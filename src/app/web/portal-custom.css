@@ -1686,7 +1686,8 @@ body {
   gap: 6px;
   padding: 8px;
   background: #1c1c1e;
-  border: 1px solid var(--pad-workspace-line);
+  border: 0;
+  box-shadow: inset 0 0 0 1px var(--pad-workspace-line);
   border-radius: 4px;
   min-height: 0;
   margin: 0 auto;

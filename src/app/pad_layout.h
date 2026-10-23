@@ -6,6 +6,7 @@
 #include "display_geometry.h"
 #include <lvgl.h>
 #include "pad_font_cache.h"
+#include "pad_track_layout.h"
 #include <stdint.h>
 #include <string.h>
 
@@ -222,7 +223,9 @@ static inline void pad_compute_grid(
     const uint8_t* button_col_spans, const uint8_t* button_row_spans,
     uint8_t button_count,
     PadRect* out_rects,
-    const PadGridLayoutSpace* layout_space = nullptr)
+    const PadGridLayoutSpace* layout_space = nullptr,
+    const uint16_t* column_widths = nullptr,
+    const uint16_t* row_heights = nullptr)
 {
     const uint16_t default_gap = pad_get_scale_info().gap;
     const uint16_t left = layout_space ? layout_space->left : 0;
@@ -239,10 +242,10 @@ static inline void pad_compute_grid(
     const uint16_t safe_w = content.w > inset_w ? content.w - inset_w : 0;
     const uint16_t safe_h = content.h > inset_h ? content.h - inset_h : 0;
 
-    const uint16_t total_gap_x = (cols - 1) * gap_x;
-    const uint16_t total_gap_y = (rows - 1) * gap_y;
-    const uint16_t tile_w = safe_w > total_gap_x ? (safe_w - total_gap_x) / cols : 0;
-    const uint16_t tile_h = safe_h > total_gap_y ? (safe_h - total_gap_y) / rows : 0;
+    uint16_t column_sizes[MAX_GRID_COLS] = {};
+    uint16_t row_sizes[MAX_GRID_ROWS] = {};
+    pad_compute_axis_track_sizes(cols, safe_w, gap_x, column_widths, column_sizes);
+    pad_compute_axis_track_sizes(rows, safe_h, gap_y, row_heights, row_sizes);
 
     for (uint8_t i = 0; i < button_count; i++) {
         const uint8_t c = button_cols[i];
@@ -250,10 +253,28 @@ static inline void pad_compute_grid(
         const uint8_t cs = button_col_spans[i] > 0 ? button_col_spans[i] : 1;
         const uint8_t rs = button_row_spans[i] > 0 ? button_row_spans[i] : 1;
 
-        out_rects[i].x = content.x + pixel_shift_margin + left + c * (tile_w + gap_x);
-        out_rects[i].y = content.y + pixel_shift_margin + top + r * (tile_h + gap_y);
-        out_rects[i].w = cs * tile_w + (cs - 1) * gap_x;
-        out_rects[i].h = rs * tile_h + (rs - 1) * gap_y;
+        uint32_t x_offset = 0;
+        uint32_t y_offset = 0;
+        uint32_t width = 0;
+        uint32_t height = 0;
+        for (uint16_t track = 0; track < c; track++)
+            x_offset += (track < cols ? column_sizes[track] : column_sizes[cols - 1]) + gap_x;
+        for (uint16_t track = 0; track < r; track++)
+            y_offset += (track < rows ? row_sizes[track] : row_sizes[rows - 1]) + gap_y;
+        for (uint8_t span = 0; span < cs; span++) {
+            const uint8_t track = c + span;
+            width += track < cols ? column_sizes[track] : column_sizes[cols - 1];
+            if (span + 1 < cs) width += gap_x;
+        }
+        for (uint8_t span = 0; span < rs; span++) {
+            const uint8_t track = r + span;
+            height += track < rows ? row_sizes[track] : row_sizes[rows - 1];
+            if (span + 1 < rs) height += gap_y;
+        }
+        out_rects[i].x = content.x + pixel_shift_margin + left + x_offset;
+        out_rects[i].y = content.y + pixel_shift_margin + top + y_offset;
+        out_rects[i].w = width;
+        out_rects[i].h = height;
     }
 }
 

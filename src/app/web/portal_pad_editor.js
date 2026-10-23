@@ -15,6 +15,8 @@ const padState = {
     rawJson: null,   // Original GET response (for merge-on-save)
     cols: 3,
     rows: 2,
+    columnWidthsPx: [],
+    rowHeightsPx: [],
     buttons: [],     // Working copy: array of button objects (by grid position key "col,row")
     editCol: 0,
     editRow: 0,
@@ -33,6 +35,190 @@ const padState = {
 let padDirty = false;
 let padSaveInProgress = false;
 let padLoadGeneration = 0;
+
+function padTrackField(axis) {
+    return document.getElementById(axis === 'rows' ? 'pad-row-heights' : 'pad-column-widths');
+}
+
+function padTrackErrorElement(axis) {
+    return document.getElementById(axis === 'rows' ? 'pad-row-heights-error' : 'pad-column-widths-error');
+}
+
+function padTrackCount(axis) {
+    return axis === 'rows' ? padState.rows : padState.cols;
+}
+
+function padTrackStateKey(axis) {
+    return axis === 'rows' ? 'rowHeightsPx' : 'columnWidthsPx';
+}
+
+function padTrackFormat(values) {
+    return (values || []).map((size, index) => Number(size) > 0 ? (index + 1) + ':' + size : '').filter(Boolean).join(', ');
+}
+
+function padTrackParse(text, count, axis) {
+    const sizes = Array(count).fill(0);
+    const label = axis === 'rows' ? 'row' : 'column';
+    const value = String(text || '').trim();
+    if (!value) return { status: 'valid', sizes, message: '' };
+
+    const entries = value.split(',');
+    for (let index = 0; index < entries.length; index++) {
+        const entry = entries[index].trim();
+        if (!entry) {
+            if (index === entries.length - 1) return { status: 'incomplete', sizes, message: 'Finish the last entry as position:size.' };
+            return { status: 'invalid', sizes, message: 'Remove the empty entry or add a position:size value.' };
+        }
+        const colon = entry.indexOf(':');
+        if (colon < 0) {
+            if (/^\d+$/.test(entry)) return { status: 'incomplete', sizes, message: 'Add a colon and pixel size, for example 3:50.' };
+            return { status: 'invalid', sizes, message: 'Use position:size entries, for example 3:50.' };
+        }
+        if (entry.indexOf(':', colon + 1) >= 0) return { status: 'invalid', sizes, message: 'Use one colon in each position:size entry.' };
+
+        const positionText = entry.slice(0, colon).trim();
+        const sizeText = entry.slice(colon + 1).trim();
+        if (!positionText || !/^\d+$/.test(positionText)) return { status: 'invalid', sizes, message: 'Positions must be whole numbers starting at 1.' };
+        if (!sizeText) return { status: 'incomplete', sizes, message: 'Add a positive pixel size after the colon.' };
+        if (!/^\d+$/.test(sizeText)) return { status: 'invalid', sizes, message: 'Sizes must be positive whole pixels.' };
+
+        const position = Number(positionText);
+        const size = Number(sizeText);
+        if (!Number.isSafeInteger(position) || position < 1 || position > count)
+            return { status: 'invalid', sizes, message: 'Choose a ' + label + ' position from 1 to ' + count + '.' };
+        if (sizes[position - 1]) return { status: 'invalid', sizes, message: 'Position ' + position + ' is listed more than once.' };
+        if (!Number.isSafeInteger(size) || size < 1 || size > 65535)
+            return { status: 'invalid', sizes, message: 'Sizes must be between 1 and 65535 pixels.' };
+        sizes[position - 1] = size;
+    }
+
+    if (sizes.every(size => size > 0))
+        return { status: 'invalid', sizes, message: 'Leave at least one ' + label + ' set to Auto.' };
+    return { status: 'valid', sizes, message: '' };
+}
+
+function padTrackEvaluate() {
+    const rowsField = padTrackField('rows');
+    const columnsField = padTrackField('columns');
+    const rowResult = padTrackParse(rowsField ? rowsField.value : padTrackFormat(padState.rowHeightsPx), padState.rows, 'rows');
+    const columnResult = padTrackParse(columnsField ? columnsField.value : padTrackFormat(padState.columnWidthsPx), padState.cols, 'columns');
+    const width = Number(deviceInfoCache && deviceInfoCache.display_coord_width) || 0;
+    const height = Number(deviceInfoCache && deviceInfoCache.display_coord_height) || 0;
+    const gap = typeof padGetEffectiveDefault === 'function'
+        ? Number(padGetEffectiveDefault('button_spacing_px')) || 0 : 0;
+
+    if (columnResult.status === 'valid' && width) {
+        const available = padGetTrackAvailableSize('columns', width);
+        if (!padComputeAxisTrackSizes(padState.cols, available, gap, columnResult.sizes).valid) {
+            columnResult.status = 'invalid';
+            columnResult.message = 'These widths leave less than one pixel for each Auto column.';
+        }
+    }
+    if (rowResult.status === 'valid' && height) {
+        const available = padGetTrackAvailableSize('rows', height);
+        if (!padComputeAxisTrackSizes(padState.rows, available, gap, rowResult.sizes).valid) {
+            rowResult.status = 'invalid';
+            rowResult.message = 'These heights leave less than one pixel for each Auto row.';
+        }
+    }
+    return { rows: rowResult, columns: columnResult,
+        valid: rowResult.status === 'valid' && columnResult.status === 'valid' };
+}
+
+function padTrackSetError(axis, message) {
+    const field = padTrackField(axis);
+    const error = padTrackErrorElement(axis);
+    if (!field || !error) return;
+    if (field.classList) field.classList.toggle('is-invalid', Boolean(message));
+    if (field.setAttribute) field.setAttribute('aria-invalid', String(Boolean(message)));
+    error.textContent = message || '';
+    error.hidden = !message;
+}
+
+function padTrackLoad(json) {
+    const source = json || {};
+    for (const axis of ['rows', 'columns']) {
+        const field = padTrackField(axis);
+        if (!field) continue;
+        const key = axis === 'rows' ? 'row_heights_px' : 'column_widths_px';
+        const count = padTrackCount(axis);
+        const values = source[key];
+        const displayValues = Array.isArray(values) ? values : [];
+        const stateValues = Array.from({ length: count }, (_, index) => {
+            const number = Number(displayValues[index]);
+            return Number.isInteger(number) && number >= 0 && number <= 65535 ? number : (displayValues[index] === undefined ? 0 : 65535);
+        });
+        padState[padTrackStateKey(axis)] = stateValues;
+        field.value = Array.isArray(values)
+            ? padTrackFormat(values.map(value => Number(value) > 0 ? value : 0))
+            : (values === undefined ? '' : String(values));
+        padTrackSetError(axis, '');
+    }
+    const section = document.getElementById('pad-custom-track-sizes-section');
+    if (section) {
+        section.open = ['column_widths_px', 'row_heights_px'].some(key => {
+            const values = source[key];
+            return Array.isArray(values) ? values.some(value => Number(value) > 0) : values !== undefined;
+        });
+    }
+    const evaluated = padTrackEvaluate();
+    if (!evaluated.valid) {
+        for (const axis of ['rows', 'columns']) {
+            const result = evaluated[axis];
+            if (result.status !== 'valid') padTrackSetError(axis, result.message);
+        }
+    }
+}
+
+function padTrackInputChanged() {
+    const evaluated = padTrackEvaluate();
+    if (evaluated.valid) {
+        padState.rowHeightsPx = evaluated.rows.sizes;
+        padState.columnWidthsPx = evaluated.columns.sizes;
+        padTrackSetError('rows', '');
+        padTrackSetError('columns', '');
+        if (padState.trackValidationError) {
+            padState.trackValidationError = false;
+            if (typeof padDialogClearValidationError === 'function') padDialogClearValidationError();
+        }
+        padRenderGrid();
+    } else {
+        const active = document.activeElement;
+        for (const axis of ['rows', 'columns']) {
+            if (evaluated[axis].status === 'valid' || padTrackField(axis) === active)
+                padTrackSetError(axis, '');
+        }
+    }
+}
+
+function padTrackValidate(showErrors) {
+    const evaluated = padTrackEvaluate();
+    if (showErrors) {
+        for (const axis of ['rows', 'columns']) {
+            const result = evaluated[axis];
+            padTrackSetError(axis, result.status === 'valid' ? '' : result.message);
+        }
+    }
+    return evaluated;
+}
+
+function padTrackGridCountChanged(axis, previousCount, nextCount) {
+    const field = padTrackField(axis);
+    const key = padTrackStateKey(axis);
+    const previous = padState[key].slice(0, previousCount);
+    const parsed = field ? padTrackParse(field.value, previousCount, axis) : { status: 'valid', sizes: previous };
+    if (parsed.status === 'valid') {
+        const next = Array(nextCount).fill(0);
+        parsed.sizes.slice(0, nextCount).forEach((size, index) => { next[index] = size; });
+        padState[key] = next;
+        if (field && nextCount < previousCount) field.value = padTrackFormat(next);
+    } else {
+        const next = Array(nextCount).fill(0);
+        previous.slice(0, nextCount).forEach((size, index) => { next[index] = size; });
+        padState[key] = next;
+    }
+    padTrackInputChanged();
+}
 
 function padMarkDirty(event) {
     if (event && event.isTrusted === false) return;
@@ -105,11 +291,24 @@ async function padInit() {
     }
 
     document.getElementById('pad-cols').addEventListener('change', (e) => {
+        const previous = padState.cols;
         padState.cols = parseInt(e.target.value);
+        padTrackGridCountChanged('columns', previous, padState.cols);
     });
     document.getElementById('pad-rows').addEventListener('change', (e) => {
+        const previous = padState.rows;
         padState.rows = parseInt(e.target.value);
+        padTrackGridCountChanged('rows', previous, padState.rows);
     });
+    for (const axis of ['rows', 'columns']) {
+        const field = padTrackField(axis);
+        if (!field) continue;
+        field.addEventListener('input', padTrackInputChanged);
+        field.addEventListener('blur', () => {
+            padTrackInputChanged();
+            padTrackValidate(true);
+        });
+    }
     document.getElementById('pad-template-pad').addEventListener('change', async (e) => {
         padState.templatePad = parseInt(e.target.value);
         padMarkDirty();
@@ -437,6 +636,7 @@ async function padLoadPage(page, defaultsReady) {
             // No config for this page — show empty grid
             padState.cols = 3;
             padState.rows = 2;
+            padTrackLoad({});
             document.getElementById('pad-cols').value = padState.cols;
             document.getElementById('pad-rows').value = padState.rows;
             document.getElementById('pad-name').value = '';
@@ -464,6 +664,7 @@ async function padLoadPage(page, defaultsReady) {
         const maxRows = (deviceInfoCache && deviceInfoCache.max_grid_rows) || 8;
         padState.cols = Math.min(json.cols || 3, maxCols);
         padState.rows = Math.min(json.rows || 2, maxRows);
+        padTrackLoad(json);
 
         document.getElementById('pad-cols').value = padState.cols;
         document.getElementById('pad-rows').value = padState.rows;
@@ -519,6 +720,20 @@ function padCloneJson(value) {
 }
 
 function padBuildSaveContext() {
+    const tracks = padTrackValidate(true);
+    if (!tracks.valid) {
+        const axis = tracks.rows.status !== 'valid' ? 'rows' : 'columns';
+        const field = padTrackField(axis);
+        const section = document.getElementById('pad-custom-track-sizes-section');
+        if (section) section.open = true;
+        padState.trackValidationError = true;
+        throw Object.assign(new Error(tracks[axis].message), {
+            trackFieldId: field && field.id,
+            trackAxis: axis,
+        });
+    }
+    padState.rowHeightsPx = tracks.rows.sizes;
+    padState.columnWidthsPx = tracks.columns.sizes;
     if (typeof padWorkspaceValidate === 'function') padWorkspaceValidate();
     const snapshot = {
         page: padState.page,
@@ -534,6 +749,10 @@ function padBuildSaveContext() {
     payload.layout = payload.layout || 'grid';
     payload.cols = snapshot.cols;
     payload.rows = snapshot.rows;
+    if (tracks.columns.sizes.some(size => size > 0)) payload.column_widths_px = tracks.columns.sizes;
+    else delete payload.column_widths_px;
+    if (tracks.rows.sizes.some(size => size > 0)) payload.row_heights_px = tracks.rows.sizes;
+    else delete payload.row_heights_px;
     const padName = document.getElementById('pad-name').value.trim();
     if (padName) payload.name = padName;
     else delete payload.name;
@@ -609,6 +828,8 @@ function padBuildSaveContext() {
         page: snapshot.page,
         cols: snapshot.cols,
         rows: snapshot.rows,
+        column_widths_px: tracks.columns.sizes,
+        row_heights_px: tracks.rows.sizes,
         buttons: snapshot.buttons,
         name: padName,
         body: JSON.stringify(payload),
@@ -694,6 +915,13 @@ async function padSavePage(options) {
         } catch (error) {
             if (bulk) throw error;
             padDialogShowValidationError(error);
+            if (error.trackFieldId) {
+                const field = document.getElementById(error.trackFieldId);
+                if (field) {
+                    padTrackSetError(error.trackAxis, error.message);
+                    field.focus();
+                }
+            }
             return null;
         }
         const workspace = typeof padWorkspace !== 'undefined' ? padWorkspace : null;

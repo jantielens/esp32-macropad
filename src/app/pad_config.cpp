@@ -120,6 +120,12 @@ static bool pad_config_resize(PadConfig** config_ptr, uint8_t button_capacity) {
     return true;
 }
 
+static uint16_t parse_track_size(JsonVariantConst value) {
+    if (!value.is<uint32_t>()) return UINT16_MAX;
+    const uint32_t size = value.as<uint32_t>();
+    return size <= UINT16_MAX ? (uint16_t)size : UINT16_MAX;
+}
+
 static void cache_replace(uint8_t page, PadConfig* replacement) {
     cache_lock();
     PadConfig* old = g_cache[page];
@@ -645,6 +651,12 @@ static PadConfig* pad_config_load_from_flash(uint8_t page, bool skip_template) {
     strlcpy(out->layout, doc["layout"] | "grid", CONFIG_LAYOUT_NAME_MAX_LEN);
     out->cols = doc["cols"] | (uint8_t)3;
     out->rows = doc["rows"] | (uint8_t)3;
+    JsonArrayConst column_widths = doc["column_widths_px"].as<JsonArrayConst>();
+    for (uint8_t i = 0; i < column_widths.size() && i < MAX_GRID_COLS; i++)
+        out->column_widths_px[i] = parse_track_size(column_widths[i]);
+    JsonArrayConst row_heights = doc["row_heights_px"].as<JsonArrayConst>();
+    for (uint8_t i = 0; i < row_heights.size() && i < MAX_GRID_ROWS; i++)
+        out->row_heights_px[i] = parse_track_size(row_heights[i]);
     strlcpy(out->wake_screen, doc["wake_screen"] | "", CONFIG_SCREEN_ID_MAX_LEN);
     parse_bindable_field(doc["bg_color"], out->bg_color, CONFIG_COLOR_MAX_LEN,
                          btn_default(button_defaults_get()->default_pad_bg_color, DEFAULT_PAD_BG_COLOR));

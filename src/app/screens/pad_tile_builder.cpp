@@ -233,7 +233,8 @@ void PadScreen::buildTiles() {
         cfg->cols, cfg->rows,
         (uint16_t)disp_w, (uint16_t)disp_h,
         cols_arr, rows_arr, cs_arr, rs_arr,
-        cfg->button_count, rects, &layout_space);
+        cfg->button_count, rects, &layout_space,
+        cfg->column_widths_px, cfg->row_heights_px);
 
     const UIScaleInfo& scale = pad_get_scale_info();
 

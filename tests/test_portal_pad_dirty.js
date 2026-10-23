@@ -27,6 +27,40 @@ vm.runInContext(fs.readFileSync('src/app/web/portal_widget_editor.js', 'utf8'), 
 const source = fs.readFileSync('src/app/web/portal_pad_editor.js', 'utf8');
 vm.runInContext(source.replace('let padDirty = false;', 'var padDirty = false;'), context);
 
+for (const [text, count, expected] of [
+	[' 3:50, 5:80 ', 5, [0, 0, 50, 0, 80]],
+	['', 3, [0, 0, 0]],
+]) {
+	const parsed = context.padTrackParse(text, count, 'rows');
+	assert.strictEqual(parsed.status, 'valid');
+	assert.deepStrictEqual(Array.from(parsed.sizes), expected);
+}
+for (const [text, count, status] of [
+	['3:', 5, 'incomplete'], ['3:50, 5:', 5, 'incomplete'],
+	['3:50, 3:60', 5, 'invalid'], ['6:50', 5, 'invalid'],
+	['1:50, 2:60, 3:70', 3, 'invalid'], ['2:0', 3, 'invalid'],
+	['2:1.5', 3, 'invalid'],
+]) {
+	assert.strictEqual(context.padTrackParse(text, count, 'rows').status, status, text);
+}
+
+const trackElements = new Map();
+const trackContext = {
+	document: { activeElement: null, getElementById(id) { return trackElements.get(id) || null; } },
+	deviceInfoCache: null,
+	padGetEffectiveDefault() { return 0; },
+	padRenderGrid() {},
+};
+for (const [id, value] of [['pad-row-heights', '1:50, 2:'], ['pad-column-widths', '2:20']]) {
+	trackElements.set(id, { id, value, classList: { toggle() {} }, setAttribute() {}, focus() {} });
+	trackElements.set(id + '-error', { textContent: '', hidden: true });
+}
+vm.createContext(trackContext);
+vm.runInContext(source.replace('let padDirty = false;', 'var padDirty = false;'), trackContext);
+vm.runInContext('padState.rows = 2; padState.cols = 3; padState.rowHeightsPx = [50, 0]; padState.columnWidthsPx = [0, 20, 0]; padTrackGridCountChanged("rows", 2, 3);', trackContext);
+assert.deepStrictEqual(Array.from(vm.runInContext('padState.rowHeightsPx', trackContext)), [50, 0, 0], 'A count change must preserve existing sizes and add Auto tracks while text is incomplete');
+assert.strictEqual(trackElements.get('pad-row-heights').value, '1:50, 2:', 'A count change must retain partial text');
+
 assert.strictEqual(context.padDirty, false);
 context.padMarkDirty({ isTrusted: false });
 assert.strictEqual(context.padDirty, false);

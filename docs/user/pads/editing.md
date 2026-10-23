@@ -21,6 +21,19 @@ The canvas reflects the device's aspect ratio and spacing, not an exact renderin
 of fonts, widgets, or live images. Each pad saves independently.
 **Show on Device** does not save the draft.
 
+### Customize row and column sizes
+
+Open **Custom Row / Column Sizes** at the bottom of the Pad inspector's **Layout**
+tab to set selected tracks in device pixels. Enter comma-separated
+`position:size` values, such as `3:50, 5:80` for row heights or `2:100` for
+column widths. Positions start at 1. Sizes must be positive whole pixels.
+
+Unlisted tracks, and every track when a field is empty, stay Auto. Auto tracks
+share the remaining space after the pad's spacing and insets. Keep at least one
+Auto track on each axis. Buttons keep their positions and spans; a span covers
+the combined size of its tracks and the gaps between them. Invalid geometry
+keeps the last valid canvas preview and prevents saving until corrected.
+
 Button styling and labels update as you edit valid settings. Widget buttons show
 a large subdued symbol behind their labels rather than simulated widget graphics;
 ordinary buttons retain their configured icons. Long bindings are abbreviated

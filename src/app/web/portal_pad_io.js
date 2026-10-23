@@ -98,6 +98,16 @@ function padFillWithClipboard() {
 // --- Pad clipboard (copy/paste entire pad) ---
 
 function padCopyPad() {
+    const tracks = padTrackValidate(true);
+    if (!tracks.valid) {
+        const axis = tracks.rows.status !== 'valid' ? 'rows' : 'columns';
+        const section = document.getElementById('pad-custom-track-sizes-section');
+        if (section) section.open = true;
+        const field = padTrackField(axis);
+        if (field && field.focus) field.focus();
+        showMessage(tracks[axis].message, 'error');
+        return;
+    }
     try { if (typeof padWorkspaceValidate === 'function') padWorkspaceValidate(); }
     catch (error) { showMessage(error.message, 'error'); return; }
     // Snapshot current pad and button defaults from UI
@@ -105,6 +115,8 @@ function padCopyPad() {
     padState.padClipboard = {
         cols: padState.cols,
         rows: padState.rows,
+        column_widths_px: tracks.columns.sizes,
+        row_heights_px: tracks.rows.sizes,
         name: document.getElementById('pad-name').value.trim(),
         wake_screen: document.getElementById('pad-wake-screen').value,
         bg_color: padGetBindableColor('pad-edit-page-bg-color') || padGetEffectiveDefault('default_pad_bg_color'),
@@ -143,6 +155,10 @@ function padPastePad() {
 
     // Paste pad and button defaults
     padLoadButtonDefaults(padState.padClipboard.buttonDefaults || {});
+    padTrackLoad({
+        column_widths_px: padState.padClipboard.column_widths_px || [],
+        row_heights_px: padState.padClipboard.row_heights_px || [],
+    });
 
     // Paste template pad (clear if it would reference self)
     padState.templatePad = (padState.padClipboard.templatePad !== undefined &&
@@ -157,6 +173,16 @@ function padPastePad() {
 // --- Export/import single pad ---
 
 function padExportPad() {
+    const tracks = padTrackValidate(true);
+    if (!tracks.valid) {
+        const axis = tracks.rows.status !== 'valid' ? 'rows' : 'columns';
+        const section = document.getElementById('pad-custom-track-sizes-section');
+        if (section) section.open = true;
+        const field = padTrackField(axis);
+        if (field && field.focus) field.focus();
+        showMessage(tracks[axis].message, 'error');
+        return;
+    }
     try { if (typeof padWorkspaceValidate === 'function') padWorkspaceValidate(); }
     catch (error) { showMessage(error.message, 'error'); return; }
     padCollectButtonDefaults();
@@ -170,6 +196,8 @@ function padExportPad() {
             return copy;
         }),
     };
+    if (tracks.columns.sizes.some(size => size > 0)) payload.column_widths_px = tracks.columns.sizes;
+    if (tracks.rows.sizes.some(size => size > 0)) payload.row_heights_px = tracks.rows.sizes;
     const padName = document.getElementById('pad-name').value.trim();
     if (padName) payload.name = padName;
     const wakeScreen = document.getElementById('pad-wake-screen').value;
@@ -221,6 +249,7 @@ async function padImportPad(evt) {
         if (typeof padWorkspaceReset === 'function') padWorkspaceReset();
         padState.cols = json.cols;
         padState.rows = json.rows;
+        padTrackLoad(json);
         padState.buttons = json.buttons.map(b => Object.assign({}, b));
 
         document.getElementById('pad-cols').value = padState.cols;

@@ -93,6 +93,32 @@ int main() {
 
     {
         JsonDocument doc;
+        doc["cols"] = 3;
+        doc["rows"] = 2;
+        doc["column_widths_px"].to<JsonArray>().add(0);
+        doc["column_widths_px"].add(20);
+        doc["column_widths_px"].add(0);
+        doc["row_heights_px"].to<JsonArray>().add(25);
+        doc["row_heights_px"].add(0);
+        const PadValidationGeometry geometry = {101, 100, 2, 0, 0, 0, 0, 0};
+        CHECK(pad_validate(doc.as<JsonObjectConst>(), false, &geometry) == nullptr);
+
+        doc["column_widths_px"][0] = 30;
+        doc["column_widths_px"][1] = 30;
+        doc["column_widths_px"][2] = 30;
+        CHECK(pad_validate(doc.as<JsonObjectConst>(), false, &geometry) != nullptr);
+
+        doc["column_widths_px"][0] = 96;
+        doc["column_widths_px"][1] = 0;
+        doc["column_widths_px"][2] = 0;
+        CHECK(pad_validate(doc.as<JsonObjectConst>(), false, &geometry) != nullptr);
+
+        doc["column_widths_px"][0] = 0.5;
+        CHECK(pad_validate(doc.as<JsonObjectConst>(), false, &geometry) != nullptr);
+    }
+
+    {
+        JsonDocument doc;
         JsonObject button = make_button(doc);
         JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
         action["type"] = "registered_test";

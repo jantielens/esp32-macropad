@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-22
+ms.date: 2026-10-23
 ms.topic: reference
 ---
 
@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add custom row heights and column widths in the Pad Editor's Layout tab.
+  Set individual sizes in device pixels while Auto rows and columns share the
+  remaining space equally, without changing button positions or spans. Preview
+  valid edits live, with save-time validation and scaled resize handles.
+  See [Customize row and column sizes](docs/user/pads/editing.md#customize-row-and-column-sizes).
 * Add simplified Pad Editor layout previews with button styling, configured
   labels, and large subdued widget symbols. Abbreviate raw bindings with full
   text available on hover, without substituting sample or live values.

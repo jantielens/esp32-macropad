@@ -11,6 +11,8 @@
 #if HAS_DISPLAY
 
 #include "pad_config.h"
+#include "display_geometry.h"
+#include "pad_track_layout.h"
 #include "psram_json_allocator.h"
 #include "widgets/widget_registry.h"
 #include "action_validate.h"
@@ -43,6 +45,33 @@ static const char* LEN_MSG_SHORT = "field too long (max 63 chars)";
 // Single in-flight validation (web task), so a static buffer for a formatted
 // validation message is safe (and the validator returns const char*).
 static char s_len_err[96];
+
+static const char* validate_track_sizes(JsonObjectConst pad, const char* field,
+                                        uint8_t count, uint16_t safe_size,
+                                        uint16_t gap) {
+    if (!pad.containsKey(field)) return nullptr;
+    JsonArrayConst values = pad[field].as<JsonArrayConst>();
+    if (values.isNull()) return "track sizes must be an array";
+    if (values.size() != count) return "track size count must match grid dimensions";
+
+    const uint8_t track_capacity = MAX_GRID_COLS > MAX_GRID_ROWS
+        ? MAX_GRID_COLS : MAX_GRID_ROWS;
+    uint16_t overrides[track_capacity] = {};
+    uint16_t computed[track_capacity] = {};
+    bool has_auto = false;
+    for (uint8_t track = 0; track < count; track++) {
+        JsonVariantConst value = values[track];
+        if (!value.is<uint32_t>()) return "track sizes must be positive whole pixels or 0 for Auto";
+        const uint32_t size = value.as<uint32_t>();
+        if (size > UINT16_MAX) return "track size exceeds supported pixel range";
+        overrides[track] = (uint16_t)size;
+        if (!size) has_auto = true;
+    }
+    if (!has_auto) return "track sizes must leave at least one Auto position";
+    if (!pad_compute_axis_track_sizes(count, safe_size, gap, overrides, computed))
+        return "track sizes leave less than one pixel for an Auto position";
+    return nullptr;
+}
 
 static const char* validate_exact_binding_token(const char* value) {
     if (!value || value[0] != '[') return "timer value binding must use [scheme:params]";
@@ -224,7 +253,8 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
 }
 
 // Validate a complete pad JSON (grid + buttons + collisions). nullptr = ok.
-const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid) {
+const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid,
+                         const PadValidationGeometry* geometry) {
     const char* shadow = pad["button_shadow"] | "";
     if (shadow[0] && strcmp(shadow, "enabled") != 0 && strcmp(shadow, "disabled") != 0)
         return "bad button_shadow";
@@ -236,7 +266,32 @@ const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid) {
         if (cols < 1 || cols > MAX_GRID_COLS) return "cols must be 1-8";
         if (rows < 1 || rows > MAX_GRID_ROWS) return "rows must be 1-8";
     } else {
+        if (pad.containsKey("column_widths_px") || pad.containsKey("row_heights_px"))
+            return "track sizes are only supported for grid layouts";
         cols = MAX_GRID_COLS; rows = MAX_GRID_ROWS;  // skip overflow checks for curated
+    }
+    if (is_grid && (pad.containsKey("column_widths_px") || pad.containsKey("row_heights_px"))) {
+        uint16_t safe_width = UINT16_MAX;
+        uint16_t safe_height = UINT16_MAX;
+        uint16_t gap_x = 0;
+        uint16_t gap_y = 0;
+        if (geometry) {
+            const DisplayContentRect content = display_safe_content_rect(
+                geometry->display_width, geometry->display_height);
+            const uint32_t horizontal_inset = 2U * geometry->pixel_shift_distance_px +
+                geometry->inset_left_px + geometry->inset_right_px;
+            const uint32_t vertical_inset = 2U * geometry->pixel_shift_distance_px +
+                geometry->inset_top_px + geometry->inset_bottom_px;
+            safe_width = content.w > horizontal_inset ? content.w - horizontal_inset : 0;
+            safe_height = content.h > vertical_inset ? content.h - vertical_inset : 0;
+            gap_x = gap_y = geometry->spacing_px;
+        }
+        const char* track_error = validate_track_sizes(
+            pad, "column_widths_px", cols, safe_width, gap_x);
+        if (track_error) return track_error;
+        track_error = validate_track_sizes(
+            pad, "row_heights_px", rows, safe_height, gap_y);
+        if (track_error) return track_error;
     }
     if (pad.containsKey("template_pad")) {
         int tp = pad["template_pad"] | -1;

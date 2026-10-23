@@ -179,6 +179,11 @@ for (const width of ['1', '2', '3']) {
 }
 
 const grid = fs.readFileSync('src/app/web/portal_pad_grid.js', 'utf8');
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.padComputeAxisTrackSizes(3, 101, 2, [0, 20, 0]))), {
+    sizes: [39, 20, 38], valid: true
+});
+assert.strictEqual(context.padComputeAxisTrackSizes(3, 100, 2, [30, 30, 30]).valid, false);
+assert.deepStrictEqual(Array.from(context.padComputeAxisTrackSizes(3, 100, 2, [30, 30, 30]).sizes), [32, 32, 32]);
 assert(grid.includes('padRenderCellContent(cell, tplBtn)'));
 assert(!grid.includes('pad-cell-widget-'));
 const gridElement = createElement();
@@ -189,6 +194,9 @@ context.padState = { cols: 3, rows: 1, buttons: [{ col: 0, row: 0, widget_type: 
         label_top: '[mqtt:home/building/temperature;state;%.1f C]' }] };
 context.padBuildOccupancySet = () => new Set();
 vm.runInContext(grid, context);
+const resizeGeometry = { columnSizes: [40, 20, 40], rowSizes: [30, 70], gapX: 2, gapY: 2 };
+assert.strictEqual(context.padResizeTrackDelta(6, 'right', resizeGeometry, 0, 0, 1, 1), 1);
+assert.strictEqual(context.padResizeTrackDelta(-5, 'right', resizeGeometry, 0, 0, 2, 1), -1);
 context.padRenderResizeHandles = () => {};
 context.padRenderGrid();
 assert.strictEqual(gridElement.children.length, 2);

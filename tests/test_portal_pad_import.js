@@ -24,7 +24,9 @@ function response(ok = true, json = {}) {
 
 function makeDocument() {
     const elements = new Map();
+    const canvasSizes = [];
     return {
+        canvasSizes,
         addEventListener() {},
         getElementById(id) {
             assert.notStrictEqual(id, 'pad-page-select', 'Import must not access the removed pad dropdown');
@@ -38,11 +40,21 @@ function makeDocument() {
             if (tag !== 'canvas') return new Element();
             const context = {
                 clearRect() {}, fillText() {}, putImageData() {},
-                getImageData() { return { data: new Uint8ClampedArray(64 * 64 * 4) }; },
+                getImageData(x, y, width, height) {
+                    if (width < 1 || height < 1) {
+                        const error = new Error('The source width is 0');
+                        error.name = 'IndexSizeError';
+                        throw error;
+                    }
+                    return { data: new Uint8ClampedArray(width * height * 4) };
+                },
             };
             return {
                 getContext() { return context; },
-                toBlob(callback) { callback(new Blob(['icon'], { type: 'image/png' })); },
+                toBlob(callback) {
+                    canvasSizes.push([this.width, this.height]);
+                    callback(new Blob(['icon'], { type: 'image/png' }));
+                },
             };
         },
     };
@@ -148,7 +160,7 @@ async function runImport(options = {}) {
             if (fetchFailure === kind) return response(false);
             if (kind === 'config-read') return response(true, { backlight_brightness: 42 });
             if (kind === 'button-sizes') return response(true, {
-                button_w: 100, button_h: 100, padding: 2, gap: 2, font_small_h: 10,
+                button_w: 100, button_h: 100, padding: 4, gap: 2, font_small_h: 10,
             });
             return response(true);
         },
@@ -187,7 +199,7 @@ async function runImport(options = {}) {
         },
     });
     await Promise.resolve();
-    return { context, requests, messages, reloads };
+    return { context, requests, messages, reloads, canvasSizes: document.canvasSizes };
 }
 
 function pageRequests(result, page) {
@@ -221,6 +233,16 @@ function pageRequests(result, page) {
     assert.deepStrictEqual(success.reloads, [1]);
     assert.strictEqual(success.requests.filter(request => request.kind === 'device-info').length, 1);
     assert.strictEqual(success.requests.filter(request => request.kind === 'reboot').length, 1);
+
+    const iconRequestCount = success.requests.filter(request => request.kind === 'icon-install').length;
+    await success.context.padUploadPageIcons({
+        page: 0, cols: 2, rows: 2,
+        column_widths_px: [10, 0], row_heights_px: [10, 0],
+        buttons: [{ col: 0, row: 0, icon_id: 'emoji_small' }],
+    });
+    assert.strictEqual(success.requests.filter(request => request.kind === 'icon-install').length, iconRequestCount + 1);
+    assert.deepStrictEqual(success.canvasSizes[success.canvasSizes.length - 1], [1, 1],
+        'A 10px track with 4px padding and 1px borders must produce a 1px icon canvas');
 
     for (const failure of ['config-save', 'button-defaults', 'brightness-0', 'icon-delete', 'icon-install', 'pad-save', 'brightness-42']) {
         const result = await runImport({ fetchFailure: failure });

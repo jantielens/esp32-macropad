@@ -31,6 +31,8 @@
 #include "mcp_tool_util.h"
 #include "web_mcp.h"
 #include "pad_config.h"
+#include "button_defaults.h"
+#include "display_manager.h"
 #include "pad_validate.h"
 #include "pad_resolve_request.h"
 #include "psram_json_allocator.h"
@@ -55,6 +57,18 @@ static constexpr int PAD_ERR_PARAMS   = MCP_RPC_ERR_PARAMS;
 static constexpr int PAD_ERR_INTERNAL = MCP_RPC_ERR_INTERNAL;
 static constexpr int PAD_ERR_BUSY     = MCP_RPC_ERR_CONTROL_BUSY;
 static constexpr uint32_t PAD_WRITE_TIMEOUT_MS = 4000;
+
+static PadValidationGeometry current_pad_validation_geometry() {
+    const PadLayoutSettings& layout = button_defaults_get()->layout;
+    return {
+        (uint16_t)(displayManager ? displayManager->getActiveWidth() : DISPLAY_WIDTH),
+        (uint16_t)(displayManager ? displayManager->getActiveHeight() : DISPLAY_HEIGHT),
+        layout.spacing_px,
+        layout.inset_left_px, layout.inset_right_px,
+        layout.inset_top_px, layout.inset_bottom_px,
+        layout.pixel_shift_distance_px,
+    };
+}
 
 // Thin adapter over the shared mcp_tool_fail (mcp_tool_util.h).
 static bool pad_fail(JsonObject& result, String& err, int code, const char* msg) {
@@ -246,7 +260,8 @@ static void exec_pad_save(const void* ctx, bool* ok, char* msg, size_t msg_len) 
 
 // Serialize `doc` into a PSRAM buffer and defer the save. Validates first.
 static bool commit_pad(uint8_t page, JsonDocument& doc, JsonObject& result, String& err) {
-    const char* verr = pad_validate(doc.as<JsonObjectConst>());
+    const PadValidationGeometry geometry = current_pad_validation_geometry();
+    const char* verr = pad_validate(doc.as<JsonObjectConst>(), false, &geometry);
     if (verr) return pad_fail(result, err, PAD_ERR_PARAMS, verr);
 
     size_t need = measureJson(doc) + 1;
@@ -305,7 +320,8 @@ static bool splice_button(JsonArray btns, int pos, JsonVariantConst button) {
 static bool tool_validate_pad(const JsonObject& args, JsonObject& result, String& err) {
     JsonObjectConst pad = args["pad"];
     if (pad.isNull()) return pad_fail(result, err, PAD_ERR_PARAMS, "missing pad object");
-    const char* verr = pad_validate(pad);
+    const PadValidationGeometry geometry = current_pad_validation_geometry();
+    const char* verr = pad_validate(pad, false, &geometry);
     if (verr) { result["valid"] = false; result["error"] = verr; return true; }
     result["valid"] = true;
     return true;

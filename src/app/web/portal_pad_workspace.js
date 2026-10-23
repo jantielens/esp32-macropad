@@ -112,6 +112,7 @@ function padWorkspaceFit() {
     const reserve = padGetEffectiveDefault('pixel_shift_distance_px');
     grid.style.gap = padGetEffectiveDefault('button_spacing_px') * scale + 'px';
     grid.style.padding = ['top', 'right', 'bottom', 'left'].map(edge => (reserve + padGetEffectiveDefault('pad_inset_' + edge + '_px')) * scale + 'px').join(' ');
+    if (typeof padRenderGridTracks === 'function') padRenderGridTracks();
 }
 
 function padWorkspaceMoveSelection(col, row, button) {

@@ -3563,7 +3563,7 @@ Resolve `[scheme:params]` binding tokens against the device's **live** data and 
 ```
   Errors: `400` (bad params / invalid JSON), `503` (busy: another resolve/control job is in flight, retry; or out of memory), and `500` (the main-loop dispatch timed out or another internal failure occurred). The resolver copies its input before queuing it, so a timed-out request remains safe while the main loop finishes and releases its owned data.
 
-> **Pad save validation.** `POST /api/pad` validates the submitted pad through the shared `pad_validate()` (the same validator the MCP write tools use): grid bounds, span overflow, widget types/config caps, colors, action arrays, binding tokens (unknown scheme, bad health key, …), and the one-level `[pad:name]` rule. Buttons that fall outside a shrunken grid are tolerated (hidden, and reappear when the grid grows).
+> **Pad save validation.** `POST /api/pad` validates the submitted pad through the shared `pad_validate()` (the same validator the MCP write tools use): grid bounds, span overflow, widget types/config caps, colors, action arrays, binding tokens (unknown scheme, bad health key, …), and the one-level `[pad:name]` rule. Grid pads may include `column_widths_px` and `row_heights_px` integer arrays, one value per track, with `0` representing Auto. Each configured axis must retain at least one Auto track, and fixed sizes must fit the active display after spacing and insets while leaving at least one pixel for every Auto track. Buttons that fall outside a shrunken grid are tolerated (hidden, and reappear when the grid grows).
 
 > **Image credentials.** `GET /api/pad` never returns a button's
 > `bg_image_password`. It supplies `bg_image_password_set` instead. On a later

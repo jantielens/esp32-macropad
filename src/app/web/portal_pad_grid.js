@@ -12,10 +12,45 @@ function padGetGridGeometry() {
     const grid = document.getElementById('pad-grid');
     if (!grid) return null;
     const rect = grid.getBoundingClientRect();
-    const gap = parseFloat(getComputedStyle(grid).gap) || 4;
-    const cellW = (rect.width - gap * (padState.cols - 1)) / padState.cols;
-    const cellH = (rect.height - gap * (padState.rows - 1)) / padState.rows;
-    return { rect, gap, cellW, cellH };
+    const style = getComputedStyle(grid);
+    const gapX = parseFloat(style.columnGap || style.gap) || 0;
+    const gapY = parseFloat(style.rowGap || style.gap) || 0;
+    const parseTracks = (value, count, size, gap) => {
+        const tracks = String(value || '').split(/\s+/).map(parseFloat).filter(Number.isFinite);
+        if (tracks.length === count) return tracks;
+        return Array(count).fill(Math.max(0, (size - gap * (count - 1)) / count));
+    };
+    const columnSizes = parseTracks(style.gridTemplateColumns, padState.cols, rect.width, gapX);
+    const rowSizes = parseTracks(style.gridTemplateRows, padState.rows, rect.height, gapY);
+    return { rect, gap: gapX, gapX, gapY, columnSizes, rowSizes };
+}
+
+function padResizeTrackDelta(raw, side, geometry, col, row, colSpan, rowSpan) {
+    const horizontal = side === 'left' || side === 'right';
+    const forward = side === 'right' || side === 'down';
+    const movement = raw * (forward ? 1 : -1);
+    const sizes = horizontal ? geometry.columnSizes : geometry.rowSizes;
+    const gap = horizontal ? geometry.gapX : geometry.gapY;
+    const origin = horizontal ? col : row;
+    const span = horizontal ? colSpan : rowSpan;
+    let track = movement >= 0
+        ? (forward ? origin + span : origin - 1)
+        : (forward ? origin + span - 1 : origin);
+    const step = movement >= 0
+        ? (forward ? 1 : -1)
+        : (forward ? -1 : 1);
+    let distance = Math.abs(movement);
+    let consumed = 0;
+    let delta = 0;
+    while (track >= 0 && track < sizes.length) {
+        const pitch = sizes[track] + gap;
+        if (pitch <= 0) break;
+        if (distance < consumed + pitch * 0.2) break;
+        delta += movement >= 0 ? 1 : -1;
+        consumed += pitch;
+        track += step;
+    }
+    return delta;
 }
 
 function padRenderResizeHandles(cell, btn, col, row) {
@@ -48,9 +83,6 @@ function padResizeDragStart(col, row, side, startX, startY) {
 
     const origCol = btn.col, origRow = btn.row;
     const origCs = btn.col_span || 1, origRs = btn.row_span || 1;
-    const axis = (side === 'left' || side === 'right') ? 'x' : 'y';
-    const cellSize = axis === 'x' ? geo.cellW + geo.gap : geo.cellH + geo.gap;
-
     const occupied = padBuildOccupancySet();
     // Remove this button's own cells from the occupancy set
     for (let dc = 0; dc < origCs; dc++)
@@ -60,11 +92,8 @@ function padResizeDragStart(col, row, side, startX, startY) {
     let lastDelta = 0;
 
     function onMove(clientX, clientY) {
-        const raw = axis === 'x' ? clientX - startX : clientY - startY;
-        const sign = (side === 'right' || side === 'down') ? 1 : -1;
-        // Snap at 20% into the next cell: 0.8 = 1.0 − 0.2, so floor triggers at frac ≥ 0.2
-        const frac = (raw * sign) / cellSize;
-        const delta = frac >= 0 ? Math.floor(frac + 0.8) : Math.ceil(frac - 0.8);
+        const raw = (side === 'left' || side === 'right') ? clientX - startX : clientY - startY;
+        const delta = padResizeTrackDelta(raw, side, geo, origCol, origRow, origCs, origRs);
         if (delta === lastDelta) return;
         lastDelta = delta;
 
@@ -144,15 +173,35 @@ function padCanPlaceTemplateButton(tplBtn) {
     return true;
 }
 
+function padRenderGridTracks() {
+    const grid = document.getElementById('pad-grid');
+    if (!grid) return;
+    const cols = padState.cols;
+    const rows = padState.rows;
+
+    const displayW = Number(deviceInfoCache && deviceInfoCache.display_coord_width) || cols;
+    const displayH = Number(deviceInfoCache && deviceInfoCache.display_coord_height) || rows;
+    const gap = Number(padGetEffectiveDefault('button_spacing_px')) || 0;
+    const columnSizing = padComputeAxisTrackSizes(cols,
+        padGetTrackAvailableSize('columns', displayW), gap, padState.columnWidthsPx);
+    const rowSizing = padComputeAxisTrackSizes(rows,
+        padGetTrackAvailableSize('rows', displayH), gap, padState.rowHeightsPx);
+    const rect = typeof grid.getBoundingClientRect === 'function' ? grid.getBoundingClientRect() : null;
+    const gridWidth = parseFloat(grid.style.width) || (rect && rect.width) || displayW;
+    const gridHeight = parseFloat(grid.style.height) || (rect && rect.height) || displayH;
+    const scaleX = displayW ? gridWidth / displayW : 1;
+    const scaleY = displayH ? gridHeight / displayH : scaleX;
+    grid.style.gridTemplateColumns = columnSizing.sizes.map(size => size * scaleX + 'px').join(' ');
+    grid.style.gridTemplateRows = rowSizing.sizes.map(size => size * scaleY + 'px').join(' ');
+}
+
 function padRenderGrid() {
     const grid = document.getElementById('pad-grid');
     if (!grid) return;
 
     const cols = padState.cols;
     const rows = padState.rows;
-
-    grid.style.gridTemplateColumns = 'repeat(' + cols + ', 1fr)';
-    grid.style.gridTemplateRows = 'repeat(' + rows + ', 1fr)';
+    padRenderGridTracks();
     // Apply device aspect ratio so the editor mimics the real screen
     if (deviceInfoCache && deviceInfoCache.display_coord_width && deviceInfoCache.display_coord_height) {
         grid.style.aspectRatio = deviceInfoCache.display_coord_width + ' / ' + deviceInfoCache.display_coord_height;

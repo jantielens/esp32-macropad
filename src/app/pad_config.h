@@ -535,6 +535,8 @@ struct PadConfig {
     char layout[CONFIG_LAYOUT_NAME_MAX_LEN]; // "grid" or curated layout name
     uint8_t cols;                            // 1-8 (grid mode only)
     uint8_t rows;                            // 1-8 (grid mode only)
+    uint16_t column_widths_px[MAX_GRID_COLS]; // 0 = Auto
+    uint16_t row_heights_px[MAX_GRID_ROWS];   // 0 = Auto
     char wake_screen[CONFIG_SCREEN_ID_MAX_LEN]; // screen to navigate to on screensaver sleep (empty = stay)
     char bg_color[CONFIG_COLOR_MAX_LEN];         // pad background color (default "#000000")
     uint8_t button_shadow;                        // ButtonShadowMode override

@@ -3,6 +3,8 @@
 #if HAS_DISPLAY
 
 #include "board_config.h"
+#include "button_defaults.h"
+#include "display_manager.h"
 #include "icon_store.h"
 #include "log_manager.h"
 #include "pad_block.h"
@@ -71,7 +73,16 @@ static const char* validate_pad_json(const uint8_t* json, size_t len) {
     BasicJsonDocument<PsramJsonAllocator> doc(len * 2 + 512);
     DeserializationError err = deserializeJson(doc, json, len);
     if (err) return "Invalid JSON";
-    return pad_validate(doc.as<JsonObjectConst>(), /*tolerate_offgrid=*/true);
+    const PadLayoutSettings& layout = button_defaults_get()->layout;
+    const PadValidationGeometry geometry = {
+        (uint16_t)(displayManager ? displayManager->getActiveWidth() : DISPLAY_WIDTH),
+        (uint16_t)(displayManager ? displayManager->getActiveHeight() : DISPLAY_HEIGHT),
+        layout.spacing_px,
+        layout.inset_left_px, layout.inset_right_px,
+        layout.inset_top_px, layout.inset_bottom_px,
+        layout.pixel_shift_distance_px,
+    };
+    return pad_validate(doc.as<JsonObjectConst>(), /*tolerate_offgrid=*/true, &geometry);
 }
 
 static uint8_t* allocate_pad_json_buffer(size_t len) {

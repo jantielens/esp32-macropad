@@ -38,6 +38,42 @@ static void test_layout_spacing_and_insets() {
     assert(rects[0].h == content.h);
 }
 
+static void test_nonuniform_tracks_spans_and_rounding() {
+    const uint8_t columns[] = {0, 2, 3};
+    const uint8_t rows[] = {0, 1, 0};
+    const uint8_t col_spans[] = {2, 1, 1};
+    const uint8_t row_spans[] = {2, 1, 1};
+    const uint16_t column_widths[] = {0, 20, 0};
+    const uint16_t row_heights[] = {25, 0};
+    const PadGridLayoutSpace layout = {0, 0, 0, 0, 2, 0, 0};
+    PadRect rects[3] = {};
+
+    pad_compute_grid(3, 2, 101, 100, columns, rows,
+                     col_spans, row_spans, 3, rects, &layout,
+                     column_widths, row_heights);
+
+    assert(rects[0].x == 0 && rects[0].y == 0);
+    assert(rects[0].w == 61 && rects[0].h == 100);
+    assert(rects[1].x == 63 && rects[1].y == 25);
+    assert(rects[1].w == 38 && rects[1].h == 75);
+    assert(rects[2].x == 103 && rects[2].w == 38);
+
+    uint16_t resized_columns[3] = {};
+    assert(pad_compute_axis_track_sizes(3, 121, 2, column_widths, resized_columns));
+    assert(resized_columns[0] == 49 && resized_columns[1] == 20 && resized_columns[2] == 48);
+}
+
+static void test_invalid_track_overrides_fall_back_to_uniform() {
+    const uint16_t all_fixed[] = {30, 30, 30};
+    uint16_t sizes[3] = {};
+    assert(!pad_compute_axis_track_sizes(3, 100, 2, all_fixed, sizes));
+    assert(sizes[0] == 32 && sizes[1] == 32 && sizes[2] == 32);
+
+    const uint16_t insufficient_auto[] = {95, 0, 0};
+    assert(!pad_compute_axis_track_sizes(3, 100, 2, insufficient_auto, sizes));
+    assert(sizes[0] == 32 && sizes[1] == 32 && sizes[2] == 32);
+}
+
 static void test_stopwatch_466_square_round_viewport() {
     constexpr uint16_t size = 466;
     uint8_t columns[25], rows[25], spans[25];
@@ -89,6 +125,8 @@ static void test_stopwatch_466_square_round_viewport() {
 
 int main() {
     test_layout_spacing_and_insets();
+    test_nonuniform_tracks_spans_and_rounding();
+    test_invalid_track_overrides_fall_back_to_uniform();
     test_stopwatch_466_square_round_viewport();
     std::puts("pad_layout: PASS");
     return 0;

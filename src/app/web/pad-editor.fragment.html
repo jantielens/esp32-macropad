@@ -98,6 +98,28 @@
             </div>
         </section>
 
+        <details class="editor-group" id="pad-custom-track-sizes-section" data-pad-tab="Layout">
+            <summary>Custom Row / Column Sizes</summary>
+            <div class="editor-group-body">
+                <p class="form-text">By default, rows have equal heights and columns have equal widths. Set individual sizes to give some buttons or widgets more or less space; Auto rows and columns share the remaining space equally.</p>
+                <div class="form-group">
+                    <label for="pad-row-heights">Row heights (px)</label>
+                    <input type="text" id="pad-row-heights" class="form-control form-control-sm" maxlength="127" placeholder="3:50, 5:80" aria-describedby="pad-track-sizes-help pad-row-heights-error">
+                    <small id="pad-row-heights-error" class="form-text text-danger" role="alert" hidden></small>
+                </div>
+                <div class="form-group mb-0">
+                    <label for="pad-column-widths">Column widths (px)</label>
+                    <input type="text" id="pad-column-widths" class="form-control form-control-sm" maxlength="127" placeholder="2:100" aria-describedby="pad-track-sizes-help pad-column-widths-error">
+                    <small id="pad-column-widths-error" class="form-text text-danger" role="alert" hidden></small>
+                </div>
+                <small id="pad-track-sizes-help" class="form-text">
+                    Use 1-based row or column positions and positive pixel sizes. Unlisted positions or an empty field stay Auto.
+                    <br>Row heights: <code>3:50, 5:80</code> makes row 3 50 px tall and row 5 80 px tall.
+                    <br>Column widths: <code>2:100</code> makes column 2 100 px wide.
+                </small>
+            </div>
+        </details>
+
         <section class="card mb-3" data-pad-tab="Bindings">
             <div class="card-body">
             <div id="pad-bindings-section">

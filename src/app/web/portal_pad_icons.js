@@ -366,6 +366,60 @@ async function padGetButtonSizes(cols, rows) {
     return data;
 }
 
+function padComputeAxisTrackSizes(count, safeSize, gap, overrides) {
+    safeSize = Number(safeSize) || 0;
+    gap = Number(gap) || 0;
+    const totalGap = Math.max(0, count - 1) * gap;
+    const available = Math.max(0, safeSize - totalGap);
+    const sizes = Array(count).fill(0);
+    const fixed = Array.from({ length: count }, (_, index) => Number(overrides && overrides[index]) || 0);
+    const autoCount = fixed.filter(size => size === 0).length;
+    const fixedTotal = fixed.reduce((total, size) => total + size, 0);
+    const hasOverrides = fixedTotal > 0;
+
+    if (hasOverrides && (!autoCount || fixedTotal + autoCount > available)) {
+        sizes.fill(count ? Math.floor(available / count) : 0);
+        return { sizes, valid: false };
+    }
+
+    if (!hasOverrides) {
+        sizes.fill(count ? Math.floor(available / count) : 0);
+        return { sizes, valid: true };
+    }
+
+    let remainder = (available - fixedTotal) % autoCount;
+    const autoSize = Math.floor((available - fixedTotal) / autoCount);
+    for (let index = 0; index < count; index++) {
+        if (fixed[index]) sizes[index] = fixed[index];
+        else {
+            sizes[index] = autoSize + (remainder ? 1 : 0);
+            if (remainder) remainder--;
+        }
+    }
+    return { sizes, valid: true };
+}
+
+function padGetTrackAvailableSize(axis, dimension, pixelShift) {
+    dimension = Number(dimension) || 0;
+    const defaults = key => typeof padGetEffectiveDefault === 'function'
+        ? Number(padGetEffectiveDefault(key)) || 0 : 0;
+    const horizontal = axis === 'columns';
+    const leading = defaults(horizontal ? 'pad_inset_left_px' : 'pad_inset_top_px');
+    const trailing = defaults(horizontal ? 'pad_inset_right_px' : 'pad_inset_bottom_px');
+    const shift = Number(pixelShift !== undefined ? pixelShift : defaults('pixel_shift_distance_px')) || 0;
+    return Math.max(0, dimension - 2 * shift - leading - trailing);
+}
+
+function padTrackSpanSize(sizes, start, span, gap) {
+    let total = 0;
+    for (let offset = 0; offset < span; offset++) {
+        const index = start + offset;
+        total += sizes[index] !== undefined ? sizes[index] : (sizes[sizes.length - 1] || 0);
+        if (offset + 1 < span) total += gap;
+    }
+    return total;
+}
+
 async function padUploadPageIcons(context) {
     // Always delete old page icons (cleans up removed icons)
     const deleteResponse = await fetch('/api/icons/page?page=' + context.page, { method: 'DELETE' });
@@ -375,8 +429,20 @@ async function padUploadPageIcons(context) {
     if (iconButtons.length === 0) return;
 
     const btnSizes = await padGetButtonSizes(context.cols, context.rows);
-    const baseW = btnSizes.button_w - btnSizes.padding * 2;
-    const baseH = btnSizes.button_h - btnSizes.padding * 2;
+    const gap = Number(btnSizes.gap) || 0;
+    const displayW = Number(btnSizes.display_w) ||
+        (Number(btnSizes.button_w) || 0) * context.cols + gap * (context.cols - 1);
+    const displayH = Number(btnSizes.display_h) ||
+        (Number(btnSizes.button_h) || 0) * context.rows + gap * (context.rows - 1);
+    const columnSizing = padComputeAxisTrackSizes(context.cols,
+        padGetTrackAvailableSize('columns', displayW, btnSizes.pixel_shift_margin),
+        gap, context.column_widths_px);
+    const rowSizing = padComputeAxisTrackSizes(context.rows,
+        padGetTrackAvailableSize('rows', displayH, btnSizes.pixel_shift_margin),
+        gap, context.row_heights_px);
+    if (!columnSizing.valid || !rowSizing.valid) throw new Error('Pad track sizes do not fit the display');
+    const columnTracks = columnSizing.sizes;
+    const rowTracks = rowSizing.sizes;
     const maxIconDimension = Number(deviceInfoCache && deviceInfoCache.icon_max_dimension) || 720;
 
     const needsMi = iconButtons.some(b => b.icon_id.startsWith('mi_'));
@@ -389,8 +455,8 @@ async function padUploadPageIcons(context) {
         const rs = btn.row_span || 1;
         // LVGL content area = button - 2*padding - 2*border_width
         const bw = (btn.border_width !== undefined) ? btn.border_width : 1;
-        const fullW = baseW * cs + btnSizes.gap * (cs - 1) - bw * 2;
-        const fullH = baseH * rs + btnSizes.gap * (rs - 1) - bw * 2;
+        const fullW = padTrackSpanSize(columnTracks, btn.col, cs, gap) - btnSizes.padding * 2 - bw * 2;
+        const fullH = padTrackSpanSize(rowTracks, btn.row, rs, gap) - btnSizes.padding * 2 - bw * 2;
         const kind = btn.icon_id.startsWith('mi_') ? 1 : 0;
 
         // Reserve space for top/bottom labels (font_small_h each)
@@ -414,8 +480,8 @@ async function padUploadPageIcons(context) {
 
         // Make icon square — glyph is sized to min dimension anyway,
         // avoids transparent padding in the taller axis
-        const iconSize = Math.min(iconW, iconH);
-        iconW = Math.min(iconSize, maxIconDimension);
+        const iconSize = Math.max(1, Math.floor(Math.min(iconW, iconH, maxIconDimension)));
+        iconW = iconSize;
         iconH = iconW;
 
         padRenderIconOnCanvas(canvas, btn.icon_id, iconW, iconH);
