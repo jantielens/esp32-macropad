@@ -259,7 +259,7 @@ static bool tool_get_pad(const JsonObject& args, JsonObject& result, String& err
     // Return the raw stored pad JSON verbatim. This is the single source of
     // truth and round-trips losslessly: widget type-specific knobs live in an
     // opaque blob in the parsed PadConfig and cannot be reconstructed, but the
-    // raw JSON still holds every field (widget_*, label_*_style, icon_id,
+    // raw JSON still holds every field (widget_*, label_*_style, icon,
     // actions/lp_actions, template_pad, bindings, ...). Keys here match exactly
     // what set_button / set_pad accept.
     size_t len = 0;

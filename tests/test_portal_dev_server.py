@@ -643,7 +643,7 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(len(self.server.mock_pads["5"]["buttons"]), 64)
         self.assertEqual(self.server.mock_pads["1"]["buttons"], [])
         self.assertEqual(self.request("/api/pad?page=4")[1]["template_pad"], 3)
-        self.assertEqual(len(self.request("/api/pad?page=3")[1]["buttons"]), 2)
+        self.assertEqual(len(self.request("/api/pad?page=3")[1]["buttons"]), 3)
         self.assertEqual(self.request("/api/pad?page=15")[0], 404)
         self.assertEqual(self.request("/api/pad?page=00")[1], self.request("/api/pad?page=0")[1])
         for query in ("", "?page=-1", "?page=16", "?page=wrong"):
@@ -682,14 +682,41 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(self.request("/api/pad?page=0", "POST", pad)[0], 200)
         self.assertEqual(self.request("/api/pad?page=0")[1], pad)
         self.assertEqual(self.request("/api/info")[1]["available_screens"][0]["name"], "Edited pad")
+        self.assertIn(0, self.request("/api/info")[1]["configured_pads"])
         invalid = copy.deepcopy(pad)
         invalid["buttons"].append(copy.deepcopy(invalid["buttons"][0]))
         self.assertEqual(self.request("/api/pad?page=0", "POST", invalid)[0], 400)
         self.assertEqual(self.request("/api/pad?page=0", "POST", [pad])[0], 400)
         self.assertEqual(self.request("/api/pad?page=0", "DELETE")[0], 200)
+        self.assertNotIn(0, self.request("/api/info")[1]["configured_pads"])
         self.assertEqual(self.request("/api/pad?page=0")[0], 404)
         self.assertEqual(self.request("/__mock/reset", "POST", {})[0], 200)
         self.assertEqual(self.request("/api/pad?page=0")[1]["name"], "Living Room")
+
+    def test_icon_dependency_context(self):
+        self.server.mock_pads = {
+            "0": {"cols": 2, "rows": 2, "buttons": [{"col": 0, "row": 0}]},
+            "1": {"template_pad": 0, "cols": 3, "rows": 2,
+                  "column_widths_px": [40, 0, 0], "row_heights_px": [0, 60],
+                  "buttons": [{"col": 1, "row": 0, "col_span": 2, "row_span": 1,
+                               "label_top": "Private", "bg_image_password": "Secret",
+                               "actions": [{"type": "reboot"}]}],
+                  "overlay_buttons": [{"col": 0, "row": 0}]},
+            "2": {"cols": 1, "rows": 1, "buttons": []},
+        }
+        status, context = self.request("/api/pad/icon_context?page=0")
+        self.assertEqual(status, 200)
+        self.assertEqual(context, {"dependents": [{
+            "page": 1, "cols": 3, "rows": 2, "button_count": 2,
+            "column_widths_px": [40, 0, 0], "row_heights_px": [0, 60],
+            "buttons": [{"col": 1, "row": 0, "col_span": 2, "row_span": 1}],
+        }]})
+        self.assertEqual(self.request("/api/pad/icon_context?page=15")[1], {"dependents": []})
+        self.server.mock_pads["1"]["template_pad"] = 2
+        self.assertEqual(self.request("/api/pad/icon_context?page=0")[1], {"dependents": []})
+        self.assertEqual(self.request("/api/pad/icon_context?page=2")[1]["dependents"][0]["page"], 1)
+        for query in ("", "?page=-1", "?page=16", "?page=invalid"):
+            self.assertEqual(self.request("/api/pad/icon_context" + query)[0], 400)
 
     def test_binding_preview_shapes(self):
         _, result = self.request("/api/pad/resolve", "POST", {
@@ -781,10 +808,52 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(self.request("/api/component/display/screen", "PUT", {"screen": "pad_4"})[0], 200)
         self.assertEqual(self.server.mock_screen, "pad_4")
         self.assertEqual(self.request("/api/component/display/screen", "PUT", {"screen": "missing"})[0], 400)
-        self.assertEqual(self.request("/api/icons/install?id=pad_0_0_0", "POST", {})[0], 200)
-        self.request("/api/icons/install?id=pad_1_0_0", "POST", {})
+        source = {"catalog_id": "material-symbols:home", "kind": "mono",
+              "media_type": "image/svg+xml", "data": "<svg></svg>"}
+        self.assertEqual(self.request("/api/icons/source", "POST", {**source, "kind": "color"})[0], 400)
+        self.assertEqual(self.request("/api/icons/source", "POST",
+                          {**source, "data": "x" * (64 * 1024)})[0], 413)
+        self.assertEqual(self.request("/api/icons/source", "POST", source)[0], 201)
+        source_id = self.request("/api/icons/installed")[1]
+        self.assertEqual(source_id["icons"], [])
+        uploaded = self.request("/api/icons/source?id=s_000000000000000000000001")[1]
+        self.assertEqual(uploaded, source)
+        self.assertEqual(self.request("/api/icons/source?id=bad")[0], 400)
+        self.assertEqual(self.request("/api/icons/source?id=s_000000000000000000000002")[0], 404)
+        png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=")
+        install_url = "/api/icons/install?id=pad_0_main_0_0&source_id=s_000000000000000000000001&kind=1"
+        self.assertEqual(self.request(install_url, "POST", png)[0], 400)
+        for render_key in ("00000000", "not-hex"):
+            self.assertEqual(self.request(install_url + "&render_key=" + render_key, "POST", png)[0], 400)
+        install_url += "&render_key=4c31e060"
+        self.assertEqual(self.request(install_url, "POST", png)[0], 200)
+        second_source = {"catalog_id": "noto:smiling-face", "kind": "color",
+                 "media_type": "image/svg+xml", "data": "<svg></svg>"}
+        self.assertEqual(self.request("/api/icons/source", "POST", second_source)[0], 201)
+        second_install = "/api/icons/install?id=pad_1_main_0_0&source_id=s_000000000000000000000002&kind=0&render_key=12345678"
+        self.assertEqual(self.request(second_install, "POST", png)[0], 200)
+        self.assertEqual(self.request("/api/icons/installed")[1]["icons"],
+                 ["pad_0_main_0_0", "pad_1_main_0_0"])
+        metadata = self.request("/api/icons/installed?pages=0")[1]["artifacts"]
+        self.assertEqual(metadata, {"pad_0_main_0_0": {
+            "source_id": "s_000000000000000000000001", "kind": 1,
+            "width": 1, "height": 1, "render_key": "4c31e060",
+        }})
+        self.assertEqual(len(self.request("/api/icons/installed?pages=0,1")[1]["artifacts"]), 2)
+        self.assertEqual(self.request("/api/icons/installed?pages=15")[1]["artifacts"], {})
+        for pages in ("", "16", "-1", "0,,1"):
+            self.assertEqual(self.request("/api/icons/installed?pages=" + pages)[0], 400)
+        self.server.mock_icons["pad_0_main_0_0"] = png[:8]
+        self.assertEqual(self.request("/api/icons/installed?pages=0")[1]["artifacts"], {})
+        self.server.mock_icons["pad_0_main_0_0"] = png
+        self.assertEqual(self.request("/api/icons/file?name=../unsafe.png", "DELETE")[0], 400)
+        self.assertEqual(self.request("/api/icons/file?name=pad_0_main_0_0.png", "DELETE")[0], 200)
+        self.assertEqual(self.request("/api/icons/installed?pages=0")[1]["artifacts"], {})
         self.assertEqual(self.request("/api/icons/page?page=0", "DELETE")[0], 200)
-        self.assertEqual(set(self.server.mock_icons), {"pad_1_0_0"})
+        self.assertEqual(set(self.server.mock_icons), {"pad_1_main_0_0"})
+        self.assertEqual(set(self.server.mock_icon_metadata), {"pad_1_main_0_0"})
+        self.assertEqual(self.request("/api/icons/page?page=1", "DELETE")[0], 200)
+        self.assertEqual(self.request("/api/icons/installed?pages=1")[1]["artifacts"], {})
         _, sizes = self.request("/api/pad/button_sizes?cols=4&rows=3")
         self.assertTrue(all(sizes[field] > 0 for field in ("button_w", "button_h", "padding", "gap", "font_small_h")))
         self.assertEqual((sizes["button_w"], sizes["button_h"], sizes["gap"], sizes["padding"]), (173, 233, 6, 4))

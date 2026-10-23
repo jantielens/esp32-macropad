@@ -204,8 +204,9 @@ show `---`; an unavailable bar reading does not become zero, and the device
 retains its last bar position. A toggle button's icon uses pink-red for
 unavailable data, distinct from its on/off colors.
 Its color follows reported HA state, not an assumed result
-of tapping. Material Symbol assets use the normal icon-generation path on save
-and need its browser font/network resources.
+of tapping. The generated Material Symbol uses the same artwork-backed icon
+path as a manually selected icon. New artwork needs browser connectivity; once
+saved, its retained source can be regenerated offline.
 
 The builder is a one-time creation tool, not a special button type. It cannot
 reopen an existing button's builder choices. **Cancel** leaves the position

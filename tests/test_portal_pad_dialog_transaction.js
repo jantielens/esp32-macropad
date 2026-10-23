@@ -88,7 +88,7 @@ assert.strictEqual(document.getElementById('pad-edit-validation-error').style.di
 assert.strictEqual(context.padState.buttons[0], originalButton);
 
 context.actionEditorBuild = function() { return {}; };
-context.padBuildIconId = function() { return ''; };
+context.padIconEditorReadDraft = function() { return null; };
 context.bindingValidateDialog = function() { return { valid: false, count: 1 }; };
 context.showMessage = function() {};
 context.padMarkDirty = function() {};

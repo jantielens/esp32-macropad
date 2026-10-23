@@ -353,11 +353,11 @@ void PadScreen::buildTiles() {
             lv_obj_clear_flag(lbl_center, LV_OBJ_FLAG_CLICKABLE);
         }
 
-        // Icon image (shown when icon_id is set and icon is cached)
+        // Icon image (shown when a source is set and its generated PNG is cached)
         lv_obj_t* icon_img = nullptr;
         uint16_t icon_scale = LV_SCALE_NONE;
-        if (bcfg.icon_id[0]) {
-            char icon_key[CONFIG_ICON_ID_MAX_LEN];
+        if (bcfg.icon_source_id[0]) {
+            char icon_key[CONFIG_ICON_KEY_MAX_LEN];
             icon_store_build_key(pageIndex, i >= cfg->main_button_count ? "overlay" : "main",
                                  bcfg.col, bcfg.row,
                                  icon_key, sizeof(icon_key));

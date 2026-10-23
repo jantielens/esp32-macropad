@@ -334,7 +334,11 @@ assert.strictEqual(zeroAppearance.content_pad, '0');
 (async function testDefaultsSaveRebootWarning() {
     let pendingCalls = 0;
     const messages = [];
-    context.padCollectButtonDefaults = () => ({ base_text_size: 30 });
+    context.padCollectButtonDefaults = () => ({
+        ...(context.padState.buttonDefaults || {}), base_text_size: 30
+    });
+    let regenerationCalls = 0;
+    context.padRegenerateAllSavedIcons = async () => { ++regenerationCalls; };
     context.padRenderGrid = () => {};
     context.setPendingReboot = () => { ++pendingCalls; };
     context.showMessage = (message, type) => messages.push({ message, type });
@@ -344,6 +348,7 @@ assert.strictEqual(zeroAppearance.content_pad, '0');
     });
     await context.padSaveButtonDefaults();
     assert.strictEqual(pendingCalls, 0);
+    assert.strictEqual(regenerationCalls, 0);
     assert.strictEqual(messages.pop().type, 'success');
 
     context.padLoadButtonDefaultsFromDevice = async () => context.padLoadButtonDefaults({

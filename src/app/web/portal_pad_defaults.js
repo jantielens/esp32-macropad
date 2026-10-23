@@ -256,7 +256,23 @@ function padUpdateLayoutDiagram() {
 }
 
 // Save device-level button defaults to /api/button-defaults
+function padIconSizingDefaultsChanged(previous, next) {
+    const fields = [
+        'content_pad', 'border_width', 'button_spacing_px',
+        'pad_inset_top_px', 'pad_inset_right_px', 'pad_inset_bottom_px', 'pad_inset_left_px',
+        'pixel_shift_distance_px',
+    ];
+    const effectiveValue = (config, field) => {
+        const value = config[field];
+        return String(value !== undefined && value !== ''
+            ? value : (PAD_FIRMWARE_DEFAULTS[field] ?? ''));
+    };
+    return fields.some(field => effectiveValue(previous, field) !== effectiveValue(next, field));
+}
+
 async function padSaveButtonDefaults() {
+    let defaultsSaved = false;
+    const previousDefaults = { ...(padState.buttonDefaults || {}) };
     try {
     var d = padCollectButtonDefaults();
         var resp = await fetch('/api/component/button-defaults/config', {
@@ -268,8 +284,12 @@ async function padSaveButtonDefaults() {
             var err = await resp.json().catch(function() { return {}; });
             throw new Error(err.error || 'HTTP ' + resp.status);
         }
+        defaultsSaved = true;
         padState.buttonDefaults = d;
         await padLoadButtonDefaultsFromDevice();
+        if (padIconSizingDefaultsChanged(previousDefaults, d)) {
+            await padRegenerateAllSavedIcons();
+        }
         if (PAD_TYPOGRAPHY_STATUS.reboot_required) {
             setPendingReboot();
         } else {
@@ -279,7 +299,7 @@ async function padSaveButtonDefaults() {
         padRenderGrid();
     } catch (err) {
         console.error('padSaveButtonDefaults error:', err);
-        showMessage('Save failed: ' + err.message, 'error');
+        showMessage((defaultsSaved ? 'Defaults saved, but icon regeneration failed: ' : 'Save failed: ') + err.message, 'error');
     }
 }
 

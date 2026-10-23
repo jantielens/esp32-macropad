@@ -11,6 +11,7 @@
 #include "icon_store.h"
 #include "log_manager.h"
 #include "pad_cycle.h"
+#include "pad_validate.h"
 #include "widgets/widget.h"
 
 #include <ArduinoJson.h>
@@ -63,6 +64,17 @@ static PadConfig* pad_config_load_from_flash(uint8_t page,
 
 static void pad_config_path(uint8_t page, char* buf, size_t buf_len) {
     snprintf(buf, buf_len, "/config/pad_%u.json", page);
+}
+
+static void recover_pad_config_file(uint8_t page) {
+    char path[32], temporary[40], backup[40];
+    pad_config_path(page, path, sizeof(path));
+    snprintf(temporary, sizeof(temporary), "%s.tmp", path);
+    snprintf(backup, sizeof(backup), "%s.bak", path);
+    if (Storage.exists(temporary)) Storage.remove(temporary);
+    if (!Storage.exists(backup)) return;
+    if (Storage.exists(path)) Storage.remove(backup);
+    else Storage.rename(backup, path);
 }
 
 static PadConfig* pad_config_create(uint8_t button_capacity, const char* name = "") {
@@ -338,7 +350,13 @@ static bool parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
     label_style_parse(dsl_bot, &btn->style_bottom,
                       btn->label_bottom_color_bind, sizeof(btn->label_bottom_color_bind));
 
-    strlcpy(btn->icon_id, obj["icon_id"] | "", CONFIG_ICON_ID_MAX_LEN);
+    JsonObjectConst icon = obj["icon"].as<JsonObjectConst>();
+    if (!icon.isNull()) {
+        strlcpy(btn->icon_source_id, icon["source_id"] | "",
+                CONFIG_ICON_SOURCE_ID_MAX_LEN);
+        btn->icon_kind = strcmp(icon["kind"] | "", "mono") == 0
+            ? ICON_KIND_MONO : ICON_KIND_COLOR;
+    }
     btn->icon_scale_pct = obj["icon_scale_pct"] | (uint8_t)0;
     {
         const char* ip = obj["icon_position"] | "";
@@ -449,6 +467,8 @@ bool pad_config_init() {
     }
     g_fs_mounted = true;
     g_eligible_mask.store(0, std::memory_order_release);
+
+    for (uint8_t page = 0; page < MAX_PADS; ++page) recover_pad_config_file(page);
 
     // Pre-load all existing page configs into RAM cache.
     // This runs on the main task (internal stack) so flash access is safe.
@@ -794,49 +814,139 @@ bool pad_config_get_data_stream_snapshot(uint8_t page,
     return true;
 }
 
-bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len) {
+static const char* validate_pad_button_icon(JsonObjectConst pad, JsonObjectConst button,
+                                           uint8_t page, const char* layer) {
+    const int template_page = pad["template_pad"] | -1;
+    JsonVariantConst icon_value = button["icon"];
+    if (icon_value.isNull()) return nullptr;
+    if (!icon_value.is<JsonObjectConst>()) return "icon must be an object";
+    JsonObjectConst icon = icon_value.as<JsonObjectConst>();
+    const char* source_id = icon["source_id"] | "";
+    const char* catalog_id = icon["catalog_id"] | "";
+    const char* kind_name = icon["kind"] | "";
+    if (!icon_store_source_matches_metadata(source_id, catalog_id, kind_name))
+        return "icon source is missing or does not match catalog_id and kind";
+    const uint8_t col = button["col"] | (uint8_t)0;
+    const uint8_t row = button["row"] | (uint8_t)0;
+    const uint8_t col_span = button["col_span"] | (uint8_t)1;
+    const uint8_t row_span = button["row_span"] | (uint8_t)1;
+    if ((uint16_t)col + col_span > (uint8_t)(pad["cols"] | (uint8_t)3) ||
+        (uint16_t)row + row_span > (uint8_t)(pad["rows"] | (uint8_t)3)) return nullptr;
+    const IconKind kind = strcmp(kind_name, "mono") == 0
+        ? ICON_KIND_MONO : ICON_KIND_COLOR;
+    const uint32_t render_key = pad_icon_render_key(pad, button);
+    char key[CONFIG_ICON_KEY_MAX_LEN];
+    icon_store_build_key(page, layer, col, row, key, sizeof(key));
+    if (icon_store_artifact_matches(key, source_id, kind, render_key)) return nullptr;
+    if (strcmp(layer, "main") == 0 && template_page >= 0 && template_page < MAX_PADS) {
+        icon_store_build_key((uint8_t)template_page, "main", col, row, key, sizeof(key));
+        if (icon_store_artifact_matches(key, source_id, kind, render_key)) return nullptr;
+    }
+    return "icon PNG is not prepared for its source, position, and layout; save through the portal";
+}
+
+static const char* validate_inherited_icon_artifacts(JsonObjectConst pad, uint8_t page,
+                                                    const PadConfig& config,
+                                                    JsonObjectConst template_pad,
+                                                    const PadConfig& template_config) {
+    uint8_t selected[MAX_PAD_BUTTONS];
+    const int count = select_template_buttons(config, template_config, selected);
+    if (count < 0) return "template buttons exceed capacity";
+    JsonArrayConst buttons = template_pad["buttons"].as<JsonArrayConst>();
+    for (int index = 0; index < count; ++index) {
+        const char* error = validate_pad_button_icon(pad, buttons[selected[index]], page, "main");
+        if (error) return error;
+    }
+    return nullptr;
+}
+
+static uint8_t collect_icon_sources(const PadConfig* config,
+                                    char source_ids[MAX_PAD_BUTTONS][CONFIG_ICON_SOURCE_ID_MAX_LEN]) {
+    if (!config) return 0;
+    uint8_t count = 0;
+    for (uint8_t index = 0; index < config->button_count; ++index) {
+        const char* source_id = config->buttons[index].icon_source_id;
+        if (!source_id[0]) continue;
+        bool duplicate = false;
+        for (uint8_t found = 0; found < count; ++found) {
+            if (strcmp(source_ids[found], source_id) == 0) duplicate = true;
+        }
+        if (!duplicate && count < MAX_PAD_BUTTONS) {
+            strlcpy(source_ids[count++], source_id, CONFIG_ICON_SOURCE_ID_MAX_LEN);
+        }
+    }
+    return count;
+}
+
+bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
+                         const char** error) {
+    if (error) *error = nullptr;
     if (page >= MAX_PADS) return false;
     if (!g_fs_mounted) return false;
     if (!json || len == 0 || len > 64 * 1024) return false;
 
-    PadConfig* replacement = nullptr;
-    {
-        BasicJsonDocument<PsramJsonAllocator> doc(len * 2 + 256);
-        if (deserializeJson(doc, json, len)) return false;
-        replacement = pad_config_parse(page, doc);
-    }
+    BasicJsonDocument<PsramJsonAllocator> doc(len * 2 + 256);
+    if (deserializeJson(doc, json, len)) return false;
+    PadConfig* replacement = pad_config_parse(page, doc);
     if (!replacement) return false;
+    auto reject_icon_error = [&](const char* icon_error) {
+        if (error) *error = icon_error;
+        pad_config_release(replacement);
+        return false;
+    };
+    for (const char* layer : {"main", "overlay"}) {
+        JsonArrayConst buttons = doc[strcmp(layer, "main") == 0 ? "buttons" : "overlay_buttons"];
+        for (JsonObjectConst button : buttons) {
+            const char* icon_error = validate_pad_button_icon(doc.as<JsonObjectConst>(), button, page, layer);
+            if (icon_error) return reject_icon_error(icon_error);
+        }
+    }
+    if (replacement->template_pad >= 0 && replacement->template_pad != page) {
+        PadConfig* template_config = pad_config_load_from_flash(replacement->template_pad, true);
+        if (template_config) {
+            size_t template_length = 0;
+            char* template_json = pad_config_read_raw(replacement->template_pad, &template_length);
+            BasicJsonDocument<PsramJsonAllocator> template_doc(template_length * 2 + 256);
+            const bool loaded = template_json && !deserializeJson(template_doc, template_json, template_length);
+            free(template_json);
+            const char* icon_error = loaded
+                ? validate_inherited_icon_artifacts(doc.as<JsonObjectConst>(), page, *replacement,
+                    template_doc.as<JsonObjectConst>(), *template_config)
+                : "could not validate template icons";
+            pad_config_release(template_config);
+            if (icon_error) return reject_icon_error(icon_error);
+        }
+    }
     for (uint8_t dependent_page = 0; dependent_page < MAX_PADS; ++dependent_page) {
         if (dependent_page == page || !cache_uses_template(dependent_page, page)) continue;
         PadConfig* dependent = pad_config_load_from_flash(dependent_page, true);
-        const bool valid = dependent && select_template_buttons(*dependent, *replacement, nullptr) >= 0;
+        size_t dependent_length = 0;
+        char* dependent_json = dependent ? pad_config_read_raw(dependent_page, &dependent_length) : nullptr;
+        BasicJsonDocument<PsramJsonAllocator> dependent_doc(dependent_length * 2 + 256);
+        const bool loaded = dependent_json && !deserializeJson(dependent_doc, dependent_json, dependent_length);
+        free(dependent_json);
+        const char* icon_error = loaded
+            ? validate_inherited_icon_artifacts(dependent_doc.as<JsonObjectConst>(), dependent_page,
+                *dependent, doc.as<JsonObjectConst>(), *replacement)
+            : "could not validate dependent pad icons";
         pad_config_release(dependent);
-        if (!valid) {
-            pad_config_release(replacement);
-            return false;
-        }
+        if (icon_error) return reject_icon_error(icon_error);
     }
     if (!merge_template_buttons(page, &replacement)) {
         pad_config_release(replacement);
         return false;
     }
 
+    const PadConfig* previous = pad_config_acquire(page);
+    char previous_sources[MAX_PAD_BUTTONS][CONFIG_ICON_SOURCE_ID_MAX_LEN] = {};
+    const uint8_t previous_source_count = collect_icon_sources(previous, previous_sources);
+
     char path[32];
     pad_config_path(page, path, sizeof(path));
-
-    File f = Storage.open(path, "w");
-    if (!f) {
-        LOGE(TAG, "Pad %u: failed to open for write", page);
+    if (!storage_write_atomic(path, json, len)) {
+        LOGE(TAG, "Pad %u: atomic JSON write failed", page);
         pad_config_release(replacement);
-        return false;
-    }
-
-    size_t written = f.write(json, len);
-    f.close();
-
-    if (written != len) {
-        LOGE(TAG, "Pad %u: write failed (wrote %u of %u)", page, (unsigned)written, (unsigned)len);
-        pad_config_release(replacement);
+        pad_config_release(previous);
         return false;
     }
 
@@ -875,6 +985,9 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len) {
     if (!refresh_ok) {
         LOGE(TAG, "Pad %u: dependent cache refresh incomplete", page);
     }
+    for (uint8_t source = 0; source < previous_source_count; ++source)
+        icon_store_source_delete_if_unreferenced(previous_sources[source]);
+    pad_config_release(previous);
     return refresh_ok;
 }
 
@@ -885,9 +998,14 @@ bool pad_config_delete(uint8_t page) {
     char path[32];
     pad_config_path(page, path, sizeof(path));
 
+    const PadConfig* previous = pad_config_acquire(page);
+    char previous_sources[MAX_PAD_BUTTONS][CONFIG_ICON_SOURCE_ID_MAX_LEN] = {};
+    const uint8_t previous_source_count = collect_icon_sources(previous, previous_sources);
+
     bool existed = Storage.exists(path);
     if (existed && !Storage.remove(path)) {
         LOGE(TAG, "Pad %u: delete failed", page);
+        pad_config_release(previous);
         return false;
     }
 
@@ -898,6 +1016,7 @@ bool pad_config_delete(uint8_t page) {
     cache_unlock();
     pad_config_release(old);
     publish_eligibility(page, false);
+    icon_store_delete_page_icons(page);
 
     // Refresh any pad that referenced this page as its template_pad
     bool refresh_ok = true;
@@ -917,6 +1036,9 @@ bool pad_config_delete(uint8_t page) {
     if (!refresh_ok) {
         LOGE(TAG, "Pad %u: dependent cache refresh incomplete", page);
     }
+    for (uint8_t source = 0; source < previous_source_count; ++source)
+        icon_store_source_delete_if_unreferenced(previous_sources[source]);
+    pad_config_release(previous);
     return refresh_ok;
 }
 

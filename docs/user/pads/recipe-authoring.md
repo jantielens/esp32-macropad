@@ -57,6 +57,24 @@ Use its live authoring metadata or adapt the
 [complete samples](../../samples/recipe-catalog.json), not an unrelated
 firmware's field catalog.
 
+## Add a catalog icon
+
+Recipe buttons can declare a Material Symbol or Noto emoji without embedding
+artwork or a device-specific source ID:
+
+```json
+{
+  "col_offset": 0,
+  "row_offset": 0,
+  "icon": { "catalog_id": "material-symbols:timer", "kind": "mono" }
+}
+```
+
+Use `kind: "mono"` for `material-symbols:` IDs and `kind: "color"` for `noto:`
+IDs. The recipe installer fetches new artwork in the browser and retains it on
+the device when the pad is saved. New catalog icons require an internet
+connection during installation.
+
 ## Choose layout syntax
 
 A fixed layout uses nonnegative whole-number col_offset/row_offset per button,

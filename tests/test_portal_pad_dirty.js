@@ -7,6 +7,7 @@ const context = {
 	console,
 	MAX_ACTIONS: 3,
 	padIconTypeChanged() {},
+	padIconEditorRefresh() {},
 	padFillRefreshVisibility() {},
 	padWorkspaceRefresh() {},
 	actionEditorListSetLabels() {},
@@ -370,6 +371,7 @@ const draftRoot = {
 };
 const workspaceContext = {
 	console, Map, Set, deviceInfoCache: { max_pad_buttons: 64 },
+	padCloneJson(value) { return JSON.parse(JSON.stringify(value)); },
 	padMaxButtons() { return 64; },
 	padState: {
 		page: 0, cols: 2, rows: 2, editCol: 0, editRow: 0, selectedLayer: 'main',
@@ -433,6 +435,7 @@ workspaceContext.padWidgetActionPrefixes = () => [];
 workspaceContext.actionEditorTypeChanged = () => {};
 workspaceContext.padWidgetTypeChanged = () => {};
 workspaceContext.padIconTypeChanged = () => {};
+workspaceContext.padIconEditorRefresh = () => {};
 workspaceContext.padConfirmChanged = () => {};
 workspaceContext.padDialogOpen = () => {
 	draftGroup.open = true;

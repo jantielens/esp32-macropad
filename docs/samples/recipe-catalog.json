@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "catalog_version": "2026-10-10-dev",
+  "catalog_version": "2026-10-23-dev",
   "recipes": [
     {
       "id": "pomodoro",
@@ -17,7 +17,7 @@
             "label_bottom": "(tap to toggle, \nhold to reset)",
             "label_center_style": "font:dseg7",
             "label_bottom_style": "color:999999",
-            "icon_id": "mi_timer",
+            "icon": { "catalog_id": "material-symbols:timer", "kind": "mono" },
             "icon_scale_pct": 50,
             "icon_position": "left",
             "actions": [
@@ -88,14 +88,14 @@
           {
             "col_offset": 0, "row_offset": 3, "row_span": 2,
             "label_bottom": "Dismiss alarm", "bg_color": "F44336", "fg_color": "FFFFFF",
-            "icon_id": "mi_alarm_off",
+            "icon": { "catalog_id": "material-symbols:alarm-off", "kind": "mono" },
             "btn_state": "[expr:[alarm:1_state]==\"idle\"?\"hidden\":\"\"]",
             "actions": [{"type": "confirm", "message": "Dismiss the alarm?"}, {"type": "alarm", "alarm_id": 1, "alarm_command": "cancel"}]
           },
           {
             "col_offset": 1, "row_offset": 3, "col_span": 4, "row_span": 2,
             "label_bottom": "Snooze alarm", "bg_color": "8BC34A", "fg_color": "FFFFFF",
-            "icon_id": "mi_snooze",
+            "icon": { "catalog_id": "material-symbols:snooze", "kind": "mono" },
             "btn_state": "[expr:[alarm:1_state]!=\"ringing\"?\"hidden\":\"enabled\"]",
             "actions": [{"type": "alarm", "alarm_id": 1, "alarm_command": "snooze"}]
           }
@@ -136,7 +136,7 @@
             "label_center": "[pad:grid;%.1f] kw",
             "label_bottom": "grid",
             "fg_color": "03A9F4",
-            "icon_id": "mi_power",
+            "icon": { "catalog_id": "material-symbols:power", "kind": "mono" },
             "icon_scale_pct": 50
           },
           {
@@ -145,7 +145,7 @@
             "label_center": "[pad:solar;%.1f] kw",
             "label_bottom": "solar",
             "fg_color": "FF9800",
-            "icon_id": "mi_sunny",
+            "icon": { "catalog_id": "material-symbols:sunny", "kind": "mono" },
             "icon_scale_pct": 50
           },
           {
@@ -154,7 +154,7 @@
             "label_center": "[pad:home;%.1f] kw",
             "label_bottom": "home",
             "fg_color": "F44336",
-            "icon_id": "mi_home",
+            "icon": { "catalog_id": "material-symbols:home", "kind": "mono" },
             "icon_scale_pct": 50
           },
           {

@@ -258,7 +258,7 @@ async function padRequestSave() {
 }
 
 const DEVICE_CONFIG_FORMAT = 'esp32-macropad-config';
-const DEVICE_CONFIG_VERSION = 1;
+const DEVICE_CONFIG_VERSION = 2;
 
 function padSetImageCapabilityVisibility(info, hideForWidget) {
     const imageFetch = !hideForWidget && info && info.has_image_fetch === true;
@@ -378,11 +378,11 @@ async function padInit() {
     document.getElementById('device-import-btn').addEventListener('click', () => document.getElementById('device-import-file').click());
     document.getElementById('device-import-file').addEventListener('change', deviceImportConfig);
 
-    // Icon input live preview
-    const iconEmoji = document.getElementById('pad-edit-icon-emoji');
-    if (iconEmoji) iconEmoji.addEventListener('input', padUpdateIconPreview);
-    const iconMi = document.getElementById('pad-edit-icon-mi');
-    if (iconMi) iconMi.addEventListener('input', padUpdateIconPreview);
+    document.getElementById('pad-edit-icon-choose').addEventListener('click', padOpenIconPicker);
+    document.getElementById('pad-edit-icon-remove').addEventListener('click', function () {
+        padIconEditorSetDraft(null);
+        padWorkspaceEdit();
+    });
 
 
     // Block placement cancel + Escape key
@@ -597,7 +597,7 @@ function padWidgetTypeChanged() {
         padConfirmChanged();
     }
     // Refresh icon position visibility (widgets may override layout)
-    padIconTypeChanged();
+    padIconEditorRefresh();
 
     const actionPolicy = editor ? editor.actions : { tap: true, longPress: true };
     var navigationGroup = document.getElementById('pad-edit-input-navigation');
@@ -638,6 +638,9 @@ async function padLoadPage(page, defaultsReady, selectedLayer) {
     padState.mainButtons = [];
     padState.overlayButtons = [];
     padState.bindings = [];
+    padState.importedIconSources = {};
+    padState.importedIconSourceIds = {};
+    padState.importedPadConfigs = null;
     padState.padActions = [];
     padState.templatePad = -1;
     document.getElementById('pad-button-shadow').value = 'inherit';
@@ -850,13 +853,18 @@ function padBuildSaveContext() {
     // Blank the backlight for the entire save sequence and restore after.
     return {
         page: snapshot.page,
-        cols: snapshot.cols,
-        rows: snapshot.rows,
-        column_widths_px: tracks.columns.sizes,
-        row_heights_px: tracks.rows.sizes,
-        buttons: snapshot.mainButtons,
-        icons: snapshot.mainButtons.map(button => Object.assign({}, button, { layer: 'main' }))
-            .concat(snapshot.overlayButtons.map(button => Object.assign({ layer: 'overlay' }, button))),
+        iconSources: {
+            byCatalogId: typeof padDraftIconSources === 'undefined' ? {} :
+                Object.fromEntries(Array.from(padDraftIconSources, ([id, record]) => [id, padCloneJson(record)])),
+            bySourceId: padCloneJson(padState.importedIconSources || {}),
+            sourceIdMap: padCloneJson(padState.importedIconSourceIds || {}),
+        },
+        templatePage: padState.templatePad,
+        templateButtons: padCloneJson(
+            padState.importedPadConfigs && padState.importedPadConfigs[padState.templatePad]
+                ? padState.importedPadConfigs[padState.templatePad].buttons || []
+                : padState.templateButtons || []),
+        iconLayout: padCaptureIconLayout(),
         name: padName,
         body: JSON.stringify(payload),
         blankOnSave: Boolean(deviceInfoCache && deviceInfoCache.display_blank_on_save),
@@ -886,12 +894,20 @@ async function padSetSaveBrightness(brightness) {
 
 let padPersistenceQueue = Promise.resolve();
 
-function padQueuePersistence(context) {
-    const save = padPersistenceQueue.then(() => padPersistPage(context));
+function padQueuePersistenceOperation(operation) {
+    const save = padPersistenceQueue.then(operation);
     // Keep the queue usable after a failed save while preserving that failure
     // for the caller that initiated it.
     padPersistenceQueue = save.catch(() => {});
     return save;
+}
+
+function padQueuePersistence(context) {
+    return padQueuePersistenceOperation(async () => padPersistPage(await padPreparePageSave(context)));
+}
+
+function padQueuePreparedPersistence(prepared) {
+    return padQueuePersistenceOperation(() => padPersistPage(prepared));
 }
 
 async function padPersistPage(context) {
@@ -899,6 +915,11 @@ async function padPersistPage(context) {
     let brightnessBlanked = false;
 
     try {
+        await padUploadIconSources(context);
+        const body = JSON.stringify(context.payload);
+        if (new TextEncoder().encode(body).length > 48 * 1024)
+            throw new Error('Pad config exceeds the 48 KiB save limit.');
+
         if (context.blankOnSave) {
             const cfgResp = await fetch('/api/config');
             if (!cfgResp.ok) throw new Error('Failed to read display brightness: HTTP ' + cfgResp.status);
@@ -908,22 +929,29 @@ async function padPersistPage(context) {
             brightnessBlanked = true;
         }
 
-        await padUploadPageIcons(context);
+        await padInstallPreparedIcons(context);
 
         const resp = await fetch('/api/pad?page=' + context.page, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: context.body,
+            body,
         });
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
             throw new Error(err.error || 'HTTP ' + resp.status);
         }
 
+        try {
+            await padDeleteObsoletePageIcons(context.page, context.desiredKeys);
+        } catch (error) {
+            console.warn('Pad saved, but obsolete icon cleanup failed:', error);
+        }
+
         if (context.blankOnSave) {
             // Wait for LVGL to rebuild tiles and render into the framebuffer
             await new Promise(r => setTimeout(r, 500));
         }
+        return context;
     } finally {
         if (brightnessBlanked) {
             await padSetSaveBrightness(savedBrightness);
@@ -953,7 +981,9 @@ async function padSavePage(options) {
         const workspace = typeof padWorkspace !== 'undefined' ? padWorkspace : null;
         const revision = workspace ? workspace.revision : 0;
         const selectedLayer = padState.selectedLayer;
-        await padQueuePersistence(context);
+        const persisted = await padQueuePersistence(context);
+        if (persisted && persisted.iconSources && (bulk || padState.page === context.page))
+            padState.importedIconSourceIds = padCloneJson(persisted.iconSources.sourceIdMap || {});
 
         if (!bulk && (document.getElementById('pad-config-section') !== section || padState.page !== context.page ||
             (workspace && (workspace !== padWorkspace || workspace.revision !== revision)))) return context;

@@ -134,6 +134,25 @@ int main() {
 
     {
         JsonDocument doc;
+        JsonObject button = make_button(doc);
+        JsonObject icon = button["icon"].to<JsonObject>();
+        icon["source_id"] = "s_0123456789abcdef01234567";
+        icon["catalog_id"] = "material-symbols:lightbulb";
+        icon["kind"] = "mono";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+
+        icon["source_id"] = "s_0123456789abcdef0123456g";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        icon["source_id"] = "s_0123456789abcdef01234567";
+        icon["kind"] = "color";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button.remove("icon");
+        button["icon_id"] = "mi_lightbulb";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+    }
+
+    {
+        JsonDocument doc;
         doc["cols"] = 2;
         doc["rows"] = 1;
         JsonObject main_button = doc["buttons"].to<JsonArray>().add<JsonObject>();
@@ -317,6 +336,22 @@ int main() {
         action["timer_value"] = "1234567890123456";
         CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
                           "timer value too long") == 0);
+    }
+
+    {
+        JsonDocument doc;
+        deserializeJson(doc, R"({"cols":3,"rows":2,"column_widths_px":[0,40,0],"buttons":[{"col":1,"row":0,"col_span":2,"row_span":1,"icon_scale_pct":75,"label_top":"Name","border_width":"2","content_pad":"4","widget_type":"gauge"}]})");
+        JsonObject button = doc["buttons"][0];
+        const uint32_t original = pad_icon_render_key(doc.as<JsonObjectConst>(), button);
+        CHECK(original == 0x4c31e060u);
+        button["label_top"] = "Other text";
+        button["fg_color"] = "ff0000";
+        CHECK(pad_icon_render_key(doc.as<JsonObjectConst>(), button) == original);
+        button["icon_scale_pct"] = 80;
+        CHECK(pad_icon_render_key(doc.as<JsonObjectConst>(), button) != original);
+        button["icon_scale_pct"] = 75;
+        doc["column_widths_px"][1] = 50;
+        CHECK(pad_icon_render_key(doc.as<JsonObjectConst>(), button) != original);
     }
 
     const char* invalid_timer_bindings[] = {

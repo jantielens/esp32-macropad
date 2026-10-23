@@ -35,7 +35,8 @@ assert.strictEqual(catalog.recipes[0].layout.flow, 'row');
 assert.strictEqual(catalog.recipes[0].layout.buttons[0].size, 'M');
 assert.strictEqual(catalog.recipes[0].layout.buttons[0].shape, 'wide');
 assert.strictEqual(catalog.recipes[0].layout.buttons[0].label_center, '[timer:1;mm:ss]');
-assert.strictEqual(catalog.recipes[0].layout.buttons[0].icon_id, 'mi_timer');
+assert.deepStrictEqual(JSON.parse(JSON.stringify(catalog.recipes[0].layout.buttons[0].icon)),
+    { catalog_id: 'material-symbols:timer', kind: 'mono' });
 assert.strictEqual(catalog.recipes[0].layout.buttons[0].icon_scale_pct, 50);
 assert.strictEqual(catalog.recipes[0].layout.buttons[0].icon_position, 'left');
 assert.strictEqual(catalog.recipes[0].layout.buttons[0].actions[0].timer_command, 'toggle');
@@ -191,7 +192,7 @@ context.recipeFindMinimumResize({
 async function testInstallation() {
     for (const outcome of ['success', 'cancel', 'pad-failure', 'component-failure', 'unsupported', 'capacity-exceeded',
         'font-success', 'font-existing', 'font-list-failure', 'font-download-failure',
-        'font-network-failure', 'font-upload-failure', 'font-unsupported']) {
+        'font-network-failure', 'font-upload-failure', 'font-unsupported', 'font-prepare-failure']) {
         const elements = new Map();
         function element() {
             return { hidden: true, children: [], classList: { add() {} }, appendChild(child) { this.children.push(child); } };
@@ -209,7 +210,21 @@ async function testInstallation() {
                 has_ttf_fonts: outcome !== 'font-unsupported', max_pad_buttons: outcome === 'capacity-exceeded' ? 1 : 64 },
             confirm: () => outcome !== 'cancel',
             showMessage: (message) => messages.push(message),
-            padUploadPageIcons: async context => { iconsUploaded = true; uploadedIcons = context.icons; },
+            padCaptureIconLayout: () => ({}),
+            padPreparePageSave: async context => {
+                if (outcome === 'font-prepare-failure') throw new Error('Icon preparation failed');
+                return context;
+            },
+            padQueuePreparedPersistence: async prepared => {
+                iconsUploaded = true;
+                uploadedIcons = JSON.parse(prepared.body).overlay_buttons || [];
+                writes.push({ url: '/api/pad?page=' + prepared.page, body: JSON.parse(prepared.body) });
+                if (outcome === 'pad-failure') throw new Error('Save failed');
+            },
+            padQueuePersistence: async context => {
+                iconsUploaded = true;
+                writes.push({ url: '/api/pad?page=' + context.page, body: JSON.parse(context.body) });
+            },
             document: {
                 getElementById(id) { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); },
                 createElement: element,
@@ -252,7 +267,8 @@ async function testInstallation() {
         install.state.selected.confirmation = 'Replace Alarm 1 actions and disable its schedule?';
         if (usesFont) install.state.selected.fonts = [{ name: 'digital', url: 'https://example.org/digital.ttf' }];
         install.state.pad = { page: 6, cols: 2, rows: 2, buttons: [],
-            overlay_buttons: [{ col: 0, row: 0, icon_id: 'emoji_overlay' }] };
+            overlay_buttons: [{ col: 0, row: 0, icon: { source_id: 's_000000000000000000000001',
+                catalog_id: 'noto:house', kind: 'color' } }] };
         install.state.placement = { col: 0, row: 0 };
         install.state.buttonSizes = { button_w: 100, button_h: 100, gap: 0 };
         await Promise.all([install.recipeInstall(), install.recipeInstall()]);
@@ -271,9 +287,9 @@ async function testInstallation() {
             assert.strictEqual(configWrites[0].url, '/api/pad?page=6');
             assert.strictEqual(configWrites.length, outcome === 'pad-failure' ? 1 : 2);
             assert.deepStrictEqual(configWrites[0].body.overlay_buttons, [
-                { col: 0, row: 0, icon_id: 'emoji_overlay' },
+                { col: 0, row: 0, icon: { source_id: 's_000000000000000000000001', catalog_id: 'noto:house', kind: 'color' } },
             ]);
-            assert(uploadedIcons.some(button => button.layer === 'overlay' && button.icon_id === 'emoji_overlay'));
+            assert(uploadedIcons.some(button => button.icon.source_id === 's_000000000000000000000001'));
         }
         if (outcome === 'font-existing') {
             assert.strictEqual(downloads.length, 0);
@@ -283,6 +299,7 @@ async function testInstallation() {
             assert.strictEqual(downloads.length, 1);
             assert.strictEqual(writes[0].url, '/api/fonts/upload?name=digital');
         }
+        if (outcome === 'font-prepare-failure') assert.strictEqual(downloads.length, 0);
         if (success) {
             assert.strictEqual(configWrites[1].body['1'].enabled, false);
             assert.strictEqual(configWrites[1].body['1'].hour, 8);

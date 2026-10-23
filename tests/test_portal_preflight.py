@@ -59,13 +59,13 @@ int main() {
 #endif
         "/api/health", "/api/reboot", "/api/firmware/update/status", "/api/firmware/update",
 #if HAS_DISPLAY
-        "/api/recipes/catalog", "/api/pad/button_sizes", "/api/pad/blocks",
+        "/api/recipes/catalog", "/api/pad/button_sizes", "/api/pad/icon_context", "/api/pad/blocks",
         "/api/pad/resolve",
         "/api/pad", "/api/screenshot",
 #if HAS_TOUCH
         "/api/screen/tap",
 #endif
-        "/api/icons/install", "/api/icons/page", "/api/icons/installed",
+        "/api/icons/install", "/api/icons/source", "/api/icons/page", "/api/icons/installed",
         "/api/icons/files", "/api/icons/cache", "/api/icons/file",
 #endif
 #if HAS_CAMERA

@@ -82,6 +82,7 @@ static const char* const core_preflight_paths[] = {
 #if HAS_DISPLAY
 	"/api/recipes/catalog",
 	"/api/pad/button_sizes",
+	"/api/pad/icon_context",
 	"/api/pad/blocks",
 #if HAS_DISPLAY
 	"/api/pad/resolve",
@@ -92,6 +93,7 @@ static const char* const core_preflight_paths[] = {
 	"/api/screen/tap",
 #endif
 	"/api/icons/install",
+	"/api/icons/source",
 	"/api/icons/page",
 	"/api/icons/installed",
 	"/api/icons/files",
@@ -239,6 +241,7 @@ void web_portal_register_routes(AsyncWebServer* server) {
 
 		// Pad button sizes (registered before /api/pad to avoid prefix match)
 		server->on("/api/pad/button_sizes", HTTP_GET, handleGetButtonSizes);
+		server->on("/api/pad/icon_context", HTTP_GET, handleGetPadIconContext);
 
 		// Pad building blocks catalog (registered before /api/pad to avoid prefix match)
 		server->on("/api/pad/blocks", HTTP_GET, handleGetPadBlocks);
@@ -283,6 +286,17 @@ void web_portal_register_routes(AsyncWebServer* server) {
 				NULL,
 				handlePostIconInstall
 		);
+
+		server->on(
+				"/api/icons/source",
+				HTTP_POST,
+				[](AsyncWebServerRequest *request) {
+						if (!portal_auth_gate(request)) return;
+				},
+				NULL,
+				handlePostIconSource
+		);
+		server->on("/api/icons/source", HTTP_GET, handleGetIconSource);
 
 		server->on("/api/icons/page", HTTP_DELETE, handleDeletePageIcons);
 

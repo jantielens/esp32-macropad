@@ -24,12 +24,106 @@
 #include <stdio.h>
 #include <string.h>
 
+uint32_t pad_icon_render_key(JsonObjectConst pad, JsonObjectConst button) {
+    uint32_t hash = 2166136261u;
+    const auto text = [&hash](const char* value) {
+        do {
+            hash ^= (uint8_t)*value;
+            hash *= 16777619u;
+        } while (*value++);
+    };
+    const auto number = [&text](int value) {
+        char buffer[16];
+        snprintf(buffer, sizeof(buffer), "%d", value);
+        text(buffer);
+    };
+    const int cols = pad["cols"] | 3;
+    const int rows = pad["rows"] | 3;
+    number(cols);
+    number(rows);
+    number(button["col"] | 0);
+    number(button["row"] | 0);
+    number(button["col_span"] | 1);
+    number(button["row_span"] | 1);
+    number(button["icon_scale_pct"] | 0);
+    number((button["label_top"] | "")[0] ? 1 : 0);
+    number((button["label_bottom"] | "")[0] ? 1 : 0);
+    const char* fields[] = {"border_width", "content_pad", "widget_type"};
+    for (const char* field : fields) {
+        JsonVariantConst value = button[field];
+        if (value.isNull()) text("");
+        else if (value.is<const char*>()) text(value.as<const char*>());
+        else {
+            char buffer[32];
+            serializeJson(value, buffer, sizeof(buffer));
+            text(buffer);
+        }
+    }
+    for (int index = 0; index < cols && index < MAX_GRID_COLS; ++index)
+        number(pad["column_widths_px"][index] | 0);
+    for (int index = 0; index < rows && index < MAX_GRID_ROWS; ++index)
+        number(pad["row_heights_px"][index] | 0);
+    return hash ? hash : 1;
+}
+
+bool pad_icon_source_id_valid(const char* source_id) {
+    if (!source_id || strlen(source_id) != 26 || source_id[0] != 's' || source_id[1] != '_')
+        return false;
+    for (size_t index = 2; index < 26; ++index) {
+        const char value = source_id[index];
+        if (!((value >= '0' && value <= '9') || (value >= 'a' && value <= 'f')))
+            return false;
+    }
+    return true;
+}
+
+bool pad_icon_catalog_kind_valid(const char* catalog_id, const char* kind) {
+    if (!catalog_id || !kind) return false;
+    const size_t length = strlen(catalog_id);
+    if (!length || length > 128) return false;
+
+    const char* name = nullptr;
+    bool material = false;
+    if (strncmp(catalog_id, "material-symbols:", 17) == 0) {
+        name = catalog_id + 17;
+        material = true;
+    } else if (strncmp(catalog_id, "noto:", 5) == 0) {
+        name = catalog_id + 5;
+    } else {
+        return false;
+    }
+    if (!name[0]) return false;
+    for (const char* cursor = name; *cursor; ++cursor) {
+        if (!((*cursor >= 'a' && *cursor <= 'z') ||
+              (*cursor >= '0' && *cursor <= '9') || *cursor == '-'))
+            return false;
+    }
+    return strcmp(kind, material ? "mono" : "color") == 0;
+}
+
 // A color is valid if it parses as hex or carries a binding template ([..]).
 static bool color_ok(const char* s) {
     if (!s || !s[0]) return true;  // empty => default
     uint32_t tmp;
     if (parse_hex_color(s, &tmp)) return true;
     return strchr(s, '[') != nullptr;  // binding template
+}
+
+static const char* validate_icon(JsonObjectConst button) {
+    if (button.containsKey("icon_id")) return "icon_id is no longer supported; use icon";
+    if (!button.containsKey("icon")) return nullptr;
+    if (!button["icon"].is<JsonObjectConst>()) return "icon must be an object";
+
+    JsonObjectConst icon = button["icon"].as<JsonObjectConst>();
+    const char* source_id = icon["source_id"] | "";
+    if (!pad_icon_source_id_valid(source_id))
+        return "icon source_id must be s_ followed by 24 lowercase hexadecimal digits";
+
+    const char* catalog_id = icon["catalog_id"] | "";
+    const char* kind = icon["kind"] | "";
+    if (!pad_icon_catalog_kind_valid(catalog_id, kind))
+        return "icon catalog_id or kind is invalid";
+    return nullptr;
 }
 
 // Return `msg` if b[key] would be truncated on store (>= cap, since strlcpy
@@ -132,6 +226,8 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
         if (col + cspan > cols) return "button overflows grid columns";
         if (row + rspan > rows) return "button overflows grid rows";
     }
+    const char* icon_error = validate_icon(b);
+    if (icon_error) return icon_error;
     if (!color_ok(b["bg_color"] | "")) return "bad bg_color";
     if (!color_ok(b["fg_color"] | "")) return "bad fg_color";
     if (!color_ok(b["border_color"] | "")) return "bad border_color";

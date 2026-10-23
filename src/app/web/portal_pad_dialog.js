@@ -177,14 +177,10 @@ function padDialogOpen(col, row) {
         !!(btn.bg_image_path || btn.bg_image_url || btn.bg_image_letterbox);
 
     // Icon
-    const iconParsed = padIconIdToType(btn.icon_id || '');
-    document.getElementById('pad-edit-icon-type').value = iconParsed.type;
-    document.getElementById('pad-edit-icon-emoji').value = (iconParsed.type === 'emoji') ? iconParsed.value : '';
-    document.getElementById('pad-edit-icon-mi').value = (iconParsed.type === 'mi') ? iconParsed.value : '';
-    document.getElementById('pad-edit-icon-section').open = !!btn.icon_id;
+    padIconEditorSetDraft(btn.icon || null);
+    document.getElementById('pad-edit-icon-section').open = !!btn.icon;
     document.getElementById('pad-edit-icon-scale').value = (btn.icon_scale_pct !== undefined) ? btn.icon_scale_pct : 0;
     document.getElementById('pad-edit-icon-position').value = btn.icon_position || 'above';
-    padIconTypeChanged();
 
     // Widget type
     document.getElementById('pad-edit-widget-type').value = btn.widget_type || '';
@@ -358,15 +354,16 @@ function padDialogBuildButton() {
     }
 
     // Icon
-    const iconId = padBuildIconId();
-    if (iconId) btn.icon_id = iconId;
+    const icon = padIconEditorReadDraft();
+    if (icon) btn.icon = icon;
+    else delete btn.icon;
 
     // Icon scale
     const iconScale = parseInt(document.getElementById('pad-edit-icon-scale').value);
     if (!isNaN(iconScale) && iconScale > 0 && iconScale <= 250) btn.icon_scale_pct = iconScale;
 
     // Icon position (only relevant when icon is set)
-    if (iconId) {
+    if (icon) {
         const iconPos = document.getElementById('pad-edit-icon-position').value;
         if (iconPos && iconPos !== 'above') btn.icon_position = iconPos;
     }

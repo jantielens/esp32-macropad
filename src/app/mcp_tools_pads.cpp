@@ -138,12 +138,12 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
         "label_top_style", "label_center_style", "label_bottom_style",
         "bg_color", "fg_color", "border_color", "border_width", "corner_radius", "content_pad", "button_shadow",
         "bg_pattern", "bg_pattern_color", "pattern_spacing", "pattern_stroke_width",
-        "icon_id", "btn_state", "widget_type", "widget_data_binding", "actions", "lp_actions"
+        "icon", "icon_scale_pct", "icon_position", "btn_state", "widget_type", "widget_data_binding", "actions", "lp_actions"
     };
     for (const char* f : fields) bf.add(f);
     btn["layer_note"] = "Buttons are stored in buttons (Main) or overlay_buttons (Overlay). Authoring tools accept layer='main' or layer='overlay'; omitted layer means Main. Positions are local array indices, while col/row are grid coordinates.";
     btn["widget_note"] = "widget keys are flat: widget_type + widget_data_binding[_2.._4]; widget config fields (e.g. min/max/color) are flat on the button too";
-    btn["labels_note"] = "Default bitmap fonts cover Latin text, digits, and basic punctuation. Uploaded static TrueType font coverage depends on the font; missing glyphs fall back to the bitmap default. Use icon_id for graphics.";
+    btn["labels_note"] = "Default bitmap fonts cover Latin text, digits, and basic punctuation. Uploaded static TrueType font coverage depends on the font; missing glyphs fall back to the bitmap default. Use icon for retained catalog artwork.";
     btn["button_shadow_note"] = "accepts 'enabled' or 'disabled' to override the pad setting; omit to inherit. Shadow type, color mode, offsets, and blur are device-wide Pad and Button Defaults.";
     btn["fill_note"] = "Keep existing base colors. bg_pattern and supported bar patterns: none (default), diagonal, reverse_diagonal, crosshatch, dots, checkerboard; unknown names -> none. Pattern color defaults to #000000 and accepts the owning surface's color bindings. pattern_spacing: static logical px 2-64 (default 8), shared across this button. pattern_stroke_width: 1-8 (default 1), capped by spacing; dot diameter, ignored for checkerboard (spacing is square size). Numeric values clamp; malformed values use defaults. Gauge fills remain unpatterned. Track outline fields apply only to bar_chart/gauge; width 0 disables. widget_bar_track_radius: bar_chart only, static logical px 0-64 (default 4), capped at half the smaller track dimension; applies with outline off, dual baseline joins stay square. Portal badges preview fills with representative bound colors, not live widget rendering.";
     btn["limits_note"] = "max field lengths: button labels/colors/btn_state/widget_data_binding = 191 chars, border_width/corner_radius = 63, pad binding name = 31. Widget caption/text fields are shorter (see each field's \"max\" in widgets[].config_fields, typically 63). If a binding expression is too long, declare it once as a pad-level [pad:name] binding and reference [pad:name] instead of inlining it.";
@@ -195,7 +195,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     JsonObject fmt = result.createNestedObject("formats");
     fmt["color"] = "#RRGGBB";
     fmt["size"] = "integer pixels or binding template";
-    result["icon_note"] = "icon_id must reference an icon already uploaded via the portal (material symbols are stored as 'mi_<name>'). MCP cannot upload icons; setting an unknown icon_id renders blank. For symbols without an upload, put a font glyph or a [time:..] binding in a label instead.";
+    result["icon_note"] = "icon is {source_id, catalog_id, kind}; source_id must refer to artwork retained by the device and kind must match catalog_id (material-symbols=mono, noto=color). MCP cannot resolve or upload catalog artwork; use the portal to prepare new icons before writing a pad.";
 
     // Visual inspection: the device cannot hand the model an image directly, but
     // a Playwright-driven browser can. /api/screenshot is the live framebuffer as
@@ -249,9 +249,13 @@ static void exec_pad_save(const void* ctx, bool* ok, char* msg, size_t msg_len) 
     const PadWriteCtx* c = (const PadWriteCtx*)ctx;
     *ok = false;
     if (!c->buf) { strlcpy(msg, "no buffer", msg_len); return; }
-    bool saved = pad_config_save_raw(c->page, c->buf, c->len);
+    const char* save_error = nullptr;
+    bool saved = pad_config_save_raw(c->page, c->buf, c->len, &save_error);
     heap_caps_free(c->buf);
-    if (!saved) { strlcpy(msg, "save failed", msg_len); return; }
+    if (!saved) {
+        strlcpy(msg, save_error ? save_error : "save failed", msg_len);
+        return;
+    }
     pad_config_rebuild_all_caches();
 #if HAS_MQTT
     // Subscribe to any MQTT topics newly referenced by this pad's bindings so

@@ -9,6 +9,7 @@
 
 #include <Arduino.h>
 #include <esp_partition.h>
+#include <string.h>
 
 #define TAG "Storage"
 
@@ -33,6 +34,61 @@ void storage_publish_usage(bool force) {
 }
 
 static bool s_mounted = false;
+
+bool storage_write_verified(const char* path, const uint8_t* data, size_t length) {
+    if (Storage.exists(path) && !Storage.remove(path)) return false;
+    File file = Storage.open(path, "w");
+    if (!file) return false;
+    const size_t written = file.write(data, length);
+    file.close();
+    if (written != length) {
+        Storage.remove(path);
+        return false;
+    }
+    File verify = Storage.open(path, "r");
+    if (!verify || verify.size() != length) {
+        if (verify) verify.close();
+        Storage.remove(path);
+        return false;
+    }
+    uint8_t chunk[256];
+    size_t offset = 0;
+    while (offset < length) {
+        const size_t wanted = length - offset < sizeof(chunk) ? length - offset : sizeof(chunk);
+        const size_t read = verify.readBytes((char*)chunk, wanted);
+        if (read != wanted || memcmp(chunk, data + offset, wanted) != 0) {
+            verify.close();
+            Storage.remove(path);
+            return false;
+        }
+        offset += read;
+    }
+    verify.close();
+    return true;
+}
+
+bool storage_write_atomic(const char* path, const uint8_t* data, size_t length) {
+    char temporary[112], backup[112];
+    if (snprintf(temporary, sizeof(temporary), "%s.tmp", path) >= (int)sizeof(temporary) ||
+        snprintf(backup, sizeof(backup), "%s.bak", path) >= (int)sizeof(backup)) return false;
+    if ((Storage.exists(temporary) && !Storage.remove(temporary)) ||
+        (Storage.exists(backup) && !Storage.remove(backup)) ||
+        !storage_write_verified(temporary, data, length)) return false;
+    const bool had_previous = Storage.exists(path);
+    if (had_previous && !Storage.rename(path, backup)) {
+        Storage.remove(temporary);
+        return false;
+    }
+    if (!Storage.rename(temporary, path)) {
+        if (had_previous && !Storage.rename(backup, path))
+            LOGE(TAG, "Failed to restore %s after replacement error", path);
+        Storage.remove(temporary);
+        return false;
+    }
+    if (had_previous && !Storage.remove(backup))
+        LOGW(TAG, "Replacement succeeded but backup cleanup failed: %s", backup);
+    return true;
+}
 
 bool storage_mount() {
     if (s_mounted) return true;

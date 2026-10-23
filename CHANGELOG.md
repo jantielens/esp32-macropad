@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add a searchable foreground-icon picker for Material Symbols and Noto emoji.
+  Browse categories and preview artwork before applying it to a button.
+  Retain selected source artwork on the device for offline resizing and copying,
+  with source-aware recipes and pad import/export. Material Symbols follow the
+  button's foreground color; emoji retain their original colors.
+  See [Add labels and icons](docs/user/pads/appearance.md#add-labels-and-icons).
 * Add Main and Overlay button layers to pads for conditional warnings and
   controls above the main layout. Overlay buttons can share Main positions;
   hidden Overlay buttons leave Main buttons usable, while visible enabled or
@@ -50,6 +56,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Replace the previous built-in foreground-icon format with retained artwork
+  sources. Reselect icons in older pad configurations and recipes; no automatic
+  migration is provided.
+* Reduce icon save overhead with one scoped template-dependency request and
+  reuse generated PNGs when source, kind, render key, and calculated dimensions
+  match. Keep firmware artifact validation and post-save cleanup in place.
 * Upgrade LVGL from 9.5.0 to 9.6.0 while keeping LVGL PPA acceleration
   disabled. Migrate affected flag setters and the FreeType glyph-entry pointer.
   The Tiny TTF allocation-failure check still exposes unsafe backend OOM

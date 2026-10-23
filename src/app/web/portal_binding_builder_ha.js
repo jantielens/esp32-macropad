@@ -521,7 +521,7 @@ const haButtonBuilderProvider = {
         if (!/^[a-z][a-z0-9_]{0,27}$/.test(options.icon)) throw new Error('Enter a Material Symbol name, such as lightbulb.');
         const state = this.buildBinding(candidate, { format: '' });
         return {
-            icon_id: 'mi_' + options.icon,
+            icon: { catalog_id: 'material-symbols:' + options.icon.replace(/_/g, '-'), kind: 'mono' },
             icon_position: 'center',
             label_top_style: 'color:' + (padColorNormalizeLiteral(padGetEffectiveDefault('fg_color')) || '#FFFFFF'),
             fg_color: '[expr:' + state + '=="on"?"' + options.on + '":"' + options.off + '"|#EF6B73]',

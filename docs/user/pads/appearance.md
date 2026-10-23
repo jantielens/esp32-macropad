@@ -26,11 +26,18 @@ Button **Content** provides Top, Center, and Bottom labels.
 Mix text and [bindings](bindings.md); enter `\n` for a line break.
 Use **fx** to search the device's Binding reference and insert a token.
 
-Choose no icon, an Emoji, or a Material Symbol by its catalog name, such as
-`lightbulb`. Browser-generated icon assets need the corresponding font/network
-resources when generated. Icon Size 0 is automatic; 1-250% overrides it.
+Choose an icon in the button editor to search or browse Material Symbols and
+Noto emoji. New catalog artwork is fetched in the browser, so selecting a new
+icon requires an internet connection. After a pad is saved, its retained source
+can be used to regenerate icons offline when you resize or copy buttons.
+Material Symbols follow the button's foreground color; Noto emoji keep their
+original colors. Remove icon clears the editor draft, and **Save Pad** persists
+the change. Icon Size 0 is automatic; 1-250% overrides it.
 Position Above/Left/Centered changes ordinary label/icon layout.
 Some widgets own placement and hide that selector.
+
+Material Symbols are distributed under the [Apache License 2.0](https://github.com/google/material-design-icons/blob/master/LICENSE).
+Noto Emoji artwork is distributed under the [SIL Open Font License 1.1](https://github.com/googlefonts/noto-emoji/blob/main/LICENSE).
 
 ## Use label style syntax
 

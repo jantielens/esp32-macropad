@@ -103,6 +103,9 @@ def reset_pad_fixtures(server, scenario="normal"):
     server.mock_mqtt_next_handle = 1
     server.mock_screen = "pad_0"
     server.mock_icons = {}
+    server.mock_icon_metadata = {}
+    server.mock_icon_sources = {}
+    server.mock_icon_source_counter = 1
     server.mock_boot_actions = []
     server.mock_boot_logo_slots = {}
     server.mock_recipe_catalog = json.loads((SCRIPT_DIR.parent / "docs/samples/recipe-catalog.json").read_text(encoding="utf-8"))
@@ -186,6 +189,27 @@ class PortalHandler(SimpleHTTPRequestHandler):
     @staticmethod
     def _valid_font_name(name):
         return re.fullmatch(r"[a-z0-9_-]{1,31}", name) is not None
+
+    @staticmethod
+    def _valid_icon_source_id(source_id):
+        return re.fullmatch(r"s_[0-9a-f]{24}", source_id) is not None
+
+    @staticmethod
+    def _valid_icon_source(source):
+        if not isinstance(source, dict) or set(source) != {"catalog_id", "kind", "media_type", "data"}:
+            return False
+        catalog_id = source["catalog_id"]
+        kind = source["kind"]
+        data = source["data"]
+        match = re.fullmatch(r"(material-symbols|noto):([a-z0-9-]+)", catalog_id) \
+            if isinstance(catalog_id, str) and len(catalog_id) <= 128 else None
+        expected_kind = "mono" if match and match.group(1) == "material-symbols" else "color"
+        return (match is not None and kind == expected_kind and source["media_type"] == "image/svg+xml"
+                and isinstance(data, str) and bool(data))
+
+    @staticmethod
+    def _valid_icon_key(key):
+        return re.fullmatch(r"pad_(?:[0-9]|1[0-5])_(?:main|overlay)_[0-7]_[0-7]", key) is not None
 
     def _page(self, query):
         value = query.get("page", [""])[0]
@@ -369,6 +393,25 @@ class PortalHandler(SimpleHTTPRequestHandler):
                                        env=environment, capture_output=True, text=True, check=True)
             local_time, offset = formatted.stdout.strip().split("|")
             self._serve_json({"epoch": MOCK_NOW_EPOCH, "local_time": local_time, "utc_offset": offset, "ready": True})
+        elif path == "/api/pad/icon_context":
+            page = self._page(query)
+            if page is None:
+                return
+            if self.server.scenario == "load-error":
+                self._serve_json({"error": "Mock icon dependency context failure"}, 503)
+                return
+            dependents = []
+            for dependent, pad in sorted(self.server.mock_pads.items(), key=lambda entry: int(entry[0])):
+                if dependent == page or pad.get("template_pad", -1) != int(page):
+                    continue
+                context = {field: copy.deepcopy(pad[field]) for field in
+                           ("cols", "rows", "column_widths_px", "row_heights_px") if field in pad}
+                context.update(page=int(dependent),
+                               button_count=len(pad.get("buttons", [])) + len(pad.get("overlay_buttons", [])),
+                               buttons=[{field: button[field] for field in ("col", "row", "col_span", "row_span")
+                                         if field in button} for button in pad.get("buttons", [])])
+                dependents.append(context)
+            self._serve_json({"dependents": dependents})
         elif path == "/api/pad":
             page = self._page(query)
             if page is not None:
@@ -378,6 +421,37 @@ class PortalHandler(SimpleHTTPRequestHandler):
                     self._serve_json(self.server.mock_pads[page])
                 else:
                     self._serve_json({"error": "Pad not found"}, 404)
+        elif path == "/api/icons/source":
+            source_id = query.get("id", [""])[0]
+            if not source_id:
+                self._serve_json({"error": "Missing source id parameter"}, 400)
+            elif not self._valid_icon_source_id(source_id):
+                self._serve_json({"error": "Invalid source id"}, 400)
+            elif source_id not in self.server.mock_icon_sources:
+                self._serve_json({"error": "Icon source not found"}, 404)
+            else:
+                self._serve_json(copy.deepcopy(self.server.mock_icon_sources[source_id]))
+        elif path == "/api/icons/installed":
+            page_query = parse_qs(parsed.query, keep_blank_values=True)
+            if "pages" not in page_query:
+                self._serve_json({"icons": sorted(self.server.mock_icons), "cache_count": 0})
+                return
+            value = page_query["pages"][0]
+            if (len(value) > 64 or not re.fullmatch(r"[0-9]+(?:,[0-9]+)*", value) or
+                    any(int(page) >= 16 for page in value.split(","))):
+                self._serve_json({"error": "Invalid pages parameter"}, 400)
+                return
+            pages = {int(page) for page in value.split(",")}
+            artifacts = {}
+            for key, metadata in sorted(self.server.mock_icon_metadata.items()):
+                png = self.server.mock_icons.get(key, b"")
+                if (int(key.split("_")[1]) in pages and len(png) >= 24 and
+                        png.startswith(b"\x89PNG\r\n\x1a\n") and
+                        png[8:16] == b"\x00\x00\x00\rIHDR" and
+                        int.from_bytes(png[16:20], "big") == metadata["width"] and
+                        int.from_bytes(png[20:24], "big") == metadata["height"]):
+                    artifacts[key] = copy.deepcopy(metadata)
+            self._serve_json({"artifacts": artifacts, "cache_count": 0})
         elif path == "/api/component/button-defaults/config":
             active = getattr(self.server, "mock_typography", {"default_font": "@builtin", "base_text_size": 0})
             saved = self.server.mock_defaults
@@ -594,6 +668,24 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 return
             self.server.mock_mqtt_inspections[handle] = inspection
             self._serve_json({"handle": handle, "status": "queued"}, 202)
+            return
+
+        if path == "/api/icons/source":
+            if len(body) > 64 * 1024:
+                self._serve_json({"error": "Icon source exceeds 64 KiB"}, 413)
+                return
+            try:
+                source = json.loads(body.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                self._serve_json({"error": "Invalid icon source"}, 400)
+                return
+            if not self._valid_icon_source(source):
+                self._serve_json({"error": "Invalid icon source"}, 400)
+                return
+            source_id = f"s_{self.server.mock_icon_source_counter:024x}"
+            self.server.mock_icon_source_counter += 1
+            self.server.mock_icon_sources[source_id] = source
+            self._serve_json({"id": source_id}, 201)
             return
 
         if path == "/api/component/boot-actions/config":
@@ -826,7 +918,24 @@ class PortalHandler(SimpleHTTPRequestHandler):
             return
 
         if path == "/api/icons/install":
-            self.server.mock_icons[query.get("id", [""])[0]] = body
+            key = query.get("id", [""])[0]
+            source_id = query.get("source_id", [""])[0]
+            kind = query.get("kind", [""])[0]
+            render_key = query.get("render_key", [""])[0]
+            source = self.server.mock_icon_sources.get(source_id)
+            width = int.from_bytes(body[16:20], "big")
+            height = int.from_bytes(body[20:24], "big")
+            if (not self._valid_icon_key(key) or not self._valid_icon_source_id(source_id) or
+                    not re.fullmatch(r"[0-9a-f]{8}", render_key) or render_key == "00000000" or
+                    kind not in ("0", "1") or not body.startswith(b"\x89PNG\r\n\x1a\n") or
+                    not 24 <= len(body) <= 512 * 1024 or body[8:16] != b"\x00\x00\x00\rIHDR" or
+                    not 1 <= width <= 720 or not 1 <= height <= 720 or source is None or
+                    source["kind"] != ("mono" if kind == "1" else "color")):
+                self._serve_json({"error": "Invalid icon key, source, kind, render key, or PNG"}, 400)
+                return
+            self.server.mock_icons[key] = body
+            self.server.mock_icon_metadata[key] = {"source_id": source_id, "kind": int(kind),
+                                                  "width": width, "height": height, "render_key": render_key}
             self._serve_json({"success": True})
             return
 
@@ -921,6 +1030,22 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 del fonts[name]
                 self._serve_json({"success": True})
             return
+        if parsed.path == "/api/icons/file":
+            name = parse_qs(parsed.query).get("name", [""])[0]
+            if not name or ".." in name or "/" in name or "\\" in name:
+                self._serve_json({"error": "Invalid filename"}, 400)
+                return
+            if not name.endswith(".png"):
+                self._serve_json({"error": "File not found"}, 404)
+                return
+            key = name[:-4]
+            if key not in self.server.mock_icons:
+                self._serve_json({"error": "File not found"}, 404)
+                return
+            del self.server.mock_icons[key]
+            self.server.mock_icon_metadata.pop(key, None)
+            self._serve_json({"success": True})
+            return
         if parsed.path not in ("/api/pad", "/api/icons/page"):
             self.send_error(404, "Not found")
             return
@@ -932,6 +1057,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
         else:
             self.server.mock_icons = {key: value for key, value in self.server.mock_icons.items()
                                       if not key.startswith("pad_" + page + "_")}
+            self.server.mock_icon_metadata = {key: value for key, value in self.server.mock_icon_metadata.items()
+                                              if not key.startswith("pad_" + page + "_")}
         self._serve_json({"success": True})
 
     @staticmethod
@@ -1100,7 +1227,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
                         has_backlight=True, has_audio=True, has_sound_player=True, has_alarm=True,
                         has_native_extensions=True, has_camera=False, has_image_fetch=True,
                         has_image_library=True, has_ble=False, has_ble_hid=False,
-                        max_pads=16, max_pad_buttons=64, max_grid_cols=8, max_grid_rows=8,
+                        max_pads=16, configured_pads=sorted(int(page) for page in self.server.mock_pads),
+                        max_pad_buttons=64, max_grid_cols=8, max_grid_rows=8,
                         display_coord_width=720, display_coord_height=720, display_blank_on_save=True,
                         available_screens=[{"id": "pad_" + str(page), "name": self.server.mock_pads.get(str(page), {}).get("name", "Pad " + str(page + 1))}
                                            for page in range(16)] + [{"id": "info", "name": "Device Info"}])

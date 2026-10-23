@@ -8,6 +8,7 @@ function element() {
         dataset: {}, children: [], attributes: {}, classes: new Set(),
         classList: { add(...names) { names.forEach(name => this.owner.classes.add(name)); } },
         appendChild(child) { this.children.push(child); },
+        append(...children) { this.children.push(...children); },
         replaceChildren(...children) { this.children = children; },
         insertBefore(child, before) {
             const index = this.children.indexOf(before);
@@ -60,6 +61,13 @@ vm.runInContext(fs.readFileSync('src/app/web/portal_widget_rocker.js', 'utf8'), 
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_numericrocker.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_binding_validator.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_icons.js', 'utf8'), context);
+context.padAppendIconPreview = function(container, icon) {
+    const image = createElement();
+    image.className = 'pad-cell-icon';
+    image.dataset.kind = icon.kind;
+    container.appendChild(image);
+    return image;
+};
 
 const fields = ['name', 'icon', 'second_icon', 'axis_field', 'horizontal_icon', 'vertical_icon', 'default_axis'];
 const widgetFiles = fs.readdirSync('src/app/widgets').filter(name => name.endsWith('_widget.cpp'))
@@ -153,7 +161,7 @@ assert.strictEqual(incompleteCell.attributes['aria-description'], incompleteBind
 
 const iconBindingCell = createElement();
 context.padRenderCellContent(iconBindingCell, {
-    icon_id: 'emoji_thermometer', icon_position: 'left', label_center: '[mqtt:home/very/long/temperature]'
+    icon: { catalog_id: 'noto:thermometer', kind: 'color' }, icon_position: 'left', label_center: '[mqtt:home/very/long/temperature]'
 });
 const iconRow = iconBindingCell.children.find(child => child.className === 'pad-cell-icon-row');
 const iconRowLabel = iconRow.children.find(child => child.className === 'pad-cell-label-center');
@@ -162,7 +170,8 @@ const widgetCatalog = context.deviceInfoCache;
 context.deviceInfoCache = null;
 assert.strictEqual(context.padWidgetPreview({ widget_type: 'gauge' }).name, 'Unknown Widget');
 
-for (const content of [{ label_top: 'Top' }, { label_bottom: 'Bottom' }, { icon_id: 'emoji_X' }, { bg_image_path: '/image.png' }]) {
+for (const content of [{ label_top: 'Top' }, { label_bottom: 'Bottom' },
+    { icon: { catalog_id: 'noto:thermometer', kind: 'color' } }, { bg_image_path: '/image.png' }]) {
     const cell = createElement();
     context.padRenderCellContent(cell, { widget_type: 'gauge', ...content });
     assert(!cell.children.some(child => child.className === 'pad-widget-fallback'));
@@ -233,7 +242,8 @@ vm.runInContext(`BUTTON_BUILDER_PROVIDERS.push({
 context.PAD_FIRMWARE_DEFAULTS = { widget_track_color: '#1A1A1A', widget_series_color: '#4CAF50',
     widget_indicator_color: '#FFFFFF', widget_tick_color: '#AAAAAA' };
 for (const widget_type of ['toggle', 'rocker', 'numericrocker', 'future_widget']) {
-    const button = { widget_type, label_top: 'Top', label_center: 'Center', label_bottom: 'Bottom', icon_id: 'emoji_X' };
+    const button = { widget_type, label_top: 'Top', label_center: 'Center', label_bottom: 'Bottom',
+        icon: { catalog_id: 'noto:thermometer', kind: 'color' } };
     const original = JSON.stringify(button);
     const cell = createElement();
     context.padRenderCellContent(cell, button);
@@ -450,4 +460,62 @@ for (const source of ['', 'on', 'off', '[expr:[ha:climate.bureau_boven_thermosta
 }
 assert.strictEqual(context.padWidgetEditor('toggle').icon.width, 0.4);
 assert.strictEqual(context.padWidgetEditor('toggle').icon.height, 0.4);
-console.log('portal_pad_preview: PASS');
+const renderPad = { cols: 3, rows: 2, column_widths_px: [0, 40, 0] };
+const renderButton = { col: 1, row: 0, col_span: 2, row_span: 1, icon_scale_pct: 75,
+    label_top: 'Name', border_width: '2', content_pad: '4', widget_type: 'gauge' };
+const originalKey = context.padIconRenderKey(renderPad, renderButton);
+assert.strictEqual(originalKey, '4c31e060');
+assert.strictEqual(context.padIconRenderKey(renderPad, { ...renderButton, label_top: 'Other text', fg_color: 'ff0000' }), originalKey);
+for (const change of [{ icon_scale_pct: 80 }, { col_span: 1 }, { label_top: '' }])
+    assert.notStrictEqual(context.padIconRenderKey(renderPad, { ...renderButton, ...change }), originalKey);
+assert.notStrictEqual(context.padIconRenderKey({ ...renderPad, column_widths_px: [0, 50, 0] }, renderButton), originalKey);
+assert.notStrictEqual(context.padIconRenderKey({ ...renderPad, cols: 4 }, renderButton), originalKey);
+
+async function checkPickerResults() {
+    vm.runInContext(fs.readFileSync('src/app/web/portal_icon_picker.js', 'utf8'), context);
+    const nodes = new Map();
+    const pickerNode = selector => {
+        if (!nodes.has(selector)) nodes.set(selector, Object.assign(createElement(), { value: 'all' }));
+        return nodes.get(selector);
+    };
+    const resultGrid = pickerNode('[data-icon-grid]');
+    resultGrid.querySelectorAll = () => descendants(resultGrid).filter(node => node.dataset && node.dataset.url);
+    pickerNode('[data-icon-search]').value = '';
+    const liveUrls = new Set();
+    let nextUrl = 0;
+    let renderCount = 0;
+    context.URL = {
+        createObjectURL() { const url = 'blob:' + (++nextUrl); liveUrls.add(url); return url; },
+        revokeObjectURL(url) { assert(liveUrls.delete(url)); },
+    };
+    context.clearTimeout = clearTimeout;
+    context.AbortController = AbortController;
+    context.padIconLoadArtwork = async icons => icons;
+    context.padRenderIconPNG = async () => { renderCount++; return {}; };
+    context.padIconPickerResultColor = () => '#ffffff';
+    const session = {
+        dialog: { querySelector: pickerNode }, urls: new Set(), searchGeneration: 1,
+        searchController: new AbortController(), matching: [{ id: 'noto:house', name: 'House' }], visibleCount: 1,
+    };
+    context.testPickerSession = session;
+    vm.runInContext('padIconPickerSession = testPickerSession;', context);
+    await context.padIconPickerDrawResults(session, 1);
+    await context.padIconPickerDrawResults(session, 1);
+    assert.strictEqual(renderCount, 1);
+    assert.strictEqual(liveUrls.size, 1);
+    session.matching.push({ id: 'noto:sun', name: 'Sun' });
+    session.visibleCount = 2;
+    await context.padIconPickerDrawResults(session, 1);
+    assert.strictEqual(renderCount, 2);
+    assert.strictEqual(resultGrid.children.length, 2);
+    assert.strictEqual(liveUrls.size, 2);
+    await context.padIconPickerRenderResults(session);
+    assert.strictEqual(liveUrls.size, 0);
+    assert.strictEqual(session.urls.size, 0);
+    assert.strictEqual(resultGrid.children.length, 0);
+}
+
+checkPickerResults().then(() => console.log('portal_pad_preview: PASS')).catch(error => {
+    console.error(error);
+    process.exitCode = 1;
+});

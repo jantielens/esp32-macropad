@@ -43,4 +43,8 @@ struct PadValidationGeometry {
 const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid = false,
 						 const PadValidationGeometry* geometry = nullptr);
 
+bool pad_icon_source_id_valid(const char* source_id);
+bool pad_icon_catalog_kind_valid(const char* catalog_id, const char* kind);
+uint32_t pad_icon_render_key(JsonObjectConst pad, JsonObjectConst button);
+
 #endif // HAS_DISPLAY

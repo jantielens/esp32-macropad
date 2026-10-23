@@ -8,6 +8,11 @@ import tempfile
 root = pathlib.Path(__file__).resolve().parents[1]
 source = (root / "src/app/pad_config.cpp").read_text()
 info_source = (root / "src/app/web_portal_device_api.cpp").read_text()
+pad_api_source = (root / "src/app/web_portal_pad.cpp").read_text()
+storage_source = (root / "src/app/storage.cpp").read_text()
+icon_source = (root / "src/app/icon_store.cpp").read_text()
+icon_header = (root / "src/app/icon_store.h").read_text()
+validation_source = (root / "src/app/pad_validate.cpp").read_text()
 
 
 def section(start, end):
@@ -60,11 +65,17 @@ static unsigned storage_reads = 0;
 struct File {
     std::string path;
     bool valid;
+    size_t offset = 0;
     explicit operator bool() const { return valid; }
     size_t size() const { return files.at(path).size(); }
+    int read() {
+        if (offset >= size()) return -1;
+        return static_cast<unsigned char>(files.at(path)[offset++]);
+    }
     size_t readBytes(char* dst, size_t size) {
         ++storage_reads;
-        memcpy(dst, files.at(path).data(), size);
+        memcpy(dst, files.at(path).data() + offset, size);
+        offset += size;
         return size;
     }
     size_t write(const uint8_t* bytes, size_t size) {
@@ -80,10 +91,26 @@ struct TestStorage {
     }
     bool exists(const char* path) { return files.count(path) != 0; }
     bool remove(const char* path) { return files.erase(path) != 0; }
+    bool rename(const char* from, const char* to) {
+        const auto found = files.find(from);
+        if (found == files.end()) return false;
+        files[to] = found->second;
+        files.erase(found);
+        return true;
+    }
 } Storage;
 static bool storage_mount() { return true; }
 static void storage_publish_usage(bool) {}
 static void icon_store_preload_pad(uint8_t) {}
+enum IconKind : uint8_t { ICON_KIND_COLOR = 0, ICON_KIND_MONO = 1 };
+bool icon_store_source_matches_metadata(const char*, const char*, const char*) { return true; }
+bool icon_store_artifact_matches(const char*, const char*, IconKind, uint32_t) { return true; }
+uint32_t pad_icon_render_key(JsonObjectConst, JsonObjectConst) { return 1; }
+void icon_store_build_key(uint8_t, const char*, uint8_t, uint8_t, char* key_out, size_t size) {
+    if (size) key_out[0] = '\0';
+}
+bool icon_store_source_delete_if_unreferenced(const char*) { return true; }
+void icon_store_delete_page_icons(uint8_t) {}
 static ButtonDefaults defaults = {};
 static const ButtonDefaults* button_defaults_get() { return &defaults; }
 static const char* btn_default(const char* value, const char* fallback) {
@@ -108,13 +135,21 @@ static bool parse_button(JsonObject object, ScreenButtonConfig* button, const Bu
     return true;
 }
 '''
+harness += icon_header[icon_header.index("#ifndef ICON_MAX_DIMENSION"):icon_header.index("// Icon kind")]
+harness += icon_header[icon_header.index("struct IconArtifactInfo"):icon_header.index("#ifdef __cplusplus")]
+harness += validation_source[validation_source.index("bool pad_icon_source_id_valid"):validation_source.index("bool pad_icon_catalog_kind_valid")]
+harness += icon_source[icon_source.index("static bool validate_png"):icon_source.index("static bool source_matches_metadata_unlocked")]
+harness += icon_source[icon_source.index("static bool read_artifact_unlocked"):icon_source.index("    static bool artifact_matches_for_preload")]
+harness += storage_source[storage_source.index("bool storage_write_verified"):storage_source.index("bool storage_mount")]
 harness += section("static bool g_fs_mounted", "// ============================================================================")
 harness += section("static void pad_config_path", "// ============================================================================")
 harness += section("bool pad_config_init()", "// Internal: read and parse")
 harness += section("static int select_template_buttons",
                    "void pad_config_rebuild_all_caches()")
 harness += section("void pad_config_rebuild_all_caches()", "bool pad_config_get_data_stream_snapshot")
+harness += section("static const char* validate_pad_button_icon", "bool pad_config_save_raw")
 harness += section("bool pad_config_save_raw", "bool pad_config_exists")
+harness += section("bool pad_config_exists", "uint32_t pad_config_get_generation()")
 harness += section("uint32_t pad_config_get_generation()", "uint32_t pad_config_get_eligible_mask()")
 harness += section("bool pad_config_read_name", "int pad_config_resolve_ref")
 harness += info_source[info_source.index("template <typename TJson"):info_source.index("static void print_json_string")]
@@ -131,6 +166,38 @@ struct TestResponse {
     }
     size_t write(uint8_t byte) { return write(&byte, 1); }
 };
+struct AsyncResponseStream : TestResponse {
+    size_t print(const char* text) {
+        return write(reinterpret_cast<const uint8_t*>(text), strlen(text));
+    }
+};
+struct AsyncWebServerRequest {
+    int page = 0;
+    int status = 0;
+    std::string body;
+    AsyncResponseStream* beginResponseStream(const char*) { return new AsyncResponseStream; }
+    void send(AsyncResponseStream* response) {
+        status = 200;
+        body = response->body;
+        delete response;
+    }
+};
+struct WebPortalTiming {
+    void attach(AsyncResponseStream*, const char*) {}
+};
+static bool portal_auth_gate(AsyncWebServerRequest*) { return true; }
+static int parse_page_param(AsyncWebServerRequest* request) {
+    return request->page >= 0 && request->page < MAX_PADS ? request->page : -1;
+}
+static void web_portal_send_json_error(AsyncWebServerRequest* request, int status,
+                                      const char* message, WebPortalTiming*) {
+    request->status = status;
+    request->body = message;
+}
+#define PAD_CONFIG_MAX_JSON_BYTES (48 * 1024)
+'''
+harness += pad_api_source[pad_api_source.index("void handleGetPadIconContext"):pad_api_source.index("static void preserve_pad_image_passwords")]
+harness += r'''
 static bool save_document(uint8_t pad, JsonDocument& doc) {
     std::string json;
     serializeJson(doc, json);
@@ -150,6 +217,34 @@ static void add_buttons(JsonArray buttons, unsigned count) {
     }
 }
 int main() {
+    const char* icon_source_id = "s_000000000000000000000001";
+    JsonDocument metadata;
+    metadata["source_id"] = icon_source_id;
+    metadata["kind"] = 1;
+    metadata["width"] = 90;
+    metadata["height"] = 90;
+    metadata["render_key"] = 0x4c31e060;
+    std::string metadata_json;
+    serializeJson(metadata, metadata_json);
+    const std::string png("\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR\x00\x00\x00\x5a\x00\x00\x00\x5a", 24);
+    files["/icons/pad_0_main_0_0.meta"] = metadata_json;
+    files["/icons/pad_0_main_0_0.png"] = png;
+    IconArtifactInfo artifact = {};
+    assert(read_artifact_unlocked("pad_0_main_0_0", &artifact));
+    assert(strcmp(artifact.source_id, icon_source_id) == 0);
+    assert(artifact.kind == ICON_KIND_MONO && artifact.width == 90 && artifact.height == 90);
+    assert(artifact.render_key == 0x4c31e060);
+    assert(artifact_matches_unlocked("pad_0_main_0_0", icon_source_id, ICON_KIND_MONO, 0x4c31e060));
+    assert(!artifact_matches_unlocked("pad_0_main_0_0", icon_source_id, ICON_KIND_MONO, 1));
+    files["/icons/pad_0_main_0_0.png"][19] = 89;
+    assert(!read_artifact_unlocked("pad_0_main_0_0", &artifact));
+    files.erase("/icons/pad_0_main_0_0.png");
+    assert(!read_artifact_unlocked("pad_0_main_0_0", &artifact));
+    files["/icons/pad_0_main_0_0.png"] = png;
+    files["/icons/pad_0_main_0_0.meta"] = "{";
+    assert(!read_artifact_unlocked("pad_0_main_0_0", &artifact));
+    files.erase("/icons/pad_0_main_0_0.meta");
+    files.erase("/icons/pad_0_main_0_0.png");
     files["/config/pad_0.json"] = R"({"name":"Boot name","buttons":[]})";
     assert(pad_config_init());
     char copied[64];
@@ -240,6 +335,54 @@ int main() {
         assert(balanced->buttons[index + 32].row == index / 8);
     }
     pad_config_release(balanced);
+    JsonObject local = child["buttons"].as<JsonArray>().add<JsonObject>();
+    local["col"] = 0;
+    local["row"] = 0;
+    local["col_span"] = 2;
+    local["row_span"] = 1;
+    local["label_top"] = "Private label";
+    local["bg_image_password"] = "Secret password";
+    child["column_widths_px"].add(40);
+    child["row_heights_px"].add(50);
+    assert(save_document(0, child));
+    AsyncWebServerRequest context_request;
+    context_request.page = 1;
+    const unsigned context_reads = storage_reads;
+    handleGetPadIconContext(&context_request);
+    assert(context_request.status == 200);
+    assert(storage_reads == context_reads + 1);
+    JsonDocument context;
+    assert(!deserializeJson(context, context_request.body));
+    assert(context["dependents"].size() == 1);
+    JsonObject dependent = context["dependents"][0];
+    assert(dependent["page"] == 0);
+    assert(dependent["cols"] == 8 && dependent["rows"] == 8);
+    assert(dependent["button_count"] == 33);
+    assert(dependent["column_widths_px"][0] == 40);
+    assert(dependent["row_heights_px"][0] == 50);
+    assert(dependent["buttons"].size() == 1);
+    assert(dependent["buttons"][0]["col_span"] == 2);
+    assert(dependent["buttons"][0].size() == 4);
+    assert(dependent["overlay_buttons"].isNull());
+    assert(context_request.body.find("Private label") == std::string::npos);
+    assert(context_request.body.find("Secret password") == std::string::npos);
+    context_request.page = MAX_PADS - 1;
+    handleGetPadIconContext(&context_request);
+    assert(context_request.status == 200 && context_request.body == "{\"dependents\":[]}");
+    assert(storage_reads == context_reads + 1);
+    context_request.page = -1;
+    handleGetPadIconContext(&context_request);
+    assert(context_request.status == 400);
+    context_request.page = 1;
+    fail_allocation = true;
+    handleGetPadIconContext(&context_request);
+    fail_allocation = false;
+    assert(context_request.status == 503);
+    const std::string saved_child = files.at("/config/pad_0.json");
+    files["/config/pad_0.json"] = "{";
+    handleGetPadIconContext(&context_request);
+    assert(context_request.status == 503);
+    files["/config/pad_0.json"] = saved_child;
     files["/config/pad_1.json"] = R"({"name":"Imported","buttons":[]})";
     pad_config_rebuild_all_caches();
     assert(pad_config_read_name(1, copied, sizeof(copied)));

@@ -404,8 +404,9 @@ forward, reveals only the selected fragment's category.
 Each fragment title contains a decorative Material Symbol with `aria-hidden="true"`.
 Navigation category icons are mapped by category ID in `portalCategoryIcon()`;
 the API's legacy emoji metadata remains unchanged. Child navigation links stay
-text-only. The shell starts the shared `portalEnsureMaterialSymbols()` loader;
-pad icon rendering reuses it rather than issuing another font request.
+text-only. The shell starts the shared `portalEnsureMaterialSymbols()` loader for
+portal chrome. Button icons are rasterized to position-specific PNGs from
+retained source artwork, independently of this portal font.
 
 Material Symbols remain Google-hosted. Decorative icons are hidden until the
 stylesheet and font load successfully. A failed request, missing font API, or
@@ -1187,6 +1188,7 @@ not every authentication failure, redirect, or early error response is instrumen
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/pad?page=N` | Returns one pad's stored JSON. `bg_image_password` is redacted in both button arrays and reported through `bg_image_password_set`. |
+| `GET` | `/api/pad/icon_context?page=N` | Returns local layout context for pads directly referencing template pad N, without fetching their complete configurations. |
 | `POST` | `/api/pad?page=N` | Validates and saves one complete pad object. `buttons` is Main; optional `overlay_buttons` is Overlay. Both share grid settings and `max_pad_buttons`. |
 | `DELETE` | `/api/pad?page=N` | Deletes the pad configuration. |
 
@@ -1194,6 +1196,23 @@ Button positions are local to their layer. Grid coordinates may overlap between
 layers, but button rectangles may not overlap within one layer. The shared
 validator rejects malformed collections and combined-capacity overflow before
 the portal or MCP authoring tools save a pad.
+
+`GET /api/pad/icon_context?page=N` returns `{"dependents":[]}` when no saved pad
+directly references N. Otherwise, each dependent has its zero-based `page`,
+`cols`, `rows`, optional `column_widths_px` and `row_heights_px`, local Main
+`buttons` containing only `col`, `row`, `col_span`, and `row_span` when present,
+and `button_count` counting local Main plus Overlay buttons before inheritance.
+Overlay geometry does not suppress Main inheritance and is not returned.
+
+The authenticated handler discovers relationships from cached configurations,
+then reads only matching saved pads, one at a time, with a JSON field filter.
+It buffers the serialized projections, not an aggregate of parsed pad documents.
+It uses saved local geometry because cached buttons already include inheritance.
+Invalid pad parameters return `400`; dependency read, parse, or allocation
+failures return `503`. Save preparation makes one context request for an
+icon-bearing template and reuses its draft buttons to select and render inherited
+icons. Firmware save validation still rejects stale or missing artifacts if
+another client changes a dependent during preparation.
 
 ### Development Crash Injection
 
@@ -1497,6 +1516,8 @@ Returns comprehensive device information.
   "flash_chip_size": 4194304,
   "psram_size": 0,
   "icon_max_dimension": 720,
+  "icon_max_png_size": 524288,
+  "icon_max_source_json_size": 65536,
   "health_poll_interval_ms": 5000,
   "health_history_seconds": 300,
   "health_history_available": true,
@@ -1532,6 +1553,7 @@ Returns comprehensive device information.
     }
   ],
   "max_pads": 16,
+  "configured_pads": [0, 1],
   "max_pad_buttons": 64,
   "max_grid_cols": 8,
   "max_grid_rows": 8,
@@ -1625,7 +1647,10 @@ the production catalog.
 - `display_coord_width` / `display_coord_height`: Display resolution
 - `icon_max_dimension`: Largest accepted PNG width or height. The Pad editor
   rasterizes larger icons at this limit and the device scales them to fit.
+- `icon_max_png_size`: Maximum generated PNG upload size in bytes.
+- `icon_max_source_json_size`: Maximum retained source-record size in bytes.
 - `available_screens`: Array of `{id, name}` objects; pad screens include custom names from config
+- `configured_pads`: Zero-based pad IDs with saved configuration files. Unlike `available_screens`, this excludes unsaved slots. Fetch fresh device info before regenerating all saved icons; ordinary save dependency discovery uses `/api/pad/icon_context` instead.
 - `current_screen`: ID of the currently displayed screen
 
 Each widget module defines a `static const WidgetPreview <type>_preview` before
@@ -3322,31 +3347,77 @@ Save timer configuration to LittleFS and apply immediately.
 
 All icon endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabled.
 
-#### `POST /api/icons/install?id=<id>&kind=<0|1>`
+#### `POST /api/icons/install?id=<key>&source_id=<id>&kind=<0|1>&render_key=<hex>`
 
-Upload a PNG icon and install it into the icon store.
+Upload a generated PNG for a positional button key.
 
-- **Query Parameters:** `id` (required, `[a-z0-9_]`), `kind` (optional, `0`=color default, `1`=mono)
-- **Body:** Raw PNG bytes (`Content-Type: application/octet-stream`)
-- **Max size:** `ICON_MAX_PNG_SIZE` (128 KB)
+- **Query Parameters:** `id` (`pad_<page>_<main|overlay>_<col>_<row>`), `source_id` (`s_` plus 24 lowercase hexadecimal digits), `kind` (`0`=color, `1`=mono), and `render_key` (eight lowercase hexadecimal digits, nonzero), all required
+- **Body:** Raw PNG bytes (`Content-Type: image/png`)
+- **Max size:** `ICON_MAX_PNG_SIZE` (512 KiB); each dimension is limited by `ICON_MAX_DIMENSION` (720 pixels)
 - **Response:** `{"success": true}` on success; JSON error on failure
-- The PNG is saved to LittleFS at `/icons/<id>.png` and decoded into a PSRAM-cached ARGB8888 draw buffer for immediate use.
+- The PNG and metadata are stored using verified replacement. Metadata associates it with the retained source, explicit rendering kind, dimensions, and render key.
+- The render key records the pad and button inputs used for generation: grid and track sizes, position, spans, icon scale, top/bottom label presence, border width, content padding, and widget type. The portal's `padIconRenderKey()` and firmware's `pad_icon_render_key()` use the same NUL-delimited FNV-1a encoding; zero maps to one.
+- Raw REST and MCP pad saves reject mismatched render keys, including inherited template icons and affected template dependents. Prepare PNGs for the intended layout before saving; use the portal save pipeline rather than changing icon geometry through a raw JSON write.
+
+#### `POST /api/icons/source`
+
+Retain the original catalog SVG separately from pad JSON and generated PNGs.
+
+- **Body:** A JSON object containing exactly `catalog_id`, `kind`, `media_type`, and `data`. `media_type` is `image/svg+xml`; `catalog_id` uses the `material-symbols:` or `noto:` prefix and must match `kind` (`mono` or `color`).
+- **Max size:** `ICON_MAX_SOURCE_JSON_SIZE` (64 KiB)
+- **Response:** `201` with `{"id":"s_..."}` on success
+
+#### `GET /api/icons/source?id=<source_id>`
+
+Return the retained source record as JSON. The ID must match the exact device-local
+source grammar; a valid but missing ID returns `404`.
 
 #### `DELETE /api/icons/page?page=<N>`
 
-Delete all icon files for a given pad page.
+Delete all generated icon files for a pad. Use only for explicit pad deletion or
+reset, not as the first step of a save.
 
-- **Query Parameters:** `page` (required, `0`–`7`)
+- **Query Parameters:** `page` (required, `0` through `MAX_PADS - 1`)
 - **Response:** `{"success": true}`
 
 #### `GET /api/icons/installed`
 
-List all installed icon IDs (from LittleFS `/icons/` directory).
+List all installed positional icon IDs (from the `/icons/` directory).
 
 **Response:**
 ```json
-{ "icons": ["pad_0_0_0", "pad_0_1_2"], "cache_count": 2 }
+{ "icons": ["pad_0_main_0_0", "pad_0_overlay_1_2"], "cache_count": 2 }
 ```
+
+With `?pages=0,1`, return artifact metadata only for the requested zero-based pad
+IDs instead of the global ID list. `pages` is a nonempty comma-separated list of
+IDs in `0..MAX_PADS-1`, at most `MAX_PADS * 4` characters; invalid values return
+`400`. Each entry requires readable metadata and a PNG header whose dimensions
+match it. Missing, invalid, or busy artifacts are omitted and will be regenerated.
+The handler reads one artifact at a time and buffers only the serialized response.
+
+```json
+{
+  "artifacts": {
+    "pad_0_main_0_0": {
+      "source_id": "s_000000000000000000000001",
+      "kind": 1,
+      "width": 90,
+      "height": 90,
+      "render_key": "4c31e060"
+    }
+  },
+  "cache_count": 2
+}
+```
+
+Save preparation requests metadata once for the current pad and affected
+dependents. It skips PNG rendering and upload only when source ID, numeric kind,
+render key, and both calculated PNG dimensions match. Dimensions are compared
+separately because device defaults can change sizing without changing the render
+key. New or imported sources still generate new artifacts. Reused keys remain in
+the cleanup keep-list; saving pad JSON, firmware validation, and fresh post-save
+inventory cleanup still run.
 
 #### `GET /api/icons/files`
 
@@ -3354,7 +3425,7 @@ List all files in `/icons/` with names and sizes (debug endpoint).
 
 **Response:**
 ```json
-{ "files": [{"name": "pad_0_0_0.png", "size": 4096}] }
+{ "files": [{"name": "pad_0_main_0_0.png", "size": 4096}] }
 ```
 
 #### `GET /api/icons/cache`
@@ -3363,7 +3434,7 @@ Dump in-memory cache entries with dimensions and data sizes (debug endpoint).
 
 **Response:**
 ```json
-{ "entries": [{"id": "pad_0_0_0", "kind": 0, "w": 128, "h": 128, "data_size": 65536}], "count": 1 }
+{ "entries": [{"id": "pad_0_main_0_0", "kind": 0, "w": 128, "h": 128, "data_size": 65536}], "count": 1 }
 ```
 
 #### `GET /api/icons/file?name=<filename>`
