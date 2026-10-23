@@ -1100,7 +1100,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                         has_backlight=True, has_audio=True, has_sound_player=True, has_alarm=True,
                         has_native_extensions=True, has_camera=False, has_image_fetch=True,
                         has_image_library=True, has_ble=False, has_ble_hid=False,
-                        max_pads=16, max_grid_cols=8, max_grid_rows=8,
+                        max_pads=16, max_pad_buttons=64, max_grid_cols=8, max_grid_rows=8,
                         display_coord_width=720, display_coord_height=720, display_blank_on_save=True,
                         available_screens=[{"id": "pad_" + str(page), "name": self.server.mock_pads.get(str(page), {}).get("name", "Pad " + str(page + 1))}
                                            for page in range(16)] + [{"id": "info", "name": "Device Info"}])

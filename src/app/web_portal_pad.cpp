@@ -105,6 +105,30 @@ static void remove_pad_image_passwords(JsonArray buttons) {
     }
 }
 
+static void remove_pad_image_passwords(JsonDocument& pad) {
+    remove_pad_image_passwords(pad["buttons"].as<JsonArray>());
+    remove_pad_image_passwords(pad["overlay_buttons"].as<JsonArray>());
+}
+
+static void preserve_pad_image_passwords(JsonArray submitted_buttons,
+                                        JsonArrayConst existing_buttons) {
+    for (JsonObject button : submitted_buttons) {
+        const char* submitted_password = button["bg_image_password"] | "";
+        const bool preserve_password = (button["bg_image_password_set"] | false) && submitted_password[0] == '\0';
+        button.remove("bg_image_password_set");
+        if (!preserve_password) continue;
+
+        const int col = button["col"] | -1;
+        const int row = button["row"] | -1;
+        for (JsonObjectConst existing_button : existing_buttons) {
+            if ((existing_button["col"] | -2) != col || (existing_button["row"] | -2) != row) continue;
+            const char* password = existing_button["bg_image_password"] | "";
+            if (password[0] != '\0') button["bg_image_password"] = password;
+            break;
+        }
+    }
+}
+
 static uint8_t* prepare_pad_save_json(uint8_t page, const uint8_t* json, size_t len, size_t* prepared_len) {
     if (!prepared_len) return nullptr;
 
@@ -116,23 +140,10 @@ static uint8_t* prepare_pad_save_json(uint8_t page, const uint8_t* json, size_t 
     BasicJsonDocument<PsramJsonAllocator> existing(existing_len * 2 + 512);
     const bool have_existing = existing_json && !deserializeJson(existing, existing_json, existing_len);
 
-    JsonArray submitted_buttons = submitted["buttons"].as<JsonArray>();
-    JsonArrayConst existing_buttons = existing["buttons"].as<JsonArrayConst>();
-    for (JsonObject button : submitted_buttons) {
-        const char* submitted_password = button["bg_image_password"] | "";
-        const bool preserve_password = (button["bg_image_password_set"] | false) && submitted_password[0] == '\0';
-        button.remove("bg_image_password_set");
-        if (!preserve_password || !have_existing) continue;
-
-        const int col = button["col"] | -1;
-        const int row = button["row"] | -1;
-        for (JsonObjectConst existing_button : existing_buttons) {
-            if ((existing_button["col"] | -2) != col || (existing_button["row"] | -2) != row) continue;
-            const char* password = existing_button["bg_image_password"] | "";
-            if (password[0] != '\0') button["bg_image_password"] = password;
-            break;
-        }
-    }
+    preserve_pad_image_passwords(submitted["buttons"].as<JsonArray>(),
+        have_existing ? existing["buttons"].as<JsonArrayConst>() : JsonArrayConst());
+    preserve_pad_image_passwords(submitted["overlay_buttons"].as<JsonArray>(),
+        have_existing ? existing["overlay_buttons"].as<JsonArrayConst>() : JsonArrayConst());
 
     if (existing_json) free(existing_json);
 
@@ -182,7 +193,7 @@ void handleGetPadConfig(AsyncWebServerRequest *request) {
     free(json);
     timing.mark("parse");
 
-    remove_pad_image_passwords((*doc)["buttons"].as<JsonArray>());
+    remove_pad_image_passwords(*doc);
     timing.mark("redact");
     web_portal_send_json_chunked(request, doc, 200, &timing);
 }

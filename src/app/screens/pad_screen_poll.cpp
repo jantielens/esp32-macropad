@@ -1,4 +1,5 @@
 #include "pad_screen.h"
+#include "../touch_manager.h"
 #include "../button_shadow_color.h"
 #include "../fill_style_runtime.h"
 #include "../display_driver.h"
@@ -310,16 +311,12 @@ void PadScreen::pollNumberBindings() {
 // Button State Binding Polling
 // ============================================================================
 
-static BtnState parse_btn_state(const char* resolved) {
-    if (!resolved || !resolved[0]) return BTN_STATE_ENABLED;
-    if (strcmp(resolved, "disabled") == 0) return BTN_STATE_DISABLED;
-    if (strcmp(resolved, "hidden") == 0)   return BTN_STATE_HIDDEN;
-    // "enabled", "---" (unresolved), "ERR:..." → default to enabled
-    return BTN_STATE_ENABLED;
-}
-
 static void apply_btn_state(ButtonTile& tile, BtnState state) {
     if (!tile.obj) return;
+    if (tile.shadow) {
+        if (state == BTN_STATE_HIDDEN) lv_obj_add_flag(tile.shadow, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_clear_flag(tile.shadow, LV_OBJ_FLAG_HIDDEN);
+    }
     const bool was_inactive = lv_obj_has_flag(tile.obj, LV_OBJ_FLAG_HIDDEN) ||
         lv_obj_has_state(tile.obj, LV_STATE_DISABLED);
     if (state != BTN_STATE_ENABLED && tile.widget_type && tile.widget_type->onHide) {
@@ -347,29 +344,39 @@ void PadScreen::pollBtnStateBindings() {
     if (btnStateBindingCount == 0) return;
 
     char resolved[BINDING_TEMPLATE_MAX_LEN];
+    bool state_changed = false;
 
     for (uint16_t i = 0; i < btnStateBindingCount; i++) {
         RuntimeBtnStateBinding& sb = btnStateBindings[i];
         if (!sb.active) continue;
 
-        BtnState state;
+        const uint8_t ti = sb.tileIndex;
+        if (ti >= tileCount) continue;
+        ButtonTile& tile = tiles[ti];
+        const bool overlay = ti >= mainButtonCount;
+        const bool was_hidden = lv_obj_has_flag(tile.obj, LV_OBJ_FLAG_HIDDEN);
+        const bool was_disabled = lv_obj_has_state(tile.obj, LV_STATE_DISABLED);
+        const BtnState previous_state = was_hidden ? BTN_STATE_HIDDEN
+            : was_disabled ? BTN_STATE_DISABLED : BTN_STATE_ENABLED;
+        const BtnState fallback = overlay ? BTN_STATE_HIDDEN : BTN_STATE_ENABLED;
+        const char* value = sb.templ;
+        bool resolution_complete = true;
 
         if (sb.hasBindings) {
-            binding_template_resolve(sb.templ, resolved, sizeof(resolved));
-            state = parse_btn_state(resolved);
+            const BindingResolverStatus status = binding_template_resolve_status(
+                sb.templ, resolved, sizeof(resolved));
+            value = resolved;
+            resolution_complete = status == BINDING_RESOLVER_RESOLVED;
         } else {
             // Static value — parse once then deactivate
-            state = parse_btn_state(sb.templ);
             sb.active = false;
         }
+        const BtnState state = pad_overlay_resolve_state(
+            value, resolution_complete, overlay, true);
 
         if ((uint8_t)state == sb.lastState) continue;
         sb.lastState = (uint8_t)state;
-
-        uint8_t ti = sb.tileIndex;
-        if (ti >= tileCount) continue;
-        ButtonTile& tile = tiles[ti];
-
+        if (previous_state != state) state_changed = true;
         apply_btn_state(tile, state);
 
 #if HAS_IMAGE_FETCH
@@ -382,6 +389,11 @@ void PadScreen::pollBtnStateBindings() {
             }
         }
 #endif
+    }
+    if (state_changed) {
+        touch_manager_cancel_physical_input();
+        for (uint8_t index = 0; index < tileCount; ++index)
+            tiles[index].touch_start_valid = false;
     }
 }
 

@@ -81,6 +81,7 @@ static uint16_t capped_icon_scale(const ScreenButtonConfig& button,
 void PadScreen::clearTiles() {
     if (navigationFocus) lv_obj_delete(navigationFocus);
     navigationFocus = nullptr;
+    destroyOverlayInputShield();
     #if HAS_TOUCH
     if (tileCount && screen && screen == lv_screen_active()) touch_manager_cancel_physical_input();
     #endif
@@ -91,6 +92,7 @@ void PadScreen::clearTiles() {
     if (!tiles) {
         fontCache.clear();
         tileCount = 0;
+            mainButtonCount = 0;
         tilesBuilt = false;
         icon_store_collect_retired(pageIndex);
         return;
@@ -148,6 +150,7 @@ void PadScreen::clearTiles() {
 #endif
     }
     tileCount = 0;
+    mainButtonCount = 0;
     bindingCount = 0;
     colorBindingCount = 0;
     numberBindingCount = 0;
@@ -177,6 +180,7 @@ void PadScreen::buildTiles() {
         tilesBuilt = true; // Mark built (empty) to avoid retrying every frame
         return;
     }
+    mainButtonCount = cfg->main_button_count;
 
     const bool swipes_enabled = !pad_disables_swipes(*cfg);
     swipe_actions_register(screen, swipes_enabled);
@@ -275,6 +279,9 @@ void PadScreen::buildTiles() {
 
         // Create tile container
         lv_obj_t* obj = lv_obj_create(container);
+        lv_obj_set_user_data(obj, this);
+        tile.obj = obj;
+        lv_obj_add_event_cb(obj, onPress, LV_EVENT_ALL, &tiles[i]);
         lv_obj_set_pos(obj, r.x, r.y);
         lv_obj_set_size(obj, r.w, r.h);
         lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
@@ -350,7 +357,8 @@ void PadScreen::buildTiles() {
         uint16_t icon_scale = LV_SCALE_NONE;
         if (bcfg.icon_id[0]) {
             char icon_key[CONFIG_ICON_ID_MAX_LEN];
-            icon_store_build_key(pageIndex, bcfg.col, bcfg.row,
+            icon_store_build_key(pageIndex, i >= cfg->main_button_count ? "overlay" : "main",
+                                 bcfg.col, bcfg.row,
                                  icon_key, sizeof(icon_key));
             IconRef ref;
             if (icon_store_lookup(icon_key, &ref)) {
@@ -603,12 +611,7 @@ void PadScreen::buildTiles() {
 #endif
 
         // Event handlers — store tile index in user_data
-        // Pack page index and tile index together for the callback
-        uintptr_t user = ((uintptr_t)this);
-        lv_obj_set_user_data(obj, (void*)user);
-
         lv_obj_add_flag(obj, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_add_event_cb(obj, onPress, LV_EVENT_PRESSED, &tiles[i]);
         lv_obj_add_event_cb(obj, onTap, LV_EVENT_SHORT_CLICKED, &tiles[i]);
         lv_obj_add_event_cb(obj, onLongPress, LV_EVENT_LONG_PRESSED, &tiles[i]);
 
@@ -723,8 +726,12 @@ void PadScreen::buildTiles() {
         lv_obj_add_flag(padActionOverlay, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_event_cb(padActionOverlay, onPadActionTap,
                             LV_EVENT_SHORT_CLICKED, this);
+        lv_obj_add_event_cb(padActionOverlay, onSwipeGuard, LV_EVENT_GESTURE, this);
         swipe_actions_register(padActionOverlay, swipes_enabled);
+        lv_obj_move_to_index(padActionOverlay, 0);
     }
+
+    createOverlayInputShield();
 
 #if HAS_DISPLAY
     // Register page-level background color binding (target=0xFF = page bg, tileIndex unused)

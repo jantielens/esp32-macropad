@@ -557,7 +557,8 @@ struct PadConfig {
     ButtonAction pad_actions[MAX_BUTTON_ACTIONS];
     uint8_t pad_action_count;
 
-    uint8_t button_count;
+    uint8_t button_count;                 // Combined Main + Overlay count
+    uint8_t main_button_count;            // Overlay starts at this index
     ScreenButtonConfig* buttons;           // exact-size trailing allocation
 };
 

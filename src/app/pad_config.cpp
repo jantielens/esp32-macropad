@@ -486,25 +486,29 @@ bool pad_config_init() {
 
 // Merge buttons from a template pad into empty grid positions.
 // Target pad's own buttons always win on col/row conflict.
-static void merge_template_buttons(uint8_t page, PadConfig** out_ptr) {
+static bool merge_template_buttons(uint8_t page, PadConfig** out_ptr) {
     PadConfig* out = *out_ptr;
     int8_t tpl = out->template_pad;
-    if (tpl < 0 || tpl >= MAX_PADS || tpl == (int8_t)page) return;
+    if (tpl < 0 || tpl >= MAX_PADS || tpl == (int8_t)page) return true;
 
     // Load template pad with skip_template=true to prevent chaining
     PadConfig* tpl_cfg = pad_config_load_from_flash((uint8_t)tpl, true);
-    if (!tpl_cfg) return;
+    if (!tpl_cfg) return true;
 
-    if (!pad_config_resize(out_ptr, (uint8_t)(out->button_count + tpl_cfg->button_count))) {
+    const uint16_t requested_capacity = (uint16_t)out->button_count +
+                                       tpl_cfg->main_button_count;
+    const uint8_t capacity = requested_capacity > MAX_PAD_BUTTONS
+        ? MAX_PAD_BUTTONS : (uint8_t)requested_capacity;
+    if (!pad_config_resize(out_ptr, capacity)) {
         LOGW(TAG, "Pad %u: OOM reserving template buttons", page);
         pad_config_release(tpl_cfg);
-        return;
+        return false;
     }
     out = *out_ptr;
 
-    // Build occupancy set for target pad's own buttons
+    // Overlay buttons do not suppress inherited Main buttons.
     bool occupied[MAX_GRID_COLS][MAX_GRID_ROWS] = {};
-    for (uint8_t i = 0; i < out->button_count; i++) {
+    for (uint8_t i = 0; i < out->main_button_count; i++) {
         const ScreenButtonConfig& b = out->buttons[i];
         uint8_t cs = b.col_span ? b.col_span : 1;
         uint8_t rs = b.row_span ? b.row_span : 1;
@@ -519,8 +523,7 @@ static void merge_template_buttons(uint8_t page, PadConfig** out_ptr) {
 
     // Merge template buttons into empty positions
     uint8_t merged = 0;
-    for (uint8_t i = 0; i < tpl_cfg->button_count; i++) {
-        if (out->button_count >= MAX_PAD_BUTTONS) break;
+    for (uint8_t i = 0; i < tpl_cfg->main_button_count; i++) {
         const ScreenButtonConfig& tb = tpl_cfg->buttons[i];
         // Skip template buttons outside target grid
         if (tb.col >= out->cols || tb.row >= out->rows) continue;
@@ -536,6 +539,11 @@ static void merge_template_buttons(uint8_t page, PadConfig** out_ptr) {
             }
         }
         if (conflict) continue;
+        if (out->button_count >= MAX_PAD_BUTTONS) {
+            LOGW(TAG, "Pad %u: template buttons exceed combined button capacity", page);
+            pad_config_release(tpl_cfg);
+            return false;
+        }
         ButtonFillStyle* style_copy = nullptr;
         if (tb.fill_style) {
             const size_t bytes = tb.fill_style->bytes;
@@ -547,9 +555,14 @@ static void merge_template_buttons(uint8_t page, PadConfig** out_ptr) {
             }
             memcpy(style_copy, tb.fill_style, bytes);
         }
-        // Copy template button and mark cells occupied
-        memcpy(&out->buttons[out->button_count], &tb, sizeof(ScreenButtonConfig));
-        out->buttons[out->button_count].fill_style = style_copy;
+        // Insert inherited Main buttons before the local Overlay range.
+        const uint8_t insertion = out->main_button_count;
+        const uint8_t overlay_count = out->button_count - insertion;
+        memmove(&out->buttons[insertion + 1], &out->buttons[insertion],
+            (size_t)overlay_count * sizeof(ScreenButtonConfig));
+        memcpy(&out->buttons[insertion], &tb, sizeof(ScreenButtonConfig));
+        out->buttons[insertion].fill_style = style_copy;
+        out->main_button_count++;
         out->button_count++;
         merged++;
         for (uint8_t dc = 0; dc < cs; dc++) {
@@ -585,6 +598,7 @@ static void merge_template_buttons(uint8_t page, PadConfig** out_ptr) {
     // Trim capacity back to the number of entries actually merged.
     (void)pad_config_resize(out_ptr, out->button_count);
     pad_config_release(tpl_cfg);
+    return true;
 }
 
 static PadConfig* pad_config_load_from_flash(uint8_t page, bool skip_template) {
@@ -632,9 +646,15 @@ static PadConfig* pad_config_load_from_flash(uint8_t page, bool skip_template) {
         return nullptr;
     }
 
-    JsonArray buttons = doc["buttons"];
-    uint8_t button_capacity = buttons.isNull() ? 0 :
-        (uint8_t)min((size_t)MAX_PAD_BUTTONS, buttons.size());
+    JsonArray buttons = doc["buttons"].as<JsonArray>();
+    JsonArray overlay_buttons = doc["overlay_buttons"].as<JsonArray>();
+    if ((doc.containsKey("buttons") && buttons.isNull()) ||
+        (doc.containsKey("overlay_buttons") && overlay_buttons.isNull()) ||
+        buttons.size() + overlay_buttons.size() > MAX_PAD_BUTTONS) {
+        LOGW(TAG, "Pad %u: invalid button collections or combined capacity", page);
+        return nullptr;
+    }
+    const uint8_t button_capacity = (uint8_t)(buttons.size() + overlay_buttons.size());
     PadConfig* out = pad_config_create(button_capacity, doc["name"] | "");
     if (!out) {
         LOGE(TAG, "Pad %u: OOM for %u buttons", page, button_capacity);
@@ -709,7 +729,15 @@ static PadConfig* pad_config_load_from_flash(uint8_t page, bool skip_template) {
 
     out->button_count = 0;
     for (JsonObject btn_obj : buttons) {
-        if (out->button_count >= MAX_PAD_BUTTONS) break;
+        if (!parse_button(btn_obj, &out->buttons[out->button_count], defs)) {
+            LOGE(TAG, "Pad %u: OOM loading button styling", page);
+            pad_config_destroy(out);
+            return nullptr;
+        }
+        out->button_count++;
+    }
+    out->main_button_count = out->button_count;
+    for (JsonObject btn_obj : overlay_buttons) {
         if (!parse_button(btn_obj, &out->buttons[out->button_count], defs)) {
             LOGE(TAG, "Pad %u: OOM loading button styling", page);
             pad_config_destroy(out);
@@ -719,8 +747,9 @@ static PadConfig* pad_config_load_from_flash(uint8_t page, bool skip_template) {
     }
 
     // Merge template pad buttons into empty grid positions
-    if (!skip_template) {
-        merge_template_buttons(page, &out);
+    if (!skip_template && !merge_template_buttons(page, &out)) {
+        pad_config_destroy(out);
+        return nullptr;
     }
 
     LOGT(TAG, "Pad %u loaded: layout=%s cols=%u rows=%u buttons=%u",

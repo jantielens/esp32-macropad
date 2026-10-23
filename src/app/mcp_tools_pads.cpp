@@ -108,6 +108,9 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     grid["max_pads"] = MAX_PADS;
     grid["max_actions"] = MAX_BUTTON_ACTIONS;
     grid["max_bindings"] = PAD_MAX_BINDINGS;
+    JsonArray layers = grid.createNestedArray("layers");
+    layers.add("main");
+    layers.add("overlay");
 
     // Pad-level schema (set via set_pad; read via get_pad). Distinct from the
     // per-button schema below.
@@ -120,9 +123,11 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     pf["wake_screen"] = "screen id to navigate to on screensaver wake ('' = stay)";
     pf["bg_color"] = "pad background color #RRGGBB (default #000000)";
     pf["button_shadow"] = "'enabled' or 'disabled' to override the device button-shadow setting; omit to inherit";
-    pf["template_pad"] = "int pad index 0..MAX_PADS-1 to inherit buttons into EMPTY cells (-1 = none). Inherited buttons render but are not stored in this pad.";
+    pf["buttons"] = "Main button array. Positions are layer-local; col/row are grid coordinates.";
+    pf["overlay_buttons"] = "Optional Overlay button array sharing the pad grid and combined button capacity.";
+    pf["template_pad"] = "int pad index 0..MAX_PADS-1 to inherit source Main buttons into empty destination Main positions (-1 = none). Overlay buttons do not suppress inheritance.";
     pf["bindings"] = "object of name->binding-template, referenced elsewhere as [pad:name]. Names: [a-zA-Z][a-zA-Z0-9_]*";
-    pf["pad_actions"] = "ordered array of up to grid.max_actions normal action objects. A non-empty effective list overrides all pad touch actions, including buttons and widgets, except swipes. [] clears it. Template pads never contribute pad_actions.";
+    pf["pad_actions"] = "ordered array of up to grid.max_actions background tap actions for unoccupied pad space. Buttons render above these actions; visible Overlay buttons block them. [] clears the list. Template pads never contribute pad_actions.";
     pad["bindings_example"] = "{\"power\":\"[mqtt:home/solar/power;watts;%.0f]\",\"hot\":\"[expr:[pad:power]>3000?1:0]\"}";
 
     JsonObject btn = result.createNestedObject("button");
@@ -136,6 +141,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
         "icon_id", "btn_state", "widget_type", "widget_data_binding", "actions", "lp_actions"
     };
     for (const char* f : fields) bf.add(f);
+    btn["layer_note"] = "Buttons are stored in buttons (Main) or overlay_buttons (Overlay). Authoring tools accept layer='main' or layer='overlay'; omitted layer means Main. Positions are local array indices, while col/row are grid coordinates.";
     btn["widget_note"] = "widget keys are flat: widget_type + widget_data_binding[_2.._4]; widget config fields (e.g. min/max/color) are flat on the button too";
     btn["labels_note"] = "Default bitmap fonts cover Latin text, digits, and basic punctuation. Uploaded static TrueType font coverage depends on the font; missing glyphs fall back to the bitmap default. Use icon_id for graphics.";
     btn["button_shadow_note"] = "accepts 'enabled' or 'disabled' to override the pad setting; omit to inherit. Shadow type, color mode, offsets, and blur are device-wide Pad and Button Defaults.";
@@ -143,7 +149,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     btn["limits_note"] = "max field lengths: button labels/colors/btn_state/widget_data_binding = 191 chars, border_width/corner_radius = 63, pad binding name = 31. Widget caption/text fields are shorter (see each field's \"max\" in widgets[].config_fields, typically 63). If a binding expression is too long, declare it once as a pad-level [pad:name] binding and reference [pad:name] instead of inlining it.";
     JsonArray states = btn.createNestedArray("btn_state");
     states.add("enabled"); states.add("disabled"); states.add("hidden");
-    btn["btn_state_note"] = "accepts a binding for conditional visibility, e.g. [expr:[mqtt:printer;state]==\"online\"?\"enabled\":\"hidden\"] (unresolved -> enabled)";
+    btn["btn_state_note"] = "accepts a binding for conditional visibility. enabled and disabled buttons both block underlying input; disabled buttons do not run actions. hidden buttons do not block. Empty means enabled; unresolved/invalid state bindings default to enabled on Main and hidden on Overlay.";
     btn["dialog_note"] = "Use a confirm action to pause a sequence for on-device approval, including programmatic presses. Cancel, timeout, replacement, or display/binding failure stops its remaining actions. Dialog messages resolve bindings once; later actions resolve their own values.";
 
     JsonObject style = result.createNestedObject("label_style");
@@ -171,7 +177,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     JsonArray acts = result.createNestedArray("action_types");
     action_catalog_emit(acts, /* include_field_docs */ true);
     result["actions_note"] = "button.actions (tap) / button.lp_actions (long-press): arrays of {type, ...fields above}";
-    result["position_note"] = "set_button/set_buttons 'position' is the 0-based index in the pad's button array, NOT a grid cell (grid placement is col/row). Use 0,1,2,...; a position at or past the end appends. To rebuild a pad: clear_pad then add buttons from position 0.";
+    result["position_note"] = "set_button/set_buttons/remove_button positions are 0-based indices in the selected layer's array, NOT grid cells (placement is col/row). Omitted layer means Main; positions at or past the end append. The combined Main and Overlay count cannot exceed grid.max_buttons.";
     result["screen_ref_note"] = "pad tools accept the 'screen' arg as either the canonical id 'pad_N' or a pad's friendly name (case-insensitive). Names may be unset or non-unique; an ambiguous name is refused with the matching ids so you can pick one. Creating a new pad requires the 'pad_N' id. list_pads shows each pad's name.";
 
     JsonObject bindings = result.createNestedObject("bindings");
@@ -303,14 +309,29 @@ static bool load_or_seed(uint8_t page, JsonDocument& doc) {
     return true;
 }
 
-// Insert/replace at position; appends when pos is at or past the end. Position
-// is the 0-based ARRAY index (not a grid cell — grid placement is col/row), so a
-// sparse/grid-style position past the current size simply appends rather than
-// failing. Only fails when pos<0 or the array is already full.
-static bool splice_button(JsonArray btns, int pos, JsonVariantConst button) {
-    if (pos < 0 || (int)btns.size() >= MAX_PAD_BUTTONS) return false;
-    if (pos < (int)btns.size()) btns[pos] = button;  // replace existing slot
-    else btns.add(button);                           // append (lenient)
+static bool get_layer_field(const JsonObject& args, const char** field) {
+    if (args.containsKey("layer") && !args["layer"].is<const char*>()) return false;
+    const char* layer = args["layer"] | "main";
+    if (strcmp(layer, "main") == 0) *field = "buttons";
+    else if (strcmp(layer, "overlay") == 0) *field = "overlay_buttons";
+    else return false;
+    return true;
+}
+
+static uint16_t combined_button_count(JsonDocument& doc) {
+    return (uint16_t)doc["buttons"].as<JsonArrayConst>().size() +
+           (uint16_t)doc["overlay_buttons"].as<JsonArrayConst>().size();
+}
+
+static bool splice_button(JsonArray btns, int pos, JsonVariantConst button,
+                          uint16_t* combined_count) {
+    if (pos < 0 || !combined_count) return false;
+    if (pos < (int)btns.size()) btns[pos] = button;
+    else {
+        if (*combined_count >= MAX_PAD_BUTTONS) return false;
+        btns.add(button);
+        ++*combined_count;
+    }
     return true;
 }
 
@@ -378,14 +399,17 @@ static bool tool_set_button(const JsonObject& args, JsonObject& result, String& 
     if (pg < 0) return pad_fail(result, err, PAD_ERR_PARAMS, s_pad_err);
     if (!args.containsKey("position")) return pad_fail(result, err, PAD_ERR_PARAMS, "missing position");
     int pos = args["position"] | -1;
+    const char* field = nullptr;
+    if (!get_layer_field(args, &field)) return pad_fail(result, err, PAD_ERR_PARAMS, "layer must be 'main' or 'overlay'");
     JsonObjectConst button = args["button"];
     if (button.isNull()) return pad_fail(result, err, PAD_ERR_PARAMS, "missing button object");
 
     BasicJsonDocument<PsramJsonAllocator> doc(48 * 1024);
     if (!load_or_seed((uint8_t)pg, doc)) return pad_fail(result, err, PAD_ERR_INTERNAL, "out of memory");
-    JsonArray btns = doc["buttons"];
-    if (btns.isNull()) btns = doc.createNestedArray("buttons");
-    if (!splice_button(btns, pos, button)) return pad_fail(result, err, PAD_ERR_PARAMS, "position out of range");
+    JsonArray btns = doc[field].as<JsonArray>();
+    if (btns.isNull()) btns = doc.createNestedArray(field);
+    uint16_t count = combined_button_count(doc);
+    if (!splice_button(btns, pos, button, &count)) return pad_fail(result, err, PAD_ERR_PARAMS, "position out of range or combined button capacity reached");
     return commit_pad((uint8_t)pg, doc, result, err);
 }
 
@@ -394,16 +418,19 @@ static bool tool_set_buttons(const JsonObject& args, JsonObject& result, String&
     if (pg < 0) return pad_fail(result, err, PAD_ERR_PARAMS, s_pad_err);
     JsonArrayConst items = args["buttons"];
     if (items.isNull()) return pad_fail(result, err, PAD_ERR_PARAMS, "missing buttons array");
+    const char* field = nullptr;
+    if (!get_layer_field(args, &field)) return pad_fail(result, err, PAD_ERR_PARAMS, "layer must be 'main' or 'overlay'");
 
     BasicJsonDocument<PsramJsonAllocator> doc(48 * 1024);
     if (!load_or_seed((uint8_t)pg, doc)) return pad_fail(result, err, PAD_ERR_INTERNAL, "out of memory");
-    JsonArray btns = doc["buttons"];
-    if (btns.isNull()) btns = doc.createNestedArray("buttons");
+    JsonArray btns = doc[field].as<JsonArray>();
+    if (btns.isNull()) btns = doc.createNestedArray(field);
+    uint16_t count = combined_button_count(doc);
     for (JsonObjectConst it : items) {
         int pos = it["position"] | -1;
         JsonObjectConst button = it["button"];
         if (button.isNull()) return pad_fail(result, err, PAD_ERR_PARAMS, "item missing button");
-        if (!splice_button(btns, pos, button)) return pad_fail(result, err, PAD_ERR_PARAMS, "position out of range");
+        if (!splice_button(btns, pos, button, &count)) return pad_fail(result, err, PAD_ERR_PARAMS, "position out of range or combined button capacity reached");
     }
     return commit_pad((uint8_t)pg, doc, result, err);
 }
@@ -412,10 +439,12 @@ static bool tool_remove_button(const JsonObject& args, JsonObject& result, Strin
     int pg = pad_index(args["screen"] | "");
     if (pg < 0) return pad_fail(result, err, PAD_ERR_PARAMS, s_pad_err);
     int pos = args["position"] | -1;
+    const char* field = nullptr;
+    if (!get_layer_field(args, &field)) return pad_fail(result, err, PAD_ERR_PARAMS, "layer must be 'main' or 'overlay'");
 
     BasicJsonDocument<PsramJsonAllocator> doc(48 * 1024);
     if (!load_or_seed((uint8_t)pg, doc)) return pad_fail(result, err, PAD_ERR_INTERNAL, "out of memory");
-    JsonArray btns = doc["buttons"];
+    JsonArray btns = doc[field].as<JsonArray>();
     if (btns.isNull() || pos < 0 || pos >= (int)btns.size())
         return pad_fail(result, err, PAD_ERR_PARAMS, "position out of range");
     btns.remove(pos);
@@ -425,10 +454,12 @@ static bool tool_remove_button(const JsonObject& args, JsonObject& result, Strin
 static bool tool_clear_pad(const JsonObject& args, JsonObject& result, String& err) {
     int pg = pad_index(args["screen"] | "");
     if (pg < 0) return pad_fail(result, err, PAD_ERR_PARAMS, s_pad_err);
+    const char* field = nullptr;
+    if (!get_layer_field(args, &field)) return pad_fail(result, err, PAD_ERR_PARAMS, "layer must be 'main' or 'overlay'");
     BasicJsonDocument<PsramJsonAllocator> doc(48 * 1024);
     if (!load_or_seed((uint8_t)pg, doc)) return pad_fail(result, err, PAD_ERR_INTERNAL, "out of memory");
-    JsonArray btns = doc["buttons"];
-    if (btns.isNull()) doc.createNestedArray("buttons");
+    JsonArray btns = doc[field].as<JsonArray>();
+    if (btns.isNull()) doc.createNestedArray(field);
     else btns.clear();
     return commit_pad((uint8_t)pg, doc, result, err);
 }
@@ -498,32 +529,32 @@ REGISTER_MCP_TOOL(s_tool_get_pad_blocks);
 
 static const McpTool s_tool_set_button = {
     "set_button",
-    "Create/replace one button. position = 0-based index in the button array (NOT a grid cell; placement is col/row). A position at/past the end appends. Args: screen (pad id or friendly name), position (int), button (JSON, portal pad schema). If the button uses any [scheme:params] binding, verify it afterward with resolve_bindings (a valid-syntax binding can still resolve to '---' or the wrong value). Requires authoring.",
-    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"position\":{\"type\":\"integer\"},\"button\":{\"type\":\"object\"}},\"required\":[\"screen\",\"position\",\"button\"]}",
+    "Create/replace one button in the selected layer. position is a 0-based layer-local array index (not a grid cell; placement is col/row). A position at/past the end appends. Args: screen, optional layer ('main' or 'overlay', default 'main'), position, button. The combined button capacity applies. Requires authoring.",
+    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"layer\":{\"type\":\"string\",\"enum\":[\"main\",\"overlay\"]},\"position\":{\"type\":\"integer\"},\"button\":{\"type\":\"object\"}},\"required\":[\"screen\",\"position\",\"button\"]}",
     tool_set_button, false, true, false, true
 };
 REGISTER_MCP_TOOL(s_tool_set_button);
 
 static const McpTool s_tool_set_buttons = {
     "set_buttons",
-    "Create/replace many buttons in one save (processed in array order). Each item.position is a 0-based array index (NOT a grid cell); positions past the end append. To rebuild a pad, clear_pad first then use positions 0,1,2,... Args: screen (pad id or friendly name), buttons (array of {position, button}). If any button uses [scheme:params] bindings, verify them afterward with resolve_bindings (a valid-syntax binding can still resolve to '---' or the wrong value). Requires authoring.",
-    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"buttons\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"position\":{\"type\":\"integer\"},\"button\":{\"type\":\"object\"}},\"required\":[\"position\",\"button\"]}}},\"required\":[\"screen\",\"buttons\"]}",
+    "Create/replace many buttons in one save. Each item.position is a 0-based index in the selected layer; positions past the end append. Args: screen, optional layer ('main' or 'overlay', default 'main'), buttons (array of {position, button}). The combined button capacity applies. Requires authoring.",
+    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"layer\":{\"type\":\"string\",\"enum\":[\"main\",\"overlay\"]},\"buttons\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"position\":{\"type\":\"integer\"},\"button\":{\"type\":\"object\"}},\"required\":[\"position\",\"button\"]}}},\"required\":[\"screen\",\"buttons\"]}",
     tool_set_buttons, false, true, false, true
 };
 REGISTER_MCP_TOOL(s_tool_set_buttons);
 
 static const McpTool s_tool_remove_button = {
     "remove_button",
-    "Remove the button at a position. Args: screen (pad id or friendly name), position (int). Requires authoring.",
-    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"position\":{\"type\":\"integer\"}},\"required\":[\"screen\",\"position\"]}",
+    "Remove a button at a layer-local position. Args: screen, optional layer ('main' or 'overlay', default 'main'), position. Requires authoring.",
+    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"layer\":{\"type\":\"string\",\"enum\":[\"main\",\"overlay\"]},\"position\":{\"type\":\"integer\"}},\"required\":[\"screen\",\"position\"]}",
     tool_remove_button, false, true, false, true
 };
 REGISTER_MCP_TOOL(s_tool_remove_button);
 
 static const McpTool s_tool_clear_pad = {
     "clear_pad",
-    "Remove all buttons from a pad. Args: screen (pad id or friendly name). Requires authoring.",
-    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"}},\"required\":[\"screen\"]}",
+    "Remove all buttons from one layer. Args: screen, optional layer ('main' or 'overlay', default 'main'). Other-layer buttons and shared pad settings remain unchanged. Requires authoring.",
+    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"layer\":{\"type\":\"string\",\"enum\":[\"main\",\"overlay\"]}},\"required\":[\"screen\"]}",
     tool_clear_pad, false, true, false, true
 };
 REGISTER_MCP_TOOL(s_tool_clear_pad);

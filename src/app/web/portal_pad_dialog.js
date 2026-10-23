@@ -26,6 +26,7 @@ function padLoadLocalImageOptions(selected) {
     if (!deviceInfoCache || deviceInfoCache.has_image_library !== true) return Promise.resolve();
     const section = document.getElementById('pad-config-section');
     const page = padState.page;
+    const layer = padState.selectedLayer;
     const col = padState.editCol;
     const row = padState.editRow;
     const generation = padDialogSelectionGeneration;
@@ -37,12 +38,12 @@ function padLoadLocalImageOptions(selected) {
             return response.json();
         })
         .then(function (catalog) {
-            if (generation !== padDialogSelectionGeneration || document.getElementById('pad-config-section') !== section || padState.page !== page || padState.editCol !== col || padState.editRow !== row) return;
+            if (generation !== padDialogSelectionGeneration || document.getElementById('pad-config-section') !== section || padState.page !== page || padState.selectedLayer !== layer || padState.editCol !== col || padState.editRow !== row) return;
             padImageLibraryFiles = Array.isArray(catalog.files) ? catalog.files : [];
             padPopulateLocalImageOptions(input.value !== before ? input.value : selected);
         })
         .catch(function () {
-            if (generation !== padDialogSelectionGeneration || document.getElementById('pad-config-section') !== section || padState.page !== page || padState.editCol !== col || padState.editRow !== row) return;
+            if (generation !== padDialogSelectionGeneration || document.getElementById('pad-config-section') !== section || padState.page !== page || padState.selectedLayer !== layer || padState.editCol !== col || padState.editRow !== row) return;
             var group = document.getElementById('pad-edit-local-image-group');
             if (group) group.style.display = 'none';
         });
@@ -407,6 +408,12 @@ function padDialogValidateButton(btn) {
         }
     });
     const others = padState.buttons.filter(function(button) { return button.col !== btn.col || button.row !== btn.row; });
+    const existing = padState.buttons.some(button => button.col === btn.col && button.row === btn.row);
+    if (!existing && padState.mainButtons.length + padState.overlayButtons.length >= padMaxButtons()) {
+        throw Object.assign(new Error('Combined Main and Overlay button limit reached (' + padMaxButtons() + ')'), {
+            fieldIds: ['pad-edit-col-span', 'pad-edit-row-span'],
+        });
+    }
     if (typeof padCanSpanFit === 'function' && !padCanSpanFit(btn.col, btn.row, btn.col_span || 1, btn.row_span || 1, others)) {
         throw Object.assign(new Error('Button span exceeds the pad or overlaps another button'), { fieldIds: ['pad-edit-col-span', 'pad-edit-row-span'] });
     }
@@ -457,10 +464,11 @@ function padPvRequestGuard() {
     const generation = padPvGeneration;
     const overlay = document.getElementById('pad-edit-overlay');
     const page = padState.page;
+    const layer = padState.selectedLayer;
     const col = padState.editCol;
     const row = padState.editRow;
     return () => generation === padPvGeneration && document.getElementById('pad-edit-overlay') === overlay &&
-        page === padState.page && col === padState.editCol && row === padState.editRow;
+        page === padState.page && layer === padState.selectedLayer && col === padState.editCol && row === padState.editRow;
 }
 
 function padPreviewEsc(s) {

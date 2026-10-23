@@ -252,6 +252,34 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
     return nullptr;
 }
 
+static const char* validate_button_layer(JsonArrayConst buttons, int cols, int rows,
+                                         bool tolerate_offgrid) {
+    for (size_t index = 0; index < buttons.size(); ++index) {
+        JsonObjectConst button = buttons[index];
+        const char* error = validate_button(button, cols, rows, tolerate_offgrid);
+        if (error) return error;
+
+        const int col = button["col"] | 0;
+        const int row = button["row"] | 0;
+        const int col_span = button["col_span"] | 1;
+        const int row_span = button["row_span"] | 1;
+        for (size_t prior = 0; prior < index; ++prior) {
+            JsonObjectConst other = buttons[prior];
+            const int other_col = other["col"] | 0;
+            const int other_row = other["row"] | 0;
+            const int other_col_span = other["col_span"] | 1;
+            const int other_row_span = other["row_span"] | 1;
+            if (col < other_col + other_col_span &&
+                other_col < col + col_span &&
+                row < other_row + other_row_span &&
+                other_row < row + row_span) {
+                return "buttons overlap within a layer";
+            }
+        }
+    }
+    return nullptr;
+}
+
 // Validate a complete pad JSON (grid + buttons + collisions). nullptr = ok.
 const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid,
                          const PadValidationGeometry* geometry) {
@@ -321,17 +349,18 @@ const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid,
             if (be) return be;
         }
     }
-    JsonArrayConst btns = pad["buttons"];
-    if (btns.isNull()) return nullptr;
-    if (btns.size() > MAX_PAD_BUTTONS) return "too many buttons";
-    // Per-button checks. NOTE: grid-cell overlaps are intentionally NOT rejected
-    // — the firmware (and the portal save path) tolerate them (a later button
-    // renders over / hides an earlier one). Rejecting overlaps here was stricter
-    // than the device and broke incremental set_buttons edits.
-    for (JsonObjectConst b : btns) {
-        const char* e = validate_button(b, cols, rows, tolerate_offgrid);
-        if (e) return e;
+    JsonArrayConst btns = pad["buttons"].as<JsonArrayConst>();
+    JsonArrayConst overlays;
+    if (pad.containsKey("buttons") && btns.isNull()) return "buttons must be an array";
+    if (pad.containsKey("overlay_buttons")) {
+        overlays = pad["overlay_buttons"].as<JsonArrayConst>();
+        if (overlays.isNull()) return "overlay_buttons must be an array";
     }
+    if (btns.size() + overlays.size() > MAX_PAD_BUTTONS) return "too many buttons across layers";
+    const char* button_error = validate_button_layer(btns, cols, rows, tolerate_offgrid);
+    if (button_error) return button_error;
+    button_error = validate_button_layer(overlays, cols, rows, tolerate_offgrid);
+    if (button_error) return button_error;
     return nullptr;
 }
 

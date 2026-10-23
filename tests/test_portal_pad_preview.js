@@ -184,12 +184,14 @@ assert.deepStrictEqual(JSON.parse(JSON.stringify(context.padComputeAxisTrackSize
 });
 assert.strictEqual(context.padComputeAxisTrackSizes(3, 100, 2, [30, 30, 30]).valid, false);
 assert.deepStrictEqual(Array.from(context.padComputeAxisTrackSizes(3, 100, 2, [30, 30, 30]).sizes), [32, 32, 32]);
-assert(grid.includes('padRenderCellContent(cell, tplBtn)'));
+assert(grid.includes('padRenderCellContent(cell, button)'));
 assert(!grid.includes('pad-cell-widget-'));
 const gridElement = createElement();
 context.deviceInfoCache = widgetCatalog;
 context.document.getElementById = id => id === 'pad-grid' ? gridElement : null;
-context.padState = { cols: 3, rows: 1, buttons: [{ col: 0, row: 0, widget_type: 'list' }],
+context.padState = { cols: 3, rows: 1, selectedLayer: 'main', mainButtons: [{ col: 0, row: 0, widget_type: 'list' }], overlayButtons: [],
+    get buttons() { return this.selectedLayer === 'overlay' ? this.overlayButtons : this.mainButtons; },
+    set buttons(value) { if (this.selectedLayer === 'overlay') this.overlayButtons = value; else this.mainButtons = value; },
     templateButtons: [{ col: 1, row: 0, col_span: 2, widget_type: 'gauge',
         label_top: '[mqtt:home/building/temperature;state;%.1f C]' }] };
 context.padBuildOccupancySet = () => new Set();
@@ -247,7 +249,10 @@ const templateToggle = { col: 1, row: 0, widget_type: 'toggle', label_center: 'T
     widget_toggle_on_color: '#2196f3', widget_toggle_off_color: '#59636e', widget_toggle_knob_color: '#ffffff', widget_toggle_width_pct: 70 };
 const ordinaryToggleBefore = JSON.stringify(ordinaryToggle);
 const templateToggleBefore = JSON.stringify(templateToggle);
-context.padState = { cols: 3, rows: 1, buttons: [ordinaryToggle], templateButtons: [templateToggle] };
+context.padState = { cols: 3, rows: 1, selectedLayer: 'main', mainButtons: [ordinaryToggle], overlayButtons: [],
+    get buttons() { return this.selectedLayer === 'overlay' ? this.overlayButtons : this.mainButtons; },
+    set buttons(value) { if (this.selectedLayer === 'overlay') this.overlayButtons = value; else this.mainButtons = value; },
+    templateButtons: [templateToggle] };
 gridElement.children = [];
 context.padRenderGrid();
 assert.strictEqual(gridElement.children.length, 2);
@@ -257,6 +262,20 @@ assert(gridElement.children[1].classes.has('pad-cell-ghost'));
 assert.strictEqual(gridElement.children[1].style.gridColumn, '2 / span 2');
 assert.strictEqual(JSON.stringify(ordinaryToggle), ordinaryToggleBefore);
 assert.strictEqual(JSON.stringify(templateToggle), templateToggleBefore);
+const overlayToggle = { col: 0, row: 0, widget_type: 'toggle', label_center: 'Overlay' };
+context.padState.overlayButtons = [overlayToggle];
+context.padState.selectedLayer = 'overlay';
+gridElement.children = [];
+context.padRenderGrid();
+assert.strictEqual(gridElement.children[0].dataset.layer, 'main');
+assert(gridElement.children[0].classes.has('pad-cell-main-preview'));
+const overlayCell = gridElement.children.find(cell => cell.classes.has('pad-cell-overlay'));
+assert.strictEqual(overlayCell.dataset.layer, 'overlay');
+assert(gridElement.children.some(cell => cell.classes.has('pad-cell-empty') && cell.dataset.layer === 'overlay'));
+context.padState.selectedLayer = 'main';
+gridElement.children = [];
+context.padRenderGrid();
+assert(!gridElement.children.some(cell => cell.dataset.layer === 'overlay'));
 const barBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "bar")', context);
 const builderElements = Object.fromEntries(['fields', 'states', 'note', 'sources', 'selection', 'name', 'id', 'state'].map(name => ['[data-bb-' + name + ']', createElement()]));
 const makeDraft = (detail, name) => {

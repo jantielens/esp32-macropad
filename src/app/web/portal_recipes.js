@@ -637,7 +637,7 @@ function recipeApplyResizeSuggestion() {
 async function recipeClearButtons() {
     if (!recipeState.pad || !recipeState.emptyPlacement || !recipeState.selected) return;
     const page = recipeState.pad.page + 1;
-    if (!confirm('Clear all buttons on Pad ' + page + '?')) return;
+    if (!confirm('Clear Main buttons on Pad ' + page + '?')) return;
     try {
         const clearedPad = Object.assign({}, recipeState.pad, { buttons: [] });
         delete clearedPad.page;
@@ -649,7 +649,7 @@ async function recipeClearButtons() {
             throw new Error(error.error || 'Failed to clear buttons: HTTP ' + response.status);
         }
         await recipeLoadPad();
-        showMessage('Buttons cleared. Select a position for the recipe.', 'success');
+        showMessage('Main buttons cleared. Select a position for the recipe.', 'success');
     } catch (error) {
         showMessage('Failed to clear buttons: ' + error.message, 'error');
     }
@@ -816,6 +816,11 @@ async function recipeInstall() {
             delete configured.order;
             return configured;
         });
+        const maxButtons = Number(deviceInfoCache && deviceInfoCache.max_pad_buttons) || 64;
+        const totalButtons = (target.buttons || []).length +
+            (target.overlay_buttons || []).length + buttons.length;
+        if (totalButtons > maxButtons)
+            recipeError('This recipe would exceed the combined Main and Overlay button limit of ' + maxButtons + '.');
         const componentIds = Object.keys(provision.components || {});
         const progress = recipeSetProgress([
             'Adding ' + buttons.length + ' buttons...'
@@ -838,6 +843,10 @@ async function recipeInstall() {
             cols: savedPad.cols,
             rows: savedPad.rows,
             buttons: savedPad.buttons,
+            icons: savedPad.buttons.map(function (button) { return Object.assign({}, button, { layer: 'main' }); })
+                .concat((savedPad.overlay_buttons || []).map(function (button) {
+                    return Object.assign({}, button, { layer: 'overlay' });
+                })),
         });
         progress[progressIndex++].classList.add('complete');
         const response = await fetch('/api/pad?page=' + target.page, {

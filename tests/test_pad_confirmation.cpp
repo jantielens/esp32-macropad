@@ -134,6 +134,67 @@ int main() {
 
     {
         JsonDocument doc;
+        doc["cols"] = 2;
+        doc["rows"] = 1;
+        JsonObject main_button = doc["buttons"].to<JsonArray>().add<JsonObject>();
+        main_button["col"] = 0;
+        main_button["row"] = 0;
+        JsonObject overlay_button = doc["overlay_buttons"].to<JsonArray>().add<JsonObject>();
+        overlay_button["col"] = 0;
+        overlay_button["row"] = 0;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+
+        JsonObject overlapping_overlay = doc["overlay_buttons"].as<JsonArray>().add<JsonObject>();
+        overlapping_overlay["col"] = 0;
+        overlapping_overlay["row"] = 0;
+        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
+                          "buttons overlap within a layer") == 0);
+    }
+
+    {
+        JsonDocument doc;
+        make_button(doc);
+        doc["overlay_buttons"] = "invalid";
+        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
+                          "overlay_buttons must be an array") == 0);
+    }
+
+    {
+        JsonDocument doc;
+        doc["cols"] = MAX_GRID_COLS;
+        doc["rows"] = MAX_GRID_ROWS;
+        JsonArray buttons = doc["buttons"].to<JsonArray>();
+        JsonArray overlays = doc["overlay_buttons"].to<JsonArray>();
+        for (int index = 0; index < MAX_PAD_BUTTONS; ++index) {
+            JsonObject button = buttons.add<JsonObject>();
+            button["col"] = index;
+            button["row"] = 0;
+        }
+        JsonObject extra = overlays.add<JsonObject>();
+        extra["col"] = 0;
+        extra["row"] = 0;
+        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
+                          "too many buttons across layers") == 0);
+    }
+
+    {
+        JsonDocument doc;
+        doc["cols"] = MAX_GRID_COLS;
+        doc["rows"] = MAX_GRID_ROWS;
+        JsonArray buttons = doc["buttons"].to<JsonArray>();
+        JsonArray overlays = doc["overlay_buttons"].to<JsonArray>();
+        for (int index = 0; index < MAX_PAD_BUTTONS; ++index) {
+            JsonObject button = index == 0
+                ? buttons.add<JsonObject>()
+                : overlays.add<JsonObject>();
+            button["col"] = index % MAX_GRID_COLS;
+            button["row"] = index / MAX_GRID_COLS;
+        }
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+    }
+
+    {
+        JsonDocument doc;
         make_button(doc);
         JsonArray actions = doc["pad_actions"].to<JsonArray>();
         actions.add<JsonObject>()["type"] = "none";

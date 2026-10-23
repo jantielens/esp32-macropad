@@ -116,7 +116,7 @@ async function runImport(options = {}) {
         Uint8ClampedArray,
         console: { error() {}, log() {}, warn() {} },
         document,
-        deviceInfoCache: { display_blank_on_save: true, max_pads: 2 },
+        deviceInfoCache: { display_blank_on_save: true, max_pads: 2, max_pad_buttons: 64 },
         MAX_ACTIONS: 3,
         confirm() { return true; },
         showMessage(message, type) { messages.push({ message, type }); },
@@ -177,7 +177,8 @@ async function runImport(options = {}) {
     });
 
     const pads = options.pads || [
-        { cols: 2, rows: 3, template_pad: 1, buttons: [{ col: 0, row: 0, icon_id: 'emoji_one' }] },
+        { cols: 2, rows: 3, template_pad: 1, buttons: [{ col: 0, row: 0, icon_id: 'emoji_one' }],
+            overlay_buttons: [{ col: 0, row: 0, icon_id: 'emoji_overlay' }] },
         {
             cols: 4,
             rows: 1,
@@ -212,15 +213,17 @@ function pageRequests(result, page) {
     assert.deepStrictEqual(padSaves.map(request => request.page), [0, 1], JSON.stringify(success.messages));
     assert.deepStrictEqual(success.requests.map(request => request.kind), [
         'config-save', 'button-defaults',
-        'config-read', 'brightness-0', 'icon-delete', 'button-sizes', 'icon-install', 'pad-save', 'brightness-42',
+        'config-read', 'brightness-0', 'icon-delete', 'button-sizes', 'icon-install', 'icon-install', 'pad-save', 'brightness-42',
         'config-read', 'brightness-0', 'icon-delete', 'button-sizes', 'icon-install', 'pad-save', 'brightness-42',
         'device-info', 'reboot',
     ]);
-    assert.ok(success.requests[6].url.includes('id=pad_0_0_0'));
-    assert.ok(success.requests[13].url.includes('id=pad_1_1_0'));
+    assert.ok(success.requests[6].url.includes('id=pad_0_main_0_0'));
+    assert.ok(success.requests[7].url.includes('id=pad_0_overlay_0_0'));
+    assert.ok(success.requests[14].url.includes('id=pad_1_main_1_0'));
     assert.strictEqual(JSON.parse(padSaves[0].options.body).cols, 2);
     assert.strictEqual(JSON.parse(padSaves[0].options.body).rows, 3);
     assert.strictEqual(JSON.parse(padSaves[0].options.body).buttons[0].icon_id, 'emoji_one');
+    assert.strictEqual(JSON.parse(padSaves[0].options.body).overlay_buttons[0].icon_id, 'emoji_overlay');
     assert.strictEqual(JSON.parse(padSaves[1].options.body).cols, 4);
     assert.strictEqual(JSON.parse(padSaves[1].options.body).rows, 1);
     assert.strictEqual(JSON.parse(padSaves[1].options.body).buttons[0].icon_id, 'emoji_two');

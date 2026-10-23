@@ -10,6 +10,13 @@
         <div class="pad-workspace">
             <nav class="pad-workspace-rail" aria-label="Pads"><div id="pad-workspace-pads"></div></nav>
             <div class="pad-workspace-stage">
+                <div class="pad-layer-switch" role="group" aria-label="Button layer">
+                    <div class="pad-layer-segments">
+                        <button type="button" data-pad-layer="main" aria-pressed="true">Main</button>
+                        <button type="button" data-pad-layer="overlay" aria-pressed="false">Overlay</button>
+                    </div>
+                    <span id="pad-layer-capacity" aria-live="polite"></span>
+                </div>
                 <div id="pad-workspace-canvas" class="pad-workspace-canvas"></div>
             </div>
             <aside id="pad-workspace-inspector" class="pad-workspace-inspector" aria-label="Inspector">

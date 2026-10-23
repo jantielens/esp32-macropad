@@ -425,7 +425,8 @@ async function padUploadPageIcons(context) {
     const deleteResponse = await fetch('/api/icons/page?page=' + context.page, { method: 'DELETE' });
     if (!deleteResponse.ok) throw new Error('Failed to delete existing icons: HTTP ' + deleteResponse.status);
 
-    const iconButtons = context.buttons.filter(b => b.icon_id);
+    const iconButtons = (context.icons || context.buttons.map(button => Object.assign({}, button, { layer: 'main' })))
+        .filter(button => button.icon_id);
     if (iconButtons.length === 0) return;
 
     const btnSizes = await padGetButtonSizes(context.cols, context.rows);
@@ -486,7 +487,8 @@ async function padUploadPageIcons(context) {
 
         padRenderIconOnCanvas(canvas, btn.icon_id, iconW, iconH);
         const pngBlob = await padCanvasToPNG(canvas);
-        const key = 'pad_' + context.page + '_' + btn.col + '_' + btn.row;
+        const layer = btn.layer === 'overlay' ? 'overlay' : 'main';
+        const key = 'pad_' + context.page + '_' + layer + '_' + btn.col + '_' + btn.row;
 
         const resp = await fetch('/api/icons/install?id=' + encodeURIComponent(key) + '&kind=' + kind, {
             method: 'POST',

@@ -149,7 +149,9 @@ static void external_create(lv_obj_t* tile, const WidgetConfig* cfg,
     external->tick_interval_ms = config->tick_interval_ms
         ? config->tick_interval_ms
         : native_extension_tick_interval_ms(config->extension_id);
-    external->instance_id = external_widget_instance_id(button->page, btn->col, btn->row);
+    auto* owner = static_cast<PadScreen*>(lv_obj_get_user_data(tile));
+    external->instance_id = external_widget_instance_id(
+        button->page, owner && owner->buttonIsOverlay(button), btn->col, btn->row);
     native_extension_set_instance_binding_context(config->extension_id, external->instance_id,
                                                   button->pad_bindings, button->pad_binding_count);
     native_extension_set_instance_button_context(config->extension_id, external->instance_id, tile,

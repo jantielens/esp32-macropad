@@ -340,9 +340,10 @@ static bool load_from_fs(const char* fs_id, IconKind kind,
 // Public API
 // ============================================================================
 
-void icon_store_build_key(uint8_t page, uint8_t col, uint8_t row,
+void icon_store_build_key(uint8_t page, const char* layer, uint8_t col, uint8_t row,
                           char* out, size_t out_size) {
-    snprintf(out, out_size, "pad_%u_%u_%u", page, col, row);
+    snprintf(out, out_size, "pad_%u_%s_%u_%u", page,
+             layer && strcmp(layer, "overlay") == 0 ? "overlay" : "main", col, row);
 }
 
 void icon_store_init() {
@@ -431,7 +432,8 @@ static uint16_t preload_pad_icons(uint8_t page, const PadConfig* cfg) {
         if (!cfg->buttons[i].icon_id[0]) continue;
 
         char key[CONFIG_ICON_ID_MAX_LEN];
-        icon_store_build_key(page, cfg->buttons[i].col,
+        const char* layer = i >= cfg->main_button_count ? "overlay" : "main";
+        icon_store_build_key(page, layer, cfg->buttons[i].col,
                              cfg->buttons[i].row, key, sizeof(key));
 
         IconKind kind = kind_from_icon_id(cfg->buttons[i].icon_id);
@@ -443,7 +445,7 @@ static uint16_t preload_pad_icons(uint8_t page, const PadConfig* cfg) {
         // the template pad's position (icon files live under original key)
         if (cfg->template_pad >= 0 && cfg->template_pad != (int8_t)page) {
             char tpl_key[CONFIG_ICON_ID_MAX_LEN];
-            icon_store_build_key((uint8_t)cfg->template_pad,
+            icon_store_build_key((uint8_t)cfg->template_pad, "main",
                                  cfg->buttons[i].col,
                                  cfg->buttons[i].row,
                                  tpl_key, sizeof(tpl_key));

@@ -17,7 +17,15 @@ const padState = {
     rows: 2,
     columnWidthsPx: [],
     rowHeightsPx: [],
-    buttons: [],     // Working copy: array of button objects (by grid position key "col,row")
+    selectedLayer: 'main',
+    mainButtons: [],
+    overlayButtons: [],
+    layerSelections: { main: null, overlay: null },
+    get buttons() { return this.selectedLayer === 'overlay' ? this.overlayButtons : this.mainButtons; },
+    set buttons(value) {
+        if (this.selectedLayer === 'overlay') this.overlayButtons = value;
+        else this.mainButtons = value;
+    },
     editCol: 0,
     editRow: 0,
     btnClipboard: null,  // Copied button settings (position-independent)
@@ -31,6 +39,11 @@ const padState = {
     placingBlock: null,  // Block being placed (from catalog), or null
     dragSource: null,    // {col, row} of button being dragged, or null
 };
+
+function padMaxButtons() {
+    const limit = Number(deviceInfoCache && deviceInfoCache.max_pad_buttons);
+    return Number.isInteger(limit) && limit > 0 ? limit : 64;
+}
 
 let padDirty = false;
 let padSaveInProgress = false;
@@ -610,17 +623,20 @@ function padWidgetTypeChanged() {
 
 }
 
-async function padLoadPage(page, defaultsReady) {
+async function padLoadPage(page, defaultsReady, selectedLayer) {
     const generation = ++padLoadGeneration;
     const section = document.getElementById('pad-config-section');
     const current = () => generation === padLoadGeneration && document.getElementById('pad-config-section') === section;
     if (typeof padWorkspaceReset === 'function') padWorkspaceReset();
     if (typeof padWorkspace !== 'undefined' && padWorkspace) padWorkspace.loading = true;
     padState.page = page;
+    padState.selectedLayer = selectedLayer === 'overlay' ? 'overlay' : 'main';
+    padState.layerSelections = { main: null, overlay: null };
     const screen = (deviceInfoCache.available_screens || []).find(screen => screen.id === 'pad_' + page);
     document.getElementById('pad-name').value = screen ? screen.name.replace(/^Pad \d+: /, '').replace(/^Pad \d+$/, '') : '';
     padState.rawJson = null;
-    padState.buttons = [];
+    padState.mainButtons = [];
+    padState.overlayButtons = [];
     padState.bindings = [];
     padState.padActions = [];
     padState.templatePad = -1;
@@ -688,15 +704,19 @@ async function padLoadPage(page, defaultsReady) {
         if (!current()) return;
 
         // Index buttons by "col,row" for easy lookup
-        padState.buttons = [];
+        padState.mainButtons = [];
+        padState.overlayButtons = [];
         if (json.buttons && Array.isArray(json.buttons)) {
             json.buttons.forEach(b => {
-                padState.buttons.push(Object.assign({}, b));
+                padState.mainButtons.push(Object.assign({}, b));
             });
         }
+        if (json.overlay_buttons !== undefined && !Array.isArray(json.overlay_buttons))
+            throw new Error('Invalid overlay_buttons collection');
+        padState.overlayButtons = (json.overlay_buttons || []).map(b => Object.assign({}, b));
 
         // Cache colors for cross-pad swatches
-        padCacheColors(page, padState.buttons,
+        padCacheColors(page, padState.mainButtons.concat(padState.overlayButtons),
                    padColorToHex(json.bg_color || padGetEffectiveDefault('default_pad_bg_color'), padGetEffectiveDefault('default_pad_bg_color')));
         padRenderGrid();
     } catch (err) {
@@ -740,7 +760,8 @@ function padBuildSaveContext() {
         cols: padState.cols,
         rows: padState.rows,
         rawJson: padCloneJson(padState.rawJson || {}),
-        buttons: padCloneJson(padState.buttons || []),
+        mainButtons: padCloneJson(padState.mainButtons || []),
+        overlayButtons: padCloneJson(padState.overlayButtons || []),
         bindings: padCloneJson(padState.bindings || []),
     };
 
@@ -816,10 +837,13 @@ function padBuildSaveContext() {
         delete payload.template_pad;
     }
 
-    payload.buttons = snapshot.buttons;
+    payload.buttons = snapshot.mainButtons;
+    if (snapshot.overlayButtons.length) payload.overlay_buttons = snapshot.overlayButtons;
+    else delete payload.overlay_buttons;
 
     // Convert color ints to hex strings for JSON
     payload.buttons.forEach(b => padColorsToHex(b));
+    if (payload.overlay_buttons) payload.overlay_buttons.forEach(b => padColorsToHex(b));
 
     // On boards with DISPLAY_BLANK_ON_SAVE, heavy PSRAM I/O during icon
     // upload causes DMA bus contention → cyan flashes on MIPI-DSI panels.
@@ -830,7 +854,9 @@ function padBuildSaveContext() {
         rows: snapshot.rows,
         column_widths_px: tracks.columns.sizes,
         row_heights_px: tracks.rows.sizes,
-        buttons: snapshot.buttons,
+        buttons: snapshot.mainButtons,
+        icons: snapshot.mainButtons.map(button => Object.assign({}, button, { layer: 'main' }))
+            .concat(snapshot.overlayButtons.map(button => Object.assign({ layer: 'overlay' }, button))),
         name: padName,
         body: JSON.stringify(payload),
         blankOnSave: Boolean(deviceInfoCache && deviceInfoCache.display_blank_on_save),
@@ -926,6 +952,7 @@ async function padSavePage(options) {
         }
         const workspace = typeof padWorkspace !== 'undefined' ? padWorkspace : null;
         const revision = workspace ? workspace.revision : 0;
+        const selectedLayer = padState.selectedLayer;
         await padQueuePersistence(context);
 
         if (!bulk && (document.getElementById('pad-config-section') !== section || padState.page !== context.page ||
@@ -940,16 +967,20 @@ async function padSavePage(options) {
             await getDeviceInfo(true);
             if (document.getElementById('pad-config-section') !== section || padState.page !== context.page ||
                 (workspace && workspace.revision !== revision)) return context;
-            const selected = workspace && workspace.selected ? [padState.editCol, padState.editRow, workspace.scope, workspace.tab] : null;
+            const selected = workspace && workspace.selected
+                ? [padState.selectedLayer, padState.editCol, padState.editRow, workspace.scope, workspace.tab]
+                : null;
             const body = selected ? workspace.root.querySelector('.pad-edit-body') : null;
             const scroll = body ? body.scrollTop : 0;
             const groups = body ? Array.from(body.querySelectorAll('details'), group => group.open) : [];
             // Reload to get canonical version from device.
-            await padLoadPage(context.page);
+            await padLoadPage(context.page, undefined, selectedLayer);
             if (selected && workspace === padWorkspace && padState.page === context.page) {
-                padDialogOpen(selected[0], selected[1]);
-                padWorkspaceSetScope(selected[2]);
-                padWorkspace.tab = selected[3];
+                padState.selectedLayer = selected[0];
+                if (typeof padWorkspaceRenderLayer === 'function') padWorkspaceRenderLayer();
+                padDialogOpen(selected[1], selected[2]);
+                padWorkspaceSetScope(selected[3]);
+                padWorkspace.tab = selected[4];
                 padWorkspaceRenderTabs();
                 body.querySelectorAll('details').forEach((group, index) => { group.open = groups[index]; });
                 body.scrollTop = scroll;

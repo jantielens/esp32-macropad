@@ -3,6 +3,7 @@
 
 #include "screen.h"
 #include "../pad_config.h"
+#include "../pad_overlay.h"
 #include "../pad_layout.h"
 #include "../binding_template.h"
 #include "../widgets/widget.h"
@@ -15,6 +16,7 @@
 #include <lvgl.h>
 
 class DisplayManager;
+class PadScreen;
 
 // ============================================================================
 // Pad Screen
@@ -45,13 +47,6 @@ struct RuntimeColorBinding {
                                                       // 3=label_top text, 4=label_center text, 5=label_bottom text
     bool active;
     bool hasBindings;                                 // true if template contains [xxx:...] tokens
-};
-
-// Tri-state button state: enabled (interactive), disabled (visible, no input), hidden
-enum BtnState : uint8_t {
-    BTN_STATE_ENABLED  = 0,
-    BTN_STATE_DISABLED = 1,
-    BTN_STATE_HIDDEN   = 2,
 };
 
 // Runtime button state binding — resolved each poll cycle to determine visibility/interactivity.
@@ -145,10 +140,12 @@ private:
 
     lv_obj_t* screen;
     lv_obj_t* container;       // Content container (offset by pixel shift margin)
+    lv_obj_t* overlayInputShield;
 
     // --- Lazily allocated arrays (heavy, freed on LRU eviction) ---
     ButtonTile* tiles;
     uint8_t tileCount;
+    uint8_t mainButtonCount;
 #if HAS_DISPLAY
     static const int16_t NAVIGATION_PAD_ACTION = -2;
     int16_t navigationTile = -1;
@@ -158,6 +155,11 @@ private:
     uint8_t navigationZoneCount(const ButtonTile& tile) const;
     bool navigationZoneAvailable(const ButtonTile& tile, uint8_t zone) const;
     lv_area_t navigationArea(const ButtonTile& tile, uint8_t zone) const;
+    bool inputAllowed(const ButtonTile& tile, const lv_point_t& point) const;
+    bool isOverlayButton(const ButtonTile* tile) const;
+    bool pointBlockedByOverlay(const lv_point_t& point) const;
+    bool disabledOverlayBlocksPoint(const lv_point_t& point) const;
+    bool coveredByOverlay(const ButtonTile& tile) const;
 #endif
     PadFontCache fontCache;
 
@@ -214,6 +216,8 @@ private:
     bool allocateArrays();
     void freeArrays();
     bool allocatePadActions();
+    bool createOverlayInputShield();
+    void destroyOverlayInputShield();
     void clearPadActionOverlay();
 
     // Build/destroy tile LVGL objects from config
@@ -239,12 +243,14 @@ private:
 
     // Event callbacks
     static void onPress(lv_event_t* e);
+    static void onOverlayInputShieldHitTest(lv_event_t* e);
     static void onWidgetPressFeedback(lv_event_t* e);
     static void onTap(lv_event_t* e);
     static void onLongPress(lv_event_t* e);
     static void tapAt(ButtonTile* tile, const lv_point_t& point);
     static void longPressAt(ButtonTile* tile, const lv_point_t& point);
     static void onPadActionTap(lv_event_t* e);
+    static void onSwipeGuard(lv_event_t* e);
     static void padActionFlashTimerCb(lv_timer_t* timer);
     void showPadActionFlash();
 
@@ -265,6 +271,7 @@ public:
     bool isEvicted() const { return !arraysAllocated; }
 
     uint8_t getPageIndex() const { return pageIndex; }
+    bool buttonIsOverlay(const ButtonTile* tile) const { return isOverlayButton(tile); }
 #if HAS_DISPLAY
     bool navigateButtons(const char* command);
 #endif

@@ -21,6 +21,31 @@ The canvas reflects the device's aspect ratio and spacing, not an exact renderin
 of fonts, widgets, or live images. Each pad saves independently.
 **Show on Device** does not save the draft.
 
+## Edit Main and Overlay buttons
+
+Use the **Main** and **Overlay** selector above the canvas to choose which button
+layer you are editing. Both layers share the pad's grid, dimensions, spacing,
+background, bindings, and other pad settings. The combined button count is shown
+beside the selector and cannot exceed the device limit.
+
+Overlay buttons draw above Main buttons and can occupy the same grid positions.
+Buttons cannot overlap other buttons in their own layer. While editing Overlay,
+Main appears dimmed and cannot be selected. Pad settings remain visible but are
+read-only. The editor keeps separate button selections and drafts for each
+layer, including when both have a button at the same coordinates.
+
+Each button's **Button State** controls visibility and input independently.
+**Enabled** buttons accept their actions, **Disabled** buttons remain visible
+but do not run actions, and **Hidden** buttons are invisible. Enabled and
+disabled Overlay buttons block input underneath their rectangles, even when
+they have no action. Hidden Overlay buttons do not block Main buttons. An empty
+state means enabled; unresolved or invalid state bindings default to enabled
+on Main and hidden on Overlay.
+
+Saving, reloading, importing, exporting, and copying a pad preserve both layers.
+Button-level operations such as blocks and button copy/paste apply to the
+selected layer.
+
 ### Customize row and column sizes
 
 Open **Custom Row / Column Sizes** at the bottom of the Pad inspector's **Layout**

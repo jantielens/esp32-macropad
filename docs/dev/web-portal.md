@@ -842,6 +842,7 @@ every component in that custom section to the same category ID.
 - **🎛️ Pad Editor** (only shown when firmware has display): Visual grid editor for pad pages
   - Pad selection and naming: Left rail for up to 16 pads with optional custom names (max 31 chars). Labels retain the `Pad X: Name` format whether selected or not; no legacy selection dropdown is needed.
   - **Grid preview**: Configuration overview with consistent widget type markers for local and inherited buttons. Unlabeled widgets show larger symbols and names when space allows; directional symbols follow widget axis settings. Click a button to open its editor
+  - **Main and Overlay layers**: The segmented selector edits one layer through the shared grid and inspector. Overlay previews Main dimmed, permits matching coordinates, and keeps selections, drafts, and validation errors layer-qualified. Shared pad settings are read-only in Overlay. Both layers share the grid and the device-reported `max_pad_buttons` limit.
   - Button inspector: Content, Actions, and Appearance tabs retain the complete label, widget, icon, image, confirmation, and appearance forms. Actions and Appearance expose controls without duplicate same-named accordions. Compact action summaries expand into registry-driven editors. The Pad Bindings tab has no duplicate inner heading; each binding groups its name, expression, live preview, and delete control inside one bordered row.
   - Bar-chart Content: Data sources groups each bar's binding, caption, and color/fill. Scale and Layout & style (including Animation) follow, then optional Gridlines and Target groups. Optional bars use fixed collapsed defaults, including when configured or paired. Disabled gridlines and empty targets retain editable styling and validation. Drafts preserve manual disclosure; field IDs and persisted configuration keys are unchanged.
   - Gauge Content: Data sources groups each ring's binding, label, and color, followed by pair controls with rings 2/4 explicitly identified as negative. Scale and Arc & track (including Animation and the existing shared outline controls) precede Needle, Tick marks, and Target. Core groups and ring 1 open on load; optional rings and feature groups start collapsed regardless of configured values. Needle off, tick count 0, and an empty target retain editable styling and validation. Drafts preserve manual disclosure. Angular units, limits, defaults, IDs, and load/build mappings remain unchanged.
@@ -863,13 +864,13 @@ every component in that custom section to the same category ID.
   - **Camera Preview widget**: Available only on camera-enabled boards. It displays the shared camera feed with Cover, Letterbox, or Center crop scaling.
   - **Numeric rocker tap areas**: The numeric rocker settings include a per-button Tap Area Scale control from 50% to 150%. It scales both fine and coarse zones while the firmware reserves a center action area.
   - **Pad and Button Defaults**: Separate Button Appearance, Pad Appearance and Layout, Button Labels and Icon, and Button Shadow sections on the Pads page. Pad Appearance and Layout provides device-wide button spacing, `default_pad_bg_color`, Burn-in Pixel Shift Distance (`pixel_shift_distance_px`, 0-8 px), and extra top, right, bottom, and left edge insets inside that distance. A live 2×2 diagram updates with those controls and labels their current pixel values. A value of 0 disables pixel shifting and its layout reserve. A pad without an explicit background inherits the device default. Shadows can be opaque backing plates or LVGL drop shadows, with free-form offsets and blur that may overlap or clip. Shadow color can use either a specific color or a darker tint of each button's background, including dynamic background bindings. Pads and buttons can enable or disable the device shadow setting. Stored as a separate JSON file on LittleFS (`/config/button_defaults.json`) with a dedicated REST API (`GET/POST /api/component/button-defaults/config`)
-  - **Template Pad**: Dropdown to inherit buttons from another pad into empty grid positions. Template buttons appear as ghost overlays in the editor. Merge includes bindings (target wins on conflict, no chaining)
+  - **Template Pad**: Dropdown to inherit source Main buttons into empty destination Main positions. Source Overlay buttons are not inherited, and local Overlay buttons do not suppress Main inheritance. Template buttons appear as ghost overlays in the editor. Merge includes bindings (target wins on conflict, no chaining) and rejects combined-capacity overflow.
   - Board appearance defaults: `GET /api/component/button-defaults/config` returns saved device overrides plus a read-only `firmware_defaults` object containing the board-selected pad, button, layout, shadow, and widget palette defaults. `POST` accepts device overrides only. The portal uses the firmware defaults for controls, widget colors, previews, and appearance resets; unchanged inherited values are omitted from device-default saves. Device exports exclude `firmware_defaults`. E-paper interactive boards use high-contrast defaults and pixel shift distance 0; other boards retain their existing defaults.
-  - **Building Blocks**: Pre-configured button groups available in the More ▾ menu under "━━ Blocks ━━". Select a block to enter placement mode — green/red ghost overlay shows valid/invalid positions. Blocks check grid dimensions, free cells, and 64-button limit. Uses extensible registration API (`pad_block_register()`) so feature branches add blocks independently. Catalog served by `GET /api/pad/blocks`
-  - **Button copy/paste**: Copy button settings from one cell and paste into another; position-independent
-  - **Pad actions via "More ▾" menu**: Fill Pad (fill all cells with copied button), Copy/Paste Pad (entire page), Export/Import Pad (JSON file), Export/Import Device Config (NVS + all 16 pad configs), Clear Pad
+  - **Building Blocks**: Pre-configured button groups available in the More ▾ menu under "━━ Blocks ━━". Select a block to enter placement mode; green/red ghost outlines show valid/invalid positions. Placement checks occupancy in the selected layer and enforces combined button capacity. Uses extensible registration API (`pad_block_register()`) so feature branches add blocks independently. Catalog served by `GET /api/pad/blocks`.
+  - **Button copy/paste**: Copy button settings from one position and paste into another in the selected layer; position-independent.
+  - **Pad actions via "More ▾" menu**: Fill Pad operates on the selected layer. Copy/Paste Pad and Export/Import Pad preserve both layers and shared settings. Export/Import Device Config covers NVS and all pad configs; Clear Pad clears the whole draft.
   - **Device config export/import**: Exports NVS settings (excluding network) plus all 16 pad pages to a single JSON file; import overwrites settings and reboots
-- **Recipes** (display boards): Installs a declared scenario into a selected pad without changing existing buttons. Adaptive recipes use ordered row or column flow; each button declares a visual shape and size, and the portal selects spans from the target pad's actual rendered button dimensions. The clicked cell is the recipe's top-left anchor; adaptive recipes may use a smaller fitting footprint when no larger forward footprint fits. The placement grid previews the resolved group and reports its bounds. Fixed-offset recipes remain supported. If an empty current grid cannot host a recipe, the portal offers the smallest supported rows/columns increase that can. If the current empty grid can host it but existing buttons block every placement, it offers a confirmed **Clear Buttons** action that retains the other pad settings. The user can then select a placement and install the recipe separately. Optional parameter descriptions appear below their inputs. The portal derives an impact summary from the recipe, and unavailable recipes identify their missing device capability. A completed installation exposes **Show Pad** and **Navigate to Pad Editor** actions for the target pad. Recipes use declarative provisioning for pad bindings and existing component configuration, such as timer expiry actions. The **Recipe Catalog** page edits the device-persisted catalog served by `GET/POST /api/recipes/catalog`; a missing catalog is an empty valid envelope. The repository sample is [docs/samples/recipe-catalog.json](../samples/recipe-catalog.json).
+- **Recipes** (display boards): Installs a declared scenario into Main without changing Overlay buttons. Adaptive recipes use ordered row or column flow; each button declares a visual shape and size, and the portal selects spans from the target pad's actual rendered button dimensions. The clicked position is the recipe's top-left anchor. Recipe installation enforces the combined Main and Overlay button limit and refreshes layer-qualified icon IDs for both arrays. If an empty current grid cannot host a recipe, the portal offers the smallest supported rows/columns increase. If Main buttons block every placement, it offers a confirmed **Clear Main Buttons** action that retains Overlay and shared pad settings. The user can then select a placement and install the recipe separately. Optional parameter descriptions appear below their inputs. The portal derives an impact summary from the recipe, and unavailable recipes identify their missing device capability. A completed installation exposes **Show Pad** and **Navigate to Pad Editor** actions for the target pad. Recipes use declarative provisioning for pad bindings and existing component configuration, such as timer expiry actions. The **Recipe Catalog** page edits the device-persisted catalog served by `GET/POST /api/recipes/catalog`; a missing catalog is an empty valid envelope. The repository sample is [docs/samples/recipe-catalog.json](../samples/recipe-catalog.json).
 - **Unsaved-changes protection**: Confirm dialog on page/pad switch and `beforeunload` event when edits are pending
 - Pad save controls: A workspace toolbar labels the pad list with Pads and provides pending-edit or saving status, Save Pad, Show on Device, and More. Clean drafts have no status label. The current pad is highlighted in the list, which shares navigation row styles with the shell. The Pad inspector scope opens pad settings. Clicking a selected button again deselects it without discarding its draft. The canvas has no dimensions toolbar or footer. Pad and button action slots share the same accented group styles. Save Pad is also available in the mobile inspector header.
 - Pad numeric inputs: Spinner buttons are hidden consistently within the editor. A delegated, non-passive wheel listener prevents native number stepping and scrolls the nearest available scroll container, including dynamically rendered action and widget fields. Input focus and values remain unchanged; browser zoom gestures retain their native behavior.
@@ -877,15 +878,19 @@ every component in that custom section to the same category ID.
 
 Desktop uses a pad rail, persistent aspect-correct canvas, and contextual
 inspector. Tablet moves the rail above the canvas and inspector. Mobile uses a
-full-screen inspector with Return to pad; returning retains edits. Pad scope
-contains Layout, Appearance, Bindings, and Actions tabs.
+full-screen inspector with Return to pad; returning retains edits. The layer
+selector remains above the canvas, and switching to a layer with no remembered
+button selection returns to the grid. Pad scope contains Layout, Appearance,
+Bindings, and Actions tabs; shared controls are read-only in Overlay.
 
 `portal_pad_workspace.js` owns one active pad draft's form snapshots, pending
 validation errors, selection, tabs, resize observer, and cancellable event
-listeners. Valid button edits immediately replace the draft model; invalid
-inputs retain the last valid model and their raw form values. Save blocks on
-pending errors or overlapping/out-of-bounds buttons. Copy and inherited-button
-selection do not mutate the draft. Only an actual edit creates an override.
+listeners. Button form and error keys include the layer so matching coordinates
+retain separate drafts. Valid edits immediately replace the selected layer's
+draft model; invalid inputs retain the last valid model and their raw form
+values. Save blocks on pending errors, layer-local overlap, combined-capacity
+overflow, or out-of-bounds buttons. Copy and inherited-button selection do not
+mutate the draft. Only an actual edit creates an override.
 
 Validation alerts overlay the action row (the inspector's top button row on
 mobile), leaving field layout unchanged. Dismissal hides only the alert and
@@ -917,6 +922,7 @@ do not verify on-device rendering, input dispatch, or physical device behavior.
 | Draft lifecycle | Direct edits; button/tab changes retain incomplete fields; errors block save; failed save retains the draft; retry succeeds |
 | Persistence | No pad writes before Save Pad; one current-pad save; canonical reload retains selection; edits during save remain dirty |
 | Navigation | Keep Editing preserves the draft; discard loads the destination; fragment/hash navigation and beforeunload are guarded; revisits have no stale listeners |
+| Layered buttons | Main and Overlay drafts remain independent at equal coordinates; preview composition, per-layer occupancy, shared capacity, and both-array save/reload/import/export are correct |
 | Canvas | Device aspect ratio, spacing and insets; spans, inherited ghosts, empty positions; native selection, drag/drop and resize synchronize inspector coordinates |
 | Button content | All labels and styles, spans, icons and positioning, local/remote images and credentials, capability-gated camera controls |
 | Widgets | Bar chart, gauge, sparkline, table, rocker, numeric rocker, list, camera preview, HID input widgets, and native extension configuration |
@@ -931,6 +937,41 @@ Run the focused Node portal tests through CTest, including the dev server,
 dialog transaction, dirty state, import, preview, action picker/list, and
 startup tests. Run the asset variant/cache checks and production asset
 generator. Portal-only changes do not require a firmware build.
+
+Hardware validation remains separate from these host and browser checks. Verify
+real touch inside and around enabled, disabled, hidden, and no-action Overlay
+buttons; change visibility during a held contact; confirm physical navigation
+skips covered Main buttons while Overlay widgets remain reachable; and inspect
+layer stacking, shadows, focus, tap feedback, and dialogs on the display. Do not
+claim the memory gate passed until internal and PSRAM free heap, minimum free
+heap, and largest blocks are measured separately during steady state,
+construction, visibility changes, navigation, and repeated load/eviction. Compare
+equal button counts with all buttons in Main and split across both layers, then
+measure the added-content cost of one warning button.
+
+The verified firmware build used `esp32-p4-lcd4b` with `HAS_DISPLAY`,
+`HAS_TOUCH`, `HAS_MCP`, `HAS_MQTT`, `HAS_NATIVE_EXTENSIONS`, `HAS_USB_HID`, and
+`HAS_AUDIO`. Its aggregate global-data report was 130,968 bytes; that is not a
+feature delta or a runtime heap measurement. P4 ELF layout reports
+`sizeof(PadConfig) = 4904`, `sizeof(ButtonTile) = 6376`,
+`sizeof(PadScreen) = 376`, and `sizeof(ScreenButtonConfig) = 6700` bytes. The
+Main boundary occupies existing `PadConfig` tail padding, and `ButtonTile` has
+no net stride increase. The additional `PadScreen` fields are estimated at
+about 8 bytes per instance, or 128 bytes across 16 instances. One active
+Overlay pad creates one LVGL hit-test shield (`lv_obj_t` is 56 bytes and its
+event descriptor is 12 bytes); its auxiliary style allocations and transient
+peak have not been measured.
+
+Pad config and LVGL allocations request PSRAM first and retain the existing
+internal-heap fallback. A `ScreenButtonConfig` record is 6,700 bytes, so a
+resize that falls back internally can exceed the 1 KiB review threshold. No
+runtime evidence establishes that this happens on the P4, or that shield
+construction and teardown stay below the threshold. Record the board, enabled
+flags, Main and Overlay counts, internal/PSRAM free heap, minimum free heap, and
+largest blocks for an 8-button Main baseline, an equivalent 7-Main/1-Overlay
+pad, and a 7-Main pad with one warning button added in Overlay. The memory gate
+remains unverified until those measurements are collected and the existing
+internal fallback risk is reviewed.
 
 #### Network Page (`/network.html`)
 
@@ -1140,6 +1181,19 @@ fields or loop iterations. JSON response bodies and cache policies are unchanged
 not every authentication failure, redirect, or early error response is instrumented.
 
 ## REST API Reference
+
+### Pad Configuration
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/pad?page=N` | Returns one pad's stored JSON. `bg_image_password` is redacted in both button arrays and reported through `bg_image_password_set`. |
+| `POST` | `/api/pad?page=N` | Validates and saves one complete pad object. `buttons` is Main; optional `overlay_buttons` is Overlay. Both share grid settings and `max_pad_buttons`. |
+| `DELETE` | `/api/pad?page=N` | Deletes the pad configuration. |
+
+Button positions are local to their layer. Grid coordinates may overlap between
+layers, but button rectangles may not overlap within one layer. The shared
+validator rejects malformed collections and combined-capacity overflow before
+the portal or MCP authoring tools save a pad.
 
 ### Development Crash Injection
 
@@ -1478,6 +1532,7 @@ Returns comprehensive device information.
     }
   ],
   "max_pads": 16,
+  "max_pad_buttons": 64,
   "max_grid_cols": 8,
   "max_grid_rows": 8,
   "display_coord_width": 480,
@@ -1497,6 +1552,7 @@ Returns comprehensive device information.
 - `wifi_hostname`: WiFi/DHCP hostname
 - `mdns_name`: Full mDNS name (hostname + `.local`)
 - `hostname`: Short hostname
+- `max_pad_buttons`: Combined Main and Overlay button capacity per pad.
 
 **Portal Mode Field:**
 - `ap_active`: `true` when the device is running in AP / captive-portal mode, `false` in full STA mode. Portal JS derives `portalMode` (`"core"` vs `"full"`) from this flag. (Replaces the removed `GET /api/mode` endpoint.)
@@ -3400,22 +3456,26 @@ Play a sound file immediately (for testing).
 
 ---
 
-#### `GET /api/pad/tile_sizes?cols=<N>&rows=<N>`
+#### `GET /api/pad/button_sizes?cols=<N>&rows=<N>`
 
-Compute tile dimensions for a given grid layout. Used by the icon picker to render correctly sized icons.
+Compute button dimensions for a given grid layout. Used to render correctly
+sized icons.
 
-- **Query Parameters:** `cols` (required, `1`–`8`), `rows` (required, `1`–`8`)
-- **Response:**
+* **Query parameters**: `cols` and `rows`, each from `1` to `8`
+* **Response**:
+
 ```json
 {
-  "display_w": 720, "display_h": 720,
-  "tile_w": 234, "tile_h": 234,
-  "gap": 4, "padding": 4,
+  "display_w": 720,
+  "display_h": 720,
+  "button_w": 234,
+  "button_h": 234,
+  "gap": 4,
+  "padding": 4,
   "pixel_shift_margin": 4,
   "font_small_h": 16
 }
 ```
-
 
 #### `GET /api/pad/blocks`
 

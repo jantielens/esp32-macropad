@@ -310,6 +310,8 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 				response->print(HAS_TOUCH ? "true" : "false");
 				response->print(",\"max_pads\":");
 				response->print(MAX_PADS);
+				response->print(",\"max_pad_buttons\":");
+				response->print(MAX_PAD_BUTTONS);
 				response->print(",\"max_grid_cols\":");
 				response->print(MAX_GRID_COLS);
 				response->print(",\"max_grid_rows\":");

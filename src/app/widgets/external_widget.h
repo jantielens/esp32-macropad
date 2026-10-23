@@ -20,8 +20,10 @@ inline const ExternalWidgetConfig* external_widget_config(const WidgetConfig* co
     return reinterpret_cast<const ExternalWidgetConfig*>(config->data);
 }
 
-inline uint32_t external_widget_instance_id(uint8_t page, uint8_t col, uint8_t row) {
+inline uint32_t external_widget_instance_id(uint8_t page, bool overlay,
+                                            uint8_t col, uint8_t row) {
     return (static_cast<uint32_t>(page) << 16) |
+           (static_cast<uint32_t>(overlay) << 15) |
            (static_cast<uint32_t>(col) << 8) | row;
 }
 

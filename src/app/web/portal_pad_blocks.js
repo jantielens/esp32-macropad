@@ -101,8 +101,9 @@ function padTryInsertBlock(block) {
             block.min_free + " free cells, pad has " + free, 'error');
         return;
     }
-    if (padState.buttons.length + block.buttons.length > 64) {
-        showMessage("Can't insert " + block.name + " — would exceed 64 button limit", 'error');
+    const maxButtons = padMaxButtons();
+    if (padState.mainButtons.length + padState.overlayButtons.length + block.buttons.length > maxButtons) {
+        showMessage("Can't insert " + block.name + ' — would exceed ' + maxButtons + ' button limit', 'error');
         return;
     }
     padEnterPlacementMode(block);

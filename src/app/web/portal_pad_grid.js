@@ -164,7 +164,7 @@ function padCanPlaceTemplateButton(tplBtn) {
         for (let dr = 0; dr < rs; dr++) {
             const c = tplBtn.col + dc, r = tplBtn.row + dr;
             if (c >= cols || r >= rows) return false;
-            if (padState.buttons.some(b => {
+            if (padState.mainButtons.some(b => {
                 const bcs = b.col_span || 1, brs = b.row_span || 1;
                 return c >= b.col && c < b.col + bcs && r >= b.row && r < b.row + brs;
             })) return false;
@@ -210,92 +210,87 @@ function padRenderGrid() {
     grid.style.background = (pageBgInput && /^#[0-9a-fA-F]{6}$/.test(pageBgInput.value.trim())) ? pageBgInput.value.trim() : padGetEffectiveDefault('default_pad_bg_color');
     grid.innerHTML = '';
 
-    // Track which cells are "covered" by a spanning button
-    const covered = new Set();
-
-    // First pass: place buttons with spans
-    for (const b of padState.buttons) {
-        const bc = b.col, br = b.row;
-        const cs = Math.min(b.col_span || 1, cols - bc);
-        const rs = Math.min(b.row_span || 1, rows - br);
-        if (bc >= cols || br >= rows) continue; // Out of current grid
-
-        for (let dc = 0; dc < cs; dc++) {
-            for (let dr = 0; dr < rs; dr++) {
-                if (dc === 0 && dr === 0) continue;
-                covered.add((bc + dc) + ',' + (br + dr));
-            }
+    const editingOverlay = padState.selectedLayer === 'overlay';
+    const mainOccupied = padGridOccupiedCells(padState.mainButtons, cols, rows);
+    const overlayOccupied = padGridOccupiedCells(padState.overlayButtons, cols, rows);
+    const activeOccupied = new Set(editingOverlay ? overlayOccupied : mainOccupied);
+    if (!editingOverlay) {
+        for (const button of padState.templateButtons) {
+            if (!padCanPlaceTemplateButton(button)) continue;
+            for (let dc = 0; dc < (button.col_span || 1); dc++)
+                for (let dr = 0; dr < (button.row_span || 1); dr++)
+                    activeOccupied.add((button.col + dc) + ',' + (button.row + dr));
         }
     }
 
-    // Build full occupancy set for resize handle validation
-    const occupied = padBuildOccupancySet();
+    const makeCell = (button, layer, kind) => {
+        const cell = document.createElement('div');
+        cell.classList.add('pad-cell');
+        cell.dataset.col = button.col;
+        cell.dataset.row = button.row;
+        cell.dataset.layer = layer;
+        const colSpan = Math.min(button.col_span || 1, cols - button.col);
+        const rowSpan = Math.min(button.row_span || 1, rows - button.row);
+        cell.style.gridColumn = (button.col + 1) + ' / span ' + Math.max(1, colSpan);
+        cell.style.gridRow = (button.row + 1) + ' / span ' + Math.max(1, rowSpan);
+        if (kind === 'button') cell.classList.add('pad-cell-btn');
+        if (layer === 'main' && editingOverlay) cell.classList.add('pad-cell-main-preview');
+        if (layer === 'overlay') cell.classList.add('pad-cell-overlay');
+        if (kind === 'template') {
+            cell.classList.add('pad-cell-ghost');
+            cell.title = 'Inherited from template pad';
+        }
+        padRenderCellContent(cell, button);
+        if (kind === 'button' && layer === padState.selectedLayer && !padState.placingBlock) {
+            padRenderResizeHandles(cell, button, button.col, button.row);
+            const col = button.col, row = button.row;
+            cell.addEventListener('click', () => padWorkspaceSelect(col, row));
+            cell.draggable = true;
+            cell.addEventListener('dragstart', event => padDragStart(event, col, row));
+            cell.addEventListener('dragend', padDragEnd);
+        }
+        grid.appendChild(cell);
+    };
 
-    // Second pass: render cells
-    for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-            const key = c + ',' + r;
-            if (covered.has(key)) continue; // Skip cells covered by a span
+    const addTemplatePreviews = () => {
+        for (const button of padState.templateButtons) {
+            if (mainOccupied.has(button.col + ',' + button.row) || !padCanPlaceTemplateButton(button)) continue;
+            makeCell(button, 'main', 'template');
+        }
+    };
 
-            const btn = padFindButton(c, r);
+    if (editingOverlay) {
+        for (const button of padState.mainButtons) {
+            if (button.col < cols && button.row < rows) makeCell(button, 'main', 'button');
+        }
+        addTemplatePreviews();
+    }
+
+    const activeButtons = editingOverlay ? padState.overlayButtons : padState.mainButtons;
+    for (const button of activeButtons) {
+        if (button.col < cols && button.row < rows) makeCell(button, padState.selectedLayer, 'button');
+    }
+
+    if (!editingOverlay) addTemplatePreviews();
+
+    for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+            if (activeOccupied.has(col + ',' + row)) continue;
             const cell = document.createElement('div');
-            cell.classList.add('pad-cell');
-            cell.dataset.col = c;
-            cell.dataset.row = r;
-            cell.style.gridColumn = (c + 1) + ' / span 1';
-            cell.style.gridRow = (r + 1) + ' / span 1';
-
-            if (btn) {
-                cell.classList.add('pad-cell-btn');
-                const cs = Math.min(btn.col_span || 1, cols - c);
-                const rs = Math.min(btn.row_span || 1, rows - r);
-                if (cs > 1) cell.style.gridColumn = (c + 1) + ' / span ' + cs;
-                if (rs > 1) cell.style.gridRow = (r + 1) + ' / span ' + rs;
-
-                padRenderCellContent(cell, btn);
-
-                padRenderResizeHandles(cell, btn, c, r);
-
-                if (!padState.placingBlock) {
-                    cell.addEventListener('click', () => padWorkspaceSelect(c, r));
-                    cell.draggable = true;
-                    cell.addEventListener('dragstart', (e) => padDragStart(e, c, r));
-                    cell.addEventListener('dragend', padDragEnd);
-                }
-            } else {
-                // Check if a template button occupies this position
-                const tplBtn = padFindTemplateButton(c, r);
-                if (tplBtn && padCanPlaceTemplateButton(tplBtn)) {
-                    cell.classList.add('pad-cell-btn', 'pad-cell-ghost');
-                    const cs = Math.min(tplBtn.col_span || 1, cols - c);
-                    const rs = Math.min(tplBtn.row_span || 1, rows - r);
-                    if (cs > 1) cell.style.gridColumn = (c + 1) + ' / span ' + cs;
-                    if (rs > 1) cell.style.gridRow = (r + 1) + ' / span ' + rs;
-                    padRenderCellContent(cell, tplBtn);
-                    // Mark cells covered by this template button's span
-                    for (let dc = 0; dc < cs; dc++) {
-                        for (let dr = 0; dr < rs; dr++) {
-                            if (dc === 0 && dr === 0) continue;
-                            covered.add((c + dc) + ',' + (r + dr));
-                        }
-                    }
-                    cell.title = 'Inherited from template pad';
-                } else {
-                    cell.classList.add('pad-cell-empty');
-                    cell.textContent = '+';
-                    if (!padState.placingBlock) {
-                        cell.addEventListener('dragover', (e) => padDragOver(e, c, r));
-                        cell.addEventListener('dragleave', padDragLeave);
-                        cell.addEventListener('drop', (e) => padDrop(e, c, r));
-                    }
-                }
-                if (padState.placingBlock) {
-                    cell.addEventListener('click', () => padPlacementClick(c, r));
-                } else {
-                    cell.addEventListener('click', () => padWorkspaceSelect(c, r));
-                }
+            cell.classList.add('pad-cell', 'pad-cell-empty');
+            cell.dataset.col = col;
+            cell.dataset.row = row;
+            cell.dataset.layer = padState.selectedLayer;
+            cell.style.gridColumn = (col + 1) + ' / span 1';
+            cell.style.gridRow = (row + 1) + ' / span 1';
+            cell.textContent = '+';
+            if (padState.placingBlock) cell.addEventListener('click', () => padPlacementClick(col, row));
+            else cell.addEventListener('click', () => padWorkspaceSelect(col, row));
+            if (!padState.placingBlock) {
+                cell.addEventListener('dragover', event => padDragOver(event, col, row));
+                cell.addEventListener('dragleave', padDragLeave);
+                cell.addEventListener('drop', event => padDrop(event, col, row));
             }
-
             grid.appendChild(cell);
         }
     }
@@ -309,6 +304,18 @@ function padRenderGrid() {
         grid.onmouseleave = null;
     }
     if (typeof padWorkspaceRefresh === 'function') padWorkspaceRefresh();
+}
+
+function padGridOccupiedCells(buttons, cols, rows) {
+    const occupied = new Set();
+    for (const button of buttons) {
+        const colSpan = Math.min(button.col_span || 1, cols - button.col);
+        const rowSpan = Math.min(button.row_span || 1, rows - button.row);
+        for (let dc = 0; dc < colSpan; dc++)
+            for (let dr = 0; dr < rowSpan; dr++)
+                occupied.add((button.col + dc) + ',' + (button.row + dr));
+    }
+    return occupied;
 }
 
 function padPlacementHover(e) {

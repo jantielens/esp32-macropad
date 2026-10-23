@@ -189,7 +189,7 @@ context.recipeFindMinimumResize({
 });
 
 async function testInstallation() {
-    for (const outcome of ['success', 'cancel', 'pad-failure', 'component-failure', 'unsupported',
+    for (const outcome of ['success', 'cancel', 'pad-failure', 'component-failure', 'unsupported', 'capacity-exceeded',
         'font-success', 'font-existing', 'font-list-failure', 'font-download-failure',
         'font-network-failure', 'font-upload-failure', 'font-unsupported']) {
         const elements = new Map();
@@ -200,15 +200,16 @@ async function testInstallation() {
         const messages = [];
         const downloads = [];
         let iconsUploaded = false;
+        let uploadedIcons = null;
         const usesFont = outcome.startsWith('font-');
         const success = ['success', 'font-success', 'font-existing'].includes(outcome);
         const fontData = new Blob([new Uint8Array([0, 1, 0, 0])]);
         const install = {
             console, Blob, Set, URL, deviceInfoCache: { has_alarm: outcome !== 'unsupported', has_sound_player: true,
-                has_ttf_fonts: outcome !== 'font-unsupported' },
+                has_ttf_fonts: outcome !== 'font-unsupported', max_pad_buttons: outcome === 'capacity-exceeded' ? 1 : 64 },
             confirm: () => outcome !== 'cancel',
             showMessage: (message) => messages.push(message),
-            padUploadPageIcons: async () => { iconsUploaded = true; },
+            padUploadPageIcons: async context => { iconsUploaded = true; uploadedIcons = context.icons; },
             document: {
                 getElementById(id) { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); },
                 createElement: element,
@@ -250,18 +251,29 @@ async function testInstallation() {
         install.state.selected = JSON.parse(JSON.stringify(alarmCatalog.recipes[0]));
         install.state.selected.confirmation = 'Replace Alarm 1 actions and disable its schedule?';
         if (usesFont) install.state.selected.fonts = [{ name: 'digital', url: 'https://example.org/digital.ttf' }];
-        install.state.pad = { page: 6, cols: 2, rows: 2, buttons: [] };
+        install.state.pad = { page: 6, cols: 2, rows: 2, buttons: [],
+            overlay_buttons: [{ col: 0, row: 0, icon_id: 'emoji_overlay' }] };
         install.state.placement = { col: 0, row: 0 };
         install.state.buttonSizes = { button_w: 100, button_h: 100, gap: 0 };
         await Promise.all([install.recipeInstall(), install.recipeInstall()]);
         assert.strictEqual(install.state.installing, false);
         const configWrites = writes.filter(write => !write.url.startsWith('/api/fonts/'));
+        if (outcome === 'capacity-exceeded') {
+            assert.strictEqual(configWrites.length, 0);
+            assert.strictEqual(iconsUploaded, false);
+            assert(messages.some(message => message.includes('combined Main and Overlay button limit')));
+            continue;
+        }
         if (outcome === 'cancel' || outcome === 'unsupported' || usesFont && !success) {
             assert.strictEqual(configWrites.length, 0);
             assert.strictEqual(iconsUploaded, false);
         } else {
             assert.strictEqual(configWrites[0].url, '/api/pad?page=6');
             assert.strictEqual(configWrites.length, outcome === 'pad-failure' ? 1 : 2);
+            assert.deepStrictEqual(configWrites[0].body.overlay_buttons, [
+                { col: 0, row: 0, icon_id: 'emoji_overlay' },
+            ]);
+            assert(uploadedIcons.some(button => button.layer === 'overlay' && button.icon_id === 'emoji_overlay'));
         }
         if (outcome === 'font-existing') {
             assert.strictEqual(downloads.length, 0);

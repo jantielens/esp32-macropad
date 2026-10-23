@@ -200,7 +200,9 @@ static void append_pad_buttons(JsonObject po, const PadConfig* cfg) {
     for (uint8_t b = 0; b < cfg->button_count; ++b) {
         const ScreenButtonConfig& btn = cfg->buttons[b];
         JsonObject bo = btns.createNestedObject();
-        bo["position"] = b;
+        const bool overlay = b >= cfg->main_button_count;
+        bo["layer"] = overlay ? "overlay" : "main";
+        bo["position"] = overlay ? b - cfg->main_button_count : b;
         bo["col"] = btn.col;
         bo["row"] = btn.row;
         bo["label"] = String(button_label(btn));
@@ -234,6 +236,8 @@ static bool tool_list_pads(const JsonObject& args, JsonObject& result, String& e
         char nm[64];
         if (pad_config_read_name(pg, nm, sizeof(nm))) po["name"] = nm;  // friendly label
         po["button_count"] = cfg->button_count;
+        po["main_button_count"] = cfg->main_button_count;
+        po["overlay_button_count"] = cfg->button_count - cfg->main_button_count;
         append_pad_buttons(po, cfg);
         pad_config_release(cfg);
     }
@@ -278,14 +282,15 @@ static bool tool_get_pad(const JsonObject& args, JsonObject& result, String& err
     snprintf(sid, sizeof(sid), "pad_%d", pg);
     result["screen"] = sid;  // canonical id (the arg may have been a friendly name)
 
-    JsonArray btns = result["buttons"];
-    if (!btns.isNull()) {
-        result["button_count"] = btns.size();
-        uint8_t i = 0;
-        for (JsonObject b : btns) b["position"] = i++;  // array index = set_button position
-    } else {
-        result["button_count"] = 0;
-    }
+    JsonArray btns = result["buttons"].as<JsonArray>();
+    JsonArray overlays = result["overlay_buttons"].as<JsonArray>();
+    uint8_t position = 0;
+    for (JsonObject button : btns) button["position"] = position++;
+    position = 0;
+    for (JsonObject button : overlays) button["position"] = position++;
+    result["main_button_count"] = btns.size();
+    result["overlay_button_count"] = overlays.size();
+    result["button_count"] = btns.size() + overlays.size();
     return true;
 }
 
@@ -300,6 +305,7 @@ static bool tool_get_pad(const JsonObject& args, JsonObject& result, String& err
 // --- press_button ----------------------------------------------------------
 struct PressCtx {
     uint8_t page;
+    bool overlay;
     int16_t position;       // -1 = match by label
     char label[CONFIG_LABEL_MAX_LEN];
 };
@@ -366,11 +372,14 @@ static void exec_press_button(const void* ctx, bool* ok, char* msg, size_t msg_l
         return;
     }
 
+    const uint8_t first_button = c->overlay ? cfg->main_button_count : 0;
+    const uint8_t layer_count = c->overlay
+        ? cfg->button_count - cfg->main_button_count : cfg->main_button_count;
     int idx = -1;
     if (c->position >= 0) {
-        if (c->position < cfg->button_count) idx = c->position;
+        if (c->position < layer_count) idx = first_button + c->position;
     } else {
-        for (uint8_t b = 0; b < cfg->button_count; ++b) {
+        for (uint8_t b = first_button; b < first_button + layer_count; ++b) {
             const char* lbl = button_label(cfg->buttons[b]);
             if (lbl[0] && strcasecmp(lbl, c->label) == 0) { idx = b; break; }
         }
@@ -420,6 +429,13 @@ static bool tool_press_button(const JsonObject& args, JsonObject& result, String
     const char* screen = args["screen"] | (const char*)nullptr;
     const char* label = args["label"] | (const char*)nullptr;
     const bool has_pos = args.containsKey("position");
+    if (args.containsKey("layer") && !args["layer"].is<const char*>()) {
+        return tool_fail(result, err, TOOL_ERR_PARAMS, "layer must be 'main' or 'overlay'");
+    }
+    const char* layer = args["layer"] | "main";
+    if (strcmp(layer, "main") != 0 && strcmp(layer, "overlay") != 0) {
+        return tool_fail(result, err, TOOL_ERR_PARAMS, "layer must be 'main' or 'overlay'");
+    }
 
     if (!screen || strncmp(screen, "pad_", 4) != 0) {
         return tool_fail(result, err, TOOL_ERR_PARAMS, "screen must be a pad id like 'pad_0'");
@@ -435,6 +451,7 @@ static bool tool_press_button(const JsonObject& args, JsonObject& result, String
     PressCtx ctx;
     memset(&ctx, 0, sizeof(ctx));
     ctx.page = (uint8_t)pg;
+    ctx.overlay = strcmp(layer, "overlay") == 0;
     ctx.position = has_pos ? (int16_t)(args["position"] | 0) : -1;
     if (label) strlcpy(ctx.label, label, sizeof(ctx.label));
 
@@ -722,7 +739,7 @@ REGISTER_MCP_TOOL(s_tool_get_current_screen);
 
 static const McpTool s_tool_list_pads = {
     "list_pads",
-    "List configured pads with their friendly name and buttons (position, label, action type). Use this to discover what can be pressed, then get_pad for one pad's full detail or press_button to activate a button. Optional 'screen' filter (e.g. 'pad_0').",
+    "List configured pads with their friendly name and buttons (layer, layer-local position, grid coordinates, label, action type). Use get_pad for full detail; press_button requires the same layer and local position. Optional 'screen' filter (e.g. 'pad_0').",
     "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\",\"description\":\"Pad id like 'pad_0' to limit output\"}}}",
     tool_list_pads, true, false, false
 };
@@ -730,7 +747,7 @@ REGISTER_MCP_TOOL(s_tool_list_pads);
 
 static const McpTool s_tool_get_pad = {
     "get_pad",
-    "Get one pad's full configuration: layout/cols/rows, wake_screen, bg_color, template_pad, named bindings, and every button's labels, styles, colors, widget, and resolved tap/long-press actions with targets. Each button's 'position' is the 0-based array index that press_button/set_button use. Inspect a button here to see what it does before pressing it. Args: screen (pad id 'pad_0' or the pad's friendly name).",
+    "Get one pad's full configuration including buttons (Main) and overlay_buttons (Overlay), shared settings, bindings, widgets, and actions. Each array has layer-local positions; use layer plus position with press_button/set_button. Counts include button_count (combined), main_button_count, and overlay_button_count. Args: screen (pad id 'pad_0' or friendly name).",
     "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"}},\"required\":[\"screen\"]}",
     tool_get_pad, true, false, false
 };
@@ -738,8 +755,8 @@ REGISTER_MCP_TOOL(s_tool_get_pad);
 
 static const McpTool s_tool_press_button = {
     "press_button",
-    "Activate a pad button programmatically. Confirmation actions still require on-device approval and pause remaining actions; cancellation, timeout, replacement, or failure stops them. A successful press response means dispatch started, not approval or completion. HA result tracking is not available for lists containing confirmation. Actions are REAL and may have side effects; inspect unfamiliar buttons with get_pad first. Discover buttons via list_pads/get_pad; 'position' is the 0-based index in the pad's button array, NOT a grid position. Args: screen (pad id like 'pad_0') plus either position or label (case-insensitive).",
-    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"position\":{\"type\":\"integer\"},\"label\":{\"type\":\"string\"}},\"required\":[\"screen\"]}",
+    "Activate a button programmatically. Optional layer is 'main' or 'overlay' and defaults to Main. position is a layer-local array index, not a grid coordinate; label matches only within that layer. Confirmation actions still require on-device approval. Actions may have side effects; inspect unfamiliar buttons with get_pad first.",
+    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"layer\":{\"type\":\"string\",\"enum\":[\"main\",\"overlay\"]},\"position\":{\"type\":\"integer\"},\"label\":{\"type\":\"string\"}},\"required\":[\"screen\"]}",
     tool_press_button, false, false, true
 };
 REGISTER_MCP_TOOL(s_tool_press_button);

@@ -16,7 +16,7 @@
 // Icons are installed via the REST API as PNG files, stored on
 // LittleFS at /icons/<id>.png, and cached in PSRAM for LVGL rendering.
 //
-// Icon IDs are positional: "pad_<page>_<col>_<row>" — deterministic filenames
+// Icon IDs are positional: "pad_<page>_<layer>_<col>_<row>" — deterministic filenames
 // that are overwritten on each pad save. The ScreenButtonConfig.icon_id field
 // holds the semantic name (e.g. "emoji_sun", "mi_power") used by the browser
 // to decide what to render; the firmware only uses positional keys.
@@ -93,8 +93,8 @@ struct IconCacheInfo {
 // Iterate cached icons. Calls cb for each entry. Stops if cb returns false.
 void icon_store_enumerate_cache(bool (*cb)(const IconCacheInfo* info, void* ctx), void* ctx);
 
-// Build a positional icon key for a button: "pad_<page>_<col>_<row>"
-void icon_store_build_key(uint8_t page, uint8_t col, uint8_t row,
+// Build a positional icon key for a button: "pad_<page>_<layer>_<col>_<row>"
+void icon_store_build_key(uint8_t page, const char* layer, uint8_t col, uint8_t row,
                           char* out, size_t out_size);
 
 #ifdef __cplusplus

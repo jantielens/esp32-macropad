@@ -10,6 +10,9 @@ supply, and optional setup of related features.
 **Pads > Recipe Catalog** accepts one complete JSON document, up to 64 KiB.
 Saving replaces the device catalog; preserve your source copy.
 This is the recipe authoring language, not a full-device configuration format.
+Recipe `layout.buttons` entries install into Main. Existing Overlay buttons and
+shared pad settings remain unchanged, and the device's combined Main and
+Overlay button limit still applies.
 
 ## Start with a complete recipe
 
@@ -47,7 +50,9 @@ This is the recipe authoring language, not a full-device configuration format.
 
 Each recipe needs a unique lowercase letter/digit/hyphen ID beginning with a
 letter or digit, nonempty name/description, and a nonempty layout.buttons array.
-Buttons use the running device's supported button/action fields.
+Buttons use the running device's supported button/action fields. Recipe
+positions and overlap checks apply to Main; an Overlay button may share their
+grid coordinates.
 Use its live authoring metadata or adapt the
 [complete samples](../../samples/recipe-catalog.json), not an unrelated
 firmware's field catalog.

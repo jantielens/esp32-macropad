@@ -487,8 +487,9 @@ function padCollectUsedColors(editCol, editRow) {
     const cur = padFindButton(editCol, editRow);
     if (cur) { add(cur.bg_color); add(cur.fg_color); add(cur.border_color); }
     // 2) Other buttons on same pad
-    for (const b of padState.buttons) {
-        if (b.col === editCol && b.row === editRow) continue;
+    const currentButton = padFindButton(editCol, editRow);
+    for (const b of padState.mainButtons.concat(padState.overlayButtons)) {
+        if (b === currentButton) continue;
         add(b.bg_color); add(b.fg_color); add(b.border_color);
     }
     // 3) Colors from other visited pads

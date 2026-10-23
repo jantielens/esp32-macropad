@@ -37,7 +37,7 @@ const context = {
     TextEncoder,
     document,
     MAX_ACTIONS: 3,
-    padState: { editCol: 1, editRow: 2, buttons: originalButtons },
+    padState: { editCol: 1, editRow: 2, selectedLayer: 'main', buttons: originalButtons },
     padLabelFromInput() { return ''; },
     padGetBindableColor() { return ''; },
     padGetEffectiveDefault() { return ''; },
@@ -392,7 +392,7 @@ needleWidth.validationMessage = 'Maximum is 10';
 context.padWorkspaceEdit();
 assert.strictEqual(context.padState.buttons[0], gauge, 'Invalid disabled styles must not replace the last valid button');
 assert.strictEqual(needleWidth.value, '11', 'Keep explicit invalid input raw');
-assert.match(validationErrors.get('1,2').message, /Maximum is 10/);
+assert.match(validationErrors.get('main:1,2').message, /Maximum is 10/);
 needleWidth.value = '7';
 needleWidth.validity.valid = true;
 document.getElementById('pad-edit-gauge-min').value = '12oops';

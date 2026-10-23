@@ -48,6 +48,11 @@ function padDialogPasteBtn() {
     if (!padState.btnClipboard) return;
     const col = padState.editCol;
     const row = padState.editRow;
+    const existing = padFindButton(col, row);
+    if (!existing && padState.mainButtons.length + padState.overlayButtons.length >= padMaxButtons()) {
+        showMessage('Combined Main and Overlay button limit reached (' + padMaxButtons() + ')', 'error');
+        return;
+    }
     if (typeof padWorkspaceClearButton === 'function') padWorkspaceClearButton(col, row);
 
     // Remove existing button at this position
@@ -76,6 +81,13 @@ function padDialogPasteBtn() {
 
 function padFillWithClipboard() {
     if (!padState.btnClipboard) return;
+    const otherLayerCount = padState.selectedLayer === 'overlay'
+        ? padState.mainButtons.length : padState.overlayButtons.length;
+    const fillCount = padState.cols * padState.rows;
+    if (otherLayerCount + fillCount > padMaxButtons()) {
+        showMessage('Filling this layer would exceed the combined button limit (' + padMaxButtons() + ')', 'error');
+        return;
+    }
     if (!confirm('Fill all cells with the copied button settings?')) return;
     if (typeof padWorkspaceReset === 'function') padWorkspaceReset();
 
@@ -120,7 +132,8 @@ function padCopyPad() {
         name: document.getElementById('pad-name').value.trim(),
         wake_screen: document.getElementById('pad-wake-screen').value,
         bg_color: padGetBindableColor('pad-edit-page-bg-color') || padGetEffectiveDefault('default_pad_bg_color'),
-        buttons: padState.buttons.map(b => Object.assign({}, b)),
+        buttons: padState.mainButtons.map(b => Object.assign({}, b)),
+        overlay_buttons: padState.overlayButtons.map(b => Object.assign({}, b)),
         bindings: padState.bindings ? padState.bindings.map(b => Object.assign({}, b)) : [],
         padActions: padBuildLevelActions().map(a => Object.assign({}, a)),
         buttonDefaults: Object.assign({}, padState.buttonDefaults),
@@ -137,7 +150,8 @@ function padPastePad() {
 
     padState.cols = padState.padClipboard.cols;
     padState.rows = padState.padClipboard.rows;
-    padState.buttons = padState.padClipboard.buttons.map(b => Object.assign({}, b));
+    padState.mainButtons = padState.padClipboard.buttons.map(b => Object.assign({}, b));
+    padState.overlayButtons = (padState.padClipboard.overlay_buttons || []).map(b => Object.assign({}, b));
 
     document.getElementById('pad-cols').value = padState.cols;
     document.getElementById('pad-rows').value = padState.rows;
@@ -190,7 +204,12 @@ function padExportPad() {
         layout: 'grid',
         cols: padState.cols,
         rows: padState.rows,
-        buttons: padState.buttons.map(b => {
+        buttons: padState.mainButtons.map(b => {
+            const copy = Object.assign({}, b);
+            padColorsToHex(copy);
+            return copy;
+        }),
+        overlay_buttons: padState.overlayButtons.map(b => {
             const copy = Object.assign({}, b);
             padColorsToHex(copy);
             return copy;
@@ -238,19 +257,25 @@ async function padImportPad(evt) {
         const json = JSON.parse(text);
         if (padState.page !== page || document.getElementById('pad-config-section') !== section) return;
 
-        if (!json.cols || !json.rows || !Array.isArray(json.buttons)) {
+        if (!json.cols || !json.rows || !Array.isArray(json.buttons) ||
+            (json.overlay_buttons !== undefined && !Array.isArray(json.overlay_buttons))) {
             throw new Error('Invalid pad JSON: missing cols, rows, or buttons');
         }
+        if (json.buttons.length + (json.overlay_buttons || []).length > padMaxButtons())
+            throw new Error('Combined Main and Overlay button limit exceeded (' + padMaxButtons() + ')');
         if (json.cols < 1 || json.cols > 8 || json.rows < 1 || json.rows > 8) {
             throw new Error('Invalid grid size (1-8 cols/rows)');
         }
 
         // Load into editor
         if (typeof padWorkspaceReset === 'function') padWorkspaceReset();
+        padState.selectedLayer = 'main';
+        padState.layerSelections = { main: null, overlay: null };
         padState.cols = json.cols;
         padState.rows = json.rows;
         padTrackLoad(json);
-        padState.buttons = json.buttons.map(b => Object.assign({}, b));
+        padState.mainButtons = json.buttons.map(b => Object.assign({}, b));
+        padState.overlayButtons = (json.overlay_buttons || []).map(b => Object.assign({}, b));
 
         document.getElementById('pad-cols').value = padState.cols;
         document.getElementById('pad-rows').value = padState.rows;
@@ -407,10 +432,12 @@ async function deviceImportConfig(evt) {
 
                 // Load pad into editor state, save it (which triggers icon upload)
                 padState.page = i;
+                padState.selectedLayer = 'main';
                 padState.rawJson = null;
                 padState.cols = padJson.cols || 3;
                 padState.rows = padJson.rows || 2;
-                padState.buttons = (padJson.buttons || []).map(b => Object.assign({}, b));
+                padState.mainButtons = (padJson.buttons || []).map(b => Object.assign({}, b));
+                padState.overlayButtons = (padJson.overlay_buttons || []).map(b => Object.assign({}, b));
                 padState.bindings = padBindingsFromJson(padJson.bindings);
                 padRenderBindings();
                 padLoadLevelActions(padJson.pad_actions);
@@ -454,7 +481,9 @@ async function padDeletePage() {
         if (typeof padWorkspaceReset === 'function') padWorkspaceReset();
         showMessage('Pad cleared (unsaved)', 'success');
         padState.rawJson = null;
-        padState.buttons = [];
+        padState.selectedLayer = 'main';
+        padState.mainButtons = [];
+        padState.overlayButtons = [];
         padState.cols = 3;
         padState.rows = 2;
         document.getElementById('pad-cols').value = padState.cols;
