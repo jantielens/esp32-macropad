@@ -85,6 +85,7 @@ const loadingContext = {
 	deviceInfoCache: { available_screens: [{ id: 'pad_1', name: 'Destination pad' }] },
 	padWorkspace: { loading: false },
 	padWorkspaceReset() {},
+	padPruneDraftIconSources() {},
 	document: { getElementById(id) { return id === 'pad-name' ? loadingName : { value: '' }; } },
 	fetch() { return new Promise(() => {}); }
 };
@@ -388,6 +389,7 @@ const workspaceContext = {
 	padMarkDirty() { workspaceContext.padDirty = true; workspaceContext.revisions++; },
 	revisions: 0,
 	padRenderGrid() {},
+	padUpdateButtonPreview() {},
 	padPvHide() {},
 	padDialogBuildButton() { return { col: 0, row: 0, label_center: draftInput.value }; },
 	padDialogValidateButton() { if (draftInput.value === '[unfinished') throw new Error('Incomplete binding'); },

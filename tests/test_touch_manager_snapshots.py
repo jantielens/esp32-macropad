@@ -11,7 +11,7 @@ globals_end = source.index("TouchManager::TouchManager()")
 callback_start = source.index("void TouchManager::readCallback(")
 callback_end = source.index("void TouchManager::init(", callback_start)
 cancel_start = source.index("void touch_manager_cancel_physical_input()")
-cancel_end = source.index("// C-style interface", cancel_start)
+cancel_end = source.index("\n}", cancel_start) + len("\n}")
 
 harness = r'''
 #include <atomic>

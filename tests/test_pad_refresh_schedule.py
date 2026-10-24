@@ -51,6 +51,7 @@ struct ButtonTile {
     WidgetState widget_state;
     lv_obj_t* tap_overlay = nullptr;
     lv_timer_t* tap_flash_timer = nullptr;
+    lv_obj_t* shadow = nullptr;
 };
 enum lv_event_code_t { LV_EVENT_PRESSED, LV_EVENT_RELEASED, LV_EVENT_PRESS_LOST };
 struct lv_event_t { void* user_data; void* param; };

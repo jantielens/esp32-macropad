@@ -114,6 +114,7 @@ struct TestStorage {
 } Storage;
 static bool storage_mount() { return true; }
 static void storage_publish_usage(bool) {}
+static std::atomic<bool> g_ready{true};
 static void icon_store_preload_pad(uint8_t) {}
 enum IconKind : uint8_t { ICON_KIND_COLOR = 0, ICON_KIND_MONO = 1 };
 bool icon_store_source_matches_metadata(const char*, const char*, const char*) { return true; }
@@ -124,6 +125,7 @@ void icon_store_build_key(uint8_t, const char*, uint8_t, uint8_t, char* key_out,
 }
 bool icon_store_source_delete_if_unreferenced(const char*) { return true; }
 void icon_store_delete_page_icons(uint8_t) {}
+void icon_store_cleanup_pad_icons(uint8_t) {}
 static ButtonDefaults defaults = {};
 static const ButtonDefaults* button_defaults_get() { return &defaults; }
 static const char* btn_default(const char* value, const char* fallback) {

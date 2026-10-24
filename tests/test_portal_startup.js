@@ -171,7 +171,7 @@ async function main() {
     context.padRenderGrid = () => { rendered = true; };
     for (const name of ['padClearDirty', 'padInitBindableColor', 'padSetBindableColor',
         'padPageBackgroundModeChanged', 'padRenderBindings', 'padLoadLevelActions',
-        'padPopulateTemplateDropdown', 'padCacheColors']) context[name] = () => {};
+        'padPopulateTemplateDropdown', 'padCacheColors', 'padPruneDraftIconSources']) context[name] = () => {};
     context.padGetEffectiveDefault = () => '#123456';
     let resolveAppearance;
     const appearance = new Promise(resolve => { resolveAppearance = resolve; });
