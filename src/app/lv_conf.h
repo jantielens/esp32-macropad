@@ -29,8 +29,8 @@
    COLOR SETTINGS
  *====================*/
 
-/* Color depth: 1 (1 byte per pixel), 8 (RGB332), 16 (RGB565), 32 (ARGB8888) */
-#define LV_COLOR_DEPTH 16
+/* Default pixel format: 16-bit RGB565. */
+#define LV_COLOR_FORMAT_DEFAULT LV_COLOR_FORMAT_RGB565
 
 /*=========================
    STDLIB SETTINGS
