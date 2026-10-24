@@ -95,6 +95,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the empty canvas around the preview to deselect without discarding edits.
   See [Move and resize](docs/user/pads/editing.md#move-and-resize).
 
+### Fixed
+
+* Hold the portal's two concurrent fetch slots until response bodies finish
+  downloading, rather than releasing them when headers arrive. Preserve readable
+  responses and release slots on download failures or cancellation. Native
+  script, stylesheet, and image requests remain outside this limiter.
+
 ## [1.43.0] - 2026-10-22
 
 ### Added

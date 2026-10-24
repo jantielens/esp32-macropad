@@ -103,10 +103,10 @@ async function copyTextToClipboard(text) {
 // ESP-Hosted SDIO transports (ESP32-P4 + external ESP32-C6) allocate AsyncTCP
 // TX buffers from MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL. Concurrent responses
 // fragment that pool and can drive copy_buff allocations to NULL, asserting
-// inside transport_drv_sta_tx. Capping browser-side concurrency to 2 keeps
-// the largest free DMA-internal block above safe-water-mark in practice.
-// Applies to all window.fetch callers in the portal; navigations and image
-// loads are not affected.
+// inside transport_drv_sta_tx. Limit fetch transfers through body completion
+// to reduce peak pressure; this does not guarantee sufficient DMA memory.
+// Applies to all window.fetch callers in the portal; native asset loads and
+// navigations are not affected. Callers receive responses after downloading.
 (function () {
     var MAX_INFLIGHT = 2;
     var inflight = 0;
@@ -118,6 +118,9 @@ async function copyTextToClipboard(text) {
             const job = queue.shift();
             inflight++;
             originalFetch(job.input, job.init).then(function (res) {
+                if (!res.body) return res;
+                return res.clone().arrayBuffer().then(function () { return res; });
+            }).then(function (res) {
                 inflight--;
                 job.resolve(res);
                 pump();

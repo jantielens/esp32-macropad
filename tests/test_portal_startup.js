@@ -2,7 +2,65 @@ const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
 
+async function testFetchConcurrency() {
+    const requests = [];
+    const context = { document: { getElementById: () => null }, window: {
+        fetch(input, init) {
+            if (input === '/network-error') return Promise.reject(new Error('Connection failed'));
+            if (input === '/empty') return Promise.resolve(new Response(null, { status: 204 }));
+            let controller;
+            const body = new ReadableStream({ start(streamController) { controller = streamController; } });
+            const response = new Response(body, { headers: { 'Content-Type': 'application/json' } });
+            if (init?.signal) {
+                init.signal.addEventListener('abort', () => controller.error(init.signal.reason), { once: true });
+            }
+            requests.push({ input, controller, response });
+            return Promise.resolve(response);
+        }
+    } };
+    vm.createContext(context);
+    vm.runInContext(fs.readFileSync('src/app/web/portal_core.js', 'utf8'), context);
+    const pending = ['/first', '/second', '/third', '/fourth'].map(path => context.window.fetch(path));
+    let firstSettled = false;
+    pending[0].then(() => { firstSettled = true; });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.strictEqual(requests.length, 2, 'headers alone must not release either transfer slot');
+    assert.strictEqual(firstSettled, false, 'fetch callers must wait for the complete body');
+    const encoder = new TextEncoder();
+    requests[0].controller.enqueue(encoder.encode('{"value":'));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.strictEqual(requests.length, 2, 'a partial body must retain its slot');
+    requests[0].controller.enqueue(encoder.encode('"first"}'));
+    requests[0].controller.close();
+    const first = await pending[0];
+    assert.strictEqual(first, requests[0].response, 'preserve the native response and its metadata');
+    assert.strictEqual(first.bodyUsed, false, 'the caller must still be able to consume the response');
+    assert.strictEqual(first.headers.get('Content-Type'), 'application/json');
+    assert.deepStrictEqual(await first.json(), { value: 'first' });
+    assert.strictEqual(requests.length, 3, 'one completed body must admit exactly one waiting request');
+    const bodyFailure = assert.rejects(pending[1], /Download interrupted/);
+    requests[1].controller.error(new Error('Download interrupted'));
+    await bodyFailure;
+    assert.strictEqual(requests.length, 4, 'a failed body must release its slot');
+    requests[2].controller.enqueue(encoder.encode('third'));
+    requests[2].controller.close();
+    requests[3].controller.close();
+    assert.strictEqual(await (await pending[2]).text(), 'third');
+    assert.strictEqual(await (await pending[3]).text(), '');
+
+    const abortController = new AbortController();
+    const aborted = context.window.fetch('/aborted', { signal: abortController.signal });
+    const abortFailure = assert.rejects(aborted, { name: 'AbortError' });
+    await new Promise(resolve => setImmediate(resolve));
+    abortController.abort();
+    await abortFailure;
+    await assert.rejects(context.window.fetch('/network-error'), /Connection failed/);
+    const emptyResponses = await Promise.all([0, 1, 2].map(() => context.window.fetch('/empty')));
+    assert(emptyResponses.every(response => response.status === 204 && response.body === null));
+}
+
 async function main() {
+    await testFetchConcurrency();
     for (const outcome of ['success', 'empty', 'error', 'font-error', 'timeout']) {
         let stylesheet;
         let timeoutCallback;

@@ -54,6 +54,18 @@ The web portal provides:
 - Optional HTTP Basic Authentication (Full Mode only)
 - Responsive web interface (desktop & mobile)
 
+### Browser Request Concurrency
+
+`portal_core.js` shares a two-transfer queue across the tab's `window.fetch`
+callers. A slot remains occupied until the full response body downloads, not
+just until headers arrive. The wrapper drains a response clone before returning
+the original, unread native `Response`; network errors, body errors, and aborts
+release the slot. Callers receive the response only after downloading completes.
+
+This reduces overlapping transfers but does not guarantee DMA-memory headroom.
+Native script, stylesheet, and image requests bypass the queue, as do other
+tabs and clients. The limiter is not a device-wide admission control.
+
 ### Remote Logs
 
 `HAS_REMOTE_LOG` defaults to `false`. Board overrides enable it for all
