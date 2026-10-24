@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-23
+ms.date: 2026-10-24
 ms.topic: reference
 ---
 
@@ -16,11 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* Add a searchable foreground-icon picker for Material Symbols and Noto emoji.
-  Browse categories and preview artwork before applying it to a button.
+* Add a searchable foreground-icon picker for Material Symbols, Noto emoji,
+  and local PNG, JPEG, or WebP images. Filter by source and category, with
+  catalog artwork shown on the button's background in a fixed-size dialog.
+  Upload, drop, or paste a local image and downscale it to 128, 256 (default),
+  512, or 720 pixels on its longest side, preserving aspect ratio without
+  upscaling. Preview the resulting dimensions and file size before applying.
   Retain selected source artwork on the device for offline resizing and copying,
-  with source-aware recipes and pad import/export. Material Symbols follow the
-  button's foreground color; emoji retain their original colors.
+  with streamed binary PNG uploads for local sources, source-aware recipes,
+  and pad import/export. Material Symbols follow the button's foreground color;
+  emoji and local images retain their original colors.
   See [Add labels and icons](docs/user/pads/appearance.md#add-labels-and-icons).
 * Add Main and Overlay button layers to pads for conditional warnings and
   controls above the main layout. Overlay buttons can share Main positions;

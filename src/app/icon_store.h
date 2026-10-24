@@ -29,7 +29,8 @@
 #define ICON_MAX_DIMENSION      720
 #endif
 #define ICON_MAX_PNG_SIZE       (512 * 1024)
-#define ICON_MAX_SOURCE_JSON_SIZE (64 * 1024)
+#define ICON_MAX_SOURCE_JSON_SIZE (704 * 1024)
+#define ICON_MAX_CATALOG_SOURCE_JSON_SIZE (64 * 1024)
 
 // Icon kind — affects LVGL rendering (recolor for mono icons)
 enum IconKind : uint8_t {
@@ -69,9 +70,16 @@ extern "C" {
 // Call once from setup() after pad_config_init().
 void icon_store_init();
 
-// Retain validated source JSON under a generated device-local source ID.
+// Retain validated catalog SVG JSON under a generated
+// device-local source ID.
 IconStoreResult icon_store_source_install(const uint8_t* json, size_t json_len,
                                           char* source_id, size_t source_id_len);
+struct IconSourceUpload;
+IconStoreResult icon_store_source_png_begin(size_t total, IconSourceUpload** upload);
+IconStoreResult icon_store_source_png_write(IconSourceUpload* upload, const uint8_t* data, size_t length);
+IconStoreResult icon_store_source_png_finish(IconSourceUpload* upload, char* source_id, size_t source_id_len);
+void icon_store_source_png_abort(IconSourceUpload* upload);
+bool icon_store_source_path(const char* source_id, char* path, size_t capacity, bool* png);
 bool icon_store_source_id_valid(const char* source_id);
 bool icon_store_key_valid(const char* key);
 bool icon_store_source_exists(const char* source_id);

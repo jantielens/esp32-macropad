@@ -272,6 +272,7 @@ function padWorkspaceEdit(revalidate) {
         padDialogValidateButton(button);
         padState.buttons = padState.buttons.filter(item => item.col !== button.col || item.row !== button.row);
         padState.buttons.push(button);
+        if (typeof padPruneDraftIconSources === 'function') padPruneDraftIconSources();
         padWorkspace.errors.delete(padWorkspaceKey());
         padDialogClearValidationError();
         padRenderGrid();

@@ -1517,7 +1517,7 @@ Returns comprehensive device information.
   "psram_size": 0,
   "icon_max_dimension": 720,
   "icon_max_png_size": 524288,
-  "icon_max_source_json_size": 65536,
+  "icon_max_source_json_size": 720896,
   "health_poll_interval_ms": 5000,
   "health_history_seconds": 300,
   "health_history_available": true,
@@ -1647,8 +1647,8 @@ the production catalog.
 - `display_coord_width` / `display_coord_height`: Display resolution
 - `icon_max_dimension`: Largest accepted PNG width or height. The Pad editor
   rasterizes larger icons at this limit and the device scales them to fit.
-- `icon_max_png_size`: Maximum generated PNG upload size in bytes.
-- `icon_max_source_json_size`: Maximum retained source-record size in bytes.
+- `icon_max_png_size`: Maximum generated or retained local PNG size in bytes.
+- `icon_max_source_json_size`: Maximum portable source-record JSON size in bytes for browser import/export. Local PNG upload/storage is binary; catalog SVG JSON uploads have a separate 64 KiB limit.
 - `available_screens`: Array of `{id, name}` objects; pad screens include custom names from config
 - `configured_pads`: Zero-based pad IDs with saved configuration files. Unlike `available_screens`, this excludes unsaved slots. Fetch fresh device info before regenerating all saved icons; ordinary save dependency discovery uses `/api/pad/icon_context` instead.
 - `current_screen`: ID of the currently displayed screen
@@ -3361,15 +3361,30 @@ Upload a generated PNG for a positional button key.
 
 #### `POST /api/icons/source`
 
-Retain the original catalog SVG separately from pad JSON and generated PNGs.
+Retain source artwork separately from pad JSON and generated PNGs.
 
-- **Body:** A JSON object containing exactly `catalog_id`, `kind`, `media_type`, and `data`. `media_type` is `image/svg+xml`; `catalog_id` uses the `material-symbols:` or `noto:` prefix and must match `kind` (`mono` or `color`).
-- **Max size:** `ICON_MAX_SOURCE_JSON_SIZE` (64 KiB)
-- **Response:** `201` with `{"id":"s_..."}` on success
+- Catalog bodies use `Content-Type: application/json` and contain exactly `catalog_id`, `kind`, `media_type`, and `data`. `media_type` is `image/svg+xml`; `catalog_id` uses the `material-symbols:` or `noto:` prefix and must match `kind` (`mono` or `color`). The JSON limit is 64 KiB.
+- Local image bodies use `Content-Type: image/png` with normalized, static PNG bytes, at most 512 KiB and 720 pixels per side. They are implicitly `color` sources without a catalog ID. Base64 PNG JSON is not accepted by this endpoint.
+- Successful uploads return `201` with `{"id":"s_..."}`.
+
+Catalog records are stored at `/icon_sources/<id>.json`. Local PNG uploads stream
+to a request-owned `/icon_sources/<id>.png.tmp`, then publish as
+`/icon_sources/<id>.png` after checking the byte count, signature, dimensions,
+and chunk boundaries through the final IEND chunk. Interrupted, invalid, or failed
+uploads remove their temporary file; startup recovery removes abandoned temporary
+files. Upload chunks and validation check OTA activity and stop their own work
+when an update starts.
+
+The browser still packages local PNG sources in export JSON as
+`{"kind":"color","media_type":"image/png","data":"<canonical base64>"}`.
+`ICON_MAX_SOURCE_JSON_SIZE` (704 KiB) bounds that portable representation, not
+the binary upload. This keeps large PNG strings out of ArduinoJson on the device.
 
 #### `GET /api/icons/source?id=<source_id>`
 
-Return the retained source record as JSON. The ID must match the exact device-local
+Return catalog records as `application/json` or local artwork as `image/png`.
+The browser converts PNG responses into portable source records for export and
+uses them for offline regeneration. The ID must match the exact device-local
 source grammar; a valid but missing ID returns `404`.
 
 #### `DELETE /api/icons/page?page=<N>`

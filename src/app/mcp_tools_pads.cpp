@@ -195,7 +195,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     JsonObject fmt = result.createNestedObject("formats");
     fmt["color"] = "#RRGGBB";
     fmt["size"] = "integer pixels or binding template";
-    result["icon_note"] = "icon is {source_id, catalog_id, kind}; source_id must refer to artwork retained by the device and kind must match catalog_id (material-symbols=mono, noto=color). MCP cannot resolve or upload catalog artwork; use the portal to prepare new icons before writing a pad.";
+    result["icon_note"] = "Catalog icons use {source_id, catalog_id, kind}; local PNG icons use {source_id, kind: color}. source_id must refer to artwork retained by the device. MCP cannot resolve or upload artwork; use the portal to prepare new icons before writing a pad.";
 
     // Visual inspection: the device cannot hand the model an image directly, but
     // a Playwright-driven browser can. /api/screenshot is the live framebuffer as

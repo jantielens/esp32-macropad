@@ -95,7 +95,9 @@ function padIconEditorRefresh() {
     if (padIconPreviewObjectUrl) URL.revokeObjectURL(padIconPreviewObjectUrl);
     padIconPreviewObjectUrl = null;
     if (image) { image.removeAttribute('src'); image.hidden = !icon; }
-    if (name) name.textContent = icon ? icon.catalog_id.split(':').pop().replace(/-/g, ' ') : 'Choose icon';
+    if (name) name.textContent = icon
+        ? icon.catalog_id ? icon.catalog_id.split(':').pop().replace(/-/g, ' ') : 'Local image'
+        : 'Choose icon';
     if (remove) remove.disabled = !icon;
     if (position) {
         const widgetType = document.getElementById('pad-edit-widget-type');
@@ -339,7 +341,101 @@ function padRegisterDraftIconSource(record) {
     return normalized;
 }
 
+function padCreateOpaqueIconId(prefix, exists) {
+    let id;
+    do {
+        const bytes = new Uint8Array(12);
+        if (window.crypto && window.crypto.getRandomValues) window.crypto.getRandomValues(bytes);
+        else bytes.forEach((_, index) => { bytes[index] = Math.floor(Math.random() * 256); });
+        id = prefix + Array.from(bytes, value => value.toString(16).padStart(2, '0')).join('');
+    } while (exists(id));
+    return id;
+}
+
+function padRegisterLocalDraftIconSource(record) {
+    const normalized = padNormalizeIconSource(record, { kind: 'color' });
+    if (!padState.draftIconSources) padState.draftIconSources = {};
+    const sourceId = padCreateOpaqueIconId('d_', id => Object.prototype.hasOwnProperty.call(padState.draftIconSources, id));
+    padState.draftIconSources[sourceId] = normalized;
+    return { draft_source_id: sourceId, kind: 'color' };
+}
+
+function padDraftIconSourceReferences() {
+    const references = new Set();
+    const addButton = button => {
+        if (button && button.icon && button.icon.draft_source_id)
+            references.add(button.icon.draft_source_id);
+    };
+    for (const button of [...(padState.mainButtons || []), ...(padState.overlayButtons || []),
+        ...(padState.templateButtons || [])]) addButton(button);
+    addButton(padState.btnClipboard);
+    if (padState.padClipboard) {
+        for (const button of [...(padState.padClipboard.buttons || []),
+            ...(padState.padClipboard.overlay_buttons || [])]) addButton(button);
+    }
+    return references;
+}
+
+function padPruneDraftIconSources() {
+    if (!padState.draftIconSources) return;
+    const references = padDraftIconSourceReferences();
+    for (const sourceId of Object.keys(padState.draftIconSources)) {
+        if (!references.has(sourceId)) delete padState.draftIconSources[sourceId];
+    }
+}
+
+function padValidatePngSourceData(data) {
+    const pngLimit = Number(deviceInfoCache && deviceInfoCache.icon_max_png_size) || 512 * 1024;
+    if (typeof data !== 'string' || !data.length || data.length % 4 !== 0 ||
+        !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(data))
+        throw new Error('Local icon source must contain canonical base64 PNG data.');
+    const padding = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0;
+    const byteLength = data.length / 4 * 3 - padding;
+    if (byteLength < 33 || byteLength > pngLimit)
+        throw new Error('Local icon source PNG must be between 33 bytes and 512 KiB.');
+
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    const header = new Uint8Array(24);
+    let output = 0;
+    for (let offset = 0; offset < data.length; offset += 4) {
+        const first = alphabet.indexOf(data[offset]);
+        const second = alphabet.indexOf(data[offset + 1]);
+        const third = data[offset + 2] === '=' ? 0 : alphabet.indexOf(data[offset + 2]);
+        const fourth = data[offset + 3] === '=' ? 0 : alphabet.indexOf(data[offset + 3]);
+        if (first < 0 || second < 0 || third < 0 || fourth < 0 ||
+            (data[offset + 2] === '=' && (second & 15) !== 0) ||
+            (data[offset + 3] === '=' && data[offset + 2] !== '=' && (third & 3) !== 0))
+            throw new Error('Local icon source base64 is invalid.');
+        for (const value of [(first << 2) | (second >> 4),
+            ((second & 15) << 4) | (third >> 2), ((third & 3) << 6) | fourth]) {
+            if (output < byteLength && output < header.length) header[output] = value;
+            output++;
+        }
+    }
+    if (header[0] !== 137 || header[1] !== 80 || header[2] !== 78 || header[3] !== 71 ||
+        header[4] !== 13 || header[5] !== 10 || header[6] !== 26 || header[7] !== 10 ||
+        header[8] !== 0 || header[9] !== 0 || header[10] !== 0 || header[11] !== 13 ||
+        header[12] !== 73 || header[13] !== 72 || header[14] !== 68 || header[15] !== 82)
+        throw new Error('Local icon source does not have a valid PNG header.');
+    const width = ((header[16] * 0x1000000) + (header[17] << 16) + (header[18] << 8) + header[19]) >>> 0;
+    const height = ((header[20] * 0x1000000) + (header[21] << 16) + (header[22] << 8) + header[23]) >>> 0;
+    if (!width || !height || width > 720 || height > 720)
+        throw new Error('Local icon source dimensions must be between 1 and 720 pixels.');
+    return byteLength;
+}
+
 function padNormalizeIconSource(record, expected) {
+    if (record && record.media_type === 'image/png') {
+        if (!expected || expected.kind !== 'color' || expected.catalog_id !== undefined ||
+            record.kind !== 'color' || Object.keys(record).sort().join(',') !== 'data,kind,media_type')
+            throw new Error('Local PNG icon metadata is invalid or mismatched.');
+        padValidatePngSourceData(record.data);
+        const normalized = { kind: 'color', media_type: 'image/png', data: record.data };
+        const sourceLimit = Number(deviceInfoCache && deviceInfoCache.icon_max_source_json_size) || 704 * 1024;
+        if (new TextEncoder().encode(JSON.stringify(normalized)).length > sourceLimit)
+            throw new Error('Local icon source exceeds the 704 KiB source limit.');
+        return normalized;
+    }
     if (!record || record.media_type !== 'image/svg+xml' || typeof record.data !== 'string')
         throw new Error('Icon source must contain SVG artwork.');
     const catalogId = expected.catalog_id;
@@ -419,7 +515,8 @@ function padNormalizeIconSource(record, expected) {
         media_type: 'image/svg+xml',
         data: new XMLSerializer().serializeToString(root),
     };
-    const sourceLimit = Number(deviceInfoCache && deviceInfoCache.icon_max_source_size) || 64 * 1024;
+    const sourceLimit = Math.min(64 * 1024,
+        Number(deviceInfoCache && deviceInfoCache.icon_max_source_json_size) || 64 * 1024);
     if (new TextEncoder().encode(JSON.stringify(normalized)).length > sourceLimit)
         throw new Error('Icon artwork exceeds the 64 KiB source limit.');
     return normalized;
@@ -454,23 +551,30 @@ function padValidateImportedIconSources(pads, supplied) {
     }
     if (referenced.size > buttonCount) throw new Error('Imported icon source count exceeds the button count.');
     const normalizedSources = {};
-    const sourceLimit = Number(deviceInfoCache && deviceInfoCache.icon_max_source_size) || 64 * 1024;
+    const sourceJsonLimit = Number(deviceInfoCache && deviceInfoCache.icon_max_source_json_size) || 704 * 1024;
     for (const [sourceId, icon] of referenced) {
         if (!Object.prototype.hasOwnProperty.call(supplied || {}, sourceId))
             throw new Error('Imported icon source ' + sourceId + ' is missing.');
         const record = supplied[sourceId];
+        const sourceLimit = record && record.media_type === 'image/png'
+            ? sourceJsonLimit : Math.min(64 * 1024, sourceJsonLimit);
         if (new TextEncoder().encode(JSON.stringify(record)).length > sourceLimit)
-            throw new Error('Imported icon source exceeds the 64 KiB limit.');
+            throw new Error(record && record.media_type === 'image/png'
+                ? 'Imported local icon source exceeds the configured source JSON limit.'
+                : 'Imported catalog icon source exceeds the 64 KiB limit.');
         normalizedSources[sourceId] = padNormalizeIconSource(record, icon);
     }
     return normalizedSources;
 }
 
-async function padCollectExportIconSources(pads, rootPages, maxPads) {
+async function padCollectExportIconSources(pads, rootPages, maxPads, draftContext) {
     const loaded = new Map(pads.map(entry => [entry.page, entry.payload]));
     const pending = rootPages.slice();
     const visited = new Set();
     const references = new Map();
+    const draftReferences = new Map();
+    const draftSources = draftContext && draftContext.byDraftId || padState.draftIconSources || {};
+    const suppliedSources = draftContext && draftContext.bySourceId || {};
     let buttonCount = 0;
     while (pending.length) {
         const page = pending.pop();
@@ -494,30 +598,76 @@ async function padCollectExportIconSources(pads, rootPages, maxPads) {
                     throw new Error('The previous icon format cannot be exported.');
                 const icon = button.icon;
                 if (!icon) continue;
+                if (icon.draft_source_id) {
+                    if (!/^d_[0-9a-f]{24}$/.test(icon.draft_source_id) || icon.source_id ||
+                        icon.catalog_id !== undefined)
+                        throw new Error('Pad export contains invalid local draft icon metadata.');
+                    let draft = draftReferences.get(icon.draft_source_id);
+                    const source = draftSources[icon.draft_source_id];
+                    if (!source) throw new Error('Local icon source ' + icon.draft_source_id + ' is missing.');
+                    const record = padNormalizeIconSource(source, icon);
+                    if (draft && draft.record.data !== record.data)
+                        throw new Error('A local draft icon source has conflicting artwork.');
+                    if (!draft) {
+                        draft = { record, icons: [] };
+                        draftReferences.set(icon.draft_source_id, draft);
+                    }
+                    draft.icons.push(icon);
+                    continue;
+                }
                 if (!/^s_[0-9a-f]{24}$/.test(icon.source_id || ''))
                     throw new Error('Pad export contains an icon without a retained source.');
                 const existing = references.get(icon.source_id);
-                if (existing && (existing.catalog_id !== icon.catalog_id || existing.kind !== icon.kind))
+                if (existing && (existing.icon.catalog_id !== icon.catalog_id || existing.icon.kind !== icon.kind))
                     throw new Error('A retained source has conflicting icon metadata.');
-                references.set(icon.source_id, icon);
+                if (!existing) references.set(icon.source_id, {
+                    icon,
+                    record: suppliedSources[icon.source_id]
+                        ? padNormalizeIconSource(suppliedSources[icon.source_id], icon) : null,
+                });
             }
         }
         if (payload.template_pad !== undefined && payload.template_pad !== null && Number(payload.template_pad) >= 0)
             pending.push(Number(payload.template_pad));
     }
-    if (references.size > buttonCount) throw new Error('Exported source count exceeds the referenced button count.');
+    if (references.size + draftReferences.size > buttonCount)
+        throw new Error('Exported source count exceeds the referenced button count.');
+
+    for (const draft of draftReferences.values()) {
+        const sourceId = padCreateOpaqueIconId('s_', id => references.has(id));
+        for (const icon of draft.icons) {
+            icon.source_id = sourceId;
+            delete icon.draft_source_id;
+        }
+        references.set(sourceId, { icon: { kind: 'color' }, record: draft.record });
+    }
 
     const sources = {};
-    const sourceLimit = Number(deviceInfoCache && deviceInfoCache.icon_max_source_size) || 64 * 1024;
-    for (const [sourceId, icon] of references) {
-        const response = await fetch('/api/icons/source?id=' + encodeURIComponent(sourceId));
-        if (!response.ok) throw new Error('Failed to read icon source ' + sourceId + ': HTTP ' + response.status);
-        const record = padNormalizeIconSource(await response.json(), icon);
+    const sourceLimit = Number(deviceInfoCache && deviceInfoCache.icon_max_source_json_size) || 704 * 1024;
+    for (const [sourceId, reference] of references) {
+        let record = reference.record;
+        if (!record) {
+            const response = await fetch('/api/icons/source?id=' + encodeURIComponent(sourceId));
+            if (!response.ok) throw new Error('Failed to read icon source ' + sourceId + ': HTTP ' + response.status);
+            record = await padReadIconSourceResponse(response);
+        }
+        record = padNormalizeIconSource(record, reference.icon);
         if (new TextEncoder().encode(JSON.stringify(record)).length > sourceLimit)
-            throw new Error('Icon source ' + sourceId + ' exceeds the 64 KiB export limit.');
+            throw new Error('Icon source ' + sourceId + ' exceeds its format-specific export limit.');
         sources[sourceId] = record;
     }
     return sources;
+}
+
+async function padReadIconSourceResponse(response) {
+    if ((response.headers.get('Content-Type') || '').split(';')[0].trim() !== 'image/png')
+        return response.json();
+    const blob = await response.blob();
+    if (!blob.size || blob.size > 512 * 1024) throw new Error('Retained PNG source is empty or too large.');
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let binary = '';
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return { kind: 'color', media_type: 'image/png', data: btoa(binary) };
 }
 
 async function padLoadRetainedIconSource(sourceId, expected) {
@@ -527,7 +677,7 @@ async function padLoadRetainedIconSource(sourceId, expected) {
         pending = (async function () {
             const response = await fetch('/api/icons/source?id=' + encodeURIComponent(sourceId));
             if (!response.ok) throw new Error('Retained icon source is unavailable: HTTP ' + response.status);
-            const record = await response.json();
+            const record = await padReadIconSourceResponse(response);
             return padNormalizeIconSource(record, record);
         })();
         padIconSourceCache.set(sourceId, pending);
@@ -550,11 +700,27 @@ async function padResolveIconSource(icon, context) {
         if (imported) return padNormalizeIconSource(imported, icon);
         return padLoadRetainedIconSource(icon.source_id, icon);
     }
+    if (icon.draft_source_id) {
+        if (!/^d_[0-9a-f]{24}$/.test(icon.draft_source_id))
+            throw new Error('Local draft icon source ID is invalid.');
+        const draftSources = context.iconSources && context.iconSources.byDraftId;
+        const record = (draftSources && draftSources[icon.draft_source_id]) ||
+            (padState.draftIconSources && padState.draftIconSources[icon.draft_source_id]);
+        if (!record) throw new Error('Local draft icon source is unavailable.');
+        return padNormalizeIconSource(record, icon);
+    }
     let record = padFindDraftIconSource(context, icon.catalog_id);
     if (!record && typeof padFetchCatalogIconSource === 'function')
         record = await padFetchCatalogIconSource(icon.catalog_id, icon.kind);
     if (!record) throw new Error('Icon artwork is not available. Select the icon again while online.');
     return padNormalizeIconSource(record, icon);
+}
+
+function padDecodeBase64Bytes(data) {
+    const binary = atob(data);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+    return bytes;
 }
 
 async function padRenderIconPNG(source, size, foreground) {
@@ -568,13 +734,17 @@ async function padRenderIconPNG(source, size, foreground) {
         }
         svg = new XMLSerializer().serializeToString(root);
     }
-    const imageUrl = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+    const imageBlob = source.media_type === 'image/png'
+        ? new Blob([padDecodeBase64Bytes(source.data)], { type: 'image/png' })
+        : new Blob([svg], { type: 'image/svg+xml' });
+    const imageUrl = URL.createObjectURL(imageBlob);
     const image = new Image();
+    let canvas = null;
     try {
         image.src = imageUrl;
         await image.decode();
         if (!image.naturalWidth || !image.naturalHeight) throw new Error('Icon artwork has no pixels.');
-        const canvas = document.createElement('canvas');
+        canvas = document.createElement('canvas');
         canvas.width = size;
         canvas.height = size;
         const context = canvas.getContext('2d');
@@ -585,12 +755,12 @@ async function padRenderIconPNG(source, size, foreground) {
         context.drawImage(image, (size - width) / 2, (size - height) / 2, width, height);
         const blob = await new Promise((resolve, reject) => canvas.toBlob(result =>
             result ? resolve(result) : reject(new Error('PNG rendering failed.')), 'image/png'));
-        canvas.width = 0;
-        canvas.height = 0;
         const pngLimit = Number(deviceInfoCache && deviceInfoCache.icon_max_png_size) || 512 * 1024;
         if (blob.size > pngLimit) throw new Error('Generated icon exceeds the PNG size limit.');
         return blob;
     } finally {
+        if (canvas) { canvas.width = 0; canvas.height = 0; }
+        image.removeAttribute('src');
         URL.revokeObjectURL(imageUrl);
     }
 }
@@ -670,7 +840,7 @@ async function padFetchConfiguredPads() {
 
 async function padPreparePageSave(context) {
     const payload = JSON.parse(JSON.stringify(context.payload || JSON.parse(context.body)));
-    const iconSources = Object.assign({ byCatalogId: {}, bySourceId: {}, sourceIdMap: {} }, context.iconSources || {});
+    const iconSources = Object.assign({ byCatalogId: {}, bySourceId: {}, byDraftId: {}, sourceIdMap: {} }, context.iconSources || {});
     iconSources.sourceIdMap = Object.assign({}, iconSources.sourceIdMap);
     const sourceIdMap = iconSources.sourceIdMap;
     if (!Array.isArray(payload.buttons) ||
@@ -750,7 +920,8 @@ async function padPreparePageSave(context) {
         if (!icon) continue;
         const importedSources = iconSources.bySourceId;
         const imported = icon.source_id && importedSources[icon.source_id];
-        const lookupKey = imported ? 'import:' + icon.source_id : icon.source_id || 'catalog:' + icon.catalog_id;
+        const lookupKey = imported ? 'import:' + icon.source_id : icon.source_id ||
+            (icon.draft_source_id ? 'draft:' + icon.draft_source_id : 'catalog:' + icon.catalog_id);
         let record = sourceRecords.get(lookupKey);
         if (!record) {
             record = await padResolveIconSource(icon, context);
@@ -771,12 +942,19 @@ async function padPreparePageSave(context) {
     const estimatedPayload = JSON.parse(JSON.stringify(payload));
     for (const group of [estimatedPayload.buttons, estimatedPayload.overlay_buttons || []]) {
         for (const button of group) {
-            if (button.icon && !button.icon.source_id) button.icon.source_id = 's_' + '0'.repeat(24);
+            if (button.icon && !button.icon.source_id) {
+                button.icon.source_id = 's_' + '0'.repeat(24);
+                delete button.icon.draft_source_id;
+            }
         }
     }
     const serializedSize = value => new TextEncoder().encode(JSON.stringify(value)).length;
     if (serializedSize(estimatedPayload) > 48 * 1024)
         throw new Error('Pad config exceeds the 48 KiB save limit.');
+    const sourceBytes = Array.from(sourceRecords.values()).reduce((total, record) =>
+        total + serializedSize(record), 0);
+    if (serializedSize(estimatedPayload) + sourceBytes > 16 * 1024 * 1024)
+        throw new Error('Pad and retained icon sources exceed the 16 MiB preparation limit.');
 
     const variants = [];
     const desiredKeys = new Set();
@@ -920,12 +1098,12 @@ async function padUploadIconSources(prepared) {
     for (const [sourceKey, record] of prepared.sourceUploads) {
         const response = await fetch('/api/icons/source', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(record),
+            headers: { 'Content-Type': record.media_type === 'image/png' ? 'image/png' : 'application/json' },
+            body: record.media_type === 'image/png' ? padDecodeBase64Bytes(record.data) : JSON.stringify(record),
         });
         if (!response.ok) {
             const error = await response.json().catch(() => ({}));
-            throw new Error(error.error || 'Icon source upload failed: HTTP ' + response.status);
+            throw new Error(error.message || error.error || 'Icon source upload failed: HTTP ' + response.status);
         }
         const result = await response.json();
         if (!result || !/^s_[0-9a-f]{24}$/.test(result.id || ''))
@@ -939,16 +1117,17 @@ async function padUploadIconSources(prepared) {
             if (!button.icon) continue;
             const imported = prepared.iconSources.bySourceId[button.icon.source_id];
             const sourceKey = imported ? 'import:' + button.icon.source_id
-                : button.icon.source_id ? null : 'catalog:' + button.icon.catalog_id;
+                : button.icon.source_id ? null : button.icon.draft_source_id
+                    ? 'draft:' + button.icon.draft_source_id : 'catalog:' + button.icon.catalog_id;
             if (!sourceKey) continue;
             const sourceId = sourceIds.get(sourceKey) || prepared.iconSources.sourceIdMap[button.icon.source_id];
             if (!sourceId) throw new Error('Prepared icon source ID is missing.');
             button.icon.source_id = sourceId;
+            delete button.icon.draft_source_id;
         }
     }
     for (const variant of prepared.variants) {
-        variant.sourceId = variant.sourceKey.startsWith('catalog:') || variant.sourceKey.startsWith('import:')
-            ? sourceIds.get(variant.sourceKey) : variant.sourceKey;
+        variant.sourceId = sourceIds.get(variant.sourceKey) || variant.sourceKey;
         if (!variant.sourceId) throw new Error('Prepared icon source ID is missing.');
     }
 }

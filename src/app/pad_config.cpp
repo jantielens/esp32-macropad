@@ -822,10 +822,11 @@ static const char* validate_pad_button_icon(JsonObjectConst pad, JsonObjectConst
     if (!icon_value.is<JsonObjectConst>()) return "icon must be an object";
     JsonObjectConst icon = icon_value.as<JsonObjectConst>();
     const char* source_id = icon["source_id"] | "";
-    const char* catalog_id = icon["catalog_id"] | "";
+    const char* catalog_id = icon.containsKey("catalog_id")
+        ? icon["catalog_id"].as<const char*>() : nullptr;
     const char* kind_name = icon["kind"] | "";
     if (!icon_store_source_matches_metadata(source_id, catalog_id, kind_name))
-        return "icon source is missing or does not match catalog_id and kind";
+        return "icon source is missing or does not match kind and optional catalog_id";
     const uint8_t col = button["col"] | (uint8_t)0;
     const uint8_t row = button["row"] | (uint8_t)0;
     const uint8_t col_span = button["col_span"] | (uint8_t)1;

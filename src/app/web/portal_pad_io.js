@@ -205,12 +205,12 @@ async function padExportPad() {
         cols: padState.cols,
         rows: padState.rows,
         buttons: padState.mainButtons.map(b => {
-            const copy = Object.assign({}, b);
+            const copy = padCloneJson(b);
             padColorsToHex(copy);
             return copy;
         }),
         overlay_buttons: padState.overlayButtons.map(b => {
-            const copy = Object.assign({}, b);
+            const copy = padCloneJson(b);
             padColorsToHex(copy);
             return copy;
         }),
@@ -240,7 +240,10 @@ async function padExportPad() {
     try {
         payload._icon_sources = await padCollectExportIconSources(
             [{ page: padState.page, payload }], [padState.page],
-            Number(deviceInfoCache && deviceInfoCache.max_pads) || 8);
+            Number(deviceInfoCache && deviceInfoCache.max_pads) || 8, {
+                byDraftId: padState.draftIconSources || {},
+                bySourceId: padState.importedIconSources || {},
+            });
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
@@ -282,6 +285,7 @@ async function padImportPad(evt) {
         padState.layerSelections = { main: null, overlay: null };
         padState.importedIconSources = importedSources;
         padState.importedIconSourceIds = {};
+        padState.draftIconSources = {};
         padState.importedPadConfigs = null;
         padState.rawJson = null;
         padState.cols = json.cols;
@@ -407,6 +411,7 @@ async function deviceImportConfig(evt) {
         if (typeof padWorkspaceReset === 'function') padWorkspaceReset();
         padState.importedIconSources = importedSources;
         padState.importedIconSourceIds = {};
+        padState.draftIconSources = {};
         padState.importedPadConfigs = data.pads;
 
         showMessage('Importing device config...', 'info');

@@ -491,10 +491,15 @@ async function checkPickerResults() {
     context.clearTimeout = clearTimeout;
     context.AbortController = AbortController;
     context.padIconLoadArtwork = async icons => icons;
-    context.padRenderIconPNG = async () => { renderCount++; return {}; };
-    context.padIconPickerResultColor = () => '#ffffff';
+    context.padRenderIconPNG = async (record, size, foreground) => {
+        assert.strictEqual(foreground, '#fedcba');
+        renderCount++;
+        return {};
+    };
     const session = {
         dialog: { querySelector: pickerNode }, urls: new Set(), searchGeneration: 1,
+        colors: { background: '#123456', foreground: '#fedcba' },
+        activeSource: 'all', collections: [],
         searchController: new AbortController(), matching: [{ id: 'noto:house', name: 'House' }], visibleCount: 1,
     };
     context.testPickerSession = session;
@@ -508,6 +513,7 @@ async function checkPickerResults() {
     await context.padIconPickerDrawResults(session, 1);
     assert.strictEqual(renderCount, 2);
     assert.strictEqual(resultGrid.children.length, 2);
+    assert.strictEqual(resultGrid.children[0].children[0].style.backgroundColor, '#123456');
     assert.strictEqual(liveUrls.size, 2);
     await context.padIconPickerRenderResults(session);
     assert.strictEqual(liveUrls.size, 0);

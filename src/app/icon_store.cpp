@@ -5,12 +5,14 @@
 #include "log_manager.h"
 #include "pad_config.h"
 #include "pad_validate.h"
+#include "ota_activity.h"
 
 #include "storage.h"
 #include "psram_json_allocator.h"
 #include <ArduinoJson.h>
 #include <esp_heap_caps.h>
 #include <esp_system.h>
+#include <new>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <stdio.h>
@@ -220,7 +222,9 @@ static bool source_matches_metadata_unlocked(const char* source_id,
                                             const char* kind) {
     if (!pad_icon_source_id_valid(source_id)) return false;
     char path[64];
-    snprintf(path, sizeof(path), "/icon_sources/%s.json", source_id);
+    bool png = false;
+    if (!icon_store_source_path(source_id, path, sizeof(path), &png)) return false;
+    if (png) return !catalog_id && strcmp(kind, "color") == 0;
     File file = Storage.open(path, "r");
     if (!file || file.size() > ICON_MAX_SOURCE_JSON_SIZE) {
         if (file) file.close();
@@ -229,6 +233,7 @@ static bool source_matches_metadata_unlocked(const char* source_id,
     BasicJsonDocument<PsramJsonAllocator> filter(128);
     filter["catalog_id"] = true;
     filter["kind"] = true;
+    filter["media_type"] = true;
     BasicJsonDocument<PsramJsonAllocator> document(256);
     const DeserializationError error = deserializeJson(
         document, file, DeserializationOption::Filter(filter));
@@ -237,8 +242,14 @@ static bool source_matches_metadata_unlocked(const char* source_id,
     const JsonObjectConst source = document.as<JsonObjectConst>();
     const char* stored_catalog_id = source["catalog_id"] | "";
     const char* source_kind = source["kind"] | "";
-    return pad_icon_catalog_kind_valid(stored_catalog_id, source_kind) &&
-        (!catalog_id || strcmp(catalog_id, stored_catalog_id) == 0) &&
+    const char* media_type = source["media_type"] | "";
+    const bool has_catalog = source.containsKey("catalog_id");
+    const bool valid_metadata = strcmp(media_type, "image/png") == 0
+        ? !has_catalog && strcmp(source_kind, "color") == 0
+        : strcmp(media_type, "image/svg+xml") == 0 && has_catalog &&
+            pad_icon_catalog_kind_valid(stored_catalog_id, source_kind);
+    return valid_metadata &&
+        (!catalog_id || (has_catalog && strcmp(catalog_id, stored_catalog_id) == 0)) &&
         strcmp(kind, source_kind) == 0;
 }
 
@@ -612,10 +623,22 @@ bool icon_store_key_valid(const char* key) {
 }
 
 bool icon_store_source_exists(const char* source_id) {
-    if (!pad_icon_source_id_valid(source_id)) return false;
     char path[64];
-    snprintf(path, sizeof(path), "/icon_sources/%s.json", source_id);
-    return Storage.exists(path);
+    bool png = false;
+    return icon_store_source_path(source_id, path, sizeof(path), &png);
+}
+
+bool icon_store_source_path(const char* source_id, char* path, size_t capacity, bool* png) {
+    if (!pad_icon_source_id_valid(source_id) || !path || !png) return false;
+    for (const char* extension : {"png", "json"}) {
+        if (snprintf(path, capacity, "/icon_sources/%s.%s", source_id, extension) >= (int)capacity)
+            return false;
+        if (Storage.exists(path)) {
+            *png = strcmp(extension, "png") == 0;
+            return true;
+        }
+    }
+    return false;
 }
 
 bool icon_store_source_matches_kind(const char* source_id, IconKind kind) {
@@ -628,7 +651,7 @@ bool icon_store_source_matches_kind(const char* source_id, IconKind kind) {
 bool icon_store_source_matches_metadata(const char* source_id,
                                        const char* catalog_id,
                                        const char* kind) {
-    if (!catalog_id || !kind || !g_file_mutex ||
+    if (!kind || !g_file_mutex ||
         xSemaphoreTake(g_file_mutex, 0) != pdTRUE) return false;
     const bool matches = source_matches_metadata_unlocked(source_id, catalog_id, kind);
     xSemaphoreGive(g_file_mutex);
@@ -661,8 +684,11 @@ bool icon_store_source_delete_if_unreferenced(const char* source_id) {
     bool removed = false;
     if (scanned && !referenced) {
         char path[64];
-        snprintf(path, sizeof(path), "/icon_sources/%s.json", source_id);
-        removed = !Storage.exists(path) || Storage.remove(path);
+        removed = true;
+        for (const char* extension : {"png", "json"}) {
+            snprintf(path, sizeof(path), "/icon_sources/%s.%s", source_id, extension);
+            if (Storage.exists(path) && !Storage.remove(path)) removed = false;
+        }
     }
     xSemaphoreGive(g_file_mutex);
     return scanned && removed;
@@ -692,7 +718,8 @@ void icon_store_cleanup_unreferenced_sources() {
             const bool is_directory = entry.isDirectory();
             entry.close();
             const size_t length = strlen(name);
-            if (!is_directory && length == 31 && strcmp(name + 26, ".json") == 0) {
+            if (!is_directory && ((length == 31 && strcmp(name + 26, ".json") == 0) ||
+                                  (length == 30 && strcmp(name + 26, ".png") == 0))) {
                 name[26] = '\0';
                 if (pad_icon_source_id_valid(name) && icon_store_source_delete_if_unreferenced(name)) {
                     removed = true;
@@ -706,11 +733,116 @@ void icon_store_cleanup_unreferenced_sources() {
     }
 }
 
+struct IconSourceUpload {
+    File file;
+    char id[CONFIG_ICON_SOURCE_ID_MAX_LEN];
+    char temporary[72];
+    size_t total;
+    size_t received;
+};
+
+static bool source_png_file_valid(File& file) {
+    const size_t length = file.size();
+    uint8_t header[33];
+    if (length < sizeof(header) || !file.seek(0) ||
+        file.readBytes((char*)header, sizeof(header)) != sizeof(header) ||
+        memcmp(header, "\x89PNG\r\n\x1a\n", 8) != 0 ||
+        !png_dimensions_allowed(header, sizeof(header), nullptr, nullptr)) return false;
+    size_t offset = sizeof(header);
+    bool image_data = false;
+    while (length - offset >= 12) {
+        if (ota_activity_is_active()) return false;
+        uint8_t chunk[8];
+        if (!file.seek(offset) || file.readBytes((char*)chunk, sizeof(chunk)) != sizeof(chunk))
+            return false;
+        const uint32_t size = read_be32(chunk);
+        if (size > length - offset - 12 || memcmp(chunk + 4, "IHDR", 4) == 0 ||
+            memcmp(chunk + 4, "acTL", 4) == 0 || memcmp(chunk + 4, "fcTL", 4) == 0 ||
+            memcmp(chunk + 4, "fdAT", 4) == 0) return false;
+        offset += size + 12;
+        if (memcmp(chunk + 4, "IDAT", 4) == 0 && size) image_data = true;
+        if (memcmp(chunk + 4, "IEND", 4) == 0)
+            return image_data && size == 0 && offset == length;
+    }
+    return false;
+}
+
+void icon_store_source_png_abort(IconSourceUpload* upload) {
+    if (!upload) return;
+    upload->file.close();
+    if (upload->temporary[0]) Storage.remove(upload->temporary);
+    delete upload;
+}
+
+IconStoreResult icon_store_source_png_begin(size_t total, IconSourceUpload** upload) {
+    if (!upload || !total) return ICON_STORE_INVALID;
+    *upload = nullptr;
+    if (ota_activity_is_active()) return ICON_STORE_BUSY;
+    if (total > ICON_MAX_PNG_SIZE) return ICON_STORE_TOO_LARGE;
+    if (!g_file_mutex || xSemaphoreTake(g_file_mutex, 0) != pdTRUE) return ICON_STORE_BUSY;
+    auto* state = new (std::nothrow) IconSourceUpload{};
+    IconStoreResult result = state ? ICON_STORE_CONFLICT : ICON_STORE_UNAVAILABLE;
+    if (state) {
+        for (unsigned attempt = 0; attempt < 8; ++attempt) {
+            snprintf(state->id, sizeof(state->id), "s_%08x%08x%08x",
+                     (unsigned)esp_random(), (unsigned)esp_random(), (unsigned)esp_random());
+            char path[64];
+            bool png = false;
+            snprintf(state->temporary, sizeof(state->temporary), "/icon_sources/%s.png.tmp", state->id);
+            if (icon_store_source_path(state->id, path, sizeof(path), &png) ||
+                Storage.exists(state->temporary)) continue;
+            state->file = Storage.open(state->temporary, "w");
+            result = state->file ? ICON_STORE_OK : ICON_STORE_IO_ERROR;
+            break;
+        }
+        if (result == ICON_STORE_OK) {
+            state->total = total;
+            *upload = state;
+        } else {
+            if (result == ICON_STORE_IO_ERROR) Storage.remove(state->temporary);
+            state->temporary[0] = '\0';
+            delete state;
+        }
+    }
+    xSemaphoreGive(g_file_mutex);
+    return result;
+}
+
+IconStoreResult icon_store_source_png_write(IconSourceUpload* upload, const uint8_t* data, size_t length) {
+    if (ota_activity_is_active()) return ICON_STORE_BUSY;
+    if (!upload || (length && !data) || length > upload->total - upload->received)
+        return ICON_STORE_INVALID;
+    if (upload->file.write(data, length) != length) return ICON_STORE_IO_ERROR;
+    upload->received += length;
+    return ICON_STORE_OK;
+}
+
+IconStoreResult icon_store_source_png_finish(IconSourceUpload* upload, char* source_id, size_t source_id_len) {
+    if (!upload || !source_id || source_id_len < CONFIG_ICON_SOURCE_ID_MAX_LEN ||
+        upload->received != upload->total) return ICON_STORE_INVALID;
+    upload->file.close();
+    upload->file = Storage.open(upload->temporary, "r");
+    if (!upload->file || upload->file.size() != upload->total) return ICON_STORE_IO_ERROR;
+    const bool valid = source_png_file_valid(upload->file);
+    upload->file.close();
+    if (ota_activity_is_active()) return ICON_STORE_BUSY;
+    if (!valid) return ICON_STORE_INVALID;
+    if (!g_file_mutex || xSemaphoreTake(g_file_mutex, 0) != pdTRUE) return ICON_STORE_BUSY;
+    char path[64];
+    snprintf(path, sizeof(path), "/icon_sources/%s.png", upload->id);
+    const bool saved = !Storage.exists(path) && Storage.rename(upload->temporary, path);
+    xSemaphoreGive(g_file_mutex);
+    if (!saved) return ICON_STORE_IO_ERROR;
+    upload->temporary[0] = '\0';
+    strlcpy(source_id, upload->id, source_id_len);
+    return ICON_STORE_OK;
+}
+
 IconStoreResult icon_store_source_install(const uint8_t* json, size_t json_len,
                                          char* source_id, size_t source_id_len) {
     if (!json || !json_len || !source_id || source_id_len < CONFIG_ICON_SOURCE_ID_MAX_LEN)
         return ICON_STORE_INVALID;
-    if (json_len > ICON_MAX_SOURCE_JSON_SIZE) return ICON_STORE_TOO_LARGE;
+    if (json_len > ICON_MAX_CATALOG_SOURCE_JSON_SIZE) return ICON_STORE_TOO_LARGE;
     if (!g_file_mutex || xSemaphoreTake(g_file_mutex, 0) != pdTRUE)
         return ICON_STORE_BUSY;
 
@@ -725,16 +857,18 @@ IconStoreResult icon_store_source_install(const uint8_t* json, size_t json_len,
         return document.overflowed() ? ICON_STORE_UNAVAILABLE : ICON_STORE_INVALID;
     }
     const JsonObjectConst source = document.as<JsonObjectConst>();
-    if (source.isNull() || source.size() != 4) {
+    if (source.isNull()) {
         xSemaphoreGive(g_file_mutex);
         return ICON_STORE_INVALID;
     }
+    const bool has_catalog = source.containsKey("catalog_id");
     const char* catalog_id = source["catalog_id"] | "";
     const char* kind = source["kind"] | "";
     const char* media_type = source["media_type"] | "";
     const char* data = source["data"] | "";
-    if (!pad_icon_catalog_kind_valid(catalog_id, kind) ||
-        strcmp(media_type, "image/svg+xml") != 0 || !data[0]) {
+    const bool valid_source = strcmp(media_type, "image/svg+xml") == 0 &&
+        source.size() == 4 && has_catalog && data[0] && pad_icon_catalog_kind_valid(catalog_id, kind);
+    if (!valid_source) {
         xSemaphoreGive(g_file_mutex);
         return ICON_STORE_INVALID;
     }
@@ -746,7 +880,11 @@ IconStoreResult icon_store_source_install(const uint8_t* json, size_t json_len,
         snprintf(id, sizeof(id), "s_%08x%08x%08x",
                  (unsigned)esp_random(), (unsigned)esp_random(), (unsigned)esp_random());
         snprintf(path, sizeof(path), "/icon_sources/%s.json", id);
-        if (!Storage.exists(path)) {
+        char existing_path[64], temporary[72];
+        bool png = false;
+        snprintf(temporary, sizeof(temporary), "/icon_sources/%s.png.tmp", id);
+        if (!icon_store_source_path(id, existing_path, sizeof(existing_path), &png) &&
+            !Storage.exists(temporary)) {
             generated = true;
             break;
         }

@@ -10,6 +10,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import zlib
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from urllib.parse import urlencode
@@ -53,8 +54,9 @@ class PortalDevServerTest(unittest.TestCase):
         PORTAL.reset_pad_fixtures(self.server)
         self.server.mock_fonts = {}
 
-    def request(self, path, method="GET", body=None, profile="esp32-p4-lcd4b", raw=False):
-        headers = {"Cookie": "portal_mock_profile=" + profile}
+    def request(self, path, method="GET", body=None, profile="esp32-p4-lcd4b", raw=False,
+                content_type="application/json"):
+        headers = {"Cookie": "portal_mock_profile=" + profile, "Content-Type": content_type}
         data = body if isinstance(body, bytes) else json.dumps(body).encode() if body is not None else None
         request = Request(self.base + path, data=data, headers=headers, method=method)
         try:
@@ -62,6 +64,8 @@ class PortalDevServerTest(unittest.TestCase):
         except HTTPError as error:
             response = error
         with response:
+            if response.headers.get_content_type() == "image/png":
+                return response.status, response.read()
             text = response.read().decode()
             return response.status, text if raw else json.loads(text)
 
@@ -832,6 +836,24 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(self.request("/api/icons/source", "POST", second_source)[0], 201)
         second_install = "/api/icons/install?id=pad_1_main_0_0&source_id=s_000000000000000000000002&kind=0&render_key=12345678"
         self.assertEqual(self.request(second_install, "POST", png)[0], 200)
+        info = self.request("/api/info")[1]
+        self.assertEqual(info["icon_max_png_size"], 512 * 1024)
+        self.assertEqual(info["icon_max_source_json_size"], 704 * 1024)
+        chunk = b"tEXt" + b"padding\x00" + b"x" * (100 * 1024)
+        chunk = (len(chunk) - 4).to_bytes(4, "big") + chunk + zlib.crc32(chunk).to_bytes(4, "big")
+        local_png = png[:-12] + chunk + png[-12:]
+        self.assertGreater(len(local_png), 65535)
+        self.assertEqual(self.request("/api/icons/source", "POST", local_png, content_type="image/png")[0], 201)
+        self.assertEqual(self.request("/api/icons/source?id=s_000000000000000000000003")[1], local_png)
+        invalid_png = bytearray(local_png)
+        invalid_png[16:20] = (721).to_bytes(4, "big")
+        self.assertEqual(self.request("/api/icons/source", "POST", bytes(invalid_png), content_type="image/png")[0], 400)
+        self.assertEqual(self.request("/api/icons/source", "POST", b"\x00" * (512 * 1024 + 1), content_type="image/png")[0], 413)
+        self.assertEqual(self.request("/api/icons/source", "POST", local_png[:-1], content_type="image/png")[0], 400)
+        self.assertEqual(self.request("/api/icons/source", "POST", b"not png", content_type="image/jpeg")[0], 415)
+        self.assertEqual(self.request("/api/icons/source", "POST", {
+            "kind": "color", "media_type": "image/png", "data": base64.b64encode(png).decode("ascii")})[0], 400)
+        self.assertEqual(len(self.server.mock_icon_sources), 3)
         self.assertEqual(self.request("/api/icons/installed")[1]["icons"],
                  ["pad_0_main_0_0", "pad_1_main_0_0"])
         metadata = self.request("/api/icons/installed?pages=0")[1]["artifacts"]

@@ -18,6 +18,7 @@ function response(ok = true, json = {}) {
     return {
         ok,
         status: ok ? 200 : 500,
+        headers: { get() { return 'application/json'; } },
         async json() { return json; },
     };
 }
@@ -120,6 +121,12 @@ function sourceId(number) {
     return 's_' + String(number).padStart(24, '0');
 }
 
+const pngSource = {
+    kind: 'color',
+    media_type: 'image/png',
+    data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=',
+};
+
 async function runImport(options = {}) {
     const requests = [];
     const messages = [];
@@ -131,12 +138,15 @@ async function runImport(options = {}) {
         [sourceId(2), { catalog_id: 'noto:house', kind: 'color', media_type: 'image/svg+xml', data: '<svg viewBox="0 0 24 24"><path fill="#ff0000" d="M0 0h24v24H0z"/></svg>' }],
         [sourceId(3), { catalog_id: 'material-symbols:lightbulb', kind: 'mono', media_type: 'image/svg+xml', data: '<svg viewBox="0 0 24 24"><path d="M0 0h24v24H0z"/></svg>' }],
     ]);
+    for (const [id, record] of options.sources || []) sourceRecords.set(id, record);
     let uploadedSourceNumber = 100;
     let corruptState = true;
     const document = makeDocument();
     const renderedSizes = document.renderedSizes;
     const context = {
         Blob,
+        atob,
+        btoa,
         TextEncoder,
         Uint8ClampedArray,
         window: {},
@@ -192,7 +202,14 @@ async function runImport(options = {}) {
             if (kind === 'icon-inventory') return response(true, { icons: [...installedIcons] });
             if (kind === 'icon-source-read') {
                 const id = new URL(url, 'http://localhost').searchParams.get('id');
-                return response(true, sourceRecords.get(id) || {});
+                const source = sourceRecords.get(id);
+                if (source && source.media_type === 'image/png') return {
+                    ok: true, status: 200,
+                    headers: { get() { return 'image/png'; } },
+                    async blob() { return new Blob([Buffer.from(source.data, 'base64')], { type: 'image/png' }); },
+                    async json() { throw new Error('Binary PNG must not be parsed as JSON'); },
+                };
+                return response(true, source || {});
             }
             if (url === '/api/pad?page=1' && !fetchOptions.method) {
                 return response(true, {
@@ -202,7 +219,9 @@ async function runImport(options = {}) {
             }
             if (kind === 'icon-source-upload') {
                 const id = sourceId(uploadedSourceNumber++);
-                sourceRecords.set(id, JSON.parse(fetchOptions.body));
+                sourceRecords.set(id, fetchOptions.headers['Content-Type'] === 'image/png'
+                    ? { kind: 'color', media_type: 'image/png', data: Buffer.from(fetchOptions.body).toString('base64') }
+                    : JSON.parse(fetchOptions.body));
                 return response(true, { id });
             }
             if (kind === 'icon-file-delete') {
@@ -215,6 +234,7 @@ async function runImport(options = {}) {
         },
     };
     loadPortal(context);
+    const normalizeProductionIconSource = context.padNormalizeIconSource;
     context.padNormalizeIconSource = function(record, expected) {
         if (record.catalog_id !== expected.catalog_id || record.kind !== expected.kind) throw new Error('Source mismatch');
         return record;
@@ -258,7 +278,8 @@ async function runImport(options = {}) {
         },
     });
     await Promise.resolve();
-    return { context, requests, messages, reloads, canvasSizes: document.canvasSizes, renderedSizes };
+    return { context, requests, messages, reloads, canvasSizes: document.canvasSizes, renderedSizes,
+        normalizeProductionIconSource, validateImportedIconSources: context.padValidateImportedIconSources };
 }
 
 function pageRequests(result, page) {
@@ -267,6 +288,40 @@ function pageRequests(result, page) {
 
 (async function() {
     const success = await runImport();
+    const uploadFetch = success.context.fetch;
+    success.context.fetch = async () => response(false, { success: false, message: 'Invalid icon source or PNG' });
+    await assert.rejects(success.context.padUploadIconSources({ sourceUploads: [['draft:test', pngSource]] }),
+        /Invalid icon source or PNG/);
+    success.context.fetch = uploadFetch;
+    const normalizedPng = success.normalizeProductionIconSource(pngSource, { kind: 'color' });
+    assert.strictEqual(JSON.stringify(normalizedPng), JSON.stringify(pngSource),
+        'Local PNG source records retain the exact approved envelope');
+    for (const extraBytes of [0, 1, 2]) {
+        const data = Buffer.concat([Buffer.from(pngSource.data, 'base64'), Buffer.alloc(extraBytes)]).toString('base64');
+        assert.strictEqual(success.normalizeProductionIconSource(
+            Object.assign({}, pngSource, { data }), { kind: 'color' }).data, data,
+        'Local PNG source validation accepts every canonical padding form');
+    }
+    assert.throws(() => success.normalizeProductionIconSource(
+        Object.assign({}, pngSource, { catalog_id: 'noto:house' }), { kind: 'color' }), /metadata is invalid/);
+    assert.throws(() => success.normalizeProductionIconSource(
+        Object.assign({}, pngSource, { media_type: 'image/jpeg' }), { kind: 'color' }), /SVG artwork/);
+    assert.throws(() => success.normalizeProductionIconSource(
+        Object.assign({}, pngSource, { data: 'not-base64' }), { kind: 'color' }), /canonical base64/);
+    const oversizedPng = Buffer.from(pngSource.data, 'base64');
+    oversizedPng.writeUInt32BE(721, 16);
+    assert.throws(() => success.normalizeProductionIconSource(
+        Object.assign({}, pngSource, { data: oversizedPng.toString('base64') }), { kind: 'color' }), /dimensions/);
+    const largeLocalPng = Object.assign({}, pngSource, {
+        data: Buffer.concat([Buffer.from(pngSource.data, 'base64'), Buffer.alloc(50 * 1024)]).toString('base64'),
+    });
+    const localSourceId = sourceId(9);
+    assert.ok(Buffer.byteLength(JSON.stringify(largeLocalPng)) > 64 * 1024);
+    const validatedSources = success.validateImportedIconSources(
+        [{ buttons: [{ icon: { source_id: localSourceId, kind: 'color' } }] }],
+        { [localSourceId]: largeLocalPng });
+    assert.strictEqual(validatedSources[localSourceId].data, largeLocalPng.data,
+        'Import accepts normalized local PNG sources above the catalog SVG limit');
     const padSaves = success.requests.filter(request => request.kind === 'pad-save');
     assert.deepStrictEqual(padSaves.map(request => request.page), [0, 1], JSON.stringify(success.messages));
     assert.deepStrictEqual(success.requests.map(request => request.kind), [
@@ -303,6 +358,27 @@ function pageRequests(result, page) {
     assert.deepStrictEqual(success.reloads, [1]);
     assert.strictEqual(success.requests.filter(request => request.kind === 'device-info').length, 1);
     assert.strictEqual(success.requests.filter(request => request.kind === 'reboot').length, 1);
+
+    const localImport = await runImport({
+        sources: [[localSourceId, largeLocalPng]],
+        pads: [{ cols: 1, rows: 1, buttons: [{ col: 0, row: 0,
+            icon: { source_id: localSourceId, kind: 'color' } }] }],
+    });
+    const localUpload = localImport.requests.find(request => request.kind === 'icon-source-upload');
+    assert.ok(localUpload, JSON.stringify(localImport.messages));
+    assert.strictEqual(localUpload.options.headers['Content-Type'], 'image/png');
+    assert.deepStrictEqual(Buffer.from(localUpload.options.body), Buffer.from(largeLocalPng.data, 'base64'));
+    const retained = await localImport.context.padLoadRetainedIconSource(sourceId(100), { kind: 'color' });
+    assert.strictEqual(retained.data, largeLocalPng.data, 'Regeneration reads binary retained sources without JSON parsing');
+    const localExport = await localImport.context.padCollectExportIconSources([{
+        page: 0, payload: { buttons: [{ icon: { source_id: sourceId(100), kind: 'color' } }] },
+    }], [0], 1);
+    assert.strictEqual(localExport[sourceId(100)].data, largeLocalPng.data,
+        'Export restores the portable base64 envelope without changing retained PNG bytes');
+    await assert.rejects(localImport.context.padReadIconSourceResponse({
+        headers: { get() { return 'image/png'; } },
+        async blob() { return new Blob([new Uint8Array(512 * 1024 + 1)]); },
+    }), /too large/);
 
     const exportedSources = await success.context.padCollectExportIconSources([{
         page: 0,

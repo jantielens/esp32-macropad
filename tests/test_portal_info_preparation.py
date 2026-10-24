@@ -32,6 +32,7 @@ harness = r'''
 #include <cstdlib>
 #include <map>
 #include <mutex>
+#include <new>
 #include <string>
 #include <thread>
 using std::min;
@@ -61,6 +62,15 @@ static size_t test_strlcpy(char* dst, const char* src, size_t capacity) {
 }
 #define strlcpy test_strlcpy
 static std::map<std::string, std::string> files;
+static bool ota_active = false;
+static bool fail_write = false;
+static bool fail_rename = false;
+static bool ota_activity_is_active() { return ota_active; }
+static int g_file_mutex = 1;
+static bool xSemaphoreTake(int, int) { return true; }
+static void xSemaphoreGive(int) {}
+static const bool pdTRUE = true;
+static unsigned esp_random() { static unsigned value = 0; return ++value; }
 static unsigned storage_reads = 0;
 struct File {
     std::string path;
@@ -79,9 +89,11 @@ struct File {
         return size;
     }
     size_t write(const uint8_t* bytes, size_t size) {
-        files[path].assign(reinterpret_cast<const char*>(bytes), size);
+        if (fail_write) return 0;
+        files[path].append(reinterpret_cast<const char*>(bytes), size);
         return size;
     }
+    bool seek(size_t position) { offset = position; return offset <= size(); }
     void close() {}
 };
 struct TestStorage {
@@ -92,6 +104,7 @@ struct TestStorage {
     bool exists(const char* path) { return files.count(path) != 0; }
     bool remove(const char* path) { return files.erase(path) != 0; }
     bool rename(const char* from, const char* to) {
+        if (fail_rename) return false;
         const auto found = files.find(from);
         if (found == files.end()) return false;
         files[to] = found->second;
@@ -137,8 +150,11 @@ static bool parse_button(JsonObject object, ScreenButtonConfig* button, const Bu
 '''
 harness += icon_header[icon_header.index("#ifndef ICON_MAX_DIMENSION"):icon_header.index("// Icon kind")]
 harness += icon_header[icon_header.index("struct IconArtifactInfo"):icon_header.index("#ifdef __cplusplus")]
+harness += icon_header[icon_header.index("enum IconStoreResult"):icon_header.index("// Reference to a cached icon")]
 harness += validation_source[validation_source.index("bool pad_icon_source_id_valid"):validation_source.index("bool pad_icon_catalog_kind_valid")]
 harness += icon_source[icon_source.index("static bool validate_png"):icon_source.index("static bool source_matches_metadata_unlocked")]
+harness += icon_source[icon_source.index("bool icon_store_source_path"):icon_source.index("bool icon_store_source_matches_kind")]
+harness += icon_source[icon_source.index("struct IconSourceUpload {"):icon_source.index("IconStoreResult icon_store_source_install")]
 harness += icon_source[icon_source.index("static bool read_artifact_unlocked"):icon_source.index("    static bool artifact_matches_for_preload")]
 harness += storage_source[storage_source.index("bool storage_write_verified"):storage_source.index("bool storage_mount")]
 harness += section("static bool g_fs_mounted", "// ============================================================================")
@@ -217,6 +233,47 @@ static void add_buttons(JsonArray buttons, unsigned count) {
     }
 }
 int main() {
+    std::string stream_png("\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR\x00\x00\x00\x01\x00\x00\x00\x01", 24);
+    stream_png.append(9, '\0');
+    stream_png.append("\x00\x01\x00\x00IDAT", 8);
+    stream_png.append(65536 + 4, '\0');
+    stream_png.append("\x00\x00\x00\x00IEND\x00\x00\x00\x00", 12);
+    IconSourceUpload* upload = nullptr;
+    assert(icon_store_source_png_begin(ICON_MAX_PNG_SIZE + 1, &upload) == ICON_STORE_TOO_LARGE);
+    assert(!upload && files.empty());
+    assert(icon_store_source_png_begin(stream_png.size(), &upload) == ICON_STORE_OK);
+    const std::string temporary = upload->temporary;
+    char retained_id[CONFIG_ICON_SOURCE_ID_MAX_LEN] = {};
+    assert(icon_store_source_png_finish(upload, retained_id, sizeof(retained_id)) == ICON_STORE_INVALID);
+    for (size_t offset = 0; offset < stream_png.size(); offset += 997) {
+        const size_t length = std::min(size_t(997), stream_png.size() - offset);
+        assert(icon_store_source_png_write(upload, (const uint8_t*)stream_png.data() + offset, length) == ICON_STORE_OK);
+    }
+    assert(icon_store_source_png_finish(upload, retained_id, sizeof(retained_id)) == ICON_STORE_OK);
+    icon_store_source_png_abort(upload);
+    char retained_path[64];
+    bool retained_png = false;
+    assert(icon_store_source_path(retained_id, retained_path, sizeof(retained_path), &retained_png) && retained_png);
+    assert(files.at(retained_path) == stream_png && !files.count(temporary));
+    files.clear();
+    for (unsigned failure = 0; failure < 5; ++failure) {
+        assert(icon_store_source_png_begin(stream_png.size(), &upload) == ICON_STORE_OK);
+        fail_write = failure == 0;
+        ota_active = failure == 1;
+        const IconStoreResult result = icon_store_source_png_write(upload, (const uint8_t*)stream_png.data(), stream_png.size());
+        assert(result == (fail_write ? ICON_STORE_IO_ERROR : ota_active ? ICON_STORE_BUSY : ICON_STORE_OK));
+        fail_write = ota_active = false;
+        if (failure == 2) files[upload->temporary].pop_back();
+        if (failure == 3) files[upload->temporary][18] = 3;
+        fail_rename = failure == 4;
+        assert(icon_store_source_png_finish(upload, retained_id, sizeof(retained_id)) != ICON_STORE_OK);
+        fail_rename = false;
+        icon_store_source_png_abort(upload);
+        assert(files.empty());
+    }
+    assert(icon_store_source_png_begin(stream_png.size(), &upload) == ICON_STORE_OK);
+    icon_store_source_png_abort(upload);
+    assert(files.empty());
     const char* icon_source_id = "s_000000000000000000000001";
     JsonDocument metadata;
     metadata["source_id"] = icon_source_id;

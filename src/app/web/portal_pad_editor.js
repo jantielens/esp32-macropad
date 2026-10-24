@@ -645,6 +645,7 @@ async function padLoadPage(page, defaultsReady, selectedLayer) {
     padState.templatePad = -1;
     document.getElementById('pad-button-shadow').value = 'inherit';
     padState.templateButtons = [];
+    padPruneDraftIconSources();
     padClearDirty();
 
     try {
@@ -857,6 +858,7 @@ function padBuildSaveContext() {
             byCatalogId: typeof padDraftIconSources === 'undefined' ? {} :
                 Object.fromEntries(Array.from(padDraftIconSources, ([id, record]) => [id, padCloneJson(record)])),
             bySourceId: padCloneJson(padState.importedIconSources || {}),
+            byDraftId: padCloneJson(padState.draftIconSources || {}),
             sourceIdMap: padCloneJson(padState.importedIconSourceIds || {}),
         },
         templatePage: padState.templatePad,

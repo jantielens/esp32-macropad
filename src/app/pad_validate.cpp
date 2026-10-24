@@ -119,10 +119,12 @@ static const char* validate_icon(JsonObjectConst button) {
     if (!pad_icon_source_id_valid(source_id))
         return "icon source_id must be s_ followed by 24 lowercase hexadecimal digits";
 
-    const char* catalog_id = icon["catalog_id"] | "";
     const char* kind = icon["kind"] | "";
-    if (!pad_icon_catalog_kind_valid(catalog_id, kind))
-        return "icon catalog_id or kind is invalid";
+    const bool has_catalog = icon.containsKey("catalog_id");
+    if (icon.size() != (has_catalog ? 3 : 2) ||
+        (has_catalog && !pad_icon_catalog_kind_valid(icon["catalog_id"] | "", kind)) ||
+        (!has_catalog && strcmp(kind, "color") != 0))
+        return "icon metadata must contain valid source_id, kind, and optional catalog_id";
     return nullptr;
 }
 

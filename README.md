@@ -403,8 +403,8 @@ See [inspection limits, status codes, and ownership](docs/dev/web-portal.md#mqtt
 
 | Endpoint | Purpose |
 | --- | --- |
-| `POST /api/icons/source` | Retain bounded source artwork and return a device-local source ID |
-| `GET /api/icons/source?id=<id>` | Read retained artwork for regeneration and export |
+| `POST /api/icons/source` | Retain catalog SVG JSON or binary local PNG artwork and return a device-local source ID |
+| `GET /api/icons/source?id=<id>` | Read retained SVG JSON or binary PNG artwork for regeneration and export |
 | `POST /api/icons/install?id=...&source_id=...&kind=...&render_key=...` | Install a generated positional PNG for a button |
 | `GET /api/pad/icon_context?page=N` | Read layout context for direct dependent pads in one request |
 | `GET /api/icons/installed` and `GET/DELETE /api/icons/file?name=...` | List or remove generated PNGs |

@@ -11,6 +11,7 @@ Usage:
 """
 
 import argparse
+import base64
 import copy
 import time
 import json
@@ -195,17 +196,57 @@ class PortalHandler(SimpleHTTPRequestHandler):
         return re.fullmatch(r"s_[0-9a-f]{24}", source_id) is not None
 
     @staticmethod
+    def _valid_png_source(data):
+        if (not 33 <= len(data) <= 512 * 1024 or data[:8] != b"\x89PNG\r\n\x1a\n" or
+                data[8:16] != b"\x00\x00\x00\rIHDR" or
+                not 1 <= int.from_bytes(data[16:20], "big") <= 720 or
+                not 1 <= int.from_bytes(data[20:24], "big") <= 720):
+            return False
+        offset = 33
+        image_data = False
+        while len(data) - offset >= 12:
+            size = int.from_bytes(data[offset:offset + 4], "big")
+            kind = data[offset + 4:offset + 8]
+            if size > len(data) - offset - 12 or kind in (b"IHDR", b"acTL", b"fcTL", b"fdAT"):
+                return False
+            offset += size + 12
+            if kind == b"IDAT" and size:
+                image_data = True
+            if kind == b"IEND":
+                return image_data and size == 0 and offset == len(data)
+        return False
+
+    @staticmethod
     def _valid_icon_source(source):
-        if not isinstance(source, dict) or set(source) != {"catalog_id", "kind", "media_type", "data"}:
+        if not isinstance(source, dict) or not isinstance(source.get("media_type"), str):
+            return False
+        try:
+            source_size = len(json.dumps(source, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
+        except (TypeError, UnicodeEncodeError):
+            return False
+        if source["media_type"] == "image/png":
+            if set(source) != {"kind", "media_type", "data"} or source["kind"] != "color" or source_size > 704 * 1024:
+                return False
+            data = source["data"]
+            if not isinstance(data, str):
+                return False
+            try:
+                decoded = base64.b64decode(data, validate=True)
+            except (ValueError, base64.binascii.Error):
+                return False
+            return (base64.b64encode(decoded).decode("ascii") == data and 33 <= len(decoded) <= 512 * 1024 and
+                    decoded[:8] == b"\x89PNG\r\n\x1a\n" and decoded[8:12] == b"\x00\x00\x00\r" and
+                    decoded[12:16] == b"IHDR" and
+                    1 <= int.from_bytes(decoded[16:20], "big") <= 720 and
+                    1 <= int.from_bytes(decoded[20:24], "big") <= 720)
+        if source["media_type"] != "image/svg+xml" or set(source) != {"catalog_id", "kind", "media_type", "data"}:
             return False
         catalog_id = source["catalog_id"]
-        kind = source["kind"]
-        data = source["data"]
         match = re.fullmatch(r"(material-symbols|noto):([a-z0-9-]+)", catalog_id) \
             if isinstance(catalog_id, str) and len(catalog_id) <= 128 else None
         expected_kind = "mono" if match and match.group(1) == "material-symbols" else "color"
-        return (match is not None and kind == expected_kind and source["media_type"] == "image/svg+xml"
-                and isinstance(data, str) and bool(data))
+        return (match is not None and source["kind"] == expected_kind and source_size <= 64 * 1024 and
+                isinstance(source["data"], str) and bool(source["data"]))
 
     @staticmethod
     def _valid_icon_key(key):
@@ -430,7 +471,11 @@ class PortalHandler(SimpleHTTPRequestHandler):
             elif source_id not in self.server.mock_icon_sources:
                 self._serve_json({"error": "Icon source not found"}, 404)
             else:
-                self._serve_json(copy.deepcopy(self.server.mock_icon_sources[source_id]))
+                source = self.server.mock_icon_sources[source_id]
+                if source["media_type"] == "image/png":
+                    self._serve_bytes(base64.b64decode(source["data"]), "image/png")
+                else:
+                    self._serve_json(copy.deepcopy(source))
         elif path == "/api/icons/installed":
             page_query = parse_qs(parsed.query, keep_blank_values=True)
             if "pages" not in page_query:
@@ -671,14 +716,28 @@ class PortalHandler(SimpleHTTPRequestHandler):
             return
 
         if path == "/api/icons/source":
-            if len(body) > 64 * 1024:
-                self._serve_json({"error": "Icon source exceeds 64 KiB"}, 413)
+            content_type = self.headers.get_content_type()
+            maximum = 512 * 1024 if content_type == "image/png" else 64 * 1024
+            if content_type not in ("image/png", "application/json"):
+                self._serve_json({"error": "Expected image/png or application/json"}, 415)
                 return
-            try:
-                source = json.loads(body.decode("utf-8"))
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                self._serve_json({"error": "Invalid icon source"}, 400)
+            if len(body) > maximum:
+                self._serve_json({"error": "Icon source exceeds its size limit"}, 413)
                 return
+            if content_type == "image/png":
+                if not self._valid_png_source(body):
+                    self._serve_json({"error": "Invalid PNG source"}, 400)
+                    return
+                source = {"kind": "color", "media_type": "image/png", "data": base64.b64encode(body).decode("ascii")}
+            else:
+                try:
+                    source = json.loads(body.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    self._serve_json({"error": "Invalid icon source"}, 400)
+                    return
+                if not isinstance(source, dict) or source.get("media_type") != "image/svg+xml":
+                    self._serve_json({"error": "Expected catalog SVG JSON"}, 400)
+                    return
             if not self._valid_icon_source(source):
                 self._serve_json({"error": "Invalid icon source"}, 400)
                 return
@@ -1229,6 +1288,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                         has_image_library=True, has_ble=False, has_ble_hid=False,
                         max_pads=16, configured_pads=sorted(int(page) for page in self.server.mock_pads),
                         max_pad_buttons=64, max_grid_cols=8, max_grid_rows=8,
+                        icon_max_png_size=512 * 1024, icon_max_source_json_size=704 * 1024,
                         display_coord_width=720, display_coord_height=720, display_blank_on_save=True,
                         available_screens=[{"id": "pad_" + str(page), "name": self.server.mock_pads.get(str(page), {}).get("name", "Pad " + str(page + 1))}
                                            for page in range(16)] + [{"id": "info", "name": "Device Info"}])
