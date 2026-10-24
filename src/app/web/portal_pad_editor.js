@@ -358,7 +358,7 @@ async function padInit() {
     document.getElementById('pad-edit-clear').addEventListener('click', padDialogClear);
     var imageRefresh = document.getElementById('pad-edit-bg-image-refresh');
     if (imageRefresh) imageRefresh.addEventListener('click', function () {
-        padLoadLocalImageOptions(document.getElementById('pad-edit-bg-image-path').value);
+        padLoadLocalImageOptions(document.getElementById('pad-edit-bg-image-path').value, true);
     });
 
     // Wire appearance field input listeners for reset-hint visibility (once)

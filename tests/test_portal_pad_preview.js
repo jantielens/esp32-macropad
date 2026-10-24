@@ -6,7 +6,10 @@ function element() {
     return {
         style: { setProperty(name, value) { this[name] = value; } },
         dataset: {}, children: [], attributes: {}, classes: new Set(),
-        classList: { add(...names) { names.forEach(name => this.owner.classes.add(name)); } },
+        classList: {
+            add(...names) { names.forEach(name => this.owner.classes.add(name)); },
+            remove(...names) { names.forEach(name => this.owner.classes.delete(name)); }
+        },
         appendChild(child) { this.children.push(child); },
         append(...children) { this.children.push(...children); },
         replaceChildren(...children) { this.children = children; },
@@ -23,7 +26,8 @@ function element() {
             return null;
         },
         addEventListener() {},
-        setAttribute(name, value) { this.attributes[name] = value; }
+        setAttribute(name, value) { this.attributes[name] = value; },
+        removeAttribute(name) { delete this.attributes[name]; }
     };
 }
 
@@ -166,6 +170,21 @@ context.padRenderCellContent(iconBindingCell, {
 const iconRow = iconBindingCell.children.find(child => child.className === 'pad-cell-icon-row');
 const iconRowLabel = iconRow.children.find(child => child.className === 'pad-cell-label-center');
 assert(visibleText(iconRowLabel).startsWith('[mqtt:...') && visibleText(iconRowLabel).endsWith('/temperature]'));
+for (const icon_position of ['left', 'above']) {
+    const cell = createElement();
+    const button = { icon: { catalog_id: 'noto:thermometer', kind: 'color' }, icon_position, label_center: 'Before' };
+    context.padRenderCellContent(cell, button);
+    const icon = cell.querySelector('.pad-cell-icon');
+    icon.src = 'blob:retained-icon';
+    for (const label of ['After', '', '[health:cpu]']) {
+        cell.replaceChildren();
+        context.padRenderCellContent(cell, { ...button, label_center: label }, icon);
+        assert.strictEqual(cell.querySelector('.pad-cell-icon'), icon, 'Label edits must retain the rendered icon');
+        assert.strictEqual(icon.src, 'blob:retained-icon');
+        const center = cell.querySelector('.pad-cell-label-center');
+        assert.strictEqual(center ? visibleText(center) : '', label);
+    }
+}
 const widgetCatalog = context.deviceInfoCache;
 context.deviceInfoCache = null;
 assert.strictEqual(context.padWidgetPreview({ widget_type: 'gauge' }).name, 'Unknown Widget');
@@ -221,6 +240,66 @@ assert.strictEqual(gridElement.children[1].children[0].title, 'Gauge Widget');
 const templateBindingLabel = gridElement.children[1].children.find(child => child.className === 'pad-cell-label-top');
 assert(visibleText(templateBindingLabel).startsWith('[mqtt:...') && visibleText(templateBindingLabel).endsWith('/temperature]'));
 const css = fs.readFileSync('src/app/web/portal-custom.css', 'utf8');
+{
+    const originalRenderGrid = context.padRenderGrid;
+    const cell = createElement();
+    const button = { col: 0, row: 0, icon: { catalog_id: 'noto:thermometer', kind: 'color' }, label_center: 'Before' };
+    context.padRenderCellContent(cell, button);
+    const icon = cell.querySelector('.pad-cell-icon');
+    const children = cell.children;
+    let rebuilds = 0;
+    context.document.querySelector = () => cell;
+    context.padRenderGrid = () => { rebuilds++; };
+    for (const changed of [{ bg_image_interval_ms: 1000 }, { actions: [{ type: 'screen', target: 'info' }] }]) {
+        context.padUpdateButtonPreview(button, { ...button, ...changed });
+        assert.strictEqual(cell.children, children, 'Nonvisual model changes must not touch preview content');
+    }
+    context.padUpdateButtonPreview({ ...button, col_span: 1, row_span: 1 }, button);
+    assert.strictEqual(rebuilds, 0, 'Explicit unit spans and omitted spans have identical geometry');
+    const labeled = { ...button, label_center: 'After' };
+    context.padUpdateButtonPreview(button, labeled);
+    assert.strictEqual(visibleText(cell.querySelector('.pad-cell-label-center')), 'After');
+    assert.strictEqual(cell.querySelector('.pad-cell-icon'), icon);
+    const colored = { ...labeled, fg_color: '#123456' };
+    context.padUpdateButtonPreview(labeled, colored);
+    assert.strictEqual(cell.style.color, '#123456');
+    assert.notStrictEqual(cell.querySelector('.pad-cell-icon'), icon, 'Foreground changes must rerender the artwork');
+    const widget = { col: 0, row: 0, widget_type: 'rocker', widget_rocker_axis: 'horizontal' };
+    context.padUpdateButtonPreview(colored, widget);
+    assert.strictEqual(cell.querySelector('.pad-widget-glyph').textContent, 'swap_horiz');
+    context.padUpdateButtonPreview(widget, { ...widget, widget_rocker_axis: 'vertical' });
+    assert.strictEqual(cell.querySelector('.pad-widget-glyph').textContent, 'swap_vert');
+    assert.strictEqual(rebuilds, 0);
+    context.padUpdateButtonPreview(widget, { ...widget, col_span: 2 });
+    assert.strictEqual(rebuilds, 1, 'Geometry changes must rebuild the grid');
+    const empty = createElement();
+    let replacement;
+    empty.replaceWith = node => { replacement = node; };
+    context.document.querySelector = selector => selector.includes('.pad-cell-empty') ? empty : replacement;
+    context.padUpdateButtonPreview(undefined, widget);
+    assert.strictEqual(rebuilds, 1, 'Creating a unit-size button must replace only its empty position');
+    assert(replacement.classes.has('pad-cell-btn'));
+    assert(!replacement.classes.has('pad-cell-empty'));
+    assert.strictEqual(replacement.style.gridColumn, '1 / span 1');
+    assert.strictEqual(replacement.style.gridRow, '1 / span 1');
+    assert.strictEqual(replacement.draggable, true);
+    context.padUpdateButtonPreview(widget, { ...widget, label_center: 'Second edit' });
+    assert.strictEqual(visibleText(replacement.querySelector('.pad-cell-label-center')), 'Second edit');
+    assert.strictEqual(rebuilds, 1);
+    context.padState.selectedLayer = 'overlay';
+    context.padUpdateButtonPreview(undefined, widget);
+    assert.strictEqual(replacement.dataset.layer, 'overlay');
+    assert(replacement.classes.has('pad-cell-overlay'));
+    assert.strictEqual(rebuilds, 1, 'Overlay creation must also leave other previews untouched');
+    context.padState.selectedLayer = 'main';
+    context.padUpdateButtonPreview(undefined, { ...widget, col_span: 2 });
+    assert.strictEqual(rebuilds, 2, 'New spanning buttons still require a layout rebuild');
+    context.document.querySelector = () => null;
+    context.padUpdateButtonPreview(undefined, widget);
+    assert.strictEqual(rebuilds, 3, 'Missing empty previews must fall back to a complete layout render');
+    context.padRenderGrid = originalRenderGrid;
+    delete context.document.querySelector;
+}
 const font = Buffer.from(css.match(/data:font\/woff2;base64,([^']+)/)[1], 'base64');
 assert.strictEqual(font.toString('ascii', 0, 4), 'wOF2');
 assert.strictEqual(font.length, font.readUInt32BE(8));

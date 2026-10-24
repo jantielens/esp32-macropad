@@ -39,7 +39,11 @@ function padWorkspaceInit() {
     ['input', 'change'].forEach(event => {
         on(element('pad-edit-overlay'), event, padWorkspaceEdit);
         on(fields, event, () => {
-            if (!padWorkspace.loading) { padMarkDirty(); padRenderGrid(); padWorkspaceSummaries(); padWorkspaceRefresh(); }
+            if (padWorkspace.loading) return;
+            padMarkDirty();
+            padUpdateGridBackground();
+            padWorkspaceSummaries();
+            padWorkspaceRefresh();
         });
     });
     on(element('pad-edit-overlay'), 'click', event => {
@@ -146,6 +150,8 @@ function padWorkspaceDispose() {
     if (padWorkspace.confirmResolve) padWorkspace.confirmResolve(false);
     if (typeof padPvHide === 'function') padPvHide();
     if (typeof padWidgetEditorsDispose === 'function') padWidgetEditorsDispose();
+    padImageLibraryCache = null;
+    padImageLibraryFiles = [];
     padWorkspace = null;
     padDirty = false;
 }
@@ -249,7 +255,7 @@ function padWorkspaceAfterSelect() {
     padWorkspace.root.querySelector('.pad-edit-body').scrollTop = saved ? saved.scroll : 0;
     padWorkspaceCapture();
     padWorkspaceSummaries();
-    padRenderGrid();
+    padWorkspaceRefresh();
     if (error) padWorkspaceEdit(true);
 }
 
@@ -270,12 +276,13 @@ function padWorkspaceEdit(revalidate) {
     try {
         const button = padDialogBuildButton();
         padDialogValidateButton(button);
+        const previous = padState.buttons.find(item => item.col === button.col && item.row === button.row);
         padState.buttons = padState.buttons.filter(item => item.col !== button.col || item.row !== button.row);
         padState.buttons.push(button);
         if (typeof padPruneDraftIconSources === 'function') padPruneDraftIconSources();
         padWorkspace.errors.delete(padWorkspaceKey());
         padDialogClearValidationError();
-        padRenderGrid();
+        padUpdateButtonPreview(previous, button);
     } catch (error) {
         padWorkspace.errors.set(padWorkspaceKey(), error);
         padDialogShowValidationError(error);
@@ -442,15 +449,18 @@ function padWorkspaceRefresh() {
     const signature = JSON.stringify([padState.page, choices]);
     if (signature === padWorkspace.railSignature) return;
     padWorkspace.railSignature = signature;
-    list.replaceChildren();
-    choices.forEach(option => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.dataset.padChoice = option.value;
-        button.textContent = option.name;
+    choices.forEach((option, index) => {
+        let button = list.children[index];
+        if (!button) {
+            button = document.createElement('button');
+            button.type = 'button';
+            button.dataset.padChoice = option.value;
+            list.appendChild(button);
+        }
+        if (button.textContent !== option.name) button.textContent = option.name;
         button.setAttribute('aria-current', String(Number(option.value) === padState.page));
-        list.appendChild(button);
     });
+    while (list.children.length > choices.length) list.lastElementChild.remove();
 }
 
 function padWorkspaceConfirm(message) {

@@ -65,6 +65,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Reduce Pad Editor work while typing by updating only affected button previews
+  and retaining unchanged icon artwork. Reuse image-list requests, resolve
+  bindings only when their inputs change, and ignore stale inspector responses
+  after switching buttons.
 * Replace the previous built-in foreground-icon format with retained artwork
   sources. Reselect icons in older pad configurations and recipes; no automatic
   migration is provided.

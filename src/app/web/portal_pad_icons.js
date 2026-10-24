@@ -91,10 +91,6 @@ function padIconEditorRefresh() {
     const remove = document.getElementById('pad-edit-icon-remove');
     const position = document.getElementById('pad-edit-icon-position-group');
     const icon = padIconEditorReadDraft();
-    const generation = ++padIconPreviewGeneration;
-    if (padIconPreviewObjectUrl) URL.revokeObjectURL(padIconPreviewObjectUrl);
-    padIconPreviewObjectUrl = null;
-    if (image) { image.removeAttribute('src'); image.hidden = !icon; }
     if (name) name.textContent = icon
         ? icon.catalog_id ? icon.catalog_id.split(':').pop().replace(/-/g, ' ') : 'Local image'
         : 'Choose icon';
@@ -104,15 +100,25 @@ function padIconEditorRefresh() {
         const editor = widgetType && padWidgetEditor(widgetType.value);
         position.style.display = icon && !(editor && editor.icon && editor.icon.fixedPosition) ? '' : 'none';
     }
+    const foreground = padIconEditorColors().foreground;
+    const signature = JSON.stringify([icon, foreground]);
+    if (image && image._padIconSignature === signature) return;
+    if (image) image._padIconSignature = signature;
+    const generation = ++padIconPreviewGeneration;
+    if (padIconPreviewObjectUrl) URL.revokeObjectURL(padIconPreviewObjectUrl);
+    padIconPreviewObjectUrl = null;
+    if (image) { image.removeAttribute('src'); image.hidden = !icon; }
     if (!icon || !image) return;
-    padResolveIconSource(icon, {}).then(record => padRenderIconPNG(record, 40, padIconEditorColors().foreground))
+    padResolveIconSource(icon, {}).then(record => padRenderIconPNG(record, 40, foreground))
         .then(blob => {
             if (generation !== padIconPreviewGeneration) return;
             padIconPreviewObjectUrl = URL.createObjectURL(blob);
             image.src = padIconPreviewObjectUrl;
             image.hidden = false;
         }).catch(() => {
-            if (generation === padIconPreviewGeneration && name) name.textContent += ' (unavailable)';
+            if (generation !== padIconPreviewGeneration) return;
+            image._padIconSignature = null;
+            if (name) name.textContent += ' (unavailable)';
         });
 }
 
@@ -159,7 +165,17 @@ function padWidgetPreviewSymbol(preview) {
 
 // Shared cell content renderer for normal and ghost buttons.
 // Sets colors, border, labels, icon, and bg-image placeholder on the cell div.
-function padRenderCellContent(cell, btn) {
+const PAD_CELL_PREVIEW_PROPERTIES = [
+    'label_top', 'label_center', 'label_bottom', 'bg_color', 'fg_color',
+    'border_color', 'border_width', 'corner_radius', 'content_pad',
+    'icon', 'icon_position', 'bg_image_url', 'bg_image_path', 'widget_type'
+];
+
+function padCellPreviewSignature(button) {
+    return JSON.stringify([PAD_CELL_PREVIEW_PROPERTIES.map(key => button[key]), padWidgetPreview(button)]);
+}
+
+function padRenderCellContent(cell, btn, existingIcon) {
     const accessibleLabels = [btn.label_top, btn.label_center, btn.label_bottom].filter(Boolean).join('\n');
     if (accessibleLabels) cell.setAttribute('aria-description', accessibleLabels);
     const bg = padColorToHex(btn.bg_color, padGetEffectiveDefault('bg_color'));
@@ -218,7 +234,8 @@ function padRenderCellContent(cell, btn) {
         if (hasCenter && pos === 'left') {
             const row = document.createElement('div');
             row.className = 'pad-cell-icon-row';
-            padAppendIconPreview(row, btn.icon, fg);
+            if (existingIcon) row.appendChild(existingIcon);
+            else padAppendIconPreview(row, btn.icon, fg);
             const lbl = document.createElement('span');
             lbl.className = 'pad-cell-label-center';
             lbl.style.fontSize = '12px';
@@ -228,7 +245,8 @@ function padRenderCellContent(cell, btn) {
         } else {
             const iconSlot = document.createElement('div');
             iconSlot.className = 'pad-cell-icon-slot';
-            padAppendIconPreview(iconSlot, btn.icon, fg);
+            if (existingIcon) iconSlot.appendChild(existingIcon);
+            else padAppendIconPreview(iconSlot, btn.icon, fg);
             cell.appendChild(iconSlot);
             if (hasCenter) {
                 const elc = document.createElement('div');

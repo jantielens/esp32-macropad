@@ -579,6 +579,27 @@ and accessible descriptions. Valid edits update the grid immediately; invalid
 input leaves the last valid layout in place. The `test_portal_pad_preview`
 regression covers ordinary and template buttons.
 
+`PAD_CELL_PREVIEW_PROPERTIES` lives beside the cell renderer and declares the
+model properties it consumes. Preview comparisons also include the computed
+widget catalog metadata, so axis-dependent symbols participate without a second
+widget-specific field list. Keep this dependency declaration synchronized when
+changing the renderer. Valid edits compare the previous and new button models:
+nonvisual changes leave the preview untouched, visual changes update only that
+button, and geometry changes rebuild the grid. Creating a unit-size button in
+an empty position replaces only that position's preview; new spanning buttons
+and positions without an empty preview use the full layout renderer. Targeted updates
+retain the existing icon element when its artwork and foreground color match.
+Selection changes update styling and the inspector without rebuilding the grid.
+Pad background changes update the existing grid background in place.
+
+The image-library list is cached for the mounted editor, with concurrent loads
+sharing one request. Explicit Refresh bypasses settled cached data; failures
+remain retryable, and disposal clears the cache. Live binding previews resolve
+on selection, explicit refresh, or changes to the active binding inputs, not
+unrelated inspector edits. Selection cancels pending edit-triggered refreshes
+before issuing its immediate resolve. Existing stale-selection guards still
+apply to asynchronous results.
+
 The workspace owns raw drafts, dirty tracking, tab/error presentation, and
 fragment disposal. A successful save reloads canonical configuration while
 restoring the selected button's tab, disclosure states, and inspector scroll

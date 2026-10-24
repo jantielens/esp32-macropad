@@ -3,6 +3,7 @@
 // Bundled into portal_pad_editor.js during minification.
 
 var padImageLibraryFiles = [];
+let padImageLibraryCache = null;
 let padDialogSelectionGeneration = 0;
 
 function padPopulateLocalImageOptions(selected) {
@@ -22,9 +23,28 @@ function padPopulateLocalImageOptions(selected) {
     select.value = selected || '';
 }
 
-function padLoadLocalImageOptions(selected) {
+function padLoadLocalImageOptions(selected, refresh = false) {
     if (!deviceInfoCache || deviceInfoCache.has_image_library !== true) return Promise.resolve();
     const section = document.getElementById('pad-config-section');
+    if (!padImageLibraryCache || padImageLibraryCache.section !== section)
+        padImageLibraryCache = { section, files: null, request: null };
+    const cache = padImageLibraryCache;
+    if (refresh) cache.files = null;
+    if (cache.files) padImageLibraryFiles = cache.files;
+    padPopulateLocalImageOptions(selected);
+    if (cache.files) return Promise.resolve();
+    if (!cache.request) {
+        cache.request = fetch('/api/images?directory=' + encodeURIComponent('/images'))
+            .then(function (response) {
+                if (!response.ok) throw new Error('Image library unavailable');
+                return response.json();
+            })
+            .then(function (catalog) {
+                cache.files = Array.isArray(catalog.files) ? catalog.files : [];
+                return cache.files;
+            })
+            .finally(function () { cache.request = null; });
+    }
     const page = padState.page;
     const layer = padState.selectedLayer;
     const col = padState.editCol;
@@ -32,18 +52,14 @@ function padLoadLocalImageOptions(selected) {
     const generation = padDialogSelectionGeneration;
     const input = document.getElementById('pad-edit-bg-image-path');
     const before = input ? input.value : '';
-    return fetch('/api/images?directory=' + encodeURIComponent('/images'))
-        .then(function (response) {
-            if (!response.ok) throw new Error('Image library unavailable');
-            return response.json();
-        })
-        .then(function (catalog) {
-            if (generation !== padDialogSelectionGeneration || document.getElementById('pad-config-section') !== section || padState.page !== page || padState.selectedLayer !== layer || padState.editCol !== col || padState.editRow !== row) return;
-            padImageLibraryFiles = Array.isArray(catalog.files) ? catalog.files : [];
+    return cache.request
+        .then(function (files) {
+            if (padImageLibraryCache !== cache || generation !== padDialogSelectionGeneration || document.getElementById('pad-config-section') !== section || padState.page !== page || padState.selectedLayer !== layer || padState.editCol !== col || padState.editRow !== row) return;
+            padImageLibraryFiles = files;
             padPopulateLocalImageOptions(input.value !== before ? input.value : selected);
         })
         .catch(function () {
-            if (generation !== padDialogSelectionGeneration || document.getElementById('pad-config-section') !== section || padState.page !== page || padState.selectedLayer !== layer || padState.editCol !== col || padState.editRow !== row) return;
+            if (padImageLibraryCache !== cache || generation !== padDialogSelectionGeneration || document.getElementById('pad-config-section') !== section || padState.page !== page || padState.selectedLayer !== layer || padState.editCol !== col || padState.editRow !== row) return;
             var group = document.getElementById('pad-edit-local-image-group');
             if (group) group.style.display = 'none';
         });
@@ -536,11 +552,18 @@ function padPvMount() {
         anchor.insertAdjacentElement('afterend', chip);
     });
     var overlay = document.getElementById('pad-edit-overlay');
+    const bindings = () => JSON.stringify(padPvFields().map(field => [field.id, padPvFieldValue(field.id)])
+        .filter(([, value]) => padPvIsBinding(value)));
+    if (overlay) overlay._pvBindings = bindings();
     if (overlay && !overlay._pvHooked) {
         overlay._pvHooked = true;
         var refresh = function (event) {
             const field = padPvFieldDef(event.target.id);
             if (field && field.preview) field.preview();
+            if (field && !padPvIsBinding(padPvFieldValue(field.id))) padPvSetChip(field.id);
+            const signature = bindings();
+            if (signature === overlay._pvBindings) return;
+            overlay._pvBindings = signature;
             if (padPvTimer) clearTimeout(padPvTimer);
             padPvTimer = setTimeout(padPvRefreshAll, 350);
         };
@@ -633,5 +656,5 @@ function padPvRefreshAll(retriesLeft) {
       });
 }
 
-function padPvOnOpen() { padPvMount(); padPvRefreshAll(); }
+function padPvOnOpen() { clearTimeout(padPvTimer); padPvRefreshAll(); }
 function padPvHide() { padPvGeneration++; clearTimeout(padPvTimer); }

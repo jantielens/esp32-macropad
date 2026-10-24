@@ -195,6 +195,72 @@ function padRenderGridTracks() {
     grid.style.gridTemplateRows = rowSizing.sizes.map(size => size * scaleY + 'px').join(' ');
 }
 
+function padCreateGridButton(button, layer, kind) {
+    const cell = document.createElement('div');
+    cell.classList.add('pad-cell');
+    cell.dataset.col = button.col;
+    cell.dataset.row = button.row;
+    cell.dataset.layer = layer;
+    const colSpan = Math.min(button.col_span || 1, padState.cols - button.col);
+    const rowSpan = Math.min(button.row_span || 1, padState.rows - button.row);
+    cell.style.gridColumn = (button.col + 1) + ' / span ' + Math.max(1, colSpan);
+    cell.style.gridRow = (button.row + 1) + ' / span ' + Math.max(1, rowSpan);
+    if (kind === 'button') cell.classList.add('pad-cell-btn');
+    if (layer === 'main' && padState.selectedLayer === 'overlay') cell.classList.add('pad-cell-main-preview');
+    if (layer === 'overlay') cell.classList.add('pad-cell-overlay');
+    if (kind === 'template') {
+        cell.classList.add('pad-cell-ghost');
+        cell.title = 'Inherited from template pad';
+    }
+    padRenderCellContent(cell, button);
+    if (kind === 'button' && layer === padState.selectedLayer && !padState.placingBlock) {
+        padRenderResizeHandles(cell, button, button.col, button.row);
+        const col = button.col, row = button.row;
+        cell.addEventListener('click', () => padWorkspaceSelect(col, row));
+        cell.draggable = true;
+        cell.addEventListener('dragstart', event => padDragStart(event, col, row));
+        cell.addEventListener('dragend', padDragEnd);
+    }
+    return cell;
+}
+
+function padUpdateButtonPreview(previous, button) {
+    if (!previous && !padState.placingBlock && (button.col_span || 1) === 1 && (button.row_span || 1) === 1) {
+        const empty = document.querySelector('#pad-grid .pad-cell-empty[data-layer="' + padState.selectedLayer + '"][data-col="' + button.col + '"][data-row="' + button.row + '"]');
+        if (empty) {
+            empty.replaceWith(padCreateGridButton(button, padState.selectedLayer, 'button'));
+            return;
+        }
+    }
+    if (!previous || previous.col !== button.col || previous.row !== button.row ||
+        (previous.col_span || 1) !== (button.col_span || 1) ||
+        (previous.row_span || 1) !== (button.row_span || 1)) {
+        padRenderGrid();
+        return;
+    }
+    if (padCellPreviewSignature(previous) === padCellPreviewSignature(button)) return;
+    const cell = document.querySelector('#pad-grid .pad-cell-btn[data-layer="' + padState.selectedLayer + '"][data-col="' + button.col + '"][data-row="' + button.row + '"]');
+    if (!cell) { padRenderGrid(); return; }
+    const sameIcon = JSON.stringify(previous.icon) === JSON.stringify(button.icon) &&
+        padColorToHex(previous.fg_color, padGetEffectiveDefault('fg_color')) === padColorToHex(button.fg_color, padGetEffectiveDefault('fg_color'));
+    const icon = sameIcon ? cell.querySelector('.pad-cell-icon') : null;
+    cell.replaceChildren();
+    cell.classList.remove('pad-cell-has-widget');
+    cell.style.justifyContent = '';
+    cell.style.padding = '';
+    cell.removeAttribute('aria-description');
+    padRenderCellContent(cell, button, icon);
+    padRenderResizeHandles(cell, button, button.col, button.row);
+}
+
+function padUpdateGridBackground() {
+    const grid = document.getElementById('pad-grid');
+    if (!grid) return;
+    const input = document.getElementById('pad-edit-page-bg-color');
+    grid.style.background = input && /^#[0-9a-fA-F]{6}$/.test(input.value.trim())
+        ? input.value.trim() : padGetEffectiveDefault('default_pad_bg_color');
+}
+
 function padRenderGrid() {
     const grid = document.getElementById('pad-grid');
     if (!grid) return;
@@ -206,8 +272,7 @@ function padRenderGrid() {
     if (deviceInfoCache && deviceInfoCache.display_coord_width && deviceInfoCache.display_coord_height) {
         grid.style.aspectRatio = deviceInfoCache.display_coord_width + ' / ' + deviceInfoCache.display_coord_height;
     }
-    const pageBgInput = document.getElementById('pad-edit-page-bg-color');
-    grid.style.background = (pageBgInput && /^#[0-9a-fA-F]{6}$/.test(pageBgInput.value.trim())) ? pageBgInput.value.trim() : padGetEffectiveDefault('default_pad_bg_color');
+    padUpdateGridBackground();
     grid.innerHTML = '';
 
     const editingOverlay = padState.selectedLayer === 'overlay';
@@ -223,34 +288,7 @@ function padRenderGrid() {
         }
     }
 
-    const makeCell = (button, layer, kind) => {
-        const cell = document.createElement('div');
-        cell.classList.add('pad-cell');
-        cell.dataset.col = button.col;
-        cell.dataset.row = button.row;
-        cell.dataset.layer = layer;
-        const colSpan = Math.min(button.col_span || 1, cols - button.col);
-        const rowSpan = Math.min(button.row_span || 1, rows - button.row);
-        cell.style.gridColumn = (button.col + 1) + ' / span ' + Math.max(1, colSpan);
-        cell.style.gridRow = (button.row + 1) + ' / span ' + Math.max(1, rowSpan);
-        if (kind === 'button') cell.classList.add('pad-cell-btn');
-        if (layer === 'main' && editingOverlay) cell.classList.add('pad-cell-main-preview');
-        if (layer === 'overlay') cell.classList.add('pad-cell-overlay');
-        if (kind === 'template') {
-            cell.classList.add('pad-cell-ghost');
-            cell.title = 'Inherited from template pad';
-        }
-        padRenderCellContent(cell, button);
-        if (kind === 'button' && layer === padState.selectedLayer && !padState.placingBlock) {
-            padRenderResizeHandles(cell, button, button.col, button.row);
-            const col = button.col, row = button.row;
-            cell.addEventListener('click', () => padWorkspaceSelect(col, row));
-            cell.draggable = true;
-            cell.addEventListener('dragstart', event => padDragStart(event, col, row));
-            cell.addEventListener('dragend', padDragEnd);
-        }
-        grid.appendChild(cell);
-    };
+    const makeCell = (button, layer, kind) => grid.appendChild(padCreateGridButton(button, layer, kind));
 
     const addTemplatePreviews = () => {
         for (const button of padState.templateButtons) {
