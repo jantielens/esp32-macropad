@@ -92,6 +92,7 @@ bool icon_store_artifact_matches(const char* key, const char* source_id, IconKin
 bool icon_store_read_artifact(const char* key, IconArtifactInfo* out);
 bool icon_store_source_delete_if_unreferenced(const char* source_id);
 void icon_store_cleanup_unreferenced_sources();
+void icon_store_cleanup_pad_icons(uint8_t page);
 
 // Install a generated PNG and its source/kind/dimension metadata.
 IconStoreResult icon_store_install(const char* key, IconKind kind,

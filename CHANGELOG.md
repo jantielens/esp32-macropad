@@ -70,7 +70,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   migration is provided.
 * Reduce icon save overhead with one scoped template-dependency request and
   reuse generated PNGs when source, kind, render key, and calculated dimensions
-  match. Keep firmware artifact validation and post-save cleanup in place.
+  match. Move post-save icon cleanup into firmware and remove the fixed file
+  limit on pad deletion. Recover orphaned artwork sources and generated icons
+  at normal startup, preserving shared and template references and skipping
+  cleanup when saved configurations cannot be read safely.
 * Upgrade LVGL from 9.5.0 to 9.6.0 while keeping LVGL PPA acceleration
   disabled. Migrate affected flag setters and the FreeType glyph-entry pointer.
   The Tiny TTF allocation-failure check still exposes unsafe backend OOM

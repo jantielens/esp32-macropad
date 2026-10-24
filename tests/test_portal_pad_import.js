@@ -327,9 +327,9 @@ function pageRequests(result, page) {
     assert.deepStrictEqual(success.requests.map(request => request.kind), [
         'config-save', 'button-defaults', 'icon-context', 'icon-metadata',
         'button-sizes', 'icon-source-upload', 'icon-source-upload', 'config-read', 'brightness-0',
-        'icon-install', 'icon-install', 'icon-install', 'pad-save', 'icon-inventory', 'icon-file-delete', 'brightness-42',
+        'icon-install', 'icon-install', 'icon-install', 'pad-save', 'brightness-42',
         'icon-context', 'icon-source-read', 'icon-metadata', 'button-sizes', 'config-read', 'brightness-0', 'icon-install', 'icon-install',
-        'pad-save', 'icon-inventory', 'icon-file-delete', 'brightness-42',
+        'pad-save', 'brightness-42',
         'device-info', 'reboot',
     ]);
     const installs = success.requests.filter(request => request.kind === 'icon-install');
@@ -443,8 +443,6 @@ function pageRequests(result, page) {
         },
     });
     assert(templatePrepared.variants.some(variant => variant.key === 'pad_1_main_0_0'));
-    assert(!templatePrepared.desiredKeys.has('pad_1_main_0_0'),
-        'Template save must not clean up a dependent pad artifact');
     success.context.fetch = async function(url, fetchOptions = {}) {
         if (url === '/api/pad/icon_context?page=0') {
             return response(true, { dependents: [{ page: 1, cols: 1, rows: 1, buttons: [], button_count: 64 }] });
@@ -508,11 +506,8 @@ function pageRequests(result, page) {
         }
     }
 
-    for (const failure of ['icon-inventory', 'icon-file-delete']) {
-        const result = await runImport({ fetchFailure: failure });
-        assert.strictEqual(result.requests.filter(request => request.kind === 'reboot').length, 1, failure);
-        assert.strictEqual(result.requests.filter(request => request.kind === 'pad-save').length, 2, failure);
-    }
+    assert(!success.requests.some(request => ['icon-inventory', 'icon-file-delete'].includes(request.kind)),
+        'Firmware owns orphan cleanup; saves must not depend on browser pruning requests');
 
     for (const failure of ['icon-delete', 'pad-delete']) {
         const result = await runImport({
@@ -539,9 +534,9 @@ function pageRequests(result, page) {
     assert.deepStrictEqual(
         concurrent.requests.slice(firstConcurrentRequest).map(request => request.kind),
         [
-            'icon-context', 'icon-metadata', 'config-read', 'brightness-0', 'icon-install', 'icon-install', 'pad-save', 'icon-inventory', 'brightness-42',
+            'icon-context', 'icon-metadata', 'config-read', 'brightness-0', 'icon-install', 'icon-install', 'pad-save', 'brightness-42',
             'device-info',
-            'icon-context', 'icon-metadata', 'config-read', 'brightness-0', 'icon-install', 'icon-install', 'pad-save', 'icon-inventory', 'brightness-42',
+            'icon-context', 'icon-metadata', 'config-read', 'brightness-0', 'icon-install', 'icon-install', 'pad-save', 'brightness-42',
             'device-info',
         ],
         'concurrent saves must not overlap display blanking'
@@ -573,7 +568,6 @@ function pageRequests(result, page) {
     const reused = await reuse.context.padPreparePageSave({ page: 0, payload: reusePayload, iconLayout: {} });
     assert.strictEqual(reused.variants.length, 0);
     assert.strictEqual(reuse.renderedSizes.length, rendersBeforeReuse, 'Matching artifacts must skip PNG rendering');
-    assert(reused.desiredKeys.has('pad_0_main_0_0'), 'Reused artifacts must remain in the cleanup keep-list');
     await reuse.context.padPersistPage(reused);
     const reuseRequests = reuse.requests.slice(requestsBeforeReuse);
     assert.strictEqual(reuseRequests.filter(request => request.kind === 'icon-metadata').length, 1);

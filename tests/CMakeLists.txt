@@ -169,6 +169,18 @@ add_host_legacy_test(test_runtime_ttf_oom
 target_link_options(test_runtime_ttf_oom PRIVATE
     "-Wl,--wrap=lv_malloc_core" "-Wl,--wrap=lv_realloc_core")
 set_tests_properties(test_runtime_ttf_oom PROPERTIES TIMEOUT 15 SKIP_RETURN_CODE 77)
+add_host_legacy_test(test_icon_store_cleanup
+    SOURCES test_icon_store_cleanup.cpp ${PROJECT_SOURCE_DIR}/src/app/icon_store.cpp
+        ${HOST_LVGL_DIR}/libs/lodepng/lodepng.c
+    DEFINITIONS HAS_FILESYSTEM=1 USE_SD_STORAGE=0 HOST_LOG_CAPTURE LV_USE_LODEPNG=1
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/font_store_overrides ${HOST_ARDUINOJSON_DIR}
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+    OPTIONS -Wno-deprecated-declarations
+    LIBRARIES host_lvgl m
+)
+set_tests_properties(test_icon_store_cleanup PROPERTIES TIMEOUT 15)
+add_host_command_test(test_icon_store_cleanup_unreadable $<TARGET_FILE:test_icon_store_cleanup> --unreadable)
+set_tests_properties(test_icon_store_cleanup_unreadable PROPERTIES TIMEOUT 15)
 add_host_legacy_test(test_font_store
     SOURCES test_font_store.cpp ${PROJECT_SOURCE_DIR}/src/app/font_store.cpp
     DEFINITIONS HAS_TTF_FONTS=0

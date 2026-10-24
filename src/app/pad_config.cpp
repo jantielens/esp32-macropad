@@ -986,6 +986,9 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
     if (!refresh_ok) {
         LOGE(TAG, "Pad %u: dependent cache refresh incomplete", page);
     }
+#if HAS_DISPLAY
+    if (refresh_ok) icon_store_cleanup_pad_icons(page);
+#endif
     for (uint8_t source = 0; source < previous_source_count; ++source)
         icon_store_source_delete_if_unreferenced(previous_sources[source]);
     pad_config_release(previous);

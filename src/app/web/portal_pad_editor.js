@@ -949,11 +949,6 @@ async function padPersistPage(context) {
 
         if (context.saveState) context.saveState.committed = true;
         if (context.operation) context.operation.stage('Finishing save');
-        try {
-            await padDeleteObsoletePageIcons(context.page, context.desiredKeys);
-        } catch (error) {
-            console.warn('Pad saved, but obsolete icon cleanup failed:', error);
-        }
 
         if (context.blankOnSave) {
             // Wait for LVGL to rebuild tiles and render into the framebuffer

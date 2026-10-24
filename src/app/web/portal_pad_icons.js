@@ -961,7 +961,6 @@ async function padPreparePageSave(context) {
         throw new Error('Pad and retained icon sources exceed the 16 MiB preparation limit.');
 
     const variants = [];
-    const desiredKeys = new Set();
     if (iconButtons.length) {
         const pages = Array.from(new Set(iconButtons.map(entry => entry.targetPage)));
         const response = await fetch('/api/icons/installed?pages=' + pages.join(','));
@@ -1012,7 +1011,6 @@ async function padPreparePageSave(context) {
                 colSpan < 1 || rowSpan < 1)
                 throw new Error('Icon button position or span is outside the pad grid.');
             const key = 'pad_' + entry.targetPage + '_' + entry.layer + '_' + col + '_' + row;
-            if (entry.targetPage === targetPage) desiredKeys.add(key);
             if (col + colSpan > cols || row + rowSpan > rows) continue;
             const borderWidth = button.border_width !== undefined ? Number(button.border_width) : 1;
             const padding = Number(buttonSizes.padding) || 0;
@@ -1057,7 +1055,6 @@ async function padPreparePageSave(context) {
         payload,
         sourceUploads: Array.from(sourceUploads.entries()),
         variants,
-        desiredKeys,
     });
 }
 
@@ -1162,20 +1159,5 @@ async function padInstallPreparedIcons(prepared) {
         if (!response.ok) throw new Error('Icon upload failed for ' + variant.key + ': HTTP ' + response.status);
         if (prepared.operation)
             prepared.operation.stage('Uploading button images', ++uploaded, prepared.variants.length);
-    }
-}
-
-async function padDeleteObsoletePageIcons(page, desiredKeys) {
-    const response = await fetch('/api/icons/installed');
-    if (!response.ok) throw new Error('Failed to list generated icons: HTTP ' + response.status);
-    const inventory = await response.json();
-    if (!Array.isArray(inventory.icons)) throw new Error('Invalid generated icon inventory');
-
-    const prefix = 'pad_' + page + '_';
-    for (const key of inventory.icons) {
-        if (typeof key !== 'string' || !key.startsWith(prefix) || desiredKeys.has(key)) continue;
-        const deleted = await fetch('/api/icons/file?name=' + encodeURIComponent(key + '.png'), { method: 'DELETE' });
-        if (!deleted.ok && deleted.status !== 404)
-            throw new Error('Failed to remove obsolete icon ' + key + ': HTTP ' + deleted.status);
     }
 }

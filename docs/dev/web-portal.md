@@ -3390,6 +3390,9 @@ uploads remove their temporary file; startup recovery removes abandoned temporar
 files. Upload chunks and validation check OTA activity and stop their own work
 when an update starts.
 
+Source and generated-icon uploads remain unavailable until initial icon preload
+and boot cleanup finish, even though the portal may already be listening.
+
 The browser still packages local PNG sources in export JSON as
 `{"kind":"color","media_type":"image/png","data":"<canonical base64>"}`.
 `ICON_MAX_SOURCE_JSON_SIZE` (704 KiB) bounds that portable representation, not
@@ -3445,9 +3448,24 @@ Save preparation requests metadata once for the current pad and affected
 dependents. It skips PNG rendering and upload only when source ID, numeric kind,
 render key, and both calculated PNG dimensions match. Dimensions are compared
 separately because device defaults can change sizing without changing the render
-key. New or imported sources still generate new artifacts. Reused keys remain in
-the cleanup keep-list; saving pad JSON, firmware validation, and fresh post-save
-inventory cleanup still run.
+key. New or imported sources still generate new artifacts. Saving pad JSON and
+firmware validation still run when all generated icons are reused.
+
+Firmware reconciles generated files for the saved pad after a successful save
+and dependent-cache refresh. It preserves main and overlay icon positions,
+including inherited template buttons, and retires obsolete decoded buffers until
+the owning screen releases them. Browser-issued pruning is not required. Pad
+deletion removes all matching files without a fixed file-count limit. Existing
+source cleanup removes previous artwork only when no saved pad references it.
+
+Initial normal-runtime startup also sweeps unreferenced sources and generated
+files, recovering leftovers from failed saves and interrupted browser sessions.
+The boot sweep skips deletion if a saved pad configuration cannot be read;
+pad-scoped cleanup also skips unreadable pad or template configurations. Cleanup
+stops for OTA activity and logs reclaimed file counts and bytes. There is no
+periodic global sweep or upload rollback, so completed but abandoned uploads can
+remain until the next normal-runtime startup. Generated files at referenced
+positions are retained conservatively rather than deleted for metadata mismatch.
 
 #### `GET /api/icons/files`
 
