@@ -99,6 +99,52 @@ static ExprVal parse_nested_ternary(Parser* p) {
     return value;
 }
 
+typedef double (*ExprUnaryMathFn)(double);
+typedef double (*ExprBinaryMathFn)(double, double);
+
+static ExprVal parse_unary_math_function(Parser* p, size_t name_len, ExprUnaryMathFn fn) {
+    p->pos += (int)name_len + 1;
+    ExprVal arg = parse_nested_ternary(p);
+    if (arg.type == VAL_ERR) return arg;
+    if (arg.type != VAL_NUM) return make_err("function: argument must be a number");
+    if (!match_char(p, ')')) return make_err("function: expected one argument");
+    return make_num(fn(arg.num));
+}
+
+static ExprVal parse_binary_math_function(Parser* p, size_t name_len, ExprBinaryMathFn fn) {
+    p->pos += (int)name_len + 1;
+    ExprVal left = parse_nested_ternary(p);
+    if (left.type == VAL_ERR) return left;
+    if (left.type != VAL_NUM) return make_err("function: arguments must be numbers");
+    if (!match_char(p, ',')) return make_err("function: expected two arguments");
+
+    ExprVal right = parse_nested_ternary(p);
+    if (right.type == VAL_ERR) return right;
+    if (right.type != VAL_NUM) return make_err("function: arguments must be numbers");
+    if (!match_char(p, ')')) return make_err("function: expected two arguments");
+    return make_num(fn(left.num, right.num));
+}
+
+static ExprVal parse_clamp_function(Parser* p) {
+    p->pos += 6;
+    ExprVal value = parse_nested_ternary(p);
+    if (value.type == VAL_ERR) return value;
+    if (value.type != VAL_NUM) return make_err("clamp: arguments must be numbers");
+    if (!match_char(p, ',')) return make_err("clamp: expected three arguments");
+
+    ExprVal low = parse_nested_ternary(p);
+    if (low.type == VAL_ERR) return low;
+    if (low.type != VAL_NUM) return make_err("clamp: arguments must be numbers");
+    if (!match_char(p, ',')) return make_err("clamp: expected three arguments");
+
+    ExprVal high = parse_nested_ternary(p);
+    if (high.type == VAL_ERR) return high;
+    if (high.type != VAL_NUM) return make_err("clamp: arguments must be numbers");
+    if (!match_char(p, ')')) return make_err("clamp: expected three arguments");
+    if (low.num > high.num) return make_err("clamp: lower bound exceeds upper bound");
+    return make_num(fmax(low.num, fmin(value.num, high.num)));
+}
+
 // ============================================================================
 // Primary: number, string literal, parenthesized expression
 // ============================================================================
@@ -167,6 +213,21 @@ static ExprVal parse_primary(Parser* p) {
         if (!match_char(p, ')')) return make_err("threshold: missing ')'");
         return result;
     }
+
+    if (strncmp(p->src + p->pos, "abs(", 4) == 0)
+        return parse_unary_math_function(p, 3, fabs);
+    if (strncmp(p->src + p->pos, "round(", 6) == 0)
+        return parse_unary_math_function(p, 5, round);
+    if (strncmp(p->src + p->pos, "floor(", 6) == 0)
+        return parse_unary_math_function(p, 5, floor);
+    if (strncmp(p->src + p->pos, "ceil(", 5) == 0)
+        return parse_unary_math_function(p, 4, ceil);
+    if (strncmp(p->src + p->pos, "min(", 4) == 0)
+        return parse_binary_math_function(p, 3, fmin);
+    if (strncmp(p->src + p->pos, "max(", 4) == 0)
+        return parse_binary_math_function(p, 3, fmax);
+    if (strncmp(p->src + p->pos, "clamp(", 6) == 0)
+        return parse_clamp_function(p);
 
     // Parenthesized expression
     if (c == '(') {

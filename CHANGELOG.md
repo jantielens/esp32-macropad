@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-22
+ms.date: 2026-10-24
 ms.topic: reference
 ---
 
@@ -12,7 +12,87 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.44.0] - 2026-10-24
+
+### Added
+
+* Add Main and Overlay button layers to pads for conditional warnings and
+  controls above the main layout. Overlay buttons can share Main positions;
+  hidden Overlay buttons leave Main buttons usable, while visible enabled or
+  disabled Overlay buttons block input beneath them. Use state bindings to
+  show, disable, or hide buttons. Edit each layer independently in the Pad
+  Editor while sharing pad settings, grid dimensions, and one combined button
+  limit. See [Edit Main and Overlay buttons](docs/user/pads/editing.md#edit-main-and-overlay-buttons).
+* Add a Toggle switch widget with local state or an authoritative state binding,
+  including Home Assistant states and expression-derived categories. Reuse the
+  button's two action lists for turn-on and turn-off commands. Local state resets
+  off when leaving the pad; bound switches wait for reported confirmation,
+  suppress repeated taps while pending, and block input when unavailable.
+  Configure read-only mode, track/knob colors, switch size, and icon position,
+  with automatic placement around existing labels and binding-aware styling.
+  A **Show a toggle switch** Button Builder template creates controllable Home
+  Assistant lights and switches with entity-state bindings and separate
+  turn-on and turn-off actions.
+  See [Toggle switch](docs/user/widgets/README.md#toggle-switch).
+* Add a searchable foreground-icon picker for Material Symbols, Noto emoji,
+  and local PNG, JPEG, or WebP images. Filter by source and category, with
+  catalog artwork shown on the button's background in a fixed-size dialog.
+  Upload, drop, or paste a local image and downscale it to 128, 256 (default),
+  512, or 720 pixels on its longest side, preserving aspect ratio without
+  upscaling. Preview the resulting dimensions and file size before applying.
+  Retain selected source artwork on the device for offline resizing and copying,
+  with streamed binary PNG uploads for local sources, source-aware recipes,
+  and pad import/export. Reuse matching generated PNGs and recover unused
+  artwork at startup and after saving while preserving shared and template
+  references; skip cleanup when saved configurations cannot be read safely.
+  Material Symbols follow the button's foreground color; emoji and local
+  images retain their original colors. This replaces the previous built-in
+  foreground-icon format: reselect icons in older pads and recipes because
+  no automatic migration is provided.
+  See [Add labels and icons](docs/user/pads/appearance.md#add-labels-and-icons).
+* Add custom row heights and column widths in the Pad Editor's Layout tab.
+  Set individual sizes in device pixels while Auto rows and columns share the
+  remaining space equally, without changing button positions or spans. Preview
+  valid edits live, with save-time validation and scaled resize handles.
+  See [Customize row and column sizes](docs/user/pads/editing.md#customize-row-and-column-sizes).
+* Add `abs`, `min`, `max`, `clamp`, `round`, `floor`, and `ceil` to expression
+  bindings. Document the functions in the portal Binding Reference and MCP
+  pad-authoring capabilities.
+* Add a reusable portal operation dialog for pad saving, with current-stage
+  progress and image-upload counts. Block editing and navigation until saving
+  and editor refresh finish, and keep errors visible until dismissed.
+  See [Keep track of edits](docs/user/pads/editing.md#keep-track-of-edits).
+
+### Changed
+
+* Simplify Pad Editor layout previews with button styling, configured labels,
+  and large subdued widget symbols. Abbreviate raw bindings with full text
+  available on hover, without substituting sample or live values. Show an
+  editor-only dotted boundary when a button blends into the pad background.
+  Distinguish selection from button borders with an external contrasting frame
+  and four persistent resize grips, using dark grips on very light backgrounds
+  and white grips otherwise. Click the empty canvas to deselect without
+  discarding edits. These guides do not affect saved button styles.
+  See [Build the layout](docs/user/pads/editing.md#build-the-layout).
+* Reduce Pad Editor work while typing by updating only affected button previews
+  and retaining unchanged icon artwork. Reuse image-list requests, resolve
+  bindings only when their inputs change, and ignore stale inspector responses
+  after switching buttons.
+* Remove the fixed file limit on pad deletion.
+* Upgrade LVGL from 9.5.0 to 9.6.0 while keeping LVGL PPA acceleration
+  disabled. Migrate affected flag setters and the FreeType glyph-entry pointer.
+  The Tiny TTF allocation-failure check still exposes unsafe backend OOM
+  handling: its known cache-creation crash now produces a warning and a CTest
+  skip rather than failing CI. Unexpected failures remain fatal; graceful
+  backend OOM recovery is not guaranteed.
+  See [Accepted backend OOM limitation](docs/dev/display-touch-architecture.md#accepted-backend-oom-limitation).
+
+### Fixed
+
+* Hold the portal's two concurrent fetch slots until response bodies finish
+  downloading, rather than releasing them when headers arrive. Preserve readable
+  responses and release slots on download failures or cancellation. Native
+  script, stylesheet, and image requests remain outside this limiter.
 
 ## [1.43.0] - 2026-10-22
 

@@ -521,11 +521,22 @@ const haButtonBuilderProvider = {
         if (!/^[a-z][a-z0-9_]{0,27}$/.test(options.icon)) throw new Error('Enter a Material Symbol name, such as lightbulb.');
         const state = this.buildBinding(candidate, { format: '' });
         return {
-            icon_id: 'mi_' + options.icon,
+            icon: { catalog_id: 'material-symbols:' + options.icon.replace(/_/g, '-'), kind: 'mono' },
             icon_position: 'center',
             label_top_style: 'color:' + (padColorNormalizeLiteral(padGetEffectiveDefault('fg_color')) || '#FFFFFF'),
             fg_color: '[expr:' + state + '=="on"?"' + options.on + '":"' + options.off + '"|#EF6B73]',
             actions: [{ type: 'ha_service', entity_id: entityId, service: 'toggle' }]
+        };
+    },
+    buildToggleWidget(candidate) {
+        const entityId = candidate.reference.detail.entity_id;
+        if (!candidate.capabilities.control) throw new Error('Choose a controllable Home Assistant light or switch.');
+        if (entityId.length >= 48) throw new Error('Entity IDs must be shorter than 48 characters for service actions.');
+        return {
+            widget_type: 'toggle',
+            widget_data_binding: this.buildBinding(candidate, { format: '' }),
+            actions: [{ type: 'ha_service', entity_id: entityId, service: 'turn_on' }],
+            lp_actions: [{ type: 'ha_service', entity_id: entityId, service: 'turn_off' }]
         };
     }
 };

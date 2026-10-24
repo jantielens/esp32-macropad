@@ -29,7 +29,7 @@ The display and touch subsystem is built on four main pillars:
 4. **Manager Classes** - Centralized management of hardware, LVGL, and lifecycle
 
 **Key Technologies:**
-- **LVGL 9.5** - Embedded graphics library
+- **LVGL 9.6.0** - Embedded graphics library
 - **TFT_eSPI** - Default display driver (supports ILI9341, ST7789, ST7735, etc.)
 - **XPT2046_Touchscreen** - Resistive touch support
 - **FreeRTOS** - Task-based continuous rendering
@@ -42,9 +42,9 @@ temporary mitigation leaves pattern rendering unchanged and may reduce P4
 drawing performance. The MIPI-DSI driver's separate PPA rotation path retains
 its aligned buffers and remains enabled.
 
-Keep LVGL pinned to 9.5.0 until a released upgrade supports the stable
-Arduino-ESP32 SDK: 9.6.0 fixes buffer-size alignment but its PPA cache code uses
-an API absent from Arduino-ESP32 3.3.12's ESP-IDF 5.5.5. Re-enabling LVGL PPA
+LVGL is pinned to 9.6.0 with PPA disabled. This release fixes buffer-size
+alignment, but its PPA cache code uses an API absent from Arduino-ESP32
+3.3.12's ESP-IDF 5.5.5. Re-enabling LVGL PPA
 requires patterned-button and bar-track checks, rounded clipping, partial
 redraws, repeated pad navigation, and a hardware soak test. The software-rendering
 mitigation builds for `jc1060p470c-sd` and passed an initial user hardware check.
@@ -65,7 +65,7 @@ graph TD
     TD --> TImpl["XPT2046_Driver<br/>AXS15231B_Touch<br/>CST816S_Driver<br/>GT911_Driver"]
     DImpl --> Lib1["TFT_eSPI library<br/>Arduino_GFX lib"]
     TImpl --> Lib2["XPT2046 library<br/>Wire.h (I2C)<br/>Vendored drivers"]
-    Lib1 --> LVGL["**LVGL 9.5**<br/>Widget rendering<br/>Themes · Fonts · Animations"]
+    Lib1 --> LVGL["**LVGL 9.6.0**<br/>Widget rendering<br/>Themes · Fonts · Animations"]
     Lib2 --> LVGL
     LVGL --> HW["**Hardware**<br/>(SPI · Display Panel · Touch Controller)"]
 ```
@@ -804,6 +804,48 @@ public:
 - Ghost touch suppression via `touch_manager_suppress_lvgl_input(200)` on show
 - Adaptive brush size (~0.8% of smaller display dimension, clamped 2–6 px)
 
+### Toggle Switch Widget Contract
+
+`toggle` is opt-in on display builds and registered through the widget manifest.
+Its packed configuration and state fit the existing widget buffers without
+enlarging every button. It uses `widget_data_binding` for its state source;
+blank/ASCII-whitespace-only sources select local mode. A literal nonblank source
+is binding-authoritative. Matching uses trimmed, ASCII-case-insensitive strings.
+
+The widget resolves in its existing tick with `binding_template_resolve_checked()`
+instead of consuming the poller's lossy combined string. This rejects direct
+resolver failures and overflow, including direct pipe fallbacks. Existing widget
+resolution and expression semantics are unchanged. Nested expression failure
+handling is covered through the production HA/expression resolver host test.
+
+The parent button owns short clicks; its `lv_switch` child is nonclickable and
+cannot independently auto-toggle or duplicate dispatch. `tapAt()` routes toggle
+requests to the widget and suppresses ordinary tap dispatch, while long presses
+are ignored. Local mode changes immediately and resets on `onHide()`. Bound mode
+keeps the reported position, arms pending before dispatch, and confirms the
+requested category, not the exact action payload. Timeout uses wrap-safe elapsed
+ticks (five seconds). Unavailability cancels pending and retains known position.
+
+Both action lists use normal action dispatch. The additive
+`action_list_dispatch_result()` reports initial completion/failure/pending;
+the existing void wrapper and continuation semantics remain unchanged. Later
+asynchronous failures are not a confirmation channel: without a new report the
+toggle times out. A temporary LVGL delete guard prevents state access after an
+action navigates and destroys the owning pad. Hiding cancels pending without
+cancelling an action already submitted to an external service.
+
+Track/knob styling is separate from binding-aware button foreground styling.
+The layout reserves top/bottom label rows, then places the natural-width center
+label left of the 2:1 switch in the remaining area. An icon sits left of that
+row by default, or above/below it. Switch size scales the largest fit (default
+100%); insufficient space hides the switch. Sizing and positioning use painted
+bounds, including label transforms and image scaling around their pivots.
+Unchanged bound reports do not rewrite styles or invalidate the switch.
+The widget tick recalculates layout after live label updates.
+UI Offset moves the middle group together, while
+center label-style offsets remain independent. Explicit offsets or oversized
+content remain subject to button clipping.
+
 ### Table Widget Payload Contract
 
 The table widget consumes a structured JSON payload, not plain formatted text.
@@ -936,14 +978,21 @@ remain available at their existing lower levels.
 
 #### Accepted Backend OOM Limitation
 
-The grayscale and flag-disabled paths use unpatched LVGL 9.5.0/STB. Allocation
+The grayscale and flag-disabled paths use unpatched LVGL 9.6.0/STB. Allocation
 failure inside font cache creation or rasterization can assert forever,
 crash, or reboot, even for a valid font. Watchdog recovery is not guaranteed;
 a saved font-heavy pad may fail again after reboot. There are no new font
 caps, budgets, global caches, allocator changes, or guarantees of graceful
 backend OOM fallback. Ordinary upload/storage errors still clean up their
 own transaction and report errors. `test_runtime_ttf_oom` characterizes the
-known cache-creation assertion rather than proving OOM recovery.
+known cache-creation limitation rather than proving OOM recovery. With 9.6.0,
+the third injected allocation failure causes a segmentation fault instead of
+the 9.5.0 assertion timeout. Either known outcome at that allocation index
+prints a warning and returns 77, which CTest reports as skipped, not passed.
+Baseline rendering and the first two allocation-failure probes still run;
+remaining probes do not run after the known limitation. The exception is
+limited to these exact versions and outcomes; unexpected failures remain fatal.
+This keeps CI running without claiming backend OOM recovery.
 
 Future work, if device stability warrants it: a repository-managed,
 version-checked LVGL/STB allocation-error patch covering cache creation,

@@ -35,11 +35,12 @@
       "pad_actions": [{"type": "screen", "target": "pad_1"}],
       "buttons": [
         {"col": 0, "row": 0, "col_span": 2, "label_top": "Living Room", "label_center": "[pad:temperature]", "label_bottom": "Temperature", "bg_color": "#166b64"},
-        {"col": 2, "row": 0, "label_center": "Lights", "icon_id": "mi_lightbulb", "bg_color": "#bd8b21", "actions": [{"type": "mqtt", "topic": "home/living/light/set", "payload": "TOGGLE"}], "lp_actions": [{"type": "screen", "target": "pad_2"}]},
+        {"col": 2, "row": 0, "label_center": "Lights", "bg_color": "#bd8b21", "actions": [{"type": "mqtt", "topic": "home/living/light/set", "payload": "TOGGLE"}], "lp_actions": [{"type": "screen", "target": "pad_2"}]},
         {"col": 3, "row": 0, "label_top": "Evening", "label_center": "Scene", "actions": [{"type": "confirm", "message": "Activate the evening scene?", "approve_text": "Activate", "cancel_text": "Cancel", "timeout_ms": 10000}, {"type": "mqtt", "topic": "home/scene/set", "payload": "evening"}, {"type": "notify", "message": "Evening scene activated", "duration_ms": 3000}]},
         {"col": 0, "row": 1, "col_span": 2, "row_span": 2, "widget_type": "gauge", "label_top": "Humidity", "widget_gauge_min": "0", "widget_gauge_max": "100", "widget_data_binding": "[mqtt:home/living/humidity]", "bg_color": "#273641"},
-        {"col": 2, "row": 1, "label_center": "Music", "icon_id": "mi_music_note", "actions": [{"type": "screen", "target": "pad_2"}]},
-        {"col": 3, "row": 2, "label_center": "Next", "icon_id": "mi_arrow_forward", "actions": [{"type": "screen", "target": "pad_1"}]}
+        {"col": 2, "row": 1, "label_center": "Music", "actions": [{"type": "screen", "target": "pad_2"}]},
+        {"col": 3, "row": 2, "label_center": "Next", "actions": [{"type": "screen", "target": "pad_1"}]},
+        {"col": 2, "row": 2, "widget_type": "toggle", "label_center": "Lamp", "widget_toggle_on_color": "#4CAF50", "widget_toggle_off_color": "#59636E", "widget_toggle_knob_color": "#FFFFFF", "widget_toggle_width_pct": 75}
       ]
     },
     "1": {"name": "Empty Workspace", "cols": 4, "rows": 3, "buttons": []},
@@ -56,8 +57,9 @@
       ]
     },
     "3": {"name": "Shared Navigation", "cols": 4, "rows": 3, "buttons": [
-      {"col": 0, "row": 2, "label_center": "Home", "icon_id": "mi_home", "actions": [{"type": "screen", "target": "pad_0"}]},
-      {"col": 3, "row": 2, "label_center": "Widgets", "actions": [{"type": "screen", "target": "pad_2"}]}
+      {"col": 0, "row": 2, "label_center": "Home", "actions": [{"type": "screen", "target": "pad_0"}]},
+      {"col": 3, "row": 2, "label_center": "Widgets", "actions": [{"type": "screen", "target": "pad_2"}]},
+      {"col": 1, "row": 2, "col_span": 2, "widget_type": "toggle", "label_center": "Sample", "widget_toggle_on_color": "#2196F3", "widget_toggle_off_color": "#59636E", "widget_toggle_knob_color": "#FFFFFF", "widget_toggle_width_pct": 70}
     ]},
     "4": {"name": "Inherited Navigation", "cols": 4, "rows": 3, "template_pad": 3, "buttons": [
       {"col": 0, "row": 0, "col_span": 2, "label_top": "Inherited navigation below", "label_center": "Office", "bg_color": "#166b64"}
@@ -117,6 +119,7 @@
     {"type": "gamepad", "group": "Gamepad", "label": "Gamepad", "button_count": 16}
   ],
   "widget_catalog": [
+    {"type": "toggle", "name": "Toggle switch", "icon": "toggle_on"},
     {"type": "bar_chart", "name": "Bar Chart", "icon": "bar_chart"},
     {"type": "gauge", "name": "Gauge", "icon": "speed"},
     {"type": "sparkline", "name": "Sparkline", "icon": "show_chart"},

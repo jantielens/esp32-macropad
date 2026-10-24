@@ -133,7 +133,7 @@ jobs:
       run: |
         mkdir -p ~/Arduino/libraries
         git clone --depth 1 --branch v7.2.1 https://github.com/bblanchon/ArduinoJson.git ~/Arduino/libraries/ArduinoJson
-        git clone --depth 1 --branch v9.5.0 https://github.com/lvgl/lvgl.git ~/Arduino/libraries/lvgl
+        git clone --depth 1 --branch v9.6.0 https://github.com/lvgl/lvgl.git ~/Arduino/libraries/lvgl
 
     - name: Install photoframe vector dependencies
       run: python3 -m pip install pillow==12.2.0

@@ -406,6 +406,17 @@ void touch_manager_cancel_physical_input() {
 		g_prev_lvgl_pressed = false;
 }
 
+	#if HAS_DISPLAY
+	void touch_manager_cancel_blocked_input(bool (*blocked)(lv_obj_t*, const lv_point_t&, void*), void* context) {
+	#if HAS_USB_HID
+			if (g_gamepad_touch_router.has_blocked_input(blocked, context)) touch_manager_cancel_physical_input();
+	#else
+			(void)blocked;
+			(void)context;
+	#endif
+	}
+	#endif
+
 // C-style interface for app.ino
 void touch_manager_init(uint8_t rotation) {
 		if (!touchManager) {

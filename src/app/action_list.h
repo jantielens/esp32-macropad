@@ -5,6 +5,7 @@
 #if HAS_DISPLAY || HAS_BUTTON
 
 #include "action_continuation.h"
+#include "action_dispatch.h"
 #include "pad_config.h"   // ButtonAction
 #include <ArduinoJson.h>
 
@@ -21,6 +22,8 @@ bool action_list_has_audio(const ButtonAction* actions, uint8_t count);
 // Safe with count == 0 or actions == nullptr (no-op).
 void action_list_dispatch(const ButtonAction* actions, uint8_t count, const char* label,
 						  ActionContinuationOwner owner = ACTION_CONTINUATION_OWNER_LOOP);
+ActionResult action_list_dispatch_result(const ButtonAction* actions, uint8_t count, const char* label,
+                                         ActionContinuationOwner owner = ACTION_CONTINUATION_OWNER_LOOP);
 
 // Resume a completed asynchronous action suffix. Call from each potential
 // owner; only the task that started the action list can consume it.

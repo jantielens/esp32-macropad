@@ -4,6 +4,7 @@
   {"type":"sparkline","source":"widgets/sparkline_widget.cpp","gates":["HAS_DISPLAY"],"portal":{"label":"Sparkline","html":"_widget_sparkline.html","js":"portal_widget_sparkline.js","css":"portal_widget_sparkline.css"}},
   {"type":"table","source":"widgets/table_widget.cpp","gates":["HAS_DISPLAY"],"portal":{"label":"Table","html":"_widget_table.html","js":"portal_widget_table.js"}},
   {"type":"rocker","source":"widgets/rocker_widget.cpp","gates":["HAS_DISPLAY"],"portal":{"label":"Rocker","html":"_widget_rocker.html","js":"portal_widget_rocker.js"}},
+  {"type":"toggle","source":"widgets/toggle_widget.cpp","gates":["HAS_DISPLAY"],"portal":{"label":"Toggle switch","html":"_widget_toggle.html","js":"portal_widget_toggle.js"}},
   {"type":"numericrocker","source":"widgets/numericrocker_widget.cpp","gates":["HAS_DISPLAY"],"portal":{"label":"Numeric Rocker","html":"_widget_numericrocker.html","js":"portal_widget_numericrocker.js"}},
   {"type":"list","source":"widgets/list_widget.cpp","gates":["HAS_DISPLAY"],"portal":{"label":"List","html":"_widget_list.html","js":"portal_widget_list.js"}},
   {"type":"mousepad","source":"widgets/mousepad_widget.cpp","gates":["HAS_DISPLAY","HAS_TOUCH","HAS_USB_HID"],"portal":{"label":"Mousepad","html":"_widget_mousepad.html","js":"portal_widget_inputs.js"}},

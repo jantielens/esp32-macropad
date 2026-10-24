@@ -1,10 +1,73 @@
 #include "pad_screen.h"
+#include "../touch_manager.h"
 #include "../widgets/numericrocker_zones.h"
+#include "../widgets/toggle_widget.h"
+#include <core/lv_obj_event_private.h>
 #include <cstring>
+
+static PadScreen* tile_owner(const ButtonTile* tile) {
+    return tile && tile->obj
+        ? static_cast<PadScreen*>(lv_obj_get_user_data(tile->obj)) : nullptr;
+}
+
 #if HAS_DISPLAY
+bool PadScreen::isOverlayButton(const ButtonTile* tile) const {
+    if (!tiles || !tile) return false;
+    const ptrdiff_t index = tile - tiles;
+    return index >= mainButtonCount && index < tileCount;
+}
+
+bool PadScreen::coveredByOverlay(const ButtonTile& tile) const {
+    if (!tile.obj || isOverlayButton(&tile)) return false;
+    lv_area_t button_area;
+    lv_obj_get_coords(tile.obj, &button_area);
+    return overlayIntersects(button_area);
+}
+
+bool PadScreen::inputAllowed(const ButtonTile& tile, const lv_point_t& point) const {
+    if (!tile.obj || lv_obj_has_flag(tile.obj, LV_OBJ_FLAG_HIDDEN) ||
+        lv_obj_has_state(tile.obj, LV_STATE_DISABLED)) return false;
+    if (isOverlayButton(&tile)) return true;
+    return !pointBlockedByOverlay(point);
+}
+
+bool PadScreen::pointBlockedByOverlay(const lv_point_t& point) const {
+    return overlayIntersects({point.x, point.y, point.x, point.y});
+}
+
+bool PadScreen::disabledOverlayBlocksPoint(const lv_point_t& point) const {
+    return overlayIntersects({point.x, point.y, point.x, point.y}, true);
+}
+
+bool PadScreen::overlayIntersects(const lv_area_t& area, bool disabledOnly) const {
+    for (uint8_t index = mainButtonCount; index < tileCount; ++index) {
+        const ButtonTile& overlay = tiles[index];
+        if (!overlay.obj || lv_obj_has_flag(overlay.obj, LV_OBJ_FLAG_HIDDEN) ||
+            (disabledOnly && !lv_obj_has_state(overlay.obj, LV_STATE_DISABLED))) continue;
+        lv_area_t overlay_area;
+        lv_obj_get_coords(overlay.obj, &overlay_area);
+        if (pad_overlay_rects_intersect(
+                {overlay_area.x1, overlay_area.y1, overlay_area.x2, overlay_area.y2},
+                {area.x1, area.y1, area.x2, area.y2})) return true;
+    }
+    return false;
+}
+
+void PadScreen::onOverlayInputShieldHitTest(lv_event_t* event) {
+    auto* pad = static_cast<PadScreen*>(lv_event_get_user_data(event));
+    lv_hit_test_info_t* hit = lv_event_get_hit_test_info(event);
+    if (!pad || !hit || !hit->point || !pad->overlayInputShield) return;
+    lv_area_t shield_area;
+    lv_obj_get_coords(pad->overlayInputShield, &shield_area);
+    const lv_point_t screen_point = {shield_area.x1 + hit->point->x,
+                                     shield_area.y1 + hit->point->y};
+    hit->res = pad->disabledOverlayBlocksPoint(screen_point);
+}
+
 bool PadScreen::navigationZoneAvailable(const ButtonTile& tile, uint8_t zone) const {
     if (!navigationZoneCount(tile)) return false;
     if (!tile.widget_type) return tile.action_count || tile.lp_action_count;
+    if (strcmp(tile.widget_type->name, "toggle") == 0) return toggle_interactive(&tile.widget_state);
     if (strcmp(tile.widget_type->name, "rocker") == 0) return zone ? tile.lp_action_count : tile.action_count;
     if (strcmp(tile.widget_type->name, "numericrocker") == 0 && navigationZoneCount(tile) == 5) {
         const auto* config = reinterpret_cast<const NumericRockerConfig*>(tile.widget_cfg.data);
@@ -17,9 +80,10 @@ bool PadScreen::navigationZoneAvailable(const ButtonTile& tile, uint8_t zone) co
 }
 
 uint8_t PadScreen::navigationZoneCount(const ButtonTile& tile) const {
-    if (padActionOverlay && padActionCount) return 0;
     if (!tile.obj || lv_obj_has_flag(tile.obj, LV_OBJ_FLAG_HIDDEN) ||
-        lv_obj_has_state(tile.obj, LV_STATE_DISABLED)) return 0;
+        lv_obj_has_state(tile.obj, LV_STATE_DISABLED) || coveredByOverlay(tile)) return 0;
+    if (tile.widget_type && strcmp(tile.widget_type->name, "toggle") == 0)
+        return toggle_interactive(&tile.widget_state) ? 1 : 0;
     if (tile.widget_type && strcmp(tile.widget_type->name, "numericrocker") == 0) {
         const auto* config = reinterpret_cast<const NumericRockerConfig*>(tile.widget_cfg.data);
         if (config->adjust_action.type[0] && (config->small_step > 0 || config->large_step > 0)) return 5;
@@ -61,8 +125,8 @@ void PadScreen::refreshNavigationFocus() {
     }
     const bool padActionActive = padActionOverlay && padActionCount;
     lv_obj_update_layout(container);
-    const bool selectedAvailable = padActionActive
-        ? navigationTile == NAVIGATION_PAD_ACTION
+    const bool selectedAvailable = navigationTile == NAVIGATION_PAD_ACTION
+        ? padActionActive
         : tiles && navigationTile >= 0 && navigationTile < tileCount &&
             navigationZoneAvailable(tiles[navigationTile], navigationZone);
     if (!selectedAvailable) {
@@ -78,7 +142,8 @@ void PadScreen::refreshNavigationFocus() {
         lv_obj_remove_flag(navigationFocus, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_style_bg_opa(navigationFocus, LV_OPA_TRANSP, 0);
     }
-    lv_obj_t* appearance = padActionActive ? container : tiles[navigationTile].obj;
+    const bool focusedPadAction = navigationTile == NAVIGATION_PAD_ACTION;
+    lv_obj_t* appearance = focusedPadAction ? container : tiles[navigationTile].obj;
     const int32_t borderWidth = lv_obj_get_style_border_width(appearance, LV_PART_MAIN);
     lv_obj_set_style_border_width(navigationFocus, borderWidth > 1 ? borderWidth * 2 : 2, 0);
     lv_obj_set_style_border_color(navigationFocus, borderWidth > 0
@@ -89,7 +154,7 @@ void PadScreen::refreshNavigationFocus() {
     lv_obj_set_style_radius(navigationFocus, lv_obj_get_style_radius(appearance, LV_PART_MAIN), 0);
     lv_obj_update_layout(container);
     lv_area_t area;
-    if (padActionActive) lv_obj_get_coords(padActionOverlay, &area);
+    if (focusedPadAction) lv_obj_get_coords(padActionOverlay, &area);
     else area = navigationArea(tiles[navigationTile], navigationZone);
     lv_area_t origin;
     lv_obj_get_coords(container, &origin);
@@ -310,7 +375,8 @@ static void do_tap_flash_px(ButtonTile* tile, int px_start, int px_end, bool hor
 
 // Publish HA event entity payload for a button press/hold
 #if HAS_MQTT
-static void publish_button_event(const ButtonTile* tile, const char* event_type) {
+static void publish_button_event(const ButtonTile* tile, const char* event_type,
+                                 bool overlay) {
     if (!mqtt_manager.connected()) return;
 
     char topic[128];
@@ -319,6 +385,7 @@ static void publish_button_event(const ButtonTile* tile, const char* event_type)
     StaticJsonDocument<256> doc;
     doc["event_type"] = event_type;
     doc["page"] = tile->page;
+    doc["layer"] = overlay ? "overlay" : "main";
     doc["col"] = tile->col;
     doc["row"] = tile->row;
 
@@ -335,15 +402,40 @@ static void publish_button_event(const ButtonTile* tile, const char* event_type)
 
 void PadScreen::onPress(lv_event_t* e) {
     ButtonTile* tile = (ButtonTile*)lv_event_get_user_data(e);
-    if (!tile) return;
-
-    lv_indev_t* indev = lv_indev_active();
-    if (!indev) {
+    PadScreen* owner = tile_owner(tile);
+    if (!tile || !owner) return;
+    const lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_INDEV_RESET || code == LV_EVENT_PRESS_LOST) {
         tile->touch_start_valid = false;
         return;
     }
-    lv_indev_get_point(indev, &tile->touch_start);
-    tile->touch_start_valid = true;
+    if (code != LV_EVENT_PRESSED && code != LV_EVENT_PRESSING &&
+        code != LV_EVENT_RELEASED && code != LV_EVENT_SHORT_CLICKED &&
+        code != LV_EVENT_CLICKED && code != LV_EVENT_LONG_PRESSED &&
+        code != LV_EVENT_LONG_PRESSED_REPEAT && code != LV_EVENT_GESTURE) return;
+
+    lv_indev_t* indev = lv_indev_active();
+    lv_point_t point{};
+    if (indev) lv_indev_get_point(indev, &point);
+    const bool allowed = indev && owner->inputAllowed(*tile, point);
+    if (code == LV_EVENT_PRESSED && allowed) {
+        tile->touch_start = point;
+        tile->touch_start_valid = true;
+        return;
+    }
+    if (code != LV_EVENT_PRESSED && tile->touch_start_valid && allowed) return;
+    if (!tile->touch_start_valid && code != LV_EVENT_PRESSED) {
+        lv_event_stop_bubbling(e);
+        lv_event_stop_processing(e);
+        return;
+    }
+
+    tile->touch_start_valid = false;
+#if HAS_TOUCH
+    touch_manager_cancel_physical_input();
+#endif
+    lv_event_stop_bubbling(e);
+    lv_event_stop_processing(e);
 }
 
 void PadScreen::onTap(lv_event_t* e) {
@@ -359,14 +451,24 @@ void PadScreen::onTap(lv_event_t* e) {
 void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
     if (!tile || !tile->obj) return;
     tile->touch_start_valid = false;
+    PadScreen* owner = tile_owner(tile);
+    if (!owner || !owner->inputAllowed(*tile, point)) return;
+    const bool overlay = owner->buttonIsOverlay(tile);
     if (device_dialog_active()) return;
 
     // Suppress taps that LVGL fires as part of a swipe gesture
     if (lv_tick_get() - swipe_actions_last_swipe_time() < 300) return;
 
+    if (tile->widget_type && strcmp(tile->widget_type->name, "toggle") == 0) {
+        toggle_tap(&tile->widget_cfg, &tile->widget_state, tile->actions, tile->action_count,
+                    tile->lp_actions, tile->lp_action_count);
+        return;
+    }
+
 #if HAS_NATIVE_EXTENSIONS
     if (strcmp(tile->widget_cfg.type, "external") == 0) {
-        const uint32_t instance_id = external_widget_instance_id(tile->page, tile->col, tile->row);
+        const uint32_t instance_id = external_widget_instance_id(
+            tile->page, owner->buttonIsOverlay(tile), tile->col, tile->row);
         if (native_extension_on_tap(external_widget_config(&tile->widget_cfg)->extension_id, instance_id) == NATIVE_EXTENSION_HANDLED) return;
     }
 #endif
@@ -473,7 +575,7 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
 #endif
             action_list_dispatch(&local_nr, 1, nr_event, ACTION_CONTINUATION_OWNER_LVGL);
 #if HAS_MQTT
-            publish_button_event(tile, "press");
+            publish_button_event(tile, "press", overlay);
 #endif
             return;
         }
@@ -512,7 +614,7 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
     }
 
 #if HAS_MQTT
-    publish_button_event(tile, "press");
+    publish_button_event(tile, "press", overlay);
 #endif
 }
 
@@ -526,12 +628,17 @@ void PadScreen::onLongPress(lv_event_t* e) {
 
 void PadScreen::longPressAt(ButtonTile* tile, const lv_point_t& point) {
     if (!tile || !tile->obj) return;
+    tile->touch_start_valid = false;
+    PadScreen* owner = tile_owner(tile);
+    if (!owner || !owner->inputAllowed(*tile, point)) return;
+    const bool overlay = owner->buttonIsOverlay(tile);
     if (device_dialog_active()) return;
-    (void)point;
+    if (tile->widget_type && strcmp(tile->widget_type->name, "toggle") == 0) return;
 
 #if HAS_NATIVE_EXTENSIONS
     if (strcmp(tile->widget_cfg.type, "external") == 0) {
-        const uint32_t instance_id = external_widget_instance_id(tile->page, tile->col, tile->row);
+        const uint32_t instance_id = external_widget_instance_id(
+            tile->page, owner->buttonIsOverlay(tile), tile->col, tile->row);
         if (native_extension_on_long_press(external_widget_config(&tile->widget_cfg)->extension_id, instance_id) == NATIVE_EXTENSION_HANDLED) return;
     }
 #endif
@@ -585,7 +692,7 @@ void PadScreen::longPressAt(ButtonTile* tile, const lv_point_t& point) {
     }
 
 #if HAS_MQTT
-    publish_button_event(tile, "hold");
+    publish_button_event(tile, "hold", overlay);
 #endif
 }
 
@@ -635,6 +742,9 @@ void PadScreen::onPadActionTap(lv_event_t* e) {
     if (device_dialog_active()) return;
     auto* pad = (PadScreen*)lv_event_get_user_data(e);
     if (!pad || !pad->padActions || pad->padActionCount == 0) return;
+    lv_point_t point = {};
+    if (lv_indev_active()) lv_indev_get_point(lv_indev_active(), &point);
+    if (pad->pointBlockedByOverlay(point)) return;
     if (lv_tick_get() - swipe_actions_last_swipe_time() < 300) return;
 
     ButtonAction local[MAX_BUTTON_ACTIONS];
@@ -651,4 +761,26 @@ void PadScreen::onPadActionTap(lv_event_t* e) {
     }
 #endif
     action_list_dispatch(local, count, "PadTap", ACTION_CONTINUATION_OWNER_LVGL);
+}
+
+void PadScreen::onSwipeGuard(lv_event_t* event) {
+    auto* pad = static_cast<PadScreen*>(lv_event_get_user_data(event));
+    if (!pad) return;
+    bool blocked = false;
+    for (uint8_t index = 0; index < pad->tileCount; ++index) {
+        const ButtonTile& tile = pad->tiles[index];
+        if (!tile.touch_start_valid) continue;
+        if ((pad->isOverlayButton(&tile) && !lv_obj_has_flag(tile.obj, LV_OBJ_FLAG_HIDDEN)) ||
+            pad->pointBlockedByOverlay(tile.touch_start)) blocked = true;
+    }
+    lv_indev_t* indev = lv_indev_active();
+    if (indev) {
+        lv_point_t point = {};
+        lv_indev_get_point(indev, &point);
+        blocked |= pad->pointBlockedByOverlay(point);
+    }
+    if (!blocked) return;
+    for (uint8_t index = 0; index < pad->tileCount; ++index)
+        pad->tiles[index].touch_start_valid = false;
+    lv_event_stop_processing(event);
 }

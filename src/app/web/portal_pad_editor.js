@@ -15,7 +15,17 @@ const padState = {
     rawJson: null,   // Original GET response (for merge-on-save)
     cols: 3,
     rows: 2,
-    buttons: [],     // Working copy: array of button objects (by grid position key "col,row")
+    columnWidthsPx: [],
+    rowHeightsPx: [],
+    selectedLayer: 'main',
+    mainButtons: [],
+    overlayButtons: [],
+    layerSelections: { main: null, overlay: null },
+    get buttons() { return this.selectedLayer === 'overlay' ? this.overlayButtons : this.mainButtons; },
+    set buttons(value) {
+        if (this.selectedLayer === 'overlay') this.overlayButtons = value;
+        else this.mainButtons = value;
+    },
     editCol: 0,
     editRow: 0,
     btnClipboard: null,  // Copied button settings (position-independent)
@@ -30,9 +40,198 @@ const padState = {
     dragSource: null,    // {col, row} of button being dragged, or null
 };
 
+function padMaxButtons() {
+    const limit = Number(deviceInfoCache && deviceInfoCache.max_pad_buttons);
+    return Number.isInteger(limit) && limit > 0 ? limit : 64;
+}
+
 let padDirty = false;
 let padSaveInProgress = false;
 let padLoadGeneration = 0;
+
+function padTrackField(axis) {
+    return document.getElementById(axis === 'rows' ? 'pad-row-heights' : 'pad-column-widths');
+}
+
+function padTrackErrorElement(axis) {
+    return document.getElementById(axis === 'rows' ? 'pad-row-heights-error' : 'pad-column-widths-error');
+}
+
+function padTrackCount(axis) {
+    return axis === 'rows' ? padState.rows : padState.cols;
+}
+
+function padTrackStateKey(axis) {
+    return axis === 'rows' ? 'rowHeightsPx' : 'columnWidthsPx';
+}
+
+function padTrackFormat(values) {
+    return (values || []).map((size, index) => Number(size) > 0 ? (index + 1) + ':' + size : '').filter(Boolean).join(', ');
+}
+
+function padTrackParse(text, count, axis) {
+    const sizes = Array(count).fill(0);
+    const label = axis === 'rows' ? 'row' : 'column';
+    const value = String(text || '').trim();
+    if (!value) return { status: 'valid', sizes, message: '' };
+
+    const entries = value.split(',');
+    for (let index = 0; index < entries.length; index++) {
+        const entry = entries[index].trim();
+        if (!entry) {
+            if (index === entries.length - 1) return { status: 'incomplete', sizes, message: 'Finish the last entry as position:size.' };
+            return { status: 'invalid', sizes, message: 'Remove the empty entry or add a position:size value.' };
+        }
+        const colon = entry.indexOf(':');
+        if (colon < 0) {
+            if (/^\d+$/.test(entry)) return { status: 'incomplete', sizes, message: 'Add a colon and pixel size, for example 3:50.' };
+            return { status: 'invalid', sizes, message: 'Use position:size entries, for example 3:50.' };
+        }
+        if (entry.indexOf(':', colon + 1) >= 0) return { status: 'invalid', sizes, message: 'Use one colon in each position:size entry.' };
+
+        const positionText = entry.slice(0, colon).trim();
+        const sizeText = entry.slice(colon + 1).trim();
+        if (!positionText || !/^\d+$/.test(positionText)) return { status: 'invalid', sizes, message: 'Positions must be whole numbers starting at 1.' };
+        if (!sizeText) return { status: 'incomplete', sizes, message: 'Add a positive pixel size after the colon.' };
+        if (!/^\d+$/.test(sizeText)) return { status: 'invalid', sizes, message: 'Sizes must be positive whole pixels.' };
+
+        const position = Number(positionText);
+        const size = Number(sizeText);
+        if (!Number.isSafeInteger(position) || position < 1 || position > count)
+            return { status: 'invalid', sizes, message: 'Choose a ' + label + ' position from 1 to ' + count + '.' };
+        if (sizes[position - 1]) return { status: 'invalid', sizes, message: 'Position ' + position + ' is listed more than once.' };
+        if (!Number.isSafeInteger(size) || size < 1 || size > 65535)
+            return { status: 'invalid', sizes, message: 'Sizes must be between 1 and 65535 pixels.' };
+        sizes[position - 1] = size;
+    }
+
+    if (sizes.every(size => size > 0))
+        return { status: 'invalid', sizes, message: 'Leave at least one ' + label + ' set to Auto.' };
+    return { status: 'valid', sizes, message: '' };
+}
+
+function padTrackEvaluate() {
+    const rowsField = padTrackField('rows');
+    const columnsField = padTrackField('columns');
+    const rowResult = padTrackParse(rowsField ? rowsField.value : padTrackFormat(padState.rowHeightsPx), padState.rows, 'rows');
+    const columnResult = padTrackParse(columnsField ? columnsField.value : padTrackFormat(padState.columnWidthsPx), padState.cols, 'columns');
+    const width = Number(deviceInfoCache && deviceInfoCache.display_coord_width) || 0;
+    const height = Number(deviceInfoCache && deviceInfoCache.display_coord_height) || 0;
+    const gap = typeof padGetEffectiveDefault === 'function'
+        ? Number(padGetEffectiveDefault('button_spacing_px')) || 0 : 0;
+
+    if (columnResult.status === 'valid' && width) {
+        const available = padGetTrackAvailableSize('columns', width);
+        if (!padComputeAxisTrackSizes(padState.cols, available, gap, columnResult.sizes).valid) {
+            columnResult.status = 'invalid';
+            columnResult.message = 'These widths leave less than one pixel for each Auto column.';
+        }
+    }
+    if (rowResult.status === 'valid' && height) {
+        const available = padGetTrackAvailableSize('rows', height);
+        if (!padComputeAxisTrackSizes(padState.rows, available, gap, rowResult.sizes).valid) {
+            rowResult.status = 'invalid';
+            rowResult.message = 'These heights leave less than one pixel for each Auto row.';
+        }
+    }
+    return { rows: rowResult, columns: columnResult,
+        valid: rowResult.status === 'valid' && columnResult.status === 'valid' };
+}
+
+function padTrackSetError(axis, message) {
+    const field = padTrackField(axis);
+    const error = padTrackErrorElement(axis);
+    if (!field || !error) return;
+    if (field.classList) field.classList.toggle('is-invalid', Boolean(message));
+    if (field.setAttribute) field.setAttribute('aria-invalid', String(Boolean(message)));
+    error.textContent = message || '';
+    error.hidden = !message;
+}
+
+function padTrackLoad(json) {
+    const source = json || {};
+    for (const axis of ['rows', 'columns']) {
+        const field = padTrackField(axis);
+        if (!field) continue;
+        const key = axis === 'rows' ? 'row_heights_px' : 'column_widths_px';
+        const count = padTrackCount(axis);
+        const values = source[key];
+        const displayValues = Array.isArray(values) ? values : [];
+        const stateValues = Array.from({ length: count }, (_, index) => {
+            const number = Number(displayValues[index]);
+            return Number.isInteger(number) && number >= 0 && number <= 65535 ? number : (displayValues[index] === undefined ? 0 : 65535);
+        });
+        padState[padTrackStateKey(axis)] = stateValues;
+        field.value = Array.isArray(values)
+            ? padTrackFormat(values.map(value => Number(value) > 0 ? value : 0))
+            : (values === undefined ? '' : String(values));
+        padTrackSetError(axis, '');
+    }
+    const section = document.getElementById('pad-custom-track-sizes-section');
+    if (section) {
+        section.open = ['column_widths_px', 'row_heights_px'].some(key => {
+            const values = source[key];
+            return Array.isArray(values) ? values.some(value => Number(value) > 0) : values !== undefined;
+        });
+    }
+    const evaluated = padTrackEvaluate();
+    if (!evaluated.valid) {
+        for (const axis of ['rows', 'columns']) {
+            const result = evaluated[axis];
+            if (result.status !== 'valid') padTrackSetError(axis, result.message);
+        }
+    }
+}
+
+function padTrackInputChanged() {
+    const evaluated = padTrackEvaluate();
+    if (evaluated.valid) {
+        padState.rowHeightsPx = evaluated.rows.sizes;
+        padState.columnWidthsPx = evaluated.columns.sizes;
+        padTrackSetError('rows', '');
+        padTrackSetError('columns', '');
+        if (padState.trackValidationError) {
+            padState.trackValidationError = false;
+            if (typeof padDialogClearValidationError === 'function') padDialogClearValidationError();
+        }
+        padRenderGrid();
+    } else {
+        const active = document.activeElement;
+        for (const axis of ['rows', 'columns']) {
+            if (evaluated[axis].status === 'valid' || padTrackField(axis) === active)
+                padTrackSetError(axis, '');
+        }
+    }
+}
+
+function padTrackValidate(showErrors) {
+    const evaluated = padTrackEvaluate();
+    if (showErrors) {
+        for (const axis of ['rows', 'columns']) {
+            const result = evaluated[axis];
+            padTrackSetError(axis, result.status === 'valid' ? '' : result.message);
+        }
+    }
+    return evaluated;
+}
+
+function padTrackGridCountChanged(axis, previousCount, nextCount) {
+    const field = padTrackField(axis);
+    const key = padTrackStateKey(axis);
+    const previous = padState[key].slice(0, previousCount);
+    const parsed = field ? padTrackParse(field.value, previousCount, axis) : { status: 'valid', sizes: previous };
+    if (parsed.status === 'valid') {
+        const next = Array(nextCount).fill(0);
+        parsed.sizes.slice(0, nextCount).forEach((size, index) => { next[index] = size; });
+        padState[key] = next;
+        if (field && nextCount < previousCount) field.value = padTrackFormat(next);
+    } else {
+        const next = Array(nextCount).fill(0);
+        previous.slice(0, nextCount).forEach((size, index) => { next[index] = size; });
+        padState[key] = next;
+    }
+    padTrackInputChanged();
+}
 
 function padMarkDirty(event) {
     if (event && event.isTrusted === false) return;
@@ -48,18 +247,20 @@ function padClearDirty() {
 
 async function padRequestSave() {
     if (padSaveInProgress) return;
-    padSaveInProgress = true;
-    padWorkspaceRefresh();
-    try {
-        await padSavePage();
-    } finally {
-        padSaveInProgress = false;
+    await portalOperation.run({ title: 'Saving Pad ' + (padState.page + 1) }, async operation => {
+        padSaveInProgress = true;
         padWorkspaceRefresh();
-    }
+        try {
+            return await padSavePage({ operation });
+        } finally {
+            padSaveInProgress = false;
+            padWorkspaceRefresh();
+        }
+    });
 }
 
 const DEVICE_CONFIG_FORMAT = 'esp32-macropad-config';
-const DEVICE_CONFIG_VERSION = 1;
+const DEVICE_CONFIG_VERSION = 2;
 
 function padSetImageCapabilityVisibility(info, hideForWidget) {
     const imageFetch = !hideForWidget && info && info.has_image_fetch === true;
@@ -105,11 +306,24 @@ async function padInit() {
     }
 
     document.getElementById('pad-cols').addEventListener('change', (e) => {
+        const previous = padState.cols;
         padState.cols = parseInt(e.target.value);
+        padTrackGridCountChanged('columns', previous, padState.cols);
     });
     document.getElementById('pad-rows').addEventListener('change', (e) => {
+        const previous = padState.rows;
         padState.rows = parseInt(e.target.value);
+        padTrackGridCountChanged('rows', previous, padState.rows);
     });
+    for (const axis of ['rows', 'columns']) {
+        const field = padTrackField(axis);
+        if (!field) continue;
+        field.addEventListener('input', padTrackInputChanged);
+        field.addEventListener('blur', () => {
+            padTrackInputChanged();
+            padTrackValidate(true);
+        });
+    }
     document.getElementById('pad-template-pad').addEventListener('change', async (e) => {
         padState.templatePad = parseInt(e.target.value);
         padMarkDirty();
@@ -144,7 +358,7 @@ async function padInit() {
     document.getElementById('pad-edit-clear').addEventListener('click', padDialogClear);
     var imageRefresh = document.getElementById('pad-edit-bg-image-refresh');
     if (imageRefresh) imageRefresh.addEventListener('click', function () {
-        padLoadLocalImageOptions(document.getElementById('pad-edit-bg-image-path').value);
+        padLoadLocalImageOptions(document.getElementById('pad-edit-bg-image-path').value, true);
     });
 
     // Wire appearance field input listeners for reset-hint visibility (once)
@@ -166,11 +380,11 @@ async function padInit() {
     document.getElementById('device-import-btn').addEventListener('click', () => document.getElementById('device-import-file').click());
     document.getElementById('device-import-file').addEventListener('change', deviceImportConfig);
 
-    // Icon input live preview
-    const iconEmoji = document.getElementById('pad-edit-icon-emoji');
-    if (iconEmoji) iconEmoji.addEventListener('input', padUpdateIconPreview);
-    const iconMi = document.getElementById('pad-edit-icon-mi');
-    if (iconMi) iconMi.addEventListener('input', padUpdateIconPreview);
+    document.getElementById('pad-edit-icon-choose').addEventListener('click', padOpenIconPicker);
+    document.getElementById('pad-edit-icon-remove').addEventListener('click', function () {
+        padIconEditorSetDraft(null);
+        padWorkspaceEdit();
+    });
 
 
     // Block placement cancel + Escape key
@@ -385,7 +599,7 @@ function padWidgetTypeChanged() {
         padConfirmChanged();
     }
     // Refresh icon position visibility (widgets may override layout)
-    padIconTypeChanged();
+    padIconEditorRefresh();
 
     const actionPolicy = editor ? editor.actions : { tap: true, longPress: true };
     var navigationGroup = document.getElementById('pad-edit-input-navigation');
@@ -411,22 +625,29 @@ function padWidgetTypeChanged() {
 
 }
 
-async function padLoadPage(page, defaultsReady) {
+async function padLoadPage(page, defaultsReady, selectedLayer, throwOnError = false) {
     const generation = ++padLoadGeneration;
     const section = document.getElementById('pad-config-section');
     const current = () => generation === padLoadGeneration && document.getElementById('pad-config-section') === section;
     if (typeof padWorkspaceReset === 'function') padWorkspaceReset();
     if (typeof padWorkspace !== 'undefined' && padWorkspace) padWorkspace.loading = true;
     padState.page = page;
+    padState.selectedLayer = selectedLayer === 'overlay' ? 'overlay' : 'main';
+    padState.layerSelections = { main: null, overlay: null };
     const screen = (deviceInfoCache.available_screens || []).find(screen => screen.id === 'pad_' + page);
     document.getElementById('pad-name').value = screen ? screen.name.replace(/^Pad \d+: /, '').replace(/^Pad \d+$/, '') : '';
     padState.rawJson = null;
-    padState.buttons = [];
+    padState.mainButtons = [];
+    padState.overlayButtons = [];
     padState.bindings = [];
+    padState.importedIconSources = {};
+    padState.importedIconSourceIds = {};
+    padState.importedPadConfigs = null;
     padState.padActions = [];
     padState.templatePad = -1;
     document.getElementById('pad-button-shadow').value = 'inherit';
     padState.templateButtons = [];
+    padPruneDraftIconSources();
     padClearDirty();
 
     try {
@@ -437,6 +658,7 @@ async function padLoadPage(page, defaultsReady) {
             // No config for this page — show empty grid
             padState.cols = 3;
             padState.rows = 2;
+            padTrackLoad({});
             document.getElementById('pad-cols').value = padState.cols;
             document.getElementById('pad-rows').value = padState.rows;
             document.getElementById('pad-name').value = '';
@@ -464,6 +686,7 @@ async function padLoadPage(page, defaultsReady) {
         const maxRows = (deviceInfoCache && deviceInfoCache.max_grid_rows) || 8;
         padState.cols = Math.min(json.cols || 3, maxCols);
         padState.rows = Math.min(json.rows || 2, maxRows);
+        padTrackLoad(json);
 
         document.getElementById('pad-cols').value = padState.cols;
         document.getElementById('pad-rows').value = padState.rows;
@@ -487,20 +710,25 @@ async function padLoadPage(page, defaultsReady) {
         if (!current()) return;
 
         // Index buttons by "col,row" for easy lookup
-        padState.buttons = [];
+        padState.mainButtons = [];
+        padState.overlayButtons = [];
         if (json.buttons && Array.isArray(json.buttons)) {
             json.buttons.forEach(b => {
-                padState.buttons.push(Object.assign({}, b));
+                padState.mainButtons.push(Object.assign({}, b));
             });
         }
+        if (json.overlay_buttons !== undefined && !Array.isArray(json.overlay_buttons))
+            throw new Error('Invalid overlay_buttons collection');
+        padState.overlayButtons = (json.overlay_buttons || []).map(b => Object.assign({}, b));
 
         // Cache colors for cross-pad swatches
-        padCacheColors(page, padState.buttons,
+        padCacheColors(page, padState.mainButtons.concat(padState.overlayButtons),
                    padColorToHex(json.bg_color || padGetEffectiveDefault('default_pad_bg_color'), padGetEffectiveDefault('default_pad_bg_color')));
         padRenderGrid();
     } catch (err) {
         if (!current()) return;
         console.error('padLoadPage error:', err);
+        if (throwOnError) throw err;
         showMessage('Failed to load Pad ' + (page + 1), 'error');
         padRenderGrid();
     } finally {
@@ -519,13 +747,28 @@ function padCloneJson(value) {
 }
 
 function padBuildSaveContext() {
+    const tracks = padTrackValidate(true);
+    if (!tracks.valid) {
+        const axis = tracks.rows.status !== 'valid' ? 'rows' : 'columns';
+        const field = padTrackField(axis);
+        const section = document.getElementById('pad-custom-track-sizes-section');
+        if (section) section.open = true;
+        padState.trackValidationError = true;
+        throw Object.assign(new Error(tracks[axis].message), {
+            trackFieldId: field && field.id,
+            trackAxis: axis,
+        });
+    }
+    padState.rowHeightsPx = tracks.rows.sizes;
+    padState.columnWidthsPx = tracks.columns.sizes;
     if (typeof padWorkspaceValidate === 'function') padWorkspaceValidate();
     const snapshot = {
         page: padState.page,
         cols: padState.cols,
         rows: padState.rows,
         rawJson: padCloneJson(padState.rawJson || {}),
-        buttons: padCloneJson(padState.buttons || []),
+        mainButtons: padCloneJson(padState.mainButtons || []),
+        overlayButtons: padCloneJson(padState.overlayButtons || []),
         bindings: padCloneJson(padState.bindings || []),
     };
 
@@ -534,6 +777,10 @@ function padBuildSaveContext() {
     payload.layout = payload.layout || 'grid';
     payload.cols = snapshot.cols;
     payload.rows = snapshot.rows;
+    if (tracks.columns.sizes.some(size => size > 0)) payload.column_widths_px = tracks.columns.sizes;
+    else delete payload.column_widths_px;
+    if (tracks.rows.sizes.some(size => size > 0)) payload.row_heights_px = tracks.rows.sizes;
+    else delete payload.row_heights_px;
     const padName = document.getElementById('pad-name').value.trim();
     if (padName) payload.name = padName;
     else delete payload.name;
@@ -597,19 +844,32 @@ function padBuildSaveContext() {
         delete payload.template_pad;
     }
 
-    payload.buttons = snapshot.buttons;
+    payload.buttons = snapshot.mainButtons;
+    if (snapshot.overlayButtons.length) payload.overlay_buttons = snapshot.overlayButtons;
+    else delete payload.overlay_buttons;
 
     // Convert color ints to hex strings for JSON
     payload.buttons.forEach(b => padColorsToHex(b));
+    if (payload.overlay_buttons) payload.overlay_buttons.forEach(b => padColorsToHex(b));
 
     // On boards with DISPLAY_BLANK_ON_SAVE, heavy PSRAM I/O during icon
     // upload causes DMA bus contention → cyan flashes on MIPI-DSI panels.
     // Blank the backlight for the entire save sequence and restore after.
     return {
         page: snapshot.page,
-        cols: snapshot.cols,
-        rows: snapshot.rows,
-        buttons: snapshot.buttons,
+        iconSources: {
+            byCatalogId: typeof padDraftIconSources === 'undefined' ? {} :
+                Object.fromEntries(Array.from(padDraftIconSources, ([id, record]) => [id, padCloneJson(record)])),
+            bySourceId: padCloneJson(padState.importedIconSources || {}),
+            byDraftId: padCloneJson(padState.draftIconSources || {}),
+            sourceIdMap: padCloneJson(padState.importedIconSourceIds || {}),
+        },
+        templatePage: padState.templatePad,
+        templateButtons: padCloneJson(
+            padState.importedPadConfigs && padState.importedPadConfigs[padState.templatePad]
+                ? padState.importedPadConfigs[padState.templatePad].buttons || []
+                : padState.templateButtons || []),
+        iconLayout: padCaptureIconLayout(),
         name: padName,
         body: JSON.stringify(payload),
         blankOnSave: Boolean(deviceInfoCache && deviceInfoCache.display_blank_on_save),
@@ -639,12 +899,20 @@ async function padSetSaveBrightness(brightness) {
 
 let padPersistenceQueue = Promise.resolve();
 
-function padQueuePersistence(context) {
-    const save = padPersistenceQueue.then(() => padPersistPage(context));
+function padQueuePersistenceOperation(operation) {
+    const save = padPersistenceQueue.then(operation);
     // Keep the queue usable after a failed save while preserving that failure
     // for the caller that initiated it.
     padPersistenceQueue = save.catch(() => {});
     return save;
+}
+
+function padQueuePersistence(context) {
+    return padQueuePersistenceOperation(async () => padPersistPage(await padPreparePageSave(context)));
+}
+
+function padQueuePreparedPersistence(prepared) {
+    return padQueuePersistenceOperation(() => padPersistPage(prepared));
 }
 
 async function padPersistPage(context) {
@@ -652,6 +920,11 @@ async function padPersistPage(context) {
     let brightnessBlanked = false;
 
     try {
+        await padUploadIconSources(context);
+        const body = JSON.stringify(context.payload);
+        if (new TextEncoder().encode(body).length > 48 * 1024)
+            throw new Error('Pad config exceeds the 48 KiB save limit.');
+
         if (context.blankOnSave) {
             const cfgResp = await fetch('/api/config');
             if (!cfgResp.ok) throw new Error('Failed to read display brightness: HTTP ' + cfgResp.status);
@@ -661,22 +934,27 @@ async function padPersistPage(context) {
             brightnessBlanked = true;
         }
 
-        await padUploadPageIcons(context);
+        await padInstallPreparedIcons(context);
 
+        if (context.operation) context.operation.stage('Saving configuration');
         const resp = await fetch('/api/pad?page=' + context.page, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: context.body,
+            body,
         });
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
             throw new Error(err.error || 'HTTP ' + resp.status);
         }
 
+        if (context.saveState) context.saveState.committed = true;
+        if (context.operation) context.operation.stage('Finishing save');
+
         if (context.blankOnSave) {
             // Wait for LVGL to rebuild tiles and render into the framebuffer
             await new Promise(r => setTimeout(r, 500));
         }
+        return context;
     } finally {
         if (brightnessBlanked) {
             await padSetSaveBrightness(savedBrightness);
@@ -686,6 +964,8 @@ async function padPersistPage(context) {
 
 async function padSavePage(options) {
     const bulk = Boolean(options && options.bulk);
+    const operation = options && options.operation;
+    const saveState = { committed: false };
     try {
         const section = document.getElementById('pad-config-section');
         let context;
@@ -694,43 +974,64 @@ async function padSavePage(options) {
         } catch (error) {
             if (bulk) throw error;
             padDialogShowValidationError(error);
+            if (error.trackFieldId) {
+                const field = document.getElementById(error.trackFieldId);
+                if (field) {
+                    padTrackSetError(error.trackAxis, error.message);
+                    field.focus();
+                }
+            }
             return null;
         }
         const workspace = typeof padWorkspace !== 'undefined' ? padWorkspace : null;
         const revision = workspace ? workspace.revision : 0;
-        await padQueuePersistence(context);
+        const selectedLayer = padState.selectedLayer;
+        context.operation = operation;
+        context.saveState = saveState;
+        if (operation) operation.stage('Waiting to save');
+        const persisted = await padQueuePersistence(context);
+        saveState.committed = true;
+        if (persisted && persisted.iconSources && (bulk || padState.page === context.page))
+            padState.importedIconSourceIds = padCloneJson(persisted.iconSources.sourceIdMap || {});
 
         if (!bulk && (document.getElementById('pad-config-section') !== section || padState.page !== context.page ||
             (workspace && (workspace !== padWorkspace || workspace.revision !== revision)))) return context;
 
-        showMessage('Pad ' + (context.page + 1) + ' saved', 'success');
         padClearDirty();
         if (typeof padWorkspaceRefresh === 'function') padWorkspaceRefresh();
 
         if (!bulk) {
+            if (operation) operation.stage('Refreshing editor');
             // Refresh deviceInfoCache so target screen dropdowns pick up new pad names.
             await getDeviceInfo(true);
             if (document.getElementById('pad-config-section') !== section || padState.page !== context.page ||
                 (workspace && workspace.revision !== revision)) return context;
-            const selected = workspace && workspace.selected ? [padState.editCol, padState.editRow, workspace.scope, workspace.tab] : null;
+            const selected = workspace && workspace.selected
+                ? [padState.selectedLayer, padState.editCol, padState.editRow, workspace.scope, workspace.tab]
+                : null;
             const body = selected ? workspace.root.querySelector('.pad-edit-body') : null;
             const scroll = body ? body.scrollTop : 0;
             const groups = body ? Array.from(body.querySelectorAll('details'), group => group.open) : [];
             // Reload to get canonical version from device.
-            await padLoadPage(context.page);
+            await padLoadPage(context.page, undefined, selectedLayer, Boolean(operation));
             if (selected && workspace === padWorkspace && padState.page === context.page) {
-                padDialogOpen(selected[0], selected[1]);
-                padWorkspaceSetScope(selected[2]);
-                padWorkspace.tab = selected[3];
+                padState.selectedLayer = selected[0];
+                if (typeof padWorkspaceRenderLayer === 'function') padWorkspaceRenderLayer();
+                padDialogOpen(selected[1], selected[2]);
+                padWorkspaceSetScope(selected[3]);
+                padWorkspace.tab = selected[4];
                 padWorkspaceRenderTabs();
                 body.querySelectorAll('details').forEach((group, index) => { group.open = groups[index]; });
                 body.scrollTop = scroll;
             }
         }
+        showMessage('Pad ' + (context.page + 1) + ' saved', 'success');
         return context;
     } catch (err) {
         console.error('padSavePage error:', err);
         if (bulk) throw err;
+        if (operation) throw new Error((saveState.committed ? 'Pad saved, but finishing the save failed: ' :
+            'Save could not be confirmed. Some changes may have reached the device. ') + err.message);
         showMessage('Save failed: ' + err.message, 'error');
         return null;
     }

@@ -10,6 +10,13 @@
 void handlePostIconInstall(AsyncWebServerRequest *request, uint8_t *data,
                            size_t len, size_t index, size_t total);
 
+// POST /api/icons/source — retain a validated source record (body handler)
+void handlePostIconSource(AsyncWebServerRequest *request, uint8_t *data,
+                          size_t len, size_t index, size_t total);
+
+// GET /api/icons/source?id=s_<24 hex digits> — retrieve retained source JSON
+void handleGetIconSource(AsyncWebServerRequest *request);
+
 // DELETE /api/icons/page?page=N — delete all icons for a page
 void handleDeletePageIcons(AsyncWebServerRequest *request);
 

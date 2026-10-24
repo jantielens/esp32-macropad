@@ -399,6 +399,27 @@ Available with `HAS_MQTT`, independently of display support. Four concurrent
 handles share a ten-second acquisition deadline and 30-second hard lifetime.
 See [inspection limits, status codes, and ownership](docs/dev/web-portal.md#mqtt-topic-inspection).
 
+### Foreground icon API
+
+| Endpoint | Purpose |
+| --- | --- |
+| `POST /api/icons/source` | Retain catalog SVG JSON or binary local PNG artwork and return a device-local source ID |
+| `GET /api/icons/source?id=<id>` | Read retained SVG JSON or binary PNG artwork for regeneration and export |
+| `POST /api/icons/install?id=...&source_id=...&kind=...&render_key=...` | Install a generated positional PNG for a button |
+| `GET /api/pad/icon_context?page=N` | Read layout context for direct dependent pads in one request |
+| `GET /api/icons/installed` and `GET/DELETE /api/icons/file?name=...` | List or remove generated PNGs |
+| `GET /api/icons/installed?pages=0,1` | Read validated artifact metadata for selected pads; saves reuse matching PNGs |
+| `DELETE /api/icons/page?page=N` | Remove a pad's generated PNGs during explicit deletion or reset |
+
+See the [icon store API reference](docs/dev/web-portal.md#icon-store-api) for
+limits and request details. Pad saves replace only obsolete generated files
+after the configuration is committed. Matching source, kind, render key, and
+calculated PNG dimensions let saves skip unchanged icon rendering and uploads.
+
+`GET /api/info` includes `configured_pads`, the saved pad IDs used for full icon
+regeneration. Ordinary saves use the focused icon-context endpoint instead of
+fetching every pad to discover template dependencies.
+
 ### Running Tests
 
 Host-native unit and integration tests run on the development machine (no ESP32 needed). They require CMake 3.20 or later. If CMake is installed through ESP-IDF but is not on `PATH`, use its toolchain directory for the commands below:

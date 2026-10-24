@@ -351,6 +351,7 @@ delete context.testHelpSchemes;
     const builders = vm.runInContext('padButtonBuilders', context);
     const valueBuilder = builders.find(builder => builder.id === 'value');
     const toggleBuilder = builders.find(builder => builder.id === 'toggle');
+    const toggleWidgetBuilder = builders.find(builder => builder.id === 'toggle_widget');
     const barBuilder = builders.find(builder => builder.id === 'bar');
     const gaugeBuilder = builders.find(builder => builder.id === 'gauge');
     const historyBuilder = builders.find(builder => builder.id === 'history');
@@ -467,7 +468,9 @@ delete context.testHelpSchemes;
     valueSession.draft.options.title = 'Living room';
     const lightSession = buildSession(light, toggleBuilder);
     const generatedLight = context.padButtonBuilderBuild(lightSession);
-    assert.strictEqual(generatedLight.icon_id, 'mi_lightbulb');
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedLight.icon)), {
+        catalog_id: 'material-symbols:lightbulb', kind: 'mono'
+    });
     assert.strictEqual(generatedLight.label_top_style, 'color:#000000', 'Keep the title legible on light button backgrounds');
     assert.strictEqual(generatedLight.fg_color, '[expr:[ha:light.kitchen]=="on"?"#FFC857":"#64748B"|#EF6B73]');
     assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedLight.actions)), [
@@ -480,15 +483,31 @@ delete context.testHelpSchemes;
     assert.strictEqual(toggleBuilder.available(makeDraft(switchDetail)), true);
     const switchSession = buildSession(switchDetail, toggleBuilder);
     const generatedSwitch = context.padButtonBuilderBuild(switchSession);
-    assert.strictEqual(generatedSwitch.icon_id, 'mi_toggle_on');
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedSwitch.icon)), {
+        catalog_id: 'material-symbols:toggle-on', kind: 'mono'
+    });
     assert.strictEqual(generatedSwitch.fg_color, '[expr:[ha:switch.desk_fan]=="on"?"#FFC857":"#64748B"|#EF6B73]');
     assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedSwitch.actions)), [
         { type: 'ha_service', entity_id: 'switch.desk_fan', service: 'toggle' }
+    ]);
+    const toggleRuntime = { widget_catalog: [{ type: 'toggle' }] };
+    assert.strictEqual(toggleWidgetBuilder.available(makeDraft(temperature), toggleRuntime), false);
+    assert.strictEqual(toggleWidgetBuilder.available(makeDraft(light), { widget_catalog: [] }), false);
+    assert.strictEqual(toggleWidgetBuilder.available(makeDraft(light), toggleRuntime), true);
+    const generatedToggleWidget = context.padButtonBuilderBuild(buildSession(light, toggleWidgetBuilder));
+    assert.strictEqual(generatedToggleWidget.widget_type, 'toggle');
+    assert.strictEqual(generatedToggleWidget.widget_data_binding, '[ha:light.kitchen]');
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedToggleWidget.actions)), [
+        { type: 'ha_service', entity_id: 'light.kitchen', service: 'turn_on' }
+    ]);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedToggleWidget.lp_actions)), [
+        { type: 'ha_service', entity_id: 'light.kitchen', service: 'turn_off' }
     ]);
     const catalogEntry = context.actionEditorCatalogEntry;
     context.actionEditorCatalogEntry = () => null;
     assert.strictEqual(toggleBuilder.available(makeDraft(switchDetail)), false);
     assert.strictEqual(toggleBuilder.available(makeDraft(light)), false);
+    assert.strictEqual(toggleWidgetBuilder.available(makeDraft(light), toggleRuntime), false);
     context.actionEditorCatalogEntry = catalogEntry;
     const previewColors = ['on', 'off', 'unavailable'].map(previewState =>
         toggleBuilder.preview({ ...lightSession.draft, previewState }).fg_color);

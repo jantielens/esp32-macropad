@@ -6,6 +6,8 @@ description: Configure recipe parameters, place a scenario without overwriting b
 A recipe adds a prepared set of buttons to a selected pad and can also configure
 related features. It is useful for installing a working starting point without
 building every control by hand, but it is not a full-device backup or restore.
+Recipe buttons are added to Main. Existing Overlay buttons remain in place, and
+the device checks the shared button limit across both layers.
 
 ## Prepare the catalog
 
@@ -33,9 +35,10 @@ Adaptive recipes can choose a smaller forward-fitting footprint near an edge.
 On an empty grid that is too small, the portal can offer the smallest supported
 grid increase that fits.
 
-When existing buttons block every placement, **Clear Buttons** confirms and
-saves an empty button list. It retains other pad settings and does not itself
-install the recipe. This is an immediate write, not just an editor draft.
+When Main buttons block every placement, **Clear Main Buttons** confirms and
+saves an empty Main button list. It retains Overlay buttons and other pad
+settings and does not itself install the recipe. This is an immediate write,
+not just an editor draft.
 
 ## Review feature changes
 

@@ -41,7 +41,12 @@ uint8_t action_list_parse(JsonVariant v, ButtonAction* out, uint8_t max,
 
 void action_list_dispatch(const ButtonAction* actions, uint8_t count, const char* label,
                           ActionContinuationOwner owner) {
-    if (!actions) return;
+    action_list_dispatch_result(actions, count, label, owner);
+}
+
+ActionResult action_list_dispatch_result(const ButtonAction* actions, uint8_t count, const char* label,
+                                         ActionContinuationOwner owner) {
+    if (!actions) return ACTION_COMPLETE;
     for (uint8_t i = 0; i < count; i++) {
         const uint8_t remaining_count = count - i - 1;
         uint32_t continuation_token = 0;
@@ -56,19 +61,20 @@ void action_list_dispatch(const ButtonAction* actions, uint8_t count, const char
             // as unavailable and return ACTION_FAILED before starting work.
             if (result == ACTION_PENDING) {
                 LOGW("Action", "%s pending action started without continuation slot", label);
-                return;
+                return ACTION_FAILED;
             }
-            if (result == ACTION_FAILED) return;
+            if (result == ACTION_FAILED) return ACTION_FAILED;
             continue;
         }
 
         if (result == ACTION_PENDING) {
             action_continuation_mark_pending(continuation_token);
-            return;
+            return ACTION_PENDING;
         }
         action_continuation_release(continuation_token);
-        if (result == ACTION_FAILED) return;
+        if (result == ACTION_FAILED) return ACTION_FAILED;
     }
+    return ACTION_COMPLETE;
 }
 
 void action_list_dispatch_continuation(ActionContinuationOwner owner) {

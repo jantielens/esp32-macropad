@@ -29,7 +29,8 @@
 #endif
 
 #define CONFIG_LABEL_MAX_LEN          192
-#define CONFIG_ICON_ID_MAX_LEN         32
+#define CONFIG_ICON_SOURCE_ID_MAX_LEN  27
+#define CONFIG_ICON_KEY_MAX_LEN        32
 #define CONFIG_SCREEN_ID_MAX_LEN       32
 #define CONFIG_MQTT_TOPIC_MAX_LEN     128
 #define CONFIG_MQTT_PAYLOAD_MAX_LEN   128
@@ -410,8 +411,9 @@ struct ScreenButtonConfig {
     char label_center_color_bind[CONFIG_LABEL_STYLE_MAX_LEN];
     char label_bottom_color_bind[CONFIG_LABEL_STYLE_MAX_LEN];
 
-    // Icon reference
-    char icon_id[CONFIG_ICON_ID_MAX_LEN];
+    // Retained icon source reference and explicit render kind
+    char icon_source_id[CONFIG_ICON_SOURCE_ID_MAX_LEN];
+    uint8_t icon_kind;
     uint8_t icon_scale_pct;             // 0 = auto (widget-aware), 1-250 = explicit scale %
     uint8_t icon_position;              // 0=above (default), 1=left, 2=center
     int16_t ui_offset_x;                // Optional visual nudge X in px (+right, -left)
@@ -535,6 +537,8 @@ struct PadConfig {
     char layout[CONFIG_LAYOUT_NAME_MAX_LEN]; // "grid" or curated layout name
     uint8_t cols;                            // 1-8 (grid mode only)
     uint8_t rows;                            // 1-8 (grid mode only)
+    uint16_t column_widths_px[MAX_GRID_COLS]; // 0 = Auto
+    uint16_t row_heights_px[MAX_GRID_ROWS];   // 0 = Auto
     char wake_screen[CONFIG_SCREEN_ID_MAX_LEN]; // screen to navigate to on screensaver sleep (empty = stay)
     char bg_color[CONFIG_COLOR_MAX_LEN];         // pad background color (default "#000000")
     uint8_t button_shadow;                        // ButtonShadowMode override
@@ -555,7 +559,8 @@ struct PadConfig {
     ButtonAction pad_actions[MAX_BUTTON_ACTIONS];
     uint8_t pad_action_count;
 
-    uint8_t button_count;
+    uint8_t button_count;                 // Combined Main + Overlay count
+    uint8_t main_button_count;            // Overlay starts at this index
     ScreenButtonConfig* buttons;           // exact-size trailing allocation
 };
 
@@ -589,7 +594,8 @@ bool pad_config_get_data_stream_snapshot(uint8_t page,
                                          PadDataStreamSnapshot* out);
 
 // Save raw JSON bytes to LittleFS. Preserves all fields including future/unknown ones.
-bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len);
+bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
+                         const char** error = nullptr);
 
 // Delete page config file from LittleFS.
 bool pad_config_delete(uint8_t page);

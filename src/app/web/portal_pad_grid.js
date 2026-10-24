@@ -12,10 +12,45 @@ function padGetGridGeometry() {
     const grid = document.getElementById('pad-grid');
     if (!grid) return null;
     const rect = grid.getBoundingClientRect();
-    const gap = parseFloat(getComputedStyle(grid).gap) || 4;
-    const cellW = (rect.width - gap * (padState.cols - 1)) / padState.cols;
-    const cellH = (rect.height - gap * (padState.rows - 1)) / padState.rows;
-    return { rect, gap, cellW, cellH };
+    const style = getComputedStyle(grid);
+    const gapX = parseFloat(style.columnGap || style.gap) || 0;
+    const gapY = parseFloat(style.rowGap || style.gap) || 0;
+    const parseTracks = (value, count, size, gap) => {
+        const tracks = String(value || '').split(/\s+/).map(parseFloat).filter(Number.isFinite);
+        if (tracks.length === count) return tracks;
+        return Array(count).fill(Math.max(0, (size - gap * (count - 1)) / count));
+    };
+    const columnSizes = parseTracks(style.gridTemplateColumns, padState.cols, rect.width, gapX);
+    const rowSizes = parseTracks(style.gridTemplateRows, padState.rows, rect.height, gapY);
+    return { rect, gap: gapX, gapX, gapY, columnSizes, rowSizes };
+}
+
+function padResizeTrackDelta(raw, side, geometry, col, row, colSpan, rowSpan) {
+    const horizontal = side === 'left' || side === 'right';
+    const forward = side === 'right' || side === 'down';
+    const movement = raw * (forward ? 1 : -1);
+    const sizes = horizontal ? geometry.columnSizes : geometry.rowSizes;
+    const gap = horizontal ? geometry.gapX : geometry.gapY;
+    const origin = horizontal ? col : row;
+    const span = horizontal ? colSpan : rowSpan;
+    let track = movement >= 0
+        ? (forward ? origin + span : origin - 1)
+        : (forward ? origin + span - 1 : origin);
+    const step = movement >= 0
+        ? (forward ? 1 : -1)
+        : (forward ? -1 : 1);
+    let distance = Math.abs(movement);
+    let consumed = 0;
+    let delta = 0;
+    while (track >= 0 && track < sizes.length) {
+        const pitch = sizes[track] + gap;
+        if (pitch <= 0) break;
+        if (distance < consumed + pitch * 0.2) break;
+        delta += movement >= 0 ? 1 : -1;
+        consumed += pitch;
+        track += step;
+    }
+    return delta;
 }
 
 function padRenderResizeHandles(cell, btn, col, row) {
@@ -48,9 +83,6 @@ function padResizeDragStart(col, row, side, startX, startY) {
 
     const origCol = btn.col, origRow = btn.row;
     const origCs = btn.col_span || 1, origRs = btn.row_span || 1;
-    const axis = (side === 'left' || side === 'right') ? 'x' : 'y';
-    const cellSize = axis === 'x' ? geo.cellW + geo.gap : geo.cellH + geo.gap;
-
     const occupied = padBuildOccupancySet();
     // Remove this button's own cells from the occupancy set
     for (let dc = 0; dc < origCs; dc++)
@@ -60,11 +92,8 @@ function padResizeDragStart(col, row, side, startX, startY) {
     let lastDelta = 0;
 
     function onMove(clientX, clientY) {
-        const raw = axis === 'x' ? clientX - startX : clientY - startY;
-        const sign = (side === 'right' || side === 'down') ? 1 : -1;
-        // Snap at 20% into the next cell: 0.8 = 1.0 − 0.2, so floor triggers at frac ≥ 0.2
-        const frac = (raw * sign) / cellSize;
-        const delta = frac >= 0 ? Math.floor(frac + 0.8) : Math.ceil(frac - 0.8);
+        const raw = (side === 'left' || side === 'right') ? clientX - startX : clientY - startY;
+        const delta = padResizeTrackDelta(raw, side, geo, origCol, origRow, origCs, origRs);
         if (delta === lastDelta) return;
         lastDelta = delta;
 
@@ -135,7 +164,7 @@ function padCanPlaceTemplateButton(tplBtn) {
         for (let dr = 0; dr < rs; dr++) {
             const c = tplBtn.col + dc, r = tplBtn.row + dr;
             if (c >= cols || r >= rows) return false;
-            if (padState.buttons.some(b => {
+            if (padState.mainButtons.some(b => {
                 const bcs = b.col_span || 1, brs = b.row_span || 1;
                 return c >= b.col && c < b.col + bcs && r >= b.row && r < b.row + brs;
             })) return false;
@@ -144,109 +173,163 @@ function padCanPlaceTemplateButton(tplBtn) {
     return true;
 }
 
+function padRenderGridTracks() {
+    const grid = document.getElementById('pad-grid');
+    if (!grid) return;
+    const cols = padState.cols;
+    const rows = padState.rows;
+
+    const displayW = Number(deviceInfoCache && deviceInfoCache.display_coord_width) || cols;
+    const displayH = Number(deviceInfoCache && deviceInfoCache.display_coord_height) || rows;
+    const gap = Number(padGetEffectiveDefault('button_spacing_px')) || 0;
+    const columnSizing = padComputeAxisTrackSizes(cols,
+        padGetTrackAvailableSize('columns', displayW), gap, padState.columnWidthsPx);
+    const rowSizing = padComputeAxisTrackSizes(rows,
+        padGetTrackAvailableSize('rows', displayH), gap, padState.rowHeightsPx);
+    const rect = typeof grid.getBoundingClientRect === 'function' ? grid.getBoundingClientRect() : null;
+    const gridWidth = parseFloat(grid.style.width) || (rect && rect.width) || displayW;
+    const gridHeight = parseFloat(grid.style.height) || (rect && rect.height) || displayH;
+    const scaleX = displayW ? gridWidth / displayW : 1;
+    const scaleY = displayH ? gridHeight / displayH : scaleX;
+    grid.style.gridTemplateColumns = columnSizing.sizes.map(size => size * scaleX + 'px').join(' ');
+    grid.style.gridTemplateRows = rowSizing.sizes.map(size => size * scaleY + 'px').join(' ');
+}
+
+function padCreateGridButton(button, layer, kind) {
+    const cell = document.createElement('div');
+    cell.classList.add('pad-cell');
+    cell.dataset.col = button.col;
+    cell.dataset.row = button.row;
+    cell.dataset.layer = layer;
+    const colSpan = Math.min(button.col_span || 1, padState.cols - button.col);
+    const rowSpan = Math.min(button.row_span || 1, padState.rows - button.row);
+    cell.style.gridColumn = (button.col + 1) + ' / span ' + Math.max(1, colSpan);
+    cell.style.gridRow = (button.row + 1) + ' / span ' + Math.max(1, rowSpan);
+    if (kind === 'button') cell.classList.add('pad-cell-btn');
+    if (layer === 'main' && padState.selectedLayer === 'overlay') cell.classList.add('pad-cell-main-preview');
+    if (layer === 'overlay') cell.classList.add('pad-cell-overlay');
+    if (kind === 'template') {
+        cell.classList.add('pad-cell-ghost');
+        cell.title = 'Inherited from template pad';
+    }
+    padRenderCellContent(cell, button);
+    if (kind === 'button' && layer === padState.selectedLayer && !padState.placingBlock) {
+        padRenderResizeHandles(cell, button, button.col, button.row);
+        const col = button.col, row = button.row;
+        cell.addEventListener('click', () => padWorkspaceSelect(col, row));
+        cell.draggable = true;
+        cell.addEventListener('dragstart', event => padDragStart(event, col, row));
+        cell.addEventListener('dragend', padDragEnd);
+    }
+    return cell;
+}
+
+function padUpdateButtonPreview(previous, button) {
+    if (!previous && !padState.placingBlock && (button.col_span || 1) === 1 && (button.row_span || 1) === 1) {
+        const empty = document.querySelector('#pad-grid .pad-cell-empty[data-layer="' + padState.selectedLayer + '"][data-col="' + button.col + '"][data-row="' + button.row + '"]');
+        if (empty) {
+            empty.replaceWith(padCreateGridButton(button, padState.selectedLayer, 'button'));
+            return;
+        }
+    }
+    if (!previous || previous.col !== button.col || previous.row !== button.row ||
+        (previous.col_span || 1) !== (button.col_span || 1) ||
+        (previous.row_span || 1) !== (button.row_span || 1)) {
+        padRenderGrid();
+        return;
+    }
+    if (padCellPreviewSignature(previous) === padCellPreviewSignature(button)) return;
+    const cell = document.querySelector('#pad-grid .pad-cell-btn[data-layer="' + padState.selectedLayer + '"][data-col="' + button.col + '"][data-row="' + button.row + '"]');
+    if (!cell) { padRenderGrid(); return; }
+    const sameIcon = JSON.stringify(previous.icon) === JSON.stringify(button.icon) &&
+        padColorToHex(previous.fg_color, padGetEffectiveDefault('fg_color')) === padColorToHex(button.fg_color, padGetEffectiveDefault('fg_color'));
+    const icon = sameIcon ? cell.querySelector('.pad-cell-icon') : null;
+    cell.replaceChildren();
+    cell.classList.remove('pad-cell-has-widget');
+    cell.style.justifyContent = '';
+    cell.style.padding = '';
+    cell.removeAttribute('aria-description');
+    padRenderCellContent(cell, button, icon);
+    padRenderResizeHandles(cell, button, button.col, button.row);
+}
+
+function padUpdateGridBackground() {
+    const grid = document.getElementById('pad-grid');
+    if (!grid) return;
+    const input = document.getElementById('pad-edit-page-bg-color');
+    grid.style.background = input && /^#[0-9a-fA-F]{6}$/.test(input.value.trim())
+        ? input.value.trim() : padGetEffectiveDefault('default_pad_bg_color');
+    grid.querySelectorAll('.pad-cell-btn').forEach(padUpdateCellBoundaryGuide);
+}
+
 function padRenderGrid() {
     const grid = document.getElementById('pad-grid');
     if (!grid) return;
 
     const cols = padState.cols;
     const rows = padState.rows;
-
-    grid.style.gridTemplateColumns = 'repeat(' + cols + ', 1fr)';
-    grid.style.gridTemplateRows = 'repeat(' + rows + ', 1fr)';
+    padRenderGridTracks();
     // Apply device aspect ratio so the editor mimics the real screen
     if (deviceInfoCache && deviceInfoCache.display_coord_width && deviceInfoCache.display_coord_height) {
         grid.style.aspectRatio = deviceInfoCache.display_coord_width + ' / ' + deviceInfoCache.display_coord_height;
     }
-    const pageBgInput = document.getElementById('pad-edit-page-bg-color');
-    grid.style.background = (pageBgInput && /^#[0-9a-fA-F]{6}$/.test(pageBgInput.value.trim())) ? pageBgInput.value.trim() : padGetEffectiveDefault('default_pad_bg_color');
+    padUpdateGridBackground();
     grid.innerHTML = '';
 
-    // Track which cells are "covered" by a spanning button
-    const covered = new Set();
-
-    // First pass: place buttons with spans
-    for (const b of padState.buttons) {
-        const bc = b.col, br = b.row;
-        const cs = Math.min(b.col_span || 1, cols - bc);
-        const rs = Math.min(b.row_span || 1, rows - br);
-        if (bc >= cols || br >= rows) continue; // Out of current grid
-
-        for (let dc = 0; dc < cs; dc++) {
-            for (let dr = 0; dr < rs; dr++) {
-                if (dc === 0 && dr === 0) continue;
-                covered.add((bc + dc) + ',' + (br + dr));
-            }
+    const editingOverlay = padState.selectedLayer === 'overlay';
+    const mainOccupied = padGridOccupiedCells(padState.mainButtons, cols, rows);
+    const overlayOccupied = padGridOccupiedCells(padState.overlayButtons, cols, rows);
+    const activeOccupied = new Set(editingOverlay ? overlayOccupied : mainOccupied);
+    if (!editingOverlay) {
+        for (const button of padState.templateButtons) {
+            if (!padCanPlaceTemplateButton(button)) continue;
+            for (let dc = 0; dc < (button.col_span || 1); dc++)
+                for (let dr = 0; dr < (button.row_span || 1); dr++)
+                    activeOccupied.add((button.col + dc) + ',' + (button.row + dr));
         }
     }
 
-    // Build full occupancy set for resize handle validation
-    const occupied = padBuildOccupancySet();
+    const makeCell = (button, layer, kind) => grid.appendChild(padCreateGridButton(button, layer, kind));
 
-    // Second pass: render cells
-    for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-            const key = c + ',' + r;
-            if (covered.has(key)) continue; // Skip cells covered by a span
+    const addTemplatePreviews = () => {
+        for (const button of padState.templateButtons) {
+            if (mainOccupied.has(button.col + ',' + button.row) || !padCanPlaceTemplateButton(button)) continue;
+            makeCell(button, 'main', 'template');
+        }
+    };
 
-            const btn = padFindButton(c, r);
+    if (editingOverlay) {
+        for (const button of padState.mainButtons) {
+            if (button.col < cols && button.row < rows) makeCell(button, 'main', 'button');
+        }
+        addTemplatePreviews();
+    }
+
+    const activeButtons = editingOverlay ? padState.overlayButtons : padState.mainButtons;
+    for (const button of activeButtons) {
+        if (button.col < cols && button.row < rows) makeCell(button, padState.selectedLayer, 'button');
+    }
+
+    if (!editingOverlay) addTemplatePreviews();
+
+    for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+            if (activeOccupied.has(col + ',' + row)) continue;
             const cell = document.createElement('div');
-            cell.classList.add('pad-cell');
-            cell.dataset.col = c;
-            cell.dataset.row = r;
-            cell.style.gridColumn = (c + 1) + ' / span 1';
-            cell.style.gridRow = (r + 1) + ' / span 1';
-
-            if (btn) {
-                cell.classList.add('pad-cell-btn');
-                const cs = Math.min(btn.col_span || 1, cols - c);
-                const rs = Math.min(btn.row_span || 1, rows - r);
-                if (cs > 1) cell.style.gridColumn = (c + 1) + ' / span ' + cs;
-                if (rs > 1) cell.style.gridRow = (r + 1) + ' / span ' + rs;
-
-                padRenderCellContent(cell, btn);
-
-                padRenderResizeHandles(cell, btn, c, r);
-
-                if (!padState.placingBlock) {
-                    cell.addEventListener('click', () => padWorkspaceSelect(c, r));
-                    cell.draggable = true;
-                    cell.addEventListener('dragstart', (e) => padDragStart(e, c, r));
-                    cell.addEventListener('dragend', padDragEnd);
-                }
-            } else {
-                // Check if a template button occupies this position
-                const tplBtn = padFindTemplateButton(c, r);
-                if (tplBtn && padCanPlaceTemplateButton(tplBtn)) {
-                    cell.classList.add('pad-cell-btn', 'pad-cell-ghost');
-                    const cs = Math.min(tplBtn.col_span || 1, cols - c);
-                    const rs = Math.min(tplBtn.row_span || 1, rows - r);
-                    if (cs > 1) cell.style.gridColumn = (c + 1) + ' / span ' + cs;
-                    if (rs > 1) cell.style.gridRow = (r + 1) + ' / span ' + rs;
-                    padRenderCellContent(cell, tplBtn);
-                    // Mark cells covered by this template button's span
-                    for (let dc = 0; dc < cs; dc++) {
-                        for (let dr = 0; dr < rs; dr++) {
-                            if (dc === 0 && dr === 0) continue;
-                            covered.add((c + dc) + ',' + (r + dr));
-                        }
-                    }
-                    cell.title = 'Inherited from template pad';
-                } else {
-                    cell.classList.add('pad-cell-empty');
-                    cell.textContent = '+';
-                    if (!padState.placingBlock) {
-                        cell.addEventListener('dragover', (e) => padDragOver(e, c, r));
-                        cell.addEventListener('dragleave', padDragLeave);
-                        cell.addEventListener('drop', (e) => padDrop(e, c, r));
-                    }
-                }
-                if (padState.placingBlock) {
-                    cell.addEventListener('click', () => padPlacementClick(c, r));
-                } else {
-                    cell.addEventListener('click', () => padWorkspaceSelect(c, r));
-                }
+            cell.classList.add('pad-cell', 'pad-cell-empty');
+            cell.dataset.col = col;
+            cell.dataset.row = row;
+            cell.dataset.layer = padState.selectedLayer;
+            cell.style.gridColumn = (col + 1) + ' / span 1';
+            cell.style.gridRow = (row + 1) + ' / span 1';
+            cell.textContent = '+';
+            if (padState.placingBlock) cell.addEventListener('click', () => padPlacementClick(col, row));
+            else cell.addEventListener('click', () => padWorkspaceSelect(col, row));
+            if (!padState.placingBlock) {
+                cell.addEventListener('dragover', event => padDragOver(event, col, row));
+                cell.addEventListener('dragleave', padDragLeave);
+                cell.addEventListener('drop', event => padDrop(event, col, row));
             }
-
             grid.appendChild(cell);
         }
     }
@@ -260,6 +343,18 @@ function padRenderGrid() {
         grid.onmouseleave = null;
     }
     if (typeof padWorkspaceRefresh === 'function') padWorkspaceRefresh();
+}
+
+function padGridOccupiedCells(buttons, cols, rows) {
+    const occupied = new Set();
+    for (const button of buttons) {
+        const colSpan = Math.min(button.col_span || 1, cols - button.col);
+        const rowSpan = Math.min(button.row_span || 1, rows - button.row);
+        for (let dc = 0; dc < colSpan; dc++)
+            for (let dr = 0; dr < rowSpan; dr++)
+                occupied.add((button.col + dc) + ',' + (button.row + dr));
+    }
+    return occupied;
 }
 
 function padPlacementHover(e) {

@@ -1,6 +1,6 @@
 /**
  * @file lv_conf.h
- * Configuration file for LVGL v9.5.0
+ * Configuration file for LVGL v9.6.0
  *
  * Rewritten from v8.4 for native v9 API.
  */
@@ -29,8 +29,8 @@
    COLOR SETTINGS
  *====================*/
 
-/* Color depth: 1 (1 byte per pixel), 8 (RGB332), 16 (RGB565), 32 (ARGB8888) */
-#define LV_COLOR_DEPTH 16
+/* Default pixel format: 16-bit RGB565. */
+#define LV_COLOR_FORMAT_DEFAULT LV_COLOR_FORMAT_RGB565
 
 /*=========================
    STDLIB SETTINGS
@@ -234,7 +234,7 @@
 #define LV_USE_SPAN       0
 #define LV_USE_SPINBOX    0
 #define LV_USE_SPINNER    1
-#define LV_USE_SWITCH     0
+#define LV_USE_SWITCH     1
 #define LV_USE_TABLE      1
 #define LV_USE_TABVIEW    0
 #define LV_USE_TEXTAREA   0

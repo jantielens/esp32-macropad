@@ -2,7 +2,7 @@
 // Part of the ESP32 Macropad configuration portal.
 
 function padStripPosition(btn) {
-    const copy = Object.assign({}, btn);
+    const copy = padCloneJson(btn);
     delete copy.col;
     delete copy.row;
     // Keep col_span/row_span in clipboard for best-effort paste
@@ -48,13 +48,18 @@ function padDialogPasteBtn() {
     if (!padState.btnClipboard) return;
     const col = padState.editCol;
     const row = padState.editRow;
+    const existing = padFindButton(col, row);
+    if (!existing && padState.mainButtons.length + padState.overlayButtons.length >= padMaxButtons()) {
+        showMessage('Combined Main and Overlay button limit reached (' + padMaxButtons() + ')', 'error');
+        return;
+    }
     if (typeof padWorkspaceClearButton === 'function') padWorkspaceClearButton(col, row);
 
     // Remove existing button at this position
     padState.buttons = padState.buttons.filter(b => !(b.col === col && b.row === row));
 
     // Paste clipboard with new position — best-effort span fitting
-    const btn = Object.assign({}, padState.btnClipboard, { col: col, row: row });
+    const btn = Object.assign(padCloneJson(padState.btnClipboard), { col: col, row: row });
     const srcCs = btn.col_span || 1;
     const srcRs = btn.row_span || 1;
     if (srcCs > 1 || srcRs > 1) {
@@ -76,15 +81,22 @@ function padDialogPasteBtn() {
 
 function padFillWithClipboard() {
     if (!padState.btnClipboard) return;
+    const otherLayerCount = padState.selectedLayer === 'overlay'
+        ? padState.mainButtons.length : padState.overlayButtons.length;
+    const fillCount = padState.cols * padState.rows;
+    if (otherLayerCount + fillCount > padMaxButtons()) {
+        showMessage('Filling this layer would exceed the combined button limit (' + padMaxButtons() + ')', 'error');
+        return;
+    }
     if (!confirm('Fill all cells with the copied button settings?')) return;
-    if (typeof padWorkspaceReset === 'function') padWorkspaceReset();
+    if (typeof padWorkspaceReset === 'function') padWorkspaceReset(padState.selectedLayer);
 
     for (let r = 0; r < padState.rows; r++) {
         for (let c = 0; c < padState.cols; c++) {
             // Remove existing button
             padState.buttons = padState.buttons.filter(b => !(b.col === c && b.row === r));
             // Add copy (strip spans — every cell gets a 1×1 button)
-            const btn = Object.assign({}, padState.btnClipboard, { col: c, row: r });
+            const btn = Object.assign(padCloneJson(padState.btnClipboard), { col: c, row: r });
             delete btn.col_span;
             delete btn.row_span;
             padState.buttons.push(btn);
@@ -98,6 +110,16 @@ function padFillWithClipboard() {
 // --- Pad clipboard (copy/paste entire pad) ---
 
 function padCopyPad() {
+    const tracks = padTrackValidate(true);
+    if (!tracks.valid) {
+        const axis = tracks.rows.status !== 'valid' ? 'rows' : 'columns';
+        const section = document.getElementById('pad-custom-track-sizes-section');
+        if (section) section.open = true;
+        const field = padTrackField(axis);
+        if (field && field.focus) field.focus();
+        showMessage(tracks[axis].message, 'error');
+        return;
+    }
     try { if (typeof padWorkspaceValidate === 'function') padWorkspaceValidate(); }
     catch (error) { showMessage(error.message, 'error'); return; }
     // Snapshot current pad and button defaults from UI
@@ -105,10 +127,13 @@ function padCopyPad() {
     padState.padClipboard = {
         cols: padState.cols,
         rows: padState.rows,
+        column_widths_px: tracks.columns.sizes,
+        row_heights_px: tracks.rows.sizes,
         name: document.getElementById('pad-name').value.trim(),
         wake_screen: document.getElementById('pad-wake-screen').value,
         bg_color: padGetBindableColor('pad-edit-page-bg-color') || padGetEffectiveDefault('default_pad_bg_color'),
-        buttons: padState.buttons.map(b => Object.assign({}, b)),
+        buttons: padCloneJson(padState.mainButtons),
+        overlay_buttons: padCloneJson(padState.overlayButtons),
         bindings: padState.bindings ? padState.bindings.map(b => Object.assign({}, b)) : [],
         padActions: padBuildLevelActions().map(a => Object.assign({}, a)),
         buttonDefaults: Object.assign({}, padState.buttonDefaults),
@@ -125,7 +150,8 @@ function padPastePad() {
 
     padState.cols = padState.padClipboard.cols;
     padState.rows = padState.padClipboard.rows;
-    padState.buttons = padState.padClipboard.buttons.map(b => Object.assign({}, b));
+    padState.mainButtons = padCloneJson(padState.padClipboard.buttons);
+    padState.overlayButtons = padCloneJson(padState.padClipboard.overlay_buttons || []);
 
     document.getElementById('pad-cols').value = padState.cols;
     document.getElementById('pad-rows').value = padState.rows;
@@ -143,6 +169,10 @@ function padPastePad() {
 
     // Paste pad and button defaults
     padLoadButtonDefaults(padState.padClipboard.buttonDefaults || {});
+    padTrackLoad({
+        column_widths_px: padState.padClipboard.column_widths_px || [],
+        row_heights_px: padState.padClipboard.row_heights_px || [],
+    });
 
     // Paste template pad (clear if it would reference self)
     padState.templatePad = (padState.padClipboard.templatePad !== undefined &&
@@ -156,7 +186,17 @@ function padPastePad() {
 
 // --- Export/import single pad ---
 
-function padExportPad() {
+async function padExportPad() {
+    const tracks = padTrackValidate(true);
+    if (!tracks.valid) {
+        const axis = tracks.rows.status !== 'valid' ? 'rows' : 'columns';
+        const section = document.getElementById('pad-custom-track-sizes-section');
+        if (section) section.open = true;
+        const field = padTrackField(axis);
+        if (field && field.focus) field.focus();
+        showMessage(tracks[axis].message, 'error');
+        return;
+    }
     try { if (typeof padWorkspaceValidate === 'function') padWorkspaceValidate(); }
     catch (error) { showMessage(error.message, 'error'); return; }
     padCollectButtonDefaults();
@@ -164,12 +204,19 @@ function padExportPad() {
         layout: 'grid',
         cols: padState.cols,
         rows: padState.rows,
-        buttons: padState.buttons.map(b => {
-            const copy = Object.assign({}, b);
+        buttons: padState.mainButtons.map(b => {
+            const copy = padCloneJson(b);
+            padColorsToHex(copy);
+            return copy;
+        }),
+        overlay_buttons: padState.overlayButtons.map(b => {
+            const copy = padCloneJson(b);
             padColorsToHex(copy);
             return copy;
         }),
     };
+    if (tracks.columns.sizes.some(size => size > 0)) payload.column_widths_px = tracks.columns.sizes;
+    if (tracks.rows.sizes.some(size => size > 0)) payload.row_heights_px = tracks.rows.sizes;
     const padName = document.getElementById('pad-name').value.trim();
     if (padName) payload.name = padName;
     const wakeScreen = document.getElementById('pad-wake-screen').value;
@@ -190,12 +237,22 @@ function padExportPad() {
     const padShadow = document.getElementById('pad-button-shadow').value || 'inherit';
     if (padShadow !== 'inherit') payload.button_shadow = padShadow;
 
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'pad_' + (padState.page + 1) + (padName ? '_' + padName.replace(/[^a-zA-Z0-9_-]/g, '_') : '') + '.json';
-    a.click();
-    URL.revokeObjectURL(a.href);
+    try {
+        payload._icon_sources = await padCollectExportIconSources(
+            [{ page: padState.page, payload }], [padState.page],
+            Number(deviceInfoCache && deviceInfoCache.max_pads) || 8, {
+                byDraftId: padState.draftIconSources || {},
+                bySourceId: padState.importedIconSources || {},
+            });
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'pad_' + (padState.page + 1) + (padName ? '_' + padName.replace(/[^a-zA-Z0-9_-]/g, '_') : '') + '.json';
+        a.click();
+        URL.revokeObjectURL(a.href);
+    } catch (error) {
+        showMessage('Export failed: ' + error.message, 'error');
+    }
 }
 
 async function padImportPad(evt) {
@@ -206,22 +263,36 @@ async function padImportPad(evt) {
     const section = document.getElementById('pad-config-section');
 
     try {
+        if (Number(file.size) > 16 * 1024 * 1024) throw new Error('Import file exceeds the 16 MiB limit.');
         const text = await file.text();
         const json = JSON.parse(text);
         if (padState.page !== page || document.getElementById('pad-config-section') !== section) return;
 
-        if (!json.cols || !json.rows || !Array.isArray(json.buttons)) {
+        if (!json.cols || !json.rows || !Array.isArray(json.buttons) ||
+            (json.overlay_buttons !== undefined && !Array.isArray(json.overlay_buttons))) {
             throw new Error('Invalid pad JSON: missing cols, rows, or buttons');
         }
+        const importedSources = padValidateImportedIconSources([json], json._icon_sources);
+        if (json.buttons.length + (json.overlay_buttons || []).length > padMaxButtons())
+            throw new Error('Combined Main and Overlay button limit exceeded (' + padMaxButtons() + ')');
         if (json.cols < 1 || json.cols > 8 || json.rows < 1 || json.rows > 8) {
             throw new Error('Invalid grid size (1-8 cols/rows)');
         }
 
         // Load into editor
         if (typeof padWorkspaceReset === 'function') padWorkspaceReset();
+        padState.selectedLayer = 'main';
+        padState.layerSelections = { main: null, overlay: null };
+        padState.importedIconSources = importedSources;
+        padState.importedIconSourceIds = {};
+        padState.draftIconSources = {};
+        padState.importedPadConfigs = null;
+        padState.rawJson = null;
         padState.cols = json.cols;
         padState.rows = json.rows;
-        padState.buttons = json.buttons.map(b => Object.assign({}, b));
+        padTrackLoad(json);
+        padState.mainButtons = json.buttons.map(b => Object.assign({}, b));
+        padState.overlayButtons = (json.overlay_buttons || []).map(b => Object.assign({}, b));
 
         document.getElementById('pad-cols').value = padState.cols;
         document.getElementById('pad-rows').value = padState.rows;
@@ -278,16 +349,10 @@ async function deviceExportConfig() {
         const maxPads = (deviceInfoCache && deviceInfoCache.max_pads) || 8;
         const pads = [];
         for (let i = 0; i < maxPads; i++) {
-            try {
-                const resp = await fetch('/api/pad?page=' + i);
-                if (resp.ok) {
-                    pads.push(await resp.json());
-                } else {
-                    pads.push(null);
-                }
-            } catch (e) {
-                pads.push(null);
-            }
+            const resp = await fetch('/api/pad?page=' + i);
+            if (resp.status === 404) pads.push(null);
+            else if (resp.ok) pads.push(await resp.json());
+            else throw new Error('Failed to fetch Pad ' + (i + 1) + ': HTTP ' + resp.status);
         }
 
         // Fetch device-level pad and button defaults
@@ -306,6 +371,9 @@ async function deviceExportConfig() {
             config: config,
             button_defaults: buttonDefaults,
             pads: pads,
+            _icon_sources: await padCollectExportIconSources(
+                pads.map((payload, page) => ({ page, payload })).filter(entry => entry.payload),
+                pads.map((payload, page) => payload ? page : -1).filter(page => page >= 0), maxPads),
         };
 
         const deviceName = (window.deviceConfig && window.deviceConfig.device_name) || 'device';
@@ -328,16 +396,23 @@ async function deviceImportConfig(evt) {
 
     let failedPage = null;
     try {
+        if (Number(file.size) > 16 * 1024 * 1024) throw new Error('Import file exceeds the 16 MiB limit.');
         const text = await file.text();
         const data = JSON.parse(text);
 
         if (data._format !== DEVICE_CONFIG_FORMAT || data._version !== DEVICE_CONFIG_VERSION) {
             throw new Error('Unrecognized file format');
         }
+        if (!Array.isArray(data.pads)) throw new Error('Device config must contain a pad list.');
+        const importedSources = padValidateImportedIconSources(data.pads, data._icon_sources);
 
         if (!confirm('Import device configuration? This will overwrite current settings and all pad configs. The device will reboot.')) return;
 
         if (typeof padWorkspaceReset === 'function') padWorkspaceReset();
+        padState.importedIconSources = importedSources;
+        padState.importedIconSourceIds = {};
+        padState.draftIconSources = {};
+        padState.importedPadConfigs = data.pads;
 
         showMessage('Importing device config...', 'info');
 
@@ -378,10 +453,13 @@ async function deviceImportConfig(evt) {
 
                 // Load pad into editor state, save it (which triggers icon upload)
                 padState.page = i;
+                padState.selectedLayer = 'main';
+                padState.importedIconSources = importedSources;
                 padState.rawJson = null;
                 padState.cols = padJson.cols || 3;
                 padState.rows = padJson.rows || 2;
-                padState.buttons = (padJson.buttons || []).map(b => Object.assign({}, b));
+                padState.mainButtons = (padJson.buttons || []).map(b => Object.assign({}, b));
+                padState.overlayButtons = (padJson.overlay_buttons || []).map(b => Object.assign({}, b));
                 padState.bindings = padBindingsFromJson(padJson.bindings);
                 padRenderBindings();
                 padLoadLevelActions(padJson.pad_actions);
@@ -425,7 +503,9 @@ async function padDeletePage() {
         if (typeof padWorkspaceReset === 'function') padWorkspaceReset();
         showMessage('Pad cleared (unsaved)', 'success');
         padState.rawJson = null;
-        padState.buttons = [];
+        padState.selectedLayer = 'main';
+        padState.mainButtons = [];
+        padState.overlayButtons = [];
         padState.cols = 3;
         padState.rows = 2;
         document.getElementById('pad-cols').value = padState.cols;

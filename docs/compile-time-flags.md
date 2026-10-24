@@ -857,6 +857,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/scrollpad_widget.cpp
   - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/table_widget.cpp
+  - src/app/widgets/toggle_widget.cpp
+  - src/app/widgets/toggle_widget.h
   - src/app/widgets/widget.cpp
   - src/app/widgets/widget.h
   - src/app/widgets/widget_registry.h
@@ -1041,6 +1043,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/scrollpad_widget.cpp
   - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/table_widget.cpp
+  - src/app/widgets/toggle_widget.cpp
   - src/app/widgets/widget.h
 - **HAS_MQTT**
   - src/app/action_dispatch.cpp
@@ -1251,6 +1254,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_tools_pads.cpp
   - src/app/screen_saver_manager.cpp
   - src/app/screens.cpp
+  - src/app/screens/pad_screen_events.cpp
+  - src/app/screens/pad_screen_poll.cpp
   - src/app/screens/pad_tile_builder.cpp
   - src/app/screens/touch_test_screen.cpp
   - src/app/screens/touch_test_screen.h

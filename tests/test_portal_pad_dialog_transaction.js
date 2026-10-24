@@ -34,9 +34,10 @@ const originalButton = { col: 1, row: 2, label_center: 'Keep me' };
 const originalButtons = [originalButton];
 const context = {
     console,
+    TextEncoder,
     document,
     MAX_ACTIONS: 3,
-    padState: { editCol: 1, editRow: 2, buttons: originalButtons },
+    padState: { editCol: 1, editRow: 2, selectedLayer: 'main', buttons: originalButtons },
     padLabelFromInput() { return ''; },
     padGetBindableColor() { return ''; },
     padGetEffectiveDefault() { return ''; },
@@ -54,6 +55,7 @@ vm.runInContext(fs.readFileSync('src/app/web/portal_widget_editor.js', 'utf8'), 
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_table.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_gamepad_button.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_rocker.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_toggle.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_numericrocker.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_inputs.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_list.js', 'utf8'), context);
@@ -66,6 +68,7 @@ context.padWorkspaceSummaries = function() {};
 context.padWorkspaceRefresh = function() {};
 context.padMarkDirty = function() {};
 context.padRenderGrid = function() {};
+context.padUpdateButtonPreview = function() {};
 
 context.padWorkspaceEdit();
 assert.match(document.getElementById('pad-edit-validation-message').textContent, /Timer Duration/);
@@ -86,7 +89,7 @@ assert.strictEqual(document.getElementById('pad-edit-validation-error').style.di
 assert.strictEqual(context.padState.buttons[0], originalButton);
 
 context.actionEditorBuild = function() { return {}; };
-context.padBuildIconId = function() { return ''; };
+context.padIconEditorReadDraft = function() { return null; };
 context.bindingValidateDialog = function() { return { valid: false, count: 1 }; };
 context.showMessage = function() {};
 context.padMarkDirty = function() {};
@@ -107,9 +110,23 @@ assert.strictEqual(context.padState.buttons[0].col, 1);
 assert.strictEqual(context.padState.buttons[0].row, 2);
 assert.strictEqual(document.getElementById('pad-edit-validation-error').style.display, 'none');
 
+let previewUpdates = 0;
+context.padUpdateButtonPreview = (previous, button) => {
+    assert.strictEqual(previous.col, button.col);
+    assert.strictEqual(button.label_center, 'Updated label');
+    previewUpdates++;
+};
+context.padLabelFromInput = id => id === 'pad-edit-label-center' ? 'Updated label' : '';
+context.padWorkspaceEdit({ target: { id: 'pad-edit-label-center' } });
+assert.strictEqual(previewUpdates, 1);
+assert.strictEqual(context.padState.buttons[0].label_center, 'Updated label');
+context.padUpdateButtonPreview = function() {};
+context.padLabelFromInput = () => '';
+context.padRenderGrid = function() {};
+
 context.actionEditorLoadGamepad = function() {};
 context.actionEditorLoad = function() {};
-context.PAD_FIRMWARE_DEFAULTS = { widget_indicator_color: '#FFFFFF' };
+context.PAD_FIRMWARE_DEFAULTS = { widget_indicator_color: '#FFFFFF', widget_series_color: '#4CAF50', widget_track_color: '#1A1A1A' };
 context.padSetBindableColor = function(id, value, fallback) { document.getElementById(id).value = value || fallback; };
 context.padWidgetEditorsLoad({ widget_type: 'table', widget_table_scrollable: false });
 assert.strictEqual(document.getElementById('pad-edit-table-scrollable').value, 'false');
@@ -390,7 +407,7 @@ needleWidth.validationMessage = 'Maximum is 10';
 context.padWorkspaceEdit();
 assert.strictEqual(context.padState.buttons[0], gauge, 'Invalid disabled styles must not replace the last valid button');
 assert.strictEqual(needleWidth.value, '11', 'Keep explicit invalid input raw');
-assert.match(validationErrors.get('1,2').message, /Maximum is 10/);
+assert.match(validationErrors.get('main:1,2').message, /Maximum is 10/);
 needleWidth.value = '7';
 needleWidth.validity.valid = true;
 document.getElementById('pad-edit-gauge-min').value = '12oops';
@@ -689,7 +706,147 @@ async function checkSourceColors() {
     assert.strictEqual(border('pad-edit-gauge-source-1'), '#123456', 'Switching buttons rejects old results');
 }
 
-checkSourceColors().then(() => console.log('portal_pad_dialog_transaction: PASS')).catch(error => {
+{
+    const savedLabel = context.padLabelFromInput;
+    const savedAction = context.actionEditorBuild;
+    const source = '[expr:[ha:climate.bureau_boven_thermostaat;attributes.temperature]>20?"on":"off"]';
+    const bottom = '[ha:climate.bureau_boven_thermostaat;attributes.temperature;%.1f \u00b0C]';
+    const foreground = '[expr:[ha:climate.bureau_boven_thermostaat;attributes.temperature]>20?"#FF0000":"#FFFFFF"]';
+    const on = { type: 'ha_service', entity_id: 'climate.bureau_boven_thermostaat', service: 'set_temperature', data_json: '{"temperature": 21}' };
+    const off = { ...on, data_json: '{"temperature": 10}' };
+    context.padLabelFromInput = id => document.getElementById(id).value;
+    document.getElementById('pad-edit-label-top').value = 'Bureau';
+    document.getElementById('pad-edit-label-bottom').value = bottom;
+    document.getElementById('pad-edit-fg-color').value = foreground;
+    context.actionEditorBuild = prefix => prefix === 'tap-0' ? on : prefix === 'lp-0' ? off : {};
+    context.padWidgetEditorsLoad({ widget_type: 'toggle', widget_data_binding: source });
+    document.getElementById('pad-edit-widget-type').value = 'toggle';
+    const button = context.padDialogBuildButton();
+    assert.strictEqual(button.label_top, 'Bureau');
+    assert.strictEqual(button.label_bottom, bottom);
+    assert.strictEqual(button.fg_color, foreground);
+    assert.strictEqual(button.widget_data_binding, source);
+    assert.strictEqual(button.widget_toggle_width_pct, 100);
+    assert.strictEqual(button.widget_toggle_icon_position, 'left');
+    assert.strictEqual(button.widget_toggle_placement, undefined);
+    assert.deepStrictEqual(button.actions[0], on);
+    assert.deepStrictEqual(button.lp_actions[0], off);
+    assert.deepStrictEqual(Array.from(context.padWidgetEditor('toggle').actions.labels()), ['Turn-on actions', 'Turn-off actions']);
+    context.padWidgetEditorsLoad(JSON.parse(JSON.stringify(button)));
+    assert.strictEqual(JSON.stringify(context.padDialogBuildButton()), JSON.stringify(button));
+    context.padWidgetEditorsLoad({ ...button, widget_toggle_width_pct: 60,
+        widget_toggle_placement: 'top', widget_toggle_icon_position: 'below' });
+    const positioned = context.padDialogBuildButton();
+    assert.strictEqual(positioned.widget_toggle_width_pct, 60);
+    assert.strictEqual(positioned.widget_toggle_icon_position, 'below');
+    assert.strictEqual(positioned.widget_toggle_placement, undefined);
+    document.getElementById('pad-edit-toggle-on-value').value = ' OFF ';
+    assert.throws(() => context.padDialogBuildButton(), /distinct/);
+    document.getElementById('pad-edit-toggle-on-value').value = 'on';
+    document.getElementById('pad-edit-toggle-width-pct').value = '101';
+    assert.throws(() => context.padDialogBuildButton(), /Switch size/);
+    context.padLabelFromInput = savedLabel;
+    context.actionEditorBuild = savedAction;
+}
+
+async function checkInspectorRequests() {
+    const nodes = new Map();
+    const requests = [];
+    const timers = new Map();
+    let nextTimer = 0;
+    const getElementById = id => {
+        if (!nodes.has(id)) nodes.set(id, new Element(id));
+        return nodes.get(id);
+    };
+    const select = getElementById('pad-edit-bg-image-path');
+    select.children = [];
+    select.replaceChildren = () => { select.children = []; select.value = ''; };
+    select.appendChild = option => { select.children.push(option); };
+    const listeners = {};
+    getElementById('pad-edit-overlay').addEventListener = (name, handler) => { listeners[name] = handler; };
+    const requestContext = {
+        deviceInfoCache: { has_image_library: true },
+        padState: { page: 0, selectedLayer: 'main', editCol: 0, editRow: 0 },
+        document: { getElementById, createElement: () => new Element(), querySelector: () => null },
+        padWidgetEditor: () => null,
+        padGetBindableColor: id => getElementById(id).value,
+        setTimeout(callback) { timers.set(++nextTimer, callback); return nextTimer; },
+        clearTimeout(id) { timers.delete(id); },
+        fetch(url, options) {
+            return new Promise((resolve, reject) => { requests.push({ url, options, resolve, reject }); });
+        }
+    };
+    vm.createContext(requestContext);
+    vm.runInContext(fs.readFileSync('src/app/web/portal_pad_dialog.js', 'utf8'), requestContext);
+    const first = requestContext.padLoadLocalImageOptions('/images/first.png');
+    requestContext.padState.editCol = 1;
+    vm.runInContext('padDialogSelectionGeneration++;', requestContext);
+    const second = requestContext.padLoadLocalImageOptions('/images/second.png');
+    assert.strictEqual(requests.length, 1, 'Selections share an in-flight image-list request');
+    requests[0].resolve({ ok: true, json: () => ({ files: ['/images/first.png', '/images/second.png'] }) });
+    await Promise.all([first, second]);
+    assert.strictEqual(select.value, '/images/second.png', 'An old selection cannot replace the new image choice');
+    await requestContext.padLoadLocalImageOptions('/images/custom.png');
+    assert.strictEqual(select.value, '/images/custom.png', 'Unknown persisted paths remain selectable');
+    assert.strictEqual(requests.length, 1, 'Settled image lists are reused');
+
+    const refresh = requestContext.padLoadLocalImageOptions(select.value, true);
+    const concurrentRefresh = requestContext.padLoadLocalImageOptions(select.value, true);
+    assert.strictEqual(requests.length, 2, 'Explicit refresh reloads once and coalesces concurrent requests');
+    select.value = '/images/user-choice.png';
+    requests[1].resolve({ ok: true, json: () => ({ files: ['/images/new.png'] }) });
+    await Promise.all([refresh, concurrentRefresh]);
+    assert.strictEqual(select.value, '/images/user-choice.png', 'Pending refresh preserves subsequent user edits');
+    const failed = requestContext.padLoadLocalImageOptions(select.value, true);
+    requests[2].reject(new Error('Disconnected'));
+    await failed;
+    const retry = requestContext.padLoadLocalImageOptions('/images/retry.png');
+    assert.strictEqual(requests.length, 4, 'A failed fetch is not cached');
+    requests[3].resolve({ ok: true, json: () => ({ files: [] }) });
+    await retry;
+    nodes.set('pad-config-section', new Element('replacement-section'));
+    const remount = requestContext.padLoadLocalImageOptions('');
+    assert.strictEqual(requests.length, 5, 'Remounting the editor invalidates the list cache');
+    requests[4].resolve({ ok: true, json: () => ({ files: [] }) });
+    await remount;
+
+    const label = getElementById('pad-edit-label-center');
+    label.value = '[health:cpu]';
+    requestContext.padPvMount();
+    listeners.input({ target: getElementById('pad-edit-bg-image-interval') });
+    listeners.change({ target: getElementById('pad-edit-col-span') });
+    assert.strictEqual(timers.size, 0, 'Unchanged binding inputs must not schedule resolution');
+    label.value = '[health:heap_free]';
+    listeners.input({ target: label });
+    listeners.change({ target: label });
+    assert.strictEqual(timers.size, 1, 'Input and change coalesce into one binding refresh');
+    const callback = Array.from(timers.values())[0];
+    timers.clear();
+    callback();
+    assert.strictEqual(requests.length, 6);
+    assert.strictEqual(requests[5].url, '/api/pad/resolve');
+    assert.strictEqual(JSON.parse(requests[5].options.body).button.label_center, '[health:heap_free]');
+    requests[5].resolve({ ok: true, json: () => ({ button: { label_center: '42' } }) });
+    await new Promise(resolve => setImmediate(resolve));
+    listeners.input({ target: getElementById('pad-edit-bg-image-interval') });
+    assert.strictEqual(timers.size, 0);
+    label.value = 'Plain label';
+    listeners.input({ target: label });
+    const removal = Array.from(timers.values())[0];
+    timers.clear();
+    removal();
+    assert.strictEqual(requests.length, 6, 'Removing the last binding must not send an empty resolve request');
+    label.value = '[health:cpu]';
+    listeners.input({ target: label });
+    assert.strictEqual(timers.size, 1);
+    requestContext.padPvOnOpen();
+    assert.strictEqual(timers.size, 0, 'Opening a selection cancels refreshes scheduled while loading its fields');
+    assert.strictEqual(requests.length, 7, 'Selection resolves once immediately instead of also resolving on a stale timer');
+    requests[6].resolve({ ok: true, json: () => ({ button: { label_center: '42' } }) });
+    await new Promise(resolve => setImmediate(resolve));
+}
+
+checkSourceColors().then(checkInspectorRequests).then(() => console.log('portal_pad_dialog_transaction: PASS')).catch(error => {
     console.error(error);
     process.exitCode = 1;
 });

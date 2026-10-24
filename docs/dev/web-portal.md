@@ -24,9 +24,9 @@ http://localhost:8765/?profile=esp32-p4-lcd4b&fragment=pad-editor
 
 Its fixtures cover empty and populated pads, spanning buttons, action lists,
 widgets, template inheritance, a dense grid, and input controls. Save, reload,
-delete, defaults, icon uploads, binding previews, and Show on Device run against
-memory-backed APIs. Show on Device records the chosen screen without rendering
-or executing actions on hardware.
+delete, defaults, icon uploads, pad-editor previews, and Show on Device run
+against memory-backed APIs. Show on Device records the chosen screen without
+rendering or executing actions on hardware.
 
 The existing E-Paper Frame image workflow remains available at:
 
@@ -37,8 +37,8 @@ http://localhost:8765/?profile=reterminal-e1003-frame&fragment=epaper-image
 Changes to served HTML, CSS, and JavaScript are applied on the next browser
 reload. Restart the server after changing `tools/portal-dev-server.py`. Mock
 configuration writes remain in memory for the server process and never reach a
-physical device. The server binds to localhost. Binding previews resolve fixed
-sample values rather than reproducing the firmware binding engine.
+physical device. The server binds to localhost. Pad-editor previews keep raw
+bindings abbreviated; they do not resolve or simulate values.
 
 See the [script reference](scripts.md#toolsportal-dev-serverpy) for reset
 commands, failure scenarios, and focused regression tests. The P4 profile is the
@@ -53,6 +53,18 @@ The web portal provides:
 - REST API for programmatic access
 - Optional HTTP Basic Authentication (Full Mode only)
 - Responsive web interface (desktop & mobile)
+
+### Browser Request Concurrency
+
+`portal_core.js` shares a two-transfer queue across the tab's `window.fetch`
+callers. A slot remains occupied until the full response body downloads, not
+just until headers arrive. The wrapper drains a response clone before returning
+the original, unread native `Response`; network errors, body errors, and aborts
+release the slot. Callers receive the response only after downloading completes.
+
+This reduces overlapping transfers but does not guarantee DMA-memory headroom.
+Native script, stylesheet, and image requests bypass the queue, as do other
+tabs and clients. The limiter is not a device-wide admission control.
 
 ### Remote Logs
 
@@ -404,8 +416,9 @@ forward, reveals only the selected fragment's category.
 Each fragment title contains a decorative Material Symbol with `aria-hidden="true"`.
 Navigation category icons are mapped by category ID in `portalCategoryIcon()`;
 the API's legacy emoji metadata remains unchanged. Child navigation links stay
-text-only. The shell starts the shared `portalEnsureMaterialSymbols()` loader;
-pad icon rendering reuses it rather than issuing another font request.
+text-only. The shell starts the shared `portalEnsureMaterialSymbols()` loader for
+portal chrome. Button icons are rasterized to position-specific PNGs from
+retained source artwork, independently of this portal font.
 
 Material Symbols remain Google-hosted. Decorative icons are hidden until the
 stylesheet and font load successfully. A failed request, missing font API, or
@@ -492,7 +505,7 @@ remains visible when Back is off to preserve existing validation. Input navigati
 remains in Layout; input-widget action suppression is declared by each owner.
 Extension declares that it replaces shared labels, icons, and images.
 
-All 14 active widget editors register explicitly through
+All 15 active widget editors register explicitly through
 `portal_widget_editor.js`. Their `portal_widget_*.js` modules precede the dialog
 through the bundle's `@widgets` marker; markup remains in the existing partials. Mousepad,
 Scrollpad, and Gamepad Joystick share the input-family owner module.
@@ -557,10 +570,67 @@ editor. Its action policy builds the first tap action with operation `down`,
 hides ordinary tap/long-press lists, and keeps the held-control section in
 Content. The firmware still owns release behavior.
 
+Toggle switch owns its state field, matching values, static palette, read-only,
+switch size, and icon position. It relabels `actions[]` and `lp_actions[]` as
+Turn-on and Turn-off actions without changing either action list's payload.
+Its State source uses the shared binding header, builder shortcut, and reference
+action. It uses the same catalog symbol and label rendering as other widgets;
+the pad editor does not simulate a switch. The size field
+retains `widget_toggle_width_pct` for compatibility, now scaling the fitted
+maximum with a default of 100%. `widget_toggle_icon_position` accepts left,
+above, or below; the older switch placement field is ignored and not emitted.
+
+The shared cell renderer shows button styling and labels, with a large subdued
+Material Symbol behind widget labels. Symbols come from existing catalog
+metadata, including axis variants and the unknown-widget fallback. Widget
+buttons omit additional configured icons and image placeholders; ordinary
+buttons retain their configured icons. There are no per-widget drawing hooks,
+sample values, binding resolution requests, or action dispatch in grid rendering.
+Bindings are abbreviated for display, with their full text retained in tooltips
+and accessible descriptions. Valid edits update the grid immediately; invalid
+input leaves the last valid layout in place. The `test_portal_pad_preview`
+regression covers ordinary and template buttons.
+
+`PAD_CELL_PREVIEW_PROPERTIES` lives beside the cell renderer and declares the
+model properties it consumes. Preview comparisons also include the computed
+widget catalog metadata, so axis-dependent symbols participate without a second
+widget-specific field list. Keep this dependency declaration synchronized when
+changing the renderer. Valid edits compare the previous and new button models:
+nonvisual changes leave the preview untouched, visual changes update only that
+button, and geometry changes rebuild the grid. Creating a unit-size button in
+an empty position replaces only that position's preview; new spanning buttons
+and positions without an empty preview use the full layout renderer. Targeted updates
+retain the existing icon element when its artwork and foreground color match.
+Selection changes update styling and the inspector without rebuilding the grid.
+Pad background changes update the existing grid background in place.
+
+The image-library list is cached for the mounted editor, with concurrent loads
+sharing one request. Explicit Refresh bypasses settled cached data; failures
+remain retryable, and disposal clears the cache. Live binding previews resolve
+on selection, explicit refresh, or changes to the active binding inputs, not
+unrelated inspector edits. Selection cancels pending edit-triggered refreshes
+before issuing its immediate resolve. Existing stale-selection guards still
+apply to asynchronous results.
+
 The workspace owns raw drafts, dirty tracking, tab/error presentation, and
 fragment disposal. A successful save reloads canonical configuration while
 restoring the selected button's tab, disclosure states, and inspector scroll
 position, without replaying pre-save field values.
+
+Long-running portal actions can use `portalOperation.run({ title }, async operation => { ... })`
+from `portal_core.js`. Its native modal dialog reuses the reboot panel styles,
+blocks background interaction and fragment navigation immediately, and appears
+after 200 ms to avoid flashing on fast operations. `operation.stage(message)`
+shows indeterminate progress; `operation.stage(message, completed, total)` shows
+real item counts. Use `await operation.yield()` between CPU-heavy preparation
+items so the browser can render updates. The controller guards browser unload,
+keeps keyboard focus in the dialog, and restores focus and busy state on exit.
+Thrown errors remain visible until Close; writes are not automatically retried.
+Pad saving reports artwork preparation, source and button-image uploads,
+configuration persistence, and editor refresh. Success is announced only after
+refresh and inspector restoration; failures after persistence identify that the
+pad was saved. The reboot overlay retains its separate reconnection lifecycle.
+
 An owner's `init(onSettled)` may notify the host when its
 asynchronous state changes. Extension uses this callback after catalog success
 or failure, retaining its stale-mount guards. It does not inspect workspace
@@ -821,6 +891,7 @@ every component in that custom section to the same category ID.
 - **🎛️ Pad Editor** (only shown when firmware has display): Visual grid editor for pad pages
   - Pad selection and naming: Left rail for up to 16 pads with optional custom names (max 31 chars). Labels retain the `Pad X: Name` format whether selected or not; no legacy selection dropdown is needed.
   - **Grid preview**: Configuration overview with consistent widget type markers for local and inherited buttons. Unlabeled widgets show larger symbols and names when space allows; directional symbols follow widget axis settings. Click a button to open its editor
+  - **Main and Overlay layers**: The segmented selector edits one layer through the shared grid and inspector. Overlay previews Main dimmed, permits matching coordinates, and keeps selections, drafts, and validation errors layer-qualified. Shared pad settings are read-only in Overlay. Both layers share the grid and the device-reported `max_pad_buttons` limit.
   - Button inspector: Content, Actions, and Appearance tabs retain the complete label, widget, icon, image, confirmation, and appearance forms. Actions and Appearance expose controls without duplicate same-named accordions. Compact action summaries expand into registry-driven editors. The Pad Bindings tab has no duplicate inner heading; each binding groups its name, expression, live preview, and delete control inside one bordered row.
   - Bar-chart Content: Data sources groups each bar's binding, caption, and color/fill. Scale and Layout & style (including Animation) follow, then optional Gridlines and Target groups. Optional bars use fixed collapsed defaults, including when configured or paired. Disabled gridlines and empty targets retain editable styling and validation. Drafts preserve manual disclosure; field IDs and persisted configuration keys are unchanged.
   - Gauge Content: Data sources groups each ring's binding, label, and color, followed by pair controls with rings 2/4 explicitly identified as negative. Scale and Arc & track (including Animation and the existing shared outline controls) precede Needle, Tick marks, and Target. Core groups and ring 1 open on load; optional rings and feature groups start collapsed regardless of configured values. Needle off, tick count 0, and an empty target retain editable styling and validation. Drafts preserve manual disclosure. Angular units, limits, defaults, IDs, and load/build mappings remain unchanged.
@@ -842,13 +913,13 @@ every component in that custom section to the same category ID.
   - **Camera Preview widget**: Available only on camera-enabled boards. It displays the shared camera feed with Cover, Letterbox, or Center crop scaling.
   - **Numeric rocker tap areas**: The numeric rocker settings include a per-button Tap Area Scale control from 50% to 150%. It scales both fine and coarse zones while the firmware reserves a center action area.
   - **Pad and Button Defaults**: Separate Button Appearance, Pad Appearance and Layout, Button Labels and Icon, and Button Shadow sections on the Pads page. Pad Appearance and Layout provides device-wide button spacing, `default_pad_bg_color`, Burn-in Pixel Shift Distance (`pixel_shift_distance_px`, 0-8 px), and extra top, right, bottom, and left edge insets inside that distance. A live 2×2 diagram updates with those controls and labels their current pixel values. A value of 0 disables pixel shifting and its layout reserve. A pad without an explicit background inherits the device default. Shadows can be opaque backing plates or LVGL drop shadows, with free-form offsets and blur that may overlap or clip. Shadow color can use either a specific color or a darker tint of each button's background, including dynamic background bindings. Pads and buttons can enable or disable the device shadow setting. Stored as a separate JSON file on LittleFS (`/config/button_defaults.json`) with a dedicated REST API (`GET/POST /api/component/button-defaults/config`)
-  - **Template Pad**: Dropdown to inherit buttons from another pad into empty grid positions. Template buttons appear as ghost overlays in the editor. Merge includes bindings (target wins on conflict, no chaining)
+  - **Template Pad**: Dropdown to inherit source Main buttons into empty destination Main positions. Source Overlay buttons are not inherited, and local Overlay buttons do not suppress Main inheritance. Template buttons appear as ghost overlays in the editor. Merge includes bindings (target wins on conflict, no chaining) and rejects combined-capacity overflow.
   - Board appearance defaults: `GET /api/component/button-defaults/config` returns saved device overrides plus a read-only `firmware_defaults` object containing the board-selected pad, button, layout, shadow, and widget palette defaults. `POST` accepts device overrides only. The portal uses the firmware defaults for controls, widget colors, previews, and appearance resets; unchanged inherited values are omitted from device-default saves. Device exports exclude `firmware_defaults`. E-paper interactive boards use high-contrast defaults and pixel shift distance 0; other boards retain their existing defaults.
-  - **Building Blocks**: Pre-configured button groups available in the More ▾ menu under "━━ Blocks ━━". Select a block to enter placement mode — green/red ghost overlay shows valid/invalid positions. Blocks check grid dimensions, free cells, and 64-button limit. Uses extensible registration API (`pad_block_register()`) so feature branches add blocks independently. Catalog served by `GET /api/pad/blocks`
-  - **Button copy/paste**: Copy button settings from one cell and paste into another; position-independent
-  - **Pad actions via "More ▾" menu**: Fill Pad (fill all cells with copied button), Copy/Paste Pad (entire page), Export/Import Pad (JSON file), Export/Import Device Config (NVS + all 16 pad configs), Clear Pad
+  - **Building Blocks**: Pre-configured button groups available in the More ▾ menu under "━━ Blocks ━━". Select a block to enter placement mode; green/red ghost outlines show valid/invalid positions. Placement checks occupancy in the selected layer and enforces combined button capacity. Uses extensible registration API (`pad_block_register()`) so feature branches add blocks independently. Catalog served by `GET /api/pad/blocks`.
+  - **Button copy/paste**: Copy button settings from one position and paste into another in the selected layer; position-independent.
+  - **Pad actions via "More ▾" menu**: Fill Pad operates on the selected layer. Copy/Paste Pad and Export/Import Pad preserve both layers and shared settings. Export/Import Device Config covers NVS and all pad configs; Clear Pad clears the whole draft.
   - **Device config export/import**: Exports NVS settings (excluding network) plus all 16 pad pages to a single JSON file; import overwrites settings and reboots
-- **Recipes** (display boards): Installs a declared scenario into a selected pad without changing existing buttons. Adaptive recipes use ordered row or column flow; each button declares a visual shape and size, and the portal selects spans from the target pad's actual rendered button dimensions. The clicked cell is the recipe's top-left anchor; adaptive recipes may use a smaller fitting footprint when no larger forward footprint fits. The placement grid previews the resolved group and reports its bounds. Fixed-offset recipes remain supported. If an empty current grid cannot host a recipe, the portal offers the smallest supported rows/columns increase that can. If the current empty grid can host it but existing buttons block every placement, it offers a confirmed **Clear Buttons** action that retains the other pad settings. The user can then select a placement and install the recipe separately. Optional parameter descriptions appear below their inputs. The portal derives an impact summary from the recipe, and unavailable recipes identify their missing device capability. A completed installation exposes **Show Pad** and **Navigate to Pad Editor** actions for the target pad. Recipes use declarative provisioning for pad bindings and existing component configuration, such as timer expiry actions. The **Recipe Catalog** page edits the device-persisted catalog served by `GET/POST /api/recipes/catalog`; a missing catalog is an empty valid envelope. The repository sample is [docs/samples/recipe-catalog.json](../samples/recipe-catalog.json).
+- **Recipes** (display boards): Installs a declared scenario into Main without changing Overlay buttons. Adaptive recipes use ordered row or column flow; each button declares a visual shape and size, and the portal selects spans from the target pad's actual rendered button dimensions. The clicked position is the recipe's top-left anchor. Recipe installation enforces the combined Main and Overlay button limit and refreshes layer-qualified icon IDs for both arrays. If an empty current grid cannot host a recipe, the portal offers the smallest supported rows/columns increase. If Main buttons block every placement, it offers a confirmed **Clear Main Buttons** action that retains Overlay and shared pad settings. The user can then select a placement and install the recipe separately. Optional parameter descriptions appear below their inputs. The portal derives an impact summary from the recipe, and unavailable recipes identify their missing device capability. A completed installation exposes **Show Pad** and **Navigate to Pad Editor** actions for the target pad. Recipes use declarative provisioning for pad bindings and existing component configuration, such as timer expiry actions. The **Recipe Catalog** page edits the device-persisted catalog served by `GET/POST /api/recipes/catalog`; a missing catalog is an empty valid envelope. The repository sample is [docs/samples/recipe-catalog.json](../samples/recipe-catalog.json).
 - **Unsaved-changes protection**: Confirm dialog on page/pad switch and `beforeunload` event when edits are pending
 - Pad save controls: A workspace toolbar labels the pad list with Pads and provides pending-edit or saving status, Save Pad, Show on Device, and More. Clean drafts have no status label. The current pad is highlighted in the list, which shares navigation row styles with the shell. The Pad inspector scope opens pad settings. Clicking a selected button again deselects it without discarding its draft. The canvas has no dimensions toolbar or footer. Pad and button action slots share the same accented group styles. Save Pad is also available in the mobile inspector header.
 - Pad numeric inputs: Spinner buttons are hidden consistently within the editor. A delegated, non-passive wheel listener prevents native number stepping and scrolls the nearest available scroll container, including dynamically rendered action and widget fields. Input focus and values remain unchanged; browser zoom gestures retain their native behavior.
@@ -856,15 +927,19 @@ every component in that custom section to the same category ID.
 
 Desktop uses a pad rail, persistent aspect-correct canvas, and contextual
 inspector. Tablet moves the rail above the canvas and inspector. Mobile uses a
-full-screen inspector with Return to pad; returning retains edits. Pad scope
-contains Layout, Appearance, Bindings, and Actions tabs.
+full-screen inspector with Return to pad; returning retains edits. The layer
+selector remains above the canvas, and switching to a layer with no remembered
+button selection returns to the grid. Pad scope contains Layout, Appearance,
+Bindings, and Actions tabs; shared controls are read-only in Overlay.
 
 `portal_pad_workspace.js` owns one active pad draft's form snapshots, pending
 validation errors, selection, tabs, resize observer, and cancellable event
-listeners. Valid button edits immediately replace the draft model; invalid
-inputs retain the last valid model and their raw form values. Save blocks on
-pending errors or overlapping/out-of-bounds buttons. Copy and inherited-button
-selection do not mutate the draft. Only an actual edit creates an override.
+listeners. Button form and error keys include the layer so matching coordinates
+retain separate drafts. Valid edits immediately replace the selected layer's
+draft model; invalid inputs retain the last valid model and their raw form
+values. Save blocks on pending errors, layer-local overlap, combined-capacity
+overflow, or out-of-bounds buttons. Copy and inherited-button selection do not
+mutate the draft. Only an actual edit creates an override.
 
 Validation alerts overlay the action row (the inspector's top button row on
 mobile), leaving field layout unchanged. Dismissal hides only the alert and
@@ -896,6 +971,7 @@ do not verify on-device rendering, input dispatch, or physical device behavior.
 | Draft lifecycle | Direct edits; button/tab changes retain incomplete fields; errors block save; failed save retains the draft; retry succeeds |
 | Persistence | No pad writes before Save Pad; one current-pad save; canonical reload retains selection; edits during save remain dirty |
 | Navigation | Keep Editing preserves the draft; discard loads the destination; fragment/hash navigation and beforeunload are guarded; revisits have no stale listeners |
+| Layered buttons | Main and Overlay drafts remain independent at equal coordinates; preview composition, per-layer occupancy, shared capacity, and both-array save/reload/import/export are correct |
 | Canvas | Device aspect ratio, spacing and insets; spans, inherited ghosts, empty positions; native selection, drag/drop and resize synchronize inspector coordinates |
 | Button content | All labels and styles, spans, icons and positioning, local/remote images and credentials, capability-gated camera controls |
 | Widgets | Bar chart, gauge, sparkline, table, rocker, numeric rocker, list, camera preview, HID input widgets, and native extension configuration |
@@ -910,6 +986,41 @@ Run the focused Node portal tests through CTest, including the dev server,
 dialog transaction, dirty state, import, preview, action picker/list, and
 startup tests. Run the asset variant/cache checks and production asset
 generator. Portal-only changes do not require a firmware build.
+
+Hardware validation remains separate from these host and browser checks. Verify
+real touch inside and around enabled, disabled, hidden, and no-action Overlay
+buttons; change visibility during a held contact; confirm physical navigation
+skips covered Main buttons while Overlay widgets remain reachable; and inspect
+layer stacking, shadows, focus, tap feedback, and dialogs on the display. Do not
+claim the memory gate passed until internal and PSRAM free heap, minimum free
+heap, and largest blocks are measured separately during steady state,
+construction, visibility changes, navigation, and repeated load/eviction. Compare
+equal button counts with all buttons in Main and split across both layers, then
+measure the added-content cost of one warning button.
+
+The verified firmware build used `esp32-p4-lcd4b` with `HAS_DISPLAY`,
+`HAS_TOUCH`, `HAS_MCP`, `HAS_MQTT`, `HAS_NATIVE_EXTENSIONS`, `HAS_USB_HID`, and
+`HAS_AUDIO`. Its aggregate global-data report was 130,968 bytes; that is not a
+feature delta or a runtime heap measurement. P4 ELF layout reports
+`sizeof(PadConfig) = 4904`, `sizeof(ButtonTile) = 6376`,
+`sizeof(PadScreen) = 376`, and `sizeof(ScreenButtonConfig) = 6700` bytes. The
+Main boundary occupies existing `PadConfig` tail padding, and `ButtonTile` has
+no net stride increase. The additional `PadScreen` fields are estimated at
+about 8 bytes per instance, or 128 bytes across 16 instances. One active
+Overlay pad creates one LVGL hit-test shield (`lv_obj_t` is 56 bytes and its
+event descriptor is 12 bytes); its auxiliary style allocations and transient
+peak have not been measured.
+
+Pad config and LVGL allocations request PSRAM first and retain the existing
+internal-heap fallback. A `ScreenButtonConfig` record is 6,700 bytes, so a
+resize that falls back internally can exceed the 1 KiB review threshold. No
+runtime evidence establishes that this happens on the P4, or that shield
+construction and teardown stay below the threshold. Record the board, enabled
+flags, Main and Overlay counts, internal/PSRAM free heap, minimum free heap, and
+largest blocks for an 8-button Main baseline, an equivalent 7-Main/1-Overlay
+pad, and a 7-Main pad with one warning button added in Overlay. The memory gate
+remains unverified until those measurements are collected and the existing
+internal fallback risk is reviewed.
 
 #### Network Page (`/network.html`)
 
@@ -1119,6 +1230,37 @@ fields or loop iterations. JSON response bodies and cache policies are unchanged
 not every authentication failure, redirect, or early error response is instrumented.
 
 ## REST API Reference
+
+### Pad Configuration
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/pad?page=N` | Returns one pad's stored JSON. `bg_image_password` is redacted in both button arrays and reported through `bg_image_password_set`. |
+| `GET` | `/api/pad/icon_context?page=N` | Returns local layout context for pads directly referencing template pad N, without fetching their complete configurations. |
+| `POST` | `/api/pad?page=N` | Validates and saves one complete pad object. `buttons` is Main; optional `overlay_buttons` is Overlay. Both share grid settings and `max_pad_buttons`. |
+| `DELETE` | `/api/pad?page=N` | Deletes the pad configuration. |
+
+Button positions are local to their layer. Grid coordinates may overlap between
+layers, but button rectangles may not overlap within one layer. The shared
+validator rejects malformed collections and combined-capacity overflow before
+the portal or MCP authoring tools save a pad.
+
+`GET /api/pad/icon_context?page=N` returns `{"dependents":[]}` when no saved pad
+directly references N. Otherwise, each dependent has its zero-based `page`,
+`cols`, `rows`, optional `column_widths_px` and `row_heights_px`, local Main
+`buttons` containing only `col`, `row`, `col_span`, and `row_span` when present,
+and `button_count` counting local Main plus Overlay buttons before inheritance.
+Overlay geometry does not suppress Main inheritance and is not returned.
+
+The authenticated handler discovers relationships from cached configurations,
+then reads only matching saved pads, one at a time, with a JSON field filter.
+It buffers the serialized projections, not an aggregate of parsed pad documents.
+It uses saved local geometry because cached buttons already include inheritance.
+Invalid pad parameters return `400`; dependency read, parse, or allocation
+failures return `503`. Save preparation makes one context request for an
+icon-bearing template and reuses its draft buttons to select and render inherited
+icons. Firmware save validation still rejects stale or missing artifacts if
+another client changes a dependent during preparation.
 
 ### Development Crash Injection
 
@@ -1422,6 +1564,8 @@ Returns comprehensive device information.
   "flash_chip_size": 4194304,
   "psram_size": 0,
   "icon_max_dimension": 720,
+  "icon_max_png_size": 524288,
+  "icon_max_source_json_size": 720896,
   "health_poll_interval_ms": 5000,
   "health_history_seconds": 300,
   "health_history_available": true,
@@ -1457,6 +1601,8 @@ Returns comprehensive device information.
     }
   ],
   "max_pads": 16,
+  "configured_pads": [0, 1],
+  "max_pad_buttons": 64,
   "max_grid_cols": 8,
   "max_grid_rows": 8,
   "display_coord_width": 480,
@@ -1476,6 +1622,7 @@ Returns comprehensive device information.
 - `wifi_hostname`: WiFi/DHCP hostname
 - `mdns_name`: Full mDNS name (hostname + `.local`)
 - `hostname`: Short hostname
+- `max_pad_buttons`: Combined Main and Overlay button capacity per pad.
 
 **Portal Mode Field:**
 - `ap_active`: `true` when the device is running in AP / captive-portal mode, `false` in full STA mode. Portal JS derives `portalMode` (`"core"` vs `"full"`) from this flag. (Replaces the removed `GET /api/mode` endpoint.)
@@ -1548,7 +1695,10 @@ the production catalog.
 - `display_coord_width` / `display_coord_height`: Display resolution
 - `icon_max_dimension`: Largest accepted PNG width or height. The Pad editor
   rasterizes larger icons at this limit and the device scales them to fit.
+- `icon_max_png_size`: Maximum generated or retained local PNG size in bytes.
+- `icon_max_source_json_size`: Maximum portable source-record JSON size in bytes for browser import/export. Local PNG upload/storage is binary; catalog SVG JSON uploads have a separate 64 KiB limit.
 - `available_screens`: Array of `{id, name}` objects; pad screens include custom names from config
+- `configured_pads`: Zero-based pad IDs with saved configuration files. Unlike `available_screens`, this excludes unsaved slots. Fetch fresh device info before regenerating all saved icons; ordinary save dependency discovery uses `/api/pad/icon_context` instead.
 - `current_screen`: ID of the currently displayed screen
 
 Each widget module defines a `static const WidgetPreview <type>_preview` before
@@ -3245,31 +3395,110 @@ Save timer configuration to LittleFS and apply immediately.
 
 All icon endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabled.
 
-#### `POST /api/icons/install?id=<id>&kind=<0|1>`
+#### `POST /api/icons/install?id=<key>&source_id=<id>&kind=<0|1>&render_key=<hex>`
 
-Upload a PNG icon and install it into the icon store.
+Upload a generated PNG for a positional button key.
 
-- **Query Parameters:** `id` (required, `[a-z0-9_]`), `kind` (optional, `0`=color default, `1`=mono)
-- **Body:** Raw PNG bytes (`Content-Type: application/octet-stream`)
-- **Max size:** `ICON_MAX_PNG_SIZE` (128 KB)
+- **Query Parameters:** `id` (`pad_<page>_<main|overlay>_<col>_<row>`), `source_id` (`s_` plus 24 lowercase hexadecimal digits), `kind` (`0`=color, `1`=mono), and `render_key` (eight lowercase hexadecimal digits, nonzero), all required
+- **Body:** Raw PNG bytes (`Content-Type: image/png`)
+- **Max size:** `ICON_MAX_PNG_SIZE` (512 KiB); each dimension is limited by `ICON_MAX_DIMENSION` (720 pixels)
 - **Response:** `{"success": true}` on success; JSON error on failure
-- The PNG is saved to LittleFS at `/icons/<id>.png` and decoded into a PSRAM-cached ARGB8888 draw buffer for immediate use.
+- The PNG and metadata are stored using verified replacement. Metadata associates it with the retained source, explicit rendering kind, dimensions, and render key.
+- The render key records the pad and button inputs used for generation: grid and track sizes, position, spans, icon scale, top/bottom label presence, border width, content padding, and widget type. The portal's `padIconRenderKey()` and firmware's `pad_icon_render_key()` use the same NUL-delimited FNV-1a encoding; zero maps to one.
+- Raw REST and MCP pad saves reject mismatched render keys, including inherited template icons and affected template dependents. Prepare PNGs for the intended layout before saving; use the portal save pipeline rather than changing icon geometry through a raw JSON write.
+
+#### `POST /api/icons/source`
+
+Retain source artwork separately from pad JSON and generated PNGs.
+
+- Catalog bodies use `Content-Type: application/json` and contain exactly `catalog_id`, `kind`, `media_type`, and `data`. `media_type` is `image/svg+xml`; `catalog_id` uses the `material-symbols:` or `noto:` prefix and must match `kind` (`mono` or `color`). The JSON limit is 64 KiB.
+- Local image bodies use `Content-Type: image/png` with normalized, static PNG bytes, at most 512 KiB and 720 pixels per side. They are implicitly `color` sources without a catalog ID. Base64 PNG JSON is not accepted by this endpoint.
+- Successful uploads return `201` with `{"id":"s_..."}`.
+
+Catalog records are stored at `/icon_sources/<id>.json`. Local PNG uploads stream
+to a request-owned `/icon_sources/<id>.png.tmp`, then publish as
+`/icon_sources/<id>.png` after checking the byte count, signature, dimensions,
+and chunk boundaries through the final IEND chunk. Interrupted, invalid, or failed
+uploads remove their temporary file; startup recovery removes abandoned temporary
+files. Upload chunks and validation check OTA activity and stop their own work
+when an update starts.
+
+Source and generated-icon uploads remain unavailable until initial icon preload
+and boot cleanup finish, even though the portal may already be listening.
+
+The browser still packages local PNG sources in export JSON as
+`{"kind":"color","media_type":"image/png","data":"<canonical base64>"}`.
+`ICON_MAX_SOURCE_JSON_SIZE` (704 KiB) bounds that portable representation, not
+the binary upload. This keeps large PNG strings out of ArduinoJson on the device.
+
+#### `GET /api/icons/source?id=<source_id>`
+
+Return catalog records as `application/json` or local artwork as `image/png`.
+The browser converts PNG responses into portable source records for export and
+uses them for offline regeneration. The ID must match the exact device-local
+source grammar; a valid but missing ID returns `404`.
 
 #### `DELETE /api/icons/page?page=<N>`
 
-Delete all icon files for a given pad page.
+Delete all generated icon files for a pad. Use only for explicit pad deletion or
+reset, not as the first step of a save.
 
-- **Query Parameters:** `page` (required, `0`–`7`)
+- **Query Parameters:** `page` (required, `0` through `MAX_PADS - 1`)
 - **Response:** `{"success": true}`
 
 #### `GET /api/icons/installed`
 
-List all installed icon IDs (from LittleFS `/icons/` directory).
+List all installed positional icon IDs (from the `/icons/` directory).
 
 **Response:**
 ```json
-{ "icons": ["pad_0_0_0", "pad_0_1_2"], "cache_count": 2 }
+{ "icons": ["pad_0_main_0_0", "pad_0_overlay_1_2"], "cache_count": 2 }
 ```
+
+With `?pages=0,1`, return artifact metadata only for the requested zero-based pad
+IDs instead of the global ID list. `pages` is a nonempty comma-separated list of
+IDs in `0..MAX_PADS-1`, at most `MAX_PADS * 4` characters; invalid values return
+`400`. Each entry requires readable metadata and a PNG header whose dimensions
+match it. Missing, invalid, or busy artifacts are omitted and will be regenerated.
+The handler reads one artifact at a time and buffers only the serialized response.
+
+```json
+{
+  "artifacts": {
+    "pad_0_main_0_0": {
+      "source_id": "s_000000000000000000000001",
+      "kind": 1,
+      "width": 90,
+      "height": 90,
+      "render_key": "4c31e060"
+    }
+  },
+  "cache_count": 2
+}
+```
+
+Save preparation requests metadata once for the current pad and affected
+dependents. It skips PNG rendering and upload only when source ID, numeric kind,
+render key, and both calculated PNG dimensions match. Dimensions are compared
+separately because device defaults can change sizing without changing the render
+key. New or imported sources still generate new artifacts. Saving pad JSON and
+firmware validation still run when all generated icons are reused.
+
+Firmware reconciles generated files for the saved pad after a successful save
+and dependent-cache refresh. It preserves main and overlay icon positions,
+including inherited template buttons, and retires obsolete decoded buffers until
+the owning screen releases them. Browser-issued pruning is not required. Pad
+deletion removes all matching files without a fixed file-count limit. Existing
+source cleanup removes previous artwork only when no saved pad references it.
+
+Initial normal-runtime startup also sweeps unreferenced sources and generated
+files, recovering leftovers from failed saves and interrupted browser sessions.
+The boot sweep skips deletion if a saved pad configuration cannot be read;
+pad-scoped cleanup also skips unreadable pad or template configurations. Cleanup
+stops for OTA activity and logs reclaimed file counts and bytes. There is no
+periodic global sweep or upload rollback, so completed but abandoned uploads can
+remain until the next normal-runtime startup. Generated files at referenced
+positions are retained conservatively rather than deleted for metadata mismatch.
 
 #### `GET /api/icons/files`
 
@@ -3277,7 +3506,7 @@ List all files in `/icons/` with names and sizes (debug endpoint).
 
 **Response:**
 ```json
-{ "files": [{"name": "pad_0_0_0.png", "size": 4096}] }
+{ "files": [{"name": "pad_0_main_0_0.png", "size": 4096}] }
 ```
 
 #### `GET /api/icons/cache`
@@ -3286,7 +3515,7 @@ Dump in-memory cache entries with dimensions and data sizes (debug endpoint).
 
 **Response:**
 ```json
-{ "entries": [{"id": "pad_0_0_0", "kind": 0, "w": 128, "h": 128, "data_size": 65536}], "count": 1 }
+{ "entries": [{"id": "pad_0_main_0_0", "kind": 0, "w": 128, "h": 128, "data_size": 65536}], "count": 1 }
 ```
 
 #### `GET /api/icons/file?name=<filename>`
@@ -3379,22 +3608,26 @@ Play a sound file immediately (for testing).
 
 ---
 
-#### `GET /api/pad/tile_sizes?cols=<N>&rows=<N>`
+#### `GET /api/pad/button_sizes?cols=<N>&rows=<N>`
 
-Compute tile dimensions for a given grid layout. Used by the icon picker to render correctly sized icons.
+Compute button dimensions for a given grid layout. Used to render correctly
+sized icons.
 
-- **Query Parameters:** `cols` (required, `1`–`8`), `rows` (required, `1`–`8`)
-- **Response:**
+* **Query parameters**: `cols` and `rows`, each from `1` to `8`
+* **Response**:
+
 ```json
 {
-  "display_w": 720, "display_h": 720,
-  "tile_w": 234, "tile_h": 234,
-  "gap": 4, "padding": 4,
+  "display_w": 720,
+  "display_h": 720,
+  "button_w": 234,
+  "button_h": 234,
+  "gap": 4,
+  "padding": 4,
   "pixel_shift_margin": 4,
   "font_small_h": 16
 }
 ```
-
 
 #### `GET /api/pad/blocks`
 
@@ -3542,7 +3775,7 @@ Resolve `[scheme:params]` binding tokens against the device's **live** data and 
 ```
   Errors: `400` (bad params / invalid JSON), `503` (busy: another resolve/control job is in flight, retry; or out of memory), and `500` (the main-loop dispatch timed out or another internal failure occurred). The resolver copies its input before queuing it, so a timed-out request remains safe while the main loop finishes and releases its owned data.
 
-> **Pad save validation.** `POST /api/pad` validates the submitted pad through the shared `pad_validate()` (the same validator the MCP write tools use): grid bounds, span overflow, widget types/config caps, colors, action arrays, binding tokens (unknown scheme, bad health key, …), and the one-level `[pad:name]` rule. Buttons that fall outside a shrunken grid are tolerated (hidden, and reappear when the grid grows).
+> **Pad save validation.** `POST /api/pad` validates the submitted pad through the shared `pad_validate()` (the same validator the MCP write tools use): grid bounds, span overflow, widget types/config caps, colors, action arrays, binding tokens (unknown scheme, bad health key, …), and the one-level `[pad:name]` rule. Grid pads may include `column_widths_px` and `row_heights_px` integer arrays, one value per track, with `0` representing Auto. Each configured axis must retain at least one Auto track, and fixed sizes must fit the active display after spacing and insets while leaving at least one pixel for every Auto track. Buttons that fall outside a shrunken grid are tolerated (hidden, and reappear when the grid grows).
 
 > **Image credentials.** `GET /api/pad` never returns a button's
 > `bg_image_password`. It supplies `bg_image_password_set` instead. On a later

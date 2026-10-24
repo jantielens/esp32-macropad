@@ -8,6 +8,13 @@ class GamepadTouchRouter {
 public:
     bool reset_navigation = false;
 
+    bool has_blocked_input(bool (*blocked)(lv_obj_t*, const lv_point_t&, void*), void* context) const {
+        for (const auto& slot : slots_) {
+            if (slot.active && slot.object && blocked(slot.object, slot.point, context)) return true;
+        }
+        return false;
+    }
+
     void cancel(bool require_release = true) {
         blocked_ = blocked_ || require_release;
         end_mouse(MouseTouchEvent::Cancel);

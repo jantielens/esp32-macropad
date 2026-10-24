@@ -1,4 +1,5 @@
 #include "pad_screen.h"
+#include "../touch_manager.h"
 #include "../button_shadow_color.h"
 #include "../fill_style_runtime.h"
 #include "../display_driver.h"
@@ -310,16 +311,12 @@ void PadScreen::pollNumberBindings() {
 // Button State Binding Polling
 // ============================================================================
 
-static BtnState parse_btn_state(const char* resolved) {
-    if (!resolved || !resolved[0]) return BTN_STATE_ENABLED;
-    if (strcmp(resolved, "disabled") == 0) return BTN_STATE_DISABLED;
-    if (strcmp(resolved, "hidden") == 0)   return BTN_STATE_HIDDEN;
-    // "enabled", "---" (unresolved), "ERR:..." → default to enabled
-    return BTN_STATE_ENABLED;
-}
-
 static void apply_btn_state(ButtonTile& tile, BtnState state) {
     if (!tile.obj) return;
+    if (tile.shadow) {
+        if (state == BTN_STATE_HIDDEN) lv_obj_add_flag(tile.shadow, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_clear_flag(tile.shadow, LV_OBJ_FLAG_HIDDEN);
+    }
     const bool was_inactive = lv_obj_has_flag(tile.obj, LV_OBJ_FLAG_HIDDEN) ||
         lv_obj_has_state(tile.obj, LV_STATE_DISABLED);
     if (state != BTN_STATE_ENABLED && tile.widget_type && tile.widget_type->onHide) {
@@ -347,29 +344,42 @@ void PadScreen::pollBtnStateBindings() {
     if (btnStateBindingCount == 0) return;
 
     char resolved[BINDING_TEMPLATE_MAX_LEN];
+    bool state_changed = false;
+    bool cancel_input = false;
 
     for (uint16_t i = 0; i < btnStateBindingCount; i++) {
         RuntimeBtnStateBinding& sb = btnStateBindings[i];
         if (!sb.active) continue;
 
-        BtnState state;
+        const uint8_t ti = sb.tileIndex;
+        if (ti >= tileCount) continue;
+        ButtonTile& tile = tiles[ti];
+        const bool overlay = ti >= mainButtonCount;
+        const bool was_hidden = lv_obj_has_flag(tile.obj, LV_OBJ_FLAG_HIDDEN);
+        const bool was_disabled = lv_obj_has_state(tile.obj, LV_STATE_DISABLED);
+        const BtnState previous_state = was_hidden ? BTN_STATE_HIDDEN
+            : was_disabled ? BTN_STATE_DISABLED : BTN_STATE_ENABLED;
+        const char* value = sb.templ;
+        bool resolution_complete = true;
 
         if (sb.hasBindings) {
-            binding_template_resolve(sb.templ, resolved, sizeof(resolved));
-            state = parse_btn_state(resolved);
+            const BindingResolverStatus status = binding_template_resolve_status(
+                sb.templ, resolved, sizeof(resolved));
+            value = resolved;
+            resolution_complete = status == BINDING_RESOLVER_RESOLVED;
         } else {
             // Static value — parse once then deactivate
-            state = parse_btn_state(sb.templ);
             sb.active = false;
         }
+        const BtnState state = pad_overlay_resolve_state(
+            value, resolution_complete, overlay, true);
 
         if ((uint8_t)state == sb.lastState) continue;
         sb.lastState = (uint8_t)state;
-
-        uint8_t ti = sb.tileIndex;
-        if (ti >= tileCount) continue;
-        ButtonTile& tile = tiles[ti];
-
+        if (previous_state != state) {
+            state_changed = true;
+            if (tile.touch_start_valid && state != BTN_STATE_ENABLED) cancel_input = true;
+        }
         apply_btn_state(tile, state);
 
 #if HAS_IMAGE_FETCH
@@ -381,6 +391,41 @@ void PadScreen::pollBtnStateBindings() {
                 image_fetch_resume_slot(tile.image_slot);
             }
         }
+#endif
+    }
+    if (state_changed) {
+        lv_point_t pointer{};
+        bool pointer_pressed = false;
+        for (lv_indev_t* indev = lv_indev_get_next(nullptr); indev; indev = lv_indev_get_next(indev)) {
+            if (lv_indev_get_type(indev) == LV_INDEV_TYPE_POINTER &&
+                lv_indev_get_state(indev) == LV_INDEV_STATE_PRESSED) {
+                lv_indev_get_point(indev, &pointer);
+                pointer_pressed = true;
+                break;
+            }
+        }
+        if (pointer_pressed && padActionOverlay && lv_obj_has_state(padActionOverlay, LV_STATE_PRESSED) &&
+            pointBlockedByOverlay(pointer)) cancel_input = true;
+        for (uint8_t index = 0; index < tileCount; ++index) {
+            ButtonTile& tile = tiles[index];
+            if (!tile.touch_start_valid) continue;
+            const lv_point_t point = pointer_pressed ? pointer : tile.touch_start;
+            if (!inputAllowed(tile, point)) {
+                tile.touch_start_valid = false;
+                cancel_input = true;
+                break;
+            }
+        }
+#if HAS_TOUCH
+        if (cancel_input) touch_manager_cancel_physical_input();
+        touch_manager_cancel_blocked_input([](lv_obj_t* object, const lv_point_t& point, void* context) {
+            auto* pad = static_cast<PadScreen*>(context);
+            for (uint8_t index = 0; index < pad->tileCount; ++index) {
+                const ButtonTile& tile = pad->tiles[index];
+                if (tile.obj == object) return !pad->inputAllowed(tile, point);
+            }
+            return false;
+        }, this);
 #endif
     }
 }

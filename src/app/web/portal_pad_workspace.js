@@ -23,15 +23,27 @@ function padWorkspaceInit() {
         node.dataset.buttonTab = actions ? 'Actions' : appearance ? 'Appearance' : 'Content';
     });
     const on = (node, event, callback) => node.addEventListener(event, callback, { signal: controller.signal });
+    on(canvas, 'click', event => {
+        if (event.target !== canvas || !padWorkspace.selected) return;
+        padWorkspaceSetScope('pad');
+        padWorkspaceReturn();
+    });
     root.addEventListener('wheel', padWorkspaceWheel, { passive: false, signal: controller.signal });
     on(element('pad-workspace-pad-scope'), 'click', () => padWorkspaceSetScope('pad'));
     on(element('pad-workspace-button-scope'), 'click', () => padWorkspaceSetScope('button'));
     on(element('pad-workspace-back'), 'click', padWorkspaceReturn);
     on(element('pad-workspace-mobile-save'), 'click', () => element('pad-save-btn').click());
+    root.querySelectorAll('[data-pad-layer]').forEach(button => {
+        on(button, 'click', () => padWorkspaceSetLayer(button.dataset.padLayer));
+    });
     ['input', 'change'].forEach(event => {
         on(element('pad-edit-overlay'), event, padWorkspaceEdit);
         on(fields, event, () => {
-            if (!padWorkspace.loading) { padMarkDirty(); padRenderGrid(); padWorkspaceSummaries(); padWorkspaceRefresh(); }
+            if (padWorkspace.loading) return;
+            padMarkDirty();
+            padUpdateGridBackground();
+            padWorkspaceSummaries();
+            padWorkspaceRefresh();
         });
     });
     on(element('pad-edit-overlay'), 'click', event => {
@@ -107,11 +119,12 @@ function padWorkspaceFit() {
     const reserve = padGetEffectiveDefault('pixel_shift_distance_px');
     grid.style.gap = padGetEffectiveDefault('button_spacing_px') * scale + 'px';
     grid.style.padding = ['top', 'right', 'bottom', 'left'].map(edge => (reserve + padGetEffectiveDefault('pad_inset_' + edge + '_px')) * scale + 'px').join(' ');
+    if (typeof padRenderGridTracks === 'function') padRenderGridTracks();
 }
 
 function padWorkspaceMoveSelection(col, row, button) {
     if (!padWorkspace || !padWorkspace.selected || padState.editCol !== col || padState.editRow !== row) return;
-    const oldKey = col + ',' + row;
+    const oldKey = padWorkspaceButtonKey(padState.selectedLayer, col, row);
     const saved = padWorkspace.forms.get(oldKey);
     if (saved) {
         saved.values.forEach(field => {
@@ -119,7 +132,7 @@ function padWorkspaceMoveSelection(col, row, button) {
             if (field.id === 'pad-edit-row-span') field.value = String(button.row_span || 1);
         });
     }
-    const newKey = button.col + ',' + button.row;
+    const newKey = padWorkspaceButtonKey(padState.selectedLayer, button.col, button.row);
     padWorkspace.forms.delete(oldKey);
     if (saved) padWorkspace.forms.set(newKey, saved);
     const error = padWorkspace.errors.get(oldKey);
@@ -137,11 +150,56 @@ function padWorkspaceDispose() {
     if (padWorkspace.confirmResolve) padWorkspace.confirmResolve(false);
     if (typeof padPvHide === 'function') padPvHide();
     if (typeof padWidgetEditorsDispose === 'function') padWidgetEditorsDispose();
+    padImageLibraryCache = null;
+    padImageLibraryFiles = [];
     padWorkspace = null;
     padDirty = false;
 }
 
-function padWorkspaceKey() { return padState.editCol + ',' + padState.editRow; }
+function padWorkspaceButtonKey(layer, col, row) { return layer + ':' + col + ',' + row; }
+function padWorkspaceKey() { return padWorkspaceButtonKey(padState.selectedLayer, padState.editCol, padState.editRow); }
+
+function padWorkspaceSetLayer(layer) {
+    if (!padWorkspace || (layer !== 'main' && layer !== 'overlay') || layer === padState.selectedLayer) return;
+    if (padWorkspace.selected) {
+        padWorkspaceCapture();
+        padState.layerSelections[padState.selectedLayer] = { col: padState.editCol, row: padState.editRow };
+    }
+    padWorkspace.selected = false;
+    padPvHide();
+    padState.selectedLayer = layer;
+    padWorkspaceSetScope('pad');
+    padWorkspaceRenderLayer();
+    padRenderGrid();
+    const selection = padState.layerSelections[layer];
+    if (selection) padDialogOpen(selection.col, selection.row);
+    else padWorkspaceReturn();
+}
+
+function padWorkspaceRenderLayer() {
+    if (!padWorkspace) return;
+    const overlay = padState.selectedLayer === 'overlay';
+    padWorkspace.root.classList.toggle('pad-overlay-editing', overlay);
+    padWorkspace.root.querySelectorAll('[data-pad-layer]').forEach(button => {
+        button.setAttribute('aria-pressed', String(button.dataset.padLayer === padState.selectedLayer));
+    });
+    const capacity = document.getElementById('pad-layer-capacity');
+    if (capacity) capacity.textContent = (padState.mainButtons.length + padState.overlayButtons.length) + ' / ' +
+        padMaxButtons() + ' button slots used';
+    const fields = document.getElementById('pad-workspace-pad-fields');
+    if (!fields) return;
+    fields.querySelectorAll('input, select, textarea, button').forEach(control => {
+        if (overlay) {
+            if (!control.hasAttribute('data-main-disabled')) {
+                control.dataset.mainDisabled = String(Boolean(control.disabled));
+            }
+            control.disabled = true;
+        } else if (control.hasAttribute('data-main-disabled')) {
+            control.disabled = control.dataset.mainDisabled === 'true';
+            delete control.dataset.mainDisabled;
+        }
+    });
+}
 
 function padWorkspaceSelect(col, row) {
     if (padWorkspace && padWorkspace.selected && padState.editCol === col && padState.editRow === row) {
@@ -180,7 +238,7 @@ function padWorkspaceAfterSelect() {
         });
         padActionPrefixes('tap').concat(padActionPrefixes('lp'), padWidgetActionPrefixes()).forEach(actionEditorTypeChanged);
         padWidgetTypeChanged();
-        padIconTypeChanged();
+        padIconEditorRefresh();
         saved.details.forEach(field => {
             const node = padWorkspace.root.querySelectorAll('#pad-edit-overlay details')[field.index];
             if (node) node.open = field.open;
@@ -189,6 +247,7 @@ function padWorkspaceAfterSelect() {
         padWorkspace.root.querySelectorAll('#pad-edit-overlay .action-list-slot').forEach(node => { node.open = false; });
     }
     padWorkspace.selected = true;
+    padState.layerSelections[padState.selectedLayer] = { col: padState.editCol, row: padState.editRow };
     padWorkspace.loading = false;
     padWorkspaceSetScope('button');
     const error = padWorkspace.errors.get(padWorkspaceKey());
@@ -196,7 +255,7 @@ function padWorkspaceAfterSelect() {
     padWorkspace.root.querySelector('.pad-edit-body').scrollTop = saved ? saved.scroll : 0;
     padWorkspaceCapture();
     padWorkspaceSummaries();
-    padRenderGrid();
+    padWorkspaceRefresh();
     if (error) padWorkspaceEdit(true);
 }
 
@@ -217,11 +276,13 @@ function padWorkspaceEdit(revalidate) {
     try {
         const button = padDialogBuildButton();
         padDialogValidateButton(button);
+        const previous = padState.buttons.find(item => item.col === button.col && item.row === button.row);
         padState.buttons = padState.buttons.filter(item => item.col !== button.col || item.row !== button.row);
         padState.buttons.push(button);
+        if (typeof padPruneDraftIconSources === 'function') padPruneDraftIconSources();
         padWorkspace.errors.delete(padWorkspaceKey());
         padDialogClearValidationError();
-        padRenderGrid();
+        padUpdateButtonPreview(previous, button);
     } catch (error) {
         padWorkspace.errors.set(padWorkspaceKey(), error);
         padDialogShowValidationError(error);
@@ -254,40 +315,59 @@ function padWorkspaceValidate() {
     if (!padWorkspace) return;
     while (padWorkspace.errors.size) {
         const [key] = padWorkspace.errors.entries().next().value;
-        const position = key.split(',').map(Number);
+        const separator = key.indexOf(':');
+        const layer = key.slice(0, separator);
+        const position = key.slice(separator + 1).split(',').map(Number);
+        if (layer !== padState.selectedLayer) padWorkspaceSetLayer(layer);
         padDialogOpen(position[0], position[1]);
         const message = padWorkspace.errors.get(key);
         if (!message) continue;
         padDialogFocusValidationError(message);
-        throw Object.assign(new Error('Button [' + key + ']: ' + (message.message || message)), { fieldIds: message.fieldIds || [] });
+        throw Object.assign(new Error('Button [' + layer + ' ' + position.join(',') + ']: ' + (message.message || message)), { fieldIds: message.fieldIds || [] });
     }
-    const occupied = new Set();
-    padState.buttons.forEach(button => {
-        const cols = button.col_span || 1;
-        const rows = button.row_span || 1;
-        if (button.col < 0 || button.row < 0 || button.col + cols > padState.cols || button.row + rows > padState.rows) throw new Error('A button is outside the pad. Adjust its position or grid size.');
-        for (let row = button.row; row < button.row + rows; row++) {
-            for (let col = button.col; col < button.col + cols; col++) {
-                const key = col + ',' + row;
-                if (occupied.has(key)) throw new Error('Buttons overlap at [' + key + ']');
-                occupied.add(key);
+    for (const [layer, buttons] of [['main', padState.mainButtons], ['overlay', padState.overlayButtons]]) {
+        const occupied = new Set();
+        buttons.forEach(button => {
+            const cols = button.col_span || 1;
+            const rows = button.row_span || 1;
+            if (button.col < 0 || button.row < 0 || button.col + cols > padState.cols || button.row + rows > padState.rows) throw new Error('A button is outside the pad. Adjust its position or grid size.');
+            for (let row = button.row; row < button.row + rows; row++) {
+                for (let col = button.col; col < button.col + cols; col++) {
+                    const key = col + ',' + row;
+                    if (occupied.has(key)) throw new Error(layer + ' buttons overlap at [' + key + ']');
+                    occupied.add(key);
+                }
             }
-        }
-    });
+        });
+    }
+    const max = padMaxButtons();
+    if (padState.mainButtons.length + padState.overlayButtons.length > max)
+        throw new Error('Combined Main and Overlay button limit exceeded (' + max + ')');
 }
 
 function padWorkspaceClearButton(col, row) {
     if (!padWorkspace) return;
-    padWorkspace.forms.delete(col + ',' + row);
-    padWorkspace.errors.delete(col + ',' + row);
+    const key = padWorkspaceButtonKey(padState.selectedLayer, col, row);
+    padWorkspace.forms.delete(key);
+    padWorkspace.errors.delete(key);
     padWorkspace.selected = false;
     padWorkspaceSetScope('pad');
 }
 
-function padWorkspaceReset() {
+function padWorkspaceReset(layer) {
     if (!padWorkspace) return;
-    padWorkspace.forms.clear();
-    padWorkspace.errors.clear();
+    if (layer) {
+        for (const entries of [padWorkspace.forms, padWorkspace.errors]) {
+            for (const key of entries.keys()) {
+                if (key.startsWith(layer + ':')) entries.delete(key);
+            }
+        }
+        padState.layerSelections[layer] = null;
+    } else {
+        padWorkspace.forms.clear();
+        padWorkspace.errors.clear();
+        padState.layerSelections = { main: null, overlay: null };
+    }
     padWorkspace.selected = false;
     padWorkspaceSetScope('pad');
     padWorkspace.root.classList.remove('pad-workspace-inspecting');
@@ -347,11 +427,12 @@ function padWorkspaceRefresh() {
     const save = document.getElementById('pad-save-btn');
     save.disabled = padSaveInProgress || padWorkspace.loading;
     document.getElementById('pad-workspace-mobile-save').disabled = save.disabled;
+    padWorkspaceRenderLayer();
     document.querySelectorAll('#pad-grid .pad-cell').forEach(cell => {
-        const selected = padWorkspace.selected && Number(cell.dataset.col) === padState.editCol && Number(cell.dataset.row) === padState.editRow;
+        const selected = padWorkspace.selected && cell.dataset.layer === padState.selectedLayer && Number(cell.dataset.col) === padState.editCol && Number(cell.dataset.row) === padState.editRow;
         cell.classList.toggle('pad-cell-selected', selected);
         cell.setAttribute('role', 'button');
-        cell.setAttribute('aria-label', 'Button [' + cell.dataset.col + ', ' + cell.dataset.row + ']');
+        cell.setAttribute('aria-label', cell.dataset.layer + ' button [' + cell.dataset.col + ', ' + cell.dataset.row + ']');
         cell.setAttribute('aria-pressed', String(selected));
         cell.tabIndex = 0;
         cell.onkeydown = event => {
@@ -368,15 +449,18 @@ function padWorkspaceRefresh() {
     const signature = JSON.stringify([padState.page, choices]);
     if (signature === padWorkspace.railSignature) return;
     padWorkspace.railSignature = signature;
-    list.replaceChildren();
-    choices.forEach(option => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.dataset.padChoice = option.value;
-        button.textContent = option.name;
+    choices.forEach((option, index) => {
+        let button = list.children[index];
+        if (!button) {
+            button = document.createElement('button');
+            button.type = 'button';
+            button.dataset.padChoice = option.value;
+            list.appendChild(button);
+        }
+        if (button.textContent !== option.name) button.textContent = option.name;
         button.setAttribute('aria-current', String(Number(option.value) === padState.page));
-        list.appendChild(button);
     });
+    while (list.children.length > choices.length) list.lastElementChild.remove();
 }
 
 function padWorkspaceConfirm(message) {

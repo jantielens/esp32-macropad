@@ -24,6 +24,8 @@
 // called at boot before any `Storage.*` access when `USE_SD_STORAGE` is on.
 
 #include "board_config.h"
+#include <stddef.h>
+#include <stdint.h>
 
 #if HAS_FILESYSTEM && USE_SD_STORAGE
   #include <SD_MMC.h>
@@ -66,5 +68,10 @@ inline bool storage_remove_sd_owned_roots(RemoveRoot remove_root) {
 // the filesystem is mounted and ready. For SD storage the card must already
 // have been mounted via sd_storage_mount() earlier in boot.
 bool storage_mount();
+
+#if HAS_FILESYSTEM
+bool storage_write_verified(const char* path, const uint8_t* data, size_t length);
+bool storage_write_atomic(const char* path, const uint8_t* data, size_t length);
+#endif
 
 #endif // STORAGE_H

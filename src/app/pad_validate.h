@@ -6,6 +6,17 @@
 
 #include <ArduinoJson.h>
 
+struct PadValidationGeometry {
+	uint16_t display_width;
+	uint16_t display_height;
+	uint16_t spacing_px;
+	uint16_t inset_left_px;
+	uint16_t inset_right_px;
+	uint16_t inset_top_px;
+	uint16_t inset_bottom_px;
+	uint16_t pixel_shift_distance_px;
+};
+
 // ============================================================================
 // Pad validation — single source of truth for pad JSON validity.
 //
@@ -29,6 +40,11 @@
 // reappear when it grows back); MCP authoring leaves it false so a mis-placed
 // button is caught up front. All other checks are identical for both callers.
 // ============================================================================
-const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid = false);
+const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid = false,
+						 const PadValidationGeometry* geometry = nullptr);
+
+bool pad_icon_source_id_valid(const char* source_id);
+bool pad_icon_catalog_kind_valid(const char* catalog_id, const char* kind);
+uint32_t pad_icon_render_key(JsonObjectConst pad, JsonObjectConst button);
 
 #endif // HAS_DISPLAY

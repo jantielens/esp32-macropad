@@ -7,6 +7,7 @@ const context = {
 	console,
 	MAX_ACTIONS: 3,
 	padIconTypeChanged() {},
+	padIconEditorRefresh() {},
 	padFillRefreshVisibility() {},
 	padWorkspaceRefresh() {},
 	actionEditorListSetLabels() {},
@@ -26,6 +27,41 @@ vm.createContext(context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_editor.js', 'utf8'), context);
 const source = fs.readFileSync('src/app/web/portal_pad_editor.js', 'utf8');
 vm.runInContext(source.replace('let padDirty = false;', 'var padDirty = false;'), context);
+
+for (const [text, count, expected] of [
+	[' 3:50, 5:80 ', 5, [0, 0, 50, 0, 80]],
+	['', 3, [0, 0, 0]],
+]) {
+	const parsed = context.padTrackParse(text, count, 'rows');
+	assert.strictEqual(parsed.status, 'valid');
+	assert.deepStrictEqual(Array.from(parsed.sizes), expected);
+}
+for (const [text, count, status] of [
+	['3:', 5, 'incomplete'], ['3:50, 5:', 5, 'incomplete'],
+	['3:50, 3:60', 5, 'invalid'], ['6:50', 5, 'invalid'],
+	['1:50, 2:60, 3:70', 3, 'invalid'], ['2:0', 3, 'invalid'],
+	['2:1.5', 3, 'invalid'],
+]) {
+	assert.strictEqual(context.padTrackParse(text, count, 'rows').status, status, text);
+}
+
+const trackElements = new Map();
+const trackContext = {
+	document: { activeElement: null, getElementById(id) { return trackElements.get(id) || null; } },
+	deviceInfoCache: null,
+	padGetEffectiveDefault() { return 0; },
+	padRenderGrid() {},
+	padPvHide() {},
+};
+for (const [id, value] of [['pad-row-heights', '1:50, 2:'], ['pad-column-widths', '2:20']]) {
+	trackElements.set(id, { id, value, classList: { toggle() {} }, setAttribute() {}, focus() {} });
+	trackElements.set(id + '-error', { textContent: '', hidden: true });
+}
+vm.createContext(trackContext);
+vm.runInContext(source.replace('let padDirty = false;', 'var padDirty = false;'), trackContext);
+vm.runInContext('padState.rows = 2; padState.cols = 3; padState.rowHeightsPx = [50, 0]; padState.columnWidthsPx = [0, 20, 0]; padTrackGridCountChanged("rows", 2, 3);', trackContext);
+assert.deepStrictEqual(Array.from(vm.runInContext('padState.rowHeightsPx', trackContext)), [50, 0, 0], 'A count change must preserve existing sizes and add Auto tracks while text is incomplete');
+assert.strictEqual(trackElements.get('pad-row-heights').value, '1:50, 2:', 'A count change must retain partial text');
 
 assert.strictEqual(context.padDirty, false);
 context.padMarkDirty({ isTrusted: false });
@@ -49,6 +85,7 @@ const loadingContext = {
 	deviceInfoCache: { available_screens: [{ id: 'pad_1', name: 'Destination pad' }] },
 	padWorkspace: { loading: false },
 	padWorkspaceReset() {},
+	padPruneDraftIconSources() {},
 	document: { getElementById(id) { return id === 'pad-name' ? loadingName : { value: '' }; } },
 	fetch() { return new Promise(() => {}); }
 };
@@ -331,19 +368,29 @@ const draftRoot = {
 	isConnected: true,
 	querySelectorAll(selector) { return selector.includes('input') ? [draftInput] : selector === '#pad-edit-overlay details' ? [draftGroup] : []; },
 	querySelector() { return { scrollTop: 42 }; },
-	classList: { add() {}, remove() {} }
+	classList: { add() {}, remove() {}, toggle() {} }
 };
 const workspaceContext = {
-	console, Map, Set,
-	padState: { page: 0, cols: 2, rows: 2, editCol: 0, editRow: 0, buttons: [{ col: 0, row: 0, label_center: 'Original' }] },
+	console, Map, Set, deviceInfoCache: { max_pad_buttons: 64 },
+	padCloneJson(value) { return JSON.parse(JSON.stringify(value)); },
+	padMaxButtons() { return 64; },
+	padState: {
+		page: 0, cols: 2, rows: 2, editCol: 0, editRow: 0, selectedLayer: 'main',
+		layerSelections: { main: null, overlay: null },
+		mainButtons: [{ col: 0, row: 0, label_center: 'Original' }], overlayButtons: [],
+		get buttons() { return this.selectedLayer === 'overlay' ? this.overlayButtons : this.mainButtons; },
+		set buttons(value) { if (this.selectedLayer === 'overlay') this.overlayButtons = value; else this.mainButtons = value; }
+	},
 	padDirty: false,
 	document: {
-		getElementById() { return { value: '0', replaceChildren() {}, appendChild() {} }; },
+		getElementById() { return { value: '0', replaceChildren() {}, appendChild() {}, querySelectorAll() { return []; } }; },
 		createElement() { return { setAttribute() {}, addEventListener() {} }; }
 	},
 	padMarkDirty() { workspaceContext.padDirty = true; workspaceContext.revisions++; },
 	revisions: 0,
 	padRenderGrid() {},
+	padUpdateButtonPreview() {},
+	padPvHide() {},
 	padDialogBuildButton() { return { col: 0, row: 0, label_center: draftInput.value }; },
 	padDialogValidateButton() { if (draftInput.value === '[unfinished') throw new Error('Incomplete binding'); },
 	padDialogShowValidationError(message) { workspaceContext.error = message.message || message; },
@@ -363,7 +410,7 @@ workspaceContext.padWorkspaceEdit();
 assert.strictEqual(workspaceContext.padState.buttons[0].label_center, 'Original');
 assert.strictEqual(workspaceContext.padDirty, true);
 assert.strictEqual(workspaceContext.error, 'Incomplete binding');
-assert.strictEqual(vm.runInContext("padWorkspace.forms.get('0,0').values[0].value", workspaceContext), '[unfinished');
+assert.strictEqual(vm.runInContext("padWorkspace.forms.get('main:0,0').values[0].value", workspaceContext), '[unfinished');
 workspaceContext.padDialogOpen = () => {};
 workspaceContext.padDialogFocusValidationError = () => {};
 assert.throws(() => workspaceContext.padWorkspaceValidate(), /Incomplete binding/);
@@ -390,6 +437,7 @@ workspaceContext.padWidgetActionPrefixes = () => [];
 workspaceContext.actionEditorTypeChanged = () => {};
 workspaceContext.padWidgetTypeChanged = () => {};
 workspaceContext.padIconTypeChanged = () => {};
+workspaceContext.padIconEditorRefresh = () => {};
 workspaceContext.padConfirmChanged = () => {};
 workspaceContext.padDialogOpen = () => {
 	draftGroup.open = true;
@@ -415,32 +463,79 @@ workspaceContext.document.getElementById = draftLookup;
 workspaceContext.padWorkspaceReset();
 assert.strictEqual(vm.runInContext('padWorkspace.forms.size', workspaceContext), 0);
 assert.strictEqual(vm.runInContext('padWorkspace.selected', workspaceContext), false);
-vm.runInContext("padWorkspace.selected = true; padWorkspace.errors.set('0,0', 'Incomplete binding');", workspaceContext);
+vm.runInContext("padWorkspace.selected = true; padWorkspace.errors.set('main:0,0', 'Incomplete binding');", workspaceContext);
 draftInput.value = '[unfinished';
 workspaceContext.padWorkspaceRenderTabs = () => {};
 setWorkspaceScope('pad');
 assert.strictEqual(vm.runInContext('padWorkspace.selected', workspaceContext), false);
-assert.strictEqual(vm.runInContext("padWorkspace.forms.get('0,0').values[0].value", workspaceContext), '[unfinished');
-assert.strictEqual(vm.runInContext("padWorkspace.errors.get('0,0')", workspaceContext), 'Incomplete binding');
+assert.strictEqual(vm.runInContext("padWorkspace.forms.get('main:0,0').values[0].value", workspaceContext), '[unfinished');
+assert.strictEqual(vm.runInContext("padWorkspace.errors.get('main:0,0')", workspaceContext), 'Incomplete binding');
 workspaceContext.padWorkspaceSetScope = setWorkspaceScope;
 vm.runInContext('padWorkspace.selected = true;', workspaceContext);
 workspaceContext.padWorkspaceSelect(0, 0);
 assert.strictEqual(vm.runInContext('padWorkspace.selected', workspaceContext), false, 'Clicking the selected button deselects it');
-assert.strictEqual(vm.runInContext("padWorkspace.forms.get('0,0').values[0].value", workspaceContext), '[unfinished');
-assert.strictEqual(vm.runInContext("padWorkspace.errors.get('0,0')", workspaceContext), 'Incomplete binding');
+assert.strictEqual(vm.runInContext("padWorkspace.forms.get('main:0,0').values[0].value", workspaceContext), '[unfinished');
+assert.strictEqual(vm.runInContext("padWorkspace.errors.get('main:0,0')", workspaceContext), 'Incomplete binding');
 let openedPosition = null;
 workspaceContext.padDialogOpen = (col, row) => { openedPosition = [col, row]; };
 workspaceContext.padWorkspaceSelect(0, 0);
 assert.deepStrictEqual(openedPosition, [0, 0], 'Clicking an unselected button opens its editor');
 
+workspaceContext.padWorkspaceSetScope = () => {};
+workspaceContext.padDialogOpen = () => {};
+workspaceContext.padState.layerSelections = { main: { col: 0, row: 0 }, overlay: { col: 0, row: 0 } };
+vm.runInContext('padWorkspace.selected = true;', workspaceContext);
+draftInput.value = 'Main same-coordinate draft';
+workspaceContext.padWorkspaceCapture();
+workspaceContext.padWorkspaceSetLayer('overlay');
+vm.runInContext('padWorkspace.selected = true;', workspaceContext);
+draftInput.value = 'Overlay same-coordinate draft';
+workspaceContext.padWorkspaceCapture();
+vm.runInContext("padWorkspace.errors.set('main:0,0', 'Main error'); padWorkspace.errors.set('overlay:0,0', 'Overlay error');", workspaceContext);
+workspaceContext.padWorkspaceSetLayer('main');
+assert.strictEqual(vm.runInContext("padWorkspace.forms.get('main:0,0').values[0].value", workspaceContext), 'Main same-coordinate draft');
+assert.strictEqual(vm.runInContext("padWorkspace.forms.get('overlay:0,0').values[0].value", workspaceContext), 'Overlay same-coordinate draft');
+assert.strictEqual(vm.runInContext("padWorkspace.errors.get('main:0,0')", workspaceContext), 'Main error');
+assert.strictEqual(vm.runInContext("padWorkspace.errors.get('overlay:0,0')", workspaceContext), 'Overlay error');
+
+const sharedControls = ['checkbox', 'text', 'button'].map((type, index) => ({
+	type, disabled: index === 2, readOnly: false, dataset: {},
+	hasAttribute(name) { return name === 'data-main-disabled' && this.dataset.mainDisabled !== undefined; }
+}));
+workspaceContext.document.getElementById = id => id === 'pad-workspace-pad-fields'
+	? { querySelectorAll() { return sharedControls; } } : null;
+workspaceContext.padState.selectedLayer = 'overlay';
+workspaceContext.padWorkspaceRenderLayer();
+workspaceContext.padWorkspaceRenderLayer();
+assert(sharedControls.every(control => control.disabled), 'Overlay must lock every shared control, including checkboxes');
+workspaceContext.padState.selectedLayer = 'main';
+workspaceContext.padWorkspaceRenderLayer();
+assert.deepStrictEqual(sharedControls.map(control => control.disabled), [false, false, true], 'Main must restore the original disabled states');
+workspaceContext.document.getElementById = draftLookup;
+
+vm.runInContext(fs.readFileSync('src/app/web/portal_pad_io.js', 'utf8'), workspaceContext);
+workspaceContext.confirm = () => true;
+workspaceContext.showMessage = () => {};
+workspaceContext.padState.btnClipboard = { label_center: 'Copied' };
+workspaceContext.padState.selectedLayer = 'overlay';
+workspaceContext.padState.layerSelections = { main: { col: 0, row: 0 }, overlay: { col: 0, row: 0 } };
+workspaceContext.padFillWithClipboard();
+assert.strictEqual(vm.runInContext("padWorkspace.forms.get('main:0,0').values[0].value", workspaceContext), 'Main same-coordinate draft', 'Filling Overlay must preserve Main drafts');
+assert.strictEqual(vm.runInContext("padWorkspace.errors.get('main:0,0')", workspaceContext), 'Main error', 'Filling Overlay must preserve Main validation errors');
+assert.strictEqual(vm.runInContext("padWorkspace.forms.has('overlay:0,0') || padWorkspace.errors.has('overlay:0,0')", workspaceContext), false);
+assert.deepStrictEqual(workspaceContext.padState.layerSelections.main, { col: 0, row: 0 });
+assert.strictEqual(workspaceContext.padState.overlayButtons.length, 4);
+workspaceContext.padState.selectedLayer = 'main';
+
 const refreshElements = new Map();
 const refreshContext = {
-	console, padState: { page: 0, cols: 4, rows: 3 }, padDirty: false, padSaveInProgress: false,
+	console, padState: { page: 0, cols: 4, rows: 3, selectedLayer: 'main', mainButtons: [], overlayButtons: [] }, padDirty: false, padSaveInProgress: false,
+	padMaxButtons() { return 64; },
 	deviceInfoCache: { max_pads: 2, available_screens: [{ id: 'pad_0', name: 'Pad 1: Solar' }, { id: 'pad_1', name: 'Pad 2: Lights' }] },
 	document: {
 		getElementById(id) {
 			assert.notStrictEqual(id, 'pad-page-select', 'Refresh must not depend on the removed pad dropdown');
-			if (!refreshElements.has(id)) refreshElements.set(id, { value: 'Solar', textContent: '', children: [], replaceChildren() { this.children = []; }, appendChild(child) { this.children.push(child); } });
+			if (!refreshElements.has(id)) refreshElements.set(id, { value: 'Solar', textContent: '', children: [], replaceChildren() { this.children = []; }, appendChild(child) { this.children.push(child); }, querySelectorAll() { return []; } });
 			return refreshElements.get(id);
 		},
 		createElement() { return { dataset: {}, setAttribute() {} }; },
@@ -449,7 +544,7 @@ const refreshContext = {
 };
 vm.createContext(refreshContext);
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_workspace.js', 'utf8'), refreshContext);
-vm.runInContext('padWorkspace = { root: { isConnected: true }, loading: false, railSignature: "[0,[]]" };', refreshContext);
+vm.runInContext('padWorkspace = { root: { isConnected: true, classList: { toggle() {} }, querySelectorAll() { return []; } }, loading: false, railSignature: "[0,[]]" };', refreshContext);
 const fitWorkspace = refreshContext.padWorkspaceFit;
 refreshContext.padWorkspaceFit = () => {};
 for (const [dirty, saving, status] of [[false, false, ''], [true, false, 'Unsaved edits'], [true, true, 'Saving...'], [false, false, '']]) {
@@ -555,13 +650,15 @@ async function checkSaveRaces() {
 	const saveContext = { console, MAX_ACTIONS: 3, padWorkspace: workspace, document: { getElementById() { return root; } } };
 	vm.createContext(saveContext);
 	vm.runInContext(source.replace('let padDirty = false;', 'var padDirty = false;'), saveContext);
-	vm.runInContext('padState.editCol = 2; padState.editRow = 0;', saveContext);
+	vm.runInContext("padState.selectedLayer = 'overlay'; padState.editCol = 2; padState.editRow = 0;", saveContext);
 	saveContext.padBuildSaveContext = () => ({ page: 0, name: 'Saved' });
 	saveContext.padClearDirty = () => { saveContext.padDirty = false; };
 	saveContext.showMessage = () => {};
 	saveContext.getDeviceInfo = async () => {};
 	let reloads = 0;
-	saveContext.padLoadPage = async () => {
+	let reloadedLayer = null;
+	saveContext.padLoadPage = async (page, defaultsReady, layer) => {
+		reloadedLayer = layer;
 		reloads++;
 		vm.runInContext('padState.editCol = 0; padState.editRow = 0;', saveContext);
 		workspace.tab = 'Layout';
@@ -582,6 +679,7 @@ async function checkSaveRaces() {
 	};
 	await saveContext.padSavePage();
 	assert.deepStrictEqual(saveContext.position, [1, 0], 'Save reload must retain the latest selection');
+	assert.strictEqual(reloadedLayer, 'overlay', 'Save reload must retain the selected layer');
 	assert.strictEqual(workspace.tab, 'Actions');
 	assert.strictEqual(body.scrollTop, 640, 'Save reload must restore the latest inspector scroll position');
 	assert.deepStrictEqual(groups.map(group => group.open), [true, false], 'Save reload must restore disclosure states');

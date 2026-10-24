@@ -3,6 +3,8 @@
 #if HAS_DISPLAY
 
 #include "board_config.h"
+#include "button_defaults.h"
+#include "display_manager.h"
 #include "icon_store.h"
 #include "log_manager.h"
 #include "pad_block.h"
@@ -71,7 +73,16 @@ static const char* validate_pad_json(const uint8_t* json, size_t len) {
     BasicJsonDocument<PsramJsonAllocator> doc(len * 2 + 512);
     DeserializationError err = deserializeJson(doc, json, len);
     if (err) return "Invalid JSON";
-    return pad_validate(doc.as<JsonObjectConst>(), /*tolerate_offgrid=*/true);
+    const PadLayoutSettings& layout = button_defaults_get()->layout;
+    const PadValidationGeometry geometry = {
+        (uint16_t)(displayManager ? displayManager->getActiveWidth() : DISPLAY_WIDTH),
+        (uint16_t)(displayManager ? displayManager->getActiveHeight() : DISPLAY_HEIGHT),
+        layout.spacing_px,
+        layout.inset_left_px, layout.inset_right_px,
+        layout.inset_top_px, layout.inset_bottom_px,
+        layout.pixel_shift_distance_px,
+    };
+    return pad_validate(doc.as<JsonObjectConst>(), /*tolerate_offgrid=*/true, &geometry);
 }
 
 static uint8_t* allocate_pad_json_buffer(size_t len) {
@@ -94,6 +105,95 @@ static void remove_pad_image_passwords(JsonArray buttons) {
     }
 }
 
+static void remove_pad_image_passwords(JsonDocument& pad) {
+    remove_pad_image_passwords(pad["buttons"].as<JsonArray>());
+    remove_pad_image_passwords(pad["overlay_buttons"].as<JsonArray>());
+}
+
+void handleGetPadIconContext(AsyncWebServerRequest *request) {
+    WebPortalTiming timing;
+    if (!portal_auth_gate(request)) return;
+    const int page = parse_page_param(request);
+    if (page < 0) {
+        web_portal_send_json_error(request, 400, "Missing or invalid page parameter", &timing);
+        return;
+    }
+
+    BasicJsonDocument<PsramJsonAllocator> filter(512);
+    for (const char* field : {"template_pad", "cols", "rows", "column_widths_px", "row_heights_px"})
+        filter[field] = true;
+    for (const char* field : {"col", "row", "col_span", "row_span"})
+        filter["buttons"][0][field] = true;
+    filter["overlay_buttons"][0]["col"] = true;
+    if (filter.overflowed()) {
+        web_portal_send_json_error(request, 503, "Out of memory", &timing);
+        return;
+    }
+
+    AsyncResponseStream* response = request->beginResponseStream("application/json");
+    response->print("{\"dependents\":[");
+    bool first = true;
+    for (uint8_t dependent = 0; dependent < MAX_PADS; ++dependent) {
+        if (dependent == page) continue;
+        const PadConfig* cached = pad_config_acquire(dependent);
+        if (!cached) continue;
+        const bool matches = cached->template_pad == page;
+        pad_config_release(cached);
+        if (!matches) continue;
+
+        size_t length = 0;
+        char* raw = pad_config_read_raw(dependent, &length);
+        BasicJsonDocument<PsramJsonAllocator> pad(8192);
+        if (!raw || length > PAD_CONFIG_MAX_JSON_BYTES ||
+            deserializeJson(pad, raw, length, DeserializationOption::Filter(filter))) {
+            free(raw);
+            delete response;
+            web_portal_send_json_error(request, 503, "Failed to read icon dependency context", &timing);
+            return;
+        }
+        if ((pad["template_pad"] | -1) != page) {
+            free(raw);
+            continue;
+        }
+        pad["page"] = dependent;
+        pad["button_count"] = pad["buttons"].size() + pad["overlay_buttons"].size();
+        pad.remove("overlay_buttons");
+        pad.remove("template_pad");
+        if (pad.overflowed()) {
+            free(raw);
+            delete response;
+            web_portal_send_json_error(request, 503, "Out of memory", &timing);
+            return;
+        }
+        if (!first) response->print(",");
+        serializeJson(pad, *response);
+        free(raw);
+        first = false;
+    }
+    response->print("]}");
+    timing.attach(response, "total");
+    request->send(response);
+}
+
+static void preserve_pad_image_passwords(JsonArray submitted_buttons,
+                                        JsonArrayConst existing_buttons) {
+    for (JsonObject button : submitted_buttons) {
+        const char* submitted_password = button["bg_image_password"] | "";
+        const bool preserve_password = (button["bg_image_password_set"] | false) && submitted_password[0] == '\0';
+        button.remove("bg_image_password_set");
+        if (!preserve_password) continue;
+
+        const int col = button["col"] | -1;
+        const int row = button["row"] | -1;
+        for (JsonObjectConst existing_button : existing_buttons) {
+            if ((existing_button["col"] | -2) != col || (existing_button["row"] | -2) != row) continue;
+            const char* password = existing_button["bg_image_password"] | "";
+            if (password[0] != '\0') button["bg_image_password"] = password;
+            break;
+        }
+    }
+}
+
 static uint8_t* prepare_pad_save_json(uint8_t page, const uint8_t* json, size_t len, size_t* prepared_len) {
     if (!prepared_len) return nullptr;
 
@@ -105,23 +205,10 @@ static uint8_t* prepare_pad_save_json(uint8_t page, const uint8_t* json, size_t 
     BasicJsonDocument<PsramJsonAllocator> existing(existing_len * 2 + 512);
     const bool have_existing = existing_json && !deserializeJson(existing, existing_json, existing_len);
 
-    JsonArray submitted_buttons = submitted["buttons"].as<JsonArray>();
-    JsonArrayConst existing_buttons = existing["buttons"].as<JsonArrayConst>();
-    for (JsonObject button : submitted_buttons) {
-        const char* submitted_password = button["bg_image_password"] | "";
-        const bool preserve_password = (button["bg_image_password_set"] | false) && submitted_password[0] == '\0';
-        button.remove("bg_image_password_set");
-        if (!preserve_password || !have_existing) continue;
-
-        const int col = button["col"] | -1;
-        const int row = button["row"] | -1;
-        for (JsonObjectConst existing_button : existing_buttons) {
-            if ((existing_button["col"] | -2) != col || (existing_button["row"] | -2) != row) continue;
-            const char* password = existing_button["bg_image_password"] | "";
-            if (password[0] != '\0') button["bg_image_password"] = password;
-            break;
-        }
-    }
+    preserve_pad_image_passwords(submitted["buttons"].as<JsonArray>(),
+        have_existing ? existing["buttons"].as<JsonArrayConst>() : JsonArrayConst());
+    preserve_pad_image_passwords(submitted["overlay_buttons"].as<JsonArray>(),
+        have_existing ? existing["overlay_buttons"].as<JsonArrayConst>() : JsonArrayConst());
 
     if (existing_json) free(existing_json);
 
@@ -171,7 +258,7 @@ void handleGetPadConfig(AsyncWebServerRequest *request) {
     free(json);
     timing.mark("parse");
 
-    remove_pad_image_passwords((*doc)["buttons"].as<JsonArray>());
+    remove_pad_image_passwords(*doc);
     timing.mark("redact");
     web_portal_send_json_chunked(request, doc, 200, &timing);
 }
@@ -267,8 +354,10 @@ void handlePostPadConfig(AsyncWebServerRequest *request, uint8_t *data, size_t l
         return;
     }
 
-    if (!pad_config_save_raw(g_pad_post.page, prepared_json, prepared_len)) {
-        web_portal_send_json_error(request, 500, "Failed to save config");
+    const char* save_error = nullptr;
+    if (!pad_config_save_raw(g_pad_post.page, prepared_json, prepared_len, &save_error)) {
+        web_portal_send_json_error(request, save_error ? 400 : 500,
+                                   save_error ? save_error : "Failed to save config");
         heap_caps_free(prepared_json);
         pad_post_reset();
         return;

@@ -410,5 +410,44 @@ const padButtonBuilders = [
             return { fg_color: previewState === 'on' ? options.on : previewState === 'off' ? options.off : '#EF6B73' };
         },
         previewStates: [['on', 'On'], ['off', 'Off'], ['unavailable', 'Unavailable']]
+    },
+    {
+        id: 'toggle_widget', label: 'Show a toggle switch',
+        description: 'Control a light or switch with an on/off switch in the button.',
+        note: 'The switch follows the entity state and sends an explicit turn-on or turn-off action.',
+        available: ({ sources: [source] }, runtime = deviceInfoCache) => {
+            const provider = source && padButtonBuilderProvider(source.candidate);
+            return !!source?.candidate.capabilities.control && !!provider?.buildToggleWidget &&
+                !!actionEditorCatalogEntry(provider.controlActionType) &&
+                !!runtime?.widget_catalog?.some(widget => widget.type === 'toggle');
+        },
+        fields: () => [],
+        build({ sources: [source] }) {
+            return padButtonBuilderProvider(source.candidate).buildToggleWidget(source.candidate);
+        },
+        preview: () => ({}),
+        previewNote: () => 'Shows the fetched entity state. Preview only. Does not control the entity.',
+        previewStates: [['on', 'On'], ['off', 'Off'], ['unavailable', 'Unavailable']],
+        renderPreview({ previewState }, cell, button) {
+            const state = String(previewState).trim().toLowerCase();
+            const available = state === 'on' || state === 'off';
+            const on = available && state === 'on';
+            const toggle = document.createElement('div');
+            toggle.className = 'pad-button-builder-toggle';
+            toggle.dataset.state = available ? (on ? 'on' : 'off') : 'unavailable';
+            toggle.setAttribute('role', 'img');
+            toggle.setAttribute('aria-label', available ? 'Switch ' + (on ? 'on' : 'off') : 'Switch unavailable');
+            const track = document.createElement('span');
+            track.className = 'pad-button-builder-toggle-track';
+            track.style.background = on ?
+                button.widget_toggle_on_color || PAD_FIRMWARE_DEFAULTS.widget_series_color :
+                button.widget_toggle_off_color || PAD_FIRMWARE_DEFAULTS.widget_track_color;
+            const knob = document.createElement('span');
+            knob.className = 'pad-button-builder-toggle-knob';
+            knob.style.background = button.widget_toggle_knob_color || PAD_FIRMWARE_DEFAULTS.widget_indicator_color;
+            toggle.append(track, knob);
+            if (!available) toggle.style.opacity = '0.5';
+            cell.appendChild(toggle);
+        }
     }
 ];

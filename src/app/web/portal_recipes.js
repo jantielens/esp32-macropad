@@ -637,19 +637,18 @@ function recipeApplyResizeSuggestion() {
 async function recipeClearButtons() {
     if (!recipeState.pad || !recipeState.emptyPlacement || !recipeState.selected) return;
     const page = recipeState.pad.page + 1;
-    if (!confirm('Clear all buttons on Pad ' + page + '?')) return;
+    if (!confirm('Clear Main buttons on Pad ' + page + '?')) return;
     try {
         const clearedPad = Object.assign({}, recipeState.pad, { buttons: [] });
         delete clearedPad.page;
-        const response = await fetch('/api/pad?page=' + recipeState.pad.page, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(clearedPad),
+        await padQueuePersistence({
+            page: recipeState.pad.page,
+            body: JSON.stringify(clearedPad),
+            iconLayout: padCaptureIconLayout(),
+            blankOnSave: Boolean(deviceInfoCache && deviceInfoCache.display_blank_on_save),
         });
-        if (!response.ok) {
-            const error = await response.json().catch(function () { return {}; });
-            throw new Error(error.error || 'Failed to clear buttons: HTTP ' + response.status);
-        }
         await recipeLoadPad();
-        showMessage('Buttons cleared. Select a position for the recipe.', 'success');
+        showMessage('Main buttons cleared. Select a position for the recipe.', 'success');
     } catch (error) {
         showMessage('Failed to clear buttons: ' + error.message, 'error');
     }
@@ -816,11 +815,16 @@ async function recipeInstall() {
             delete configured.order;
             return configured;
         });
+        const maxButtons = Number(deviceInfoCache && deviceInfoCache.max_pad_buttons) || 64;
+        const totalButtons = (target.buttons || []).length +
+            (target.overlay_buttons || []).length + buttons.length;
+        if (totalButtons > maxButtons)
+            recipeError('This recipe would exceed the combined Main and Overlay button limit of ' + maxButtons + '.');
         const componentIds = Object.keys(provision.components || {});
         const progress = recipeSetProgress([
-            'Adding ' + buttons.length + ' buttons...'
+            'Adding ' + buttons.length + ' buttons...', 'Generating button icons...'
         ].concat(recipe.fonts && recipe.fonts.length ? ['Installing fonts...'] : []).concat([
-            'Generating button icons...', 'Saving pad...'
+            'Saving pad...'
         ]).concat(componentIds.map(function (id) { return 'Configuring ' + id + '...'; })));
         let progressIndex = 0;
         progress[progressIndex++].classList.add('complete');
@@ -829,24 +833,19 @@ async function recipeInstall() {
             bindings: recipeMergeBindings(target.bindings, provision.pad && provision.pad.bindings),
         });
         delete savedPad.page;
+        const persistenceContext = {
+            page: target.page,
+            body: JSON.stringify(savedPad),
+            iconLayout: padCaptureIconLayout(),
+            blankOnSave: Boolean(deviceInfoCache && deviceInfoCache.display_blank_on_save),
+        };
+        const preparedPad = await padPreparePageSave(persistenceContext);
+        progress[progressIndex++].classList.add('complete');
         if (recipe.fonts && recipe.fonts.length) {
             await recipeInstallFonts(recipe.fonts);
             progress[progressIndex++].classList.add('complete');
         }
-        await padUploadPageIcons({
-            page: target.page,
-            cols: savedPad.cols,
-            rows: savedPad.rows,
-            buttons: savedPad.buttons,
-        });
-        progress[progressIndex++].classList.add('complete');
-        const response = await fetch('/api/pad?page=' + target.page, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(savedPad),
-        });
-        if (!response.ok) {
-            const error = await response.json().catch(function () { return {}; });
-            throw new Error(error.error || 'Failed to save pad: HTTP ' + response.status);
-        }
+        await padQueuePreparedPersistence(preparedPad);
         padSaved = true;
         progress[progressIndex++].classList.add('complete');
         for (const id of componentIds) {

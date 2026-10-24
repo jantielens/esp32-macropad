@@ -443,7 +443,8 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     lv_obj_set_style_radius(chart_area, 0, 0);
     lv_obj_set_style_clip_corner(chart_area, true, 0);
     lv_obj_set_scrollbar_mode(chart_area, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_clear_flag(chart_area, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
+    lv_obj_set_scrollable(chart_area, false);
+    lv_obj_set_clickable(chart_area, false);
 
     // Create line objects — extra lines first (drawn behind main line)
     uint32_t line_colors[MAX_SPARKLINE_LINES];
@@ -454,7 +455,8 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         lv_obj_set_style_line_width(line, cfg->line_width, 0);
         lv_obj_set_style_line_rounded(line, true, 0);
         lv_obj_set_style_line_opa(line, LV_OPA_TRANSP, 0);
-        lv_obj_clear_flag(line, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
+        lv_obj_set_scrollable(line, false);
+        lv_obj_set_clickable(line, false);
         lv_line_set_points(line, st->points[i], 0);
         st->lines[i] = line;
         st->draw_context[i] = {st->points[i], 0};
@@ -481,7 +483,8 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
             lv_obj_set_style_line_dash_width(rl, 6, 0);
             lv_obj_set_style_line_dash_gap(rl, 4, 0);
         }
-        lv_obj_clear_flag(rl, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
+        lv_obj_set_scrollable(rl, false);
+        lv_obj_set_clickable(rl, false);
         lv_obj_move_to_index(rl, 0);  // behind data lines
         st->ref_line_objs[r] = rl;
     }
@@ -495,15 +498,17 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
         lv_obj_set_style_border_width(dot, 0, 0);
         lv_obj_set_style_pad_all(dot, 0, 0);
-        lv_obj_clear_flag(dot, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
-        lv_obj_add_flag(dot, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_scrollable(dot, false);
+        lv_obj_set_clickable(dot, false);
+        lv_obj_set_hidden(dot, true);
         *out_dot = dot;
 
         lv_obj_t* lbl = lv_label_create(tile);
         lv_obj_set_style_text_font(lbl, annotation_font, 0);
         lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_clear_flag(lbl, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
-        lv_obj_add_flag(lbl, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_scrollable(lbl, false);
+        lv_obj_set_clickable(lbl, false);
+        lv_obj_set_hidden(lbl, true);
         lv_label_set_text(lbl, "");
         *out_lbl = lbl;
     };
@@ -519,8 +524,9 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
             lv_obj_set_style_bg_opa(cd, LV_OPA_COVER, 0);
             lv_obj_set_style_border_width(cd, 0, 0);
             lv_obj_set_style_pad_all(cd, 0, 0);
-            lv_obj_clear_flag(cd, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
-            lv_obj_add_flag(cd, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_scrollable(cd, false);
+            lv_obj_set_clickable(cd, false);
+            lv_obj_set_hidden(cd, true);
             st->dot_current[i] = cd;
         }
     }
@@ -536,8 +542,9 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
             lv_obj_set_width(lbl, st->label_margin_r);
             lv_obj_set_style_pad_left(lbl, 2, 0);
             lv_obj_set_style_pad_right(lbl, 1, 0);
-            lv_obj_clear_flag(lbl, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
-            lv_obj_add_flag(lbl, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_scrollable(lbl, false);
+            lv_obj_set_clickable(lbl, false);
+            lv_obj_set_hidden(lbl, true);
             lv_label_set_text(lbl, "");
             st->lbl_current[i] = lbl;
         }
@@ -839,7 +846,7 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
             if (lv_line_get_point_count(st->ref_line_objs[r]) != 0) {
                 lv_line_set_points(st->ref_line_objs[r], &st->ref_pts[r * 2], 0);
             }
-            lv_obj_add_flag(st->ref_line_objs[r], LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(st->ref_line_objs[r], true);
             continue;
         }
         int16_t ry = val_to_y(ry_val);
@@ -855,7 +862,7 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
         if (!lv_color_eq(lv_obj_get_style_line_color(st->ref_line_objs[r], LV_PART_MAIN), color)) {
             lv_obj_set_style_line_color(st->ref_line_objs[r], color, 0);
         }
-        lv_obj_clear_flag(st->ref_line_objs[r], LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_hidden(st->ref_line_objs[r], false);
     }
 
     // ---- Chart area position for tile-child overlays ----
@@ -883,9 +890,9 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
                 lv_obj_set_style_bg_color(st->dot_current[ci], cd_clr, 0);
             }
             lv_obj_set_pos(st->dot_current[ci], ca_x + si.last_px - cr, ca_y + si.last_py - cr);
-            lv_obj_clear_flag(st->dot_current[ci], LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(st->dot_current[ci], false);
         } else {
-            lv_obj_add_flag(st->dot_current[ci], LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(st->dot_current[ci], true);
         }
     }
 
@@ -937,7 +944,7 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
                     lv_obj_set_style_bg_color(st->dot_max, max_clr, 0);
                 }
                 lv_obj_set_pos(st->dot_max, ca_x + max_cx - max_r, ca_y + max_cy - max_r);
-                lv_obj_clear_flag(st->dot_max, LV_OBJ_FLAG_HIDDEN);
+                lv_obj_set_hidden(st->dot_max, false);
 
                 snprintf(buf, sizeof(buf), cfg->max_fmt, (double)found_max);
                 if (strcmp(lv_label_get_text(st->lbl_max), buf) != 0) {
@@ -954,7 +961,7 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
                 if (lx < 0) lx = 0;
                 if (lx + lw > chart_right) lx = chart_right - lw;
                 lv_obj_set_pos(st->lbl_max, lx, ca_y + max_cy - max_r - lh - 1);
-                lv_obj_clear_flag(st->lbl_max, LV_OBJ_FLAG_HIDDEN);
+                lv_obj_set_hidden(st->lbl_max, false);
             }
 
             // Position min dot + label (below)
@@ -967,7 +974,7 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
                     lv_obj_set_style_bg_color(st->dot_min, min_clr, 0);
                 }
                 lv_obj_set_pos(st->dot_min, ca_x + min_cx - min_r, ca_y + min_cy - min_r);
-                lv_obj_clear_flag(st->dot_min, LV_OBJ_FLAG_HIDDEN);
+                lv_obj_set_hidden(st->dot_min, false);
 
                 snprintf(buf, sizeof(buf), cfg->min_fmt, (double)found_min);
                 if (strcmp(lv_label_get_text(st->lbl_min), buf) != 0) {
@@ -983,13 +990,13 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
                 if (lx < 0) lx = 0;
                 if (lx + lw > chart_right_min) lx = chart_right_min - lw;
                 lv_obj_set_pos(st->lbl_min, lx, ca_y + min_cy + min_r + 1);
-                lv_obj_clear_flag(st->lbl_min, LV_OBJ_FLAG_HIDDEN);
+                lv_obj_set_hidden(st->lbl_min, false);
             }
         } else {
-            if (st->dot_min) lv_obj_add_flag(st->dot_min, LV_OBJ_FLAG_HIDDEN);
-            if (st->dot_max) lv_obj_add_flag(st->dot_max, LV_OBJ_FLAG_HIDDEN);
-            if (st->lbl_min) lv_obj_add_flag(st->lbl_min, LV_OBJ_FLAG_HIDDEN);
-            if (st->lbl_max) lv_obj_add_flag(st->lbl_max, LV_OBJ_FLAG_HIDDEN);
+            if (st->dot_min) lv_obj_set_hidden(st->dot_min, true);
+            if (st->dot_max) lv_obj_set_hidden(st->dot_max, true);
+            if (st->lbl_min) lv_obj_set_hidden(st->lbl_min, true);
+            if (st->lbl_max) lv_obj_set_hidden(st->lbl_max, true);
         }
     }
 
@@ -1026,7 +1033,7 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
 
             const SmoothLineInfo& si = smooth_info[ci];
             if (si.valid_count == 0 || !isfinite(si.smoothed_last)) {
-                lv_obj_add_flag(st->lbl_current[ci], LV_OBJ_FLAG_HIDDEN);
+                lv_obj_set_hidden(st->lbl_current[ci], true);
                 continue;
             }
 
@@ -1040,7 +1047,7 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
             }
 
             if (!resolved[0]) {
-                lv_obj_add_flag(st->lbl_current[ci], LV_OBJ_FLAG_HIDDEN);
+                lv_obj_set_hidden(st->lbl_current[ci], true);
                 continue;
             }
 
@@ -1068,7 +1075,7 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
             for (uint8_t a = 0; a < active_count; a++) {
                 if (active[a].line_idx == ci) { is_active = true; break; }
             }
-            if (!is_active) lv_obj_add_flag(st->lbl_current[ci], LV_OBJ_FLAG_HIDDEN);
+            if (!is_active) lv_obj_set_hidden(st->lbl_current[ci], true);
         }
 
         if (active_count > 0) {
@@ -1141,7 +1148,7 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
             for (uint8_t i = 0; i < active_count; i++) {
                 uint8_t ci = active[i].line_idx;
                 lv_obj_set_pos(st->lbl_current[ci], label_x, ca_y + adjusted_y[i]);
-                lv_obj_clear_flag(st->lbl_current[ci], LV_OBJ_FLAG_HIDDEN);
+                lv_obj_set_hidden(st->lbl_current[ci], false);
             }
         }
     }

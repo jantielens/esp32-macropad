@@ -21,6 +21,54 @@ The canvas reflects the device's aspect ratio and spacing, not an exact renderin
 of fonts, widgets, or live images. Each pad saves independently.
 **Show on Device** does not save the draft.
 
+Buttons whose fill and border blend into the pad background show a faint dotted
+boundary on the canvas. Selecting a button replaces this guide with the selection
+frame. The guide does not change saved styling or appear on the device.
+
+## Edit Main and Overlay buttons
+
+Use the **Main** and **Overlay** selector above the canvas to choose which button
+layer you are editing. Both layers share the pad's grid, dimensions, spacing,
+background, bindings, and other pad settings. The combined button count is shown
+beside the selector and cannot exceed the device limit.
+
+Overlay buttons draw above Main buttons and can occupy the same grid positions.
+Buttons cannot overlap other buttons in their own layer. While editing Overlay,
+Main appears dimmed and cannot be selected. Pad settings remain visible but are
+read-only. The editor keeps separate button selections and drafts for each
+layer, including when both have a button at the same coordinates.
+
+Each button's **Button State** controls visibility and input independently.
+**Enabled** buttons accept their actions, **Disabled** buttons remain visible
+but do not run actions, and **Hidden** buttons are invisible. Enabled and
+disabled Overlay buttons block input underneath their rectangles, even when
+they have no action. Hidden Overlay buttons do not block Main buttons. An empty
+state means enabled; unresolved or invalid state bindings default to enabled
+on Main and hidden on Overlay.
+
+Saving, reloading, importing, exporting, and copying a pad preserve both layers.
+Button-level operations such as blocks and button copy/paste apply to the
+selected layer.
+
+### Customize row and column sizes
+
+Open **Custom Row / Column Sizes** at the bottom of the Pad inspector's **Layout**
+tab to set selected tracks in device pixels. Enter comma-separated
+`position:size` values, such as `3:50, 5:80` for row heights or `2:100` for
+column widths. Positions start at 1. Sizes must be positive whole pixels.
+
+Unlisted tracks, and every track when a field is empty, stay Auto. Auto tracks
+share the remaining space after the pad's spacing and insets. Keep at least one
+Auto track on each axis. Buttons keep their positions and spans; a span covers
+the combined size of its tracks and the gaps between them. Invalid geometry
+keeps the last valid canvas preview and prevents saving until corrected.
+
+Button styling and labels update as you edit valid settings. Widget buttons show
+a large subdued symbol behind their labels rather than simulated widget graphics;
+ordinary buttons retain their configured icons. Long bindings are abbreviated
+without substituting sample or live values. Hover over a binding or select its
+button to read the full text. The saved binding is unchanged.
+
 ## Create a button from a source
 
 The **Button Builder** configures related fields together, so you do not need
@@ -80,7 +128,7 @@ For a single field rather than a complete button, use the
    into the button and are not requested again during customization.
 5. Under **What should this button do?**, choose **Show a value**,
    **Show a bar**, **Show a gauge**, or **Show a value with history** for a numeric reading, or
-   **Toggle an entity** for a light or switch. Adjust the title and available controls.
+   **Toggle an entity** for a light or switch, or **Show a toggle switch** to add an interactive switch widget. Adjust the title and available controls.
    Value buttons show the name, formatted value, and unit in three labels.
    Bar buttons show the title, a single bar, and the formatted value with its
    unit below. Set a minimum and maximum, orientation, formatting, and unit.
@@ -138,6 +186,10 @@ For a single field rather than a complete button, use the
    Lights default to a lightbulb icon; switches default to a switch icon.
    Select an on/off color badge to open the shared color picker. Choose a palette
    color or enter a custom hex color, then choose **Apply**.
+   **Show a toggle switch** adds a switch widget bound to the entity state. Its
+   on and off positions send separate turn-on and turn-off actions. This is
+   distinct from **Toggle an entity**, which uses a single toggle action on a
+   regular button.
 6. Check the approximate **Preview**, then choose **Create button**.
    Preview uses fetched data rather than continuous updates. The bar preview
    reflects the chosen range and orientation. The gauge preview reflects its
@@ -156,8 +208,9 @@ show `---`; an unavailable bar reading does not become zero, and the device
 retains its last bar position. A toggle button's icon uses pink-red for
 unavailable data, distinct from its on/off colors.
 Its color follows reported HA state, not an assumed result
-of tapping. Material Symbol assets use the normal icon-generation path on save
-and need its browser font/network resources.
+of tapping. The generated Material Symbol uses the same artwork-backed icon
+path as a manually selected icon. New artwork needs browser connectivity; once
+saved, its retained source can be regenerated offline.
 
 The builder is a one-time creation tool, not a special button type. It cannot
 reopen an existing button's builder choices. **Cancel** leaves the position
@@ -168,6 +221,18 @@ unchanged, and **Create button** changes only the draft.
 The editor maintains one in-memory draft. Switching buttons, inspector tabs,
 or Pad/Button scope retains incomplete edits. There is no button Apply/Cancel.
 A failed save keeps the draft for correction or retry.
+
+While saving, the portal blocks editing and navigation. A progress dialog shows
+the current stage and image counts when available. Wait for the success message
+after the editor refreshes. You cannot cancel a save once it starts. Errors stay
+visible until you select **Close**. If the message says the pad was saved but
+finishing failed, check the device and reload the editor rather than saving again
+immediately. A lost connection can leave the save outcome unconfirmed.
+
+The device cleans up unused saved icons when you save or delete a pad. It keeps
+artwork still used by other buttons or inherited from a template. Interrupted or
+failed saves can leave uploaded artwork behind; the next normal startup checks
+for orphaned icon files and removes them. No manual cleanup is normally needed.
 
 Leaving or switching pads offers **Keep Editing** or **Discard and Switch**.
 Browser reload/close warns about unsaved changes, but drafts are not durably
@@ -185,7 +250,15 @@ have a green outline. Drop on an occupied position or press Escape to cancel.
 A multi-position span is preserved where it fits, otherwise movement can reduce
 it to 1 x 1. Check the result before saving.
 
-Hover a button for resize handles or edit Column span/Row span explicitly.
+Select a button to show an external selection frame and four persistent resize
+grips at its edge midpoints. The borderless grips are white on most button
+backgrounds and dark on very light backgrounds. Drag a grip to resize along
+that edge, or edit Column span/Row span explicitly. Hovering an unselected
+button also reveals its grips.
+
+Click the empty canvas around the preview to deselect the button and return
+to Pad settings without discarding edits.
+
 Covered positions belong to the spanning button; do not hide useful controls
 under it. Copy/paste is an alternative and works on mobile where dragging is
 unavailable.

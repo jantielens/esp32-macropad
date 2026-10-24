@@ -3,6 +3,7 @@
 // Bundled into portal_pad_editor.js during minification.
 
 var padImageLibraryFiles = [];
+let padImageLibraryCache = null;
 let padDialogSelectionGeneration = 0;
 
 function padPopulateLocalImageOptions(selected) {
@@ -22,27 +23,43 @@ function padPopulateLocalImageOptions(selected) {
     select.value = selected || '';
 }
 
-function padLoadLocalImageOptions(selected) {
+function padLoadLocalImageOptions(selected, refresh = false) {
     if (!deviceInfoCache || deviceInfoCache.has_image_library !== true) return Promise.resolve();
     const section = document.getElementById('pad-config-section');
+    if (!padImageLibraryCache || padImageLibraryCache.section !== section)
+        padImageLibraryCache = { section, files: null, request: null };
+    const cache = padImageLibraryCache;
+    if (refresh) cache.files = null;
+    if (cache.files) padImageLibraryFiles = cache.files;
+    padPopulateLocalImageOptions(selected);
+    if (cache.files) return Promise.resolve();
+    if (!cache.request) {
+        cache.request = fetch('/api/images?directory=' + encodeURIComponent('/images'))
+            .then(function (response) {
+                if (!response.ok) throw new Error('Image library unavailable');
+                return response.json();
+            })
+            .then(function (catalog) {
+                cache.files = Array.isArray(catalog.files) ? catalog.files : [];
+                return cache.files;
+            })
+            .finally(function () { cache.request = null; });
+    }
     const page = padState.page;
+    const layer = padState.selectedLayer;
     const col = padState.editCol;
     const row = padState.editRow;
     const generation = padDialogSelectionGeneration;
     const input = document.getElementById('pad-edit-bg-image-path');
     const before = input ? input.value : '';
-    return fetch('/api/images?directory=' + encodeURIComponent('/images'))
-        .then(function (response) {
-            if (!response.ok) throw new Error('Image library unavailable');
-            return response.json();
-        })
-        .then(function (catalog) {
-            if (generation !== padDialogSelectionGeneration || document.getElementById('pad-config-section') !== section || padState.page !== page || padState.editCol !== col || padState.editRow !== row) return;
-            padImageLibraryFiles = Array.isArray(catalog.files) ? catalog.files : [];
+    return cache.request
+        .then(function (files) {
+            if (padImageLibraryCache !== cache || generation !== padDialogSelectionGeneration || document.getElementById('pad-config-section') !== section || padState.page !== page || padState.selectedLayer !== layer || padState.editCol !== col || padState.editRow !== row) return;
+            padImageLibraryFiles = files;
             padPopulateLocalImageOptions(input.value !== before ? input.value : selected);
         })
         .catch(function () {
-            if (generation !== padDialogSelectionGeneration || document.getElementById('pad-config-section') !== section || padState.page !== page || padState.editCol !== col || padState.editRow !== row) return;
+            if (padImageLibraryCache !== cache || generation !== padDialogSelectionGeneration || document.getElementById('pad-config-section') !== section || padState.page !== page || padState.selectedLayer !== layer || padState.editCol !== col || padState.editRow !== row) return;
             var group = document.getElementById('pad-edit-local-image-group');
             if (group) group.style.display = 'none';
         });
@@ -176,14 +193,10 @@ function padDialogOpen(col, row) {
         !!(btn.bg_image_path || btn.bg_image_url || btn.bg_image_letterbox);
 
     // Icon
-    const iconParsed = padIconIdToType(btn.icon_id || '');
-    document.getElementById('pad-edit-icon-type').value = iconParsed.type;
-    document.getElementById('pad-edit-icon-emoji').value = (iconParsed.type === 'emoji') ? iconParsed.value : '';
-    document.getElementById('pad-edit-icon-mi').value = (iconParsed.type === 'mi') ? iconParsed.value : '';
-    document.getElementById('pad-edit-icon-section').open = !!btn.icon_id;
+    padIconEditorSetDraft(btn.icon || null);
+    document.getElementById('pad-edit-icon-section').open = !!btn.icon;
     document.getElementById('pad-edit-icon-scale').value = (btn.icon_scale_pct !== undefined) ? btn.icon_scale_pct : 0;
     document.getElementById('pad-edit-icon-position').value = btn.icon_position || 'above';
-    padIconTypeChanged();
 
     // Widget type
     document.getElementById('pad-edit-widget-type').value = btn.widget_type || '';
@@ -357,15 +370,16 @@ function padDialogBuildButton() {
     }
 
     // Icon
-    const iconId = padBuildIconId();
-    if (iconId) btn.icon_id = iconId;
+    const icon = padIconEditorReadDraft();
+    if (icon) btn.icon = icon;
+    else delete btn.icon;
 
     // Icon scale
     const iconScale = parseInt(document.getElementById('pad-edit-icon-scale').value);
     if (!isNaN(iconScale) && iconScale > 0 && iconScale <= 250) btn.icon_scale_pct = iconScale;
 
     // Icon position (only relevant when icon is set)
-    if (iconId) {
+    if (icon) {
         const iconPos = document.getElementById('pad-edit-icon-position').value;
         if (iconPos && iconPos !== 'above') btn.icon_position = iconPos;
     }
@@ -407,6 +421,12 @@ function padDialogValidateButton(btn) {
         }
     });
     const others = padState.buttons.filter(function(button) { return button.col !== btn.col || button.row !== btn.row; });
+    const existing = padState.buttons.some(button => button.col === btn.col && button.row === btn.row);
+    if (!existing && padState.mainButtons.length + padState.overlayButtons.length >= padMaxButtons()) {
+        throw Object.assign(new Error('Combined Main and Overlay button limit reached (' + padMaxButtons() + ')'), {
+            fieldIds: ['pad-edit-col-span', 'pad-edit-row-span'],
+        });
+    }
     if (typeof padCanSpanFit === 'function' && !padCanSpanFit(btn.col, btn.row, btn.col_span || 1, btn.row_span || 1, others)) {
         throw Object.assign(new Error('Button span exceeds the pad or overlaps another button'), { fieldIds: ['pad-edit-col-span', 'pad-edit-row-span'] });
     }
@@ -457,10 +477,11 @@ function padPvRequestGuard() {
     const generation = padPvGeneration;
     const overlay = document.getElementById('pad-edit-overlay');
     const page = padState.page;
+    const layer = padState.selectedLayer;
     const col = padState.editCol;
     const row = padState.editRow;
     return () => generation === padPvGeneration && document.getElementById('pad-edit-overlay') === overlay &&
-        page === padState.page && col === padState.editCol && row === padState.editRow;
+        page === padState.page && layer === padState.selectedLayer && col === padState.editCol && row === padState.editRow;
 }
 
 function padPreviewEsc(s) {
@@ -531,11 +552,18 @@ function padPvMount() {
         anchor.insertAdjacentElement('afterend', chip);
     });
     var overlay = document.getElementById('pad-edit-overlay');
+    const bindings = () => JSON.stringify(padPvFields().map(field => [field.id, padPvFieldValue(field.id)])
+        .filter(([, value]) => padPvIsBinding(value)));
+    if (overlay) overlay._pvBindings = bindings();
     if (overlay && !overlay._pvHooked) {
         overlay._pvHooked = true;
         var refresh = function (event) {
             const field = padPvFieldDef(event.target.id);
             if (field && field.preview) field.preview();
+            if (field && !padPvIsBinding(padPvFieldValue(field.id))) padPvSetChip(field.id);
+            const signature = bindings();
+            if (signature === overlay._pvBindings) return;
+            overlay._pvBindings = signature;
             if (padPvTimer) clearTimeout(padPvTimer);
             padPvTimer = setTimeout(padPvRefreshAll, 350);
         };
@@ -628,5 +656,5 @@ function padPvRefreshAll(retriesLeft) {
       });
 }
 
-function padPvOnOpen() { padPvMount(); padPvRefreshAll(); }
+function padPvOnOpen() { clearTimeout(padPvTimer); padPvRefreshAll(); }
 function padPvHide() { padPvGeneration++; clearTimeout(padPvTimer); }

@@ -10,6 +10,9 @@ supply, and optional setup of related features.
 **Pads > Recipe Catalog** accepts one complete JSON document, up to 64 KiB.
 Saving replaces the device catalog; preserve your source copy.
 This is the recipe authoring language, not a full-device configuration format.
+Recipe `layout.buttons` entries install into Main. Existing Overlay buttons and
+shared pad settings remain unchanged, and the device's combined Main and
+Overlay button limit still applies.
 
 ## Start with a complete recipe
 
@@ -47,10 +50,30 @@ This is the recipe authoring language, not a full-device configuration format.
 
 Each recipe needs a unique lowercase letter/digit/hyphen ID beginning with a
 letter or digit, nonempty name/description, and a nonempty layout.buttons array.
-Buttons use the running device's supported button/action fields.
+Buttons use the running device's supported button/action fields. Recipe
+positions and overlap checks apply to Main; an Overlay button may share their
+grid coordinates.
 Use its live authoring metadata or adapt the
 [complete samples](../../samples/recipe-catalog.json), not an unrelated
 firmware's field catalog.
+
+## Add a catalog icon
+
+Recipe buttons can declare a Material Symbol or Noto emoji without embedding
+artwork or a device-specific source ID:
+
+```json
+{
+  "col_offset": 0,
+  "row_offset": 0,
+  "icon": { "catalog_id": "material-symbols:timer", "kind": "mono" }
+}
+```
+
+Use `kind: "mono"` for `material-symbols:` IDs and `kind: "color"` for `noto:`
+IDs. The recipe installer fetches new artwork in the browser and retains it on
+the device when the pad is saved. New catalog icons require an internet
+connection during installation.
 
 ## Choose layout syntax
 

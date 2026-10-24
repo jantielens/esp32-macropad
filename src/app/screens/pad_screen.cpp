@@ -68,8 +68,9 @@ static lv_color_t rgb_to_lv(uint32_t rgb) {
 // ============================================================================
 
 PadScreen::PadScreen(uint8_t page, DisplayManager* manager)
-    : pageIndex(page), displayMgr(manager), screen(nullptr), container(nullptr),
-      tiles(nullptr), tileCount(0),
+        : pageIndex(page), displayMgr(manager), screen(nullptr), container(nullptr),
+            overlayInputShield(nullptr),
+            tiles(nullptr), tileCount(0), mainButtonCount(0),
       bindings(nullptr), bindingCount(0),
       colorBindings(nullptr), colorBindingCount(0),
       numberBindings(nullptr), numberBindingCount(0),
@@ -142,6 +143,7 @@ void PadScreen::freeArrays() {
     free(padActions);       padActions = nullptr;
 
     tileCount = 0;
+    mainButtonCount = 0;
     bindingCount = 0;
     colorBindingCount = 0;
     numberBindingCount = 0;
@@ -181,6 +183,7 @@ void PadScreen::create() {
     lv_obj_clear_flag(container, LV_OBJ_FLAG_SCROLLABLE);
 
     // Swipe gesture actions (shared across all screens)
+    lv_obj_add_event_cb(screen, onSwipeGuard, LV_EVENT_GESTURE, this);
     swipe_actions_register(screen);
 }
 
@@ -200,6 +203,7 @@ void PadScreen::show() {
     if (screen) {
         lv_screen_load(screen);
     }
+    createOverlayInputShield();
 
     // Acquire any device-class engine this pad is already known to consume.
     // On the very first show() of a freshly-constructed PadScreen, tiles have
@@ -256,6 +260,51 @@ void PadScreen::hide() {
     // when buildTiles() runs after show() or when a config rebuild flipped the
     // consumer set between the matching acquire and this hide.
     releaseAllPadHold("pad_screen");
+    destroyOverlayInputShield();
+}
+
+bool PadScreen::createOverlayInputShield() {
+    if (!container) return false;
+    if (tileCount <= mainButtonCount) {
+        lv_obj_set_hidden(container, false);
+        return true;
+    }
+    if (overlayInputShield) {
+        lv_obj_set_hidden(container, false);
+        return true;
+    }
+    overlayInputShield = lv_obj_create(container);
+    if (!overlayInputShield) {
+        LOGE(TAG, "Pad %u: failed to allocate Overlay input shield; hiding pad", pageIndex);
+        lv_obj_set_hidden(container, true);
+        return false;
+    }
+    lv_obj_remove_style_all(overlayInputShield);
+    lv_obj_set_pos(overlayInputShield, 0, 0);
+    lv_obj_set_size(overlayInputShield, displayMgr->getActiveWidth(),
+                    displayMgr->getActiveHeight());
+    lv_obj_set_style_bg_opa(overlayInputShield, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(overlayInputShield, 0, 0);
+    lv_obj_set_scrollable(overlayInputShield, false);
+    lv_obj_set_clickable(overlayInputShield, true);
+    lv_obj_set_adv_hittest(overlayInputShield, true);
+    if (!lv_obj_add_event_cb(overlayInputShield, onOverlayInputShieldHitTest,
+                             LV_EVENT_HIT_TEST, this)) {
+        lv_obj_delete(overlayInputShield);
+        overlayInputShield = nullptr;
+        LOGE(TAG, "Pad %u: failed to register Overlay input shield; hiding pad", pageIndex);
+        lv_obj_set_hidden(container, true);
+        return false;
+    }
+    lv_obj_move_foreground(overlayInputShield);
+    lv_obj_set_hidden(container, false);
+    return true;
+}
+
+void PadScreen::destroyOverlayInputShield() {
+    if (!overlayInputShield) return;
+    lv_obj_delete(overlayInputShield);
+    overlayInputShield = nullptr;
 }
 
 void PadScreen::update() {

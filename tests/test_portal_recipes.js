@@ -35,7 +35,8 @@ assert.strictEqual(catalog.recipes[0].layout.flow, 'row');
 assert.strictEqual(catalog.recipes[0].layout.buttons[0].size, 'M');
 assert.strictEqual(catalog.recipes[0].layout.buttons[0].shape, 'wide');
 assert.strictEqual(catalog.recipes[0].layout.buttons[0].label_center, '[timer:1;mm:ss]');
-assert.strictEqual(catalog.recipes[0].layout.buttons[0].icon_id, 'mi_timer');
+assert.deepStrictEqual(JSON.parse(JSON.stringify(catalog.recipes[0].layout.buttons[0].icon)),
+    { catalog_id: 'material-symbols:timer', kind: 'mono' });
 assert.strictEqual(catalog.recipes[0].layout.buttons[0].icon_scale_pct, 50);
 assert.strictEqual(catalog.recipes[0].layout.buttons[0].icon_position, 'left');
 assert.strictEqual(catalog.recipes[0].layout.buttons[0].actions[0].timer_command, 'toggle');
@@ -189,9 +190,9 @@ context.recipeFindMinimumResize({
 });
 
 async function testInstallation() {
-    for (const outcome of ['success', 'cancel', 'pad-failure', 'component-failure', 'unsupported',
+    for (const outcome of ['success', 'cancel', 'pad-failure', 'component-failure', 'unsupported', 'capacity-exceeded',
         'font-success', 'font-existing', 'font-list-failure', 'font-download-failure',
-        'font-network-failure', 'font-upload-failure', 'font-unsupported']) {
+        'font-network-failure', 'font-upload-failure', 'font-unsupported', 'font-prepare-failure']) {
         const elements = new Map();
         function element() {
             return { hidden: true, children: [], classList: { add() {} }, appendChild(child) { this.children.push(child); } };
@@ -200,15 +201,30 @@ async function testInstallation() {
         const messages = [];
         const downloads = [];
         let iconsUploaded = false;
+        let uploadedIcons = null;
         const usesFont = outcome.startsWith('font-');
         const success = ['success', 'font-success', 'font-existing'].includes(outcome);
         const fontData = new Blob([new Uint8Array([0, 1, 0, 0])]);
         const install = {
             console, Blob, Set, URL, deviceInfoCache: { has_alarm: outcome !== 'unsupported', has_sound_player: true,
-                has_ttf_fonts: outcome !== 'font-unsupported' },
+                has_ttf_fonts: outcome !== 'font-unsupported', max_pad_buttons: outcome === 'capacity-exceeded' ? 1 : 64 },
             confirm: () => outcome !== 'cancel',
             showMessage: (message) => messages.push(message),
-            padUploadPageIcons: async () => { iconsUploaded = true; },
+            padCaptureIconLayout: () => ({}),
+            padPreparePageSave: async context => {
+                if (outcome === 'font-prepare-failure') throw new Error('Icon preparation failed');
+                return context;
+            },
+            padQueuePreparedPersistence: async prepared => {
+                iconsUploaded = true;
+                uploadedIcons = JSON.parse(prepared.body).overlay_buttons || [];
+                writes.push({ url: '/api/pad?page=' + prepared.page, body: JSON.parse(prepared.body) });
+                if (outcome === 'pad-failure') throw new Error('Save failed');
+            },
+            padQueuePersistence: async context => {
+                iconsUploaded = true;
+                writes.push({ url: '/api/pad?page=' + context.page, body: JSON.parse(context.body) });
+            },
             document: {
                 getElementById(id) { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); },
                 createElement: element,
@@ -250,18 +266,30 @@ async function testInstallation() {
         install.state.selected = JSON.parse(JSON.stringify(alarmCatalog.recipes[0]));
         install.state.selected.confirmation = 'Replace Alarm 1 actions and disable its schedule?';
         if (usesFont) install.state.selected.fonts = [{ name: 'digital', url: 'https://example.org/digital.ttf' }];
-        install.state.pad = { page: 6, cols: 2, rows: 2, buttons: [] };
+        install.state.pad = { page: 6, cols: 2, rows: 2, buttons: [],
+            overlay_buttons: [{ col: 0, row: 0, icon: { source_id: 's_000000000000000000000001',
+                catalog_id: 'noto:house', kind: 'color' } }] };
         install.state.placement = { col: 0, row: 0 };
         install.state.buttonSizes = { button_w: 100, button_h: 100, gap: 0 };
         await Promise.all([install.recipeInstall(), install.recipeInstall()]);
         assert.strictEqual(install.state.installing, false);
         const configWrites = writes.filter(write => !write.url.startsWith('/api/fonts/'));
+        if (outcome === 'capacity-exceeded') {
+            assert.strictEqual(configWrites.length, 0);
+            assert.strictEqual(iconsUploaded, false);
+            assert(messages.some(message => message.includes('combined Main and Overlay button limit')));
+            continue;
+        }
         if (outcome === 'cancel' || outcome === 'unsupported' || usesFont && !success) {
             assert.strictEqual(configWrites.length, 0);
             assert.strictEqual(iconsUploaded, false);
         } else {
             assert.strictEqual(configWrites[0].url, '/api/pad?page=6');
             assert.strictEqual(configWrites.length, outcome === 'pad-failure' ? 1 : 2);
+            assert.deepStrictEqual(configWrites[0].body.overlay_buttons, [
+                { col: 0, row: 0, icon: { source_id: 's_000000000000000000000001', catalog_id: 'noto:house', kind: 'color' } },
+            ]);
+            assert(uploadedIcons.some(button => button.icon.source_id === 's_000000000000000000000001'));
         }
         if (outcome === 'font-existing') {
             assert.strictEqual(downloads.length, 0);
@@ -271,6 +299,7 @@ async function testInstallation() {
             assert.strictEqual(downloads.length, 1);
             assert.strictEqual(writes[0].url, '/api/fonts/upload?name=digital');
         }
+        if (outcome === 'font-prepare-failure') assert.strictEqual(downloads.length, 0);
         if (success) {
             assert.strictEqual(configWrites[1].body['1'].enabled, false);
             assert.strictEqual(configWrites[1].body['1'].hour, 8);

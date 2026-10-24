@@ -10,6 +10,14 @@
         <div class="pad-workspace">
             <nav class="pad-workspace-rail" aria-label="Pads"><div id="pad-workspace-pads"></div></nav>
             <div class="pad-workspace-stage">
+                <div class="pad-layer-switch" role="group" aria-label="Button layer">
+                    <div class="pad-layer-segments">
+                        <button type="button" data-pad-layer="main" aria-pressed="true">Main</button>
+                        <button type="button" data-pad-layer="overlay" aria-pressed="false">Overlay</button>
+                    </div>
+                    <span id="pad-layer-capacity" aria-live="polite"></span>
+                    <p id="pad-layer-note">Overlay buttons sit above Main. Use Pad Appearance &gt; Button State to show or hide them; hidden buttons leave Main usable.</p>
+                </div>
                 <div id="pad-workspace-canvas" class="pad-workspace-canvas"></div>
             </div>
             <aside id="pad-workspace-inspector" class="pad-workspace-inspector" aria-label="Inspector">
@@ -97,6 +105,28 @@
             <small class="form-text">Inherit buttons from another pad into empty grid positions.</small>
             </div>
         </section>
+
+        <details class="editor-group" id="pad-custom-track-sizes-section" data-pad-tab="Layout">
+            <summary>Custom Row / Column Sizes</summary>
+            <div class="editor-group-body">
+                <p class="form-text">By default, rows have equal heights and columns have equal widths. Set individual sizes to give some buttons or widgets more or less space; Auto rows and columns share the remaining space equally.</p>
+                <div class="form-group">
+                    <label for="pad-row-heights">Row heights (px)</label>
+                    <input type="text" id="pad-row-heights" class="form-control form-control-sm" maxlength="127" placeholder="3:50, 5:80" aria-describedby="pad-track-sizes-help pad-row-heights-error">
+                    <small id="pad-row-heights-error" class="form-text text-danger" role="alert" hidden></small>
+                </div>
+                <div class="form-group mb-0">
+                    <label for="pad-column-widths">Column widths (px)</label>
+                    <input type="text" id="pad-column-widths" class="form-control form-control-sm" maxlength="127" placeholder="2:100" aria-describedby="pad-track-sizes-help pad-column-widths-error">
+                    <small id="pad-column-widths-error" class="form-text text-danger" role="alert" hidden></small>
+                </div>
+                <small id="pad-track-sizes-help" class="form-text">
+                    Use 1-based row or column positions and positive pixel sizes. Unlisted positions or an empty field stay Auto.
+                    <br>Row heights: <code>3:50, 5:80</code> makes row 3 50 px tall and row 5 80 px tall.
+                    <br>Column widths: <code>2:100</code> makes column 2 100 px wide.
+                </small>
+            </div>
+        </details>
 
         <section class="card mb-3" data-pad-tab="Bindings">
             <div class="card-body">
@@ -262,27 +292,14 @@
                     <summary>Icon</summary>
                     <div class="editor-group-body">
                         <div class="form-group">
-                            <label for="pad-edit-icon-type">Icon Type</label>
-                            <select id="pad-edit-icon-type" onchange="padIconTypeChanged()">
-                                <option value="">(none)</option>
-                                <option value="emoji">Emoji</option>
-                                <option value="mi">Material Symbol</option>
-                            </select>
-                        </div>
-
-                        <div id="pad-edit-icon-emoji-group" style="display:none;">
-                            <div class="form-group">
-                                <label for="pad-edit-icon-emoji">Emoji</label>
-                                <input type="text" id="pad-edit-icon-emoji" maxlength="15" placeholder="e.g. ☀️ 🔌 💡">
-                                <small>Paste or type an emoji character.</small>
-                            </div>
-                        </div>
-
-                        <div id="pad-edit-icon-mi-group" style="display:none;">
-                            <div class="form-group">
-                                <label for="pad-edit-icon-mi">Symbol Name</label>
-                                <input type="text" id="pad-edit-icon-mi" maxlength="31" placeholder="e.g. power_settings_new">
-                                <small>Name from <a href="https://fonts.google.com/icons" target="_blank" style="color:#007aff;">Material Symbols</a>.</small>
+                            <label>Foreground icon</label>
+                            <div class="pad-icon-editor-control">
+                                <button type="button" class="btn btn-secondary" id="pad-edit-icon-choose" aria-haspopup="dialog" aria-label="Choose icon">
+                                    <img id="pad-edit-icon-image" alt="" hidden>
+                                    <span id="pad-edit-icon-name">Choose icon</span>
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" id="pad-edit-icon-remove" aria-label="Remove icon" title="Remove icon" disabled>Remove</button>
+                                <input type="hidden" id="pad-edit-icon-json">
                             </div>
                         </div>
 
@@ -302,9 +319,6 @@
                             <small>Controls how the icon relates to the center label.</small>
                         </div>
 
-                        <div id="pad-edit-icon-preview-box" class="pad-icon-preview" style="display:none;">
-                            <canvas id="pad-edit-icon-canvas" width="64" height="64"></canvas>
-                        </div>
                     </div>
                 </details>
 
@@ -397,7 +411,7 @@
                         <div class="form-group">
                             <label for="pad-edit-ui-offset">UI Offset</label>
                             <input type="text" id="pad-edit-ui-offset" class="binding-mono" maxlength="31" style="width:100%;" placeholder="x;y  (e.g. 20;-10)">
-                            <small>Visual content nudge in pixels: +x right, -x left, +y down, -y up.</small>
+                            <small>Offset visual content in pixels (<code>x;y</code>). Positive x moves right; positive y moves down. Example: <code>20;-10</code> moves it 20 px right and 10 px up.</small>
                         </div>
                         <div class="form-group" id="pad-edit-btn-state-section">
                             <label for="pad-edit-btn-state">Button State <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>

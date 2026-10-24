@@ -93,6 +93,32 @@ int main() {
 
     {
         JsonDocument doc;
+        doc["cols"] = 3;
+        doc["rows"] = 2;
+        doc["column_widths_px"].to<JsonArray>().add(0);
+        doc["column_widths_px"].add(20);
+        doc["column_widths_px"].add(0);
+        doc["row_heights_px"].to<JsonArray>().add(25);
+        doc["row_heights_px"].add(0);
+        const PadValidationGeometry geometry = {101, 100, 2, 0, 0, 0, 0, 0};
+        CHECK(pad_validate(doc.as<JsonObjectConst>(), false, &geometry) == nullptr);
+
+        doc["column_widths_px"][0] = 30;
+        doc["column_widths_px"][1] = 30;
+        doc["column_widths_px"][2] = 30;
+        CHECK(pad_validate(doc.as<JsonObjectConst>(), false, &geometry) != nullptr);
+
+        doc["column_widths_px"][0] = 96;
+        doc["column_widths_px"][1] = 0;
+        doc["column_widths_px"][2] = 0;
+        CHECK(pad_validate(doc.as<JsonObjectConst>(), false, &geometry) != nullptr);
+
+        doc["column_widths_px"][0] = 0.5;
+        CHECK(pad_validate(doc.as<JsonObjectConst>(), false, &geometry) != nullptr);
+    }
+
+    {
+        JsonDocument doc;
         JsonObject button = make_button(doc);
         JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
         action["type"] = "registered_test";
@@ -103,6 +129,86 @@ int main() {
     {
         JsonDocument doc;
         make_button(doc);
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+    }
+
+    {
+        JsonDocument doc;
+        JsonObject button = make_button(doc);
+        JsonObject icon = button["icon"].to<JsonObject>();
+        icon["source_id"] = "s_0123456789abcdef01234567";
+        icon["catalog_id"] = "material-symbols:lightbulb";
+        icon["kind"] = "mono";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+
+        icon["source_id"] = "s_0123456789abcdef0123456g";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        icon["source_id"] = "s_0123456789abcdef01234567";
+        icon["kind"] = "color";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button.remove("icon");
+        button["icon_id"] = "mi_lightbulb";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+    }
+
+    {
+        JsonDocument doc;
+        doc["cols"] = 2;
+        doc["rows"] = 1;
+        JsonObject main_button = doc["buttons"].to<JsonArray>().add<JsonObject>();
+        main_button["col"] = 0;
+        main_button["row"] = 0;
+        JsonObject overlay_button = doc["overlay_buttons"].to<JsonArray>().add<JsonObject>();
+        overlay_button["col"] = 0;
+        overlay_button["row"] = 0;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+
+        JsonObject overlapping_overlay = doc["overlay_buttons"].as<JsonArray>().add<JsonObject>();
+        overlapping_overlay["col"] = 0;
+        overlapping_overlay["row"] = 0;
+        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
+                          "buttons overlap within a layer") == 0);
+    }
+
+    {
+        JsonDocument doc;
+        make_button(doc);
+        doc["overlay_buttons"] = "invalid";
+        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
+                          "overlay_buttons must be an array") == 0);
+    }
+
+    {
+        JsonDocument doc;
+        doc["cols"] = MAX_GRID_COLS;
+        doc["rows"] = MAX_GRID_ROWS;
+        JsonArray buttons = doc["buttons"].to<JsonArray>();
+        JsonArray overlays = doc["overlay_buttons"].to<JsonArray>();
+        for (int index = 0; index < MAX_PAD_BUTTONS; ++index) {
+            JsonObject button = buttons.add<JsonObject>();
+            button["col"] = index;
+            button["row"] = 0;
+        }
+        JsonObject extra = overlays.add<JsonObject>();
+        extra["col"] = 0;
+        extra["row"] = 0;
+        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
+                          "too many buttons across layers") == 0);
+    }
+
+    {
+        JsonDocument doc;
+        doc["cols"] = MAX_GRID_COLS;
+        doc["rows"] = MAX_GRID_ROWS;
+        JsonArray buttons = doc["buttons"].to<JsonArray>();
+        JsonArray overlays = doc["overlay_buttons"].to<JsonArray>();
+        for (int index = 0; index < MAX_PAD_BUTTONS; ++index) {
+            JsonObject button = index == 0
+                ? buttons.add<JsonObject>()
+                : overlays.add<JsonObject>();
+            button["col"] = index % MAX_GRID_COLS;
+            button["row"] = index / MAX_GRID_COLS;
+        }
         CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
     }
 
@@ -230,6 +336,22 @@ int main() {
         action["timer_value"] = "1234567890123456";
         CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
                           "timer value too long") == 0);
+    }
+
+    {
+        JsonDocument doc;
+        deserializeJson(doc, R"({"cols":3,"rows":2,"column_widths_px":[0,40,0],"buttons":[{"col":1,"row":0,"col_span":2,"row_span":1,"icon_scale_pct":75,"label_top":"Name","border_width":"2","content_pad":"4","widget_type":"gauge"}]})");
+        JsonObject button = doc["buttons"][0];
+        const uint32_t original = pad_icon_render_key(doc.as<JsonObjectConst>(), button);
+        CHECK(original == 0x4c31e060u);
+        button["label_top"] = "Other text";
+        button["fg_color"] = "ff0000";
+        CHECK(pad_icon_render_key(doc.as<JsonObjectConst>(), button) == original);
+        button["icon_scale_pct"] = 80;
+        CHECK(pad_icon_render_key(doc.as<JsonObjectConst>(), button) != original);
+        button["icon_scale_pct"] = 75;
+        doc["column_widths_px"][1] = 50;
+        CHECK(pad_icon_render_key(doc.as<JsonObjectConst>(), button) != original);
     }
 
     const char* invalid_timer_bindings[] = {

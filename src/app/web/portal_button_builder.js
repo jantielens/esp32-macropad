@@ -18,6 +18,7 @@
  * @property {(candidate: BindingSourceCandidate, suffix: string) => Object} [buildHistoryFields]
  * @property {(candidate: BindingSourceCandidate) => Object[]} [controlFields]
  * @property {(candidate: BindingSourceCandidate, options: Object) => Object} [buildControl]
+ * @property {(candidate: BindingSourceCandidate) => Object} [buildToggleWidget]
  * @property {(candidate: BindingSourceCandidate) => void|Promise<void>} dispose
  * @property {(root: HTMLElement, reference: Object, onUse: (candidate: BindingSourceCandidate) => void, screen: string, selected?: BindingSourceCandidate, onChange?: () => void, rawOnly?: boolean) => (() => void)} [configureSelection]
  */

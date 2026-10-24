@@ -151,6 +151,10 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 #if HAS_DISPLAY
 		response->print(",\"icon_max_dimension\":");
 		response->print(ICON_MAX_DIMENSION);
+		response->print(",\"icon_max_png_size\":");
+		response->print(ICON_MAX_PNG_SIZE);
+		response->print(",\"icon_max_source_json_size\":");
+		response->print(ICON_MAX_SOURCE_JSON_SIZE);
 #endif
 		response->print(",\"free_heap\":");
 		response->print(ESP.getFreeHeap());
@@ -310,6 +314,19 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 				response->print(HAS_TOUCH ? "true" : "false");
 				response->print(",\"max_pads\":");
 				response->print(MAX_PADS);
+				response->print(",\"configured_pads\":[");
+				bool first_pad = true;
+				for (uint8_t page = 0; page < MAX_PADS; ++page) {
+						const PadConfig* config = pad_config_acquire(page);
+						if (!config) continue;
+						pad_config_release(config);
+						if (!first_pad) response->print(',');
+						response->print(page);
+						first_pad = false;
+				}
+				response->print(']');
+				response->print(",\"max_pad_buttons\":");
+				response->print(MAX_PAD_BUTTONS);
 				response->print(",\"max_grid_cols\":");
 				response->print(MAX_GRID_COLS);
 				response->print(",\"max_grid_rows\":");

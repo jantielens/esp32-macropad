@@ -7,6 +7,7 @@
 #include "display_manager.h"
 #include "icon_store.h"
 #include "log_manager.h"
+#include "ota_activity.h"
 #include "pad_layout.h"
 #include "web_portal_auth.h"
 #include "web_portal_json.h"
@@ -14,165 +15,209 @@
 
 #include "storage.h"
 #include <esp_heap_caps.h>
+#include <new>
 #include <string.h>
+#include <stdlib.h>
 
 #define TAG "IconAPI"
 
-// Maximum icon blob size accepted via POST
-#define ICON_POST_MAX_BYTES ICON_MAX_PNG_SIZE
-
-// Body accumulator for POST /api/icons/install
-static struct {
-    bool in_progress;
-    bool errored;       // Error already sent — ignore subsequent chunks
-    uint32_t started_ms;
+struct IconUploadState {
+    bool source_upload;
+    bool png_source;
     size_t total;
     size_t received;
-    uint8_t* buf;
-    char id[CONFIG_ICON_ID_MAX_LEN];
+    uint8_t* data;
+    IconSourceUpload* stream;
+    char key[CONFIG_ICON_KEY_MAX_LEN];
+    char source_id[CONFIG_ICON_SOURCE_ID_MAX_LEN];
     IconKind kind;
-} g_icon_post = {false, false, 0, 0, 0, nullptr, {0}, ICON_KIND_COLOR};
+    uint32_t render_key;
+};
 
-static void icon_post_reset() {
-    if (g_icon_post.buf) {
-        heap_caps_free(g_icon_post.buf);
-        g_icon_post.buf = nullptr;
-    }
-    g_icon_post.in_progress = false;
-    g_icon_post.errored = false;
-    g_icon_post.total = 0;
-    g_icon_post.received = 0;
-    g_icon_post.started_ms = 0;
-    g_icon_post.id[0] = '\0';
-    g_icon_post.kind = ICON_KIND_COLOR;
+static void icon_upload_cleanup(AsyncWebServerRequest* request) {
+    auto* state = static_cast<IconUploadState*>(request->_tempObject);
+    if (!state) return;
+    request->_tempObject = nullptr;
+    icon_store_source_png_abort(state->stream);
+    if (state->data) heap_caps_free(state->data);
+    delete state;
 }
 
-// Validate icon ID: only [a-z0-9_] allowed, max length
-static bool validate_icon_id(const char* id) {
-    if (!id || !id[0]) return false;
-    size_t len = strlen(id);
-    if (len >= CONFIG_ICON_ID_MAX_LEN) return false;
-    for (size_t i = 0; i < len; i++) {
-        char c = id[i];
-        if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_')) {
-            return false;
-        }
+static void icon_store_send_error(AsyncWebServerRequest* request, IconStoreResult result) {
+    switch (result) {
+        case ICON_STORE_INVALID: web_portal_send_json_error(request, 400, "Invalid icon source or PNG"); return;
+        case ICON_STORE_TOO_LARGE: web_portal_send_json_error(request, 413, "Icon data exceeds the supported size"); return;
+        case ICON_STORE_BUSY:
+        case ICON_STORE_CONFLICT: web_portal_send_json_error(request, 409, "Another icon storage operation is in progress"); return;
+        case ICON_STORE_UNAVAILABLE: web_portal_send_json_error(request, 503, "Not enough memory to store icon data"); return;
+        case ICON_STORE_IO_ERROR: web_portal_send_json_error(request, 507, "Icon storage operation failed"); return;
+        case ICON_STORE_OK: return;
     }
-    return true;
 }
 
-// ============================================================================
-// POST /api/icons/install?id=<id>
-// ============================================================================
-void handlePostIconInstall(AsyncWebServerRequest *request, uint8_t *data,
-                           size_t len, size_t index, size_t total) {
-    if (!portal_auth_gate(request)) return;
+static void handleIconUploadBody(AsyncWebServerRequest* request, uint8_t* data,
+                                 size_t length, size_t index, size_t total,
+                                 bool source_upload) {
+    if (!portal_auth_gate(request)) {
+        icon_upload_cleanup(request);
+        return;
+    }
+    if (ota_activity_is_active()) {
+        const bool owned = request->_tempObject != nullptr;
+        icon_upload_cleanup(request);
+        if (index == 0 || owned)
+            web_portal_send_json_error(request, 409, "Firmware update is in progress");
+        return;
+    }
+    if (index == 0 && !request->_tempObject) {
+        const bool png_source = source_upload && request->contentType() == "image/png";
+        if (source_upload && !png_source && request->contentType() != "application/json") {
+            web_portal_send_json_error(request, 415, "Expected image/png or application/json");
+            return;
+        }
+        const size_t maximum = source_upload && !png_source
+            ? ICON_MAX_CATALOG_SOURCE_JSON_SIZE : ICON_MAX_PNG_SIZE;
+        if (!total || total > maximum) {
+            web_portal_send_json_error(request, total > maximum ? 413 : 400,
+                                       "Icon data is empty or too large");
+            return;
+        }
+        auto* state = new (std::nothrow) IconUploadState{};
+        if (!state) {
+            web_portal_send_json_error(request, 503, "Unable to start icon upload");
+            return;
+        }
+        state->png_source = png_source;
+        if (png_source) {
+            const IconStoreResult result = icon_store_source_png_begin(total, &state->stream);
+            if (result != ICON_STORE_OK) {
+                delete state;
+                icon_store_send_error(request, result);
+                return;
+            }
+        } else {
+            if (psramFound()) state->data = (uint8_t*)heap_caps_malloc(total + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            if (!state->data) state->data = (uint8_t*)heap_caps_malloc(total + 1, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+            if (!state->data) {
+                delete state;
+                web_portal_send_json_error(request, 503, "Not enough memory for icon upload");
+                return;
+            }
+        }
+        state->source_upload = source_upload;
+        state->total = total;
+        state->kind = ICON_KIND_COLOR;
+        if (!source_upload) {
+            if (!request->hasParam("id") || !request->hasParam("source_id") ||
+                !request->hasParam("kind") || !request->hasParam("render_key")) {
+                heap_caps_free(state->data);
+                delete state;
+                web_portal_send_json_error(request, 400, "Missing id, source_id, kind, or render_key parameter");
+                return;
+            }
+            const String& key = request->getParam("id")->value();
+            const String& source_id = request->getParam("source_id")->value();
+            const String& kind = request->getParam("kind")->value();
+            const String& render_key = request->getParam("render_key")->value();
+            if (render_key.length() != 8 || strspn(render_key.c_str(), "0123456789abcdef") != 8 ||
+                !(state->render_key = (uint32_t)strtoul(render_key.c_str(), nullptr, 16))) {
+                heap_caps_free(state->data);
+                delete state;
+                web_portal_send_json_error(request, 400, "Invalid render_key");
+                return;
+            }
+            if (!icon_store_key_valid(key.c_str()) || !icon_store_source_id_valid(source_id.c_str()) ||
+                (kind != "0" && kind != "1")) {
+                heap_caps_free(state->data);
+                delete state;
+                web_portal_send_json_error(request, 400, "Invalid icon key, source_id, or kind");
+                return;
+            }
+            strlcpy(state->key, key.c_str(), sizeof(state->key));
+            strlcpy(state->source_id, source_id.c_str(), sizeof(state->source_id));
+            state->kind = kind == "1" ? ICON_KIND_MONO : ICON_KIND_COLOR;
+        }
+        request->_tempObject = state;
+        request->onDisconnect([request]() { icon_upload_cleanup(request); });
+    }
 
-    // If a previous chunk of THIS request already sent an error, ignore remaining chunks.
-    // At index == 0 (new request), always clear the flag so stale errors from a
-    // prior request don't block this one.
-    if (index == 0) {
-        g_icon_post.errored = false;
-    } else if (g_icon_post.errored) {
+    auto* state = static_cast<IconUploadState*>(request->_tempObject);
+    if (!state || state->source_upload != source_upload || state->total != total ||
+        index != state->received || index > total || length > total - index ||
+        (length && !data)) {
+        icon_upload_cleanup(request);
+        if (index == 0 || state)
+            web_portal_send_json_error(request, 400, "Invalid icon upload framing");
+        return;
+    }
+    if (state->png_source) {
+        const IconStoreResult result = icon_store_source_png_write(state->stream, data, length);
+        if (result != ICON_STORE_OK) {
+            icon_upload_cleanup(request);
+            icon_store_send_error(request, result);
+            return;
+        }
+    } else {
+        memcpy(state->data + index, data, length);
+    }
+    state->received += length;
+    if (state->received != state->total) return;
+    if (state->data) state->data[state->total] = '\0';
+
+    if (source_upload) {
+        char source_id[CONFIG_ICON_SOURCE_ID_MAX_LEN] = {};
+        const IconStoreResult result = state->png_source
+            ? icon_store_source_png_finish(state->stream, source_id, sizeof(source_id))
+            : icon_store_source_install(state->data, state->total, source_id, sizeof(source_id));
+        icon_upload_cleanup(request);
+        if (result != ICON_STORE_OK) {
+            icon_store_send_error(request, result);
+            return;
+        }
+        char body[48];
+        snprintf(body, sizeof(body), "{\"id\":\"%s\"}", source_id);
+        request->send(201, "application/json", body);
         return;
     }
 
-    if (index == 0) {
-        // First chunk — parse id param, allocate buffer
-        if (!request->hasParam("id")) {
-            web_portal_send_json_error(request, 400, "Missing id parameter");
-            g_icon_post.errored = true;
-            return;
-        }
-        const String& id_val = request->getParam("id")->value();
-        if (!validate_icon_id(id_val.c_str())) {
-            web_portal_send_json_error(request, 400, "Invalid icon ID (a-z0-9_ only)");
-            g_icon_post.errored = true;
-            return;
-        }
-
-        // Cleanup stuck upload (e.g., client disconnected mid-transfer)
-        const uint32_t now = millis();
-        if (g_icon_post.in_progress && g_icon_post.started_ms &&
-            (now - g_icon_post.started_ms > 5000)) {
-            LOGW(TAG, "Stuck icon upload — resetting");
-            icon_post_reset();
-        }
-
-        if (g_icon_post.in_progress) {
-            web_portal_send_json_error(request, 409, "Icon upload already in progress");
-            g_icon_post.errored = true;
-            return;
-        }
-
-        if (total == 0 || total > ICON_POST_MAX_BYTES) {
-            LOGE(TAG, "Icon blob size rejected: %u bytes", (unsigned)total);
-            web_portal_send_json_error(request, 413, "Icon blob too large or empty");
-            g_icon_post.errored = true;
-            return;
-        }
-
-        uint8_t* buf = nullptr;
-        if (psramFound()) {
-            buf = (uint8_t*)heap_caps_malloc(total, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        }
-        if (!buf) {
-            buf = (uint8_t*)heap_caps_malloc(total, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-        }
-        if (!buf) {
-            web_portal_send_json_error(request, 503, "Out of memory for icon");
-            g_icon_post.errored = true;
-            return;
-        }
-
-        LOGI(TAG, "Icon upload start: id=%s total=%u", id_val.c_str(), (unsigned)total);
-        g_icon_post.in_progress = true;
-        g_icon_post.started_ms = now;
-        g_icon_post.total = total;
-        g_icon_post.received = 0;
-        g_icon_post.buf = buf;
-        strlcpy(g_icon_post.id, id_val.c_str(), CONFIG_ICON_ID_MAX_LEN);
-        g_icon_post.kind = ICON_KIND_COLOR;
-        if (request->hasParam("kind")) {
-            int k = request->getParam("kind")->value().toInt();
-            if (k == 1) g_icon_post.kind = ICON_KIND_MONO;
-        }
-    }
-
-    // Copy chunk
-    if (!g_icon_post.in_progress || !g_icon_post.buf ||
-        g_icon_post.total != total || (index + len) > total) {
-        LOGE(TAG, "Icon upload bad state: prog=%d buf=%p total=%u/%u idx=%u len=%u",
-             g_icon_post.in_progress, g_icon_post.buf,
-             (unsigned)g_icon_post.total, (unsigned)total,
-             (unsigned)index, (unsigned)len);
-        web_portal_send_json_error(request, 400, "Icon upload state mismatch");
-        icon_post_reset();
+    const IconStoreResult result = icon_store_install(
+        state->key, state->kind, state->source_id, state->render_key, state->data, state->total);
+    icon_upload_cleanup(request);
+    if (result != ICON_STORE_OK) {
+        icon_store_send_error(request, result);
         return;
     }
-
-    memcpy(g_icon_post.buf + index, data, len);
-
-    size_t new_received = index + len;
-    if (new_received > g_icon_post.received) {
-        g_icon_post.received = new_received;
-    }
-
-    if (g_icon_post.received < g_icon_post.total) {
-        return;  // More chunks to come
-    }
-
-    // All data received — install
-    bool ok = icon_store_install(g_icon_post.id, g_icon_post.kind,
-                                 g_icon_post.buf, g_icon_post.total);
-    icon_post_reset();
-
-    if (!ok) {
-        web_portal_send_json_error(request, 400, "Invalid PNG data");
-        return;
-    }
-
     request->send(200, "application/json", "{\"success\":true}");
+}
+
+void handlePostIconInstall(AsyncWebServerRequest* request, uint8_t* data,
+                           size_t length, size_t index, size_t total) {
+    handleIconUploadBody(request, data, length, index, total, false);
+}
+
+void handlePostIconSource(AsyncWebServerRequest* request, uint8_t* data,
+                          size_t length, size_t index, size_t total) {
+    handleIconUploadBody(request, data, length, index, total, true);
+}
+
+void handleGetIconSource(AsyncWebServerRequest* request) {
+    if (!portal_auth_gate(request)) return;
+    if (!request->hasParam("id")) {
+        web_portal_send_json_error(request, 400, "Missing source id parameter");
+        return;
+    }
+    const String& source_id = request->getParam("id")->value();
+    if (!icon_store_source_id_valid(source_id.c_str())) {
+        web_portal_send_json_error(request, 400, "Invalid source id");
+        return;
+    }
+    char path[64];
+    bool png = false;
+    if (!icon_store_source_path(source_id.c_str(), path, sizeof(path), &png)) {
+        web_portal_send_json_error(request, 404, "Icon source not found");
+        return;
+    }
+    sendFileThrottled(request, path, png ? "image/png" : "application/json");
 }
 
 // ============================================================================
@@ -207,36 +252,71 @@ void handleDeletePageIcons(AsyncWebServerRequest *request) {
 void handleGetInstalledIcons(AsyncWebServerRequest *request) {
     if (!portal_auth_gate(request)) return;
 
+    const bool scoped = request->hasParam("pages");
+    bool pages[MAX_PADS] = {};
+    if (scoped) {
+        const String& value = request->getParam("pages")->value();
+        const char* cursor = value.c_str();
+        if (!value.length() || value.length() > MAX_PADS * 4) {
+            web_portal_send_json_error(request, 400, "Invalid pages parameter");
+            return;
+        }
+        while (*cursor) {
+            char* end = nullptr;
+            const unsigned long page = strtoul(cursor, &end, 10);
+            if (*cursor < '0' || *cursor > '9' || page >= MAX_PADS ||
+                (*end && (*end != ',' || !end[1]))) {
+                web_portal_send_json_error(request, 400, "Invalid pages parameter");
+                return;
+            }
+            pages[page] = true;
+            cursor = *end ? end + 1 : end;
+        }
+    }
+
     AsyncResponseStream *response = request->beginResponseStream("application/json");
-    response->print("{\"icons\":[");
+    response->print(scoped ? "{\"artifacts\":{" : "{\"icons\":[");
 
     File dir = Storage.open("/icons");
     bool first = true;
     if (dir && dir.isDirectory()) {
         File entry = dir.openNextFile();
         while (entry) {
-            const char* name = entry.name();
+            const char* raw_name = entry.name();
+            const char* name = raw_name ? strrchr(raw_name, '/') : nullptr;
+            name = name ? name + 1 : raw_name;
             size_t nlen = name ? strlen(name) : 0;
             // Strip .png suffix for the ID
             size_t strip = 0;
             if (nlen > 4 && strcmp(name + nlen - 4, ".png") == 0) strip = 4;
 
-            if (strip) {
+            char key[CONFIG_ICON_KEY_MAX_LEN] = {};
+            if (strip && nlen - strip < sizeof(key)) memcpy(key, name, nlen - strip);
+            entry.close();
+            unsigned page = 0;
+            IconArtifactInfo info = {};
+            const bool include = scoped
+                ? icon_store_key_valid(key) && sscanf(key, "pad_%u_", &page) == 1 &&
+                  page < MAX_PADS && pages[page] && icon_store_read_artifact(key, &info)
+                : key[0] != '\0';
+            if (include) {
                 if (!first) response->print(",");
                 response->print("\"");
-                for (size_t i = 0; i < nlen - strip; i++) {
-                    response->print(name[i]);
-                }
+                response->print(key);
                 response->print("\"");
+                if (scoped) {
+                    response->printf(":{\"source_id\":\"%s\",\"kind\":%u,\"width\":%u,\"height\":%u,\"render_key\":\"%08x\"}",
+                        info.source_id, (unsigned)info.kind, (unsigned)info.width,
+                        (unsigned)info.height, (unsigned)info.render_key);
+                }
                 first = false;
             }
-            entry.close();
             entry = dir.openNextFile();
         }
         dir.close();
     }
 
-    response->print("],\"cache_count\":");
+    response->print(scoped ? "},\"cache_count\":" : "],\"cache_count\":");
     response->print(icon_store_cache_count());
     response->print("}");
     request->send(response);
@@ -358,7 +438,10 @@ void handleDeleteIconFile(AsyncWebServerRequest *request) {
         return;
     }
 
-    Storage.remove(path);
+    if (!icon_store_delete_file(name.c_str())) {
+        web_portal_send_json_error(request, 500, "Failed to delete generated icon");
+        return;
+    }
     LOGI(TAG, "Deleted: %s", path);
     request->send(200, "application/json", "{\"success\":true}");
 }

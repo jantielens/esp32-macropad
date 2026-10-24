@@ -11,6 +11,8 @@
 #if HAS_DISPLAY
 
 #include "pad_config.h"
+#include "display_geometry.h"
+#include "pad_track_layout.h"
 #include "psram_json_allocator.h"
 #include "widgets/widget_registry.h"
 #include "action_validate.h"
@@ -22,12 +24,108 @@
 #include <stdio.h>
 #include <string.h>
 
+uint32_t pad_icon_render_key(JsonObjectConst pad, JsonObjectConst button) {
+    uint32_t hash = 2166136261u;
+    const auto text = [&hash](const char* value) {
+        do {
+            hash ^= (uint8_t)*value;
+            hash *= 16777619u;
+        } while (*value++);
+    };
+    const auto number = [&text](int value) {
+        char buffer[16];
+        snprintf(buffer, sizeof(buffer), "%d", value);
+        text(buffer);
+    };
+    const int cols = pad["cols"] | 3;
+    const int rows = pad["rows"] | 3;
+    number(cols);
+    number(rows);
+    number(button["col"] | 0);
+    number(button["row"] | 0);
+    number(button["col_span"] | 1);
+    number(button["row_span"] | 1);
+    number(button["icon_scale_pct"] | 0);
+    number((button["label_top"] | "")[0] ? 1 : 0);
+    number((button["label_bottom"] | "")[0] ? 1 : 0);
+    const char* fields[] = {"border_width", "content_pad", "widget_type"};
+    for (const char* field : fields) {
+        JsonVariantConst value = button[field];
+        if (value.isNull()) text("");
+        else if (value.is<const char*>()) text(value.as<const char*>());
+        else {
+            char buffer[32];
+            serializeJson(value, buffer, sizeof(buffer));
+            text(buffer);
+        }
+    }
+    for (int index = 0; index < cols && index < MAX_GRID_COLS; ++index)
+        number(pad["column_widths_px"][index] | 0);
+    for (int index = 0; index < rows && index < MAX_GRID_ROWS; ++index)
+        number(pad["row_heights_px"][index] | 0);
+    return hash ? hash : 1;
+}
+
+bool pad_icon_source_id_valid(const char* source_id) {
+    if (!source_id || strlen(source_id) != 26 || source_id[0] != 's' || source_id[1] != '_')
+        return false;
+    for (size_t index = 2; index < 26; ++index) {
+        const char value = source_id[index];
+        if (!((value >= '0' && value <= '9') || (value >= 'a' && value <= 'f')))
+            return false;
+    }
+    return true;
+}
+
+bool pad_icon_catalog_kind_valid(const char* catalog_id, const char* kind) {
+    if (!catalog_id || !kind) return false;
+    const size_t length = strlen(catalog_id);
+    if (!length || length > 128) return false;
+
+    const char* name = nullptr;
+    bool material = false;
+    if (strncmp(catalog_id, "material-symbols:", 17) == 0) {
+        name = catalog_id + 17;
+        material = true;
+    } else if (strncmp(catalog_id, "noto:", 5) == 0) {
+        name = catalog_id + 5;
+    } else {
+        return false;
+    }
+    if (!name[0]) return false;
+    for (const char* cursor = name; *cursor; ++cursor) {
+        if (!((*cursor >= 'a' && *cursor <= 'z') ||
+              (*cursor >= '0' && *cursor <= '9') || *cursor == '-'))
+            return false;
+    }
+    return strcmp(kind, material ? "mono" : "color") == 0;
+}
+
 // A color is valid if it parses as hex or carries a binding template ([..]).
 static bool color_ok(const char* s) {
     if (!s || !s[0]) return true;  // empty => default
     uint32_t tmp;
     if (parse_hex_color(s, &tmp)) return true;
     return strchr(s, '[') != nullptr;  // binding template
+}
+
+static const char* validate_icon(JsonObjectConst button) {
+    if (button.containsKey("icon_id")) return "icon_id is no longer supported; use icon";
+    if (!button.containsKey("icon")) return nullptr;
+    if (!button["icon"].is<JsonObjectConst>()) return "icon must be an object";
+
+    JsonObjectConst icon = button["icon"].as<JsonObjectConst>();
+    const char* source_id = icon["source_id"] | "";
+    if (!pad_icon_source_id_valid(source_id))
+        return "icon source_id must be s_ followed by 24 lowercase hexadecimal digits";
+
+    const char* kind = icon["kind"] | "";
+    const bool has_catalog = icon.containsKey("catalog_id");
+    if (icon.size() != (has_catalog ? 3 : 2) ||
+        (has_catalog && !pad_icon_catalog_kind_valid(icon["catalog_id"] | "", kind)) ||
+        (!has_catalog && strcmp(kind, "color") != 0))
+        return "icon metadata must contain valid source_id, kind, and optional catalog_id";
+    return nullptr;
 }
 
 // Return `msg` if b[key] would be truncated on store (>= cap, since strlcpy
@@ -43,6 +141,33 @@ static const char* LEN_MSG_SHORT = "field too long (max 63 chars)";
 // Single in-flight validation (web task), so a static buffer for a formatted
 // validation message is safe (and the validator returns const char*).
 static char s_len_err[96];
+
+static const char* validate_track_sizes(JsonObjectConst pad, const char* field,
+                                        uint8_t count, uint16_t safe_size,
+                                        uint16_t gap) {
+    if (!pad.containsKey(field)) return nullptr;
+    JsonArrayConst values = pad[field].as<JsonArrayConst>();
+    if (values.isNull()) return "track sizes must be an array";
+    if (values.size() != count) return "track size count must match grid dimensions";
+
+    const uint8_t track_capacity = MAX_GRID_COLS > MAX_GRID_ROWS
+        ? MAX_GRID_COLS : MAX_GRID_ROWS;
+    uint16_t overrides[track_capacity] = {};
+    uint16_t computed[track_capacity] = {};
+    bool has_auto = false;
+    for (uint8_t track = 0; track < count; track++) {
+        JsonVariantConst value = values[track];
+        if (!value.is<uint32_t>()) return "track sizes must be positive whole pixels or 0 for Auto";
+        const uint32_t size = value.as<uint32_t>();
+        if (size > UINT16_MAX) return "track size exceeds supported pixel range";
+        overrides[track] = (uint16_t)size;
+        if (!size) has_auto = true;
+    }
+    if (!has_auto) return "track sizes must leave at least one Auto position";
+    if (!pad_compute_axis_track_sizes(count, safe_size, gap, overrides, computed))
+        return "track sizes leave less than one pixel for an Auto position";
+    return nullptr;
+}
 
 static const char* validate_exact_binding_token(const char* value) {
     if (!value || value[0] != '[') return "timer value binding must use [scheme:params]";
@@ -103,6 +228,8 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
         if (col + cspan > cols) return "button overflows grid columns";
         if (row + rspan > rows) return "button overflows grid rows";
     }
+    const char* icon_error = validate_icon(b);
+    if (icon_error) return icon_error;
     if (!color_ok(b["bg_color"] | "")) return "bad bg_color";
     if (!color_ok(b["fg_color"] | "")) return "bad fg_color";
     if (!color_ok(b["border_color"] | "")) return "bad border_color";
@@ -223,8 +350,37 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
     return nullptr;
 }
 
+static const char* validate_button_layer(JsonArrayConst buttons, int cols, int rows,
+                                         bool tolerate_offgrid) {
+    for (size_t index = 0; index < buttons.size(); ++index) {
+        JsonObjectConst button = buttons[index];
+        const char* error = validate_button(button, cols, rows, tolerate_offgrid);
+        if (error) return error;
+
+        const int col = button["col"] | 0;
+        const int row = button["row"] | 0;
+        const int col_span = button["col_span"] | 1;
+        const int row_span = button["row_span"] | 1;
+        for (size_t prior = 0; prior < index; ++prior) {
+            JsonObjectConst other = buttons[prior];
+            const int other_col = other["col"] | 0;
+            const int other_row = other["row"] | 0;
+            const int other_col_span = other["col_span"] | 1;
+            const int other_row_span = other["row_span"] | 1;
+            if (col < other_col + other_col_span &&
+                other_col < col + col_span &&
+                row < other_row + other_row_span &&
+                other_row < row + row_span) {
+                return "buttons overlap within a layer";
+            }
+        }
+    }
+    return nullptr;
+}
+
 // Validate a complete pad JSON (grid + buttons + collisions). nullptr = ok.
-const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid) {
+const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid,
+                         const PadValidationGeometry* geometry) {
     const char* shadow = pad["button_shadow"] | "";
     if (shadow[0] && strcmp(shadow, "enabled") != 0 && strcmp(shadow, "disabled") != 0)
         return "bad button_shadow";
@@ -236,7 +392,32 @@ const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid) {
         if (cols < 1 || cols > MAX_GRID_COLS) return "cols must be 1-8";
         if (rows < 1 || rows > MAX_GRID_ROWS) return "rows must be 1-8";
     } else {
+        if (pad.containsKey("column_widths_px") || pad.containsKey("row_heights_px"))
+            return "track sizes are only supported for grid layouts";
         cols = MAX_GRID_COLS; rows = MAX_GRID_ROWS;  // skip overflow checks for curated
+    }
+    if (is_grid && (pad.containsKey("column_widths_px") || pad.containsKey("row_heights_px"))) {
+        uint16_t safe_width = UINT16_MAX;
+        uint16_t safe_height = UINT16_MAX;
+        uint16_t gap_x = 0;
+        uint16_t gap_y = 0;
+        if (geometry) {
+            const DisplayContentRect content = display_safe_content_rect(
+                geometry->display_width, geometry->display_height);
+            const uint32_t horizontal_inset = 2U * geometry->pixel_shift_distance_px +
+                geometry->inset_left_px + geometry->inset_right_px;
+            const uint32_t vertical_inset = 2U * geometry->pixel_shift_distance_px +
+                geometry->inset_top_px + geometry->inset_bottom_px;
+            safe_width = content.w > horizontal_inset ? content.w - horizontal_inset : 0;
+            safe_height = content.h > vertical_inset ? content.h - vertical_inset : 0;
+            gap_x = gap_y = geometry->spacing_px;
+        }
+        const char* track_error = validate_track_sizes(
+            pad, "column_widths_px", cols, safe_width, gap_x);
+        if (track_error) return track_error;
+        track_error = validate_track_sizes(
+            pad, "row_heights_px", rows, safe_height, gap_y);
+        if (track_error) return track_error;
     }
     if (pad.containsKey("template_pad")) {
         int tp = pad["template_pad"] | -1;
@@ -266,17 +447,18 @@ const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid) {
             if (be) return be;
         }
     }
-    JsonArrayConst btns = pad["buttons"];
-    if (btns.isNull()) return nullptr;
-    if (btns.size() > MAX_PAD_BUTTONS) return "too many buttons";
-    // Per-button checks. NOTE: grid-cell overlaps are intentionally NOT rejected
-    // — the firmware (and the portal save path) tolerate them (a later button
-    // renders over / hides an earlier one). Rejecting overlaps here was stricter
-    // than the device and broke incremental set_buttons edits.
-    for (JsonObjectConst b : btns) {
-        const char* e = validate_button(b, cols, rows, tolerate_offgrid);
-        if (e) return e;
+    JsonArrayConst btns = pad["buttons"].as<JsonArrayConst>();
+    JsonArrayConst overlays;
+    if (pad.containsKey("buttons") && btns.isNull()) return "buttons must be an array";
+    if (pad.containsKey("overlay_buttons")) {
+        overlays = pad["overlay_buttons"].as<JsonArrayConst>();
+        if (overlays.isNull()) return "overlay_buttons must be an array";
     }
+    if (btns.size() + overlays.size() > MAX_PAD_BUTTONS) return "too many buttons across layers";
+    const char* button_error = validate_button_layer(btns, cols, rows, tolerate_offgrid);
+    if (button_error) return button_error;
+    button_error = validate_button_layer(overlays, cols, rows, tolerate_offgrid);
+    if (button_error) return button_error;
     return nullptr;
 }
 

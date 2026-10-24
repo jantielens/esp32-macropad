@@ -50,7 +50,7 @@ Every `BindingSchemeSpec` carries a `BindingSchemeDoc`: category, summary, one `
 
 - Inner bindings are resolved first, then the expression is evaluated
 - Uses bracket-depth-aware semicolon splitting (not simple `strchr`)
-- Expression evaluator (`expr_eval.cpp`) supports: arithmetic, comparisons, ternary, string operations, `threshold()` function
+- Expression evaluator (`expr_eval.cpp`) supports arithmetic, comparisons, ternaries, string comparisons, numeric functions (`abs`, `min`, `max`, `clamp`, `round`, `floor`, `ceil`), and `threshold()`
 - `expr_eval.cpp` is pure C with no ESP32 dependencies — host-testable
 
 ## Pad Binding (`[pad:]`)

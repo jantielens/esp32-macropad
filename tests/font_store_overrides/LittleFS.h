@@ -40,21 +40,24 @@ public:
     bool short_read = false;
     void (*read_hook)() = nullptr;
     bool rename_failure = false;
+    bool remove_failure = false;
     bool exists(const char* path) const { return files.count(path) != 0; }
     bool mkdir(const char* path) { files[path] = {}; return true; }
-    bool remove(const char* path) { return files.erase(path) != 0; }
+    bool remove(const char* path) { return !remove_failure && files.erase(path) != 0; }
     bool rename(const char* source, const char* destination) {
         if (rename_failure || !exists(source) || exists(destination)) return false;
         files[destination] = std::move(files[source]); files.erase(source); return true;
     }
     File open(const char* path, const char* mode = "r") {
         if (*mode == 'w') files[path].clear();
-        return exists(path) ? File(this, path, strcmp(path, "/fonts") == 0) : File();
+        return exists(path) ? File(this, path, strcmp(path, "/fonts") == 0 ||
+            strcmp(path, "/icons") == 0 || strcmp(path, "/icon_sources") == 0) : File();
     }
 };
 inline File::File(FakeFontStorage* filesystem, const std::string& filename, bool is_directory)
     : storage(filesystem), path(filename), directory(is_directory), valid(true) {
-    if (directory) for (const auto& item : storage->files) if (item.first != path) children.push_back(item.first);
+    if (directory) for (const auto& item : storage->files)
+        if (item.first.compare(0, path.size() + 1, path + "/") == 0) children.push_back(item.first);
 }
 inline size_t File::size() const { return valid ? storage->files[path].size() : 0; }
 inline size_t File::write(const uint8_t* data, size_t length) {

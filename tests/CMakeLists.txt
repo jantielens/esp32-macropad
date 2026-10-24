@@ -168,7 +168,19 @@ add_host_legacy_test(test_runtime_ttf_oom
 )
 target_link_options(test_runtime_ttf_oom PRIVATE
     "-Wl,--wrap=lv_malloc_core" "-Wl,--wrap=lv_realloc_core")
-set_tests_properties(test_runtime_ttf_oom PROPERTIES TIMEOUT 15)
+set_tests_properties(test_runtime_ttf_oom PROPERTIES TIMEOUT 15 SKIP_RETURN_CODE 77)
+add_host_legacy_test(test_icon_store_cleanup
+    SOURCES test_icon_store_cleanup.cpp ${PROJECT_SOURCE_DIR}/src/app/icon_store.cpp
+        ${HOST_LVGL_DIR}/libs/lodepng/lodepng.c
+    DEFINITIONS HAS_FILESYSTEM=1 USE_SD_STORAGE=0 HOST_LOG_CAPTURE LV_USE_LODEPNG=1
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/font_store_overrides ${HOST_ARDUINOJSON_DIR}
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+    OPTIONS -Wno-deprecated-declarations
+    LIBRARIES host_lvgl m
+)
+set_tests_properties(test_icon_store_cleanup PROPERTIES TIMEOUT 15)
+add_host_command_test(test_icon_store_cleanup_unreadable $<TARGET_FILE:test_icon_store_cleanup> --unreadable)
+set_tests_properties(test_icon_store_cleanup_unreadable PROPERTIES TIMEOUT 15)
 add_host_legacy_test(test_font_store
     SOURCES test_font_store.cpp ${PROJECT_SOURCE_DIR}/src/app/font_store.cpp
     DEFINITIONS HAS_TTF_FONTS=0
@@ -312,6 +324,20 @@ target_compile_options(test_fill_draw PRIVATE
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/log_manager.h")
 target_link_libraries(test_fill_draw PRIVATE host_lvgl m)
 
+add_host_gtest(test_toggle_widget test_toggle_widget.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/expr_binding.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/expr_eval.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/label_style.cpp stubs.cpp)
+target_include_directories(test_toggle_widget PRIVATE ${HOST_ARDUINOJSON_DIR})
+target_compile_definitions(test_toggle_widget PRIVATE HAS_MCP=1 DISPLAY_DISABLE_ANIMATIONS=0)
+target_compile_options(test_toggle_widget PRIVATE -Wno-deprecated-declarations
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/Arduino.h"
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h"
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/log_manager.h")
+target_link_libraries(test_toggle_widget PRIVATE host_lvgl m)
+
 add_host_legacy_test(test_ota_activity
     SOURCES test_ota_activity.cpp ${PROJECT_SOURCE_DIR}/src/app/ota_activity.cpp
     OPTIONS -pthread
@@ -403,11 +429,18 @@ target_compile_options(test_ha_history_decoder PRIVATE -Wno-deprecated-declarati
 
 add_host_gtest(test_ha_live
     test_ha_live.cpp ${PROJECT_SOURCE_DIR}/src/app/ha_live_state.cpp
-    ${PROJECT_SOURCE_DIR}/src/app/ha_lookup_data.cpp)
+    ${PROJECT_SOURCE_DIR}/src/app/ha_lookup_data.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/ha_binding.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/expr_binding.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/expr_eval.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp stubs.cpp)
 target_include_directories(test_ha_live PRIVATE ${HOST_ARDUINOJSON_DIR})
 target_compile_definitions(test_ha_live PRIVATE HAS_HA_LIVE=1)
 target_compile_options(test_ha_live PRIVATE
-    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h")
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h"
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/log_manager.h"
+    -Wno-deprecated-declarations)
 
 add_host_legacy_test(test_binding_value
     SOURCES test_binding_value.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp
@@ -615,6 +648,11 @@ add_host_legacy_test(test_camera_capture_action
 )
 add_host_legacy_test(test_pad_cycle SOURCES test_pad_cycle.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_cycle.cpp PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_pad_config_dynamic_layout SOURCES test_pad_config_dynamic_layout.cpp PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
+add_host_legacy_test(test_pad_overlay_input
+    SOURCES test_pad_overlay_input.cpp
+    INCLUDES ${HOST_LVGL_DIR}
+    LIBRARIES host_lvgl
+)
 add_host_legacy_test(test_parse_hex_color SOURCES test_parse_hex_color.cpp PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_wifi_reconnect SOURCES test_wifi_reconnect.cpp ${PROJECT_SOURCE_DIR}/src/app/wifi_reconnect.cpp)
 add_host_legacy_test(test_screen_saver_schedule SOURCES test_screen_saver_schedule.cpp)

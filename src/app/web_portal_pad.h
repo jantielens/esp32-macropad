@@ -9,6 +9,8 @@
 // GET /api/pad?page=N — return raw JSON config for page N
 void handleGetPadConfig(AsyncWebServerRequest *request);
 
+void handleGetPadIconContext(AsyncWebServerRequest *request);
+
 // POST /api/pad?page=N — save JSON config for page N (body handler)
 void handlePostPadConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total);
 
