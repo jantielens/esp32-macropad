@@ -1740,6 +1740,16 @@ body {
 .pad-cell-ghost       { opacity: 0.85; outline: 2px dashed #9ca3af; outline-offset: -2px; }
 .pad-cell-btn:hover   { outline-color: var(--pad-cell-border-color, #48484a); box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
 
+#pad-grid .pad-cell-boundary-guide:not(.pad-cell-selected):not(.pad-cell-ghost)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px dotted var(--pad-boundary-guide-color);
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 3;
+}
+
 .pad-cell-image-placeholder {
   position: absolute;
   inset: 0;

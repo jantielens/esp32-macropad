@@ -259,6 +259,7 @@ function padUpdateGridBackground() {
     const input = document.getElementById('pad-edit-page-bg-color');
     grid.style.background = input && /^#[0-9a-fA-F]{6}$/.test(input.value.trim())
         ? input.value.trim() : padGetEffectiveDefault('default_pad_bg_color');
+    grid.querySelectorAll('.pad-cell-btn').forEach(padUpdateCellBoundaryGuide);
 }
 
 function padRenderGrid() {

@@ -21,6 +21,10 @@ The canvas reflects the device's aspect ratio and spacing, not an exact renderin
 of fonts, widgets, or live images. Each pad saves independently.
 **Show on Device** does not save the draft.
 
+Buttons whose fill and border blend into the pad background show a faint dotted
+boundary on the canvas. Selecting a button replaces this guide with the selection
+frame. The guide does not change saved styling or appear on the device.
+
 ## Edit Main and Overlay buttons
 
 Use the **Main** and **Overlay** selector above the canvas to choose which button

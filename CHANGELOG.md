@@ -65,6 +65,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Show a faint dotted boundary in the Pad Editor when a button's fill and
+  border blend into the pad background. Keep contrasting buttons and selection
+  styling unchanged; the guide is editor-only and does not affect saved styles.
+  See [Build the layout](docs/user/pads/editing.md#build-the-layout).
 * Reduce Pad Editor work while typing by updating only affected button previews
   and retaining unchanged icon artwork. Reuse image-list requests, resolve
   bindings only when their inputs change, and ignore stale inspector responses

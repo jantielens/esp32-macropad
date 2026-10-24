@@ -175,6 +175,29 @@ function padCellPreviewSignature(button) {
     return JSON.stringify([PAD_CELL_PREVIEW_PROPERTIES.map(key => button[key]), padWidgetPreview(button)]);
 }
 
+function padPreviewLuminance(color) {
+    const channels = [1, 3, 5].map(offset => {
+        const channel = parseInt(color.slice(offset, offset + 2), 16) / 255;
+        return channel <= 0.04045 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+}
+
+function padUpdateCellBoundaryGuide(cell) {
+    const input = document.getElementById('pad-edit-page-bg-color');
+    const background = input && /^#[0-9a-fA-F]{6}$/.test(input.value.trim())
+        ? input.value.trim() : padGetEffectiveDefault('default_pad_bg_color');
+    const padLuminance = padPreviewLuminance(background);
+    const blendsIn = [cell.dataset.previewEdgeColor, cell.dataset.previewFillColor].every(color => {
+        const luminance = padPreviewLuminance(color);
+        return (Math.max(padLuminance, luminance) + 0.05) /
+            (Math.min(padLuminance, luminance) + 0.05) < 1.3;
+    });
+    cell.classList.remove('pad-cell-boundary-guide');
+    if (blendsIn) cell.classList.add('pad-cell-boundary-guide');
+    cell.style.setProperty('--pad-boundary-guide-color', padLuminance > 0.5 ? '#00000055' : '#ffffff55');
+}
+
 function padRenderCellContent(cell, btn, existingIcon) {
     const accessibleLabels = [btn.label_top, btn.label_center, btn.label_bottom].filter(Boolean).join('\n');
     if (accessibleLabels) cell.setAttribute('aria-description', accessibleLabels);
@@ -182,11 +205,7 @@ function padRenderCellContent(cell, btn, existingIcon) {
     const fg = padColorToHex(btn.fg_color, padGetEffectiveDefault('fg_color'));
     cell.style.background = bg;
     cell.style.color = fg;
-    const channels = [1, 3, 5].map(offset => {
-        const channel = parseInt(bg.slice(offset, offset + 2), 16) / 255;
-        return channel <= 0.04045 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4);
-    });
-    const luminance = 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+    const luminance = padPreviewLuminance(bg);
     cell.style.setProperty('--pad-resize-grip-color', luminance > 0.5 ? '#17212b' : '#ffffff');
     const borderColor = padColorToHex(btn.border_color, padGetEffectiveDefault('border_color'));
     const borderWidth = (btn.border_width !== undefined) ? btn.border_width : padGetEffectiveDefault('border_width');
@@ -194,6 +213,9 @@ function padRenderCellContent(cell, btn, existingIcon) {
     cell.style.setProperty('--pad-cell-border-color', borderColor);
     cell.style.border = borderWidth + 'px solid ' + borderColor;
     cell.style.borderRadius = cornerRadius + 'px';
+    cell.dataset.previewEdgeColor = Number(borderWidth) > 0 ? borderColor : bg;
+    cell.dataset.previewFillColor = bg;
+    padUpdateCellBoundaryGuide(cell);
     // Content padding — mirror the device inset so the preview stays WYSIWYG
     var contentPad = (btn.content_pad !== undefined) ? btn.content_pad : padGetEffectiveDefault('content_pad');
     var cpNum = parseInt(contentPad, 10);

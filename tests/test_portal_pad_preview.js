@@ -25,6 +25,7 @@ function element() {
             }
             return null;
         },
+        querySelectorAll() { return []; },
         addEventListener() {},
         setAttribute(name, value) { this.attributes[name] = value; },
         removeAttribute(name) { delete this.attributes[name]; }
@@ -51,11 +52,12 @@ const context = {
     deviceInfoCache: { widget_catalog: [] },
     document: {
         createElement, createElementNS: createElement,
+        getElementById: () => null,
         createTextNode: textContent => ({ textContent, querySelector: () => null })
     },
     padColorToHex: (color, fallback) => color || fallback,
     padColorNormalizeLiteral: color => /^#[0-9a-f]{6}$/i.test(color || '') ? color.toLowerCase() : '',
-    padGetEffectiveDefault: key => ({ bg_color: '#333333', fg_color: '#ffffff', border_color: '#000000', border_width: '0', corner_radius: '8', content_pad: '4' })[key]
+    padGetEffectiveDefault: key => ({ bg_color: '#333333', fg_color: '#ffffff', border_color: '#000000', border_width: '0', corner_radius: '8', content_pad: '4', default_pad_bg_color: '#000000' })[key]
 };
 vm.createContext(context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_editor.js', 'utf8'), context);
@@ -125,6 +127,25 @@ for (const [background, gripColor] of [
 context.deviceInfoCache.widget_catalog.push({ type: 'future_widget', name: 'Future Widget', icon: 'list',
     axis_field: 'custom_axis', horizontal_icon: 'swap_horiz', vertical_icon: 'swap_vert', default_axis: 'vertical' });
 assert.strictEqual(context.padWidgetPreview({ widget_type: 'future_widget', custom_axis: 'horizontal' }).icon, 'swap_horiz');
+for (const [background, button, expected] of [
+    ['#000000', { bg_color: '#000000', border_color: '#000000', border_width: '2' }, true],
+    ['#000000', { bg_color: '#101010', border_width: '0' }, true],
+    ['#000000', { bg_color: '#ffffff', border_width: '0' }, false],
+    ['#000000', { bg_color: '#ffffff', border_color: '#000000', border_width: '2' }, false],
+    ['#000000', { bg_color: '#000000', border_color: '#ffffff', border_width: '2' }, false],
+    ['#ffffff', { bg_color: '#ffffff', border_width: '0' }, true],
+    ['#ffffff', { bg_color: '#000000', border_width: '0' }, false]
+]) {
+    context.document.getElementById = () => ({ value: background });
+    const cell = createElement();
+    const before = JSON.stringify(button);
+    context.padRenderCellContent(cell, button);
+    assert.strictEqual(cell.classes.has('pad-cell-boundary-guide'), expected, JSON.stringify([background, button]));
+    assert.strictEqual(JSON.stringify(button), before);
+    context.padRenderCellContent(cell, { bg_color: background === '#000000' ? '#ffffff' : '#000000', border_width: '0' });
+    assert(!cell.classes.has('pad-cell-boundary-guide'), 'Appearance edits must remove stale guides');
+}
+context.document.getElementById = () => null;
 const longBinding = '[mqtt:home/building/room/sensor/temperature;state;%.1f C|offline]';
 const nestedExpression = '[expr:[mqtt:home/setpoint;state;%.1f]*2]';
 const mixedBindingText = 'Room ' + longBinding + ' is [health:cpu]\nTarget ' + nestedExpression;
@@ -224,6 +245,19 @@ context.padState = { cols: 3, rows: 1, selectedLayer: 'main', mainButtons: [{ co
         label_top: '[mqtt:home/building/temperature;state;%.1f C]' }] };
 context.padBuildOccupancySet = () => new Set();
 vm.runInContext(grid, context);
+{
+    const cell = createElement();
+    const background = { value: '#000000' };
+    context.document.getElementById = id => id === 'pad-grid' ? gridElement : background;
+    context.padRenderCellContent(cell, { bg_color: '#000000' });
+    gridElement.querySelectorAll = () => [cell];
+    assert(cell.classes.has('pad-cell-boundary-guide'));
+    background.value = '#ffffff';
+    context.padUpdateGridBackground();
+    assert(!cell.classes.has('pad-cell-boundary-guide'), 'Pad background changes must refresh existing guides');
+    gridElement.querySelectorAll = () => [];
+    context.document.getElementById = id => id === 'pad-grid' ? gridElement : null;
+}
 const resizeGeometry = { columnSizes: [40, 20, 40], rowSizes: [30, 70], gapX: 2, gapY: 2 };
 assert.strictEqual(context.padResizeTrackDelta(6, 'right', resizeGeometry, 0, 0, 1, 1), 1);
 assert.strictEqual(context.padResizeTrackDelta(-5, 'right', resizeGeometry, 0, 0, 2, 1), -1);
