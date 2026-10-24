@@ -431,7 +431,9 @@ void PadScreen::onPress(lv_event_t* e) {
     }
 
     tile->touch_start_valid = false;
+#if HAS_TOUCH
     touch_manager_cancel_physical_input();
+#endif
     lv_event_stop_bubbling(e);
     lv_event_stop_processing(e);
 }

@@ -416,8 +416,8 @@ void PadScreen::pollBtnStateBindings() {
                 break;
             }
         }
-        if (cancel_input) touch_manager_cancel_physical_input();
 #if HAS_TOUCH
+        if (cancel_input) touch_manager_cancel_physical_input();
         touch_manager_cancel_blocked_input([](lv_obj_t* object, const lv_point_t& point, void* context) {
             auto* pad = static_cast<PadScreen*>(context);
             for (uint8_t index = 0; index < pad->tileCount; ++index) {

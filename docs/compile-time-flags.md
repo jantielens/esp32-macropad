@@ -1254,6 +1254,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_tools_pads.cpp
   - src/app/screen_saver_manager.cpp
   - src/app/screens.cpp
+  - src/app/screens/pad_screen_events.cpp
   - src/app/screens/pad_screen_poll.cpp
   - src/app/screens/pad_tile_builder.cpp
   - src/app/screens/touch_test_screen.cpp
