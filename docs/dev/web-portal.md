@@ -583,6 +583,21 @@ The workspace owns raw drafts, dirty tracking, tab/error presentation, and
 fragment disposal. A successful save reloads canonical configuration while
 restoring the selected button's tab, disclosure states, and inspector scroll
 position, without replaying pre-save field values.
+
+Long-running portal actions can use `portalOperation.run({ title }, async operation => { ... })`
+from `portal_core.js`. Its native modal dialog reuses the reboot panel styles,
+blocks background interaction and fragment navigation immediately, and appears
+after 200 ms to avoid flashing on fast operations. `operation.stage(message)`
+shows indeterminate progress; `operation.stage(message, completed, total)` shows
+real item counts. Use `await operation.yield()` between CPU-heavy preparation
+items so the browser can render updates. The controller guards browser unload,
+keeps keyboard focus in the dialog, and restores focus and busy state on exit.
+Thrown errors remain visible until Close; writes are not automatically retried.
+Pad saving reports artwork preparation, source and button-image uploads,
+configuration persistence, and editor refresh. Success is announced only after
+refresh and inspector restoration; failures after persistence identify that the
+pad was saved. The reboot overlay retains its separate reconnection lifecycle.
+
 An owner's `init(onSettled)` may notify the host when its
 asynchronous state changes. Extension uses this callback after catalog success
 or failure, retaining its stale-mount guards. It does not inspect workspace

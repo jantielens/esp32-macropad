@@ -590,6 +590,35 @@ function pageRequests(result, page) {
         assert.strictEqual(prepared.variants.length, 1, 'Missing or mismatched artifacts must regenerate');
     }
 
+    const stages = [];
+    const operation = {
+        stage(...values) { stages.push(values); },
+        async yield() {},
+    };
+    const preparedWithProgress = await reuse.context.padPreparePageSave({
+        page: 0, payload: reusePayload, iconLayout: {}, operation,
+        saveState: { committed: false },
+    });
+    await reuse.context.padPersistPage(preparedWithProgress);
+    assert(stages.some(([stage, completed, total]) => stage === 'Preparing artwork' && completed === total && total > 0));
+    assert(stages.some(([stage, completed, total]) => stage === 'Uploading button images' && completed === total && total > 0));
+    assert(stages.some(([stage]) => stage === 'Saving configuration'));
+    assert.strictEqual(preparedWithProgress.saveState.committed, true);
+
+    const refreshFailure = await runImport();
+    refreshFailure.context.padLoadPage = async () => { throw new Error('Refresh unavailable'); };
+    await assert.rejects(refreshFailure.context.padSavePage({ operation }),
+        /Pad saved, but finishing the save failed: Refresh unavailable/);
+
+    const restoreFailure = await runImport();
+    const restoreFetch = restoreFailure.context.fetch;
+    restoreFailure.context.fetch = async (url, options = {}) => {
+        if (requestKind(url, options) === 'brightness-42') return response(false);
+        return restoreFetch(url, options);
+    };
+    await assert.rejects(restoreFailure.context.padSavePage({ operation }),
+        /Pad saved, but finishing the save failed: Failed to set display brightness/);
+
     console.log('portal_pad_import: PASS');
 })().catch(error => {
     console.error(error);

@@ -218,6 +218,13 @@ The editor maintains one in-memory draft. Switching buttons, inspector tabs,
 or Pad/Button scope retains incomplete edits. There is no button Apply/Cancel.
 A failed save keeps the draft for correction or retry.
 
+While saving, the portal blocks editing and navigation. A progress dialog shows
+the current stage and image counts when available. Wait for the success message
+after the editor refreshes. You cannot cancel a save once it starts. Errors stay
+visible until you select **Close**. If the message says the pad was saved but
+finishing failed, check the device and reload the editor rather than saving again
+immediately. A lost connection can leave the save outcome unconfirmed.
+
 Leaving or switching pads offers **Keep Editing** or **Discard and Switch**.
 Browser reload/close warns about unsaved changes, but drafts are not durably
 stored or retained for several pads.

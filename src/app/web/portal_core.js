@@ -222,6 +222,88 @@ function showMessage(message, type) {
     }, 5000);
 }
 
+const portalOperation = {
+    active: false,
+    async run(options, action) {
+        if (this.active) return;
+        this.active = true;
+        const previousFocus = document.activeElement;
+        const dialog = document.createElement('dialog');
+        dialog.className = 'reboot-modal portal-operation';
+        dialog.tabIndex = -1;
+        dialog.setAttribute('aria-labelledby', 'portal-operation-title');
+        dialog.innerHTML = '<h2 id="portal-operation-title"></h2>' +
+            '<p role="status" aria-live="polite"></p><progress class="w-100"></progress>' +
+            '<p class="small text-muted" data-elapsed></p>' +
+            '<button type="button" class="btn btn-secondary" hidden>Close</button>';
+        dialog.querySelector('h2').textContent = options.title;
+        const status = dialog.querySelector('[role="status"]');
+        const progress = dialog.querySelector('progress');
+        const close = dialog.querySelector('button');
+        const content = document.getElementById('content-pane');
+        const previousBusy = content && content.getAttribute('aria-busy');
+        const beforeUnload = event => { event.preventDefault(); event.returnValue = ''; };
+        const started = Date.now();
+        const operation = {
+            stage(message, completed, total) {
+                status.textContent = message + (total > 0 ? ' - ' + completed + ' of ' + total : '');
+                progress.setAttribute('aria-label', message);
+                if (total > 0) {
+                    progress.max = total;
+                    progress.value = completed;
+                } else progress.removeAttribute('value');
+            },
+            async yield() {
+                await new Promise(resolve => setTimeout(resolve, 0));
+            },
+        };
+        dialog.addEventListener('cancel', event => event.preventDefault());
+        dialog.addEventListener('keydown', event => {
+            if (event.key === 'Tab') {
+                event.preventDefault();
+                (close.hidden ? dialog : close).focus();
+            }
+        });
+        document.body.appendChild(dialog);
+        window.addEventListener('beforeunload', beforeUnload);
+        if (content) content.setAttribute('aria-busy', 'true');
+        const reveal = setTimeout(() => dialog.classList.add('visible'), 200);
+        const elapsed = setInterval(() => {
+            const seconds = Math.floor((Date.now() - started) / 1000);
+            if (seconds >= 10) dialog.querySelector('[data-elapsed]').textContent =
+                'Taking longer than usual. ' + seconds + ' seconds elapsed.';
+        }, 1000);
+        try {
+            dialog.showModal();
+            operation.stage('Preparing...');
+            await operation.yield();
+            return await action(operation);
+        } catch (error) {
+            clearTimeout(reveal);
+            clearInterval(elapsed);
+            dialog.classList.add('visible');
+            status.textContent = error.message;
+            progress.hidden = true;
+            dialog.querySelector('[data-elapsed]').textContent = '';
+            close.hidden = false;
+            close.focus();
+            await new Promise(resolve => close.addEventListener('click', resolve, { once: true }));
+        } finally {
+            clearTimeout(reveal);
+            clearInterval(elapsed);
+            window.removeEventListener('beforeunload', beforeUnload);
+            dialog.close();
+            dialog.remove();
+            if (content) {
+                if (previousBusy === null) content.removeAttribute('aria-busy');
+                else content.setAttribute('aria-busy', previousBusy);
+            }
+            this.active = false;
+            if (previousFocus && previousFocus.isConnected) previousFocus.focus();
+        }
+    },
+};
+
 /**
  * Show unified reboot overlay and handle reconnection
  * @param {Object} options - Configuration options

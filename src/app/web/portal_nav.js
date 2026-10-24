@@ -158,6 +158,10 @@
   // ---------- Fragment loading ----------
 
   async function loadFragment(itemId, revealCategory) {
+    if (typeof portalOperation !== 'undefined' && portalOperation.active) {
+      history.replaceState(null, '', '#' + currentItem);
+      return false;
+    }
     if (currentItem === itemId) return;
     if (currentItem === 'pad-editor' && typeof padWorkspace !== 'undefined' && padWorkspace) {
       if (padDirty && !await padWorkspaceConfirm('Discard pad edits and leave the editor?')) {

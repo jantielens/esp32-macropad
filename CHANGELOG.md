@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add a reusable portal operation dialog for pad saving, with current-stage
+  progress and image-upload counts. Block editing and navigation until saving
+  and editor refresh finish, and keep errors visible until dismissed.
+  See [Keep track of edits](docs/user/pads/editing.md#keep-track-of-edits).
 * Add a searchable foreground-icon picker for Material Symbols, Noto emoji,
   and local PNG, JPEG, or WebP images. Filter by source and category, with
   catalog artwork shown on the button's background in a fixed-size dialog.

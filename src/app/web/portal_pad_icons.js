@@ -839,6 +839,10 @@ async function padFetchConfiguredPads() {
 }
 
 async function padPreparePageSave(context) {
+    if (context.operation) {
+        context.operation.stage('Preparing artwork');
+        await context.operation.yield();
+    }
     const payload = JSON.parse(JSON.stringify(context.payload || JSON.parse(context.body)));
     const iconSources = Object.assign({ byCatalogId: {}, bySourceId: {}, byDraftId: {}, sourceIdMap: {} }, context.iconSources || {});
     iconSources.sourceIdMap = Object.assign({}, iconSources.sourceIdMap);
@@ -970,7 +974,12 @@ async function padPreparePageSave(context) {
         const maxDimension = Number(deviceInfoCache && deviceInfoCache.icon_max_dimension) || 720;
         const rendered = new Map();
         let totalPngBytes = 0;
+        let processed = 0;
         for (const entry of iconButtons) {
+            if (context.operation) {
+                context.operation.stage('Preparing artwork', processed++, iconButtons.length);
+                await context.operation.yield();
+            }
             const button = entry.button;
             const targetPayload = entry.targetPayload;
             const cols = Number(targetPayload.cols);
@@ -1040,6 +1049,7 @@ async function padPreparePageSave(context) {
         const combinedPngLimit = iconButtons.length *
             (Number(deviceInfoCache && deviceInfoCache.icon_max_png_size) || 512 * 1024);
         if (totalPngBytes > combinedPngLimit) throw new Error('Prepared icon variants exceed the combined PNG limit.');
+        if (context.operation) context.operation.stage('Preparing artwork', iconButtons.length, iconButtons.length);
     }
 
     return Object.assign({}, context, {
@@ -1095,6 +1105,9 @@ async function padRegenerateAllSavedIcons() {
 
 async function padUploadIconSources(prepared) {
     const sourceIds = new Map();
+    let uploaded = 0;
+    if (prepared.operation && prepared.sourceUploads.length)
+        prepared.operation.stage('Uploading image sources', 0, prepared.sourceUploads.length);
     for (const [sourceKey, record] of prepared.sourceUploads) {
         const response = await fetch('/api/icons/source', {
             method: 'POST',
@@ -1109,6 +1122,8 @@ async function padUploadIconSources(prepared) {
         if (!result || !/^s_[0-9a-f]{24}$/.test(result.id || ''))
             throw new Error('Icon source upload returned an invalid ID.');
         sourceIds.set(sourceKey, result.id);
+        if (prepared.operation)
+            prepared.operation.stage('Uploading image sources', ++uploaded, prepared.sourceUploads.length);
         if (sourceKey.startsWith('import:'))
             prepared.iconSources.sourceIdMap[sourceKey.slice(7)] = result.id;
     }
@@ -1133,6 +1148,9 @@ async function padUploadIconSources(prepared) {
 }
 
 async function padInstallPreparedIcons(prepared) {
+    let uploaded = 0;
+    if (prepared.operation && prepared.variants.length)
+        prepared.operation.stage('Uploading button images', 0, prepared.variants.length);
     for (const variant of prepared.variants) {
         const response = await fetch('/api/icons/install?id=' + encodeURIComponent(variant.key) +
             '&source_id=' + encodeURIComponent(variant.sourceId) + '&kind=' + (variant.kind === 'mono' ? 1 : 0) +
@@ -1142,6 +1160,8 @@ async function padInstallPreparedIcons(prepared) {
             body: variant.blob,
         });
         if (!response.ok) throw new Error('Icon upload failed for ' + variant.key + ': HTTP ' + response.status);
+        if (prepared.operation)
+            prepared.operation.stage('Uploading button images', ++uploaded, prepared.variants.length);
     }
 }
 

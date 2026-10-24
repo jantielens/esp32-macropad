@@ -1540,6 +1540,23 @@ body {
   font-size: 24px;
 }
 
+.portal-operation {
+  border: 0;
+  border-radius: 8px;
+  color: var(--portal-text);
+  max-width: min(480px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  overflow-wrap: anywhere;
+  opacity: 0;
+  animation: none;
+}
+.portal-operation.visible { opacity: 1; }
+.portal-operation::backdrop { background: transparent; }
+.portal-operation.visible::backdrop { background: var(--portal-overlay-bg); }
+.portal-operation progress { accent-color: var(--bs-primary); }
+.portal-operation [hidden] { display: none !important; }
+
 .pad-dialog-validation-error {
   position: absolute;
   inset: 0;

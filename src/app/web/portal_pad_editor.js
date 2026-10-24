@@ -247,14 +247,16 @@ function padClearDirty() {
 
 async function padRequestSave() {
     if (padSaveInProgress) return;
-    padSaveInProgress = true;
-    padWorkspaceRefresh();
-    try {
-        await padSavePage();
-    } finally {
-        padSaveInProgress = false;
+    await portalOperation.run({ title: 'Saving Pad ' + (padState.page + 1) }, async operation => {
+        padSaveInProgress = true;
         padWorkspaceRefresh();
-    }
+        try {
+            return await padSavePage({ operation });
+        } finally {
+            padSaveInProgress = false;
+            padWorkspaceRefresh();
+        }
+    });
 }
 
 const DEVICE_CONFIG_FORMAT = 'esp32-macropad-config';
@@ -623,7 +625,7 @@ function padWidgetTypeChanged() {
 
 }
 
-async function padLoadPage(page, defaultsReady, selectedLayer) {
+async function padLoadPage(page, defaultsReady, selectedLayer, throwOnError = false) {
     const generation = ++padLoadGeneration;
     const section = document.getElementById('pad-config-section');
     const current = () => generation === padLoadGeneration && document.getElementById('pad-config-section') === section;
@@ -726,6 +728,7 @@ async function padLoadPage(page, defaultsReady, selectedLayer) {
     } catch (err) {
         if (!current()) return;
         console.error('padLoadPage error:', err);
+        if (throwOnError) throw err;
         showMessage('Failed to load Pad ' + (page + 1), 'error');
         padRenderGrid();
     } finally {
@@ -933,6 +936,7 @@ async function padPersistPage(context) {
 
         await padInstallPreparedIcons(context);
 
+        if (context.operation) context.operation.stage('Saving configuration');
         const resp = await fetch('/api/pad?page=' + context.page, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -943,6 +947,8 @@ async function padPersistPage(context) {
             throw new Error(err.error || 'HTTP ' + resp.status);
         }
 
+        if (context.saveState) context.saveState.committed = true;
+        if (context.operation) context.operation.stage('Finishing save');
         try {
             await padDeleteObsoletePageIcons(context.page, context.desiredKeys);
         } catch (error) {
@@ -963,6 +969,8 @@ async function padPersistPage(context) {
 
 async function padSavePage(options) {
     const bulk = Boolean(options && options.bulk);
+    const operation = options && options.operation;
+    const saveState = { committed: false };
     try {
         const section = document.getElementById('pad-config-section');
         let context;
@@ -983,18 +991,22 @@ async function padSavePage(options) {
         const workspace = typeof padWorkspace !== 'undefined' ? padWorkspace : null;
         const revision = workspace ? workspace.revision : 0;
         const selectedLayer = padState.selectedLayer;
+        context.operation = operation;
+        context.saveState = saveState;
+        if (operation) operation.stage('Waiting to save');
         const persisted = await padQueuePersistence(context);
+        saveState.committed = true;
         if (persisted && persisted.iconSources && (bulk || padState.page === context.page))
             padState.importedIconSourceIds = padCloneJson(persisted.iconSources.sourceIdMap || {});
 
         if (!bulk && (document.getElementById('pad-config-section') !== section || padState.page !== context.page ||
             (workspace && (workspace !== padWorkspace || workspace.revision !== revision)))) return context;
 
-        showMessage('Pad ' + (context.page + 1) + ' saved', 'success');
         padClearDirty();
         if (typeof padWorkspaceRefresh === 'function') padWorkspaceRefresh();
 
         if (!bulk) {
+            if (operation) operation.stage('Refreshing editor');
             // Refresh deviceInfoCache so target screen dropdowns pick up new pad names.
             await getDeviceInfo(true);
             if (document.getElementById('pad-config-section') !== section || padState.page !== context.page ||
@@ -1006,7 +1018,7 @@ async function padSavePage(options) {
             const scroll = body ? body.scrollTop : 0;
             const groups = body ? Array.from(body.querySelectorAll('details'), group => group.open) : [];
             // Reload to get canonical version from device.
-            await padLoadPage(context.page, undefined, selectedLayer);
+            await padLoadPage(context.page, undefined, selectedLayer, Boolean(operation));
             if (selected && workspace === padWorkspace && padState.page === context.page) {
                 padState.selectedLayer = selected[0];
                 if (typeof padWorkspaceRenderLayer === 'function') padWorkspaceRenderLayer();
@@ -1018,10 +1030,13 @@ async function padSavePage(options) {
                 body.scrollTop = scroll;
             }
         }
+        showMessage('Pad ' + (context.page + 1) + ' saved', 'success');
         return context;
     } catch (err) {
         console.error('padSavePage error:', err);
         if (bulk) throw err;
+        if (operation) throw new Error((saveState.committed ? 'Pad saved, but finishing the save failed: ' :
+            'Save could not be confirmed. Some changes may have reached the device. ') + err.message);
         showMessage('Save failed: ' + err.message, 'error');
         return null;
     }
