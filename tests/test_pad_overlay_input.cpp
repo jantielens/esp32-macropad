@@ -85,7 +85,7 @@ int main() {
     lv_indev_set_display(fixture.indev, fixture.display);
     lv_indev_set_user_data(fixture.indev, &fixture);
     lv_indev_set_read_cb(fixture.indev, read_pointer);
-    fixture.main_button = lv_obj_create(lv_screen_active());
+    fixture.main_button = lv_button_create(lv_screen_active());
     lv_obj_set_pos(fixture.main_button, 0, 0);
     lv_obj_set_size(fixture.main_button, 200, 100);
     lv_obj_set_scrollable(fixture.main_button, false);
@@ -93,7 +93,7 @@ int main() {
     lv_obj_update_layout(fixture.main_button);
     lv_obj_add_event_cb(fixture.main_button, main_button_clicked,
                         LV_EVENT_CLICKED, &fixture);
-    fixture.overlay_button = lv_obj_create(lv_screen_active());
+    fixture.overlay_button = lv_button_create(lv_screen_active());
     lv_obj_set_pos(fixture.overlay_button, 50, 0);
     lv_obj_set_size(fixture.overlay_button, 100, 100);
     lv_obj_set_scrollable(fixture.overlay_button, false);
@@ -123,7 +123,9 @@ int main() {
     lv_indev_reset(fixture.indev, nullptr);
     fixture.point = {25, 50};
     read_pointer_state(fixture, true);
+    assert(lv_obj_has_state(fixture.main_button, LV_STATE_PRESSED));
     read_pointer_state(fixture, false);
+    assert(!lv_obj_has_state(fixture.main_button, LV_STATE_PRESSED));
     assert(fixture.main_actions == 1);
 
     fixture.overlay_state = BTN_STATE_ENABLED;
@@ -131,7 +133,9 @@ int main() {
     lv_obj_clear_state(fixture.overlay_button, LV_STATE_DISABLED);
     fixture.point = {75, 50};
     read_pointer_state(fixture, true);
+    assert(lv_obj_has_state(fixture.overlay_button, LV_STATE_PRESSED));
     read_pointer_state(fixture, false);
+    assert(!lv_obj_has_state(fixture.overlay_button, LV_STATE_PRESSED));
     assert(fixture.main_actions == 1);
 
     fixture.point = {25, 50};
@@ -140,6 +144,7 @@ int main() {
     fixture.overlay_state = BTN_STATE_ENABLED;
     lv_indev_reset(fixture.indev, nullptr);
     read_pointer_state(fixture, false);
+    assert(!lv_obj_has_state(fixture.main_button, LV_STATE_PRESSED));
     assert(fixture.main_actions == 1);
 
     lv_indev_delete(fixture.indev);

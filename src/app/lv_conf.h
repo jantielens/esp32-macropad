@@ -189,7 +189,7 @@
 
 #define LV_USE_ARC        1
 #define LV_USE_BAR        0
-#define LV_USE_BUTTON     0
+#define LV_USE_BUTTON     1
 #define LV_USE_BUTTONMATRIX  0
 #define LV_USE_CALENDAR   0
 #ifndef LV_USE_CANVAS

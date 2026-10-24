@@ -12,6 +12,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.45.0] - Unreleased
+
+### Changed
+
+* Use native LVGL buttons for actionable ordinary buttons, gauges, sparklines,
+  bar charts, and camera previews on displays with animations enabled. Start
+  visual feedback on press with a short transition and background-aware contrast,
+  while preserving configured appearance, tap actions, and long-press actions.
+* Align rocker, numeric-rocker, held gamepad-button, and list-row feedback with
+  short fades while retaining their existing interaction targets and triggers.
+  Keep specialized widget controls and no-animation display behavior.
+  See [Press feedback](docs/user/pads/appearance.md#press-feedback).
+
+### Fixed
+
+* Anchor rocker and numeric-rocker feedback to the original button rectangle so
+  repeated taps cannot accumulate offsets or shrink the highlighted region.
+
 ## [1.44.0] - 2026-10-24
 
 ### Added

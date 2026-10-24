@@ -90,7 +90,7 @@ protected:
         lv_display_add_event_cb(display, [](lv_event_t* event) {
             ++static_cast<SparklineWidget*>(lv_event_get_user_data(event))->invalidations;
         }, LV_EVENT_INVALIDATE_AREA, this);
-        tile = lv_obj_create(lv_display_get_screen_active(display));
+        tile = lv_button_create(lv_display_get_screen_active(display));
         lv_obj_set_size(tile, 580, 380);
         JsonDocument document;
         JsonObject fields = document.to<JsonObject>();

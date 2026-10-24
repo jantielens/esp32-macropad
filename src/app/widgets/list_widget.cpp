@@ -182,7 +182,20 @@ static void list_create(lv_obj_t* tile, const WidgetConfig* wcfg,
 
         lv_obj_set_style_bg_opa(item, LV_OPA_50, 0);
         lv_obj_set_style_bg_color(item, lv_color_hex(0x444444), 0);
-        lv_obj_set_style_bg_color(item, lv_color_hex(0x666666), LV_STATE_PRESSED);
+        const lv_color_t row_background = lv_color_mix(lv_color_hex(0x444444),
+            lv_obj_get_style_bg_color(tile, LV_PART_MAIN), LV_OPA_50);
+        const bool is_light = lv_color_luminance(row_background) > 180;
+        lv_obj_set_style_recolor(item, is_light ? lv_color_black() : lv_color_white(), LV_STATE_PRESSED);
+        lv_obj_set_style_recolor_opa(item, is_light ? 80 : 50, LV_STATE_PRESSED);
+        if (!DISPLAY_DISABLE_ANIMATIONS) {
+            static const lv_style_prop_t press_properties[] = {LV_STYLE_RECOLOR, LV_STYLE_RECOLOR_OPA, 0};
+            static lv_style_transition_dsc_t press_transition;
+            static lv_style_transition_dsc_t release_transition;
+            lv_style_transition_dsc_init(&press_transition, press_properties, lv_anim_path_linear, 30, 0, nullptr);
+            lv_style_transition_dsc_init(&release_transition, press_properties, lv_anim_path_linear, 80, 0, nullptr);
+            lv_obj_set_style_transition(item, &release_transition, 0);
+            lv_obj_set_style_transition(item, &press_transition, LV_STATE_PRESSED);
+        }
         lv_obj_set_style_border_width(item, 0, 0);
         lv_obj_set_style_radius(item, st->item_radius, 0);
         lv_obj_set_style_pad_ver(item, item_pad_v, 0);

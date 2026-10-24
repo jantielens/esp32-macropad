@@ -2224,13 +2224,36 @@ LVGL handles touch events automatically once input device is registered. Add int
 // In screen's create() method:
 
 // Button example
-lv_obj_t* btn = lv_btn_create(screen);
+lv_obj_t* btn = lv_button_create(screen);
 lv_obj_add_event_cb(btn, button_callback, LV_EVENT_CLICKED, this);
 
 // Slider example
 lv_obj_t* slider = lv_slider_create(screen);
 lv_obj_add_event_cb(slider, slider_callback, LV_EVENT_VALUE_CHANGED, this);
 ```
+
+### Pad Button Press Feedback
+
+`LV_USE_BUTTON` is enabled. `PadScreen::buildTiles()` creates `lv_button` objects
+for ordinary buttons and the `gauge`, `sparkline`, `bar_chart`, and
+`camera_preview` widgets when at least one tap or long-press action is configured
+and `DISPLAY_DISABLE_ANIMATIONS` is false. Other buttons retain generic
+containers. Explicit styles preserve configured geometry, colors, and shadows;
+the native pressed style uses a 30 ms transition with background-aware recoloring
+and retains the theme's release transition. Action dispatch still uses
+`LV_EVENT_SHORT_CLICKED` and `LV_EVENT_LONG_PRESSED`. Non-input-device activation
+pulses the pressed state through the existing feedback timer.
+
+Rocker, numeric-rocker, and gamepad-button overlays use `LV_STATE_USER_1` for
+30 ms fade-in and 80 ms fade-out. Their existing trigger and hold behavior stays
+unchanged. After the flash hold expires, the timer starts fade-out; its next
+callback hides the overlay and restores its full rectangle. Store that rectangle
+once at creation, rather than resampling rendered coordinates after a layout
+setter: LVGL applies layout changes lazily, so immediate getters can return the
+previous zone and cause cumulative drift. Repeated flashes cancel the pending
+timer and restore this fixed rectangle before choosing a new zone. Teardown
+deletes the timer before deleting the owning objects. List rows remain generic
+objects with background-aware pressed recoloring and 30/80 ms transitions.
 
 ### Mousepad And Scrollpad Touch Ownership
 

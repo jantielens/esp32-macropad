@@ -266,11 +266,20 @@ static void restore_tap_overlay(ButtonTile* tile) {
 void PadScreen::tapFlashTimerCb(lv_timer_t* timer) {
     auto* tile = (ButtonTile*)lv_timer_get_user_data(timer);
     if (tile) {
-        tile->tap_flash_timer = nullptr;
         if (tile->tap_overlay) {
+            if (button_overlay_uses_fade(tile->widget_cfg.type) &&
+                lv_obj_has_state(tile->tap_overlay, LV_STATE_USER_1)) {
+                lv_obj_remove_state(tile->tap_overlay, LV_STATE_USER_1);
+                lv_timer_set_period(timer, 80);
+                lv_timer_reset(timer);
+                return;
+            }
             lv_obj_add_flag(tile->tap_overlay, LV_OBJ_FLAG_HIDDEN);
             restore_tap_overlay(tile);
+        } else if (tile->obj && lv_obj_check_type(tile->obj, &lv_button_class)) {
+            lv_obj_remove_state(tile->obj, LV_STATE_PRESSED);
         }
+        tile->tap_flash_timer = nullptr;
     }
     lv_timer_delete(timer);
 }
@@ -279,6 +288,15 @@ void PadScreen::tapFlashTimerCb(lv_timer_t* timer) {
 // horizontal: only meaningful when zone != 0
 static void do_tap_flash(ButtonTile* tile, uint8_t zone = 0, bool horizontal = false) {
     if (DISPLAY_DISABLE_ANIMATIONS) return;
+    if (tile->obj && lv_obj_check_type(tile->obj, &lv_button_class)) {
+        if (lv_indev_active()) return;
+        if (tile->tap_flash_timer) lv_timer_delete(tile->tap_flash_timer);
+        lv_obj_add_state(tile->obj, LV_STATE_PRESSED);
+        tile->tap_flash_timer = lv_timer_create(PadScreen::tapFlashTimerCb,
+                                               TAP_FLASH_DURATION_MS, tile);
+        if (!tile->tap_flash_timer) lv_obj_remove_state(tile->obj, LV_STATE_PRESSED);
+        return;
+    }
     if (!tile->tap_overlay) return;
 
     lv_obj_t* ov = tile->tap_overlay;
@@ -287,10 +305,6 @@ static void do_tap_flash(ButtonTile* tile, uint8_t zone = 0, bool horizontal = f
         tile->tap_flash_timer = nullptr;
         restore_tap_overlay(tile);
     }
-    tile->tap_flash_x = lv_obj_get_x(ov);
-    tile->tap_flash_y = lv_obj_get_y(ov);
-    tile->tap_flash_w = lv_obj_get_width(ov);
-    tile->tap_flash_h = lv_obj_get_height(ov);
 
     // Resize to cover only the tapped zone for rocker
     if (zone == 1) {
@@ -311,11 +325,13 @@ static void do_tap_flash(ButtonTile* tile, uint8_t zone = 0, bool horizontal = f
         }
     }
 
+    if (button_overlay_uses_fade(tile->widget_cfg.type)) lv_obj_add_state(ov, LV_STATE_USER_1);
     lv_obj_remove_flag(ov, LV_OBJ_FLAG_HIDDEN);
     tile->tap_flash_timer = lv_timer_create(PadScreen::tapFlashTimerCb,
                                              TAP_FLASH_DURATION_MS, tile);
     if (!tile->tap_flash_timer) {
         lv_obj_add_flag(ov, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_state(ov, LV_STATE_USER_1);
         restore_tap_overlay(tile);
     }
 }
@@ -334,8 +350,14 @@ void PadScreen::onWidgetPressFeedback(lv_event_t* event) {
         tile->tap_flash_timer = nullptr;
         restore_tap_overlay(tile);
     }
-    if (*feedback == LV_EVENT_PRESSED) lv_obj_remove_flag(tile->tap_overlay, LV_OBJ_FLAG_HIDDEN);
-    else lv_obj_add_flag(tile->tap_overlay, LV_OBJ_FLAG_HIDDEN);
+    if (*feedback == LV_EVENT_PRESSED) {
+        if (button_overlay_uses_fade(tile->widget_cfg.type))
+            lv_obj_add_state(tile->tap_overlay, LV_STATE_USER_1);
+        lv_obj_remove_flag(tile->tap_overlay, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(tile->tap_overlay, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_state(tile->tap_overlay, LV_STATE_USER_1);
+    }
 }
 
 // Pixel-based tap flash: resize overlay to a pixel band of the tile.
@@ -350,10 +372,6 @@ static void do_tap_flash_px(ButtonTile* tile, int px_start, int px_end, bool hor
         tile->tap_flash_timer = nullptr;
         restore_tap_overlay(tile);
     }
-    tile->tap_flash_x = lv_obj_get_x(ov);
-    tile->tap_flash_y = lv_obj_get_y(ov);
-    tile->tap_flash_w = lv_obj_get_width(ov);
-    tile->tap_flash_h = lv_obj_get_height(ov);
 
     if (horizontal) {
         lv_obj_set_pos(ov, tile->tap_flash_x + px_start, tile->tap_flash_y);
@@ -363,11 +381,13 @@ static void do_tap_flash_px(ButtonTile* tile, int px_start, int px_end, bool hor
         lv_obj_set_size(ov, tile->tap_flash_w, px_end - px_start);
     }
 
+    if (button_overlay_uses_fade(tile->widget_cfg.type)) lv_obj_add_state(ov, LV_STATE_USER_1);
     lv_obj_remove_flag(ov, LV_OBJ_FLAG_HIDDEN);
     tile->tap_flash_timer = lv_timer_create(PadScreen::tapFlashTimerCb,
                                              TAP_FLASH_DURATION_MS, tile);
     if (!tile->tap_flash_timer) {
         lv_obj_add_flag(ov, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_state(ov, LV_STATE_USER_1);
         restore_tap_overlay(tile);
     }
 }

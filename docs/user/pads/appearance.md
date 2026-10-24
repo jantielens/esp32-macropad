@@ -111,6 +111,20 @@ transparency reveals a pattern. Gauge fills are unpatterned.
 Track outlines and bar corner radius belong to their widget's Content controls.
 Color badges are representative previews, not a live device simulation.
 
+## Press feedback
+
+On displays with animations enabled, ordinary buttons and buttons containing a
+gauge, sparkline, bar chart, or camera preview respond visually when pressed if
+they have a tap or long-press action. Feedback uses a short transition and a
+contrasting tint chosen from the button's background. Your configured colors,
+labels, images, and actions remain unchanged; no additional setting is required.
+
+Rockers highlight the activated zone, list rows highlight while pressed, and
+gamepad buttons highlight while held. Their feedback uses short fades without
+changing when actions run. Toggles, joysticks, and mouse/scroll surfaces retain
+their specialized feedback. Displays configured without animations do not gain
+these transitions.
+
 ## Set button state
 
 Button State accepts `enabled`, `disabled`, or `hidden`, including a binding:
