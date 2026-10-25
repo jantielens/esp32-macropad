@@ -48,6 +48,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Update the boot splash as soon as Wi-Fi connects, showing the IP address on a
+  separate line during device preparation, icon loading, and MQTT connection.
+  Show offline status when disconnected and remove the final 500 ms pause.
 * Let idle tasks run during Home Assistant history processing by briefly blocking
   the worker at processing checkpoints instead of only yielding, reducing the
   risk of task watchdog resets during large history downloads.

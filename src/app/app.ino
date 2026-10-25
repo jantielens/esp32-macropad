@@ -193,6 +193,19 @@ static void load_boot_logo() {
 	#endif
 }
 
+#if HAS_DISPLAY
+static void set_boot_splash_status(const char* phase) {
+	char status[96];
+	if (WiFi.status() == WL_CONNECTED) {
+		snprintf(status, sizeof(status), "%s\nIP: %s", phase,
+			WiFi.localIP().toString().c_str());
+	} else {
+		snprintf(status, sizeof(status), "%s\nOffline", phase);
+	}
+	display_manager_set_splash_status(status);
+}
+#endif
+
 static void start_normal_runtime(bool dispatch_boot_actions) {
 	if (g_normal_runtime_started) return;
 	g_normal_runtime_started = true;
@@ -202,6 +215,7 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 	#endif
 
 	#if HAS_DISPLAY
+	set_boot_splash_status("Preparing device...");
 	screen_saver_manager_init(&device_config);
 	pad_config_init();
 	#if HAS_NATIVE_EXTENSIONS
@@ -218,7 +232,9 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 	void list_provider_pads_init();
 	list_provider_pads_init();
 	icon_store_init();
+	set_boot_splash_status("Loading icons...");
 	icon_store_preload_pad_pages();
+	set_boot_splash_status("Preparing device...");
 	#elif HAS_STORAGE_BROWSER
 	storage_mount();
 	#endif
@@ -289,21 +305,13 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 	#if HAS_MQTT
 	if (mqtt_manager.enabled() && WiFi.status() == WL_CONNECTED) {
 		#if HAS_DISPLAY
-		display_manager_set_splash_status("Connecting to MQTT...");
+		set_boot_splash_status("Connecting to MQTT...");
 		#endif
 		mqtt_manager.connectAndPublishDiscoveryBlocking(8000);
 	}
 	#endif
 
 	#if HAS_DISPLAY
-	if (WiFi.status() == WL_CONNECTED) {
-		char ip_msg[48];
-		snprintf(ip_msg, sizeof(ip_msg), "Wi-Fi connected: %s", WiFi.localIP().toString().c_str());
-		display_manager_set_splash_status(ip_msg);
-	} else {
-		display_manager_set_splash_status("Offline mode");
-	}
-	delay(500);
 	if (pad_config_exists(0)) {
 		display_manager_show_screen("pad_0", nullptr);
 	} else {
@@ -703,6 +711,9 @@ void setup()
 		display_manager_set_splash_status("Connecting to Wi-Fi...");
 		#endif
 		if (wifi_manager_connect(&device_config, false)) {
+			#if HAS_DISPLAY
+			set_boot_splash_status("Preparing device...");
+			#endif
 			power_manager_note_wifi_success();
 			wifi_manager_start_mdns(&device_config);
 			device_telemetry_cache_rssi();
