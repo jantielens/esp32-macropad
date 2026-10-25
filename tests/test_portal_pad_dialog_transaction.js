@@ -746,7 +746,7 @@ async function checkSourceColors() {
     assert.strictEqual(button.label_bottom, bottom);
     assert.strictEqual(button.fg_color, foreground);
     assert.strictEqual(button.widget_data_binding, source);
-    assert.strictEqual(button.widget_toggle_width_pct, 100);
+    assert.strictEqual(button.widget_toggle_width_pct, 50);
     assert.strictEqual(button.widget_toggle_icon_position, 'left');
     assert.strictEqual(button.widget_toggle_placement, undefined);
     assert.deepStrictEqual(button.actions[0], on);
@@ -764,7 +764,7 @@ async function checkSourceColors() {
     assert.throws(() => context.padDialogBuildButton(), /distinct/);
     document.getElementById('pad-edit-toggle-on-value').value = 'on';
     document.getElementById('pad-edit-toggle-width-pct').value = '101';
-    assert.throws(() => context.padDialogBuildButton(), /Switch size/);
+    assert.throws(() => context.padDialogBuildButton(), /Switch width/);
     context.padLabelFromInput = savedLabel;
     context.actionEditorBuild = savedAction;
 }

@@ -571,13 +571,16 @@ hides ordinary tap/long-press lists, and keeps the held-control section in
 Content. The firmware still owns release behavior.
 
 Toggle switch owns its state field, matching values, static palette, read-only,
-switch size, and icon position. It relabels `actions[]` and `lp_actions[]` as
+switch width, and icon position. It relabels `actions[]` and `lp_actions[]` as
 Turn-on and Turn-off actions without changing either action list's payload.
 Its State source uses the shared binding header, builder shortcut, and reference
 action. It uses the same catalog symbol and label rendering as other widgets;
-the pad editor does not simulate a switch. The size field
-retains `widget_toggle_width_pct` for compatibility, now scaling the fitted
-maximum with a default of 100%. `widget_toggle_icon_position` accepts left,
+the pad editor does not simulate a switch. The width field
+retains `widget_toggle_width_pct`, now expressing a percentage of button content
+width with a default of 50%, capped by available height. Firmware uses a centered,
+height-capped 100% width when neither a center label nor a left icon is configured;
+otherwise the switch is right-aligned and label length does not affect its size.
+`widget_toggle_icon_position` accepts left,
 above, or below; the older switch placement field is ignored and not emitted.
 
 The shared cell renderer shows button styling and labels, with a large subdued

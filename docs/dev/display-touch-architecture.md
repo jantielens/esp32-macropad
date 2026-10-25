@@ -835,10 +835,16 @@ action navigates and destroys the owning pad. Hiding cancels pending without
 cancelling an action already submitted to an external service.
 
 Track/knob styling is separate from binding-aware button foreground styling.
-The layout reserves top/bottom label rows, then places the natural-width center
-label left of the 2:1 switch in the remaining area. An icon sits left of that
-row by default, or above/below it. Switch size scales the largest fit (default
-100%); insufficient space hides the switch. Sizing and positioning use painted
+The layout reserves top/bottom label rows and any above/below icon space.
+Switch width is a percentage of button content width (default 50%), capped by
+the remaining height at a 2:1 aspect ratio, independent of center-label length.
+A configured center label or left icon anchors the switch to the right; otherwise
+it is centered at 100% width, height-capped, ignoring the percentage setting.
+The center label uses the remaining width with ellipsis, accounting for font
+upscaling. A temporarily empty bound label does not change the layout mode.
+Labels and left icons with no horizontal space are hidden without shrinking
+the switch; switches narrower than four pixels are hidden. An icon sits left
+of the row by default, or above/below it. Sizing and positioning use painted
 bounds, including label transforms and image scaling around their pivots.
 Unchanged bound reports do not rewrite styles or invalidate the switch.
 The widget tick recalculates layout after live label updates.

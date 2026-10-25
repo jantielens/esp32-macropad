@@ -31,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Make toggle switch sizing independent of label length. **Switch width (%)**
+  now measures button content width, defaults to 50%, and remains height-capped.
+  Shared rows keep the switch right-aligned and truncate long center labels;
+  switches without a center label or left icon are centered at full available
+  width. Existing saved percentages use the new sizing rule.
+  See [Toggle switch](docs/user/widgets/README.md#toggle-switch).
 * Use native LVGL buttons for actionable ordinary buttons, gauges, sparklines,
   bar charts, and camera previews on displays with animations enabled. Start
   visual feedback on press with a short transition and background-aware contrast,
