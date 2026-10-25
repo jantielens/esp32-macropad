@@ -480,6 +480,19 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
     if (lv_tick_get() - swipe_actions_last_swipe_time() < 300) return;
 
     if (tile->widget_type && strcmp(tile->widget_type->name, "toggle") == 0) {
+#if HAS_AUDIO
+        if (toggle_interactive(&tile->widget_state)) {
+            const auto* state = reinterpret_cast<const ToggleState*>(tile->widget_state.data);
+            const ButtonAction* actions = state->value ? tile->lp_actions : tile->actions;
+            const uint8_t count = state->value ? tile->lp_action_count : tile->action_count;
+            if ((!state->bound || count) && !has_audio_action(actions, count)) {
+                const char* pattern = device_config.tap_beep;
+                if (pattern[0] && strcmp(pattern, "none") != 0) {
+                    audio_feedback(pattern);
+                }
+            }
+        }
+#endif
         toggle_tap(&tile->widget_cfg, &tile->widget_state, tile->actions, tile->action_count,
                     tile->lp_actions, tile->lp_action_count);
         return;

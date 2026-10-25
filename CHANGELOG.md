@@ -48,6 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Play the configured tap sound when a toggle switch accepts a tap. Keep ignored
+  taps silent and suppress duplicate feedback when the selected actions play audio.
 * Anchor rocker and numeric-rocker feedback to the original button rectangle so
   repeated taps cannot accumulate offsets or shrink the highlighted region.
 
