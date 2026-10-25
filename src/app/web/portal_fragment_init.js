@@ -93,7 +93,7 @@ async function saveFragmentConfig(requiresReboot) {
             if (window.deviceConfig && (config.ha_url !== undefined || config.ha_token !== undefined)) {
                 if (config.ha_url !== undefined) window.deviceConfig.ha_url = config.ha_url;
                 if (config.ha_token && config.ha_token.trim()) window.deviceConfig.ha_token_set = true;
-                if (typeof bindingBuilderRefreshShortcuts === 'function') bindingBuilderRefreshShortcuts();
+                if (typeof bindingToolsRefresh === 'function') bindingToolsRefresh();
             }
             var needsReboot = typeof requiresReboot === 'function' ? requiresReboot(config) : requiresReboot;
             if (config.display_rotation !== undefined && window.deviceConfig) {

@@ -36,7 +36,7 @@ function bindingFieldHeader(hint) {
     while (header.nextSibling && !(header.nextSibling.nodeType === 1 &&
         header.nextSibling.matches('input, textarea, select'))) {
         const node = header.nextSibling;
-        if (node.nodeType === 1 && node.matches('.fx-hint, .binding-builder-shortcuts, .reset-hint')) {
+        if (node.nodeType === 1 && node.matches('.fx-hint, .binding-tools, .reset-hint')) {
             controls.appendChild(node);
         } else {
             title.appendChild(node);
@@ -45,40 +45,31 @@ function bindingFieldHeader(hint) {
     header.append(title, controls);
 }
 
-function bindingBuilderRefreshShortcuts(root = document) {
+function bindingToolsRefresh(root = document) {
     const hints = [];
     if (root.matches && root.matches('.fx-hint')) hints.push(root);
     if (root.querySelectorAll) hints.push(...root.querySelectorAll('.fx-hint'));
     hints.forEach(hint => {
         const field = bindingHelpResolveTarget(hint);
         if (field?.classList.contains('bc-input')) {
-            const shortcuts = hint.previousElementSibling;
-            if (shortcuts?.classList.contains('binding-builder-shortcuts')) shortcuts.remove();
             hint.remove();
             return;
         }
         bindingFieldHeader(hint);
-        hint.setAttribute('role', 'button');
-        hint.tabIndex = 0;
-        hint.title = 'Binding syntax and examples';
-        hint.setAttribute('aria-label', hint.title);
-        let shortcuts = hint.previousElementSibling;
-        if (!shortcuts || !shortcuts.classList.contains('binding-builder-shortcuts')) {
-            if (typeof bindingSourcePickerMount !== 'function') return;
-            shortcuts = document.createElement('span');
-            shortcuts.className = 'binding-builder-shortcuts';
-            hint.before(shortcuts);
-        }
         const fieldName = field?.id ? document.querySelector('label[for="' + field.id + '"] .binding-field-title')?.textContent.trim() : '';
-        const html = '<button type="button" class="binding-builder-shortcut" ' +
-            'data-binding-builder="" title="Build a binding" aria-label="' +
-            _bhEsc('Build a binding' + (fieldName ? ' for ' + fieldName : '')) + '">' +
-            '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false">' +
-            '<path d="m3 13 8-8 2 2-8 8Zm6-6 2 2M4 1v4M2 3h4M12 0v3M10.5 1.5h3M14 10v4M12 12h4" ' +
-            'fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>' +
-            '</svg></button>';
-        if (shortcuts.innerHTML !== html) shortcuts.innerHTML = html;
-        shortcuts.hidden = hint.hidden || hint.style.display === 'none';
+        const tools = document.createElement('span');
+        tools.className = 'binding-tools';
+        const expressionDisabled = expressionBuilderEligible(field) ? '' : ' disabled';
+        tools.innerHTML = '<button type="button" class="binding-tools-trigger" aria-haspopup="menu" aria-expanded="false" title="Binding tools" aria-label="' +
+            _bhEsc('Binding tools' + (fieldName ? ' for ' + fieldName : '')) + '">' +
+            '<span class="material-symbols-outlined" aria-hidden="true">more_horiz</span></button>' +
+            '<div class="binding-tools-menu" role="menu" aria-label="Binding tools" hidden>' +
+            '<button type="button" class="binding-tools-item" role="menuitem" tabindex="-1" data-binding-tool="binding">Build a binding</button>' +
+            '<button type="button" class="binding-tools-item" role="menuitem" tabindex="-1" data-binding-tool="expression"' + expressionDisabled + '>Build an expression</button>' +
+            '<button type="button" class="binding-tools-item" role="menuitem" tabindex="-1" data-binding-tool="reference">Binding Reference</button>' +
+            '</div>';
+        tools.hidden = hint.hidden || hint.style.display === 'none';
+        hint.replaceWith(tools);
     });
 }
 
@@ -90,8 +81,53 @@ const _bindingHelp = {
     target: null,
     targetFocused: false,
     pointer: null,
-    opener: null
+    opener: null,
+    onClose: null
 };
+
+function bindingToolsCloseMenu(wrapper) {
+    if (!wrapper) return;
+    const trigger = wrapper.querySelector('.binding-tools-trigger');
+    const menu = wrapper.querySelector('.binding-tools-menu');
+    if (menu) {
+        menu.hidden = true;
+        if (menu.style) menu.style.left = menu.style.right = '';
+    }
+    if (trigger) trigger.setAttribute('aria-expanded', 'false');
+    wrapper.classList.remove('binding-tools-open');
+}
+
+function bindingToolsOpenMenu(wrapper) {
+    const trigger = wrapper && wrapper.querySelector('.binding-tools-trigger');
+    const menu = wrapper && wrapper.querySelector('.binding-tools-menu');
+    if (!trigger || !menu) return;
+    if (menu.style) menu.style.left = menu.style.right = '';
+    menu.hidden = false;
+    if (typeof menu.getBoundingClientRect === 'function' && menu.style) {
+        const menuRect = menu.getBoundingClientRect();
+        const wrapperRect = wrapper.getBoundingClientRect();
+        const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+        const clipRect = wrapper.closest('.pad-workspace-inspector, .color-popover')?.getBoundingClientRect();
+        const minLeft = Math.max(8, clipRect ? clipRect.left + 8 : 8);
+        const maxLeft = Math.max(minLeft, Math.min(
+            viewportWidth - menuRect.width - 8,
+            clipRect ? clipRect.right - menuRect.width - 8 : viewportWidth - menuRect.width - 8
+        ));
+        const left = Math.max(minLeft, Math.min(menuRect.left, maxLeft));
+        if (left !== menuRect.left) {
+            menu.style.left = (left - wrapperRect.left) + 'px';
+            menu.style.right = 'auto';
+        }
+    }
+    wrapper.classList.add('binding-tools-open');
+    trigger.setAttribute('aria-expanded', 'true');
+}
+
+function bindingToolsCloseAll(except) {
+    document.querySelectorAll('.binding-tools-open').forEach(wrapper => {
+        if (wrapper !== except) bindingToolsCloseMenu(wrapper);
+    });
+}
 
 function _bhEsc(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, c => (
@@ -458,13 +494,16 @@ function bindingHelpResolveTarget(trigger) {
     return null;
 }
 
-function showBindingHelp() {
-    _bhOpen('guide:basics');
+function showBindingHelp(onClose) {
+    _bindingHelp.onClose = typeof onClose === 'function' ? onClose : null;
+    if (_bhOpen('guide:basics')) return true;
+    _bindingHelp.onClose = null;
+    return false;
 }
 
 function _bhOpen(view) {
     const overlay = document.getElementById('binding-help-overlay');
-    if (!overlay) return;
+    if (!overlay) return false;
     if (!_bindingHelp.target) _bindingHelp.opener = document.activeElement;
     _bindingHelp.view = view;
     const search = document.getElementById('binding-docs-search');
@@ -474,6 +513,7 @@ function _bhOpen(view) {
     _bhRender();
     _bhLoad();
     if (search) search.focus();
+    return true;
 }
 
 function closeBindingHelp() {
@@ -481,9 +521,12 @@ function closeBindingHelp() {
     if (!overlay) return;
     overlay.style.display = 'none';
     const restore = _bindingHelp.target || _bindingHelp.opener;
+    const onClose = _bindingHelp.onClose;
     _bindingHelp.target = null;
     _bindingHelp.opener = null;
+    _bindingHelp.onClose = null;
     if (restore && restore.isConnected && typeof restore.focus === 'function') restore.focus();
+    if (onClose) onClose();
 }
 
 function bindingHelpInsertText(field, text, focused) {
@@ -519,6 +562,36 @@ document.addEventListener('pointerover', event => {
 });
 
 document.addEventListener('keydown', event => {
+    const wrapper = event.target.closest && event.target.closest('.binding-tools');
+    if (wrapper && typeof wrapper.querySelector === 'function') {
+        const trigger = wrapper.querySelector('.binding-tools-trigger');
+        const menu = wrapper.querySelector('.binding-tools-menu');
+        const items = Array.from(menu.querySelectorAll('[role="menuitem"]:not(:disabled)'));
+        if (event.target === trigger && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+            event.preventDefault();
+            bindingToolsCloseAll(wrapper);
+            bindingToolsOpenMenu(wrapper);
+            items[event.key === 'ArrowUp' ? items.length - 1 : 0]?.focus();
+            return;
+        }
+        if (!menu.hidden) {
+            const index = items.indexOf(event.target);
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                bindingToolsCloseMenu(wrapper);
+                trigger.focus();
+                return;
+            }
+            if (event.key === 'Tab') bindingToolsCloseMenu(wrapper);
+            else if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
+                event.preventDefault();
+                const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 :
+                    (index + (event.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length;
+                items[next]?.focus();
+                return;
+            }
+        }
+    }
     const trigger = event.target.closest && event.target.closest('.fx-hint');
     if (!trigger || (event.key !== 'Enter' && event.key !== ' ')) return;
     event.preventDefault();
@@ -526,7 +599,7 @@ document.addEventListener('keydown', event => {
 });
 
 document.addEventListener('pointerdown', event => {
-    if (!event.target.closest || !event.target.closest('.fx-hint, .binding-help-btn, #cp-fx, .binding-builder-shortcut')) return;
+    if (!event.target.closest || !event.target.closest('.fx-hint, .binding-help-btn, .binding-tools-trigger, .binding-tools-item')) return;
     const active = document.activeElement;
     _bindingHelp.pointer = _bhIsTextField(active)
         ? { field: active, start: active.selectionStart, end: active.selectionEnd } : null;
@@ -534,7 +607,9 @@ document.addEventListener('pointerdown', event => {
 
 // Capture phase: record the target field before the trigger's own onclick opens the dialog.
 document.addEventListener('click', event => {
-    const trigger = event.target.closest && event.target.closest('.fx-hint, .binding-help-btn, #cp-fx, .binding-builder-shortcut');
+    const insideTools = event.target.closest && event.target.closest('.binding-tools');
+    if (!insideTools) bindingToolsCloseAll();
+    const trigger = event.target.closest && event.target.closest('.fx-hint, .binding-help-btn, .binding-tools-trigger, .binding-tools-item');
     if (!trigger) return;
     const field = bindingHelpResolveTarget(trigger);
     const pointer = _bindingHelp.pointer;
@@ -544,21 +619,46 @@ document.addEventListener('click', event => {
         field.setSelectionRange(pointer.start, pointer.end);
     }
     _bindingHelp.pointer = null;
-    if (trigger.matches('.binding-builder-shortcut')) {
+    if (trigger.matches('.binding-tools-trigger')) {
         event.preventDefault();
-        showBindingBuilder(trigger.dataset.bindingBuilder);
+        const wrapper = trigger.closest('.binding-tools');
+        const menu = wrapper.querySelector('.binding-tools-menu');
+        const open = menu.hidden;
+        bindingToolsCloseAll(wrapper);
+        if (open) {
+            bindingToolsOpenMenu(wrapper);
+            if (event.detail === 0) menu.querySelector('[role="menuitem"]:not(:disabled)')?.focus();
+        } else {
+            bindingToolsCloseMenu(wrapper);
+        }
+        return;
+    }
+    if (trigger.matches('.binding-tools-item')) {
+        event.preventDefault();
+        const action = trigger.dataset.bindingTool;
+        const wrapper = trigger.closest('.binding-tools');
+        const opener = wrapper.querySelector('.binding-tools-trigger');
+        bindingToolsCloseMenu(wrapper);
+        if (action === 'binding') showBindingBuilder();
+        else if (action === 'expression') {
+            _bindingHelp.target = null;
+            _bindingHelp.targetFocused = false;
+            _bindingHelp.opener = null;
+            if (expressionBuilderEligible(field)) expressionBuilderOpen(field, opener);
+        } else if (action === 'reference') showBindingHelp();
+        return;
     }
 }, true);
 
-function bindingBuilderObserveShortcuts() {
-    bindingBuilderRefreshShortcuts();
+function bindingToolsObserve() {
+    bindingToolsRefresh();
     const observer = new MutationObserver(mutations => {
         mutations.forEach(mutation => {
             if (mutation.type === 'attributes') {
-                if (mutation.target.matches('.fx-hint')) bindingBuilderRefreshShortcuts(mutation.target);
+                if (mutation.target.matches('.fx-hint')) bindingToolsRefresh(mutation.target);
             } else {
                 mutation.addedNodes.forEach(node => {
-                    if (node.nodeType === 1) bindingBuilderRefreshShortcuts(node);
+                    if (node.nodeType === 1) bindingToolsRefresh(node);
                 });
             }
         });
@@ -569,9 +669,9 @@ function bindingBuilderObserveShortcuts() {
 }
 
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', bindingBuilderObserveShortcuts);
+    document.addEventListener('DOMContentLoaded', bindingToolsObserve);
 } else {
-    bindingBuilderObserveShortcuts();
+    bindingToolsObserve();
 }
 
 document.addEventListener('click', event => {

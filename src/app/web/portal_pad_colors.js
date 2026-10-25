@@ -240,9 +240,6 @@ function padColorPopoverCreate() {
             padColorPopoverValidate(true);
         });
     });
-    pop.querySelector('#cp-fx').addEventListener('click', function() {
-        if (typeof showBindingHelp === 'function') showBindingHelp();
-    });
     pop.querySelector('#cp-close').addEventListener('click', padColorPopoverClose);
     // Escape closes from anywhere, unless the binding help overlay is on top
     document.addEventListener('keydown', function(e) {
@@ -379,7 +376,10 @@ function padColorPopoverOpen(swatch, input) {
     }
     var allowBindings = input.dataset.allowBindings !== 'false';
     cp.pop.querySelector('#cp-gen').style.display = allowBindings ? '' : 'none';
-    cp.pop.querySelector('#cp-fx').style.display = allowBindings ? '' : 'none';
+    var bindingTools = cp.pop.querySelector('.color-popover-input-row .binding-tools');
+    var bindingHint = cp.pop.querySelector('#cp-fx');
+    if (bindingTools) bindingTools.hidden = !allowBindings;
+    if (bindingHint) bindingHint.hidden = !allowBindings;
     cp.pop.querySelector('#cp-input-label').textContent = cp.fill ? (allowBindings ? 'Base Color or expression' : 'Base Color') : allowBindings ? 'Color or expression' : 'Color';
     cp.pop.querySelector('#cp-input').placeholder = allowBindings ? '#RRGGBB or [expr:\u2026]' : '#RRGGBB';
     padThresholdGenLoad(allowBindings ? input.value : '');

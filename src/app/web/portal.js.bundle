@@ -31,6 +31,7 @@ portal_dropdown.js
 portal_binding_validator.js
 portal_binding_help.js
 portal_binding_builder.js
+portal_expression_builder.js
 
 # [chunk:catalog_bindings HAS_DISPLAY]
 portal_binding_builder_catalog.js

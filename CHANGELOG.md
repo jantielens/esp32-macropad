@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-24
+ms.date: 2026-10-25
 ms.topic: reference
 ---
 
@@ -13,6 +13,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.45.0] - Unreleased
+
+### Added
+
+* Add an Expression Builder to the shared Binding tools menu. Insert functions,
+  bindings, and colors, validate field limits and widget formatting rules, and
+  preview resolved results. See [Expressions](docs/user/pads/expressions.md).
 
 ### Changed
 

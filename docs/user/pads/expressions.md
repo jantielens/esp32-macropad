@@ -12,6 +12,32 @@ expression, not an inner token. Numeric inner results become numbers;
 non-numeric results are quoted as strings automatically.
 An unresolved inner value makes the expression unavailable.
 
+## Use the portal Expression builder
+
+In a field with Binding tools, choose **Build an expression**. The same menu
+also opens the binding builder and Binding Reference. Custom color pickers use
+their separate workflow. Enter the expression body without the outer
+`[expr:...]` wrapper.
+
+Use **Insert binding** to add a raw binding token, **Insert function** to add a
+supported function or conditional snippet, and **Insert color** to add a
+quoted hex color at the current selection. Use **?** to open Binding Reference
+for expression basics and the bindings available on the device. Optional
+numeric formatting sets 0 through 6 decimal places and a display-only unit
+suffix. A literal percent suffix is escaped as `%%`; units are not converted.
+
+The builder can reopen a complete supported expression and its supported
+numeric format. It preserves plain text, other bindings, mixed content,
+fallbacks, and unsupported formats, and disables **Replace field** for those
+values. Edit them directly or use the existing Binding controls instead.
+
+The Result preview uses the device's live binding resolver, not a browser
+expression evaluator. Missing values and request failures are shown as
+unavailable or failed previews; they do not block a structurally valid
+expression from being applied. Portal checks do not prove that the firmware
+will accept every expression. **Replace field** updates only the selected
+label; choose **Save Pad** to persist it. **Cancel** leaves the label unchanged.
+
 ## Operators and values
 
 | Precedence, highest first        | Meaning                                  |

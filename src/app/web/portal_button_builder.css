@@ -1,7 +1,6 @@
 .pad-button-builders { flex: none; display: flex; flex-direction: column; align-items: flex-end; min-height: 44px; padding: 0 12px; }
 .pad-button-builders [hidden] { display: none !important; }
 .pad-button-builder-entry { max-width: 100%; min-height: 44px; padding: 6px 0; border: 0; background: transparent; color: var(--portal-primary); cursor: pointer; font-size: 13px; line-height: 1.5; text-align: right; text-decoration: none; }
-.pad-button-builder-entry .binding-builder-badge { margin: 0 2px; }
 .pad-button-builder-entry:hover { text-decoration: underline; text-underline-offset: 3px; }
 .pad-button-builder-entry:focus-visible { outline: 2px solid var(--portal-primary); outline-offset: 2px; }
 .pad-button-builder-manual { display: none; border: 0; background: transparent; color: var(--portal-text-muted); font-size: 12px; text-decoration: underline; cursor: pointer; }
