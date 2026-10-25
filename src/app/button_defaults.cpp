@@ -154,13 +154,7 @@ static bool load_from_flash(ButtonDefaults* d) {
 
 void button_defaults_init() {
     if (!ensure_defaults()) return;
-    bool loaded = load_from_flash(g_defaults);
-
-    // If defaults were loaded, rebuild pad caches so they pick up the
-    // saved defaults (pad_config_init runs first with empty defaults).
-    if (loaded) {
-        pad_config_rebuild_all_caches();
-    }
+    load_from_flash(g_defaults);
 }
 
 const ButtonDefaults* button_defaults_get() {

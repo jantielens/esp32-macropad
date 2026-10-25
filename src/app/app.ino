@@ -222,7 +222,6 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 	native_extension_init();
 	#endif
 	swipe_config_init();
-	button_defaults_init();
 	if (displayManager) {
 		const ButtonDefaults* defaults = button_defaults_get();
 		displayManager->initTypography(defaults->default_font, defaults->base_text_size);

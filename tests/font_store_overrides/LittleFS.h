@@ -41,6 +41,7 @@ public:
     void (*read_hook)() = nullptr;
     bool rename_failure = false;
     bool remove_failure = false;
+    unsigned icon_directory_opens = 0;
     bool exists(const char* path) const { return files.count(path) != 0; }
     bool mkdir(const char* path) { files[path] = {}; return true; }
     bool remove(const char* path) { return !remove_failure && files.erase(path) != 0; }
@@ -49,6 +50,7 @@ public:
         files[destination] = std::move(files[source]); files.erase(source); return true;
     }
     File open(const char* path, const char* mode = "r") {
+        if (strcmp(path, "/icons") == 0) ++icon_directory_opens;
         if (*mode == 'w') files[path].clear();
         return exists(path) ? File(this, path, strcmp(path, "/fonts") == 0 ||
             strcmp(path, "/icons") == 0 || strcmp(path, "/icon_sources") == 0) : File();
