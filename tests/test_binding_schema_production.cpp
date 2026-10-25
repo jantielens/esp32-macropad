@@ -6,6 +6,8 @@
 
 #include "binding_builtin_schemes.h"
 #include "binding_template.h"
+#include "runtime_variables.h"
+#include "var_binding.h"
 #include "pad_binding.h"
 #include "list_binding.h"
 #include "list_provider.h"
@@ -213,6 +215,8 @@ static void expect_key_patterns() {
     expect(!binding_key_doc_matches("#", "1_state"), "# does not span non-digits");
     expect(binding_key_doc_matches("*.selected", "pads.selected"), "* matches an id");
     expect(!binding_key_doc_matches("*.selected", "a.b.selected"), "* stops at a dot");
+    expect(binding_key_doc_matches("*", "not_yet_created.counter"),
+           "standalone dynamic names may contain periods");
     expect(binding_key_doc_matches("seg_time:#", "seg_time:11"), "pattern suffix digits");
 }
 
@@ -352,7 +356,14 @@ static void expect_static_authoring_complete() {
         }
         for (uint8_t j = 0; j < spec.authoring->key_count; ++j) {
             const auto& entry = spec.authoring->keys[j];
-            expect(has_text(entry.example_value), "every static value has a representative sample");
+            if (std::strcmp(name, "var") == 0 && spec.free_form && is_pattern(entry.key)) {
+                expect(!entry.example_value && entry.kind == BINDING_AUTHORING_KIND_TEXT &&
+                           !(entry.capabilities & BINDING_AUTHORING_CAP_NUMERIC_WIDGET) &&
+                           !(entry.capabilities & BINDING_AUTHORING_CAP_LIVE_SAMPLING),
+                       "dynamic text names do not invent samples or numeric capabilities");
+            } else {
+                expect(has_text(entry.example_value), "every static value has a representative sample");
+            }
             expect(entry.unit != nullptr, "every static value declares a unit or known unitless output");
             expect(entry.read_only && (entry.capabilities & BINDING_AUTHORING_CAP_DISPLAY),
                    "local sample metadata describes a read-only display value");
@@ -421,6 +432,49 @@ int main(int argc, char** argv) {
     expect(scheme_is_registered("pad") == bool(HAS_DISPLAY),
            "named bindings are registered whenever display is enabled");
     expect(scheme_is_registered("ha") == bool(HAS_HA_LIVE), "HA registration matches gate");
+#if HAS_DISPLAY || HAS_BUTTON
+    expect(scheme_is_registered("var"),
+           "runtime variables are registered independently of network bindings");
+#else
+    expect(!scheme_is_registered("var"), "runtime variables follow the action/display boundary");
+#endif
+    if (scheme_is_registered("var")) {
+        char value[192] = {};
+        const BindingSchemeSpec* var_spec = nullptr;
+        for (uint8_t index = 0; index < binding_template_scheme_count(); ++index) {
+            if (std::strcmp(binding_template_scheme_name(index), "var") == 0)
+                var_spec = binding_template_scheme_spec(index);
+        }
+        expect(var_spec && var_spec->free_form && var_spec->doc && var_spec->doc->param_count &&
+                   var_spec->doc->params[0].validation_pattern &&
+                   std::strcmp(var_spec->doc->params[0].validation_pattern,
+                               "^[A-Za-z0-9_.-]{1,32}$") == 0,
+               "var uses a dynamic-name validation contract");
+        expect(var_spec && var_spec->authoring && var_spec->authoring->key_count == 1 &&
+                   var_spec->authoring->keys[0].kind == BINDING_AUTHORING_KIND_TEXT &&
+                   !var_spec->authoring->keys[0].example_value &&
+                   !(var_spec->authoring->keys[0].capabilities & BINDING_AUTHORING_CAP_NUMERIC_WIDGET),
+               "var authoring has no invented sample or numeric capability");
+        expect(binding_template_validate_params("var", 3, "counter") == nullptr,
+               "free-form variable name validates before assignment");
+        expect(binding_template_validate_params("var", 3, "bad/name") != nullptr,
+               "variable name rejects invalid characters");
+        expect(binding_template_validate_params("var", 3, "[health:cpu]") != nullptr,
+               "variable name rejects nested bindings");
+        expect(runtime_variable_set("counter", "5") == RUNTIME_VARIABLE_STORED,
+               "runtime variable can be assigned in production profile");
+        expect(binding_template_resolve("[var:counter]", value, sizeof(value)) &&
+                   std::strcmp(value, "5") == 0,
+               "var binding returns the stored string");
+        expect(binding_template_resolve_checked("[var:unset|0]", value, sizeof(value)) &&
+                   std::strcmp(value, "0") == 0,
+               "explicit fallback resolves an unset variable successfully");
+        expect(runtime_variable_set("template", "[health:cpu]") == RUNTIME_VARIABLE_STORED,
+               "binding-looking text can be stored literally");
+        expect(binding_template_resolve("[var:template]", value, sizeof(value)) &&
+                   std::strcmp(value, "[health:cpu]") == 0,
+               "stored templates are not evaluated recursively");
+    }
 #if HAS_HA_LIVE
     {
         char value[64] = {};

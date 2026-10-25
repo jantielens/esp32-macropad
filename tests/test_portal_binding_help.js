@@ -1274,11 +1274,37 @@ delete context.testHelpSchemes;
     vm.runInContext(fs.readFileSync('src/app/web/portal_binding_builder_mqtt.js', 'utf8'), context);
     const catalogProvider = vm.runInContext('catalogBindingProvider', context);
     const mqttProvider = vm.runInContext('mqttBindingProvider', context);
+    const variableScheme = fixture.schemes.find(scheme => scheme.name === 'var');
+    assert(variableScheme, 'runtime variable scheme is present in generated Binding Reference metadata');
+    assert.strictEqual(variableScheme.first_param_pattern, '^[A-Za-z0-9_.-]{1,32}$');
+    assert(context.bindingHelpKeyMatches('*', 'not_yet_created.counter'));
+    assert(context.validateBinding('[var:counter|0]', {}).valid);
+    assert(!context.validateBinding('[var:bad/name]', {}).valid);
+    assert(!context.validateBinding('[var:[health:cpu]]', {}).valid);
+    const variableToken = context.catalogBindingToken({
+        scheme: 'var', params: ['not_yet_created.counter'], fallback: '0'
+    });
+    assert.strictEqual(variableToken, '[var:not_yet_created.counter|0]');
+    const variableCandidate = context.catalogBindingCandidate(
+        context.catalogBindingReference(variableToken));
+    assert.strictEqual(variableCandidate.capabilities.numericWidget, false);
+    assert.strictEqual(variableCandidate.capabilities.liveSampling, false);
+    assert.strictEqual(Object.hasOwn(variableCandidate, 'exampleValue'), false);
+    const variableDocs = vm.runInContext('_bhRenderScheme(scheme)', Object.assign(context, { scheme: variableScheme }));
+    assert(variableDocs.includes('volatile, device-global string variable'));
+    assert(variableDocs.includes('Literal, case-sensitive name'));
     const catalogKeys = await catalogProvider.list('');
+    assert(catalogKeys.some(candidate => candidate.reference.scheme === 'var'),
+        'on-device catalog exposes var without enumerating assigned variables');
     for (const scheme of fixture.schemes) {
         if (scheme.free_form && scheme.reference?.formats && scheme.reference.rows?.length) {
             assert.ok(catalogKeys.some(candidate => candidate.reference.scheme === scheme.name),
                 scheme.name + ' format presets');
+            continue;
+        }
+        if (scheme.name === 'var') {
+            assert.ok(catalogKeys.some(candidate => candidate.reference.scheme === 'var' &&
+                candidate.reference.params[0] === 'id'), 'var exposes a dynamic-name placeholder');
             continue;
         }
         for (const key of scheme.free_form ? [''] : scheme.keys) {

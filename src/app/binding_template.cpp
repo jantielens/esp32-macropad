@@ -38,6 +38,7 @@ uint8_t binding_template_scheme_count() { return (uint8_t)g_scheme_count; }
 
 bool binding_key_doc_matches(const char* pattern, const char* key) {
     if (!pattern || !key) return false;
+    if (strcmp(pattern, "*") == 0) return key[0] && !strchr(key, ';');
     if (!*pattern) return !*key;
     if (*pattern == '#' || *pattern == '*') {
         for (size_t n = 0; key[n]; ++n) {
@@ -90,9 +91,11 @@ const char* binding_template_validate_params(const char* scheme, size_t name_len
             }
             if (count < spec.min_params) return kTooFewParameters;
             if (count > spec.max_params) return kTooManyParameters;
-            if (spec.validation_mode == BINDING_VALIDATION_STRUCTURAL_ONLY || spec.free_form) return nullptr;
             size_t key_len = 0;
             while (params[key_len] && params[key_len] != ';' && params[key_len] != '|') ++key_len;
+            if (spec.validate_first_param && !spec.validate_first_param(params, key_len))
+                return "invalid binding parameter";
+            if (spec.validation_mode == BINDING_VALIDATION_STRUCTURAL_ONLY || spec.free_form) return nullptr;
             for (uint8_t key_index = 0; key_index < spec.key_count(); ++key_index) {
                 const char* key = spec.key_at(key_index);
                 if (key && strlen(key) == key_len && strncmp(key, params, key_len) == 0) return nullptr;
@@ -297,7 +300,10 @@ static bool resolve_template(const char* templ, char* out, size_t out_len,
                 memcpy(out + written, resolved, copy);
                 written += copy;
             } else {
-                if (resolved_status == BINDING_RESOLVER_UNKNOWN) {
+                if (fallback) {
+                    // A supplied fallback fulfills the token even when its source
+                    // is unavailable; checked callers may safely use that value.
+                } else if (resolved_status == BINDING_RESOLVER_UNKNOWN) {
                     outcome = BINDING_RESOLVER_UNKNOWN;
                 } else if (outcome == BINDING_RESOLVER_RESOLVED) {
                     outcome = BINDING_RESOLVER_UNAVAILABLE;

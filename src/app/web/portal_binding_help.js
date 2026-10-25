@@ -136,6 +136,7 @@ function _bhEsc(value) {
 
 // Key docs use '#' for digits and '*' for an id segment.
 function bindingHelpKeyMatches(pattern, key) {
+    if (pattern === '*') return key.length > 0 && !key.includes(';');
     let source = '^';
     for (const c of pattern) {
         if (c === '#') source += '[0-9]+';

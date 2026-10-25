@@ -15,6 +15,7 @@
 #include "time_binding.h"
 #include "timer_binding.h"
 #include "alarm_binding.h"
+#include "var_binding.h"
 
 void binding_builtin_schemes_init() {
 #if HAS_CAMERA && HAS_DISPLAY
@@ -46,4 +47,7 @@ void binding_builtin_schemes_init() {
 #endif
     list_binding_init();
     net_binding_init();
+#if HAS_DISPLAY || HAS_BUTTON
+    var_binding_init();
+#endif
 }

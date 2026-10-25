@@ -45,11 +45,15 @@ struct ActionTypeDef {
                 bool (*binding_fields)(ButtonAction& act, ActionBindableFieldVisitor visitor,
                                                              void* context) = nullptr,
         ActionExecutionClass execution = ACTION_EXECUTION_UNKNOWN,
-        bool display_lock_required = true)
+            bool display_lock_required = true,
+            bool resolve_bindings_before_dispatch = true,
+            bool dispatch_lock_always = false)
         : type_name(type_name), parse(parse), serialize(serialize), dispatch(dispatch),
           value_field(value_field), describe(describe), available(available),
                     validate(validate), binding_fields(binding_fields), execution(execution),
-          display_lock_required(display_lock_required) {}
+                    display_lock_required(display_lock_required),
+                    resolve_bindings_before_dispatch(resolve_bindings_before_dispatch),
+                    dispatch_lock_always(dispatch_lock_always) {}
 
     const char* type_name;                                                  // matches ButtonAction::type
     void (*parse)(const JsonObject& a, ButtonAction& act);                  // flat JSON -> payload arm
@@ -67,6 +71,8 @@ struct ActionTypeDef {
                            void* context);                                   // optional: visit bindable payload fields
     ActionExecutionClass execution;
     bool display_lock_required;
+    bool resolve_bindings_before_dispatch;
+    bool dispatch_lock_always;
 };
 
 void action_type_register(const ActionTypeDef* type);
@@ -96,9 +102,9 @@ void action_substitute_step_field(char* field, size_t field_size, float step);
 void action_type_substitute_step(const ActionTypeDef* def, ButtonAction& act, float step);
 bool action_type_visit_bindable_fields(const ActionTypeDef* def, ButtonAction& act,
                                        ActionBindableFieldVisitor visitor, void* context);
-#if HAS_MQTT || HAS_HA_LIVE
 bool action_type_has_binding(const ActionTypeDef* def, const ButtonAction& act);
 bool action_type_resolve_bindings(const ActionTypeDef* def, ButtonAction& act);
+#if HAS_MQTT || HAS_HA_LIVE
 // Collect MQTT topics referenced by the type's bindable value field (if any)
 // into a binding_template_collect_topics() context. No-op without value_field.
 void action_type_collect_topics(const ActionTypeDef* def, const ButtonAction& act, void* user_data);

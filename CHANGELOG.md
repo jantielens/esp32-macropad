@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add volatile device-global runtime variables through `[var:name]` bindings
+  and the **Set variable** action. Use expressions for counters and toggles;
+  values survive pad changes and configuration reloads but clear on reboot.
+  See [actions](docs/user/pads/actions.md#set-a-runtime-variable) and
+  [bindings](docs/user/pads/bindings.md#read-a-runtime-variable).
 * Support binding templates in button background image URLs. Changed sources
   load asynchronously, retain the previous image on failure, and discard stale
   downloads. Dynamic URLs do not support authentication.

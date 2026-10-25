@@ -1,7 +1,7 @@
 #include "expr_binding.h"
 #include "board_config.h"
 
-#if HAS_DISPLAY
+#if HAS_DISPLAY || HAS_BUTTON
 
 #include "binding_template.h"
 #include "binding_value.h"
@@ -232,7 +232,7 @@ void expr_binding_init(void) {
     }
 }
 
-#else // !HAS_DISPLAY
+#else // !HAS_DISPLAY && !HAS_BUTTON
 
 void expr_binding_init(void) {}
 

@@ -612,15 +612,18 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/mqtt_action.cpp
   - src/app/actions/music_action.cpp
   - src/app/actions/screen_action.cpp
+  - src/app/actions/set_var_action.cpp
   - src/app/actions/sound_alert_action.cpp
   - src/app/actions/system_action.cpp
   - src/app/actions/timer_action.cpp
   - src/app/actions/visual_alert_action.cpp
   - src/app/actions/volume_action.cpp
   - src/app/app.ino
+  - src/app/binding_builtin_schemes.cpp
   - src/app/board_config.h
   - src/app/components/hw_buttons_component.cpp
   - src/app/device_dialog.cpp
+  - src/app/expr_binding.cpp
   - src/app/gamepad_hid.cpp
   - src/app/ha_service.cpp
   - src/app/ha_service.h
@@ -634,6 +637,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_tools_config.cpp
   - src/app/mcp_tools_core.cpp
   - src/app/portal_components.cpp
+  - src/app/runtime_variables.cpp
+  - src/app/var_binding.cpp
   - src/app/web_portal_device_api.cpp
   - src/boards/m5stack-stopwatch/stopwatch_actions.cpp
 - **HAS_CAMERA**
@@ -702,6 +707,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/music_action.cpp
   - src/app/actions/notify_action.cpp
   - src/app/actions/screen_action.cpp
+  - src/app/actions/set_var_action.cpp
   - src/app/actions/sound_alert_action.cpp
   - src/app/actions/system_action.cpp
   - src/app/actions/timer_action.cpp
@@ -803,6 +809,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/pad_validate.cpp
   - src/app/pad_validate.h
   - src/app/portal_components.cpp
+  - src/app/runtime_variables.cpp
   - src/app/screen_saver_manager.cpp
   - src/app/screen_saver_manager.h
   - src/app/screens.cpp
@@ -828,6 +835,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/timer_mcp_adapter.h
   - src/app/touch_manager.cpp
   - src/app/touch_manager.h
+  - src/app/var_binding.cpp
   - src/app/visual_alert.cpp
   - src/app/visual_alert.h
   - src/app/web_mcp.cpp

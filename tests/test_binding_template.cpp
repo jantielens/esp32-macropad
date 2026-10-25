@@ -166,8 +166,9 @@ int main() {
                "checked source rejects saturated resolver output");
     check_true(!binding_template_resolve_checked("https://host/[nested:any]", checked, sizeof(checked)),
                "checked source rejects truncation inside nested resolution");
-    check_true(!binding_template_resolve_checked("https://host/[fail:any|fallback]", checked, sizeof(checked)),
-               "checked source rejects unavailable bindings even with fallback");
+    check_true(binding_template_resolve_checked("https://host/[fail:any|fallback]", checked, sizeof(checked)) &&
+                   std::strcmp(checked, "https://host/fallback") == 0,
+               "checked source accepts an explicit fallback for an unavailable binding");
     check_true(binding_template_resolve_checked("https://host/restored.jpg", checked, sizeof(checked)),
                "checked failure does not leak into the next resolution");
 

@@ -61,6 +61,27 @@ Expressions support up to 12 nested groups/unary/conditional/function levels.
 [expr:[mqtt:device;state]=="ON"?"Running":"Stopped"]
 ```
 
+## Update runtime state
+
+The **Set variable** action can use an expression as its Value. A counter
+starts at zero when unset and increments on each activation:
+
+```text
+[expr:[var:counter|0] + 1]
+```
+
+Set the same Name to the literal `0` to reset it. A toggle can switch a
+numeric variable between zero and one:
+
+```text
+[expr:[var:enabled|0] == 0 ? 1 : 0]
+```
+
+Runtime variables store strings, while expressions interpret numeric text
+using the same numeric rules as other bindings. See
+[Set a runtime variable](actions.md#set-a-runtime-variable) for the complete
+button workflow and reboot behavior.
+
 ## Use numeric functions
 
 Numeric functions accept numbers and return numbers. `round()` rounds halfway

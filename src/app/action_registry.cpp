@@ -5,9 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#if HAS_MQTT || HAS_HA_LIVE
 #include "binding_template.h"
-#endif
 
 // Built-ins and device classes share this fixed-size registry. Reserve room
 // for device classes even when every built-in action is present.
@@ -83,7 +81,6 @@ bool action_type_visit_bindable_fields(const ActionTypeDef* def, ButtonAction& a
     return !field || !field[0] || visitor(field, size, true, context);
 }
 
-#if HAS_MQTT || HAS_HA_LIVE
 bool action_type_has_binding(const ActionTypeDef* def, const ButtonAction& act) {
     bool has_binding = false;
     auto check = [](char* field, size_t, bool, void* context) {
@@ -107,6 +104,7 @@ bool action_type_resolve_bindings(const ActionTypeDef* def, ButtonAction& act) {
     return action_type_visit_bindable_fields(def, act, resolve, nullptr);
 }
 
+#if HAS_MQTT || HAS_HA_LIVE
 void action_type_collect_topics(const ActionTypeDef* def, const ButtonAction& act, void* user_data) {
     auto collect = [](char* field, size_t, bool, void* context) {
         if (field[0]) binding_template_collect_topics(field, context);

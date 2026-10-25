@@ -465,6 +465,11 @@ function bindingValidateToken(token, opts) {
         return 'Binding parameter is empty';
     }
 
+    if (typeof def.first_param_pattern === 'string' && parts[0].trim() !== '' &&
+        !new RegExp(def.first_param_pattern).test(parts[0].trim())) {
+        return 'Invalid binding parameter';
+    }
+
     if (!def.free_form && Array.isArray(def.keys) && parts[0].trim() !== '' &&
         def.keys.indexOf(parts[0].trim()) === -1) {
         return 'Unknown binding key "' + parts[0].trim() + '"';

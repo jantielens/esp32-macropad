@@ -156,6 +156,58 @@ TEST(type_only) {
 #endif
 }
 
+TEST(set_var_round_trip_and_validation) {
+    ButtonAction act = round_trip(
+        "{\"type\":\"set_var\",\"var_name\":\"counter\",\"var_value\":\"[expr:[var:counter|0] + 1]\"}");
+    ASSERT_STR(act.type, ACTION_TYPE_SET_VAR);
+    ASSERT_STR(act.payload.set_var.var_name, "counter");
+    ASSERT_STR(act.payload.set_var.var_value, "[expr:[var:counter|0] + 1]");
+
+    const ActionTypeDef* type = action_type_find(ACTION_TYPE_SET_VAR);
+    ASSERT_TRUE(type != nullptr);
+    JsonDocument valid;
+    deserializeJson(valid, "{\"type\":\"set_var\",\"var_name\":\"counter\",\"var_value\":\"\"}");
+    ASSERT_TRUE(action_type_validate(type, valid.as<JsonObjectConst>()) == nullptr);
+
+    for (const char* json : {
+            "{\"type\":\"set_var\",\"var_name\":\"bad/name\",\"var_value\":\"x\"}",
+            "{\"type\":\"set_var\",\"var_name\":\"counter\",\"var_value\":1}",
+            "{\"type\":\"set_var\",\"var_name\":\"counter\"}",
+            "{\"type\":\"set_var\",\"var_name\":\"counter\\u0000suffix\",\"var_value\":\"x\"}",
+            "{\"type\":\"set_var\",\"var_name\":\"counter\",\"var_value\":\"prefix\\u0000suffix\"}"}) {
+        JsonDocument invalid;
+        deserializeJson(invalid, json);
+        ASSERT_TRUE(action_type_validate(type, invalid.as<JsonObjectConst>()) != nullptr);
+        act = parse_from_string(json);
+        ASSERT_TRUE(act.payload.set_var.var_name[0] == '\0' &&
+                    act.payload.set_var.var_value[0] == '\0');
+    }
+
+    const std::string oversized_value(192, 'x');
+    const std::string oversized_json = "{\"type\":\"set_var\",\"var_name\":\"counter\",\"var_value\":\"" +
+        oversized_value + "\"}";
+    JsonDocument oversized;
+    deserializeJson(oversized, oversized_json);
+    ASSERT_TRUE(action_type_validate(type, oversized.as<JsonObjectConst>()) != nullptr);
+
+    size_t input_length = 0;
+    const auto count_value_field = [](char*, size_t, bool, void* context) {
+        ++*static_cast<size_t*>(context);
+        return true;
+    };
+    ASSERT_TRUE(action_type_visit_bindable_fields(type, act, count_value_field, &input_length));
+    ASSERT_EQ(input_length, 1);
+
+    JsonDocument metadata;
+    JsonObject metadata_object = metadata.to<JsonObject>();
+    type->describe(metadata_object);
+    ASSERT_STR(metadata["label"].as<const char*>(), "Set variable");
+    ASSERT_STR(metadata["editor_fields"][0]["label"].as<const char*>(), "Name");
+    ASSERT_STR(metadata["editor_fields"][1]["label"].as<const char*>(), "Value");
+    ASSERT_TRUE(!metadata["editor_fields"][0]["bindable"].as<bool>());
+    ASSERT_TRUE(metadata["editor_fields"][1]["bindable"].as<bool>());
+}
+
 TEST(gamepad_round_trip_and_validation) {
     ButtonAction act = round_trip("{\"type\":\"gamepad\",\"control\":\"button\",\"button\":16,\"operation\":\"down\"}");
     ASSERT_STR(act.type, "gamepad");
@@ -867,6 +919,7 @@ int main(int argc, char** argv) {
     RUN(action_list_filters_literal_none_for_pad_callers);
     RUN(action_list_retains_literal_none_for_existing_callers);
     RUN(type_only);
+    RUN(set_var_round_trip_and_validation);
     RUN(gamepad_round_trip_and_validation);
 
     printf("\n--- Screen action ---\n");

@@ -19,6 +19,13 @@ assert.deepStrictEqual(productionCatalogs.portal, productionCatalogs.mcp.map(ent
     delete metadata.fields;
     return metadata;
 }));
+const setVariableCatalog = productionCatalogs.portal.find(entry => entry.type === 'set_var');
+assert.deepStrictEqual(setVariableCatalog && {
+    group: setVariableCatalog.group,
+    label: setVariableCatalog.label,
+    nameBindable: setVariableCatalog.editor_fields[0].bindable === true,
+    valueBindable: setVariableCatalog.editor_fields[1].bindable === true
+}, { group: 'Variables', label: 'Set variable', nameBindable: false, valueBindable: true });
 
 class Element {
     constructor(tag) {
@@ -396,6 +403,7 @@ for (const key of ['1_next_seconds', '1_next_ring_seconds', '1_dismiss_seconds']
 console.log('portal_action_picker: PASS');
 context.deviceInfoCache.catalog = productionCatalogs.portal;
 const roundTrips = [
+    {type:'set_var', var_name:'counter', var_value:'[expr:[var:counter|0] + 1]'},
     {type:'mqtt', topic:'home/topic', payload:'[mqtt:value]'},
     {type:'key', sequence:'ctrl+c'},
     {type:'cycle_pad', direction:'previous', wrap:false, excluded_pads:'1,3'},

@@ -174,6 +174,7 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_IMAGE_PREVIOUS "image_previous"
 #define ACTION_TYPE_DISPLAY_REFRESH "display_refresh"
 #define ACTION_TYPE_BUTTON_NAVIGATION "button_nav"
+#define ACTION_TYPE_SET_VAR "set_var"
 
 #define ACTION_DELAY_MAX_DURATION_MS 55000U
 
@@ -292,6 +293,12 @@ struct DisplayRefreshPayload {
 struct ButtonNavigationPayload {
     char command[9];
 };
+struct SetVariablePayload {
+    char var_name[33];
+    char var_value[192];
+};
+static_assert(sizeof(SetVariablePayload) <= 256,
+              "Set variable payload must remain within the shared action payload budget");
 
 // Opaque slot reserved for device-class action payloads. Each device class
 // registers its own ActionTypeDef (via REGISTER_ACTION_TYPE) and casts the
@@ -331,6 +338,7 @@ union ActionPayload {
     CameraCapturePayload camera_capture; // type == ACTION_TYPE_CAMERA_CAPTURE
     DisplayRefreshPayload display_refresh; // type == ACTION_TYPE_DISPLAY_REFRESH
     ButtonNavigationPayload button_navigation;
+    SetVariablePayload set_var;
     uint8_t           device_class[ACTION_PAYLOAD_DEVICE_CLASS_BYTES];
                                     // opaque; owned by a registered ActionTypeDef
     // back, ble_pair, and "" (none) carry no payload data — only the type tag.

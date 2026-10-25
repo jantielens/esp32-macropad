@@ -1458,7 +1458,9 @@ All endpoints return JSON responses with proper HTTP status codes.
 Returns the live registry of binding schemes used by the portal validator and
 the MCP capability manifest. Each entry contains `name`, `min_params`,
 `max_params`, `widget_max_params`, `format_param`, `validation_mode`, and
-`free_form`. Finite schemes also include their current `keys` array.
+`free_form`. Free-form schemes may include `first_param_pattern` to share a
+literal first-parameter validation rule with portal authoring. Finite schemes
+also include their current `keys` array.
 
 The response is board-aware: device-class and feature-gated schemes appear
 only when registered by the running firmware. Clients should fetch this endpoint
@@ -1502,6 +1504,14 @@ provider-generated key strings. Structural schemes retain declared patterns;
 the guided picker uses concrete example keys for their search results.
 The Binding reference dialog fetches this once when opened; the validator
 keeps using the smaller response without docs.
+
+Runtime variables use one lazily allocated, bounded table. On PSRAM builds,
+the table uses PSRAM exclusively; allocation failure does not fall back to
+internal RAM. Non-PSRAM builds allocate the table from the heap on first use.
+The store is compiled only with display or button support. One recursive mutex
+serializes both individual store operations and complete resolve-and-set
+transactions; acquire the display lock first when present. Existing binding
+polling observes changes without a separate generation counter.
 
 The binding and button builders share `bindingSourcePickerHTML`, the picker
 session lifecycle, and selected-value display options. On-device bindings and HA

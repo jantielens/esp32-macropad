@@ -12,6 +12,14 @@ Use **fx > Binding reference** for the exact schemes and keys available on the
 running device. It includes descriptions, parameters, and examples.
 Local bindings do not require MQTT.
 
+## Read runtime variables
+
+`[var:name]` reads mutable, device-global text written by a button action. It
+is useful for counters, toggles, and other local state that is not a hardware
+reading. Variables need no network integration, survive pad changes and
+configuration reloads, and clear on reboot. See [runtime variables](bindings.md#read-a-runtime-variable)
+and [Set variable](actions.md#set-a-runtime-variable).
+
 ## Read MQTT payloads
 
 Use `[mqtt:topic;path;format]`. Only topic is required.

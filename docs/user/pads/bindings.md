@@ -151,6 +151,26 @@ Time and timer formats have their own language; see
 Structured Table input must be one exact token, without a text prefix/suffix
 or format parameter.
 
+## Read a runtime variable
+
+Use `[var:name]` to read a device-global string set by the
+[Set variable action](actions.md#set-a-runtime-variable). Names are literal,
+case-sensitive, and use 1-32 ASCII letters, digits, underscores, hyphens, or
+periods. The device holds up to 32 names. Stored values are limited to 127 UTF-8
+bytes; an action's Value template can be up to 191 bytes before resolution.
+
+Values are shared across pads and action hosts. They survive pad changes and
+configuration reloads without a reboot, but are cleared on reboot. An assigned
+empty string is different from an unset name. An unset name is unavailable and
+shows `---` unless the token supplies a fallback, for example
+`[var:counter|0]`. Stored text is returned literally; it is not evaluated again.
+There is no formatting parameter. Use an [expression](expressions.md) when a
+value needs calculation or presentation logic. Runtime variables need no MQTT
+or Home Assistant configuration.
+
+Unlike `[pad:name]`, a runtime variable is mutable device-wide state, not a
+saved name-to-binding definition in one pad.
+
 ## Name a source on the pad
 
 Open Pad **Bindings**, select Add, and enter a Name and Binding.

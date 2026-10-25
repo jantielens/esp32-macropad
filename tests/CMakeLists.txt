@@ -487,6 +487,26 @@ add_host_legacy_test(test_binding_template
     LIBRARIES m
 )
 
+add_host_legacy_test(test_runtime_variables
+    SOURCES test_runtime_variables.cpp ${PROJECT_SOURCE_DIR}/src/app/runtime_variables.cpp
+    DEFINITIONS TEST_HEAP_CAPS_ALLOCATOR
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h
+)
+add_host_legacy_test(test_runtime_variables_no_psram
+    SOURCES test_runtime_variables.cpp ${PROJECT_SOURCE_DIR}/src/app/runtime_variables.cpp
+    DEFINITIONS HAS_PSRAM=0
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h
+)
+add_library(check_runtime_variables_disabled OBJECT
+    ${PROJECT_SOURCE_DIR}/src/app/runtime_variables.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/var_binding.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/expr_binding.cpp
+)
+target_compile_definitions(check_runtime_variables_disabled PRIVATE HAS_DISPLAY=0 HAS_BUTTON=0)
+target_compile_options(check_runtime_variables_disabled PRIVATE -Wall -Wextra -Werror)
+add_test(NAME check_runtime_variables_disabled
+    COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target check_runtime_variables_disabled)
+
 add_host_legacy_test(test_binding_schema
     SOURCES test_binding_schema.cpp
         ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp
@@ -599,7 +619,8 @@ set(ACTION_TEST_SOURCES
     ${PROJECT_SOURCE_DIR}/src/app/actions.cpp ${PROJECT_SOURCE_DIR}/src/app/music_command.cpp
     ${PROJECT_SOURCE_DIR}/src/app/action_parse.cpp ${PROJECT_SOURCE_DIR}/src/app/action_list.cpp
     ${PROJECT_SOURCE_DIR}/src/app/action_continuation.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_cycle.cpp
-    ${PROJECT_SOURCE_DIR}/src/app/action_registry.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp stubs.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/action_registry.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/runtime_variables.cpp stubs.cpp
 )
 
 add_host_legacy_test(test_action_parse
@@ -624,6 +645,29 @@ add_host_legacy_test(test_action_bindings
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
     LIBRARIES m
 )
+foreach(runtime_profile display headless)
+add_host_legacy_test(test_runtime_variable_actions_${runtime_profile}
+    SOURCES test_runtime_variable_actions.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/action_dispatch.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/action_list.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/action_continuation.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/action_parse.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/action_registry.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/expr_binding.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/expr_eval.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/runtime_variables.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/var_binding.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/actions/set_var_action.cpp
+        stubs.cpp
+    INCLUDES ${HOST_ARDUINOJSON_DIR} ${HOST_LVGL_DIR}
+    OPTIONS -Wno-deprecated-declarations -pthread
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+        ${PROJECT_SOURCE_DIR}/tests/runtime_variable_action_overrides/${runtime_profile}_board_config.h
+    LIBRARIES pthread m
+)
+endforeach()
 add_host_legacy_test(test_action_continuation
     SOURCES test_action_continuation.cpp ${PROJECT_SOURCE_DIR}/src/app/action_list.cpp ${PROJECT_SOURCE_DIR}/src/app/action_continuation.cpp stubs.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
@@ -798,7 +842,8 @@ function(add_binding_schema_profile name definition)
             ${PROJECT_SOURCE_DIR}/src/app/camera_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/expr_eval.cpp
             ${PROJECT_SOURCE_DIR}/src/app/time_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp
             ${PROJECT_SOURCE_DIR}/src/app/mqtt_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/config_psram.cpp
-            ${PROJECT_SOURCE_DIR}/src/app/ha_binding.cpp
+            ${PROJECT_SOURCE_DIR}/src/app/ha_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/var_binding.cpp
+            ${PROJECT_SOURCE_DIR}/src/app/runtime_variables.cpp
             $<TARGET_OBJECTS:binding_schema_json> ${ARGN}
         INCLUDES ${PROJECT_SOURCE_DIR}/tests/binding_schema_profiles ${PROJECT_SOURCE_DIR}/src
         DEFINITIONS ${definition}
