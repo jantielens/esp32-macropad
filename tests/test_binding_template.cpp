@@ -29,6 +29,13 @@ static BindingResolverStatus mock_fail_resolve(const char* params, char* out, si
     return BINDING_RESOLVER_UNAVAILABLE;
 }
 
+static BindingResolverStatus mock_nested_resolve(const char*, char* out, size_t out_len) {
+    char nested[64];
+    binding_template_resolve("[big:any]", nested, sizeof(nested));
+    std::snprintf(out, out_len, "%s", nested);
+    return BINDING_RESOLVER_RESOLVED;
+}
+
 static void mock_collect(const char* params, void* user_data) {
     (void)params;
     (void)user_data;
@@ -99,7 +106,8 @@ static void test_single_token_unknown_scheme() {
 static void test_scheme_registry_capacity() {
     std::printf("--- scheme registry capacity ---\n");
 
-    for (uint8_t index = 0; index < BINDING_MAX_SCHEMES - 3; ++index) {
+    const uint8_t remaining = BINDING_MAX_SCHEMES - binding_template_scheme_count();
+    for (uint8_t index = 0; index < remaining; ++index) {
         char scheme_name[16] = {};
         std::snprintf(scheme_name, sizeof(scheme_name), "s%u", (unsigned)index + 1);
         check_true(binding_template_register(scheme_name, mock_big_resolve, mock_collect, kMockFiniteSpec),
@@ -149,6 +157,19 @@ int main() {
 
     binding_template_register("big", mock_big_resolve, mock_collect, kMockFiniteSpec);
     binding_template_register("fail", mock_fail_resolve, mock_collect, kMockFiniteSpec);
+    binding_template_register("nested", mock_nested_resolve, mock_collect, kMockFiniteSpec);
+
+    char checked[256];
+    check_true(binding_template_resolve_checked("https://host/image.jpg", checked, sizeof(checked)),
+               "checked literal source is complete");
+    check_true(!binding_template_resolve_checked("[big:any]", checked, sizeof(checked)),
+               "checked source rejects saturated resolver output");
+    check_true(!binding_template_resolve_checked("https://host/[nested:any]", checked, sizeof(checked)),
+               "checked source rejects truncation inside nested resolution");
+    check_true(!binding_template_resolve_checked("https://host/[fail:any|fallback]", checked, sizeof(checked)),
+               "checked source rejects unavailable bindings even with fallback");
+    check_true(binding_template_resolve_checked("https://host/restored.jpg", checked, sizeof(checked)),
+               "checked failure does not leak into the next resolution");
 
     test_single_token_large_output();
     test_single_token_shape_rejection();

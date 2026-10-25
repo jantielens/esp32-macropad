@@ -115,6 +115,7 @@ struct ButtonTile {
 #if HAS_IMAGE_FETCH
     lv_obj_t* bg_image;       // Background image widget (or nullptr)
     image_slot_t image_slot;  // Image fetch slot (-1 = none)
+    char* image_url_template;
 #endif
 #if HAS_IMAGE_LIBRARY
     lv_obj_t* local_bg_image;             // Local background image widget (or nullptr)

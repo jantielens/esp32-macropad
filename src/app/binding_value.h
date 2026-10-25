@@ -17,7 +17,7 @@ bool binding_value_parse_params(const char* params,
 
 // Extract a dot-separated object path without truncating its keys.
 // "." copies the raw payload. Invalid JSON copies the raw payload and returns
-// false; a missing/null path clears out and returns false.
+// false; a missing/null path clears out and returns false. Overflow returns false.
 bool binding_value_extract_json(const char* payload, const char* path, char* out, size_t out_len);
 
 // Apply one printf conversion to a value. Supports strings, integers, and finite

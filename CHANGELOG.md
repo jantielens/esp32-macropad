@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Support binding templates in button background image URLs. Changed sources
+  load asynchronously, retain the previous image on failure, and discard stale
+  downloads. Dynamic URLs do not support authentication.
+  See [Button images](docs/user/media/images.md#follow-a-changing-url).
 * Add an Expression Builder to the shared Binding tools menu. Insert functions,
   bindings, and colors, validate field limits and widget formatting rules, and
   preview resolved results. See [Expressions](docs/user/pads/expressions.md).

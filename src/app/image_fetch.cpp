@@ -33,14 +33,15 @@
 
 struct ImageSlot {
     bool active;
+    uint32_t generation;
     char url[SLOT_URL_MAX_LEN];
     char user[SLOT_USER_MAX_LEN];
     char pass[SLOT_PASS_MAX_LEN];
     uint16_t target_w;
     uint16_t target_h;
     uint32_t interval_ms;      // 0 = fetch once
-    uint32_t last_fetch_ms;    // millis() of last successful fetch
-    bool fetched_once;         // true after first successful fetch
+    uint32_t last_fetch_ms;    // millis() of last completed attempt
+    bool fetched_once;         // true after first completed attempt
     ImageScaleMode scale_mode; // Cover or letterbox
     uint16_t letterbox_color;  // RGB565 padding color for letterbox mode
 
@@ -66,6 +67,7 @@ struct ImageSlot {
 static ImageSlot* g_slots = nullptr;
 static SemaphoreHandle_t g_mutex = nullptr;
 static TaskHandle_t g_task = nullptr;
+static uint32_t g_generation = 0;
 static std::atomic<TaskHandle_t> fetch_sample_task{nullptr};
 static RtosTaskPsramAlloc g_task_alloc;
 static const uint32_t FETCH_TASK_STACK_BYTES = 16384;
@@ -100,12 +102,34 @@ struct SlotConn {
     HTTPClient        http;
     bool              active;     // connection has been set up
     bool              is_https;
+    uint32_t          generation;
     // MJPEG streaming state (valid only when is_streaming == true)
     bool              is_streaming;   // server returned multipart/x-mixed-replace
     char              boundary[64];   // MIME boundary extracted from Content-Type
 };
 
 static SlotConn* g_conn = nullptr;
+
+static bool fetch_current(int slot) {
+    if (g_suspended || ota_activity_is_active()) return false;
+    xSemaphoreTake(g_mutex, portMAX_DELAY);
+    const ImageSlot& source = g_slots[slot];
+    const bool current = source.active && !source.paused && source.url[0] &&
+        source.generation == g_conn[slot].generation;
+    xSemaphoreGive(g_mutex);
+    return current;
+}
+
+static void finish_attempt(int slot, uint32_t generation) {
+    xSemaphoreTake(g_mutex, portMAX_DELAY);
+    ImageSlot& source = g_slots[slot];
+    if (source.active && source.generation == generation &&
+        !source.paused && !g_suspended && !ota_activity_is_active()) {
+        source.last_fetch_ms = (uint32_t)millis();
+        source.fetched_once = true;
+    }
+    xSemaphoreGive(g_mutex);
+}
 
 static void conn_close(int slot) {
     SlotConn& c = g_conn[slot];
@@ -140,11 +164,6 @@ static void conn_close(int slot) {
 static bool conn_ensure(int slot, const char* url, const char* user, const char* pass) {
     SlotConn& c = g_conn[slot];
     bool need_https = (strncmp(url, "https://", 8) == 0);
-
-    // Protocol changed — tear down and recreate
-    if (c.active && c.is_https != need_https) {
-        conn_close(slot);
-    }
 
     // Create client on first use
     if (!c.active) {
@@ -184,25 +203,18 @@ static bool conn_ensure(int slot, const char* url, const char* user, const char*
 
     if (user && user[0] && pass && pass[0]) {
         c.http.setAuthorization(user, pass);
+    } else {
+        c.http.setAuthorization("");
     }
     return true;
 }
 
-// Download from an already-prepared connection.  Returns PSRAM buffer.
-static bool conn_download(int slot, uint8_t** out_data, size_t* out_len) {
+// Read the current HTTP response body into PSRAM.
+static bool conn_read_body(int slot, uint8_t** out_data, size_t* out_len) {
     *out_data = nullptr;
     *out_len = 0;
 
     SlotConn& c = g_conn[slot];
-    int code = c.http.GET();
-    net_activity_mark(NET_CH_HTTP);
-    if (code != 200) {
-        LOGW(TAG, "HTTP %d for slot %d", code, slot);
-        c.http.end();        // clears response; keep-alive preserves socket
-        if (code < 0) conn_close(slot);  // transport error — full teardown
-        return false;
-    }
-
     int content_len = c.http.getSize();
     if (content_len == 0) {
         LOGW(TAG, "Empty response for slot %d", slot);
@@ -232,7 +244,7 @@ static bool conn_download(int slot, uint8_t** out_data, size_t* out_len) {
     uint32_t dl_start = (uint32_t)millis();
 
     while (c.http.connected() && (content_len < 0 || received < (size_t)content_len)) {
-        if ((uint32_t)millis() - dl_start > MAX_DOWNLOAD_WALL_MS) {
+        if (!fetch_current(slot) || (uint32_t)millis() - dl_start > MAX_DOWNLOAD_WALL_MS) {
             LOGW(TAG, "Download wall-clock timeout (%us) slot %d",
                  (unsigned)(MAX_DOWNLOAD_WALL_MS / 1000), slot);
             heap_caps_free(buf);
@@ -276,7 +288,7 @@ static bool conn_download(int slot, uint8_t** out_data, size_t* out_len) {
 
     c.http.end();  // clears response; keep-alive preserves socket
 
-    if (received == 0) {
+    if (received == 0 || (content_len > 0 && received != (size_t)content_len)) {
         heap_caps_free(buf);
         return false;
     }
@@ -310,15 +322,22 @@ static bool conn_download(int slot, uint8_t** out_data, size_t* out_len) {
 
 // Read one line from stream (up to max_len-1 chars), stripping \r\n.
 // Returns number of chars read, or -1 on timeout/disconnect.
-static int read_line(WiFiClient* stream, char* buf, size_t max_len, uint32_t timeout_ms) {
+static int read_line(int slot, WiFiClient* stream, char* buf, size_t max_len, uint32_t timeout_ms) {
     size_t pos = 0;
+    uint8_t bytes_until_check = 0;
     uint32_t start = (uint32_t)millis();
     while (pos < max_len - 1) {
+        const size_t available = stream->available();
+        if (!bytes_until_check || !available) {
+            if (!fetch_current(slot)) return -1;
+            bytes_until_check = 32;
+        }
         if ((uint32_t)millis() - start > timeout_ms) return -1;
-        if (!stream->available()) {
+        if (!available) {
             vTaskDelay(pdMS_TO_TICKS(1));
             continue;
         }
+        --bytes_until_check;
         char c = (char)stream->read();
         if (c == '\n') break;
         if (c != '\r') buf[pos++] = c;
@@ -328,11 +347,11 @@ static int read_line(WiFiClient* stream, char* buf, size_t max_len, uint32_t tim
 }
 
 // Read exactly `len` bytes from stream into buf.  Returns true on success.
-static bool read_exact(WiFiClient* stream, uint8_t* buf, size_t len, uint32_t timeout_ms) {
+static bool read_exact(int slot, WiFiClient* stream, uint8_t* buf, size_t len, uint32_t timeout_ms) {
     size_t received = 0;
     uint32_t start = (uint32_t)millis();
     while (received < len) {
-        if (ota_activity_is_active()) return false;
+        if (!fetch_current(slot)) return false;
         if ((uint32_t)millis() - start > timeout_ms) return false;
         size_t avail = stream->available();
         if (avail == 0) { vTaskDelay(pdMS_TO_TICKS(1)); continue; }
@@ -356,6 +375,10 @@ static bool mjpeg_read_frame(int slot, uint8_t** out_data, size_t* out_len) {
     if (!c.is_streaming) {
         int code = c.http.GET();
         net_activity_mark(NET_CH_HTTP);
+        if (!fetch_current(slot)) {
+            conn_close(slot);
+            return false;
+        }
         if (code != 200) {
             LOGW(TAG, "MJPEG slot %d: HTTP %d", slot, code);
             c.http.end();
@@ -369,31 +392,8 @@ static bool mjpeg_read_frame(int slot, uint8_t** out_data, size_t* out_len) {
         if (ct.isEmpty()) ct = c.http.header("content-type");
 
         if (ct.indexOf("multipart") < 0) {
-            // Server returned a single image, not a stream.
-            // Read the body from this response directly to avoid a wasted
-            // second GET when the caller falls back to snapshot mode.
             LOGT(TAG, "Slot %d snapshot content-type=%s", slot, ct.c_str());
-            int cl = c.http.getSize();
-            if (cl <= 0 || (size_t)cl > MAX_DOWNLOAD_SIZE) { c.http.end(); return false; }
-            uint8_t* buf = (uint8_t*)heap_caps_malloc((size_t)cl, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-            if (!buf) buf = (uint8_t*)malloc((size_t)cl);
-            if (!buf) { c.http.end(); return false; }
-            WiFiClient* s = c.http.getStreamPtr();
-            size_t got = 0;
-            uint32_t t0 = (uint32_t)millis();
-            while (got < (size_t)cl && (uint32_t)millis() - t0 < MAX_DOWNLOAD_WALL_MS) {
-                size_t a = s->available();
-                if (a == 0) { vTaskDelay(pdMS_TO_TICKS(10)); continue; }
-                size_t chunk = (a < (size_t)cl - got) ? a : ((size_t)cl - got);
-                int nr = s->readBytes(buf + got, chunk);
-                if (nr <= 0) break;
-                got += nr;
-            }
-            c.http.end();
-            if (got == 0) { heap_caps_free(buf); return false; }
-            *out_data = buf;
-            *out_len  = got;
-            return true;
+            return conn_read_body(slot, out_data, out_len);
         }
 
         // Parse boundary (after "boundary=")
@@ -428,7 +428,7 @@ static bool mjpeg_read_frame(int slot, uint8_t** out_data, size_t* out_len) {
     uint32_t search_start = (uint32_t)millis();
     bool found_boundary = false;
     while ((uint32_t)millis() - search_start < FRAME_TIMEOUT_MS) {
-        int n = read_line(stream, line, sizeof(line), LINE_TIMEOUT_MS);
+        int n = read_line(slot, stream, line, sizeof(line), LINE_TIMEOUT_MS);
         if (n < 0) {
             LOGW(TAG, "MJPEG slot %d: timeout waiting for boundary", slot);
             conn_close(slot);
@@ -449,7 +449,7 @@ static bool mjpeg_read_frame(int slot, uint8_t** out_data, size_t* out_len) {
     // Read part headers until blank line, extracting Content-Length.
     int content_length = -1;
     for (int header_i = 0; header_i < 16; header_i++) {
-        int n = read_line(stream, line, sizeof(line), LINE_TIMEOUT_MS);
+        int n = read_line(slot, stream, line, sizeof(line), LINE_TIMEOUT_MS);
         if (n < 0) { conn_close(slot); return false; }
         if (n == 0) break;  // blank line = end of part headers
         if (strncasecmp(line, "content-length:", 15) == 0) {
@@ -472,7 +472,7 @@ static bool mjpeg_read_frame(int slot, uint8_t** out_data, size_t* out_len) {
         return false;
     }
 
-    if (!read_exact(stream, buf, (size_t)content_length, FRAME_TIMEOUT_MS)) {
+    if (!read_exact(slot, stream, buf, (size_t)content_length, FRAME_TIMEOUT_MS)) {
         LOGW(TAG, "MJPEG slot %d: incomplete frame (%d bytes)", slot, content_length);
         heap_caps_free(buf);
         conn_close(slot);
@@ -507,7 +507,7 @@ static void fetch_task(void* param) {
         for (int8_t i = 0; i < IMAGE_SLOT_MAX; i++) {
             int8_t idx = (scan_start + i) % IMAGE_SLOT_MAX;
             ImageSlot& s = g_slots[idx];
-            if (!s.active || s.paused || g_suspended || ota_activity_is_active()) continue;
+            if (!s.active || !s.url[0] || s.paused || g_suspended || ota_activity_is_active()) continue;
 
             // Check if this slot is due for a fetch
             if (!s.fetched_once) {
@@ -540,11 +540,11 @@ static void fetch_task(void* param) {
 
         xSemaphoreGive(g_mutex);
 
+        for (int8_t i = 0; i < IMAGE_SLOT_MAX; i++) {
+            if (g_conn[i].active && !fetch_current(i)) conn_close(i);
+        }
+
         if (next < 0) {
-            // No slot ready — close connections for inactive/cancelled/paused slots
-            for (int8_t i = 0; i < IMAGE_SLOT_MAX; i++) {
-                if (g_conn[i].active && (!g_slots[i].active || g_slots[i].paused || ota_activity_is_active())) conn_close(i);
-            }
             // Sleep until the soonest slot is due
             if (min_wait_ms < 10) min_wait_ms = 10;  // Floor to avoid busy-spin
             vTaskDelay(pdMS_TO_TICKS(min_wait_ms));
@@ -556,7 +556,7 @@ static void fetch_task(void* param) {
         // Copy slot info (under mutex) for the fetch
         xSemaphoreTake(g_mutex, portMAX_DELAY);
         ImageSlot& slot = g_slots[next];
-        if (!slot.active) {
+        if (!slot.active || !slot.url[0] || slot.paused || g_suspended) {
             xSemaphoreGive(g_mutex);
             continue;
         }
@@ -567,10 +567,16 @@ static void fetch_task(void* param) {
         uint16_t th = slot.target_h;
         ImageScaleMode sm = slot.scale_mode;
         uint16_t letterbox_color = slot.letterbox_color;
+        const uint32_t generation = slot.generation;
         strlcpy(url, slot.url, sizeof(url));
         strlcpy(user, slot.user, sizeof(user));
         strlcpy(pass, slot.pass, sizeof(pass));
         xSemaphoreGive(g_mutex);
+
+        if (g_conn[next].generation != generation) {
+            conn_close(next);
+            g_conn[next].generation = generation;
+        }
 
         if (ota_activity_is_active()) {
             conn_close(next);
@@ -580,7 +586,7 @@ static void fetch_task(void* param) {
         // Persistent connection: ensure client exists, then fetch a frame.
         // MJPEG streaming: if the server responds with multipart/x-mixed-replace,
         // mjpeg_read_frame() keeps the socket open and reads one frame per call.
-        // Snapshot mode: conn_download() does a GET per frame (existing behaviour).
+        // Snapshot mode reads the current response through conn_read_body().
         // The mode is auto-detected on the first GET and cached in SlotConn.
         uint8_t* raw_data = nullptr;
         size_t raw_len = 0;
@@ -595,48 +601,22 @@ static void fetch_task(void* param) {
 
         if (!conn_ensure(next, url, user, pass)) {
             LOGW(TAG, "Slot %d connection failed", next);
-            xSemaphoreTake(g_mutex, portMAX_DELAY);
-            if (g_slots[next].active) {
-                g_slots[next].last_fetch_ms = (uint32_t)millis();
-                g_slots[next].fetched_once = true;
-            }
-            xSemaphoreGive(g_mutex);
+            finish_attempt(next, generation);
             vTaskDelay(pdMS_TO_TICKS(100));
             continue;
         }
 
-        bool got_frame;
-        if (g_conn[next].is_streaming) {
-            // Already in MJPEG streaming mode — read next frame from open socket.
-            got_frame = mjpeg_read_frame(next, &raw_data, &raw_len);
-        } else {
-            // First fetch (or after reconnect): try MJPEG first.
-            // mjpeg_read_frame auto-detects: if the server returns multipart,
-            // it sets is_streaming and returns the first frame.  If single-image,
-            // it reads the body from the same response and returns it directly
-            // (no wasted second GET).  Fall back to conn_download only on error.
-            got_frame = mjpeg_read_frame(next, &raw_data, &raw_len);
-            if (!got_frame && !g_conn[next].is_streaming) {
-                if (conn_ensure(next, url, user, pass)) {
-                    got_frame = conn_download(next, &raw_data, &raw_len);
-                }
-            }
-        }
+        const bool got_frame = mjpeg_read_frame(next, &raw_data, &raw_len);
 
         if (!got_frame) {
             LOGW(TAG, "Slot %d download failed", next);
             // Mark last_fetch to avoid immediate retry
-            xSemaphoreTake(g_mutex, portMAX_DELAY);
-            if (g_slots[next].active) {
-                g_slots[next].last_fetch_ms = (uint32_t)millis();
-                g_slots[next].fetched_once = true;
-            }
-            xSemaphoreGive(g_mutex);
+            finish_attempt(next, generation);
             vTaskDelay(pdMS_TO_TICKS(100));
             continue;
         }
 
-        if (ota_activity_is_active()) {
+        if (!fetch_current(next)) {
             heap_caps_free(raw_data);
             conn_close(next);
             continue;
@@ -652,12 +632,7 @@ static void fetch_task(void* param) {
 
         if (!decoded || !pixels) {
             LOGW(TAG, "Slot %d decode failed", next);
-            xSemaphoreTake(g_mutex, portMAX_DELAY);
-            if (g_slots[next].active) {
-                g_slots[next].last_fetch_ms = (uint32_t)millis();
-                g_slots[next].fetched_once = true;
-            }
-            xSemaphoreGive(g_mutex);
+            finish_attempt(next, generation);
             vTaskDelay(pdMS_TO_TICKS(100));
             continue;
         }
@@ -665,7 +640,7 @@ static void fetch_task(void* param) {
         // Swap into slot's back buffer, then promote to front
         xSemaphoreTake(g_mutex, portMAX_DELAY);
         ImageSlot& s = g_slots[next];
-        if (s.active && !s.paused) {
+        if (s.active && s.generation == generation && !s.paused && !g_suspended && !ota_activity_is_active()) {
             // Free old back buffer and assign new decoded pixels
             if (s.back_buf) heap_caps_free(s.back_buf);
             s.back_buf = pixels;
@@ -752,7 +727,7 @@ image_slot_t image_fetch_request(
     uint16_t target_w, uint16_t target_h, uint32_t interval_ms,
     ImageScaleMode scale_mode, uint16_t letterbox_color)
 {
-    if (!url || !url[0] || target_w == 0 || target_h == 0) return IMAGE_SLOT_INVALID;
+    if (!url || (url[0] && !image_fetch_url_valid(url)) || target_w == 0 || target_h == 0) return IMAGE_SLOT_INVALID;
     if (!g_mutex) return IMAGE_SLOT_INVALID;
 
     xSemaphoreTake(g_mutex, portMAX_DELAY);
@@ -775,6 +750,7 @@ image_slot_t image_fetch_request(
     ImageSlot& s = g_slots[id];
     memset(&s, 0, sizeof(ImageSlot));
     s.active = true;
+    s.generation = ++g_generation;
     strlcpy(s.url, url, sizeof(s.url));
     if (user) strlcpy(s.user, user, sizeof(s.user));
     if (pass) strlcpy(s.pass, pass, sizeof(s.pass));
@@ -790,6 +766,71 @@ image_slot_t image_fetch_request(
     return id;
 }
 
+bool image_fetch_url_valid(const char* url) {
+    if (!url || strlen(url) >= SLOT_URL_MAX_LEN) return false;
+    const char* host = nullptr;
+    if (strncmp(url, "http://", 7) == 0) host = url + 7;
+    else if (strncmp(url, "https://", 8) == 0) host = url + 8;
+    else return false;
+    const char* end = host + strcspn(host, "/?#");
+    if (host == end || *host == ':' || memchr(host, '@', end - host)) return false;
+    for (const char* character = url; *character; ++character) {
+        if ((unsigned char)*character <= 32 || (unsigned char)*character == 127 ||
+            *character == '\\' || *character == '"' || *character == '<' || *character == '>') return false;
+        if ((*character == '[' || *character == ']') &&
+            !(host[0] == '[' && character >= host && character < end)) return false;
+    }
+    if (strstr(url, "ERR:")) return false;
+    if (host[0] == '[') {
+        const char* closing = (const char*)memchr(host, ']', end - host);
+        if (!closing || closing == host + 1 || (closing + 1 < end && closing[1] != ':')) return false;
+        if ((size_t)(closing - host - 1) != strspn(host + 1, "0123456789abcdefABCDEF:.")) return false;
+        host = closing + 1;
+    } else {
+        const size_t length = strcspn(host, ":/?#");
+        if (length != strspn(host, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._")) return false;
+        host += length;
+    }
+    if (host < end) {
+        if (*host++ != ':' || host == end) return false;
+        unsigned port = 0;
+        while (host < end) {
+            if (*host < '0' || *host > '9') return false;
+            port = port * 10 + (*host++ - '0');
+            if (port > 65535) return false;
+        }
+        if (!port) return false;
+    }
+    return true;
+}
+
+bool image_fetch_update_source(image_slot_t slot, const char* url) {
+    if (!g_slots || !g_mutex || slot < 0 || slot >= IMAGE_SLOT_MAX ||
+        !url || (url[0] && !image_fetch_url_valid(url))) return false;
+    xSemaphoreTake(g_mutex, portMAX_DELAY);
+    ImageSlot& image_slot = g_slots[slot];
+    const bool changed = image_slot.active && strcmp(image_slot.url, url) != 0;
+    if (changed) {
+        image_slot.generation = ++g_generation;
+        strlcpy(image_slot.url, url, sizeof(image_slot.url));
+        image_slot.user[0] = '\0';
+        image_slot.pass[0] = '\0';
+        image_slot.fetched_once = false;
+        image_slot.new_frame = false;
+        if (!url[0]) {
+            heap_caps_free(image_slot.front_buf);
+            heap_caps_free(image_slot.back_buf);
+            heap_caps_free(image_slot.lvgl_buf);
+            image_slot.front_buf = nullptr;
+            image_slot.back_buf = nullptr;
+            image_slot.lvgl_buf = nullptr;
+            image_slot.buf_size = 0;
+        }
+    }
+    xSemaphoreGive(g_mutex);
+    return changed;
+}
+
 void image_fetch_set_letterbox_color(image_slot_t slot, uint16_t color) {
     if (!g_slots || slot < 0 || slot >= IMAGE_SLOT_MAX || !g_mutex) return;
     xSemaphoreTake(g_mutex, portMAX_DELAY);
@@ -797,6 +838,8 @@ void image_fetch_set_letterbox_color(image_slot_t slot, uint16_t color) {
     if (image_slot.active && image_slot.scale_mode == IMAGE_SCALE_LETTERBOX &&
         image_slot.letterbox_color != color) {
         image_slot.letterbox_color = color;
+        image_slot.generation = ++g_generation;
+        image_slot.new_frame = false;
         image_slot.fetched_once = false;
     }
     xSemaphoreGive(g_mutex);
@@ -840,6 +883,7 @@ void image_fetch_pause_slot(image_slot_t slot) {
 
     xSemaphoreTake(g_mutex, portMAX_DELAY);
     ImageSlot& s = g_slots[slot];
+    if (!s.paused) s.generation = ++g_generation;
     s.paused = true;
     // Free double-buffers to reclaim PSRAM while the page is hidden.
     // lvgl_buf is unaffected, so LVGL keeps showing the last frame.
@@ -848,34 +892,51 @@ void image_fetch_pause_slot(image_slot_t slot) {
     if (s.front_buf) { freed += s.buf_size; heap_caps_free(s.front_buf); s.front_buf = nullptr; }
     if (s.back_buf)  { freed += s.buf_size; heap_caps_free(s.back_buf);  s.back_buf  = nullptr; }
     s.buf_size = 0;
+    s.new_frame = false;
     xSemaphoreGive(g_mutex);
 
     if (freed) LOGD(TAG, "Slot %d paused, freed %u bytes", slot, (unsigned)freed);
 }
 
 void image_fetch_resume_slot(image_slot_t slot) {
-    if (!g_slots || slot < 0 || slot >= IMAGE_SLOT_MAX) return;
+    if (!g_slots || !g_mutex || slot < 0 || slot >= IMAGE_SLOT_MAX) return;
+    xSemaphoreTake(g_mutex, portMAX_DELAY);
     g_slots[slot].paused = false;
+    xSemaphoreGive(g_mutex);
 }
 
 void image_fetch_pause() {
-    if (!g_slots) return;
+    if (!g_slots || !g_mutex) return;
+    xSemaphoreTake(g_mutex, portMAX_DELAY);
     for (int8_t i = 0; i < IMAGE_SLOT_MAX; i++) {
-        if (g_slots[i].active) g_slots[i].paused = true;
+        if (g_slots[i].active) {
+            g_slots[i].generation = ++g_generation;
+            g_slots[i].paused = true;
+        }
     }
+    xSemaphoreGive(g_mutex);
     LOGD(TAG, "Paused all");
 }
 
 void image_fetch_resume() {
-    if (!g_slots) return;
+    if (!g_slots || !g_mutex) return;
+    xSemaphoreTake(g_mutex, portMAX_DELAY);
     for (int8_t i = 0; i < IMAGE_SLOT_MAX; i++) {
         if (g_slots[i].active) g_slots[i].paused = false;
     }
+    xSemaphoreGive(g_mutex);
     LOGD(TAG, "Resumed all");
 }
 
 void image_fetch_suspend() {
     g_suspended = true;
+    if (g_slots && g_mutex) {
+        xSemaphoreTake(g_mutex, portMAX_DELAY);
+        for (int index = 0; index < IMAGE_SLOT_MAX; ++index) {
+            if (g_slots[index].active) g_slots[index].generation = ++g_generation;
+        }
+        xSemaphoreGive(g_mutex);
+    }
     LOGD(TAG, "Suspended (screen saver)");
 }
 

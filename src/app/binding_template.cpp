@@ -215,12 +215,16 @@ bool binding_template_has_bindings(const char* label) {
     return find_next_token(label, &ts, &sc, &sl, &pm, &pl, &te);
 }
 
+static bool checked_resolution_active = false;
+static bool checked_resolution_complete = true;
+
 static bool resolve_template(const char* templ, char* out, size_t out_len,
                              BindingResolverStatus* status, bool* complete = nullptr) {
     if (complete) *complete = false;
     if (!templ || !out || out_len == 0) {
         if (out && out_len > 0) out[0] = '\0';
         if (status) *status = BINDING_RESOLVER_UNAVAILABLE;
+        if (checked_resolution_active) checked_resolution_complete = false;
         return false;
     }
 
@@ -283,13 +287,13 @@ static bool resolve_template(const char* templ, char* out, size_t out_len,
 
             char resolved[BINDING_TEMPLATE_MAX_LEN + 1];
             BindingResolverStatus resolved_status = binding_template_resolve_registered(
-                scheme, scheme_len, params_buf, resolved, complete ? sizeof(resolved) : 128);
+                scheme, scheme_len, params_buf, resolved, checked_resolution_active ? sizeof(resolved) : 128);
             if (resolved_status == BINDING_RESOLVER_RESOLVED) {
                 any_resolved = true;
                 size_t rlen = strlen(resolved);
                 size_t space = out_len - 1 - written;
                 size_t copy = rlen < space ? rlen : space;
-                if (copy != rlen || (complete && rlen == sizeof(resolved) - 1)) fits = false;
+                if (copy != rlen || (checked_resolution_active && rlen == sizeof(resolved) - 1)) fits = false;
                 memcpy(out + written, resolved, copy);
                 written += copy;
             } else {
@@ -313,14 +317,24 @@ static bool resolve_template(const char* templ, char* out, size_t out_len,
     }
 
     out[written] = '\0';
+    if (checked_resolution_active && (!fits || *p || outcome != BINDING_RESOLVER_RESOLVED)) {
+        checked_resolution_complete = false;
+    }
     if (complete) *complete = fits && !*p && outcome == BINDING_RESOLVER_RESOLVED;
     if (status) *status = outcome;
     return any_resolved;
 }
 
 bool binding_template_resolve_checked(const char* templ, char* out, size_t out_len) {
+    const bool previous_active = checked_resolution_active;
+    const bool previous_complete = checked_resolution_complete;
+    checked_resolution_active = true;
+    checked_resolution_complete = true;
     bool complete = false;
     resolve_template(templ, out, out_len, nullptr, &complete);
+    complete = complete && checked_resolution_complete;
+    checked_resolution_active = previous_active;
+    checked_resolution_complete = previous_complete && complete;
     return complete;
 }
 

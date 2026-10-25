@@ -16,6 +16,7 @@
 #include "psram_json_allocator.h"
 #include "widgets/widget_registry.h"
 #include "action_validate.h"
+#include "binding_template.h"
 #if HAS_IMAGE_LIBRARY
 #include "image_library.h"
 #endif
@@ -319,6 +320,14 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
     if ((e = check_max(b, "content_pad",  CONFIG_BINDABLE_SHORT_LEN, LEN_MSG_SHORT))) return e;
     if ((e = check_max(b, "bg_image_path", CONFIG_BG_IMAGE_PATH_MAX_LEN,
                        "bg_image_path too long (max 191 chars)"))) return e;
+    if ((e = check_max(b, "bg_image_url", CONFIG_BG_IMAGE_URL_MAX_LEN,
+                       "bg_image_url too long (max 255 chars)"))) return e;
+    const char* image_url = b["bg_image_url"] | "";
+    if (binding_template_has_bindings(image_url) &&
+        ((b["bg_image_user"] | "")[0] || (b["bg_image_password"] | "")[0] ||
+         (b["bg_image_password_set"] | false))) {
+        return "Image URL bindings do not support authentication";
+    }
 #if HAS_IMAGE_LIBRARY
     const char* bg_image_path = b["bg_image_path"] | "";
     if (bg_image_path[0] && !strchr(bg_image_path, '[') &&

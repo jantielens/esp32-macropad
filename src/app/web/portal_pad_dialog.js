@@ -359,9 +359,13 @@ function padDialogBuildButton() {
         btn.bg_image_url = imgUrl;
         const imgUser = document.getElementById('pad-edit-bg-image-user').value.trim();
         const imgPass = document.getElementById('pad-edit-bg-image-password').value;
+        const dynamicImage = typeof bindingTokenize === 'function' && bindingTokenize(imgUrl).length > 0;
+        if (dynamicImage && (imgUser || imgPass)) {
+            throw new Error('Image URL bindings do not support authentication. Clear Auth User and Auth Password.');
+        }
         if (imgUser) btn.bg_image_user = imgUser;
         if (imgPass) btn.bg_image_password = imgPass;
-        else {
+        else if (!dynamicImage) {
             const previous = padFindButton(col, row);
             if (previous && previous.bg_image_password_set) btn.bg_image_password_set = true;
         }

@@ -896,6 +896,20 @@ every component in that custom section to the same category ID.
   - Bar-chart Content: Data sources groups each bar's binding, caption, and color/fill. Scale and Layout & style (including Animation) follow, then optional Gridlines and Target groups. Optional bars use fixed collapsed defaults, including when configured or paired. Disabled gridlines and empty targets retain editable styling and validation. Drafts preserve manual disclosure; field IDs and persisted configuration keys are unchanged.
   - Gauge Content: Data sources groups each ring's binding, label, and color, followed by pair controls with rings 2/4 explicitly identified as negative. Scale and Arc & track (including Animation and the existing shared outline controls) precede Needle, Tick marks, and Target. Core groups and ring 1 open on load; optional rings and feature groups start collapsed regardless of configured values. Needle off, tick count 0, and an empty target retain editable styling and validation. Drafts preserve manual disclosure. Angular units, limits, defaults, IDs, and load/build mappings remain unchanged.
   - Background image: One collapsible frame contains unframed Local Image and Camera Feed or Remote Image disclosures plus their shared Scale control. Source visibility follows image-library and remote-fetch capabilities; the frame opens when an image source or letterbox setting is configured.
+    The remote URL field uses the shared binding tools and validator. Save/load
+    preserves literal and mixed templates without resolving them in the browser.
+    Binding-based URLs reject configured authentication; changing from a fixed
+    URL to a template drops the saved-password preservation marker.
+    Runtime URL evaluation uses the existing binding-source collection and pad
+    refresh lifecycle. A PSRAM-only template copy is allocated only for dynamic
+    sources. The existing image slot stores the latest resolved URL; generations
+    invalidate stale success and failure results, including slot reuse. Source
+    changes reset connection state and fetch-once scheduling without allocating
+    another image slot. Clearing detaches the LVGL source before freeing buffers;
+    replacements retain the displayed frame until successful decode. The single
+    worker retains round-robin scheduling, visibility/screen-saver gates, and OTA
+    checkpoints. See [button images](../user/media/images.md#follow-a-changing-url)
+    for source, failure, authentication, and refresh semantics.
   - Patterned fills: Button backgrounds, four independent bar-series slots, and the shared bar track support five patterns plus None (`none`, default; unknown names normalize to None), with separate bindable colors and shared static spacing/stroke.
     Supported color pickers use Base Color and Pattern sections, staging both colors and the pattern until Apply. Base Color opens for unpatterned fills; Pattern opens for existing patterns. Both sections retain the threshold generator. Badges preview the combined fill using representative bound colors and a binding indicator.
     Appearance starts with always-visible Background/Text, Button Shadow, UI Offset, and bindable Button State. Borders & Geometry opens by default, with border color/width together and button radius/padding next. Patterns follows, initially open only when an applicable pattern is active; active-pattern transitions update it, routine refreshes preserve manual toggles, and loading another button resets its default.

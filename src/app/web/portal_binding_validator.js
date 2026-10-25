@@ -625,7 +625,8 @@ function bindingAttachValidation(input, opts) {
 var _BV_STD = [
     'pad-edit-label-top', 'pad-edit-label-center', 'pad-edit-label-bottom',
     'pad-edit-bg-color', 'pad-edit-fg-color', 'pad-edit-border-color',
-    'pad-edit-border-width', 'pad-edit-corner-radius', 'pad-edit-btn-state'
+    'pad-edit-border-width', 'pad-edit-corner-radius', 'pad-edit-btn-state',
+    'pad-edit-bg-image-url'
 ];
 var _BV_DEF = [
     'pad-def-bg-color', 'pad-def-fg-color', 'pad-def-border-color',

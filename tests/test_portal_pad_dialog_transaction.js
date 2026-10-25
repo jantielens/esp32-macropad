@@ -51,6 +51,9 @@ const context = {
 };
 
 vm.createContext(context);
+const bindingContext = vm.createContext({ console });
+vm.runInContext(fs.readFileSync('src/app/web/portal_binding_validator.js', 'utf8'), bindingContext);
+context.bindingTokenize = bindingContext.bindingTokenize;
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_editor.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_table.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_gamepad_button.js', 'utf8'), context);
@@ -219,6 +222,23 @@ document.getElementById('pad-edit-bg-image-letterbox').checked = false;
 context.padWorkspaceEdit();
 assert.strictEqual(context.padState.buttons[0].bg_image_password_set, true);
 assert.strictEqual(context.padState.buttons[0].bg_image_password, undefined);
+
+document.getElementById('pad-edit-bg-image-url').value = 'https://images.example/[mqtt:cover].jpg';
+context.padWorkspaceEdit();
+assert.strictEqual(context.padState.buttons[0].bg_image_url, 'https://images.example/[mqtt:cover].jpg');
+assert.strictEqual(context.padState.buttons[0].bg_image_password_set, undefined);
+assert.strictEqual(context.padState.buttons[0].bg_image_interval_ms, 0);
+document.getElementById('pad-edit-bg-image-user').value = 'user';
+context.padWorkspaceEdit();
+assert.match(document.getElementById('pad-edit-validation-message').textContent, /do not support authentication/);
+assert.strictEqual(context.padState.buttons[0].bg_image_user, undefined);
+document.getElementById('pad-edit-bg-image-user').value = '';
+document.getElementById('pad-edit-bg-image-url').value = '[pad:image_url]';
+context.padWorkspaceEdit();
+assert.strictEqual(context.padState.buttons[0].bg_image_url, '[pad:image_url]');
+document.getElementById('pad-edit-bg-image-url').value = savedCredentialButton.bg_image_url;
+context.padWorkspaceEdit();
+assert.strictEqual(context.padState.buttons[0].bg_image_url, savedCredentialButton.bg_image_url);
 
 document.getElementById('pad-edit-widget-type').value = 'mousepad';
 document.getElementById('pad-edit-mousepad-sensitivity').value = '1.5';

@@ -64,6 +64,14 @@ function(add_host_command_test name)
     set_tests_properties(${name} PROPERTIES WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 endfunction()
 
+add_host_legacy_test(test_image_fetch
+    SOURCES test_image_fetch.cpp ${PROJECT_SOURCE_DIR}/src/app/image_fetch.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/image_fetch_overrides
+    DEFINITIONS HAS_IMAGE_FETCH=1
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
+        ${PROJECT_SOURCE_DIR}/tests/image_fetch_overrides/HTTPClient.h
+)
+
 set(HOST_ARDUINOJSON_DIR "$ENV{HOME}/Arduino/libraries/ArduinoJson/src")
 set(HOST_LVGL_DIR "$ENV{HOME}/Arduino/libraries/lvgl/src")
 

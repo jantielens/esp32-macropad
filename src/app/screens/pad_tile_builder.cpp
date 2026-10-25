@@ -113,10 +113,13 @@ void PadScreen::clearTiles() {
 #if HAS_IMAGE_FETCH || HAS_IMAGE_LIBRARY
         // Cancel fetch slot first (stops background task from touching buffers)
 #if HAS_IMAGE_FETCH
+    if (tiles[i].bg_image) lv_image_set_src(tiles[i].bg_image, nullptr);
         if (tiles[i].image_slot != IMAGE_SLOT_INVALID) {
             image_fetch_cancel(tiles[i].image_slot);
             tiles[i].image_slot = IMAGE_SLOT_INVALID;
         }
+        free(tiles[i].image_url_template);
+        tiles[i].image_url_template = nullptr;
 #endif
 #if HAS_IMAGE_LIBRARY
 #endif
@@ -666,6 +669,7 @@ void PadScreen::buildTiles() {
 #if HAS_IMAGE_FETCH
         tile.bg_image = nullptr;
         tile.image_slot = IMAGE_SLOT_INVALID;
+        tile.image_url_template = nullptr;
 #endif
 #if HAS_IMAGE_LIBRARY
         tile.local_bg_image = nullptr;
@@ -699,14 +703,24 @@ void PadScreen::buildTiles() {
 
 #if HAS_IMAGE_FETCH
         if (bcfg.bg_image_url[0]) {
+            const bool dynamic = binding_template_has_bindings(bcfg.bg_image_url);
+            if (dynamic && !bcfg.bg_image_user[0] && !bcfg.bg_image_password[0]) {
+                const size_t size = strlen(bcfg.bg_image_url) + 1;
+                tile.image_url_template = (char*)heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+                if (tile.image_url_template) memcpy(tile.image_url_template, bcfg.bg_image_url, size);
+            }
             ImageScaleMode sm = bcfg.bg_image_letterbox ? IMAGE_SCALE_LETTERBOX : IMAGE_SCALE_COVER;
-            tile.image_slot = image_fetch_request(
-                bcfg.bg_image_url, bcfg.bg_image_user, bcfg.bg_image_password,
-                r.w, r.h, bcfg.bg_image_interval_ms, sm, lv_color_to_u16(rgb_to_lv(bg_def)));
+            if (!dynamic || tile.image_url_template) {
+                tile.image_slot = image_fetch_request(
+                    dynamic ? "" : bcfg.bg_image_url,
+                    dynamic ? "" : bcfg.bg_image_user, dynamic ? "" : bcfg.bg_image_password,
+                    r.w, r.h, bcfg.bg_image_interval_ms, sm, lv_color_to_u16(rgb_to_lv(bg_def)));
+            }
 
             if (tile.image_slot != IMAGE_SLOT_INVALID) {
                 // Create LVGL image widget as background (behind labels)
                 tile.bg_image = lv_image_create(obj);
+                lv_obj_add_flag(tile.bg_image, LV_OBJ_FLAG_HIDDEN);
                 lv_obj_set_size(tile.bg_image, r.w, r.h);
                 lv_obj_set_align(tile.bg_image, LV_ALIGN_CENTER);
                 lv_obj_clear_flag(tile.bg_image, LV_OBJ_FLAG_CLICKABLE);

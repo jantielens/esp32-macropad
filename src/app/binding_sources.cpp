@@ -36,7 +36,8 @@ void binding_sources_visit(BindingSourceVisitor visitor, void* user) {
             const char* fields[] = {button.label_top, button.label_center, button.label_bottom,
                 button.bg_color, button.fg_color, button.border_color, button.border_width,
                 button.corner_radius, button.btn_state, button.label_top_color_bind,
-                button.label_center_color_bind, button.label_bottom_color_bind};
+                button.label_center_color_bind, button.label_bottom_color_bind,
+                button.bg_image_url};
             for (const char* field : fields) visitor(field, user);
             if (button.fill_style)
                 for (unsigned i = 0; i < 7; ++i) visitor(button.fill_style->color(i), user);
