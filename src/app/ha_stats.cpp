@@ -342,9 +342,9 @@ static SourceOutcome fetch_raw_history(const HaStatsJob& job, uint32_t started_m
     HaHistoryDecoder decoder;
     HistoryBodySink sink(decoder, context);
 
-    HTTPClient http;
     WiFiClientSecure tls_client;
     WiFiClient plain_client;
+    HTTPClient http;
     if (!begin_http(http, plain_client, tls_client, job, url))
         return SourceOutcome::Retryable;
     const Checkpoint before_request = check_job(job, started_ms);
@@ -414,9 +414,9 @@ static SourceOutcome fetch_statistics(const HaStatsJob& job, uint32_t started_ms
         return initial_checkpoint == Checkpoint::Cancelled
                    ? SourceOutcome::Cancelled : SourceOutcome::Retryable;
 
-    HTTPClient http;
     WiFiClientSecure tls_client;
     WiFiClient plain_client;
+    HTTPClient http;
     if (!begin_http(http, plain_client, tls_client, job, url))
         return SourceOutcome::Retryable;
     const Checkpoint before_request = check_job(job, started_ms);
