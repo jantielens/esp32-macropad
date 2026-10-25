@@ -218,7 +218,7 @@ static bool parse_history_record(const char* json, size_t size, void* context) {
                               ? SourceOutcome::Cancelled : SourceOutcome::Retryable;
             return false;
         }
-        taskYIELD();
+        vTaskDelay(1);
         raw.records_since_yield = 0;
         raw.last_checkpoint_ms = millis();
     }
@@ -303,7 +303,7 @@ private:
                            ? SourceOutcome::Cancelled : SourceOutcome::Retryable;
             return false;
         }
-        taskYIELD();
+        vTaskDelay(1);
         last_checkpoint_ms_ = millis();
         return true;
     }
@@ -492,7 +492,7 @@ static SourceOutcome fetch_statistics(const HaStatsJob& job, uint32_t started_ms
             const Checkpoint checkpoint = check_job(job, started_ms);
             if (checkpoint == Checkpoint::Cancelled) return SourceOutcome::Cancelled;
             if (checkpoint != Checkpoint::Continue) return SourceOutcome::Retryable;
-            taskYIELD();
+            vTaskDelay(1);
         }
         const uint64_t start = parse_start(period["start"]);
         const JsonVariantConst value = period["mean"];

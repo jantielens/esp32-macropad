@@ -48,6 +48,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Let idle tasks run during Home Assistant history processing by briefly blocking
+  the worker at processing checkpoints instead of only yielding, reducing the
+  risk of task watchdog resets during large history downloads.
 * Prevent intermittent crashes during Home Assistant history cleanup by keeping
   network clients alive until their HTTP client is destroyed.
 * Play the configured tap sound when a toggle switch accepts a tap. Keep ignored
