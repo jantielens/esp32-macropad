@@ -8,6 +8,7 @@
 #include "../action_parse.h"
 #include "../action_registry.h"
 #include "../action_validate.h"
+#include <algorithm>
 #include <new>
 #include <string.h>
 
@@ -36,7 +37,6 @@ struct SliderState {
     lv_obj_t* center_label;
     lv_obj_t* top_label;
     lv_obj_t* bottom_label;
-    const lv_font_t* small_font;
     uint16_t display_position;
     uint16_t reported_position;
     uint16_t draft_position;
@@ -308,22 +308,23 @@ static void slider_layout(SliderState* state) {
     if (config.icon_position == 1) body_top += outer_icon_height;
     if (config.icon_position == 2) body_bottom -= outer_icon_height;
     const int body_height = body_bottom > body_top ? body_bottom - body_top : 0;
-    const int automatic_track = lv_font_get_line_height(state->small_font) / 4;
-    const int automatic_knob = lv_font_get_line_height(state->small_font) * 3 / 4;
+    const bool shared_row = (state->icon && side_icon) || state->center_label;
+    const int target_length = (config.axis == 0 ? content_width : body_height)
+        * (shared_row ? config.length_pct : 100) / 100;
     const int cross_available = config.axis == 0 ? body_height : content_width;
     const int cross_limit = cross_available > 0 ? cross_available : 1;
-    const int track = clamp_val<int>(config.track_px ? config.track_px : automatic_track,
+    const int automatic_knob = std::min(50, std::min(cross_available * 3 / 5, target_length / 4));
+    const int requested_knob = clamp_val<int>(config.knob_px ? config.knob_px : automatic_knob,
+                                              1, cross_limit);
+    const int track = clamp_val<int>(config.track_px ? config.track_px : requested_knob * 2 / 5,
                                      1, cross_limit);
-    const int knob = clamp_val<int>(config.knob_px ? config.knob_px : automatic_knob,
-                                    track, cross_limit);
+    const int knob = clamp_val<int>(requested_knob, track, cross_limit);
     bool usable = config.valid_range && content_width > 0 && body_height > 0
         && cross_available >= 8 && knob >= 8;
-    const int target_length = (config.axis == 0 ? content_width : body_height) * config.length_pct / 100;
     const int control_length = target_length > knob ? target_length - knob : 1;
     usable = usable && control_length >= knob && control_length > track;
     int control_x = 0, control_y = body_top;
     if (config.axis == 0) {
-        const bool shared_row = (state->icon && side_icon) || state->center_label;
         const int slot_left = shared_row ? content_width - target_length : (content_width - target_length) / 2;
         const bool show_icon = state->icon && side_icon && icon_width + 4 <= slot_left && icon_height <= body_height;
         if (state->icon && side_icon && !show_icon) lv_obj_add_flag(state->icon, LV_OBJ_FLAG_HIDDEN);
@@ -509,7 +510,7 @@ static void slider_event(lv_event_t* event) {
 
 static void slider_create(lv_obj_t* button, const WidgetConfig* widget,
                           const ScreenButtonConfig* source, const PadRect*,
-                          const UIScaleInfo* scale, lv_obj_t* icon,
+                          const UIScaleInfo*, lv_obj_t* icon,
                           lv_obj_t* center, WidgetState* runtime) {
     const auto* config = reinterpret_cast<const SliderConfig*>(widget->data);
     auto* state = new (runtime->data) SliderState{};
@@ -523,7 +524,6 @@ static void slider_create(lv_obj_t* button, const WidgetConfig* widget,
         state->icon_scale_y = lv_image_get_scale_y(icon);
     }
     state->center_label = center;
-    state->small_font = scale->font_small;
     state->bound = widget->data_binding[0][0] != '\0';
     state->available = !state->bound;
     state->layout_usable = true;
@@ -654,7 +654,7 @@ static void slider_describe(JsonObject& out) {
     placement["name"] = "widget_slider_icon_position"; placement["type"] = "string"; placement["default"] = "left";
     JsonArray positions = placement.createNestedArray("enum");
     for (const char* position : {"left", "above", "below"}) positions.add(position);
-    out["note"] = "Touch slider. actions[] runs once on a changed release; {value} is optional in registered value fields. No long press. Length is a percentage of the content width (horizontal) or body height (vertical), including the knob. Bound reports are authoritative, with a five-second confirmation timeout.";
+    out["note"] = "Touch slider. actions[] runs once on a changed release; {value} is optional in registered value fields. No long press. Length is a percentage of the content width (horizontal) or body height (vertical), including the knob; without a center label or side icon, it uses the full length. Automatic sizing targets a 50px knob and 20px track, shrinking to fit. Bound reports are authoritative, with a five-second confirmation timeout.";
 }
 #endif
 

@@ -17,8 +17,14 @@ after changing the selection.
 3. Choose **Horizontal** or **Vertical**. Horizontal values increase to the
    right; vertical values increase upward. **Control length (%)** reserves a
    percentage of the content width for a horizontal slider, or the height
-   between labels for a vertical slider. It includes the knob and does not
-   change when label text changes. Track and knob sizes of `0` use automatic sizing.
+   between labels for a vertical slider, when a center label or side icon is
+   present. Without either, the slider uses the full available length. The
+   length includes the knob and does not change when label text changes.
+   Track and knob sizes of `0` use automatic sizing: the knob targets 50 px,
+   limited to 60% of the available thickness and 25% of the slider length.
+   The automatic track is 40% of the knob diameter, normally 20 px for a
+   50 px knob. Explicit sizes override automatic sizing and are limited by
+   the available thickness.
 4. Choose literal track, fill, and knob colors. Existing top and bottom labels
    remain in their reserved rows. The icon and center label sit to the left of a
    horizontal slider or beside a vertical slider. **Icon position** can also

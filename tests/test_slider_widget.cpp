@@ -191,6 +191,46 @@ protected:
     }
 };
 
+TEST_F(SliderNativeWidget, AutomaticSizingUsesFullLengthAndShrinksToFitBothAxes) {
+    auto* settings = reinterpret_cast<SliderConfig*>(config.data);
+    for (uint8_t axis : {0, 1}) {
+        settings->axis = axis;
+        for (const auto& size : {lv_point_t{450, 300}, lv_point_t{140, 70},
+                                 lv_point_t{80, 40}, lv_point_t{200, 40}}) {
+            lv_obj_set_style_pad_all(button, 0, 0);
+            lv_obj_set_style_border_width(button, 0, 0);
+            lv_obj_set_size(button, axis == 0 ? size.x : size.y,
+                            axis == 0 ? size.y : size.x);
+            slider_layout(&state());
+            const int expected_knob = std::min(50, std::min(size.y * 3 / 5, size.x / 4));
+            const int expected_track = expected_knob * 2 / 5;
+            EXPECT_TRUE(state().layout_usable);
+            EXPECT_EQ(axis == 0 ? lv_obj_get_width(state().control) : lv_obj_get_height(state().control),
+                      size.x - expected_knob);
+            EXPECT_EQ(axis == 0 ? lv_obj_get_height(state().control) : lv_obj_get_width(state().control),
+                      expected_track);
+            EXPECT_EQ(lv_obj_get_style_pad_left(state().control, LV_PART_KNOB),
+                      (expected_knob - expected_track) / 2);
+        }
+    }
+}
+
+TEST_F(SliderNativeWidget, OuterIconDoesNotReserveHalfTheSliderLength) {
+    createLayout(0);
+    lv_obj_delete(state().center_label);
+    state().center_label = nullptr;
+    auto* settings = reinterpret_cast<SliderConfig*>(config.data);
+    settings->knob_px = 20;
+    settings->track_px = 4;
+    slider_layout(&state());
+    EXPECT_EQ(lv_obj_get_width(state().control) + 20, lv_obj_get_content_width(button) / 2);
+    for (uint8_t position : {1, 2}) {
+        settings->icon_position = position;
+        slider_layout(&state());
+        EXPECT_EQ(lv_obj_get_width(state().control) + 20, lv_obj_get_content_width(button));
+    }
+}
+
 TEST_F(SliderNativeWidget, ChangedReleaseDispatchesAbsoluteValueOnce) {
     EXPECT_TRUE(state().available);
     begin(42);
