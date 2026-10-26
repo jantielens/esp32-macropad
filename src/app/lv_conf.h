@@ -188,7 +188,13 @@
  *==================*/
 
 #define LV_USE_ARC        1
-#define LV_USE_BAR        0
+#if HAS_DISPLAY && HAS_TOUCH
+    #define LV_USE_BAR        1
+    #define LV_USE_SLIDER     1
+#else
+    #define LV_USE_BAR        0
+    #define LV_USE_SLIDER     0
+#endif
 #define LV_USE_BUTTON     1
 #define LV_USE_BUTTONMATRIX  0
 #define LV_USE_CALENDAR   0
@@ -230,7 +236,6 @@
 #define LV_USE_MSGBOX     0
 #define LV_USE_ROLLER     0
 #define LV_USE_SCALE      0
-#define LV_USE_SLIDER     0
 #define LV_USE_SPAN       0
 #define LV_USE_SPINBOX    0
 #define LV_USE_SPINNER    1

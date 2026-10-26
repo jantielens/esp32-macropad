@@ -7,6 +7,7 @@
 #include "../fill_style_runtime.h"
 #if HAS_TOUCH
 #include "../touch_manager.h"
+#include "../widgets/slider_widget.h"
 #endif
 #include <esp_heap_caps.h>
 #include <string.h>
@@ -561,6 +562,11 @@ void PadScreen::buildTiles() {
                     tile.widget_state.font_owner = &fontCache;
                     wt->createUI(obj, &tile.widget_cfg, &bcfg, &r, &scale,
                                  tile.icon_img, tile.label_center, &tile.widget_state);
+#if HAS_TOUCH
+                    if (strcmp(wt->name, "slider") == 0)
+                        slider_attach(&tile.widget_state, tile.actions, tile.action_count,
+                                      PadScreen::onPress, &tile);
+#endif
                 }
             }
         }

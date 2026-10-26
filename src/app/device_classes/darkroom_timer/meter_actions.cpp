@@ -47,10 +47,9 @@ static ActionResult meter_action_dispatch(const ButtonAction& act, const char* l
 
 // `value` is the single bindable/numeric field (numeric rocker {step} target
 // for adjust_* commands); expose it so shared code drives binding + {step}.
-static char* meter_value_field(ButtonAction& act, size_t* out_size) {
+static bool meter_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {
     MeterPayload& p = meter_payload(act);
-    *out_size = sizeof(p.value);
-    return p.value;
+    return action_visit_field(visitor, context, "meter_value", p.value);
 }
 
 static void meter_describe(JsonObject& out) {
@@ -72,6 +71,6 @@ static void meter_describe(JsonObject& out) {
     }
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(meter_action_type, /* type_name   */ ACTION_TYPE_METER, /* parse       */ meter_parse, /* serialize   */ meter_serialize, /* dispatch    */ meter_action_dispatch, /* value_field */ meter_value_field, /* describe    */ meter_describe, nullptr, nullptr, nullptr, ACTION_EXECUTION_SYNC);
+DEFINE_AND_REGISTER_ACTION_TYPE(meter_action_type, ACTION_TYPE_METER, meter_parse, meter_serialize, meter_action_dispatch, meter_fields, meter_describe, nullptr, nullptr, ACTION_EXECUTION_SYNC);
 
 #endif // HAS_DISPLAY && IS_DARKROOM_TIMER

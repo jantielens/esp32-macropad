@@ -863,6 +863,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/numericrocker_widget.cpp
   - src/app/widgets/rocker_widget.cpp
   - src/app/widgets/scrollpad_widget.cpp
+  - src/app/widgets/slider_widget.cpp
   - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/table_widget.cpp
   - src/app/widgets/toggle_widget.cpp
@@ -1051,6 +1052,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/numericrocker_widget.cpp
   - src/app/widgets/rocker_widget.cpp
   - src/app/widgets/scrollpad_widget.cpp
+  - src/app/widgets/slider_widget.cpp
   - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/table_widget.cpp
   - src/app/widgets/toggle_widget.cpp
@@ -1281,6 +1283,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/gamepad_joystick_widget.cpp
   - src/app/widgets/mousepad_widget.cpp
   - src/app/widgets/scrollpad_widget.cpp
+  - src/app/widgets/slider_widget.cpp
 - **HAS_TTF_FONTS**
   - src/app/board_config.h
   - src/app/display_manager.cpp

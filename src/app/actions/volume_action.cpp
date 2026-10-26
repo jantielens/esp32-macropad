@@ -48,16 +48,23 @@ bool volume_available() {
 }
 
 const char* validate_volume(const JsonObjectConst action) {
-    if (!action.containsKey("volume_mode")) return nullptr;
-    if (!action["volume_mode"].is<const char*>()) return "action command must be a string";
-    const char* mode = action["volume_mode"].as<const char*>();
-    return strcmp(mode, "set") == 0 || strcmp(mode, "adjust") == 0
-        ? nullptr : "volume_mode must be set or adjust";
+    if (action.containsKey("volume_mode")) {
+        if (!action["volume_mode"].is<const char*>()) return "action command must be a string";
+        const char* mode = action["volume_mode"].as<const char*>();
+        if (strcmp(mode, "set") != 0 && strcmp(mode, "adjust") != 0)
+            return "volume_mode must be set or adjust";
+    }
+    if (action.containsKey("volume_value")) {
+        if (!action["volume_value"].is<const char*>()) return "volume_value must be a string";
+        if (strlen(action["volume_value"].as<const char*>()) >= sizeof(((VolumePayload*)nullptr)->volume_value))
+            return "volume_value too long";
+    }
+    return nullptr;
 }
 
-bool visit_volume_fields(ButtonAction& act, ActionBindableFieldVisitor visitor, void* context) {
-    return !act.payload.volume.volume_value[0] || visitor(act.payload.volume.volume_value,
-        sizeof(act.payload.volume.volume_value), false, context);
+bool visit_volume_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {
+    return action_visit_field(visitor, context, "volume_value", act.payload.volume.volume_value,
+        ACTION_FIELD_BINDING | ACTION_FIELD_EVENT);
 }
 
 void describe_volume(JsonObject& action) {
@@ -71,10 +78,10 @@ void describe_volume(JsonObject& action) {
     JsonObject value = fields.createNestedObject(); value["name"] = "volume_value"; value["description"] = "percentage for set; signed delta for adjust";
     JsonArray editor_fields = action.createNestedArray("editor_fields");
     JsonObject editor_mode = editor_fields.createNestedObject(); editor_mode["name"] = "volume_mode"; editor_mode["label"] = "Command"; editor_mode["type"] = "select"; editor_mode["command_options"] = true;
-    JsonObject editor_value = editor_fields.createNestedObject(); editor_value["name"] = "volume_value"; editor_value["label"] = "Value (%)"; editor_value["type"] = "text"; editor_value["bindable"] = true;
+    JsonObject editor_value = editor_fields.createNestedObject(); editor_value["name"] = "volume_value"; editor_value["label"] = "Value (%)"; editor_value["type"] = "text"; editor_value["bindable"] = true; editor_value["max"] = CONFIG_VALUE_MAX_LEN - 1;
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(kVolumeActionType, ACTION_TYPE_VOLUME, parse_volume, serialize_volume, dispatch_volume, nullptr, describe_volume, volume_available, validate_volume, visit_volume_fields, ACTION_EXECUTION_SYNC);
+DEFINE_AND_REGISTER_ACTION_TYPE(kVolumeActionType, ACTION_TYPE_VOLUME, parse_volume, serialize_volume, dispatch_volume, visit_volume_fields, describe_volume, volume_available, validate_volume, ACTION_EXECUTION_SYNC);
 
 } // namespace
 

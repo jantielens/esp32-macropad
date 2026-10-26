@@ -1204,6 +1204,7 @@ int main() {
         assert result.returncode != 0 and "STOPWATCH_CHARGING_MODE must be" in result.stderr
     action_prelude = r'''
 #include <ArduinoJson.h>
+#include "binding_template.h"
 #include <cassert>
 #include <cstdint>
 #include <cstring>
@@ -1217,6 +1218,8 @@ int main() {
 #define ACTION_CONTINUATION_SLOTS 1
 constexpr uint8_t STOPWATCH_VIBRATION_MAX_STEPS = 15;
 struct ButtonAction { char type[16]; union { uint8_t device_class[96]; } payload; };
+bool binding_template_has_bindings(const char*) { assert(false); return false; }
+bool binding_template_resolve_checked(const char*, char*, size_t) { assert(false); return false; }
 #ifdef BOARD_ACTION_SOURCE
 static bool setterOk = true;
 static int setterCalls = 0;
@@ -1397,6 +1400,7 @@ int main() {
                   aggregator + action_tests)
         subprocess.run(["c++", "-std=c++17", "-Wno-deprecated-declarations",
                         "-I", str(pathlib.Path.home() / "Arduino/libraries/ArduinoJson/src"),
+                        "-I", str(ROOT / "src/app"),
                         str(source), "-o", str(executable)], check=True)
         subprocess.run([str(executable)], check=True)
         if not board_action:

@@ -200,16 +200,16 @@ void describe_shutdown(JsonObject& action) {
 
 DEFINE_AND_REGISTER_ACTION_TYPE(kStopWatchChargingActionType, "charging_mode",
     parse_charging_mode, serialize_charging_mode, dispatch_charging_mode, nullptr,
-    describe_charging_mode, nullptr, validate_charging_mode, nullptr, ACTION_EXECUTION_SYNC, false);
+    describe_charging_mode, nullptr, validate_charging_mode, ACTION_EXECUTION_SYNC, false);
 DEFINE_AND_REGISTER_ACTION_TYPE(kStopWatchStatusLedActionType, "status_led",
     parse_status_led, serialize_status_led, dispatch_status_led, nullptr,
-    describe_status_led, nullptr, validate_status_led, nullptr, ACTION_EXECUTION_SYNC, false);
+    describe_status_led, nullptr, validate_status_led, ACTION_EXECUTION_SYNC, false);
 DEFINE_AND_REGISTER_ACTION_TYPE(kStopWatchVibrateActionType, "vibrate",
     parse_vibrate, serialize_vibrate, dispatch_vibrate, nullptr,
-    describe_vibrate, nullptr, validate_vibrate, nullptr, ACTION_EXECUTION_SYNC, false);
+    describe_vibrate, nullptr, validate_vibrate, ACTION_EXECUTION_SYNC, false);
 DEFINE_AND_REGISTER_ACTION_TYPE(kStopWatchShutdownActionType, "shutdown",
     nullptr, nullptr, dispatch_shutdown, nullptr,
-    describe_shutdown, nullptr, nullptr, nullptr, ACTION_EXECUTION_PAUSABLE, false);
+    describe_shutdown, nullptr, nullptr, ACTION_EXECUTION_PAUSABLE, false);
 
 }
 #endif

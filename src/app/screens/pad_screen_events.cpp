@@ -1,4 +1,5 @@
 #include "pad_screen.h"
+#include "../action_registry.h"
 #include "../touch_manager.h"
 #include "../widgets/numericrocker_zones.h"
 #include "../widgets/toggle_widget.h"
@@ -226,9 +227,6 @@ extern DeviceConfig device_config;
 #include <ArduinoJson.h>
 #endif
 
-// Forward declaration — defined in numericrocker_widget.cpp
-void numericrocker_substitute_step(ButtonAction* act, float step);
-
 #include "../widgets/numericrocker_zones.h"
 
 // TAG and TAP_FLASH_DURATION_MS are defined in pad_screen.cpp which is
@@ -427,6 +425,7 @@ void PadScreen::onPress(lv_event_t* e) {
     const lv_event_code_t code = lv_event_get_code(e);
     if (code == LV_EVENT_INDEV_RESET || code == LV_EVENT_PRESS_LOST) {
         tile->touch_start_valid = false;
+        widget_cancel_input(tile->widget_type, &tile->widget_state);
         return;
     }
     if (code != LV_EVENT_PRESSED && code != LV_EVENT_PRESSING &&
@@ -443,7 +442,11 @@ void PadScreen::onPress(lv_event_t* e) {
         tile->touch_start_valid = true;
         return;
     }
-    if (code != LV_EVENT_PRESSED && tile->touch_start_valid && allowed) return;
+    if (code != LV_EVENT_PRESSED && tile->touch_start_valid && allowed) {
+        if (code == LV_EVENT_RELEASED && widget_owns_input(tile->widget_type))
+            tile->touch_start_valid = false;
+        return;
+    }
     if (!tile->touch_start_valid && code != LV_EVENT_PRESSED) {
         lv_event_stop_bubbling(e);
         lv_event_stop_processing(e);
@@ -451,6 +454,7 @@ void PadScreen::onPress(lv_event_t* e) {
     }
 
     tile->touch_start_valid = false;
+    if (!allowed) widget_cancel_input(tile->widget_type, &tile->widget_state);
 #if HAS_TOUCH
     touch_manager_cancel_physical_input();
 #endif
@@ -474,6 +478,7 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
     PadScreen* owner = tile_owner(tile);
     if (!owner || !owner->inputAllowed(*tile, point)) return;
     const bool overlay = owner->buttonIsOverlay(tile);
+    if (widget_owns_input(tile->widget_type)) return;
     if (device_dialog_active()) return;
 
     // Suppress taps that LVGL fires as part of a swipe gesture
@@ -594,7 +599,7 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
 
             ButtonAction local_nr;
             memcpy(&local_nr, &cfg->adjust_action, sizeof(ButtonAction));
-            numericrocker_substitute_step(&local_nr, step);
+            if (!action_type_substitute_step(action_type_find(local_nr.type), local_nr, step)) return;
 
             do_tap_flash_px(tile, axis_offset + flash_start, axis_offset + flash_end,
                             cfg->horizontal);
@@ -665,6 +670,7 @@ void PadScreen::longPressAt(ButtonTile* tile, const lv_point_t& point) {
     PadScreen* owner = tile_owner(tile);
     if (!owner || !owner->inputAllowed(*tile, point)) return;
     const bool overlay = owner->buttonIsOverlay(tile);
+    if (widget_owns_input(tile->widget_type)) return;
     if (device_dialog_active()) return;
     if (tile->widget_type && strcmp(tile->widget_type->name, "toggle") == 0) return;
 
@@ -804,16 +810,23 @@ void PadScreen::onSwipeGuard(lv_event_t* event) {
         const ButtonTile& tile = pad->tiles[index];
         if (!tile.touch_start_valid) continue;
         if ((pad->isOverlayButton(&tile) && !lv_obj_has_flag(tile.obj, LV_OBJ_FLAG_HIDDEN)) ||
-            pad->pointBlockedByOverlay(tile.touch_start)) blocked = true;
+            pad->pointBlockedByOverlay(tile.touch_start)) {
+            blocked = true;
+        }
     }
     lv_indev_t* indev = lv_indev_active();
     if (indev) {
         lv_point_t point = {};
         lv_indev_get_point(indev, &point);
-        blocked |= pad->pointBlockedByOverlay(point);
+        if (pad->pointBlockedByOverlay(point)) {
+            blocked = true;
+        }
     }
     if (!blocked) return;
-    for (uint8_t index = 0; index < pad->tileCount; ++index)
-        pad->tiles[index].touch_start_valid = false;
+    for (uint8_t index = 0; index < pad->tileCount; ++index) {
+        ButtonTile& tile = pad->tiles[index];
+        tile.touch_start_valid = false;
+        widget_cancel_input(tile.widget_type, &tile.widget_state);
+    }
     lv_event_stop_processing(event);
 }

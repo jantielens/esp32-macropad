@@ -80,47 +80,16 @@ static void toggle_render(ToggleState* state, bool animate) {
     lv_obj_set_style_opa(state->control, state->known ? LV_OPA_COVER : LV_OPA_TRANSP, LV_PART_KNOB);
 }
 
-static lv_area_t toggle_content_bounds(lv_obj_t* object) {
-    if (!object) return {0, 0, -1, -1};
-    const int width = lv_obj_get_width(object), height = lv_obj_get_height(object);
-    lv_point_t corners[] = {{0, 0}, {width, 0}, {0, height}, {width, height}};
-    if (lv_obj_check_type(object, &lv_image_class)) {
-        lv_point_t pivot;
-        lv_image_get_pivot(object, &pivot);
-        lv_point_array_transform(corners, 4, lv_image_get_rotation(object),
-                                 lv_image_get_scale_x(object), lv_image_get_scale_y(object), &pivot, true);
-    }
-    lv_area_t coordinates;
-    lv_obj_get_coords(object, &coordinates);
-    for (auto& corner : corners) {
-        corner.x += coordinates.x1;
-        corner.y += coordinates.y1;
-    }
-    lv_obj_transform_point_array(object, corners, 4, LV_OBJ_POINT_TRANSFORM_FLAG_NONE);
-    lv_area_t bounds = {corners[0].x, corners[0].y, corners[0].x, corners[0].y};
-    for (const auto& corner : corners) {
-        if (corner.x < bounds.x1) bounds.x1 = corner.x;
-        if (corner.y < bounds.y1) bounds.y1 = corner.y;
-        if (corner.x > bounds.x2) bounds.x2 = corner.x;
-        if (corner.y > bounds.y2) bounds.y2 = corner.y;
-    }
-    bounds.x1 -= coordinates.x1;
-    bounds.y1 -= coordinates.y1;
-    bounds.x2 -= coordinates.x1 + 1;
-    bounds.y2 -= coordinates.y1 + 1;
-    return bounds;
-}
-
 static void toggle_layout(const WidgetConfig* config, ToggleState* state) {
     const auto* settings = reinterpret_cast<const ToggleConfig*>(config->data);
     lv_obj_t* button = state->button;
     lv_obj_update_layout(button);
     const int available_width = lv_obj_get_content_width(button);
     int top = 0, bottom = lv_obj_get_content_height(button);
-    if (state->top_label) top = lv_obj_get_y(state->top_label) + toggle_content_bounds(state->top_label).y2 + 5;
-    if (state->bottom_label) bottom = lv_obj_get_y(state->bottom_label) + toggle_content_bounds(state->bottom_label).y1 - 4;
+    if (state->top_label) top = lv_obj_get_y(state->top_label) + widget_content_bounds(state->top_label).y2 + 5;
+    if (state->bottom_label) bottom = lv_obj_get_y(state->bottom_label) + widget_content_bounds(state->bottom_label).y1 - 4;
     const int height = bottom > top ? bottom - top : 0;
-    const lv_area_t icon_bounds = toggle_content_bounds(state->icon);
+    const lv_area_t icon_bounds = widget_content_bounds(state->icon);
     const int icon_width = lv_area_get_width(&icon_bounds), icon_height = lv_area_get_height(&icon_bounds);
     const bool side_icon = state->icon && settings->icon_position == 0;
     const bool shared_row = side_icon || state->center_label;
@@ -140,7 +109,7 @@ static void toggle_layout(const WidgetConfig* config, ToggleState* state) {
         else lv_obj_remove_flag(state->center_label, LV_OBJ_FLAG_HIDDEN);
         lv_obj_update_layout(button);
     }
-    const lv_area_t label_bounds = toggle_content_bounds(state->center_label);
+    const lv_area_t label_bounds = widget_content_bounds(state->center_label);
     const int label_height = state->center_label && !lv_obj_has_flag(state->center_label, LV_OBJ_FLAG_HIDDEN)
         ? lv_area_get_height(&label_bounds) : 0;
     if (switch_width < 4) lv_obj_add_flag(state->control, LV_OBJ_FLAG_HIDDEN);

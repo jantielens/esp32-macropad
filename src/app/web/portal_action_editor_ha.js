@@ -47,6 +47,16 @@
             if (d) d.value = action.data_json || '';
         },
 
+        validate: function (action, prefix) {
+            if (action.type !== 'ha_service' || !action.data_json) return;
+            try {
+                var data = JSON.parse(action.data_json);
+                if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error();
+            } catch (_) {
+                throw Object.assign(new Error('data_json: Home Assistant data must be a JSON object after substitution'), { fieldIds: [prefix + '-ha-data'] });
+            }
+        },
+
         // Read fields into the action object.
         build: function (prefix, type) {
             if (type !== 'ha_service') return null;

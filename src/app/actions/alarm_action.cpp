@@ -29,7 +29,7 @@ const char* validate_alarm(JsonObjectConst action) {
     if (operation == 3 || operation == 4) {
         const char* text = action["alarm_value"] | "";
         if (!text[0]) return "Time commands require alarm_value";
-        if (!strchr(text, '[') && !strstr(text, "{step}") && !alarm_integer(text, &value)) return "alarm_value must be whole minutes or a binding/{step}";
+        if (!strchr(text, '[') && !strstr(text, "{step}") && !strstr(text, "{value}") && !alarm_integer(text, &value)) return "alarm_value must be whole minutes, a binding, or an event value";
     }
     return alarm_command_validate(command, id, value, action["alarm_day"] | 0);
 }
@@ -56,11 +56,11 @@ ActionResult dispatch_alarm(const ButtonAction& action, const char*, uint32_t) {
     }
     return alarm_command_submit(payload.alarm_command, payload.alarm_id, value, payload.alarm_day) ? ACTION_COMPLETE : ACTION_FAILED;
 }
-char* alarm_value_field(ButtonAction& action, size_t* size) {
+bool visit_alarm_fields(ButtonAction& action, ActionFieldVisitor visitor, void* context) {
     const uint8_t operation = alarm_command_operation(action.payload.alarm.alarm_command);
-    if (operation != 3 && operation != 4) return nullptr;
-    *size = sizeof(action.payload.alarm.alarm_value);
-    return action.payload.alarm.alarm_value;
+    return action_visit_field(visitor, context, "alarm_value", action.payload.alarm.alarm_value,
+        ACTION_FIELD_EVENT | ACTION_FIELD_REJECT_OVERFLOW |
+        ((operation == 3 || operation == 4) ? ACTION_FIELD_BINDING : 0));
 }
 void describe_alarm(JsonObject& action) {
     action["group"] = "Alarm";
@@ -81,7 +81,7 @@ void describe_alarm(JsonObject& action) {
     command["description"] = "cancel, snooze, set_time, adjust_minutes, enable, disable, toggle, weekday_enable, weekday_disable, weekday_toggle";
     JsonObject value = fields.createNestedObject();
     value["name"] = "alarm_value";
-    value["description"] = "set_time: whole minutes since midnight (0-1439); adjust_minutes: signed 32-bit minutes, wraps within 24 hours; string supports bindings and {step}";
+    value["description"] = "set_time: whole minutes since midnight (0-1439); adjust_minutes: signed 32-bit minutes, wraps within 24 hours; string supports bindings, {step}, and {value}";
     JsonObject day = fields.createNestedObject();
     day["name"] = "alarm_day";
     day["description"] = "required for weekday commands: Sunday=0 through Saturday=6";
@@ -124,6 +124,6 @@ void describe_alarm(JsonObject& action) {
         item["label"] = names[index];
     }
 }
-DEFINE_AND_REGISTER_ACTION_TYPE(kAlarmActionType, ACTION_TYPE_ALARM, parse_alarm, serialize_alarm, dispatch_alarm, alarm_value_field, describe_alarm, nullptr, validate_alarm, nullptr, ACTION_EXECUTION_SYNC, false);
+DEFINE_AND_REGISTER_ACTION_TYPE(kAlarmActionType, ACTION_TYPE_ALARM, parse_alarm, serialize_alarm, dispatch_alarm, visit_alarm_fields, describe_alarm, nullptr, validate_alarm, ACTION_EXECUTION_SYNC, false);
 }
 #endif

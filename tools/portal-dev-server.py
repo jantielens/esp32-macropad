@@ -1303,7 +1303,10 @@ class PortalHandler(SimpleHTTPRequestHandler):
                             display_coord_width=400, display_coord_height=300)
             if include_catalog:
                 info["catalog"] = self.server.pad_fixture["catalog"]
-                info["widget_catalog"] = self.server.pad_fixture["widget_catalog"]
+                info["widget_catalog"] = [
+                    widget for widget in self.server.pad_fixture["widget_catalog"]
+                    if widget.get("type") != "slider" or info["has_touch"]
+                ]
         return info
 
     def _health(self):

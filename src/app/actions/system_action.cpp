@@ -104,7 +104,7 @@ void describe_system(JsonObject& action) {
     JsonObject command = editor_fields.createNestedObject(); command["name"] = "system_command"; command["label"] = "Command"; command["type"] = "select"; command["command_options"] = true;
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(kSystemActionType, ACTION_TYPE_SYSTEM, parse_system, serialize_system, dispatch_system, nullptr, describe_system, system_available, validate_system, nullptr, ACTION_EXECUTION_SYNC);
+DEFINE_AND_REGISTER_ACTION_TYPE(kSystemActionType, ACTION_TYPE_SYSTEM, parse_system, serialize_system, dispatch_system, nullptr, describe_system, system_available, validate_system, ACTION_EXECUTION_SYNC);
 
 } // namespace
 

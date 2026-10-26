@@ -55,14 +55,12 @@ static void parse_registered_test(const JsonObject& action, ButtonAction& parsed
 }
 
 static bool visit_registered_test_fields(ButtonAction& parsed,
-                                         ActionBindableFieldVisitor visitor, void* context) {
-    return visitor(parsed.payload.mqtt.mqtt_topic, sizeof(parsed.payload.mqtt.mqtt_topic),
-                   false, context);
+                                         ActionFieldVisitor visitor, void* context) {
+    return action_visit_field(visitor, context, "value", parsed.payload.mqtt.mqtt_topic, ACTION_FIELD_BINDING | ACTION_FIELD_EVENT);
 }
 
 static const ActionTypeDef registered_type = {
-    "registered_test", parse_registered_test, nullptr, nullptr, nullptr, nullptr,
-    nullptr, nullptr, visit_registered_test_fields
+    "registered_test", parse_registered_test, nullptr, nullptr, visit_registered_test_fields, nullptr
 };
 
 const ActionTypeDef* action_type_find(const char* type) {
@@ -78,9 +76,17 @@ const char* action_type_validate(const ActionTypeDef*, JsonObjectConst) {
     return nullptr;
 }
 
+bool action_substitute_token_field(char*, size_t, const char*, const char*) { return true; }
+
+bool action_type_visit_fields(const ActionTypeDef* def, ButtonAction& action,
+                              ActionFieldVisitor visitor, void* context) {
+    return !def || !def->fields || def->fields(action, visitor, context);
+}
+
 bool action_type_visit_bindable_fields(const ActionTypeDef* def, ButtonAction& action,
                                        ActionBindableFieldVisitor visitor, void* context) {
-    return def && def->binding_fields && def->binding_fields(action, visitor, context);
+    return !def || def != &registered_type || visitor(action.payload.mqtt.mqtt_topic,
+        sizeof(action.payload.mqtt.mqtt_topic), false, context);
 }
 
 static JsonObject make_button(JsonDocument& doc) {

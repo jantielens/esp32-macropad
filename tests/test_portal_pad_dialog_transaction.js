@@ -10,6 +10,7 @@ class Element {
         this.textContent = '';
         this.style = { display: 'none', setProperty(name, value) { this[name] = value; } };
         this.dataset = {};
+        this.listeners = {};
         this.attributes = {};
         const classes = new Set();
         this.classList = {
@@ -20,6 +21,9 @@ class Element {
     }
     setAttribute(name, value) { this.attributes[name] = value; }
     removeAttribute(name) { delete this.attributes[name]; }
+    addEventListener(type, callback) {
+        (this.listeners[type] || (this.listeners[type] = [])).push(callback);
+    }
 }
 
 const elements = new Map();
@@ -642,6 +646,78 @@ assert.strictEqual(context.padDialogBuildButton().widget_waveform_line_width, 2)
 context.padWidgetEditorsLoad({ widget_type: 'waveform' });
 assert.strictEqual(context.padDialogBuildButton().widget_waveform_show_threshold, true);
 assert.strictEqual(context.padDialogBuildButton().widget_waveform_sensor, 0);
+
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_slider.js', 'utf8'), context);
+const sliderEditor = context.padWidgetEditor('slider');
+assert.strictEqual(sliderEditor.available({ has_display: true, has_touch: true }), true);
+assert.strictEqual(sliderEditor.available({ has_display: true, has_touch: false }), false);
+const sliderAxis = document.getElementById('pad-edit-slider-axis');
+context.actionEditorHTML = () => '<div></div>';
+context.actionEditorLoad = () => {};
+context.actionEditorCatalogEntry = type => ({
+    type,
+    template_fields: ({ mqtt: { topic: { max: 127 }, payload: { max: 127 } },
+        ha_service: { entity_id: { max: 47 }, service: { max: 63 }, data_json: { max: 63 } }, volume: { volume_value: { max: 15 } },
+        brightness: { brightness_value: { max: 15 } }, notify: { message: { max: 191 } },
+        set_var: { var_value: { max: 191 } } })[type]
+});
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_ha.js', 'utf8'), context);
+const buildActions = actions => (prefix, token) => {
+    const action = actions[Number(prefix.slice(-1))] || {};
+    context.actionEditorValidateEventTokens(action, token, prefix);
+    return action;
+};
+context.padGetBindableColor = id => document.getElementById(id).value;
+const sliderActions = [
+    { type: 'mqtt', topic: 'device/set', payload: '{value}' },
+    { type: 'screen', target: 'info' },
+    { type: 'volume', volume_mode: 'adjust', volume_value: '1' }
+];
+context.actionEditorBuild = buildActions(sliderActions);
+const sliderButton = { widget_type: 'slider', widget_data_binding: '[mqtt:device/level]',
+    widget_slider_min: -1, widget_slider_max: 1, widget_slider_step: 0.01,
+    widget_slider_axis: 'vertical', widget_slider_length_pct: 75, widget_slider_track_px: 4,
+    widget_slider_knob_px: 16, widget_slider_track_color: '#111111',
+    widget_slider_fill_color: '#22aa77', widget_slider_knob_color: '#ffffff' };
+context.padWidgetEditorsLoad(sliderButton);
+sliderAxis.value = 'vertical';
+document.getElementById('pad-edit-widget-type').value = 'slider';
+const sliderRoundTrip = context.padDialogBuildButton();
+assert.strictEqual(sliderRoundTrip.widget_slider_axis, 'vertical');
+assert.strictEqual(sliderRoundTrip.widget_slider_min, -1);
+assert.strictEqual(sliderRoundTrip.widget_slider_step, 0.01);
+assert.strictEqual(sliderRoundTrip.widget_slider_fill_color, '#22aa77');
+assert.deepStrictEqual(sliderRoundTrip.actions, sliderActions);
+assert.strictEqual(sliderRoundTrip.lp_actions, undefined);
+context.actionEditorBuild = () => ({});
+const noActionSlider = context.padDialogBuildButton();
+assert.strictEqual(noActionSlider.actions, undefined);
+
+context.actionEditorBuild = buildActions([{ type: 'ha_service', entity_id: 'light.room', service: 'turn_on',
+    data_json: '{"brightness":{value}}' }]);
+const haSlider = context.padDialogBuildButton();
+assert.strictEqual(haSlider.actions[0].data_json, '{"brightness":{value}}');
+context.actionEditorBuild = buildActions([{ type: 'ha_service', entity_id: 'light.room', service: 'turn_on',
+    data_json: '{"brightness":{value}.0}' }]);
+assert.doesNotThrow(() => context.padDialogBuildButton());
+context.actionEditorBuild = buildActions([{ type: 'ha_service', entity_id: 'light.lamp_{value}', service: 'scene_{value}',
+    data_json: '{"brightness":{value}0}' }]);
+assert.throws(() => context.padDialogBuildButton(), /JSON object/);
+context.actionEditorBuild = buildActions([
+    { type: 'notify', message: 'Brightness set to {value}%' },
+    { type: 'set_var', var_name: 'a', var_value: '{value}%' },
+    { type: 'mqtt', topic: 'device/{value}', payload: '{value}' }
+]);
+assert.strictEqual(context.padDialogBuildButton().actions[1].var_value, '{value}%');
+for (const token of ['{value}', '{step}']) {
+    assert.doesNotThrow(() => context.actionEditorValidateEventTokens({ type: 'notify', message: token + '%' }, token, 'test'));
+    assert.doesNotThrow(() => context.actionEditorValidateEventTokens({ type: 'set_var', var_name: 'a', var_value: token }, token, 'test'));
+    assert.throws(() => context.actionEditorValidateEventTokens({ type: 'set_var', var_name: token, var_value: '1' }, token, 'test'), /var_name.*does not support/);
+    assert.throws(() => context.actionEditorValidateEventTokens({ type: 'notify', message: token }, undefined, 'test'), /message.*unavailable/);
+    assert.throws(() => context.actionEditorValidateEventTokens({ type: 'notify', message: 'x'.repeat(185) + token }, token, 'test'), /message.*exceeds/);
+}
+assert.throws(() => context.actionEditorValidateEventTokens({ type: 'notify', message: '{step}' }, '{value}', 'test'), /use \{value\}/);
 
 async function checkSourceColors() {
     document.querySelector = () => null;

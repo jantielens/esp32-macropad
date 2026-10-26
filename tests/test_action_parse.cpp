@@ -15,9 +15,14 @@
 #include "action_parse.h"
 #include "action_registry.h"
 #include "action_catalog.h"
+#include "action_validate.h"
 #include <string>
 
-ActionResult action_dispatch(const ButtonAction&, const char*, uint32_t) {
+static unsigned g_followup_dispatches = 0;
+ActionResult action_dispatch(const ButtonAction& action, const char* label, uint32_t token) {
+    if (!strcmp(action.type, ACTION_TYPE_HA_SERVICE))
+        return action_type_find(action.type)->dispatch(action, label, token);
+    ++g_followup_dispatches;
     return ACTION_COMPLETE;
 }
 
@@ -296,7 +301,7 @@ TEST(mouse_button_validation_and_catalog) {
     const ActionTypeDef* type = action_type_find(ACTION_TYPE_MOUSE_BUTTON);
     ASSERT_TRUE(type != nullptr);
     ASSERT_EQ(type->available(), HAS_USB_HID);
-    ASSERT_TRUE(type->value_field == nullptr);
+    ASSERT_TRUE(type->fields == nullptr);
     for (const char* value : {"\"invalid\"", "\"\"", "3", "null", "true"}) {
         char json[100];
         snprintf(json, sizeof(json), "{\"type\":\"mouse_button\",\"button\":%s}", value);
@@ -893,10 +898,136 @@ TEST(catalog_feature_gates_and_metadata_parity) {
     ASSERT_EQ(alarm_count, ALARM_ENABLED ? 3 : 0);
     ASSERT_TRUE(action_type_find("screen")->display_lock_required);
     ASSERT_TRUE(!action_type_find("ha_service")->display_lock_required);
+    for (JsonObjectConst entry : portal.as<JsonArray>()) {
+        const char* type = entry["type"];
+        JsonObjectConst fields = entry["template_fields"];
+        if (!strcmp(type, "volume")) {
+            ASSERT_EQ(fields["volume_value"]["max"].as<unsigned>(), CONFIG_VALUE_MAX_LEN - 1);
+        }
+        if (!strcmp(type, "brightness")) {
+            ASSERT_EQ(fields["brightness_value"]["max"].as<unsigned>(), CONFIG_VALUE_MAX_LEN - 1);
+        }
+        if (!strcmp(type, "mqtt")) {
+            ASSERT_EQ(fields["payload"]["max"].as<unsigned>(), CONFIG_MQTT_PAYLOAD_MAX_LEN - 1);
+            ASSERT_EQ(fields["topic"]["max"].as<unsigned>(), CONFIG_MQTT_TOPIC_MAX_LEN - 1);
+        }
+        if (!strcmp(type, "ha_service")) {
+            ASSERT_EQ(fields["data_json"]["max"].as<unsigned>(), sizeof(HaServicePayload::data_json) - 1);
+        }
+        if (!strcmp(type, "key")) {
+            ASSERT_EQ(fields["sequence"]["max"].as<unsigned>(), CONFIG_KEY_SEQ_MAX_LEN - 1);
+        }
+        if (!strcmp(type, "timer")) {
+            ASSERT_EQ(fields["timer_value"]["max"].as<unsigned>(), CONFIG_VALUE_MAX_LEN - 1);
+        }
+        if (!strcmp(type, "notify")) {
+            ASSERT_EQ(fields["message"]["max"].as<unsigned>(), CONFIG_DIALOG_MESSAGE_MAX_LEN - 1);
+        }
+        if (!strcmp(type, "set_var")) {
+            ASSERT_EQ(fields["var_value"]["max"].as<unsigned>(), CONFIG_LABEL_MAX_LEN - 1);
+        }
+    }
     std::string portal_json, mcp_json;
     serializeJson(portal, portal_json);
     serializeJson(mcp, mcp_json);
     ASSERT_TRUE(portal_json == mcp_json);
+}
+
+TEST(slider_value_action_validation) {
+    StaticJsonDocument<512> doc;
+#if ALARM_ENABLED
+    for (const char* token : {"{step}", "{value}"}) {
+        doc.clear();
+        doc["type"] = "alarm";
+        doc["alarm_command"] = "adjust_minutes";
+        doc["alarm_value"] = token;
+        ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, token) == nullptr);
+        ButtonAction alarm = {};
+        action_parse(doc.as<JsonObject>(), alarm);
+        ASSERT_STR(alarm.type, "alarm");
+        ASSERT_STR(alarm.payload.alarm.alarm_value, token);
+        const ActionTypeDef* alarm_type = action_type_find(alarm.type);
+        ASSERT_TRUE(action_type_substitute_token(alarm_type, alarm, token, "-60"));
+        ASSERT_STR(alarm.payload.alarm.alarm_value, "-60");
+    }
+    doc.clear();
+#endif
+    ASSERT_TRUE(deserializeJson(doc, R"({"type":"volume","volume_mode":"set","volume_value":"{value}"})") == DeserializationError::Ok);
+    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}") == nullptr);
+    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>()) != nullptr);
+    doc["volume_mode"] = "adjust";
+    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}") == nullptr);
+    doc["volume_mode"] = "set";
+    doc["volume_value"] = "1";
+    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}") == nullptr);
+
+    doc.clear();
+    ASSERT_TRUE(deserializeJson(doc, R"({"type":"mqtt","topic":"device/set","payload":"{value}"})") == DeserializationError::Ok);
+    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}") == nullptr);
+    doc["topic"] = "device/{value}";
+    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}") == nullptr);
+    doc["topic"] = "device/set";
+    std::string oversized_payload(CONFIG_MQTT_PAYLOAD_MAX_LEN, 'x');
+    oversized_payload += "{value}";
+    doc["payload"] = oversized_payload;
+    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}") != nullptr);
+    for (const char* token : {"{value}", "{step}"}) {
+        doc.clear();
+        doc["type"] = "notify";
+        doc["message"] = std::string("Brightness set to ") + token + "%";
+        ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, token) == nullptr);
+        ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>()) != nullptr);
+        ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, !strcmp(token, "{value}") ? "{step}" : "{value}") != nullptr);
+        doc.clear();
+        doc["type"] = "set_var";
+        doc["var_name"] = "a";
+        doc["var_value"] = std::string(token) + "%";
+        ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, token) == nullptr);
+        doc["var_name"] = token;
+        ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, token) != nullptr);
+    }
+}
+
+TEST(slider_ha_json_template_validation) {
+    StaticJsonDocument<512> doc;
+    ASSERT_TRUE(deserializeJson(doc, R"({"type":"ha_service","entity_id":"light.room","service":"turn_on","data_json":"{\"brightness\":{value}}"})") == DeserializationError::Ok);
+    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}") == nullptr);
+    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>()) != nullptr);
+    const char* ha_template = R"({"type":"ha_service","entity_id":"light.room","service":"turn_on","data_json":"{\"brightness\":{value}}"})";
+    ButtonAction parsed = parse_from_string(ha_template);
+    const ActionTypeDef* type = action_type_find(parsed.type);
+    ASSERT_TRUE(action_type_substitute_token(type, parsed, "{value}", "42.5"));
+    ASSERT_STR(parsed.payload.ha_service.data_json, "{\"brightness\":42.5}");
+    for (const char* data : {"{\"brightness\":{value}", "{\"brightness\":{value}0}"}) {
+        doc["data_json"] = data;
+        ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}") != nullptr);
+    }
+    doc["data_json"] = "{\"brightness\":{value}}";
+    doc["entity_id"] = "light.lamp_{value}";
+    doc["service"] = "scene_{value}";
+    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}") == nullptr);
+    action_parse(doc.as<JsonObject>(), parsed);
+    ASSERT_TRUE(action_type_substitute_token(type, parsed, "{value}", "2"));
+    ASSERT_STR(parsed.payload.ha_service.entity_id, "light.lamp_2");
+    ASSERT_STR(parsed.payload.ha_service.service, "scene_2");
+    ASSERT_EQ(type->dispatch(parsed, "test", 0), ACTION_COMPLETE);
+    for (const char* data : {"{\"brightness\":00}", "{\"brightness\":1.5.0}", "{'x':1}", "{x:1}", "{}junk", "[]", "{\"x\":1,}", "{\"x\":NaN}"}) {
+        strlcpy(parsed.payload.ha_service.data_json, data, sizeof(parsed.payload.ha_service.data_json));
+        ASSERT_EQ(type->dispatch(parsed, "test", 0), ACTION_FAILED);
+    }
+    for (const char* data : {"{}", " {\"x\":[true,false,null,-1.5e+2,\"a\\\"b\"]} \n"}) {
+        ASSERT_TRUE(action_json_object_valid(data));
+    }
+    doc["data_json"] = "{\"brightness\":{value}.0}";
+    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}") == nullptr);
+    action_parse(doc.as<JsonObject>(), parsed);
+    ASSERT_TRUE(action_type_substitute_token(type, parsed, "{value}", "1.5"));
+    ASSERT_EQ(type->dispatch(parsed, "test", 0), ACTION_FAILED);
+    ButtonAction actions[2] = {parsed, {}};
+    strlcpy(actions[1].type, ACTION_TYPE_SCREEN, sizeof(actions[1].type));
+    g_followup_dispatches = 0;
+    ASSERT_EQ(action_list_dispatch_result(actions, 2, "test"), ACTION_FAILED);
+    ASSERT_EQ(g_followup_dispatches, 0);
 }
 
 int main(int argc, char** argv) {
@@ -914,6 +1045,8 @@ int main(int argc, char** argv) {
     printf("--- Empty / minimal ---\n");
     RUN(registered_identifiers_survive_storage);
     RUN(catalog_feature_gates_and_metadata_parity);
+    RUN(slider_value_action_validation);
+    RUN(slider_ha_json_template_validation);
     RUN(empty_json);
     RUN(empty_to_json_produces_empty_object);
     RUN(action_list_filters_literal_none_for_pad_callers);

@@ -96,26 +96,26 @@
     {"name": "image", "min_params": 1, "max_params": 1, "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": false, "keys": ["current", "error"]}
   ]},
   "catalog": [
-    {"type": "screen", "group": "Navigation", "label": "Navigate to screen"},
+    {"type": "screen", "group": "Navigation", "label": "Navigate to screen", "template_fields": {"target": {"max": 31}}},
     {"type": "back", "group": "Navigation", "label": "Navigate back"},
     {"type": "cycle_pad", "group": "Navigation", "label": "Navigate pad sequence"},
-    {"type": "set_var", "group": "Variables", "label": "Set variable", "editor_fields": [{"name": "var_name", "label": "Name", "type": "text"}, {"name": "var_value", "label": "Value", "type": "text", "bindable": true}]},
+    {"type": "set_var", "group": "Variables", "label": "Set variable", "template_fields": {"var_value": {"max": 191}}, "editor_fields": [{"name": "var_name", "label": "Name", "type": "text"}, {"name": "var_value", "label": "Value", "type": "text", "bindable": true}]},
     {"type": "button_navigation", "group": "Navigation", "label": "Navigate buttons", "commands": [{"id": "previous", "label": "Previous"}, {"id": "next", "label": "Next"}, {"id": "tap", "label": "Tap"}, {"id": "tap_hold", "label": "Tap & Hold"}], "fields": [{"name": "command", "description": "previous, next, tap, or tap_hold"}], "editor_fields": [{"name": "command", "label": "Command", "type": "select", "command_options": true}]},
-    {"type": "mqtt", "group": "Connectivity", "label": "Publish MQTT message"},
-    {"type": "ha_service", "group": "Connectivity", "label": "Call Home Assistant service"},
-    {"type": "notify", "group": "Display", "label": "Show notification"},
-    {"type": "confirm", "group": "Display", "label": "Ask for confirmation", "pausable": true},
-    {"type": "brightness", "group": "Display", "label": "Brightness", "commands": [{"id": "set", "label": "Set brightness"}, {"id": "adjust", "label": "Adjust brightness"}], "editor_fields": [{"name": "brightness_mode", "label": "Command", "type": "select", "command_options": true}, {"name": "brightness_value", "label": "Value (%)", "type": "text", "bindable": true}]},
-    {"type": "visual_alert", "group": "Display", "label": "Visual alert", "commands": [{"id": "start", "label": "Start alert"}, {"id": "stop", "label": "Stop alert"}]},
-    {"type": "timer", "group": "Timer", "label": "Timer", "commands": [{"id": "toggle", "label": "Toggle"}, {"id": "start", "label": "Start"}, {"id": "stop", "label": "Stop"}, {"id": "pause", "label": "Pause"}, {"id": "resume", "label": "Resume"}, {"id": "reset", "label": "Reset"}, {"id": "set", "label": "Set countdown"}, {"id": "adjust", "label": "Adjust countdown"}]},
+    {"type": "mqtt", "group": "Connectivity", "label": "Publish MQTT message", "template_fields": {"topic": {"max": 127}, "payload": {"max": 127}}, "editor_fields": [{"name": "topic", "label": "Topic", "type": "text", "bindable": true, "max": 127}, {"name": "payload", "label": "Payload", "type": "text", "bindable": true, "max": 127}]},
+    {"type": "ha_service", "group": "Connectivity", "label": "Call Home Assistant service", "template_fields": {"entity_id": {"max": 47}, "service": {"max": 63}, "data_json": {"max": 63}}},
+    {"type": "notify", "group": "Display", "label": "Show notification", "template_fields": {"message": {"max": 191}}},
+    {"type": "confirm", "group": "Display", "label": "Ask for confirmation", "template_fields": {"message": {"max": 191}}, "pausable": true},
+    {"type": "brightness", "group": "Display", "label": "Brightness", "template_fields": {"brightness_value": {"max": 15}}, "commands": [{"id": "set", "label": "Set brightness"}, {"id": "adjust", "label": "Adjust brightness"}], "editor_fields": [{"name": "brightness_mode", "label": "Command", "type": "select", "command_options": true}, {"name": "brightness_value", "label": "Value (%)", "type": "text", "bindable": true, "max": 15}]},
+    {"type": "visual_alert", "group": "Display", "label": "Visual alert", "template_fields": {"va_color": {"max": 63}}, "commands": [{"id": "start", "label": "Start alert"}, {"id": "stop", "label": "Stop alert"}]},
+    {"type": "timer", "group": "Timer", "label": "Timer", "template_fields": {"timer_value": {"max": 15}}, "commands": [{"id": "toggle", "label": "Toggle"}, {"id": "start", "label": "Start"}, {"id": "stop", "label": "Stop"}, {"id": "pause", "label": "Pause"}, {"id": "resume", "label": "Resume"}, {"id": "reset", "label": "Reset"}, {"id": "set", "label": "Set countdown"}, {"id": "adjust", "label": "Adjust countdown"}]},
     {"type": "delay", "group": "Timer", "label": "Delay", "max_pending_actions": 3},
-    {"type": "volume", "group": "Audio", "label": "Volume", "commands": [{"id": "set", "label": "Set volume"}, {"id": "adjust", "label": "Adjust volume"}], "editor_fields": [{"name": "volume_mode", "label": "Command", "type": "select", "command_options": true}, {"name": "volume_value", "label": "Value (%)", "type": "text", "bindable": true}]},
-    {"type": "sound_alert", "group": "Audio", "label": "Play sound alert"},
+    {"type": "volume", "group": "Audio", "label": "Volume", "template_fields": {"volume_value": {"max": 15}}, "commands": [{"id": "set", "label": "Set volume"}, {"id": "adjust", "label": "Adjust volume"}], "editor_fields": [{"name": "volume_mode", "label": "Command", "type": "select", "command_options": true}, {"name": "volume_value", "label": "Value (%)", "type": "text", "bindable": true, "max": 15}]},
+    {"type": "sound_alert", "group": "Audio", "label": "Play sound alert", "template_fields": {"sound_alert_pattern": {"max": 127}}},
     {"type": "music", "group": "Audio", "label": "Music", "commands": [{"id": "play_pause", "label": "Play/Pause"}, {"id": "next", "label": "Next track"}, {"id": "previous", "label": "Previous track"}, {"id": "stop", "label": "Stop"}], "editor_fields": [{"name": "music_command", "label": "Command", "type": "select", "command_options": true}]},
     {"type": "image_next", "group": "Image library", "label": "Next image"},
     {"type": "image_previous", "group": "Image library", "label": "Previous image"},
     {"type": "system", "group": "Device", "label": "Device command", "commands": [{"id": "reboot", "label": "Restart device"}, {"id": "wifi_reconnect", "label": "Reconnect Wi-Fi"}, {"id": "screensaver", "label": "Enable screensaver"}, {"id": "wake_display", "label": "Wake display"}], "editor_fields": [{"name": "system_command", "label": "Command", "type": "select", "command_options": true}]},
-    {"type": "key", "group": "Keyboard", "label": "Send keys"},
+    {"type": "key", "group": "Keyboard", "label": "Send keys", "template_fields": {"sequence": {"max": 255}}},
     {"type": "mouse_button", "group": "Mouse", "label": "Mouse button", "commands": [{"id": "left", "label": "Left"}, {"id": "right", "label": "Right"}, {"id": "middle", "label": "Middle"}], "editor_fields": [{"name": "button", "label": "Button", "type": "select", "default": "left", "command_options": true}]},
     {"type": "gamepad", "group": "Gamepad", "label": "Gamepad", "button_count": 16}
   ],
@@ -132,6 +132,7 @@
     {"type": "scrollpad", "name": "Scrollpad", "icon": "keyboard_double_arrow_up", "axis_field": "widget_scrollpad_axis", "horizontal_icon": "keyboard_double_arrow_left", "vertical_icon": "keyboard_double_arrow_up", "default_axis": "vertical"},
     {"type": "gamepad_stick", "name": "Gamepad Joystick", "icon": "joystick"},
     {"type": "gamepad_button", "name": "Gamepad Button", "icon": "gamepad"},
-    {"type": "external", "name": "Extension", "icon": "extension"}
+    {"type": "external", "name": "Extension", "icon": "extension"},
+    {"type": "slider", "name": "Slider", "icon": "tune", "axis_field": "widget_slider_axis", "default_axis": "horizontal"}
   ]
 }

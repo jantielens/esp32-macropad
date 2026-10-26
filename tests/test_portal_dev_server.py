@@ -81,6 +81,9 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertNotIn("{{", fragment)
         self.assertIn('id="pad-edit-gauge-min"', fragment)
+        self.assertIn('id="pad-edit-slider-axis"', fragment)
+        self.assertIn("Data binding", fragment)
+        self.assertNotIn("pad-slider-preview", fragment)
         self.assertNotIn('id="binding-help-overlay"', fragment)
         status, bundle = self.request("/portal.js", raw=True)
         self.assertEqual(status, 200)
@@ -969,6 +972,16 @@ class PortalDevServerTest(unittest.TestCase):
             expected.update({field: value for field, value in zip(fields, values) if value is not None})
             self.assertEqual(widgets.pop(match[1]), expected)
         self.assertEqual(widgets, {})
+
+    def test_slider_catalog_requires_touch(self):
+        _, touch_info = self.request("/api/info?catalog=1", profile="esp32-p4-lcd4b")
+        slider = next(widget for widget in touch_info["widget_catalog"] if widget["type"] == "slider")
+        self.assertEqual(slider["axis_field"], "widget_slider_axis")
+        self.assertTrue(any(action.get("template_fields", {}).get("data_json", {}).get("max") == 63
+                            for action in touch_info["catalog"] if action["type"] == "ha_service"))
+
+        _, non_touch_info = self.request("/api/info?catalog=1", profile="crowpanel-4.2-interactive")
+        self.assertFalse(any(widget["type"] == "slider" for widget in non_touch_info["widget_catalog"]))
 
     def test_binding_schema_source_parity(self):
         schema = self.server.pad_fixture["binding_schema"]["schemes"]

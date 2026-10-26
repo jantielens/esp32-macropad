@@ -21,7 +21,7 @@ padRegisterWidgetEditor({
         actionEditorLoad('pad-edit-nr-adjust', button.widget_numericrocker_action || null);
     },
     build(button) {
-        const action = actionEditorBuild('pad-edit-nr-adjust');
+        const action = actionEditorBuild('pad-edit-nr-adjust', '{step}');
         if (action.type) button.widget_numericrocker_action = action;
     }
 });

@@ -207,10 +207,11 @@ static const char* validate_action_constraints(JsonObjectConst action) {
     return nullptr;
 }
 
-static const char* validate_action_array(JsonArrayConst arr, bool require_known_type = true) {
+static const char* validate_action_array(JsonArrayConst arr, bool require_known_type = true,
+                                         const char* value_token = nullptr) {
     if (arr.size() > MAX_BUTTON_ACTIONS) return "too many actions (max 3)";
     for (JsonObjectConst a : arr) {
-        const char* action_error = action_validate_json(a, require_known_type);
+        const char* action_error = action_validate_json(a, require_known_type, value_token);
         if (action_error) return action_error;
         const char* constraint_error = validate_action_constraints(a);
         if (constraint_error) return constraint_error;
@@ -289,7 +290,7 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
                                  "widget field '%s' action is missing 'type'", fname);
                         return s_len_err;
                     }
-                    const char* action_error = action_validate_json(av.as<JsonObjectConst>());
+                    const char* action_error = action_validate_json(av.as<JsonObjectConst>(), true, f["event_token"] | static_cast<const char*>(nullptr));
                     if (action_error) return action_error;
                 }
                 continue;  // action fields carry no length cap
@@ -345,7 +346,7 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
         if (!b["extension_upscale"].is<int>() || b["extension_upscale"].as<int>() < 1 ||
             b["extension_upscale"].as<int>() > 4) return "extension_upscale must be an integer from 1 to 4";
     }
-    if (b["actions"].is<JsonArrayConst>()) { const char* ae = validate_action_array(b["actions"]); if (ae) return ae; }
+    if (b["actions"].is<JsonArrayConst>()) { const char* ae = validate_action_array(b["actions"], true, strcmp(wt, "slider") == 0 ? "{value}" : nullptr); if (ae) return ae; }
     if (b["lp_actions"].is<JsonArrayConst>()) { const char* ae = validate_action_array(b["lp_actions"]); if (ae) return ae; }
     // Reject invalid binding tokens (unknown scheme, bad health key / list
     // provider / timer id) in any string field (labels, widget bindings...).

@@ -69,8 +69,8 @@ ActionResult dispatch_set_var(const ButtonAction& act, const char* label, uint32
     return ACTION_FAILED;
 }
 
-bool visit_set_var_fields(ButtonAction& act, ActionBindableFieldVisitor visitor, void* context) {
-    return visitor(act.payload.set_var.var_value, sizeof(act.payload.set_var.var_value), true, context);
+bool visit_set_var_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {
+    return action_visit_field(visitor, context, "var_value", act.payload.set_var.var_value);
 }
 
 void describe_set_var(JsonObject& action) {
@@ -92,8 +92,8 @@ void describe_set_var(JsonObject& action) {
 bool set_var_available() { return true; }
 
 DEFINE_AND_REGISTER_ACTION_TYPE(kSetVarActionType, ACTION_TYPE_SET_VAR, parse_set_var,
-    serialize_set_var, dispatch_set_var, nullptr, describe_set_var, set_var_available,
-    validate_set_var, visit_set_var_fields, ACTION_EXECUTION_SYNC, true, false, true);
+    serialize_set_var, dispatch_set_var, visit_set_var_fields, describe_set_var, set_var_available,
+    validate_set_var, ACTION_EXECUTION_SYNC, true, false, true);
 }
 
 #endif

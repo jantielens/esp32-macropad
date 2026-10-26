@@ -123,17 +123,14 @@ void voice_describe(JsonObject& out) {
     volume["description"] = "optional 1-100 volume override";
 }
 
-char* voice_value_field(ButtonAction& action, size_t* out_size) {
+bool voice_fields(ButtonAction& action, ActionFieldVisitor visitor, void* context) {
     VoicePayload& payload = voice_payload(action);
-    if (strcmp(payload.command, "speak") != 0) {
-        *out_size = 0;
-        return nullptr;
-    }
-    *out_size = sizeof(payload.text);
-    return payload.text;
+    return action_visit_field(visitor, context, "text", payload.text,
+        ACTION_FIELD_EVENT | ACTION_FIELD_REJECT_OVERFLOW |
+        (strcmp(payload.command, "speak") == 0 ? ACTION_FIELD_BINDING : 0));
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(kVoiceActionType, /* type_name   */ ACTION_TYPE_VOICE, /* parse       */ voice_parse, /* serialize   */ voice_serialize, /* dispatch    */ voice_dispatch, /* value_field */ voice_value_field, /* describe    */ voice_describe, nullptr, nullptr, nullptr, ACTION_EXECUTION_PAUSABLE);
+DEFINE_AND_REGISTER_ACTION_TYPE(kVoiceActionType, ACTION_TYPE_VOICE, voice_parse, voice_serialize, voice_dispatch, voice_fields, voice_describe, nullptr, nullptr, ACTION_EXECUTION_PAUSABLE);
 } // namespace
 
 #endif // IS_VOICE_ASSISTANT

@@ -1,0 +1,69 @@
+<details class="editor-group" id="pad-edit-slider-section" style="display:none;" open>
+    <summary>Slider</summary>
+    <div class="editor-group-body">
+        <div class="form-group">
+            <label for="pad-edit-slider-source">Data binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+            <input type="text" class="binding-mono" id="pad-edit-slider-source" maxlength="191" placeholder="e.g. [mqtt:device/level]">
+        </div>
+        <div class="form-group">
+            <label for="pad-edit-slider-axis">Orientation</label>
+            <select id="pad-edit-slider-axis">
+                <option value="horizontal">Horizontal</option>
+                <option value="vertical">Vertical</option>
+            </select>
+        </div>
+        <div class="widget-row">
+            <div class="form-group">
+                <label for="pad-edit-slider-min">Minimum</label>
+                <input type="number" id="pad-edit-slider-min" min="-1000000" max="1000000" step="any" value="0">
+            </div>
+            <div class="form-group">
+                <label for="pad-edit-slider-max">Maximum</label>
+                <input type="number" id="pad-edit-slider-max" min="-1000000" max="1000000" step="any" value="100">
+            </div>
+            <div class="form-group">
+                <label for="pad-edit-slider-step">Step</label>
+                <input type="number" id="pad-edit-slider-step" min="0.0001" max="2000000" step="any" value="1">
+            </div>
+        </div>
+        <div class="widget-row">
+            <div class="form-group">
+                <label for="pad-edit-slider-length">Control length (%)</label>
+                <input type="number" id="pad-edit-slider-length" min="20" max="100" step="1" value="50">
+            </div>
+            <div class="form-group">
+                <label for="pad-edit-slider-track">Track (px)</label>
+                <input type="number" id="pad-edit-slider-track" min="0" max="32" step="1" value="0">
+            </div>
+            <div class="form-group">
+                <label for="pad-edit-slider-knob">Knob (px)</label>
+                <input type="number" id="pad-edit-slider-knob" min="0" max="64" step="1" value="0">
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="pad-edit-slider-icon-position">Icon position</label>
+            <select id="pad-edit-slider-icon-position">
+                <option value="left">Left</option>
+                <option value="above">Above</option>
+                <option value="below">Below</option>
+            </select>
+        </div>
+        <div class="widget-row pad-slider-colors">
+            <div class="form-group">
+                <label for="pad-edit-slider-track-color">Track color</label>
+                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-slider-track-color" class="bc-input" data-allow-bindings="false" maxlength="7"></div>
+            </div>
+            <div class="form-group">
+                <label for="pad-edit-slider-fill-color">Fill color</label>
+                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-slider-fill-color" class="bc-input" data-allow-bindings="false" maxlength="7"></div>
+            </div>
+            <div class="form-group">
+                <label for="pad-edit-slider-knob-color">Knob color</label>
+                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-slider-knob-color" class="bc-input" data-allow-bindings="false" maxlength="7"></div>
+            </div>
+        </div>
+    </div>
+</details>
+<div id="pad-edit-slider-action-note" class="form-group" style="display:none;">
+    <small>Use <code>{value}</code> in supported action text fields for the selected absolute value.</small>
+</div>

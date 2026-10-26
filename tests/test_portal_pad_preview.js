@@ -334,9 +334,7 @@ const css = fs.readFileSync('src/app/web/portal-custom.css', 'utf8');
     context.padRenderGrid = originalRenderGrid;
     delete context.document.querySelector;
 }
-const font = Buffer.from(css.match(/data:font\/woff2;base64,([^']+)/)[1], 'base64');
-assert.strictEqual(font.toString('ascii', 0, 4), 'wOF2');
-assert.strictEqual(font.length, font.readUInt32BE(8));
+assert(!css.includes('data:font/woff2;base64,'));
 assert(!css.includes('.pad-cell-widget-'));
 
 vm.runInContext(fs.readFileSync('src/app/web/portal_binding_builder.js', 'utf8'), context);

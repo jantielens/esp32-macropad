@@ -16,6 +16,7 @@ collapsing a section does not disable it.
 * [Mousepad](mousepad.md) for pointer movement and supported multi-contact gestures
 * [Scrollpad](scrollpad.md) for one-finger wheel scrolling
 * [Gamepad](gamepad.md) for sticks and held controls
+* [Slider](slider.md) for touch-based numeric value setting
 * [Rocker and Numeric Rocker](rockers.md) for adjustments
 * [List](list.md) for provider items and selection actions
 * [Toggle switch](#toggle-switch) for local state or a reported on/off category

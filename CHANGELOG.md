@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add a touch-only Slider widget with decimal ranges, live numeric sources,
+  three optional release actions from the normal catalog, configurable icon
+  placement, and drag ownership independent of pad swipe actions. See
+  [Slider widget](docs/user/widgets/slider.md).
 * Add volatile device-global runtime variables through `[var:name]` bindings
   and the **Set variable** action. Use expressions for counters and toggles;
   values survive pad changes and configuration reloads but clear on reboot.

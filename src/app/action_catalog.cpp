@@ -13,6 +13,15 @@ void action_catalog_emit(JsonArray actions, bool include_field_docs) {
         if (!type || !type->type_name || !action_type_is_supported(type->type_name)) continue;
         JsonObject action = actions.createNestedObject();
         action["type"] = type->type_name;
+        ButtonAction parsed{};
+        auto emit = [](const char* name, char*, size_t capacity, uint8_t flags, void* opaque) {
+            if (!(flags & ACTION_FIELD_EVENT)) return true;
+            auto* action = static_cast<JsonObject*>(opaque);
+            JsonObject field = (*action)["template_fields"][name].to<JsonObject>();
+            field["max"] = capacity - 1;
+            return true;
+        };
+        action_type_visit_fields(type, parsed, emit, &action);
         action["alarm_hook_allowed"] = type->execution == ACTION_EXECUTION_SYNC;
         action["pausable"] = type->execution == ACTION_EXECUTION_PAUSABLE;
         if (type->describe) {

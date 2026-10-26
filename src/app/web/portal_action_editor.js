@@ -300,7 +300,7 @@ function actionEditorLoad(prefix, action) {
 }
 
 // Build an action object from the form. Returns {} if type is empty.
-function actionEditorBuild(prefix) {
+function actionEditorBuild(prefix, eventToken) {
     var typeEl = document.getElementById(prefix + '-type');
     if (!typeEl) return {};
     var type = typeEl.value;
@@ -323,7 +323,35 @@ function actionEditorBuild(prefix) {
             if (extra) { for (var k in extra) act[k] = extra[k]; }
         }
     });
+    actionEditorValidateEventTokens(act, eventToken, prefix);
     return act;
+}
+
+function actionEditorValidateEventTokens(action, eventToken, prefix) {
+    const entry = actionEditorCatalogEntry(action.type) || {};
+    const fields = entry.template_fields || {};
+    const normalized = { ...action };
+    const fail = (field, message) => {
+        throw Object.assign(new Error(field + ': ' + message), { fieldIds: [prefix + '-type'] });
+    };
+    for (const [name, value] of Object.entries(action)) {
+        if (/\{(?:value|step)\}/.test(name)) fail(name, 'event tokens are not valid in field names');
+        if (typeof value !== 'string') continue;
+        let expanded = value;
+        for (const token of ['{value}', '{step}']) {
+            if (!value.includes(token)) continue;
+            if (token !== eventToken)
+                fail(name, token + ' is unavailable here' + (eventToken ? '; use ' + eventToken : ''));
+            if (!fields[name]) fail(name, 'this field does not support event tokens');
+            expanded = value.replaceAll(token, '-999999.9999');
+            normalized[name] = value.replaceAll(token, '0');
+        }
+        if (fields[name] && new TextEncoder().encode(expanded).length > fields[name].max)
+            fail(name, 'expanded value exceeds ' + fields[name].max + ' bytes');
+    }
+    _actionEditorExtensions.forEach(extension => {
+        if (extension.validate) extension.validate(normalized, prefix);
+    });
 }
 
 function actionEditorHandleError(error) {
@@ -417,8 +445,8 @@ function actionEditorListLoad(prefixes, actions) {
 
 // Build an array of action objects from N editor prefixes. Empty slots are
 // omitted; non-empty actions keep their configured order.
-function actionEditorListBuild(prefixes) {
-    return prefixes.map(function(prefix) { return actionEditorBuild(prefix); })
+function actionEditorListBuild(prefixes, eventToken) {
+    return prefixes.map(function(prefix) { return actionEditorBuild(prefix, eventToken); })
         .filter(function(action) { return !!action.type; });
 }
 

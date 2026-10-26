@@ -24,10 +24,12 @@ ActionResult dispatch_key(const ButtonAction& act, const char* label, uint32_t c
     return ACTION_COMPLETE;
 #endif
 }
-char* key_value_field(ButtonAction& act, size_t* size) { *size = sizeof(act.payload.key.key_sequence); return act.payload.key.key_sequence; }
+bool visit_key_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {
+    return action_visit_field(visitor, context, "sequence", act.payload.key.key_sequence);
+}
 bool key_available() { return HAS_BLE_HID || HAS_USB_HID; }
 const char* validate_key(const JsonObjectConst action) { return action.containsKey("sequence") && !action["sequence"].is<const char*>() ? "key sequence must be a string" : nullptr; }
 void describe_key(JsonObject& action) { action["group"] = "Keyboard"; action["label"] = "Send keys"; JsonArray fields = action.createNestedArray("fields"); JsonObject sequence = fields.createNestedObject(); sequence["name"] = "sequence"; sequence["description"] = "key sequence DSL"; }
-DEFINE_AND_REGISTER_ACTION_TYPE(kKeyActionType, ACTION_TYPE_KEY, parse_key, serialize_key, dispatch_key, key_value_field, describe_key, key_available, validate_key, nullptr, ACTION_EXECUTION_PAUSABLE);
+DEFINE_AND_REGISTER_ACTION_TYPE(kKeyActionType, ACTION_TYPE_KEY, parse_key, serialize_key, dispatch_key, visit_key_fields, describe_key, key_available, validate_key, ACTION_EXECUTION_PAUSABLE);
 } // namespace
 #endif // (HAS_DISPLAY || HAS_BUTTON) && (HAS_BLE_HID || HAS_USB_HID)

@@ -166,6 +166,7 @@ add_library(host_lvgl STATIC EXCLUDE_FROM_ALL ${HOST_LVGL_SOURCES})
 target_include_directories(host_lvgl PUBLIC ${HOST_LVGL_DIR})
 target_compile_definitions(host_lvgl PUBLIC LV_CONF_SKIP=1 LV_USE_OS=0 LV_USE_LOG=0
     LV_MEM_SIZE=1048576
+    LV_USE_BAR=1 LV_USE_SLIDER=1
     LV_USE_TINY_TTF=1 LV_TINY_TTF_FILE_SUPPORT=0
     LV_TINY_TTF_CACHE_GLYPH_CNT=16 LV_TINY_TTF_CACHE_KERNING_CNT=16
     LV_FONT_MONTSERRAT_12=1 LV_FONT_MONTSERRAT_18=1 LV_FONT_MONTSERRAT_24=1
@@ -271,6 +272,14 @@ target_compile_options(test_sparkline_widget PRIVATE
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/Arduino.h"
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h")
 target_link_libraries(test_sparkline_widget PRIVATE host_lvgl m)
+
+add_host_gtest(test_slider_widget test_slider_widget.cpp)
+target_include_directories(test_slider_widget PRIVATE ${HOST_ARDUINOJSON_DIR})
+target_compile_definitions(test_slider_widget PRIVATE HAS_TOUCH=1)
+target_compile_options(test_slider_widget PRIVATE -Wno-deprecated-declarations
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/Arduino.h"
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h")
+target_link_libraries(test_slider_widget PRIVATE host_lvgl m)
 
 add_host_gtest(test_mqtt_subscription_registry test_mqtt_subscription_registry.cpp)
 
@@ -620,7 +629,7 @@ set(ACTION_TEST_SOURCES
     ${PROJECT_SOURCE_DIR}/src/app/action_parse.cpp ${PROJECT_SOURCE_DIR}/src/app/action_list.cpp
     ${PROJECT_SOURCE_DIR}/src/app/action_continuation.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_cycle.cpp
     ${PROJECT_SOURCE_DIR}/src/app/action_registry.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp
-    ${PROJECT_SOURCE_DIR}/src/app/runtime_variables.cpp stubs.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/runtime_variables.cpp ${PROJECT_SOURCE_DIR}/src/app/action_validate.cpp stubs.cpp
 )
 
 add_host_legacy_test(test_action_parse
@@ -732,6 +741,8 @@ add_host_legacy_test(test_timer_config
     SOURCES test_timer_config.cpp ${PROJECT_SOURCE_DIR}/src/app/timer_config.cpp ${PROJECT_SOURCE_DIR}/src/app/config_psram.cpp
         ${PROJECT_SOURCE_DIR}/src/app/actions.cpp ${PROJECT_SOURCE_DIR}/src/app/music_command.cpp
         ${PROJECT_SOURCE_DIR}/src/app/action_parse.cpp ${PROJECT_SOURCE_DIR}/src/app/action_continuation.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/action_validate.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/runtime_variables.cpp
         ${PROJECT_SOURCE_DIR}/src/app/pad_cycle.cpp ${PROJECT_SOURCE_DIR}/src/app/action_registry.cpp stubs.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/timer_test_overrides ${HOST_ARDUINOJSON_DIR}
     DEFINITIONS HAS_FILESYSTEM=1
@@ -744,6 +755,7 @@ add_test(NAME test_timer_config_save_mutex_failure COMMAND test_timer_config sav
 add_host_legacy_test(test_alarm_manager
     SOURCES test_alarm_manager.cpp ${PROJECT_SOURCE_DIR}/src/app/alarm_manager.cpp
         ${PROJECT_SOURCE_DIR}/src/app/config_psram.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/runtime_variables.cpp
         ${PROJECT_SOURCE_DIR}/src/app/actions.cpp ${PROJECT_SOURCE_DIR}/src/app/music_command.cpp
         ${PROJECT_SOURCE_DIR}/src/app/action_parse.cpp ${PROJECT_SOURCE_DIR}/src/app/action_validate.cpp
         ${PROJECT_SOURCE_DIR}/src/app/action_continuation.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp
@@ -788,6 +800,7 @@ add_host_legacy_test(test_shutter_session SOURCES test_shutter_session.cpp ${PRO
 add_host_legacy_test(test_shutter_session_actions
     SOURCES test_shutter_session_actions.cpp ${PROJECT_SOURCE_DIR}/src/app/actions.cpp
         ${PROJECT_SOURCE_DIR}/src/app/music_command.cpp ${PROJECT_SOURCE_DIR}/src/app/action_parse.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/action_validate.cpp ${PROJECT_SOURCE_DIR}/src/app/runtime_variables.cpp
         ${PROJECT_SOURCE_DIR}/src/app/action_continuation.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_cycle.cpp
         ${PROJECT_SOURCE_DIR}/src/app/action_registry.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp stubs.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester ${HOST_ARDUINOJSON_DIR}

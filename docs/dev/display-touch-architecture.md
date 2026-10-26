@@ -804,6 +804,18 @@ public:
 - Ghost touch suppression via `touch_manager_suppress_lvgl_input(200)` on show
 - Adaptive brush size (~0.8% of smaller display dimension, clamped 2–6 px)
 
+### Native Widget Geometry And Input
+
+`widget_content_bounds()` shares transformed label and image geometry between
+Slider and Toggle, including image pivots, rotation, and scaling. Their layouts
+and interaction state machines remain separate.
+
+A widget with a `WidgetType.cancelInput` hook owns native input.
+`widget_owns_input()` suppresses ordinary tap and long-press dispatch for that
+widget; `widget_cancel_input()` routes press loss, input reset, blocked overlays,
+and gesture cancellation to its hook. Slider registers this hook to discard an
+unfinished drag without dispatch. Toggle retains parent-button short clicks.
+
 ### Toggle Switch Widget Contract
 
 `toggle` is opt-in on display builds and registered through the widget manifest.
