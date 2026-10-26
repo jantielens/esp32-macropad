@@ -85,17 +85,18 @@ bool binding_value_extract_json(const char* payload, const char* path, char* out
 
 enum class Length { NONE, HH, H, L, LL, J, Z, T, LONG_DOUBLE };
 
-static bool skip_digits(const char*& p) {
+static bool skip_digits(const char*& p, unsigned maximum = INT_MAX) {
     unsigned int value = 0;
     while (*p >= '0' && *p <= '9') {
         const unsigned int digit = *p++ - '0';
         if (value > (INT_MAX - digit) / 10u) return false;
         value = value * 10 + digit;
     }
-    return true;
+    return value <= maximum;
 }
 
-static bool parse_format(const char* format, char& conversion, Length& length) {
+static bool parse_format(const char* format, char& conversion, Length& length,
+                         unsigned max_width = INT_MAX, unsigned max_precision = INT_MAX) {
     bool found = false;
     for (const char* p = format; *p; ++p) {
         if (*p != '%') continue;
@@ -109,10 +110,10 @@ static bool parse_format(const char* format, char& conversion, Length& length) {
             zero |= *p == '0';
             ++p;
         }
-        if (!skip_digits(p)) return false;
+        if (!skip_digits(p, max_width)) return false;
         if (*p == '.') {
             ++p;
-            if (!skip_digits(p)) return false;
+            if (!skip_digits(p, max_precision)) return false;
         }
         length = Length::NONE;
         switch (*p) {
@@ -138,6 +139,14 @@ static bool parse_format(const char* format, char& conversion, Length& length) {
         }
     }
     return found;
+}
+
+bool binding_value_format_valid(const char* format, unsigned max_width, unsigned max_precision,
+                                const char* conversions) {
+    char conversion = '\0';
+    Length length = Length::NONE;
+    return format && conversions && parse_format(format, conversion, length, max_width, max_precision)
+        && strchr(conversions, conversion);
 }
 
 void binding_value_format(const char* raw_value, const char* format, char* out, size_t out_len) {

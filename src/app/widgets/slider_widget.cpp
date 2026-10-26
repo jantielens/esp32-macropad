@@ -8,6 +8,7 @@
 #include "../action_parse.h"
 #include "../action_registry.h"
 #include "../action_validate.h"
+#include "../binding_value.h"
 #include <algorithm>
 #include <new>
 #include <string.h>
@@ -19,6 +20,12 @@ struct SliderConfig {
     char track_color[8];
     char fill_color[8];
     char knob_color[8];
+    char value_color[8];
+    char value_format[65];
+    uint16_t value_clearance;
+    uint16_t value_font_size;
+    uint8_t value_side;
+    bool show_value;
     uint8_t axis;
     uint8_t length_pct;
     uint8_t icon_position;
@@ -37,6 +44,10 @@ struct SliderState {
     lv_obj_t* center_label;
     lv_obj_t* top_label;
     lv_obj_t* bottom_label;
+    lv_obj_t* value_label;
+    const LabelStyle* value_style;
+    PadFontCache* value_fonts;
+    uint16_t value_width;
     uint16_t display_position;
     uint16_t reported_position;
     uint16_t draft_position;
@@ -68,7 +79,10 @@ static const char* const kSliderFields[] = {
     "widget_slider_min", "widget_slider_max", "widget_slider_step",
     "widget_slider_axis", "widget_slider_length_pct", "widget_slider_track_px",
     "widget_slider_knob_px", "widget_slider_track_color", "widget_slider_fill_color",
-    "widget_slider_knob_color", "widget_slider_icon_position"
+    "widget_slider_knob_color", "widget_slider_icon_position",
+    "widget_slider_show_value", "widget_slider_value_font_size", "widget_slider_value_color",
+    "widget_slider_value_side",
+    "widget_slider_value_format", "widget_slider_value_clearance"
 };
 
 static bool slider_known_field(const char* name) {
@@ -147,6 +161,33 @@ static const char* slider_validate(JsonObjectConst button) {
     if (strcmp(icon_position, "left") && strcmp(icon_position, "above") && strcmp(icon_position, "below"))
         return "slider icon position must be left, above, or below";
     if (slider_has_ordinary_actions(button, "lp_actions")) return "slider does not support long-press actions";
+    if (button.containsKey("widget_slider_show_value") && !button["widget_slider_show_value"].is<bool>())
+        return "slider show value must be a boolean";
+    if (button.containsKey("widget_slider_value_font_size") &&
+        (!button["widget_slider_value_font_size"].is<unsigned>() ||
+                 button["widget_slider_value_font_size"].as<unsigned>() > 512))
+                return "slider value font size must be an integer from 0 to 512";
+    if (button.containsKey("widget_slider_value_color") &&
+        (!button["widget_slider_value_color"].is<const char*>() ||
+         (button["widget_slider_value_color"].as<const char*>()[0] &&
+          !slider_color_valid(button, "widget_slider_value_color"))))
+        return "slider value color must be empty or a #RRGGBB literal";
+    if (button.containsKey("widget_slider_value_side")) {
+        if (!button["widget_slider_value_side"].is<const char*>()) return "invalid slider value side";
+        const char* side = button["widget_slider_value_side"].as<const char*>();
+        if (strcmp(side, "auto") && strcmp(side, "before") && strcmp(side, "after"))
+            return "slider value side must be auto, before, or after";
+    }
+    if (button.containsKey("widget_slider_value_format")) {
+        if (!button["widget_slider_value_format"].is<const char*>()) return "slider value format must be a string";
+        const char* format = button["widget_slider_value_format"].as<const char*>();
+        if (strlen(format) > 64 || (format[0] && !binding_value_format_valid(format, 32, 8, "fFs")))
+            return "slider value format needs one %f or %s conversion, at most 64 bytes, width 32, and precision 8";
+    }
+    if (button.containsKey("widget_slider_value_clearance") &&
+        (!button["widget_slider_value_clearance"].is<unsigned>() ||
+         button["widget_slider_value_clearance"].as<unsigned>() > 200))
+        return "slider value clearance must be an integer from 0 to 200";
     return nullptr;
 }
 
@@ -169,12 +210,133 @@ static void slider_parse(const JsonObject& button, uint8_t* data) {
             sizeof(config->fill_color));
     strlcpy(config->knob_color, button["widget_slider_knob_color"] | DEFAULT_WIDGET_INDICATOR_COLOR,
             sizeof(config->knob_color));
+    config->show_value = button["widget_slider_show_value"] | true;
+    config->value_font_size = button["widget_slider_value_font_size"] | 0;
+    strlcpy(config->value_color, button["widget_slider_value_color"] | "", sizeof(config->value_color));
+    strlcpy(config->value_format, button["widget_slider_value_format"] | "", sizeof(config->value_format));
+    config->value_clearance = button["widget_slider_value_clearance"] | 40;
+    const char* side = button["widget_slider_value_side"] | "auto";
+    config->value_side = !strcmp(side, "before") ? 1 : !strcmp(side, "after") ? 2 : 0;
 }
 
 static lv_color_t slider_color(const char* value, uint32_t fallback) {
     uint32_t rgb = fallback;
     parse_hex_color(value, &rgb);
     return lv_color_make((rgb >> 16) & 0xff, (rgb >> 8) & 0xff, rgb & 0xff);
+}
+
+static void slider_hide_value(SliderState* state) {
+    if (state->value_label) lv_obj_add_flag(state->value_label, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void slider_format_value(const SliderConfig* config, int64_t value, char* output, size_t size) {
+    char number[16];
+    if (!slider_numeric_format(value, number, sizeof(number))) {
+        output[0] = '\0';
+        return;
+    }
+    if (config->value_format[0]) binding_value_format(number, config->value_format, output, size);
+    else strlcpy(output, number, size);
+}
+
+static int slider_value_width(const SliderConfig* config, const lv_font_t* font) {
+    char widest_digit = '0';
+    int digit_width = 0;
+    for (char digit = '0'; digit <= '9'; ++digit) {
+        const int width = lv_font_get_glyph_width(font, digit, digit);
+        if (width > digit_width) { digit_width = width; widest_digit = digit; }
+    }
+    int width = 0;
+    for (int64_t value : {config->range.minimum, config->range.maximum, int64_t{0}}) {
+        char text[96];
+        unsigned precision = 4;
+        int64_t step = config->range.step;
+        int64_t minimum = config->range.minimum;
+        while (precision && step % 10 == 0 && minimum % 10 == 0) {
+            --precision; step /= 10; minimum /= 10;
+        }
+        char number[24];
+        snprintf(number, sizeof(number), "%.*f", static_cast<int>(precision),
+                 static_cast<double>(value) / SLIDER_FIXED_SCALE);
+        if (config->value_format[0]) binding_value_format(number, config->value_format, text, sizeof(text));
+        else strlcpy(text, number, sizeof(text));
+        for (char* cursor = text; *cursor; ++cursor)
+            if (*cursor >= '0' && *cursor <= '9') *cursor = widest_digit;
+        lv_point_t size;
+        lv_text_get_size(&size, text, font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        width = std::max(width, static_cast<int>(size.x));
+    }
+    return width + 20;
+}
+
+static void slider_update_value(SliderState* state) {
+    if (!state->value_label || !state->gesture_active || !state->available || !state->layout_usable) {
+        slider_hide_value(state);
+        return;
+    }
+    char text[96];
+    slider_format_value(state->config, slider_numeric_value_at(state->config->range, state->display_position),
+                        text, sizeof(text));
+    lv_label_set_text(state->value_label, text);
+    lv_obj_t* typography = state->center_label ? state->center_label : state->button;
+    const lv_font_t* font = lv_obj_get_style_text_font(typography, LV_PART_MAIN);
+    if (state->config->value_font_size) {
+        LabelStyle style = state->center_label ? *state->value_style : LabelStyle{};
+        style.font_size = state->config->value_font_size;
+        font = pad_resolve_font(style, font, state->value_fonts);
+    }
+    lv_obj_set_style_text_font(state->value_label, font, 0);
+    uint32_t rgb;
+    const lv_color_t color = parse_hex_color(state->config->value_color, &rgb)
+        ? lv_color_hex(rgb) : lv_obj_get_style_text_color(typography, LV_PART_MAIN);
+    lv_obj_set_style_text_color(state->value_label, color, 0);
+    const lv_color_t background = lv_color_brightness(color) > 128 ? lv_color_hex(0x202124) : lv_color_hex(0xf4f5f6);
+    lv_obj_set_style_bg_color(state->value_label, background, 0);
+    lv_obj_set_style_bg_opa(state->value_label, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(state->value_label, 8, 0);
+    lv_obj_set_style_pad_hor(state->value_label, 10, 0);
+    lv_obj_set_style_pad_ver(state->value_label, 6, 0);
+    lv_obj_set_style_text_align(state->value_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_shadow_color(state->value_label, lv_color_black(), 0);
+    lv_obj_set_style_shadow_opa(state->value_label, LV_OPA_20, 0);
+    lv_obj_set_style_shadow_width(state->value_label, 6, 0);
+    lv_display_t* display = lv_obj_get_display(state->button);
+    const int screen_width = lv_display_get_horizontal_resolution(display);
+    const int screen_height = lv_display_get_vertical_resolution(display);
+    if (!state->value_width)
+        state->value_width = slider_value_width(state->config, lv_obj_get_style_text_font(state->value_label, LV_PART_MAIN));
+    lv_obj_set_width(state->value_label, std::min(screen_width, static_cast<int>(state->value_width)));
+    lv_obj_set_style_max_width(state->value_label, screen_width, 0);
+    lv_obj_set_style_max_height(state->value_label, screen_height, 0);
+    lv_obj_remove_flag(state->value_label, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(state->value_label);
+    lv_obj_update_layout(state->value_label);
+    const int width = lv_obj_get_width(state->value_label);
+    const int height = lv_obj_get_height(state->value_label);
+    lv_area_t track;
+    lv_obj_get_content_coords(state->control, &track);
+    const int knob_padding = lv_obj_get_style_pad_left(state->control, LV_PART_KNOB);
+    const int clearance = knob_padding + state->config->value_clearance;
+    int position_x, position_y;
+    if (state->config->axis == 0) {
+        const int center = (track.y1 + track.y2) / 2;
+        position_x = track.x1 + (track.x2 - track.x1) * state->display_position / state->config->range.intervals - width / 2;
+        const int above = track.y1 - clearance - height;
+        const int below = track.y2 + 1 + clearance;
+        position_y = state->config->value_side == 2 ? below : above;
+        if (position_y < 0 || position_y + height > screen_height)
+            position_y = position_y < center ? below : above;
+    } else {
+        const int center = (track.x1 + track.x2) / 2;
+        position_y = track.y2 - (track.y2 - track.y1) * state->display_position / state->config->range.intervals - height / 2;
+        const int left = track.x1 - clearance - width;
+        const int right = track.x2 + 1 + clearance;
+        position_x = state->config->value_side == 1 ? left : right;
+        if (position_x < 0 || position_x + width > screen_width)
+            position_x = position_x < center ? right : left;
+    }
+    lv_obj_set_pos(state->value_label, clamp_val(position_x, 0, std::max(0, screen_width - width)),
+                   clamp_val(position_y, 0, std::max(0, screen_height - height)));
 }
 
 static void slider_render(SliderState* state) {
@@ -187,6 +349,8 @@ static void slider_render(SliderState* state) {
                             LV_PART_INDICATOR);
     if (usable) lv_obj_clear_flag(state->control, LV_OBJ_FLAG_HIDDEN);
     else lv_obj_add_flag(state->control, LV_OBJ_FLAG_HIDDEN);
+    if (state->value_label && !lv_obj_has_flag(state->value_label, LV_OBJ_FLAG_HIDDEN))
+        slider_update_value(state);
 }
 
 static void slider_set_display(SliderState* state, uint16_t position) {
@@ -395,6 +559,7 @@ static void slider_reconcile(SliderState* state) {
 }
 
 static void slider_cancel_gesture(SliderState* state) {
+    slider_hide_value(state);
     if (!state->gesture_active) return;
     state->gesture_active = false;
     if (state->bound) slider_reconcile(state);
@@ -427,6 +592,7 @@ static void slider_delete_guard(lv_event_t* event) {
 }
 
 static void slider_release_gesture(SliderState* state) {
+    slider_hide_value(state);
     state->draft_position = static_cast<uint16_t>(lv_slider_get_value(state->control));
     if (state->draft_position == state->gesture_start_position) {
         state->gesture_active = false;
@@ -490,6 +656,25 @@ static void slider_release_gesture(SliderState* state) {
     }
 }
 
+static void slider_drag_value(SliderState* state) {
+    const uint16_t position = static_cast<uint16_t>(lv_slider_get_value(state->control));
+    if (position != state->draft_position && state->config->show_value && !state->value_label) {
+        state->value_label = lv_label_create(lv_display_get_layer_top(lv_obj_get_display(state->button)));
+        if (state->value_label) {
+            lv_obj_remove_style_all(state->value_label);
+            lv_obj_set_size(state->value_label, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+            lv_obj_clear_flag(state->value_label, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_clear_flag(state->value_label, LV_OBJ_FLAG_SCROLLABLE);
+            lv_label_set_long_mode(state->value_label, LV_LABEL_LONG_CLIP);
+        }
+    }
+    if (position != state->draft_position && state->config->show_value && state->value_label)
+        lv_obj_remove_flag(state->value_label, LV_OBJ_FLAG_HIDDEN);
+    state->draft_position = position;
+    state->display_position = position;
+    slider_render(state);
+}
+
 static void slider_event(lv_event_t* event) {
     auto* state = static_cast<SliderState*>(lv_event_get_user_data(event));
     if (!state || !state->control) return;
@@ -497,13 +682,33 @@ static void slider_event(lv_event_t* event) {
     if (code == LV_EVENT_PRESSED) {
         if (!state->available || !state->layout_usable) return;
         state->gesture_active = true;
+        state->value_width = 0;
         state->gesture_start_position = state->display_position;
         state->draft_position = state->display_position;
+        lv_indev_t* input = lv_event_get_indev(event);
+        if (input && lv_indev_get_type(input) == LV_INDEV_TYPE_POINTER) {
+            lv_point_t point;
+            lv_indev_get_point(input, &point);
+            lv_obj_transform_point(state->control, &point, LV_OBJ_POINT_TRANSFORM_FLAG_INVERSE_RECURSIVE);
+            lv_area_t track;
+            lv_obj_get_coords(state->control, &track);
+            const bool vertical = state->config->axis != 0;
+            const int start_padding = vertical ? lv_obj_get_style_pad_top(state->control, LV_PART_MAIN)
+                : lv_obj_get_style_pad_left(state->control, LV_PART_MAIN);
+            const int end_padding = vertical ? lv_obj_get_style_pad_bottom(state->control, LV_PART_MAIN)
+                : lv_obj_get_style_pad_right(state->control, LV_PART_MAIN);
+            const int length = (vertical ? lv_obj_get_height(state->control) : lv_obj_get_width(state->control))
+                - start_padding - end_padding;
+            const int offset = vertical ? track.y2 - end_padding - point.y : point.x - track.x1 - start_padding;
+            if (length > 0) {
+                const int position = (clamp_val(offset, 0, length) * state->config->range.intervals + length / 2) / length;
+                lv_slider_set_value(state->control, position, LV_ANIM_OFF);
+            }
+        }
+        slider_drag_value(state);
     } else if (code == LV_EVENT_VALUE_CHANGED) {
         if (!state->programmatic_update && state->gesture_active) {
-            state->draft_position = static_cast<uint16_t>(lv_slider_get_value(state->control));
-            state->display_position = state->draft_position;
-            slider_render(state);
+            slider_drag_value(state);
         }
     } else if (code == LV_EVENT_RELEASED) {
         if (state->gesture_active) slider_release_gesture(state);
@@ -519,6 +724,8 @@ static void slider_create(lv_obj_t* button, const WidgetConfig* widget,
     const auto* config = reinterpret_cast<const SliderConfig*>(widget->data);
     auto* state = new (runtime->data) SliderState{};
     state->config = config;
+    state->value_style = &source->style_center;
+    state->value_fonts = runtime->font_owner;
     state->actions = source->actions;
     state->action_count = source->action_count;
     state->button = button;
@@ -632,6 +839,10 @@ static void slider_destroy(WidgetState* runtime) {
     auto* state = reinterpret_cast<SliderState*>(runtime->data);
     slider_cancel_gesture(state);
     state->pending = false;
+    if (state->value_label) {
+        lv_obj_delete(state->value_label);
+        state->value_label = nullptr;
+    }
 }
 
 #if HAS_MCP
@@ -658,6 +869,21 @@ static void slider_describe(JsonObject& out) {
     placement["name"] = "widget_slider_icon_position"; placement["type"] = "string"; placement["default"] = "left";
     JsonArray positions = placement.createNestedArray("enum");
     for (const char* position : {"left", "above", "below"}) positions.add(position);
+    JsonObject show_value = fields.createNestedObject();
+    show_value["name"] = "widget_slider_show_value";
+    show_value["type"] = "boolean"; show_value["default"] = true;
+    add_number("widget_slider_value_font_size", 0, 512, 0);
+    JsonObject value_color = fields.createNestedObject();
+    value_color["name"] = "widget_slider_value_color"; value_color["type"] = "color"; value_color["default"] = "";
+    JsonObject format = fields.createNestedObject();
+    format["name"] = "widget_slider_value_format"; format["type"] = "string";
+    format["default"] = ""; format["max_length"] = 64;
+    format["description"] = "One %f conversion (e.g. %.1f C, %.0f%%), or %s for automatic decimals. Width <=32, precision <=8.";
+    add_number("widget_slider_value_clearance", 0, 200, 40);
+    JsonObject side = fields.createNestedObject();
+    side["name"] = "widget_slider_value_side"; side["type"] = "string"; side["default"] = "auto";
+    JsonArray sides = side.createNestedArray("enum");
+    for (const char* value : {"auto", "before", "after"}) sides.add(value);
     out["note"] = "Touch slider. actions[] runs once on a changed release; {value} is optional in registered value fields. No long press. Length is a percentage of the content width (horizontal) or body height (vertical), including the knob; without a center label or side icon, it uses the full length. Automatic sizing targets a 50px knob and 20px track, shrinking to fit. Bound reports are authoritative, with a five-second confirmation timeout.";
 }
 #endif

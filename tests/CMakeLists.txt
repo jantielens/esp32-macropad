@@ -274,11 +274,15 @@ target_compile_options(test_sparkline_widget PRIVATE
 target_link_libraries(test_sparkline_widget PRIVATE host_lvgl m)
 
 add_host_gtest(test_slider_widget test_slider_widget.cpp)
+target_sources(test_slider_widget PRIVATE ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/pad_font_cache.cpp)
 target_include_directories(test_slider_widget PRIVATE ${HOST_ARDUINOJSON_DIR})
-target_compile_definitions(test_slider_widget PRIVATE HAS_TOUCH=1)
+target_compile_definitions(test_slider_widget PRIVATE HAS_TOUCH=1 HAS_TTF_FONTS=1 HAS_FREETYPE_FONTS=0)
 target_compile_options(test_slider_widget PRIVATE -Wno-deprecated-declarations
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/Arduino.h"
-    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h")
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h"
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/font_runtime_overrides.h"
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/log_manager.h")
 target_link_libraries(test_slider_widget PRIVATE host_lvgl m)
 
 add_host_gtest(test_mqtt_subscription_registry test_mqtt_subscription_registry.cpp)

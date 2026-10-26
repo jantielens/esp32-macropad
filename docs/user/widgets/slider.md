@@ -15,12 +15,13 @@ after changing the selection.
    within -1,000,000 to 1,000,000, and the step must divide the range exactly.
    The range supports up to 10,000 steps and four decimal places.
 3. Choose **Horizontal** or **Vertical**. Horizontal values increase to the
-   right; vertical values increase upward. **Control length (%)** reserves a
+   right; vertical values increase upward. **Slider length (%)** reserves a
    percentage of the content width for a horizontal slider, or the height
    between labels for a vertical slider, when a center label or side icon is
    present. Without either, the slider uses the full available length. The
    length includes the knob and does not change when label text changes.
-   Track and knob sizes of `0` use automatic sizing: the knob targets 50 px,
+   **Track thickness (px)** and **Knob diameter (px)** values of `0` use
+   automatic sizing: the knob targets 50 px,
    limited to 60% of the available thickness and 25% of the slider length.
    The automatic track is 40% of the knob diameter, normally 20 px for a
    50 px knob. Explicit sizes override automatic sizing and are limited by
@@ -29,7 +30,7 @@ after changing the selection.
    remain in their reserved rows. The icon and center label sit to the left of a
    horizontal slider or beside a vertical slider. **Icon position** can also
    place the icon above or below the row. Use an existing label binding to
-   display a reported value. Increase the button size or reduce control length
+   display a reported value. Increase the button size or reduce slider length
    when more space is needed for its icon and label.
 5. Leave **Data binding** empty for a local control, or enter a binding such
    as `[mqtt:home/level]` or `[ha:media_player.living_room;attributes.volume_level]`.
@@ -45,6 +46,39 @@ after changing the selection.
 Use Content Padding and UI Offset to adjust the group. If the button is too
 small to fit a usable control, the slider is shown unavailable instead of
 overlapping the button's labels.
+
+## Show the value while dragging
+
+Open **Drag Value** under **Content**. It is enabled by default. A rounded
+bubble follows the knob when you change the selection by dragging or touching
+the track. Its background contrasts with the text, and its size stays fixed
+during the gesture. It can overlap other buttons without taking touch input
+or changing their layout. It disappears on release, cancellation, or leaving
+the pad. Release actions and the five-second confirmation window are unchanged.
+
+* Set **Font size (px)** to `0` to inherit the center label's font and size,
+   or the button's font when there is no center label. Enter a whole number
+   from 1 to 512 for an explicit size. TTF fonts use the requested size in the
+   inherited family. Built-in fonts use the nearest available size: 12, 14, 18,
+   24, 32, or 36 px. A missing TTF uses the same nearest-size bitmap fallback.
+* Leave **Text color** empty for the inherited text color, or choose a literal
+   color. The bubble automatically uses a light or dark background for contrast.
+* Enter a **Value format** to control decimals and units. `%.1f` displays
+   `23.0`, `23.5`, and `24.0`; `%.1f C` adds a unit; `%.0f%%` displays whole
+   percentages such as `42%`. Leave it empty for automatic decimals without
+   unnecessary trailing zeroes, or use `%s dB` to append a unit to that number.
+   Include any desired spaces. Formats support one `%f`, `%F`, or `%s`
+   conversion, at most 64 UTF-8 bytes, width up to 32, and precision up to 8.
+   Use `%%` for a literal percent.
+* Set **Knob clearance (px)** to the gap from the knob's outer edge to the
+   bubble's nearest edge. The default is 40 px; the range is 0 to 200 px.
+* Choose **Position**. **Auto** prefers above a horizontal slider and
+   right of a vertical slider. **Above / Left** and **Below / Right** select a
+   preferred side; the bubble flips sides when needed and stays within the
+   screen. Available screen space takes precedence over clearance.
+
+The format changes only the bubble, not the number sent to actions. Use the
+existing label bindings for values that should remain visible after release.
 
 ## Use value actions
 

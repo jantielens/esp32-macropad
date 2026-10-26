@@ -2,6 +2,34 @@
 
 #include "widgets/slider_numeric.h"
 #include "widgets/slider_widget.cpp"
+#include "font_store.h"
+
+static const uint8_t slider_font_fixture[] = {
+#include "fixtures/BebasNeue.inc"
+};
+static unsigned g_font_loads;
+static unsigned g_font_buffers;
+
+extern "C" unsigned long millis() { return 0; }
+size_t heap_caps_get_free_size(uint32_t) { return 8192; }
+size_t heap_caps_get_largest_free_block(uint32_t) { return 4096; }
+bool ota_activity_is_active() { return false; }
+bool font_store_validate_name(const char* name) { return name && *name && strlen(name) < FONT_NAME_MAX_LEN; }
+uint8_t* font_store_load(const char* name, size_t& length) {
+    ++g_font_loads;
+    if (strcmp(name, "missing") == 0) return nullptr;
+    length = sizeof(slider_font_fixture);
+    auto* data = static_cast<uint8_t*>(malloc(length));
+    if (data) {
+        memcpy(data, slider_font_fixture, length);
+        ++g_font_buffers;
+    }
+    return data;
+}
+void heap_caps_free(void* data) {
+    if (data) --g_font_buffers;
+    free(data);
+}
 
 static unsigned g_dispatches;
 static uint8_t g_action_count;
@@ -115,11 +143,16 @@ protected:
     WidgetConfig config{};
     WidgetState runtime{};
     ScreenButtonConfig source{};
+    PadFontCache fonts;
     JsonDocument json;
 
     void SetUp() override {
         static bool initialized = false;
         if (!initialized) { lv_init(); initialized = true; }
+        device_typography_fonts().clear();
+        device_typography_init("", 0);
+        g_font_loads = 0;
+        g_font_buffers = 0;
         display = lv_display_create(320, 240);
         lv_display_set_default(display);
         indev = lv_indev_create();
@@ -146,6 +179,7 @@ protected:
         strlcpy(source.actions[0].payload.mqtt.mqtt_payload, "{value}", sizeof(source.actions[0].payload.mqtt.mqtt_payload));
         slider_parse(object, config.data);
         strlcpy(config.type, "slider", sizeof(config.type));
+        runtime.font_owner = &fonts;
         slider_create(button, &config, &source, nullptr, &UI_SCALE_TABLE[0],
                       nullptr, nullptr, &runtime);
         lv_obj_update_layout(button);
@@ -156,6 +190,9 @@ protected:
         slider_destroy(&runtime);
         lv_indev_delete(indev);
         lv_display_delete(display);
+        fonts.clear();
+        device_typography_fonts().clear();
+        EXPECT_EQ(g_font_buffers, 0u);
     }
 
     SliderState& state() { return *reinterpret_cast<SliderState*>(runtime.data); }
@@ -177,6 +214,7 @@ protected:
         slider_destroy(&runtime);
         lv_obj_clean(button);
         runtime = WidgetState{};
+        runtime.font_owner = &fonts;
         reinterpret_cast<SliderConfig*>(config.data)->axis = axis;
         lv_obj_t* top = lv_label_create(button);
         lv_label_set_text(top, "Top label");
@@ -254,6 +292,20 @@ TEST_F(SliderNativeWidget, ChangedReleaseDispatchesAbsoluteValueOnce) {
     EXPECT_EQ(g_dispatches, 1u);
 }
 
+TEST_F(SliderNativeWidget, DragValueFloatsWithoutDispatchAndHidesOnRelease) {
+    EXPECT_EQ(state().value_label, nullptr);
+    begin(42);
+    ASSERT_NE(state().value_label, nullptr);
+    EXPECT_STREQ(lv_label_get_text(state().value_label), "42");
+    EXPECT_EQ(lv_obj_get_parent(state().value_label), lv_display_get_layer_top(display));
+    EXPECT_FALSE(lv_obj_has_flag(state().value_label, LV_OBJ_FLAG_CLICKABLE));
+    EXPECT_FALSE(lv_obj_has_flag(state().value_label, LV_OBJ_FLAG_HIDDEN));
+    EXPECT_EQ(g_dispatches, 0u);
+    release();
+    EXPECT_TRUE(lv_obj_has_flag(state().value_label, LV_OBJ_FLAG_HIDDEN));
+    EXPECT_EQ(g_dispatches, 1u);
+}
+
 TEST_F(SliderNativeWidget, MissingActionKeepsLocalSliderInteractive) {
     state().action_count = 0;
     begin(37);
@@ -261,6 +313,183 @@ TEST_F(SliderNativeWidget, MissingActionKeepsLocalSliderInteractive) {
     EXPECT_EQ(g_dispatches, 0u);
     EXPECT_EQ(state().display_position, 37);
     EXPECT_FALSE(state().pending);
+}
+
+TEST_F(SliderNativeWidget, DragValueFormatsTextAndUsesNearestBitmapTypography) {
+    auto* settings = reinterpret_cast<SliderConfig*>(config.data);
+    ASSERT_TRUE(slider_numeric_range_init(-1, 1, 0.01, &settings->range));
+    strlcpy(settings->value_format, "%s dB ", sizeof(settings->value_format));
+    strlcpy(settings->value_color, "#12ab34", sizeof(settings->value_color));
+    settings->value_font_size = 25;
+    lv_slider_set_range(state().control, 0, settings->range.intervals);
+    begin(25);
+    ASSERT_NE(state().value_label, nullptr);
+    EXPECT_STREQ(lv_label_get_text(state().value_label), "-0.75 dB ");
+    EXPECT_EQ(lv_obj_get_style_text_font(state().value_label, LV_PART_MAIN), &lv_font_montserrat_24);
+    EXPECT_EQ(lv_color_to_u32(lv_obj_get_style_text_color(state().value_label, LV_PART_MAIN)), 0xff12ab34u);
+    lv_slider_set_value(state().control, 150, LV_ANIM_OFF);
+    lv_obj_send_event(state().control, LV_EVENT_VALUE_CHANGED, nullptr);
+    EXPECT_STREQ(lv_label_get_text(state().value_label), "0.5 dB ");
+    EXPECT_EQ(g_dispatches, 0u);
+    settings->value_font_size = 0;
+    lv_obj_set_style_text_font(button, &lv_font_montserrat_18, 0);
+    slider_update_value(&state());
+    EXPECT_EQ(lv_obj_get_style_text_font(state().value_label, LV_PART_MAIN), &lv_font_montserrat_18);
+}
+
+TEST_F(SliderNativeWidget, DragValueUsesRequestedTtfSizeAndReusesPadFontCache) {
+    auto* settings = reinterpret_cast<SliderConfig*>(config.data);
+    settings->value_font_size = 25;
+    strlcpy(source.style_center.font_name, "test-font", sizeof(source.style_center.font_name));
+    createLayout(0);
+    begin(42);
+    const lv_font_t* font = lv_obj_get_style_text_font(state().value_label, LV_PART_MAIN);
+    ASSERT_FALSE(pad_is_bitmap_font(font));
+    lv_font_t* expected = lv_tiny_ttf_create_data_ex(slider_font_fixture, sizeof(slider_font_fixture),
+                                                   25, LV_FONT_KERNING_NORMAL, 16);
+    ASSERT_NE(expected, nullptr);
+    EXPECT_EQ(font->line_height, expected->line_height);
+    EXPECT_EQ(lv_font_get_glyph_width(font, '8', '8'), lv_font_get_glyph_width(expected, '8', '8'));
+    lv_tiny_ttf_destroy(expected);
+    EXPECT_EQ(g_font_loads, 1u);
+    EXPECT_EQ(g_font_buffers, 1u);
+    for (uint16_t position = 43; position <= 60; ++position) {
+        lv_slider_set_value(state().control, position, LV_ANIM_OFF);
+        lv_obj_send_event(state().control, LV_EVENT_VALUE_CHANGED, nullptr);
+        EXPECT_EQ(lv_obj_get_style_text_font(state().value_label, LV_PART_MAIN), font);
+    }
+    EXPECT_EQ(g_font_loads, 1u);
+    slider_hide(&runtime);
+    EXPECT_EQ(g_font_buffers, 1u);
+    slider_destroy(&runtime);
+    EXPECT_EQ(g_font_buffers, 1u);
+    fonts.clear();
+    EXPECT_EQ(g_font_buffers, 0u);
+}
+
+TEST_F(SliderNativeWidget, DragValueFallsBackToNearestBitmapWhenTtfIsUnavailable) {
+    auto* settings = reinterpret_cast<SliderConfig*>(config.data);
+    settings->value_font_size = 25;
+    strlcpy(source.style_center.font_name, "missing", sizeof(source.style_center.font_name));
+    createLayout(0);
+    begin(42);
+    EXPECT_EQ(lv_obj_get_style_text_font(state().value_label, LV_PART_MAIN), &lv_font_montserrat_24);
+    EXPECT_EQ(g_font_buffers, 0u);
+}
+
+TEST_F(SliderNativeWidget, DragBubbleFormatsDecimalsAndKeepsStableSizeWithoutChangingActions) {
+    auto* settings = reinterpret_cast<SliderConfig*>(config.data);
+    ASSERT_TRUE(slider_numeric_range_init(20, 30, 0.5, &settings->range));
+    strlcpy(settings->value_format, "%.1f C", sizeof(settings->value_format));
+    lv_slider_set_range(state().control, 0, settings->range.intervals);
+    begin(6);
+    ASSERT_NE(state().value_label, nullptr);
+    EXPECT_STREQ(lv_label_get_text(state().value_label), "23.0 C");
+    const int width = lv_obj_get_width(state().value_label);
+    const int height = lv_obj_get_height(state().value_label);
+    for (uint16_t position : {7, 8}) {
+        lv_slider_set_value(state().control, position, LV_ANIM_OFF);
+        lv_obj_send_event(state().control, LV_EVENT_VALUE_CHANGED, nullptr);
+        EXPECT_EQ(lv_obj_get_width(state().value_label), width);
+        EXPECT_EQ(lv_obj_get_height(state().value_label), height);
+    }
+    EXPECT_STREQ(lv_label_get_text(state().value_label), "24.0 C");
+    EXPECT_EQ(lv_obj_get_style_bg_opa(state().value_label, LV_PART_MAIN), LV_OPA_COVER);
+    EXPECT_GT(lv_obj_get_style_radius(state().value_label, LV_PART_MAIN), 0);
+    for (const char* color : {"#ffffff", "#000000"}) {
+        strlcpy(settings->value_color, color, sizeof(settings->value_color));
+        slider_update_value(&state());
+        const auto foreground = lv_obj_get_style_text_color(state().value_label, LV_PART_MAIN);
+        const auto background = lv_obj_get_style_bg_color(state().value_label, LV_PART_MAIN);
+        EXPECT_GT(std::abs(static_cast<int>(lv_color_brightness(foreground)) - lv_color_brightness(background)), 200);
+    }
+    EXPECT_EQ(g_dispatches, 0u);
+    release();
+    EXPECT_EQ(g_dispatches, 1u);
+    EXPECT_STREQ(g_dispatched_value, "24");
+    strlcpy(settings->value_format, "%.0f%%", sizeof(settings->value_format));
+    begin(10);
+    EXPECT_STREQ(lv_label_get_text(state().value_label), "25%");
+}
+
+TEST_F(SliderNativeWidget, DragBubbleReservesAutomaticFractionWidthAndRespectsKnobClearance) {
+    auto* settings = reinterpret_cast<SliderConfig*>(config.data);
+    ASSERT_TRUE(slider_numeric_range_init(-1, 1, 0.01, &settings->range));
+    lv_slider_set_range(state().control, 0, settings->range.intervals);
+    lv_obj_set_size(button, 200, 180);
+    lv_obj_set_pos(button, 20, 30);
+    for (uint8_t axis : {0, 1}) {
+        settings->axis = axis;
+        for (uint16_t clearance : {10, 40}) {
+            settings->value_clearance = clearance;
+            slider_layout(&state());
+            begin(100);
+            EXPECT_STREQ(lv_label_get_text(state().value_label), "0");
+            const int width = lv_obj_get_width(state().value_label);
+            lv_slider_set_value(state().control, 25, LV_ANIM_OFF);
+            lv_obj_send_event(state().control, LV_EVENT_VALUE_CHANGED, nullptr);
+            EXPECT_STREQ(lv_label_get_text(state().value_label), "-0.75");
+            EXPECT_EQ(lv_obj_get_width(state().value_label), width);
+            lv_area_t track, bubble;
+            lv_obj_get_content_coords(state().control, &track);
+            lv_obj_get_coords(state().value_label, &bubble);
+            const int knob = lv_obj_get_style_pad_left(state().control, LV_PART_KNOB);
+            if (axis == 0) { EXPECT_EQ(track.y1 - knob - bubble.y2 - 1, clearance); }
+            else { EXPECT_EQ(bubble.x1 - track.x2 - knob - 1, clearance); }
+            EXPECT_LE(lv_obj_get_width(state().value_label), 100);
+            slider_cancel_input(&runtime);
+        }
+    }
+}
+
+TEST_F(SliderNativeWidget, DragValueStaysOnScreenAndDoesNotChangeLayout) {
+    auto* settings = reinterpret_cast<SliderConfig*>(config.data);
+    lv_obj_set_style_pad_all(button, 0, 0);
+    lv_obj_set_style_border_width(button, 0, 0);
+    for (uint8_t axis : {0, 1}) {
+        settings->axis = axis;
+        lv_obj_set_size(button, axis == 0 ? 180 : 60, axis == 0 ? 60 : 180);
+        for (const lv_point_t origin : {lv_point_t{0, 0}, lv_point_t{140, 60}}) {
+            lv_obj_set_pos(button, origin.x, origin.y);
+            slider_layout(&state());
+            lv_area_t before;
+            lv_obj_get_coords(state().control, &before);
+            begin(50);
+            ASSERT_NE(state().value_label, nullptr);
+            lv_obj_update_layout(state().value_label);
+            lv_area_t label, after;
+            lv_obj_get_coords(state().value_label, &label);
+            lv_obj_get_coords(state().control, &after);
+            EXPECT_GE(label.x1, 0); EXPECT_GE(label.y1, 0);
+            EXPECT_LT(label.x2, 320); EXPECT_LT(label.y2, 240);
+            EXPECT_EQ(before.x1, after.x1); EXPECT_EQ(before.y1, after.y1);
+            EXPECT_EQ(before.x2, after.x2); EXPECT_EQ(before.y2, after.y2);
+            if (axis == 0 && origin.y == 0) { EXPECT_GT(label.y1, before.y2); }
+            if (axis == 1 && origin.x == 0) { EXPECT_GT(label.x1, before.x2); }
+            slider_cancel_input(&runtime);
+            EXPECT_TRUE(lv_obj_has_flag(state().value_label, LV_OBJ_FLAG_HIDDEN));
+        }
+    }
+}
+
+TEST_F(SliderNativeWidget, DragValueHonorsDisabledSettingAndCleansUpOnHideAndDestroy) {
+    auto* settings = reinterpret_cast<SliderConfig*>(config.data);
+    settings->show_value = false;
+    begin(40);
+    EXPECT_EQ(state().value_label, nullptr);
+    slider_cancel_input(&runtime);
+    settings->show_value = true;
+    lv_obj_send_event(state().control, LV_EVENT_PRESSED, nullptr);
+    EXPECT_EQ(state().value_label, nullptr);
+    begin(65);
+    ASSERT_NE(state().value_label, nullptr);
+    slider_hide(&runtime);
+    EXPECT_TRUE(lv_obj_has_flag(state().value_label, LV_OBJ_FLAG_HIDDEN));
+    EXPECT_EQ(g_dispatches, 0u);
+    const uint32_t children = lv_obj_get_child_count(lv_display_get_layer_top(display));
+    slider_destroy(&runtime);
+    EXPECT_EQ(state().value_label, nullptr);
+    EXPECT_EQ(lv_obj_get_child_count(lv_display_get_layer_top(display)), children - 1);
 }
 
 TEST_F(SliderNativeWidget, MissingActionBoundSliderReturnsToReportedValue) {
@@ -294,14 +523,18 @@ TEST_F(SliderNativeWidget, PointerDragAndTrackTapDispatchOnRelease) {
     readPointer({area.x1 + 4, center_y}, true);
     readPointer({area.x1 + (area.x2 - area.x1) * 3 / 4, center_y}, true);
     EXPECT_TRUE(state().gesture_active);
+    ASSERT_NE(state().value_label, nullptr);
+    EXPECT_FALSE(lv_obj_has_flag(state().value_label, LV_OBJ_FLAG_HIDDEN));
     EXPECT_EQ(feedback_count, 0u);
     readPointer({area.x1 + (area.x2 - area.x1) * 3 / 4, center_y}, false);
     EXPECT_EQ(feedback_count, 1u);
     EXPECT_EQ(g_dispatches, 1u);
     EXPECT_GT(std::atoi(g_dispatched_value), 50);
+    EXPECT_TRUE(lv_obj_has_flag(state().value_label, LV_OBJ_FLAG_HIDDEN));
 
     lv_obj_get_coords(state().control, &area);
     readPointer({area.x1 + (area.x2 - area.x1) / 3, center_y}, true);
+    EXPECT_FALSE(lv_obj_has_flag(state().value_label, LV_OBJ_FLAG_HIDDEN));
     readPointer({area.x1 + (area.x2 - area.x1) / 3, center_y}, false);
     EXPECT_EQ(feedback_count, 2u);
     EXPECT_EQ(g_dispatches, 2u);
@@ -526,6 +759,46 @@ TEST(SliderSchema, RejectsInvalidRangesActionsAndUnsupportedFields) {
     button.remove("widget_slider_knob_px");
     button["widget_slider_ticks"] = true;
     EXPECT_NE(slider_validate(button), nullptr);
+    button.remove("widget_slider_ticks");
+    button["widget_slider_show_value"] = false;
+    button["widget_slider_value_font_size"] = 24;
+    button["widget_slider_value_color"] = "";
+    button["widget_slider_value_side"] = "before";
+    EXPECT_EQ(slider_validate(button), nullptr);
+    WidgetConfig parsed{};
+    slider_parse(button, parsed.data);
+    const auto* settings = reinterpret_cast<const SliderConfig*>(parsed.data);
+    EXPECT_FALSE(settings->show_value);
+    EXPECT_EQ(settings->value_font_size, 24);
+    button["widget_slider_value_font_size"] = 65560;
+    EXPECT_NE(slider_validate(button), nullptr);
+    button["widget_slider_value_font_size"] = 0;
+    for (unsigned size : {0u, 25u, 512u}) {
+        button["widget_slider_value_font_size"] = size;
+        EXPECT_EQ(slider_validate(button), nullptr);
+        slider_parse(button, parsed.data);
+        EXPECT_EQ(settings->value_font_size, size);
+    }
+    for (const char* format : {"%n", "%p", "%*f", "%f %f", "%.9f", "%33f", "%+s", "trailing%", "plain text"}) {
+        button["widget_slider_value_format"] = format;
+        EXPECT_NE(slider_validate(button), nullptr) << format;
+    }
+    for (const char* format : {"%.1f", "%.0f%%", " %s dB ", "%08.2f", "%.8Lf", ""}) {
+        button["widget_slider_value_format"] = format;
+        EXPECT_EQ(slider_validate(button), nullptr) << format;
+    }
+    button["widget_slider_value_format"] = std::string(65, 'a');
+    EXPECT_NE(slider_validate(button), nullptr);
+    button["widget_slider_value_format"] = " %.1f C ";
+    button["widget_slider_value_clearance"] = 60;
+    EXPECT_EQ(slider_validate(button), nullptr);
+    slider_parse(button, parsed.data);
+    EXPECT_STREQ(settings->value_format, " %.1f C ");
+    EXPECT_EQ(settings->value_clearance, 60);
+    for (double clearance : {-1.0, 0.5, 201.0}) {
+        button["widget_slider_value_clearance"] = clearance;
+        EXPECT_NE(slider_validate(button), nullptr);
+    }
 }
 
 TEST(SliderNumeric, DefaultAndNegativeRanges) {

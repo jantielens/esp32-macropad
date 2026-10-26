@@ -25,6 +25,9 @@ bool binding_value_extract_json(const char* payload, const char* path, char* out
 // unparseable values fall back to raw text. No dynamic widths or %n/%p/%c.
 void binding_value_format(const char* raw_value, const char* format, char* out, size_t out_len);
 
+bool binding_value_format_valid(const char* format, unsigned max_width, unsigned max_precision,
+                                const char* conversions);
+
 #ifdef __cplusplus
 }
 #endif

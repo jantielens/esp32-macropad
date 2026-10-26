@@ -21,34 +21,10 @@
                 <label for="pad-edit-slider-max">Maximum</label>
                 <input type="number" id="pad-edit-slider-max" min="-1000000" max="1000000" step="any" value="100">
             </div>
-            <div class="form-group">
-                <label for="pad-edit-slider-step">Step</label>
-                <input type="number" id="pad-edit-slider-step" min="0.0001" max="2000000" step="any" value="1">
-            </div>
-        </div>
-        <div class="widget-row">
-            <div class="form-group">
-                <label for="pad-edit-slider-length">Control length (%)</label>
-                <input type="number" id="pad-edit-slider-length" min="20" max="100" step="1" value="50">
-            </div>
-            <div class="form-group">
-                <label for="pad-edit-slider-track">Track (px)</label>
-                <input type="number" id="pad-edit-slider-track" min="0" max="32" step="1" value="0" aria-describedby="pad-edit-slider-track-help">
-                <small id="pad-edit-slider-track-help">0 = auto</small>
-            </div>
-            <div class="form-group">
-                <label for="pad-edit-slider-knob">Knob (px)</label>
-                <input type="number" id="pad-edit-slider-knob" min="0" max="64" step="1" value="0" aria-describedby="pad-edit-slider-knob-help">
-                <small id="pad-edit-slider-knob-help">0 = auto</small>
-            </div>
         </div>
         <div class="form-group">
-            <label for="pad-edit-slider-icon-position">Icon position</label>
-            <select id="pad-edit-slider-icon-position">
-                <option value="left">Left</option>
-                <option value="above">Above</option>
-                <option value="below">Below</option>
-            </select>
+            <label for="pad-edit-slider-step">Step</label>
+            <input type="number" id="pad-edit-slider-step" min="0.0001" max="2000000" step="any" value="1">
         </div>
         <div class="widget-row pad-slider-colors">
             <div class="form-group">
@@ -59,11 +35,69 @@
                 <label for="pad-edit-slider-fill-color">Fill color</label>
                 <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-slider-fill-color" class="bc-input" data-allow-bindings="false" maxlength="7"></div>
             </div>
-            <div class="form-group">
-                <label for="pad-edit-slider-knob-color">Knob color</label>
-                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-slider-knob-color" class="bc-input" data-allow-bindings="false" maxlength="7"></div>
-            </div>
         </div>
+        <div class="form-group">
+            <label for="pad-edit-slider-knob-color">Knob color</label>
+            <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-slider-knob-color" class="bc-input" data-allow-bindings="false" maxlength="7"></div>
+        </div>
+        <div class="form-group">
+            <label for="pad-edit-slider-knob">Knob diameter (px)</label>
+            <input type="number" id="pad-edit-slider-knob" min="0" max="64" step="1" value="0" aria-describedby="pad-edit-slider-knob-help">
+            <small id="pad-edit-slider-knob-help">0 = auto</small>
+        </div>
+        <div class="form-group">
+            <label for="pad-edit-slider-length">Slider length (%)</label>
+            <input type="number" id="pad-edit-slider-length" min="20" max="100" step="1" value="50" aria-describedby="pad-edit-slider-length-help">
+            <small id="pad-edit-slider-length-help">Full length without a center label or side icon.</small>
+        </div>
+        <div class="form-group">
+            <label for="pad-edit-slider-track">Track thickness (px)</label>
+            <input type="number" id="pad-edit-slider-track" min="0" max="32" step="1" value="0" aria-describedby="pad-edit-slider-track-help">
+            <small id="pad-edit-slider-track-help">0 = auto</small>
+        </div>
+        <div class="form-group">
+            <label for="pad-edit-slider-icon-position">Icon position</label>
+            <select id="pad-edit-slider-icon-position">
+                <option value="left">Left</option>
+                <option value="above">Above</option>
+                <option value="below">Below</option>
+            </select>
+        </div>
+    </div>
+</details>
+<details class="editor-group" id="pad-edit-slider-value-section" style="display:none;" open>
+    <summary>Drag Value</summary>
+    <div class="editor-group-body slider-value-grid">
+            <small class="slider-value-note">Shows the selected value in a floating bubble while dragging or touching the track.</small>
+            <div class="form-group">
+                <label for="pad-edit-slider-show-value">Enabled</label>
+                <div class="slider-value-toggle"><input type="checkbox" id="pad-edit-slider-show-value" checked></div>
+            </div>
+            <div class="form-group">
+                <label for="pad-edit-slider-value-side">Position</label>
+                <select id="pad-edit-slider-value-side">
+                    <option value="auto">Auto</option>
+                    <option value="before">Above / Left</option>
+                    <option value="after">Below / Right</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="pad-edit-slider-value-font-size">Font size (px)</label>
+                <input type="number" id="pad-edit-slider-value-font-size" min="0" max="512" step="1" value="0" aria-describedby="pad-edit-slider-value-font-size-help">
+                <small id="pad-edit-slider-value-font-size-help">0 = inherited</small>
+            </div>
+            <div class="form-group">
+                <label for="pad-edit-slider-value-color">Text color</label>
+                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-slider-value-color" class="bc-input" data-allow-bindings="false" maxlength="7" placeholder="Auto"><button type="button" class="btn btn-small btn-outline-secondary" id="pad-edit-slider-value-color-reset" title="Use automatic value color" aria-label="Use automatic value color" onclick="padSetBindableColor('pad-edit-slider-value-color', '')"><span class="material-symbols-outlined" aria-hidden="true">restart_alt</span></button></div>
+            </div>
+            <div class="form-group">
+                <label for="pad-edit-slider-value-format">Value format</label>
+                <input type="text" id="pad-edit-slider-value-format" class="binding-mono" maxlength="64" placeholder="Auto">
+            </div>
+            <div class="form-group">
+                <label for="pad-edit-slider-value-clearance">Knob clearance (px)</label>
+                <input type="number" id="pad-edit-slider-value-clearance" min="0" max="200" step="1" value="40">
+            </div>
     </div>
 </details>
 <div id="pad-edit-slider-action-note" class="form-group" style="display:none;">

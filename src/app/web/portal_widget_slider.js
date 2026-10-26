@@ -45,7 +45,13 @@
         { id: prefix + 'knob', key: 'widget_slider_knob_px', kind: 'number', default: 0 },
         { id: prefix + 'track-color', key: 'widget_slider_track_color', kind: 'color', default: () => PAD_FIRMWARE_DEFAULTS.widget_track_color },
         { id: prefix + 'fill-color', key: 'widget_slider_fill_color', kind: 'color', default: () => PAD_FIRMWARE_DEFAULTS.widget_series_color },
-        { id: prefix + 'knob-color', key: 'widget_slider_knob_color', kind: 'color', default: () => PAD_FIRMWARE_DEFAULTS.widget_indicator_color }
+        { id: prefix + 'knob-color', key: 'widget_slider_knob_color', kind: 'color', default: () => PAD_FIRMWARE_DEFAULTS.widget_indicator_color },
+        { id: prefix + 'show-value', key: 'widget_slider_show_value', kind: 'checkbox', default: true },
+        { id: prefix + 'value-font-size', key: 'widget_slider_value_font_size', kind: 'number', default: 0 },
+        { id: prefix + 'value-color', key: 'widget_slider_value_color', kind: 'color', default: '' },
+        { id: prefix + 'value-format', key: 'widget_slider_value_format', kind: 'text', default: '' },
+        { id: prefix + 'value-clearance', key: 'widget_slider_value_clearance', kind: 'number', default: 40 },
+        { id: prefix + 'value-side', key: 'widget_slider_value_side', kind: 'text', default: 'auto' }
     ];
 
     padRegisterWidgetEditor({
@@ -53,6 +59,7 @@
         available: info => !!(info && info.has_display === true && info.has_touch === true),
         sections: [
             { id: 'pad-edit-slider-section', tab: 'Content' },
+            { id: 'pad-edit-slider-value-section', tab: 'Content' },
             { id: 'pad-edit-slider-action-note', tab: 'Actions' }
         ],
         fields,
@@ -83,6 +90,36 @@
                 if (!/^#[0-9a-f]{6}$/i.test(input(name).value.trim())) fail(name, 'Choose a #RRGGBB color');
             }
             button.widget_slider_axis = axis;
+            if (!Number.isInteger(button.widget_slider_value_font_size) ||
+                button.widget_slider_value_font_size < 0 || button.widget_slider_value_font_size > 512)
+                fail('value-font-size', 'Font size must be a whole number from 0 to 512');
+            const valueColor = button.widget_slider_value_color || '';
+            if (valueColor && !/^#[0-9a-f]{6}$/i.test(valueColor))
+                fail('value-color', 'Choose a #RRGGBB color or leave empty for Auto');
+            if (!['auto', 'before', 'after'].includes(button.widget_slider_value_side))
+                fail('value-side', 'Choose an available value position');
+            const format = input('value-format').value;
+            if (new TextEncoder().encode(format).length > 64)
+                fail('value-format', 'Value format must fit within 64 UTF-8 bytes');
+            if (format) {
+                let conversions = 0;
+                const remaining = format.replace(/%%|%([-+ #0]*)(\d*)(?:\.(\d*))?([lL]?)([fFs])/g,
+                    (token, flags, width, precision, length, type) => {
+                        if (token === '%%') return '';
+                        conversions++;
+                        if (Number(width) > 32 || Number(precision) > 8 ||
+                            (type === 's' && (length || /[^-]/.test(flags))))
+                            fail('value-format', 'Use a width up to 32 and precision up to 8; %s only supports the - flag');
+                        return '';
+                    });
+                if (conversions !== 1 || remaining.includes('%'))
+                    fail('value-format', 'Use one %f or %s conversion and %% for a literal percent');
+            }
+            button.widget_slider_value_format = format;
+            const clearance = Number(input('value-clearance').value);
+            if (!Number.isInteger(clearance) || clearance < 0 || clearance > 200)
+                fail('value-clearance', 'Knob clearance must be a whole number from 0 to 200');
+            button.widget_slider_value_clearance = clearance;
         }
     });
 })();
