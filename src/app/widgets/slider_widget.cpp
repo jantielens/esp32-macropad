@@ -434,6 +434,10 @@ static void slider_release_gesture(SliderState* state) {
         return;
     }
 
+    lv_event_code_t feedback = LV_EVENT_RELEASED;
+    if (lv_obj_send_event(state->button, LV_EVENT_VALUE_CHANGED, &feedback) == LV_RESULT_INVALID)
+        return;
+
     if (!state->action_count) {
         state->gesture_active = false;
         if (state->bound) slider_reconcile(state);

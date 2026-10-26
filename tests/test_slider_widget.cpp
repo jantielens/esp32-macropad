@@ -110,6 +110,7 @@ protected:
     lv_display_t* display = nullptr;
     lv_indev_t* indev = nullptr;
     lv_obj_t* button = nullptr;
+    unsigned feedback_count = 0;
     SliderPointerInput pointer{};
     WidgetConfig config{};
     WidgetState runtime{};
@@ -128,6 +129,11 @@ protected:
         lv_indev_set_read_cb(indev, read_slider_pointer);
         button = lv_obj_create(lv_screen_active());
         lv_obj_set_size(button, 200, 180);
+        lv_obj_add_event_cb(button, [](lv_event_t* event) {
+            const auto* feedback = static_cast<const lv_event_code_t*>(lv_event_get_param(event));
+            if (feedback && *feedback == LV_EVENT_RELEASED)
+                ++*static_cast<unsigned*>(lv_event_get_user_data(event));
+        }, LV_EVENT_VALUE_CHANGED, &feedback_count);
         g_dispatches = 0;
         g_dispatched_value[0] = '\0';
         g_binding_value = "0";
@@ -234,10 +240,13 @@ TEST_F(SliderNativeWidget, OuterIconDoesNotReserveHalfTheSliderLength) {
 TEST_F(SliderNativeWidget, ChangedReleaseDispatchesAbsoluteValueOnce) {
     EXPECT_TRUE(state().available);
     begin(42);
+    EXPECT_EQ(feedback_count, 0u);
     release();
+    EXPECT_EQ(feedback_count, 1u);
     EXPECT_EQ(g_dispatches, 1u);
     EXPECT_STREQ(g_dispatched_value, "42");
     release();
+    EXPECT_EQ(feedback_count, 1u);
     EXPECT_EQ(g_dispatches, 1u);
 }
 
@@ -281,13 +290,16 @@ TEST_F(SliderNativeWidget, PointerDragAndTrackTapDispatchOnRelease) {
     readPointer({area.x1 + 4, center_y}, true);
     readPointer({area.x1 + (area.x2 - area.x1) * 3 / 4, center_y}, true);
     EXPECT_TRUE(state().gesture_active);
+    EXPECT_EQ(feedback_count, 0u);
     readPointer({area.x1 + (area.x2 - area.x1) * 3 / 4, center_y}, false);
+    EXPECT_EQ(feedback_count, 1u);
     EXPECT_EQ(g_dispatches, 1u);
     EXPECT_GT(std::atoi(g_dispatched_value), 50);
 
     lv_obj_get_coords(state().control, &area);
     readPointer({area.x1 + (area.x2 - area.x1) / 3, center_y}, true);
     readPointer({area.x1 + (area.x2 - area.x1) / 3, center_y}, false);
+    EXPECT_EQ(feedback_count, 2u);
     EXPECT_EQ(g_dispatches, 2u);
     EXPECT_EQ(swipes, 0u);
 }
@@ -430,6 +442,7 @@ TEST_F(SliderNativeWidget, UnchangedReleaseAndPressLossDoNotDispatch) {
     begin(65);
     lv_obj_send_event(state().control, LV_EVENT_PRESS_LOST, nullptr);
     EXPECT_EQ(g_dispatches, 0u);
+    EXPECT_EQ(feedback_count, 0u);
     EXPECT_EQ(state().display_position, 0);
 }
 
@@ -450,6 +463,7 @@ TEST_F(SliderNativeWidget, BoundReportsDoNotDispatchAndPendingExpires) {
     EXPECT_TRUE(state().available);
     EXPECT_EQ(state().display_position, 0);
     EXPECT_EQ(g_dispatches, 0u);
+    EXPECT_EQ(feedback_count, 0u);
 
     begin(25);
     EXPECT_TRUE(state().gesture_active);

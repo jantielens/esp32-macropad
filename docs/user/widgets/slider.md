@@ -90,6 +90,11 @@ remaining actions in that list.
 
 ## Source and feedback behavior
 
+Releasing a changed selection triggers the normal button flash and configured
+**Tap Feedback** tone once, whether you drag the knob or tap the track. A
+**Sound Alert** action suppresses the tone. Unchanged selections, cancelled
+gestures, and source updates do not trigger feedback.
+
 A valid source value is clamped to the range and snapped to the nearest step;
 ties snap upward. A valid `0` is a value. Empty, partially numeric,
 non-finite, and over-precision source values are unavailable. Source updates

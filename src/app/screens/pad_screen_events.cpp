@@ -335,10 +335,17 @@ static void do_tap_flash(ButtonTile* tile, uint8_t zone = 0, bool horizontal = f
 }
 
 void PadScreen::onWidgetPressFeedback(lv_event_t* event) {
-    if (DISPLAY_DISABLE_ANIMATIONS) return;
     auto* tile = static_cast<ButtonTile*>(lv_event_get_user_data(event));
     const auto* feedback = static_cast<const lv_event_code_t*>(lv_event_get_param(event));
-    if (!tile || !tile->tap_overlay || !feedback) return;
+    if (!tile || !feedback) return;
+#if HAS_AUDIO
+    if (*feedback == LV_EVENT_RELEASED && strcmp(tile->widget_cfg.type, "slider") == 0 &&
+        !has_audio_action(tile->actions, tile->action_count)) {
+        const char* pattern = device_config.tap_beep;
+        if (pattern[0] && strcmp(pattern, "none") != 0) audio_feedback(pattern);
+    }
+#endif
+    if (DISPLAY_DISABLE_ANIMATIONS || !tile->tap_overlay) return;
     if (*feedback == LV_EVENT_RELEASED) {
         do_tap_flash(tile);
         return;
