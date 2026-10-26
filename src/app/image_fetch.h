@@ -88,6 +88,9 @@ void image_fetch_resume();
 void image_fetch_suspend();
 void image_fetch_unsuspend();
 
+void image_fetch_set_history_paused(bool paused);
+bool image_fetch_history_pause_ready();
+
 // Check if a slot has a new frame since last acknowledgement.
 bool image_fetch_has_new_frame(image_slot_t slot);
 

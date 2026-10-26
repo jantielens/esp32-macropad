@@ -52,6 +52,10 @@ entity states first, so changes can appear at finer resolution than long-term
 statistics. A history source still needs a live binding. Save Pad and wait for
 clock synchronization/backfill.
 
+During the initial startup backfill batch, remote image downloads pause to
+reduce memory pressure from concurrent network transfers. They resume when the
+batch completes or must defer; retry backoff does not keep images paused.
+
 Set **Raw history limit (hours)** in **Sampling** to control how much recent raw
 data is requested for all lines. Use a whole number from 0 to 720:
 

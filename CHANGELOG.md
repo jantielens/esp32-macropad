@@ -48,6 +48,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Pause remote image downloads across the initial Home Assistant history batch
+  to reduce overlapping network-buffer pressure. Resume images when the batch
+  completes or must defer, without holding them through retry backoff.
 * Reduce boot time by sharing icon cleanup directory scans across all pads and
   loading saved button defaults before caching pads. Skip unused pads during
   cache rebuilds instead of reporting misleading allocation failures.

@@ -78,6 +78,9 @@ static const uint32_t HTTP_TIMEOUT_MS = 10000;
 static const uint32_t MAX_DOWNLOAD_WALL_MS = 30000;  // 30s total wall-clock limit
 static const size_t   MAX_DOWNLOAD_SIZE = 2 * 1024 * 1024;  // 2 MB
 
+static std::atomic<bool> history_pause_requested{false};
+static std::atomic<bool> history_pause_ready{false};
+
 // ============================================================================
 // Per-slot persistent HTTP connections (fetch task only — no mutex needed)
 // ============================================================================
@@ -112,6 +115,7 @@ static SlotConn* g_conn = nullptr;
 
 static bool fetch_current(int slot) {
     if (g_suspended || ota_activity_is_active()) return false;
+    if (history_pause_requested.load(std::memory_order_acquire)) return false;
     xSemaphoreTake(g_mutex, portMAX_DELAY);
     const ImageSlot& source = g_slots[slot];
     const bool current = source.active && !source.paused && source.url[0] &&
@@ -121,6 +125,7 @@ static bool fetch_current(int slot) {
 }
 
 static void finish_attempt(int slot, uint32_t generation) {
+    if (history_pause_requested.load(std::memory_order_acquire)) return;
     xSemaphoreTake(g_mutex, portMAX_DELAY);
     ImageSlot& source = g_slots[slot];
     if (source.active && source.generation == generation &&
@@ -495,6 +500,13 @@ static void fetch_task(void* param) {
     int8_t last_slot = -1;
 
     for (;;) {
+        if (history_pause_requested.load(std::memory_order_acquire)) {
+            for (int8_t slot = 0; slot < IMAGE_SLOT_MAX; ++slot) conn_close(slot);
+            history_pause_ready.store(true, std::memory_order_release);
+            vTaskDelay(pdMS_TO_TICKS(50));
+            continue;
+        }
+        history_pause_ready.store(false, std::memory_order_release);
         // Find next slot to fetch
         xSemaphoreTake(g_mutex, portMAX_DELAY);
 
@@ -582,6 +594,10 @@ static void fetch_task(void* param) {
             conn_close(next);
             continue;
         }
+        if (history_pause_requested.load(std::memory_order_acquire)) {
+            conn_close(next);
+            continue;
+        }
 
         // Persistent connection: ensure client exists, then fetch a frame.
         // MJPEG streaming: if the server responds with multipart/x-mixed-replace,
@@ -609,6 +625,7 @@ static void fetch_task(void* param) {
         const bool got_frame = mjpeg_read_frame(next, &raw_data, &raw_len);
 
         if (!got_frame) {
+            if (history_pause_requested.load(std::memory_order_acquire)) continue;
             LOGW(TAG, "Slot %d download failed", next);
             // Mark last_fetch to avoid immediate retry
             finish_attempt(next, generation);
@@ -674,6 +691,16 @@ static void fetch_task(void* param) {
 // ============================================================================
 // Public API
 // ============================================================================
+
+void image_fetch_set_history_paused(bool paused) {
+    if (paused) history_pause_ready.store(false, std::memory_order_release);
+    history_pause_requested.store(paused, std::memory_order_release);
+}
+
+bool image_fetch_history_pause_ready() {
+    return !fetch_sample_task.load(std::memory_order_acquire) ||
+        history_pause_ready.load(std::memory_order_acquire);
+}
 
 void image_fetch_init() {
     if (g_task) return;  // Already initialized

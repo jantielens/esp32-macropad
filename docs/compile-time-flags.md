@@ -916,6 +916,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/freetype_mono_font.h
   - src/app/pad_font_cache.cpp
 - **HAS_HA_HISTORY**
+  - src/app/app.ino
   - src/app/board_config.h
   - src/app/data_stream.cpp
   - src/app/data_stream.h
@@ -953,6 +954,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/device_telemetry.cpp
+  - src/app/ha_stats.cpp
   - src/app/image_decoder.cpp
   - src/app/image_decoder.h
   - src/app/image_fetch.cpp

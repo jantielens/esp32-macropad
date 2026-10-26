@@ -102,6 +102,7 @@
 #include "storage.h"
 #include "ota_activity.h"
 #include "ha_live.h"
+#include "ha_stats.h"
 
 #if HAS_NATIVE_EXTENSIONS
 #include "native_extension.h"
@@ -209,6 +210,10 @@ static void set_boot_splash_status(const char* phase) {
 static void start_normal_runtime(bool dispatch_boot_actions) {
 	if (g_normal_runtime_started) return;
 	g_normal_runtime_started = true;
+
+	#if HAS_HA_HISTORY
+	ha_stats_begin_startup();
+	#endif
 
 	#if HAS_DISPLAY && HAS_BACKLIGHT
 	display_manager_set_backlight_brightness(device_config.backlight_brightness);
@@ -327,6 +332,9 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 
 	#if HAS_REMOTE_LOG
 	remote_log_finish_boot();
+	#endif
+	#if HAS_HA_HISTORY
+	ha_stats_end_startup();
 	#endif
 }
 

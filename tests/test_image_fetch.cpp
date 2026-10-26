@@ -159,6 +159,35 @@ int main() {
     step();
     assert(fetch_requests.back() == "https://host/paused");
 
+    const auto* before_history = frame(slot);
+    image_fetch_update_source(slot, "https://host/history");
+    const unsigned history_decodes = fetch_decodes;
+    fetch_on_read = [] { image_fetch_set_history_paused(true); };
+    step();
+    assert(image_fetch_history_pause_ready());
+    assert(fetch_live_clients == 0);
+    assert(fetch_decodes == history_decodes);
+    assert(frame(slot) == before_history);
+    const size_t history_requests = fetch_requests.size();
+    step();
+    assert(fetch_requests.size() == history_requests);
+    image_fetch_set_history_paused(false);
+    step();
+    assert(fetch_requests.size() == history_requests + 1);
+    assert(frame(slot));
+
+    image_fetch_update_source(slot, "https://host/history-suspended");
+    image_fetch_suspend();
+    image_fetch_set_history_paused(true);
+    step();
+    image_fetch_set_history_paused(false);
+    const size_t history_suspended_requests = fetch_requests.size();
+    step();
+    assert(fetch_requests.size() == history_suspended_requests);
+    image_fetch_unsuspend();
+    step();
+    assert(fetch_requests.back() == "https://host/history-suspended");
+
     image_fetch_update_source(slot, "https://host/ota");
     fetch_on_read = [] { fetch_ota = true; };
     step();

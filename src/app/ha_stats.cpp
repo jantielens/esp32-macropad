@@ -12,6 +12,10 @@
 #include "rtos_task_utils.h"
 #include "web_portal_state.h"   // web_portal_get_current_config()
 
+#if HAS_IMAGE_FETCH
+#include "image_fetch.h"
+#endif
+
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
 #include <WiFi.h>
@@ -72,6 +76,8 @@ using FetchOutcome = HaHistoryFetchOutcome;
 
 static portMUX_TYPE   g_mux = portMUX_INITIALIZER_UNLOCKED;
 static volatile uint8_t g_state = ST_IDLE;
+static bool g_startup_deferred = false;
+static std::atomic<bool> g_startup_batch{false};
 static HaStatsJob     g_job;
 static float*         g_values = nullptr;   // [slot_count] resampled result
 static float*         g_stats_values = nullptr;  // [slot_count] older-statistics scratch
@@ -590,7 +596,19 @@ static void ha_stats_task(void*) {
         portEXIT_CRITICAL(&g_mux);
         if (!have_job) continue;
 
+#if HAS_IMAGE_FETCH
+        if (g_startup_batch.load(std::memory_order_acquire))
+            image_fetch_set_history_paused(true);
+        while (g_startup_batch.load(std::memory_order_acquire) &&
+               !image_fetch_history_pause_ready() &&
+               check_job(job, job.queued_ms) == Checkpoint::Continue)
+            vTaskDelay(pdMS_TO_TICKS(10));
+        const Checkpoint pause_status = check_job(job, job.queued_ms);
+        const FetchOutcome result = pause_status == Checkpoint::Continue ? fetch_job(job) :
+            pause_status == Checkpoint::Cancelled ? FetchOutcome::Cancelled : FetchOutcome::RetryableFailure;
+#else
         const FetchOutcome result = fetch_job(job);
+#endif
 
         portENTER_CRITICAL(&g_mux);
         uint32_t paused_ms = 0;
@@ -698,6 +716,30 @@ void ha_stats_init() {
     LOGI(TAG, "History hydration ready");
 }
 
+void ha_stats_begin_startup() {
+    portENTER_CRITICAL(&g_mux);
+    g_startup_deferred = true;
+    g_startup_batch.store(true, std::memory_order_release);
+    portEXIT_CRITICAL(&g_mux);
+}
+
+void ha_stats_end_startup() {
+    portENTER_CRITICAL(&g_mux);
+    g_startup_deferred = false;
+    portEXIT_CRITICAL(&g_mux);
+}
+
+void ha_stats_finish_startup_hydration() {
+    portENTER_CRITICAL(&g_mux);
+    const bool finished = !g_startup_deferred && g_state == ST_IDLE &&
+        g_startup_batch.exchange(false, std::memory_order_acq_rel);
+    portEXIT_CRITICAL(&g_mux);
+    if (!finished) return;
+#if HAS_IMAGE_FETCH
+    image_fetch_set_history_paused(false);
+#endif
+}
+
 bool ha_stats_get_stack_watermark(uint32_t* minimum_free_bytes, uint32_t* configured_bytes) {
     if (!minimum_free_bytes || !configured_bytes) return false;
     const TaskHandle_t task = ha_stats_sample_task.load(std::memory_order_acquire);
@@ -758,7 +800,8 @@ bool ha_stats_request(data_stream_handle_t handle, uint32_t uid,
     queued.queued_ms = millis();
 
     portENTER_CRITICAL(&g_mux);
-    const bool accept = (g_state == ST_IDLE) &&
+    const bool accept = !g_startup_deferred &&
+                        (g_state == ST_IDLE) &&
                         (int32_t)(millis() - g_blocked_until_ms) >= 0;
     if (accept) {
         g_job = queued;

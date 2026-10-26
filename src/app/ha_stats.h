@@ -24,6 +24,10 @@
 // stays blocked until the first request arrives.
 void ha_stats_init();
 
+void ha_stats_begin_startup();
+void ha_stats_end_startup();
+void ha_stats_finish_startup_hydration();
+
 bool ha_stats_get_stack_watermark(uint32_t* minimum_free_bytes, uint32_t* configured_bytes);
 
 // Invalidate any queued or active request after the HA credentials change.

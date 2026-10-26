@@ -68,6 +68,12 @@ Start with a small snapshot and a moderate interval before enabling streams.
 Multiple large sources increase network, decoding, and memory load; there is
 no universal frame-rate guarantee.
 
+At startup, remote image downloads pause while the initial
+[Home Assistant history backfill](../widgets/sparkline.md#backfill-from-home-assistant)
+batch runs. Downloads resume when the batch completes or must defer, so history
+retry backoff does not keep images paused. An existing image remains visible;
+the first image can appear after the initial backfill.
+
 ### Follow a changing URL
 
 The **Image or Stream URL** also accepts [binding templates](../pads/bindings.md),
