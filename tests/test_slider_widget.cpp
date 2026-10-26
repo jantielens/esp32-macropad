@@ -217,6 +217,10 @@ TEST_F(SliderNativeWidget, AutomaticSizingUsesFullLengthAndShrinksToFitBothAxes)
                       expected_track);
             EXPECT_EQ(lv_obj_get_style_pad_left(state().control, LV_PART_KNOB),
                       (expected_knob - expected_track) / 2);
+            EXPECT_EQ(lv_obj_get_x(state().control),
+                      (lv_obj_get_content_width(button) - lv_obj_get_width(state().control)) / 2);
+            EXPECT_EQ(lv_obj_get_y(state().control),
+                      (lv_obj_get_content_height(button) - lv_obj_get_height(state().control)) / 2);
         }
     }
 }

@@ -363,7 +363,7 @@ static void slider_layout(SliderState* state) {
                                body_top + (body_height - group.height) / 2,
                                group_width, group);
         if (outer_icon) state->icon = outer_icon;
-        control_x = (knob - track) / 2;
+        control_x = shared_row ? (knob - track) / 2 : (content_width - track) / 2;
         control_y = body_top + (body_height - control_length) / 2;
         lv_obj_set_size(state->control, track, control_length);
     }
