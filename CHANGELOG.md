@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-25
+ms.date: 2026-10-26
 ms.topic: reference
 ---
 
@@ -52,6 +52,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Clear previous action settings when editing another button so new sliders and
+  other buttons do not inherit Home Assistant service fields or other action
+  values. Preserve each button's drafts when switching action types or returning
+  to that button.
 * Pause remote image downloads across the initial Home Assistant history batch
   to reduce overlapping network-buffer pressure. Resume images when the batch
   completes or must defer, without holding them through retry backoff.

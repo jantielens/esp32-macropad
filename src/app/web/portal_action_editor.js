@@ -242,10 +242,11 @@ function actionEditorHTML(prefix, label, opts) {
     h += '</select>';
     h += '<small id="' + prefix + '-context" class="action-context" style="display:none;"></small>';
     h += '</div>';
+    h += '<div id="' + prefix + '-fields">';
     h += actionEditorGenericFieldsHTML(prefix);
     // Extension-contributed groups (e.g. shutter command UI on shutter-tester builds)
     _actionEditorExtensions.forEach(function(ext) { if (ext.groups) h += ext.groups(prefix, opts); });
-    return h;
+    return h + '</div>';
 }
 
 // Show/hide sub-groups when the action type dropdown changes.
@@ -275,6 +276,18 @@ function actionEditorTypeChanged(prefix) {
 // Load an action object { type, target, topic, payload, sequence } into the form.
 function actionEditorLoad(prefix, action) {
     if (!action) action = {};
+    var fields = document.getElementById(prefix + '-fields');
+    if (fields && fields.querySelectorAll) fields.querySelectorAll('input, select, textarea').forEach(function(input) {
+        if (input.tagName === 'SELECT') {
+            var options = Array.from(input.options);
+            var selected = options.findIndex(function(option) { return option.defaultSelected; });
+            input.selectedIndex = selected < 0 ? 0 : selected;
+        } else {
+            input.value = input.defaultValue;
+            input.checked = input.defaultChecked;
+        }
+        if (input.setCustomValidity) input.setCustomValidity('');
+    });
     var el;
     el = document.getElementById(prefix + '-type');
     if (el) {
