@@ -5,11 +5,11 @@
   "chip_family": "ESP32-P4",
   "flash_mb": 16,
   "psram_mb": 32,
-  "capabilities": ["mcp", "image_fetch", "audio"],
+  "capabilities": ["mcp", "ble_hid", "image_fetch", "audio", "extensions"],
   "wireless": {
     "wifi": true,
-    "ble": false,
-    "notes": "Wi-Fi via ESP-Hosted ESP32-C6 over SDIO; hardware validation pending"
+    "ble": true,
+    "notes": "Wi-Fi and BLE via ESP-Hosted ESP32-C6 over SDIO; hardware validation pending"
   },
   "display": {
     "size": "5.0\"",

@@ -33,9 +33,16 @@ the C6 wireless firmware without first confirming the recovery procedure.
 
 ## Configured features
 
-The firmware enables touch, Wi-Fi through the ESP32-C6, MQTT, MCP, remote
-images, ES8388 speaker playback, battery monitoring, and charging.
-Microphone capture, camera, BLE, USB HID, and native extensions are not enabled.
+The firmware enables touch, Wi-Fi and BLE keyboard HID through the ESP32-C6,
+MQTT, MCP, remote images, native extensions, ES8388 speaker playback, battery
+monitoring, and charging. Microphone capture, camera, BLE telemetry, and USB
+HID are not enabled. BLE keyboard pairing and Wi-Fi coexistence require physical
+validation on this board.
+
+USB-C provides serial diagnostics through USB CDC. USB HID is unavailable:
+the firmware's USB HID stack uses the controller connected to the host-oriented
+USB-A port, not USB-C. Remote logging remains available. Native extensions
+require physical validation on this board.
 
 ## Battery and charging
 

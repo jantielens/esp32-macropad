@@ -6,8 +6,9 @@
 #define BOARD_SENSOR_SOURCE "../m5stack-tab5/tab5_battery_sensor.cpp"
 #define HAS_REMOTE_LOG true
 #define HAS_BLE false
-#define HAS_BLE_HID false
+#define HAS_BLE_HID true
 #define HAS_USB_HID false
+#define HAS_NATIVE_EXTENSIONS true
 #define HAS_DISPLAY true
 #define HAS_TOUCH true
 #define HAS_AUDIO true

@@ -165,6 +165,26 @@ for board in ("jc3248w535", "jc3636w518", "jc3636w518-sd"):
     assert "extensions" in metadata["capabilities"]
     print(f"PASS: {board}")
 
+for board in ("m5stack-tab5", "m5stack-tab5-sd"):
+    subprocess.run(
+        ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+         "-x", "c++", "-", "-I", str(root), "-I", str(root / "src/boards" / board),
+         "-DCONFIG_IDF_TARGET_ESP32P4=1", "-DBOARD_HAS_PSRAM", "-DBOARD_HAS_OVERRIDE"],
+        input='''#include "src/app/board_config.h"
+static_assert(!HAS_USB_HID && HAS_NATIVE_EXTENSIONS, "USB HID disabled; extensions required");
+static_assert(HAS_BLE_HID && !HAS_BLE, "BLE HID enabled; BLE telemetry disabled");
+''', text=True, check=True,
+    )
+    metadata = json.loads((root / "src/boards" / board / "metadata.json").read_text())
+    assert "usb_hid" not in metadata["capabilities"]
+    assert "extensions" in metadata["capabilities"]
+    assert "ble_hid" in metadata["capabilities"]
+    assert metadata["wireless"]["ble"] is True
+    fqbn_line = next(line for line in (root / "config.sh").read_text().splitlines()
+                     if f'["{board}"]=' in line)
+    assert "USBMode=hwcdc,CDCOnBoot=cdc" in fqbn_line
+    print(f"PASS: {board}")
+
 board = "esp32c3-withsensors"
 subprocess.run(
     ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
