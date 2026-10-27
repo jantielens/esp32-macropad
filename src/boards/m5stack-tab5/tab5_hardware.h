@@ -5,3 +5,4 @@
 
 uint8_t tab5_panel_revision();
 AudioBoardControl tab5_audio_control();
+bool tab5_battery_read(float& voltage, float& current);

@@ -294,7 +294,9 @@ unknown versions leave the display and touch unavailable. The older
 ILI9881C/GT911 hardware is not supported. The DSI driver uses the existing
 PSRAM framebuffer and asynchronous rendering path; panel command payloads
 remain in flash. The ST touch driver reads bounded 7-byte contact records and
-reports I2C errors distinctly from releases. Physical behavior is unverified.
+reports I2C errors distinctly from releases. It reads up to 10 controller records
+and reports up to the configured contact capacity. Display and touch have been
+observed on Tab5; the SD variant remains unverified.
 
 ### Inkplate 6 Flick LVGL
 

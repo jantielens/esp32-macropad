@@ -3,6 +3,8 @@
 
 #define BOARD_HARDWARE_SOURCE "../m5stack-tab5/tab5_hardware.cpp"
 #define BOARD_HARDWARE_HEADER "../m5stack-tab5/tab5_hardware.h"
+#define BOARD_SENSOR_SOURCE "../m5stack-tab5/tab5_battery_sensor.cpp"
+#define HAS_REMOTE_LOG true
 #define HAS_BLE false
 #define HAS_BLE_HID false
 #define HAS_USB_HID false

@@ -12,6 +12,13 @@ bool writeCodec(uint8_t reg, uint8_t value) {
     i2c_bus_unlock();
     return ok;
 }
+
+int readCodec(uint8_t reg) {
+    Wire.beginTransmission(AUDIO_CODEC_ADDR);
+    if (Wire.write(reg) != 1 || Wire.endTransmission(false) != 0 ||
+        Wire.requestFrom(uint8_t(AUDIO_CODEC_ADDR), uint8_t(1)) != 1) return -1;
+    return Wire.read();
+}
 }
 
 bool ES8388AudioDriver::begin(uint32_t sample_rate) {
@@ -36,11 +43,6 @@ bool ES8388AudioDriver::begin(uint32_t sample_rate) {
         },
     };
     config.clk_cfg.mclk_multiple = I2S_MCLK_MULTIPLE_256;
-    error = i2s_channel_init_std_mode(tx, &config);
-    if (error == ESP_OK) error = i2s_channel_enable(tx);
-    if (error != ESP_OK) { LOGE("Audio", "ES8388 I2S init failed: %s", esp_err_to_name(error)); end(); return false; }
-    running = true;
-    vTaskDelay(pdMS_TO_TICKS(50));
     struct Register { uint8_t address, value; };
     static const Register sequence[] = {
         {0, 0x80}, {0, 0}, {0, 0}, {0, 0x0e}, {1, 0}, {2, 0x0a}, {3, 0xff},
@@ -49,6 +51,7 @@ bool ES8388AudioDriver::begin(uint32_t sample_rate) {
         {39, 0xb8}, {42, 0xb8}, {43, 0x08}, {45, 0}, {46, 0x21}, {47, 0x21},
         {48, 0x21}, {49, 0x21},
     };
+    codecStarted = true;
     for (const Register& entry : sequence) {
         if (!writeCodec(entry.address, entry.value)) {
             LOGE("Audio", "ES8388 initialization failed at register 0x%02x", entry.address);
@@ -56,6 +59,12 @@ bool ES8388AudioDriver::begin(uint32_t sample_rate) {
             return false;
         }
     }
+    error = i2s_channel_init_std_mode(tx, &config);
+    if (error != ESP_OK) { LOGE("Audio", "ES8388 I2S init failed: %s", esp_err_to_name(error)); end(); return false; }
+    error = i2s_channel_enable(tx);
+    if (error != ESP_OK) { LOGE("Audio", "ES8388 I2S start failed: %s", esp_err_to_name(error)); end(); return false; }
+    running = true;
+    vTaskDelay(pdMS_TO_TICKS(50));
     initialized = true;
     int16_t silence[64] = {};
     if (!write(silence, 32)) { end(); return false; }
@@ -66,7 +75,32 @@ bool ES8388AudioDriver::write(const int16_t* frames, size_t frame_count) {
     if (!initialized || !frames || !frame_count) return false;
     size_t written = 0;
     const size_t bytes = frame_count * 2 * sizeof(int16_t);
-    return i2s_channel_write(tx, frames, bytes, &written, portMAX_DELAY) == ESP_OK && written == bytes;
+    const esp_err_t error = i2s_channel_write(tx, frames, bytes, &written, portMAX_DELAY);
+    static bool loggedPcm = false;
+    if (!loggedPcm) {
+        for (size_t sample = 0; sample < frame_count * 2; ++sample) {
+            if (frames[sample] != 0) {
+                LOGI("Audio", "ES8388 PCM: sample=%d bytes=%u/%u result=%s",
+                     int(frames[sample]), unsigned(written), unsigned(bytes), esp_err_to_name(error));
+                loggedPcm = true;
+                static const uint8_t registers[] = {2, 4, 8, 23, 24, 25, 26, 27, 39, 42, 46, 48};
+                int values[sizeof(registers)] = {};
+                if (i2c_bus_lock()) {
+                    for (size_t index = 0; index < sizeof(registers); ++index)
+                        values[index] = readCodec(registers[index]);
+                    i2c_bus_unlock();
+                    LOGI("Audio", "ES8388 power/format: 02=%d 04=%d 08=%d 23=%d 24=%d 25=%d",
+                         values[0], values[1], values[2], values[3], values[4], values[5]);
+                    LOGI("Audio", "ES8388 volume/mix: 26=%d 27=%d 39=%d 42=%d 46=%d 48=%d",
+                         values[6], values[7], values[8], values[9], values[10], values[11]);
+                } else {
+                    LOGW("Audio", "ES8388 register readback lock failed");
+                }
+                break;
+            }
+        }
+    }
+    return error == ESP_OK && written == bytes;
 }
 
 bool ES8388AudioDriver::setVolume(uint8_t volume) {
@@ -85,10 +119,13 @@ bool ES8388AudioDriver::setMuted(bool muted) {
 
 bool ES8388AudioDriver::end() {
     bool ok = setMuted(true);
-    if (running) {
+    if (codecStarted) {
         if (!writeCodec(25, 0x24)) ok = false;
         vTaskDelay(pdMS_TO_TICKS(1));
         if (!writeCodec(4, 0xc0) || !writeCodec(2, 0xff)) ok = false;
+        codecStarted = false;
+    }
+    if (running) {
         if (i2s_channel_disable(tx) == ESP_OK) running = false;
         else ok = false;
     }

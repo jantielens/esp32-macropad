@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstdint>
+#include <cmath>
 #include <Wire.h>
 #include "board_hardware.h"
 #include "tab5_hardware.h"
@@ -51,7 +52,17 @@ size_t TwoWire::write(uint8_t value) {
 
 int TwoWire::endTransmission(bool) {
     if (fail) return 1;
-    if (count == 2 && address != 0x55) {
+    if (transientFailures) {
+        --transientFailures;
+        return 1;
+    }
+    if (address == 0x41 && count == 3) {
+        powerRegisters[bytes[0]] = uint16_t(bytes[1] << 8) | bytes[2];
+    } else if (count == 2 && address != 0x55 && address != 0x41) {
+        if (address == 0x44 && bytes[0] == 0x03 && (bytes[1] & 0xa0) == 0xa0) {
+            assert((registers[address][0x05] & 0xa0) == 0xa0);
+            assert((registers[address][0x07] & 0xa0) == 0);
+        }
         if (address == 0x43 && bytes[0] == 0x05) {
             assert((bytes[1] & 0x10) == 0);
             ++resetWrites;
@@ -69,7 +80,11 @@ int TwoWire::endTransmission(bool) {
 
 size_t TwoWire::requestFrom(uint8_t target, uint8_t length) {
     assert(locked && target == address);
-    if (target == 0x55) {
+    if (target == 0x41) {
+        assert(count == 1 && length == 2);
+        responseRegister = bytes[0];
+        responseIndex = 0;
+    } else if (target == 0x55) {
         assert(count == 2 && bytes[0] == 0);
         responseRegister = bytes[1];
         response = responseRegister == 0 ? panelVersion : -1;
@@ -81,21 +96,45 @@ size_t TwoWire::requestFrom(uint8_t target, uint8_t length) {
 }
 
 int TwoWire::read() {
+    if (address == 0x41) {
+        const uint16_t value = powerRegisters[responseRegister];
+        return responseIndex++ == 0 ? value >> 8 : value & 0xff;
+    }
     if (address == 0x55 && response < 0) return registers[address][responseRegister++];
     return response;
 }
 
 int main() {
-    Wire.registers[0x44][0x05] = 0xa4;
+    Wire.registers[0x44][0x05] = 0x1c;
     Wire.registers[0x44][0x07] = 0xff;
-    Wire.registers[0x44][0x03] = 0xa4;
+    Wire.registers[0x44][0x03] = 0x1c;
     Wire.registers[0x43][0x05] = 0xff;
     Wire.registers[0x43][0x07] = 0xff;
+    Wire.transientFailures = 1;
     assert(board_hardware_init());
     assert(!locked && tab5_panel_revision() == 1 && resetWrites >= 2);
-    assert(Wire.registers[0x44][0x05] == 0xa5);
-    assert(Wire.registers[0x44][0x07] == 0xfe);
-    assert(Wire.registers[0x44][0x03] == 0xa5);
+    assert(Wire.registers[0x44][0x05] == 0xbd);
+    assert(Wire.registers[0x44][0x07] == 0x5e);
+    assert(Wire.registers[0x44][0x03] == 0xbd);
+    float voltage = -1, current = -1;
+    Wire.powerRegisters[0xff] = 0;
+    assert(!tab5_battery_read(voltage, current));
+    assert(Wire.powerRegisters[0x05] == 0);
+    Wire.powerRegisters[0xff] = 0x2260;
+    assert(!tab5_battery_read(voltage, current));
+    assert(Wire.powerRegisters[0x00] == 0x0527 && Wire.powerRegisters[0x05] == 16777);
+    Wire.powerRegisters[0x06] = 0x0008;
+    Wire.powerRegisters[0x02] = 6400;
+    Wire.powerRegisters[0x04] = uint16_t(-8192);
+    assert(tab5_battery_read(voltage, current));
+    assert(std::fabs(voltage - 8.0f) < 0.001f && std::fabs(current - 0.5f) < 0.001f);
+    Wire.powerRegisters[0x04] = 4096;
+    assert(tab5_battery_read(voltage, current) && std::fabs(current + 0.25f) < 0.001f);
+    Wire.powerRegisters[0x06] = 0x000c;
+    assert(!tab5_battery_read(voltage, current));
+    Wire.fail = true;
+    assert(!tab5_battery_read(voltage, current));
+    Wire.fail = false;
     assert((Wire.registers[0x43][0x03] & 0x30) == 0x20);
     assert((Wire.registers[0x43][0x07] & 0x32) == 0);
     assert((Wire.registers[0x43][0x0b] & 0x10) != 0);
@@ -116,6 +155,16 @@ int main() {
     auto snapshot = touch.readSnapshot();
     assert(snapshot.status == TouchReadStatus::Fresh && snapshot.count == 1);
     assert(snapshot.contacts[0].horizontal == 100 && snapshot.contacts[0].vertical == 300);
+        Wire.registers[0x55][0x09] = 10;
+        Wire.registers[0x55][0x45] = 0x80;
+        Wire.registers[0x55][0x46] = 120;
+        Wire.registers[0x55][0x47] = 0x01;
+        Wire.registers[0x55][0x48] = 0x40;
+        snapshot = touch.readSnapshot();
+        assert(snapshot.status == TouchReadStatus::Fresh && snapshot.count == 2);
+        assert(snapshot.contacts[1].id == 7 && snapshot.contacts[1].horizontal == 120 &&
+            snapshot.contacts[1].vertical == 320);
+        Wire.registers[0x55][0x09] = 2;
     touch.setRotation(1);
     snapshot = touch.readSnapshot();
     assert(snapshot.contacts[0].horizontal == 300 && snapshot.contacts[0].vertical == 619);

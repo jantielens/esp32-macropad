@@ -18,5 +18,6 @@ private:
     AudioBoardControl control;
     i2s_chan_handle_t tx = nullptr;
     bool running = false;
+    bool codecStarted = false;
     bool initialized = false;
 };

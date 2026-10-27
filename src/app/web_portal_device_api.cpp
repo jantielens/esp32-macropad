@@ -627,6 +627,10 @@ void handleReboot(AsyncWebServerRequest *request) {
 
 		// Schedule reboot after response is sent
 		delay(100);
+#if HAS_AUDIO && AUDIO_OUTPUT_DRIVER == AUDIO_OUTPUT_DRIVER_ES8388
+		if (audio_prepare_reboot(1000)) LOGI("Audio", "Reboot shutdown complete");
+		else LOGW("Audio", "Reboot shutdown failed or timed out");
+#endif
 		LOGI("Portal", "Rebooting");
 		ESP.restart();
 }

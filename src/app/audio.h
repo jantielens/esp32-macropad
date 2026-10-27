@@ -14,6 +14,8 @@ typedef void (*AudioPlaybackFinished)(uint32_t generation);
 // initial_volume: 0-100 (from NVS config)
 void audio_init(uint8_t initial_volume);
 
+bool audio_prepare_reboot(uint32_t timeout_ms);
+
 static constexpr uint16_t AUDIO_WAKE_DELAY_DEFAULT_MS = 120;
 static constexpr uint16_t AUDIO_WAKE_DELAY_MAX_MS = 1000;
 void audio_set_amplifier_policy(bool idle_mute, uint16_t wake_delay_ms);

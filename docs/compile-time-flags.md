@@ -432,8 +432,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc4827w543c |  |  | ✅ |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? |  | ? |  |  | ✅ |  |  |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
 | esp32-p4-lcd4b | ✅ | ✅ | ✅ |  | ✅ | ? |  | ✅ |  | ? | ✅ |  |  |  | ? |  |  | ✅ | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
 | esp32-p4-lcd4b-voice | ✅ | ✅ | ✅ |  | ✅ | ? |  | ✅ |  | ? | ✅ |  |  |  | ? |  |  | ✅ | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
-| m5stack-tab5 | ✅ |  | ✅ |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ |  |  |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
-| m5stack-tab5-sd | ✅ |  | ✅ |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ |  |  |  | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
+| m5stack-tab5 | ✅ |  | ✅ |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ |  |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
+| m5stack-tab5-sd | ✅ |  | ✅ |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
 | jc4880p433 | ✅ |  | ✅ |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
 | jc4880p433-sd | ✅ |  | ✅ |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
 | jc4880p433-shutter | ✅ |  | ✅ |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? |  | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
@@ -1129,6 +1129,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_pad.cpp
   - src/app/web_portal_routes.cpp
   - src/boards/m5stack-stopwatch/stopwatch_battery_sensor.cpp
+  - src/boards/m5stack-tab5/tab5_battery_sensor.cpp
 - **HAS_MUSIC_ANALYSIS**
   - src/app/audio.cpp
   - src/app/board_config.h
@@ -1204,6 +1205,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sensors/battery_adc_sensor.cpp
   - src/app/sensors/battery_adc_sensor.h
   - src/boards/m5stack-stopwatch/stopwatch_battery_sensor.cpp
+  - src/boards/m5stack-tab5/tab5_battery_sensor.cpp
 - **HAS_SENSOR_BME280**
   - src/app/board_config.h
   - src/app/sensors.cpp
@@ -1347,6 +1349,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **AUDIO_OUTPUT_DRIVER**
   - src/app/audio_output_drivers.cpp
   - src/app/board_config.h
+  - src/app/web_portal_device_api.cpp
 - **CAMERA_DRIVER**
   - src/app/board_config.h
   - src/app/camera_drivers.cpp

@@ -83,6 +83,8 @@ static QueueHandle_t audio_queue = NULL;
 static QueueHandle_t music_work_queue = NULL;
 #endif
 static std::atomic<TaskHandle_t> audio_task_handle{nullptr};
+enum AudioRebootState : uint8_t { AUDIO_REBOOT_IDLE, AUDIO_REBOOT_REQUESTED, AUDIO_REBOOT_DONE, AUDIO_REBOOT_FAILED };
+static std::atomic<AudioRebootState> audio_reboot_state{AUDIO_REBOOT_IDLE};
 static std::atomic<uint32_t> g_alert_stop_epoch{0};
 static std::atomic<uint32_t> g_all_stop_epoch{0};
 static std::atomic<bool> g_playing{false};
@@ -385,6 +387,19 @@ static void audio_task(void* param) {
 #endif
 
     for (;;) {
+        const AudioRebootState reboot_state = audio_reboot_state.load();
+        if (reboot_state != AUDIO_REBOOT_IDLE) {
+            if (reboot_state == AUDIO_REBOOT_REQUESTED) {
+                close_alert();
+#if HAS_SOUND_PLAYER
+                close_music();
+#endif
+                const bool ok = output_driver && output_driver->end();
+                audio_reboot_state.store(ok ? AUDIO_REBOOT_DONE : AUDIO_REBOOT_FAILED);
+            }
+            vTaskDelay(pdMS_TO_TICKS(10));
+            continue;
+        }
         if (session_guard && !session_guard(session_generation)) session_guard = nullptr;
         if (g_playing.load() && active.guard && !active.guard(active.generation)) close_alert();
         if (g_alert_stop_epoch.load() != alert_stop_epoch) {
@@ -728,6 +743,16 @@ void audio_init(uint8_t initial_volume) {
     audio_initialized = true;
     device_telemetry_log_memory_snapshot("audio");
     LOGI(TAG, "Audio ready (volume=%u%%, amplifier muted until playback)", current_volume.load());
+}
+
+bool audio_prepare_reboot(uint32_t timeout_ms) {
+    if (!audio_initialized) return true;
+    AudioRebootState expected = AUDIO_REBOOT_IDLE;
+    audio_reboot_state.compare_exchange_strong(expected, AUDIO_REBOOT_REQUESTED);
+    const int64_t deadline = esp_timer_get_time() + int64_t(timeout_ms) * 1000;
+    while (audio_reboot_state.load() == AUDIO_REBOOT_REQUESTED && esp_timer_get_time() < deadline)
+        vTaskDelay(pdMS_TO_TICKS(10));
+    return audio_reboot_state.load() == AUDIO_REBOOT_DONE;
 }
 
 bool audio_get_stack_watermark(uint32_t* minimum_free_bytes) {

@@ -262,9 +262,12 @@ The audio sample rate is board-configurable. The current audio boards use
 changing that rate.
 
 Tab5 uses 16-bit stereo at 48 kHz with 256x MCLK. Its board callback controls
-the amplifier through the shared I2C expander; the driver configures the DAC
-and shuts it down while I2S clocks are still running. Microphone input is not
-enabled. Hardware behavior and runtime memory use remain unverified.
+the amplifier through the shared I2C expander. The driver configures the codec
+before starting I2S and shuts it down while I2S clocks are still running. A
+portal reboot requests shutdown from the audio worker before restarting;
+other restart paths do not request it. Microphone input is not enabled. Speaker
+playback and portal reboots have been observed on Tab5; other reset paths and
+the SD variant remain unverified.
 
 ## ES8311 Output
 

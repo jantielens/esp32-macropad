@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Enable conservative charging and INA226 battery voltage and current readings
+  for Tab5 targets. Battery percentage and charging status are not estimated;
+  hardware validation is pending. See [M5Stack Tab5](src/boards/m5stack-tab5/README.md).
 * Add an SPI SD storage backend and experimental `m5stack-tab5` and
   `m5stack-tab5-sd` targets. The latter requires a readable SD card at boot;
   the former uses internal flash. ST7121 and ST7123 panels are supported;

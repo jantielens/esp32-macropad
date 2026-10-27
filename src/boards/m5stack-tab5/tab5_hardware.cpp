@@ -10,23 +10,62 @@
 namespace {
 constexpr uint8_t expanderAddress = 0x43;
 constexpr uint8_t powerExpanderAddress = 0x44;
+constexpr uint8_t powerMonitorAddress = 0x41;
 constexpr uint8_t wifiPowerMask = 0x01;
+constexpr uint8_t chargeControlMask = 0xa0;
 constexpr uint8_t amplifierMask = 0x02;
 constexpr uint8_t displayResetMask = 0x10;
 constexpr uint8_t touchResetMask = 0x20;
 uint8_t panelRevision = 0;
 bool boardReady = false;
+bool powerMonitorConfigured = false;
 
-bool updateExpander(uint8_t reg, uint8_t mask, uint8_t value, uint8_t address = expanderAddress) {
+bool readPowerRegister(uint8_t reg, uint16_t& value) {
+    Wire.beginTransmission(powerMonitorAddress);
+    const bool written = Wire.write(reg) == 1;
+    if (Wire.endTransmission(false) != 0 || !written ||
+        Wire.requestFrom(powerMonitorAddress, uint8_t(2)) != 2) return false;
+    const int high = Wire.read();
+    const int low = Wire.read();
+    if (high < 0 || low < 0) return false;
+    value = uint16_t((uint16_t(high) << 8) | uint16_t(low));
+    return true;
+}
+
+bool writePowerRegister(uint8_t reg, uint16_t value) {
+    Wire.beginTransmission(powerMonitorAddress);
+    const bool written = Wire.write(reg) == 1 && Wire.write(uint8_t(value >> 8)) == 1 &&
+        Wire.write(uint8_t(value)) == 1;
+    return Wire.endTransmission() == 0 && written;
+}
+
+int readExpander(uint8_t reg, uint8_t address = expanderAddress) {
     Wire.beginTransmission(address);
     if (Wire.write(reg) != 1 || Wire.endTransmission(false) != 0 ||
-        Wire.requestFrom(address, uint8_t(1)) != 1) return false;
-    const int current = Wire.read();
+        Wire.requestFrom(address, uint8_t(1)) != 1) return -1;
+    return Wire.read();
+}
+
+bool updateExpander(uint8_t reg, uint8_t mask, uint8_t value, uint8_t address = expanderAddress) {
+    const int current = readExpander(reg, address);
     if (current < 0) return false;
     Wire.beginTransmission(address);
     const bool written = Wire.write(reg) == 1 &&
         Wire.write(uint8_t((current & ~mask) | (value & mask))) == 1;
     return Wire.endTransmission() == 0 && written;
+}
+
+bool updateBootExpander(uint8_t reg, uint8_t mask, uint8_t value, uint8_t address = expanderAddress) {
+    for (unsigned attempt = 0; attempt < 3; ++attempt) {
+        if (updateExpander(reg, mask, value, address)) {
+            if (attempt) LOGW("Tab5", "Expander recovered: address=0x%02x register=0x%02x attempt=%u",
+                              address, reg, attempt + 1);
+            return true;
+        }
+        if (attempt < 2) delay(10);
+    }
+    LOGE("Tab5", "Expander initialization failed: address=0x%02x register=0x%02x", address, reg);
+    return false;
 }
 
 uint8_t detectPanel() {
@@ -45,12 +84,38 @@ uint8_t detectPanel() {
 bool setAmplifierMuted(bool muted) {
     if (!boardReady || !i2c_bus_lock()) return false;
     const bool ok = updateExpander(0x05, amplifierMask, muted ? 0 : amplifierMask);
+    int output = -1, direction = -1, highImpedance = -1;
+    if (ok && !muted) {
+        output = readExpander(0x05);
+        direction = readExpander(0x03);
+        highImpedance = readExpander(0x07);
+    }
     i2c_bus_unlock();
+    if (ok && !muted) {
+           LOGI("Tab5", "Amplifier wake: output=%d direction=%d high_z=%d",
+               output, direction, highImpedance);
+    }
     return ok;
 }
 }
 
 uint8_t tab5_panel_revision() { return panelRevision; }
+bool tab5_battery_read(float& voltage, float& current) {
+    if (!boardReady || !i2c_bus_lock()) return false;
+    uint16_t identity = 0, status = 0, rawVoltage = 0, rawCurrent = 0;
+    if (!powerMonitorConfigured) {
+        powerMonitorConfigured = readPowerRegister(0xff, identity) && identity == 0x2260 &&
+            writePowerRegister(0x00, 0x0527) && writePowerRegister(0x05, 16777);
+    }
+    const bool ok = powerMonitorConfigured && readPowerRegister(0x06, status) &&
+        (status & 0x0008) && !(status & 0x0004) && readPowerRegister(0x02, rawVoltage) &&
+        readPowerRegister(0x04, rawCurrent);
+    i2c_bus_unlock();
+    if (!ok) return false;
+    voltage = rawVoltage * 0.00125f;
+    current = -static_cast<int16_t>(rawCurrent) * (2.0f / 32768.0f);
+    return true;
+}
 AudioBoardControl tab5_audio_control() {
     AudioBoardControl control;
     control.mute = setAmplifierMuted;
@@ -58,6 +123,7 @@ AudioBoardControl tab5_audio_control() {
 }
 
 bool board_hardware_init() {
+    powerMonitorConfigured = false;
     pinMode(22, OUTPUT);
     digitalWrite(22, LOW);
     if (!hostedSetPins(12, 13, 11, 10, 9, 8, 15)) {
@@ -69,19 +135,22 @@ bool board_hardware_init() {
     if (ready) {
         pinMode(23, OUTPUT);
         digitalWrite(23, HIGH);
-        ready = updateExpander(0x05, wifiPowerMask, wifiPowerMask, powerExpanderAddress) &&
-            updateExpander(0x07, wifiPowerMask, 0, powerExpanderAddress) &&
-            updateExpander(0x03, wifiPowerMask, wifiPowerMask, powerExpanderAddress) &&
-            updateExpander(0x05, amplifierMask | displayResetMask | touchResetMask, 0) &&
-            updateExpander(0x03, amplifierMask | displayResetMask | touchResetMask,
+        ready = updateBootExpander(0x05, wifiPowerMask, wifiPowerMask, powerExpanderAddress) &&
+            updateBootExpander(0x07, wifiPowerMask, 0, powerExpanderAddress) &&
+            updateBootExpander(0x03, wifiPowerMask, wifiPowerMask, powerExpanderAddress) &&
+            updateBootExpander(0x05, chargeControlMask, chargeControlMask, powerExpanderAddress) &&
+            updateBootExpander(0x07, chargeControlMask, 0, powerExpanderAddress) &&
+            updateBootExpander(0x03, chargeControlMask, chargeControlMask, powerExpanderAddress) &&
+            updateBootExpander(0x05, amplifierMask | displayResetMask | touchResetMask, 0) &&
+            updateBootExpander(0x03, amplifierMask | displayResetMask | touchResetMask,
                            amplifierMask | displayResetMask | touchResetMask) &&
-            updateExpander(0x07, amplifierMask | displayResetMask | touchResetMask, 0) &&
-            updateExpander(0x0d, displayResetMask, displayResetMask) &&
-            updateExpander(0x0b, displayResetMask, displayResetMask);
+            updateBootExpander(0x07, amplifierMask | displayResetMask | touchResetMask, 0) &&
+            updateBootExpander(0x0d, displayResetMask, displayResetMask) &&
+            updateBootExpander(0x0b, displayResetMask, displayResetMask);
         if (ready) {
             delay(10);
-            ready = updateExpander(0x03, displayResetMask, 0) &&
-                updateExpander(0x05, touchResetMask, touchResetMask);
+            ready = updateBootExpander(0x03, displayResetMask, 0) &&
+                updateBootExpander(0x05, touchResetMask, touchResetMask);
         }
         pinMode(23, INPUT);
         if (ready) {

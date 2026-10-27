@@ -34,10 +34,23 @@ the C6 wireless firmware without first confirming the recovery procedure.
 ## Configured features
 
 The firmware enables touch, Wi-Fi through the ESP32-C6, MQTT, MCP, remote
-images, and ES8388 speaker playback. Microphone capture, camera, BLE, USB HID,
-native extensions, battery monitoring, and charging control are not enabled.
-Charging and battery behavior have not been verified by this firmware; follow
-the vendor's power and charging guidance before relying on battery operation.
+images, ES8388 speaker playback, battery monitoring, and charging.
+Microphone capture, camera, BLE, USB HID, and native extensions are not enabled.
+
+## Battery and charging
+
+The firmware enables the vendor's 500 mA charging setting with quick charge
+disabled during board initialization. Charging stops when the board is off.
+The firmware does not provide a charging control or a battery percentage.
+Charging and battery behavior have not been physically verified: monitor
+current and battery temperature during initial testing and follow the
+[vendor power and charging guidance](https://docs.m5stack.com/en/core/Tab5).
+
+The INA226 reports battery voltage and signed current, positive when charging
+and negative when discharging. Use `[sensor:battery_voltage;%.2f|N/A]` and
+`[sensor:battery_current;%.2f|N/A]` in a button, or use the corresponding
+Home Assistant sensors with MQTT. Failed samples can retain their last valid
+values; see [local sensor readings](../../../docs/user/pads/data-sources.md#read-local-sensors-and-health).
 
 | Signal | GPIO or controller |
 | --- | --- |
@@ -48,6 +61,8 @@ the vendor's power and charging guidance before relying on battery operation.
 | ES8388 MCLK / BCLK / LRCK / data | 30 / 27 / 29 / 26 |
 | C6 SDIO CLK / CMD / D0-D3 / reset | 12 / 13 / 11, 10, 9, 8 / 15 |
 | C6 power | I2C expander `0x44`, bit 0 |
+| Charging enable / quick-charge disable | I2C expander `0x44`, bits 7 / 5 |
+| Battery voltage and current monitor | INA226 at I2C `0x41` |
 
 ## References
 

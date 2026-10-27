@@ -5,6 +5,8 @@
 #include <Wire.h>
 
 namespace {
+constexpr uint8_t maxTouchRecords = 10;
+
 bool readTouchRegister(uint16_t reg, uint8_t* data, uint8_t length) {
     Wire.beginTransmission(0x55);
     const bool written = Wire.write(uint8_t(reg >> 8)) == 1 && Wire.write(uint8_t(reg)) == 1;
@@ -52,11 +54,11 @@ TouchSnapshot ST7123TouchDriver::readSnapshot() {
     result.status = TouchReadStatus::Error;
     if (!available || !i2c_bus_lock()) return result;
     uint8_t info = 0, count = 0;
-    uint8_t records[7 * TOUCH_CONTACT_CAPACITY] = {};
+    uint8_t records[7 * maxTouchRecords] = {};
     bool ok = readTouchRegister(0x0010, &info, 1);
     if (ok && (info & 0x08)) {
         ok = readTouchRegister(0x0009, &count, 1);
-        if (count > TOUCH_CONTACT_CAPACITY) count = TOUCH_CONTACT_CAPACITY;
+        if (count > maxTouchRecords) count = maxTouchRecords;
         if (ok && count) ok = readTouchRegister(0x0014, records, uint8_t(count * 7));
     }
     i2c_bus_unlock();
@@ -81,6 +83,7 @@ TouchSnapshot ST7123TouchDriver::readSnapshot() {
         result.contacts[result.count].horizontal = tx;
         result.contacts[result.count].vertical = ty;
         ++result.count;
+        if (result.count == TOUCH_CONTACT_CAPACITY) break;
     }
     return result;
 }
