@@ -65,6 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Show buttons created with the Button Builder immediately in the pad preview.
 * Abort interrupted firmware uploads before releasing update ownership so a
   pending reboot or another update can proceed. Keep successful updates
   protected through reboot, and prevent duplicate reboot requests from

@@ -1033,6 +1033,7 @@ function padButtonBuilderCreate() {
     }
     padWorkspaceClearButton(session.col, session.row);
     padState.buttons.push(button);
+    padUpdateButtonPreview(null, button);
     padMarkDirty();
     padButtonBuilderClose();
     padDialogOpen(button.col, button.row);
