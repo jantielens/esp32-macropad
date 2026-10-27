@@ -513,6 +513,7 @@ struct HwButtonDef {
 // Audio output driver selection.
 #define AUDIO_OUTPUT_DRIVER_ES8311   0
 #define AUDIO_OUTPUT_DRIVER_PCM510XA 1
+#define AUDIO_OUTPUT_DRIVER_ES8388   2
 
 // Select the audio output HAL backend (one of the AUDIO_OUTPUT_DRIVER_* constants).
 #ifndef AUDIO_OUTPUT_DRIVER
@@ -1097,6 +1098,7 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define DISPLAY_DRIVER_RETERMINAL_E1003 DISPLAY_DRIVER_IT8951
 #define DISPLAY_DRIVER_ARDUINO_GFX_CO5300 14
 #define DISPLAY_DRIVER_CROWPANEL_42 15
+#define DISPLAY_DRIVER_TAB5_DSI 16
 
 // Use reTerminal E1003's controller firmware and reversed image-packing protocol.
 #ifndef IT8951_E1003_PROTOCOL
@@ -1121,7 +1123,8 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #ifndef TELEMETRY_ALLOW_PSRAM_POOL_WALK
 #if HAS_DISPLAY && (DISPLAY_DRIVER == DISPLAY_DRIVER_ST7703_DSI || \
                     DISPLAY_DRIVER == DISPLAY_DRIVER_ST7701_DSI || \
-                    DISPLAY_DRIVER == DISPLAY_DRIVER_JD9165_DSI)
+                    DISPLAY_DRIVER == DISPLAY_DRIVER_JD9165_DSI || \
+                    DISPLAY_DRIVER == DISPLAY_DRIVER_TAB5_DSI)
 #define TELEMETRY_ALLOW_PSRAM_POOL_WALK 0
 #else
 #define TELEMETRY_ALLOW_PSRAM_POOL_WALK 1
@@ -1505,6 +1508,7 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define TOUCH_DRIVER_CST816S_WIRE 6
 #define TOUCH_DRIVER_INKPLATE6FLICK 7
 #define TOUCH_DRIVER_CST820B_WIRE 8
+#define TOUCH_DRIVER_ST7123 9
 
 // Maximum AXS15231B contacts (1 or 2); enable two only on verified panels.
 #ifndef MAX_AXS15231B_CONTACTS

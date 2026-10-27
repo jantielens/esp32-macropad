@@ -61,8 +61,8 @@ graph TD
     DM --> Screens["**Screen Base Class**<br/>SplashScreen · InfoScreen<br/>TestScreen · Custom screens"]
     DM --> DD["**DisplayDriver**<br/>(HAL Interface)"]
     TM --> TD["**TouchDriver**<br/>(HAL Interface)"]
-    DD --> DImpl["TFT_eSPI_Driver<br/>Arduino_GFX_Drv<br/>ST7701_RGB_Driver<br/>MipiDsiDriver<br/>(ST7703 / ST7701 / JD9165 DSI subclasses)"]
-    TD --> TImpl["XPT2046_Driver<br/>AXS15231B_Touch<br/>CST816S_Driver<br/>GT911_Driver"]
+    DD --> DImpl["TFT_eSPI_Driver<br/>Arduino_GFX_Drv<br/>ST7701_RGB_Driver<br/>MipiDsiDriver<br/>(ST7703 / ST7701 / JD9165 / Tab5 DSI subclasses)"]
+    TD --> TImpl["XPT2046_Driver<br/>AXS15231B_Touch<br/>CST816S_Driver<br/>GT911_Driver<br/>ST7123TouchDriver"]
     DImpl --> Lib1["TFT_eSPI library<br/>Arduino_GFX lib"]
     TImpl --> Lib2["XPT2046 library<br/>Wire.h (I2C)<br/>Vendored drivers"]
     Lib1 --> LVGL["**LVGL 9.6.0**<br/>Widget rendering<br/>Themes · Fonts · Animations"]
@@ -284,6 +284,17 @@ idle/wake behavior and release handling on a physical unit. Reference sources:
 [factory HAL](https://github.com/m5stack/M5StopWatch-UserDemo/tree/6b4aa125288b6fe9dca661f10159f6e1e5ee785c/main/hal),
 [M5GFX bring-up](https://github.com/m5stack/M5GFX/blob/22e94f1eaa7d5eb40eab65f42bf10713e7e89294/src/M5GFX.cpp),
 and [hardware documentation](https://docs.m5stack.com/en/core/StopWatch).
+
+### Tab5 Display And Touch
+
+Tab5 board initialization holds the backlight off, releases the expander-owned
+LCD reset as an input with pull-up, and identifies the ST touch firmware over
+shared I2C. Version 1 selects ST7121 DSI timing and version 3 selects ST7123;
+unknown versions leave the display and touch unavailable. The older
+ILI9881C/GT911 hardware is not supported. The DSI driver uses the existing
+PSRAM framebuffer and asynchronous rendering path; panel command payloads
+remain in flash. The ST touch driver reads bounded 7-byte contact records and
+reports I2C errors distinctly from releases. Physical behavior is unverified.
 
 ### Inkplate 6 Flick LVGL
 

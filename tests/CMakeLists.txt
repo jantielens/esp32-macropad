@@ -64,6 +64,14 @@ function(add_host_command_test name)
     set_tests_properties(${name} PROPERTIES WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 endfunction()
 
+add_host_legacy_test(test_tab5_hardware
+    SOURCES test_tab5_hardware.cpp ${PROJECT_SOURCE_DIR}/src/boards/m5stack-tab5/tab5_hardware.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/drivers/st7123_touch_driver.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/tab5_overrides ${PROJECT_SOURCE_DIR}/src/boards/m5stack-tab5
+    DEFINITIONS BOARD_HAS_OVERRIDE BOARD_HAS_PSRAM CONFIG_IDF_TARGET_ESP32P4=1
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+)
+
 add_host_legacy_test(test_image_fetch
     SOURCES test_image_fetch.cpp ${PROJECT_SOURCE_DIR}/src/app/image_fetch.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/image_fetch_overrides

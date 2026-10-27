@@ -20,7 +20,7 @@ flowchart TD
     Storage["LittleFS sound files"] --> Player["sound_player.cpp\nMP3 decode and resampling"]
     Audio --> Driver["AudioOutputDriver"]
     Player --> Driver
-    Driver --> Hardware["ES8311 or PCM510xA\nI2S output hardware"]
+    Driver --> Hardware["ES8311, ES8388, or PCM510xA\nI2S output hardware"]
 ```
 
 `audio_output_drivers.cpp` includes exactly one concrete driver selected by
@@ -47,7 +47,7 @@ buffer duration plus a 100 ms idle grace period before muting. Paused music is
 idle; silence gaps within an active tone pattern are not. Rapid feedback can
 reuse the enabled amplifier during the grace period. OTA entry mutes immediately.
 Codec power and I2S clocks remain active while idle, including the PCM510xA
-clock configuration. This policy applies to both output drivers.
+clock configuration. This policy applies to all output drivers.
 
 The Volume fragment's Amplifier section persists `audio_idle_mute` (default
 true) and `audio_wake_delay_ms` in NVS. Disabling idle muting keeps the
@@ -255,10 +255,16 @@ Audio-capable boards select their driver and pin mapping in
 | `jc1060p470c` | ES8311 codec | `ES8311Driver` |
 | `jc3636w518` | PCM510xA DAC | `PCM510xADriver` |
 | `m5stack-stopwatch` (hardware validation pending) | ES8311 + AW8737A, M5IOE1 power/mute | `ES8311Driver` |
+| `m5stack-tab5` / `m5stack-tab5-sd` (hardware validation pending) | ES8388 + expander-controlled amplifier | `ES8388AudioDriver` |
 
 The audio sample rate is board-configurable. The current audio boards use
 48 kHz output; update the I2S clocking and output-buffer timing together when
 changing that rate.
+
+Tab5 uses 16-bit stereo at 48 kHz with 256x MCLK. Its board callback controls
+the amplifier through the shared I2C expander; the driver configures the DAC
+and shuts it down while I2S clocks are still running. Microphone input is not
+enabled. Hardware behavior and runtime memory use remain unverified.
 
 ## ES8311 Output
 

@@ -35,6 +35,8 @@
 #include "drivers/st7701_dsi_driver.h"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_JD9165_DSI
 #include "drivers/jd9165_dsi_driver.h"
+#elif DISPLAY_DRIVER == DISPLAY_DRIVER_TAB5_DSI
+#include "drivers/tab5_dsi_driver.h"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_INKPLATE6FLICK
 #include "drivers/inkplate6flick_epaper_driver.h"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_IT8951
@@ -90,6 +92,8 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 		driver = new ST7701_DSI_Driver();
 		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_JD9165_DSI
 		driver = new JD9165_DSI_Driver();
+		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_TAB5_DSI
+		driver = new Tab5DsiDriver();
 		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_INKPLATE6FLICK
 		driver = new Inkplate6FlickEpaperDriver(config);
 		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_IT8951

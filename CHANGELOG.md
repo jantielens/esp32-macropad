@@ -16,8 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* Add an SPI SD storage backend for future board configurations. No existing
-  board selects it yet.
+* Add an SPI SD storage backend and experimental `m5stack-tab5` and
+  `m5stack-tab5-sd` targets. The latter requires a readable SD card at boot;
+  the former uses internal flash. ST7121 and ST7123 panels are supported;
+  older ILI9881C/GT911 panels are not. Hardware validation is pending.
+  See [M5Stack Tab5](src/boards/m5stack-tab5/README.md).
 * Add a touch-only Slider widget with decimal ranges, live numeric sources,
   three optional release actions from the normal catalog, configurable icon
   placement, and drag ownership independent of pad swipe actions. See

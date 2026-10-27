@@ -34,6 +34,8 @@ static GamepadTouchRouter g_gamepad_touch_router;
 #include "drivers/wire_cst820b_touch_driver.h"
 #elif TOUCH_DRIVER == TOUCH_DRIVER_GT911
 #include "drivers/gt911_touch_driver.h"
+#elif TOUCH_DRIVER == TOUCH_DRIVER_ST7123
+#include "drivers/st7123_touch_driver.h"
 #elif TOUCH_DRIVER == TOUCH_DRIVER_INKPLATE6FLICK
 #include "drivers/inkplate6flick_touch_driver.h"
 #endif
@@ -304,6 +306,8 @@ void TouchManager::init(uint8_t rotation) {
 		driver = new Wire_CST820B_TouchDriver(board_cst820b_config());
 		#elif TOUCH_DRIVER == TOUCH_DRIVER_GT911
 		driver = new GT911_TouchDriver();
+		#elif TOUCH_DRIVER == TOUCH_DRIVER_ST7123
+		driver = new ST7123TouchDriver();
 		#elif TOUCH_DRIVER == TOUCH_DRIVER_INKPLATE6FLICK
 		driver = new Inkplate6Flick_TouchDriver();
 		#else
