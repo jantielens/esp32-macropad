@@ -159,6 +159,22 @@ vm.runInContext(
     context
 );
 
+const keyEditor = context._actionEditorExtensions.find(extension => extension.type === 'key');
+for (const type of ['key', 'ble_pair', 'mqtt']) {
+    keyEditor.typeChanged('keyboard-test', type);
+    assert.strictEqual(document.getElementById('keyboard-test-ble-hint').style.display,
+        type === 'mqtt' ? 'none' : '');
+}
+FIXTURE_CATALOG.push({ type: 'key', group: 'Keyboard', label: 'Send keys' });
+for (const type of ['key', 'ble_pair']) {
+    keyEditor.typeChanged('keyboard-test', type);
+    assert.strictEqual(document.getElementById('keyboard-test-ble-hint').style.display, 'none');
+}
+assert.strictEqual(document.getElementById('keyboard-test-key-group').style.display, 'none');
+keyEditor.typeChanged('keyboard-test', 'key');
+assert.strictEqual(document.getElementById('keyboard-test-key-group').style.display, '');
+FIXTURE_CATALOG.pop();
+
 // --- Group assembly from the fixture catalog ---
 const optionsHtml = context.actionEditorTypeOptionsHTML();
 assert(optionsHtml.includes('<optgroup label="Navigation">'));

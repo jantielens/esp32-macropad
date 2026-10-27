@@ -65,6 +65,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Hide the incorrect "Keyboard unavailable on this board" warning for Send keys
+  actions on boards that support BLE or USB HID keyboards.
 * Show buttons created with the Button Builder immediately in the pad preview.
 * Abort interrupted firmware uploads before releasing update ownership so a
   pending reboot or another update can proceed. Keep successful updates
