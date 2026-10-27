@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <vector>
 
 #include "widgets/slider_numeric.h"
 #include "widgets/slider_widget.cpp"
@@ -304,6 +305,97 @@ TEST_F(SliderNativeWidget, DragValueFloatsWithoutDispatchAndHidesOnRelease) {
     release();
     EXPECT_TRUE(lv_obj_has_flag(state().value_label, LV_OBJ_FLAG_HIDDEN));
     EXPECT_EQ(g_dispatches, 1u);
+}
+
+TEST_F(SliderNativeWidget, BoundVerticalSliderStaysVisibleAtZeroAfterReleaseAndPolling) {
+    static uint8_t draw_buffer[320 * 240 * 3];
+    std::vector<uint8_t> pixels(sizeof(draw_buffer));
+    lv_display_set_color_format(display, LV_COLOR_FORMAT_RGB888);
+    lv_display_set_buffers(display, draw_buffer, nullptr, sizeof(draw_buffer), LV_DISPLAY_RENDER_MODE_FULL);
+    lv_display_set_user_data(display, &pixels);
+    lv_display_set_flush_cb(display, [](lv_display_t* output, const lv_area_t*, uint8_t* data) {
+        auto& image = *static_cast<std::vector<uint8_t>*>(lv_display_get_user_data(output));
+        std::copy(data, data + image.size(), image.begin());
+        lv_display_flush_ready(output);
+    });
+    lv_obj_set_style_bg_color(state().control, lv_color_hex(0x00ff00), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(state().control, lv_color_hex(0xff00ff), LV_PART_KNOB);
+    auto* settings = reinterpret_cast<SliderConfig*>(config.data);
+    settings->axis = 1;
+    slider_layout(&state());
+    state().bound = true;
+    strlcpy(config.data_binding[0], "[mock:value]", sizeof(config.data_binding[0]));
+    slider_apply_report(&state(), "50", true);
+    lv_refr_now(display);
+    begin(0);
+    EXPECT_FALSE(lv_obj_has_flag(state().control, LV_OBJ_FLAG_HIDDEN));
+    release();
+    EXPECT_STREQ(g_dispatched_value, "0");
+    g_binding_value = "0";
+    slider_tick(button, &config, &runtime);
+    EXPECT_TRUE(state().available);
+    EXPECT_TRUE(state().layout_usable);
+    EXPECT_FALSE(state().pending);
+    EXPECT_EQ(lv_slider_get_value(state().control), 0);
+    EXPECT_FALSE(lv_obj_has_flag(state().control, LV_OBJ_FLAG_HIDDEN));
+    EXPECT_FALSE(lv_obj_has_state(state().control, LV_STATE_DISABLED));
+    lv_refr_now(display);
+    unsigned track_pixels = 0;
+    unsigned knob_pixels = 0;
+    for (size_t offset = 0; offset < pixels.size(); offset += 3) {
+        if (pixels[offset] == 0 && pixels[offset + 1] == 255 && pixels[offset + 2] == 0)
+            ++track_pixels;
+        if (pixels[offset] == 255 && pixels[offset + 1] == 0 && pixels[offset + 2] == 255)
+            ++knob_pixels;
+    }
+    EXPECT_GT(track_pixels, 100u);
+    EXPECT_GT(knob_pixels, 100u);
+    lv_display_set_user_data(display, nullptr);
+    lv_display_set_flush_cb(display, [](lv_display_t* output, const lv_area_t*, uint8_t*) {
+        lv_display_flush_ready(output);
+    });
+}
+
+TEST_F(SliderNativeWidget, UnavailableSourceUsesMinimumAndRemainsInteractive) {
+    strlcpy(config.data_binding[0], "[mock:value]", sizeof(config.data_binding[0]));
+    auto* settings = reinterpret_cast<SliderConfig*>(config.data);
+    ASSERT_TRUE(slider_numeric_range_init(20, 100, 1, &settings->range));
+    for (uint8_t axis : {0, 1}) {
+        slider_destroy(&runtime);
+        lv_obj_clean(button);
+        runtime = WidgetState{};
+        runtime.font_owner = &fonts;
+        settings->axis = axis;
+        slider_create(button, &config, &source, nullptr, &UI_SCALE_TABLE[0],
+                      nullptr, nullptr, &runtime);
+        EXPECT_EQ(lv_slider_get_value(state().control), 0);
+        EXPECT_FALSE(lv_obj_has_flag(state().control, LV_OBJ_FLAG_HIDDEN));
+        EXPECT_FALSE(lv_obj_has_state(state().control, LV_STATE_DISABLED));
+        slider_apply_report(&state(), "80", true);
+        begin(30);
+        release();
+        ASSERT_TRUE(state().pending);
+        const unsigned dispatches = g_dispatches;
+        slider_apply_report(&state(), "null", true);
+        EXPECT_FALSE(state().pending);
+        EXPECT_EQ(state().display_position, 0);
+        EXPECT_EQ(lv_slider_get_value(state().control), 0);
+        EXPECT_FALSE(lv_obj_has_flag(state().control, LV_OBJ_FLAG_HIDDEN));
+        EXPECT_FALSE(lv_obj_has_state(state().control, LV_STATE_DISABLED));
+        EXPECT_EQ(g_dispatches, dispatches);
+        begin(25);
+        slider_apply_report(&state(), nullptr, false);
+        EXPECT_TRUE(state().gesture_active);
+        EXPECT_EQ(state().display_position, 25);
+        release();
+        EXPECT_EQ(g_dispatches, dispatches + 1);
+        EXPECT_STREQ(g_dispatched_value, "45");
+        slider_apply_report(&state(), nullptr, false);
+        EXPECT_EQ(state().display_position, 0);
+        slider_apply_report(&state(), "80", true);
+        EXPECT_EQ(state().display_position, 60);
+        EXPECT_EQ(g_dispatches, dispatches + 1);
+    }
 }
 
 TEST_F(SliderNativeWidget, MissingActionKeepsLocalSliderInteractive) {

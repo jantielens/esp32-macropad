@@ -270,7 +270,7 @@ static int slider_value_width(const SliderConfig* config, const lv_font_t* font)
 }
 
 static void slider_update_value(SliderState* state) {
-    if (!state->value_label || !state->gesture_active || !state->available || !state->layout_usable) {
+    if (!state->value_label || !state->gesture_active || !state->layout_usable) {
         slider_hide_value(state);
         return;
     }
@@ -341,11 +341,11 @@ static void slider_update_value(SliderState* state) {
 
 static void slider_render(SliderState* state) {
     if (!state->control) return;
-    const bool usable = state->available && state->layout_usable;
+    const bool usable = state->layout_usable;
     if (usable) lv_obj_clear_state(state->control, LV_STATE_DISABLED);
     else lv_obj_add_state(state->control, LV_STATE_DISABLED);
-    lv_obj_set_style_bg_opa(state->control, usable ? LV_OPA_COVER : LV_OPA_50, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(state->control, usable && !state->pending ? LV_OPA_COVER : LV_OPA_50,
+    lv_obj_set_style_bg_opa(state->control, usable && state->available ? LV_OPA_COVER : LV_OPA_50, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(state->control, usable && state->available && !state->pending ? LV_OPA_COVER : LV_OPA_50,
                             LV_PART_INDICATOR);
     if (usable) lv_obj_clear_flag(state->control, LV_OBJ_FLAG_HIDDEN);
     else lv_obj_add_flag(state->control, LV_OBJ_FLAG_HIDDEN);
@@ -573,8 +573,7 @@ static void slider_apply_report(SliderState* state, const char* raw_value, bool 
         state->available = false;
         state->has_report = false;
         state->pending = false;
-        slider_cancel_gesture(state);
-        slider_set_display(state, 0);
+        slider_set_display(state, state->gesture_active ? state->draft_position : 0);
         return;
     }
     const uint16_t position = slider_numeric_position_for(state->config->range, value);
@@ -680,7 +679,7 @@ static void slider_event(lv_event_t* event) {
     if (!state || !state->control) return;
     const lv_event_code_t code = lv_event_get_code(event);
     if (code == LV_EVENT_PRESSED) {
-        if (!state->available || !state->layout_usable) return;
+        if (!state->layout_usable) return;
         state->gesture_active = true;
         state->value_width = 0;
         state->gesture_start_position = state->display_position;

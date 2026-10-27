@@ -34,7 +34,8 @@ after changing the selection.
    when more space is needed for its icon and label.
 5. Leave **Data binding** empty for a local control, or enter a binding such
    as `[mqtt:home/level]` or `[ha:media_player.living_room;attributes.volume_level]`.
-   A bound slider stays unavailable until it receives a valid numeric value.
+   Until a valid numeric value arrives, a bound slider shows its configured
+   minimum and remains interactive with a dimmed track.
 6. Optionally configure up to three **Value set actions** under **Actions**.
    All actions available on the device can be selected, including navigation
    and delays. Use `{value}` in a supported text field when the action needs
@@ -131,15 +132,20 @@ gestures, and source updates do not trigger feedback.
 
 A valid source value is clamped to the range and snapped to the nearest step;
 ties snap upward. A valid `0` is a value. Empty, partially numeric,
-non-finite, and over-precision source values are unavailable. Source updates
-never dispatch an action and do not move the slider during an active drag.
+non-finite, over-precision, and unavailable source values return the slider to
+its configured minimum with a dimmed track instead of hiding it. You can still
+drag it and send a new value. This fallback also applies during a source
+disconnection; it does not prove that the remote device is at its minimum.
+Source updates never dispatch an action and do not move the slider during an
+active drag.
 
 On a changed release, a bound slider displays the requested value while it waits
 up to five seconds for a matching reported value. A different report is kept
 for reconciliation after the wait ends. An accepted action is not proof that a
 remote device changed. A matching report clears the pending state; timeout
-shows the latest report. A local slider keeps its selection for the current
-instance only.
+shows the latest report. An invalid or unavailable report clears the pending
+state and returns to the minimum unless you are actively dragging. A local
+slider keeps its selection for the current instance only.
 
 Press loss, input reset, hidden or disabled state, overlays, and leaving the pad
 cancel an active drag without sending an action. A drag that starts on the
