@@ -19,6 +19,7 @@ extern "C" {
 typedef enum FSBackend {
 		FS_BACKEND_LITTLEFS,
 		FS_BACKEND_SDMMC,
+		FS_BACKEND_SD_SPI,
 } FSBackend;
 
 typedef enum FSCardType {
@@ -40,10 +41,10 @@ typedef struct FSHealthStats {
 void fs_health_init();
 
 // Called by subsystems that successfully mounted the storage backend
-// (LittleFS or SD_MMC). uint64_t accommodates SD cards larger than 4 GiB.
+// (LittleFS, SD_MMC, or SPI SD). uint64_t accommodates SD cards larger than 4 GiB.
 void fs_health_set_storage_usage(uint64_t used_bytes, uint64_t total_bytes);
 
-// Records the SDMMC card type after a successful mount.
+// Records the SD card type after a successful mount.
 void fs_health_set_sd_card_type(FSCardType card_type);
 
 // Returns cached stats (always succeeds after fs_health_init()).

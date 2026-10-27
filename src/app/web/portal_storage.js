@@ -69,7 +69,8 @@ window.init_storage_fragment = function () {
             var response = await fetch('/api/component/storage/status');
             if (!response.ok) throw new Error('Could not read storage status');
             var status = await response.json();
-            var backend = status.backend === 'sdmmc' ? 'SD card (SDMMC)' : 'Internal flash (LittleFS)';
+            var backend = status.backend === 'sdmmc' ? 'SD card (SDMMC)' :
+                status.backend === 'sd_spi' ? 'SD card (SPI)' : 'Internal flash (LittleFS)';
             document.getElementById('storage-backend').textContent = backend;
             document.getElementById('storage-status').textContent = status.mounted ? 'Mounted' : 'Unavailable';
             document.getElementById('storage-capacity').textContent = storageFormatBytes(status.total_bytes);

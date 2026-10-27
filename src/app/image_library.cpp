@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#if __has_include(<LittleFS.h>) || __has_include(<SD_MMC.h>)
+#if __has_include(<LittleFS.h>) || __has_include(<SD_MMC.h>) || __has_include(<SD.h>)
 #include "storage.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>

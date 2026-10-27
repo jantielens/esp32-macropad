@@ -6,13 +6,18 @@
 #include "log_manager.h"
 
 #include <Arduino.h>
+#include "storage.h"
+#if SD_STORAGE_SPI
+#include <SPI.h>
+#else
 #include <SD_MMC.h>
+#endif
 
 #define TAG "SDStor"
 
 static bool s_mounted = false;
 
-static FSCardType fs_card_type_from_sdmmc(uint8_t card_type) {
+static FSCardType fs_card_type_from_sd(uint8_t card_type) {
     if (card_type == CARD_NONE) return FS_CARD_TYPE_NONE;
     if (card_type == CARD_SD) return FS_CARD_TYPE_SD;
     if (card_type == CARD_SDHC) return FS_CARD_TYPE_SDHC;
@@ -22,6 +27,18 @@ static FSCardType fs_card_type_from_sdmmc(uint8_t card_type) {
 bool sd_storage_mount() {
     if (s_mounted) return true;
 
+#if SD_STORAGE_SPI
+    if (!SPI.begin(SD_SPI_SCK_PIN, SD_SPI_MISO_PIN, SD_SPI_MOSI_PIN, SD_SPI_CS_PIN)) {
+        SPI.end();
+        LOGE(TAG, "SPI SD bus initialization failed");
+        return false;
+    }
+    if (!SD.begin(SD_SPI_CS_PIN, SPI, SD_SPI_FREQUENCY_HZ, "/sdcard")) {
+        SPI.end();
+        LOGE(TAG, "SPI SD mount failed; check the card, filesystem, wiring, and power, then reboot");
+        return false;
+    }
+#else
 #if SDMMC_POWER_PIN >= 0
     pinMode(SDMMC_POWER_PIN, OUTPUT);
     digitalWrite(SDMMC_POWER_PIN, SDMMC_POWER_ACTIVE_LOW ? LOW : HIGH);
@@ -43,11 +60,16 @@ bool sd_storage_mount() {
         LOGE(TAG, "SDMMC mount failed; check the card, filesystem, wiring, and power, then reboot");
         return false;
     }
+#endif
 
-    const uint8_t type = SD_MMC.cardType();
-    const FSCardType health_card_type = fs_card_type_from_sdmmc(type);
+    const uint8_t type = Storage.cardType();
+    const FSCardType health_card_type = fs_card_type_from_sd(type);
     if (health_card_type == FS_CARD_TYPE_NONE) {
-        LOGE(TAG, "SDMMC mount reported no card; check the card, filesystem, wiring, and power, then reboot");
+        LOGE(TAG, "SD mount reported no card; check the card, filesystem, wiring, and power, then reboot");
+    #if SD_STORAGE_SPI
+        SD.end();
+        SPI.end();
+    #endif
         return false;
     }
 
@@ -56,10 +78,10 @@ bool sd_storage_mount() {
     const char* type_name = health_card_type == FS_CARD_TYPE_SD ? "SD" :
                             health_card_type == FS_CARD_TYPE_SDHC ? "SDHC" : "UNKNOWN";
     LOGI(TAG, "SD card mounted: type=%s size=%llu MB",
-         type_name, SD_MMC.cardSize() / (1024ULL * 1024ULL));
+         type_name, Storage.cardSize() / (1024ULL * 1024ULL));
     LOGI(TAG, "FS used=%llu MB total=%llu MB",
-         SD_MMC.usedBytes() / (1024ULL * 1024ULL),
-         SD_MMC.totalBytes() / (1024ULL * 1024ULL));
+         Storage.usedBytes() / (1024ULL * 1024ULL),
+         Storage.totalBytes() / (1024ULL * 1024ULL));
     return true;
 }
 

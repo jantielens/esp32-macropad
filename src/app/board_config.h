@@ -526,7 +526,7 @@ struct HwButtonDef {
 // ============================================================================
 // SD Card Storage (optional)
 // ============================================================================
-// Board has a physical MicroSD card slot wired to SDMMC.
+// Board has a physical MicroSD card slot.
 #ifndef HAS_SD_CARD
 #define HAS_SD_CARD false
 #endif
@@ -538,6 +538,31 @@ struct HwButtonDef {
 // flash cache-disable starving the framebuffer DMA.
 #ifndef USE_SD_STORAGE
 #define USE_SD_STORAGE false
+#endif
+
+// Use SPI instead of SDMMC for SD-primary storage.
+#ifndef SD_STORAGE_SPI
+#define SD_STORAGE_SPI false
+#endif
+// SPI SD card chip-select pin.
+#ifndef SD_SPI_CS_PIN
+#define SD_SPI_CS_PIN -1
+#endif
+// SPI SD card clock pin.
+#ifndef SD_SPI_SCK_PIN
+#define SD_SPI_SCK_PIN -1
+#endif
+// SPI SD card MOSI pin.
+#ifndef SD_SPI_MOSI_PIN
+#define SD_SPI_MOSI_PIN -1
+#endif
+// SPI SD card MISO pin.
+#ifndef SD_SPI_MISO_PIN
+#define SD_SPI_MISO_PIN -1
+#endif
+// SPI SD card bus frequency in Hz.
+#ifndef SD_SPI_FREQUENCY_HZ
+#define SD_SPI_FREQUENCY_HZ 25000000
 #endif
 
 // SDMMC bus width: 1 or 4 bits. Slot and IOMUX pins are owned by the FQBN.
@@ -587,6 +612,10 @@ struct HwButtonDef {
 
 #if USE_SD_STORAGE && !HAS_SD_CARD
 #error "USE_SD_STORAGE requires HAS_SD_CARD=true"
+#endif
+
+#if USE_SD_STORAGE && SD_STORAGE_SPI && (SD_SPI_CS_PIN < 0 || SD_SPI_SCK_PIN < 0 || SD_SPI_MOSI_PIN < 0 || SD_SPI_MISO_PIN < 0)
+#error "SPI SD storage requires CS, SCK, MOSI, and MISO pins"
 #endif
 
 #if SDMMC_BUS_WIDTH != 1 && SDMMC_BUS_WIDTH != 4

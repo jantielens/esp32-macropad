@@ -9,7 +9,8 @@
 
 namespace {
 const char* backend_name(FSBackend backend) {
-    return backend == FS_BACKEND_SDMMC ? "sdmmc" : "littlefs";
+    return backend == FS_BACKEND_SDMMC ? "sdmmc" :
+           backend == FS_BACKEND_SD_SPI ? "sd_spi" : "littlefs";
 }
 
 const char* card_type_name(FSCardType card_type) {

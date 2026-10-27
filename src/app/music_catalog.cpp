@@ -2,7 +2,7 @@
 
 #include <string.h>
 
-#if __has_include(<LittleFS.h>) || __has_include(<SD_MMC.h>)
+#if __has_include(<LittleFS.h>) || __has_include(<SD_MMC.h>) || __has_include(<SD.h>)
 #include "storage.h"
 #define MUSIC_CATALOG_HAS_STORAGE 1
 #endif

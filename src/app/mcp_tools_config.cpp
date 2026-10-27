@@ -893,7 +893,7 @@ static bool tool_set_config(const JsonObject& args, JsonObject& result, String& 
 #if HAS_STORAGE_BROWSER
 static const McpTool s_tool_get_storage_status = {
     "get_storage_status",
-    "Read the active persistent-storage backend and capacity status: LittleFS or SDMMC, mount state, card type, and used/free/total bytes. This is the same status shown by the web portal Storage page.",
+    "Read the active persistent-storage backend and capacity status: LittleFS, SDMMC, or SPI SD, mount state, card type, and used/free/total bytes. This is the same status shown by the web portal Storage page.",
     "{\"type\":\"object\",\"properties\":{}}",
     tool_get_storage_status, true, false, false
 };

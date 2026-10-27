@@ -3062,8 +3062,8 @@ Returns the selected persistent-storage backend and cached usage information.
 }
 ```
 
-`backend` is `littlefs` or `sdmmc`. SD card types are `none`, `sd`, `sdhc`, or
-`unknown`; LittleFS reports `not_applicable`.
+`backend` is `littlefs`, `sdmmc`, or `sd_spi`. SD card types are `none`, `sd`,
+`sdhc`, or `unknown`; LittleFS reports `not_applicable`.
 
 #### `GET /api/component/storage/list?path=/`
 

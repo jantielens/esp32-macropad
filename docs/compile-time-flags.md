@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 366
+Total flags: 372
 
 ### Features (HAS_*)
 
@@ -56,7 +56,7 @@ Total flags: 366
 - **HAS_NATIVE_EXTENSIONS** default: `false` — ELF modules loaded from persistent storage at startup.
 - **HAS_REMOTE_LOG** default: `false` — Include remote log capture, portal assets, and retained-crash retrieval.
 - **HAS_SCALE** default: `(HAS_SENSOR_HX711 || HAS_SENSOR_NAU7802)` — device class.
-- **HAS_SD_CARD** default: `false` — Board has a physical MicroSD card slot wired to SDMMC.
+- **HAS_SD_CARD** default: `false` — Board has a physical MicroSD card slot.
 - **HAS_SENSOR_AHT10** default: `false` — Enable AHT10/AHT20 (I2C) temperature and humidity sensor adapter.
 - **HAS_SENSOR_BATTERY_ADC** default: `false` — Enable an ADC-connected LiPo battery monitor sensor adapter.
 - **HAS_SENSOR_BME280** default: `false` — Enable BME280 (I2C) environmental sensor adapter.
@@ -147,6 +147,10 @@ Total flags: 366
 - **SDMMC_CMD_PIN** default: `-1` — Optional board-specific SDMMC command pin; -1 uses the FQBN's default slot routing.
 - **SDMMC_D0_PIN** default: `-1` — Optional board-specific SDMMC data-0 pin; -1 uses the FQBN's default slot routing.
 - **SDMMC_POWER_PIN** default: `-1` — Optional application-managed SD card power-enable GPIO; -1 leaves it alone.
+- **SD_SPI_CS_PIN** default: `-1` — SPI SD card chip-select pin.
+- **SD_SPI_MISO_PIN** default: `-1` — SPI SD card MISO pin.
+- **SD_SPI_MOSI_PIN** default: `-1` — SPI SD card MOSI pin.
+- **SD_SPI_SCK_PIN** default: `-1` — SPI SD card clock pin.
 - **SENSOR_I2C_SCL** default: `-1` — I2C SCL pin for sensors.
 - **SENSOR_I2C_SDA** default: `-1` — I2C pins for sensors. Use -1 to keep default Wire pins.
 - **TOUCH_I2C_SCL** default: `(no default)` — Touch I2C SCL pin.
@@ -192,6 +196,7 @@ Total flags: 366
 - **REMOTE_LOG_BUFFER_RECORDS** default: `256` — Rolling record capacity when remote diagnostics are enabled.
 - **SCREENSAVER_DEFAULT_TIMEOUT_SECONDS** default: `300` — Default inactivity timeout before the screen saver activates (seconds; 0 disables automatic sleep).
 - **SDMMC_MAX_FREQUENCY_KHZ** default: `20000` — SDMMC maximum bus frequency in kHz.
+- **SD_SPI_FREQUENCY_HZ** default: `25000000` — SPI SD card bus frequency in Hz.
 - **SENSOR_I2C_FREQUENCY** default: `400000` — I2C clock for sensors (Hz).
 - **ST7701_DSI_DPI_CLK_HZ** default: `34000000L` — DPI pixel clock in Hz.
 - **ST7703_DPI_CLK_HZ** default: `38000000L` — DPI pixel clock in Hz for ST7703 MIPI-DSI panels (ESP32-P4 only).
@@ -352,6 +357,7 @@ Total flags: 366
 - **SDMMC_POWER_ACTIVE_LOW** default: `false` — Whether SDMMC_POWER_PIN enables card power when driven low.
 - **SDMMC_POWER_SETTLE_MS** default: `0` — Delay after application-managed SD power is enabled.
 - **SD_PROBE_ON_BOOT** default: `false` — listing, write/read round-trip). Intended for new-board bring-up only.
+- **SD_STORAGE_SPI** default: `false` — Use SPI instead of SDMMC for SD-primary storage.
 - **SHUTTER_ADC_PIN_S1** default: `-1` — ADC input pin for shutter sensor 1.
 - **SHUTTER_ADC_PIN_S2** default: `-1` — ADC input pin for shutter sensor 2.
 - **SHUTTER_ADC_PIN_S3** default: `-1` — ADC input pin for shutter sensor 3.
@@ -1928,6 +1934,21 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/sd_probe.cpp
+- **SD_SPI_CS_PIN**
+  - src/app/board_config.h
+- **SD_SPI_FREQUENCY_HZ**
+  - src/app/board_config.h
+- **SD_SPI_MISO_PIN**
+  - src/app/board_config.h
+- **SD_SPI_MOSI_PIN**
+  - src/app/board_config.h
+- **SD_SPI_SCK_PIN**
+  - src/app/board_config.h
+- **SD_STORAGE_SPI**
+  - src/app/board_config.h
+  - src/app/fs_health.cpp
+  - src/app/sd_storage.cpp
+  - src/app/storage.h
 - **SENSOR_I2C_FREQUENCY**
   - src/app/board_config.h
 - **SENSOR_I2C_SCL**

@@ -824,9 +824,14 @@ add_host_legacy_test(test_mcp_result_strings SOURCES test_mcp_result_strings.cpp
 add_host_legacy_test(test_mcp_device_identity SOURCES test_mcp_device_identity.cpp ${PROJECT_SOURCE_DIR}/src/app/mcp_device_identity.cpp INCLUDES ${HOST_ARDUINOJSON_DIR} DEFINITIONS HAS_MCP=1 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_fs_health_littlefs SOURCES test_fs_health.cpp ${PROJECT_SOURCE_DIR}/src/app/fs_health.cpp DEFINITIONS USE_SD_STORAGE=0 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_fs_health_sdmmc SOURCES test_fs_health.cpp ${PROJECT_SOURCE_DIR}/src/app/fs_health.cpp DEFINITIONS USE_SD_STORAGE=1 HAS_SD_CARD=1 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
+add_host_legacy_test(test_fs_health_sd_spi SOURCES test_fs_health.cpp ${PROJECT_SOURCE_DIR}/src/app/fs_health.cpp DEFINITIONS USE_SD_STORAGE=1 HAS_SD_CARD=1 SD_STORAGE_SPI=1 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_fs_health_telemetry SOURCES test_fs_health_telemetry.cpp INCLUDES ${HOST_ARDUINOJSON_DIR} PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_storage_policy_littlefs SOURCES test_storage_policy.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/storage_policy_overrides DEFINITIONS USE_SD_STORAGE=0)
 add_host_legacy_test(test_storage_policy_sdmmc SOURCES test_storage_policy.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/storage_policy_overrides DEFINITIONS USE_SD_STORAGE=1 HAS_SD_CARD=1)
+add_host_legacy_test(test_sd_storage_spi SOURCES test_sd_storage_spi.cpp ${PROJECT_SOURCE_DIR}/src/app/sd_storage.cpp ${PROJECT_SOURCE_DIR}/src/app/fs_health.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/sd_storage_spi_overrides
+    DEFINITIONS HAS_FILESYSTEM=1 USE_SD_STORAGE=1 HAS_SD_CARD=1 SD_STORAGE_SPI=1 SD_SPI_CS_PIN=42 SD_SPI_SCK_PIN=43 SD_SPI_MOSI_PIN=44 SD_SPI_MISO_PIN=39 SD_SPI_FREQUENCY_HZ=25000000
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h)
 add_host_legacy_test(test_factory_reset_storage SOURCES test_factory_reset_storage.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides OPTIONS -ffunction-sections -fdata-sections LIBRARIES -Wl,--gc-sections)
 add_host_legacy_test(test_factory_reset_no_filesystem SOURCES test_factory_reset_storage.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides

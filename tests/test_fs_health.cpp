@@ -8,7 +8,11 @@ int main() {
     FSHealthStats stats{};
     fs_health_get(&stats);
 #if USE_SD_STORAGE
+#if defined(SD_STORAGE_SPI) && SD_STORAGE_SPI
+    assert(stats.backend == FS_BACKEND_SD_SPI);
+#else
     assert(stats.backend == FS_BACKEND_SDMMC);
+#endif
     assert(stats.card_type == FS_CARD_TYPE_NONE);
 #else
     assert(stats.backend == FS_BACKEND_LITTLEFS);
