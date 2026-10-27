@@ -263,11 +263,22 @@ changing that rate.
 
 Tab5 uses 16-bit stereo at 48 kHz with 256x MCLK. Its board callback controls
 the amplifier through the shared I2C expander. The driver configures the codec
-before starting I2S and shuts it down while I2S clocks are still running. A
-portal reboot requests shutdown from the audio worker before restarting;
-other restart paths do not request it. Microphone input is not enabled. Speaker
-playback and portal reboots have been observed on Tab5; other reset paths and
-the SD variant remain unverified.
+before starting I2S and shuts it down while I2S clocks are still running.
+Microphone input is not enabled. Speaker playback and portal reboots have been
+observed on Tab5; other restart paths and the SD variant remain unverified.
+
+Intentional software restarts use a main-loop reboot service. It waits for
+ongoing OTA or configuration writes, reserves the network transition, and
+requests shutdown from the audio worker for drivers that opt in. Completed OTA
+and setup-AP restarts retain their existing activity ownership. The worker
+stops playback and closes the output; the service never calls the driver
+directly. Duplicate requests keep the first response-grace deadline; the first
+completed-OTA or setup-AP handoff may extend it once for its response.
+On failure or after a one-second shutdown timeout, it logs the issue
+and restarts anyway. Drivers without this requirement retain their previous
+restart behavior. A stalled main loop can delay the restart or timeout, and
+crashes, watchdogs, power loss, and other unexpected resets cannot guarantee
+shutdown.
 
 ## ES8311 Output
 

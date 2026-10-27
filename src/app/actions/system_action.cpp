@@ -4,6 +4,7 @@
 #include "wifi_manager.h"
 #include "power_manager.h"
 #include "main_loop_bridge.h"
+#include "reboot_service.h"
 #if HAS_DISPLAY
 #include "screen_saver_manager.h"
 #endif
@@ -23,8 +24,7 @@ void restart_into_setup_ap(const void*, bool* ok, char*, size_t) {
         return;
     }
     LOGI(kSystemActionTag, "Restarting into setup AP");
-    delay(200);
-    ESP.restart();
+    reboot_request(200, REBOOT_NETWORK_TRANSITION);
 }
 #endif
 
@@ -42,8 +42,7 @@ ActionResult dispatch_system(const ButtonAction& act, const char* label, uint32_
     if (strcmp(command, "reboot") == 0) {
         LOGI(kSystemActionTag, "%s system: reboot", label);
 #if defined(ARDUINO)
-        delay(200);
-        ESP.restart();
+        reboot_request(200);
 #endif
     } else if (strcmp(command, "reboot_ap") == 0) {
 #if defined(ARDUINO)

@@ -63,6 +63,7 @@ public:
     uint8_t volume = 0;
     bool fail = false;
     bool end_result = true;
+    bool reboot_shutdown = true;
     unsigned end_count = 0;
     bool muted = true;
     bool fail_unmute = false;
@@ -82,6 +83,7 @@ public:
         return true;
     }
     bool isAvailable() const override { return true; }
+    bool needsRebootShutdown() const override { return reboot_shutdown; }
     bool end() override { ++end_count; return end_result; }
     bool write(const int16_t* frames, size_t count) override {
         assert(!muted);
@@ -475,22 +477,34 @@ int main() {
 #endif
     reset();
     audio_feedback("500:20");
-    idle_hook = [] { idle_hook = nullptr; run_worker(); };
-    assert(audio_prepare_reboot(100));
+    audio_request_reboot();
+    assert(audio_reboot_status() == AUDIO_REBOOT_PENDING);
+    run_worker();
+    assert(audio_reboot_status() == AUDIO_REBOOT_COMPLETE);
     assert(output.end_count == 1 && output.writes == 0);
     run_worker();
     assert(output.end_count == 1 && output.writes == 0);
 
     reset();
     output.end_result = false;
-    idle_hook = [] { idle_hook = nullptr; run_worker(); };
-    assert(!audio_prepare_reboot(100));
+    audio_request_reboot();
+    run_worker();
+    assert(audio_reboot_status() == AUDIO_REBOOT_ERROR);
     assert(output.end_count == 1);
 
     reset();
-    idle_hook = [] {};
-    assert(!audio_prepare_reboot(30));
-    assert(output.end_count == 0 && now_us >= 30001);
+    output.reboot_shutdown = false;
+    audio_request_reboot();
+    assert(audio_reboot_status() == AUDIO_REBOOT_COMPLETE);
+    run_worker();
+    assert(output.end_count == 0);
+
+    reset();
+    audio_request_reboot();
+    audio_request_reboot();
+    assert(audio_reboot_status() == AUDIO_REBOOT_PENDING);
+    run_worker();
+    assert(audio_reboot_status() == AUDIO_REBOOT_COMPLETE && output.end_count == 1);
     std::puts("audio worker policy: PASS");
 }
 #else

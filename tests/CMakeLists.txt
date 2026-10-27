@@ -373,6 +373,13 @@ add_host_legacy_test(test_ota_activity
     DEFINITIONS OTA_ACTIVITY_HOST_TEST
 )
 
+add_host_legacy_test(test_reboot_service
+    SOURCES test_reboot_service.cpp ${PROJECT_SOURCE_DIR}/src/app/ota_activity.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/ota_upload_overrides ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides
+    DEFINITIONS OTA_ACTIVITY_HOST_TEST HAS_AUDIO=1
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+)
+
 add_host_legacy_test(test_pad_layout
     SOURCES test_pad_layout.cpp
     INCLUDES ${HOST_LVGL_DIR}

@@ -5,6 +5,7 @@
 #include "device_telemetry.h"
 #include "log_manager.h"
 #include "power_manager.h"
+#include "reboot_service.h"
 #include "version.h"
 #if HAS_DISPLAY
 #include "time_binding.h"
@@ -811,9 +812,13 @@ void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool 
 		const WifiRecoveryAction recovery_action = wifi_reconnect_next_action(
 				total_outage, since_last_retry, g_tier2_attempt, false, WIFI_RECOVERY_POLICY);
 		if (recovery_action == WifiRecoveryAction::Reboot) {
-				LOGE("WiFi", "Total outage %lus exceeds threshold — rebooting", total_outage / 1000);
-				ESP.restart();
-				return; // unreachable
+				static bool reboot_requested = false;
+				if (!reboot_requested) {
+						LOGE("WiFi", "Total outage %lus exceeds threshold — rebooting", total_outage / 1000);
+						reboot_request(0);
+						reboot_requested = true;
+				}
+				return;
 		}
 		if (recovery_action == WifiRecoveryAction::None) return;
 

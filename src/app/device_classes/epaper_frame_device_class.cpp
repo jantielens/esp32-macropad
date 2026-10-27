@@ -31,6 +31,7 @@
 #include "log_manager.h"
 #include "power_config.h"
 #include "power_manager.h"
+#include "reboot_service.h"
 #include "version.h"
 #include "wifi_manager.h"
 
@@ -824,8 +825,7 @@ static void on_loop_hook() {
 						epaper_frame_show_status(g_epaper_config.epaper_frame_rotation, []() {
 								epaper_frame_screen_returning_to_normal();
 						});
-						delay(100);
-						ESP.restart();
+						reboot_request(100);
 				}
 		}
 		s_last_released = released;

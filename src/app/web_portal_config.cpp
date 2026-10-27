@@ -4,6 +4,7 @@
 #include "web_portal_state.h"
 #include "portal_idle.h"
 #include "ota_activity.h"
+#include "reboot_service.h"
 
 #include "board_config.h"
 #if HAS_TTF_FONTS
@@ -1168,9 +1169,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				// Check for no_reboot parameter
 				if (!request->hasParam("no_reboot")) {
 						LOGI("Portal", "Rebooting device");
-						// Schedule reboot after response is sent
-						delay(100);
-						ESP.restart();
+						reboot_request(100);
 				}
 		} else {
 				LOGE("Portal", "Config save failed");
@@ -1196,6 +1195,10 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 
 void handleDeleteConfig(AsyncWebServerRequest *request) {
 		if (!portal_auth_gate(request)) return;
+		if (!ota_activity_try_begin_config_write()) {
+				request->send(409, "application/json", "{\"success\":false,\"message\":\"Device busy\"}");
+				return;
+		}
 
 		// Send the success response FIRST so the client receives it before the
 		// long blocking wipe (NVS erase + LittleFS.format() / SD rmrf, several
@@ -1207,5 +1210,6 @@ void handleDeleteConfig(AsyncWebServerRequest *request) {
 		delay(100);
 
 		config_manager_factory_reset();
-		ESP.restart();
+		reboot_request(0);
+		ota_activity_finish_config_write();
 }

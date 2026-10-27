@@ -11,6 +11,7 @@ public:
     bool setVolume(uint8_t volume) override;
     bool setMuted(bool muted) override;
     bool supportsMute() const override { return control.mute != nullptr; }
+    bool needsRebootShutdown() const override { return true; }
     bool isAvailable() const override { return initialized; }
     bool end() override;
 

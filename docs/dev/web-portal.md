@@ -2817,6 +2817,13 @@ Get current progress/state of the online update task.
 activity lifecycle. Only one path can own the firmware writer at a time; a
 competing update receives `409 Conflict`.
 
+Manual uploads associate ownership with the admitted HTTP request. Its
+disconnect callback aborts an unfinished update before releasing the activity
+gate, allowing a pending reboot or another update to proceed. Rejected requests
+and stale disconnect callbacks cannot cancel another upload. A successfully
+finalized upload retains activity ownership through reboot; disconnecting after
+success does not abort it or release the gate.
+
 While the lifecycle is active, the firmware cooperatively defers new
 nonessential work at subsystem-owned safe points:
 

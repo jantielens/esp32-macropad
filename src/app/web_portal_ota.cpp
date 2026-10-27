@@ -8,6 +8,7 @@
 #include "log_manager.h"
 #include "net_activity.h"
 #include "ota_activity.h"
+#include "reboot_service.h"
 
 #include <Update.h>
 
@@ -16,23 +17,25 @@
 
 static portMUX_TYPE g_ota_upload_mux = portMUX_INITIALIZER_UNLOCKED;
 static uint8_t g_ota_last_percent = 0;
-static bool g_ota_upload_active = false;
+static AsyncWebServerRequest* g_ota_upload_owner = nullptr;
 
 static size_t ota_progress = 0;
 static size_t ota_total = 0;
 
-static void ota_upload_finish() {
+static bool ota_upload_is_owner(AsyncWebServerRequest* request) {
 		portENTER_CRITICAL(&g_ota_upload_mux);
-		g_ota_upload_active = false;
+		const bool owns_upload = g_ota_upload_owner == request;
 		portEXIT_CRITICAL(&g_ota_upload_mux);
-		ota_activity_finish();
+		return owns_upload;
 }
 
-static bool ota_upload_is_active() {
+static void ota_upload_finish(AsyncWebServerRequest* request) {
+		if (!ota_upload_is_owner(request)) return;
+		Update.abort();
 		portENTER_CRITICAL(&g_ota_upload_mux);
-		const bool active = g_ota_upload_active;
+		g_ota_upload_owner = nullptr;
 		portEXIT_CRITICAL(&g_ota_upload_mux);
-		return active;
+		ota_activity_finish();
 }
 
 // POST /api/update - Handle OTA firmware upload
@@ -45,8 +48,9 @@ void handleOTAUpload(AsyncWebServerRequest *request, String filename, size_t ind
 				if (allowed) {
 						portENTER_CRITICAL(&g_ota_upload_mux);
 						g_ota_last_percent = 0;
-						g_ota_upload_active = true;
+						g_ota_upload_owner = request;
 						portEXIT_CRITICAL(&g_ota_upload_mux);
+						request->onDisconnect([request]() { ota_upload_finish(request); });
 				}
 
 				if (!allowed) {
@@ -65,7 +69,7 @@ void handleOTAUpload(AsyncWebServerRequest *request, String filename, size_t ind
 				if (!filename.endsWith(".bin")) {
 								LOGE("OTA", "Not a .bin file");
 						request->send(400, "application/json", "{\"success\":false,\"message\":\"Only .bin files are supported\"}");
-						ota_upload_finish();
+						ota_upload_finish(request);
 						return;
 				}
 
@@ -79,7 +83,7 @@ void handleOTAUpload(AsyncWebServerRequest *request, String filename, size_t ind
 				if (ota_total > 0 && ota_total > freeSpace) {
 								LOGE("OTA", "Firmware too large");
 						request->send(400, "application/json", "{\"success\":false,\"message\":\"Firmware too large\"}");
-						ota_upload_finish();
+						ota_upload_finish(request);
 						return;
 				}
 
@@ -87,10 +91,10 @@ void handleOTAUpload(AsyncWebServerRequest *request, String filename, size_t ind
 				if (!Update.begin(updateSize, U_FLASH)) {
 								LOGE("OTA", "Begin failed: %s", Update.errorString());
 						request->send(500, "application/json", "{\"success\":false,\"message\":\"OTA begin failed\"}");
-						ota_upload_finish();
+						ota_upload_finish(request);
 						return;
 				}
-		} else if (!ota_upload_is_active()) {
+		} else if (!ota_upload_is_owner(request)) {
 				return;
 		}
 
@@ -99,9 +103,8 @@ void handleOTAUpload(AsyncWebServerRequest *request, String filename, size_t ind
 				net_activity_mark(NET_CH_OTA);
 				if (Update.write(data, len) != len) {
 								LOGE("OTA", "Write failed: %s", Update.errorString());
-						Update.abort();
 						request->send(500, "application/json", "{\"success\":false,\"message\":\"Write failed\"}");
-						ota_upload_finish();
+						ota_upload_finish(request);
 						return;
 				}
 
@@ -120,19 +123,21 @@ void handleOTAUpload(AsyncWebServerRequest *request, String filename, size_t ind
 		// Final chunk - complete OTA
 		if (final) {
 				if (Update.end(true)) {
+						portENTER_CRITICAL(&g_ota_upload_mux);
+						g_ota_upload_owner = nullptr;
+						portEXIT_CRITICAL(&g_ota_upload_mux);
 								LOGI("OTA", "Written: %d bytes", ota_progress);
 								LOGI("OTA", "Success - rebooting");
 
 						request->send(200, "application/json", "{\"success\":true,\"message\":\"Update successful! Rebooting...\"}");
 
-						delay(500);
-						ESP.restart();
+						reboot_request(500, REBOOT_OTA_COMPLETE);
 						return;
 				} else {
 								LOGE("OTA", "Update failed: %s", Update.errorString());
 						request->send(500, "application/json", "{\"success\":false,\"message\":\"Update failed\"}");
 				}
 
-				ota_upload_finish();
+				ota_upload_finish(request);
 		}
 }

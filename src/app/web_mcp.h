@@ -59,8 +59,7 @@ static inline McpControlResult mcp_control_dispatch(McpControlExec exec,
                                                   out_ok, out_msg, out_msg_len);
 }
 
-// Request a deferred device reboot. The restart fires from web_mcp_loop() after
-// a short grace period so the in-flight JSON-RPC response flushes first.
-void mcp_request_reboot();
+// Request a deferred device reboot after the JSON-RPC response can flush.
+void mcp_request_reboot(bool owns_network_transition = false);
 
 #endif // WEB_MCP_H

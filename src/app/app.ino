@@ -101,6 +101,7 @@
 #include "sd_storage.h"
 #include "storage.h"
 #include "ota_activity.h"
+#include "reboot_service.h"
 #include "ha_live.h"
 #include "ha_stats.h"
 
@@ -776,6 +777,7 @@ void setup()
 
 void loop()
 {
+	reboot_service_loop();
 #ifdef BOARD_HARDWARE_LOOP
 	BOARD_HARDWARE_LOOP();
 #endif

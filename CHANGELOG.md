@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-26
+ms.date: 2026-10-27
 ms.topic: reference
 ---
 
@@ -43,6 +43,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Coordinate intentional software restarts across portal, configuration, OTA,
+  actions, MCP, Wi-Fi recovery, and e-paper controls. Wait for active firmware
+  and configuration writes, and let the audio worker shut down output on
+  drivers that require it. Restart after a one-second audio shutdown timeout
+  or failure; unexpected resets cannot guarantee cleanup.
 * Make toggle switch sizing independent of label length. **Switch width (%)**
   now measures button content width, defaults to 50%, and remains height-capped.
   Shared rows keep the switch right-aligned and truncate long center labels;
@@ -60,6 +65,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Abort interrupted firmware uploads before releasing update ownership so a
+  pending reboot or another update can proceed. Keep successful updates
+  protected through reboot, and prevent duplicate reboot requests from
+  indefinitely extending the response grace period.
 * Clear previous action settings when editing another button so new sliders and
   other buttons do not inherit Home Assistant service fields or other action
   values. Preserve each button's drafts when switching action types or returning

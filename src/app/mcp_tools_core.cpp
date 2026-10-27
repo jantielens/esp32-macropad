@@ -635,7 +635,7 @@ static void exec_system_command(const void* ctx, bool* ok, char* msg, size_t msg
             strlcpy(msg, "setup AP restart refused or could not be persisted; check device logs", msg_len);
             return;
         }
-        mcp_request_reboot();
+        mcp_request_reboot(true);
         *ok = true;
         strlcpy(msg, "restart into setup AP scheduled", msg_len);
         return;

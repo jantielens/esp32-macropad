@@ -34,7 +34,7 @@
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
-static bool audio_initialized = false;
+static std::atomic<bool> audio_initialized{false};
 static std::atomic<uint8_t> current_volume{70};
 static AudioOutputDriver* output_driver = nullptr;
 
@@ -745,14 +745,18 @@ void audio_init(uint8_t initial_volume) {
     LOGI(TAG, "Audio ready (volume=%u%%, amplifier muted until playback)", current_volume.load());
 }
 
-bool audio_prepare_reboot(uint32_t timeout_ms) {
-    if (!audio_initialized) return true;
+void audio_request_reboot() {
+    if (!audio_initialized || !output_driver->needsRebootShutdown()) return;
     AudioRebootState expected = AUDIO_REBOOT_IDLE;
     audio_reboot_state.compare_exchange_strong(expected, AUDIO_REBOOT_REQUESTED);
-    const int64_t deadline = esp_timer_get_time() + int64_t(timeout_ms) * 1000;
-    while (audio_reboot_state.load() == AUDIO_REBOOT_REQUESTED && esp_timer_get_time() < deadline)
-        vTaskDelay(pdMS_TO_TICKS(10));
-    return audio_reboot_state.load() == AUDIO_REBOOT_DONE;
+}
+
+AudioRebootStatus audio_reboot_status() {
+    if (!audio_initialized || !output_driver->needsRebootShutdown()) return AUDIO_REBOOT_COMPLETE;
+    const AudioRebootState state = audio_reboot_state.load();
+    if (state == AUDIO_REBOOT_DONE) return AUDIO_REBOOT_COMPLETE;
+    if (state == AUDIO_REBOOT_FAILED) return AUDIO_REBOOT_ERROR;
+    return AUDIO_REBOOT_PENDING;
 }
 
 bool audio_get_stack_watermark(uint32_t* minimum_free_bytes) {

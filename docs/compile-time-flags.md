@@ -513,6 +513,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/music_analysis.h
   - src/app/music_binding.cpp
   - src/app/portal_components.cpp
+  - src/app/reboot_service.cpp
   - src/app/screens/pad_screen_events.cpp
   - src/app/swipe_actions.cpp
   - src/app/web_portal_config.cpp
@@ -1349,7 +1350,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **AUDIO_OUTPUT_DRIVER**
   - src/app/audio_output_drivers.cpp
   - src/app/board_config.h
-  - src/app/web_portal_device_api.cpp
 - **CAMERA_DRIVER**
   - src/app/board_config.h
   - src/app/camera_drivers.cpp

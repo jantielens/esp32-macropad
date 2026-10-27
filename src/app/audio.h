@@ -14,7 +14,9 @@ typedef void (*AudioPlaybackFinished)(uint32_t generation);
 // initial_volume: 0-100 (from NVS config)
 void audio_init(uint8_t initial_volume);
 
-bool audio_prepare_reboot(uint32_t timeout_ms);
+enum AudioRebootStatus : uint8_t { AUDIO_REBOOT_PENDING, AUDIO_REBOOT_COMPLETE, AUDIO_REBOOT_ERROR };
+void audio_request_reboot();
+AudioRebootStatus audio_reboot_status();
 
 static constexpr uint16_t AUDIO_WAKE_DELAY_DEFAULT_MS = 120;
 static constexpr uint16_t AUDIO_WAKE_DELAY_MAX_MS = 1000;

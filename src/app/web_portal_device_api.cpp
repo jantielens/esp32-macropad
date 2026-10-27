@@ -3,6 +3,7 @@
 #include "web_portal_device_api.h"
 #include "web_portal_auth.h"
 #include "web_portal_state.h"
+#include "reboot_service.h"
 
 #include "board_config.h"
 #include "ha_live.h"
@@ -625,12 +626,5 @@ void handleReboot(AsyncWebServerRequest *request) {
 		LOGI("API", "POST /api/reboot");
 		request->send(200, "application/json", "{\"success\":true,\"message\":\"Rebooting device...\"}");
 
-		// Schedule reboot after response is sent
-		delay(100);
-#if HAS_AUDIO && AUDIO_OUTPUT_DRIVER == AUDIO_OUTPUT_DRIVER_ES8388
-		if (audio_prepare_reboot(1000)) LOGI("Audio", "Reboot shutdown complete");
-		else LOGW("Audio", "Reboot shutdown failed or timed out");
-#endif
-		LOGI("Portal", "Rebooting");
-		ESP.restart();
+		reboot_request(100);
 }
