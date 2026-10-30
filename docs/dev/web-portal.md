@@ -2538,6 +2538,30 @@ delivery failures remain warnings. There are no periodic keyboard diagnostic
 counters. Media keys and extended sleep/reconnect reliability still require
 hardware validation.
 
+BLE HID uses bonded Legacy Just Works pairing with LE Secure Connections disabled,
+no MITM requirement, and no input/output capability. A usable HID connection
+requires both encryption and bonding. Outside the 60-second pairing window,
+connection admission requires the recorded owner identity and a stored local
+LTK; fresh repeat-pairing requests are rejected. Authentication has a ten-second
+timeout, and rejected connections cannot become ready through a late callback.
+
+Legacy pairing avoids the confirmed P4 TinyCrypt DHKey defect in the stock
+Arduino ESP32 3.3.12 SDK. It does not protect against a passive observer capturing
+the initial pairing and deriving its encryption key. The project keeps the stock
+SDK without version-specific pairing behavior; restoration of Secure Connections
+after a fixed stable Arduino release is tracked in
+[issue #139](https://github.com/jantielens/esp32-macropad/issues/139).
+
+The status-bearing NimBLE authentication callback records failures, and a GAP
+listener logs disconnect reasons and pairing completion status without key
+material. Ordinary failures preserve the owner and stored bonds. The Arduino
+BLE stack handles confirmed missing-key failures by deleting only the affected
+peer's stale bond. The HID module permits one reconnect retry within the
+current pairing window, never opens a window automatically, and closes it on a
+second missing-key failure. **Pair New Device** explicitly clears bonds and
+resets recovery. See [BLE pairing](../user/integrations/keyboard-mouse-gamepad.md#pair-ble)
+for the host-side recovery procedure.
+
 #### `POST /api/config`
 
 Save new configuration. Device reboots after successful save.

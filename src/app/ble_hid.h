@@ -27,7 +27,7 @@ void ble_hid_loop();
 bool ble_hid_send_report(KsUsageType type, uint16_t usage, uint8_t modifiers);
 uint32_t ble_hid_epoch();
 
-// Returns true when a BLE HID host is connected.
+// Returns true when a BLE HID host is connected, encrypted, and bonded.
 bool ble_hid_is_connected();
 
 // Returns true when pairing mode is active (accepting new devices).

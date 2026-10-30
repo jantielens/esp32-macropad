@@ -36,8 +36,11 @@ the C6 wireless firmware without first confirming the recovery procedure.
 The firmware enables touch, Wi-Fi and BLE keyboard HID through the ESP32-C6,
 MQTT, MCP, remote images, native extensions, ES8388 speaker playback, battery
 monitoring, and charging. Microphone capture, camera, BLE telemetry, and USB
-HID are not enabled. BLE keyboard pairing and Wi-Fi coexistence require physical
-validation on this board.
+HID are not enabled. BLE keyboard fresh pairing and reconnection after toggling
+Windows Bluetooth have been verified with an encrypted, bonded connection while
+Wi-Fi remained connected. Device-reboot reconnection, media keys, and extended
+Wi-Fi coexistence testing remain unverified. See
+[BLE pairing and security limitations](../../../docs/user/integrations/keyboard-mouse-gamepad.md#pair-ble).
 
 USB-C provides serial diagnostics through USB CDC. USB HID is unavailable:
 the firmware's USB HID stack uses the controller connected to the host-oriented

@@ -47,6 +47,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Use bonded Legacy Just Works BLE keyboard pairing with LE Secure Connections
+  disabled to avoid the bundled P4 SDK's DHKey defect. Pair only in a trusted
+  environment: initial pairing is vulnerable to passive capture. Security changes
+  may require removing the saved host device and pairing again. See
+  [BLE pairing](docs/user/integrations/keyboard-mouse-gamepad.md#pair-ble).
 * Coordinate intentional software restarts across portal, configuration, OTA,
   actions, MCP, Wi-Fi recovery, and e-paper controls. Wait for active firmware
   and configuration writes, and let the audio worker shut down output on
@@ -69,6 +74,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Handle BLE authentication failures explicitly, require encryption and bonding
+  before keyboard reports, and reject new owners outside the pairing window.
+  Preserve bonds on ordinary failures, bound missing-key recovery, time out
+  stalled authentication, and log pairing status and disconnect reasons.
 * Prevent silence-boundary pops on ES8388 speaker output with a one-LSB
   alternating signal and continuous idle output when idle amplifier muting is
   disabled. See [Tab5 speaker settings](src/boards/m5stack-tab5/README.md#speaker-audio).

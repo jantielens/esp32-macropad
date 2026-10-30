@@ -621,6 +621,13 @@ add_host_command_test(check_keyboard_transport_cpp11
     -include ${PROJECT_SOURCE_DIR}/src/app/keyboard_transport.h -x c++ -fsyntax-only /dev/null
 )
 
+add_host_legacy_test(test_ble_hid
+    SOURCES test_ble_hid.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/ble_hid_overrides
+    LIBRARIES GTest::gtest_main
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+)
+
 foreach(transport IN ITEMS both usb ble none)
     if(transport STREQUAL "usb" OR transport STREQUAL "both")
         set(test_usb_transport 1)

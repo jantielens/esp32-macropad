@@ -27,11 +27,30 @@ is busy is rejected.
 
 ## Pair BLE
 
-With BLE active, remove the old host's saved Bluetooth device, then select
-**Pair New Device**. It clears the previous bond and opens a 60-second window
-without reboot. Select the advertised device on the new host.
-Check connected/bonded/encrypted status.
-A Start BLE pairing action provides the same control from a pad.
+BLE uses bonded Legacy Just Works pairing: no passkey entry or number
+confirmation. LE Secure Connections is disabled. Pairing has no
+man-in-the-middle protection, and a passive observer who captures the initial
+pairing can derive its encryption key. Pair only in a trusted environment.
+Saved bond keys allow the owner to reconnect without reopening pairing.
+
+1. With BLE active, open **Connectivity > Keyboard, Mouse & Gamepad**.
+2. Remove the old saved device in the host's Bluetooth settings.
+3. Select **Pair New Device** in the portal. It clears previous bonds and opens
+	a 60-second pairing window without reboot.
+4. Select the advertised device in the host's Bluetooth settings.
+5. Check that the portal reports connected, bonded, and encrypted before testing
+	a harmless key action.
+
+A **Start BLE pairing** action provides the same control from a pad. New hosts
+cannot become the owner outside the pairing window. A radio connection alone
+does not enable keyboard reports; encryption and bonding must complete first.
+
+If Windows repeatedly connects and disconnects, remove its saved device and
+repeat these steps. Failed authentication does not automatically open pairing
+or clear every bond. A confirmed missing-key failure allows at most one recovery
+retry within an already-open window; another closes the window. Select
+**Pair New Device** again to restart. Firmware security changes may require a
+fresh pairing on both sides.
 
 ## Write a key sequence
 
