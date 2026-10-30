@@ -317,15 +317,15 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 	#endif
 
 	#if HAS_DISPLAY
+	#if HAS_IMAGE_FETCH
+	image_fetch_init();
+	#endif
 	if (pad_config_exists(0)) {
 		display_manager_show_screen("pad_0", nullptr);
 	} else {
 		display_manager_show_info();
 	}
 	if (dispatch_boot_actions) boot_actions_dispatch();
-	#if HAS_IMAGE_FETCH
-	image_fetch_init();
-	#endif
 	screen_saver_manager_notify_activity(false);
 	#else
 	(void)dispatch_boot_actions;

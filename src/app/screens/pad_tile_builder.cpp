@@ -740,6 +740,8 @@ void PadScreen::buildTiles() {
                 );
 
                 LOGT(TAG, "Button %u: image slot %d", i, tile.image_slot);
+            } else {
+                LOGW(TAG, "Button %u: image fetch slot unavailable", i);
             }
         }
 #endif

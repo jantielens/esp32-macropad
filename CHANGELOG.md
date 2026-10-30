@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-27
+ms.date: 2026-10-30
 ms.topic: reference
 ---
 
@@ -65,6 +65,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Initialize background image fetching before showing the first pad so camera
+  images can register at startup. Warn when a button cannot register an image.
 * Hide the incorrect "Keyboard unavailable on this board" warning for Send keys
   actions on boards that support BLE or USB HID keyboards.
 * Show buttons created with the Button Builder immediately in the pad preview.
