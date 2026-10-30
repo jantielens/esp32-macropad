@@ -49,6 +49,13 @@ reuse the enabled amplifier during the grace period. OTA entry mutes immediately
 Codec power and I2S clocks remain active while idle, including the PCM510xA
 clock configuration. This policy applies to all output drivers.
 
+Drivers can opt into `needsContinuousIdleOutput()`; the default is false.
+With idle amplifier muting disabled, the worker continues sending silent PCM
+blocks to these drivers between sounds. Blocking driver writes pace the feed;
+a failed write backs off for 10 ms. The feed stops when idle muting is enabled,
+OTA takes ownership, or reboot shutdown is requested. Active music retains its
+existing ownership of PCM output.
+
 The Volume fragment's Amplifier section persists `audio_idle_mute` (default
 true) and `audio_wake_delay_ms` in NVS. Disabling idle muting keeps the
 amplifier enabled between sounds, reducing repeated wake latency but allowing
@@ -87,8 +94,9 @@ requires mute control. StopWatch selects its board-local factory through
 Transport lifecycle operations are startup/cleanup operations, not a concurrent
 runtime shutdown API. Runtime amplifier mute changes belong to the audio worker.
 Callers must stop workers and capture owners before teardown.
-The manager currently tears down only during startup failure, before a worker
-exists. The microphone driver tracks capture activation separately from TX
+The manager tears down during startup failure, before a worker exists; the
+audio worker handles requested reboot shutdown. The microphone driver tracks
+capture activation separately from TX
 and makes repeated capture start/stop calls safe.
 
 ## Microphone Input
@@ -271,6 +279,17 @@ the amplifier through the shared I2C expander. The driver configures the codec
 before starting I2S and shuts it down while I2S clocks are still running.
 Microphone input is not enabled. Speaker playback and portal reboots have been
 observed on Tab5; other restart paths and the SD variant remain unverified.
+
+The ES8388 driver opts into continuous idle output and replaces exact-zero
+samples with a one-LSB signal. Fully silent stereo frames repeat
+`+1, +1, -1, -1` on both channels: a zero-mean 12 kHz pattern at 48 kHz.
+Nonzero samples and caller buffers are unchanged. A bounded 1 KiB stack buffer
+holds transformed PCM; phase persists across chunks and calls, advances by
+accepted complete stereo frames, and resets on initialization.
+This is an empirically verified workaround for silence-boundary pops, not a
+claim about an undocumented ES8388 automatic mute function. It requires idle
+amplifier muting to be disabled for continuous output between clips. Amplifier
+switching can still pop; see the [Tab5 speaker settings](../../src/boards/m5stack-tab5/README.md#speaker-audio).
 
 Intentional software restarts use a main-loop reboot service. It waits for
 ongoing OTA or configuration writes, reserves the network transition, and

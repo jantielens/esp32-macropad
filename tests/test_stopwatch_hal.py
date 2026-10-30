@@ -37,6 +37,7 @@ using std::min;
 #define HAS_AUDIO true
 #define AUDIO_OUTPUT_DRIVER_ES8311 1
 #define AUDIO_OUTPUT_DRIVER_PCM510XA 2
+#define AUDIO_OUTPUT_DRIVER_ES8388 3
 #define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_ES8311
 #define AUDIO_PA_PIN 27
 #define AUDIO_PA_ACTIVE_LOW false
@@ -120,6 +121,9 @@ static int channel = 0, receiveChannel = 0, liveChannels = 0;
 static bool channelFails = false, channelWriteFails = false;
 static bool channelInitFails = false, channelEnableFails = false, channelReadFails = false;
 static bool channelWriteShort = false, testingPcm = false, txEnabled = false;
+static bool testingEs8388 = false;
+static size_t channelWriteLimit = size_t(-1);
+static std::vector<int16_t> writtenPcm;
 static std::vector<std::string> audioEvents;
 static bool lifecycleTesting = false, silentFrameWritten = false;
 static esp_err_t i2s_new_channel(i2s_chan_config_t* config, i2s_chan_handle_t* tx, i2s_chan_handle_t* rx) {
@@ -160,13 +164,18 @@ static esp_err_t i2s_channel_write(i2s_chan_handle_t, const void* frames, size_t
                                  size_t* written, int) {
     if (channelWriteFails) return 1;
     const auto* bytes = static_cast<const uint8_t*>(frames);
-    if (!testingPcm) {
+    if (!testingPcm && !testingEs8388) {
         assert(count == 128);
         for (size_t i = 0; i < count; ++i) assert(bytes[i] == 0);
     }
     silentFrameWritten = true;
     audioEvents.push_back("write");
-    *written = channelWriteShort ? count - 1 : count; return ESP_OK;
+    *written = channelWriteShort ? count - 1 : min(count, channelWriteLimit);
+    if (testingEs8388) {
+        const auto* samples = static_cast<const int16_t*>(frames);
+        writtenPcm.insert(writtenPcm.end(), samples, samples + *written / sizeof(int16_t));
+    }
+    return ESP_OK;
 }
 using lv_display_t = int;
 static std::vector<int> delays;
@@ -463,7 +472,7 @@ BODY += LIFECYCLE_DOUBLES
 audio_lifecycle = production("src/app/audio.cpp")
 LIFECYCLE_CODE = audio_lifecycle[audio_lifecycle.index("static void audio_init_abort",
                                              audio_lifecycle.index("// Public API")):
-                        audio_lifecycle.index("void audio_set_volume")]
+                        audio_lifecycle.index("void audio_request_reboot")]
 BODY += LIFECYCLE_CODE
 
 GENERIC_TESTS = r'''
@@ -481,6 +490,9 @@ int main() {
     assert(i2c_bus_lock()); Wire.begin(47,48,100000); i2c_bus_unlock();
 #if AUDIO_OUTPUT_DRIVER == AUDIO_OUTPUT_DRIVER_PCM510XA
     testingPcm = true;
+#endif
+#if AUDIO_OUTPUT_DRIVER == AUDIO_OUTPUT_DRIVER_ES8388
+    testingEs8388 = true;
 #endif
     for (int failure = -1; failure < 10; ++failure) {
         clear_failures(); audioEvents.clear(); silentFrameWritten = false;
@@ -508,6 +520,7 @@ int main() {
             audio_init(30);
         }
         assert(audio_initialized && output_driver->isAvailable());
+        assert(output_driver->needsContinuousIdleOutput() == testingEs8388);
         assert(liveChannels == (HAS_AUDIO_INPUT ? 2 : 1) && liveQueues == 2);
         const auto enabled = std::find(audioEvents.begin(), audioEvents.end(), "enableTX");
         const auto unmuted = std::find(audioEvents.begin(), audioEvents.end(), "unmute");
@@ -558,6 +571,51 @@ int main() {
     const auto disabled = std::find(audioEvents.begin(), audioEvents.end(), "disableTX");
     const auto poweredOff = std::find(audioEvents.begin(), audioEvents.end(), "powerOff");
     assert(disabled < poweredOff);
+#endif
+#if AUDIO_OUTPUT_DRIVER == AUDIO_OUTPUT_DRIVER_ES8388
+    ES8388AudioDriver driver(control);
+    writtenPcm.clear();
+    assert(driver.begin(48000));
+    size_t phase = 0;
+    const auto check_output = [&](const int16_t* input, size_t frame_count) {
+        assert(writtenPcm.size() == frame_count * 2);
+        for (size_t frame = 0; frame < frame_count; ++frame) {
+            const int16_t silence = phase < 2 ? 1 : -1;
+            for (size_t channel = 0; channel < 2; ++channel) {
+                const size_t sample = frame * 2 + channel;
+                assert(writtenPcm[sample] == (input[sample] == 0 ? silence : input[sample]));
+            }
+            phase = (phase + 1) & 3;
+        }
+        writtenPcm.clear();
+    };
+    int16_t silence[64] = {};
+    check_output(silence, 32);
+    std::vector<int16_t> frames(259 * 2, 0);
+    frames[0] = 32767;
+    frames[3] = -32768;
+    frames[257] = 123;
+    const auto original = frames;
+    assert(driver.write(frames.data(), frames.size() / 2));
+    assert(frames == original);
+    check_output(original.data(), original.size() / 2);
+    assert(driver.write(silence, 1));
+    check_output(silence, 1);
+    assert(driver.write(silence, 3));
+    check_output(silence, 3);
+    channelWriteLimit = 3 * 2 * sizeof(int16_t);
+    assert(!driver.write(silence, 32));
+    check_output(silence, 3);
+    channelWriteLimit = size_t(-1);
+    channelWriteFails = true;
+    assert(!driver.write(silence, 4) && writtenPcm.empty());
+    channelWriteFails = false;
+    assert(driver.write(silence, 4));
+    check_output(silence, 4);
+    assert(driver.end() && driver.begin(48000));
+    phase = 0;
+    check_output(silence, 32);
+    assert(driver.end() && liveChannels == 0);
 #endif
     assert(lockDepth == 0);
 }
@@ -1421,6 +1479,7 @@ int main() {
         source.write_text(define + r'''
 #include <cassert>
 static int loopCalls = 0;
+void reboot_service_loop() {}
 #ifdef BOARD_HARDWARE_LOOP
 void m5stack_stopwatch_loop() { ++loopCalls; }
 #endif
@@ -1503,7 +1562,7 @@ int main() {
         result = subprocess.run([str(executable)])
         assert result.returncode == (1 if unlocked else 0)
     print("PASS: screensaver brightness holds display lock; unlocked regression rejected", flush=True)
-    for profile in ("es8311-gpio", "es8311-microphone", "pcm510xa-gpio"):
+    for profile in ("es8311-gpio", "es8311-microphone", "pcm510xa-gpio", "es8388-gpio"):
         prelude = PRELUDE
         if profile == "es8311-microphone":
             prelude = prelude.replace("#define HAS_AUDIO_INPUT false", "#define HAS_AUDIO_INPUT true")
@@ -1512,12 +1571,18 @@ int main() {
         if pcm:
             prelude = prelude.replace("#define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_ES8311",
                                       "#define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_PCM510XA")
+        es8388 = profile == "es8388-gpio"
+        if es8388:
+            prelude = prelude.replace("#define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_ES8311",
+                                      "#define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_ES8388")
         paths = ["src/app/audio_output_driver.h", "src/app/audio_input_driver.h",
                  "src/app/i2c_bus.cpp", "src/app/board_hardware.cpp",
                  "src/app/audio_output_drivers.cpp"]
         if pcm:
             paths += ["src/app/drivers/audio_gain.h", "src/app/drivers/pcm510xa_audio_driver.h",
                       "src/app/drivers/pcm510xa_audio_driver.cpp"]
+        elif es8388:
+            paths += ["src/app/drivers/es8388_audio_driver.h", "src/app/drivers/es8388_audio_driver.cpp"]
         else:
             paths += ["src/app/drivers/es8311_audio_driver.h", "src/app/drivers/es8311_audio_driver.cpp"]
         body = "\n".join(production(path) for path in paths)

@@ -69,6 +69,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Prevent silence-boundary pops on ES8388 speaker output with a one-LSB
+  alternating signal and continuous idle output when idle amplifier muting is
+  disabled. See [Tab5 speaker settings](src/boards/m5stack-tab5/README.md#speaker-audio).
 * Wait for buffered audio to drain before changing alert volume overrides or
   restoring device volume, keeping each alert's final samples at its own volume.
 * Avoid Pillow deprecation warnings during PNG asset generation while retaining

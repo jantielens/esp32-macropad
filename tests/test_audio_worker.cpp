@@ -66,6 +66,7 @@ public:
     bool fail = false;
     bool end_result = true;
     bool reboot_shutdown = true;
+    bool continuous_idle = false;
     unsigned end_count = 0;
     bool muted = true;
     bool fail_unmute = false;
@@ -90,6 +91,7 @@ public:
         return true;
     }
     bool isAvailable() const override { return true; }
+    bool needsContinuousIdleOutput() const override { return continuous_idle; }
     bool needsRebootShutdown() const override { return reboot_shutdown; }
     bool end() override { ++end_count; return end_result; }
     bool write(const int16_t* frames, size_t count) override {
@@ -229,6 +231,37 @@ int main() {
     ota = false;
     run_worker();
     assert(!output.muted);
+    reset();
+    output.continuous_idle = true;
+    audio_set_amplifier_policy(false, 0);
+    output.on_write = [] {
+        if (output.writes == 3) audio_set_amplifier_policy(true, 0);
+    };
+    idle_hook = [] {
+        if (output.muted) throw WorkerIdle{};
+        assert(now_us - output_last_write_us < kOutputBufferedUs + kOutputIdleGraceUs + 10000);
+    };
+    run_worker();
+    assert(output.writes == 3 && output.muted);
+    assert(std::all_of(output.pcm.begin(), output.pcm.end(),
+        [](int16_t sample) { return sample == 0; }));
+    reset();
+    output.continuous_idle = true;
+    audio_set_amplifier_policy(false, 0);
+    output.on_write = [] {
+        if (output.writes == 3) { ota = true; ++ota_epoch; }
+    };
+    run_worker();
+    assert(output.writes == 3 && output.muted);
+    reset();
+    output.continuous_idle = true;
+    audio_set_amplifier_policy(false, 0);
+    output.on_write = [] {
+        if (output.writes == 3) audio_request_reboot();
+    };
+    run_worker();
+    assert(output.writes == 3 && output.end_count == 1);
+    assert(audio_reboot_status() == AUDIO_REBOOT_COMPLETE);
     reset();
     audio_set_amplifier_policy(true, 0);
     audio_feedback("500:20");

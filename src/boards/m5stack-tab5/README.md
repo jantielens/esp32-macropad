@@ -44,6 +44,19 @@ the firmware's USB HID stack uses the controller connected to the host-oriented
 USB-A port, not USB-C. Remote logging remains available. Native extensions
 require physical validation on this board.
 
+## Speaker audio
+
+To avoid pops at silence boundaries during tone and MP3 playback, open
+**Audio > Volume**, turn off **Mute amplifier when idle**, and **Save**.
+The setting applies without reboot. The firmware keeps the amplifier enabled
+and continuously feeds a very low-level signal through the ES8388 between
+sounds. Idle muting remains available, but switching the amplifier can still
+produce pops. Firmware updates and reboot shutdown can still mute or stop audio
+regardless of this setting.
+
+See [Feedback, sound alerts, and Music](../../../docs/user/media/audio.md) for
+volume, wake delay, tone patterns, and MP3 playback controls.
+
 ## Battery and charging
 
 The firmware enables the vendor's 500 mA charging setting with quick charge

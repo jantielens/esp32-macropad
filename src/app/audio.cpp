@@ -648,13 +648,18 @@ static void audio_task(void* param) {
         }
         if (music_transport.state() == MUSIC_TRANSPORT_STOPPED) refresh_music_catalog(false);
 #endif
-        if (g_feedback.active) {
+        const bool continuous_idle = output_driver->needsContinuousIdleOutput() &&
+            !(amplifier_policy.load() & 1);
+        if (g_feedback.active || continuous_idle) {
             int16_t silence[512 * 2] = {};
             AudioStarvationStats stats = {};
     #if HAS_SOUND_PLAYER
             if (!music_player || music_transport.state() != MUSIC_TRANSPORT_PLAYING || session_guard)
     #endif
-            if (!audio_write_with_stats(output_driver, silence, 512, &stats)) tone_alert_overlay_stop(&g_feedback);
+            if (!audio_write_with_stats(output_driver, silence, 512, &stats)) {
+                tone_alert_overlay_stop(&g_feedback);
+                if (continuous_idle) vTaskDelay(pdMS_TO_TICKS(10));
+            }
         } else {
     #if HAS_SOUND_PLAYER
             if (!music_player || music_transport.state() != MUSIC_TRANSPORT_PLAYING || session_guard)

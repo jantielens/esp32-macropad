@@ -4,6 +4,8 @@
 #include <Wire.h>
 
 namespace {
+constexpr int16_t kSilenceAmplitude = 1;
+
 bool writeCodec(uint8_t reg, uint8_t value) {
     if (!i2c_bus_lock()) return false;
     Wire.beginTransmission(AUDIO_CODEC_ADDR);
@@ -13,12 +15,6 @@ bool writeCodec(uint8_t reg, uint8_t value) {
     return ok;
 }
 
-int readCodec(uint8_t reg) {
-    Wire.beginTransmission(AUDIO_CODEC_ADDR);
-    if (Wire.write(reg) != 1 || Wire.endTransmission(false) != 0 ||
-        Wire.requestFrom(uint8_t(AUDIO_CODEC_ADDR), uint8_t(1)) != 1) return -1;
-    return Wire.read();
-}
 }
 
 bool ES8388AudioDriver::begin(uint32_t sample_rate) {
@@ -66,6 +62,7 @@ bool ES8388AudioDriver::begin(uint32_t sample_rate) {
     running = true;
     vTaskDelay(pdMS_TO_TICKS(50));
     initialized = true;
+    silence_phase = 0;
     int16_t silence[64] = {};
     if (!write(silence, 32)) { end(); return false; }
     return true;
@@ -75,30 +72,28 @@ bool ES8388AudioDriver::write(const int16_t* frames, size_t frame_count) {
     if (!initialized || !frames || !frame_count) return false;
     size_t written = 0;
     const size_t bytes = frame_count * 2 * sizeof(int16_t);
-    const esp_err_t error = i2s_channel_write(tx, frames, bytes, &written, portMAX_DELAY);
-    static bool loggedPcm = false;
-    if (!loggedPcm) {
-        for (size_t sample = 0; sample < frame_count * 2; ++sample) {
-            if (frames[sample] != 0) {
-                LOGI("Audio", "ES8388 PCM: sample=%d bytes=%u/%u result=%s",
-                     int(frames[sample]), unsigned(written), unsigned(bytes), esp_err_to_name(error));
-                loggedPcm = true;
-                static const uint8_t registers[] = {2, 4, 8, 23, 24, 25, 26, 27, 39, 42, 46, 48};
-                int values[sizeof(registers)] = {};
-                if (i2c_bus_lock()) {
-                    for (size_t index = 0; index < sizeof(registers); ++index)
-                        values[index] = readCodec(registers[index]);
-                    i2c_bus_unlock();
-                    LOGI("Audio", "ES8388 power/format: 02=%d 04=%d 08=%d 23=%d 24=%d 25=%d",
-                         values[0], values[1], values[2], values[3], values[4], values[5]);
-                    LOGI("Audio", "ES8388 volume/mix: 26=%d 27=%d 39=%d 42=%d 46=%d 48=%d",
-                         values[6], values[7], values[8], values[9], values[10], values[11]);
-                } else {
-                    LOGW("Audio", "ES8388 register readback lock failed");
-                }
-                break;
-            }
+    int16_t scratch[512];
+    const size_t scratch_frames = sizeof(scratch) / sizeof(scratch[0]) / 2;
+    esp_err_t error = ESP_OK;
+    for (size_t offset = 0; offset < frame_count;) {
+        const size_t remaining = frame_count - offset;
+        const size_t count = remaining < scratch_frames ? remaining : scratch_frames;
+        uint8_t next_phase = silence_phase;
+        for (size_t frame = 0; frame < count; ++frame) {
+            const int16_t probe = next_phase < 2 ? kSilenceAmplitude : -kSilenceAmplitude;
+            const int16_t left = frames[(offset + frame) * 2];
+            const int16_t right = frames[(offset + frame) * 2 + 1];
+            scratch[frame * 2] = left == 0 ? probe : left;
+            scratch[frame * 2 + 1] = right == 0 ? probe : right;
+            next_phase = (next_phase + 1) & 3;
         }
+        const size_t chunk_bytes = count * 2 * sizeof(int16_t);
+        size_t chunk_written = 0;
+        error = i2s_channel_write(tx, scratch, chunk_bytes, &chunk_written, portMAX_DELAY);
+        written += chunk_written;
+        silence_phase = (silence_phase + chunk_written / (2 * sizeof(int16_t))) & 3;
+        if (error != ESP_OK || chunk_written != chunk_bytes) break;
+        offset += count;
     }
     return error == ESP_OK && written == bytes;
 }
