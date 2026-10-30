@@ -6,8 +6,6 @@
 
 #include "mqtt_manager.h"
 #include "audio.h"
-#include "config_manager.h"
-#include "web_portal_state.h"
 #include "log_manager.h"
 #if HAS_SOUND_PLAYER
 #include "sound_store.h"
@@ -364,13 +362,6 @@ void mqtt_audio_loop() {
         portEXIT_CRITICAL(&g_mux);
 
         audio_set_volume(vol);
-
-        // Persist to NVS
-        DeviceConfig *cfg = web_portal_get_current_config();
-        if (cfg) {
-            cfg->audio_volume = vol;
-            config_manager_save(cfg);
-        }
 
         LOGT(TAG, "Volume set: %u%%", vol);
     }

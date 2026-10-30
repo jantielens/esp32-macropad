@@ -18,6 +18,7 @@
 #if HAS_DISPLAY
 #include "device_dialog.h"
 #include "psram_json_allocator.h"
+#include "screen_saver_manager.h"
 #endif
 #if HAS_AUDIO
 #include "audio.h"
@@ -141,6 +142,53 @@
 
 static Preferences preferences;
 static std::atomic<bool> g_config_save_in_progress{false};
+
+struct ConfigSaveGuard {
+		bool admitted = false;
+		bool locked = false;
+		bool begin() {
+				bool expected = false;
+				locked = g_config_save_in_progress.compare_exchange_strong(expected, true, std::memory_order_acq_rel);
+				if (!locked) return false;
+				admitted = ota_activity_try_begin_config_write();
+				return admitted;
+		}
+		~ConfigSaveGuard() {
+				if (admitted) ota_activity_finish_config_write();
+				if (locked) g_config_save_in_progress.store(false, std::memory_order_release);
+		}
+};
+
+#if HAS_DISPLAY || HAS_AUDIO
+static bool save_current_level(DeviceConfig *config, const char* key, uint8_t value, uint8_t* saved_value) {
+		if (!config || !saved_value || value > 100) return false;
+		ConfigSaveGuard guard;
+		if (!guard.begin()) return false;
+		Serial.flush();
+		delay(1);
+		if (!preferences.begin(CONFIG_NAMESPACE, false)) return false;
+		const bool saved = preferences.putUChar(key, value) == sizeof(uint8_t);
+		preferences.end();
+		if (saved) *saved_value = value;
+		return saved;
+}
+#endif
+
+#if HAS_DISPLAY
+bool config_manager_save_current_brightness(DeviceConfig *config) {
+		if (!config) return false;
+		const uint8_t brightness = screen_saver_manager_get_brightness();
+		if (brightness < MIN_USER_BRIGHTNESS) return false;
+		return save_current_level(config, KEY_BACKLIGHT_BRIGHTNESS, brightness, &config->backlight_brightness);
+}
+#endif
+
+#if HAS_AUDIO
+bool config_manager_save_current_volume(DeviceConfig *config) {
+		if (!config) return false;
+		return save_current_level(config, KEY_AUDIO_VOLUME, audio_get_volume(), &config->audio_volume);
+}
+#endif
 
 #if HAS_LVGL_EPAPER
 static portMUX_TYPE epaper_refresh_settings_mux = portMUX_INITIALIZER_UNLOCKED;
@@ -672,21 +720,9 @@ bool config_manager_save(const DeviceConfig *config) {
 				return false;
 		}
 
-		bool expected = false;
-		if (!g_config_save_in_progress.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
-				LOGW("Config", "Save rejected: another configuration write is active");
-				return false;
-		}
-		struct SaveProgressGuard {
-				bool admitted = false;
-				~SaveProgressGuard() {
-						if (admitted) ota_activity_finish_config_write();
-						g_config_save_in_progress.store(false, std::memory_order_release);
-				}
-		} save_progress_guard;
-		save_progress_guard.admitted = ota_activity_try_begin_config_write();
-		if (!save_progress_guard.admitted) {
-				LOGW("Config", "Save rejected: update or network transition is active");
+		ConfigSaveGuard save_progress_guard;
+		if (!save_progress_guard.begin()) {
+				LOGW("Config", "Save rejected: another write, update or network transition is active");
 				return false;
 		}
 
@@ -770,7 +806,7 @@ bool config_manager_save(const DeviceConfig *config) {
 
 		// Save display settings
 		LOGI("Config", "Saving brightness: %d%%", config->backlight_brightness);
-		preferences.putUChar(KEY_BACKLIGHT_BRIGHTNESS, config->backlight_brightness);
+		const bool brightness_saved = preferences.putUChar(KEY_BACKLIGHT_BRIGHTNESS, config->backlight_brightness) == sizeof(uint8_t);
 		preferences.putUChar(KEY_DISPLAY_ROTATION, config->display_rotation);
 #if HAS_DISPLAY
 		const bool boot_font_saved = preferences.putUChar(
@@ -814,7 +850,7 @@ bool config_manager_save(const DeviceConfig *config) {
 		#endif
 
 		#if HAS_AUDIO
-		preferences.putUChar(KEY_AUDIO_VOLUME, config->audio_volume);
+		const bool volume_saved = preferences.putUChar(KEY_AUDIO_VOLUME, config->audio_volume) == sizeof(uint8_t);
 		preferences.putBool(KEY_AUDIO_IDLE_MUTE, config->audio_idle_mute);
 		preferences.putUShort(KEY_AUDIO_WAKE_DELAY, config->audio_wake_delay_ms);
 		preferences.putString(KEY_TAP_BEEP, config->tap_beep);
@@ -871,8 +907,11 @@ bool config_manager_save(const DeviceConfig *config) {
 		const char* timezone = config->timezone[0] ? config->timezone : "UTC0";
 		const bool timezone_saved = preferences.putString(KEY_TIMEZONE, timezone) == strlen(timezone);
 		preferences.end();
+		#if !HAS_AUDIO
+		const bool volume_saved = true;
+		#endif
 		if (!timezone_saved || !boot_font_saved || !boot_text_saved ||
-				!boot_background_saved || !boot_logo_saved) {
+				!boot_background_saved || !boot_logo_saved || !brightness_saved || !volume_saved) {
 				LOGE("Config", "Save failed: one or more configuration fields were not persisted");
 				return false;
 		}

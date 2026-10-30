@@ -856,6 +856,7 @@ add_host_legacy_test(test_sd_storage_spi SOURCES test_sd_storage_spi.cpp ${PROJE
     DEFINITIONS HAS_FILESYSTEM=1 USE_SD_STORAGE=1 HAS_SD_CARD=1 SD_STORAGE_SPI=1 SD_SPI_CS_PIN=42 SD_SPI_SCK_PIN=43 SD_SPI_MOSI_PIN=44 SD_SPI_MISO_PIN=39 SD_SPI_FREQUENCY_HZ=25000000
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h)
 add_host_legacy_test(test_factory_reset_storage SOURCES test_factory_reset_storage.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides OPTIONS -ffunction-sections -fdata-sections LIBRARIES -Wl,--gc-sections)
+add_host_legacy_test(test_config_level_save SOURCES test_factory_reset_storage.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides DEFINITIONS HAS_AUDIO=1 OPTIONS -ffunction-sections -fdata-sections LIBRARIES -Wl,--gc-sections)
 add_host_legacy_test(test_factory_reset_no_filesystem SOURCES test_factory_reset_storage.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides
     DEFINITIONS HAS_FILESYSTEM=0 USE_SD_STORAGE=0

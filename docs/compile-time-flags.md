@@ -490,6 +490,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 <!-- BEGIN COMPILE_FLAG_REPORT:USAGE -->
 - **HAS_AUDIO**
   - src/app/actions/alarm_mp3_action.cpp
+  - src/app/actions/save_volume_action.cpp
   - src/app/actions/sound_alert_action.cpp
   - src/app/actions/volume_action.cpp
   - src/app/alarm_manager.cpp
@@ -623,6 +624,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/mouse_button_action.cpp
   - src/app/actions/mqtt_action.cpp
   - src/app/actions/music_action.cpp
+  - src/app/actions/save_brightness_action.cpp
+  - src/app/actions/save_volume_action.cpp
   - src/app/actions/screen_action.cpp
   - src/app/actions/set_var_action.cpp
   - src/app/actions/sound_alert_action.cpp
@@ -718,6 +721,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/mqtt_action.cpp
   - src/app/actions/music_action.cpp
   - src/app/actions/notify_action.cpp
+  - src/app/actions/save_brightness_action.cpp
+  - src/app/actions/save_volume_action.cpp
   - src/app/actions/screen_action.cpp
   - src/app/actions/set_var_action.cpp
   - src/app/actions/sound_alert_action.cpp

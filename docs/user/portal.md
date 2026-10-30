@@ -70,7 +70,7 @@ Most sections have their own **Save** control. Save before leaving a section;
 unsubmitted form values are not a device-wide draft. A save submits that
 section's settings, not settings from every category.
 
-* Live changes, such as moving the brightness slider, can affect the device
+* Live changes, such as moving the brightness or volume slider, affect the device
   before they are saved. Save to keep the setting across reboot.
 * Settings that apply live, such as screen saver settings and timezone, do not
   need a reboot after a successful save.

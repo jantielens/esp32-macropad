@@ -747,7 +747,7 @@ static void exec_set_config(const void* ctx, bool* ok, char* msg, size_t msg_len
     if (q->has_ss_wake_bind)  strlcpy(cfg->screen_saver_wake_binding, q->ss_wake_bind, CONFIG_SS_WAKE_BINDING_MAX_LEN);
     if (q->has_brightness) {
         cfg->backlight_brightness = q->brightness;
-        display_manager_set_backlight_brightness(q->brightness);
+        screen_saver_manager_set_brightness(q->brightness);
         screen_saver_manager_notify_activity(true);
     }
 #else

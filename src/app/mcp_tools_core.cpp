@@ -542,7 +542,7 @@ struct BacklightCtx { uint8_t brightness; };
 
 static void exec_set_backlight(const void* ctx, bool* ok, char* msg, size_t msg_len) {
     const BacklightCtx* c = (const BacklightCtx*)ctx;
-    display_manager_set_backlight_brightness(c->brightness);
+    screen_saver_manager_set_brightness(c->brightness);
     screen_saver_manager_notify_activity(true);
     *ok = true;
     snprintf(msg, msg_len, "brightness set to %u%%", (unsigned)c->brightness);

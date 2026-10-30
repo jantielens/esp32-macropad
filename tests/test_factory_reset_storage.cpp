@@ -58,6 +58,39 @@ esp_err_t nvs_flash_init() { ++s_nvs_init_calls; return ESP_OK; }
 
 #include "config_manager.cpp"
 
+#if HAS_AUDIO
+static uint8_t current_volume = 35;
+static bool config_write_allowed = true;
+static unsigned config_writes_finished = 0;
+uint8_t audio_get_volume() { return current_volume; }
+bool ota_activity_try_begin_config_write() { return config_write_allowed; }
+void ota_activity_finish_config_write() { ++config_writes_finished; }
+
+static void test_save_current_volume() {
+    DeviceConfig config = {};
+    config.audio_volume = 70;
+    config.backlight_brightness = 80;
+    assert(config_manager_save_current_volume(&config));
+    assert(config.audio_volume == 35 && config.backlight_brightness == 80);
+    assert(Preferences::saved_volume == 35 && Preferences::volume_writes == 1);
+    assert(config_writes_finished == 1);
+
+    current_volume = 60;
+    Preferences::write_ok = false;
+    assert(!config_manager_save_current_volume(&config));
+    assert(config.audio_volume == 35 && Preferences::saved_volume == 35);
+    assert(config_writes_finished == 2);
+    Preferences::write_ok = true;
+    config_write_allowed = false;
+    assert(!config_manager_save_current_volume(&config));
+    assert(config.audio_volume == 35 && Preferences::volume_writes == 1);
+    assert(config_writes_finished == 2);
+    config_write_allowed = true;
+    assert(config_manager_save_current_volume(&config));
+    assert(config.audio_volume == 60 && Preferences::saved_volume == 60);
+}
+#endif
+
 #if HAS_FILESYSTEM
 static const char* const kOwnedRoots[] = {
     "/camera", "/config", "/icons", "/sounds", "/storage", "/prints", "/brews",
@@ -113,6 +146,9 @@ static void test_rmdir_failure_fails_reset() {
 #endif
 
 int main() {
+#if HAS_AUDIO
+    test_save_current_volume();
+#endif
 #if HAS_FILESYSTEM
     test_success_removes_owned_roots_only();
     test_remove_failure_fails_reset();

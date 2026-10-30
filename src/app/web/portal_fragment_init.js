@@ -65,6 +65,29 @@ async function saveFragmentConfig(requiresReboot) {
         }
     });
 
+    var level = config.audio_volume !== undefined ? 'volume' :
+        config.backlight_brightness !== undefined ? 'brightness' : null;
+    if (level) {
+        delete config[level === 'volume' ? 'audio_volume' : 'backlight_brightness'];
+        config['save_current_' + level] = true;
+        try {
+            if (liveLevelRequests[level]) await liveLevelRequests[level];
+            var currentResponse = await fetch('/api/config');
+            if (!currentResponse.ok) throw new Error('Failed to read current ' + level);
+            var currentConfig = await currentResponse.json();
+            var currentValue = level === 'volume' ? currentConfig.current_audio_volume : currentConfig.current_backlight_brightness;
+            if (currentValue !== undefined) {
+                var currentSlider = document.getElementById(level === 'volume' ? 'audio_volume' : 'backlight_brightness');
+                var currentLabel = document.getElementById(level === 'volume' ? 'audio_volume_value' : 'brightness-value');
+                if (currentSlider) currentSlider.value = currentValue;
+                if (currentLabel) currentLabel.textContent = currentValue;
+            }
+        } catch (error) {
+            showMessage('Error updating ' + level + ': ' + error.message, 'error');
+            return;
+        }
+    }
+
     // Validate
     var validation = validateConfig(config);
     if (!validation.valid) {
@@ -90,6 +113,7 @@ async function saveFragmentConfig(requiresReboot) {
         if (!response.ok) throw new Error('Failed to save configuration');
         var result = await response.json();
         if (result.success) {
+            if (level) await loadConfig();
             if (window.deviceConfig && (config.ha_url !== undefined || config.ha_token !== undefined)) {
                 if (config.ha_url !== undefined) window.deviceConfig.ha_url = config.ha_url;
                 if (config.ha_token && config.ha_token.trim()) window.deviceConfig.ha_token_set = true;
@@ -925,6 +949,8 @@ window.init_ha_discovery_fragment = function () {
 window.init_volume_fragment = function () {
     var idleMute = document.getElementById('audio_idle_mute');
     if (idleMute) idleMute.addEventListener('change', updateAmplifierSettings);
+    var slider = document.getElementById('audio_volume');
+    if (slider) slider.addEventListener('input', handleVolumeChange);
     initConfigFragment('volume-save-btn', false);
 };
 

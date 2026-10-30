@@ -10,7 +10,7 @@
 // Built-ins and device classes share this fixed-size registry. Reserve room
 // for device classes even when every built-in action is present.
 #ifndef ACTION_TYPE_REGISTRY_MAX_TYPES
-#define ACTION_TYPE_REGISTRY_MAX_TYPES 25
+#define ACTION_TYPE_REGISTRY_MAX_TYPES 27
 #endif
 static constexpr int MAX_ACTION_TYPES = ACTION_TYPE_REGISTRY_MAX_TYPES;
 static const ActionTypeDef* s_types[MAX_ACTION_TYPES] = {};

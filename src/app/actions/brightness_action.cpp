@@ -27,7 +27,7 @@ ActionResult dispatch_brightness(const ButtonAction& act, const char* label, uin
 #if defined(ARDUINO) && HAS_DISPLAY
     const auto& brightness = act.payload.brightness;
     const bool adjust = strcmp(brightness.brightness_mode, "adjust") == 0;
-    int value = adjust ? display_manager_get_backlight_brightness() + lroundf(atof(brightness.brightness_value))
+    int value = adjust ? screen_saver_manager_get_brightness() + lroundf(atof(brightness.brightness_value))
                        : lroundf(atof(brightness.brightness_value));
     value = constrain(value, MIN_USER_BRIGHTNESS, 100);
     screen_saver_manager_set_brightness(value);

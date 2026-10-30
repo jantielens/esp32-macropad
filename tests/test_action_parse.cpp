@@ -448,6 +448,11 @@ TEST(volume_adjust_step_placeholder) {
     ASSERT_STR(act.payload.volume.volume_value, "{step}");
 }
 
+TEST(save_level_actions_round_trip) {
+    ASSERT_STR(round_trip("{\"type\":\"save_volume\"}").type, "save_volume");
+    ASSERT_STR(round_trip("{\"type\":\"save_brightness\"}").type, "save_brightness");
+}
+
 // ============================================================================
 // Brightness action
 // ============================================================================
@@ -1084,6 +1089,7 @@ int main(int argc, char** argv) {
     RUN(volume_set_action_parse);
     RUN(volume_adjust_action_round_trip);
     RUN(volume_adjust_step_placeholder);
+    RUN(save_level_actions_round_trip);
 
     printf("\n--- Brightness action ---\n");
     RUN(brightness_set_action_parse);

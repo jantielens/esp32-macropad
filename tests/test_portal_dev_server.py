@@ -36,7 +36,8 @@ class PortalDevServerTest(unittest.TestCase):
             "caps": {"ble": True, "ble_hid": True, "usb_hid": True, "mqtt": True},
             "mqtt_host": "broker.example.test",
             "ha_url": "http://ha.example.test", "ha_token_set": True,
-            "backlight_brightness": 80, "keyboard_transport": "none",
+            "backlight_brightness": 80, "current_backlight_brightness": 80,
+            "audio_volume": 70, "current_audio_volume": 70, "keyboard_transport": "none",
             "keyboard_active_transport": "none", "device_name": "Mock",
             "wifi_failure_mode": "ap", "ap_password": "",
         }
@@ -808,9 +809,32 @@ class PortalDevServerTest(unittest.TestCase):
         finally:
             self.server.mock_config["mqtt_host"] = previous
 
+    def test_live_levels_save_independently_and_reboot(self):
+        original = dict(self.server.mock_config)
+        try:
+            self.server.mock_config.update(backlight_brightness=80, current_backlight_brightness=80,
+                                           audio_volume=70, current_audio_volume=70)
+            self.assertEqual(self.request("/api/component/display/brightness", "PUT", {"brightness": 45})[0], 200)
+            self.assertEqual(self.request("/api/component/volume/level", "PUT", {"volume": 30})[0], 200)
+            self.assertEqual(self.request("/api/config?no_reboot=1", "POST", {"device_name": "Test"})[0], 200)
+            config = self.request("/api/config")[1]
+            self.assertEqual((config["backlight_brightness"], config["audio_volume"]), (80, 70))
+            self.assertEqual((config["current_backlight_brightness"], config["current_audio_volume"]), (45, 30))
+            self.assertEqual(self.request("/api/config?no_reboot=1", "POST", {"save_current_volume": True})[0], 200)
+            self.assertEqual(self.request("/api/reboot", "POST", {})[0], 200)
+            config = self.request("/api/config")[1]
+            self.assertEqual((config["current_backlight_brightness"], config["current_audio_volume"]), (80, 30))
+            self.assertEqual(self.request("/api/component/display/brightness", "PUT", {"brightness": 55})[0], 200)
+            self.assertEqual(self.request("/api/config?no_reboot=1", "POST", {"save_current_brightness": True})[0], 200)
+            self.assertEqual(self.request("/api/reboot", "POST", {})[0], 200)
+            config = self.request("/api/config")[1]
+            self.assertEqual((config["current_backlight_brightness"], config["current_audio_volume"]), (55, 30))
+        finally:
+            self.server.mock_config = original
+
     def test_display_icons_defaults_and_catalog_routes(self):
         self.assertEqual(self.request("/api/component/display/brightness", "PUT", {"brightness": 0})[0], 200)
-        self.assertEqual(self.request("/api/config")[1]["backlight_brightness"], 0)
+        self.assertEqual(self.request("/api/config")[1]["current_backlight_brightness"], 0)
         self.assertEqual(self.request("/api/component/display/brightness", "PUT", {"brightness": 101})[0], 400)
         self.assertEqual(self.request("/api/component/display/screen", "PUT", {"screen": "pad_4"})[0], 200)
         self.assertEqual(self.server.mock_screen, "pad_4")

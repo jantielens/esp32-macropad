@@ -2212,6 +2212,20 @@ sound library and retain missing saved file names.
 
 Returns current device configuration (passwords excluded).
 
+`backlight_brightness` and `audio_volume` are the saved levels. When their
+capabilities are available, `current_backlight_brightness` and
+`current_audio_volume` report the selected runtime levels. Brightness excludes
+the screen-saver fade or temporary sleep level.
+
+`PUT /api/component/display/brightness` accepts `{"brightness": 0-100}` and
+`PUT /api/component/volume/level` accepts `{"volume": 0-100}`. Both change
+the current level without saving. The brightness endpoint also permits zero for
+temporary blanking. A configuration POST can set `save_current_brightness` or
+`save_current_volume` to `true` to persist the corresponding current level;
+the brightness must meet the configured user minimum. Other omitted level
+fields retain their saved values. The `save_brightness` and `save_volume`
+actions persist only their respective current level.
+
 The `timezone` field defaults to `UTC0`. `POST /api/config?no_reboot=1` accepts
 supported Olson names or validated POSIX TZ rules, including explicit transition
 rules for DST. Successful changes apply live and dismiss/rearm an active alarm;

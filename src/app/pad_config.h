@@ -158,6 +158,8 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_SOUND_ALERT "sound_alert"
 #define ACTION_TYPE_VOLUME     "volume"
 #define ACTION_TYPE_BRIGHTNESS "brightness"
+#define ACTION_TYPE_SAVE_VOLUME "save_volume"
+#define ACTION_TYPE_SAVE_BRIGHTNESS "save_brightness"
 #define ACTION_TYPE_TIMER    "timer"
 #define ACTION_TYPE_ALARM    "alarm"
 #define ACTION_TYPE_ALARM_TONE "alarm_tone"

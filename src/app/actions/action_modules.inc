@@ -3,6 +3,8 @@
 #include "back_action.cpp"
 #include "volume_action.cpp"
 #include "brightness_action.cpp"
+#include "save_volume_action.cpp"
+#include "save_brightness_action.cpp"
 #include "system_action.cpp"
 #include "music_action.cpp"
 #include "screen_action.cpp"

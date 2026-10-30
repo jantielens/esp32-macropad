@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add **Save volume** and **Save brightness** actions to persist the current
+  level independently. See [audio](docs/user/media/audio.md) and
+  [display and sleep](docs/user/device/display-and-sleep.md).
 * Add a reusable firmware history report with self-contained offline HTML charts,
   interactive release highlights, available subsystem comparisons, and CSV/JSON
   exports. Compare shipped application sizes across GitHub releases without
@@ -47,6 +50,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Apply portal volume and brightness slider changes immediately without saving
+  them until **Save** is selected. Volume and brightness actions, MCP backlight
+  changes, and MQTT volume commands also change only the current level.
 * Use bonded Legacy Just Works BLE keyboard pairing with LE Secure Connections
   disabled to avoid the bundled P4 SDK's DHKey defect. Pair only in a trusted
   environment: initial pairing is vulnerable to passive capture. Security changes

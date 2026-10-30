@@ -233,6 +233,12 @@ struct DeviceConfig {
 void config_manager_init();                           // Initialize NVS
 bool config_manager_load(DeviceConfig *config);       // Load config from NVS
 bool config_manager_save(const DeviceConfig *config); // Save config to NVS
+#if HAS_DISPLAY
+bool config_manager_save_current_brightness(DeviceConfig *config);
+#endif
+#if HAS_AUDIO
+bool config_manager_save_current_volume(DeviceConfig *config);
+#endif
 bool config_manager_factory_reset();                  // Erase entire NVS partition + wipe user filesystem (pads, icons, sounds, indexed stores)
 bool config_manager_is_valid(const DeviceConfig *config); // Check if config is valid
 void config_manager_print(const DeviceConfig *config); // Debug print config
