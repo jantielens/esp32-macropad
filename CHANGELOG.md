@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add a reusable firmware history report with self-contained offline HTML charts,
+  interactive release highlights, available subsystem comparisons, and CSV/JSON
+  exports. Compare shipped application sizes across GitHub releases without
+  rebuilding firmware. See [Firmware history report](docs/dev/scripts.md#toolsfirmware_historypy).
 * Enable conservative charging and INA226 battery voltage and current readings
   for Tab5 targets. Battery percentage and charging status are not estimated;
   hardware validation is pending. See [M5Stack Tab5](src/boards/m5stack-tab5/README.md).
