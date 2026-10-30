@@ -25,12 +25,14 @@ int64_t esp_timer_get_time() { return now_us; }
 void device_telemetry_log_memory_snapshot(const char*) {}
 UBaseType_t uxTaskGetStackHighWaterMark(TaskHandle_t) { return 16384; }
 void vTaskDelay(TickType_t ticks) {
+    const bool output_pending = output_last_write_us && now_us - output_last_write_us < kOutputBufferedUs;
     now_us += ticks * 1000;
     if (amplifier_wake_pending) {
         assert(ticks == pdMS_TO_TICKS(amplifier_policy.load() >> 1));
         amplifier_wake_pending = false;
         return;
     }
+    if (output_pending) return;
     if (idle_hook) idle_hook();
     else throw WorkerIdle{};
 }
@@ -72,12 +74,17 @@ public:
     std::vector<int16_t> pcm;
     std::vector<int16_t> audible_pcm;
     std::function<void()> on_write;
+    std::function<void(uint8_t)> on_volume;
     bool begin(uint32_t) override { return true; }
-    bool setVolume(uint8_t value) override { volume = value; return true; }
+    bool setVolume(uint8_t value) override {
+        if (on_volume) on_volume(value);
+        volume = value;
+        return true;
+    }
     bool setMuted(bool value) override {
         if (!value && fail_unmute) return false;
         muted = value;
-        amplifier_wake_pending = !value;
+        amplifier_wake_pending = !value && (amplifier_policy.load() >> 1) != 0;
         if (!value) amplifier_ready_us = now_us + 120000;
         mute_changes.push_back(value);
         return true;
@@ -303,6 +310,52 @@ int main() {
         [](int16_t sample) { return sample != 0; }));
 
     reset();
+    audio_set_amplifier_policy(false, 0);
+    assert(audio_submit_tone("400:20", 10, false));
+    unsigned volume_restores = 0;
+    output.on_volume = [&](uint8_t volume) {
+        if (volume != 70) return;
+        assert(output.writes > 0);
+        assert(now_us - output_last_write_us >= kOutputBufferedUs);
+        ++volume_restores;
+    };
+    run_worker();
+    assert(volume_restores == 1 && output.volume == 70);
+    assert(!output.muted);
+
+    reset();
+    assert(audio_submit_tone("400:100", 0, false));
+    bool device_volume_changed = false;
+    output.on_write = [] {
+        if (output.writes == 1) audio_set_volume(22);
+        if (output.writes == 2) audio_stop();
+    };
+    output.on_volume = [&](uint8_t volume) {
+        if (volume != 22) return;
+        assert(now_us - output_last_write_us < kOutputBufferedUs);
+        device_volume_changed = true;
+    };
+    run_worker();
+    assert(device_volume_changed && output.writes == 2);
+
+    reset();
+    assert(audio_submit_tone("400:100", 10, false));
+    bool replaced = false;
+    output.on_write = [&] {
+        if (!replaced) {
+            replaced = true;
+            assert(audio_submit_tone("800:20", 20, false));
+        }
+    };
+    output.on_volume = [](uint8_t volume) {
+        if (volume == 10) return;
+        assert(output.writes > 0);
+        assert(now_us - output_last_write_us >= kOutputBufferedUs);
+    };
+    run_worker();
+    assert(replaced && output.volume == 70);
+
+    reset();
     audio_feedback("1000:10000");
     run_worker();
     assert(output.pcm.size() == 94 * 512 * 2);
@@ -350,6 +403,18 @@ int main() {
 
 #if HAS_SOUND_PLAYER
     reset();
+    assert(audio_submit_sound("alert", 10));
+    volume_restores = 0;
+    output.on_volume = [&](uint8_t volume) {
+        if (volume != 70) return;
+        assert(output.writes == 3);
+        assert(now_us - output_last_write_us >= kOutputBufferedUs);
+        ++volume_restores;
+    };
+    run_worker();
+    assert(volume_restores == 1 && output.volume == 70);
+
+    reset();
     assert(audio_music_command(MUSIC_COMMAND_PLAY_PAUSE) == AUDIO_MUSIC_SUBMIT_QUEUED);
     output.on_write = [] {
         if (output.writes == 1)
@@ -371,7 +436,11 @@ int main() {
     reset();
     assert(audio_music_command(MUSIC_COMMAND_PLAY_PAUSE) == AUDIO_MUSIC_SUBMIT_QUEUED);
     output.on_write = [] {
-        if (output.writes == 1) assert(audio_submit_sound("alert", 0));
+        assert(output.volume == (opened.back() == "/sounds/alert.mp3" ? 10 : 70));
+        if (output.writes == 1) assert(audio_submit_sound("alert", 10));
+    };
+    output.on_volume = [](uint8_t) {
+        if (output.writes) assert(now_us - output_last_write_us >= kOutputBufferedUs);
     };
     run_worker();
     assert((opened == std::vector<std::string>{"/media/first.mp3", "/sounds/alert.mp3", "/media/first.mp3", "/media/second.mp3"}));

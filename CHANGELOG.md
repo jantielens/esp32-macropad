@@ -65,6 +65,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Wait for buffered audio to drain before changing alert volume overrides or
+  restoring device volume, keeping each alert's final samples at its own volume.
 * Avoid Pillow deprecation warnings during PNG asset generation while retaining
   compatibility with older Pillow releases.
 * Initialize background image fetching before showing the first pad so camera

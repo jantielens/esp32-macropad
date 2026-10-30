@@ -206,6 +206,11 @@ The common PCM writer reserves fixed headroom (primary gain 0.75, feedback gain
 sole driver write. Alert volume overrides affect only that primary; master volume
 changes made during an alert are retained afterward.
 
+Before entering or leaving a different alert volume override, the worker waits
+for the configured DMA buffer duration after the last output write. It continues
+processing commands during that wait. Ordinary device-volume changes remain
+immediate when no alert override is involved.
+
 The `alarm_mp3` action submits an MP3 Alert with looping enabled. File-backed
 playback reuses its decoder and output buffers, seeks to the beginning only
 after a successful pass with accepted PCM, and checks stop, session-generation,

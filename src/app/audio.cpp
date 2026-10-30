@@ -254,6 +254,7 @@ static void audio_task(void* param) {
     uint32_t alert_stop_epoch = g_alert_stop_epoch.load();
     uint32_t all_stop_epoch = g_all_stop_epoch.load();
     uint8_t output_volume = 255;
+    bool output_volume_overridden = false;
 #if HAS_SOUND_PLAYER
     SoundPlayer* alert_player = nullptr;
 #endif
@@ -556,11 +557,18 @@ static void audio_task(void* param) {
 #endif
         }
         const uint8_t device_volume = current_volume.load();
-        const uint8_t requested_volume = g_playing.load() && active.volume_override ? active.volume_override : device_volume;
+        const bool volume_overridden = g_playing.load() && active.volume_override != 0;
+        const uint8_t requested_volume = volume_overridden ? active.volume_override : device_volume;
         if (output_volume != requested_volume) {
+            if ((output_volume_overridden || volume_overridden) && output_last_write_us != 0 &&
+                esp_timer_get_time() - output_last_write_us < kOutputBufferedUs) {
+                vTaskDelay(pdMS_TO_TICKS(10));
+                continue;
+            }
             if (!output_driver->setVolume(requested_volume)) LOGW(TAG, "Volume control failed");
             else output_volume = requested_volume;
         }
+        if (output_volume == requested_volume) output_volume_overridden = volume_overridden;
         if (g_playing.load()) {
 #if HAS_SOUND_PLAYER
             if (alert_player) {
