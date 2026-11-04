@@ -169,6 +169,8 @@ void keyboard_hid_loop() {
 bool keyboard_hid_is_busy() { return occupied.load(); }
 bool keyboard_hid_is_ready() { return ready.load(); }
 KeyboardTransport keyboard_hid_transport() { return selected.load(); }
+bool keyboard_hid_transport_is_ready() { return backend_ready(); }
+uint32_t keyboard_hid_transport_epoch() { return backend_epoch(); }
 const char* keyboard_hid_status() {
     if (selected.load() == KeyboardTransport::None) return "disabled";
     if (occupied.load()) return "busy";
@@ -183,6 +185,8 @@ void keyboard_hid_loop() {}
 bool keyboard_hid_is_busy() { return false; }
 bool keyboard_hid_is_ready() { return false; }
 KeyboardTransport keyboard_hid_transport() { return KeyboardTransport::None; }
+bool keyboard_hid_transport_is_ready() { return false; }
+uint32_t keyboard_hid_transport_epoch() { return 0; }
 const char* keyboard_hid_status() { return "unavailable"; }
 
 #endif

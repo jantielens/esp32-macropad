@@ -1,6 +1,6 @@
 #include "widget.h"
 
-#if HAS_DISPLAY && HAS_TOUCH && HAS_USB_HID
+#if HAS_DISPLAY && HAS_TOUCH && (HAS_USB_HID || HAS_BLE_HID)
 
 #include "scrollpad_input.h"
 #include "mouse_surface_touch.h"
@@ -113,7 +113,7 @@ static void scrollpad_describe(JsonObject& out) {
     inertia["name"] = "widget_scrollpad_inertia";
     inertia["type"] = "number";
     inertia["desc"] = "Release coasting, 0-5 (default 0/off); higher values coast longer; either mouse surface stops coasting on touch";
-    out["note"] = "Single-touch USB scroll surface. Requires USB keyboard transport; "
+    out["note"] = "Single-touch HID scroll surface. Requires USB or BLE HID transport; "
                   "consumes button actions and pad swipes and retains touches outside its bounds. "
                   "No clicks, pointer movement, or BLE mouse. Optional inertia stops on touch, hide, reconnect, or OTA. "
                   "Horizontal support depends on the host application.";

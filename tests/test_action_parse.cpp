@@ -300,7 +300,7 @@ TEST(mouse_button_action_round_trip) {
 TEST(mouse_button_validation_and_catalog) {
     const ActionTypeDef* type = action_type_find(ACTION_TYPE_MOUSE_BUTTON);
     ASSERT_TRUE(type != nullptr);
-    ASSERT_EQ(type->available(), HAS_USB_HID);
+    ASSERT_EQ(type->available(), HAS_USB_HID || HAS_BLE_HID);
     ASSERT_TRUE(type->fields == nullptr);
     for (const char* value : {"\"invalid\"", "\"\"", "3", "null", "true"}) {
         char json[100];

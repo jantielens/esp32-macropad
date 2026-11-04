@@ -484,6 +484,9 @@ arrive. Building blocks show a loading state until their catalog is available.
 
 The widget manifest, `src/app/widgets/manifest.json`, owns explicit firmware and
 portal asset paths, firmware compile gates, selector labels, and order.
+`gates` requires every listed flag; optional `any_gates` additionally requires
+at least one listed flag. HID input widgets require display/touch and either
+`HAS_USB_HID` or `HAS_BLE_HID`.
 `{{WIDGET_OPTIONS}}` and `{{WIDGET_EDITORS}}` in `pad-editor.fragment.html`
 expand through `tools/_render_html_template.py`. The firmware asset pipeline and
 local mock server use the same manifest loader and renderer. Keep manifest order
@@ -1660,10 +1663,11 @@ Returns comprehensive device information.
 - `has_camera`: Enables the separate Camera Preview widget for an attached camera.
 
 **Mouse Capability:**
-- `has_usb_hid` reports compiled native USB HID support, not host readiness.
-  The pad editor offers Mousepad, Scrollpad, Gamepad Joystick, and Gamepad Button only when both `has_usb_hid` and `has_touch`
-  are true. The action catalog exposes Mouse Button on USB HID builds, without
-  requiring touch. Mouse output requires the active USB keyboard transport.
+- `has_usb_hid` and `has_ble_hid` report compiled HID support, not host readiness.
+  The pad editor offers Mousepad, Scrollpad, Gamepad Joystick, and Gamepad Button
+  when `has_touch` and either HID capability are true. The action catalog
+  exposes Mouse Button and Gamepad with either backend, without requiring touch.
+  All HID output follows the selected `keyboard_transport`, without fallback.
 
 **Action Catalog:**
 - Add `?catalog=1` to request the optional `catalog` array. The bare `/api/info` response omits it to keep startup and polling responses small.
@@ -2355,8 +2359,8 @@ Explicitly saved USB/BLE choices remain unchanged; devices without a saved
 choice become Off after updating. With neither backend compiled, keyboard
 fields, navigation, and the key action are absent. The `hid` fragment displays
 **Keyboard, Mouse & Gamepad** in both navigation and the fragment heading. The transport
-note explains that USB enables keyboard and mouse control, BLE enables keyboard
-control only, and Off disables both. Its active connection section follows the
+note explains that USB or BLE enables keyboard, mouse, and gamepad control,
+and Off disables all HID output. Its active connection section follows the
 running backend, not the selector. Save is disabled for an unchanged preference; a saved preference
 that differs from the active backend displays a pending-reboot message.
 USB-only builds omit the BLE pairing and bond-detail markup from the embedded
@@ -2376,11 +2380,21 @@ session; cancellation, failed reports, OTA, and the continuation deadline fail
 the action suffix. There is no fallback, broadcast, or live transport switching.
 Neutral recovery sends at most one report per loop pass. USB keyboard report
 lock and completion waits each use a 5 ms timeout. Mouse reports use nonblocking
-TinyUSB submission after validating their USB and OTA epochs, so Arduino's
+TinyUSB submission after validating their connection and OTA epochs, so Arduino's
 semaphore wait cannot delay a stale mouse snapshot until a later session.
 Unaccepted reports remain queued; accepted reports are acknowledged once.
 Neutral mouse release is permitted during OTA. Already-submitted reports cannot
 be recalled, and keyboard boot protocol does not carry mouse reports.
+
+Mouse and gamepad state layers share the keyboard backend's readiness and
+connection epoch. Their generations also reset on transport identity changes,
+even when the two backend epochs match. BLE uses dedicated encrypted/bonded-owner
+GATT input reports (mouse ID 3, gamepad ID 4), with signed 8-bit pointer/wheel/pan
+deltas and the same 13-byte gamepad payload as USB. BLE submission validates
+connection/OTA epochs and gamepad generation, permits neutral OTA recovery,
+and acknowledges only accepted notifications. Reconnect clears cached pointer
+reports and restores report protocol. Hosts must forget and re-pair after the
+report map changes; no old-descriptor compatibility path is retained.
 
 The shared macro workspace is allocated on the first accepted request, not at
 boot or connection time. PSRAM workspaces are retained for reuse until reboot;
@@ -2425,7 +2439,7 @@ output is Off. Review the core VID/PID distribution policy before release;
 no custom IDs are assigned.
 
 The Mousepad widget is registered only with `HAS_DISPLAY && HAS_TOUCH &&
-HAS_USB_HID`. Its `widget_mousepad_sensitivity` JSON field accepts finite
+(HAS_USB_HID || HAS_BLE_HID)`. Its `widget_mousepad_sensitivity` JSON field accepts finite
 values from 0.1 to 5, defaulting to 1. `widget_mousepad_acceleration` accepts
 finite values from 0 to 5, defaulting to 0/off; it amplifies fast movement
 independently of sensitivity. `widget_mousepad_movement_threshold` accepts
@@ -2462,15 +2476,16 @@ Mousepad, Scrollpad, Gamepad Joystick, and Gamepad Button share
 **Disable pad swipe actions (entire pad)** only for those widgets; authoring
 validation rejects the field on other types. If any configured input widget
 enables it, the pad registers no swipe handler, regardless of touch position
-or USB readiness. Rebuilding the pad reapplies the aggregate setting.
+or HID readiness. Rebuilding the pad reapplies the aggregate setting.
 MCP includes the shared field in each supported widget's capability metadata.
 
-Gamepad Joystick and Gamepad Button use the same display/touch/USB gates and
-existing USB keyboard transport setting, with no new NVS toggle. USB registers
+Gamepad Joystick and Gamepad Button use the same display/touch/HID gates and
+existing keyboard transport setting, with no new NVS toggle. USB registers
 a custom generic-HID gamepad descriptor before startup alongside keyboard,
 consumer control, and mouse. Its packed report is 13 bytes: four signed 16-bit
 stick axes, two unsigned 8-bit triggers, an 8-bit null-state hat, and 16 button
-bits. BLE and Off leave native USB stopped after reboot; UART logging remains available.
+bits. BLE exposes the same controller over GATT. BLE and Off leave native USB
+stopped after reboot; UART logging remains available.
 
 USB HID interface and configuration strings reference the product string,
 which uses the configured device name plus ` USB`. Arduino supplies hardcoded
@@ -2493,14 +2508,14 @@ Shared pad validation invokes an optional widget validation callback even
 when MCP is disabled. The editor hides ordinary action lists for both widgets
 and provides a dedicated held-control selector. The shared action editor
 emits only the selected control family's target fields. See the
-[Gamepad authoring guide](../pad-editor-guide.md#gamepad-controls) for JSON and
-ownership semantics. `get_capabilities` advertises action/widget schemas plus
-`device_config.usb_gamepad` ranges, readiness, the driver `touch_contacts` limit,
+[Gamepad guide](../user/widgets/gamepad.md) for controls and ownership semantics.
+`get_capabilities` advertises action/widget schemas plus
+`device_config.gamepad` ranges, readiness, the driver `touch_contacts` limit,
 and `controller_multitouch` support. `/api/info` exposes
 `touch_contact_capacity` (0 without initialized touch, 1 for single-contact
 drivers, up to 5 for GT911) and `has_controller_multitouch` independently of
 `has_usb_hid`. These fields report software capacity, not verified panel capacity
-or current USB readiness. No persisted action/widget fields or settings change.
+or current HID readiness. No persisted action/widget fields or settings change.
 Gamepad contacts are captured by stable ID; ordinary navigation is canceled
 and blocked until all fingers lift. Synthetic taps remain idle-only.
 The lean gamepad action catalog also exposes `button_count`; the shared action
@@ -2527,15 +2542,14 @@ non-finite acceleration/inertia defaults to 0, and finite values are clamped
 to 0-5. Neither feature adds an enable toggle or changes USB descriptors.
 
 The self-registering `mouse_button` action module is available with
-`HAS_USB_HID` and uses flat JSON `{"type":"mouse_button","button":"right"}`.
+`HAS_USB_HID || HAS_BLE_HID` and uses flat JSON `{"type":"mouse_button","button":"right"}`.
 The `button` field accepts `left`, `right`, or `middle` (default `left` when
 omitted); validation rejects invalid names and non-string values. This fixed
 option set is not bindable. Its catalog metadata drives the shared portal
 selector and MCP action schema. Dispatch returns complete when a click is
 accepted by the queue, or failed if unavailable, disconnected, full, in OTA,
 or overlapping a drag-owned button. Other-button click releases preserve drag
-ownership. No descriptor, BLE mouse, transport setting, or gesture-enable toggle
-is added.
+ownership. No separate transport setting or gesture-enable toggle is added.
 It requires neither touch nor a dedicated widget and uses its host's gesture
 rules. It does not wait for delivery before the next action in a list.
 

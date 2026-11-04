@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-30
+ms.date: 2026-11-04
 ms.topic: reference
 ---
 
@@ -12,29 +12,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.45.0] - Unreleased
+## [1.45.0] - 2026-11-04
 
 ### Added
 
-* Add **Save volume** and **Save brightness** actions to persist the current
-  level independently. See [audio](docs/user/media/audio.md) and
-  [display and sleep](docs/user/device/display-and-sleep.md).
-* Add a reusable firmware history report with self-contained offline HTML charts,
-  interactive release highlights, available subsystem comparisons, and CSV/JSON
-  exports. Compare shipped application sizes across GitHub releases without
-  rebuilding firmware. See [Firmware history report](docs/dev/scripts.md#toolsfirmware_historypy).
-* Enable conservative charging and INA226 battery voltage and current readings
-  for Tab5 targets. Battery percentage and charging status are not estimated;
-  hardware validation is pending. See [M5Stack Tab5](src/boards/m5stack-tab5/README.md).
-* Add an SPI SD storage backend and experimental `m5stack-tab5` and
-  `m5stack-tab5-sd` targets. The latter requires a readable SD card at boot;
-  the former uses internal flash. ST7121 and ST7123 panels are supported;
-  older ILI9881C/GT911 panels are not. Hardware validation is pending.
-  See [M5Stack Tab5](src/boards/m5stack-tab5/README.md).
 * Add a touch-only Slider widget with decimal ranges, live numeric sources,
-  three optional release actions from the normal catalog, configurable icon
-  placement, and drag ownership independent of pad swipe actions. See
-  [Slider widget](docs/user/widgets/slider.md).
+  up to three release actions, a configurable drag-value bubble, and drag
+  ownership independent of pad swipe actions.
+  See [Slider widget](docs/user/widgets/slider.md).
+* Add mouse and generic HID gamepad output over BLE using existing actions and
+  widgets. Host and application support varies. Remove the saved device from
+  the host and pair again after updating from keyboard-only BLE firmware.
+  See [keyboard, mouse, and gamepad output](docs/user/integrations/keyboard-mouse-gamepad.md).
 * Add volatile device-global runtime variables through `[var:name]` bindings
   and the **Set variable** action. Use expressions for counters and toggles;
   values survive pad changes and configuration reloads but clear on reboot.
@@ -47,22 +36,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Add an Expression Builder to the shared Binding tools menu. Insert functions,
   bindings, and colors, validate field limits and widget formatting rules, and
   preview resolved results. See [Expressions](docs/user/pads/expressions.md).
+* Add `m5stack-tab5` and `m5stack-tab5-sd` targets, including
+  BLE HID, native extensions, speaker audio, conservative charging, and
+  INA226 battery voltage and current readings. Battery percentage and charging
+  status are not estimated. The SD target uses the new SPI SD storage backend
+  and requires a readable card at boot; the other uses internal flash. ST7121
+  and ST7123 panels are supported; older ILI9881C/GT911 panels are not.
+  Some individual features still require hardware validation.
+  See [M5Stack Tab5](src/boards/m5stack-tab5/README.md).
+* Add a firmware history report with offline HTML charts, release highlights,
+  subsystem comparisons, and CSV/JSON exports. Compare shipped application
+  sizes across GitHub releases without rebuilding firmware.
+  See [Firmware history report](docs/dev/scripts.md#toolsfirmware_historypy).
 
 ### Changed
 
-* Apply portal volume and brightness slider changes immediately without saving
-  them until **Save** is selected. Volume and brightness actions, MCP backlight
-  changes, and MQTT volume commands also change only the current level.
-* Use bonded Legacy Just Works BLE keyboard pairing with LE Secure Connections
-  disabled to avoid the bundled P4 SDK's DHKey defect. Pair only in a trusted
-  environment: initial pairing is vulnerable to passive capture. Security changes
-  may require removing the saved host device and pairing again. See
+* Apply portal volume and brightness slider changes immediately without
+  persisting them until **Save** is selected. Volume and brightness actions,
+  the MCP backlight tool, and MQTT volume commands also change only the current
+  level. Use the new **Save volume** and **Save brightness** actions to retain
+  the respective level across reboots. See [audio](docs/user/media/audio.md) and
+  [display and sleep](docs/user/device/display-and-sleep.md).
+* Use bonded Legacy Just Works BLE pairing without a passkey or LE Secure
+  Connections. Pair in a trusted environment: a passive observer can capture
+  the initial pairing. Security changes may require removing the saved host
+  device and pairing again. Require encryption and bonding before HID reports,
+  and reject new owners outside the pairing window. See
   [BLE pairing](docs/user/integrations/keyboard-mouse-gamepad.md#pair-ble).
 * Coordinate intentional software restarts across portal, configuration, OTA,
   actions, MCP, Wi-Fi recovery, and e-paper controls. Wait for active firmware
   and configuration writes, and let the audio worker shut down output on
   drivers that require it. Restart after a one-second audio shutdown timeout
-  or failure; unexpected resets cannot guarantee cleanup.
+  or failure; unexpected resets cannot guarantee cleanup. Abort interrupted
+  firmware uploads before releasing update ownership.
 * Make toggle switch sizing independent of label length. **Switch width (%)**
   now measures button content width, defaults to 50%, and remains height-capped.
   Shared rows keep the switch right-aligned and truncate long center labels;
@@ -75,18 +81,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   while preserving configured appearance, tap actions, and long-press actions.
 * Align rocker, numeric-rocker, held gamepad-button, and list-row feedback with
   short fades while retaining their existing interaction targets and triggers.
-  Keep specialized widget controls and no-animation display behavior.
+  Keep specialized widget controls and no-animation display behavior, and
+  anchor rocker feedback to the original button rectangle.
   See [Press feedback](docs/user/pads/appearance.md#press-feedback).
 
 ### Fixed
 
-* Handle BLE authentication failures explicitly, require encryption and bonding
-  before keyboard reports, and reject new owners outside the pairing window.
-  Preserve bonds on ordinary failures, bound missing-key recovery, time out
-  stalled authentication, and log pairing status and disconnect reasons.
-* Prevent silence-boundary pops on ES8388 speaker output with a one-LSB
-  alternating signal and continuous idle output when idle amplifier muting is
-  disabled. See [Tab5 speaker settings](src/boards/m5stack-tab5/README.md#speaker-audio).
 * Wait for buffered audio to drain before changing alert volume overrides or
   restoring device volume, keeping each alert's final samples at its own volume.
 * Avoid Pillow deprecation warnings during PNG asset generation while retaining
@@ -96,10 +96,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Hide the incorrect "Keyboard unavailable on this board" warning for Send keys
   actions on boards that support BLE or USB HID keyboards.
 * Show buttons created with the Button Builder immediately in the pad preview.
-* Abort interrupted firmware uploads before releasing update ownership so a
-  pending reboot or another update can proceed. Keep successful updates
-  protected through reboot, and prevent duplicate reboot requests from
-  indefinitely extending the response grace period.
 * Clear previous action settings when editing another button so new sliders and
   other buttons do not inherit Home Assistant service fields or other action
   values. Preserve each button's drafts when switching action types or returning
@@ -120,8 +116,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   network clients alive until their HTTP client is destroyed.
 * Play the configured tap sound when a toggle switch accepts a tap. Keep ignored
   taps silent and suppress duplicate feedback when the selected actions play audio.
-* Anchor rocker and numeric-rocker feedback to the original button rectangle so
-  repeated taps cannot accumulate offsets or shrink the highlighted region.
 
 ## [1.44.0] - 2026-10-24
 

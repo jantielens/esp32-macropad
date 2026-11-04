@@ -557,7 +557,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/boards/m5stack-stopwatch/stopwatch_battery_sensor.cpp
 - **HAS_BLE_HID**
   - src/app/actions/ble_pair_action.cpp
+  - src/app/actions/gamepad_action.cpp
   - src/app/actions/key_action.cpp
+  - src/app/actions/mouse_button_action.cpp
   - src/app/app.ino
   - src/app/ble_hid.cpp
   - src/app/ble_hid.h
@@ -565,14 +567,24 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/device_telemetry.cpp
+  - src/app/gamepad_hid.cpp
+  - src/app/gamepad_hid.h
   - src/app/health_binding.cpp
   - src/app/keyboard_hid.cpp
   - src/app/mcp_tools_config.cpp
+  - src/app/mouse_hid.cpp
+  - src/app/mouse_hid.h
   - src/app/portal_components.cpp
+  - src/app/screens/pad_screen.cpp
+  - src/app/touch_manager.cpp
   - src/app/web_portal_ble.cpp
   - src/app/web_portal_ble.h
   - src/app/web_portal_config.cpp
   - src/app/web_portal_routes.cpp
+  - src/app/widgets/gamepad_button_widget.cpp
+  - src/app/widgets/gamepad_joystick_widget.cpp
+  - src/app/widgets/mousepad_widget.cpp
+  - src/app/widgets/scrollpad_widget.cpp
 - **HAS_BOOT_LOGO**
   - src/app/app.ino
   - src/app/board_config.h

@@ -197,17 +197,22 @@ class PortalDevServerTest(unittest.TestCase):
             validate_editors([{**widgets[0], "type": "mismatched_type"}])
         includes = firmware_includes(widgets)
         for kind, gates in {
-            "mousepad": ["HAS_DISPLAY", "HAS_TOUCH", "HAS_USB_HID"],
+            "mousepad": ["HAS_DISPLAY", "HAS_TOUCH"],
             "camera_preview": ["HAS_DISPLAY", "HAS_CAMERA"],
             "external": ["HAS_DISPLAY", "HAS_NATIVE_EXTENSIONS"],
             "waveform": ["HAS_DISPLAY", "IS_SHUTTER_TESTER"],
         }.items():
             widget = next(widget for widget in widgets if widget["type"] == kind)
             self.assertEqual(widget["gates"], gates)
-            self.assertIn(f"#if {' && '.join(gates)}\n#include \"{widget['source']}\"", includes)
+            condition = " && ".join(gates)
+            if kind == "mousepad":
+                self.assertEqual(widget["any_gates"], ["HAS_USB_HID", "HAS_BLE_HID"])
+                condition += " && (HAS_USB_HID || HAS_BLE_HID)"
+            self.assertIn(f"#if {condition}\n#include \"{widget['source']}\"", includes)
         invalid = [
             widgets + [widgets[0]],
             [{**widgets[0], "gates": ["HAS_MISSPELLED_FLAG"]}],
+            [{**widgets[0], "any_gates": ["HAS_MISSPELLED_FLAG"]}],
             [{**widgets[0], "source": "widgets/missing_widget.cpp"}],
             [{**widgets[0], "portal": {**widgets[0]["portal"], "html": "_missing.html"}}],
             [{**widgets[0], "portal": {"label": "Missing", "js": "portal_widget_table.js"}}],

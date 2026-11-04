@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../mouse_hid.h"
-#include "../usb_hid.h"
 #include <lvgl.h>
 
 enum class MouseTouchEvent : uint8_t { Press, Position, Move, Release, Sample, End, Cancel };
@@ -62,7 +61,7 @@ struct MouseSurfaceTouch {
                 session() = this;
                 physical = raw;
                 mouse_hid_begin_touch();
-                epoch = usb_hid_epoch();
+                epoch = mouse_hid_epoch();
                 generation = mouse_hid_generation();
             }
         } else if (session() != this || physical != raw) return false;
@@ -106,7 +105,7 @@ struct MouseSurfaceTouch {
     void cancel() {
         lifetime = next_lifetime();
         handler(context, MouseTouchEvent::Cancel, 0, lv_point_t{});
-        if (session() == this || (!session() && epoch == usb_hid_epoch() &&
+        if (session() == this || (!session() && epoch == mouse_hid_epoch() &&
                                   generation == mouse_hid_generation())) {
             mouse_hid_cancel();
         }

@@ -149,11 +149,14 @@ for (const type of ['mousepad', 'scrollpad', 'gamepad-stick']) {
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_inputs.js', 'utf8'), context);
 for (const touch of [false, true]) {
 	for (const usb of [false, true]) {
-		context.padWidgetEditorsInit({ has_touch: touch, has_usb_hid: usb });
-		assert.strictEqual(mousepadOption.hidden, !(touch && usb));
-		assert.strictEqual(mousepadOption.disabled, !(touch && usb));
-		assert.strictEqual(scrollpadOption.hidden, !(touch && usb));
-		assert.strictEqual(scrollpadOption.disabled, !(touch && usb));
+		for (const ble of [false, true]) {
+			context.padWidgetEditorsInit({ has_touch: touch, has_usb_hid: usb, has_ble_hid: ble });
+			assert.strictEqual(mousepadOption.hidden, !(touch && (usb || ble)));
+			assert.strictEqual(mousepadOption.disabled, !(touch && (usb || ble)));
+			assert.strictEqual(scrollpadOption.hidden, !(touch && (usb || ble)));
+			assert.strictEqual(scrollpadOption.disabled, !(touch && (usb || ble)));
+			assert.strictEqual(elements.get('pad-edit-gamepad_stick-widget-option').hidden, !(touch && (usb || ble)));
+		}
 	}
 }
 context.padWidgetEditorsInit(null);

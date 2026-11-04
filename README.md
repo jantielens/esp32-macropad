@@ -28,12 +28,13 @@ Put a complex keyboard combo behind one button. Add text snippets, presentation
 controls, and media keys beside it. **USB and BLE keyboard macros** put your
 favorite shortcuts on screen instead of making you memorize them.
 
-On USB HID boards, add a **Mousepad** for pointing, clicking, and button-zone dragging,
+On USB or BLE HID boards, add a **Mousepad** for pointing, clicking, and button-zone dragging,
 a **Scrollpad**, or **gamepad controls** with two sticks, two triggers, a hat,
 and 16 buttons. Multicontact drivers support button-zone dragging, simultaneous controls, and
 two-finger Mousepad scrolling.
 
-BLE supports keyboard control only; USB gamepad output is generic HID, not XInput.
+All controls use the selected USB or BLE transport. Gamepad output is generic HID,
+not XInput; host and application support varies.
 See [keyboard macros](docs/user/integrations/keyboard-mouse-gamepad.md),
 [mouse controls](docs/user/widgets/mousepad.md), and
 [gamepad controls](docs/user/widgets/gamepad.md).
@@ -282,7 +283,7 @@ more room without using the board's internal flash for those files.
 | Capability | What to check |
 |------------|---------------|
 | USB keyboard, mouse, and gamepad | Firmware HID support and a native device/OTG connector, not a USB-UART or host-only port |
-| BLE keyboard | BLE HID support in the exact firmware; mouse and gamepad require USB |
+| BLE keyboard, mouse, and gamepad | BLE HID support in the exact firmware and a compatible Bluetooth host |
 | Alarms | Alarm support in the installed firmware |
 | Native Extensions | Supported architecture, package ABI, and usable slot capacity |
 | Audio, microphones, and cameras | Hardware and firmware support vary; check the exact installer target |

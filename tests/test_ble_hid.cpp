@@ -5,12 +5,20 @@
 
 unsigned long millis() { return TestBle::clock_ms; }
 void net_activity_mark(net_channel_t) {}
+static bool ota_active = false;
+static uint32_t ota_epoch = 1;
+bool ota_activity_is_active() { return ota_active; }
+uint32_t ota_activity_epoch() { return ota_epoch; }
+uint32_t gamepad_hid_submission_generation() { return 1; }
 
 class BleHid : public testing::Test {
 protected:
     ble_gap_conn_desc peer = {7, {0, {1, 2, 3, 4, 5, 6}}, {0, {1, 2, 3, 4, 5, 6}}, {false, false}};
 
     void SetUp() override {
+        ota_active = false;
+        ota_epoch = 1;
+        protocolMode = 1;
         TestBle::clock_ms = 100;
         TestBle::claimed = false;
         TestBle::owner.clear();
@@ -88,7 +96,7 @@ TEST_F(BleHid, ReportCharacteristicsRequireSecuredOwner) {
             characteristic->arg), BLE_ATT_ERR_INSUFFICIENT_ENC);
         EXPECT_TRUE(buffer.bytes.empty());
     }
-    EXPECT_EQ(report_count, 3u);
+    EXPECT_EQ(report_count, 5u);
     authenticate();
     for (auto* characteristic = TestBle::services->characteristics; characteristic->uuid; ++characteristic) {
         if (characteristic->uuid->value != 0x2A4D) continue;
@@ -99,6 +107,105 @@ TEST_F(BleHid, ReportCharacteristicsRequireSecuredOwner) {
         EXPECT_EQ(characteristic->access(peer.conn_handle, *characteristic->val_handle, &context,
             characteristic->arg), 0);
         EXPECT_FALSE(buffer.bytes.empty());
+    }
+}
+
+TEST_F(BleHid, DescriptorInputWidthsMatchWireReports) {
+    uint32_t report_bits[5] = {};
+    uint32_t report_id = 0;
+    uint32_t report_size = 0;
+    uint32_t report_count = 0;
+    for (size_t offset = 0; offset < sizeof(HID_REPORT_MAP);) {
+        const uint8_t prefix = HID_REPORT_MAP[offset++];
+        ASSERT_NE(prefix, 0xFE);
+        const size_t size = (prefix & 3) == 3 ? 4 : prefix & 3;
+        ASSERT_LE(offset + size, sizeof(HID_REPORT_MAP));
+        uint32_t value = 0;
+        for (size_t byte = 0; byte < size; ++byte)
+            value |= uint32_t(HID_REPORT_MAP[offset++]) << (8 * byte);
+        switch (prefix & 0xFC) {
+            case 0x84: report_id = value; break;
+            case 0x74: report_size = value; break;
+            case 0x94: report_count = value; break;
+            case 0x80:
+                ASSERT_GT(report_id, 0u);
+                ASSERT_LT(report_id, 5u);
+                report_bits[report_id] += report_size * report_count;
+                break;
+        }
+    }
+    EXPECT_EQ(report_bits[KEYBOARD_ID], sizeof(KeyReport) * 8);
+    EXPECT_EQ(report_bits[MEDIA_KEYS_ID], sizeof(ConsumerReport) * 8);
+    EXPECT_EQ(report_bits[MOUSE_ID], sizeof(BleMouseReport) * 8);
+    EXPECT_EQ(report_bits[GAMEPAD_ID], sizeof(BleGamepadReport) * 8);
+}
+
+TEST_F(BleHid, MouseAndGamepadUseIndependentReports) {
+    pair_owner();
+    MouseHidReport mouse;
+    mouse.buttons = 3;
+    mouse.dx = -12;
+    mouse.dy = 34;
+    mouse.wheel = -1;
+    mouse.pan = 2;
+    ASSERT_TRUE(ble_hid_send_mouse_report(mouse, ble_hid_epoch(), ota_epoch));
+    EXPECT_EQ(TestBle::last_report, (std::vector<uint8_t>{3, 244, 34, 255, 2}));
+    GamepadReport gamepad;
+    gamepad.left_x = -32767;
+    gamepad.right_y = 32767;
+    gamepad.left_trigger = 255;
+    gamepad.hat = 8;
+    gamepad.buttons = 0x8001;
+    ASSERT_TRUE(ble_hid_send_gamepad_report(gamepad, ble_hid_epoch(), ota_epoch, 1));
+    EXPECT_EQ(TestBle::last_report, (std::vector<uint8_t>{1, 128, 0, 0, 0, 0, 255, 127, 255, 0, 8, 1, 128}));
+}
+
+TEST_F(BleHid, PointerReportsRejectUnsecuredStaleAndOtaInput) {
+    MouseHidReport mouse;
+    mouse.dx = 1;
+    GamepadReport gamepad;
+    gamepad.buttons = 1;
+    connect();
+    EXPECT_FALSE(ble_hid_send_mouse_report(mouse, ble_hid_epoch(), ota_epoch));
+    EXPECT_FALSE(ble_hid_send_gamepad_report(gamepad, ble_hid_epoch(), ota_epoch, 1));
+    authenticate();
+    EXPECT_FALSE(ble_hid_send_mouse_report(mouse, ble_hid_epoch() - 1, ota_epoch));
+    EXPECT_FALSE(ble_hid_send_gamepad_report(gamepad, ble_hid_epoch() - 1, ota_epoch, 1));
+    EXPECT_FALSE(ble_hid_send_mouse_report(mouse, ble_hid_epoch(), ota_epoch - 1));
+    EXPECT_FALSE(ble_hid_send_gamepad_report(gamepad, ble_hid_epoch(), ota_epoch - 1, 1));
+    EXPECT_FALSE(ble_hid_send_gamepad_report(gamepad, ble_hid_epoch(), ota_epoch, 2));
+    ota_active = true;
+    EXPECT_FALSE(ble_hid_send_mouse_report(mouse, ble_hid_epoch(), ota_epoch));
+    EXPECT_FALSE(ble_hid_send_gamepad_report(gamepad, ble_hid_epoch(), ota_epoch, 1));
+    EXPECT_EQ(TestBle::allocations, 0u);
+    EXPECT_TRUE(ble_hid_send_mouse_report(MouseHidReport{}, ble_hid_epoch(), ota_epoch));
+    EXPECT_TRUE(ble_hid_send_gamepad_report(GamepadReport{}, ble_hid_epoch(), ota_epoch, 1));
+    protocolMode = 0;
+    EXPECT_FALSE(ble_hid_send_mouse_report(MouseHidReport{}, ble_hid_epoch(), ota_epoch));
+    EXPECT_FALSE(ble_hid_send_gamepad_report(GamepadReport{}, ble_hid_epoch(), ota_epoch, 1));
+}
+
+TEST_F(BleHid, ReconnectClearsCachedPointerReportsAndProtocol) {
+    pair_owner();
+    MouseHidReport mouse;
+    mouse.buttons = 1;
+    GamepadReport gamepad;
+    gamepad.buttons = 1;
+    ASSERT_TRUE(ble_hid_send_mouse_report(mouse, ble_hid_epoch(), ota_epoch));
+    ASSERT_TRUE(ble_hid_send_gamepad_report(gamepad, ble_hid_epoch(), ota_epoch, 1));
+    const uint32_t previous_epoch = ble_hid_epoch();
+    protocolMode = 0;
+    disconnect();
+    connect();
+    authenticate();
+    EXPECT_EQ(protocolMode, 1);
+    EXPECT_FALSE(ble_hid_send_mouse_report(mouse, previous_epoch, ota_epoch));
+    EXPECT_FALSE(ble_hid_send_gamepad_report(gamepad, previous_epoch, ota_epoch, 1));
+    for (void* token : {static_cast<void*>(&mouseInputToken), static_cast<void*>(&gamepadInputToken)}) {
+        os_mbuf buffer;
+        ble_gatt_access_ctxt context = {BLE_GATT_ACCESS_OP_READ_CHR, &buffer};
+        ASSERT_EQ(hid_access(peer.conn_handle, 0, &context, token), 0);
+        for (uint8_t value : buffer.bytes) EXPECT_EQ(value, 0);
     }
 }
 

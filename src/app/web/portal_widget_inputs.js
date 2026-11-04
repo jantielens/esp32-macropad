@@ -1,5 +1,5 @@
 (() => {
-    const available = info => !!(info && info.has_touch === true && info.has_usb_hid === true);
+    const available = info => !!(info && info.has_touch === true && (info.has_usb_hid === true || info.has_ble_hid === true));
     function fields(prefix, keyPrefix, definitions) {
         return definitions.map(([name, kind, value]) => ({
             id: 'pad-edit-' + prefix + '-' + name,

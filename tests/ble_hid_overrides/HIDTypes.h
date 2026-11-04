@@ -1,15 +1,15 @@
 #pragma once
 
-#define USAGE_PAGE(size) 0x04
-#define USAGE(size) 0x08
-#define COLLECTION(size) 0xA0
-#define REPORT_ID(size) 0x84
-#define USAGE_MINIMUM(size) 0x18
-#define USAGE_MAXIMUM(size) 0x28
-#define LOGICAL_MINIMUM(size) 0x14
-#define LOGICAL_MAXIMUM(size) 0x24
-#define REPORT_SIZE(size) 0x74
-#define REPORT_COUNT(size) 0x94
-#define HIDINPUT(size) 0x80
-#define HIDOUTPUT(size) 0x90
-#define END_COLLECTION(size) 0xC0
+#define USAGE_PAGE(size) (0x04 | (size))
+#define USAGE(size) (0x08 | (size))
+#define COLLECTION(size) (0xA0 | (size))
+#define REPORT_ID(size) (0x84 | (size))
+#define USAGE_MINIMUM(size) (0x18 | (size))
+#define USAGE_MAXIMUM(size) (0x28 | (size))
+#define LOGICAL_MINIMUM(size) (0x14 | (size))
+#define LOGICAL_MAXIMUM(size) (0x24 | (size))
+#define REPORT_SIZE(size) (0x74 | (size))
+#define REPORT_COUNT(size) (0x94 | (size))
+#define HIDINPUT(size) (0x80 | (size))
+#define HIDOUTPUT(size) (0x90 | (size))
+#define END_COLLECTION(size) (0xC0 | (size))

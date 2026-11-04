@@ -26,7 +26,7 @@ extern DeviceConfig device_config;
 #include "../local_image_loader.h"
 #endif
 #include "../device_class.h"
-#if HAS_USB_HID
+#if HAS_USB_HID || HAS_BLE_HID
 #include "../gamepad_hid.h"
 #endif
 
@@ -241,7 +241,7 @@ void PadScreen::show() {
 }
 
 void PadScreen::hide() {
-#if HAS_USB_HID
+#if HAS_USB_HID || HAS_BLE_HID
     gamepad_hid_cancel();
 #endif
 #if HAS_IMAGE_FETCH
@@ -319,7 +319,7 @@ void PadScreen::update() {
     }
 
     cachedGeneration = gen;
-#if HAS_USB_HID
+#if HAS_USB_HID || HAS_BLE_HID
     gamepad_hid_cancel();
 #endif
     buildTiles();

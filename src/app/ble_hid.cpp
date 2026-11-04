@@ -5,6 +5,9 @@
 #include "config_manager.h"
 #include "key_sequence.h"
 #include "keyboard_transport.h"
+#include "mouse_hid_state.h"
+#include "gamepad_hid_state.h"
+#include "ota_activity.h"
 #include <atomic>
 #include "net_activity.h"
 #include "log_manager.h"
@@ -36,6 +39,21 @@ static const char* TAG = "BleHID";
 #define HID_KEYBOARD 0x03C1
 #define KEYBOARD_ID 0x01
 #define MEDIA_KEYS_ID 0x02
+#define MOUSE_ID 0x03
+#define GAMEPAD_ID 0x04
+
+struct __attribute__((packed)) BleMouseReport {
+    uint8_t buttons;
+    int8_t dx, dy, wheel, pan;
+};
+
+struct __attribute__((packed)) BleGamepadReport {
+    int16_t left_x, left_y, right_x, right_y;
+    uint8_t left_trigger, right_trigger, hat;
+    uint16_t buttons;
+};
+static_assert(sizeof(BleGamepadReport) == gamepad_protocol::report_bytes, "Gamepad report size mismatch");
+uint32_t gamepad_hid_submission_generation();
 
 typedef struct {
     uint8_t modifiers;
@@ -93,7 +111,25 @@ static const uint8_t HID_REPORT_MAP[] = {
     REPORT_SIZE(1),     0x10,
     REPORT_COUNT(1),    0x01,
     HIDINPUT(1),        0x00,
-    END_COLLECTION(0)
+    END_COLLECTION(0),
+    0x05, 0x01, 0x09, 0x02, 0xA1, 0x01, 0x85, MOUSE_ID,
+    0x09, 0x01, 0xA1, 0x00,
+    0x05, 0x09, 0x19, 0x01, 0x29, 0x05, 0x15, 0x00, 0x25, 0x01,
+    0x75, 0x01, 0x95, 0x05, 0x81, 0x02,
+    0x75, 0x03, 0x95, 0x01, 0x81, 0x01,
+    0x05, 0x01, 0x09, 0x30, 0x09, 0x31, 0x09, 0x38,
+    0x15, 0x81, 0x25, 0x7F, 0x75, 0x08, 0x95, 0x03, 0x81, 0x06,
+    0x05, 0x0C, 0x0A, 0x38, 0x02, 0x95, 0x01, 0x81, 0x06, 0xC0, 0xC0,
+
+    0x05, 0x01, 0x09, 0x05, 0xA1, 0x01, 0x85, GAMEPAD_ID,
+    0x09, 0x30, 0x09, 0x31, 0x09, 0x32, 0x09, 0x35,
+    0x16, 0x01, 0x80, 0x26, 0xFF, 0x7F, 0x75, 0x10, 0x95, 0x04, 0x81, 0x02,
+    0x09, 0x33, 0x09, 0x34, 0x15, 0x00, 0x26, 0xFF, 0x00,
+    0x75, 0x08, 0x95, 0x02, 0x81, 0x02,
+    0x09, 0x39, 0x15, 0x01, 0x25, 0x08, 0x35, 0x00, 0x46, 0x3B, 0x01,
+    0x65, 0x14, 0x95, 0x01, 0x81, 0x42, 0x45, 0x00, 0x65, 0x00,
+    0x05, 0x09, 0x19, 0x01, 0x29, 0x10, 0x15, 0x00, 0x25, 0x01,
+    0x75, 0x01, 0x95, 0x10, 0x81, 0x02, 0xC0
 };
 
 static BLEServer* bleServer = nullptr;
@@ -110,6 +146,16 @@ static uint8_t hidControlPoint = 0x00;
 static const uint8_t hidInfoData[] = {0x11, 0x01, 0x00, 0x01};
 static KeyReport keyboardInputReport = {};
 static ConsumerReport consumerInputReport = {};
+static BleMouseReport mouseInputReport = {};
+static BleGamepadReport gamepadInputReport = {};
+static uint16_t mouseInputHandle = 0;
+static uint16_t gamepadInputHandle = 0;
+static uint8_t mouseInputToken = 0;
+static uint8_t gamepadInputToken = 0;
+static uint8_t mouseInputRefToken = 0;
+static uint8_t gamepadInputRefToken = 0;
+static const uint8_t mouseInputReportRef[] = {MOUSE_ID, 0x01};
+static const uint8_t gamepadInputReportRef[] = {GAMEPAD_ID, 0x01};
 
 static uint16_t protocolModeHandle = 0;
 static uint16_t hidInfoHandle = 0;
@@ -205,6 +251,16 @@ static ble_gatt_dsc_def consumerInputDescriptors[] = {
     {nullptr, 0, 0, nullptr, nullptr},
 };
 
+static ble_gatt_dsc_def mouseInputDescriptors[] = {
+    {&uuidReportReference.u, BLE_ATT_F_READ, 0, hid_access, &mouseInputRefToken},
+    {nullptr, 0, 0, nullptr, nullptr},
+};
+
+static ble_gatt_dsc_def gamepadInputDescriptors[] = {
+    {&uuidReportReference.u, BLE_ATT_F_READ, 0, hid_access, &gamepadInputRefToken},
+    {nullptr, 0, 0, nullptr, nullptr},
+};
+
 static ble_gatt_chr_def hidCharacteristics[] = {
     {&uuidProtocolMode.u, hid_access, &protocolModeToken, nullptr,
      BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE_NO_RSP, 0, &protocolModeHandle, nullptr},
@@ -220,6 +276,10 @@ static ble_gatt_chr_def hidCharacteristics[] = {
      BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_NO_RSP, 0, &keyboardOutputHandle, nullptr},
     {&uuidReport.u, hid_access, &consumerInputToken, consumerInputDescriptors,
      BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY, 0, &consumerInputHandle, nullptr},
+    {&uuidReport.u, hid_access, &mouseInputToken, mouseInputDescriptors,
+     BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY, 0, &mouseInputHandle, nullptr},
+    {&uuidReport.u, hid_access, &gamepadInputToken, gamepadInputDescriptors,
+     BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY, 0, &gamepadInputHandle, nullptr},
     {nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, nullptr},
 };
 
@@ -240,7 +300,8 @@ static int copy_write_value(const struct os_mbuf* om, void* data, uint16_t max_l
 static int hid_access(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt* ctxt, void* arg) {
     uint16_t out_len = 0;
 
-    if ((arg == &keyboardInputToken || arg == &keyboardOutputToken || arg == &consumerInputToken)
+        if ((arg == &keyboardInputToken || arg == &keyboardOutputToken || arg == &consumerInputToken
+            || arg == &mouseInputToken || arg == &gamepadInputToken)
         && (conn_handle != active_conn_handle || !peer_encrypted || !peer_bonded)) {
         return BLE_ATT_ERR_INSUFFICIENT_ENC;
     }
@@ -304,6 +365,11 @@ static int hid_access(uint16_t conn_handle, uint16_t attr_handle, struct ble_gat
     if (arg == &consumerInputToken) {
         return append_flat_value(ctxt->om, &consumerInputReport, sizeof(consumerInputReport));
     }
+
+    if (arg == &mouseInputToken) return append_flat_value(ctxt->om, &mouseInputReport, sizeof(mouseInputReport));
+    if (arg == &gamepadInputToken) return append_flat_value(ctxt->om, &gamepadInputReport, sizeof(gamepadInputReport));
+    if (arg == &mouseInputRefToken) return append_flat_value(ctxt->om, mouseInputReportRef, sizeof(mouseInputReportRef));
+    if (arg == &gamepadInputRefToken) return append_flat_value(ctxt->om, gamepadInputReportRef, sizeof(gamepadInputReportRef));
 
     if (arg == &keyboardInputRefToken) {
         return append_flat_value(ctxt->om, keyboardInputReportRef, sizeof(keyboardInputReportRef));
@@ -371,6 +437,9 @@ class HidCallbacks : public BLEServerCallbacks {
             return;
         }
         clear_peer_metadata();
+        protocolMode = 1;
+        mouseInputReport = {};
+        gamepadInputReport = {};
         connected = true;
         connection_epoch.fetch_add(1);
         advertising_active = false;
@@ -612,6 +681,28 @@ bool ble_hid_is_connected() {
 }
 
 uint32_t ble_hid_epoch() { return connection_epoch.load(); }
+
+bool ble_hid_send_mouse_report(const MouseHidReport& state, uint32_t expected_epoch, uint32_t expected_ota_epoch) {
+    if (protocolMode != 1 || !ble_hid_is_connected() ||
+        !state.can_submit(expected_epoch, ble_hid_epoch(), expected_ota_epoch,
+                          ota_activity_epoch(), ota_activity_is_active())) return false;
+    const BleMouseReport report = {state.buttons, state.dx, state.dy, state.wheel, state.pan};
+    if (!send_report_notification(mouseInputHandle, &report, sizeof(report))) return false;
+    mouseInputReport = report;
+    return true;
+}
+
+bool ble_hid_send_gamepad_report(const GamepadReport& state, uint32_t expected_epoch,
+                                 uint32_t expected_ota_epoch, uint32_t expected_generation) {
+    if (protocolMode != 1 || !ble_hid_is_connected() || expected_epoch != ble_hid_epoch() ||
+        expected_ota_epoch != ota_activity_epoch() || expected_generation != gamepad_hid_submission_generation() ||
+        (ota_activity_is_active() && !state.same_value(GamepadReport{}))) return false;
+    const BleGamepadReport report = {state.left_x, state.left_y, state.right_x, state.right_y,
+        state.left_trigger, state.right_trigger, state.hat, state.buttons};
+    if (!send_report_notification(gamepadInputHandle, &report, sizeof(report))) return false;
+    gamepadInputReport = report;
+    return true;
+}
 
 bool ble_hid_send_report(KsUsageType type, uint16_t usage, uint8_t modifiers) {
     if (type == KS_USAGE_CONSUMER) {

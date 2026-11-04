@@ -18,7 +18,13 @@ ActionResult dispatch_save_volume(const ButtonAction&, const char* label, uint32
 #endif
     return ACTION_COMPLETE;
 }
-bool save_volume_available() { return HAS_AUDIO; }
+bool save_volume_available() {
+#if HAS_AUDIO
+    return true;
+#else
+    return false;
+#endif
+}
 void describe_save_volume(JsonObject& action) {
     action["group"] = "Audio";
     action["label"] = "Save volume";

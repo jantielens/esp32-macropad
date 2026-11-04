@@ -1,6 +1,6 @@
 padRegisterWidgetEditor({
     type: 'gamepad_button',
-    available: info => !!(info && info.has_touch === true && info.has_usb_hid === true),
+    available: info => !!(info && info.has_touch === true && (info.has_usb_hid === true || info.has_ble_hid === true)),
     sections: [{ id: 'pad-edit-gamepad-button-section', tab: 'Content' }],
     fields: [],
     inputNavigation: true,

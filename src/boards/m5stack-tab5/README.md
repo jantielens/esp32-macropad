@@ -4,8 +4,7 @@ description: Hardware requirements and firmware limitations for the M5Stack Tab5
 ---
 
 Target `m5stack-tab5` uses the ESP32-P4 Tab5 with 16 MB flash, 32 MB PSRAM,
-and a 5-inch 720 x 1280 MIPI-DSI display. This is initial bring-up firmware;
-physical validation is required.
+and a 5-inch 720 x 1280 MIPI-DSI display.
 
 ## Display revision
 
@@ -33,14 +32,12 @@ the C6 wireless firmware without first confirming the recovery procedure.
 
 ## Configured features
 
-The firmware enables touch, Wi-Fi and BLE keyboard HID through the ESP32-C6,
-MQTT, MCP, remote images, native extensions, ES8388 speaker playback, battery
-monitoring, and charging. Microphone capture, camera, BLE telemetry, and USB
-HID are not enabled. BLE keyboard fresh pairing and reconnection after toggling
-Windows Bluetooth have been verified with an encrypted, bonded connection while
-Wi-Fi remained connected. Device-reboot reconnection, media keys, and extended
-Wi-Fi coexistence testing remain unverified. See
-[BLE pairing and security limitations](../../../docs/user/integrations/keyboard-mouse-gamepad.md#pair-ble).
+The firmware enables touch, Wi-Fi and BLE keyboard, mouse, and gamepad HID
+through the ESP32-C6, MQTT, MCP, remote images, native extensions, ES8388
+speaker playback, battery monitoring, and charging. Microphone capture,
+camera, BLE telemetry, and USB
+HID are not enabled. BLE HID pairing, input, and Wi-Fi coexistence require
+physical validation on this board.
 
 USB-C provides serial diagnostics through USB CDC. USB HID is unavailable:
 the firmware's USB HID stack uses the controller connected to the host-oriented

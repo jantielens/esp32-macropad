@@ -127,6 +127,7 @@ bool icon_store_source_delete_if_unreferenced(const char*) { return true; }
 void icon_store_delete_page_icons(uint8_t) {}
 void icon_store_cleanup_pad_icons(uint8_t) {}
 static ButtonDefaults defaults = {};
+static void button_defaults_init() {}
 static const ButtonDefaults* button_defaults_get() { return &defaults; }
 static const char* btn_default(const char* value, const char* fallback) {
     return value[0] ? value : fallback;

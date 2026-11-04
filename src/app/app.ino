@@ -79,6 +79,8 @@
 
 #if HAS_USB_HID
 #include "usb_hid.h"
+#endif
+#if HAS_USB_HID || HAS_BLE_HID
 #include "mouse_hid.h"
 #include "gamepad_hid.h"
 #endif
@@ -828,7 +830,7 @@ void loop()
 	keyboard_hid_loop();
 	#endif
 
-	#if HAS_USB_HID
+	#if HAS_USB_HID || HAS_BLE_HID
 	mouse_hid_loop();
 	gamepad_hid_loop();
 	#endif

@@ -1,6 +1,6 @@
 #include "widget.h"
 
-#if HAS_DISPLAY && HAS_TOUCH && HAS_USB_HID
+#if HAS_DISPLAY && HAS_TOUCH && (HAS_USB_HID || HAS_BLE_HID)
 #include "gamepad_joystick_input.h"
 #include "gamepad_surface_touch.h"
 #include <new>
@@ -229,7 +229,7 @@ static void gamepad_stick_describe(JsonObject& out) {
         field["type"] = index < 2 ? "string" : index == 2 ? "number" : "boolean";
         field["desc"] = descriptions[index];
     }
-    out["note"] = "Absolute USB gamepad stick, with independent simultaneous contacts on multitouch drivers; release/cancel returns to neutral. One contact per widget; extras are ignored until lift. Ring fills the shorter padded content dimension; dot is one-third of its diameter (minimum 6 pixels) and stays inside the ring. Both use button foreground color. Floating center can shift only along the longer dimension. Areas smaller than 16 pixels are inactive. First interaction owns each stick until release. Positive X/Y are right/down. Center label is suppressed; top/bottom labels remain. Consumes normal actions and pad swipes. USB keyboard mode required.";
+    out["note"] = "Absolute HID gamepad stick, with independent simultaneous contacts on multitouch drivers; release/cancel returns to neutral. One contact per widget; extras are ignored until lift. Ring fills the shorter padded content dimension; dot is one-third of its diameter (minimum 6 pixels) and stays inside the ring. Both use button foreground color. Floating center can shift only along the longer dimension. Areas smaller than 16 pixels are inactive. First interaction owns each stick until release. Positive X/Y are right/down. Center label is suppressed; top/bottom labels remain. Consumes normal actions and pad swipes. USB or BLE HID transport required.";
 }
 #endif
 static const WidgetPreview gamepad_stick_preview = {"Gamepad Joystick", "joystick"};

@@ -11,6 +11,13 @@
 #include "../src/app/actions/mouse_button_action.cpp"
 #include "../src/app/keyboard_hid.cpp"
 #include "../src/app/key_sequence.h"
+#include <mutex>
+using portMUX_TYPE = std::mutex;
+#define portMUX_INITIALIZER_UNLOCKED {}
+#define portENTER_CRITICAL(mutex) (mutex)->lock()
+#define portEXIT_CRITICAL(mutex) (mutex)->unlock()
+#include "../src/app/mouse_hid.cpp"
+#include "../src/app/gamepad_hid.cpp"
 
 #include <cassert>
 #include <cstring>
@@ -33,10 +40,14 @@ unsigned usb_calls = 0;
 unsigned ble_calls = 0;
 uint32_t finished_token = 0;
 bool finished_success = false;
-bool mouse_queue_accepts = true;
-unsigned mouse_calls = 0;
-uint8_t mouse_buttons = 0;
-uint32_t mouse_epoch = 0;
+unsigned usb_mouse_calls = 0;
+unsigned ble_mouse_calls = 0;
+unsigned usb_gamepad_calls = 0;
+unsigned ble_gamepad_calls = 0;
+#if TEST_USB_TRANSPORT || TEST_BLE_TRANSPORT
+MouseHidReport last_mouse;
+GamepadReport last_gamepad;
+#endif
 std::vector<uint16_t> usages;
 }
 
@@ -55,6 +66,7 @@ void action_type_register(const ActionTypeDef*) { ++registered_actions; }
 
 unsigned long millis() { return clock_ms; }
 bool ota_activity_is_active() { return ota_active; }
+uint32_t ota_activity_epoch() { return 1; }
 bool action_continuation_complete(uint32_t token, bool success) {
     finished_token = token;
     finished_success = success;
@@ -62,12 +74,6 @@ bool action_continuation_complete(uint32_t token, bool success) {
 }
 bool usb_hid_is_ready() { return backend_connected; }
 uint32_t usb_hid_epoch() { return test_epoch; }
-bool mouse_hid_click(uint32_t epoch, uint8_t buttons) {
-    ++mouse_calls;
-    mouse_epoch = epoch;
-    mouse_buttons = buttons;
-    return mouse_queue_accepts;
-}
 bool usb_hid_send_report(KsUsageType, uint16_t usage, uint8_t) {
     ++usb_calls;
     usages.push_back(usage);
@@ -83,6 +89,93 @@ bool ble_hid_send_report(KsUsageType, uint16_t usage, uint8_t) {
     usages.push_back(usage);
     return report_succeeds;
 }
+
+#if TEST_USB_TRANSPORT || TEST_BLE_TRANSPORT
+bool usb_hid_send_mouse_report(const MouseHidReport& report, uint32_t, uint32_t) {
+    ++usb_mouse_calls;
+    last_mouse = report;
+    return report_succeeds;
+}
+bool ble_hid_send_mouse_report(const MouseHidReport& report, uint32_t, uint32_t) {
+    ++ble_mouse_calls;
+    last_mouse = report;
+    return report_succeeds;
+}
+bool usb_hid_send_gamepad_report(const GamepadReport& report, uint32_t, uint32_t, uint32_t) {
+    ++usb_gamepad_calls;
+    last_gamepad = report;
+    return report_succeeds;
+}
+bool ble_hid_send_gamepad_report(const GamepadReport& report, uint32_t, uint32_t, uint32_t) {
+    ++ble_gamepad_calls;
+    last_gamepad = report;
+    return report_succeeds;
+}
+
+void check_pointer_transport(KeyboardTransport transport) {
+    keyboard_hid_init(transport);
+    mouse_hid_loop();
+    gamepad_hid_loop();
+    usb_mouse_calls = ble_mouse_calls = usb_gamepad_calls = ble_gamepad_calls = 0;
+    assert(mouse_hid_is_ready() && gamepad_hid_is_ready());
+    ButtonAction click = {};
+    const char* buttons[] = {"left", "right", "middle"};
+    for (unsigned index = 0; index < 3; ++index) {
+        strlcpy(click.payload.mouse_button.button, buttons[index], sizeof(click.payload.mouse_button.button));
+        assert(dispatch_mouse_button(click, "click", 0) == ACTION_COMPLETE);
+        mouse_hid_loop();
+        assert(last_mouse.buttons == (1 << index));
+        mouse_hid_loop();
+        assert(last_mouse.buttons == 0);
+    }
+    const uint32_t pointer_epoch = mouse_hid_epoch();
+    const uint32_t pointer_generation = mouse_hid_generation();
+    const uint32_t controller_generation = gamepad_hid_generation();
+    const uint32_t pointer_owner = mouse_hid_acquire(pointer_epoch, 1);
+    const uint32_t controller_owner = gamepad_hid_acquire_stick(0, controller_generation);
+    assert(pointer_owner && controller_owner);
+    mouse_hid_move(12, -9, pointer_epoch);
+    assert(gamepad_hid_move(controller_owner, 1234, -2345, controller_generation));
+    mouse_hid_loop();
+    gamepad_hid_loop();
+    assert(last_mouse.buttons == 1);
+    assert(last_gamepad.left_x == 1234 && last_gamepad.left_y == -2345);
+    if (transport == KeyboardTransport::Usb) {
+        assert(usb_mouse_calls && usb_gamepad_calls && !ble_mouse_calls && !ble_gamepad_calls);
+    } else {
+        assert(ble_mouse_calls && ble_gamepad_calls && !usb_mouse_calls && !usb_gamepad_calls);
+    }
+    backend_connected = false;
+    ++test_epoch;
+    mouse_hid_loop();
+    gamepad_hid_loop();
+    assert(!mouse_hid_is_ready() && !gamepad_hid_is_ready());
+    backend_connected = true;
+    ++test_epoch;
+    mouse_hid_loop();
+    gamepad_hid_loop();
+    assert(mouse_hid_generation() != pointer_generation);
+    assert(gamepad_hid_generation() != controller_generation);
+    assert(!last_mouse.buttons && !last_gamepad.left_x && !last_gamepad.left_y);
+    assert(!gamepad_hid_move(controller_owner, 1, 1, controller_generation));
+    assert(!mouse_hid_acquire(pointer_epoch, 1));
+    assert(mouse_hid_click(mouse_hid_epoch(), 1));
+    assert(gamepad_hid_hold({GamepadControlKind::Button, 0}, true));
+    ota_active = true;
+    mouse_hid_loop();
+    gamepad_hid_loop();
+    assert(!last_mouse.buttons && !last_gamepad.buttons);
+    ota_active = false;
+    keyboard_hid_init(KeyboardTransport::None);
+    const unsigned pointer_calls = usb_mouse_calls + ble_mouse_calls;
+    const unsigned controller_calls = usb_gamepad_calls + ble_gamepad_calls;
+    mouse_hid_loop();
+    gamepad_hid_loop();
+    assert(!mouse_hid_is_ready() && !gamepad_hid_is_ready());
+    assert(usb_mouse_calls + ble_mouse_calls == pointer_calls);
+    assert(usb_gamepad_calls + ble_gamepad_calls == controller_calls);
+}
+#endif
 
 void run_until_idle() {
     for (unsigned iteration = 0; iteration < 1000 && keyboard_hid_is_busy(); ++iteration) {
@@ -104,27 +197,14 @@ int main() {
     keyboard_hid_init(KeyboardTransport::None);
     keyboard_hid_loop();
     assert(registered_actions == 1 + unsigned(TEST_USB_TRANSPORT || TEST_BLE_TRANSPORT));
-    assert(mouse_button_available() == bool(TEST_USB_TRANSPORT));
+    assert(mouse_button_available() == bool(TEST_USB_TRANSPORT || TEST_BLE_TRANSPORT));
     ButtonAction mouse_action = {};
     const char* buttons[] = { "left", "right", "middle" };
     for (unsigned index = 0; index < 3; ++index) {
         strlcpy(mouse_action.payload.mouse_button.button, buttons[index], sizeof(mouse_action.payload.mouse_button.button));
         const ActionResult result = dispatch_mouse_button(mouse_action, "mouse test", 0);
-#if TEST_USB_TRANSPORT
-        assert(result == ACTION_COMPLETE);
-        assert(mouse_buttons == (1 << index));
-        assert(mouse_epoch == test_epoch);
-#else
         assert(result == ACTION_FAILED);
-        assert(mouse_calls == 0);
-#endif
     }
-#if TEST_USB_TRANSPORT
-    assert(mouse_calls == 3);
-    mouse_queue_accepts = false;
-    assert(dispatch_mouse_button(mouse_action, "rejected", 0) == ACTION_FAILED);
-    mouse_queue_accepts = true;
-#endif
     assert(keyboard_hid_transport() == keyboard_transport_default(TEST_BLE_TRANSPORT, TEST_USB_TRANSPORT));
     ButtonAction action = {};
     strlcpy(action.payload.key.key_sequence, "a 100ms b", sizeof(action.payload.key.key_sequence));
@@ -274,6 +354,16 @@ int main() {
     assert(!keyboard_hid_is_ready());
     assert(usb_calls == 0 && ble_calls == 0);
     assert(allocation_calls == 0);
+#endif
+#if TEST_USB_TRANSPORT
+    check_pointer_transport(KeyboardTransport::Usb);
+#endif
+#if TEST_BLE_TRANSPORT
+    check_pointer_transport(KeyboardTransport::Ble);
+#endif
+#if !TEST_USB_TRANSPORT && !TEST_BLE_TRANSPORT
+    assert(usb_mouse_calls + ble_mouse_calls == 0);
+    assert(usb_gamepad_calls + ble_gamepad_calls == 0);
 #endif
     return 0;
 }

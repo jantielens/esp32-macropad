@@ -254,6 +254,8 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(HAS_CAMERA ? "true" : "false");
 		response->print(",\"has_usb_hid\":");
 		response->print(HAS_USB_HID ? "true" : "false");
+		response->print(",\"has_ble_hid\":");
+		response->print(HAS_BLE_HID ? "true" : "false");
 		const uint8_t touch_contact_capacity = touch_manager_contact_capacity();
 		response->print(",\"touch_contact_capacity\":");
 		response->print(touch_contact_capacity);
