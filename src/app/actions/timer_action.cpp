@@ -20,7 +20,9 @@ ActionResult dispatch_timer(const ButtonAction& act, const char* label, uint32_t
 }
 bool timer_available() { return HAS_DISPLAY; }
 const char* validate_timer(const JsonObjectConst action) { if (action.containsKey("timer_id") && !action["timer_id"].is<uint8_t>()) return "timer_id must be a whole number"; if (action.containsKey("timer_command") && !action["timer_command"].is<const char*>()) return "timer_command must be a string"; return action.containsKey("timer_value") && !action["timer_value"].is<const char*>() ? "timer_value must be a string" : nullptr; }
-bool visit_timer_fields(ButtonAction& act, ActionBindableFieldVisitor visitor, void* context) { return !act.payload.timer.timer_value[0] || visitor(act.payload.timer.timer_value, sizeof(act.payload.timer.timer_value), true, context); }
+bool visit_timer_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {
+    return action_visit_field(visitor, context, "timer_value", act.payload.timer.timer_value);
+}
 void describe_timer(JsonObject& action) {
     action["group"] = "Timer";
     action["label"] = "Timer";
@@ -44,6 +46,6 @@ void describe_timer(JsonObject& action) {
     value["name"] = "timer_value";
     value["description"] = "countdown value, bindable";
 }
-DEFINE_AND_REGISTER_ACTION_TYPE(kTimerActionType, ACTION_TYPE_TIMER, parse_timer, serialize_timer, dispatch_timer, nullptr, describe_timer, timer_available, validate_timer, visit_timer_fields, ACTION_EXECUTION_SYNC);
+DEFINE_AND_REGISTER_ACTION_TYPE(kTimerActionType, ACTION_TYPE_TIMER, parse_timer, serialize_timer, dispatch_timer, visit_timer_fields, describe_timer, timer_available, validate_timer, ACTION_EXECUTION_SYNC);
 } // namespace
 #endif // HAS_DISPLAY || HAS_BUTTON

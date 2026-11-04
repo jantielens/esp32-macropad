@@ -2,6 +2,7 @@
 #define DISPLAY_MANAGER_H
 
 #include "board_config.h"
+#include "display_manager_lock.h"
 #include "config_manager.h"
 #include "display_driver.h"
 #include "display_perf.h"
@@ -285,12 +286,6 @@ DisplayTaskDispatchResult display_manager_dispatch(
 		DisplayTaskExec exec, DisplayTaskCleanup cleanup,
 		const void* ctx, size_t ctx_len,
 		uint32_t timeout_ms, bool* out_ok, char* out_msg, size_t out_msg_len);
-// Lock only when called from outside the LVGL task; no-op (and reports
-// did_lock=false) when already running on the LVGL task. Pair the returned
-// flag with display_manager_unlock_if_needed().
-void display_manager_lock_if_needed(bool* did_lock);
-void display_manager_unlock_if_needed(bool did_lock);
-
 // Best-effort perf stats for diagnostics (/api/health).
 // Returns false until a first stats window has been captured.
 bool display_manager_get_perf_stats(DisplayPerfStats* out);

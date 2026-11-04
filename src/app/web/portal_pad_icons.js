@@ -1124,7 +1124,7 @@ async function padRegenerateAllSavedIcons() {
                     if (!configResponse.ok)
                         throw new Error('Failed to read display brightness: HTTP ' + configResponse.status);
                     const config = await configResponse.json();
-                    savedBrightness = config.backlight_brightness ?? 80;
+                    savedBrightness = config.current_backlight_brightness ?? config.backlight_brightness ?? 80;
                     await padSetSaveBrightness(0);
                     brightnessBlanked = true;
                 }

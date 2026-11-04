@@ -7,14 +7,14 @@
 // Storage Facade — compile-time selection of the persistent filesystem backend
 // ============================================================================
 //
-// Provides a `Storage` macro that resolves to either the Arduino `LittleFS`
-// global (internal-flash backend) or the
-// `SD_MMC` global (external SD card backend). Both implement the same
+// Provides a `Storage` macro that resolves to the Arduino `LittleFS`
+// global (internal flash), `SD_MMC` (SDMMC card), or `SD` (SPI card).
+// All implement the same
 // `fs::FS` API surface, so call sites can use `Storage.open()`,
 // `Storage.exists()`, `Storage.usedBytes()`, etc. without caring which
 // backend is active.
 //
-// HAS_FILESYSTEM=false excludes both backends; no Storage object is available.
+// HAS_FILESYSTEM=false excludes all backends; no Storage object is available.
 // The backend selection is driven by the `USE_SD_STORAGE` compile-time flag from
 // `board_config.h`. When `USE_SD_STORAGE` is false (the default), this
 // header is a no-op rename of `LittleFS` and behavior is identical to the
@@ -27,7 +27,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#if HAS_FILESYSTEM && USE_SD_STORAGE
+#if HAS_FILESYSTEM && USE_SD_STORAGE && defined(SD_STORAGE_SPI) && SD_STORAGE_SPI
+  #include <SD.h>
+  #define Storage SD
+#elif HAS_FILESYSTEM && USE_SD_STORAGE
   #include <SD_MMC.h>
   #define Storage SD_MMC
 #elif HAS_FILESYSTEM

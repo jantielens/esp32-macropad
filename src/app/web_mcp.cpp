@@ -15,6 +15,7 @@
 #include "web_portal_routes.h"
 #include "web_portal_state.h"
 #include "net_activity.h"
+#include "reboot_service.h"
 
 #include "version.h"
 
@@ -148,16 +149,11 @@ static size_t mcp_body_cap() {
 // Deferred control bridge (web task -> main loop)
 // ----------------------------------------------------------------------------
 // The generic slot + dispatch + drain live in main_loop_bridge.{h,cpp}; MCP
-// call sites use it via the mcp_control_dispatch alias (web_mcp.h). Only the
-// MCP-specific deferred reboot state remains here.
+// call sites use it via the mcp_control_dispatch alias (web_mcp.h).
 
-// Pending reboot timestamp (0 = none). Set on the main loop; honored by loop.
-static volatile uint32_t  s_reboot_at_ms   = 0;
-
-void mcp_request_reboot() {
-    uint32_t at = millis() + MCP_REBOOT_GRACE_MS;
-    if (at == 0) at = 1;  // 0 is the "none" sentinel
-    s_reboot_at_ms = at;
+void mcp_request_reboot(bool owns_network_transition) {
+    reboot_request(MCP_REBOOT_GRACE_MS,
+                   owns_network_transition ? REBOOT_NETWORK_TRANSITION : REBOOT_NORMAL);
 }
 
 // ----------------------------------------------------------------------------
@@ -757,14 +753,6 @@ void web_mcp_loop() {
     // 2) The deferred-job bridge is drained by web_portal_handle()
     //    (loop_bridge_drain), so it runs regardless of HAS_MCP.
 
-    // 3) Deferred reboot: fire after the grace period so the
-    //    JSON-RPC response has flushed.
-    const uint32_t at = s_reboot_at_ms;
-    if (at != 0 && (int32_t)(now - at) >= 0) {
-        LOGW(TAG, "MCP system_command: rebooting");
-        s_reboot_at_ms = 0;
-        ESP.restart();
-    }
 }
 
 #else // !HAS_MCP

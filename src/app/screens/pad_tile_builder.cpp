@@ -7,9 +7,17 @@
 #include "../fill_style_runtime.h"
 #if HAS_TOUCH
 #include "../touch_manager.h"
+#include "../widgets/slider_widget.h"
 #endif
 #include <esp_heap_caps.h>
 #include <string.h>
+
+static bool button_overlay_uses_fade(const char* widget_type) {
+    return !DISPLAY_DISABLE_ANIMATIONS &&
+        (strcmp(widget_type, "rocker") == 0 ||
+         strcmp(widget_type, "numericrocker") == 0 ||
+         strcmp(widget_type, "gamepad_button") == 0);
+}
 
 static bool button_shadow_enabled(const PadConfig& cfg, const ScreenButtonConfig& button) {
     bool enabled = cfg.shadow.enabled;
@@ -106,10 +114,13 @@ void PadScreen::clearTiles() {
 #if HAS_IMAGE_FETCH || HAS_IMAGE_LIBRARY
         // Cancel fetch slot first (stops background task from touching buffers)
 #if HAS_IMAGE_FETCH
+    if (tiles[i].bg_image) lv_image_set_src(tiles[i].bg_image, nullptr);
         if (tiles[i].image_slot != IMAGE_SLOT_INVALID) {
             image_fetch_cancel(tiles[i].image_slot);
             tiles[i].image_slot = IMAGE_SLOT_INVALID;
         }
+        free(tiles[i].image_url_template);
+        tiles[i].image_url_template = nullptr;
 #endif
 #if HAS_IMAGE_LIBRARY
 #endif
@@ -278,7 +289,19 @@ void PadScreen::buildTiles() {
         }
 
         // Create tile container
-        lv_obj_t* obj = lv_obj_create(container);
+        bool has_actions = false;
+        for (uint8_t action_index = 0; action_index < bcfg.action_count; ++action_index)
+            has_actions |= bcfg.actions[action_index].type[0] != '\0';
+        for (uint8_t action_index = 0; action_index < bcfg.lp_action_count; ++action_index)
+            has_actions |= bcfg.lp_actions[action_index].type[0] != '\0';
+        const bool native_button_content = !bcfg.widget.type[0] ||
+            strcmp(bcfg.widget.type, "gauge") == 0 ||
+            strcmp(bcfg.widget.type, "sparkline") == 0 ||
+            strcmp(bcfg.widget.type, "bar_chart") == 0 ||
+            strcmp(bcfg.widget.type, "camera_preview") == 0;
+        const bool native_button = !DISPLAY_DISABLE_ANIMATIONS &&
+            native_button_content && has_actions;
+        lv_obj_t* obj = native_button ? lv_button_create(container) : lv_obj_create(container);
         lv_obj_set_user_data(obj, this);
         tile.obj = obj;
         tileCount++;
@@ -297,6 +320,21 @@ void PadScreen::buildTiles() {
         lv_obj_set_style_border_width(obj, bw_def, 0);
         lv_obj_set_style_radius(obj, cr_def, 0);
         lv_obj_set_style_clip_corner(obj, true, 0);
+        lv_obj_set_style_shadow_width(obj, 0, 0);
+        if (native_button) {
+            static const lv_style_prop_t press_properties[] = {
+                LV_STYLE_TRANSFORM_WIDTH, LV_STYLE_TRANSFORM_HEIGHT,
+                LV_STYLE_RECOLOR, LV_STYLE_RECOLOR_OPA, 0
+            };
+            static lv_style_transition_dsc_t press_transition;
+            lv_style_transition_dsc_init(&press_transition, press_properties,
+                                         lv_anim_path_linear, 30, 0, nullptr);
+            const bool is_light = perceived_luminance(bg_def) > TAP_LUMINANCE_THRESH;
+            lv_obj_set_style_recolor(obj, is_light ? lv_color_black() : lv_color_white(), LV_STATE_PRESSED);
+            lv_obj_set_style_recolor_opa(obj, is_light ? TAP_OVERLAY_DARK_OPA : TAP_OVERLAY_LIGHT_OPA,
+                                         LV_STATE_PRESSED);
+            lv_obj_set_style_transition(obj, &press_transition, LV_STATE_PRESSED);
+        }
         tile.fill_style = fill_style_create(obj, bcfg.fill_style);
         if (bcfg.fill_style && !tile.fill_style) LOGW(TAG, "Button styling allocation failed");
         if (has_shadow && cfg->shadow.type == BUTTON_SHADOW_TYPE_DROP) {
@@ -524,6 +562,11 @@ void PadScreen::buildTiles() {
                     tile.widget_state.font_owner = &fontCache;
                     wt->createUI(obj, &tile.widget_cfg, &bcfg, &r, &scale,
                                  tile.icon_img, tile.label_center, &tile.widget_state);
+#if HAS_TOUCH
+                    if (strcmp(wt->name, "slider") == 0)
+                        slider_attach(&tile.widget_state, tile.actions, tile.action_count,
+                                      PadScreen::onPress, &tile);
+#endif
                 }
             }
         }
@@ -632,6 +675,7 @@ void PadScreen::buildTiles() {
 #if HAS_IMAGE_FETCH
         tile.bg_image = nullptr;
         tile.image_slot = IMAGE_SLOT_INVALID;
+        tile.image_url_template = nullptr;
 #endif
 #if HAS_IMAGE_LIBRARY
         tile.local_bg_image = nullptr;
@@ -665,14 +709,24 @@ void PadScreen::buildTiles() {
 
 #if HAS_IMAGE_FETCH
         if (bcfg.bg_image_url[0]) {
+            const bool dynamic = binding_template_has_bindings(bcfg.bg_image_url);
+            if (dynamic && !bcfg.bg_image_user[0] && !bcfg.bg_image_password[0]) {
+                const size_t size = strlen(bcfg.bg_image_url) + 1;
+                tile.image_url_template = (char*)heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+                if (tile.image_url_template) memcpy(tile.image_url_template, bcfg.bg_image_url, size);
+            }
             ImageScaleMode sm = bcfg.bg_image_letterbox ? IMAGE_SCALE_LETTERBOX : IMAGE_SCALE_COVER;
-            tile.image_slot = image_fetch_request(
-                bcfg.bg_image_url, bcfg.bg_image_user, bcfg.bg_image_password,
-                r.w, r.h, bcfg.bg_image_interval_ms, sm, lv_color_to_u16(rgb_to_lv(bg_def)));
+            if (!dynamic || tile.image_url_template) {
+                tile.image_slot = image_fetch_request(
+                    dynamic ? "" : bcfg.bg_image_url,
+                    dynamic ? "" : bcfg.bg_image_user, dynamic ? "" : bcfg.bg_image_password,
+                    r.w, r.h, bcfg.bg_image_interval_ms, sm, lv_color_to_u16(rgb_to_lv(bg_def)));
+            }
 
             if (tile.image_slot != IMAGE_SLOT_INVALID) {
                 // Create LVGL image widget as background (behind labels)
                 tile.bg_image = lv_image_create(obj);
+                lv_obj_add_flag(tile.bg_image, LV_OBJ_FLAG_HIDDEN);
                 lv_obj_set_size(tile.bg_image, r.w, r.h);
                 lv_obj_set_align(tile.bg_image, LV_ALIGN_CENTER);
                 lv_obj_clear_flag(tile.bg_image, LV_OBJ_FLAG_CLICKABLE);
@@ -686,6 +740,8 @@ void PadScreen::buildTiles() {
                 );
 
                 LOGT(TAG, "Button %u: image slot %d", i, tile.image_slot);
+            } else {
+                LOGW(TAG, "Button %u: image fetch slot unavailable", i);
             }
         }
 #endif
@@ -694,7 +750,7 @@ void PadScreen::buildTiles() {
         // Tap overlay — semi-transparent sheet shown briefly on press.
         // Created last so it renders on top of all children (image bg, widgets, labels).
         // Color adapts to background luminance: dark overlay on light bg, light on dark.
-        {
+        if (!native_button) {
             bool is_light = perceived_luminance(bg_def) > TAP_LUMINANCE_THRESH;
             int16_t inset = pad + bw_def; // pad + border
             lv_obj_t* ov = lv_obj_create(obj);
@@ -705,12 +761,30 @@ void PadScreen::buildTiles() {
             lv_obj_set_style_border_width(ov, 0, 0);
             lv_obj_set_style_radius(ov, 0, 0);
             lv_obj_set_style_pad_all(ov, 0, 0);
+            if (button_overlay_uses_fade(tile.widget_cfg.type)) {
+                static const lv_style_prop_t fade_properties[] = {LV_STYLE_OPA, 0};
+                static lv_style_transition_dsc_t fade_in;
+                static lv_style_transition_dsc_t fade_out;
+                lv_style_transition_dsc_init(&fade_in, fade_properties, lv_anim_path_linear, 30, 0, nullptr);
+                lv_style_transition_dsc_init(&fade_out, fade_properties, lv_anim_path_linear, 80, 0, nullptr);
+                lv_obj_set_style_opa(ov, LV_OPA_TRANSP, 0);
+                lv_obj_set_style_opa(ov, LV_OPA_COVER, LV_STATE_USER_1);
+                lv_obj_set_style_transition(ov, &fade_out, 0);
+                lv_obj_set_style_transition(ov, &fade_in, LV_STATE_USER_1);
+            }
             lv_obj_clear_flag(ov, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
             lv_obj_add_flag(ov, LV_OBJ_FLAG_HIDDEN);
             tile.tap_overlay = ov;
+            tile.tap_flash_x = -inset;
+            tile.tap_flash_y = -inset;
+            tile.tap_flash_w = r.w;
+            tile.tap_flash_h = r.h;
             if (strcmp(tile.widget_cfg.type, "gamepad_button") == 0) {
                 lv_obj_add_event_cb(obj, onWidgetPressFeedback, LV_EVENT_VALUE_CHANGED, &tiles[i]);
             }
+        }
+        if (strcmp(tile.widget_cfg.type, "slider") == 0) {
+            lv_obj_add_event_cb(obj, onWidgetPressFeedback, LV_EVENT_VALUE_CHANGED, &tiles[i]);
         }
 
     }

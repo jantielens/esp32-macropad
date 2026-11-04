@@ -484,6 +484,9 @@ arrive. Building blocks show a loading state until their catalog is available.
 
 The widget manifest, `src/app/widgets/manifest.json`, owns explicit firmware and
 portal asset paths, firmware compile gates, selector labels, and order.
+`gates` requires every listed flag; optional `any_gates` additionally requires
+at least one listed flag. HID input widgets require display/touch and either
+`HAS_USB_HID` or `HAS_BLE_HID`.
 `{{WIDGET_OPTIONS}}` and `{{WIDGET_EDITORS}}` in `pad-editor.fragment.html`
 expand through `tools/_render_html_template.py`. The firmware asset pipeline and
 local mock server use the same manifest loader and renderer. Keep manifest order
@@ -505,7 +508,7 @@ remains visible when Back is off to preserve existing validation. Input navigati
 remains in Layout; input-widget action suppression is declared by each owner.
 Extension declares that it replaces shared labels, icons, and images.
 
-All 15 active widget editors register explicitly through
+Widget editors register explicitly through
 `portal_widget_editor.js`. Their `portal_widget_*.js` modules precede the dialog
 through the bundle's `@widgets` marker; markup remains in the existing partials. Mousepad,
 Scrollpad, and Gamepad Joystick share the input-family owner module.
@@ -571,13 +574,16 @@ hides ordinary tap/long-press lists, and keeps the held-control section in
 Content. The firmware still owns release behavior.
 
 Toggle switch owns its state field, matching values, static palette, read-only,
-switch size, and icon position. It relabels `actions[]` and `lp_actions[]` as
+switch width, and icon position. It relabels `actions[]` and `lp_actions[]` as
 Turn-on and Turn-off actions without changing either action list's payload.
 Its State source uses the shared binding header, builder shortcut, and reference
 action. It uses the same catalog symbol and label rendering as other widgets;
-the pad editor does not simulate a switch. The size field
-retains `widget_toggle_width_pct` for compatibility, now scaling the fitted
-maximum with a default of 100%. `widget_toggle_icon_position` accepts left,
+the pad editor does not simulate a switch. The width field
+retains `widget_toggle_width_pct`, now expressing a percentage of button content
+width with a default of 50%, capped by available height. Firmware uses a centered,
+height-capped 100% width when neither a center label nor a left icon is configured;
+otherwise the switch is right-aligned and label length does not affect its size.
+`widget_toggle_icon_position` accepts left,
 above, or below; the older switch placement field is ignored and not emitted.
 
 The shared cell renderer shows button styling and labels, with a large subdued
@@ -896,6 +902,20 @@ every component in that custom section to the same category ID.
   - Bar-chart Content: Data sources groups each bar's binding, caption, and color/fill. Scale and Layout & style (including Animation) follow, then optional Gridlines and Target groups. Optional bars use fixed collapsed defaults, including when configured or paired. Disabled gridlines and empty targets retain editable styling and validation. Drafts preserve manual disclosure; field IDs and persisted configuration keys are unchanged.
   - Gauge Content: Data sources groups each ring's binding, label, and color, followed by pair controls with rings 2/4 explicitly identified as negative. Scale and Arc & track (including Animation and the existing shared outline controls) precede Needle, Tick marks, and Target. Core groups and ring 1 open on load; optional rings and feature groups start collapsed regardless of configured values. Needle off, tick count 0, and an empty target retain editable styling and validation. Drafts preserve manual disclosure. Angular units, limits, defaults, IDs, and load/build mappings remain unchanged.
   - Background image: One collapsible frame contains unframed Local Image and Camera Feed or Remote Image disclosures plus their shared Scale control. Source visibility follows image-library and remote-fetch capabilities; the frame opens when an image source or letterbox setting is configured.
+    The remote URL field uses the shared binding tools and validator. Save/load
+    preserves literal and mixed templates without resolving them in the browser.
+    Binding-based URLs reject configured authentication; changing from a fixed
+    URL to a template drops the saved-password preservation marker.
+    Runtime URL evaluation uses the existing binding-source collection and pad
+    refresh lifecycle. A PSRAM-only template copy is allocated only for dynamic
+    sources. The existing image slot stores the latest resolved URL; generations
+    invalidate stale success and failure results, including slot reuse. Source
+    changes reset connection state and fetch-once scheduling without allocating
+    another image slot. Clearing detaches the LVGL source before freeing buffers;
+    replacements retain the displayed frame until successful decode. The single
+    worker retains round-robin scheduling, visibility/screen-saver gates, and OTA
+    checkpoints. See [button images](../user/media/images.md#follow-a-changing-url)
+    for source, failure, authentication, and refresh semantics.
   - Patterned fills: Button backgrounds, four independent bar-series slots, and the shared bar track support five patterns plus None (`none`, default; unknown names normalize to None), with separate bindable colors and shared static spacing/stroke.
     Supported color pickers use Base Color and Pattern sections, staging both colors and the pattern until Apply. Base Color opens for unpatterned fills; Pattern opens for existing patterns. Both sections retain the threshold generator. Badges preview the combined fill using representative bound colors and a binding indicator.
     Appearance starts with always-visible Background/Text, Button Shadow, UI Offset, and bindable Button State. Borders & Geometry opens by default, with border color/width together and button radius/padding next. Patterns follows, initially open only when an applicable pattern is active; active-pattern transitions update it, routine refreshes preserve manual toggles, and loading another button resets its default.
@@ -1444,7 +1464,9 @@ All endpoints return JSON responses with proper HTTP status codes.
 Returns the live registry of binding schemes used by the portal validator and
 the MCP capability manifest. Each entry contains `name`, `min_params`,
 `max_params`, `widget_max_params`, `format_param`, `validation_mode`, and
-`free_form`. Finite schemes also include their current `keys` array.
+`free_form`. Free-form schemes may include `first_param_pattern` to share a
+literal first-parameter validation rule with portal authoring. Finite schemes
+also include their current `keys` array.
 
 The response is board-aware: device-class and feature-gated schemes appear
 only when registered by the running firmware. Clients should fetch this endpoint
@@ -1488,6 +1510,14 @@ provider-generated key strings. Structural schemes retain declared patterns;
 the guided picker uses concrete example keys for their search results.
 The Binding reference dialog fetches this once when opened; the validator
 keeps using the smaller response without docs.
+
+Runtime variables use one lazily allocated, bounded table. On PSRAM builds,
+the table uses PSRAM exclusively; allocation failure does not fall back to
+internal RAM. Non-PSRAM builds allocate the table from the heap on first use.
+The store is compiled only with display or button support. One recursive mutex
+serializes both individual store operations and complete resolve-and-set
+transactions; acquire the display lock first when present. Existing binding
+polling observes changes without a separate generation counter.
 
 The binding and button builders share `bindingSourcePickerHTML`, the picker
 session lifecycle, and selected-value display options. On-device bindings and HA
@@ -1633,15 +1663,32 @@ Returns comprehensive device information.
 - `has_camera`: Enables the separate Camera Preview widget for an attached camera.
 
 **Mouse Capability:**
-- `has_usb_hid` reports compiled native USB HID support, not host readiness.
-  The pad editor offers Mousepad, Scrollpad, Gamepad Joystick, and Gamepad Button only when both `has_usb_hid` and `has_touch`
-  are true. The action catalog exposes Mouse Button on USB HID builds, without
-  requiring touch. Mouse output requires the active USB keyboard transport.
+- `has_usb_hid` and `has_ble_hid` report compiled HID support, not host readiness.
+  The pad editor offers Mousepad, Scrollpad, Gamepad Joystick, and Gamepad Button
+  when `has_touch` and either HID capability are true. The action catalog
+  exposes Mouse Button and Gamepad with either backend, without requiring touch.
+  All HID output follows the selected `keyboard_transport`, without fallback.
 
 **Action Catalog:**
 - Add `?catalog=1` to request the optional `catalog` array. The bare `/api/info` response omits it to keep startup and polling responses small.
 - The catalog is generated by enumerating registered `ActionTypeDef` descriptors. An action module's `describe()` callback supplies its portal and MCP presentation metadata and documented fields; `available()` controls support and `validate()` defines authoring validation.
 - Each catalog entry contains `type`, `group`, and `label`. Multi-command entries also contain `commands`, an array of `{id, label}` objects; device-class entries may additionally contain `command_families`.
+- Actions declare named text fields through `ActionTypeDef::fields` and
+  `action_visit_field()`. Flags independently enable live bindings, event tokens,
+  and binding-overflow rejection. Event-capable fields are projected as
+  `template_fields`, for example `{"message":{"max":191}}`, using each buffer's
+  usable byte capacity. No second token-field registry is maintained.
+- Slider release actions use the normal three-action list and optional `{value}`;
+  Numeric Rocker adjustment actions supply signed `{step}`. Shared firmware and
+  portal validation check the supplied context, declared fields, expanded byte
+  lengths, and action-owned payload rules. Fixed properties do not become
+  templateable. Home Assistant data is validated as a JSON object after token
+  substitution, including tokens in quoted strings.
+- Firmware preflights every declared field before replacing any event token.
+  Substitution is bounded and allocation-free, and overflow rejects the action
+  rather than truncating it. Event values are frozen before action-list dispatch,
+  including delayed or confirmed suffixes. Existing live-binding timing and
+  transactional variable updates remain unchanged.
 - Simple actions can additionally provide `editor_fields`, with a small field vocabulary: `text`, `number`, `select`, `toggle`, and `color`. `select` fields can reuse the entry's `commands` through `command_options`. Actions with conditional or specialized behavior keep their dedicated portal editor code.
 - The portal uses this projection to populate action type, command, and simple field controls. MCP capability metadata uses the same catalog source with field documentation included.
 - StopWatch builds add the **M5Stack StopWatch** group: `charging_mode` (**Set charging mode**, `mode`: `off`, `low`, `high`), `status_led` (**Status LED**, `mode`: `on`, `off`), `vibrate` (**Vibrate**, `pattern`: comma-separated vibrate/pause durations such as `20,100,20`, 1-15 positive steps with an odd count and total at most 5000 ms; default `200`, standalone `0` stops), and fieldless `shutdown` (**Shutdown**). Vibration has one text field; `duration_ms` is not supported. Charging and LED overrides reset at boot; vibration does not pause the action list, and shutdown never resumes its remaining actions. Shutdown excludes OTA but does not save unsaved edits or flush uploads. The board-local `BOARD_ACTION_SOURCE` module supplies catalog metadata and validation; no board-specific JS, HTML, or configuration API fields are included in other firmware variants.
@@ -1708,16 +1755,16 @@ portal. The generic grid renderer reads `deviceInfoCache.widget_catalog`, so
 adding a widget does not require another JavaScript type-to-icon list. Unknown
 types or missing catalogs use a generic extension symbol.
 
-Widget markers use the small Material Symbols Outlined WOFF2 subset embedded
-in `portal-custom.css`, under the separate `Pad Widget Symbols` font family.
-This keeps markers offline without changing user-configured button icons.
-When a widget introduces a new symbol, regenerate the embedded subset from the
-icon names in widget preview declarations, including axis variants and the
-generic `extension` fallback. The upstream Apache 2.0 license is retained in
-[`assets/fonts/MaterialSymbols-LICENSE.txt`](../../assets/fonts/MaterialSymbols-LICENSE.txt).
+Widget markers use Material Symbols Outlined from the shared Google Fonts
+request. They stay hidden until `portalEnsureMaterialSymbols()` confirms font
+availability and adds `portal-icons-ready`. Offline, failed, or timed-out
+requests leave decorative markers hidden rather than displaying ligature text
+or a fallback icon. Configured button labels and images remain visible.
+There is no embedded preview font or per-widget font subset to maintain.
 `tests/test_portal_pad_preview.js` checks catalog coverage, generic axis handling,
-configured content preservation, inherited rendering, and the embedded font
-payload. The `WidgetPreview.CatalogIsAvailableWithoutMcp` host test verifies
+configured content preservation, inherited rendering, and absence of embedded
+font payloads. `tests/test_portal_startup.js` covers font-loading success,
+failure, and timeout. The `WidgetPreview.CatalogIsAvailableWithoutMcp` host test verifies
 native serialization with MCP disabled.
 
 **Health Widget Fields:**
@@ -2169,6 +2216,20 @@ sound library and retain missing saved file names.
 
 Returns current device configuration (passwords excluded).
 
+`backlight_brightness` and `audio_volume` are the saved levels. When their
+capabilities are available, `current_backlight_brightness` and
+`current_audio_volume` report the selected runtime levels. Brightness excludes
+the screen-saver fade or temporary sleep level.
+
+`PUT /api/component/display/brightness` accepts `{"brightness": 0-100}` and
+`PUT /api/component/volume/level` accepts `{"volume": 0-100}`. Both change
+the current level without saving. The brightness endpoint also permits zero for
+temporary blanking. A configuration POST can set `save_current_brightness` or
+`save_current_volume` to `true` to persist the corresponding current level;
+the brightness must meet the configured user minimum. Other omitted level
+fields retain their saved values. The `save_brightness` and `save_volume`
+actions persist only their respective current level.
+
 The `timezone` field defaults to `UTC0`. `POST /api/config?no_reboot=1` accepts
 supported Olson names or validated POSIX TZ rules, including explicit transition
 rules for DST. Successful changes apply live and dismiss/rearm an active alarm;
@@ -2298,8 +2359,8 @@ Explicitly saved USB/BLE choices remain unchanged; devices without a saved
 choice become Off after updating. With neither backend compiled, keyboard
 fields, navigation, and the key action are absent. The `hid` fragment displays
 **Keyboard, Mouse & Gamepad** in both navigation and the fragment heading. The transport
-note explains that USB enables keyboard and mouse control, BLE enables keyboard
-control only, and Off disables both. Its active connection section follows the
+note explains that USB or BLE enables keyboard, mouse, and gamepad control,
+and Off disables all HID output. Its active connection section follows the
 running backend, not the selector. Save is disabled for an unchanged preference; a saved preference
 that differs from the active backend displays a pending-reboot message.
 USB-only builds omit the BLE pairing and bond-detail markup from the embedded
@@ -2319,11 +2380,21 @@ session; cancellation, failed reports, OTA, and the continuation deadline fail
 the action suffix. There is no fallback, broadcast, or live transport switching.
 Neutral recovery sends at most one report per loop pass. USB keyboard report
 lock and completion waits each use a 5 ms timeout. Mouse reports use nonblocking
-TinyUSB submission after validating their USB and OTA epochs, so Arduino's
+TinyUSB submission after validating their connection and OTA epochs, so Arduino's
 semaphore wait cannot delay a stale mouse snapshot until a later session.
 Unaccepted reports remain queued; accepted reports are acknowledged once.
 Neutral mouse release is permitted during OTA. Already-submitted reports cannot
 be recalled, and keyboard boot protocol does not carry mouse reports.
+
+Mouse and gamepad state layers share the keyboard backend's readiness and
+connection epoch. Their generations also reset on transport identity changes,
+even when the two backend epochs match. BLE uses dedicated encrypted/bonded-owner
+GATT input reports (mouse ID 3, gamepad ID 4), with signed 8-bit pointer/wheel/pan
+deltas and the same 13-byte gamepad payload as USB. BLE submission validates
+connection/OTA epochs and gamepad generation, permits neutral OTA recovery,
+and acknowledges only accepted notifications. Reconnect clears cached pointer
+reports and restores report protocol. Hosts must forget and re-pair after the
+report map changes; no old-descriptor compatibility path is retained.
 
 The shared macro workspace is allocated on the first accepted request, not at
 boot or connection time. PSRAM workspaces are retained for reuse until reboot;
@@ -2368,7 +2439,7 @@ output is Off. Review the core VID/PID distribution policy before release;
 no custom IDs are assigned.
 
 The Mousepad widget is registered only with `HAS_DISPLAY && HAS_TOUCH &&
-HAS_USB_HID`. Its `widget_mousepad_sensitivity` JSON field accepts finite
+(HAS_USB_HID || HAS_BLE_HID)`. Its `widget_mousepad_sensitivity` JSON field accepts finite
 values from 0.1 to 5, defaulting to 1. `widget_mousepad_acceleration` accepts
 finite values from 0 to 5, defaulting to 0/off; it amplifies fast movement
 independently of sensitivity. `widget_mousepad_movement_threshold` accepts
@@ -2405,15 +2476,16 @@ Mousepad, Scrollpad, Gamepad Joystick, and Gamepad Button share
 **Disable pad swipe actions (entire pad)** only for those widgets; authoring
 validation rejects the field on other types. If any configured input widget
 enables it, the pad registers no swipe handler, regardless of touch position
-or USB readiness. Rebuilding the pad reapplies the aggregate setting.
+or HID readiness. Rebuilding the pad reapplies the aggregate setting.
 MCP includes the shared field in each supported widget's capability metadata.
 
-Gamepad Joystick and Gamepad Button use the same display/touch/USB gates and
-existing USB keyboard transport setting, with no new NVS toggle. USB registers
+Gamepad Joystick and Gamepad Button use the same display/touch/HID gates and
+existing keyboard transport setting, with no new NVS toggle. USB registers
 a custom generic-HID gamepad descriptor before startup alongside keyboard,
 consumer control, and mouse. Its packed report is 13 bytes: four signed 16-bit
 stick axes, two unsigned 8-bit triggers, an 8-bit null-state hat, and 16 button
-bits. BLE and Off leave native USB stopped after reboot; UART logging remains available.
+bits. BLE exposes the same controller over GATT. BLE and Off leave native USB
+stopped after reboot; UART logging remains available.
 
 USB HID interface and configuration strings reference the product string,
 which uses the configured device name plus ` USB`. Arduino supplies hardcoded
@@ -2436,14 +2508,14 @@ Shared pad validation invokes an optional widget validation callback even
 when MCP is disabled. The editor hides ordinary action lists for both widgets
 and provides a dedicated held-control selector. The shared action editor
 emits only the selected control family's target fields. See the
-[Gamepad authoring guide](../pad-editor-guide.md#gamepad-controls) for JSON and
-ownership semantics. `get_capabilities` advertises action/widget schemas plus
-`device_config.usb_gamepad` ranges, readiness, the driver `touch_contacts` limit,
+[Gamepad guide](../user/widgets/gamepad.md) for controls and ownership semantics.
+`get_capabilities` advertises action/widget schemas plus
+`device_config.gamepad` ranges, readiness, the driver `touch_contacts` limit,
 and `controller_multitouch` support. `/api/info` exposes
 `touch_contact_capacity` (0 without initialized touch, 1 for single-contact
 drivers, up to 5 for GT911) and `has_controller_multitouch` independently of
 `has_usb_hid`. These fields report software capacity, not verified panel capacity
-or current USB readiness. No persisted action/widget fields or settings change.
+or current HID readiness. No persisted action/widget fields or settings change.
 Gamepad contacts are captured by stable ID; ordinary navigation is canceled
 and blocked until all fingers lift. Synthetic taps remain idle-only.
 The lean gamepad action catalog also exposes `button_count`; the shared action
@@ -2470,15 +2542,14 @@ non-finite acceleration/inertia defaults to 0, and finite values are clamped
 to 0-5. Neither feature adds an enable toggle or changes USB descriptors.
 
 The self-registering `mouse_button` action module is available with
-`HAS_USB_HID` and uses flat JSON `{"type":"mouse_button","button":"right"}`.
+`HAS_USB_HID || HAS_BLE_HID` and uses flat JSON `{"type":"mouse_button","button":"right"}`.
 The `button` field accepts `left`, `right`, or `middle` (default `left` when
 omitted); validation rejects invalid names and non-string values. This fixed
 option set is not bindable. Its catalog metadata drives the shared portal
 selector and MCP action schema. Dispatch returns complete when a click is
 accepted by the queue, or failed if unavailable, disconnected, full, in OTA,
 or overlapping a drag-owned button. Other-button click releases preserve drag
-ownership. No descriptor, BLE mouse, transport setting, or gesture-enable toggle
-is added.
+ownership. No separate transport setting or gesture-enable toggle is added.
 It requires neither touch nor a dedicated widget and uses its host's gesture
 rules. It does not wait for delivery before the next action in a list.
 
@@ -2494,6 +2565,30 @@ Startup and connection/pairing events remain at INFO; aborted macros and
 delivery failures remain warnings. There are no periodic keyboard diagnostic
 counters. Media keys and extended sleep/reconnect reliability still require
 hardware validation.
+
+BLE HID uses bonded Legacy Just Works pairing with LE Secure Connections disabled,
+no MITM requirement, and no input/output capability. A usable HID connection
+requires both encryption and bonding. Outside the 60-second pairing window,
+connection admission requires the recorded owner identity and a stored local
+LTK; fresh repeat-pairing requests are rejected. Authentication has a ten-second
+timeout, and rejected connections cannot become ready through a late callback.
+
+Legacy pairing avoids the confirmed P4 TinyCrypt DHKey defect in the stock
+Arduino ESP32 3.3.12 SDK. It does not protect against a passive observer capturing
+the initial pairing and deriving its encryption key. The project keeps the stock
+SDK without version-specific pairing behavior; restoration of Secure Connections
+after a fixed stable Arduino release is tracked in
+[issue #139](https://github.com/jantielens/esp32-macropad/issues/139).
+
+The status-bearing NimBLE authentication callback records failures, and a GAP
+listener logs disconnect reasons and pairing completion status without key
+material. Ordinary failures preserve the owner and stored bonds. The Arduino
+BLE stack handles confirmed missing-key failures by deleting only the affected
+peer's stale bond. The HID module permits one reconnect retry within the
+current pairing window, never opens a window automatically, and closes it on a
+second missing-key failure. **Pair New Device** explicitly clears bonds and
+resets recovery. See [BLE pairing](../user/integrations/keyboard-mouse-gamepad.md#pair-ble)
+for the host-side recovery procedure.
 
 #### `POST /api/config`
 
@@ -2774,6 +2869,13 @@ Get current progress/state of the online update task.
 activity lifecycle. Only one path can own the firmware writer at a time; a
 competing update receives `409 Conflict`.
 
+Manual uploads associate ownership with the admitted HTTP request. Its
+disconnect callback aborts an unfinished update before releasing the activity
+gate, allowing a pending reboot or another update to proceed. Rejected requests
+and stale disconnect callbacks cannot cancel another upload. A successfully
+finalized upload retains activity ownership through reboot; disconnecting after
+success does not abort it or release the gate.
+
 While the lifecycle is active, the firmware cooperatively defers new
 nonessential work at subsystem-owned safe points:
 
@@ -3019,8 +3121,8 @@ Returns the selected persistent-storage backend and cached usage information.
 }
 ```
 
-`backend` is `littlefs` or `sdmmc`. SD card types are `none`, `sd`, `sdhc`, or
-`unknown`; LittleFS reports `not_applicable`.
+`backend` is `littlefs`, `sdmmc`, or `sd_spi`. SD card types are `none`, `sd`,
+`sdhc`, or `unknown`; LittleFS reports `not_applicable`.
 
 #### `GET /api/component/storage/list?path=/`
 

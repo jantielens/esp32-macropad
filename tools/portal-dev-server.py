@@ -331,6 +331,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             if amplifier_control:
                 for key, value in {"audio_volume": 70, "audio_idle_mute": True, "audio_wake_delay_ms": 120}.items():
                     config.setdefault(key, value)
+                config["current_audio_volume"] = self.server.mock_config.get("current_audio_volume", config["audio_volume"])
             else:
                 for key in ("audio_volume", "audio_idle_mute", "audio_wake_delay_ms"):
                     config.pop(key, None)
@@ -1003,6 +1004,14 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 update = json.loads(body.decode("utf-8"))
                 if update.pop("ha_token", ""):
                     self.server.mock_config["ha_token_set"] = True
+                if update.pop("save_current_volume", False):
+                    update["audio_volume"] = self.server.mock_config.get("current_audio_volume", 70)
+                if update.pop("save_current_brightness", False):
+                    update["backlight_brightness"] = self.server.mock_config["current_backlight_brightness"]
+                if "audio_volume" in update and "current_audio_volume" not in update:
+                    self.server.mock_config["current_audio_volume"] = update["audio_volume"]
+                if "backlight_brightness" in update and "current_backlight_brightness" not in update:
+                    self.server.mock_config["current_backlight_brightness"] = update["backlight_brightness"]
                 self.server.mock_config.update(update)
             except (UnicodeDecodeError, json.JSONDecodeError):
                 self.send_error(400, "Invalid JSON")
@@ -1013,6 +1022,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
                                           "base_text_size": self.server.mock_defaults.get("base_text_size", 0)}
             self.server.mock_config["keyboard_active_transport"] = self.server.mock_config["keyboard_transport"]
             self.server.mock_config["keyboard_status"] = "disabled" if self.server.mock_config["keyboard_transport"] == "none" else "ready"
+            self.server.mock_config["current_backlight_brightness"] = self.server.mock_config["backlight_brightness"]
+            self.server.mock_config["current_audio_volume"] = self.server.mock_config.get("audio_volume", 70)
             self._serve_json({"success": True, "message": "Mock reboot complete"})
         elif path in (
             "/api/component/epaper-status/refresh",
@@ -1025,7 +1036,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
 
     def do_PUT(self):
         path = urlparse(self.path).path
-        if path not in ("/api/component/display/brightness", "/api/component/display/screen"):
+        if path not in ("/api/component/display/brightness", "/api/component/display/screen", "/api/component/volume/level"):
             self.send_error(404, "Not found")
             return
         try:
@@ -1037,13 +1048,15 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 self.server.mock_screen = target
                 self._serve_json({"success": True})
                 return
-            brightness = data["brightness"]
-            if type(brightness) is not int or not 0 <= brightness <= 100:
+            field = "volume" if path == "/api/component/volume/level" else "brightness"
+            value = data[field]
+            if type(value) is not int or not 0 <= value <= 100:
                 raise ValueError()
         except (ValueError, KeyError, TypeError):
             self._serve_json({"error": "Invalid display setting"}, 400)
             return
-        self.server.mock_config["backlight_brightness"] = brightness
+        key = "current_audio_volume" if field == "volume" else "current_backlight_brightness"
+        self.server.mock_config[key] = value
         self._serve_json({"success": True})
 
     def do_DELETE(self):
@@ -1303,7 +1316,10 @@ class PortalHandler(SimpleHTTPRequestHandler):
                             display_coord_width=400, display_coord_height=300)
             if include_catalog:
                 info["catalog"] = self.server.pad_fixture["catalog"]
-                info["widget_catalog"] = self.server.pad_fixture["widget_catalog"]
+                info["widget_catalog"] = [
+                    widget for widget in self.server.pad_fixture["widget_catalog"]
+                    if widget.get("type") != "slider" or info["has_touch"]
+                ]
         return info
 
     def _health(self):
@@ -1414,6 +1430,7 @@ def main():
         "wifi_failure_mode": "ap",
         "ap_password": "",
         "backlight_brightness": 80,
+        "current_backlight_brightness": 80,
         "operating_mode": "always_on",
         "duty_cycle_wake_seconds": 120,
         "ble_burst_count": 3,

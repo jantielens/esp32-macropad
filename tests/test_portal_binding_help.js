@@ -27,10 +27,22 @@ vm.runInContext(fs.readFileSync('src/app/web/portal_binding_builder.js', 'utf8')
 vm.runInContext(fs.readFileSync('src/app/web/portal_binding_builder_ha.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_button_templates.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_button_builder.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_expression_builder.js', 'utf8'), context);
 const haButtonBuilderProvider = vm.runInContext('haButtonBuilderProvider', context);
 
 const scheme = name => fixture.schemes.find(s => s.name === name);
 const haConfigured = { caps: { ha_live: true }, ha_url: 'http://ha.local:8123', ha_token_set: true };
+
+for (const field of [
+    { tagName: 'INPUT', type: 'text' },
+    { tagName: 'INPUT', type: 'search' },
+    { tagName: 'TEXTAREA' }
+]) assert.strictEqual(context.expressionBuilderEligible(field), true);
+for (const field of [null, { tagName: 'INPUT', type: 'color' },
+    { tagName: 'INPUT', type: 'text', disabled: true },
+    { tagName: 'INPUT', type: 'text', readOnly: true },
+    { tagName: 'SELECT' }
+]) assert.strictEqual(context.expressionBuilderEligible(field), false);
 
 assert.ok(context.bindingHelpKeyMatches('#_state', '12_state'));
 assert.ok(!context.bindingHelpKeyMatches('#_state', 'x_state'));
@@ -265,12 +277,12 @@ vm.runInContext('_bindingHelp.schemes = testHelpSchemes', context);
 helpElements['binding-docs-search'].value = 'temperature';
 context.showBindingHelp();
 assert.strictEqual(vm.runInContext('_bindingHelp.view', context), 'guide:basics');
-const shortcutField = Object.assign(field('Before selected after', 7, 15), {
+const bindingField = Object.assign(field('Before selected after', 7, 15), {
     tagName: 'INPUT', type: 'text', isConnected: true, addEventListener() {}, focus() {}
 });
 context.window.deviceConfig = haConfigured;
-helpElements['shortcut-field'] = shortcutField;
-context.document.activeElement = shortcutField;
+helpElements['binding-field'] = bindingField;
+context.document.activeElement = bindingField;
 // The dialog boundary must preserve the target/selection and cancel acquisition.
 const mountPicker = context.bindingSourcePickerMount;
 const loadPickerConfig = context.padButtonBuilderLoadConfig;
@@ -290,15 +302,24 @@ context.bindingSourcePickerMount = session => {
     return () => { session.disposed = true; disposedPickers++; };
 };
 context.padButtonBuilderLoadConfig = () => {};
-const shortcut = {
-    dataset: { bindingBuilder: '' },
-    closest(selector) { return selector === 'label' ? { htmlFor: 'shortcut-field' } : this; },
-    matches(selector) { return selector === '.binding-builder-shortcut'; }
+const menu = { hidden: false, style: {} };
+const menuTrigger = { setAttribute() {} };
+const toolsWrapper = {
+    querySelector(selector) { return selector === '.binding-tools-menu' ? menu : menuTrigger; },
+    classList: { remove() {} }
 };
-listeners.find(listener => listener.type === 'pointerdown' && listener.capture).handler({ target: shortcut });
+const bindingItem = {
+    dataset: { bindingTool: 'binding' },
+    closest(selector) {
+        if (selector === 'label') return { htmlFor: 'binding-field' };
+        return selector === '.binding-tools' ? toolsWrapper : this;
+    },
+    matches(selector) { return selector === '.binding-tools-item'; }
+};
+listeners.find(listener => listener.type === 'pointerdown' && listener.capture).handler({ target: bindingItem });
 let preventedLabelFocus = false;
 listeners.find(listener => listener.type === 'click' && listener.capture).handler({
-    target: shortcut, preventDefault() { preventedLabelFocus = true; }
+    target: bindingItem, preventDefault() { preventedLabelFocus = true; }
 });
 assert.ok(preventedLabelFocus);
 assert.strictEqual(dialogs[0].open, true);
@@ -308,13 +329,13 @@ assert.strictEqual(mountedSession.rawOnly, false);
 context.closeBindingBuilder();
 assert.strictEqual(disposedPickers, 1);
 assert.strictEqual(dialogs[0].removed, true);
-context.bindingAttachValidation(shortcutField, { isWidgetBinding: true });
+context.bindingAttachValidation(bindingField, { isWidgetBinding: true });
 listeners.find(listener => listener.type === 'click' && listener.capture).handler({
-    target: shortcut, preventDefault() {}
+    target: bindingItem, preventDefault() {}
 });
 assert.strictEqual(mountedSession.rawOnly, true);
-context.bindingHelpInsertText(shortcutField, '[ha:sensor.temperature]', true);
-assert.strictEqual(shortcutField.value, 'Before [ha:sensor.temperature] after');
+context.bindingHelpInsertText(bindingField, '[ha:sensor.temperature]', true);
+assert.strictEqual(bindingField.value, 'Before [ha:sensor.temperature] after');
 context.closeBindingBuilder();
 vm.runInContext('_bindingHelp.target = null; _bindingHelp.pointer = null', context);
 context.window.deviceConfig = {};
@@ -344,6 +365,231 @@ delete context.testHelpSchemes;
 // Every documented example must pass the portal validator too.
 (async function() {
     await context.bindingLoadSchema();
+    const expressionLoad = (value, validationOptions) => context.expressionBuilderLoad(value, validationOptions);
+    const expressionGenerate = (value, formatting, limit, validationOptions) =>
+        context.expressionBuilderGenerate(value, formatting, limit, validationOptions);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(expressionLoad('  \t'))), {
+        supported: true, expression: '',
+        formatting: { enabled: false, decimals: 1, unit: '' }, error: ''
+    });
+    assert.strictEqual(expressionLoad('Living Room').supported, true);
+    assert.strictEqual(expressionLoad('Living Room').expression, '');
+    assert.strictEqual(expressionLoad('[health:cpu]').supported, true);
+    assert.strictEqual(expressionLoad('[expr:[health:cpu] + 1]').expression, '[health:cpu] + 1');
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(expressionLoad(
+        '[expr:[mqtt:topic;path|"offline|later"] + 1;%.2f %%]'))), {
+        supported: true, expression: '[mqtt:topic;path|"offline|later"] + 1',
+        formatting: { enabled: true, decimals: 2, unit: '%' }, error: ''
+    });
+    for (const unsupported of [
+        'plain [expr:1]', '[expr:1] + [expr:2]', '[expr:1',
+        '[expr:1|offline]', '[expr:1;%.1f;extra]', '[expr:1;%d]', '[expr:1;%.7f]', '[expr:1;%.1f ]'
+    ]) assert.strictEqual(expressionLoad(unsupported).supported, false, unsupported);
+    assert.strictEqual(expressionLoad('[expr:"quoted ] value" + 1]').supported, true);
+    assert.strictEqual(context.bindingTokenize('[expr:"[" ]')[0].unclosed, false);
+    assert.strictEqual(context.bindingTokenize('[expr:"quoted ] value" ]')[0].raw,
+        '[expr:"quoted ] value" ]');
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(context.bindingSplitParams(
+        String.raw`"a\";b";%.1f`))), [String.raw`"a\";b"`, '%.1f']);
+    const nestedExpression = String.raw`  [mqtt:topic;path|fallback   text]   +   "say \"value\"  now"  `;
+    assert.strictEqual(context.expressionBuilderFoldWhitespace(nestedExpression),
+        String.raw`[mqtt:topic;path|fallback   text] + "say \"value\"  now"`);
+    assert.strictEqual(expressionGenerate('1.234', { enabled: true, decimals: 2, unit: '%' }).binding,
+        '[expr:1.234;%.2f %%]');
+    assert.strictEqual(expressionGenerate('1', {}, 191, { isWidgetBinding: true }).valid, true);
+    assert.strictEqual(expressionGenerate('1', { enabled: true, decimals: 1 }, 191,
+        { isWidgetBinding: true }).valid, false);
+    assert.strictEqual(expressionLoad('[expr:1;%.1f]', { isWidgetBinding: true }).supported, false);
+    assert.strictEqual(expressionLoad('[expr:1.234;%.2f %%]').formatting.unit, '%');
+    assert.strictEqual(expressionGenerate('"value"', {}).valid, true);
+    assert.strictEqual(expressionGenerate('[health:cpu] + "value"', {}).valid, true);
+    assert.strictEqual(expressionGenerate('abs(value)', {}).valid, false);
+    assert.strictEqual(expressionGenerate('min(1, 2)', {}).valid, true);
+    const tooLong = expressionGenerate('"' + 'é'.repeat(100) + '"', {});
+    assert.strictEqual(tooLong.valid, false);
+    assert.strictEqual(tooLong.bytes, new TextEncoder().encode(tooLong.binding).length);
+    assert.strictEqual(expressionGenerate('1', {}, 7).valid, false);
+    const clampSnippet = context.expressionBuilderSnippet('clamp(x, low, high)');
+    assert.strictEqual(clampSnippet.text.slice(clampSnippet.selectionStart, clampSnippet.selectionEnd), 'value');
+    assert.strictEqual(context.expressionBuilderSnippet('unknown'), null);
+
+    const originalPreviewGlobals = {
+        fetch: context.fetch, setTimeout: context.setTimeout, clearTimeout: context.clearTimeout,
+        padState: context.padState, padFindButton: context.padFindButton,
+        padColorNormalizeLiteral: context.padColorNormalizeLiteral
+    };
+    const previewTimers = new Map();
+    const previewRequests = [];
+    let nextPreviewTimer = 1;
+    context.setTimeout = (callback, delay) => {
+        const id = nextPreviewTimer++;
+        previewTimers.set(id, { callback, delay });
+        return id;
+    };
+    context.clearTimeout = id => previewTimers.delete(id);
+    context.padState = { page: 3, selectedLayer: 0, editCol: 0, editRow: 0 };
+    const previewButton = {};
+    context.padFindButton = () => previewButton;
+    context.padColorNormalizeLiteral = value => value === '#0aF' ? '#00AAFF' : null;
+    const makePreviewSession = binding => {
+        const output = { textContent: '', dataset: {} };
+        const swatch = { hidden: true, style: {} };
+        const dialog = {
+            isConnected: true,
+            querySelector(selector) {
+                return selector === '[data-expression-result]' ? output : swatch;
+            }
+        };
+        const session = {
+            dialog, target: { isConnected: true }, supported: true,
+            context: context.expressionBuilderCaptureContext(), result: { valid: true, binding },
+            previewGeneration: 0, previewTimer: null, previewController: null, previewBinding: ''
+        };
+        return { session, output, swatch };
+    };
+    const runPreviewTimer = async () => {
+        const [id, timer] = previewTimers.entries().next().value || [];
+        assert.ok(timer, 'a valid expression schedules one preview');
+        previewTimers.delete(id);
+        assert.strictEqual(timer.delay, 250);
+        timer.callback();
+        await Promise.resolve();
+    };
+    const settlePreview = async () => {
+        await new Promise(resolve => setImmediate(resolve));
+    };
+    const previewResponse = (binding, value) => ({ ok: true, json: async () => ({ resolved: [{ binding, value }] }) });
+    try {
+        context.fetch = (url, options) => {
+            const request = { url, options };
+            request.promise = new Promise(resolve => { request.resolve = resolve; });
+            previewRequests.push(request);
+            return request.promise;
+        };
+
+        const invalidPreview = makePreviewSession('[expr:1]');
+        context.testPreviewSession = invalidPreview.session;
+        vm.runInContext('expressionBuilderSession = testPreviewSession', context);
+        context.expressionBuilderPreviewSchedule(invalidPreview.session, { valid: true, binding: '[expr:1]' });
+        assert.strictEqual(invalidPreview.output.dataset.state, 'resolving');
+        assert.strictEqual(previewTimers.size, 1);
+        context.expressionBuilderPreviewSchedule(invalidPreview.session, { valid: false, binding: '', error: 'invalid' });
+        assert.strictEqual(previewTimers.size, 0, 'invalid edits cancel a pending preview timer');
+        assert.strictEqual(invalidPreview.output.dataset.state, 'invalid');
+        assert.strictEqual(previewRequests.length, 0);
+
+        const orderedPreview = makePreviewSession('[expr:1]');
+        context.testPreviewSession = orderedPreview.session;
+        vm.runInContext('expressionBuilderSession = testPreviewSession', context);
+        context.expressionBuilderPreviewSchedule(orderedPreview.session, { valid: true, binding: '[expr:1]' });
+        await runPreviewTimer();
+        assert.strictEqual(previewRequests[0].url, '/api/pad/resolve');
+        assert.deepStrictEqual(JSON.parse(previewRequests[0].options.body), {
+            screen: 'pad_3', bindings: ['[expr:1]']
+        });
+        orderedPreview.session.result = { valid: true, binding: '[expr:2]' };
+        context.expressionBuilderPreviewSchedule(orderedPreview.session, orderedPreview.session.result);
+        assert.strictEqual(previewRequests[0].options.signal.aborted, true);
+        await runPreviewTimer();
+        previewRequests[1].resolve(previewResponse('[expr:2]', 0));
+        await settlePreview();
+        assert.strictEqual(orderedPreview.output.textContent, '0', 'zero is a resolved preview value');
+        assert.strictEqual(orderedPreview.output.dataset.state, 'resolved');
+        previewRequests[0].resolve(previewResponse('[expr:1]', 'stale result'));
+        await settlePreview();
+        assert.strictEqual(orderedPreview.output.textContent, '0', 'a late response cannot replace a newer edit');
+        assert.strictEqual(orderedPreview.session.result.valid, true, 'preview state does not affect Apply validity');
+
+        const closedPreview = makePreviewSession('[expr:6]');
+        context.testPreviewSession = closedPreview.session;
+        vm.runInContext('expressionBuilderSession = testPreviewSession', context);
+        context.expressionBuilderPreviewSchedule(closedPreview.session, closedPreview.session.result);
+        await runPreviewTimer();
+        context.expressionBuilderPreviewDispose(closedPreview.session);
+        assert.strictEqual(previewRequests[2].options.signal.aborted, true);
+        const reopenedPreview = makePreviewSession('[expr:6]');
+        context.testPreviewSession = reopenedPreview.session;
+        vm.runInContext('expressionBuilderSession = testPreviewSession', context);
+        previewRequests[2].resolve(previewResponse('[expr:6]', 'old session result'));
+        await settlePreview();
+        assert.strictEqual(closedPreview.output.textContent, 'Resolving...', 'a closed session ignores late results');
+        assert.strictEqual(reopenedPreview.output.textContent, '', 'reopening starts with a clean result');
+
+        const changedContextPreview = makePreviewSession('[expr:8]');
+        context.testPreviewSession = changedContextPreview.session;
+        vm.runInContext('expressionBuilderSession = testPreviewSession', context);
+        context.expressionBuilderPreviewSchedule(changedContextPreview.session, changedContextPreview.session.result);
+        await runPreviewTimer();
+        assert.deepStrictEqual(JSON.parse(previewRequests[3].options.body), {
+            screen: 'pad_3', bindings: ['[expr:8]']
+        });
+        context.padState.page = 4;
+        previewRequests[3].resolve(previewResponse('[expr:8]', 'wrong pad result'));
+        await settlePreview();
+        assert.strictEqual(changedContextPreview.output.textContent, 'Resolving...',
+            'a response cannot publish after the captured pad context changes');
+        context.padState.page = 3;
+        context.expressionBuilderPreviewDispose(changedContextPreview.session);
+
+        const emptyPreview = makePreviewSession('[expr:2]');
+        context.testPreviewSession = emptyPreview.session;
+        vm.runInContext('expressionBuilderSession = testPreviewSession', context);
+        context.expressionBuilderPreviewSchedule(emptyPreview.session, emptyPreview.session.result);
+        await runPreviewTimer();
+        previewRequests[4].resolve(previewResponse('[expr:2]', ''));
+        await settlePreview();
+        assert.strictEqual(emptyPreview.output.textContent, '(empty)');
+        assert.strictEqual(emptyPreview.output.dataset.state, 'resolved');
+
+        const unavailablePreview = makePreviewSession('[expr:3]');
+        context.testPreviewSession = unavailablePreview.session;
+        vm.runInContext('expressionBuilderSession = testPreviewSession', context);
+        context.expressionBuilderPreviewSchedule(unavailablePreview.session, unavailablePreview.session.result);
+        await runPreviewTimer();
+        previewRequests[5].resolve(previewResponse('[expr:3]', '---'));
+        await settlePreview();
+        assert.strictEqual(unavailablePreview.output.dataset.state, 'unavailable');
+        assert.strictEqual(unavailablePreview.session.result.valid, true);
+
+        const colorPreview = makePreviewSession('[expr:4]');
+        context.testPreviewSession = colorPreview.session;
+        vm.runInContext('expressionBuilderSession = testPreviewSession', context);
+        context.expressionBuilderPreviewSchedule(colorPreview.session, colorPreview.session.result);
+        await runPreviewTimer();
+        previewRequests[6].resolve(previewResponse('[expr:4]', '#0aF'));
+        await settlePreview();
+        assert.strictEqual(colorPreview.output.textContent, '#0aF');
+        assert.strictEqual(colorPreview.swatch.style.backgroundColor, '#00AAFF');
+        assert.strictEqual(colorPreview.swatch.hidden, false);
+
+        const failedPreview = makePreviewSession('[expr:5]');
+        context.testPreviewSession = failedPreview.session;
+        vm.runInContext('expressionBuilderSession = testPreviewSession', context);
+        context.fetch = async () => ({ ok: false });
+        context.expressionBuilderPreviewSchedule(failedPreview.session, failedPreview.session.result);
+        await runPreviewTimer();
+        await settlePreview();
+        assert.strictEqual(failedPreview.output.dataset.state, 'failed');
+
+        const malformedPreview = makePreviewSession('[expr:7]');
+        context.testPreviewSession = malformedPreview.session;
+        vm.runInContext('expressionBuilderSession = testPreviewSession', context);
+        context.fetch = async () => ({ ok: true, json: async () => ({ resolved: [{ binding: '[expr:7]' }] }) });
+        context.expressionBuilderPreviewSchedule(malformedPreview.session, malformedPreview.session.result);
+        await runPreviewTimer();
+        await settlePreview();
+        assert.strictEqual(malformedPreview.output.dataset.state, 'failed');
+    } finally {
+        previewTimers.clear();
+        context.fetch = originalPreviewGlobals.fetch;
+        context.setTimeout = originalPreviewGlobals.setTimeout;
+        context.clearTimeout = originalPreviewGlobals.clearTimeout;
+        context.padState = originalPreviewGlobals.padState;
+        context.padFindButton = originalPreviewGlobals.padFindButton;
+        context.padColorNormalizeLiteral = originalPreviewGlobals.padColorNormalizeLiteral;
+        vm.runInContext('expressionBuilderSession = null; delete testPreviewSession', context);
+    }
+
     // Whole-button generation must produce ordinary, valid bindings and literal service actions.
     context.actionEditorCatalogEntry = type => type === 'ha_service' ? {} : null;
     context.padGetEffectiveDefault = () => '#000000';
@@ -775,13 +1021,19 @@ delete context.testHelpSchemes;
     vm.runInContext('padButtonBuilderSession = testButtonSession', context);
     const originalClose = context.padButtonBuilderClose;
     let dirty = 0, opened = 0, closed = 0;
+    let createdPreviewButton;
     context.padWorkspaceClearButton = () => {};
+    context.padUpdateButtonPreview = (previous, button) => {
+        assert.strictEqual(previous, null);
+        createdPreviewButton = button;
+    };
     context.padMarkDirty = () => dirty++;
     context.padDialogOpen = () => opened++;
     context.padButtonBuilderClose = () => closed++;
     context.showMessage = () => {};
     context.padButtonBuilderCreate();
     assert.strictEqual(context.padState.buttons.length, 1);
+    assert.strictEqual(createdPreviewButton, context.padState.buttons[0]);
     assert.strictEqual(dirty, 1);
     assert.strictEqual(opened, 1);
     assert.strictEqual(closed, 1);
@@ -1028,11 +1280,37 @@ delete context.testHelpSchemes;
     vm.runInContext(fs.readFileSync('src/app/web/portal_binding_builder_mqtt.js', 'utf8'), context);
     const catalogProvider = vm.runInContext('catalogBindingProvider', context);
     const mqttProvider = vm.runInContext('mqttBindingProvider', context);
+    const variableScheme = fixture.schemes.find(scheme => scheme.name === 'var');
+    assert(variableScheme, 'runtime variable scheme is present in generated Binding Reference metadata');
+    assert.strictEqual(variableScheme.first_param_pattern, '^[A-Za-z0-9_.-]{1,32}$');
+    assert(context.bindingHelpKeyMatches('*', 'not_yet_created.counter'));
+    assert(context.validateBinding('[var:counter|0]', {}).valid);
+    assert(!context.validateBinding('[var:bad/name]', {}).valid);
+    assert(!context.validateBinding('[var:[health:cpu]]', {}).valid);
+    const variableToken = context.catalogBindingToken({
+        scheme: 'var', params: ['not_yet_created.counter'], fallback: '0'
+    });
+    assert.strictEqual(variableToken, '[var:not_yet_created.counter|0]');
+    const variableCandidate = context.catalogBindingCandidate(
+        context.catalogBindingReference(variableToken));
+    assert.strictEqual(variableCandidate.capabilities.numericWidget, false);
+    assert.strictEqual(variableCandidate.capabilities.liveSampling, false);
+    assert.strictEqual(Object.hasOwn(variableCandidate, 'exampleValue'), false);
+    const variableDocs = vm.runInContext('_bhRenderScheme(scheme)', Object.assign(context, { scheme: variableScheme }));
+    assert(variableDocs.includes('volatile, device-global string variable'));
+    assert(variableDocs.includes('Literal, case-sensitive name'));
     const catalogKeys = await catalogProvider.list('');
+    assert(catalogKeys.some(candidate => candidate.reference.scheme === 'var'),
+        'on-device catalog exposes var without enumerating assigned variables');
     for (const scheme of fixture.schemes) {
         if (scheme.free_form && scheme.reference?.formats && scheme.reference.rows?.length) {
             assert.ok(catalogKeys.some(candidate => candidate.reference.scheme === scheme.name),
                 scheme.name + ' format presets');
+            continue;
+        }
+        if (scheme.name === 'var') {
+            assert.ok(catalogKeys.some(candidate => candidate.reference.scheme === 'var' &&
+                candidate.reference.params[0] === 'id'), 'var exposes a dynamic-name placeholder');
             continue;
         }
         for (const key of scheme.free_form ? [''] : scheme.keys) {
@@ -1425,7 +1703,7 @@ delete context.testHelpSchemes;
     pickerRoot.querySelector('#source-format-decimals').value = '1';
     pickerRoot.querySelector('#source-format-unit').value = '%';
     pickerRoot.querySelector('#source-format-fallback').value = '';
-    context.testTarget = shortcutField;
+    context.testTarget = bindingField;
     vm.runInContext('_bindingHelp.target = testTarget', context);
     context.bindingSourcePickerSelect(bindingSession, integerCandidate);
     const bindingInsert = pickerRoot.querySelector('[data-binding-insert]');

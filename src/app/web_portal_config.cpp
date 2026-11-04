@@ -4,6 +4,7 @@
 #include "web_portal_state.h"
 #include "portal_idle.h"
 #include "ota_activity.h"
+#include "reboot_service.h"
 
 #include "board_config.h"
 #if HAS_TTF_FONTS
@@ -244,6 +245,7 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				// Display settings
 				(*doc)["backlight_brightness"] = current_config->backlight_brightness;
 				#if HAS_DISPLAY
+				(*doc)["current_backlight_brightness"] = screen_saver_manager_get_brightness();
 				(*doc)["display_rotation"] = current_config->display_rotation;
 				(*doc)["boot_appearance_font_size"] = current_config->boot_appearance_font_size;
 				(*doc)["boot_appearance_text_color"] = current_config->boot_appearance_text_color;
@@ -282,6 +284,7 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 
 				#if HAS_AUDIO
 				(*doc)["audio_volume"] = current_config->audio_volume;
+				(*doc)["current_audio_volume"] = audio_get_volume();
 				(*doc)["audio_idle_mute"] = current_config->audio_idle_mute;
 				(*doc)["audio_wake_delay_ms"] = current_config->audio_wake_delay_ms;
 				caps["audio_amplifier_mute"] = audio_has_amplifier_control();
@@ -944,7 +947,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 
 				// Apply brightness immediately (will also be persisted when config saved)
 				#if HAS_DISPLAY
-				display_manager_set_backlight_brightness(brightness);
+				screen_saver_manager_set_brightness(brightness);
 
 				// Edge case: if the device was in screen saver (backlight at 0), changing brightness
 				// externally would light the screen without updating the screen saver state.
@@ -1135,6 +1138,23 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 
 		// Save to NVS
 		#if HAS_DISPLAY
+		const uint8_t previous_saved_brightness = current_config->backlight_brightness;
+		if (parseBoolField(doc, "save_current_brightness")) {
+				const uint8_t brightness = screen_saver_manager_get_brightness();
+				if (brightness < MIN_USER_BRIGHTNESS) {
+						request->send(400, "application/json", "{\"success\":false,\"message\":\"Current brightness is below the allowed minimum\"}");
+						portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+						return;
+				}
+				current_config->backlight_brightness = brightness;
+		}
+		#endif
+		#if HAS_AUDIO
+		const uint8_t previous_saved_volume = current_config->audio_volume;
+		if (parseBoolField(doc, "save_current_volume"))
+				current_config->audio_volume = audio_get_volume();
+		#endif
+		#if HAS_DISPLAY
 		const DialogTemplates previous_dialog_appearance = current_config->dialog_appearance;
 		current_config->dialog_appearance = dialog_candidate;
 		#endif
@@ -1168,14 +1188,16 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				// Check for no_reboot parameter
 				if (!request->hasParam("no_reboot")) {
 						LOGI("Portal", "Rebooting device");
-						// Schedule reboot after response is sent
-						delay(100);
-						ESP.restart();
+						reboot_request(100);
 				}
 		} else {
 				LOGE("Portal", "Config save failed");
 				#if HAS_DISPLAY
+				current_config->backlight_brightness = previous_saved_brightness;
 				current_config->dialog_appearance = previous_dialog_appearance;
+				#endif
+				#if HAS_AUDIO
+				current_config->audio_volume = previous_saved_volume;
 				#endif
 				strlcpy(current_config->timezone, previous_timezone, sizeof(current_config->timezone));
 #if HAS_DISPLAY
@@ -1196,6 +1218,10 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 
 void handleDeleteConfig(AsyncWebServerRequest *request) {
 		if (!portal_auth_gate(request)) return;
+		if (!ota_activity_try_begin_config_write()) {
+				request->send(409, "application/json", "{\"success\":false,\"message\":\"Device busy\"}");
+				return;
+		}
 
 		// Send the success response FIRST so the client receives it before the
 		// long blocking wipe (NVS erase + LittleFS.format() / SD rmrf, several
@@ -1207,5 +1233,6 @@ void handleDeleteConfig(AsyncWebServerRequest *request) {
 		delay(100);
 
 		config_manager_factory_reset();
-		ESP.restart();
+		reboot_request(0);
+		ota_activity_finish_config_write();
 }

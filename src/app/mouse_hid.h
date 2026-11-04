@@ -5,8 +5,9 @@
 #include "board_config.h"
 #include <stdint.h>
 
-#if HAS_USB_HID
+#if HAS_USB_HID || HAS_BLE_HID
 bool mouse_hid_is_ready();
+uint32_t mouse_hid_epoch();
 uint32_t mouse_hid_generation();
 void mouse_hid_move(int dx, int dy, uint32_t epoch);
 void mouse_hid_scroll(int wheel, int pan, uint32_t epoch);

@@ -122,7 +122,7 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
     const css = assets.get('portal_all_css_gz');
     assert(css, 'Main stylesheet must be selected');
     assert.equal(css.includes('.binding-docs-modal'), display, 'Binding reference CSS must follow HAS_DISPLAY');
-    assert.equal(css.includes('.binding-builder-shortcut'), display, 'Binding shortcut CSS must follow HAS_DISPLAY');
+    assert.equal(css.includes('.binding-tools-menu'), display, 'Binding tools menu CSS must follow HAS_DISPLAY');
     assert.equal(css.includes('.binding-builder-step'), display, 'Shared builder CSS must follow HAS_DISPLAY');
     assert.equal(css.includes('.pad-button-builder-entry'), display, 'Button builder CSS must follow HAS_DISPLAY');
     assert.equal(css.includes('.dialog-appearance-layout'), display);

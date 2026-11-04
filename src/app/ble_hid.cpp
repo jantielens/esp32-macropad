@@ -5,6 +5,9 @@
 #include "config_manager.h"
 #include "key_sequence.h"
 #include "keyboard_transport.h"
+#include "mouse_hid_state.h"
+#include "gamepad_hid_state.h"
+#include "ota_activity.h"
 #include <atomic>
 #include "net_activity.h"
 #include "log_manager.h"
@@ -36,6 +39,21 @@ static const char* TAG = "BleHID";
 #define HID_KEYBOARD 0x03C1
 #define KEYBOARD_ID 0x01
 #define MEDIA_KEYS_ID 0x02
+#define MOUSE_ID 0x03
+#define GAMEPAD_ID 0x04
+
+struct __attribute__((packed)) BleMouseReport {
+    uint8_t buttons;
+    int8_t dx, dy, wheel, pan;
+};
+
+struct __attribute__((packed)) BleGamepadReport {
+    int16_t left_x, left_y, right_x, right_y;
+    uint8_t left_trigger, right_trigger, hat;
+    uint16_t buttons;
+};
+static_assert(sizeof(BleGamepadReport) == gamepad_protocol::report_bytes, "Gamepad report size mismatch");
+uint32_t gamepad_hid_submission_generation();
 
 typedef struct {
     uint8_t modifiers;
@@ -93,7 +111,25 @@ static const uint8_t HID_REPORT_MAP[] = {
     REPORT_SIZE(1),     0x10,
     REPORT_COUNT(1),    0x01,
     HIDINPUT(1),        0x00,
-    END_COLLECTION(0)
+    END_COLLECTION(0),
+    0x05, 0x01, 0x09, 0x02, 0xA1, 0x01, 0x85, MOUSE_ID,
+    0x09, 0x01, 0xA1, 0x00,
+    0x05, 0x09, 0x19, 0x01, 0x29, 0x05, 0x15, 0x00, 0x25, 0x01,
+    0x75, 0x01, 0x95, 0x05, 0x81, 0x02,
+    0x75, 0x03, 0x95, 0x01, 0x81, 0x01,
+    0x05, 0x01, 0x09, 0x30, 0x09, 0x31, 0x09, 0x38,
+    0x15, 0x81, 0x25, 0x7F, 0x75, 0x08, 0x95, 0x03, 0x81, 0x06,
+    0x05, 0x0C, 0x0A, 0x38, 0x02, 0x95, 0x01, 0x81, 0x06, 0xC0, 0xC0,
+
+    0x05, 0x01, 0x09, 0x05, 0xA1, 0x01, 0x85, GAMEPAD_ID,
+    0x09, 0x30, 0x09, 0x31, 0x09, 0x32, 0x09, 0x35,
+    0x16, 0x01, 0x80, 0x26, 0xFF, 0x7F, 0x75, 0x10, 0x95, 0x04, 0x81, 0x02,
+    0x09, 0x33, 0x09, 0x34, 0x15, 0x00, 0x26, 0xFF, 0x00,
+    0x75, 0x08, 0x95, 0x02, 0x81, 0x02,
+    0x09, 0x39, 0x15, 0x01, 0x25, 0x08, 0x35, 0x00, 0x46, 0x3B, 0x01,
+    0x65, 0x14, 0x95, 0x01, 0x81, 0x42, 0x45, 0x00, 0x65, 0x00,
+    0x05, 0x09, 0x19, 0x01, 0x29, 0x10, 0x15, 0x00, 0x25, 0x01,
+    0x75, 0x01, 0x95, 0x10, 0x81, 0x02, 0xC0
 };
 
 static BLEServer* bleServer = nullptr;
@@ -110,6 +146,16 @@ static uint8_t hidControlPoint = 0x00;
 static const uint8_t hidInfoData[] = {0x11, 0x01, 0x00, 0x01};
 static KeyReport keyboardInputReport = {};
 static ConsumerReport consumerInputReport = {};
+static BleMouseReport mouseInputReport = {};
+static BleGamepadReport gamepadInputReport = {};
+static uint16_t mouseInputHandle = 0;
+static uint16_t gamepadInputHandle = 0;
+static uint8_t mouseInputToken = 0;
+static uint8_t gamepadInputToken = 0;
+static uint8_t mouseInputRefToken = 0;
+static uint8_t gamepadInputRefToken = 0;
+static const uint8_t mouseInputReportRef[] = {MOUSE_ID, 0x01};
+static const uint8_t gamepadInputReportRef[] = {GAMEPAD_ID, 0x01};
 
 static uint16_t protocolModeHandle = 0;
 static uint16_t hidInfoHandle = 0;
@@ -147,7 +193,10 @@ static std::atomic<uint32_t> connection_epoch{1};
 
 // Single-owner BLE policy state
 static const unsigned long PAIRING_TIMEOUT_MS = 60000;  // 60s pairing window
+static const unsigned long AUTH_TIMEOUT_MS = 10000;
 static volatile unsigned long pairing_deadline = 0;
+static volatile unsigned long authentication_started = 0;
+static volatile bool authentication_pending = false;
 static volatile uint16_t active_conn_handle = 0xFFFF;
 
 // Peer metadata (captured on auth complete)
@@ -157,13 +206,14 @@ static char ble_name_str[40] = {};
 static volatile bool peer_bonded = false;
 static volatile bool peer_encrypted = false;
 
-// Persisted owner identity address for auto-re-pair detection.
-// When a previously-bonded host drops its bond (e.g. after firmware update
-// causing a GATT database hash change on Windows), the ESP32 still holds a
-// stale bond.  The host reconnects without encryption, and we detect the
-// address match to automatically clear the stale bond and allow re-pairing.
 static char owner_id_addr_str[18] = {};
-static volatile bool auto_repair_attempted = false;
+static volatile bool recovery_attempted = false;
+
+static bool pairing_window_open() {
+    return pairing_mode
+        && static_cast<int32_t>(static_cast<uint32_t>(pairing_deadline)
+            - static_cast<uint32_t>(millis())) > 0;
+}
 
 static bool start_advertising() {
     if (!hid_service_ready) return false;
@@ -182,7 +232,6 @@ static void clear_peer_metadata() {
     peer_id_addr_str[0] = '\0';
     peer_bonded = false;
     peer_encrypted = false;
-    auto_repair_attempted = false;
 }
 
 static int hid_access(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt* ctxt, void* arg);
@@ -202,6 +251,16 @@ static ble_gatt_dsc_def consumerInputDescriptors[] = {
     {nullptr, 0, 0, nullptr, nullptr},
 };
 
+static ble_gatt_dsc_def mouseInputDescriptors[] = {
+    {&uuidReportReference.u, BLE_ATT_F_READ, 0, hid_access, &mouseInputRefToken},
+    {nullptr, 0, 0, nullptr, nullptr},
+};
+
+static ble_gatt_dsc_def gamepadInputDescriptors[] = {
+    {&uuidReportReference.u, BLE_ATT_F_READ, 0, hid_access, &gamepadInputRefToken},
+    {nullptr, 0, 0, nullptr, nullptr},
+};
+
 static ble_gatt_chr_def hidCharacteristics[] = {
     {&uuidProtocolMode.u, hid_access, &protocolModeToken, nullptr,
      BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE_NO_RSP, 0, &protocolModeHandle, nullptr},
@@ -217,6 +276,10 @@ static ble_gatt_chr_def hidCharacteristics[] = {
      BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_NO_RSP, 0, &keyboardOutputHandle, nullptr},
     {&uuidReport.u, hid_access, &consumerInputToken, consumerInputDescriptors,
      BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY, 0, &consumerInputHandle, nullptr},
+    {&uuidReport.u, hid_access, &mouseInputToken, mouseInputDescriptors,
+     BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY, 0, &mouseInputHandle, nullptr},
+    {&uuidReport.u, hid_access, &gamepadInputToken, gamepadInputDescriptors,
+     BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY, 0, &gamepadInputHandle, nullptr},
     {nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, nullptr},
 };
 
@@ -234,8 +297,14 @@ static int copy_write_value(const struct os_mbuf* om, void* data, uint16_t max_l
     return rc == 0 ? 0 : BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
 }
 
-static int hid_access(uint16_t, uint16_t attr_handle, struct ble_gatt_access_ctxt* ctxt, void* arg) {
+static int hid_access(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt* ctxt, void* arg) {
     uint16_t out_len = 0;
+
+        if ((arg == &keyboardInputToken || arg == &keyboardOutputToken || arg == &consumerInputToken
+            || arg == &mouseInputToken || arg == &gamepadInputToken)
+        && (conn_handle != active_conn_handle || !peer_encrypted || !peer_bonded)) {
+        return BLE_ATT_ERR_INSUFFICIENT_ENC;
+    }
 
     if (arg == &protocolModeToken) {
         if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
@@ -297,6 +366,11 @@ static int hid_access(uint16_t, uint16_t attr_handle, struct ble_gatt_access_ctx
         return append_flat_value(ctxt->om, &consumerInputReport, sizeof(consumerInputReport));
     }
 
+    if (arg == &mouseInputToken) return append_flat_value(ctxt->om, &mouseInputReport, sizeof(mouseInputReport));
+    if (arg == &gamepadInputToken) return append_flat_value(ctxt->om, &gamepadInputReport, sizeof(gamepadInputReport));
+    if (arg == &mouseInputRefToken) return append_flat_value(ctxt->om, mouseInputReportRef, sizeof(mouseInputReportRef));
+    if (arg == &gamepadInputRefToken) return append_flat_value(ctxt->om, gamepadInputReportRef, sizeof(gamepadInputReportRef));
+
     if (arg == &keyboardInputRefToken) {
         return append_flat_value(ctxt->om, keyboardInputReportRef, sizeof(keyboardInputReportRef));
     }
@@ -331,7 +405,8 @@ static bool init_hid_service() {
 
 static bool send_report_notification(uint16_t value_handle, const void* data, uint16_t size) {
     static std::atomic<uint32_t> failed_sends{0};
-    if (!connected || !hid_service_ready || value_handle == 0 || bleServer == nullptr) {
+    if (!connected || !peer_encrypted || !peer_bonded || !hid_service_ready
+        || value_handle == 0 || bleServer == nullptr) {
         return false;
     }
 
@@ -342,7 +417,7 @@ static bool send_report_notification(uint16_t value_handle, const void* data, ui
         return false;
     }
 
-    const int rc = ble_gatts_notify_custom(bleServer->getConnId(), value_handle, om);
+    const int rc = ble_gatts_notify_custom(active_conn_handle, value_handle, om);
     if (rc != 0) {
         ++failed_sends;
         LOGW(TAG, "ble_gatts_notify_custom failed (handle=%u rc=%d)", value_handle, rc);
@@ -361,12 +436,30 @@ class HidCallbacks : public BLEServerCallbacks {
             ble_gap_terminate(desc->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
             return;
         }
+        clear_peer_metadata();
+        protocolMode = 1;
+        mouseInputReport = {};
+        gamepadInputReport = {};
         connected = true;
         connection_epoch.fetch_add(1);
         advertising_active = false;
         active_conn_handle = desc->conn_handle;
+        authentication_started = millis();
+        authentication_pending = true;
         format_ble_addr(desc->peer_ota_addr.val, peer_addr_str, sizeof(peer_addr_str));
         LOGI(TAG, "Host connected (handle=%u addr=%s)", desc->conn_handle, peer_addr_str);
+        if (!pairing_window_open()) {
+            ble_store_key_sec key = {};
+            ble_store_value_sec bond = {};
+            key.peer_addr = desc->peer_id_addr;
+            format_ble_addr(desc->peer_id_addr.val, peer_id_addr_str, sizeof(peer_id_addr_str));
+            if (!owner_claimed || strcmp(peer_id_addr_str, owner_id_addr_str) != 0
+                || ble_store_read_our_sec(&key, &bond) != 0 || !bond.ltk_present) {
+                LOGW(TAG, "Peer has no owner bond; select Pair New Device");
+                authentication_pending = false;
+                ble_gap_terminate(desc->conn_handle, BLE_ERR_AUTH_FAIL);
+            }
+        }
     }
 
     void onDisconnect(BLEServer*, ble_gap_conn_desc* desc) override {
@@ -374,6 +467,8 @@ class HidCallbacks : public BLEServerCallbacks {
         connected = false;
         connection_epoch.fetch_add(1);
         active_conn_handle = 0xFFFF;
+        authentication_started = 0;
+        authentication_pending = false;
         clear_peer_metadata();
         LOGI(TAG, "Host disconnected");
         if (!hid_service_ready) return;
@@ -387,96 +482,80 @@ class HidSecurityCallbacks : public BLESecurityCallbacks {
     bool onConfirmPIN(uint32_t) override { return true; }
     bool onSecurityRequest() override { return true; }
 
-#if defined(CONFIG_BLUEDROID_ENABLED)
-    void onAuthenticationComplete(esp_ble_auth_cmpl_t auth) override {
-        if (auth.success) {
-            LOGI(TAG, "Paired (Bluedroid mode=%d)", auth.auth_mode);
-            pairing_mode = false;
-            owner_claimed = true;
-            config_manager_set_ble_owner_claimed(true);
-        } else {
-            LOGW(TAG, "Pairing FAILED (reason=0x%02X)", auth.fail_reason);
-        }
-    }
-#elif defined(CONFIG_NIMBLE_ENABLED)
-    void onAuthenticationComplete(ble_gap_conn_desc* desc) override {
-        // Capture peer metadata from the encryption result
-        peer_encrypted = desc->sec_state.encrypted;
-        peer_bonded = desc->sec_state.bonded;
+    void onAuthenticationComplete(ble_gap_conn_desc* desc, int status) override {
+        if (!connected || (!authentication_pending && !peer_encrypted)
+            || desc->conn_handle != active_conn_handle) return;
+        peer_encrypted = false;
+        peer_bonded = false;
         format_ble_addr(desc->peer_ota_addr.val, peer_addr_str, sizeof(peer_addr_str));
         format_ble_addr(desc->peer_id_addr.val, peer_id_addr_str, sizeof(peer_id_addr_str));
 
-        if (desc->sec_state.encrypted) {
-            LOGI(TAG, "Paired (encrypted=%d bonded=%d id_addr=%s)",
+        if (status != 0 || !desc->sec_state.encrypted || !desc->sec_state.bonded) {
+            LOGW(TAG, "Authentication failed (handle=%u status=%d encrypted=%d bonded=%d)",
+                 desc->conn_handle, status, desc->sec_state.encrypted, desc->sec_state.bonded);
+            if (status == BLE_HS_HCI_ERR(BLE_ERR_PINKEY_MISSING)) {
+                if (pairing_window_open() && !recovery_attempted) {
+                    recovery_attempted = true;
+                    LOGW(TAG, "Peer missing bonding key; retry within current pairing window");
+                } else {
+                    pairing_mode = false;
+                    pairing_deadline = 0;
+                    LOGW(TAG, "Remove saved device on host and select Pair New Device");
+                }
+            }
+            authentication_started = 0;
+            authentication_pending = false;
+            ble_gap_terminate(desc->conn_handle, BLE_ERR_AUTH_FAIL);
+            return;
+        }
+
+        if (!pairing_window_open() && (!owner_claimed
+            || strcmp(peer_id_addr_str, owner_id_addr_str) != 0)) {
+            LOGW(TAG, "Peer rejected outside pairing window (id_addr=%s)", peer_id_addr_str);
+            authentication_pending = false;
+            ble_gap_terminate(desc->conn_handle, BLE_ERR_AUTH_FAIL);
+            return;
+        }
+
+        peer_bonded = true;
+        peer_encrypted = true;
+        authentication_pending = false;
+        authentication_started = 0;
+        LOGI(TAG, "Paired (encrypted=%d bonded=%d id_addr=%s)",
                  desc->sec_state.encrypted,
                  desc->sec_state.bonded,
                  peer_id_addr_str);
-            pairing_mode = false;
-            pairing_deadline = 0;
-            owner_claimed = true;
-            auto_repair_attempted = false;
-            config_manager_set_ble_owner_claimed(true);
-            // Persist the bonded peer's identity address for auto-re-pair
-            strlcpy(owner_id_addr_str, peer_id_addr_str, sizeof(owner_id_addr_str));
-            config_manager_set_ble_owner_addr(owner_id_addr_str);
-            return;
-        }
-
-        // Not encrypted — check for stale-bond auto-re-pair opportunity.
-        // When the host (e.g. Windows) drops its bond after a firmware update
-        // (GATT database hash changed), it reconnects without encryption.
-        // If the peer's address matches our stored owner, clear the stale bond
-        // and allow re-pairing — once per connection cycle to avoid loops.
-        if (!pairing_mode && owner_claimed && !auto_repair_attempted
-            && owner_id_addr_str[0] != '\0'
-            && strcmp(peer_id_addr_str, owner_id_addr_str) == 0) {
-            LOGI(TAG, "Stale bond detected for owner %s — clearing bonds and allowing re-pair", peer_id_addr_str);
-            auto_repair_attempted = true;
-            ble_gap_terminate(desc->conn_handle, BLE_ERR_AUTH_FAIL);
-            // Clear our stale bond so the next connection can pair fresh
-            ble_store_clear();
-            owner_claimed = false;
-            config_manager_set_ble_owner_claimed(false);
-            pairing_mode = true;
-            pairing_deadline = millis() + PAIRING_TIMEOUT_MS;
-            return;
-        }
-
-        // Not encrypted — reject if not in pairing mode
-        if (!pairing_mode) {
-            LOGW(TAG, "Unbonded peer rejected (not in pairing mode)");
-            ble_gap_terminate(desc->conn_handle, BLE_ERR_AUTH_FAIL);
-            return;
-        }
-
-        // In pairing mode, failed encryption means the peer did not complete a
-        // usable fresh pair.  This is expected when the old host reconnects
-        // repeatedly after bonds were cleared (common on Windows).  Log at
-        // DEBUG to avoid flooding the serial output.
-        LOGD(TAG, "Pairing failed during pairing mode - disconnecting");
-        ble_gap_terminate(desc->conn_handle, BLE_ERR_AUTH_FAIL);
+        pairing_mode = false;
+        pairing_deadline = 0;
+        owner_claimed = true;
+        config_manager_set_ble_owner_claimed(true);
+        strlcpy(owner_id_addr_str, peer_id_addr_str, sizeof(owner_id_addr_str));
+        config_manager_set_ble_owner_addr(owner_id_addr_str);
     }
-#endif
 };
 
-static void clear_all_bonds() {
-#if defined(CONFIG_BLUEDROID_ENABLED)
-    int count = esp_ble_get_bond_device_num();
-    if (count > 0) {
-        esp_ble_bond_dev_t* devs = static_cast<esp_ble_bond_dev_t*>(malloc(count * sizeof(esp_ble_bond_dev_t)));
-        if (devs) {
-            esp_ble_get_bond_device_list(&count, devs);
-            for (int i = 0; i < count; i++) {
-                esp_ble_remove_bond_device(devs[i].bd_addr);
-            }
-            free(devs);
-        }
+static int hid_gap_event(ble_gap_event* event, void*) {
+    if (event->type == BLE_GAP_EVENT_DISCONNECT) {
+        LOGI(TAG, "GAP disconnect (handle=%u reason=%d/0x%X)",
+             event->disconnect.conn.conn_handle, event->disconnect.reason,
+             static_cast<unsigned int>(event->disconnect.reason));
+    } else if (event->type == BLE_GAP_EVENT_PARING_COMPLETE) {
+        LOGI(TAG, "Pairing complete (handle=%u status=%d)",
+             event->pairing_complete.conn_handle, event->pairing_complete.status);
+    } else if (event->type == BLE_GAP_EVENT_REPEAT_PAIRING
+        && event->repeat_pairing.conn_handle == active_conn_handle && !pairing_window_open()) {
+        LOGW(TAG, "Fresh pairing rejected outside pairing window");
+        authentication_pending = false;
+        peer_encrypted = false;
+        peer_bonded = false;
+        ble_gap_terminate(active_conn_handle, BLE_ERR_AUTH_FAIL);
     }
-    LOGI(TAG, "Cleared %d bonded device(s)", count);
-#elif defined(CONFIG_NIMBLE_ENABLED)
+    return 0;
+}
+
+static void clear_all_bonds() {
     ble_store_clear();
     LOGI(TAG, "Cleared all NimBLE bonds");
-#endif
 }
 
 void ble_hid_init(const char* device_name, bool force_pairing_mode) {
@@ -485,6 +564,9 @@ void ble_hid_init(const char* device_name, bool force_pairing_mode) {
     peer_encrypted = false;
     peer_bonded = false;
     clear_peer_metadata();
+    recovery_attempted = false;
+    authentication_started = 0;
+    authentication_pending = false;
     owner_claimed = config_manager_get_ble_owner_claimed();
     config_manager_get_ble_owner_addr(owner_id_addr_str, sizeof(owner_id_addr_str));
     if (owner_id_addr_str[0]) {
@@ -502,6 +584,7 @@ void ble_hid_init(const char* device_name, bool force_pairing_mode) {
     }
     static HidSecurityCallbacks secCb;
     BLEDevice::setSecurityCallbacks(&secCb);
+    BLEDevice::setCustomGapHandler(hid_gap_event);
 
     bleServer = BLEDevice::createServer();
     if (bleServer == nullptr) {
@@ -519,7 +602,7 @@ void ble_hid_init(const char* device_name, bool force_pairing_mode) {
     }
 
     static BLESecurity security;
-    security.setAuthenticationMode(true, true, false);
+    security.setAuthenticationMode(true, false, false);
     security.setCapability(ESP_IO_CAP_NONE);
     security.setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
     security.setRespEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
@@ -536,7 +619,9 @@ void ble_hid_init(const char* device_name, bool force_pairing_mode) {
         clear_all_bonds();
         clear_peer_metadata();
         owner_claimed = false;
+        owner_id_addr_str[0] = '\0';
         config_manager_set_ble_owner_claimed(false);
+        config_manager_set_ble_owner_addr("");
         pairing_mode = true;
         pairing_deadline = millis() + PAIRING_TIMEOUT_MS;
     } else if (!owner_claimed) {
@@ -572,6 +657,9 @@ void ble_hid_start_pairing() {
     // 3. Clear bonds, owner claim, and stored owner address
     clear_all_bonds();
     clear_peer_metadata();
+    recovery_attempted = false;
+    authentication_started = 0;
+    authentication_pending = false;
     owner_claimed = false;
     owner_id_addr_str[0] = '\0';
     config_manager_set_ble_owner_claimed(false);
@@ -589,10 +677,32 @@ void ble_hid_start_pairing() {
 }
 
 bool ble_hid_is_connected() {
-    return connected;
+    return connected && peer_encrypted && peer_bonded;
 }
 
 uint32_t ble_hid_epoch() { return connection_epoch.load(); }
+
+bool ble_hid_send_mouse_report(const MouseHidReport& state, uint32_t expected_epoch, uint32_t expected_ota_epoch) {
+    if (protocolMode != 1 || !ble_hid_is_connected() ||
+        !state.can_submit(expected_epoch, ble_hid_epoch(), expected_ota_epoch,
+                          ota_activity_epoch(), ota_activity_is_active())) return false;
+    const BleMouseReport report = {state.buttons, state.dx, state.dy, state.wheel, state.pan};
+    if (!send_report_notification(mouseInputHandle, &report, sizeof(report))) return false;
+    mouseInputReport = report;
+    return true;
+}
+
+bool ble_hid_send_gamepad_report(const GamepadReport& state, uint32_t expected_epoch,
+                                 uint32_t expected_ota_epoch, uint32_t expected_generation) {
+    if (protocolMode != 1 || !ble_hid_is_connected() || expected_epoch != ble_hid_epoch() ||
+        expected_ota_epoch != ota_activity_epoch() || expected_generation != gamepad_hid_submission_generation() ||
+        (ota_activity_is_active() && !state.same_value(GamepadReport{}))) return false;
+    const BleGamepadReport report = {state.left_x, state.left_y, state.right_x, state.right_y,
+        state.left_trigger, state.right_trigger, state.hat, state.buttons};
+    if (!send_report_notification(gamepadInputHandle, &report, sizeof(report))) return false;
+    gamepadInputReport = report;
+    return true;
+}
 
 bool ble_hid_send_report(KsUsageType type, uint16_t usage, uint8_t modifiers) {
     if (type == KS_USAGE_CONSUMER) {
@@ -617,10 +727,16 @@ void ble_hid_loop() {
     }
 
     // Auto-close pairing window on timeout
-    if (pairing_mode && pairing_deadline != 0 && millis() >= pairing_deadline) {
+    if (pairing_mode && !pairing_window_open()) {
         pairing_mode = false;
         pairing_deadline = 0;
         LOGI(TAG, "Pairing mode timed out");
+    }
+    if (connected && authentication_pending
+        && static_cast<uint32_t>(millis() - authentication_started) >= AUTH_TIMEOUT_MS) {
+        LOGW(TAG, "Authentication timed out (handle=%u)", active_conn_handle);
+        authentication_pending = false;
+        ble_gap_terminate(active_conn_handle, BLE_ERR_AUTH_FAIL);
     }
 }
 

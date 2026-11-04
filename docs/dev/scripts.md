@@ -5,6 +5,60 @@ description: Build, upload, monitoring, and local portal development script refe
 
 This project includes several bash scripts to streamline ESP32 development workflow.
 
+## tools/firmware_history.py
+
+Generate a self-contained HTML report of shipped application sizes across GitHub
+releases. The default board is `esp32-p4-lcd4b`. Collection requires Python 3 and
+the GitHub CLI (`gh`) with repository access; authenticate with `gh auth login`
+when needed. No firmware builds, binary downloads, or Python packages are needed.
+
+```bash
+python3 tools/firmware_history.py
+python3 tools/firmware_history.py --board esp32c3-withsensors \
+  --output build/c3-firmware-history
+python3 tests/test_firmware_history.py
+```
+
+Open `build/firmware-history/index.html` directly in a browser. The HTML embeds
+its data, styles, and SVG charts with no CDN, network request, or server required
+for viewing. Release links open GitHub for changelog context. The same directory
+contains `history.csv` and `history.json`. Hover, focus, or select a chart marker
+to update the release-details section; release-table rows also update it. The
+section shows up to two short entries per changelog section (eight total), the
+size change, and expandable full release notes. Highlights follow authored order,
+not an automated importance ranking or verified attribution of firmware growth.
+Release notes are stored in the JSON so the interaction works offline. Older JSON
+exports without notes remain usable but display an unavailable-notes message.
+Regenerate from saved data offline:
+
+```bash
+python3 tools/firmware_history.py \
+  --input build/firmware-history/history.json \
+  --output build/firmware-history-offline
+```
+
+Use `--repo OWNER/REPOSITORY` for a repository with the same asset convention:
+`esp32-macropad-<board>-<release-tag>.bin`. Exact matching excludes merged images,
+bootloaders, partition tables, and similarly named board variants. Drafts are
+excluded; `--include-prereleases` opts into prereleases. Releases without a board
+asset are listed as missing and skipped, not counted as zero. Changes compare
+adjacent available releases in publication order; charts space releases equally,
+not by elapsed time. Values use KiB (1024 bytes) and MiB (1,048,576 bytes).
+
+The report includes application size and change charts, the largest changes,
+per-release sizes, and available subsystem snapshots. Footprint attachments must
+match the release tag, board, and application binary size. Unavailable or invalid
+snapshots produce warnings without discarding the release's binary size. Only
+the chosen board's snapshot is retained in the output. Headroom comes from its
+selected reference app partition, not a device's active OTA slot.
+
+Sizes measure what was shipped, including feature flags, dependencies, compiler
+changes, headers, and alignment. Release notes provide context, not proof of
+causation. Subsystem comparisons cover only releases with footprint attachments;
+ownership rules can change, and absent categories are not treated as zero.
+Runtime heap and task stacks are not measured. Collection failure exits nonzero;
+review the report's coverage diagnostics for gaps and footprint warnings.
+
 ## tools/firmware_size_report.py
 
 Attribute subsystem sizes from an existing GNU linker map without rebuilding

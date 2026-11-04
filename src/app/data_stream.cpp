@@ -283,13 +283,15 @@ static void hydrate_streams() {
                          (unsigned long)(backoff / 1000));
                 log_hydrate_deferred(i, reason);
             } else {
-                log_hydrate_deferred(i, "WiFi or HA config not ready");
+                log_hydrate_deferred(i, "startup, WiFi, or HA config not ready");
             }
+            ha_stats_finish_startup_hydration();
         }
         return;
     }
 
     if (clock_pending >= 0) log_hydrate_deferred((uint8_t)clock_pending, "clock not synced");
+    ha_stats_finish_startup_hydration();
 }
 #endif // HAS_HA_HISTORY
 

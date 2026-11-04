@@ -32,12 +32,12 @@ ActionResult dispatch_notify(const ButtonAction& act, const char* label, uint32_
 }
 bool notify_available() { return HAS_DISPLAY; }
 const char* validate_notify(JsonObjectConst action) { return dialog_action::validate(action, false); }
-bool visit_notify_fields(ButtonAction& act, ActionBindableFieldVisitor visitor, void* context) {
-    return visitor(act.payload.notify.message, sizeof(act.payload.notify.message), true, context);
+bool visit_notify_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {
+    return action_visit_field(visitor, context, "message", act.payload.notify.message);
 }
 void describe_notify(JsonObject& action) { dialog_action::describe(action, false); }
 DEFINE_AND_REGISTER_ACTION_TYPE(kNotifyActionType, ACTION_TYPE_NOTIFY, parse_notify, serialize_notify,
-    dispatch_notify, nullptr, describe_notify, notify_available, validate_notify,
-    visit_notify_fields, ACTION_EXECUTION_SYNC);
+    dispatch_notify, visit_notify_fields, describe_notify, notify_available, validate_notify,
+    ACTION_EXECUTION_SYNC);
 }
 #endif

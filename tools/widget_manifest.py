@@ -29,6 +29,9 @@ def load_widgets(path=MANIFEST):
         gates = widget["gates"]
         if not isinstance(gates, list) or not gates or any(gate not in flags for gate in gates):
             raise ValueError(f"Invalid widget gates: {kind}")
+        any_gates = widget.get("any_gates", [])
+        if not isinstance(any_gates, list) or any(gate not in flags for gate in any_gates):
+            raise ValueError(f"Invalid widget any_gates: {kind}")
         assets = [(widget["source"], APP, ".cpp")]
         portal = widget.get("portal")
         if portal is not None:
@@ -47,7 +50,13 @@ def load_widgets(path=MANIFEST):
 
 
 def firmware_includes(widgets):
-    return "\n".join(f"#if {' && '.join(widget['gates'])}\n"
+    def condition(widget):
+        gates = list(widget["gates"])
+        if widget.get("any_gates"):
+            gates.append(f"({' || '.join(widget['any_gates'])})")
+        return " && ".join(gates)
+
+    return "\n".join(f"#if {condition(widget)}\n"
                      f"#include \"{widget['source']}\"\n"
                      f"static_assert(sizeof({widget['type']}_widget_type) == sizeof(WidgetType), "
                      f"\"Manifest widget registration: {widget['type']}\");\n#endif"

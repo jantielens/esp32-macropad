@@ -47,10 +47,9 @@ static ActionResult print_dispatch(const ButtonAction& act, const char* label,
 
 // `value` is the single bindable/numeric field (numeric rocker {step} target
 // for adjust_* commands); expose it so shared code drives binding + {step}.
-static char* print_value_field(ButtonAction& act, size_t* out_size) {
+static bool print_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {
     PrintPayload& p = print_payload(act);
-    *out_size = sizeof(p.value);
-    return p.value;
+    return action_visit_field(visitor, context, "print_value", p.value);
 }
 
 static void print_describe(JsonObject& out) {
@@ -72,6 +71,6 @@ static void print_describe(JsonObject& out) {
     }
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(print_action_type, /* type_name   */ ACTION_TYPE_PRINT, /* parse       */ print_parse, /* serialize   */ print_serialize, /* dispatch    */ print_dispatch, /* value_field */ print_value_field, /* describe    */ print_describe, nullptr, nullptr, nullptr, ACTION_EXECUTION_SYNC);
+DEFINE_AND_REGISTER_ACTION_TYPE(print_action_type, ACTION_TYPE_PRINT, print_parse, print_serialize, print_dispatch, print_fields, print_describe, nullptr, nullptr, ACTION_EXECUTION_SYNC);
 
 #endif // HAS_DISPLAY && IS_DARKROOM_TIMER

@@ -40,8 +40,9 @@ void screen_saver_manager_notify_activity(bool wake);
 void screen_saver_manager_sleep_now();
 void screen_saver_manager_wake();
 
-// Set the runtime brightness (updates config + internal tracking; thread-safe).
+// Set and read the selected runtime brightness, independent of sleep fades.
 void screen_saver_manager_set_brightness(uint8_t brightness);
+uint8_t screen_saver_manager_get_brightness();
 
 bool screen_saver_manager_is_asleep();
 bool screen_saver_manager_is_fully_asleep();
@@ -75,6 +76,7 @@ inline void screen_saver_manager_notify_activity(bool) {}
 inline void screen_saver_manager_sleep_now() {}
 inline void screen_saver_manager_wake() {}
 inline void screen_saver_manager_set_brightness(uint8_t) {}
+inline uint8_t screen_saver_manager_get_brightness() { return 100; }
 inline bool screen_saver_manager_is_asleep() { return false; }
 inline bool screen_saver_manager_is_fully_asleep() { return false; }
 inline bool screen_saver_manager_is_rendering_suspended() { return false; }

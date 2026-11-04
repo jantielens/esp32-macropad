@@ -5,14 +5,12 @@
 #include <stdio.h>
 #include <string.h>
 
-#if HAS_MQTT || HAS_HA_LIVE
 #include "binding_template.h"
-#endif
 
 // Built-ins and device classes share this fixed-size registry. Reserve room
 // for device classes even when every built-in action is present.
 #ifndef ACTION_TYPE_REGISTRY_MAX_TYPES
-#define ACTION_TYPE_REGISTRY_MAX_TYPES 25
+#define ACTION_TYPE_REGISTRY_MAX_TYPES 27
 #endif
 static constexpr int MAX_ACTION_TYPES = ACTION_TYPE_REGISTRY_MAX_TYPES;
 static const ActionTypeDef* s_types[MAX_ACTION_TYPES] = {};
@@ -48,42 +46,85 @@ const char* action_type_validate(const ActionTypeDef* type, JsonObjectConst acti
     return type->validate(action);
 }
 
-void action_substitute_step_field(char* field, size_t field_size, float step) {
-    if (!field) return;
-    const char* token = "{step}";
-    const size_t token_len = 6;
-    char tmp[24];
-    snprintf(tmp, sizeof(tmp), "%g", step);
-    size_t repl_len = strlen(tmp);
-
-    char* pos = strstr(field, token);
-    while (pos) {
-        size_t tail_len = strlen(pos + token_len);
-        if ((size_t)(pos - field) + repl_len + tail_len >= field_size) return;
-        memmove(pos + repl_len, pos + token_len, tail_len + 1);
-        memcpy(pos, tmp, repl_len);
-        pos = strstr(pos + repl_len, token);
+static bool action_token_fits(const char* field, size_t field_size,
+                              const char* token, const char* replacement) {
+    if (!field || !field_size || !token || !token[0] || !replacement ||
+        strstr(replacement, token)) return false;
+    const size_t field_length = strnlen(field, field_size);
+    if (field_length == field_size) return false;
+    const size_t token_length = strlen(token);
+    const size_t replacement_length = strlen(replacement);
+    size_t occurrences = 0;
+    for (const char* cursor = field; (cursor = strstr(cursor, token)) != nullptr;
+         cursor += token_length) ++occurrences;
+    if (replacement_length > token_length) {
+        const size_t growth = replacement_length - token_length;
+        if (occurrences > (field_size - 1 - field_length) / growth) return false;
     }
+    return true;
 }
 
-void action_type_substitute_step(const ActionTypeDef* def, ButtonAction& act, float step) {
-    if (!def || !def->value_field) return;
-    size_t size = 0;
-    char* field = def->value_field(act, &size);
-    if (field && size) action_substitute_step_field(field, size, step);
+bool action_substitute_token_field(char* field, size_t field_size,
+                                   const char* token, const char* replacement) {
+    if (!action_token_fits(field, field_size, token, replacement)) return false;
+    const size_t token_length = strlen(token);
+    const size_t replacement_length = strlen(replacement);
+    char* cursor = field;
+    char* position = nullptr;
+    while ((position = strstr(cursor, token)) != nullptr) {
+        const size_t tail_length = strlen(position + token_length);
+        memmove(position + replacement_length, position + token_length, tail_length + 1);
+        memcpy(position, replacement, replacement_length);
+        cursor = position + replacement_length;
+    }
+    return true;
+}
+
+bool action_type_substitute_token(const ActionTypeDef* def, ButtonAction& act,
+                                  const char* token, const char* value) {
+    if (!def || !token || !value || (strcmp(token, "{value}") && strcmp(token, "{step}")) ||
+        strstr(value, "{value}") || strstr(value, "{step}")) return false;
+    struct Context { const char* token; const char* value; bool apply; } context = {token, value, false};
+    auto visit = [](const char*, char* field, size_t capacity, uint8_t flags, void* opaque) {
+        auto* context = static_cast<Context*>(opaque);
+        const size_t length = strnlen(field, capacity);
+        if (length == capacity) return false;
+        const char* other = strcmp(context->token, "{value}") == 0 ? "{step}" : "{value}";
+        if (strstr(field, other)) return false;
+        if (!strstr(field, context->token)) return true;
+        if (!(flags & ACTION_FIELD_EVENT)) return false;
+        if (context->apply)
+            return action_substitute_token_field(field, capacity, context->token, context->value);
+        return action_token_fits(field, capacity, context->token, context->value);
+    };
+    if (!action_type_visit_fields(def, act, visit, &context)) return false;
+    context.apply = true;
+    return action_type_visit_fields(def, act, visit, &context);
+}
+
+bool action_type_substitute_step(const ActionTypeDef* def, ButtonAction& act, float step) {
+    char formatted[24];
+    snprintf(formatted, sizeof(formatted), "%g", step);
+    return action_type_substitute_token(def, act, "{step}", formatted);
+}
+
+bool action_type_visit_fields(const ActionTypeDef* def, ButtonAction& act,
+                              ActionFieldVisitor visitor, void* context) {
+    return !def || !def->fields || def->fields(act, visitor, context);
 }
 
 bool action_type_visit_bindable_fields(const ActionTypeDef* def, ButtonAction& act,
                                        ActionBindableFieldVisitor visitor, void* context) {
     if (!def || !visitor) return true;
-    if (def->binding_fields) return def->binding_fields(act, visitor, context);
-    if (!def->value_field) return true;
-    size_t size = 0;
-    char* field = def->value_field(act, &size);
-    return !field || !field[0] || visitor(field, size, true, context);
+    struct Context { ActionBindableFieldVisitor visitor; void* user; } adapter = {visitor, context};
+    auto visit = [](const char*, char* field, size_t capacity, uint8_t flags, void* opaque) {
+        auto* context = static_cast<Context*>(opaque);
+        return !(flags & ACTION_FIELD_BINDING) ||
+            context->visitor(field, capacity, flags & ACTION_FIELD_REJECT_OVERFLOW, context->user);
+    };
+    return action_type_visit_fields(def, act, visit, &adapter);
 }
 
-#if HAS_MQTT || HAS_HA_LIVE
 bool action_type_has_binding(const ActionTypeDef* def, const ButtonAction& act) {
     bool has_binding = false;
     auto check = [](char* field, size_t, bool, void* context) {
@@ -107,6 +148,7 @@ bool action_type_resolve_bindings(const ActionTypeDef* def, ButtonAction& act) {
     return action_type_visit_bindable_fields(def, act, resolve, nullptr);
 }
 
+#if HAS_MQTT || HAS_HA_LIVE
 void action_type_collect_topics(const ActionTypeDef* def, const ButtonAction& act, void* user_data) {
     auto collect = [](char* field, size_t, bool, void* context) {
         if (field[0]) binding_template_collect_topics(field, context);

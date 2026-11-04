@@ -3768,6 +3768,58 @@
           }
         ]
       }
+    },
+    {
+      "name": "var",
+      "min_params": 1,
+      "max_params": 1,
+      "widget_max_params": 1,
+      "format_param": -1,
+      "validation_mode": 0,
+      "free_form": true,
+      "first_param_pattern": "^[A-Za-z0-9_.-]{1,32}$",
+      "category": "Logic",
+      "summary": "Read a volatile, device-global string variable.",
+      "note": "Values survive pad changes and configuration reloads, but are cleared on reboot. Empty values are valid; an unset name is unavailable and uses the token fallback or ---.",
+      "params": [
+        {
+          "name": "name",
+          "desc": "Literal, case-sensitive name using 1-32 ASCII letters, digits, _, -, or .",
+          "required": true
+        }
+      ],
+      "key_docs": [
+        {
+          "key": "*",
+          "desc": "A device-global runtime variable name."
+        }
+      ],
+      "examples": [
+        {
+          "code": "[var:counter|0]",
+          "desc": "Show zero until the counter is assigned."
+        },
+        {
+          "code": "[var:status]",
+          "desc": "Show the stored text without evaluating it again."
+        }
+      ],
+      "authoring": {
+        "keys": [
+          {
+            "key": "*",
+            "kind": "text",
+            "unit": "",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          }
+        ]
+      }
     }
   ]
 }

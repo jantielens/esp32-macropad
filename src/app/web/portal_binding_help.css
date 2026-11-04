@@ -1,4 +1,4 @@
-/* Binding-capable field hint badge */
+/* Binding-enabled field controls */
 #pad-editor-root label:has(> .reset-hint) {
   display: flex !important; align-items: center; min-height: 20px;
 }
@@ -11,9 +11,7 @@
 .binding-field-controls {
   display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; white-space: nowrap;
 }
-.fx-hint,
-.binding-builder-badge,
-.binding-builder-shortcut {
+.fx-hint {
   display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
   height: 20px; min-width: 24px; padding: 0 4px;
   border: 1px solid var(--portal-border); border-radius: 4px;
@@ -22,19 +20,35 @@
   vertical-align: middle; flex-shrink: 0; user-select: none; cursor: pointer;
 }
 .fx-hint { font-style: italic; letter-spacing: -0.5px; }
-.fx-hint:hover,
-.binding-builder-shortcut:hover { color: var(--portal-primary); border-color: var(--portal-primary); }
-.fx-hint:focus-visible,
-.binding-builder-shortcut:focus-visible { outline: 2px solid var(--portal-primary); outline-offset: 2px; }
-.binding-builder-shortcuts { display: inline-flex; align-items: center; gap: 4px; margin-right: 4px; vertical-align: middle; }
-.binding-field-controls > .binding-builder-shortcuts,
+.fx-hint:hover { color: var(--portal-primary); border-color: var(--portal-primary); }
+.fx-hint:focus-visible { outline: 2px solid var(--portal-primary); outline-offset: 2px; }
 .binding-field-controls > .reset-hint { margin-left: 0; }
-.binding-field-controls > .binding-builder-shortcuts { margin-right: 0; }
-.binding-builder-shortcuts[hidden] { display: none; }
+.binding-tools { position: relative; display: inline-flex; flex: 0 0 auto; vertical-align: middle; }
+.binding-tools-trigger {
+  display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+  width: 24px; height: 20px; padding: 0; border: 1px solid var(--portal-border); border-radius: 4px;
+  background: var(--portal-surface-alt); color: var(--portal-text-muted); cursor: pointer;
+}
+.binding-tools-trigger .material-symbols-outlined { font-size: 17px; line-height: 1; }
+.binding-tools-trigger:hover, .binding-tools-trigger[aria-expanded="true"] { color: var(--portal-primary); border-color: var(--portal-primary); }
+.binding-tools-trigger:focus-visible, .binding-tools-item:focus-visible { outline: 2px solid var(--portal-primary); outline-offset: 2px; }
+.binding-tools-menu {
+  position: absolute; top: calc(100% + 4px); right: 0; z-index: 10003; min-width: min(190px, calc(100vw - 16px)); max-width: calc(100vw - 16px); box-sizing: border-box;
+  padding: 4px; border: 1px solid var(--portal-docs-border); border-radius: 6px;
+  background: var(--portal-docs-bg); box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
+}
+.binding-tools-menu[hidden] { display: none !important; }
+.binding-tools-item {
+  display: block; width: 100%; padding: 8px 10px; border: 0; border-radius: 4px;
+  background: transparent; color: var(--portal-docs-heading); font: inherit; font-size: 13px;
+  line-height: 1.35; text-align: left; white-space: nowrap; cursor: pointer;
+}
+.binding-tools-item:hover:not(:disabled), .binding-tools-item:focus-visible { background: var(--portal-surface-hover); }
+.binding-tools-item:disabled { color: var(--portal-text-muted); cursor: not-allowed; opacity: .65; }
 @media (pointer: coarse) {
   .binding-field-controls { gap: 8px; }
-  .fx-hint, .binding-builder-shortcut { position: relative; }
-  .fx-hint::after, .binding-builder-shortcut::after { content: ""; position: absolute; inset: -8px -3px; }
+  .fx-hint, .binding-tools-trigger { position: relative; }
+  .fx-hint::after, .binding-tools-trigger::after { content: ""; position: absolute; inset: -8px -3px; }
   .binding-field-header { min-height: 36px; }
 }
 

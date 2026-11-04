@@ -3,6 +3,7 @@
 #include "ota_activity.h"
 #include "action_registry.h"
 #include "main_loop_bridge.h"
+#include "reboot_service.h"
 
 #include <Preferences.h>
 #include <esp_sleep.h>
@@ -10,14 +11,17 @@
 #include <esp_timer.h>
 #include <gtest/gtest.h>
 
-static unsigned restart_calls = 0;
+static unsigned reboot_requests = 0;
+static RebootOwnership last_reboot_ownership = REBOOT_NORMAL;
 static const ActionTypeDef* system_action = nullptr;
-struct TestPowerEsp {
-    void restart() { ++restart_calls; }
-} ESP;
 
 void action_type_register(const ActionTypeDef* type) { system_action = type; }
 void wifi_manager_request_reconnect() {}
+void reboot_request(uint32_t grace_ms, RebootOwnership ownership) {
+    EXPECT_EQ(grace_ms, 200U);
+    ++reboot_requests;
+    last_reboot_ownership = ownership;
+}
 
 static LoopBridgeExec queued_job = nullptr;
 static LoopBridgeResult enqueue_result = LOOP_BRIDGE_OK;
@@ -141,14 +145,15 @@ TEST(SystemAction, SetupApRestartRunsOnlyInQueuedJob) {
     test_power_preferences["req_ap"] = false;
     ASSERT_EQ(system_action->dispatch(action, "test", 0), ACTION_COMPLETE);
     EXPECT_FALSE(test_power_preferences["req_ap"]);
-    EXPECT_EQ(restart_calls, 0U);
+    EXPECT_EQ(reboot_requests, 0U);
     ASSERT_NE(queued_job, nullptr);
 
     bool ok = false;
     queued_job(nullptr, &ok, nullptr, 0);
     EXPECT_TRUE(ok);
     EXPECT_TRUE(test_power_preferences["req_ap"]);
-    EXPECT_EQ(restart_calls, 1U);
+    EXPECT_EQ(reboot_requests, 1U);
+    EXPECT_EQ(last_reboot_ownership, REBOOT_NETWORK_TRANSITION);
     EXPECT_FALSE(ota_activity_try_begin());
     ota_activity_finish_network_transition();
 
@@ -161,6 +166,6 @@ TEST(SystemAction, SetupApRestartRunsOnlyInQueuedJob) {
     ok = true;
     queued_job(nullptr, &ok, nullptr, 0);
     EXPECT_FALSE(ok);
-    EXPECT_EQ(restart_calls, 1U);
+    EXPECT_EQ(reboot_requests, 1U);
     ota_activity_finish();
 }

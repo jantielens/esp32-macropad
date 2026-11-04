@@ -91,6 +91,12 @@ function bindingFuzzyScheme(name) {
     return best;
 }
 
+function _bindingCharIsEscaped(value, index) {
+    var slashes = 0;
+    for (var i = index - 1; i >= 0 && value[i] === '\\'; i--) slashes++;
+    return slashes % 2 === 1;
+}
+
 /**
  * Extract [scheme:params] tokens from a binding string,
  * respecting nested brackets.
@@ -119,7 +125,10 @@ function bindingTokenize(value) {
 
         var depth = 1;
         var end = -1;
+        var inQuote = false;
         for (var k = colonPos + 1; k < value.length; k++) {
+            if (value[k] === '"' && !_bindingCharIsEscaped(value, k)) inQuote = !inQuote;
+            if (inQuote) continue;
             if (value[k] === '[') depth++;
             else if (value[k] === ']') { depth--; if (depth === 0) { end = k; break; } }
         }
@@ -154,7 +163,7 @@ function bindingSplitFallback(params) {
     var depth = 0, inQuote = false, lastPipe = -1;
     for (var i = 0; i < params.length; i++) {
         var c = params[i];
-        if (c === '"' && (i === 0 || params[i-1] !== '\\')) inQuote = !inQuote;
+        if (c === '"' && !_bindingCharIsEscaped(params, i)) inQuote = !inQuote;
         if (inQuote) continue;
         if (c === '[') depth++;
         else if (c === ']') depth--;
@@ -173,7 +182,7 @@ function bindingSplitParams(params) {
     var parts = [], depth = 0, inQuote = false, start = 0;
     for (var i = 0; i < params.length; i++) {
         var c = params[i];
-        if (c === '"' && (i === 0 || params[i-1] !== '\\')) inQuote = !inQuote;
+        if (c === '"' && !_bindingCharIsEscaped(params, i)) inQuote = !inQuote;
         if (inQuote) continue;
         if (c === '[') depth++;
         else if (c === ']') depth--;
@@ -243,8 +252,14 @@ function bindingValidateExprSkeleton(exprBody) {
     // Replace nested [...] tokens with placeholder "1"
     var skeleton = '';
     var depth = 0;
+    var quote = false;
     for (var i = 0; i < exprBody.length; i++) {
-        if (exprBody[i] === '[') {
+        if (exprBody[i] === '"' && !_bindingCharIsEscaped(exprBody, i)) {
+            quote = !quote;
+            if (depth === 0) skeleton += exprBody[i];
+        } else if (quote) {
+            if (depth === 0) skeleton += exprBody[i];
+        } else if (exprBody[i] === '[') {
             if (depth === 0) skeleton += '1'; // placeholder for binding value
             depth++;
         } else if (exprBody[i] === ']') {
@@ -264,10 +279,7 @@ function bindingValidateExprSkeleton(exprBody) {
         // string literal
         if (s[pos] === '"') {
             var end = pos + 1;
-            while (end < s.length && s[end] !== '"') {
-                if (s[end] === '\\') end++; // skip escaped char
-                end++;
-            }
+            while (end < s.length && (s[end] !== '"' || _bindingCharIsEscaped(s, end))) end++;
             tokens.push({ type: 'value', val: s.substring(pos, end + 1) });
             pos = end + 1;
             continue;
@@ -453,6 +465,11 @@ function bindingValidateToken(token, opts) {
         return 'Binding parameter is empty';
     }
 
+    if (typeof def.first_param_pattern === 'string' && parts[0].trim() !== '' &&
+        !new RegExp(def.first_param_pattern).test(parts[0].trim())) {
+        return 'Invalid binding parameter';
+    }
+
     if (!def.free_form && Array.isArray(def.keys) && parts[0].trim() !== '' &&
         def.keys.indexOf(parts[0].trim()) === -1) {
         return 'Unknown binding key "' + parts[0].trim() + '"';
@@ -613,7 +630,8 @@ function bindingAttachValidation(input, opts) {
 var _BV_STD = [
     'pad-edit-label-top', 'pad-edit-label-center', 'pad-edit-label-bottom',
     'pad-edit-bg-color', 'pad-edit-fg-color', 'pad-edit-border-color',
-    'pad-edit-border-width', 'pad-edit-corner-radius', 'pad-edit-btn-state'
+    'pad-edit-border-width', 'pad-edit-corner-radius', 'pad-edit-btn-state',
+    'pad-edit-bg-image-url'
 ];
 var _BV_DEF = [
     'pad-def-bg-color', 'pad-def-fg-color', 'pad-def-border-color',
@@ -736,7 +754,7 @@ function bindingValidateExprParams(params) {
         var depth = 0, inQuote = false, lastSemiAt0 = -1;
         for (var i = 0; i < params.length; i++) {
             var c = params[i];
-            if (c === '"' && (i === 0 || params[i-1] !== '\\')) inQuote = !inQuote;
+            if (c === '"' && !_bindingCharIsEscaped(params, i)) inQuote = !inQuote;
             if (inQuote) continue;
             if (c === '[') depth++;
             else if (c === ']') depth--;
@@ -750,7 +768,7 @@ function bindingValidateExprParams(params) {
         inQuote = false; depth = 0;
         for (var j = 0; j < exprBody.length; j++) {
             var ch = exprBody[j];
-            if (ch === '"' && (j === 0 || exprBody[j-1] !== '\\')) inQuote = !inQuote;
+            if (ch === '"' && !_bindingCharIsEscaped(exprBody, j)) inQuote = !inQuote;
             if (inQuote) continue;
             if (ch === '[') depth++;
             else if (ch === ']') depth--;

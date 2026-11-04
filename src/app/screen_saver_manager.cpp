@@ -106,6 +106,7 @@ uint8_t g_fade_to = 0;
 
 uint8_t g_current_brightness = 100;
 uint8_t g_target_brightness = 100;
+std::atomic<uint8_t> g_selected_brightness{100};
 
 // Cross-task signaling (API handlers run on AsyncTCP task)
 portMUX_TYPE g_mux = portMUX_INITIALIZER_UNLOCKED;
@@ -158,10 +159,7 @@ static uint16_t fade_in_ms() {
 }
 
 static uint8_t config_brightness() {
-		if (!g_config) return 100;
-		uint8_t b = g_config->backlight_brightness;
-		if (b > 100) b = 100;
-		return b;
+		return g_selected_brightness.load();
 }
 
 static void apply_brightness(uint8_t brightness) {
@@ -238,6 +236,7 @@ static void request_sleep() {
 
 static void request_brightness(uint8_t brightness) {
 		portENTER_CRITICAL(&g_mux);
+		g_selected_brightness.store(brightness);
 		g_pending_brightness = true;
 		g_pending_brightness_value = brightness;
 		portEXIT_CRITICAL(&g_mux);
@@ -275,9 +274,6 @@ static void handle_pending_requests() {
 		}
 
 		if (doBrightness) {
-				// Update the in-RAM config so wake target stays consistent.
-				if (g_config) g_config->backlight_brightness = brightnessValue;
-
 				if (g_state == ScreenSaverState::Awake) {
 						g_current_brightness = brightnessValue;
 						g_target_brightness = brightnessValue;
@@ -502,6 +498,7 @@ static void poll_touch_activity() {
 
 void screen_saver_manager_init(DeviceConfig* config) {
 		g_config = config;
+		g_selected_brightness.store(config && config->backlight_brightness <= 100 ? config->backlight_brightness : 100);
 		g_state = ScreenSaverState::Awake;
 		g_last_activity_ms = millis();
 		g_prev_enabled = is_enabled();
@@ -590,6 +587,10 @@ void screen_saver_manager_wake() {
 void screen_saver_manager_set_brightness(uint8_t brightness) {
 		if (brightness > 100) brightness = 100;
 		request_brightness(brightness);
+}
+
+uint8_t screen_saver_manager_get_brightness() {
+		return g_selected_brightness.load();
 }
 
 bool screen_saver_manager_is_asleep() {

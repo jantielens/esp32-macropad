@@ -14,6 +14,22 @@
 #include <string.h>
 #endif
 
+#if HAS_IMAGE_FETCH
+static void poll_remote_image_source(ButtonTile& tile) {
+    char url[CONFIG_BG_IMAGE_URL_MAX_LEN];
+    if (!binding_template_resolve_checked(tile.image_url_template, url, sizeof(url)) ||
+        !image_fetch_url_valid(url)) {
+        if (tile.img_dsc.data) {
+            lv_obj_add_flag(tile.bg_image, LV_OBJ_FLAG_HIDDEN);
+            lv_image_set_src(tile.bg_image, nullptr);
+            tile.img_dsc.data = nullptr;
+        }
+        url[0] = '\0';
+    }
+    image_fetch_update_source(tile.image_slot, url);
+}
+#endif
+
 // TAG, perceived_luminance(), rgb_to_lv(), and tap-overlay constants are
 // defined in pad_screen.cpp which is #included before this file in screens.cpp.
 
@@ -93,6 +109,14 @@ void PadScreen::pollMqttBindings(bool refreshPassive) {
         if (tile.widget_type->tick) {
             tile.widget_type->tick(tile.obj, &tile.widget_cfg, &tile.widget_state);
         }
+    }
+#endif
+
+#if HAS_IMAGE_FETCH
+    for (uint8_t index = 0; refreshPassive && index < tileCount; ++index) {
+        ButtonTile& tile = tiles[index];
+        if (!tile.image_url_template || tile.image_slot == IMAGE_SLOT_INVALID) continue;
+        poll_remote_image_source(tile);
     }
 #endif
 
@@ -460,6 +484,7 @@ void PadScreen::pollImageFrames() {
                 dsc.data_size = (uint32_t)fw * fh * 2;
                 dsc.data = (const uint8_t*)pixels;
                 lv_image_set_src(tile.bg_image, &dsc);
+                lv_obj_remove_flag(tile.bg_image, LV_OBJ_FLAG_HIDDEN);
                 lv_obj_invalidate(tile.bg_image);
             }
         }

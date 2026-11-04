@@ -36,7 +36,8 @@ class PortalDevServerTest(unittest.TestCase):
             "caps": {"ble": True, "ble_hid": True, "usb_hid": True, "mqtt": True},
             "mqtt_host": "broker.example.test",
             "ha_url": "http://ha.example.test", "ha_token_set": True,
-            "backlight_brightness": 80, "keyboard_transport": "none",
+            "backlight_brightness": 80, "current_backlight_brightness": 80,
+            "audio_volume": 70, "current_audio_volume": 70, "keyboard_transport": "none",
             "keyboard_active_transport": "none", "device_name": "Mock",
             "wifi_failure_mode": "ap", "ap_password": "",
         }
@@ -81,6 +82,9 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertNotIn("{{", fragment)
         self.assertIn('id="pad-edit-gauge-min"', fragment)
+        self.assertIn('id="pad-edit-slider-axis"', fragment)
+        self.assertIn("Data binding", fragment)
+        self.assertNotIn("pad-slider-preview", fragment)
         self.assertNotIn('id="binding-help-overlay"', fragment)
         status, bundle = self.request("/portal.js", raw=True)
         self.assertEqual(status, 200)
@@ -193,17 +197,22 @@ class PortalDevServerTest(unittest.TestCase):
             validate_editors([{**widgets[0], "type": "mismatched_type"}])
         includes = firmware_includes(widgets)
         for kind, gates in {
-            "mousepad": ["HAS_DISPLAY", "HAS_TOUCH", "HAS_USB_HID"],
+            "mousepad": ["HAS_DISPLAY", "HAS_TOUCH"],
             "camera_preview": ["HAS_DISPLAY", "HAS_CAMERA"],
             "external": ["HAS_DISPLAY", "HAS_NATIVE_EXTENSIONS"],
             "waveform": ["HAS_DISPLAY", "IS_SHUTTER_TESTER"],
         }.items():
             widget = next(widget for widget in widgets if widget["type"] == kind)
             self.assertEqual(widget["gates"], gates)
-            self.assertIn(f"#if {' && '.join(gates)}\n#include \"{widget['source']}\"", includes)
+            condition = " && ".join(gates)
+            if kind == "mousepad":
+                self.assertEqual(widget["any_gates"], ["HAS_USB_HID", "HAS_BLE_HID"])
+                condition += " && (HAS_USB_HID || HAS_BLE_HID)"
+            self.assertIn(f"#if {condition}\n#include \"{widget['source']}\"", includes)
         invalid = [
             widgets + [widgets[0]],
             [{**widgets[0], "gates": ["HAS_MISSPELLED_FLAG"]}],
+            [{**widgets[0], "any_gates": ["HAS_MISSPELLED_FLAG"]}],
             [{**widgets[0], "source": "widgets/missing_widget.cpp"}],
             [{**widgets[0], "portal": {**widgets[0]["portal"], "html": "_missing.html"}}],
             [{**widgets[0], "portal": {"label": "Missing", "js": "portal_widget_table.js"}}],
@@ -805,9 +814,32 @@ class PortalDevServerTest(unittest.TestCase):
         finally:
             self.server.mock_config["mqtt_host"] = previous
 
+    def test_live_levels_save_independently_and_reboot(self):
+        original = dict(self.server.mock_config)
+        try:
+            self.server.mock_config.update(backlight_brightness=80, current_backlight_brightness=80,
+                                           audio_volume=70, current_audio_volume=70)
+            self.assertEqual(self.request("/api/component/display/brightness", "PUT", {"brightness": 45})[0], 200)
+            self.assertEqual(self.request("/api/component/volume/level", "PUT", {"volume": 30})[0], 200)
+            self.assertEqual(self.request("/api/config?no_reboot=1", "POST", {"device_name": "Test"})[0], 200)
+            config = self.request("/api/config")[1]
+            self.assertEqual((config["backlight_brightness"], config["audio_volume"]), (80, 70))
+            self.assertEqual((config["current_backlight_brightness"], config["current_audio_volume"]), (45, 30))
+            self.assertEqual(self.request("/api/config?no_reboot=1", "POST", {"save_current_volume": True})[0], 200)
+            self.assertEqual(self.request("/api/reboot", "POST", {})[0], 200)
+            config = self.request("/api/config")[1]
+            self.assertEqual((config["current_backlight_brightness"], config["current_audio_volume"]), (80, 30))
+            self.assertEqual(self.request("/api/component/display/brightness", "PUT", {"brightness": 55})[0], 200)
+            self.assertEqual(self.request("/api/config?no_reboot=1", "POST", {"save_current_brightness": True})[0], 200)
+            self.assertEqual(self.request("/api/reboot", "POST", {})[0], 200)
+            config = self.request("/api/config")[1]
+            self.assertEqual((config["current_backlight_brightness"], config["current_audio_volume"]), (55, 30))
+        finally:
+            self.server.mock_config = original
+
     def test_display_icons_defaults_and_catalog_routes(self):
         self.assertEqual(self.request("/api/component/display/brightness", "PUT", {"brightness": 0})[0], 200)
-        self.assertEqual(self.request("/api/config")[1]["backlight_brightness"], 0)
+        self.assertEqual(self.request("/api/config")[1]["current_backlight_brightness"], 0)
         self.assertEqual(self.request("/api/component/display/brightness", "PUT", {"brightness": 101})[0], 400)
         self.assertEqual(self.request("/api/component/display/screen", "PUT", {"screen": "pad_4"})[0], 200)
         self.assertEqual(self.server.mock_screen, "pad_4")
@@ -969,6 +1001,16 @@ class PortalDevServerTest(unittest.TestCase):
             expected.update({field: value for field, value in zip(fields, values) if value is not None})
             self.assertEqual(widgets.pop(match[1]), expected)
         self.assertEqual(widgets, {})
+
+    def test_slider_catalog_requires_touch(self):
+        _, touch_info = self.request("/api/info?catalog=1", profile="esp32-p4-lcd4b")
+        slider = next(widget for widget in touch_info["widget_catalog"] if widget["type"] == "slider")
+        self.assertEqual(slider["axis_field"], "widget_slider_axis")
+        self.assertTrue(any(action.get("template_fields", {}).get("data_json", {}).get("max") == 63
+                            for action in touch_info["catalog"] if action["type"] == "ha_service"))
+
+        _, non_touch_info = self.request("/api/info?catalog=1", profile="crowpanel-4.2-interactive")
+        self.assertFalse(any(widget["type"] == "slider" for widget in non_touch_info["widget_catalog"]))
 
     def test_binding_schema_source_parity(self):
         schema = self.server.pad_fixture["binding_schema"]["schemes"]

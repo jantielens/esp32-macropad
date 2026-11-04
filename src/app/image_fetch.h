@@ -49,7 +49,7 @@ typedef int8_t image_slot_t;
 void image_fetch_init();
 
 // Request a new image slot.  Returns a slot_id or IMAGE_SLOT_INVALID on failure.
-//   url         — HTTP(S) URL to fetch (must remain valid / be copied internally)
+//   url         — HTTP(S) URL to fetch; empty reserves an idle slot
 //   user, pass  — optional HTTP Basic Auth credentials (empty string = no auth)
 //   target_w/h  — desired pixel dimensions
 //   interval_ms — 0 = fetch once, >0 = periodic refresh
@@ -59,6 +59,11 @@ image_slot_t image_fetch_request(
     const char* url, const char* user, const char* pass,
     uint16_t target_w, uint16_t target_h, uint32_t interval_ms,
     ImageScaleMode scale_mode = IMAGE_SCALE_COVER, uint16_t letterbox_color = 0);
+
+bool image_fetch_url_valid(const char* url);
+// LVGL owner only. Empty clears buffers; detach the displayed source first.
+// Changed sources discard credentials and retain the displayed frame otherwise.
+bool image_fetch_update_source(image_slot_t slot, const char* url);
 
 // Changes the letterbox padding color and schedules a refresh when needed.
 void image_fetch_set_letterbox_color(image_slot_t slot, uint16_t color);
@@ -82,6 +87,9 @@ void image_fetch_resume();
 // without disturbing per-page pause state.
 void image_fetch_suspend();
 void image_fetch_unsuspend();
+
+void image_fetch_set_history_paused(bool paused);
+bool image_fetch_history_pause_ready();
 
 // Check if a slot has a new frame since last acknowledgement.
 bool image_fetch_has_new_frame(image_slot_t slot);

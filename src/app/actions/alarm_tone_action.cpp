@@ -19,7 +19,7 @@ void describe_alarm_tone(JsonObject& action) {
     describe_alarm_audio(action, false);
 }
 DEFINE_AND_REGISTER_ACTION_TYPE(kAlarmToneActionType, ACTION_TYPE_ALARM_TONE, parse_alarm_tone, serialize_alarm_tone,
-    dispatch_sound_alert, nullptr, describe_alarm_tone, sound_alert_available, validate_alarm_tone,
-    visit_sound_alert_fields, ACTION_EXECUTION_SYNC);
+    dispatch_sound_alert, visit_sound_alert_fields, describe_alarm_tone, sound_alert_available, validate_alarm_tone,
+    ACTION_EXECUTION_SYNC);
 }
 #endif

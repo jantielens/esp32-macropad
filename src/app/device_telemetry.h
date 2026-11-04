@@ -66,7 +66,8 @@ void device_telemetry_mark_async_flush_completed(bool errored);
 void IRAM_ATTR device_telemetry_mark_async_flush_completed_from_isr(bool errored);
 
 inline void device_telemetry_append_fs_health(JsonDocument &doc, const FSHealthStats &fs) {
-	const char* backend = fs.backend == FS_BACKEND_SDMMC ? "sdmmc" : "littlefs";
+	const char* backend = fs.backend == FS_BACKEND_SDMMC ? "sdmmc" :
+	                      fs.backend == FS_BACKEND_SD_SPI ? "sd_spi" : "littlefs";
 	doc["fs_backend"] = backend;
 	doc["fs_mounted"] = fs.storage_mounted;
 	if (fs.storage_mounted && fs.storage_total_bytes > 0) {
@@ -77,7 +78,7 @@ inline void device_telemetry_append_fs_health(JsonDocument &doc, const FSHealthS
 		doc["fs_total_bytes"] = nullptr;
 	}
 
-	if (fs.backend != FS_BACKEND_SDMMC) {
+	if (fs.backend == FS_BACKEND_LITTLEFS) {
 		doc["fs_card_type"] = nullptr;
 		return;
 	}

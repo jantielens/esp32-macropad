@@ -1,9 +1,8 @@
 #include "action_registry.h"
 #include "log_manager.h"
 #include "mouse_hid_buttons.h"
-#if defined(ARDUINO) && HAS_USB_HID
+#if defined(ARDUINO) && (HAS_USB_HID || HAS_BLE_HID)
 #include "mouse_hid.h"
-#include "usb_hid.h"
 #endif
 
 #if HAS_DISPLAY || HAS_BUTTON
@@ -37,20 +36,20 @@ void serialize_mouse_button(const ButtonAction& act, JsonObject action) {
 }
 
 ActionResult dispatch_mouse_button(const ButtonAction& act, const char* label, uint32_t) {
-#if defined(ARDUINO) && HAS_USB_HID
-    if (mouse_hid_click(usb_hid_epoch(), mouse_button_mask(act.payload.mouse_button.button))) {
+#if defined(ARDUINO) && (HAS_USB_HID || HAS_BLE_HID)
+    if (mouse_hid_click(mouse_hid_epoch(), mouse_button_mask(act.payload.mouse_button.button))) {
         return ACTION_COMPLETE;
     }
     LOGW("Action", "%s mouse button: request rejected (disconnected, owned button, queue full, invalid, or OTA)", label);
 #else
     (void)act;
-    LOGW("Action", "%s mouse button: USB HID not compiled", label);
+    LOGW("Action", "%s mouse button: HID not compiled", label);
 #endif
     return ACTION_FAILED;
 }
 
 bool mouse_button_available() {
-    return HAS_USB_HID;
+    return HAS_USB_HID || HAS_BLE_HID;
 }
 
 void describe_mouse_button(JsonObject& action) {
@@ -58,7 +57,7 @@ void describe_mouse_button(JsonObject& action) {
     action["label"] = "Mouse button";
     JsonObject field = action.createNestedArray("fields").createNestedObject();
     field["name"] = "button";
-    field["description"] = "left (default), right, or middle; complete USB click; owned drag buttons reject clicks, other-button clicks preserve the drag";
+    field["description"] = "left (default), right, or middle; complete HID click over the selected USB or BLE transport; owned drag buttons reject clicks, other-button clicks preserve the drag";
     const char* values[] = { "left", "right", "middle" };
     const char* labels[] = { "Left", "Right", "Middle" };
     JsonArray commands = action.createNestedArray("commands");
@@ -75,7 +74,7 @@ void describe_mouse_button(JsonObject& action) {
     editor["command_options"] = true;
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(kMouseButtonActionType, ACTION_TYPE_MOUSE_BUTTON, parse_mouse_button, serialize_mouse_button, dispatch_mouse_button, nullptr, describe_mouse_button, mouse_button_available, validate_mouse_button, nullptr, ACTION_EXECUTION_SYNC);
+DEFINE_AND_REGISTER_ACTION_TYPE(kMouseButtonActionType, ACTION_TYPE_MOUSE_BUTTON, parse_mouse_button, serialize_mouse_button, dispatch_mouse_button, nullptr, describe_mouse_button, mouse_button_available, validate_mouse_button, ACTION_EXECUTION_SYNC);
 
 }
 #endif

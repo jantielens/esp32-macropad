@@ -18,8 +18,8 @@ static bool copy_part(const char* value, size_t len, char* out, size_t out_len) 
     return len < out_len;
 }
 
-static void copy_value(const char* value, char* out, size_t out_len) {
-    copy_part(value, strlen(value), out, out_len);
+static bool copy_value(const char* value, char* out, size_t out_len) {
+    return copy_part(value, strlen(value), out, out_len);
 }
 
 bool binding_value_parse_params(const char* params,
@@ -43,8 +43,7 @@ bool binding_value_parse_params(const char* params,
 bool binding_value_extract_json(const char* payload, const char* path, char* out, size_t out_len) {
     if (!payload || !path || !out || out_len == 0) return false;
     if (path[0] == '.' && path[1] == '\0') {
-        copy_value(payload, out, out_len);
-        return true;
+        return copy_value(payload, out, out_len);
     }
 
     BasicJsonDocument<PsramJsonAllocator> doc(2048);
@@ -68,31 +67,36 @@ bool binding_value_extract_json(const char* payload, const char* path, char* out
         return false;
     }
     if (value.is<const char*>()) {
-        copy_value(value.as<const char*>(), out, out_len);
+        return copy_value(value.as<const char*>(), out, out_len);
     } else if (value.is<float>() || value.is<double>()) {
-        snprintf(out, out_len, "%g", value.as<double>());
+        const int length = snprintf(out, out_len, "%g", value.as<double>());
+        return length >= 0 && (size_t)length < out_len;
     } else if (value.is<bool>()) {
-        copy_value(value.as<bool>() ? "true" : "false", out, out_len);
+        return copy_value(value.as<bool>() ? "true" : "false", out, out_len);
     } else {
         const size_t written = serializeJson(value, out, out_len);
-        if (written == out_len) out[out_len - 1] = '\0';
+        if (written == out_len) {
+            out[out_len - 1] = '\0';
+            return false;
+        }
     }
     return true;
 }
 
 enum class Length { NONE, HH, H, L, LL, J, Z, T, LONG_DOUBLE };
 
-static bool skip_digits(const char*& p) {
+static bool skip_digits(const char*& p, unsigned maximum = INT_MAX) {
     unsigned int value = 0;
     while (*p >= '0' && *p <= '9') {
         const unsigned int digit = *p++ - '0';
         if (value > (INT_MAX - digit) / 10u) return false;
         value = value * 10 + digit;
     }
-    return true;
+    return value <= maximum;
 }
 
-static bool parse_format(const char* format, char& conversion, Length& length) {
+static bool parse_format(const char* format, char& conversion, Length& length,
+                         unsigned max_width = INT_MAX, unsigned max_precision = INT_MAX) {
     bool found = false;
     for (const char* p = format; *p; ++p) {
         if (*p != '%') continue;
@@ -106,10 +110,10 @@ static bool parse_format(const char* format, char& conversion, Length& length) {
             zero |= *p == '0';
             ++p;
         }
-        if (!skip_digits(p)) return false;
+        if (!skip_digits(p, max_width)) return false;
         if (*p == '.') {
             ++p;
-            if (!skip_digits(p)) return false;
+            if (!skip_digits(p, max_precision)) return false;
         }
         length = Length::NONE;
         switch (*p) {
@@ -135,6 +139,14 @@ static bool parse_format(const char* format, char& conversion, Length& length) {
         }
     }
     return found;
+}
+
+bool binding_value_format_valid(const char* format, unsigned max_width, unsigned max_precision,
+                                const char* conversions) {
+    char conversion = '\0';
+    Length length = Length::NONE;
+    return format && conversions && parse_format(format, conversion, length, max_width, max_precision)
+        && strchr(conversions, conversion);
 }
 
 void binding_value_format(const char* raw_value, const char* format, char* out, size_t out_len) {

@@ -68,7 +68,16 @@ struct WidgetType {
     void (*onHide)(WidgetState* state);
     const char* (*validateConfig)(JsonObjectConst button);
     const WidgetPreview* preview;
+    void (*cancelInput)(WidgetState* state);
 };
+
+inline bool widget_owns_input(const WidgetType* type) {
+    return type && type->cancelInput;
+}
+
+inline void widget_cancel_input(const WidgetType* type, WidgetState* state) {
+    if (widget_owns_input(type)) type->cancelInput(state);
+}
 
 const WidgetType* widget_find(const char* type_name);
 void widget_register(const WidgetType* type);

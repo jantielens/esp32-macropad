@@ -13,9 +13,12 @@ capabilities. Check the [hardware reference](../hardware.md) for connections.
 
 ## Set volume and amplifier behavior
 
-Open **Audio > Volume**, choose 0-100%, and **Save**.
+Open **Audio > Volume** and adjust the slider from 0-100%. The change applies
+immediately; select **Save** to retain the current volume across reboots.
 The device volume applies to feedback, alerts, and Music.
-Changes apply without reboot.
+Volume actions and MQTT volume commands change the current volume without
+saving it. Add a **Save volume** action to retain it across reboots. Each save
+action stores only its own level.
 
 When an amplifier section is shown, **Mute amplifier when idle** defaults on
 to reduce hiss. Turning it off keeps playback enabled but can restore idle

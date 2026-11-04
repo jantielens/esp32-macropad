@@ -27,7 +27,7 @@ ActionResult dispatch_brightness(const ButtonAction& act, const char* label, uin
 #if defined(ARDUINO) && HAS_DISPLAY
     const auto& brightness = act.payload.brightness;
     const bool adjust = strcmp(brightness.brightness_mode, "adjust") == 0;
-    int value = adjust ? display_manager_get_backlight_brightness() + lroundf(atof(brightness.brightness_value))
+    int value = adjust ? screen_saver_manager_get_brightness() + lroundf(atof(brightness.brightness_value))
                        : lroundf(atof(brightness.brightness_value));
     value = constrain(value, MIN_USER_BRIGHTNESS, 100);
     screen_saver_manager_set_brightness(value);
@@ -43,16 +43,23 @@ ActionResult dispatch_brightness(const ButtonAction& act, const char* label, uin
 bool brightness_available() { return HAS_DISPLAY; }
 
 const char* validate_brightness(const JsonObjectConst action) {
-    if (!action.containsKey("brightness_mode")) return nullptr;
-    if (!action["brightness_mode"].is<const char*>()) return "action command must be a string";
-    const char* mode = action["brightness_mode"].as<const char*>();
-    return strcmp(mode, "set") == 0 || strcmp(mode, "adjust") == 0
-        ? nullptr : "brightness_mode must be set or adjust";
+    if (action.containsKey("brightness_mode")) {
+        if (!action["brightness_mode"].is<const char*>()) return "action command must be a string";
+        const char* mode = action["brightness_mode"].as<const char*>();
+        if (strcmp(mode, "set") != 0 && strcmp(mode, "adjust") != 0)
+            return "brightness_mode must be set or adjust";
+    }
+    if (action.containsKey("brightness_value")) {
+        if (!action["brightness_value"].is<const char*>()) return "brightness_value must be a string";
+        if (strlen(action["brightness_value"].as<const char*>()) >= sizeof(((BrightnessPayload*)nullptr)->brightness_value))
+            return "brightness_value too long";
+    }
+    return nullptr;
 }
 
-bool visit_brightness_fields(ButtonAction& act, ActionBindableFieldVisitor visitor, void* context) {
-    return !act.payload.brightness.brightness_value[0] || visitor(act.payload.brightness.brightness_value,
-        sizeof(act.payload.brightness.brightness_value), false, context);
+bool visit_brightness_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {
+    return action_visit_field(visitor, context, "brightness_value", act.payload.brightness.brightness_value,
+        ACTION_FIELD_BINDING | ACTION_FIELD_EVENT);
 }
 
 void describe_brightness(JsonObject& action) {
@@ -65,10 +72,10 @@ void describe_brightness(JsonObject& action) {
     JsonObject value = fields.createNestedObject(); value["name"] = "brightness_value"; value["description"] = "percentage for set; signed delta for adjust";
     JsonArray editor_fields = action.createNestedArray("editor_fields");
     JsonObject editor_mode = editor_fields.createNestedObject(); editor_mode["name"] = "brightness_mode"; editor_mode["label"] = "Command"; editor_mode["type"] = "select"; editor_mode["command_options"] = true;
-    JsonObject editor_value = editor_fields.createNestedObject(); editor_value["name"] = "brightness_value"; editor_value["label"] = "Value (%)"; editor_value["type"] = "text"; editor_value["bindable"] = true;
+    JsonObject editor_value = editor_fields.createNestedObject(); editor_value["name"] = "brightness_value"; editor_value["label"] = "Value (%)"; editor_value["type"] = "text"; editor_value["bindable"] = true; editor_value["max"] = CONFIG_VALUE_MAX_LEN - 1;
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(kBrightnessActionType, ACTION_TYPE_BRIGHTNESS, parse_brightness, serialize_brightness, dispatch_brightness, nullptr, describe_brightness, brightness_available, validate_brightness, visit_brightness_fields, ACTION_EXECUTION_SYNC);
+DEFINE_AND_REGISTER_ACTION_TYPE(kBrightnessActionType, ACTION_TYPE_BRIGHTNESS, parse_brightness, serialize_brightness, dispatch_brightness, visit_brightness_fields, describe_brightness, brightness_available, validate_brightness, ACTION_EXECUTION_SYNC);
 
 } // namespace
 

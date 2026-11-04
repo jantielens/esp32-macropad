@@ -1,6 +1,6 @@
 #include "widget.h"
 
-#if HAS_DISPLAY && HAS_TOUCH && HAS_USB_HID
+#if HAS_DISPLAY && HAS_TOUCH && (HAS_USB_HID || HAS_BLE_HID)
 
 #include "mousepad_input.h"
 #include "mouse_surface_touch.h"
@@ -303,14 +303,14 @@ static void mousepad_describe(JsonObject& out) {
     back_size["name"] = "widget_mousepad_back_size";
     back_size["type"] = "number";
     back_size["desc"] = "Back button side length, integer 1-512 device pixels (default 44); constrained to fit the mousepad";
-    out["note"] = "USB mousepad: one finger moves; a short stationary tap sends left click. "
+    out["note"] = "HID mousepad: one finger moves; a short stationary tap sends left click. "
                   "A stationary second tap double-clicks; movement after a tap never holds a mouse button. "
                   "Two contacts starting in this mousepad scroll "
                   "by midpoint with dominant-axis lock (ties vertical); lift either to stop and lift all before restarting. "
                   "Optional bottom button zones hold left/right on touch until lift; pointer contacts can lift and restart while a zone is held. "
                   "Contact roles are fixed at touchdown; scrolling requires two contacts above the button strip. "
                   "Only one mouse button can be held at a time. "
-                  "Requires USB keyboard transport; consumes button actions and pad swipes. "
+                  "Requires USB or BLE HID transport; consumes button actions and pad swipes. "
                   "Single-contact drivers support movement, taps, and zone clicks, but not dragging; use scrollpad for one-finger scrolling. "
                   "No BLE mouse, drag lock, pinch, or multi-finger clicks.";
 }

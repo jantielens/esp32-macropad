@@ -1,5 +1,5 @@
-// Coffee-scale ActionTypeDef — parse, serialize, dispatch and a value_field
-// accessor for the "scale" action type. Registered via
+// Coffee-scale ActionTypeDef: parse, serialize, dispatch and named fields
+// for the "scale" action type. Registered via
 // REGISTER_ACTION_TYPE so action_dispatch.cpp / action_parse.cpp do not need
 // to know about the scale arm at compile time.
 //
@@ -37,10 +37,9 @@ static void scale_serialize(const ButtonAction& act, JsonObject obj) {
 // preset) and the numeric rocker {step} target for cal_weight. Expose it so
 // shared code drives binding resolution + {step} substitution. `command` is
 // structural and never bindable.
-static char* scale_value_field(ButtonAction& act, size_t* out_size) {
+static bool scale_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {
     ScalePayload& p = scale_payload(act);
-    *out_size = sizeof(p.value);
-    return p.value;
+    return action_visit_field(visitor, context, "scale_value", p.value);
 }
 
 static void scale_describe(JsonObject& out) {
@@ -102,6 +101,6 @@ static ActionResult scale_dispatch(const ButtonAction& /*act*/, const char* labe
 }
 #endif
 
-DEFINE_AND_REGISTER_ACTION_TYPE(scale_action_type, /* type_name   */ ACTION_TYPE_SCALE, /* parse       */ scale_parse, /* serialize   */ scale_serialize, /* dispatch    */ scale_dispatch, /* value_field */ scale_value_field, /* describe    */ scale_describe, nullptr, nullptr, nullptr, ACTION_EXECUTION_SYNC);
+DEFINE_AND_REGISTER_ACTION_TYPE(scale_action_type, ACTION_TYPE_SCALE, scale_parse, scale_serialize, scale_dispatch, scale_fields, scale_describe, nullptr, nullptr, ACTION_EXECUTION_SYNC);
 
 #endif // HAS_DISPLAY && IS_COFFEE_SCALE

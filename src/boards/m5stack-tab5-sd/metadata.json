@@ -1,0 +1,20 @@
+{
+  "device_class": "macropad",
+  "board_label": "M5Stack Tab5 SD",
+  "description": "M5Stack Tab5 with ST7121 or ST7123 display and required microSD primary storage. Hardware validation pending; older ILI9881C/GT911 panels are not supported.",
+  "chip_family": "ESP32-P4",
+  "flash_mb": 16,
+  "psram_mb": 32,
+  "capabilities": ["mcp", "ble_hid", "image_fetch", "audio", "extensions", "sd_card"],
+  "wireless": {
+    "wifi": true,
+    "ble": true,
+    "notes": "Wi-Fi and BLE via ESP-Hosted ESP32-C6 over SDIO; hardware validation pending"
+  },
+  "display": {
+    "size": "5.0\"",
+    "resolution": "720x1280",
+    "type": "MIPI-DSI",
+    "touch": true
+  }
+}

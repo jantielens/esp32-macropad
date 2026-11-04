@@ -149,6 +149,8 @@ TEST_F(ToggleWidget, TimeoutWrapFailureFastConfirmationAndNavigationDeletion) {
 TEST_F(ToggleWidget, ConfigDefaultsValidationAndBoundedFitting) {
     JsonObject settings = json.to<JsonObject>();
     EXPECT_EQ(toggle_validate(settings), nullptr);
+    toggle_parse(settings, config.data);
+    EXPECT_EQ(reinterpret_cast<ToggleConfig*>(config.data)->width_pct, 50);
     settings["widget_toggle_on_value"] = " OFF ";
     EXPECT_NE(toggle_validate(settings), nullptr);
     settings["widget_toggle_on_value"] = std::string(64, 'x');
@@ -195,7 +197,7 @@ TEST_F(ToggleWidget, LabelsAndExistingIconReserveSwitchSpace) {
     EXPECT_LT(switch_bounds.y2, bottom_bounds.y1);
 }
 
-TEST_F(ToggleWidget, AvailableSpaceFitsBetweenOuterLabelsAndScalesFromMaximum) {
+TEST_F(ToggleWidget, UnlabelledSwitchUsesFullWidthBetweenOuterLabels) {
     for (unsigned labels = 0; labels < 4; ++labels) {
         lv_obj_clean(button);
         lv_obj_t* top = nullptr;
@@ -223,9 +225,8 @@ TEST_F(ToggleWidget, AvailableSpaceFitsBetweenOuterLabelsAndScalesFromMaximum) {
         reinterpret_cast<ToggleConfig*>(config.data)->width_pct = 60;
         toggle_tick(button, &config, &runtime);
         lv_obj_update_layout(button);
-        int smaller = maximum * 60 / 100;
-        smaller -= smaller % 2;
-        EXPECT_EQ(lv_obj_get_width(state().control), smaller);
+        EXPECT_EQ(lv_obj_get_width(state().control), maximum);
+        EXPECT_NEAR(lv_obj_get_x(state().control), (lv_obj_get_content_width(button) - maximum) / 2, 1);
     }
 }
 
@@ -241,12 +242,52 @@ TEST_F(ToggleWidget, CenterLabelSharesRowAndBoundTextRelayoutsWithoutActions) {
     EXPECT_NEAR(lv_obj_get_y(center) + lv_obj_get_height(center) / 2,
                 lv_obj_get_y(state().control) + lv_obj_get_height(state().control) / 2, 1);
     const int first_width = lv_obj_get_width(state().control);
+    const int first_x = lv_obj_get_x(state().control);
+    int expected_width = lv_obj_get_content_width(button) * 50 / 100;
+    expected_width -= expected_width % 2;
+    EXPECT_EQ(first_width, expected_width);
     lv_label_set_text(center, "Comfort heating");
     toggle_tick(button, &config, &runtime);
     lv_obj_update_layout(button);
-    EXPECT_LT(lv_obj_get_width(state().control), first_width);
+    EXPECT_EQ(lv_obj_get_width(state().control), first_width);
+    EXPECT_EQ(lv_obj_get_x(state().control), first_x);
     EXPECT_LT(lv_obj_get_x(center) + lv_obj_get_width(center), lv_obj_get_x(state().control));
+    lv_label_set_text(center, "");
+    toggle_tick(button, &config, &runtime);
+    lv_obj_update_layout(button);
+    EXPECT_EQ(lv_obj_get_width(state().control), first_width);
+    EXPECT_EQ(lv_obj_get_x(state().control), first_x);
+    reinterpret_cast<ToggleConfig*>(config.data)->width_pct = 25;
+    toggle_tick(button, &config, &runtime);
+    lv_obj_update_layout(button);
+    int narrower_width = lv_obj_get_content_width(button) * 25 / 100;
+    narrower_width -= narrower_width % 2;
+    EXPECT_EQ(lv_obj_get_width(state().control), narrower_width);
+    EXPECT_EQ(lv_obj_get_x(state().control) + narrower_width, lv_obj_get_content_width(button));
     EXPECT_EQ(dispatches, 0u);
+}
+
+TEST_F(ToggleWidget, FullWidthSwitchHidesCrowdedContentAndRestoresItWhenSpaceReturns) {
+    lv_obj_set_size(button, 200, 180);
+    toggle_parse(json.to<JsonObject>(), config.data);
+    auto* settings = reinterpret_cast<ToggleConfig*>(config.data);
+    settings->width_pct = 100;
+    lv_obj_t* center = lv_label_create(button);
+    lv_label_set_text(center, "Bureau");
+    lv_obj_t* icon = lv_obj_create(button);
+    lv_obj_set_size(icon, 24, 24);
+    toggle_create(button, &config, &source, nullptr, nullptr, icon, center, &runtime);
+    lv_obj_update_layout(button);
+    EXPECT_TRUE(lv_obj_has_flag(center, LV_OBJ_FLAG_HIDDEN));
+    EXPECT_TRUE(lv_obj_has_flag(icon, LV_OBJ_FLAG_HIDDEN));
+    EXPECT_NEAR(lv_obj_get_width(state().control), lv_obj_get_content_width(button), 1);
+    settings->width_pct = 40;
+    toggle_tick(button, &config, &runtime);
+    lv_obj_update_layout(button);
+    EXPECT_FALSE(lv_obj_has_flag(center, LV_OBJ_FLAG_HIDDEN));
+    EXPECT_FALSE(lv_obj_has_flag(icon, LV_OBJ_FLAG_HIDDEN));
+    EXPECT_LT(lv_obj_get_x(icon) + lv_obj_get_width(icon), lv_obj_get_x(center));
+    EXPECT_LT(lv_obj_get_x(center) + lv_obj_get_width(center), lv_obj_get_x(state().control));
 }
 
 TEST_F(ToggleWidget, IconPositionsAndGroupOffsetDoNotOverlapCenterLabel) {

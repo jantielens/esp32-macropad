@@ -1,7 +1,7 @@
 #include "action_registry.h"
 #include "gamepad_hid_state.h"
 #include "log_manager.h"
-#if defined(ARDUINO) && HAS_USB_HID
+#if defined(ARDUINO) && (HAS_USB_HID || HAS_BLE_HID)
 #include "gamepad_hid.h"
 #endif
 
@@ -59,7 +59,7 @@ void serialize_gamepad(const ButtonAction& act, JsonObject action) {
 }
 
 ActionResult dispatch_gamepad(const ButtonAction& act, const char* label, uint32_t token) {
-#if defined(ARDUINO) && HAS_USB_HID
+#if defined(ARDUINO) && (HAS_USB_HID || HAS_BLE_HID)
     const GamepadPayload& payload = act.payload.gamepad;
     const GamepadControl control{static_cast<GamepadControlKind>(payload.control), payload.index};
     if (payload.operation == 0) {
@@ -71,17 +71,17 @@ ActionResult dispatch_gamepad(const ButtonAction& act, const char* label, uint32
     (void)act;
     (void)token;
 #endif
-    LOGW("Action", "%s gamepad: rejected (USB unavailable, invalid, held target, or capacity exhausted)", label);
+    LOGW("Action", "%s gamepad: rejected (HID unavailable, invalid, held target, or capacity exhausted)", label);
     return ACTION_FAILED;
 }
 
-bool gamepad_available() { return HAS_USB_HID; }
+bool gamepad_available() { return HAS_USB_HID || HAS_BLE_HID; }
 
 void describe_gamepad(JsonObject& action) {
     action["group"] = "Gamepad";
     action["label"] = "Gamepad";
     action["button_count"] = gamepad_protocol::button_count;
-    action["note"] = "USB keyboard mode required. tap waits for submitted press, 50 ms hold, and submitted release; held targets reject taps. down/up share one standalone latch per control, independent of widget holds. Pad exit, replacement, disconnect, and OTA clear holds.";
+    action["note"] = "USB or BLE HID transport required. tap waits for submitted press, 50 ms hold, and submitted release; held targets reject taps. down/up share one standalone latch per control, independent of widget holds. Pad exit, replacement, disconnect, and OTA clear holds.";
     JsonArray fields = action.createNestedArray("fields");
     const char* names[] = {"control", "button", "direction", "trigger", "operation"};
     const char* descriptions[] = {"button (default), hat, trigger", "Button number; button controls only (default 1)",
@@ -97,6 +97,6 @@ void describe_gamepad(JsonObject& action) {
     }
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(kGamepadActionType, ACTION_TYPE_GAMEPAD, parse_gamepad, serialize_gamepad, dispatch_gamepad, nullptr, describe_gamepad, gamepad_available, validate_gamepad, nullptr, ACTION_EXECUTION_PAUSABLE);
+DEFINE_AND_REGISTER_ACTION_TYPE(kGamepadActionType, ACTION_TYPE_GAMEPAD, parse_gamepad, serialize_gamepad, dispatch_gamepad, nullptr, describe_gamepad, gamepad_available, validate_gamepad, ACTION_EXECUTION_PAUSABLE);
 }
 #endif

@@ -1,0 +1,14 @@
+#ifndef RUNTIME_VARIABLE_ACTION_HEADLESS_BOARD_CONFIG_H
+#define RUNTIME_VARIABLE_ACTION_HEADLESS_BOARD_CONFIG_H
+
+#include "../board_config.h"
+
+#undef HAS_DISPLAY
+#define HAS_DISPLAY 0
+#define HAS_BUTTON 1
+#undef HAS_MQTT
+#define HAS_MQTT 0
+#undef HAS_HA_LIVE
+#define HAS_HA_LIVE 0
+
+#endif

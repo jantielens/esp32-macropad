@@ -7,6 +7,7 @@
 #include "log_manager.h"
 #include "net_activity.h"
 #include "ota_activity.h"
+#include "reboot_service.h"
 #include "psram_json_allocator.h"
 #include "web_portal_json.h"
 
@@ -247,9 +248,7 @@ static void firmware_update_task(void *pv) {
 
 		LOGI("OTA", "Update complete, rebooting");
 
-		// Give the HTTP response/polling a moment to observe completion.
-		delay(300);
-		ESP.restart();
+		reboot_request(300, REBOOT_OTA_COMPLETE);
 		vTaskDelete(nullptr);
 }
 

@@ -10,7 +10,7 @@
 
 #include <atomic>
 
-#if HAS_DISPLAY && HAS_USB_HID
+#if HAS_DISPLAY && (HAS_USB_HID || HAS_BLE_HID)
 #include "widgets/gamepad_touch_router.h"
 static GamepadTouchRouter g_gamepad_touch_router;
 #endif
@@ -34,6 +34,8 @@ static GamepadTouchRouter g_gamepad_touch_router;
 #include "drivers/wire_cst820b_touch_driver.h"
 #elif TOUCH_DRIVER == TOUCH_DRIVER_GT911
 #include "drivers/gt911_touch_driver.h"
+#elif TOUCH_DRIVER == TOUCH_DRIVER_ST7123
+#include "drivers/st7123_touch_driver.h"
 #elif TOUCH_DRIVER == TOUCH_DRIVER_INKPLATE6FLICK
 #include "drivers/inkplate6flick_touch_driver.h"
 #endif
@@ -190,7 +192,7 @@ void TouchManager::readCallback(lv_indev_t* indev, lv_indev_data_t* data) {
 		if (release_guarded && physical.status == TouchReadStatus::Fresh && !physical.count) {
 				LOGT("Touch", "Release guard cleared (suppressed=%u)", unsigned(suppressed));
 				g_require_release = false;
-				#if HAS_DISPLAY && HAS_USB_HID
+				#if HAS_DISPLAY && (HAS_USB_HID || HAS_BLE_HID)
 				g_gamepad_touch_router.update(physical, false, gamepad_hid_generation(), mouse_hid_generation());
 				#endif
 		}
@@ -226,7 +228,7 @@ void TouchManager::readCallback(lv_indev_t* indev, lv_indev_data_t* data) {
 		}
 
 		TouchSample navigation;
-		#if HAS_DISPLAY && HAS_USB_HID
+		#if HAS_DISPLAY && (HAS_USB_HID || HAS_BLE_HID)
 		const uint32_t gamepad_generation = gamepad_hid_generation();
 		const uint32_t mouse_generation = mouse_hid_generation();
 		if (device_dialog_active()) {
@@ -304,6 +306,8 @@ void TouchManager::init(uint8_t rotation) {
 		driver = new Wire_CST820B_TouchDriver(board_cst820b_config());
 		#elif TOUCH_DRIVER == TOUCH_DRIVER_GT911
 		driver = new GT911_TouchDriver();
+		#elif TOUCH_DRIVER == TOUCH_DRIVER_ST7123
+		driver = new ST7123TouchDriver();
 		#elif TOUCH_DRIVER == TOUCH_DRIVER_INKPLATE6FLICK
 		driver = new Inkplate6Flick_TouchDriver();
 		#else
@@ -397,7 +401,7 @@ void touch_manager_cancel_physical_input() {
 				LOGT("Touch", "Cancel: release_guard=%u physical=%u lvgl_pressed=%u",
 						unsigned(require_release), unsigned(physical.pressed), unsigned(g_prev_lvgl_pressed));
 		}
-		#if HAS_DISPLAY && HAS_USB_HID
+		#if HAS_DISPLAY && (HAS_USB_HID || HAS_BLE_HID)
 		g_gamepad_touch_router.cancel(require_release);
 		if (auto* mouse = MouseSurfaceTouch::session()) mouse->cancel();
 		#endif
@@ -408,7 +412,7 @@ void touch_manager_cancel_physical_input() {
 
 	#if HAS_DISPLAY
 	void touch_manager_cancel_blocked_input(bool (*blocked)(lv_obj_t*, const lv_point_t&, void*), void* context) {
-	#if HAS_USB_HID
+	#if HAS_USB_HID || HAS_BLE_HID
 			if (g_gamepad_touch_router.has_blocked_input(blocked, context)) touch_manager_cancel_physical_input();
 	#else
 			(void)blocked;

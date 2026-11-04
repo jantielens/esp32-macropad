@@ -24,15 +24,19 @@ static uint16_t raw_hours = 0;
 #if HAS_HA_HISTORY
 static bool fetch_busy = false;
 static unsigned fetch_requests = 0;
+static bool fetch_accept = true;
+static unsigned startup_finishes = 0;
 static uint64_t fetch_end_bucket = 0;
 static uint16_t fetch_raw_hours = 0;
 
 void ha_stats_init() {}
+void ha_stats_finish_startup_hydration() { ++startup_finishes; }
 bool ha_stats_deliver() { return false; }
 bool ha_stats_busy() { return fetch_busy; }
 uint32_t ha_stats_backoff_remaining_ms() { return 0; }
 bool ha_stats_request(data_stream_handle_t, uint32_t, const char*, uint32_t,
                       uint16_t, uint64_t end_bucket, uint16_t hours) {
+    if (!fetch_accept) return false;
     fetch_busy = true;
     fetch_requests++;
     fetch_end_bucket = end_bucket;
@@ -101,6 +105,8 @@ protected:
         binding_values = {{"[test:reading]", "100"}};
         fetch_busy = false;
         fetch_requests = 0;
+        fetch_accept = true;
+        startup_finishes = 0;
         history_entity = "sensor.test";
         raw_hours = 0;
         pad_snapshot.button_count = 1;
@@ -160,6 +166,7 @@ TEST_F(DataStreamHistory, RetryRepairsFullHistoryWithoutOverwritingLiveSamples) 
     fetch_busy = false;
     data_stream_poll();
     EXPECT_EQ(fetch_requests, 2u);
+    EXPECT_EQ(startup_finishes, 1u);
 }
 
 TEST_F(DataStreamHistory, RawLimitParticipatesInIdentityAndWorkerRequest) {
@@ -177,6 +184,38 @@ TEST_F(DataStreamHistory, RawLimitParticipatesInIdentityAndWorkerRequest) {
     fetch_busy = false;
     data_stream_poll();
     EXPECT_EQ(fetch_raw_hours, 24);
+}
+
+TEST_F(DataStreamHistory, StartupBatchStaysOpenBetweenStreams) {
+    pad_snapshot.button_count = 2;
+    pad_snapshot.widgets[1] = pad_snapshot.widgets[0];
+    strlcpy(pad_snapshot.widgets[1].data_binding[0], "[test:other]",
+            sizeof(pad_snapshot.widgets[1].data_binding[0]));
+    binding_values["[test:other]"] = "200";
+    data_stream_rebuild();
+    const auto other = data_stream_find("[test:other]", 4, 4, history_entity);
+    ASSERT_NE(other, DATA_STREAM_INVALID);
+    data_stream_poll();
+    const float history[] = {10, 20, 30, 40};
+    ASSERT_TRUE(data_stream_apply_history(handle, uid, fetch_end_bucket, history, 4));
+    fetch_busy = false;
+    data_stream_poll();
+    EXPECT_EQ(fetch_requests, 2u);
+    EXPECT_EQ(startup_finishes, 0u);
+    ASSERT_TRUE(data_stream_apply_history(other, data_stream_uid(other), fetch_end_bucket, history, 4));
+    fetch_busy = false;
+    data_stream_poll();
+    EXPECT_EQ(startup_finishes, 1u);
+}
+
+TEST_F(DataStreamHistory, DeferredRequestEndsStartupBatchWithoutChargingAttempt) {
+    fetch_accept = false;
+    data_stream_poll();
+    EXPECT_EQ(startup_finishes, 1u);
+    EXPECT_EQ(fetch_requests, 0u);
+    fetch_accept = true;
+    data_stream_poll();
+    EXPECT_EQ(fetch_requests, 1u);
 }
 
 TEST_F(DataStreamHistory, RetryUpdatesValuesAndGapsEvenWhenCountDoesNotChange) {
@@ -207,6 +246,7 @@ TEST_F(DataStreamHistory, RetriesStopAtBudgetAndKeepUsablePartialHistory) {
     data_stream_poll();
     data_stream_poll();
     EXPECT_EQ(fetch_requests, 3u);
+    EXPECT_GT(startup_finishes, 0u);
     const auto state = snapshot();
     EXPECT_FLOAT_EQ(at(state, 0), 41);
     EXPECT_FLOAT_EQ(at(state, 1), 100);

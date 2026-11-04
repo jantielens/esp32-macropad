@@ -397,13 +397,19 @@ That manifest aggregates built-in actions only. Device-class action modules
 remain with their owner and are compiled by the existing feature-gated
 device-class aggregator.
 
-If your payload follows the `{ command, value }` convention and `value` is
-bindable (`[scheme:...]` tokens) and/or the numeric rocker's `{step}` target,
-expose it via the `value_field` accessor on `ActionTypeDef`. Shared code then
-drives binding resolution, the `[` binding scan, and `{step}` substitution
-generically against that one pointer — you do not write a per-type
-`resolve_bindings` / `has_binding` / `substitute_step`. Types with no single
-value field (e.g. shelly's `host`/`relay`/`on`) leave `value_field` `nullptr`.
+Declare eligible text buffers once through `ActionTypeDef::fields`, using
+`action_visit_field(visitor, context, "persisted_field_name", payload.field)`.
+The helper infers capacity from the array. Flags independently enable
+`ACTION_FIELD_BINDING`, `ACTION_FIELD_EVENT`, and binding-overflow rejection
+(`ACTION_FIELD_REJECT_OVERFLOW`); the default enables all three. Keep commands
+and other fixed properties out of the visitor. Use the persisted JSON field
+name, not an internal alias.
+
+Shared code uses this declaration for live-binding resolution and discovery,
+bounded `{step}` / `{value}` substitution, authoring validation, and catalog
+`template_fields` metadata. Event overflow always rejects, regardless of the
+binding-overflow policy. Types with no eligible text fields leave `fields`
+`nullptr`. Do not add per-type token substitution or a second field registry.
 
 **Size budget**: the default `ACTION_PAYLOAD_DEVICE_CLASS_BYTES` is 96 B.
 Today the dominant arm is `NotifyPayload` at 394 B, so the device-class slot

@@ -91,7 +91,7 @@ context.padCollectUsedColors = () => ['#FFFFFF', '[expr:1]'];
 context.padColorPopoverOpen({}, { value: '#FFFFFF', dataset: { allowBindings: 'false' }, closest() { return null; } });
 assert.strictEqual(dialog.pop.parentNode, body);
 assert.strictEqual(elements['#cp-gen'].style.display, 'none');
-assert.strictEqual(elements['#cp-fx'].style.display, 'none');
+assert.strictEqual(elements['#cp-fx'].hidden, true);
 assert.strictEqual(elements['#cp-input-label'].textContent, 'Color');
 assert.strictEqual(elements['#cp-input'].placeholder, '#RRGGBB');
 assert.strictEqual(elements['#cp-recent-grid'].children.length, 1);
@@ -100,7 +100,7 @@ context.padColorPopoverOpen({}, { value: '[expr:1]', dataset: {}, closest() { re
 assert.strictEqual(dialog.pop.parentNode, modalHost, 'The shared picker must be interactive inside a native modal');
 assert.strictEqual(dialog.bd.parentNode, modalHost);
 assert.strictEqual(elements['#cp-gen'].style.display, '');
-assert.strictEqual(elements['#cp-fx'].style.display, '');
+assert.strictEqual(elements['#cp-fx'].hidden, false);
 assert.strictEqual(elements['#cp-input-label'].textContent, 'Color or expression');
 assert.strictEqual(elements['#cp-recent-grid'].children.length, 2);
 const waveform = fs.readFileSync('src/app/web/_widget_waveform.html', 'utf8');

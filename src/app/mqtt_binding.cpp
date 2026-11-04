@@ -17,8 +17,9 @@ static BindingResolverStatus mqtt_binding_resolve(const char* params, char* out,
     char path[CONFIG_JSON_PATH_MAX_LEN];
     char fmt[CONFIG_FORMAT_MAX_LEN];
 
-    // MQTT historically accepts truncated parameters.
-    (void)binding_value_parse_params(params, topic, sizeof(topic), path, sizeof(path), fmt, sizeof(fmt));
+    if (!binding_value_parse_params(params, topic, sizeof(topic), path, sizeof(path), fmt, sizeof(fmt))) {
+        return BINDING_RESOLVER_UNAVAILABLE;
+    }
 
     if (!topic[0]) {
         strlcpy(out, "ERR:no topic", out_len);
@@ -32,10 +33,11 @@ static BindingResolverStatus mqtt_binding_resolve(const char* params, char* out,
     }
 
     const char* jp = (path[0]) ? path : ".";
-    char extracted[128];
+    char extracted[BINDING_TEMPLATE_MAX_LEN + 1];
     if (!binding_value_extract_json(s_payload, jp, extracted, sizeof(extracted))) {
         strlcpy(extracted, truncated ? "ERR:too big" : s_payload, sizeof(extracted));
     }
+    if (truncated || strlen(extracted) == sizeof(extracted) - 1) return BINDING_RESOLVER_UNAVAILABLE;
 
     if (fmt[0]) {
         binding_value_format(extracted, fmt, out, out_len);

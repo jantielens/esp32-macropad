@@ -1,5 +1,5 @@
-// Shutter Tester ActionTypeDef — parse, serialize, dispatch and a value_field
-// accessor for the "shutter" action type. Registered via
+// Shutter Tester ActionTypeDef: parse, serialize, dispatch and named fields
+// for the "shutter" action type. Registered via
 // REGISTER_ACTION_TYPE so action_dispatch.cpp / action_parse.cpp do not need
 // to know about the shutter arm at compile time (beyond the union arm itself,
 // which must live in pad_config.h because ActionPayload is a union).
@@ -37,10 +37,9 @@ static void shutter_serialize(const ButtonAction& act, JsonObject obj) {
 // commands like guide_start ([list:shutter_tests.selected]) and sess_start
 // (camera id from a list). Expose it so shared code drives binding resolution
 // + {step} substitution. `command` is structural and never bindable.
-static char* shutter_value_field(ButtonAction& act, size_t* out_size) {
+static bool shutter_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {
     ShutterPayload& p = shutter_payload(act);
-    *out_size = sizeof(p.value);
-    return p.value;
+    return action_visit_field(visitor, context, "shutter_value", p.value);
 }
 
 static void shutter_describe(JsonObject& out) {
@@ -148,6 +147,6 @@ static ActionResult shutter_dispatch(const ButtonAction& act, const char* label,
     return ACTION_COMPLETE;
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(shutter_action_type, /* type_name   */ ACTION_TYPE_SHUTTER, /* parse       */ shutter_parse, /* serialize   */ shutter_serialize, /* dispatch    */ shutter_dispatch, /* value_field */ shutter_value_field, /* describe    */ shutter_describe, nullptr, nullptr, nullptr, ACTION_EXECUTION_SYNC);
+DEFINE_AND_REGISTER_ACTION_TYPE(shutter_action_type, ACTION_TYPE_SHUTTER, shutter_parse, shutter_serialize, shutter_dispatch, shutter_fields, shutter_describe, nullptr, nullptr, ACTION_EXECUTION_SYNC);
 
 #endif // HAS_DISPLAY && IS_SHUTTER_TESTER

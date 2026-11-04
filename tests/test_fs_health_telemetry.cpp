@@ -42,6 +42,13 @@ int main() {
     assert(mqtt_doc["fs_total_bytes"] == 78);
     assert_string(mqtt_doc, "fs_card_type", "sdhc");
 
+    FSHealthStats sd_spi = sdmmc;
+    sd_spi.backend = FS_BACKEND_SD_SPI;
+    JsonDocument spi_doc;
+    device_telemetry_append_fs_health(spi_doc, sd_spi);
+    assert_string(spi_doc, "fs_backend", "sd_spi");
+    assert_string(spi_doc, "fs_card_type", "sdhc");
+
     FSHealthStats unmounted_sdmmc = {
         .backend = FS_BACKEND_SDMMC,
         .card_type = FS_CARD_TYPE_NONE,

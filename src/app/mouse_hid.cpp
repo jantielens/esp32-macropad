@@ -1,10 +1,16 @@
 #include "mouse_hid.h"
 
-#if HAS_USB_HID
+#if HAS_USB_HID || HAS_BLE_HID
 
 #include "mouse_hid_state.h"
 #include "ota_activity.h"
+#include "keyboard_hid.h"
+#if HAS_USB_HID
 #include "usb_hid.h"
+#endif
+#if HAS_BLE_HID
+#include "ble_hid.h"
+#endif
 #include <Arduino.h>
 #include <freertos/FreeRTOS.h>
 
@@ -14,15 +20,18 @@ portMUX_TYPE mouse_mutex = portMUX_INITIALIZER_UNLOCKED;
 uint32_t mouse_epoch = 0;
 uint32_t mouse_ota_epoch = 0;
 bool mouse_was_ready = false;
+KeyboardTransport mouse_transport = KeyboardTransport::None;
 
 void sync_mouse_epoch() {
-    const uint32_t live_epoch = usb_hid_epoch();
+    const uint32_t live_epoch = mouse_hid_epoch();
+    const KeyboardTransport transport = keyboard_hid_transport();
     const uint32_t live_ota_epoch = ota_activity_epoch();
     const bool ready = mouse_hid_is_ready();
-    if (mouse_epoch != live_epoch || mouse_ota_epoch != live_ota_epoch ||
+    if (mouse_transport != transport || mouse_epoch != live_epoch || mouse_ota_epoch != live_ota_epoch ||
         (!ready && mouse_was_ready)) {
         mouse_state.reset();
         mouse_epoch = live_epoch;
+        mouse_transport = transport;
         mouse_ota_epoch = live_ota_epoch;
     }
     mouse_was_ready = ready;
@@ -30,8 +39,10 @@ void sync_mouse_epoch() {
 }
 
 bool mouse_hid_is_ready() {
-    return usb_hid_is_ready() && !ota_activity_is_active();
+    return keyboard_hid_transport_is_ready() && !ota_activity_is_active();
 }
+
+uint32_t mouse_hid_epoch() { return keyboard_hid_transport_epoch(); }
 
 uint32_t mouse_hid_generation() {
     portENTER_CRITICAL(&mouse_mutex);
@@ -115,14 +126,25 @@ void mouse_hid_loop() {
     sync_mouse_epoch();
     if (mouse_hid_is_ready()) mouse_state.apply_inertia(coast);
     const uint32_t report_epoch = mouse_epoch;
+    const KeyboardTransport report_transport = mouse_transport;
     const uint32_t report_ota_epoch = mouse_ota_epoch;
     const bool pending = mouse_state.next(report);
     portEXIT_CRITICAL(&mouse_mutex);
-    if (!pending || !usb_hid_is_ready()) return;
-    if (!usb_hid_send_mouse_report(report, report_epoch, report_ota_epoch)) return;
+    if (!pending || report_transport != keyboard_hid_transport()) return;
+    bool sent = false;
+#if HAS_USB_HID
+    if (report_transport == KeyboardTransport::Usb)
+        sent = usb_hid_send_mouse_report(report, report_epoch, report_ota_epoch);
+#endif
+#if HAS_BLE_HID
+    if (report_transport == KeyboardTransport::Ble)
+        sent = ble_hid_send_mouse_report(report, report_epoch, report_ota_epoch);
+#endif
+    if (!sent) return;
     portENTER_CRITICAL(&mouse_mutex);
     sync_mouse_epoch();
-    if (report_epoch == mouse_epoch && report_ota_epoch == mouse_ota_epoch) mouse_state.acknowledge(report);
+    if (report_transport == mouse_transport && report_epoch == mouse_epoch && report_ota_epoch == mouse_ota_epoch)
+        mouse_state.acknowledge(report);
     portEXIT_CRITICAL(&mouse_mutex);
 }
 

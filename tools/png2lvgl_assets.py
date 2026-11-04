@@ -58,7 +58,7 @@ def _read_png_to_rgb565a8_bytes(png_path: str) -> Tuple[int, int, int, bytes]:
     img = img.convert("RGBA")
 
     width, height = img.size
-    pixels = list(img.getdata())
+    pixels = list(img.get_flattened_data() if hasattr(img, "get_flattened_data") else img.getdata())
     stride = width * 2  # bytes per row for RGB565
 
     rgb_plane = bytearray()

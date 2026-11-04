@@ -272,12 +272,56 @@ static void test_curly_brace_step_not_affected() {
     }
 }
 
+static void test_numeric_rocker_step_uses_registered_value_fields() {
+    {
+        ButtonAction action = make_action(ACTION_TYPE_MQTT);
+        strlcpy(action.payload.mqtt.mqtt_topic, "device/{step}", sizeof(action.payload.mqtt.mqtt_topic));
+        strlcpy(action.payload.mqtt.mqtt_payload, "{step}", sizeof(action.payload.mqtt.mqtt_payload));
+        action_type_substitute_step(action_type_find(action.type), action, 5.25f);
+        check_str(action.payload.mqtt.mqtt_topic, "device/5.25", "MQTT topic receives step");
+        check_str(action.payload.mqtt.mqtt_payload, "5.25", "MQTT payload receives step");
+    }
+    {
+        ButtonAction action = make_action(ACTION_TYPE_VOLUME);
+        strlcpy(action.payload.volume.volume_value, "{step}", sizeof(action.payload.volume.volume_value));
+        action_type_substitute_step(action_type_find(action.type), action, -2.5f);
+        check_str(action.payload.volume.volume_value, "-2.5", "volume value receives signed step");
+    }
+    {
+        ButtonAction action = make_action(ACTION_TYPE_BRIGHTNESS);
+        strlcpy(action.payload.brightness.brightness_value, "{step}", sizeof(action.payload.brightness.brightness_value));
+        action_type_substitute_step(action_type_find(action.type), action, 10.0f);
+        check_str(action.payload.brightness.brightness_value, "10", "brightness value receives step");
+    }
+    {
+        ButtonAction action = make_action(ACTION_TYPE_TIMER);
+        strlcpy(action.payload.timer.timer_value, "{step}", sizeof(action.payload.timer.timer_value));
+        action_type_substitute_step(action_type_find(action.type), action, 1.5f);
+        check_str(action.payload.timer.timer_value, "1.5", "timer value receives step");
+    }
+}
+
 static void test_mixed_static_and_binding() {
     printf("--- mixed static text and binding token ---\n");
     ButtonAction act = make_action(ACTION_TYPE_NOTIFY);
     strlcpy(act.payload.notify.message, "CPU: [echo:42]%", sizeof(act.payload.notify.message));
     resolve_action_bindings(act);
     check_str(act.payload.notify.message, "CPU: 42%", "mixed binding resolved");
+}
+
+static void test_event_tokens_in_text_fields() {
+    for (const char* token : {"{value}", "{step}"}) {
+        ButtonAction notification = make_action(ACTION_TYPE_NOTIFY);
+        snprintf(notification.payload.notify.message, sizeof(notification.payload.notify.message), "Brightness set to %s%%", token);
+        check_true(action_type_substitute_token(action_type_find(notification.type), notification, token, "20"), "notification accepts event token");
+        check_str(notification.payload.notify.message, "Brightness set to 20%", "notification formats event value");
+        ButtonAction variable = make_action(ACTION_TYPE_SET_VAR);
+        strlcpy(variable.payload.set_var.var_name, "a", sizeof(variable.payload.set_var.var_name));
+        snprintf(variable.payload.set_var.var_value, sizeof(variable.payload.set_var.var_value), "%s%%", token);
+        check_true(action_type_substitute_token(action_type_find(variable.type), variable, token, "20"), "variable value accepts event token");
+        check_str(variable.payload.set_var.var_value, "20%", "variable value formats event value");
+        check_str(variable.payload.set_var.var_name, "a", "variable name stays fixed");
+    }
 }
 
 static void test_small_field_truncation() {
@@ -354,6 +398,8 @@ int main() {
     test_plain_values_unchanged();
     test_empty_fields_stay_empty();
     test_curly_brace_step_not_affected();
+    test_numeric_rocker_step_uses_registered_value_fields();
+    test_event_tokens_in_text_fields();
     test_mixed_static_and_binding();
     test_small_field_truncation();
     test_oversized_timer_binding_rejected();

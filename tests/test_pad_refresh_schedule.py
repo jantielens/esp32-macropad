@@ -17,10 +17,15 @@ event_source = (root / "src/app/screens/pad_screen_events.cpp").read_text()
 feedback_start = event_source.index("void PadScreen::onWidgetPressFeedback(")
 feedback_end = event_source.index("\n// Pixel-based tap flash:", feedback_start)
 press_feedback = event_source[feedback_start:feedback_end]
+builder_source = (root / "src/app/screens/pad_tile_builder.cpp").read_text()
+fade_start = builder_source.index("static bool button_overlay_uses_fade(")
+fade_end = builder_source.index("\nstatic bool button_shadow_enabled(", fade_start)
+fade_helper = builder_source[fade_start:fade_end]
 
 harness = r'''
 #include <cassert>
 #include <cstdint>
+#include <cstring>
 #include <sys/time.h>
 #define HAS_MQTT 1
 #define HAS_DISPLAY 1
@@ -35,6 +40,7 @@ static uint32_t interval_ms = 100;
 enum BtnState { BTN_STATE_ENABLED, BTN_STATE_DISABLED, BTN_STATE_HIDDEN };
 constexpr unsigned LV_OBJ_FLAG_HIDDEN = 1;
 constexpr unsigned LV_STATE_DISABLED = 2;
+constexpr unsigned LV_STATE_USER_1 = 4;
 struct lv_obj_t { unsigned flags = 0; unsigned states = 0; };
 static bool lv_obj_has_flag(lv_obj_t* obj, unsigned flag) { return obj->flags & flag; }
 static bool lv_obj_has_state(lv_obj_t* obj, unsigned state) { return obj->states & state; }
@@ -42,6 +48,7 @@ static void lv_obj_clear_flag(lv_obj_t* obj, unsigned flag) { obj->flags &= ~fla
 static void lv_obj_add_flag(lv_obj_t* obj, unsigned flag) { obj->flags |= flag; }
 static void lv_obj_clear_state(lv_obj_t* obj, unsigned state) { obj->states &= ~state; }
 static void lv_obj_add_state(lv_obj_t* obj, unsigned state) { obj->states |= state; }
+static void lv_obj_remove_state(lv_obj_t* obj, unsigned state) { obj->states &= ~state; }
 struct WidgetState { lv_obj_t* obj; unsigned shows = 0; unsigned hides = 0; };
 struct WidgetType { void (*onShow)(WidgetState*); void (*onHide)(WidgetState*); };
 struct lv_timer_t { bool deleted = false; };
@@ -52,6 +59,7 @@ struct ButtonTile {
     lv_obj_t* tap_overlay = nullptr;
     lv_timer_t* tap_flash_timer = nullptr;
     lv_obj_t* shadow = nullptr;
+    struct { const char* type = ""; } widget_cfg = {};
 };
 enum lv_event_code_t { LV_EVENT_PRESSED, LV_EVENT_RELEASED, LV_EVENT_PRESS_LOST };
 struct lv_event_t { void* user_data; void* param; };
@@ -115,6 +123,7 @@ struct PadScreen {
 '''
 harness += poll
 harness += apply_state
+harness += fade_helper
 harness += press_feedback
 harness += r'''
 int main() {
@@ -148,6 +157,13 @@ int main() {
     PadScreen::onWidgetPressFeedback(&event);
     assert(lv_obj_has_flag(&overlay, LV_OBJ_FLAG_HIDDEN) && flashes == 2);
     animations_disabled = false;
+    feedback_tile.widget_cfg.type = "gamepad_button";
+    feedback = LV_EVENT_PRESSED;
+    PadScreen::onWidgetPressFeedback(&event);
+    assert(lv_obj_has_state(&overlay, LV_STATE_USER_1));
+    feedback = LV_EVENT_PRESS_LOST;
+    PadScreen::onWidgetPressFeedback(&event);
+    assert(!lv_obj_has_state(&overlay, LV_STATE_USER_1));
     const WidgetType widget = {
         [](WidgetState* state) {
             assert(!lv_obj_has_flag(state->obj, LV_OBJ_FLAG_HIDDEN));

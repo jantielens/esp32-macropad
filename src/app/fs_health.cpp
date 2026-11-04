@@ -17,7 +17,11 @@ void fs_health_init() {
 		if (g_inited) return;
 		g_inited = true;
 #if USE_SD_STORAGE
+		#if defined(SD_STORAGE_SPI) && SD_STORAGE_SPI
+		g_stats.backend = FS_BACKEND_SD_SPI;
+		#else
 		g_stats.backend = FS_BACKEND_SDMMC;
+		#endif
 		g_stats.card_type = FS_CARD_TYPE_NONE;
 #endif
 }
@@ -31,7 +35,7 @@ void fs_health_set_storage_usage(uint64_t used_bytes, uint64_t total_bytes) {
 
 void fs_health_set_sd_card_type(FSCardType card_type) {
 		if (!g_inited) fs_health_init();
-		if (g_stats.backend != FS_BACKEND_SDMMC) return;
+		if (g_stats.backend == FS_BACKEND_LITTLEFS) return;
 		g_stats.card_type = card_type;
 }
 

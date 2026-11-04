@@ -542,7 +542,7 @@ struct BacklightCtx { uint8_t brightness; };
 
 static void exec_set_backlight(const void* ctx, bool* ok, char* msg, size_t msg_len) {
     const BacklightCtx* c = (const BacklightCtx*)ctx;
-    display_manager_set_backlight_brightness(c->brightness);
+    screen_saver_manager_set_brightness(c->brightness);
     screen_saver_manager_notify_activity(true);
     *ok = true;
     snprintf(msg, msg_len, "brightness set to %u%%", (unsigned)c->brightness);
@@ -635,7 +635,7 @@ static void exec_system_command(const void* ctx, bool* ok, char* msg, size_t msg
             strlcpy(msg, "setup AP restart refused or could not be persisted; check device logs", msg_len);
             return;
         }
-        mcp_request_reboot();
+        mcp_request_reboot(true);
         *ok = true;
         strlcpy(msg, "restart into setup AP scheduled", msg_len);
         return;

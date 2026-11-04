@@ -57,6 +57,6 @@ void describe_music(JsonObject& action) {
     JsonArray editor_fields = action.createNestedArray("editor_fields");
     JsonObject command = editor_fields.createNestedObject(); command["name"] = "music_command"; command["label"] = "Command"; command["type"] = "select"; command["command_options"] = true;
 }
-DEFINE_AND_REGISTER_ACTION_TYPE(kMusicActionType, ACTION_TYPE_MUSIC, parse_music, serialize_music, dispatch_music, nullptr, describe_music, music_available, validate_music, nullptr, ACTION_EXECUTION_SYNC);
+DEFINE_AND_REGISTER_ACTION_TYPE(kMusicActionType, ACTION_TYPE_MUSIC, parse_music, serialize_music, dispatch_music, nullptr, describe_music, music_available, validate_music, ACTION_EXECUTION_SYNC);
 } // namespace
 #endif // HAS_DISPLAY || HAS_BUTTON

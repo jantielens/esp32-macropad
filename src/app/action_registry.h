@@ -19,11 +19,23 @@
 // types with payload data; dispatch is mandatory for types that produce side
 // effects.
 //
-// value_field supports the common single bindable/numeric value used by
-// device-class actions. binding_fields extends that model for built-ins with
-// multiple or conditional bindable fields without adding a UI schema.
 typedef bool (*ActionBindableFieldVisitor)(char* field, size_t field_size,
                                            bool reject_overflow, void* context);
+enum ActionFieldFlags : uint8_t {
+    ACTION_FIELD_BINDING = 1,
+    ACTION_FIELD_EVENT = 2,
+    ACTION_FIELD_REJECT_OVERFLOW = 4
+};
+typedef bool (*ActionFieldVisitor)(const char* name, char* field, size_t capacity,
+                                   uint8_t flags, void* context);
+typedef bool (*ActionFields)(ButtonAction&, ActionFieldVisitor, void*);
+
+template<size_t capacity>
+bool action_visit_field(ActionFieldVisitor visitor, void* context, const char* name,
+                        char (&field)[capacity], uint8_t flags = ACTION_FIELD_BINDING |
+                            ACTION_FIELD_EVENT | ACTION_FIELD_REJECT_OVERFLOW) {
+    return visitor(name, field, capacity, flags, context);
+}
 
 // describe() may expose only the existing generic editor field types (text,
 // number, select, toggle). Actions with conditional or specialized controls
@@ -32,24 +44,26 @@ enum ActionExecutionClass { ACTION_EXECUTION_UNKNOWN, ACTION_EXECUTION_SYNC,
                             ACTION_EXECUTION_PAUSABLE };
 
 struct ActionTypeDef {
-    ActionTypeDef(
+    constexpr ActionTypeDef(
         const char* type_name,
         void (*parse)(const JsonObject& a, ButtonAction& act),
         void (*serialize)(const ButtonAction& act, JsonObject obj),
         ActionResult (*dispatch)(const ButtonAction& act, const char* label,
                                  uint32_t continuation_token),
-        char* (*value_field)(ButtonAction& act, size_t* out_size),
+        ActionFields fields,
         void (*describe)(JsonObject& out),
         bool (*available)() = nullptr,
                 const char* (*validate)(JsonObjectConst action) = nullptr,
-                bool (*binding_fields)(ButtonAction& act, ActionBindableFieldVisitor visitor,
-                                                             void* context) = nullptr,
         ActionExecutionClass execution = ACTION_EXECUTION_UNKNOWN,
-        bool display_lock_required = true)
+            bool display_lock_required = true,
+            bool resolve_bindings_before_dispatch = true,
+            bool dispatch_lock_always = false)
         : type_name(type_name), parse(parse), serialize(serialize), dispatch(dispatch),
-          value_field(value_field), describe(describe), available(available),
-                    validate(validate), binding_fields(binding_fields), execution(execution),
-          display_lock_required(display_lock_required) {}
+          fields(fields), describe(describe), available(available),
+                    validate(validate), execution(execution),
+                    display_lock_required(display_lock_required),
+                    resolve_bindings_before_dispatch(resolve_bindings_before_dispatch),
+                    dispatch_lock_always(dispatch_lock_always) {}
 
     const char* type_name;                                                  // matches ButtonAction::type
     void (*parse)(const JsonObject& a, ButtonAction& act);                  // flat JSON -> payload arm
@@ -59,14 +73,14 @@ struct ActionTypeDef {
     // continuation is active and must be rejected with ACTION_FAILED.
     ActionResult (*dispatch)(const ButtonAction& act, const char* label,
                              uint32_t continuation_token);                  // execute side effects
-    char* (*value_field)(ButtonAction& act, size_t* out_size);              // &payload.value (+ buffer size), or nullptr
+    ActionFields fields;
     void (*describe)(JsonObject& out);                                       // optional: list flat JSON fields for the MCP manifest (nullptr = none)
     bool (*available)();                                                      // optional: false hides and rejects the type on this build
     const char* (*validate)(JsonObjectConst action);                         // optional: authoring validation; nullptr = valid
-    bool (*binding_fields)(ButtonAction& act, ActionBindableFieldVisitor visitor,
-                           void* context);                                   // optional: visit bindable payload fields
     ActionExecutionClass execution;
     bool display_lock_required;
+    bool resolve_bindings_before_dispatch;
+    bool dispatch_lock_always;
 };
 
 void action_type_register(const ActionTypeDef* type);
@@ -84,23 +98,21 @@ bool action_type_is_supported(const char* type_name);
 // Invoke an action type's optional authoring validator. nullptr means valid.
 const char* action_type_validate(const ActionTypeDef* type, JsonObjectConst action);
 
-// Replace every "{step}" token in a char buffer with the signed step value.
-// Canonical helper shared by the numeric rocker and device-class action types
-// so {step} substitution behaves identically everywhere.
-void action_substitute_step_field(char* field, size_t field_size, float step);
+// Replace every literal token with a value without modifying the field on failure.
+bool action_substitute_token_field(char* field, size_t field_size,
+                                   const char* token, const char* replacement);
+bool action_type_substitute_token(const ActionTypeDef* def, ButtonAction& act,
+                                  const char* token, const char* value);
+bool action_type_visit_fields(const ActionTypeDef* def, ButtonAction& act,
+                              ActionFieldVisitor visitor, void* context);
 
-// Generic value-field behaviors driven by ActionTypeDef::value_field. These
-// replace the former per-type resolve_bindings / has_binding / substitute_step
-// hooks: implement value_field once and the type gets all three. All are
-// no-ops when def or def->value_field is nullptr.
-void action_type_substitute_step(const ActionTypeDef* def, ButtonAction& act, float step);
+bool action_type_substitute_step(const ActionTypeDef* def, ButtonAction& act, float step);
 bool action_type_visit_bindable_fields(const ActionTypeDef* def, ButtonAction& act,
                                        ActionBindableFieldVisitor visitor, void* context);
-#if HAS_MQTT || HAS_HA_LIVE
 bool action_type_has_binding(const ActionTypeDef* def, const ButtonAction& act);
 bool action_type_resolve_bindings(const ActionTypeDef* def, ButtonAction& act);
-// Collect MQTT topics referenced by the type's bindable value field (if any)
-// into a binding_template_collect_topics() context. No-op without value_field.
+#if HAS_MQTT || HAS_HA_LIVE
+// Collect MQTT topics from declared bindable fields into the collector context.
 void action_type_collect_topics(const ActionTypeDef* def, const ButtonAction& act, void* user_data);
 #endif
 

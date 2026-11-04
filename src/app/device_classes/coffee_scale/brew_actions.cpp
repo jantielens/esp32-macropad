@@ -1,5 +1,5 @@
-// Coffee-brew ActionTypeDef — parse, serialize, dispatch and a value_field
-// accessor for the "brew" action type. Registered via
+// Coffee-brew ActionTypeDef: parse, serialize, dispatch and named fields
+// for the "brew" action type. Registered via
 // REGISTER_ACTION_TYPE so action_dispatch.cpp / action_parse.cpp do not need
 // to know about the brew arm at compile time.
 //
@@ -40,10 +40,9 @@ static void brew_serialize(const ButtonAction& act, JsonObject obj) {
 // `value` is the single bindable field (e.g. set_template using
 // [list:brew_presets.selected]). Expose it so shared code drives binding
 // resolution + {step} substitution. `command` is structural, never bindable.
-static char* brew_value_field(ButtonAction& act, size_t* out_size) {
+static bool brew_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {
     BrewPayload& p = brew_payload(act);
-    *out_size = sizeof(p.value);
-    return p.value;
+    return action_visit_field(visitor, context, "brew_value", p.value);
 }
 
 static void brew_describe(JsonObject& out) {
@@ -109,6 +108,6 @@ static ActionResult brew_dispatch(const ButtonAction& /*act*/, const char* label
 }
 #endif
 
-DEFINE_AND_REGISTER_ACTION_TYPE(brew_action_type, /* type_name   */ ACTION_TYPE_BREW, /* parse       */ brew_parse, /* serialize   */ brew_serialize, /* dispatch    */ brew_dispatch, /* value_field */ brew_value_field, /* describe    */ brew_describe, nullptr, nullptr, nullptr, ACTION_EXECUTION_SYNC);
+DEFINE_AND_REGISTER_ACTION_TYPE(brew_action_type, ACTION_TYPE_BREW, brew_parse, brew_serialize, brew_dispatch, brew_fields, brew_describe, nullptr, nullptr, ACTION_EXECUTION_SYNC);
 
 #endif // HAS_DISPLAY && IS_COFFEE_SCALE

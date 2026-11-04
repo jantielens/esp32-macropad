@@ -138,6 +138,8 @@ void binding_schema_emit(void* out_json, bool include_docs) {
         scheme["format_param"] = spec->format_param;
         scheme["validation_mode"] = spec->validation_mode;
         scheme["free_form"] = spec->free_form;
+        if (spec->doc && spec->doc->param_count && spec->doc->params[0].validation_pattern)
+            scheme["first_param_pattern"] = spec->doc->params[0].validation_pattern;
         if (!spec->free_form) {
             JsonArray keys = scheme["keys"].to<JsonArray>();
             for (uint8_t key_index = 0; key_index < spec->key_count(); ++key_index) {

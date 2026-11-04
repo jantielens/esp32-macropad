@@ -26,7 +26,7 @@ extern DeviceConfig device_config;
 #include "../local_image_loader.h"
 #endif
 #include "../device_class.h"
-#if HAS_USB_HID
+#if HAS_USB_HID || HAS_BLE_HID
 #include "../gamepad_hid.h"
 #endif
 
@@ -241,7 +241,7 @@ void PadScreen::show() {
 }
 
 void PadScreen::hide() {
-#if HAS_USB_HID
+#if HAS_USB_HID || HAS_BLE_HID
     gamepad_hid_cancel();
 #endif
 #if HAS_IMAGE_FETCH
@@ -319,7 +319,7 @@ void PadScreen::update() {
     }
 
     cachedGeneration = gen;
-#if HAS_USB_HID
+#if HAS_USB_HID || HAS_BLE_HID
     gamepad_hid_cancel();
 #endif
     buildTiles();
@@ -407,6 +407,9 @@ bool PadScreen::containsTimeBinding() const {
     for (uint16_t i = 0; i < btnStateBindingCount; i++)
         if (strstr(btnStateBindings[i].templ, TIME_SCHEME)) return true;
     for (uint8_t i = 0; i < tileCount; i++) {
+#if HAS_IMAGE_FETCH
+        if (tiles[i].image_url_template && strstr(tiles[i].image_url_template, TIME_SCHEME)) return true;
+#endif
         if (fill_style_has_scheme(tiles[i].fill_style, TIME_SCHEME)) return true;
         for (uint8_t binding = 0; binding < MAX_WIDGET_BINDINGS; binding++)
             if (strstr(tiles[i].widget_binding[binding], TIME_SCHEME)) return true;
@@ -424,6 +427,9 @@ bool PadScreen::padHasScheme(const char* scheme) const {
     if (!scheme || !scheme[0]) return false;
     for (uint8_t i = 0; i < tileCount; i++) {
         const ButtonTile& t = tiles[i];
+    #if HAS_IMAGE_FETCH
+        if (t.image_url_template && strstr(t.image_url_template, scheme)) return true;
+    #endif
         if (fill_style_has_scheme(t.fill_style, scheme)) return true;
         for (uint8_t w = 0; w < MAX_WIDGET_BINDINGS; w++) {
             if (strstr(t.widget_binding[w], scheme)) return true;

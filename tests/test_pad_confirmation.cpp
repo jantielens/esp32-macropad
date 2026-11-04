@@ -37,6 +37,10 @@ bool binding_template_scheme_known(const char* scheme, size_t name_len) {
     return !(name_len == 7 && std::strncmp(scheme, "unknown", name_len) == 0);
 }
 
+bool binding_template_has_bindings(const char* text) {
+    return text && std::strstr(text, "[mqtt:");
+}
+
 const char* binding_template_validate_params(const char* scheme, size_t name_len,
                                              const char* params) {
     (void)scheme;
@@ -51,14 +55,12 @@ static void parse_registered_test(const JsonObject& action, ButtonAction& parsed
 }
 
 static bool visit_registered_test_fields(ButtonAction& parsed,
-                                         ActionBindableFieldVisitor visitor, void* context) {
-    return visitor(parsed.payload.mqtt.mqtt_topic, sizeof(parsed.payload.mqtt.mqtt_topic),
-                   false, context);
+                                         ActionFieldVisitor visitor, void* context) {
+    return action_visit_field(visitor, context, "value", parsed.payload.mqtt.mqtt_topic, ACTION_FIELD_BINDING | ACTION_FIELD_EVENT);
 }
 
 static const ActionTypeDef registered_type = {
-    "registered_test", parse_registered_test, nullptr, nullptr, nullptr, nullptr,
-    nullptr, nullptr, visit_registered_test_fields
+    "registered_test", parse_registered_test, nullptr, nullptr, visit_registered_test_fields, nullptr
 };
 
 const ActionTypeDef* action_type_find(const char* type) {
@@ -74,9 +76,17 @@ const char* action_type_validate(const ActionTypeDef*, JsonObjectConst) {
     return nullptr;
 }
 
+bool action_substitute_token_field(char*, size_t, const char*, const char*) { return true; }
+
+bool action_type_visit_fields(const ActionTypeDef* def, ButtonAction& action,
+                              ActionFieldVisitor visitor, void* context) {
+    return !def || !def->fields || def->fields(action, visitor, context);
+}
+
 bool action_type_visit_bindable_fields(const ActionTypeDef* def, ButtonAction& action,
                                        ActionBindableFieldVisitor visitor, void* context) {
-    return def && def->binding_fields && def->binding_fields(action, visitor, context);
+    return !def || def != &registered_type || visitor(action.payload.mqtt.mqtt_topic,
+        sizeof(action.payload.mqtt.mqtt_topic), false, context);
 }
 
 static JsonObject make_button(JsonDocument& doc) {
@@ -90,6 +100,24 @@ static JsonObject make_button(JsonDocument& doc) {
 
 int main() {
     std::printf("=== pad confirmation validation tests ===\n");
+
+    {
+        JsonDocument doc;
+        JsonObject button = make_button(doc);
+        button["bg_image_url"] = "https://images.example/[mqtt:cover].jpg";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        button["bg_image_user"] = "user";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button.remove("bg_image_user");
+        button["bg_image_password_set"] = true;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button.remove("bg_image_password_set");
+        button["bg_image_url"] = std::string(256, 'x');
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["bg_image_url"] = "https://images.example/cover.jpg";
+        button["bg_image_user"] = "user";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+    }
 
     {
         JsonDocument doc;

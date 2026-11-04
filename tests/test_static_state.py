@@ -124,7 +124,8 @@ int main() {
     assert(button_defaults_save_raw(reinterpret_cast<const uint8_t*>(json), strlen(json)));
     assert(!strcmp(defaults->bg_color, "#123456") && rebuilds == 1);
     button_defaults_init();
-    assert(button_defaults_get() == defaults && rebuilds == 2);
+    assert(button_defaults_get() == defaults && rebuilds == 1);
+    assert(!strcmp(defaults->bg_color, "#123456"));
 
     mqtt_binding_init();
     assert(mqtt_binding_resolve("topic;value", output, sizeof(output)) == BINDING_RESOLVER_RESOLVED);

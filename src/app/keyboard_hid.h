@@ -9,4 +9,6 @@ void keyboard_hid_loop();
 bool keyboard_hid_is_busy();
 bool keyboard_hid_is_ready();
 KeyboardTransport keyboard_hid_transport();
+bool keyboard_hid_transport_is_ready();
+uint32_t keyboard_hid_transport_epoch();
 const char* keyboard_hid_status();

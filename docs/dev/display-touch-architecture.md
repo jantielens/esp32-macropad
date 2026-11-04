@@ -61,8 +61,8 @@ graph TD
     DM --> Screens["**Screen Base Class**<br/>SplashScreen · InfoScreen<br/>TestScreen · Custom screens"]
     DM --> DD["**DisplayDriver**<br/>(HAL Interface)"]
     TM --> TD["**TouchDriver**<br/>(HAL Interface)"]
-    DD --> DImpl["TFT_eSPI_Driver<br/>Arduino_GFX_Drv<br/>ST7701_RGB_Driver<br/>MipiDsiDriver<br/>(ST7703 / ST7701 / JD9165 DSI subclasses)"]
-    TD --> TImpl["XPT2046_Driver<br/>AXS15231B_Touch<br/>CST816S_Driver<br/>GT911_Driver"]
+    DD --> DImpl["TFT_eSPI_Driver<br/>Arduino_GFX_Drv<br/>ST7701_RGB_Driver<br/>MipiDsiDriver<br/>(ST7703 / ST7701 / JD9165 / Tab5 DSI subclasses)"]
+    TD --> TImpl["XPT2046_Driver<br/>AXS15231B_Touch<br/>CST816S_Driver<br/>GT911_Driver<br/>ST7123TouchDriver"]
     DImpl --> Lib1["TFT_eSPI library<br/>Arduino_GFX lib"]
     TImpl --> Lib2["XPT2046 library<br/>Wire.h (I2C)<br/>Vendored drivers"]
     Lib1 --> LVGL["**LVGL 9.6.0**<br/>Widget rendering<br/>Themes · Fonts · Animations"]
@@ -284,6 +284,19 @@ idle/wake behavior and release handling on a physical unit. Reference sources:
 [factory HAL](https://github.com/m5stack/M5StopWatch-UserDemo/tree/6b4aa125288b6fe9dca661f10159f6e1e5ee785c/main/hal),
 [M5GFX bring-up](https://github.com/m5stack/M5GFX/blob/22e94f1eaa7d5eb40eab65f42bf10713e7e89294/src/M5GFX.cpp),
 and [hardware documentation](https://docs.m5stack.com/en/core/StopWatch).
+
+### Tab5 Display And Touch
+
+Tab5 board initialization holds the backlight off, releases the expander-owned
+LCD reset as an input with pull-up, and identifies the ST touch firmware over
+shared I2C. Version 1 selects ST7121 DSI timing and version 3 selects ST7123;
+unknown versions leave the display and touch unavailable. The older
+ILI9881C/GT911 hardware is not supported. The DSI driver uses the existing
+PSRAM framebuffer and asynchronous rendering path; panel command payloads
+remain in flash. The ST touch driver reads bounded 7-byte contact records and
+reports I2C errors distinctly from releases. It reads up to 10 controller records
+and reports up to the configured contact capacity. Display and touch have been
+observed on Tab5; the SD variant remains unverified.
 
 ### Inkplate 6 Flick LVGL
 
@@ -804,6 +817,18 @@ public:
 - Ghost touch suppression via `touch_manager_suppress_lvgl_input(200)` on show
 - Adaptive brush size (~0.8% of smaller display dimension, clamped 2–6 px)
 
+### Native Widget Geometry And Input
+
+`widget_content_bounds()` shares transformed label and image geometry between
+Slider and Toggle, including image pivots, rotation, and scaling. Their layouts
+and interaction state machines remain separate.
+
+A widget with a `WidgetType.cancelInput` hook owns native input.
+`widget_owns_input()` suppresses ordinary tap and long-press dispatch for that
+widget; `widget_cancel_input()` routes press loss, input reset, blocked overlays,
+and gesture cancellation to its hook. Slider registers this hook to discard an
+unfinished drag without dispatch. Toggle retains parent-button short clicks.
+
 ### Toggle Switch Widget Contract
 
 `toggle` is opt-in on display builds and registered through the widget manifest.
@@ -835,10 +860,16 @@ action navigates and destroys the owning pad. Hiding cancels pending without
 cancelling an action already submitted to an external service.
 
 Track/knob styling is separate from binding-aware button foreground styling.
-The layout reserves top/bottom label rows, then places the natural-width center
-label left of the 2:1 switch in the remaining area. An icon sits left of that
-row by default, or above/below it. Switch size scales the largest fit (default
-100%); insufficient space hides the switch. Sizing and positioning use painted
+The layout reserves top/bottom label rows and any above/below icon space.
+Switch width is a percentage of button content width (default 50%), capped by
+the remaining height at a 2:1 aspect ratio, independent of center-label length.
+A configured center label or left icon anchors the switch to the right; otherwise
+it is centered at 100% width, height-capped, ignoring the percentage setting.
+The center label uses the remaining width with ellipsis, accounting for font
+upscaling. A temporarily empty bound label does not change the layout mode.
+Labels and left icons with no horizontal space are hidden without shrinking
+the switch; switches narrower than four pixels are hidden. An icon sits left
+of the row by default, or above/below it. Sizing and positioning use painted
 bounds, including label transforms and image scaling around their pivots.
 Unchanged bound reports do not rewrite styles or invalidate the switch.
 The widget tick recalculates layout after live label updates.
@@ -2224,13 +2255,36 @@ LVGL handles touch events automatically once input device is registered. Add int
 // In screen's create() method:
 
 // Button example
-lv_obj_t* btn = lv_btn_create(screen);
+lv_obj_t* btn = lv_button_create(screen);
 lv_obj_add_event_cb(btn, button_callback, LV_EVENT_CLICKED, this);
 
 // Slider example
 lv_obj_t* slider = lv_slider_create(screen);
 lv_obj_add_event_cb(slider, slider_callback, LV_EVENT_VALUE_CHANGED, this);
 ```
+
+### Pad Button Press Feedback
+
+`LV_USE_BUTTON` is enabled. `PadScreen::buildTiles()` creates `lv_button` objects
+for ordinary buttons and the `gauge`, `sparkline`, `bar_chart`, and
+`camera_preview` widgets when at least one tap or long-press action is configured
+and `DISPLAY_DISABLE_ANIMATIONS` is false. Other buttons retain generic
+containers. Explicit styles preserve configured geometry, colors, and shadows;
+the native pressed style uses a 30 ms transition with background-aware recoloring
+and retains the theme's release transition. Action dispatch still uses
+`LV_EVENT_SHORT_CLICKED` and `LV_EVENT_LONG_PRESSED`. Non-input-device activation
+pulses the pressed state through the existing feedback timer.
+
+Rocker, numeric-rocker, and gamepad-button overlays use `LV_STATE_USER_1` for
+30 ms fade-in and 80 ms fade-out. Their existing trigger and hold behavior stays
+unchanged. After the flash hold expires, the timer starts fade-out; its next
+callback hides the overlay and restores its full rectangle. Store that rectangle
+once at creation, rather than resampling rendered coordinates after a layout
+setter: LVGL applies layout changes lazily, so immediate getters can return the
+previous zone and cause cumulative drift. Repeated flashes cancel the pending
+timer and restore this fixed rectangle before choosing a new zone. Teardown
+deletes the timer before deleting the owning objects. List rows remain generic
+objects with background-aware pressed recoloring and 30/80 ms transitions.
 
 ### Mousepad And Scrollpad Touch Ownership
 

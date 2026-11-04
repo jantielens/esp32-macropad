@@ -34,7 +34,7 @@
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
-static bool audio_initialized = false;
+static std::atomic<bool> audio_initialized{false};
 static std::atomic<uint8_t> current_volume{70};
 static AudioOutputDriver* output_driver = nullptr;
 
@@ -83,6 +83,8 @@ static QueueHandle_t audio_queue = NULL;
 static QueueHandle_t music_work_queue = NULL;
 #endif
 static std::atomic<TaskHandle_t> audio_task_handle{nullptr};
+enum AudioRebootState : uint8_t { AUDIO_REBOOT_IDLE, AUDIO_REBOOT_REQUESTED, AUDIO_REBOOT_DONE, AUDIO_REBOOT_FAILED };
+static std::atomic<AudioRebootState> audio_reboot_state{AUDIO_REBOOT_IDLE};
 static std::atomic<uint32_t> g_alert_stop_epoch{0};
 static std::atomic<uint32_t> g_all_stop_epoch{0};
 static std::atomic<bool> g_playing{false};
@@ -252,6 +254,7 @@ static void audio_task(void* param) {
     uint32_t alert_stop_epoch = g_alert_stop_epoch.load();
     uint32_t all_stop_epoch = g_all_stop_epoch.load();
     uint8_t output_volume = 255;
+    bool output_volume_overridden = false;
 #if HAS_SOUND_PLAYER
     SoundPlayer* alert_player = nullptr;
 #endif
@@ -385,6 +388,19 @@ static void audio_task(void* param) {
 #endif
 
     for (;;) {
+        const AudioRebootState reboot_state = audio_reboot_state.load();
+        if (reboot_state != AUDIO_REBOOT_IDLE) {
+            if (reboot_state == AUDIO_REBOOT_REQUESTED) {
+                close_alert();
+#if HAS_SOUND_PLAYER
+                close_music();
+#endif
+                const bool ok = output_driver && output_driver->end();
+                audio_reboot_state.store(ok ? AUDIO_REBOOT_DONE : AUDIO_REBOOT_FAILED);
+            }
+            vTaskDelay(pdMS_TO_TICKS(10));
+            continue;
+        }
         if (session_guard && !session_guard(session_generation)) session_guard = nullptr;
         if (g_playing.load() && active.guard && !active.guard(active.generation)) close_alert();
         if (g_alert_stop_epoch.load() != alert_stop_epoch) {
@@ -541,11 +557,18 @@ static void audio_task(void* param) {
 #endif
         }
         const uint8_t device_volume = current_volume.load();
-        const uint8_t requested_volume = g_playing.load() && active.volume_override ? active.volume_override : device_volume;
+        const bool volume_overridden = g_playing.load() && active.volume_override != 0;
+        const uint8_t requested_volume = volume_overridden ? active.volume_override : device_volume;
         if (output_volume != requested_volume) {
+            if ((output_volume_overridden || volume_overridden) && output_last_write_us != 0 &&
+                esp_timer_get_time() - output_last_write_us < kOutputBufferedUs) {
+                vTaskDelay(pdMS_TO_TICKS(10));
+                continue;
+            }
             if (!output_driver->setVolume(requested_volume)) LOGW(TAG, "Volume control failed");
             else output_volume = requested_volume;
         }
+        if (output_volume == requested_volume) output_volume_overridden = volume_overridden;
         if (g_playing.load()) {
 #if HAS_SOUND_PLAYER
             if (alert_player) {
@@ -625,13 +648,18 @@ static void audio_task(void* param) {
         }
         if (music_transport.state() == MUSIC_TRANSPORT_STOPPED) refresh_music_catalog(false);
 #endif
-        if (g_feedback.active) {
+        const bool continuous_idle = output_driver->needsContinuousIdleOutput() &&
+            !(amplifier_policy.load() & 1);
+        if (g_feedback.active || continuous_idle) {
             int16_t silence[512 * 2] = {};
             AudioStarvationStats stats = {};
     #if HAS_SOUND_PLAYER
             if (!music_player || music_transport.state() != MUSIC_TRANSPORT_PLAYING || session_guard)
     #endif
-            if (!audio_write_with_stats(output_driver, silence, 512, &stats)) tone_alert_overlay_stop(&g_feedback);
+            if (!audio_write_with_stats(output_driver, silence, 512, &stats)) {
+                tone_alert_overlay_stop(&g_feedback);
+                if (continuous_idle) vTaskDelay(pdMS_TO_TICKS(10));
+            }
         } else {
     #if HAS_SOUND_PLAYER
             if (!music_player || music_transport.state() != MUSIC_TRANSPORT_PLAYING || session_guard)
@@ -728,6 +756,20 @@ void audio_init(uint8_t initial_volume) {
     audio_initialized = true;
     device_telemetry_log_memory_snapshot("audio");
     LOGI(TAG, "Audio ready (volume=%u%%, amplifier muted until playback)", current_volume.load());
+}
+
+void audio_request_reboot() {
+    if (!audio_initialized || !output_driver->needsRebootShutdown()) return;
+    AudioRebootState expected = AUDIO_REBOOT_IDLE;
+    audio_reboot_state.compare_exchange_strong(expected, AUDIO_REBOOT_REQUESTED);
+}
+
+AudioRebootStatus audio_reboot_status() {
+    if (!audio_initialized || !output_driver->needsRebootShutdown()) return AUDIO_REBOOT_COMPLETE;
+    const AudioRebootState state = audio_reboot_state.load();
+    if (state == AUDIO_REBOOT_DONE) return AUDIO_REBOOT_COMPLETE;
+    if (state == AUDIO_REBOOT_FAILED) return AUDIO_REBOOT_ERROR;
+    return AUDIO_REBOOT_PENDING;
 }
 
 bool audio_get_stack_watermark(uint32_t* minimum_free_bytes) {

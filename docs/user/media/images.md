@@ -54,7 +54,7 @@ Choose one intended source rather than leaving competing source settings.
 
 * Enter an HTTP/HTTPS URL returning JPEG, PNG, or a multipart MJPEG stream.
   A browser dashboard URL or raw RTSP URL is not an image source.
-* Supply **Auth User** and **Auth Password** for Basic Authentication if needed.
+* For a fixed URL, supply **Auth User** and **Auth Password** for Basic Authentication if needed.
   A blank password preserves one already saved; exports do not recover it.
 * For a periodically fetched snapshot, set **Refresh Interval (ms)**, such as
   `5000` for five seconds.
@@ -67,6 +67,42 @@ the URL. An RTSP camera can need an external image/MJPEG relay.
 Start with a small snapshot and a moderate interval before enabling streams.
 Multiple large sources increase network, decoding, and memory load; there is
 no universal frame-rate guarantee.
+
+At startup, remote image downloads pause while the initial
+[Home Assistant history backfill](../widgets/sparkline.md#backfill-from-home-assistant)
+batch runs. Downloads resume when the batch completes or must defer, so history
+retry backoff does not keep images paused. An existing image remains visible;
+the first image can appear after the initial backfill.
+
+### Follow a changing URL
+
+The **Image or Stream URL** also accepts [binding templates](../pads/bindings.md),
+including a complete URL from `[pad:image_url]` or a mixed template such as:
+
+```text
+https://images.example/covers/[mqtt:player/cover_id].jpg
+```
+
+Leave **Auth User** and **Auth Password** empty for binding-based URLs.
+Saving a binding-based URL drops any previously saved image password. Credentials
+embedded in a resolved URL are not accepted either.
+
+After **Save Pad**, the device reevaluates the source through its normal binding
+updates. A changed URL loads even when the refresh interval is zero. An unchanged
+URL follows the configured interval; zero means one snapshot attempt per source.
+A failed attempt with zero interval is not automatically retried. Use a positive
+interval when transient failures should recover without another URL change.
+
+The previous image stays visible while a replacement loads and if fetching or
+decoding fails. An empty or unavailable binding clears it. Unresolved, invalid,
+or oversized results are not downloaded; the resolved URL must fit within 255
+bytes, and individual values remain subject to the binding engine's limits.
+
+Downloads run one at a time. Rapid changes retain only the latest requested
+source; obsolete results cannot replace it. A slow request can still delay other
+images until it reaches a cancellation checkpoint or times out. Avoid continuously
+changing values such as timestamps in the URL: pending work is coalesced, but
+there is no additional debounce or rate limit.
 
 > [!WARNING]
 > Keep private feeds on a trusted network. The remote-fetch HTTPS path does not

@@ -25,12 +25,14 @@ int64_t esp_timer_get_time() { return now_us; }
 void device_telemetry_log_memory_snapshot(const char*) {}
 UBaseType_t uxTaskGetStackHighWaterMark(TaskHandle_t) { return 16384; }
 void vTaskDelay(TickType_t ticks) {
+    const bool output_pending = output_last_write_us && now_us - output_last_write_us < kOutputBufferedUs;
     now_us += ticks * 1000;
     if (amplifier_wake_pending) {
         assert(ticks == pdMS_TO_TICKS(amplifier_policy.load() >> 1));
         amplifier_wake_pending = false;
         return;
     }
+    if (output_pending) return;
     if (idle_hook) idle_hook();
     else throw WorkerIdle{};
 }
@@ -62,6 +64,10 @@ public:
     size_t writes = 0;
     uint8_t volume = 0;
     bool fail = false;
+    bool end_result = true;
+    bool reboot_shutdown = true;
+    bool continuous_idle = false;
+    unsigned end_count = 0;
     bool muted = true;
     bool fail_unmute = false;
     int64_t amplifier_ready_us = 0;
@@ -69,18 +75,25 @@ public:
     std::vector<int16_t> pcm;
     std::vector<int16_t> audible_pcm;
     std::function<void()> on_write;
+    std::function<void(uint8_t)> on_volume;
     bool begin(uint32_t) override { return true; }
-    bool setVolume(uint8_t value) override { volume = value; return true; }
+    bool setVolume(uint8_t value) override {
+        if (on_volume) on_volume(value);
+        volume = value;
+        return true;
+    }
     bool setMuted(bool value) override {
         if (!value && fail_unmute) return false;
         muted = value;
-        amplifier_wake_pending = !value;
+        amplifier_wake_pending = !value && (amplifier_policy.load() >> 1) != 0;
         if (!value) amplifier_ready_us = now_us + 120000;
         mute_changes.push_back(value);
         return true;
     }
     bool isAvailable() const override { return true; }
-    bool end() override { return true; }
+    bool needsContinuousIdleOutput() const override { return continuous_idle; }
+    bool needsRebootShutdown() const override { return reboot_shutdown; }
+    bool end() override { ++end_count; return end_result; }
     bool write(const int16_t* frames, size_t count) override {
         assert(!muted);
         amplifier_wake_pending = false;
@@ -175,6 +188,7 @@ static void run_worker() {
 }
 static void reset() {
     ota = false;
+    audio_reboot_state.store(AUDIO_REBOOT_IDLE);
     output = TestOutput{};
     output_muted = true;
     output_last_write_us = 0;
@@ -217,6 +231,37 @@ int main() {
     ota = false;
     run_worker();
     assert(!output.muted);
+    reset();
+    output.continuous_idle = true;
+    audio_set_amplifier_policy(false, 0);
+    output.on_write = [] {
+        if (output.writes == 3) audio_set_amplifier_policy(true, 0);
+    };
+    idle_hook = [] {
+        if (output.muted) throw WorkerIdle{};
+        assert(now_us - output_last_write_us < kOutputBufferedUs + kOutputIdleGraceUs + 10000);
+    };
+    run_worker();
+    assert(output.writes == 3 && output.muted);
+    assert(std::all_of(output.pcm.begin(), output.pcm.end(),
+        [](int16_t sample) { return sample == 0; }));
+    reset();
+    output.continuous_idle = true;
+    audio_set_amplifier_policy(false, 0);
+    output.on_write = [] {
+        if (output.writes == 3) { ota = true; ++ota_epoch; }
+    };
+    run_worker();
+    assert(output.writes == 3 && output.muted);
+    reset();
+    output.continuous_idle = true;
+    audio_set_amplifier_policy(false, 0);
+    output.on_write = [] {
+        if (output.writes == 3) audio_request_reboot();
+    };
+    run_worker();
+    assert(output.writes == 3 && output.end_count == 1);
+    assert(audio_reboot_status() == AUDIO_REBOOT_COMPLETE);
     reset();
     audio_set_amplifier_policy(true, 0);
     audio_feedback("500:20");
@@ -298,6 +343,52 @@ int main() {
         [](int16_t sample) { return sample != 0; }));
 
     reset();
+    audio_set_amplifier_policy(false, 0);
+    assert(audio_submit_tone("400:20", 10, false));
+    unsigned volume_restores = 0;
+    output.on_volume = [&](uint8_t volume) {
+        if (volume != 70) return;
+        assert(output.writes > 0);
+        assert(now_us - output_last_write_us >= kOutputBufferedUs);
+        ++volume_restores;
+    };
+    run_worker();
+    assert(volume_restores == 1 && output.volume == 70);
+    assert(!output.muted);
+
+    reset();
+    assert(audio_submit_tone("400:100", 0, false));
+    bool device_volume_changed = false;
+    output.on_write = [] {
+        if (output.writes == 1) audio_set_volume(22);
+        if (output.writes == 2) audio_stop();
+    };
+    output.on_volume = [&](uint8_t volume) {
+        if (volume != 22) return;
+        assert(now_us - output_last_write_us < kOutputBufferedUs);
+        device_volume_changed = true;
+    };
+    run_worker();
+    assert(device_volume_changed && output.writes == 2);
+
+    reset();
+    assert(audio_submit_tone("400:100", 10, false));
+    bool replaced = false;
+    output.on_write = [&] {
+        if (!replaced) {
+            replaced = true;
+            assert(audio_submit_tone("800:20", 20, false));
+        }
+    };
+    output.on_volume = [](uint8_t volume) {
+        if (volume == 10) return;
+        assert(output.writes > 0);
+        assert(now_us - output_last_write_us >= kOutputBufferedUs);
+    };
+    run_worker();
+    assert(replaced && output.volume == 70);
+
+    reset();
     audio_feedback("1000:10000");
     run_worker();
     assert(output.pcm.size() == 94 * 512 * 2);
@@ -345,6 +436,18 @@ int main() {
 
 #if HAS_SOUND_PLAYER
     reset();
+    assert(audio_submit_sound("alert", 10));
+    volume_restores = 0;
+    output.on_volume = [&](uint8_t volume) {
+        if (volume != 70) return;
+        assert(output.writes == 3);
+        assert(now_us - output_last_write_us >= kOutputBufferedUs);
+        ++volume_restores;
+    };
+    run_worker();
+    assert(volume_restores == 1 && output.volume == 70);
+
+    reset();
     assert(audio_music_command(MUSIC_COMMAND_PLAY_PAUSE) == AUDIO_MUSIC_SUBMIT_QUEUED);
     output.on_write = [] {
         if (output.writes == 1)
@@ -366,7 +469,11 @@ int main() {
     reset();
     assert(audio_music_command(MUSIC_COMMAND_PLAY_PAUSE) == AUDIO_MUSIC_SUBMIT_QUEUED);
     output.on_write = [] {
-        if (output.writes == 1) assert(audio_submit_sound("alert", 0));
+        assert(output.volume == (opened.back() == "/sounds/alert.mp3" ? 10 : 70));
+        if (output.writes == 1) assert(audio_submit_sound("alert", 10));
+    };
+    output.on_volume = [](uint8_t) {
+        if (output.writes) assert(now_us - output_last_write_us >= kOutputBufferedUs);
     };
     run_worker();
     assert((opened == std::vector<std::string>{"/media/first.mp3", "/sounds/alert.mp3", "/media/first.mp3", "/media/second.mp3"}));
@@ -454,6 +561,52 @@ int main() {
     assert((opened == std::vector<std::string>{"/media/first.mp3", "/sounds/corrupt.mp3", "/media/first.mp3", "/media/second.mp3"}));
     assert(decoder_peak == 1);
 #endif
+    reset();
+    assert(audio_submit_tone("500:1000", 0, true, owner_guard, owner_generation, false, owner_finished));
+    output.on_write = [] { audio_reboot_state.store(AUDIO_REBOOT_REQUESTED); };
+    run_worker();
+    assert(output.writes == 1 && output.end_count == 1);
+    assert(finished_generation == owner_generation && !audio_is_playing());
+    assert(audio_reboot_state.load() == AUDIO_REBOOT_DONE);
+
+#if HAS_SOUND_PLAYER
+    reset();
+    assert(audio_submit_sound("alert", 0));
+    output.on_write = [] { audio_reboot_state.store(AUDIO_REBOOT_REQUESTED); };
+    run_worker();
+    assert(output.writes == 1 && output.end_count == 1 && decoder_count == 0);
+    assert(audio_reboot_state.load() == AUDIO_REBOOT_DONE);
+#endif
+    reset();
+    audio_feedback("500:20");
+    audio_request_reboot();
+    assert(audio_reboot_status() == AUDIO_REBOOT_PENDING);
+    run_worker();
+    assert(audio_reboot_status() == AUDIO_REBOOT_COMPLETE);
+    assert(output.end_count == 1 && output.writes == 0);
+    run_worker();
+    assert(output.end_count == 1 && output.writes == 0);
+
+    reset();
+    output.end_result = false;
+    audio_request_reboot();
+    run_worker();
+    assert(audio_reboot_status() == AUDIO_REBOOT_ERROR);
+    assert(output.end_count == 1);
+
+    reset();
+    output.reboot_shutdown = false;
+    audio_request_reboot();
+    assert(audio_reboot_status() == AUDIO_REBOOT_COMPLETE);
+    run_worker();
+    assert(output.end_count == 0);
+
+    reset();
+    audio_request_reboot();
+    audio_request_reboot();
+    assert(audio_reboot_status() == AUDIO_REBOOT_PENDING);
+    run_worker();
+    assert(audio_reboot_status() == AUDIO_REBOOT_COMPLETE && output.end_count == 1);
     std::puts("audio worker policy: PASS");
 }
 #else

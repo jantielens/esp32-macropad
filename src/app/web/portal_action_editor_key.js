@@ -20,7 +20,7 @@ _actionEditorExtensions.push({
         var group = document.getElementById(prefix + '-key-group');
         if (group) group.style.display = type === 'key' ? '' : 'none';
         var hint = document.getElementById(prefix + '-ble-hint');
-        if (hint) hint.style.display = type === 'key' || type === 'ble_pair' ? '' : 'none';
+        if (hint) hint.style.display = (type === 'key' || type === 'ble_pair') && !actionEditorCatalogEntry('key') ? '' : 'none';
     },
     load: function(prefix, action) {
         var el;

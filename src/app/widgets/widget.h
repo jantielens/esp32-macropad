@@ -30,6 +30,37 @@ constexpr unsigned widget_default_rgb(const char* color) {
 #include <lvgl.h>
 #include <stdint.h>
 
+inline lv_area_t widget_content_bounds(lv_obj_t* object) {
+    if (!object) return {0, 0, -1, -1};
+    const int width = lv_obj_get_width(object), height = lv_obj_get_height(object);
+    lv_point_t corners[] = {{0, 0}, {width, 0}, {0, height}, {width, height}};
+    if (lv_obj_check_type(object, &lv_image_class)) {
+        lv_point_t pivot;
+        lv_image_get_pivot(object, &pivot);
+        lv_point_array_transform(corners, 4, lv_image_get_rotation(object),
+                                 lv_image_get_scale_x(object), lv_image_get_scale_y(object), &pivot, true);
+    }
+    lv_area_t coordinates;
+    lv_obj_get_coords(object, &coordinates);
+    for (auto& corner : corners) {
+        corner.x += coordinates.x1;
+        corner.y += coordinates.y1;
+    }
+    lv_obj_transform_point_array(object, corners, 4, LV_OBJ_POINT_TRANSFORM_FLAG_NONE);
+    lv_area_t bounds = {corners[0].x, corners[0].y, corners[0].x, corners[0].y};
+    for (const auto& corner : corners) {
+        if (corner.x < bounds.x1) bounds.x1 = corner.x;
+        if (corner.y < bounds.y1) bounds.y1 = corner.y;
+        if (corner.x > bounds.x2) bounds.x2 = corner.x;
+        if (corner.y > bounds.y2) bounds.y2 = corner.y;
+    }
+    bounds.x1 -= coordinates.x1;
+    bounds.y1 -= coordinates.y1;
+    bounds.x2 -= coordinates.x1 + 1;
+    bounds.y2 -= coordinates.y1 + 1;
+    return bounds;
+}
+
 // ============================================================================
 // Widget Type Interface
 // ============================================================================
@@ -164,7 +195,7 @@ inline void widget_describe_fill_fields(JsonArray fields, bool bar_patterns) {
     static const WidgetType prefix##_widget_type = {                           \
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
         prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \
-        nullptr, nullptr, nullptr, nullptr, &prefix##_preview                  \
+        nullptr, nullptr, nullptr, nullptr, &prefix##_preview, nullptr         \
     };                                                                         \
     static struct prefix##AutoReg {                                            \
         prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \
@@ -182,19 +213,19 @@ inline void widget_describe_fill_fields(JsonArray fields, bool bar_patterns) {
     static const WidgetType prefix##_widget_type = {                           \
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
         prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \
-        prefix##_describe, nullptr, nullptr, nullptr, &prefix##_preview        \
+        prefix##_describe, nullptr, nullptr, nullptr, &prefix##_preview, nullptr \
     };                                                                         \
     static struct prefix##AutoReg {                                            \
         prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \
     } _##prefix##_auto_reg
 
-#define REGISTER_WIDGET_SCHEMA_VALIDATED_LIFECYCLE(prefix, stream_fn, resolve_in_tick_flag, validate_fn) \
+#define REGISTER_WIDGET_SCHEMA_INPUT_LIFECYCLE(prefix, stream_fn, resolve_in_tick_flag, validate_fn, cancel_fn) \
     static_assert(sizeof(#prefix) <= CONFIG_WIDGET_TYPE_MAX_LEN,               \
                   "Widget identifier exceeds CONFIG_WIDGET_TYPE_MAX_LEN; shorten the prefix"); \
     static const WidgetType prefix##_widget_type = {                           \
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
         prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \
-        prefix##_describe, prefix##_show, prefix##_hide, validate_fn, &prefix##_preview \
+        prefix##_describe, prefix##_show, prefix##_hide, validate_fn, &prefix##_preview, cancel_fn \
     };                                                                         \
     static struct prefix##AutoReg {                                            \
         prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \
@@ -203,18 +234,21 @@ inline void widget_describe_fill_fields(JsonArray fields, bool bar_patterns) {
 #define REGISTER_WIDGET_SCHEMA(prefix, stream_fn, resolve_in_tick_flag)        \
     REGISTER_WIDGET(prefix, stream_fn, resolve_in_tick_flag)
 
-#define REGISTER_WIDGET_SCHEMA_VALIDATED_LIFECYCLE(prefix, stream_fn, resolve_in_tick_flag, validate_fn) \
+#define REGISTER_WIDGET_SCHEMA_INPUT_LIFECYCLE(prefix, stream_fn, resolve_in_tick_flag, validate_fn, cancel_fn) \
     static_assert(sizeof(#prefix) <= CONFIG_WIDGET_TYPE_MAX_LEN,               \
                   "Widget identifier exceeds CONFIG_WIDGET_TYPE_MAX_LEN; shorten the prefix"); \
     static const WidgetType prefix##_widget_type = {                           \
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
         prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \
-        nullptr, prefix##_show, prefix##_hide, validate_fn, &prefix##_preview   \
+        nullptr, prefix##_show, prefix##_hide, validate_fn, &prefix##_preview, cancel_fn \
     };                                                                         \
     static struct prefix##AutoReg {                                            \
         prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \
     } _##prefix##_auto_reg
 #endif
+
+#define REGISTER_WIDGET_SCHEMA_VALIDATED_LIFECYCLE(prefix, stream_fn, resolve_in_tick_flag, validate_fn) \
+    REGISTER_WIDGET_SCHEMA_INPUT_LIFECYCLE(prefix, stream_fn, resolve_in_tick_flag, validate_fn, nullptr)
 
 #define REGISTER_WIDGET_SCHEMA_LIFECYCLE(prefix, stream_fn, resolve_in_tick_flag) \
     REGISTER_WIDGET_SCHEMA_VALIDATED_LIFECYCLE(prefix, stream_fn, resolve_in_tick_flag, nullptr)

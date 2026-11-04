@@ -46,10 +46,9 @@ static ActionResult expose_dispatch(const ButtonAction& act, const char* label,
 
 // `value` is the single bindable/numeric field (numeric rocker {step} target
 // for adjust_* commands); expose it so shared code drives binding + {step}.
-static char* expose_value_field(ButtonAction& act, size_t* out_size) {
+static bool expose_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {
     ExposePayload& p = expose_payload(act);
-    *out_size = sizeof(p.value);
-    return p.value;
+    return action_visit_field(visitor, context, "expose_value", p.value);
 }
 
 static void expose_describe(JsonObject& out) {
@@ -71,6 +70,6 @@ static void expose_describe(JsonObject& out) {
     }
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(expose_action_type, /* type_name   */ ACTION_TYPE_EXPOSE, /* parse       */ expose_parse, /* serialize   */ expose_serialize, /* dispatch    */ expose_dispatch, /* value_field */ expose_value_field, /* describe    */ expose_describe, nullptr, nullptr, nullptr, ACTION_EXECUTION_SYNC);
+DEFINE_AND_REGISTER_ACTION_TYPE(expose_action_type, ACTION_TYPE_EXPOSE, expose_parse, expose_serialize, expose_dispatch, expose_fields, expose_describe, nullptr, nullptr, ACTION_EXECUTION_SYNC);
 
 #endif // HAS_DISPLAY && IS_DARKROOM_TIMER

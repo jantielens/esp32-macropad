@@ -28,12 +28,13 @@ Put a complex keyboard combo behind one button. Add text snippets, presentation
 controls, and media keys beside it. **USB and BLE keyboard macros** put your
 favorite shortcuts on screen instead of making you memorize them.
 
-On USB HID boards, add a **Mousepad** for pointing, clicking, and button-zone dragging,
+On USB or BLE HID boards, add a **Mousepad** for pointing, clicking, and button-zone dragging,
 a **Scrollpad**, or **gamepad controls** with two sticks, two triggers, a hat,
 and 16 buttons. Multicontact drivers support button-zone dragging, simultaneous controls, and
 two-finger Mousepad scrolling.
 
-BLE supports keyboard control only; USB gamepad output is generic HID, not XInput.
+All controls use the selected USB or BLE transport. Gamepad output is generic HID,
+not XInput; host and application support varies.
 See [keyboard macros](docs/user/integrations/keyboard-mouse-gamepad.md),
 [mouse controls](docs/user/widgets/mousepad.md), and
 [gamepad controls](docs/user/widgets/gamepad.md).
@@ -282,7 +283,7 @@ more room without using the board's internal flash for those files.
 | Capability | What to check |
 |------------|---------------|
 | USB keyboard, mouse, and gamepad | Firmware HID support and a native device/OTG connector, not a USB-UART or host-only port |
-| BLE keyboard | BLE HID support in the exact firmware; mouse and gamepad require USB |
+| BLE keyboard, mouse, and gamepad | BLE HID support in the exact firmware and a compatible Bluetooth host |
 | Alarms | Alarm support in the installed firmware |
 | Native Extensions | Supported architecture, package ABI, and usable slot capacity |
 | Audio, microphones, and cameras | Hardware and firmware support vary; check the exact installer target |
@@ -374,51 +375,6 @@ For portal-only UI work, use the [device-free portal development server](docs/de
 Widget firmware and portal packaging share one explicit manifest; see the
 [widget manifest generator](docs/dev/scripts.md#toolswidget_manifestpy) and
 [editor extension contract](docs/dev/web-portal.md).
-
-### Home Assistant API
-
-| Endpoint | Purpose |
-| --- | --- |
-| `GET /api/config` | HA URL and write-only token status; `capabilities.ha_live` reports live binding support |
-| `GET /api/ha/live` | Authenticated live connection state, entity count, errors, and counters; only with `HAS_HA_LIVE` |
-| `GET /api/ha/lookup` | Authenticated, bounded HA entity search and attribute lookup jobs for the binding builder; only with `HAS_HA_LIVE` |
-
-See the [REST API reference](docs/dev/web-portal.md#home-assistant-live-status).
-Live bindings share HA credentials with REST actions and history; MQTT remains
-independent.
-
-### MQTT inspection API
-
-| Endpoint                                 | Purpose                                                                                 |
-|------------------------------------------|-----------------------------------------------------------------------------------------|
-| `POST /api/mqtt/inspect`                  | Start authenticated, bounded exact-topic inspection; returns a queued handle              |
-| `GET /api/mqtt/inspect?handle=<id>`        | Poll received sample, cached/truncated flags, and explicit acquisition or cleanup status   |
-| `DELETE /api/mqtt/inspect?handle=<id>`     | Request idempotent release; acceptance does not claim broker acknowledgement               |
-
-Available with `HAS_MQTT`, independently of display support. Four concurrent
-handles share a ten-second acquisition deadline and 30-second hard lifetime.
-See [inspection limits, status codes, and ownership](docs/dev/web-portal.md#mqtt-topic-inspection).
-
-### Foreground icon API
-
-| Endpoint | Purpose |
-| --- | --- |
-| `POST /api/icons/source` | Retain catalog SVG JSON or binary local PNG artwork and return a device-local source ID |
-| `GET /api/icons/source?id=<id>` | Read retained SVG JSON or binary PNG artwork for regeneration and export |
-| `POST /api/icons/install?id=...&source_id=...&kind=...&render_key=...` | Install a generated positional PNG for a button |
-| `GET /api/pad/icon_context?page=N` | Read layout context for direct dependent pads in one request |
-| `GET /api/icons/installed` and `GET/DELETE /api/icons/file?name=...` | List or remove generated PNGs |
-| `GET /api/icons/installed?pages=0,1` | Read validated artifact metadata for selected pads; saves reuse matching PNGs |
-| `DELETE /api/icons/page?page=N` | Remove a pad's generated PNGs during explicit deletion or reset |
-
-See the [icon store API reference](docs/dev/web-portal.md#icon-store-api) for
-limits and request details. Pad saves replace only obsolete generated files
-after the configuration is committed. Matching source, kind, render key, and
-calculated PNG dimensions let saves skip unchanged icon rendering and uploads.
-
-`GET /api/info` includes `configured_pads`, the saved pad IDs used for full icon
-regeneration. Ordinary saves use the focused icon-context endpoint instead of
-fetching every pad to discover template dependencies.
 
 ### Running Tests
 

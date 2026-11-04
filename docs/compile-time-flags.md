@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 366
+Total flags: 373
 
 ### Features (HAS_*)
 
@@ -56,7 +56,7 @@ Total flags: 366
 - **HAS_NATIVE_EXTENSIONS** default: `false` — ELF modules loaded from persistent storage at startup.
 - **HAS_REMOTE_LOG** default: `false` — Include remote log capture, portal assets, and retained-crash retrieval.
 - **HAS_SCALE** default: `(HAS_SENSOR_HX711 || HAS_SENSOR_NAU7802)` — device class.
-- **HAS_SD_CARD** default: `false` — Board has a physical MicroSD card slot wired to SDMMC.
+- **HAS_SD_CARD** default: `false` — Board has a physical MicroSD card slot.
 - **HAS_SENSOR_AHT10** default: `false` — Enable AHT10/AHT20 (I2C) temperature and humidity sensor adapter.
 - **HAS_SENSOR_BATTERY_ADC** default: `false` — Enable an ADC-connected LiPo battery monitor sensor adapter.
 - **HAS_SENSOR_BME280** default: `false` — Enable BME280 (I2C) environmental sensor adapter.
@@ -73,11 +73,11 @@ Total flags: 366
 
 ### Selectors (*_DRIVER)
 
-- **AUDIO_OUTPUT_DRIVER** default: `AUDIO_OUTPUT_DRIVER_ES8311` (values: AUDIO_OUTPUT_DRIVER_ES8311, AUDIO_OUTPUT_DRIVER_PCM510XA) — Select the audio output HAL backend (one of the AUDIO_OUTPUT_DRIVER_* constants).
+- **AUDIO_OUTPUT_DRIVER** default: `AUDIO_OUTPUT_DRIVER_ES8311` (values: AUDIO_OUTPUT_DRIVER_ES8311, AUDIO_OUTPUT_DRIVER_ES8388, AUDIO_OUTPUT_DRIVER_PCM510XA) — Select the audio output HAL backend (one of the AUDIO_OUTPUT_DRIVER_* constants).
 - **CAMERA_DRIVER** default: `CAMERA_DRIVER_NONE` (values: CAMERA_DRIVER_OV02C10_P4) — Select the board-specific camera driver.
-- **DISPLAY_DRIVER** default: `DISPLAY_DRIVER_TFT_ESPI` (values: DISPLAY_DRIVER_ARDUINO_GFX, DISPLAY_DRIVER_ARDUINO_GFX_CO5300, DISPLAY_DRIVER_ARDUINO_GFX_NV3041A, DISPLAY_DRIVER_ARDUINO_GFX_ST77916, DISPLAY_DRIVER_CROWPANEL_42, DISPLAY_DRIVER_INKPLATE6FLICK, DISPLAY_DRIVER_IT8951, DISPLAY_DRIVER_JD9165_DSI, DISPLAY_DRIVER_ST7701_DSI, DISPLAY_DRIVER_ST7701_RGB, DISPLAY_DRIVER_ST7703_DSI, DISPLAY_DRIVER_TFT_ESPI) — Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
+- **DISPLAY_DRIVER** default: `DISPLAY_DRIVER_TFT_ESPI` (values: DISPLAY_DRIVER_ARDUINO_GFX, DISPLAY_DRIVER_ARDUINO_GFX_CO5300, DISPLAY_DRIVER_ARDUINO_GFX_NV3041A, DISPLAY_DRIVER_ARDUINO_GFX_ST77916, DISPLAY_DRIVER_CROWPANEL_42, DISPLAY_DRIVER_INKPLATE6FLICK, DISPLAY_DRIVER_IT8951, DISPLAY_DRIVER_JD9165_DSI, DISPLAY_DRIVER_ST7701_DSI, DISPLAY_DRIVER_ST7701_RGB, DISPLAY_DRIVER_ST7703_DSI, DISPLAY_DRIVER_TAB5_DSI, DISPLAY_DRIVER_TFT_ESPI) — Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
 - **DISPLAY_SHAPE** default: `DISPLAY_SHAPE_RECT` (values: DISPLAY_SHAPE_ROUND) — Default display shape (boards override in board_overrides.h)
-- **TOUCH_DRIVER** default: `TOUCH_DRIVER_XPT2046` (values: TOUCH_DRIVER_AXS15231B_I2C, TOUCH_DRIVER_CST816S_WIRE, TOUCH_DRIVER_CST820B_WIRE, TOUCH_DRIVER_GT911, TOUCH_DRIVER_INKPLATE6FLICK, TOUCH_DRIVER_XPT2046) — Select the touch HAL backend (one of the TOUCH_DRIVER_* constants).
+- **TOUCH_DRIVER** default: `TOUCH_DRIVER_XPT2046` (values: TOUCH_DRIVER_AXS15231B_I2C, TOUCH_DRIVER_CST816S_WIRE, TOUCH_DRIVER_CST820B_WIRE, TOUCH_DRIVER_GT911, TOUCH_DRIVER_INKPLATE6FLICK, TOUCH_DRIVER_ST7123, TOUCH_DRIVER_XPT2046) — Select the touch HAL backend (one of the TOUCH_DRIVER_* constants).
 
 ### Hardware (Geometry)
 
@@ -147,6 +147,10 @@ Total flags: 366
 - **SDMMC_CMD_PIN** default: `-1` — Optional board-specific SDMMC command pin; -1 uses the FQBN's default slot routing.
 - **SDMMC_D0_PIN** default: `-1` — Optional board-specific SDMMC data-0 pin; -1 uses the FQBN's default slot routing.
 - **SDMMC_POWER_PIN** default: `-1` — Optional application-managed SD card power-enable GPIO; -1 leaves it alone.
+- **SD_SPI_CS_PIN** default: `-1` — SPI SD card chip-select pin.
+- **SD_SPI_MISO_PIN** default: `-1` — SPI SD card MISO pin.
+- **SD_SPI_MOSI_PIN** default: `-1` — SPI SD card MOSI pin.
+- **SD_SPI_SCK_PIN** default: `-1` — SPI SD card clock pin.
 - **SENSOR_I2C_SCL** default: `-1` — I2C SCL pin for sensors.
 - **SENSOR_I2C_SDA** default: `-1` — I2C pins for sensors. Use -1 to keep default Wire pins.
 - **TOUCH_I2C_SCL** default: `(no default)` — Touch I2C SCL pin.
@@ -192,6 +196,7 @@ Total flags: 366
 - **REMOTE_LOG_BUFFER_RECORDS** default: `256` — Rolling record capacity when remote diagnostics are enabled.
 - **SCREENSAVER_DEFAULT_TIMEOUT_SECONDS** default: `300` — Default inactivity timeout before the screen saver activates (seconds; 0 disables automatic sleep).
 - **SDMMC_MAX_FREQUENCY_KHZ** default: `20000` — SDMMC maximum bus frequency in kHz.
+- **SD_SPI_FREQUENCY_HZ** default: `25000000` — SPI SD card bus frequency in Hz.
 - **SENSOR_I2C_FREQUENCY** default: `400000` — I2C clock for sensors (Hz).
 - **ST7701_DSI_DPI_CLK_HZ** default: `34000000L` — DPI pixel clock in Hz.
 - **ST7703_DPI_CLK_HZ** default: `38000000L` — DPI pixel clock in Hz for ST7703 MIPI-DSI panels (ESP32-P4 only).
@@ -352,6 +357,7 @@ Total flags: 366
 - **SDMMC_POWER_ACTIVE_LOW** default: `false` — Whether SDMMC_POWER_PIN enables card power when driven low.
 - **SDMMC_POWER_SETTLE_MS** default: `0` — Delay after application-managed SD power is enabled.
 - **SD_PROBE_ON_BOOT** default: `false` — listing, write/read round-trip). Intended for new-board bring-up only.
+- **SD_STORAGE_SPI** default: `false` — Use SPI instead of SDMMC for SD-primary storage.
 - **SHUTTER_ADC_PIN_S1** default: `-1` — ADC input pin for shutter sensor 1.
 - **SHUTTER_ADC_PIN_S2** default: `-1` — ADC input pin for shutter sensor 2.
 - **SHUTTER_ADC_PIN_S3** default: `-1` — ADC input pin for shutter sensor 3.
@@ -385,6 +391,7 @@ Total flags: 366
 - **ST7703_VSYNC_FRONT_PORCH** default: `20` — VSYNC front porch in lines.
 - **ST7703_VSYNC_PULSE_WIDTH** default: `4` — VSYNC pulse width in lines.
 - **STOPWATCH_CHARGING_MODE** default: `(no default)` — StopWatch boot charging: 0 off, 1 low (185 mA), 2 high (425 mA).
+- **TELEMETRY_ALLOW_PSRAM_POOL_WALK** default: `(no default)` — free-list walk can starve that scan and produce a visible blue frame.
 - **TELEMETRY_CACHE_INTERNAL_POOL_WALK** default: `(!TELEMETRY_ALLOW_PSRAM_POOL_WALK)` — DSI boards sample the internal largest-free-block metric off the LVGL task.
 - **TFT_BACKLIGHT_DUTY_MAX** default: `255` — Duty cycle at full saturation (before constant DC).
 - **TFT_BACKLIGHT_DUTY_MIN** default: `0` — Duty cycle where backlight first turns on.
@@ -425,6 +432,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc4827w543c |  |  | ✅ |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? |  | ? |  |  | ✅ |  |  |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
 | esp32-p4-lcd4b | ✅ | ✅ | ✅ |  | ✅ | ? |  | ✅ |  | ? | ✅ |  |  |  | ? |  |  | ✅ | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
 | esp32-p4-lcd4b-voice | ✅ | ✅ | ✅ |  | ✅ | ? |  | ✅ |  | ? | ✅ |  |  |  | ? |  |  | ✅ | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
+| m5stack-tab5 | ✅ |  | ✅ |  | ✅ | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
+| m5stack-tab5-sd | ✅ |  | ✅ |  | ✅ | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ |  | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
 | jc4880p433 | ✅ |  | ✅ |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
 | jc4880p433-sd | ✅ |  | ✅ |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
 | jc4880p433-shutter | ✅ |  | ✅ |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? |  | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
@@ -457,6 +466,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc4827w543c | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX_NV3041A | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_GT911 |
 | esp32-p4-lcd4b | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ST7703_DSI | DISPLAY_SHAPE_SQUARE | TOUCH_DRIVER_GT911 |
 | esp32-p4-lcd4b-voice | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ST7703_DSI | DISPLAY_SHAPE_SQUARE | TOUCH_DRIVER_GT911 |
+| m5stack-tab5 | AUDIO_OUTPUT_DRIVER_ES8388 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_TAB5_DSI | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_ST7123 |
+| m5stack-tab5-sd | AUDIO_OUTPUT_DRIVER_ES8388 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_TAB5_DSI | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_ST7123 |
 | jc4880p433 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_ST7701_DSI | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_GT911 |
 | jc4880p433-sd | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_ST7701_DSI | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_GT911 |
 | jc4880p433-shutter | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_ST7701_DSI | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_GT911 |
@@ -479,6 +490,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 <!-- BEGIN COMPILE_FLAG_REPORT:USAGE -->
 - **HAS_AUDIO**
   - src/app/actions/alarm_mp3_action.cpp
+  - src/app/actions/save_volume_action.cpp
   - src/app/actions/sound_alert_action.cpp
   - src/app/actions/volume_action.cpp
   - src/app/alarm_manager.cpp
@@ -502,6 +514,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/music_analysis.h
   - src/app/music_binding.cpp
   - src/app/portal_components.cpp
+  - src/app/reboot_service.cpp
   - src/app/screens/pad_screen_events.cpp
   - src/app/swipe_actions.cpp
   - src/app/web_portal_config.cpp
@@ -544,7 +557,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/boards/m5stack-stopwatch/stopwatch_battery_sensor.cpp
 - **HAS_BLE_HID**
   - src/app/actions/ble_pair_action.cpp
+  - src/app/actions/gamepad_action.cpp
   - src/app/actions/key_action.cpp
+  - src/app/actions/mouse_button_action.cpp
   - src/app/app.ino
   - src/app/ble_hid.cpp
   - src/app/ble_hid.h
@@ -552,14 +567,24 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/device_telemetry.cpp
+  - src/app/gamepad_hid.cpp
+  - src/app/gamepad_hid.h
   - src/app/health_binding.cpp
   - src/app/keyboard_hid.cpp
   - src/app/mcp_tools_config.cpp
+  - src/app/mouse_hid.cpp
+  - src/app/mouse_hid.h
   - src/app/portal_components.cpp
+  - src/app/screens/pad_screen.cpp
+  - src/app/touch_manager.cpp
   - src/app/web_portal_ble.cpp
   - src/app/web_portal_ble.h
   - src/app/web_portal_config.cpp
   - src/app/web_portal_routes.cpp
+  - src/app/widgets/gamepad_button_widget.cpp
+  - src/app/widgets/gamepad_joystick_widget.cpp
+  - src/app/widgets/mousepad_widget.cpp
+  - src/app/widgets/scrollpad_widget.cpp
 - **HAS_BOOT_LOGO**
   - src/app/app.ino
   - src/app/board_config.h
@@ -611,16 +636,21 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/mouse_button_action.cpp
   - src/app/actions/mqtt_action.cpp
   - src/app/actions/music_action.cpp
+  - src/app/actions/save_brightness_action.cpp
+  - src/app/actions/save_volume_action.cpp
   - src/app/actions/screen_action.cpp
+  - src/app/actions/set_var_action.cpp
   - src/app/actions/sound_alert_action.cpp
   - src/app/actions/system_action.cpp
   - src/app/actions/timer_action.cpp
   - src/app/actions/visual_alert_action.cpp
   - src/app/actions/volume_action.cpp
   - src/app/app.ino
+  - src/app/binding_builtin_schemes.cpp
   - src/app/board_config.h
   - src/app/components/hw_buttons_component.cpp
   - src/app/device_dialog.cpp
+  - src/app/expr_binding.cpp
   - src/app/gamepad_hid.cpp
   - src/app/ha_service.cpp
   - src/app/ha_service.h
@@ -634,6 +664,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_tools_config.cpp
   - src/app/mcp_tools_core.cpp
   - src/app/portal_components.cpp
+  - src/app/runtime_variables.cpp
+  - src/app/var_binding.cpp
   - src/app/web_portal_device_api.cpp
   - src/boards/m5stack-stopwatch/stopwatch_actions.cpp
 - **HAS_CAMERA**
@@ -701,7 +733,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/mqtt_action.cpp
   - src/app/actions/music_action.cpp
   - src/app/actions/notify_action.cpp
+  - src/app/actions/save_brightness_action.cpp
+  - src/app/actions/save_volume_action.cpp
   - src/app/actions/screen_action.cpp
+  - src/app/actions/set_var_action.cpp
   - src/app/actions/sound_alert_action.cpp
   - src/app/actions/system_action.cpp
   - src/app/actions/timer_action.cpp
@@ -803,6 +838,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/pad_validate.cpp
   - src/app/pad_validate.h
   - src/app/portal_components.cpp
+  - src/app/runtime_variables.cpp
   - src/app/screen_saver_manager.cpp
   - src/app/screen_saver_manager.h
   - src/app/screens.cpp
@@ -828,6 +864,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/timer_mcp_adapter.h
   - src/app/touch_manager.cpp
   - src/app/touch_manager.h
+  - src/app/var_binding.cpp
   - src/app/visual_alert.cpp
   - src/app/visual_alert.h
   - src/app/web_mcp.cpp
@@ -855,6 +892,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/numericrocker_widget.cpp
   - src/app/widgets/rocker_widget.cpp
   - src/app/widgets/scrollpad_widget.cpp
+  - src/app/widgets/slider_widget.cpp
   - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/table_widget.cpp
   - src/app/widgets/toggle_widget.cpp
@@ -908,6 +946,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/freetype_mono_font.h
   - src/app/pad_font_cache.cpp
 - **HAS_HA_HISTORY**
+  - src/app/app.ino
   - src/app/board_config.h
   - src/app/data_stream.cpp
   - src/app/data_stream.h
@@ -945,6 +984,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/device_telemetry.cpp
+  - src/app/ha_stats.cpp
   - src/app/image_decoder.cpp
   - src/app/image_decoder.h
   - src/app/image_fetch.cpp
@@ -1041,6 +1081,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/numericrocker_widget.cpp
   - src/app/widgets/rocker_widget.cpp
   - src/app/widgets/scrollpad_widget.cpp
+  - src/app/widgets/slider_widget.cpp
   - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/table_widget.cpp
   - src/app/widgets/toggle_widget.cpp
@@ -1106,6 +1147,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_pad.cpp
   - src/app/web_portal_routes.cpp
   - src/boards/m5stack-stopwatch/stopwatch_battery_sensor.cpp
+  - src/boards/m5stack-tab5/tab5_battery_sensor.cpp
 - **HAS_MUSIC_ANALYSIS**
   - src/app/audio.cpp
   - src/app/board_config.h
@@ -1181,6 +1223,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sensors/battery_adc_sensor.cpp
   - src/app/sensors/battery_adc_sensor.h
   - src/boards/m5stack-stopwatch/stopwatch_battery_sensor.cpp
+  - src/boards/m5stack-tab5/tab5_battery_sensor.cpp
 - **HAS_SENSOR_BME280**
   - src/app/board_config.h
   - src/app/sensors.cpp
@@ -1271,6 +1314,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/gamepad_joystick_widget.cpp
   - src/app/widgets/mousepad_widget.cpp
   - src/app/widgets/scrollpad_widget.cpp
+  - src/app/widgets/slider_widget.cpp
 - **HAS_TTF_FONTS**
   - src/app/board_config.h
   - src/app/display_manager.cpp
@@ -1915,6 +1959,21 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/sd_probe.cpp
+- **SD_SPI_CS_PIN**
+  - src/app/board_config.h
+- **SD_SPI_FREQUENCY_HZ**
+  - src/app/board_config.h
+- **SD_SPI_MISO_PIN**
+  - src/app/board_config.h
+- **SD_SPI_MOSI_PIN**
+  - src/app/board_config.h
+- **SD_SPI_SCK_PIN**
+  - src/app/board_config.h
+- **SD_STORAGE_SPI**
+  - src/app/board_config.h
+  - src/app/fs_health.cpp
+  - src/app/sd_storage.cpp
+  - src/app/storage.h
 - **SENSOR_I2C_FREQUENCY**
   - src/app/board_config.h
 - **SENSOR_I2C_SCL**
@@ -2002,6 +2061,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/boards/esp32-p4-lcd4b/board_overrides.h
 - **STOPWATCH_CHARGING_MODE**
   - src/boards/m5stack-stopwatch/board_overrides.h
+- **TELEMETRY_ALLOW_PSRAM_POOL_WALK**
+  - src/app/board_config.h
+  - src/app/device_telemetry.cpp
+  - src/app/health_binding.cpp
 - **TELEMETRY_CACHE_INTERNAL_POOL_WALK**
   - src/app/board_config.h
   - src/app/device_telemetry.cpp

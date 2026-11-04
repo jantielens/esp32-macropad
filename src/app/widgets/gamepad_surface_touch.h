@@ -70,7 +70,7 @@ struct GamepadSurfaceTouch {
         if (interaction == GamepadTouchEvent::Ignore) return interaction;
         if (interaction == GamepadTouchEvent::Cancel) return interaction;
         if (!gamepad_hid_is_ready()) {
-            if (interaction == GamepadTouchEvent::Press) LOGW("GamepadTouch", "Press rejected: USB gamepad not ready");
+            if (interaction == GamepadTouchEvent::Press) LOGW("GamepadTouch", "Press rejected: HID gamepad not ready");
             return GamepadTouchEvent::Cancel;
         }
         if (interaction == GamepadTouchEvent::Press) generation = gamepad_hid_generation();

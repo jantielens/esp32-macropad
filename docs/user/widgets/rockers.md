@@ -36,11 +36,18 @@ Configure one **Adjustment Action** using `{step}`, for example:
 * Timer: slot 1, Adjust countdown, Value `{step}`
 * Volume: Adjust volume, Value `{step}`
 * MQTT: payload `{"delta":{step}}` for an automation expecting a numeric delta
+* Notification: message `Adjusted by {step}`
 
-Small/large zones substitute the signed value into supported bindable action
-fields, including MQTT payload, keys, volume, brightness, timer, and
-feature-specific numeric adjustment fields.
-Do not assume a literal field or arbitrary JSON key supports substitution.
+Small/large zones substitute the signed adjustment into supported text fields,
+including notification messages, variable values, MQTT topics and payloads,
+keys, volume, brightness, and timer values. `{step}` is the change requested,
+not the resulting absolute value. For a decrement of 10, `Adjusted by {step}`
+becomes `Adjusted by -10`.
+
+Event-token support is separate from live bindings. Commands, variable names,
+action field names, and native numeric properties such as delay duration stay
+literal. The editor rejects unsupported fields and substitutions that exceed
+their byte capacity. `{value}` belongs to sliders and is unavailable here.
 
 The center has its own up-to-three tap actions; the adjustment action may be
 empty. The editor omits ordinary long-press actions for this widget.

@@ -61,9 +61,10 @@ async function testFetchConcurrency() {
 
 async function main() {
     await testFetchConcurrency();
-    for (const outcome of ['success', 'empty', 'error', 'font-error', 'timeout']) {
+    for (const outcome of ['success', 'empty', 'error', 'font-error', 'timeout', 'font-timeout', 'no-font-api']) {
         let stylesheet;
         let timeoutCallback;
+        let completeFont;
         const classes = new Set();
         const fontContext = {
             window: { fetch: async () => ({}) },
@@ -74,6 +75,7 @@ async function main() {
                 documentElement: { classList: { add: name => classes.add(name) } },
                 fonts: { load: async () => {
                     if (outcome === 'font-error') throw new Error('Font unavailable');
+                    if (outcome === 'font-timeout') return new Promise(resolve => { completeFont = resolve; });
                     return outcome === 'success' ? [{}] : [];
                 } }
             },
@@ -85,11 +87,19 @@ async function main() {
         vm.runInContext(fs.readFileSync('src/app/web/portal_core.js', 'utf8'), fontContext);
         const loaded = fontContext.portalEnsureMaterialSymbols();
         assert.strictEqual(fontContext.portalEnsureMaterialSymbols(), loaded);
+        assert(!classes.has('portal-icons-ready'), 'pending fonts must not reveal decorative glyphs');
+        if (outcome === 'no-font-api') delete fontContext.document.fonts;
         if (outcome === 'timeout') timeoutCallback();
         else if (outcome === 'error') stylesheet.onerror();
         else stylesheet.onload();
+        if (outcome === 'font-timeout') timeoutCallback();
         assert.strictEqual(await loaded, outcome === 'success');
         assert.strictEqual(classes.has('portal-icons-ready'), outcome === 'success');
+        if (outcome === 'font-timeout') {
+            completeFont([{}]);
+            await new Promise(resolve => setImmediate(resolve));
+            assert(!classes.has('portal-icons-ready'), 'a late font download must not reveal offline glyphs');
+        }
         if (outcome === 'timeout') {
             fontContext.document.fonts.load = async () => [{}];
             stylesheet.onload();

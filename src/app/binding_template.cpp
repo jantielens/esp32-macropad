@@ -38,6 +38,7 @@ uint8_t binding_template_scheme_count() { return (uint8_t)g_scheme_count; }
 
 bool binding_key_doc_matches(const char* pattern, const char* key) {
     if (!pattern || !key) return false;
+    if (strcmp(pattern, "*") == 0) return key[0] && !strchr(key, ';');
     if (!*pattern) return !*key;
     if (*pattern == '#' || *pattern == '*') {
         for (size_t n = 0; key[n]; ++n) {
@@ -90,9 +91,11 @@ const char* binding_template_validate_params(const char* scheme, size_t name_len
             }
             if (count < spec.min_params) return kTooFewParameters;
             if (count > spec.max_params) return kTooManyParameters;
-            if (spec.validation_mode == BINDING_VALIDATION_STRUCTURAL_ONLY || spec.free_form) return nullptr;
             size_t key_len = 0;
             while (params[key_len] && params[key_len] != ';' && params[key_len] != '|') ++key_len;
+            if (spec.validate_first_param && !spec.validate_first_param(params, key_len))
+                return "invalid binding parameter";
+            if (spec.validation_mode == BINDING_VALIDATION_STRUCTURAL_ONLY || spec.free_form) return nullptr;
             for (uint8_t key_index = 0; key_index < spec.key_count(); ++key_index) {
                 const char* key = spec.key_at(key_index);
                 if (key && strlen(key) == key_len && strncmp(key, params, key_len) == 0) return nullptr;
@@ -215,12 +218,16 @@ bool binding_template_has_bindings(const char* label) {
     return find_next_token(label, &ts, &sc, &sl, &pm, &pl, &te);
 }
 
+static bool checked_resolution_active = false;
+static bool checked_resolution_complete = true;
+
 static bool resolve_template(const char* templ, char* out, size_t out_len,
                              BindingResolverStatus* status, bool* complete = nullptr) {
     if (complete) *complete = false;
     if (!templ || !out || out_len == 0) {
         if (out && out_len > 0) out[0] = '\0';
         if (status) *status = BINDING_RESOLVER_UNAVAILABLE;
+        if (checked_resolution_active) checked_resolution_complete = false;
         return false;
     }
 
@@ -283,17 +290,20 @@ static bool resolve_template(const char* templ, char* out, size_t out_len,
 
             char resolved[BINDING_TEMPLATE_MAX_LEN + 1];
             BindingResolverStatus resolved_status = binding_template_resolve_registered(
-                scheme, scheme_len, params_buf, resolved, complete ? sizeof(resolved) : 128);
+                scheme, scheme_len, params_buf, resolved, checked_resolution_active ? sizeof(resolved) : 128);
             if (resolved_status == BINDING_RESOLVER_RESOLVED) {
                 any_resolved = true;
                 size_t rlen = strlen(resolved);
                 size_t space = out_len - 1 - written;
                 size_t copy = rlen < space ? rlen : space;
-                if (copy != rlen || (complete && rlen == sizeof(resolved) - 1)) fits = false;
+                if (copy != rlen || (checked_resolution_active && rlen == sizeof(resolved) - 1)) fits = false;
                 memcpy(out + written, resolved, copy);
                 written += copy;
             } else {
-                if (resolved_status == BINDING_RESOLVER_UNKNOWN) {
+                if (fallback) {
+                    // A supplied fallback fulfills the token even when its source
+                    // is unavailable; checked callers may safely use that value.
+                } else if (resolved_status == BINDING_RESOLVER_UNKNOWN) {
                     outcome = BINDING_RESOLVER_UNKNOWN;
                 } else if (outcome == BINDING_RESOLVER_RESOLVED) {
                     outcome = BINDING_RESOLVER_UNAVAILABLE;
@@ -313,14 +323,24 @@ static bool resolve_template(const char* templ, char* out, size_t out_len,
     }
 
     out[written] = '\0';
+    if (checked_resolution_active && (!fits || *p || outcome != BINDING_RESOLVER_RESOLVED)) {
+        checked_resolution_complete = false;
+    }
     if (complete) *complete = fits && !*p && outcome == BINDING_RESOLVER_RESOLVED;
     if (status) *status = outcome;
     return any_resolved;
 }
 
 bool binding_template_resolve_checked(const char* templ, char* out, size_t out_len) {
+    const bool previous_active = checked_resolution_active;
+    const bool previous_complete = checked_resolution_complete;
+    checked_resolution_active = true;
+    checked_resolution_complete = true;
     bool complete = false;
     resolve_template(templ, out, out_len, nullptr, &complete);
+    complete = complete && checked_resolution_complete;
+    checked_resolution_active = previous_active;
+    checked_resolution_complete = previous_complete && complete;
     return complete;
 }
 

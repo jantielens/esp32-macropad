@@ -25,9 +25,14 @@ void ble_hid_request_pairing();
 // Process pending BLE HID requests. Call from main loop() (non-PSRAM stack).
 void ble_hid_loop();
 bool ble_hid_send_report(KsUsageType type, uint16_t usage, uint8_t modifiers);
+struct MouseHidReport;
+struct GamepadReport;
+bool ble_hid_send_mouse_report(const MouseHidReport& report, uint32_t expected_epoch, uint32_t expected_ota_epoch);
+bool ble_hid_send_gamepad_report(const GamepadReport& report, uint32_t expected_epoch,
+								 uint32_t expected_ota_epoch, uint32_t expected_generation);
 uint32_t ble_hid_epoch();
 
-// Returns true when a BLE HID host is connected.
+// Returns true when a BLE HID host is connected, encrypted, and bonded.
 bool ble_hid_is_connected();
 
 // Returns true when pairing mode is active (accepting new devices).

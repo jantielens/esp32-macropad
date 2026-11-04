@@ -23,8 +23,10 @@ ActionResult dispatch_visual_alert(const ButtonAction& act, const char* label, u
 }
 bool visual_alert_available() { return HAS_DISPLAY; }
 const char* validate_visual_alert(const JsonObjectConst action) { if (action.containsKey("op")) { if (!action["op"].is<const char*>()) return "visual_alert op must be a string"; const char* op = action["op"].as<const char*>(); if (strcmp(op, "start") && strcmp(op, "stop")) return "visual_alert op must be start or stop"; } return nullptr; }
-bool visit_visual_alert_fields(ButtonAction& act, ActionBindableFieldVisitor visitor, void* context) { return !act.payload.visual_alert.va_color[0] || visitor(act.payload.visual_alert.va_color, sizeof(act.payload.visual_alert.va_color), false, context); }
+bool visit_visual_alert_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {
+    return action_visit_field(visitor, context, "va_color", act.payload.visual_alert.va_color, ACTION_FIELD_BINDING | ACTION_FIELD_EVENT);
+}
 void describe_visual_alert(JsonObject& action) { action["group"] = "Display"; action["label"] = "Visual alert"; JsonArray commands = action.createNestedArray("commands"); JsonObject start = commands.createNestedObject(); start["id"] = "start"; start["label"] = "Start alert"; JsonObject stop = commands.createNestedObject(); stop["id"] = "stop"; stop["label"] = "Stop alert"; }
-DEFINE_AND_REGISTER_ACTION_TYPE(kVisualAlertActionType, ACTION_TYPE_VISUAL_ALERT, parse_visual_alert, serialize_visual_alert, dispatch_visual_alert, nullptr, describe_visual_alert, visual_alert_available, validate_visual_alert, visit_visual_alert_fields, ACTION_EXECUTION_SYNC);
+DEFINE_AND_REGISTER_ACTION_TYPE(kVisualAlertActionType, ACTION_TYPE_VISUAL_ALERT, parse_visual_alert, serialize_visual_alert, dispatch_visual_alert, visit_visual_alert_fields, describe_visual_alert, visual_alert_available, validate_visual_alert, ACTION_EXECUTION_SYNC);
 } // namespace
 #endif // HAS_DISPLAY || HAS_BUTTON

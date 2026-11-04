@@ -1,10 +1,16 @@
 #include "gamepad_hid.h"
 
-#if HAS_USB_HID
+#if HAS_USB_HID || HAS_BLE_HID
 #include "action_continuation.h"
 #include "log_manager.h"
 #include "ota_activity.h"
+#include "keyboard_hid.h"
+#if HAS_USB_HID
 #include "usb_hid.h"
+#endif
+#if HAS_BLE_HID
+#include "ble_hid.h"
+#endif
 #include <Arduino.h>
 #include <atomic>
 #include <freertos/FreeRTOS.h>
@@ -13,7 +19,8 @@ namespace {
 GamepadHidState gamepad_state;
 portMUX_TYPE gamepad_mutex = portMUX_INITIALIZER_UNLOCKED;
 std::atomic<uint32_t> gamepad_generation{1};
-uint32_t gamepad_usb_epoch = 0;
+uint32_t gamepad_transport_epoch = 0;
+KeyboardTransport gamepad_transport = KeyboardTransport::None;
 uint32_t gamepad_ota_epoch = 0;
 bool gamepad_was_ready = false;
 
@@ -23,13 +30,15 @@ void gamepad_reset_locked() {
 }
 
 void gamepad_sync_locked() {
-    const uint32_t usb_epoch = usb_hid_epoch();
+    const uint32_t transport_epoch = keyboard_hid_transport_epoch();
+    const KeyboardTransport transport = keyboard_hid_transport();
     const uint32_t ota_epoch = ota_activity_epoch();
     const bool ready = gamepad_hid_is_ready();
-    if (usb_epoch != gamepad_usb_epoch || ota_epoch != gamepad_ota_epoch ||
+    if (transport != gamepad_transport || transport_epoch != gamepad_transport_epoch || ota_epoch != gamepad_ota_epoch ||
         (!ready && gamepad_was_ready)) {
         gamepad_reset_locked();
-        gamepad_usb_epoch = usb_epoch;
+        gamepad_transport_epoch = transport_epoch;
+        gamepad_transport = transport;
         gamepad_ota_epoch = ota_epoch;
     }
     gamepad_was_ready = ready;
@@ -37,7 +46,7 @@ void gamepad_sync_locked() {
 }
 
 bool gamepad_hid_is_ready() {
-    return usb_hid_is_ready() && usb_hid_gamepad_enabled() && !ota_activity_is_active();
+    return keyboard_hid_transport_is_ready() && !ota_activity_is_active();
 }
 
 uint32_t gamepad_hid_generation() {
@@ -111,7 +120,8 @@ void gamepad_hid_loop() {
     portENTER_CRITICAL(&gamepad_mutex);
     gamepad_sync_locked();
     gamepad_state.tick(millis());
-    const uint32_t usb_epoch = gamepad_usb_epoch;
+    const uint32_t transport_epoch = gamepad_transport_epoch;
+    const KeyboardTransport transport = gamepad_transport;
     const uint32_t ota_epoch = gamepad_ota_epoch;
     const uint32_t generation = gamepad_generation.load();
     const bool pending = gamepad_state.next(report);
@@ -122,12 +132,23 @@ void gamepad_hid_loop() {
     static bool logged_ready = false;
     if (generation != logged_generation || ready != logged_ready) {
         if (ready != logged_ready) LOGI("GamepadHID", "Ready=%u", unsigned(ready));
-        LOGT("GamepadHID", "Ready=%u generation=%lu usb_epoch=%lu ota_epoch=%lu",
-             unsigned(ready), (unsigned long)generation, (unsigned long)usb_epoch, (unsigned long)ota_epoch);
+           LOGT("GamepadHID", "Ready=%u generation=%lu transport_epoch=%lu ota_epoch=%lu",
+               unsigned(ready), (unsigned long)generation, (unsigned long)transport_epoch, (unsigned long)ota_epoch);
         logged_generation = generation;
         logged_ready = ready;
     }
-    if (pending && usb_hid_send_gamepad_report(report, usb_epoch, ota_epoch, generation)) {
+    bool sent = false;
+    if (pending && transport == keyboard_hid_transport()) {
+#if HAS_USB_HID
+        if (transport == KeyboardTransport::Usb)
+            sent = usb_hid_send_gamepad_report(report, transport_epoch, ota_epoch, generation);
+#endif
+#if HAS_BLE_HID
+        if (transport == KeyboardTransport::Ble)
+            sent = ble_hid_send_gamepad_report(report, transport_epoch, ota_epoch, generation);
+#endif
+    }
+    if (sent) {
         portENTER_CRITICAL(&gamepad_mutex);
         gamepad_sync_locked();
         const bool current = generation == gamepad_generation.load();

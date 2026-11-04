@@ -19,6 +19,27 @@ The dropdown groups supported actions by category. Use its current fields/help
 instead of assuming another firmware's action catalog applies.
 An action that queues network work is not proof its external effect completed.
 
+## Set a runtime variable
+
+Choose **Set variable** and enter a literal **Name** and a **Value**. The Value
+can contain binding tokens or an expression; it is resolved once when the
+action runs. The action does not require MQTT or Home Assistant.
+
+1. Add **Set variable** to a button's Tap actions. Set **Name** to `counter`
+	and **Value** to `[expr:[var:counter|0] + 1]`.
+2. Set a button label to `[var:counter|0]`. Add a reset button with **Set
+	variable**, **Name** `counter`, and **Value** `0`.
+3. Choose **Save Pad**, activate the counter button, and observe the label
+	increase. Activate the reset button to return it to zero.
+
+The saved action configuration persists, but current variable values are
+volatile. Values survive pad changes and configuration reloads without a
+reboot; reboot clears them. Empty Values are valid. If a Value cannot resolve,
+the variable store is full, or memory cannot be allocated, the action fails, leaves the previous value
+unchanged, and stops the remaining actions in that list. See
+[runtime-variable binding syntax](bindings.md#read-a-runtime-variable) and
+[expression examples](expressions.md#update-runtime-state).
+
 ## Pause and confirm safely
 
 Delay accepts a literal whole number, 1-55000 ms, and pauses only that list.

@@ -27,7 +27,7 @@ uint32_t widget_mouse_epoch = 1;
 
 bool mouse_hid_is_ready() { return widget_ready; }
 bool display_manager_go_back() { ++widget_back_requests; return true; }
-uint32_t usb_hid_epoch() { return widget_mouse_epoch; }
+uint32_t mouse_hid_epoch() { return widget_mouse_epoch; }
 uint32_t mouse_hid_generation() { return widget_mouse.current_generation(); }
 void mouse_hid_cancel() { widget_mouse.reset(); }
 uint32_t mouse_hid_acquire(uint32_t, uint8_t buttons) { return widget_ready ? widget_mouse.acquire(buttons) : 0; }

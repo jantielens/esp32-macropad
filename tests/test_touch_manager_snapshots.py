@@ -513,18 +513,20 @@ int main() {
     capacity = 1;
     assert(!touch_manager_controller_multitouch());
     capacity = 5;
-    assert(touch_manager_controller_multitouch() == bool(HAS_USB_HID));
+    assert(touch_manager_controller_multitouch() == bool(HAS_USB_HID || HAS_BLE_HID));
 #endif
 }
 ''')
     for display in (0, 1):
         for touch in (0, 1):
             for usb in (0, 1):
-                subprocess.run(["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
-                                f"-DHAS_DISPLAY={display}", f"-DHAS_TOUCH={touch}", f"-DHAS_USB_HID={usb}",
-                                str(test_source), "-o", str(executable)], check=True)
-                subprocess.run([str(executable)], check=True)
-print("PASS: shared touch capabilities across display, touch, and USB feature combinations")
+                for ble in (0, 1):
+                    subprocess.run(["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                                    f"-DHAS_DISPLAY={display}", f"-DHAS_TOUCH={touch}",
+                                    f"-DHAS_USB_HID={usb}", f"-DHAS_BLE_HID={ble}",
+                                    str(test_source), "-o", str(executable)], check=True)
+                    subprocess.run([str(executable)], check=True)
+print("PASS: shared touch capabilities across display, touch, USB, and BLE feature combinations")
 
 mouse_source = (root / "src/app/mouse_hid.cpp").read_text()
 mouse_start = mouse_source.index("namespace {")
@@ -533,6 +535,9 @@ mouse_harness = r'''
 #include <cassert>
 #include <cstdint>
 #include "mouse_hid_state.h"
+#include "keyboard_transport.h"
+#define HAS_USB_HID 1
+#define HAS_BLE_HID 0
 #define portMUX_TYPE int
 #define portMUX_INITIALIZER_UNLOCKED 0
 #define portENTER_CRITICAL(mux) ((void)(mux))
@@ -541,15 +546,18 @@ static bool usb_ready = false, ota_active = false;
 static uint32_t usb_epoch = 1, ota_epoch = 0, clock_ms = 0;
 static unsigned submissions = 0;
 static uint32_t millis() { return ++clock_ms; }
-static uint32_t usb_hid_epoch() { return usb_epoch; }
+static uint32_t keyboard_hid_transport_epoch() { return usb_epoch; }
 static uint32_t ota_activity_epoch() { return ota_epoch; }
-static bool usb_hid_is_ready() { return usb_ready; }
+static bool keyboard_hid_transport_is_ready() { return usb_ready; }
+static KeyboardTransport keyboard_hid_transport() { return KeyboardTransport::Usb; }
 static bool ota_activity_is_active() { return ota_active; }
 static bool usb_hid_send_mouse_report(const MouseHidReport&, uint32_t, uint32_t) {
+    if (!usb_ready || ota_active) return false;
     ++submissions;
     return true;
 }
 bool mouse_hid_is_ready();
+uint32_t mouse_hid_epoch();
 '''
 mouse_harness += mouse_source[mouse_start:mouse_end]
 mouse_harness += r'''

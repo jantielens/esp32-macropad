@@ -1,11 +1,11 @@
 // ============================================================================
-// Guard test for the action-type registry value-field contract
+// Guard test for the action-type registry named-field contract
 // ============================================================================
 // Device-class action types store their value in the opaque
 // ActionPayload::device_class arm, invisible to shared firmware at compile
-// time. A single registry accessor, value_field, reaches that field; shared
+// time. The registry's named-field visitor reaches that field; shared
 // code drives binding resolution, the '[' scan, and {step} substitution
-// generically against it. A device class that forgets to wire value_field
+// generically against it. A device class that omits its field declaration
 // silently loses all three behaviors (the bug that motivated this test).
 //
 // This test registers a SYNTHETIC device-class value-action — mirroring the
@@ -30,6 +30,7 @@
 struct FakePayload {
     char command[16];
     char value[32];
+    char message[16];
 };
 static_assert(sizeof(FakePayload) <= ACTION_PAYLOAD_DEVICE_CLASS_BYTES,
               "FakePayload exceeds device_class arm");
@@ -41,10 +42,10 @@ static FakePayload& fake_payload(ButtonAction& act) {
 // ---------------------------------------------------------------------------
 // Accessor implementation — mirrors the device-class pattern exactly.
 // ---------------------------------------------------------------------------
-static char* fake_value_field(ButtonAction& act, size_t* out_size) {
+static bool fake_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {
     FakePayload& p = fake_payload(act);
-    *out_size = sizeof(p.value);
-    return p.value;
+    return action_visit_field(visitor, context, "value", p.value) &&
+        action_visit_field(visitor, context, "message", p.message, ACTION_FIELD_EVENT);
 }
 
 static bool s_fake_available = true;
@@ -62,7 +63,7 @@ static const ActionTypeDef fake_action_type = {
     /* parse       */ nullptr,
     /* serialize   */ nullptr,
     /* dispatch    */ nullptr,
-    /* value_field */ fake_value_field,
+    /* fields      */ fake_fields,
     /* describe    */ nullptr,
     /* available   */ fake_available,
     /* validate    */ fake_validate,
@@ -121,7 +122,7 @@ static void test_lookup_returns_registered_def() {
     printf("--- registry returns the registered def ---\n");
     const ActionTypeDef* def = action_type_find(ACTION_TYPE_FAKE);
     check_true(def != nullptr, "fake type is registered");
-    check_true(def && def->value_field != nullptr, "value_field accessor present");
+    check_true(def && def->fields != nullptr, "field declaration present");
 }
 
 static void test_support_and_validation_hooks() {
@@ -141,7 +142,7 @@ static void test_support_and_validation_hooks() {
 static void test_substitute_step_via_registry() {
     printf("--- substitute_step substitutes {step} via registry ---\n");
     const ActionTypeDef* def = action_type_find(ACTION_TYPE_FAKE);
-    if (!def || !def->value_field) { g_fail++; return; }
+    if (!def || !def->fields) { g_fail++; return; }
     {
         ButtonAction act = make_fake("adjust_base {step}");
         action_type_substitute_step(def, act, 5.0f);
@@ -159,10 +160,40 @@ static void test_substitute_step_via_registry() {
     }
 }
 
+static void test_token_substitution_is_atomic() {
+    printf("--- token substitution is bounded and atomic ---\n");
+    char field[16] = "{value}:{value}";
+    check_true(action_substitute_token_field(field, sizeof(field), "{value}", "7"),
+               "repeated token replacement succeeds");
+    check_str(field, "7:7", "all occurrences are replaced");
+
+    strlcpy(field, "{value}{value}", sizeof(field));
+    check_true(!action_substitute_token_field(field, sizeof(field), "{value}", "12345678"),
+               "overflow is rejected");
+    check_str(field, "{value}{value}", "overflow leaves original unchanged");
+
+    check_true(!action_substitute_token_field(field, sizeof(field), "{value}", "{value}"),
+               "recursive replacement is rejected");
+    check_str(field, "{value}{value}", "recursive replacement leaves original unchanged");
+
+    const ActionTypeDef* def = action_type_find(ACTION_TYPE_FAKE);
+    ButtonAction act = make_fake("{value}");
+    strlcpy(fake_payload(act).message, "{value}{value}", sizeof(fake_payload(act).message));
+    check_true(!action_type_substitute_token(def, act, "{value}", "12345678"), "second-field overflow is rejected");
+    check_str(fake_payload(act).value, "{value}", "first field is unchanged on second-field failure");
+    check_true(action_type_substitute_token(def, act, "{value}", "20"), "multi-field substitution succeeds");
+    check_str(fake_payload(act).value, "20", "value field substituted");
+    check_str(fake_payload(act).message, "2020", "event-only field substituted");
+    strlcpy(fake_payload(act).message, "[mock:x]", sizeof(fake_payload(act).message));
+    check_true(!action_type_has_binding(def, act), "event-only field does not enable live bindings");
+    strlcpy(fake_payload(act).message, "{step}", sizeof(fake_payload(act).message));
+    check_true(!action_type_substitute_token(def, act, "{value}", "20"), "unavailable token is rejected");
+}
+
 static void test_has_binding_via_registry() {
     printf("--- has_binding detects bindings via registry ---\n");
     const ActionTypeDef* def = action_type_find(ACTION_TYPE_FAKE);
-    if (!def || !def->value_field) { g_fail++; return; }
+    if (!def || !def->fields) { g_fail++; return; }
     {
         ButtonAction act = make_fake("[mock:x]");
         check_true(action_type_has_binding(def, act), "binding token detected");
@@ -180,7 +211,7 @@ static void test_has_binding_via_registry() {
 static void test_resolve_bindings_via_registry() {
     printf("--- resolve_bindings resolves value via registry ---\n");
     const ActionTypeDef* def = action_type_find(ACTION_TYPE_FAKE);
-    if (!def || !def->value_field) { g_fail++; return; }
+    if (!def || !def->fields) { g_fail++; return; }
     {
         ButtonAction act = make_fake("[mock:x]");
         check_true(action_type_resolve_bindings(def, act), "binding resolution succeeds");
@@ -205,7 +236,7 @@ static BindingResolverStatus long_resolve(const char* params, char* out, size_t 
 static void test_resolve_bindings_rejects_overflow() {
     printf("--- resolve_bindings rejects overflow ---\n");
     const ActionTypeDef* def = action_type_find(ACTION_TYPE_FAKE);
-    if (!def || !def->value_field) { g_fail++; return; }
+    if (!def || !def->fields) { g_fail++; return; }
     ButtonAction act = make_fake("[long:x]");
     check_true(!action_type_resolve_bindings(def, act), "oversized binding result is rejected");
     check_str(fake_payload(act).value, "[long:x]", "overflow leaves original value unchanged");
@@ -231,6 +262,7 @@ int main() {
     test_lookup_returns_registered_def();
     test_support_and_validation_hooks();
     test_substitute_step_via_registry();
+    test_token_substitution_is_atomic();
     test_has_binding_via_registry();
     test_resolve_bindings_via_registry();
     test_resolve_bindings_rejects_overflow();

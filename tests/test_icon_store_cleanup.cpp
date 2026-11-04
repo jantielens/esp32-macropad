@@ -78,7 +78,9 @@ int main(int argc, char**) {
         return 0;
     }
 
+    LittleFS.icon_directory_opens = 0;
     icon_store_preload_pad_pages();
+    assert(LittleFS.icon_directory_opens == 5);
     assert(LittleFS.exists("/icons/pad_0_main_0_0.png"));
     assert(LittleFS.exists("/icons/pad_0_main_0_0.meta"));
     assert(LittleFS.exists("/icons/pad_0_main_1_0.png"));

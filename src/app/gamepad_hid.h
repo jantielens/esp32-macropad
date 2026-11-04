@@ -3,7 +3,7 @@
 #include "board_config.h"
 #include "gamepad_hid_state.h"
 
-#if HAS_USB_HID
+#if HAS_USB_HID || HAS_BLE_HID
 bool gamepad_hid_is_ready();
 uint32_t gamepad_hid_generation();
 bool gamepad_hid_hold(GamepadControl control, bool down);

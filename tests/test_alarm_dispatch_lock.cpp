@@ -17,6 +17,8 @@ void display_manager_lock_if_needed(bool* locked) {
     if (*locked) { display_locked = true; ++lock_count; }
 }
 void display_manager_unlock_if_needed(bool locked) { if (locked) display_locked = false; }
+void runtime_variable_transaction_lock() {}
+void runtime_variable_transaction_unlock() {}
 
 static ActionResult ui_dispatch(const ButtonAction&, const char*, uint32_t) {
     assert(display_locked);
@@ -29,9 +31,9 @@ static ActionResult network_dispatch(const ButtonAction&, const char*, uint32_t)
     return ACTION_COMPLETE;
 }
 static const ActionTypeDef ui_type{"screen", nullptr, nullptr, ui_dispatch, nullptr, nullptr,
-    nullptr, nullptr, nullptr, ACTION_EXECUTION_SYNC};
+    nullptr, nullptr, ACTION_EXECUTION_SYNC};
 static const ActionTypeDef network_type{"ha_service", nullptr, nullptr, network_dispatch, nullptr, nullptr,
-    nullptr, nullptr, nullptr, ACTION_EXECUTION_SYNC, false};
+    nullptr, nullptr, ACTION_EXECUTION_SYNC, false};
 const ActionTypeDef* action_type_find(const char* type) {
     return !strcmp(type, "screen") ? &ui_type : !strcmp(type, "ha_service") ? &network_type : nullptr;
 }

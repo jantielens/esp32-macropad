@@ -17,6 +17,8 @@
 #include "drivers/wire_cst820b_touch_driver.cpp"
 #elif TOUCH_DRIVER == TOUCH_DRIVER_GT911
 #include "drivers/gt911_touch_driver.cpp"
+#elif TOUCH_DRIVER == TOUCH_DRIVER_ST7123
+#include "drivers/st7123_touch_driver.cpp"
 #elif TOUCH_DRIVER == TOUCH_DRIVER_INKPLATE6FLICK
 #include "drivers/inkplate6flick_touch_driver.cpp"
 #else

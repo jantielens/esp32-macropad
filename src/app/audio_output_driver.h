@@ -21,6 +21,8 @@ public:
 
     virtual bool setMuted(bool muted) = 0;
     virtual bool supportsMute() const { return false; }
+    virtual bool needsContinuousIdleOutput() const { return false; }
+    virtual bool needsRebootShutdown() const { return false; }
     virtual bool isAvailable() const = 0;
     virtual bool end() = 0;
     virtual void flush() {}

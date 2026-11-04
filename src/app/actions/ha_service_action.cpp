@@ -1,5 +1,6 @@
 #include "action_registry.h"
 #include "action_dispatch.h"
+#include "action_validate.h"
 #include "log_manager.h"
 #if defined(ARDUINO)
 #include "ha_service.h"
@@ -12,6 +13,11 @@ constexpr const char* kHaServiceActionTag = "Action";
 void parse_ha_service(const JsonObject& action, ButtonAction& act) { strlcpy(act.payload.ha_service.entity_id, action["entity_id"] | "", sizeof(act.payload.ha_service.entity_id)); strlcpy(act.payload.ha_service.service, action["service"] | "", sizeof(act.payload.ha_service.service)); strlcpy(act.payload.ha_service.data_json, action["data_json"] | "", sizeof(act.payload.ha_service.data_json)); }
 void serialize_ha_service(const ButtonAction& act, JsonObject action) { if (act.payload.ha_service.entity_id[0]) action["entity_id"] = act.payload.ha_service.entity_id; if (act.payload.ha_service.service[0]) action["service"] = act.payload.ha_service.service; if (act.payload.ha_service.data_json[0]) action["data_json"] = act.payload.ha_service.data_json; }
 ActionResult dispatch_ha_service(const ButtonAction& act, const char* label, uint32_t) {
+    JsonDocument resolved;
+    JsonObject object = resolved.to<JsonObject>();
+    object["type"] = ACTION_TYPE_HA_SERVICE;
+    serialize_ha_service(act, object);
+    if (action_validate_json(object, false)) return ACTION_FAILED;
 #if defined(ARDUINO)
     const auto& service = act.payload.ha_service;
     if (action_dispatch_context().synchronous)
@@ -19,7 +25,7 @@ ActionResult dispatch_ha_service(const ButtonAction& act, const char* label, uin
     if (service.entity_id[0] && service.service[0]) { LOGI(kHaServiceActionTag, "%s ha_service: %s.%s", label, service.entity_id, service.service); if (ha_service_enqueue(service) == HA_SERVICE_QUEUE_FULL) { LOGW(kHaServiceActionTag, "%s ha_service queue full: entity='%s' service='%s'", label, service.entity_id, service.service); return ACTION_FAILED; } }
     else { LOGW(kHaServiceActionTag, "%s ha_service: missing entity_id/service", label); return ACTION_FAILED; }
 #else
-    (void)act; (void)label;
+    (void)label;
 #endif
     return ACTION_COMPLETE;
 }
@@ -37,9 +43,14 @@ const char* validate_ha_service(const JsonObjectConst action) {
     if (!action["data_json"].is<const char*>()) return "ha_service data_json must be a string";
     const char* data = action["data_json"].as<const char*>(); if (!data[0]) return nullptr;
     if (strlen(data) >= sizeof(((HaServicePayload*)nullptr)->data_json)) return "ha_service data_json too long";
-    JsonDocument document; return deserializeJson(document, data) || !document.is<JsonObjectConst>() ? "ha_service data_json must contain a JSON object" : nullptr;
+    return action_json_object_valid(data) ? nullptr : "ha_service data_json must contain a JSON object";
+}
+bool visit_ha_service_fields(ButtonAction& action, ActionFieldVisitor visitor, void* context) {
+    return action_visit_field(visitor, context, "entity_id", action.payload.ha_service.entity_id, ACTION_FIELD_EVENT) &&
+        action_visit_field(visitor, context, "service", action.payload.ha_service.service, ACTION_FIELD_EVENT) &&
+        action_visit_field(visitor, context, "data_json", action.payload.ha_service.data_json, ACTION_FIELD_EVENT);
 }
 void describe_ha_service(JsonObject& action) { action["group"] = "Connectivity"; action["label"] = "Call Home Assistant service"; JsonArray fields = action.createNestedArray("fields"); JsonObject entity = fields.createNestedObject(); entity["name"] = "entity_id"; entity["description"] = "required domain-qualified entity"; JsonObject service = fields.createNestedObject(); service["name"] = "service"; service["description"] = "required bare service name"; }
-DEFINE_AND_REGISTER_ACTION_TYPE(kHaServiceActionType, ACTION_TYPE_HA_SERVICE, parse_ha_service, serialize_ha_service, dispatch_ha_service, nullptr, describe_ha_service, ha_service_available, validate_ha_service, nullptr, ACTION_EXECUTION_SYNC, false);
+DEFINE_AND_REGISTER_ACTION_TYPE(kHaServiceActionType, ACTION_TYPE_HA_SERVICE, parse_ha_service, serialize_ha_service, dispatch_ha_service, visit_ha_service_fields, describe_ha_service, ha_service_available, validate_ha_service, ACTION_EXECUTION_SYNC, false);
 } // namespace
 #endif // HAS_DISPLAY || HAS_BUTTON

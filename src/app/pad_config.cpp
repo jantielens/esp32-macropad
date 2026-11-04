@@ -468,6 +468,7 @@ bool pad_config_init() {
     g_fs_mounted = true;
     g_eligible_mask.store(0, std::memory_order_release);
 
+    button_defaults_init();
     for (uint8_t page = 0; page < MAX_PADS; ++page) recover_pad_config_file(page);
 
     // Pre-load all existing page configs into RAM cache.
@@ -750,7 +751,7 @@ static PadConfig* pad_config_load_from_flash(uint8_t page, bool skip_template) {
 static bool cache_update(uint8_t page) {
     PadConfig* replacement = pad_config_load_from_flash(page);
     if (!replacement) {
-        LOGE(TAG, "Pad %u: cache allocation failed", page);
+        LOGE(TAG, "Pad %u: cache load failed", page);
         return false;
     }
     cache_replace(page, replacement);
@@ -763,6 +764,7 @@ void pad_config_rebuild_all_caches() {
     if (!g_fs_mounted) return;
     bool refresh_ok = true;
     for (uint8_t i = 0; i < MAX_PADS; i++) {
+        if (!pad_config_exists(i)) continue;
         if (!cache_update(i)) refresh_ok = false;
     }
     g_generation++;

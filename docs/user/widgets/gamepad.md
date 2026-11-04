@@ -1,14 +1,16 @@
 ---
 title: Gamepad sticks and held controls
-description: Build a USB controller pad with analog sticks, buttons, D-pad, triggers, and automatic release.
+description: Build a USB or BLE controller pad with analog sticks, buttons, D-pad, triggers, and automatic release.
 ---
 
-Gamepad widgets turn a pad into a USB controller with touch-operated sticks,
+Gamepad widgets turn a pad into a USB or BLE controller with touch-operated sticks,
 held buttons, a directional hat, and triggers. The host receives generic HID
 controller input, and the widgets manage touch ownership and release.
 
-Use [USB transport](../integrations/keyboard-mouse-gamepad.md), save/reboot,
-and connect the native data port. This is generic HID, not XInput.
+Use [USB or BLE transport](../integrations/keyboard-mouse-gamepad.md), save/reboot,
+then connect the native data port or pair the Bluetooth host. The widgets are
+identical for either transport. This is generic HID, not XInput or a
+console-specific controller protocol; host and application support varies.
 Test it in the host's controller view before relying on a game mapping.
 
 ## Add a joystick
@@ -49,7 +51,7 @@ unavailable. Controller interaction blocks ordinary navigation until all
 contacts lift. Full-screen tap actions take precedence; clear them.
 Disable pad swipe actions suppresses all pad swipes.
 
-Pad exit/replacement, disconnect/reconnect, OTA, hide/disable/destruction, and
+Pad exit/replacement, disconnect/reconnect, transport changes, OTA, hide/disable/destruction, and
 detected touch cancellation release holds without replay.
 After cancellation lift all contacts before retrying. Failure detection depends
 on the touch driver; do not use a held control as a safety mechanism.

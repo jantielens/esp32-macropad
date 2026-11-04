@@ -80,7 +80,11 @@ bool sound_alert_available() {
     return false;
 #endif
 }
-bool visit_sound_alert_fields(ButtonAction& act, ActionBindableFieldVisitor visitor, void* context) { return (strcmp(act.payload.sound_alert.sound_alert_kind, "tone") && strcmp(act.payload.sound_alert.sound_alert_kind, "tone_loop")) || !act.payload.sound_alert.sound_alert_pattern[0] || visitor(act.payload.sound_alert.sound_alert_pattern, sizeof(act.payload.sound_alert.sound_alert_pattern), false, context); }
+bool visit_sound_alert_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {
+    return action_visit_field(visitor, context, "sound_alert_pattern", act.payload.sound_alert.sound_alert_pattern,
+        ACTION_FIELD_EVENT | ((strcmp(act.payload.sound_alert.sound_alert_kind, "tone") &&
+        strcmp(act.payload.sound_alert.sound_alert_kind, "tone_loop")) ? 0 : ACTION_FIELD_BINDING));
+}
 void describe_sound_alert(JsonObject& action) { action["group"] = "Audio"; action["label"] = "Sound alert"; JsonArray fields = action.createNestedArray("fields"); JsonObject kind = fields.createNestedObject(); kind["name"] = "sound_alert_kind"; kind["description"] = "tone, mp3, stop (alerts only), or stop_all; use Alarm tone or Alarm MP3 for loops"; }
 #if ALARM_ENABLED
 void describe_alarm_audio(JsonObject& action, bool mp3) {
@@ -109,6 +113,6 @@ void describe_alarm_audio(JsonObject& action, bool mp3) {
     volume_editor["help"] = "0 = use device volume; 1-100 overrides it.";
 }
 #endif
-DEFINE_AND_REGISTER_ACTION_TYPE(kSoundAlertActionType, ACTION_TYPE_SOUND_ALERT, parse_sound_alert, serialize_sound_alert, dispatch_sound_alert, nullptr, describe_sound_alert, sound_alert_available, validate_sound_alert, visit_sound_alert_fields, ACTION_EXECUTION_SYNC);
+DEFINE_AND_REGISTER_ACTION_TYPE(kSoundAlertActionType, ACTION_TYPE_SOUND_ALERT, parse_sound_alert, serialize_sound_alert, dispatch_sound_alert, visit_sound_alert_fields, describe_sound_alert, sound_alert_available, validate_sound_alert, ACTION_EXECUTION_SYNC);
 } // namespace
 #endif // HAS_DISPLAY || HAS_BUTTON

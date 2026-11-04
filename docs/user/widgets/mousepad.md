@@ -1,17 +1,18 @@
 ---
 title: Mousepad
-description: Configure a relative USB pointer surface, button zones, two-finger scrolling, and reliable exit controls.
+description: Configure a relative USB or BLE pointer surface, button zones, two-finger scrolling, and reliable exit controls.
 ---
 
 A Mousepad turns a button's touch area into a relative pointer surface for a
-USB-connected host. It supports pointer movement and clicks, with dragging or
+USB- or BLE-connected host. It supports pointer movement and clicks, with dragging or
 two-finger scrolling available when the touch hardware can track the needed
 contacts.
 
-## Prepare USB and touch
+## Prepare HID and touch
 
-Select [USB HID transport](../integrations/keyboard-mouse-gamepad.md), save,
-reboot, and connect the native USB data port. BLE/Off do not output mouse reports.
+Select [USB or BLE HID transport](../integrations/keyboard-mouse-gamepad.md), save,
+reboot, then connect the native USB data port or pair the Bluetooth host.
+Off disables mouse output. The widget is the same for either transport.
 In Button Content, select Mousepad and give it a usable span.
 Single-contact touch supports pointer movement and zone clicks, not simultaneous
 hold-and-move dragging. Check contact capability in the [hardware reference](../hardware.md).
@@ -56,7 +57,7 @@ See [Scrollpad](scrollpad.md) for coasting limits and cancellation.
 Show Back button adds a top-left navigation target, default 44 px, configurable
 1-512 px and clamped to content size. Enable it separately from its size.
 A short stationary tap goes back; motion over 8 px or hold cancels it.
-It works without USB but needs screen history.
+It works without a HID connection but needs screen history.
 Provide a separate exit if history can be empty.
 
 Save Pad and test pointer, click, drag, and exit on your host.
@@ -65,11 +66,12 @@ Save Pad and test pointer, click, drag, and exit on your host.
 
 Mousepad contacts remain captured outside its bounds. They do not dispatch
 ordinary actions/holds/swipes. Disable pad swipe actions disables all swipes
-everywhere on that pad, even when USB is disconnected.
+everywhere on that pad, even when the HID host is disconnected.
 Only one mouse surface owns input at a time; independent gamepad widgets can
 coexist when the hardware provides enough contacts.
 
-Pad replacement, hiding/removal, wake suppression, USB reset, and OTA cancel
+Pad replacement, hiding/removal, wake suppression, disconnect, transport changes,
+USB reset, and OTA cancel
 input and release ownership. Lift every finger before restarting.
 There is no pinch zoom, two-finger right-click, or three-finger gesture.
 

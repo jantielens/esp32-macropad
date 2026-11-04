@@ -16,6 +16,7 @@ collapsing a section does not disable it.
 * [Mousepad](mousepad.md) for pointer movement and supported multi-contact gestures
 * [Scrollpad](scrollpad.md) for one-finger wheel scrolling
 * [Gamepad](gamepad.md) for sticks and held controls
+* [Slider](slider.md) for touch-based numeric value setting
 * [Rocker and Numeric Rocker](rockers.md) for adjustments
 * [List](list.md) for provider items and selection actions
 * [Toggle switch](#toggle-switch) for local state or a reported on/off category
@@ -53,7 +54,7 @@ reload its configuration, or restart the device. No state is written to storage.
 4. Configure **Turn-on actions** and **Turn-off actions** under **Actions**.
  For a lamp, use explicit HA `turn_on` and `turn_off` services, not `toggle`.
  An empty list is allowed; a bound switch with no selected actions does nothing.
-5. Choose track/knob colors and **Switch size (%)** (20-100%, default 100%).
+5. Choose track/knob colors and **Switch width (%)** (20-100%, default 50%).
  Choose **Icon Position**: Left, Above, or Below. **Read-only** follows the source
  but ignores taps. State source has the standard binding-builder and reference buttons.
 6. Select **Save Pad**. No reboot is needed. Tap the switch or button background
@@ -68,19 +69,24 @@ adopts the current value without sending actions. Read-only alone does not dim i
 
 Existing labels, fonts, foreground colors, and the icon remain available.
 Top and bottom labels reserve their own rows. Within the remaining area, the
-center label and switch share a row, with the label on the left. With no labels,
-the switch fills the available area as far as its 2:1 aspect ratio permits.
+center label and switch share a row, with the label on the left and the switch
+anchored to the right. Switch width is a percentage of the button's content
+width, capped by the available height at a 2:1 aspect ratio. Label length does
+not change the switch size or position; long center labels use an ellipsis.
+With no configured center label and no left icon, the switch is centered and
+uses 100% width, subject to the height limit, regardless of the width setting.
 An icon defaults to the left of that row; Above and Below place it around the
-row, inside the outer labels. Switch size scales the largest fitted switch,
-not the entire button. Existing saved size percentages remain valid; older
-top/bottom switch placement is ignored.
+row, inside the outer labels. A configured label that temporarily resolves to
+empty still reserves its space. Existing saved percentages use this width rule;
+older top/bottom switch placement is ignored.
 
 Use Content Padding and Icon Scale to adjust spacing and icon size. UI Offset
 moves the middle group together; label-style offsets nudge the center label.
-Binding updates recalculate the fit as text changes. Icon scaling and label
-font upscaling are included in the fit. When less than four pixels
-of switch width remain, it is hidden instead of overlapping content. Enlarge
-the button or reduce its content if needed. Explicit offsets and oversized text
+Icon scaling and label font upscaling are included in the layout. A center label
+or left icon is hidden if its horizontal space runs out; the switch does not
+shrink to accommodate it. When less than four pixels of switch width fit within
+the available area, the switch is hidden. Enlarge the button or reduce its
+content if needed. Explicit offsets and oversized text
 are clipped at the button boundary. The pad editor shows button styling and
 labels, with a large subdued symbol identifying each widget behind its labels.
 It does not reproduce widget graphics or widget-specific visual settings.

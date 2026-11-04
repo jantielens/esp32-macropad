@@ -929,7 +929,7 @@ async function padPersistPage(context) {
             const cfgResp = await fetch('/api/config');
             if (!cfgResp.ok) throw new Error('Failed to read display brightness: HTTP ' + cfgResp.status);
             const cfg = await cfgResp.json();
-            savedBrightness = cfg.backlight_brightness ?? 80;
+            savedBrightness = cfg.current_backlight_brightness ?? cfg.backlight_brightness ?? 80;
             await padSetSaveBrightness(0);
             brightnessBlanked = true;
         }

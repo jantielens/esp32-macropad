@@ -37,10 +37,14 @@ static void test_extract() {
     expect_extract(long_path_payload.c_str(), ("attributes." + prefix + "_actual").c_str(), true, "right");
     expect_extract(long_path_payload.c_str(), ("attributes." + prefix + "_missing").c_str(), false, "");
     char out[4];
-    assert(binding_value_extract_json(payload, "name", out, sizeof(out)));
+    assert(!binding_value_extract_json(payload, "name", out, sizeof(out)));
     assert(std::strcmp(out, "liv") == 0);
-    assert(binding_value_extract_json(payload, "child", out, sizeof(out)));
+    assert(!binding_value_extract_json(payload, "child", out, sizeof(out)));
     assert(std::strcmp(out, "{\"v") == 0);
+    assert(binding_value_extract_json("abc", ".", out, sizeof(out)));
+    assert(!binding_value_extract_json("abcd", ".", out, sizeof(out)));
+    assert(binding_value_extract_json("{\"v\":\"abc\"}", "v", out, sizeof(out)));
+    assert(!binding_value_extract_json("{\"v\":\"abcd\"}", "v", out, sizeof(out)));
     assert(!binding_value_extract_json(nullptr, ".", out, sizeof(out)));
     assert(!binding_value_extract_json(payload, ".", out, 0));
 }

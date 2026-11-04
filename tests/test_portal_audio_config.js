@@ -12,6 +12,8 @@ const elements = {
 };
 let stored;
 let submitted;
+let liveVolume;
+let liveBrightness;
 let pendingReboot = false;
 const messages = [];
 const context = {
@@ -31,11 +33,24 @@ const context = {
     async fetch(url, options) {
         if (!options) {
             assert.strictEqual(url, '/api/config');
-            return { ok: true, json: async () => stored };
+            return { ok: true, json: async () => Object.assign({}, stored, {
+                current_audio_volume: liveVolume,
+                current_backlight_brightness: liveBrightness
+            }) };
+        }
+        if (url === '/api/component/volume/level') {
+            liveVolume = JSON.parse(options.body).volume;
+            return { ok: true };
+        }
+        if (url === '/api/component/display/brightness') {
+            liveBrightness = JSON.parse(options.body).brightness;
+            return { ok: true };
         }
         assert.strictEqual(url, '/api/config?no_reboot=1');
         submitted = JSON.parse(options.body);
         stored = Object.assign({}, stored, submitted);
+        if (submitted.save_current_volume) stored.audio_volume = liveVolume;
+        if (submitted.save_current_brightness) stored.backlight_brightness = liveBrightness;
         return { ok: true, json: async () => ({ success: true }) };
     }
 };
@@ -47,6 +62,8 @@ for (const file of ['portal_config.js', 'portal_fragment_init.js']) {
 (async function () {
     stored = { audio_volume: 70, audio_idle_mute: true, audio_wake_delay_ms: 120,
         caps: { audio_amplifier_mute: true } };
+    liveVolume = 70;
+    liveBrightness = 80;
     await context.loadConfig();
     assert.strictEqual(elements.audio_idle_mute.checked, true);
     assert.strictEqual(Number(elements.audio_wake_delay_ms.value), 120);
@@ -58,7 +75,7 @@ for (const file of ['portal_config.js', 'portal_fragment_init.js']) {
         elements.audio_wake_delay_ms.value = String(value);
         submitted = null;
         await context.saveFragmentConfig(false);
-        assert.deepStrictEqual(submitted, { audio_volume: 70, audio_idle_mute: true,
+        assert.deepStrictEqual(submitted, { save_current_volume: true, audio_idle_mute: true,
             audio_wake_delay_ms: String(value) });
         await context.loadConfig();
         assert.strictEqual(Number(elements.audio_wake_delay_ms.value), value);
@@ -95,8 +112,27 @@ for (const file of ['portal_config.js', 'portal_fragment_init.js']) {
         assert.strictEqual(elements.audio_idle_mute.disabled, true);
         assert.strictEqual(elements.audio_wake_delay_ms.disabled, true);
         await context.saveFragmentConfig(false);
-        assert.deepStrictEqual(submitted, { audio_volume: 70 });
+        assert.deepStrictEqual(submitted, { save_current_volume: true });
     }
+    await context.handleVolumeChange({ target: { value: '35' } });
+    assert.strictEqual(liveVolume, 35);
+    assert.strictEqual(stored.audio_volume, 70);
+    liveVolume = 45;
+    await context.saveFragmentConfig(false);
+    assert.strictEqual(stored.audio_volume, 45);
+    assert.strictEqual(Number(elements.audio_volume.value), 45);
+
+    delete elements.audio_volume;
+    elements.backlight_brightness = { value: '60', disabled: false };
+    elements['brightness-value'] = { textContent: '' };
+    stored.backlight_brightness = 80;
+    await context.handleBrightnessChange({ target: { value: '60' } });
+    assert.strictEqual(liveBrightness, 60);
+    assert.strictEqual(stored.backlight_brightness, 80);
+    liveBrightness = 55;
+    await context.saveFragmentConfig(false);
+    assert.strictEqual(stored.backlight_brightness, 55);
+    assert.strictEqual(Number(elements.backlight_brightness.value), 55);
     delete elements['amplifier-section'];
     await context.loadConfig();
     assert(!messages.some(message => message.type === 'error'));

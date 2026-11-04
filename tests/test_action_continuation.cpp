@@ -15,6 +15,7 @@ static int g_fail = 0;
 static uint32_t g_pending_token = 0;
 static char g_dispatched[4][CONFIG_ACTION_TYPE_MAX_LEN] = {};
 static uint8_t g_dispatched_count = 0;
+static char g_notification[CONFIG_DIALOG_MESSAGE_MAX_LEN] = {};
 
 #define TEST(name) static void test_##name()
 #define RUN(name) do { test_##name(); g_pass++; } while (0)
@@ -33,6 +34,8 @@ ActionResult action_dispatch(const ButtonAction& action, const char*,
                              uint32_t continuation_token) {
     strlcpy(g_dispatched[g_dispatched_count++], action.type,
             sizeof(g_dispatched[0]));
+    if (!strcmp(action.type, ACTION_TYPE_NOTIFY))
+        strlcpy(g_notification, action.payload.notify.message, sizeof(g_notification));
     if (!strcmp(action.type, "failed")) return ACTION_FAILED;
     if (strcmp(action.type, "pending") == 0) {
         g_pending_token = continuation_token;
@@ -163,6 +166,7 @@ TEST(pending_action_pauses_and_resumes_copied_suffix) {
     strlcpy(actions[0].type, "pending", sizeof(actions[0].type));
     strlcpy(actions[1].type, ACTION_TYPE_MQTT, sizeof(actions[1].type));
     strlcpy(actions[2].type, ACTION_TYPE_NOTIFY, sizeof(actions[2].type));
+    strlcpy(actions[2].payload.notify.message, "Brightness set to 20%", sizeof(actions[2].payload.notify.message));
 
     action_list_dispatch(actions, 3, "Test");
     ASSERT_EQ(g_dispatched_count, 1);
@@ -170,12 +174,14 @@ TEST(pending_action_pauses_and_resumes_copied_suffix) {
 
     // The continuation must not observe mutable source storage after dispatch.
     strlcpy(actions[1].type, ACTION_TYPE_KEY, sizeof(actions[1].type));
+    strlcpy(actions[2].payload.notify.message, "Brightness set to 80%", sizeof(actions[2].payload.notify.message));
     ASSERT_TRUE(action_continuation_complete(g_pending_token, true));
     action_list_dispatch_continuation();
 
     ASSERT_EQ(g_dispatched_count, 3);
     ASSERT_TRUE(strcmp(g_dispatched[1], ACTION_TYPE_MQTT) == 0);
     ASSERT_TRUE(strcmp(g_dispatched[2], ACTION_TYPE_NOTIFY) == 0);
+    ASSERT_TRUE(strcmp(g_notification, "Brightness set to 20%") == 0);
 }
 
 TEST(failed_pending_action_does_not_resume_suffix) {

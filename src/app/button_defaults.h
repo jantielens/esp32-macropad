@@ -7,7 +7,7 @@
 #include "pad_config.h"  // ButtonDefaults struct
 #include <ArduinoJson.h>
 
-// Load device-level pad and button defaults from LittleFS. Call after pad_config_init().
+// Load device-level pad and button defaults after storage mounts, before caching pads.
 void button_defaults_init();
 
 // Get the current device-level pad and button defaults (never null, all-empty if file missing).

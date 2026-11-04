@@ -1,4 +1,5 @@
 #include "pad_screen.h"
+#include "../action_registry.h"
 #include "../touch_manager.h"
 #include "../widgets/numericrocker_zones.h"
 #include "../widgets/toggle_widget.h"
@@ -226,9 +227,6 @@ extern DeviceConfig device_config;
 #include <ArduinoJson.h>
 #endif
 
-// Forward declaration — defined in numericrocker_widget.cpp
-void numericrocker_substitute_step(ButtonAction* act, float step);
-
 #include "../widgets/numericrocker_zones.h"
 
 // TAG and TAP_FLASH_DURATION_MS are defined in pad_screen.cpp which is
@@ -266,11 +264,20 @@ static void restore_tap_overlay(ButtonTile* tile) {
 void PadScreen::tapFlashTimerCb(lv_timer_t* timer) {
     auto* tile = (ButtonTile*)lv_timer_get_user_data(timer);
     if (tile) {
-        tile->tap_flash_timer = nullptr;
         if (tile->tap_overlay) {
+            if (button_overlay_uses_fade(tile->widget_cfg.type) &&
+                lv_obj_has_state(tile->tap_overlay, LV_STATE_USER_1)) {
+                lv_obj_remove_state(tile->tap_overlay, LV_STATE_USER_1);
+                lv_timer_set_period(timer, 80);
+                lv_timer_reset(timer);
+                return;
+            }
             lv_obj_add_flag(tile->tap_overlay, LV_OBJ_FLAG_HIDDEN);
             restore_tap_overlay(tile);
+        } else if (tile->obj && lv_obj_check_type(tile->obj, &lv_button_class)) {
+            lv_obj_remove_state(tile->obj, LV_STATE_PRESSED);
         }
+        tile->tap_flash_timer = nullptr;
     }
     lv_timer_delete(timer);
 }
@@ -279,6 +286,15 @@ void PadScreen::tapFlashTimerCb(lv_timer_t* timer) {
 // horizontal: only meaningful when zone != 0
 static void do_tap_flash(ButtonTile* tile, uint8_t zone = 0, bool horizontal = false) {
     if (DISPLAY_DISABLE_ANIMATIONS) return;
+    if (tile->obj && lv_obj_check_type(tile->obj, &lv_button_class)) {
+        if (lv_indev_active()) return;
+        if (tile->tap_flash_timer) lv_timer_delete(tile->tap_flash_timer);
+        lv_obj_add_state(tile->obj, LV_STATE_PRESSED);
+        tile->tap_flash_timer = lv_timer_create(PadScreen::tapFlashTimerCb,
+                                               TAP_FLASH_DURATION_MS, tile);
+        if (!tile->tap_flash_timer) lv_obj_remove_state(tile->obj, LV_STATE_PRESSED);
+        return;
+    }
     if (!tile->tap_overlay) return;
 
     lv_obj_t* ov = tile->tap_overlay;
@@ -287,10 +303,6 @@ static void do_tap_flash(ButtonTile* tile, uint8_t zone = 0, bool horizontal = f
         tile->tap_flash_timer = nullptr;
         restore_tap_overlay(tile);
     }
-    tile->tap_flash_x = lv_obj_get_x(ov);
-    tile->tap_flash_y = lv_obj_get_y(ov);
-    tile->tap_flash_w = lv_obj_get_width(ov);
-    tile->tap_flash_h = lv_obj_get_height(ov);
 
     // Resize to cover only the tapped zone for rocker
     if (zone == 1) {
@@ -311,20 +323,29 @@ static void do_tap_flash(ButtonTile* tile, uint8_t zone = 0, bool horizontal = f
         }
     }
 
+    if (button_overlay_uses_fade(tile->widget_cfg.type)) lv_obj_add_state(ov, LV_STATE_USER_1);
     lv_obj_remove_flag(ov, LV_OBJ_FLAG_HIDDEN);
     tile->tap_flash_timer = lv_timer_create(PadScreen::tapFlashTimerCb,
                                              TAP_FLASH_DURATION_MS, tile);
     if (!tile->tap_flash_timer) {
         lv_obj_add_flag(ov, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_state(ov, LV_STATE_USER_1);
         restore_tap_overlay(tile);
     }
 }
 
 void PadScreen::onWidgetPressFeedback(lv_event_t* event) {
-    if (DISPLAY_DISABLE_ANIMATIONS) return;
     auto* tile = static_cast<ButtonTile*>(lv_event_get_user_data(event));
     const auto* feedback = static_cast<const lv_event_code_t*>(lv_event_get_param(event));
-    if (!tile || !tile->tap_overlay || !feedback) return;
+    if (!tile || !feedback) return;
+#if HAS_AUDIO
+    if (*feedback == LV_EVENT_RELEASED && strcmp(tile->widget_cfg.type, "slider") == 0 &&
+        !has_audio_action(tile->actions, tile->action_count)) {
+        const char* pattern = device_config.tap_beep;
+        if (pattern[0] && strcmp(pattern, "none") != 0) audio_feedback(pattern);
+    }
+#endif
+    if (DISPLAY_DISABLE_ANIMATIONS || !tile->tap_overlay) return;
     if (*feedback == LV_EVENT_RELEASED) {
         do_tap_flash(tile);
         return;
@@ -334,8 +355,14 @@ void PadScreen::onWidgetPressFeedback(lv_event_t* event) {
         tile->tap_flash_timer = nullptr;
         restore_tap_overlay(tile);
     }
-    if (*feedback == LV_EVENT_PRESSED) lv_obj_remove_flag(tile->tap_overlay, LV_OBJ_FLAG_HIDDEN);
-    else lv_obj_add_flag(tile->tap_overlay, LV_OBJ_FLAG_HIDDEN);
+    if (*feedback == LV_EVENT_PRESSED) {
+        if (button_overlay_uses_fade(tile->widget_cfg.type))
+            lv_obj_add_state(tile->tap_overlay, LV_STATE_USER_1);
+        lv_obj_remove_flag(tile->tap_overlay, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(tile->tap_overlay, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_state(tile->tap_overlay, LV_STATE_USER_1);
+    }
 }
 
 // Pixel-based tap flash: resize overlay to a pixel band of the tile.
@@ -350,10 +377,6 @@ static void do_tap_flash_px(ButtonTile* tile, int px_start, int px_end, bool hor
         tile->tap_flash_timer = nullptr;
         restore_tap_overlay(tile);
     }
-    tile->tap_flash_x = lv_obj_get_x(ov);
-    tile->tap_flash_y = lv_obj_get_y(ov);
-    tile->tap_flash_w = lv_obj_get_width(ov);
-    tile->tap_flash_h = lv_obj_get_height(ov);
 
     if (horizontal) {
         lv_obj_set_pos(ov, tile->tap_flash_x + px_start, tile->tap_flash_y);
@@ -363,11 +386,13 @@ static void do_tap_flash_px(ButtonTile* tile, int px_start, int px_end, bool hor
         lv_obj_set_size(ov, tile->tap_flash_w, px_end - px_start);
     }
 
+    if (button_overlay_uses_fade(tile->widget_cfg.type)) lv_obj_add_state(ov, LV_STATE_USER_1);
     lv_obj_remove_flag(ov, LV_OBJ_FLAG_HIDDEN);
     tile->tap_flash_timer = lv_timer_create(PadScreen::tapFlashTimerCb,
                                              TAP_FLASH_DURATION_MS, tile);
     if (!tile->tap_flash_timer) {
         lv_obj_add_flag(ov, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_state(ov, LV_STATE_USER_1);
         restore_tap_overlay(tile);
     }
 }
@@ -407,6 +432,7 @@ void PadScreen::onPress(lv_event_t* e) {
     const lv_event_code_t code = lv_event_get_code(e);
     if (code == LV_EVENT_INDEV_RESET || code == LV_EVENT_PRESS_LOST) {
         tile->touch_start_valid = false;
+        widget_cancel_input(tile->widget_type, &tile->widget_state);
         return;
     }
     if (code != LV_EVENT_PRESSED && code != LV_EVENT_PRESSING &&
@@ -423,7 +449,11 @@ void PadScreen::onPress(lv_event_t* e) {
         tile->touch_start_valid = true;
         return;
     }
-    if (code != LV_EVENT_PRESSED && tile->touch_start_valid && allowed) return;
+    if (code != LV_EVENT_PRESSED && tile->touch_start_valid && allowed) {
+        if (code == LV_EVENT_RELEASED && widget_owns_input(tile->widget_type))
+            tile->touch_start_valid = false;
+        return;
+    }
     if (!tile->touch_start_valid && code != LV_EVENT_PRESSED) {
         lv_event_stop_bubbling(e);
         lv_event_stop_processing(e);
@@ -431,6 +461,7 @@ void PadScreen::onPress(lv_event_t* e) {
     }
 
     tile->touch_start_valid = false;
+    if (!allowed) widget_cancel_input(tile->widget_type, &tile->widget_state);
 #if HAS_TOUCH
     touch_manager_cancel_physical_input();
 #endif
@@ -454,12 +485,26 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
     PadScreen* owner = tile_owner(tile);
     if (!owner || !owner->inputAllowed(*tile, point)) return;
     const bool overlay = owner->buttonIsOverlay(tile);
+    if (widget_owns_input(tile->widget_type)) return;
     if (device_dialog_active()) return;
 
     // Suppress taps that LVGL fires as part of a swipe gesture
     if (lv_tick_get() - swipe_actions_last_swipe_time() < 300) return;
 
     if (tile->widget_type && strcmp(tile->widget_type->name, "toggle") == 0) {
+#if HAS_AUDIO
+        if (toggle_interactive(&tile->widget_state)) {
+            const auto* state = reinterpret_cast<const ToggleState*>(tile->widget_state.data);
+            const ButtonAction* actions = state->value ? tile->lp_actions : tile->actions;
+            const uint8_t count = state->value ? tile->lp_action_count : tile->action_count;
+            if ((!state->bound || count) && !has_audio_action(actions, count)) {
+                const char* pattern = device_config.tap_beep;
+                if (pattern[0] && strcmp(pattern, "none") != 0) {
+                    audio_feedback(pattern);
+                }
+            }
+        }
+#endif
         toggle_tap(&tile->widget_cfg, &tile->widget_state, tile->actions, tile->action_count,
                     tile->lp_actions, tile->lp_action_count);
         return;
@@ -561,7 +606,7 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
 
             ButtonAction local_nr;
             memcpy(&local_nr, &cfg->adjust_action, sizeof(ButtonAction));
-            numericrocker_substitute_step(&local_nr, step);
+            if (!action_type_substitute_step(action_type_find(local_nr.type), local_nr, step)) return;
 
             do_tap_flash_px(tile, axis_offset + flash_start, axis_offset + flash_end,
                             cfg->horizontal);
@@ -632,6 +677,7 @@ void PadScreen::longPressAt(ButtonTile* tile, const lv_point_t& point) {
     PadScreen* owner = tile_owner(tile);
     if (!owner || !owner->inputAllowed(*tile, point)) return;
     const bool overlay = owner->buttonIsOverlay(tile);
+    if (widget_owns_input(tile->widget_type)) return;
     if (device_dialog_active()) return;
     if (tile->widget_type && strcmp(tile->widget_type->name, "toggle") == 0) return;
 
@@ -771,16 +817,23 @@ void PadScreen::onSwipeGuard(lv_event_t* event) {
         const ButtonTile& tile = pad->tiles[index];
         if (!tile.touch_start_valid) continue;
         if ((pad->isOverlayButton(&tile) && !lv_obj_has_flag(tile.obj, LV_OBJ_FLAG_HIDDEN)) ||
-            pad->pointBlockedByOverlay(tile.touch_start)) blocked = true;
+            pad->pointBlockedByOverlay(tile.touch_start)) {
+            blocked = true;
+        }
     }
     lv_indev_t* indev = lv_indev_active();
     if (indev) {
         lv_point_t point = {};
         lv_indev_get_point(indev, &point);
-        blocked |= pad->pointBlockedByOverlay(point);
+        if (pad->pointBlockedByOverlay(point)) {
+            blocked = true;
+        }
     }
     if (!blocked) return;
-    for (uint8_t index = 0; index < pad->tileCount; ++index)
-        pad->tiles[index].touch_start_valid = false;
+    for (uint8_t index = 0; index < pad->tileCount; ++index) {
+        ButtonTile& tile = pad->tiles[index];
+        tile.touch_start_valid = false;
+        widget_cancel_input(tile.widget_type, &tile.widget_state);
+    }
     lv_event_stop_processing(event);
 }

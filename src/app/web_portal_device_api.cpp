@@ -3,6 +3,7 @@
 #include "web_portal_device_api.h"
 #include "web_portal_auth.h"
 #include "web_portal_state.h"
+#include "reboot_service.h"
 
 #include "board_config.h"
 #include "ha_live.h"
@@ -253,6 +254,8 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(HAS_CAMERA ? "true" : "false");
 		response->print(",\"has_usb_hid\":");
 		response->print(HAS_USB_HID ? "true" : "false");
+		response->print(",\"has_ble_hid\":");
+		response->print(HAS_BLE_HID ? "true" : "false");
 		const uint8_t touch_contact_capacity = touch_manager_contact_capacity();
 		response->print(",\"touch_contact_capacity\":");
 		response->print(touch_contact_capacity);
@@ -625,8 +628,5 @@ void handleReboot(AsyncWebServerRequest *request) {
 		LOGI("API", "POST /api/reboot");
 		request->send(200, "application/json", "{\"success\":true,\"message\":\"Rebooting device...\"}");
 
-		// Schedule reboot after response is sent
-		delay(100);
-		LOGI("Portal", "Rebooting");
-		ESP.restart();
+		reboot_request(100);
 }

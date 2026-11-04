@@ -193,7 +193,7 @@ async function loadConfig() {
         const config = await response.json();
         // Cache for validation logic (e.g., whether passwords are already set)
         window.deviceConfig = config;
-        if (typeof bindingBuilderRefreshShortcuts === 'function') bindingBuilderRefreshShortcuts();
+        if (typeof bindingToolsRefresh === 'function') bindingToolsRefresh();
         // Cache compile-time capability map for fragments that gate UI on it.
         window.__device_caps = config.caps || {};
         if (typeof window.padUpdateSparklineEditor === 'function' &&
@@ -316,7 +316,7 @@ async function loadConfig() {
 
         // Audio settings
         if (config.audio_volume !== undefined) {
-            const vol = config.audio_volume;
+            const vol = config.current_audio_volume ?? config.audio_volume;
             setValueIfExists('audio_volume', vol);
             setTextIfExists('audio_volume_value', vol);
             setValueIfExists('tap_beep', config.tap_beep);
@@ -354,7 +354,7 @@ async function loadConfig() {
         
         // Display settings - backlight brightness
         setValueIfExists('display_rotation', config.display_rotation !== undefined ? config.display_rotation : 0);
-        const brightness = config.backlight_brightness !== undefined ? config.backlight_brightness : 100;
+        const brightness = config.current_backlight_brightness ?? config.backlight_brightness ?? 100;
         const brightnessMin = config.backlight_brightness_min !== undefined ? config.backlight_brightness_min : 5;
         const brightnessSlider = document.getElementById('backlight_brightness');
         if (brightnessSlider) brightnessSlider.min = brightnessMin;
@@ -583,7 +583,24 @@ async function resetConfig() {
  * Handle brightness slider changes - update device immediately
  * @param {Event} event - Input event from slider
  */
-async function handleBrightnessChange(event) {
+var liveLevelRequests = {};
+
+function setLiveLevel(name, url, field, value) {
+    const previous = liveLevelRequests[name] || Promise.resolve();
+    const next = previous.catch(function () {}).then(async function () {
+        const response = await fetch(url, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [field]: value })
+        });
+        if (!response.ok) throw new Error('Failed to update ' + name);
+    });
+    liveLevelRequests[name] = next;
+    next.catch(function (error) { console.error(error); });
+    return next;
+}
+
+function handleBrightnessChange(event) {
     const brightness = parseInt(event.target.value);
     
     // Update displayed value
@@ -592,22 +609,14 @@ async function handleBrightnessChange(event) {
         valueDisplay.textContent = brightness;
     }
     
-    // Send brightness update to device immediately (no persist)
-    try {
-        const response = await fetch('/api/component/display/brightness', {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ brightness: brightness })
-        });
-        
-        if (!response.ok) {
-            console.error('Failed to update brightness:', response.statusText);
-        }
-    } catch (error) {
-        console.error('Error updating brightness:', error);
-    }
+    return setLiveLevel('brightness', '/api/component/display/brightness', 'brightness', brightness);
+}
+
+function handleVolumeChange(event) {
+    const volume = parseInt(event.target.value);
+    const valueDisplay = document.getElementById('audio_volume_value');
+    if (valueDisplay) valueDisplay.textContent = volume;
+    return setLiveLevel('volume', '/api/component/volume/level', 'volume', volume);
 }
 
 /**

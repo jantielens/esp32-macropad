@@ -242,10 +242,11 @@ function actionEditorHTML(prefix, label, opts) {
     h += '</select>';
     h += '<small id="' + prefix + '-context" class="action-context" style="display:none;"></small>';
     h += '</div>';
+    h += '<div id="' + prefix + '-fields">';
     h += actionEditorGenericFieldsHTML(prefix);
     // Extension-contributed groups (e.g. shutter command UI on shutter-tester builds)
     _actionEditorExtensions.forEach(function(ext) { if (ext.groups) h += ext.groups(prefix, opts); });
-    return h;
+    return h + '</div>';
 }
 
 // Show/hide sub-groups when the action type dropdown changes.
@@ -275,6 +276,18 @@ function actionEditorTypeChanged(prefix) {
 // Load an action object { type, target, topic, payload, sequence } into the form.
 function actionEditorLoad(prefix, action) {
     if (!action) action = {};
+    var fields = document.getElementById(prefix + '-fields');
+    if (fields && fields.querySelectorAll) fields.querySelectorAll('input, select, textarea').forEach(function(input) {
+        if (input.tagName === 'SELECT') {
+            var options = Array.from(input.options);
+            var selected = options.findIndex(function(option) { return option.defaultSelected; });
+            input.selectedIndex = selected < 0 ? 0 : selected;
+        } else {
+            input.value = input.defaultValue;
+            input.checked = input.defaultChecked;
+        }
+        if (input.setCustomValidity) input.setCustomValidity('');
+    });
     var el;
     el = document.getElementById(prefix + '-type');
     if (el) {
@@ -300,7 +313,7 @@ function actionEditorLoad(prefix, action) {
 }
 
 // Build an action object from the form. Returns {} if type is empty.
-function actionEditorBuild(prefix) {
+function actionEditorBuild(prefix, eventToken) {
     var typeEl = document.getElementById(prefix + '-type');
     if (!typeEl) return {};
     var type = typeEl.value;
@@ -323,7 +336,35 @@ function actionEditorBuild(prefix) {
             if (extra) { for (var k in extra) act[k] = extra[k]; }
         }
     });
+    actionEditorValidateEventTokens(act, eventToken, prefix);
     return act;
+}
+
+function actionEditorValidateEventTokens(action, eventToken, prefix) {
+    const entry = actionEditorCatalogEntry(action.type) || {};
+    const fields = entry.template_fields || {};
+    const normalized = { ...action };
+    const fail = (field, message) => {
+        throw Object.assign(new Error(field + ': ' + message), { fieldIds: [prefix + '-type'] });
+    };
+    for (const [name, value] of Object.entries(action)) {
+        if (/\{(?:value|step)\}/.test(name)) fail(name, 'event tokens are not valid in field names');
+        if (typeof value !== 'string') continue;
+        let expanded = value;
+        for (const token of ['{value}', '{step}']) {
+            if (!value.includes(token)) continue;
+            if (token !== eventToken)
+                fail(name, token + ' is unavailable here' + (eventToken ? '; use ' + eventToken : ''));
+            if (!fields[name]) fail(name, 'this field does not support event tokens');
+            expanded = value.replaceAll(token, '-999999.9999');
+            normalized[name] = value.replaceAll(token, '0');
+        }
+        if (fields[name] && new TextEncoder().encode(expanded).length > fields[name].max)
+            fail(name, 'expanded value exceeds ' + fields[name].max + ' bytes');
+    }
+    _actionEditorExtensions.forEach(extension => {
+        if (extension.validate) extension.validate(normalized, prefix);
+    });
 }
 
 function actionEditorHandleError(error) {
@@ -417,8 +458,8 @@ function actionEditorListLoad(prefixes, actions) {
 
 // Build an array of action objects from N editor prefixes. Empty slots are
 // omitted; non-empty actions keep their configured order.
-function actionEditorListBuild(prefixes) {
-    return prefixes.map(function(prefix) { return actionEditorBuild(prefix); })
+function actionEditorListBuild(prefixes, eventToken) {
+    return prefixes.map(function(prefix) { return actionEditorBuild(prefix, eventToken); })
         .filter(function(action) { return !!action.type; });
 }
 

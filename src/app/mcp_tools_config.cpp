@@ -41,7 +41,7 @@
 #define MCP_ALARM_COMPONENT_ENUM ""
 #endif
 #include "keyboard_hid.h"
-#if HAS_USB_HID
+#if HAS_USB_HID || HAS_BLE_HID
 #include "gamepad_hid.h"
 #endif
 #include "touch_manager.h"
@@ -747,7 +747,7 @@ static void exec_set_config(const void* ctx, bool* ok, char* msg, size_t msg_len
     if (q->has_ss_wake_bind)  strlcpy(cfg->screen_saver_wake_binding, q->ss_wake_bind, CONFIG_SS_WAKE_BINDING_MAX_LEN);
     if (q->has_brightness) {
         cfg->backlight_brightness = q->brightness;
-        display_manager_set_backlight_brightness(q->brightness);
+        screen_saver_manager_set_brightness(q->brightness);
         screen_saver_manager_notify_activity(true);
     }
 #else
@@ -893,7 +893,7 @@ static bool tool_set_config(const JsonObject& args, JsonObject& result, String& 
 #if HAS_STORAGE_BROWSER
 static const McpTool s_tool_get_storage_status = {
     "get_storage_status",
-    "Read the active persistent-storage backend and capacity status: LittleFS or SDMMC, mount state, card type, and used/free/total bytes. This is the same status shown by the web portal Storage page.",
+    "Read the active persistent-storage backend and capacity status: LittleFS, SDMMC, or SPI SD, mount state, card type, and used/free/total bytes. This is the same status shown by the web portal Storage page.",
     "{\"type\":\"object\",\"properties\":{}}",
     tool_get_storage_status, true, false, false
 };
@@ -1121,11 +1121,11 @@ void mcp_config_capabilities(JsonObject& out) {
     keyboard["status"] = keyboard_hid_status();
     keyboard["ready"] = keyboard_hid_is_ready();
     keyboard["busy"] = keyboard_hid_is_busy();
-    keyboard["selection"] = "portal-only keyboard_transport setting; none disables keyboard; default off; reboot required; no fallback or broadcast";
-#if HAS_USB_HID
-    JsonObject gamepad = out.createNestedObject("usb_gamepad");
-    gamepad["protocol"] = "generic USB HID, not XInput";
-    gamepad["selection"] = "enabled with USB keyboard transport after reboot; unavailable in BLE or none";
+    keyboard["selection"] = "portal-only keyboard_transport setting controls keyboard, mouse, and gamepad; none disables HID; default off; reboot required; no fallback or broadcast";
+#if HAS_USB_HID || HAS_BLE_HID
+    JsonObject gamepad = out.createNestedObject("gamepad");
+    gamepad["protocol"] = "generic USB or BLE HID, not XInput";
+    gamepad["selection"] = "uses the selected keyboard_transport after reboot; disabled in none; no fallback or broadcast";
     gamepad["ready"] = gamepad_hid_is_ready();
     gamepad["sticks"] = gamepad_protocol::stick_count;
     gamepad["stick_min"] = gamepad_protocol::axis_min;

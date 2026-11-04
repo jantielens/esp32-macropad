@@ -78,7 +78,7 @@ void describe_button_navigation(JsonObject& action) {
 
 DEFINE_AND_REGISTER_ACTION_TYPE(kButtonNavigationActionType, ACTION_TYPE_BUTTON_NAVIGATION,
     parse_button_navigation, serialize_button_navigation, dispatch_button_navigation, nullptr,
-    describe_button_navigation, nullptr, validate_button_navigation, nullptr,
+    describe_button_navigation, nullptr, validate_button_navigation,
     ACTION_EXECUTION_SYNC, false);
 }
 #endif

@@ -47,12 +47,12 @@ bool confirm_available() {
 #endif
 }
 const char* validate_confirm(JsonObjectConst action) { return dialog_action::validate(action, true); }
-bool visit_confirm_fields(ButtonAction& act, ActionBindableFieldVisitor visitor, void* context) {
-    return visitor(act.payload.confirm.message, sizeof(act.payload.confirm.message), true, context);
+bool visit_confirm_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {
+    return action_visit_field(visitor, context, "message", act.payload.confirm.message);
 }
 void describe_confirm(JsonObject& action) { dialog_action::describe(action, true); }
 DEFINE_AND_REGISTER_ACTION_TYPE(kConfirmActionType, ACTION_TYPE_CONFIRM, parse_confirm, serialize_confirm,
-    dispatch_confirm, nullptr, describe_confirm, confirm_available, validate_confirm,
-    visit_confirm_fields, ACTION_EXECUTION_PAUSABLE);
+    dispatch_confirm, visit_confirm_fields, describe_confirm, confirm_available, validate_confirm,
+    ACTION_EXECUTION_PAUSABLE);
 }
 #endif

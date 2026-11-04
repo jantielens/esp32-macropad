@@ -172,35 +172,6 @@ static void numericrocker_destroy(WidgetState* state) {
     (void)state;
 }
 
-// ---- {step} substitution helpers (used by pad_screen_events.cpp) ----
-
-void numericrocker_substitute_step(ButtonAction* act, float step) {
-    // Type-dispatched: only touch the active union arm.
-    if (strcmp(act->type, ACTION_TYPE_MQTT) == 0) {
-        action_substitute_step_field(act->payload.mqtt.mqtt_payload,
-                                     sizeof(act->payload.mqtt.mqtt_payload), step);
-    } else if (strcmp(act->type, ACTION_TYPE_KEY) == 0) {
-        action_substitute_step_field(act->payload.key.key_sequence,
-                                     sizeof(act->payload.key.key_sequence), step);
-    } else if (strcmp(act->type, ACTION_TYPE_VOLUME) == 0) {
-        action_substitute_step_field(act->payload.volume.volume_value,
-                                     sizeof(act->payload.volume.volume_value), step);
-    } else if (strcmp(act->type, ACTION_TYPE_BRIGHTNESS) == 0) {
-        action_substitute_step_field(act->payload.brightness.brightness_value,
-                                     sizeof(act->payload.brightness.brightness_value), step);
-    } else if (strcmp(act->type, ACTION_TYPE_TIMER) == 0) {
-        action_substitute_step_field(act->payload.timer.timer_value,
-                                     sizeof(act->payload.timer.timer_value), step);
-    } else {
-        // Device-class action types store their value in the opaque
-        // payload arm; substitute {step} generically against the registered
-        // value_field accessor so it reaches fields shared code cannot see
-        // (e.g. darkroom strip/expose/meter).
-        const ActionTypeDef* def = action_type_find(act->type);
-        action_type_substitute_step(def, *act, step);
-    }
-}
-
 // ---- Registration ----
 
 #if HAS_MCP
@@ -217,6 +188,7 @@ static void numericrocker_describe(JsonObject& out) {
     {
         JsonObject o = f.createNestedObject();
         o["name"] = "widget_numericrocker_action";
+        o["event_token"] = "{step}";
         o["type"] = "action";
         o["desc"] = "REQUIRED nested action OBJECT (same shape as a button action; NOT a bare string). "
                     "Dispatched on every arrow tap with the literal token {step} substituted by the small/large "

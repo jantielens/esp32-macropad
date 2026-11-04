@@ -17,13 +17,16 @@ bool binding_value_parse_params(const char* params,
 
 // Extract a dot-separated object path without truncating its keys.
 // "." copies the raw payload. Invalid JSON copies the raw payload and returns
-// false; a missing/null path clears out and returns false.
+// false; a missing/null path clears out and returns false. Overflow returns false.
 bool binding_value_extract_json(const char* payload, const char* path, char* out, size_t out_len);
 
 // Apply one printf conversion to a value. Supports strings, integers, and finite
 // floats with standard numeric length modifiers. Invalid/unsafe formats or
 // unparseable values fall back to raw text. No dynamic widths or %n/%p/%c.
 void binding_value_format(const char* raw_value, const char* format, char* out, size_t out_len);
+
+bool binding_value_format_valid(const char* format, unsigned max_width, unsigned max_precision,
+                                const char* conversions);
 
 #ifdef __cplusplus
 }

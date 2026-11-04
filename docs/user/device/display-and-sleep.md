@@ -17,6 +17,9 @@ frontlight availability, and defaults belong in the
 Open **Display > Brightness** and adjust the slider. It changes the current
 brightness immediately; select **Save** to retain it after reboot.
 The allowed minimum depends on the device.
+Brightness actions also change the current value without saving it. Add a
+**Save brightness** action to retain the selected value across reboots. Sleep
+and wake do not change the selected brightness.
 
 Open **Display > Rotation** to select 0, 90, 180, or 270 degrees clockwise
 relative to the board's default orientation. Zero keeps that default.

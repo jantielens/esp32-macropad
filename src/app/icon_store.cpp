@@ -1021,6 +1021,8 @@ static uint16_t preload_pad_icons(uint8_t page, const PadConfig* cfg) {
     return loaded;
 }
 
+static void cleanup_all_pad_icon_files();
+
 void icon_store_preload_pad_pages() {
     if (g_ready.load()) return;
     uint16_t loaded = 0;
@@ -1039,9 +1041,7 @@ void icon_store_preload_pad_pages() {
 
     if (readable) {
         icon_store_cleanup_unreferenced_sources();
-        for (uint8_t page = 0; page < MAX_PADS; ++page) {
-            icon_store_cleanup_pad_icons(page);
-        }
+        cleanup_all_pad_icon_files();
     } else {
         LOGW(TAG, "Skipping boot icon cleanup: saved pad config could not be read");
     }
@@ -1078,14 +1078,9 @@ static bool pad_uses_icon_key(uint8_t page, const PadConfig* config, const char*
     return false;
 }
 
-static void cleanup_pad_icon_files(uint8_t page, const PadConfig* config) {
-    if (page >= MAX_PADS) return;
+static void cleanup_icon_files(uint8_t page, const PadConfig* const* configs) {
     if (ota_activity_is_active()) return;
     if (!g_file_mutex || xSemaphoreTake(g_file_mutex, 0) != pdTRUE) return;
-
-    char prefix[16];
-    snprintf(prefix, sizeof(prefix), "pad_%u_", page);
-    size_t prefix_len = strlen(prefix);
 
     uint32_t removed = 0;
     size_t reclaimed = 0;
@@ -1100,15 +1095,19 @@ static void cleanup_pad_icon_files(uint8_t page, const PadConfig* config) {
             const char* raw_name = entry.name();
             const char* basename = raw_name ? strrchr(raw_name, '/') : nullptr;
             const char* name = basename ? basename + 1 : raw_name;
+            const uint8_t file_page = page_from_icon_id(name);
+            char prefix[16];
+            snprintf(prefix, sizeof(prefix), "pad_%u_", file_page);
             if (!entry.isDirectory() && name && strlen(name) < sizeof(candidate) &&
-                strncmp(name, prefix, prefix_len) == 0) {
+                file_page < MAX_PADS && (page == MAX_PADS || page == file_page) &&
+                strncmp(name, prefix, strlen(prefix)) == 0) {
                 bool keep = false;
                 const char* extension = strrchr(name, '.');
                 if (extension && (strcmp(extension, ".png") == 0 || strcmp(extension, ".meta") == 0) &&
                     (size_t)(extension - name) < CONFIG_ICON_KEY_MAX_LEN) {
                     char key[CONFIG_ICON_KEY_MAX_LEN] = {};
                     memcpy(key, name, extension - name);
-                    keep = pad_uses_icon_key(page, config, key);
+                    keep = pad_uses_icon_key(file_page, configs[file_page], key);
                 }
                 if (!keep) {
                     strlcpy(candidate, name, sizeof(candidate));
@@ -1134,9 +1133,10 @@ static void cleanup_pad_icon_files(uint8_t page, const PadConfig* config) {
     if (!ota_activity_is_active()) {
         cache_lock();
         for (uint16_t index = 0; index < g_count; ) {
-            if (strncmp(g_entries[index].id, prefix, prefix_len) == 0 &&
-                !pad_uses_icon_key(page, config, g_entries[index].id)) {
-                if (!retire_buffer(page, g_entries[index].draw_buf)) break;
+            const uint8_t entry_page = page_from_icon_id(g_entries[index].id);
+            if (entry_page < MAX_PADS && (page == MAX_PADS || page == entry_page) &&
+                !pad_uses_icon_key(entry_page, configs[entry_page], g_entries[index].id)) {
+                if (!retire_buffer(entry_page, g_entries[index].draw_buf)) break;
                 g_entries[index] = g_entries[--g_count];
             } else {
                 ++index;
@@ -1145,8 +1145,32 @@ static void cleanup_pad_icon_files(uint8_t page, const PadConfig* config) {
         cache_unlock();
     }
     xSemaphoreGive(g_file_mutex);
-    if (removed) LOGI(TAG, "Pad %u cleanup: removed %u files, reclaimed %u bytes",
-                     page, (unsigned)removed, (unsigned)reclaimed);
+    if (removed) LOGI(TAG, "Icon cleanup: removed %u files, reclaimed %u bytes",
+                     (unsigned)removed, (unsigned)reclaimed);
+}
+
+static void cleanup_pad_icon_files(uint8_t page, const PadConfig* config) {
+    if (page >= MAX_PADS) return;
+    const PadConfig* configs[MAX_PADS] = {};
+    configs[page] = config;
+    cleanup_icon_files(page, configs);
+}
+
+static void cleanup_all_pad_icon_files() {
+    const PadConfig* configs[MAX_PADS] = {};
+    bool readable = true;
+    for (uint8_t page = 0; page < MAX_PADS; ++page) {
+        configs[page] = pad_config_acquire(page);
+        if (!configs[page] && pad_config_exists(page)) readable = false;
+    }
+    if (readable) {
+        cleanup_icon_files(MAX_PADS, configs);
+    } else {
+        LOGW(TAG, "Skipping boot icon cleanup: saved pad config could not be read");
+    }
+    for (uint8_t page = 0; page < MAX_PADS; ++page) {
+        pad_config_release(configs[page]);
+    }
 }
 
 void icon_store_cleanup_pad_icons(uint8_t page) {

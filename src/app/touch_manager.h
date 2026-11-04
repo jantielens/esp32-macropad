@@ -85,7 +85,7 @@ inline uint8_t touch_manager_contact_capacity() { return 0; }
 #endif
 
 inline bool touch_manager_controller_multitouch() {
-	return HAS_USB_HID && touch_manager_contact_capacity() > 1;
+	return (HAS_USB_HID || HAS_BLE_HID) && touch_manager_contact_capacity() > 1;
 }
 
 #endif // TOUCH_MANAGER_H

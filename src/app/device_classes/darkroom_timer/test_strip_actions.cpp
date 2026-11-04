@@ -47,10 +47,9 @@ static ActionResult strip_dispatch(const ButtonAction& act, const char* label,
 
 // `value` is the single bindable/numeric field (numeric rocker {step} target
 // for adjust_* commands); expose it so shared code drives binding + {step}.
-static char* strip_value_field(ButtonAction& act, size_t* out_size) {
+static bool strip_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {
     StripPayload& p = strip_payload(act);
-    *out_size = sizeof(p.value);
-    return p.value;
+    return action_visit_field(visitor, context, "strip_value", p.value);
 }
 
 static void strip_describe(JsonObject& out) {
@@ -72,6 +71,6 @@ static void strip_describe(JsonObject& out) {
     }
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(strip_action_type, /* type_name   */ ACTION_TYPE_STRIP, /* parse       */ strip_parse, /* serialize   */ strip_serialize, /* dispatch    */ strip_dispatch, /* value_field */ strip_value_field, /* describe    */ strip_describe, nullptr, nullptr, nullptr, ACTION_EXECUTION_SYNC);
+DEFINE_AND_REGISTER_ACTION_TYPE(strip_action_type, ACTION_TYPE_STRIP, strip_parse, strip_serialize, strip_dispatch, strip_fields, strip_describe, nullptr, nullptr, ACTION_EXECUTION_SYNC);
 
 #endif // HAS_DISPLAY && IS_DARKROOM_TIMER

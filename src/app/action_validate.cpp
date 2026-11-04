@@ -12,6 +12,97 @@
 
 static char s_action_validation_error[96];
 
+namespace {
+class StrictActionJson {
+    const char* cursor;
+    void whitespace() { while (*cursor == ' ' || *cursor == '\t' || *cursor == '\r' || *cursor == '\n') ++cursor; }
+    bool string() {
+        if (*cursor != '"') return false;
+        ++cursor;
+        while (*cursor && *cursor != '"') {
+            if (static_cast<unsigned char>(*cursor) < 32) return false;
+            if (*cursor++ != '\\') continue;
+            if (*cursor == 'u') {
+                ++cursor;
+                for (unsigned digit = 0; digit < 4; ++digit) {
+                    if (!isxdigit(static_cast<unsigned char>(*cursor))) return false;
+                    ++cursor;
+                }
+            } else {
+                if (!*cursor || !strchr("\"\\/bfnrt", *cursor)) return false;
+                ++cursor;
+            }
+        }
+        if (*cursor != '"') return false;
+        ++cursor;
+        return true;
+    }
+    bool number() {
+        if (*cursor == '-') ++cursor;
+        if (*cursor == '0') ++cursor;
+        else {
+            if (*cursor < '1' || *cursor > '9') return false;
+            while (*cursor >= '0' && *cursor <= '9') ++cursor;
+        }
+        if (*cursor == '.') {
+            ++cursor;
+            if (*cursor < '0' || *cursor > '9') return false;
+            while (*cursor >= '0' && *cursor <= '9') ++cursor;
+        }
+        if (*cursor == 'e' || *cursor == 'E') {
+            ++cursor;
+            if (*cursor == '+' || *cursor == '-') ++cursor;
+            if (*cursor < '0' || *cursor > '9') return false;
+            while (*cursor >= '0' && *cursor <= '9') ++cursor;
+        }
+        return true;
+    }
+    bool value(unsigned depth) {
+        whitespace();
+        if (depth > 10) return false;
+        if (*cursor == '"') return string();
+        if (*cursor == '{' || *cursor == '[') {
+            const bool object = *cursor++ == '{';
+            const char closing = object ? '}' : ']';
+            whitespace();
+            if (*cursor == closing) { ++cursor; return true; }
+            do {
+                whitespace();
+                if (object) {
+                    if (!string()) return false;
+                    whitespace();
+                    if (*cursor != ':') return false;
+                    ++cursor;
+                }
+                if (!value(depth + 1)) return false;
+                whitespace();
+                if (*cursor == closing) { ++cursor; return true; }
+                if (*cursor != ',') return false;
+                ++cursor;
+            } while (*cursor);
+            return false;
+        }
+        for (const char* literal : {"true", "false", "null"}) {
+            const size_t length = strlen(literal);
+            if (!strncmp(cursor, literal, length)) { cursor += length; return true; }
+        }
+        return number();
+    }
+public:
+    explicit StrictActionJson(const char* source) : cursor(source) {}
+    bool object() {
+        whitespace();
+        if (*cursor != '{' || !value(0)) return false;
+        whitespace();
+        return !*cursor;
+    }
+};
+}
+
+bool action_json_object_valid(const char* value) {
+    return value && StrictActionJson(value).object();
+}
+
 const char* action_validate_binding_tokens(const char* value) {
     if (!value) return nullptr;
     const char* token = value;
@@ -109,9 +200,7 @@ static const char* validate_action_contract(JsonObjectConst action) {
     const char* data_json = action["data_json"].as<const char*>();
     if (!data_json[0]) return nullptr;
     if (strlen(data_json) >= sizeof(((HaServicePayload*)nullptr)->data_json)) return "ha_service data_json too long";
-    JsonDocument data;
-    if (deserializeJson(data, data_json)) return "ha_service data_json must contain valid JSON";
-    return data.is<JsonObjectConst>() ? nullptr : "ha_service data_json root must be an object";
+    return action_json_object_valid(data_json) ? nullptr : "ha_service data_json must contain a JSON object";
 }
 
 static bool action_type_known(const char* type) {
@@ -135,24 +224,54 @@ static bool validate_binding_field(char* value, size_t, bool, void* context) {
     return validation->error == nullptr;
 }
 
-const char* action_validate_json(JsonObjectConst action, bool require_known_type) {
+const char* action_validate_json(JsonObjectConst action, bool require_known_type,
+                                 const char* value_token) {
     const char* type = action["type"] | "";
     if (!type[0]) return "action missing type";
     if (require_known_type && !action_type_known(type)) return "unknown action type";
 
-    const char* error = validate_action_contract(action);
-    if (error) return error;
-
     const ActionTypeDef* registered_type = action_type_find(type);
-    if (!registered_type) return nullptr;
-
     ButtonAction parsed = {};
-    strlcpy(parsed.type, type, sizeof(parsed.type));
-    if (registered_type->parse) {
-        JsonDocument parse_input;
-        parse_input.set(action);
-        registered_type->parse(parse_input.as<JsonObject>(), parsed);
+    JsonDocument normalized;
+    normalized.set(action);
+    for (JsonPairConst pair : action) {
+        const char* name = pair.key().c_str();
+        if (strstr(name, "{value}") || strstr(name, "{step}")) return "event tokens are not valid in action field names";
+        if (!pair.value().is<const char*>()) continue;
+        const char* source = pair.value().as<const char*>();
+        const bool has_value = strstr(source, "{value}");
+        const bool has_step = strstr(source, "{step}");
+        if (!has_value && !has_step) continue;
+        const char* token = has_value ? "{value}" : "{step}";
+        if (!value_token || strcmp(token, value_token) || (has_value && has_step)) {
+            snprintf(s_action_validation_error, sizeof(s_action_validation_error),
+                "%s: %s is unavailable in this action context", name, token);
+            return s_action_validation_error;
+        }
+        struct Context { const char* name; const char* source; const char* token; JsonObject output; bool found; };
+        Context context = {name, source, token, normalized.as<JsonObject>(), false};
+        auto visit = [](const char* name, char* field, size_t capacity, uint8_t flags, void* opaque) {
+            auto* context = static_cast<Context*>(opaque);
+            if (strcmp(name, context->name)) return true;
+            context->found = flags & ACTION_FIELD_EVENT;
+            if (!context->found || strlen(context->source) >= capacity) return false;
+            strlcpy(field, context->source, capacity);
+            if (!action_substitute_token_field(field, capacity, context->token, "-999999.9999")) return false;
+            strlcpy(field, context->source, capacity);
+            if (!action_substitute_token_field(field, capacity, context->token, "0")) return false;
+            context->output[name] = field;
+            return true;
+        };
+        if (!action_type_visit_fields(registered_type, parsed, visit, &context) || !context.found) {
+            snprintf(s_action_validation_error, sizeof(s_action_validation_error),
+                "%s: event token is unsupported or expanded value exceeds field capacity", name);
+            return s_action_validation_error;
+        }
     }
+    const char* error = validate_action_contract(normalized.as<JsonObjectConst>());
+    if (error || !registered_type) return error;
+    strlcpy(parsed.type, type, sizeof(parsed.type));
+    if (registered_type->parse) registered_type->parse(normalized.as<JsonObject>(), parsed);
     BindingValidationContext validation = {};
     if (!action_type_visit_bindable_fields(registered_type, parsed, validate_binding_field, &validation)) {
         return validation.error ? validation.error : "invalid action binding";

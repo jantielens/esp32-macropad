@@ -19,6 +19,13 @@ assert.deepStrictEqual(productionCatalogs.portal, productionCatalogs.mcp.map(ent
     delete metadata.fields;
     return metadata;
 }));
+const setVariableCatalog = productionCatalogs.portal.find(entry => entry.type === 'set_var');
+assert.deepStrictEqual(setVariableCatalog && {
+    group: setVariableCatalog.group,
+    label: setVariableCatalog.label,
+    nameBindable: setVariableCatalog.editor_fields[0].bindable === true,
+    valueBindable: setVariableCatalog.editor_fields[1].bindable === true
+}, { group: 'Variables', label: 'Set variable', nameBindable: false, valueBindable: true });
 
 class Element {
     constructor(tag) {
@@ -62,6 +69,7 @@ const FIXTURE_CATALOG = [
     { type: 'screen', group: 'Navigation', label: 'Navigate to screen' },
     { type: 'back', group: 'Navigation', label: 'Navigate back' },
     { type: 'mqtt', group: 'Connectivity', label: 'Publish MQTT message' },
+    { type: 'ha_service', group: 'Connectivity', label: 'Call Home Assistant service' },
     { type: 'gamepad', group: 'Gamepad', label: 'Gamepad', button_count: 16 },
     {
         type: 'mouse_button', group: 'Mouse', label: 'Mouse button',
@@ -70,6 +78,7 @@ const FIXTURE_CATALOG = [
     },
     {
         type: 'volume', group: 'Audio', label: 'Volume',
+        template_fields: { volume_value: { max: 15 } },
         commands: [{ id: 'set', label: 'Set volume' }, { id: 'adjust', label: 'Adjust volume' }],
         editor_fields: [
             { name: 'volume_mode', label: 'Command', type: 'select', command_options: true },
@@ -137,6 +146,7 @@ vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor.js', 'utf8'), 
 vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_screen.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_cycle_pad.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_mqtt.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_ha.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_key.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_sound_alert.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_timer.js', 'utf8'), context);
@@ -148,6 +158,22 @@ vm.runInContext(
     fs.readFileSync('src/app/device_classes/shutter_tester/web/portal_action_editor_shutter.js', 'utf8'),
     context
 );
+
+const keyEditor = context._actionEditorExtensions.find(extension => extension.type === 'key');
+for (const type of ['key', 'ble_pair', 'mqtt']) {
+    keyEditor.typeChanged('keyboard-test', type);
+    assert.strictEqual(document.getElementById('keyboard-test-ble-hint').style.display,
+        type === 'mqtt' ? 'none' : '');
+}
+FIXTURE_CATALOG.push({ type: 'key', group: 'Keyboard', label: 'Send keys' });
+for (const type of ['key', 'ble_pair']) {
+    keyEditor.typeChanged('keyboard-test', type);
+    assert.strictEqual(document.getElementById('keyboard-test-ble-hint').style.display, 'none');
+}
+assert.strictEqual(document.getElementById('keyboard-test-key-group').style.display, 'none');
+keyEditor.typeChanged('keyboard-test', 'key');
+assert.strictEqual(document.getElementById('keyboard-test-key-group').style.display, '');
+FIXTURE_CATALOG.pop();
 
 // --- Group assembly from the fixture catalog ---
 const optionsHtml = context.actionEditorTypeOptionsHTML();
@@ -224,7 +250,7 @@ for (const button of ['left', 'right', 'middle', undefined]) {
 assert(!editorHtml.includes('picker-system-command'));
 assert(!editorHtml.includes('picker-music-command'));
 context.actionEditorLoad(prefix, { type: 'volume', volume_mode: 'adjust', volume_value: '{step}' });
-const volumeAction = context.actionEditorBuild(prefix);
+const volumeAction = context.actionEditorBuild(prefix, '{step}');
 assert.strictEqual(volumeAction.type, 'volume');
 assert.strictEqual(volumeAction.volume_mode, 'adjust');
 assert.strictEqual(volumeAction.volume_value, '{step}');
@@ -268,8 +294,52 @@ assert.strictEqual(delayAction.duration_ms, 2500);
 // no such sweep at all: the catalog is read once, synchronously, at HTML
 // generation time. Guard against it recurring.
 const editorSource = fs.readFileSync('src/app/web/portal_action_editor.js', 'utf8');
-assert(!editorSource.includes('querySelectorAll'));
+assert(!editorSource.includes('document.querySelectorAll'));
 assert(editorSource.includes('action-type-select'));
+const resetPrefix = 'reset-test';
+const resetFields = ['-ha-entity', '-ha-service', '-ha-data', '-generic-volume-volume_value', '-timer-set-sec', '-timer-adjust-sec'].map(suffix => {
+    const input = document.getElementById(resetPrefix + suffix);
+    input.tagName = 'INPUT';
+    input.defaultValue = '';
+    input.defaultChecked = false;
+    return input;
+});
+const resetCommand = document.getElementById(resetPrefix + '-generic-system-system_command');
+resetCommand.options = [{ value: 'reboot', defaultSelected: false }, { value: 'wifi_reconnect', defaultSelected: false }];
+Object.defineProperty(resetCommand, 'selectedIndex', { set(index) { this.value = this.options[index].value; } });
+const resetCheckbox = new Element('INPUT');
+resetCheckbox.defaultValue = 'on';
+resetCheckbox.defaultChecked = true;
+resetCheckbox.checked = false;
+const resetSelected = new Element('SELECT');
+resetSelected.options = [{ value: 'first', defaultSelected: false }, { value: 'configured', defaultSelected: true }];
+Object.defineProperty(resetSelected, 'selectedIndex', { set(index) { this.value = this.options[index].value; } });
+document.getElementById(resetPrefix + '-fields').querySelectorAll = () => resetFields.concat(resetCommand, resetCheckbox, resetSelected);
+const previousHa = { type: 'ha_service', entity_id: 'light.previous', service: 'turn_on', data_json: '{"brightness_pct":80}' };
+context.actionEditorLoad(resetPrefix, previousHa);
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(resetPrefix))), previousHa);
+document.getElementById(resetPrefix + '-type').value = 'mqtt';
+context.actionEditorTypeChanged(resetPrefix);
+document.getElementById(resetPrefix + '-type').value = 'ha_service';
+context.actionEditorTypeChanged(resetPrefix);
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(resetPrefix))), previousHa, 'type switching within a button preserves its draft');
+context.actionEditorLoad(resetPrefix, {});
+document.getElementById(resetPrefix + '-type').value = 'ha_service';
+context.actionEditorTypeChanged(resetPrefix);
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(resetPrefix))), {type:'ha_service'}, 'new buttons must not inherit HA settings');
+context.actionEditorLoad(resetPrefix, {type:'volume', volume_mode:'set', volume_value:'73'});
+document.getElementById(resetPrefix + '-timer-set-sec').value = '123';
+document.getElementById(resetPrefix + '-timer-adjust-sec').value = '-45';
+resetCommand.value = 'wifi_reconnect';
+context.actionEditorLoad(resetPrefix, {type:'mqtt', topic:'new/button', payload:'fresh'});
+document.getElementById(resetPrefix + '-type').value = 'volume';
+context.actionEditorTypeChanged(resetPrefix);
+assert.strictEqual(context.actionEditorBuild(resetPrefix).volume_value, undefined, 'different action types also clear inactive generic fields');
+assert.strictEqual(document.getElementById(resetPrefix + '-timer-set-sec').value, '');
+assert.strictEqual(document.getElementById(resetPrefix + '-timer-adjust-sec').value, '');
+assert.strictEqual(resetCommand.value, 'reboot');
+assert.strictEqual(resetSelected.value, 'configured');
+assert.strictEqual(resetCheckbox.checked, true);
 const specializedTypes = ['screen', 'cycle_pad', 'mqtt', 'key', 'sound_alert', 'timer', 'notify', 'visual_alert', 'delay', 'gamepad'];
 const manifest = fs.readFileSync('src/app/web/portal.js.bundle', 'utf8');
 for (const type of specializedTypes) {
@@ -396,6 +466,7 @@ for (const key of ['1_next_seconds', '1_next_ring_seconds', '1_dismiss_seconds']
 console.log('portal_action_picker: PASS');
 context.deviceInfoCache.catalog = productionCatalogs.portal;
 const roundTrips = [
+    {type:'set_var', var_name:'counter', var_value:'[expr:[var:counter|0] + 1]'},
     {type:'mqtt', topic:'home/topic', payload:'[mqtt:value]'},
     {type:'key', sequence:'ctrl+c'},
     {type:'cycle_pad', direction:'previous', wrap:false, excluded_pads:'1,3'},
@@ -411,7 +482,7 @@ const roundTrips = [
 ];
 for (const action of roundTrips) {
     context.actionEditorLoad('round-trip', action);
-    assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('round-trip'))), action, 'round-trip: ' + action.type);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('round-trip', '{step}'))), action, 'round-trip: ' + action.type);
 }
 context.actionEditorLoad('round-trip', {type:'sound_alert'});
 assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('round-trip'))), {type:'sound_alert', sound_alert_kind:'tone', sound_alert_pattern:''});

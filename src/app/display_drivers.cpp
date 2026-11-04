@@ -27,6 +27,9 @@
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_JD9165_DSI
 #include "drivers/mipi_dsi_driver.cpp"
 #include "drivers/jd9165_dsi_driver.cpp"
+#elif DISPLAY_DRIVER == DISPLAY_DRIVER_TAB5_DSI
+#include "drivers/mipi_dsi_driver.cpp"
+#include "drivers/tab5_dsi_driver.cpp"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_INKPLATE6FLICK
 #include "drivers/inkplate6flick_epaper_driver.cpp"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_IT8951

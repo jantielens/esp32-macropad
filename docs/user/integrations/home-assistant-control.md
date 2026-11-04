@@ -58,8 +58,10 @@ their waiting lists. Tap, dismissal, screen changes, or replacement can end them
 Siren supports tones default, alert, doorbell, warning, and custom.
 Turn on with optional duration in seconds and volume_level 0.0-1.0.
 Without duration it loops until stopped/replaced.
-Volume number 0-100 changes the persistent device volume;
+Volume number 0-100 changes the current device volume without persisting it;
 a siren volume override affects that playback only.
+Use the portal or a **Save volume** action to retain the current volume after
+reboot. See [volume settings](../media/audio.md#set-volume-and-amplifier-behavior).
 Custom Tone text uses the [tone language](../media/audio.md#write-a-tone-pattern);
 a trailing gap controls repetition spacing.
 Beep/Double/Triple buttons request one-shot alerts.

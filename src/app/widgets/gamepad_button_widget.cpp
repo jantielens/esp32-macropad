@@ -1,6 +1,6 @@
 #include "widget.h"
 
-#if HAS_DISPLAY && HAS_TOUCH && HAS_USB_HID
+#if HAS_DISPLAY && HAS_TOUCH && (HAS_USB_HID || HAS_BLE_HID)
 #include "gamepad_surface_touch.h"
 #include <new>
 
@@ -106,7 +106,7 @@ static void gamepad_button_destroy(WidgetState* state) {
 }
 #if HAS_MCP
 static void gamepad_button_describe(JsonObject& out) {
-    out["note"] = "Held Gamepad control, with independent simultaneous contacts on multitouch drivers. One contact per widget; extras are ignored until lift. Configure actions as exactly one gamepad action with operation down. Touch release, cancellation, hiding, pad exit, disconnect, and OTA release automatically. No long-press actions, ordinary tap dispatch, or pad swipes. USB keyboard mode required.";
+    out["note"] = "Held Gamepad control, with independent simultaneous contacts on multitouch drivers. One contact per widget; extras are ignored until lift. Configure actions as exactly one gamepad action with operation down. Touch release, cancellation, hiding, pad exit, disconnect, and OTA release automatically. No long-press actions, ordinary tap dispatch, or pad swipes. USB or BLE HID transport required.";
     JsonObject field = out.createNestedArray("config_fields").createNestedObject();
     field["name"] = "actions";
     field["type"] = "array";
