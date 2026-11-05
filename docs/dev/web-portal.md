@@ -1523,8 +1523,11 @@ The binding and button builders share `bindingSourcePickerHTML`, the picker
 session lifecycle, and selected-value display options. On-device bindings and HA
 search after three characters; MQTT explicitly reads one exact topic and
 offers clickable scalar fields. HA defaults to state and permits attribute or
-custom-path selection. Display options travel with the selected candidate;
-button scenarios apply them to labels, never to raw numeric widget inputs.
+custom-path selection. External Data lists configured sources and previews JSON
+paths or source statistics via `/api/pad/resolve`, without fetching the source.
+Its provider is loaded from the `HAS_EXTERNAL_DATA`-gated component asset.
+Display options travel with the selected candidate; button scenarios apply them
+to labels, never to raw numeric widget inputs.
 Only missing required catalog parameters interrupt direct selection in either
 builder. Binding Builder's **Edit value** opens the catalog parameter form for
 optional changes, including expressions and named pad bindings.
@@ -1551,9 +1554,9 @@ The compact wand control opens a native modal Binding Builder
 source summary, customization/preview columns, and Cancel/Insert footer.
 Both dialogs use `portal-form` for shared input styles, plus shared design-grid
 and preview-panel classes. Generated binding text, sample provenance, and Copy
-remain visible during binding customization. Samples are declared examples or
-the first value acquired during HA/MQTT selection; neither builder offers a
-separate device-resolution action. Widget targets restrict display options.
+remain visible during binding customization. Samples are declared examples, the
+first value acquired during HA/MQTT selection, or the External Data preview.
+Widget targets restrict display options.
 Close disposes the picker and pending acquisition work before restoring focus.
 
 The separate Binding Reference dialog (`portal_binding_help.js`, markup in `_binding_help.html`) lists

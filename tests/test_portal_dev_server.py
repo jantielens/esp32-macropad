@@ -137,6 +137,12 @@ class PortalDevServerTest(unittest.TestCase):
                                       body={"external_data": [source]})[0], 200)
         config = self.request("/api/config")[1]
         self.assertEqual(config["external_data"][0]["url"], source["url"])
+        resolved = self.request("/api/pad/resolve", method="POST", body={"bindings": [
+            "[ext:weather;current.temperature|missing]",
+            "[ext:weather;missing|not found]",
+            "[ext:weather;.@state|missing]"
+        ]})[1]["resolved"]
+        self.assertEqual([entry["value"] for entry in resolved], ["21.3", "not found", "healthy"])
         source["name"] = "renamed"
         source["refresh_seconds"] = 120
         self.assertEqual(self.request("/api/config?no_reboot=1", method="POST",

@@ -60,7 +60,7 @@ function bindingSourcePickerMount(session) {
         root.querySelector('[data-bb-matches]').replaceChildren();
         root.querySelector('[data-bb-retry]').hidden = true;
         padButtonBuilderStatus('', false, session);
-        if (session.provider?.search && search.value.trim().length >= 3) {
+        if (session.provider?.search && (session.provider.listOnOpen || search.value.trim().length >= 3)) {
             session.timer = setTimeout(() => padButtonBuilderLookup(false, undefined, session), 300);
         }
     };
@@ -93,6 +93,10 @@ function bindingSourcePickerMount(session) {
         if (event.target.matches('[data-bb-provider]')) {
             padButtonBuilderChooseProvider(event.target.value, session, false);
         }
+    };
+    root.querySelector('[data-bb-settings]').onclick = () => {
+        if (session.bindingOnly) closeBindingBuilder();
+        else padButtonBuilderClose();
     };
     root.querySelector('[data-bb-confirm-value]').onclick = () => {
         try {
@@ -536,7 +540,7 @@ function padButtonBuilderChooseProvider(id, session = padButtonBuilderSession, f
     const unavailable = provider.availability(session.config);
     const setup = dialog.querySelector('[data-bb-setup]');
     setup.hidden = !unavailable;
-    setup.firstChild.textContent = unavailable + ' ';
+    dialog.querySelector('[data-bb-setup-message]').textContent = unavailable;
     const settings = dialog.querySelector('[data-bb-settings]');
     settings.hidden = !provider.setupHref;
     settings.href = provider.setupHref || '#';
@@ -608,6 +612,7 @@ async function padButtonBuilderLoadConfig(session = padButtonBuilderSession) {
         const response = await fetch('/api/config', { cache: 'no-store', signal: controller.signal });
         if (!response.ok) throw new Error('Could not load source configuration (HTTP ' + response.status + ').');
         const config = await response.json();
+        await window.portalLoadItemAssets('pad-editor');
         await _bhLoad();
         if (_bindingHelp.error) throw new Error(_bindingHelp.error);
         if (!bindingSourceSessionActive(session) || controller !== session.controller || controller.signal.aborted) return;

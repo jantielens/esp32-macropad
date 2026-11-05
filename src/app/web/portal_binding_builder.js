@@ -63,7 +63,7 @@ const BUTTON_BUILDER_PROVIDERS = [];
 function bindingSourcePickerHTML() {
     return `<div class="binding-source-picker">
         <div class="binding-source-options" data-bb-provider-picker role="radiogroup" aria-label="Source"></div>
-        <p data-bb-setup hidden><a data-bb-settings>Open source settings</a></p>
+        <p data-bb-setup hidden><span data-bb-setup-message></span> <a data-bb-settings>Open source settings</a></p>
         <section data-bb-source hidden>
             <div data-bb-catalog-search-panel>
                 <label class="binding-builder-input-label" for="button-builder-search" data-bb-source-label>Find a value</label>

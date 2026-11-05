@@ -985,6 +985,18 @@ class PortalHandler(SimpleHTTPRequestHandler):
 
                 def resolve_value(value):
                     source = names.get(value[5:-1], value) if value.startswith("[pad:") and value.endswith("]") else value
+                    if source.startswith("[ext:") and source.endswith("]"):
+                        params, _, fallback = source[5:-1].partition("|")
+                        parts = params.split(";")
+                        configured = next((item for item in self.server.mock_config.get("external_data", [])
+                                           if item["name"] == parts[0]), None)
+                        if configured:
+                            path = parts[1] if len(parts) > 1 else ""
+                            if path == ".@state":
+                                return configured["state"]
+                            if parts[0] == "weather" and path == "current.temperature":
+                                return "21.3"
+                        return fallback or "---"
                     return values.get(source, "---" if "[" in source else source)
 
                 self._serve_json({"resolved": [{"binding": value, "value": resolve_value(value)} for value in bindings],
@@ -1041,7 +1053,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
                             self._serve_json({"success": False, "message": "Invalid external data sources"}, 400)
                             return
                         names.add(name)
-                        saved.append({"name": name, "url": url, "refresh_seconds": interval, "state": "waiting"})
+                        saved.append({"name": name, "url": url, "refresh_seconds": interval,
+                                      "state": "healthy" if name == "weather" else "waiting"})
                     update["external_data"] = saved
                 if update.pop("ha_token", ""):
                     self.server.mock_config["ha_token_set"] = True
@@ -1290,6 +1303,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 {"id": "alarm-behavior", "display_name": "Behavior", "portal_script": "/portal_alarms.js"}]})
         for category in nav["categories"]:
             if category["id"] == "pads":
+                if profile in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
+                    next(item for item in category["items"] if item["id"] == "pad-editor")["portal_script"] = "/portal-external-data.js"
                 category["items"].append({"id": "dialog-appearance", "display_name": "Dialog appearance"})
             if category["id"] == "connectivity" and profile in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
                 category["items"].append({"id": "external-data", "display_name": "External Data",

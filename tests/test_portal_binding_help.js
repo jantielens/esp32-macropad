@@ -365,6 +365,117 @@ delete context.testHelpSchemes;
 // Every documented example must pass the portal validator too.
 (async function() {
     await context.bindingLoadSchema();
+    {
+    vm.runInContext(fs.readFileSync('src/app/web/portal_external_data.js', 'utf8'), context);
+    const external = vm.runInContext('externalDataBuilderProvider', context);
+    assert.strictEqual(external.supported({ caps: {} }), false);
+    assert.strictEqual(external.supported({ external_data: [] }), true);
+    assert.match(external.availability({ external_data: [] }), /Configure/);
+    const originalFetch = context.fetch;
+    context.fetch = async () => ({ ok: true, json: async () => ({
+        external_data: [{ name: 'weather', state: 'healthy' }, { name: 'energy', state: 'waiting' }]
+    }) });
+    const sources = await external.search('weath', new AbortController().signal);
+    assert.deepStrictEqual(Array.from(sources.candidates, item => item.sourceId), ['weather']);
+    const fields = {
+        '[data-ext-name]': {}, '#external-builder-kind': { value: '', options: [{ value: '' }, { value: '.@state' }] },
+        '#external-builder-path': { value: '' }, '[data-ext-path-label]': {}, '[data-ext-path-help]': {},
+        '[data-ext-preview]': {}, '[data-ext-preview-label]': {}, '[data-ext-preview-value]': {},
+        '[data-ext-preview-status]': {}, '[data-ext-use]': {}, '[data-ext-change]': {}
+    };
+    const root = { isConnected: true, querySelector: selector => fields[selector] };
+    const requests = [];
+    context.fetch = (url, options) => new Promise(resolve => requests.push({ resolve, options }));
+    let selected;
+    const dispose = external.configureSelection(root, { source: 'weather' }, value => { selected = value; });
+    assert.strictEqual(fields['[data-ext-path-help]'].hidden, false);
+    fields['#external-builder-kind'].value = '.@state';
+    fields['#external-builder-kind'].onchange();
+    assert.strictEqual(fields['[data-ext-path-label]'].hidden, true);
+    assert.strictEqual(fields['[data-ext-path-help]'].hidden, true);
+    fields['#external-builder-kind'].value = '';
+    fields['#external-builder-kind'].onchange();
+    assert.strictEqual(fields['[data-ext-path-label]'].hidden, false);
+    assert.strictEqual(fields['[data-ext-path-help]'].hidden, false);
+    await new Promise(resolve => setTimeout(resolve, 350));
+    fields['#external-builder-path'].value = 'current.temperature';
+    fields['#external-builder-path'].oninput();
+    await new Promise(resolve => setTimeout(resolve, 350));
+    assert.strictEqual(requests.length, 2);
+    requests[0].resolve({ ok: true, json: async () => ({ resolved: [
+        { value: 'old' }, { value: 'old' }, { value: 'healthy' }
+    ] }) });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.strictEqual(fields['[data-ext-preview-status]'].textContent, 'Loading preview...');
+    assert.strictEqual(fields['[data-ext-preview]'].hidden, true);
+    requests[1].resolve({ ok: true, json: async () => ({ resolved: [
+        { value: '21.3' }, { value: '21.3' }, { value: 'stale' }
+    ] }) });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.strictEqual(fields['[data-ext-preview]'].hidden, false);
+    assert.strictEqual(fields['[data-ext-preview-label]'].textContent, 'Preview (cached, stale)');
+    assert.strictEqual(fields['[data-ext-preview-value]'].textContent, '21.3');
+    fields['[data-ext-use]'].onclick();
+    assert.strictEqual(selected.capabilities.numericWidget, true);
+    assert.strictEqual(external.buildBinding(selected, { format: '%.1f C', fallback: 'No data' }),
+        '[ext:weather;current.temperature;%.1f C|No data]');
+    assert.throws(() => external.buildBinding(selected, { format: 'x'.repeat(24) }), /24 UTF-8/);
+    fields['#external-builder-path'].value = 'missing';
+    fields['#external-builder-path'].oninput();
+    await new Promise(resolve => setTimeout(resolve, 350));
+    requests[2].resolve({ ok: true, json: async () => ({ resolved: [
+        { value: '__ext_missing_a__' }, { value: '__ext_missing_b__' }, { value: 'healthy' }
+    ] }) });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.strictEqual(fields['[data-ext-preview]'].hidden, true);
+    assert.match(fields['[data-ext-preview-status]'].textContent, /No cached value/);
+    fields['[data-ext-use]'].onclick();
+    assert.strictEqual(selected.capabilities.numericWidget, false);
+    fields['#external-builder-path'].value = 'error';
+    fields['#external-builder-path'].oninput();
+    await new Promise(resolve => setTimeout(resolve, 350));
+    requests[3].resolve({ ok: false, status: 503 });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.match(fields['[data-ext-preview-status]'].textContent, /HTTP 503/);
+    assert.strictEqual(fields['[data-ext-use]'].disabled, false);
+    fields['#external-builder-path'].value = 'changing';
+    fields['#external-builder-path'].oninput();
+    await new Promise(resolve => setTimeout(resolve, 350));
+    requests[4].resolve({ ok: true, json: async () => ({ resolved: [
+        { value: '21' }, { value: '22' }, { value: 'healthy' }
+    ] }) });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.match(fields['[data-ext-preview-status]'].textContent, /changed during preview/);
+    fields['#external-builder-kind'].value = '.@state';
+    fields['#external-builder-kind'].onchange();
+    await new Promise(resolve => setTimeout(resolve, 350));
+    requests[5].resolve({ ok: true, json: async () => ({ resolved: [
+        { value: 'stale' }, { value: 'stale' }, { value: 'stale' }
+    ] }) });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.strictEqual(fields['[data-ext-preview-label]'].textContent, 'Preview');
+    fields['[data-ext-use]'].onclick();
+    assert.strictEqual(selected.cached, false);
+    fields['#external-builder-kind'].value = '.@next';
+    fields['#external-builder-kind'].onchange();
+    await new Promise(resolve => setTimeout(resolve, 350));
+    requests[6].resolve({ ok: true, json: async () => ({ resolved: [
+        { value: '__ext_missing_a__' }, { value: '__ext_missing_b__' }, { value: 'healthy' }
+    ] }) });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.strictEqual(fields['[data-ext-preview-status]'].textContent, 'This statistic is not available yet.');
+    fields['#external-builder-kind'].value = '';
+    fields['#external-builder-path'].value = 'later';
+    fields['#external-builder-path'].oninput();
+    await new Promise(resolve => setTimeout(resolve, 350));
+    dispose();
+    requests[7].resolve({ ok: true, json: async () => ({ resolved: [
+        { value: 'late' }, { value: 'late' }, { value: 'healthy' }
+    ] }) });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.strictEqual(fields['[data-ext-preview-status]'].textContent, 'Loading preview...');
+    context.fetch = originalFetch;
+    }
     const expressionLoad = (value, validationOptions) => context.expressionBuilderLoad(value, validationOptions);
     const expressionGenerate = (value, formatting, limit, validationOptions) =>
         context.expressionBuilderGenerate(value, formatting, limit, validationOptions);
@@ -1762,10 +1873,23 @@ delete context.testHelpSchemes;
     context.padButtonBuilderChooseProvider('ha', pickerSession, false);
     assert.strictEqual(pickerRoot.querySelector('[data-bb-source]').hidden, true);
     assert.strictEqual(pickerRoot.querySelector('[data-bb-setup]').hidden, false);
-    assert.match(pickerRoot.querySelector('[data-bb-setup]').firstChild.textContent, /Configure Home Assistant/);
+    assert.match(pickerRoot.querySelector('[data-bb-setup-message]').textContent, /Configure Home Assistant/);
     assert.strictEqual(pickerRoot.querySelector('[data-bb-settings]').href, '#ha-discovery');
     context.padButtonBuilderChooseProvider('mqtt', pickerSession, false);
     assert.strictEqual(pickerRoot.querySelector('[data-bb-settings]').href, '#mqtt');
+    const closeBinding = context.closeBindingBuilder;
+    const closeButton = context.padButtonBuilderClose;
+    let settingsClosedBuilder = '';
+    context.closeBindingBuilder = () => { settingsClosedBuilder = 'binding'; };
+    context.padButtonBuilderClose = () => { settingsClosedBuilder = 'button'; };
+    context.bindingSourcePickerMount({ dialog: pickerRoot, bindingOnly: true });
+    pickerRoot.querySelector('[data-bb-settings]').onclick();
+    assert.strictEqual(settingsClosedBuilder, 'binding');
+    context.bindingSourcePickerMount({ dialog: pickerRoot, bindingOnly: false });
+    pickerRoot.querySelector('[data-bb-settings]').onclick();
+    assert.strictEqual(settingsClosedBuilder, 'button');
+    context.closeBindingBuilder = closeBinding;
+    context.padButtonBuilderClose = closeButton;
     context.padButtonBuilderStopLookup(pickerSession);
     pickerSession.disposed = true;
     assert.strictEqual(context.bindingSourceSessionActive(pickerSession), false);

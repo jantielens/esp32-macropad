@@ -940,6 +940,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/binding_value.cpp
   - src/app/binding_value.h
   - src/app/board_config.h
+  - src/app/components/pad_editor_component.cpp
   - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/ext_binding.cpp

@@ -95,6 +95,9 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
     const external = display && psram && integrationMode !== 'external-disabled';
     assert.equal(assets.has('external_data_fragment_html_gz'), external);
     assert.equal(assets.has('portal_external_data_js_gz'), external);
+    assert(!js.includes('externalDataBuilderProvider'), 'External builder must not leak into the shared bundle');
+    if (external) assert(assets.get('portal_external_data_js_gz').includes('externalDataBuilderProvider'),
+        'External builder must be included in the gated External Data asset');
     const ha = display && psram && integrationMode !== 'builtin-only';
     const mqtt = display && !['builtin-only', 'ha-only'].includes(integrationMode);
     const shell = assets.get('shell_html_gz');

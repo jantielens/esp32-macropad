@@ -36,6 +36,11 @@ Use the source in a label or widget binding:
 [ext:weather;daily.temperature_2m_max.1;%.0f C|No data]
 ```
 
+In the pad editor, open **fx > Build a binding**, choose **External Data**,
+and select a configured source. Enter a JSON path or choose a source statistic.
+The preview reads cached JSON values or current source statistics; it does not
+fetch the source. Choose display formatting or a fallback, then insert the binding.
+
 The dot-separated path selects object keys and zero-based array indices.
 Numeric object keys remain keys. An empty path or `.` selects the root.
 Objects and arrays are returned as JSON if they fit the binding output.
