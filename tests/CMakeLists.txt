@@ -481,7 +481,9 @@ target_compile_options(test_ha_live PRIVATE
 
 add_host_legacy_test(test_binding_value
     SOURCES test_binding_value.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/external_data_config.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS HAS_EXTERNAL_DATA=1 HAS_DISPLAY=1 HAS_PSRAM=1
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h
     OPTIONS -Wno-deprecated-declarations)
 
@@ -889,6 +891,7 @@ function(add_binding_schema_profile name definition)
             ${PROJECT_SOURCE_DIR}/src/app/time_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp
             ${PROJECT_SOURCE_DIR}/src/app/mqtt_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/config_psram.cpp
             ${PROJECT_SOURCE_DIR}/src/app/ha_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/var_binding.cpp
+            ${PROJECT_SOURCE_DIR}/src/app/ext_binding.cpp
             ${PROJECT_SOURCE_DIR}/src/app/runtime_variables.cpp
             $<TARGET_OBJECTS:binding_schema_json> ${ARGN}
         INCLUDES ${PROJECT_SOURCE_DIR}/tests/binding_schema_profiles ${PROJECT_SOURCE_DIR}/src

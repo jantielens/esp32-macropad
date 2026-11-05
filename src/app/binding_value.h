@@ -30,4 +30,14 @@ bool binding_value_format_valid(const char* format, unsigned max_width, unsigned
 
 #ifdef __cplusplus
 }
+
+#include "board_config.h"
+#if HAS_EXTERNAL_DATA
+#include <ArduinoJson.h>
+
+// Select a value in an already-parsed document, including array indices.
+// Returns false for missing/null values, invalid paths or truncated output.
+bool binding_value_select_json(JsonVariantConst root, const char* path,
+                               char* out, size_t out_len);
+#endif
 #endif

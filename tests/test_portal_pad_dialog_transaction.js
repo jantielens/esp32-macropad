@@ -894,6 +894,61 @@ async function checkSourceColors() {
     context.actionEditorBuild = savedAction;
 }
 
+async function checkBindingPreviewPlacement() {
+    const nodes = new Map();
+    const chips = new Map();
+    const overlay = new Element('pad-edit-overlay');
+    const widgetType = new Element('pad-edit-widget-type');
+    nodes.set(overlay.id, overlay);
+    nodes.set(widgetType.id, widgetType);
+    const addField = (id, value, hasHeader) => {
+        const input = new Element(id);
+        input.value = value;
+        const container = {
+            children: [],
+            appendChild(chip) { this.children.push(chip); chips.set(chip.attributes['data-pv'], chip); }
+        };
+        const label = hasHeader ? { querySelector: () => container } :
+            Object.assign(container, { querySelector: () => null });
+        input.labels = [label];
+        nodes.set(id, input);
+        return container;
+    };
+    const top = addField('pad-edit-label-top', '[ext:weather;current.temperature_2m]', true);
+    const center = addField('pad-edit-label-center', '[health:cpu]', true);
+    const color = addField('pad-edit-border-color', '[health:rssi]', false);
+    const previewContext = {
+        document: {
+            getElementById: id => nodes.get(id) || null,
+            createElement: () => new Element(),
+            querySelector: selector => chips.get(selector.match(/data-pv="([^"]+)"/)?.[1]) || null
+        },
+        padState: { page: 0, selectedLayer: 'main', editCol: 0, editRow: 0 },
+        padWidgetEditor: () => null,
+        padGetBindableColor: id => nodes.get(id)?.value || '',
+        setTimeout,
+        clearTimeout,
+        fetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve({
+            button: { label_top: '21.3 C', label_center: '23', border_color: '#123456' }
+        }) })
+    };
+    vm.createContext(previewContext);
+    vm.runInContext(fs.readFileSync('src/app/web/portal_pad_dialog.js', 'utf8'), previewContext);
+    previewContext.padPvOnOpen();
+    await new Promise(resolve => setImmediate(resolve));
+    for (const [container, expected] of [[top, '21.3 C'], [center, '23'], [color, '#123456']]) {
+        assert.strictEqual(container.children.length, 1, 'Each binding preview belongs to its own label');
+        assert.strictEqual(container.children[0].style.display, 'inline-flex');
+        assert.ok(container.children[0].innerHTML.includes(expected));
+    }
+    previewContext.padPvOnOpen();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.strictEqual(top.children.length, 1, 'Reselecting a button does not duplicate its preview');
+    nodes.get('pad-edit-label-top').value = 'Plain label';
+    previewContext.padPvSetChip('pad-edit-label-top');
+    assert.strictEqual(top.children[0].style.display, 'none');
+}
+
 async function checkInspectorRequests() {
     const nodes = new Map();
     const requests = [];
@@ -991,7 +1046,7 @@ async function checkInspectorRequests() {
     await new Promise(resolve => setImmediate(resolve));
 }
 
-checkSourceColors().then(checkInspectorRequests).then(() => console.log('portal_pad_dialog_transaction: PASS')).catch(error => {
+checkSourceColors().then(checkBindingPreviewPlacement).then(checkInspectorRequests).then(() => console.log('portal_pad_dialog_transaction: PASS')).catch(error => {
     console.error(error);
     process.exitCode = 1;
 });

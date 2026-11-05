@@ -24,6 +24,11 @@
 #include "web_portal_json.h"
 #include "web_mcp.h"
 #include "ha_live.h"
+#if HAS_EXTERNAL_DATA
+#include "external_data.h"
+#include <memory>
+#include <new>
+#endif
 #if HAS_HA_HISTORY
 #include "ha_stats.h"
 #endif
@@ -193,6 +198,9 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["ha_token"] = "";
 				(*doc)["ha_token_set"] = (strlen(current_config->ha_token) > 0);
 
+#if HAS_EXTERNAL_DATA
+				external_data_write_status((*doc)["external_data"].to<JsonArray>(), current_config->external_data);
+#endif
 				// Power settings
 				(*doc)["operating_mode"] = current_config->operating_mode;
 				(*doc)["duty_cycle_wake_seconds"] = current_config->duty_cycle_wake_seconds;
@@ -455,6 +463,24 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				portEXIT_CRITICAL(&g_config_post_mux);
 				return;
 		}
+
+#if HAS_EXTERNAL_DATA
+		std::unique_ptr<ExternalDataConfig, decltype(&heap_caps_free)> external_candidate(nullptr, heap_caps_free);
+		if (doc.containsKey("external_data")) {
+				void* memory = heap_caps_malloc(sizeof(ExternalDataConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+				if (!memory) {
+						request->send(503, "application/json", "{\"success\":false,\"message\":\"External data configuration allocation failed\"}");
+						portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+						return;
+				}
+				external_candidate.reset(new (memory) ExternalDataConfig{});
+				if (!external_data_parse_config(doc["external_data"], *external_candidate)) {
+						request->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid external data sources\"}");
+						portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+						return;
+				}
+		}
+#endif
 
 		char wifi_failure_mode_candidate[CONFIG_WIFI_FAILURE_MODE_MAX_LEN];
 		char ap_password_candidate[CONFIG_AP_PASSWORD_MAX_LEN];
@@ -1158,7 +1184,11 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		const DialogTemplates previous_dialog_appearance = current_config->dialog_appearance;
 		current_config->dialog_appearance = dialog_candidate;
 		#endif
+#if HAS_EXTERNAL_DATA
+		if (config_manager_save(current_config, external_candidate.get())) {
+#else
 		if (config_manager_save(current_config)) {
+#endif
 #if HAS_HA_LIVE
 				if (doc.containsKey("ha_url") || doc.containsKey("ha_token"))
 						ha_live_configure(current_config->ha_url, current_config->ha_token);

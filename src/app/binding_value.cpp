@@ -83,6 +83,48 @@ bool binding_value_extract_json(const char* payload, const char* path, char* out
     return true;
 }
 
+#if HAS_EXTERNAL_DATA
+bool binding_value_select_json(JsonVariantConst value, const char* path,
+                               char* out, size_t out_len) {
+    if (!path || !out || !out_len) return false;
+    out[0] = '\0';
+    const char* token = path;
+    if (strcmp(path, ".") == 0) token += 1;
+    while (*token) {
+        const size_t length = strcspn(token, ".");
+        if (!length) return false;
+        if (value.is<JsonObjectConst>()) {
+            value = value[JsonString(token, length)];
+        } else if (value.is<JsonArrayConst>()) {
+            size_t index = 0;
+            for (size_t i = 0; i < length; ++i) {
+                if (token[i] < '0' || token[i] > '9') return false;
+                const unsigned digit = token[i] - '0';
+                if (index > (SIZE_MAX - digit) / 10) return false;
+                index = index * 10 + digit;
+            }
+            value = value[index];
+        } else {
+            return false;
+        }
+        token += length;
+        if (*token == '.') {
+            ++token;
+            if (!*token) return false;
+        }
+    }
+    if (value.isNull()) return false;
+    if (value.is<const char*>()) return copy_value(value.as<const char*>(), out, out_len);
+    if (value.is<JsonObjectConst>() || value.is<JsonArrayConst>()) {
+        if (measureJson(value) >= out_len) return false;
+        return serializeJson(value, out, out_len) < out_len;
+    }
+    if (value.is<bool>()) return copy_value(value.as<bool>() ? "true" : "false", out, out_len);
+    const int length = snprintf(out, out_len, "%g", value.as<double>());
+    return length >= 0 && static_cast<size_t>(length) < out_len;
+}
+#endif
+
 enum class Length { NONE, HH, H, L, LL, J, Z, T, LONG_DOUBLE };
 
 static bool skip_digits(const char*& p, unsigned maximum = INT_MAX) {

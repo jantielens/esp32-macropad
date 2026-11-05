@@ -1543,6 +1543,53 @@
       }
     },
     {
+      "name": "ext",
+      "min_params": 1,
+      "max_params": 3,
+      "widget_max_params": 2,
+      "format_param": 2,
+      "validation_mode": 0,
+      "free_form": true,
+      "category": "Data",
+      "summary": "Cached JSON from a configured external HTTP or HTTPS source.",
+      "note": "Statistics: .@state, .@age, .@next, .@duration, .@size, .@http_status, .@error. Failed refreshes retain the last value. Keys containing dots or binding delimiters are unsupported.",
+      "params": [
+        {
+          "name": "source",
+          "desc": "Configured source name, using letters, digits, underscore or hyphen.",
+          "required": true
+        },
+        {
+          "name": "path",
+          "desc": "JSON path, or .@ followed by a source statistic; empty or . selects the root.",
+          "required": false
+        },
+        {
+          "name": "format",
+          "desc": "Optional safe printf format, such as %.1f C.",
+          "required": false
+        }
+      ],
+      "examples": [
+        {
+          "code": "[ext:weather;current.temperature_2m;%.1f C|No data]",
+          "desc": "Current temperature with a fallback."
+        },
+        {
+          "code": "[ext:weather;daily.temperature_2m_max.1;%.0f C|No data]",
+          "desc": "Second daily maximum."
+        },
+        {
+          "code": "[ext:weather;.@age;%.0f s|Unknown]",
+          "desc": "Seconds since the last successful refresh."
+        },
+        {
+          "code": "[ext:weather;.@state|Unknown]",
+          "desc": "Source state."
+        }
+      ]
+    },
+    {
       "name": "mqtt",
       "min_params": 1,
       "max_params": 3,

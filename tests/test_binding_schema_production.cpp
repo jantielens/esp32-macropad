@@ -323,7 +323,7 @@ static const BindingAuthoringKey* authoring_for_key(const BindingSchemeSpec& spe
 static void expect_static_authoring_complete() {
     for (uint8_t i = 0; i < binding_template_scheme_count(); ++i) {
         const char* name = binding_template_scheme_name(i);
-        if (!std::strcmp(name, "ha") || !std::strcmp(name, "mqtt") ||
+        if (!std::strcmp(name, "ha") || !std::strcmp(name, "mqtt") || !std::strcmp(name, "ext") ||
             !std::strcmp(name, "expr") || !std::strcmp(name, "pad")) continue;
         const auto& spec = *binding_template_scheme_spec(i);
         if (!spec.authoring || !spec.authoring->key_count) {
@@ -429,9 +429,31 @@ int main(int argc, char** argv) {
 
     expect(binding_template_scheme_count() > 0, "production profile registered binding schemes");
     expect(scheme_is_registered("mqtt") == bool(HAS_MQTT), "MQTT registration matches gate");
+    expect(scheme_is_registered("ext") == bool(HAS_EXTERNAL_DATA), "external data registration matches gate");
     expect(scheme_is_registered("pad") == bool(HAS_DISPLAY),
            "named bindings are registered whenever display is enabled");
     expect(scheme_is_registered("ha") == bool(HAS_HA_LIVE), "HA registration matches gate");
+#if HAS_EXTERNAL_DATA
+    {
+        char value[192] = {};
+        binding_template_resolve("[ext:weather;current.temperature_2m;%.1f C|No data]", value, sizeof(value));
+        expect(std::strcmp(value, "12.5 C") == 0, "external data binding formats a cached value");
+        binding_template_resolve("[ext:weather;missing|No data]", value, sizeof(value));
+        expect(std::strcmp(value, "No data") == 0, "external data binding uses fallback for missing data");
+        binding_template_resolve("[ext:weather;current.temperature_2m;%200s|No data]", value, sizeof(value));
+        expect(std::strcmp(value, "No data") == 0, "external data binding rejects oversized formatted values");
+        binding_template_resolve("[ext:weather;duration]", value, sizeof(value));
+        expect(std::strcmp(value, "99") == 0, "external JSON duration remains accessible");
+        binding_template_resolve("[ext:weather;@duration]", value, sizeof(value));
+        expect(std::strcmp(value, "100") == 0, "external JSON at-prefixed key remains accessible");
+        binding_template_resolve("[ext:weather;.@duration;%.0f ms|Unknown]", value, sizeof(value));
+        expect(std::strcmp(value, "420 ms") == 0, "external statistic uses the normal format");
+        binding_template_resolve("[ext:weather;.@age|Unknown]", value, sizeof(value));
+        expect(std::strcmp(value, "Unknown") == 0, "unavailable external statistic uses fallback");
+        binding_template_resolve("[ext:missing;.@duration|Unknown]", value, sizeof(value));
+        expect(std::strcmp(value, "Unknown") == 0, "unknown source statistic uses fallback");
+    }
+#endif
 #if HAS_DISPLAY || HAS_BUTTON
     expect(scheme_is_registered("var"),
            "runtime variables are registered independently of network bindings");

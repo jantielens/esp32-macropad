@@ -35,7 +35,7 @@ Common paths include:
 * **Pads** for pad editing, defaults, recipes, fonts, and dialog appearance
 * **Actions** for boot/swipe/physical-button/MQTT triggers and timers
 * **Alarm** for Schedule and Behavior
-* **Connectivity** for MQTT, keyboard/mouse/gamepad, Home Assistant, and MCP
+* **Connectivity** for MQTT, keyboard/mouse/gamepad, Home Assistant, external data, and MCP
 * **Audio**, **Camera**, and **Sensors** for their configured capabilities
 * **Firmware** for online update, manual upload, and version information
 

@@ -17,6 +17,9 @@ class String {};
 #ifndef HAS_PSRAM
 #define HAS_PSRAM 1
 #endif
+#ifndef HAS_EXTERNAL_DATA
+#define HAS_EXTERNAL_DATA HAS_PSRAM
+#endif
 #define TELEMETRY_ALLOW_PSRAM_POOL_WALK 0
 #define HAS_CAMERA 0
 #ifndef HAS_HA_LIVE

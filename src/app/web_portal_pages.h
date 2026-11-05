@@ -25,6 +25,9 @@ void handlePortalAlarmsJS(AsyncWebServerRequest *request);
 #if HAS_REMOTE_LOG
 void handlePortalLogsJS(AsyncWebServerRequest *request);
 #endif
+#if HAS_EXTERNAL_DATA
+void handlePortalExternalDataJS(AsyncWebServerRequest *request);
+#endif
 #if HAS_CAMERA
 void handlePortalCameraJS(AsyncWebServerRequest *request);
 void handlePortalCameraCSS(AsyncWebServerRequest *request);

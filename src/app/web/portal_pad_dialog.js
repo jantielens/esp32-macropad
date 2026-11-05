@@ -457,8 +457,7 @@ function padDialogClear() {
 
 // --- Live binding preview (in-context) -------------------------------------
 // Each bindable field (labels, colors, state, primary data binding) that holds
-// a binding shows its live resolved value INLINE, right after the field's "fx"
-// hint — no popover, so nothing can be hidden behind the modal. Values resolve
+// a binding shows its live resolved value inline in the field's label. Values resolve
 // via POST /api/pad/resolve on dialog open and refresh (debounced) as bindings
 // are edited; click a value to force a fresh reading. Color values also show a
 // swatch. Resolves VALUES only (not a pixel render); reads fields from the form.
@@ -528,18 +527,12 @@ function padPvUnresolved(v) {
     return s === '' || s.indexOf('---') !== -1;
 }
 
-// Anchor the inline value chip next to each field's visible "fx" hint (uniform
-// across text inputs and the display:none color inputs).
 function padPvAnchor(id) {
     var el = document.getElementById(id);
     if (!el) return null;
-    var node = el;
-    while (node && node !== document.body) {
-        var fx = node.querySelector ? node.querySelector('.fx-hint') : null;
-        if (fx) return fx;
-        node = node.parentElement;
-    }
-    return null;
+    var label = el.labels && el.labels[0];
+    if (!label && el.closest) label = el.closest('.bindable-color')?.parentElement.querySelector('label');
+    return label && (label.querySelector('.binding-field-header') || label);
 }
 
 // Create the inline value chip for each field once (idempotent), and hook a
@@ -547,13 +540,13 @@ function padPvAnchor(id) {
 function padPvMount() {
     padPvFields().forEach(function (f) {
         var anchor = padPvAnchor(f.id);
-        if (!anchor || anchor.parentNode.querySelector('.pad-pv-val[data-pv="' + f.id + '"]')) return;
+        if (!anchor || document.querySelector('.pad-pv-val[data-pv="' + f.id + '"]')) return;
         var chip = document.createElement('span');
         chip.className = 'pad-pv-val';
         chip.setAttribute('data-pv', f.id);
         chip.style.display = 'none';
         chip.addEventListener('click', function (ev) { ev.preventDefault(); ev.stopPropagation(); padPvRefreshField(f.id); });
-        anchor.insertAdjacentElement('afterend', chip);
+        anchor.appendChild(chip);
     });
     var overlay = document.getElementById('pad-edit-overlay');
     const bindings = () => JSON.stringify(padPvFields().map(field => [field.id, padPvFieldValue(field.id)])

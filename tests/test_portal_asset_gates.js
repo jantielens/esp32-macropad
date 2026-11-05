@@ -23,6 +23,14 @@ try {
                 module + ' must emit no code or data without a display (HAS_BUTTON=' + buttons + ')');
         }
     }
+    for (const module of ['external_data.cpp', 'external_data_config.cpp', 'ext_binding.cpp']) {
+        const object = path.join(nativeDirectory, 'external.o');
+        execFileSync('c++', ['-std=c++17', '-c', 'src/app/' + module, '-o', object,
+            '-DBOARD_CONFIG_H', '-DHAS_EXTERNAL_DATA=0', '-Itests', '-Isrc/app'],
+            {cwd: root, stdio: 'pipe'});
+        assert.equal(execFileSync('nm', ['--defined-only', object], {encoding: 'utf8'}).trim(), '',
+            module + ' must emit no code or data when external data is disabled');
+    }
 } finally {
     fs.rmSync(nativeDirectory, {recursive: true, force: true});
 }
@@ -48,6 +56,7 @@ execFileSync('bash', ['tools/minify-web-assets.sh', 'esp32-macropad', 'ESP32 Mac
 for (const [board, target, psram, integrationMode = 'default', epaperProfile = false] of [
     ['esp32c3-withsensors', 'ESP32C3', false],
     ['esp32-p4-lcd4b', 'ESP32P4', true],
+    ['esp32-p4-lcd4b', 'ESP32P4', true, 'external-disabled'],
     ['esp32-p4-lcd4b', 'ESP32P4', false],
     ['esp32-p4-lcd4b', 'ESP32P4', false, 'builtin-only'],
     ['esp32-p4-lcd4b', 'ESP32P4', true, 'ha-only'],
@@ -57,7 +66,8 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
         '-Itests', '-Isrc/boards/' + board, '-DBOARD_HAS_OVERRIDE', '-DCONFIG_IDF_TARGET_' + target,
         ...(psram ? ['-DBOARD_HAS_PSRAM'] : []),
         ...(integrationMode === 'builtin-only' ? ['-DHAS_MQTT=0', '-DHAS_HA_LIVE=0'] : []),
-        ...(integrationMode === 'ha-only' ? ['-DHAS_MQTT=0', '-DHAS_HA_LIVE=1'] : [])],
+        ...(integrationMode === 'ha-only' ? ['-DHAS_MQTT=0', '-DHAS_HA_LIVE=1'] : []),
+        ...(integrationMode === 'external-disabled' ? ['-DHAS_EXTERNAL_DATA=0'] : [])],
         {cwd: root, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe']});
     const assets = new Map();
     const pattern = /const uint8_t (\w+_gz)\[\] PROGMEM = \{([\s\S]*?)\};/g;
@@ -82,6 +92,9 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
     assert(js.includes('function uploadFirmware('), 'HTML upload callback was removed');
     assert(js.includes('function saveFragmentConfig('), 'Fragment save callback was removed');
     const display = board === 'esp32-p4-lcd4b';
+    const external = display && psram && integrationMode !== 'external-disabled';
+    assert.equal(assets.has('external_data_fragment_html_gz'), external);
+    assert.equal(assets.has('portal_external_data_js_gz'), external);
     const ha = display && psram && integrationMode !== 'builtin-only';
     const mqtt = display && !['builtin-only', 'ha-only'].includes(integrationMode);
     const shell = assets.get('shell_html_gz');

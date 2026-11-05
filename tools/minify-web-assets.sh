@@ -1103,6 +1103,8 @@ asset_feature_flag() {
             echo "HAS_STORAGE_BROWSER" ;;
         logs|portal_logs)
             echo "HAS_REMOTE_LOG" ;;
+        external_data|portal_external_data)
+            echo "HAS_EXTERNAL_DATA" ;;
         epaper_status|epaper_image|epaper_overlay|epaper_vcom|epaper_init)
             echo "HAS_EPAPER_PANEL" ;;
         epaper_refresh|portal_epaper_refresh)

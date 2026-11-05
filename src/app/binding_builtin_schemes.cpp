@@ -3,6 +3,7 @@
 #include "audio_input_binding.h"
 #include "camera_binding.h"
 #include "expr_binding.h"
+#include "ext_binding.h"
 #include "health_binding.h"
 #include "sensor_binding.h"
 #include "image_binding.h"
@@ -28,6 +29,9 @@ void binding_builtin_schemes_init() {
     sensor_binding_init();
     time_binding_init();
     expr_binding_init();
+#if HAS_EXTERNAL_DATA
+    external_binding_init();
+#endif
 #if HAS_DISPLAY && HAS_MQTT
     mqtt_binding_init();
 #endif

@@ -92,6 +92,15 @@ struct HwButtonDef {
 #define HAS_HA_LIVE (HAS_DISPLAY && HAS_PSRAM)
 #endif
 
+// External HTTP JSON sources and bindings require a display and PSRAM.
+#ifndef HAS_EXTERNAL_DATA
+#define HAS_EXTERNAL_DATA (HAS_DISPLAY && HAS_PSRAM)
+#endif
+
+#if HAS_EXTERNAL_DATA && (!HAS_DISPLAY || !HAS_PSRAM)
+#error "HAS_EXTERNAL_DATA requires HAS_DISPLAY and HAS_PSRAM."
+#endif
+
 // Developer-only display profiling; compile out detailed collection and health fields by default.
 #ifndef HAS_DISPLAY_DIAGNOSTICS
 #define HAS_DISPLAY_DIAGNOSTICS false

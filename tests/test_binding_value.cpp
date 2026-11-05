@@ -1,5 +1,6 @@
 // Production-helper parity and unsafe printf regression coverage.
 #include "binding_value.h"
+#include "external_data.h"
 
 #include <cassert>
 #include <cstdio>
@@ -47,6 +48,105 @@ static void test_extract() {
     assert(!binding_value_extract_json("{\"v\":\"abcd\"}", "v", out, sizeof(out)));
     assert(!binding_value_extract_json(nullptr, ".", out, sizeof(out)));
     assert(!binding_value_extract_json(payload, ".", out, 0));
+}
+
+static void test_select_json() {
+    JsonDocument doc;
+    assert(!deserializeJson(doc, R"({"daily":{"values":[12.5,23.5]},"0":"numeric key","null":null,"text":"a\nb","object":{"x":1},"@duration":42})"));
+    char out[64];
+    auto select = [&](const char* path, const char* expected) {
+        assert(binding_value_select_json(doc.as<JsonVariantConst>(), path, out, sizeof(out)));
+        assert(std::strcmp(out, expected) == 0);
+    };
+    auto missing = [&](const char* path) {
+        assert(!binding_value_select_json(doc.as<JsonVariantConst>(), path, out, sizeof(out)));
+    };
+    select("daily.values.0", "12.5");
+    select("daily.values.1", "23.5");
+    select("0", "numeric key");
+    select("text", "a\nb");
+    select("object", "{\"x\":1}");
+    select("@duration", "42");
+    missing(".@duration");
+    missing("daily.values.-1");
+    missing("daily.values.1x");
+    missing("daily.values.184467440737095516160");
+    missing("daily.values.2");
+    missing("daily..values");
+    missing("object.x.");
+    missing("null");
+    missing("missing");
+    char small[4];
+    assert(!binding_value_select_json(doc.as<JsonVariantConst>(), "object", small, sizeof(small)));
+    assert(!binding_value_select_json(doc.as<JsonVariantConst>(), "0", small, sizeof(small)));
+}
+
+static void test_external_config() {
+    ExternalDataConfig next{};
+    JsonDocument doc;
+    auto parse = [&](const char* json) {
+        doc.clear();
+        assert(!deserializeJson(doc, json));
+        return external_data_parse_config(doc.as<JsonVariantConst>(), next);
+    };
+    assert(parse(R"([{"name":"weather","url":"https://example.org/data?location=pelt","refresh_seconds":60}])"));
+    assert(std::strcmp(next.sources[0].url, "https://example.org/data?location=pelt") == 0);
+    assert(parse(R"([{"name":"renamed","url":"https://example.org/data?location=pelt"}])"));
+    assert(next.sources[0].refresh_seconds == 1800);
+    assert(!parse(R"([{"name":"weather","url":""}])"));
+    assert(!parse(R"([{"name":"weather"}])"));
+    assert(!parse(R"([{"name":"renamed"}])"));
+    assert(!parse(R"([{"name":"weather","url":null}])"));
+    assert(!parse(R"([{"name":"weather","url":"https://example.org","refresh_seconds":null}])"));
+    assert(!parse(R"([{"name":"weather","url":"https://example.org","refresh_seconds":59}])"));
+    assert(!parse(R"([{"name":"weather","url":"https://example.org","refresh_seconds":86401}])"));
+    assert(!parse(R"([{"name":"weather","url":"https://example.org"},{"name":"weather","url":"https://example.org"}])"));
+    assert(!parse(R"([{"name":"bad.name","url":"https://example.org"}])"));
+    assert(!parse(R"([{"name":"new","url":"https://example.org/hello world"}])"));
+    assert(!parse(R"([{"name":"new","url":"https://user:token@example.org/"}])"));
+    assert(!parse(R"([{}, {}, {}, {}, {}])"));
+    assert(parse("[]") && next.count == 0);
+
+    JsonDocument request;
+    JsonArray sources = request["external_data"].to<JsonArray>();
+    const std::string url = "https://example.org/" + std::string(511 - 20, 'a');
+    assert(url.size() == 511);
+    for (unsigned i = 0; i < EXTERNAL_DATA_MAX_SOURCES; ++i) {
+        JsonObject source = sources.add<JsonObject>();
+        source["name"] = std::string(31, 'n') + std::to_string(i);
+        source["url"] = url;
+        source["refresh_seconds"] = 86400;
+    }
+    assert(measureJson(request) <= 4096);
+    assert(external_data_parse_config(sources, next));
+    assert(next.count == EXTERNAL_DATA_MAX_SOURCES);
+}
+
+static void test_legacy_ca_bundle() {
+    static const unsigned char bundle[] = {
+#include "external_data_ca_bundle.inc"
+    };
+    const size_t count = (bundle[0] << 8) | bundle[1];
+    assert(count > 0);
+    size_t position = 2;
+    const unsigned char* previous = nullptr;
+    size_t previous_length = 0;
+    for (size_t i = 0; i < count; ++i) {
+        assert(position + 4 <= sizeof(bundle));
+        const size_t name_length = (bundle[position] << 8) | bundle[position + 1];
+        const size_t key_length = (bundle[position + 2] << 8) | bundle[position + 3];
+        position += 4;
+        assert(name_length && key_length && position + name_length + key_length <= sizeof(bundle));
+        if (previous) {
+            const size_t common = previous_length < name_length ? previous_length : name_length;
+            const int order = std::memcmp(previous, bundle + position, common);
+            assert(order < 0 || (order == 0 && previous_length <= name_length));
+        }
+        previous = bundle + position;
+        previous_length = name_length;
+        position += name_length + key_length;
+    }
+    assert(position == sizeof(bundle));
 }
 
 static void expect_format(const char* raw, const char* format, const char* expected) {
@@ -142,6 +242,9 @@ static void test_params() {
 
 int main() {
     test_extract();
+    test_select_json();
+    test_external_config();
+    test_legacy_ca_bundle();
     test_format();
     test_params();
     std::puts("binding value tests passed");

@@ -46,6 +46,10 @@ FEATURES = {
         ("logs_fragment_html_gz", "portal_logs_js_gz"),
     ),
     "Home Assistant": (("ha_*.cpp.o",), ()),
+    "External JSON data (HAS_EXTERNAL_DATA)": (
+        ("external_data*.cpp.o", "ext_binding.cpp.o"),
+        ("external_data_fragment_html_gz", "portal_external_data_js_gz"),
+    ),
     "Display / touch (HAS_DISPLAY / HAS_TOUCH)": (
         ("display*.cpp.o", "touch*.cpp.o", "dma2d_arbiter.cpp.o"),
         ("brightness_fragment_html_gz", "rotation_fragment_html_gz", "screen_preview_fragment_html_gz"),

@@ -2216,6 +2216,23 @@ sound library and retain missing saved file names.
 
 Returns current device configuration (passwords excluded).
 
+When `HAS_EXTERNAL_DATA` is enabled, `external_data` contains each source's
+`name`, `url`, `refresh_seconds`, `state`, optional `age_seconds`, and
+sanitized `error`. URLs are visible in the portal and configuration API; avoid
+including sensitive tokens or API keys.
+POST accepts an `external_data` array of source objects with `name`, a nonempty
+`url`, and `refresh_seconds`. An empty array deletes all sources. Omitting the array leaves it
+unchanged. Validated source changes apply after successful persistence without
+reboot when `no_reboot=1` is used.
+
+External HTTPS uses the Arduino ESP32 built-in CA bundle on core 3. Older cores
+use a legacy-format snapshot of the Arduino ESP32 3.3.12 trust anchors, compiled
+only when external data is enabled. Keep that snapshot current when updating
+the project's supported trust anchors; it adds approximately 67 KiB of flash.
+The worker checks a 30-second fetch deadline and OTA/configuration changes
+between network operations and while reading. DNS, connection, TLS, and write
+calls can delay those checks, so the deadline and cancellation are best effort.
+
 `backlight_brightness` and `audio_volume` are the saved levels. When their
 capabilities are available, `current_backlight_brightness` and
 `current_audio_volume` report the selected runtime levels. Brightness excludes

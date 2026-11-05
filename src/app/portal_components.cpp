@@ -80,6 +80,9 @@
 #if HAS_MQTT || HAS_HA_LIVE || HAS_DISPLAY || HAS_BUTTON
 #include "components/ha_discovery_component.cpp"
 #endif
+#if HAS_EXTERNAL_DATA
+#include "components/external_data_component.cpp"
+#endif
 
 // --- Hardware Button Actions (boards with GPIO buttons) ---
 #if HAS_BUTTON
