@@ -26,7 +26,7 @@ function expressionBuilderUnsupported(reason) {
         supported: false,
         expression: '',
         formatting: { enabled: false, decimals: 1, unit: '' },
-        error: reason || 'This field is not a supported whole-field expression.'
+        error: reason || 'The existing field value must contain exactly one complete expression to edit it here.'
     };
 }
 
@@ -63,20 +63,21 @@ function expressionBuilderDecodeFormat(format) {
 }
 
 function expressionBuilderLoad(value, validationOptions = {}) {
-    const text = String(value == null ? '' : value).trim();
+    const text = String(value == null ? '' : value);
     const formatting = { enabled: false, decimals: 1, unit: '' };
-    if (!text) return expressionBuilderEmpty();
+    if (!text.trim()) return expressionBuilderEmpty();
     const tokens = bindingTokenize(text);
     if (!tokens.length) return expressionBuilderEmpty();
-    if (tokens.length === 1 && tokens[0].start === 0 && tokens[0].end === text.length &&
+    if (tokens.length === 1 && tokens[0].raw === text.trim() &&
         !tokens[0].unclosed && tokens[0].scheme.toLowerCase() !== 'expr') {
         return expressionBuilderEmpty();
     }
-    if (tokens.length !== 1 || tokens[0].start !== 0 || tokens[0].end !== text.length ||
-        tokens[0].scheme.toLowerCase() !== 'expr' || tokens[0].unclosed) {
+    const expressions = tokens.filter(token => token.scheme.toLowerCase() === 'expr');
+    if (expressions.length !== 1 || tokens.some(token => token.unclosed)) {
         return expressionBuilderUnsupported();
     }
-    const outer = bindingSplitFallback(tokens[0].params);
+    const token = expressions[0];
+    const outer = bindingSplitFallback(token.params);
     if (outer.fallback !== null) return expressionBuilderUnsupported('Fallbacks are not supported by this editor.');
     const parts = bindingSplitParams(outer.params);
     if (parts.length > 2) return expressionBuilderUnsupported('This editor supports only one numeric format parameter.');
@@ -88,7 +89,10 @@ function expressionBuilderLoad(value, validationOptions = {}) {
     if (validationOptions.isWidgetBinding && formatting.enabled) {
         return expressionBuilderUnsupported('Widget data bindings cannot use numeric formatting.');
     }
-    return { supported: true, expression: parts[0], formatting, error: '' };
+    return {
+        supported: true, expression: parts[0], formatting, error: '',
+        prefix: text.slice(0, token.start), suffix: text.slice(token.end)
+    };
 }
 
 function expressionBuilderFoldWhitespace(expression) {
@@ -146,9 +150,9 @@ function expressionBuilderFindPlaceholder(expression) {
     return '';
 }
 
-function expressionBuilderGenerate(expression, formatting = {}, byteLimit = 191, validationOptions = {}) {
+function expressionBuilderGenerate(expression, formatting = {}, byteLimit = 191, validationOptions = {}, surrounding = {}) {
     const body = expressionBuilderFoldWhitespace(String(expression == null ? '' : expression));
-    if (!body) return { valid: false, binding: '', bytes: 0, body, error: 'Enter an expression.' };
+    if (!body) return { valid: false, binding: '', bytes: 0, body, error: '' };
     const placeholder = expressionBuilderFindPlaceholder(body);
     let format = '';
     try {
@@ -160,19 +164,21 @@ function expressionBuilderGenerate(expression, formatting = {}, byteLimit = 191,
         return { valid: false, binding: '', bytes: 0, body, error: error.message };
     }
     const binding = '[expr:' + body + (format ? ';' + format : '') + ']';
-    const bytes = new TextEncoder().encode(binding).length;
-    if (placeholder) return { valid: false, binding, bytes, body, error: 'Replace the unfinished "' + placeholder + '" operand.' };
+    const fieldValue = (surrounding.prefix || '') + binding + (surrounding.suffix || '');
+    const bytes = new TextEncoder().encode(fieldValue).length;
+    const result = { binding, fieldValue, bytes, body };
+    if (placeholder) return { ...result, valid: false, error: 'Replace the unfinished "' + placeholder + '" operand.' };
     if (bytes > byteLimit) {
-        return { valid: false, binding, bytes, body, error: 'The generated binding exceeds ' + byteLimit + ' UTF-8 bytes.' };
+        return { ...result, valid: false, error: 'The resulting field value exceeds ' + byteLimit + ' UTF-8 bytes.' };
     }
     if (validationOptions.isWidgetBinding && format) {
-        return { valid: false, binding, bytes, body, error: 'Widget data bindings must not include a format parameter.' };
+        return { ...result, valid: false, error: 'Widget data bindings must not include a format parameter.' };
     }
-    const validation = validateBinding(binding, validationOptions);
+    const validation = validateBinding(fieldValue, validationOptions);
     if (!validation.valid) {
-        return { valid: false, binding, bytes, body, error: validation.errors[0].message };
+        return { ...result, valid: false, error: validation.errors[0].message };
     }
-    return { valid: true, binding, bytes, body, error: '' };
+    return { ...result, valid: true, error: '' };
 }
 
 function expressionBuilderSnippet(name) {
@@ -190,6 +196,10 @@ function expressionBuilderDialogHTML() {
     return `<header><h2 id="expression-builder-title">Expression builder</h2>
         <button type="button" class="btn btn-sm" data-expression-close aria-label="Close Expression Builder">&#215;</button></header>
         <div class="pad-button-builder-body">
+            <div data-expression-unsupported hidden>
+                <p data-expression-load-error role="status"></p>
+                <button type="button" class="btn btn-secondary" data-expression-start>Start new expression</button>
+            </div>
             <div class="expression-builder-tools">
                 <select class="form-select expression-builder-function" data-expression-function aria-label="Insert function">
                     <option value="" selected>Insert function</option>${functions}
@@ -205,7 +215,7 @@ function expressionBuilderDialogHTML() {
                     <input type="checkbox" id="expression-builder-format" data-expression-format aria-controls="expression-builder-format-controls">
                     Numeric formatting
                 </label>
-                <div class="expression-builder-format-controls" id="expression-builder-format-controls">
+                <div class="expression-builder-format-controls" id="expression-builder-format-controls" hidden>
                     <label class="expression-builder-format-control" for="expression-builder-decimals">Decimals
                         <select class="form-select" id="expression-builder-decimals" data-expression-decimals disabled>
                             <option>0</option><option selected>1</option><option>2</option><option>3</option>
@@ -217,13 +227,13 @@ function expressionBuilderDialogHTML() {
                     </label>
                 </div>
             </div>
-            <section class="expression-builder-generated" aria-label="Generated binding">
-                <span class="binding-builder-code-label">Generated binding</span>
-                <pre><code data-expression-binding-output>No binding generated</code></pre>
+            <section class="expression-builder-generated" data-expression-field-section aria-label="Resulting field value">
+                <span class="binding-builder-code-label">Resulting field value</span>
+                <pre><code data-expression-field-output></code></pre>
                 <div class="expression-builder-validation" data-expression-error role="alert"></div>
                 <span class="expression-builder-bytes" data-expression-bytes>0 / 191 bytes</span>
             </section>
-            <section class="expression-builder-result" aria-label="Result">
+            <section class="expression-builder-result" data-expression-result-section aria-label="Result">
                 <span>Result</span>
                 <div class="expression-builder-result-value">
                     <span class="expression-builder-result-swatch" data-expression-result-swatch aria-hidden="true" hidden></span>
@@ -232,7 +242,7 @@ function expressionBuilderDialogHTML() {
             </section>
             <input type="text" data-expression-color-staging maxlength="191" data-allow-bindings="false" hidden tabindex="-1" aria-hidden="true">
         </div>
-        <footer><span></span><div>
+        <footer><span>Changes this field only. Save your changes in the editor.</span><div>
             <button type="button" class="btn btn-secondary" data-expression-cancel>Cancel</button>
             <button type="button" class="btn btn-primary" data-expression-apply disabled>Replace field</button>
         </div></footer>`;
@@ -260,24 +270,38 @@ function expressionBuilderRender(session) {
     const formatToggle = session.dialog.querySelector('[data-expression-format]');
     const validationOptions = bindingValidationOptions.get(session.target) || {};
     const rawOnly = validationOptions.isWidgetBinding === true;
+    const byteLimit = Math.min(session.target.maxLength > 0 ? session.target.maxLength : 191, 191);
+    session.input.disabled = !session.supported;
+    session.dialog.querySelector('[data-expression-function]').disabled = !session.supported;
+    session.dialog.querySelectorAll('[data-expression-insert]').forEach(button => button.disabled = !session.supported);
+    session.dialog.querySelector('[data-expression-unsupported]').hidden = session.supported;
+    session.dialog.querySelector('[data-expression-load-error]').textContent = session.loadError;
+    const preserving = !!(session.prefix || session.suffix);
+    session.dialog.querySelector('[data-expression-apply]').textContent =
+        preserving ? 'Replace expression' : 'Replace field';
     const enabled = formatToggle.checked && !rawOnly;
     formatToggle.disabled = rawOnly || !session.supported;
     const decimals = session.dialog.querySelector('[data-expression-decimals]');
     const unit = session.dialog.querySelector('[data-expression-unit]');
+    session.dialog.querySelector('#expression-builder-format-controls').hidden = !enabled || !session.supported;
     decimals.disabled = unit.disabled = !enabled || !session.supported;
     const result = session.supported
         ? expressionBuilderGenerate(session.input.value, {
             enabled, decimals: decimals.value, unit: unit.value
-        }, Math.min(session.target.maxLength > 0 ? session.target.maxLength : 191, 191), validationOptions)
-        : { valid: false, binding: '', bytes: 0, error: session.loadError };
+        }, byteLimit, validationOptions, session)
+        : { valid: false, binding: '', bytes: 0, error: '' };
     if (session.guardError) {
         result.valid = false;
         result.error = session.guardError;
     }
-    session.dialog.querySelector('[data-expression-binding-output]').textContent =
-        result.binding || 'No binding generated';
-    session.dialog.querySelector('[data-expression-error]').textContent = result.error || '';
-    session.dialog.querySelector('[data-expression-bytes]').textContent = result.bytes + ' / 191 bytes';
+    session.dialog.querySelector('[data-expression-field-section]').hidden = !session.supported;
+    session.dialog.querySelector('[data-expression-result-section]').hidden = !session.supported;
+    session.dialog.querySelector('[data-expression-field-output]').textContent =
+        result.fieldValue || (result.error ? 'Cannot generate binding.' : 'Enter an expression to generate a binding.');
+    const error = session.dialog.querySelector('[data-expression-error]');
+    error.textContent = result.error || '';
+    error.hidden = !result.error;
+    session.dialog.querySelector('[data-expression-bytes]').textContent = result.bytes + ' / ' + byteLimit + ' bytes';
     session.dialog.querySelector('[data-expression-apply]').disabled = !result.valid;
     session.result = result;
     expressionBuilderPreviewSchedule(session, result);
@@ -288,7 +312,8 @@ function expressionBuilderPreviewSet(session, state, value) {
     const swatch = session.dialog.querySelector('[data-expression-result-swatch]');
     output.dataset.state = state;
     output.textContent = value === undefined
-        ? ({ invalid: session.supported ? 'Enter a valid expression to preview.' : 'Preview unavailable for this value.',
+        ? ({ empty: 'Your result will appear here.',
+            invalid: 'Preview unavailable.',
             resolving: 'Resolving...', unavailable: 'No preview available.', failed: 'Preview request failed.' }[state] || '')
         : value === '' ? '(empty)' : String(value);
     swatch.hidden = true;
@@ -328,7 +353,7 @@ function expressionBuilderPreviewSchedule(session, result) {
     session.previewGeneration = generation;
     session.previewBinding = result.valid ? result.binding : '';
     if (!session.supported || !result.valid) {
-        expressionBuilderPreviewSet(session, 'invalid');
+        expressionBuilderPreviewSet(session, session.supported && result.body === '' ? 'empty' : 'invalid');
         return;
     }
     const page = session.context ? session.context.page :
@@ -447,17 +472,9 @@ function expressionBuilderApply(session) {
         expressionBuilderRender(session);
         return;
     }
-    const result = expressionBuilderGenerate(session.input.value, {
-        enabled: session.dialog.querySelector('[data-expression-format]').checked,
-        decimals: session.dialog.querySelector('[data-expression-decimals]').value,
-        unit: session.dialog.querySelector('[data-expression-unit]').value
-    }, Math.min(target.maxLength > 0 ? target.maxLength : 191, 191),
-    bindingValidationOptions.get(target) || {});
-    if (!result.valid) {
-        expressionBuilderRender(session);
-        return;
-    }
-    target.value = result.binding;
+    expressionBuilderRender(session);
+    if (!session.result.valid) return;
+    target.value = session.result.fieldValue;
     target.dispatchEvent(new Event('input', { bubbles: true }));
     target.dispatchEvent(new Event('change', { bubbles: true }));
     expressionBuilderClose();
@@ -475,7 +492,9 @@ function expressionBuilderOpen(target, opener) {
     const session = {
         dialog, target, opener: opener || document.activeElement,
         initialValue: target.value, supported: loaded.supported,
-        loadError: loaded.supported ? '' : loaded.error + ' The original field value is unchanged.',
+        loadError: loaded.supported ? '' : 'Cannot edit the existing field value. ' + loaded.error +
+            ' Start a new expression to replace the entire field, or cancel to keep it. The original value is unchanged until you choose Replace field.',
+        prefix: loaded.prefix || '', suffix: loaded.suffix || '',
         input: dialog.querySelector('#expression-builder-input'),
         selection: { start: 0, end: 0 }, context: expressionBuilderCaptureContext(),
         colorInput: dialog.querySelector('[data-expression-color-staging]'), guardError: '',
@@ -492,6 +511,11 @@ function expressionBuilderOpen(target, opener) {
     dialog.querySelector('[data-expression-close]').addEventListener('click', close);
     dialog.querySelector('[data-expression-cancel]').addEventListener('click', close);
     dialog.querySelector('[data-expression-apply]').addEventListener('click', () => expressionBuilderApply(session));
+    dialog.querySelector('[data-expression-start]').addEventListener('click', () => {
+        session.supported = true;
+        expressionBuilderRender(session);
+        session.input.focus();
+    });
     dialog.querySelector('[data-expression-binding]').addEventListener('click', () => expressionBuilderOpenBindingPicker(session));
     dialog.querySelector('[data-expression-color]').addEventListener('click', () => expressionBuilderOpenColorPicker(session));
     dialog.querySelector('[data-expression-reference]').addEventListener('click', () => {

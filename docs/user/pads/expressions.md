@@ -22,21 +22,31 @@ their separate workflow. Enter the expression body without the outer
 Use **Insert binding** to add a raw binding token, **Insert function** to add a
 supported function or conditional snippet, and **Insert color** to add a
 quoted hex color at the current selection. Use **?** to open Binding Reference
-for expression basics and the bindings available on the device. Optional
-numeric formatting sets 0 through 6 decimal places and a display-only unit
-suffix. A literal percent suffix is escaped as `%%`; units are not converted.
+for expression basics and the bindings available on the device. Enable
+**Numeric formatting** to show the decimal-place and unit-suffix controls.
+Formatting sets 0 through 6 decimal places and a display-only unit suffix.
+A literal percent suffix is escaped as `%%`; units are not converted.
 
-The builder can reopen a complete supported expression and its supported
-numeric format. It preserves plain text, other bindings, mixed content,
-fallbacks, and unsupported formats, and disables **Replace field** for those
-values. Edit them directly or use the existing Binding controls instead.
+The builder can reopen one supported expression and its numeric format anywhere
+in a field. For example, `Temperature: [expr:1 + 2] °C` loads `1 + 2` for editing.
+Surrounding text, whitespace, and other bindings stay unchanged. Check
+**Resulting field value**, then choose **Replace expression** to apply the edit.
+The length limit includes the surrounding content.
+
+Multiple expressions, expression fallbacks, and unsupported formats cannot be
+loaded. The dialog explains why the existing value cannot be edited. Choose
+**Start new expression** to build a replacement from scratch, then **Replace
+field** to replace the entire value. Cancel to keep the original instead.
+Plain text or a single non-expression binding also opens an empty editor for
+building a replacement.
 
 The Result preview uses the device's live binding resolver, not a browser
 expression evaluator. Missing values and request failures are shown as
 unavailable or failed previews; they do not block a structurally valid
-expression from being applied. Portal checks do not prove that the firmware
-will accept every expression. **Replace field** updates only the selected
-label; choose **Save Pad** to persist it. **Cancel** leaves the label unchanged.
+expression from being applied. The Result preview resolves the expression only,
+not the surrounding text. Portal checks do not prove that the firmware
+will accept every expression. Applying updates only the selected field; choose
+**Save Pad** to persist it. **Cancel** leaves the field unchanged.
 
 ## Operators and values
 

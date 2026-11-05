@@ -368,6 +368,12 @@ delete context.testHelpSchemes;
     const expressionLoad = (value, validationOptions) => context.expressionBuilderLoad(value, validationOptions);
     const expressionGenerate = (value, formatting, limit, validationOptions) =>
         context.expressionBuilderGenerate(value, formatting, limit, validationOptions);
+    for (const blank of ['', ' \n\t ']) {
+        const blankResult = expressionGenerate(blank);
+        assert.strictEqual(blankResult.valid, false);
+        assert.strictEqual(blankResult.binding, '');
+        assert.strictEqual(blankResult.error, '');
+    }
     assert.deepStrictEqual(JSON.parse(JSON.stringify(expressionLoad('  \t'))), {
         supported: true, expression: '',
         formatting: { enabled: false, decimals: 1, unit: '' }, error: ''
@@ -379,10 +385,27 @@ delete context.testHelpSchemes;
     assert.deepStrictEqual(JSON.parse(JSON.stringify(expressionLoad(
         '[expr:[mqtt:topic;path|"offline|later"] + 1;%.2f %%]'))), {
         supported: true, expression: '[mqtt:topic;path|"offline|later"] + 1',
-        formatting: { enabled: true, decimals: 2, unit: '%' }, error: ''
+        formatting: { enabled: true, decimals: 2, unit: '%' }, error: '', prefix: '', suffix: ''
     });
+    const mixedExpression = expressionLoad('  Temperature: [expr:1 + 2] \u00b0C  ');
+    assert.strictEqual(mixedExpression.expression, '1 + 2');
+    assert.strictEqual(mixedExpression.prefix, '  Temperature: ');
+    assert.strictEqual(mixedExpression.suffix, ' \u00b0C  ');
+    const mixedReplacement = context.expressionBuilderGenerate('4 + 5', {}, 191, {}, mixedExpression);
+    assert.strictEqual(mixedReplacement.valid, true);
+    assert.strictEqual(mixedReplacement.binding, '[expr:4 + 5]');
+    assert.strictEqual(mixedReplacement.fieldValue, '  Temperature: [expr:4 + 5] \u00b0C  ');
+    assert.strictEqual(mixedReplacement.bytes, new TextEncoder().encode(mixedReplacement.fieldValue).length);
+    assert.strictEqual(context.expressionBuilderGenerate('4 + 5', {}, mixedReplacement.bytes, {}, mixedExpression).valid, true);
+    assert.strictEqual(context.expressionBuilderGenerate('4 + 5', {}, mixedReplacement.bytes - 1, {}, mixedExpression).valid, false);
+    const withOtherBinding = expressionLoad('[health:cpu] / [expr:[health:cpu] + 1]!');
+    assert.strictEqual(withOtherBinding.supported, true);
+    assert.strictEqual(context.expressionBuilderGenerate('2', {}, 191, {}, withOtherBinding).fieldValue,
+        '[health:cpu] / [expr:2]!');
+    assert.strictEqual(context.expressionBuilderGenerate('2', {}, 191, {},
+        expressionLoad('[unknown:bad] [expr:1]')).valid, false);
     for (const unsupported of [
-        'plain [expr:1]', '[expr:1] + [expr:2]', '[expr:1',
+        '[expr:1] + [expr:2]', '[expr:1', 'plain [health:cpu]', '[expr:1] [health:cpu',
         '[expr:1|offline]', '[expr:1;%.1f;extra]', '[expr:1;%d]', '[expr:1;%.7f]', '[expr:1;%.1f ]'
     ]) assert.strictEqual(expressionLoad(unsupported).supported, false, unsupported);
     assert.strictEqual(expressionLoad('[expr:"quoted ] value" + 1]').supported, true);
@@ -476,6 +499,12 @@ delete context.testHelpSchemes;
         context.expressionBuilderPreviewSchedule(invalidPreview.session, { valid: false, binding: '', error: 'invalid' });
         assert.strictEqual(previewTimers.size, 0, 'invalid edits cancel a pending preview timer');
         assert.strictEqual(invalidPreview.output.dataset.state, 'invalid');
+        assert.strictEqual(invalidPreview.output.textContent, 'Preview unavailable.');
+        assert.strictEqual(previewRequests.length, 0);
+        context.expressionBuilderPreviewSchedule(invalidPreview.session, expressionGenerate(' \n '));
+        assert.strictEqual(invalidPreview.output.dataset.state, 'empty');
+        assert.strictEqual(invalidPreview.output.textContent, 'Your result will appear here.');
+        assert.strictEqual(previewTimers.size, 0, 'blank input does not schedule a preview');
         assert.strictEqual(previewRequests.length, 0);
 
         const orderedPreview = makePreviewSession('[expr:1]');
