@@ -949,7 +949,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/external_data.h
   - src/app/external_data_config.cpp
   - src/app/external_data_config.h
+  - src/app/mcp_device_identity.cpp
+  - src/app/mcp_tools_config.cpp
+  - src/app/mcp_tools_pads.cpp
   - src/app/portal_components.cpp
+  - src/app/web_mcp.cpp
   - src/app/web_portal_config.cpp
   - src/app/web_portal_pages.cpp
   - src/app/web_portal_pages.h
@@ -1057,6 +1061,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_pages.h
   - src/app/web_portal_routes.cpp
 - **HAS_MCP**
+  - src/app/binding_value.cpp
+  - src/app/binding_value.h
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
@@ -1071,6 +1077,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/darkroom_timer/test_strip.cpp
   - src/app/device_classes/darkroom_timer/test_strip.h
   - src/app/device_classes/shutter_tester/mcp/mcp_tools_shutter.cpp
+  - src/app/external_data.cpp
+  - src/app/external_data.h
+  - src/app/external_data_config.cpp
   - src/app/ha_service.cpp
   - src/app/ha_service.h
   - src/app/ha_service_delivery.cpp
@@ -1106,7 +1115,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/table_widget.cpp
   - src/app/widgets/toggle_widget.cpp
+  - src/app/widgets/widget.cpp
   - src/app/widgets/widget.h
+  - src/app/widgets/widget_registry.h
 - **HAS_MQTT**
   - src/app/action_dispatch.cpp
   - src/app/action_dispatch.h

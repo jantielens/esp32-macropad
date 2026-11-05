@@ -299,14 +299,14 @@ static bool parse_button_fill_style(JsonObject obj, ScreenButtonConfig* btn) {
                                        header.spacing < 8 ? header.spacing : 8);
     header.outline_width = fill_geometry_clamp(obj["widget_track_outline_width"] | 0, 0, 8);
     header.track_radius = fill_geometry_clamp(obj["widget_bar_track_radius"] | 4, 0, 64);
-    char colors[7][CONFIG_COLOR_MAX_LEN];
+    char color[CONFIG_COLOR_MAX_LEN];
     size_t bytes = sizeof(header);
     for (unsigned index = 0; index < 7; ++index) {
         if (index < 6) header.patterns[index] = fill_pattern_parse(obj[pattern_fields[index]] | "none");
-        parse_bindable_field(obj[color_fields[index]], colors[index],
+        parse_bindable_field(obj[color_fields[index]], color,
                              index < 5 ? CONFIG_COLOR_MAX_LEN : CONFIG_BINDABLE_SHORT_LEN, "#000000");
         header.color_offsets[index] = bytes;
-        bytes += strlen(colors[index]) + 1;
+        bytes += strlen(color) + 1;
     }
     header.bytes = bytes;
     ButtonFillStyle* style = nullptr;
@@ -315,7 +315,9 @@ static bool parse_button_fill_style(JsonObject obj, ScreenButtonConfig* btn) {
     if (!style) return false;
     memcpy(style, &header, sizeof(header));
     for (unsigned index = 0; index < 7; ++index) {
-        memcpy(reinterpret_cast<char*>(style) + header.color_offsets[index], colors[index], strlen(colors[index]) + 1);
+        parse_bindable_field(obj[color_fields[index]], color,
+                             index < 5 ? CONFIG_COLOR_MAX_LEN : CONFIG_BINDABLE_SHORT_LEN, "#000000");
+        memcpy(reinterpret_cast<char*>(style) + header.color_offsets[index], color, strlen(color) + 1);
     }
     btn->fill_style = style;
     return true;
@@ -863,22 +865,20 @@ static const char* validate_inherited_icon_artifacts(JsonObjectConst pad, uint8_
     return nullptr;
 }
 
-static uint8_t collect_icon_sources(const PadConfig* config,
-                                    char source_ids[MAX_PAD_BUTTONS][CONFIG_ICON_SOURCE_ID_MAX_LEN]) {
-    if (!config) return 0;
-    uint8_t count = 0;
+static void cleanup_icon_sources(const PadConfig* config) {
+    if (!config) return;
     for (uint8_t index = 0; index < config->button_count; ++index) {
         const char* source_id = config->buttons[index].icon_source_id;
         if (!source_id[0]) continue;
         bool duplicate = false;
-        for (uint8_t found = 0; found < count; ++found) {
-            if (strcmp(source_ids[found], source_id) == 0) duplicate = true;
+        for (uint8_t found = 0; found < index; ++found) {
+            if (strcmp(config->buttons[found].icon_source_id, source_id) == 0) {
+                duplicate = true;
+                break;
+            }
         }
-        if (!duplicate && count < MAX_PAD_BUTTONS) {
-            strlcpy(source_ids[count++], source_id, CONFIG_ICON_SOURCE_ID_MAX_LEN);
-        }
+        if (!duplicate) icon_store_source_delete_if_unreferenced(source_id);
     }
-    return count;
 }
 
 bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
@@ -941,9 +941,6 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
     }
 
     const PadConfig* previous = pad_config_acquire(page);
-    char previous_sources[MAX_PAD_BUTTONS][CONFIG_ICON_SOURCE_ID_MAX_LEN] = {};
-    const uint8_t previous_source_count = collect_icon_sources(previous, previous_sources);
-
     char path[32];
     pad_config_path(page, path, sizeof(path));
     if (!storage_write_atomic(path, json, len)) {
@@ -991,8 +988,7 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
 #if HAS_DISPLAY
     if (refresh_ok) icon_store_cleanup_pad_icons(page);
 #endif
-    for (uint8_t source = 0; source < previous_source_count; ++source)
-        icon_store_source_delete_if_unreferenced(previous_sources[source]);
+    cleanup_icon_sources(previous);
     pad_config_release(previous);
     return refresh_ok;
 }
@@ -1005,9 +1001,6 @@ bool pad_config_delete(uint8_t page) {
     pad_config_path(page, path, sizeof(path));
 
     const PadConfig* previous = pad_config_acquire(page);
-    char previous_sources[MAX_PAD_BUTTONS][CONFIG_ICON_SOURCE_ID_MAX_LEN] = {};
-    const uint8_t previous_source_count = collect_icon_sources(previous, previous_sources);
-
     bool existed = Storage.exists(path);
     if (existed && !Storage.remove(path)) {
         LOGE(TAG, "Pad %u: delete failed", page);
@@ -1042,8 +1035,7 @@ bool pad_config_delete(uint8_t page) {
     if (!refresh_ok) {
         LOGE(TAG, "Pad %u: dependent cache refresh incomplete", page);
     }
-    for (uint8_t source = 0; source < previous_source_count; ++source)
-        icon_store_source_delete_if_unreferenced(previous_sources[source]);
+    cleanup_icon_sources(previous);
     pad_config_release(previous);
     return refresh_ok;
 }

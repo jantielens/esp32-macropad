@@ -82,9 +82,24 @@ Read component settings before editing: component writes replace the full
 configuration. Portal and assistant pad saves are last-write-wins;
 avoid simultaneous editing and [back up](../device/backup-and-restore.md) first.
 
+On supported firmware, an assistant can configure and inspect
+[external JSON sources](../pads/data-sources.md#read-external-json) for pad
+bindings. Source configuration needs control permission; cached-field
+inspection and pad editing need authoring permission. Fetches run
+asynchronously and cached values can be stale. Prefer keyless APIs: URLs sent
+through MCP pass through the assistant client and unencrypted LAN connection.
+For focused binding guidance, the assistant can call `get_capabilities` with
+`binding_scheme` set to `ext`, or another registered scheme name. For widget
+guidance, it can use `widget`, for example `sparkline`.
+
+For conditional icons, use the [Main and Overlay pattern](../pads/editing.md#show-a-conditional-icon).
+New icon artwork still needs preparation in the portal before MCP pad writes.
+
 ## Verify effects
 
 After a write, read back the affected pad/configuration and resolve its bindings.
+Pad validation does not establish that bindings resolve to available live data
+or that an external JSON path exists.
 Accepted/queued means admitted, not necessarily executed or durably saved.
 For eligible Home Assistant actions, press_button returns an execution ID;
 use get_ha_execution_result until terminal, then inspect every action result.

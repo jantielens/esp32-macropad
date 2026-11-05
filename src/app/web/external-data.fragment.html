@@ -7,7 +7,7 @@
   <div class="card-body">
     <label class="form-label" for="external-data-sources">Sources (JSON array)</label>
     <textarea class="form-control font-monospace" id="external-data-sources" rows="12" spellcheck="false"></textarea>
-    <p class="form-text">Up to four sources. Each needs a unique name, URL, and refresh_seconds (60–86400; default 1800). Edit the JSON to change or rename a source; remove an entry to delete it.</p>
+    <p class="form-text">Up to four sources. Each needs a unique name, URL, and refresh_seconds (1–86400; default 1800). Edit the JSON to change or rename a source; remove an entry to delete it.</p>
     <p class="form-text">Warning: Saved URLs are visible in the portal and configuration API; without portal authentication, anyone with access to the device can read them. Use HTTPS for external sources when possible and avoid using sensitive tokens or API keys.</p>
     <button type="button" class="btn btn-primary btn-sm" id="external-data-save">Save</button>
     <p class="small mt-3 mb-0" id="external-data-message" role="status" aria-live="polite"></p>

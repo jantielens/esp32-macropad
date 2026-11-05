@@ -52,9 +52,12 @@ to 127 bytes.
 Up to four sources are supported. Names are case-sensitive and use 1-32 ASCII
 letters, digits, underscores, or hyphens. URLs are limited to 511 bytes and
 cannot contain credentials in the authority portion. Refresh intervals range
-from 60 to 86400 seconds and default to 1800. Responses are limited to 16 KiB
-and each source has a 48 KiB PSRAM document budget shared by the current and
-replacement snapshots. TLS and the worker stack use additional memory.
+from 1 to 86400 seconds and default to 1800. The interval starts after a
+successful fetch finishes; other work can delay the next attempt. Failed
+fetches retry with backoff starting at 60 seconds. Responses are limited to 16 KiB
+and each JSON snapshot has a 48 KiB PSRAM document budget. A refresh temporarily
+keeps both the current and replacement snapshots. TLS, the response buffer, and
+the worker stack use additional memory.
 
 Saved URLs are visible in the portal and configuration API. Without portal
 authentication, anyone with access to the device can read them. Avoid using
@@ -64,7 +67,15 @@ and data in transit; use HTTPS where possible.
 HTTPS requires a synchronized device clock and a certificate trusted by the
 firmware's CA bundle. Check the provider's availability and terms before use.
 
-The status shows the age of the last successful refresh. A failed refresh
+An [MCP assistant](../integrations/ai-assistants.md) can configure a named source
+with control permission, inspect cached fields with pad-authoring permission,
+and use those fields in pad bindings. Inspection returns bounded pages, not a
+new fetch. Source URLs submitted through MCP also pass through the assistant
+client and its unencrypted local connection; prefer keyless APIs.
+
+The status shows the age of the last successful refresh, not the age of the
+provider's data. Check any provider timestamp and its context before treating
+a value as current. A failed refresh
 retains the last value and marks it stale. Sparklines continue sampling that
 value according to their normal sampling behavior. Removing or renaming a
 source, changing its URL, or rebooting clears its cached value. The fallback

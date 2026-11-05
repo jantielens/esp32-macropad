@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-11-04
+ms.date: 2026-11-05
 ms.topic: reference
 ---
 
@@ -14,12 +14,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+* Add up to four external HTTP or HTTPS JSON data sources for display bindings,
+  such as weather data. Configure refresh intervals in **Connectivity > External
+  Data**, select JSON fields with `[ext:source;path]`, and use the binding
+  builder to preview cached values and source statistics. Failed refreshes
+  retain the last value. Saved URLs are visible in the portal and configuration
+  API. See [external JSON data](docs/user/pads/data-sources.md#read-external-json).
+* Let MCP assistants configure external JSON sources and inspect cached fields
+  for use in pad bindings. Source writes need control permission; inspection
+  needs pad-authoring permission. Prefer keyless URLs.
+
 ### Changed
 
+* Document the Main and Overlay pattern for conditional icons and expose it to
+  MCP assistants.
+* Let MCP assistants request focused binding-scheme or widget capabilities
+  instead of the full manifest. Clarify that pad validation does not verify
+  live binding resolution.
 * Edit one expression within a field while preserving surrounding text and
   bindings. Simplify the Expression builder's output and validation messages,
   and allow unsupported values to be replaced explicitly.
   See [Expressions](docs/user/pads/expressions.md).
+
+### Fixed
+
+* Allow large MCP tool results without the copied-string size limit that can
+  reject capability responses.
+* Reduce stack usage while parsing and saving pads to prevent crashes with
+  complex configurations.
 
 ## [1.45.0] - 2026-11-04
 

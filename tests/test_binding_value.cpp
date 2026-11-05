@@ -4,6 +4,7 @@
 
 #include <cassert>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 
@@ -52,10 +53,12 @@ static void test_extract() {
 
 static void test_select_json() {
     JsonDocument doc;
-    assert(!deserializeJson(doc, R"({"daily":{"values":[12.5,23.5]},"0":"numeric key","null":null,"text":"a\nb","object":{"x":1},"@duration":42})"));
+    assert(!deserializeJson(doc, R"({"daily":{"values":[12.5,23.5]},"0":"numeric key","null":null,"text":"a\nb","object":{"x":1},"@duration":42,"large":123456789,"precise":12.3456789,"float":0.1,"scientific":1.23456789e8,"unsigned":18446744073709551615})"));
     char out[64];
     auto select = [&](const char* path, const char* expected) {
         assert(binding_value_select_json(doc.as<JsonVariantConst>(), path, out, sizeof(out)));
+        if (std::strcmp(out, expected) != 0)
+            std::fprintf(stderr, "select %s: expected <%s>, got <%s>\n", path, expected, out);
         assert(std::strcmp(out, expected) == 0);
     };
     auto missing = [&](const char* path) {
@@ -67,6 +70,31 @@ static void test_select_json() {
     select("text", "a\nb");
     select("object", "{\"x\":1}");
     select("@duration", "42");
+    select("large", "123456789");
+    assert(binding_value_select_json(doc.as<JsonVariantConst>(), "precise", out, sizeof(out)));
+    assert(std::strtod(out, nullptr) == doc["precise"].as<double>());
+    select("float", "0.1");
+    select("unsigned", "18446744073709551615");
+    select("scientific", "123456789");
+    char formatted[64];
+    binding_value_format_external(out, "%d", formatted, sizeof(formatted));
+    assert(std::strcmp(formatted, "123456789") == 0);
+    assert(binding_value_select_json(doc.as<JsonVariantConst>(), "precise", out, sizeof(out)));
+    binding_value_format_external(out, "%.7f", formatted, sizeof(formatted));
+    assert(std::strcmp(formatted, "12.3456789") == 0);
+    select("unsigned", "18446744073709551615");
+    binding_value_format_external(out, "%llu", formatted, sizeof(formatted));
+    assert(std::strcmp(formatted, "18446744073709551615") == 0);
+    binding_value_format_external("1.23456789e+08", "%d", formatted, sizeof(formatted));
+    assert(std::strcmp(formatted, "123456789") == 0);
+    binding_value_format_external("-1.25e+02", "%d", formatted, sizeof(formatted));
+    assert(std::strcmp(formatted, "-125") == 0);
+    binding_value_format_external("1e19", "%llu", formatted, sizeof(formatted));
+    assert(std::strcmp(formatted, "10000000000000000000") == 0);
+    binding_value_format_external("18446744073709551616", "%llu", formatted, sizeof(formatted));
+    assert(std::strcmp(formatted, "18446744073709551616") == 0);
+    binding_value_format("1.23456789e+08", "%d", formatted, sizeof(formatted));
+    assert(std::strcmp(formatted, "1") == 0);
     missing(".@duration");
     missing("daily.values.-1");
     missing("daily.values.1x");
@@ -89,8 +117,9 @@ static void test_external_config() {
         assert(!deserializeJson(doc, json));
         return external_data_parse_config(doc.as<JsonVariantConst>(), next);
     };
-    assert(parse(R"([{"name":"weather","url":"https://example.org/data?location=pelt","refresh_seconds":60}])"));
+    assert(parse(R"([{"name":"weather","url":"https://example.org/data?location=pelt","refresh_seconds":1}])"));
     assert(std::strcmp(next.sources[0].url, "https://example.org/data?location=pelt") == 0);
+    assert(next.sources[0].refresh_seconds == 1);
     assert(parse(R"([{"name":"renamed","url":"https://example.org/data?location=pelt"}])"));
     assert(next.sources[0].refresh_seconds == 1800);
     assert(!parse(R"([{"name":"weather","url":""}])"));
@@ -98,7 +127,7 @@ static void test_external_config() {
     assert(!parse(R"([{"name":"renamed"}])"));
     assert(!parse(R"([{"name":"weather","url":null}])"));
     assert(!parse(R"([{"name":"weather","url":"https://example.org","refresh_seconds":null}])"));
-    assert(!parse(R"([{"name":"weather","url":"https://example.org","refresh_seconds":59}])"));
+    assert(!parse(R"([{"name":"weather","url":"https://example.org","refresh_seconds":0}])"));
     assert(!parse(R"([{"name":"weather","url":"https://example.org","refresh_seconds":86401}])"));
     assert(!parse(R"([{"name":"weather","url":"https://example.org"},{"name":"weather","url":"https://example.org"}])"));
     assert(!parse(R"([{"name":"bad.name","url":"https://example.org"}])"));
@@ -120,6 +149,93 @@ static void test_external_config() {
     assert(measureJson(request) <= 4096);
     assert(external_data_parse_config(sources, next));
     assert(next.count == EXTERNAL_DATA_MAX_SOURCES);
+}
+
+static void test_external_source_update() {
+    JsonDocument input;
+    ExternalDataSourceUpdate update{};
+    ExternalDataConfig config{};
+    auto parse = [&](const char* json) {
+        input.clear();
+        assert(!deserializeJson(input, json));
+        return external_data_parse_update(input.as<JsonObjectConst>(), update);
+    };
+    assert(parse(R"({"source":"weather","url":"https://example.org/weather"})"));
+    assert(external_data_apply_update(config, update));
+    assert(config.count == 1 && config.sources[0].refresh_seconds == 1800);
+    assert(parse(R"({"source":"weather","refresh_seconds":1})"));
+    assert(external_data_apply_update(config, update));
+    assert(std::strcmp(config.sources[0].url, "https://example.org/weather") == 0);
+    assert(config.sources[0].refresh_seconds == 1);
+    assert(parse(R"({"source":"weather","url":"https://example.org/new"})"));
+    assert(external_data_apply_update(config, update));
+    assert(config.sources[0].refresh_seconds == 1);
+    assert(parse(R"({"source":"other","refresh_seconds":60})"));
+    assert(!external_data_apply_update(config, update));
+    assert(config.count == 1);
+    assert(!parse(R"({"source":"weather"})"));
+    assert(!parse(R"({"source":"bad.name","url":"https://example.org"})"));
+    assert(!parse(R"({"source":"weather","url":"https://example.org","refresh_seconds":0})"));
+    assert(!parse(R"({"source":"weather","url":"https://example.org\u0000hidden"})"));
+    assert(!parse(R"({"source":"weather\u0000hidden","url":"https://example.org"})"));
+    for (unsigned i = 1; i < EXTERNAL_DATA_MAX_SOURCES; ++i) {
+        input.clear();
+        input["source"] = std::string("source") + std::to_string(i);
+        input["url"] = "https://example.org";
+        assert(external_data_parse_update(input.as<JsonObjectConst>(), update));
+        assert(external_data_apply_update(config, update));
+    }
+    assert(parse(R"({"source":"weather","refresh_seconds":300})"));
+    assert(external_data_apply_update(config, update));
+    assert(config.count == EXTERNAL_DATA_MAX_SOURCES);
+    assert(std::strcmp(config.sources[1].name, "source1") == 0);
+    assert(parse(R"({"source":"overflow","url":"https://example.org"})"));
+    assert(!external_data_apply_update(config, update));
+}
+
+static void test_external_inspection() {
+    JsonDocument source;
+    assert(!deserializeJson(source, R"({"current":{"temperature":21.5},"daily":[10,20,30,40,50,60,70,80,90],"bad.key":1,"null":null})"));
+    JsonDocument output;
+    auto inspect = [&](const char* path, size_t offset) {
+        output.clear();
+        return binding_value_inspect_json(source.as<JsonVariantConst>(), path, offset,
+                                          output.to<JsonObject>());
+    };
+    assert(inspect(".", 0));
+    assert(std::strcmp(output["type"], "object") == 0);
+    assert(std::strcmp(output["children"][0]["path"], "current") == 0);
+    assert(!output["children"][2]["bindable"].as<bool>());
+    assert(!output["children"][3]["bindable"].as<bool>());
+    assert(inspect("current", 0));
+    assert(std::strcmp(output["children"][0]["path"], "current.temperature") == 0);
+    assert(output["children"][0]["value"].as<double>() == 21.5);
+    assert(inspect("daily", 0));
+    assert(output["children"].size() == 8 && output["next_offset"].as<int>() == 8);
+    assert(inspect("daily", 8));
+    assert(output["children"].size() == 1 && !output.containsKey("next_offset"));
+    assert(std::strcmp(output["children"][0]["path"], "daily.8") == 0);
+    assert(output["children"][0]["value"].as<int>() == 90);
+    assert(inspect("daily.0", 0));
+    assert(output["value"].as<int>() == 10);
+    assert(!inspect("daily.9", 0));
+    assert(!inspect("bad;key", 0));
+    assert(!inspect("null", 0));
+
+    source.clear();
+    source["long"] = std::string(120, 'x');
+    assert(inspect(".", 0));
+    assert(output["children"][0]["value_truncated"].as<bool>());
+    source.clear();
+    assert(std::strlen(output["children"][0]["value"].as<const char*>()) == 96);
+    source["long"] = std::string(95, 'x') + "\xc3\xa9" + std::string(5, 'x');
+    assert(inspect(".", 0));
+    assert(std::strlen(output["children"][0]["value"].as<const char*>()) == 95);
+    source.clear();
+    source[std::string(48, 'k')] = 1;
+    assert(inspect("", 0));
+    assert(!output["children"][0]["bindable"].as<bool>());
+    assert(!output["children"][0].containsKey("path"));
 }
 
 static void test_legacy_ca_bundle() {
@@ -244,6 +360,8 @@ int main() {
     test_extract();
     test_select_json();
     test_external_config();
+    test_external_source_update();
+    test_external_inspection();
     test_legacy_ca_bundle();
     test_format();
     test_params();

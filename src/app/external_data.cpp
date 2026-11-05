@@ -39,8 +39,10 @@ constexpr uint32_t TASK_STACK_BYTES = 16384;
 
 struct Slot {
     ExternalDataSourceConfig config{};
-    BoundedPsramJsonAllocator allocator{DOCUMENT_LIMIT};
+    BoundedPsramJsonAllocator allocators[2]{
+        BoundedPsramJsonAllocator(DOCUMENT_LIMIT), BoundedPsramJsonAllocator(DOCUMENT_LIMIT)};
     JsonDocument* document = nullptr;
+    uint8_t document_allocator = 0;
     uint32_t generation = 1;
     uint32_t document_generation = 0;
     uint32_t next_attempt = 0;
@@ -70,7 +72,7 @@ struct Job {
     uint32_t started;
 };
 
-Slot slots[EXTERNAL_DATA_MAX_SOURCES];
+Slot* slots = nullptr;
 SemaphoreHandle_t mutex = nullptr;
 TaskHandle_t worker_task = nullptr;
 RtosTaskPsramAlloc worker_alloc{};
@@ -370,7 +372,8 @@ const char* fetch(const Job& job, JsonDocument& document, FetchStats& stats) {
             if (default_port) snprintf(host_header, sizeof(host_header), "%s", parts.host);
             else snprintf(host_header, sizeof(host_header), "%s:%u", parts.host, parts.port);
         }
-        const char* request_format = "GET %s HTTP/1.1\r\nHost: %s\r\nAccept: application/json\r\n"
+        const char* request_format = "GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: ESP32-Macropad\r\n"
+                                     "Accept: application/json\r\n"
                                      "Accept-Encoding: identity\r\nConnection: close\r\n\r\n";
         const int request_length = snprintf(nullptr, 0, request_format, parts.target, host_header);
         if (request_length < 0 ||
@@ -436,7 +439,8 @@ void worker(void*) {
         }
         Slot& slot = slots[job.slot];
         void* memory = heap_caps_malloc(sizeof(JsonDocument), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        JsonDocument* candidate = memory ? new (memory) JsonDocument(&slot.allocator) : nullptr;
+        const uint8_t candidate_allocator = slot.document_allocator ^ 1;
+        JsonDocument* candidate = memory ? new (memory) JsonDocument(&slot.allocators[candidate_allocator]) : nullptr;
         FetchStats stats;
         const char* error = candidate ? fetch(job, *candidate, stats) : "JSON document allocation failed";
         JsonDocument* previous = nullptr;
@@ -450,6 +454,7 @@ void worker(void*) {
                 if (!error) {
                     previous = slot.document;
                     slot.document = candidate;
+                    slot.document_allocator = candidate_allocator;
                     slot.document_generation = slot.generation;
                     candidate = nullptr;
                     slot.last_success_ms = static_cast<uint64_t>(esp_timer_get_time() / 1000);
@@ -489,15 +494,38 @@ void external_data_init(const ExternalDataConfig& config) {
         LOGE("ExtData", "Unable to create source mutex");
         return;
     }
+    void* memory = heap_caps_malloc(sizeof(Slot) * EXTERNAL_DATA_MAX_SOURCES,
+                                    MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!memory) {
+        worker_failed = true;
+        LOGE("ExtData", "Unable to allocate source slots in PSRAM");
+        return;
+    }
+    Slot* allocated = static_cast<Slot*>(memory);
+    for (unsigned i = 0; i < EXTERNAL_DATA_MAX_SOURCES; ++i) new (&allocated[i]) Slot{};
+    if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) {
+        for (unsigned i = 0; i < EXTERNAL_DATA_MAX_SOURCES; ++i) allocated[i].~Slot();
+        heap_caps_free(memory);
+        worker_failed = true;
+        LOGE("ExtData", "Unable to initialize source slots");
+        return;
+    }
+    slots = allocated;
+    xSemaphoreGive(mutex);
     external_data_configure(config);
 }
 
 void external_data_configure(const ExternalDataConfig& config) {
     if (!mutex) return;
     if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) return;
+    if (!slots) {
+        xSemaphoreGive(mutex);
+        return;
+    }
     revision.fetch_add(1, std::memory_order_acq_rel);
     const uint32_t now = millis();
-    for (Slot& slot : slots) {
+    for (unsigned index = 0; index < EXTERNAL_DATA_MAX_SOURCES; ++index) {
+        Slot& slot = slots[index];
         if (!slot.active) continue;
         const ExternalDataSourceConfig* match = nullptr;
         for (uint32_t i = 0; i < config.count; ++i)
@@ -518,10 +546,13 @@ void external_data_configure(const ExternalDataConfig& config) {
     }
     for (uint32_t i = 0; i < config.count; ++i) {
         bool exists = false;
-        for (const Slot& slot : slots)
+        for (unsigned index = 0; index < EXTERNAL_DATA_MAX_SOURCES; ++index) {
+            const Slot& slot = slots[index];
             if (slot.active && !strcmp(slot.config.name, config.sources[i].name)) exists = true;
+        }
         if (exists) continue;
-        for (Slot& slot : slots) {
+        for (unsigned index = 0; index < EXTERNAL_DATA_MAX_SOURCES; ++index) {
+            Slot& slot = slots[index];
             if (slot.active) continue;
             ++slot.generation;
             slot.config = config.sources[i];
@@ -549,8 +580,13 @@ void external_data_configure(const ExternalDataConfig& config) {
 
 bool external_data_get_value(const char* name, const char* path, char* out, size_t out_len) {
     if (!mutex || xSemaphoreTake(mutex, 0) != pdTRUE) return false;
+    if (!slots) {
+        xSemaphoreGive(mutex);
+        return false;
+    }
     bool resolved = false;
-    for (const Slot& slot : slots) {
+    for (unsigned index = 0; index < EXTERNAL_DATA_MAX_SOURCES; ++index) {
+        const Slot& slot = slots[index];
         if (slot.active && slot.document && slot.document_generation == slot.generation &&
             strcmp(slot.config.name, name) == 0) {
             resolved = binding_value_select_json(slot.document->as<JsonVariantConst>(), path, out, out_len);
@@ -570,8 +606,13 @@ static const char* source_state(const Slot& slot) {
 bool external_data_get_stat(const char* name, const char* key, char* out, size_t out_len) {
     if (!name || !key || !out || !out_len || !mutex || xSemaphoreTake(mutex, 0) != pdTRUE)
         return false;
+    if (!slots) {
+        xSemaphoreGive(mutex);
+        return false;
+    }
     int written = -1;
-    for (const Slot& slot : slots) {
+    for (unsigned index = 0; index < EXTERNAL_DATA_MAX_SOURCES; ++index) {
+        const Slot& slot = slots[index];
         if (!slot.active || strcmp(slot.config.name, name)) continue;
         if (!strcmp(key, "state")) {
             written = snprintf(out, out_len, "%s", source_state(slot));
@@ -598,22 +639,68 @@ bool external_data_get_stat(const char* name, const char* key, char* out, size_t
     return written >= 0 && static_cast<size_t>(written) < out_len;
 }
 
-void external_data_write_status(JsonArray output, const ExternalDataConfig& config) {
+#if HAS_MCP
+ExternalDataInspectResult external_data_inspect(const char* name, const char* path,
+                                               size_t offset, JsonObject result) {
+    if (!mutex) return EXTERNAL_DATA_INSPECT_UNAVAILABLE;
+    if (xSemaphoreTake(mutex, pdMS_TO_TICKS(20)) != pdTRUE)
+        return EXTERNAL_DATA_INSPECT_BUSY;
+    if (!slots) {
+        xSemaphoreGive(mutex);
+        return EXTERNAL_DATA_INSPECT_UNAVAILABLE;
+    }
+    const Slot* match = nullptr;
+    if (slots) {
+        for (unsigned index = 0; index < EXTERNAL_DATA_MAX_SOURCES; ++index) {
+            const Slot& slot = slots[index];
+            if (slot.active && strcmp(slot.config.name, name) == 0) {
+                match = &slot;
+                break;
+            }
+        }
+    }
+    ExternalDataInspectResult status = EXTERNAL_DATA_INSPECT_NOT_FOUND;
+    if (match) {
+        result["source"] = JsonString(name, JsonString::Copied);
+        result["state"] = source_state(*match);
+        if (worker_failed) result["error"] = "Source worker unavailable";
+        else if (match->error) result["error"] = match->error;
+        const bool available = match->document && match->document_generation == match->generation;
+        result["available"] = available;
+        if (!available) status = EXTERNAL_DATA_INSPECT_OK;
+        else {
+            const uint64_t now = static_cast<uint64_t>(esp_timer_get_time() / 1000);
+            result["age_seconds"] = (now - match->last_success_ms) / 1000;
+            result["path"] = JsonString(path, JsonString::Copied);
+            status = binding_value_inspect_json(match->document->as<JsonVariantConst>(), path, offset, result)
+                         ? EXTERNAL_DATA_INSPECT_OK : EXTERNAL_DATA_INSPECT_BAD_PATH;
+        }
+    }
+    xSemaphoreGive(mutex);
+    return status;
+}
+#endif
+
+void external_data_write_status(JsonArray output, const ExternalDataConfig& config, bool include_url) {
     const bool locked = mutex && xSemaphoreTake(mutex, pdMS_TO_TICKS(20)) == pdTRUE;
     for (uint32_t i = 0; i < config.count; ++i) {
         const auto& source = config.sources[i];
         JsonObject item = output.add<JsonObject>();
-        item["name"] = source.name;
-        item["url"] = source.url;
+        item["name"] = JsonString(source.name, JsonString::Copied);
+        if (include_url) item["url"] = JsonString(source.url, JsonString::Copied);
         item["refresh_seconds"] = source.refresh_seconds;
         const Slot* match = nullptr;
-        if (locked) {
-            for (const Slot& slot : slots)
+        if (locked && slots) {
+            for (unsigned index = 0; index < EXTERNAL_DATA_MAX_SOURCES; ++index) {
+                const Slot& slot = slots[index];
                 if (slot.active && strcmp(slot.config.name, source.name) == 0) match = &slot;
+            }
         }
         if (worker_failed || !mutex) {
             item["state"] = "error";
             item["error"] = "Source worker unavailable";
+        } else if (!locked) {
+            item["state"] = "busy";
         } else if (!match) {
             item["state"] = "waiting";
         } else {

@@ -14,7 +14,7 @@
 // or frees them.
 // ============================================================================
 
-static constexpr uint8_t MCP_TOOL_REGISTRY_MAX = 48;
+static constexpr uint8_t MCP_TOOL_REGISTRY_MAX = 64;
 static const McpTool* s_tools[MCP_TOOL_REGISTRY_MAX] = {};
 static uint8_t s_tool_count = 0;
 static uint16_t s_tools_dropped = 0;

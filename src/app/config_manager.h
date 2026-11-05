@@ -238,6 +238,16 @@ void config_manager_init();                           // Initialize NVS
 bool config_manager_load(DeviceConfig *config);       // Load config from NVS
 #if HAS_EXTERNAL_DATA
 bool config_manager_save(DeviceConfig *config, const ExternalDataConfig* external_override = nullptr);
+#if HAS_MCP
+enum ExternalDataSaveResult {
+		EXTERNAL_DATA_SAVE_OK,
+		EXTERNAL_DATA_SAVE_INVALID,
+		EXTERNAL_DATA_SAVE_FAILED,
+};
+ExternalDataSaveResult config_manager_save_external_source(DeviceConfig *config,
+		const ExternalDataSourceUpdate& update, ExternalDataConfig& candidate);
+bool config_manager_copy_external_sources(const DeviceConfig *config, ExternalDataConfig& snapshot);
+#endif
 #else
 bool config_manager_save(const DeviceConfig *config);
 #endif

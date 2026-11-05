@@ -32,6 +32,12 @@ struct ExternalDataConfig {
     ExternalDataSourceConfig sources[EXTERNAL_DATA_MAX_SOURCES];
 };
 
+struct ExternalDataSourceUpdate {
+    ExternalDataSourceConfig source;
+    bool has_url;
+    bool has_refresh_seconds;
+};
+
 struct ExternalDataUrl {
     char host[256];
     char target[EXTERNAL_DATA_URL_BYTES + 1];

@@ -132,11 +132,12 @@ class PortalDevServerTest(unittest.TestCase):
             self.assertEqual(config["device_name"], "Mock")
 
     def test_external_data_round_trip_and_partial_updates(self):
-        source = {"name": "weather", "url": "https://example.test/data?location=pelt", "refresh_seconds": 60}
+        source = {"name": "weather", "url": "https://example.test/data?location=pelt", "refresh_seconds": 1}
         self.assertEqual(self.request("/api/config?no_reboot=1", method="POST",
                                       body={"external_data": [source]})[0], 200)
         config = self.request("/api/config")[1]
         self.assertEqual(config["external_data"][0]["url"], source["url"])
+        self.assertEqual(config["external_data"][0]["refresh_seconds"], 1)
         resolved = self.request("/api/pad/resolve", method="POST", body={"bindings": [
             "[ext:weather;current.temperature|missing]",
             "[ext:weather;missing|not found]",
@@ -152,6 +153,7 @@ class PortalDevServerTest(unittest.TestCase):
         config = self.request("/api/config")[1]
         self.assertEqual({key: config["external_data"][0][key] for key in source}, source)
         for invalid in [{"name": "renamed"}, {"name": "renamed", "url": ""},
+                        {"name": "renamed", "url": source["url"], "refresh_seconds": 0},
                         {"name": "renamed", "url": None}]:
             self.assertEqual(self.request("/api/config?no_reboot=1", method="POST",
                                           body={"external_data": [invalid]})[0], 400)

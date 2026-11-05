@@ -33,6 +33,21 @@ const haButtonBuilderProvider = vm.runInContext('haButtonBuilderProvider', conte
 const scheme = name => fixture.schemes.find(s => s.name === name);
 const haConfigured = { caps: { ha_live: true }, ha_url: 'http://ha.local:8123', ha_token_set: true };
 
+const externalStats = scheme('ext').reference.rows;
+for (const [path, kind, unit] of [
+    ['.@state', 'text', ''], ['.@age', 'integer', 's'],
+    ['.@next', 'integer', 's'], ['.@duration', 'integer', 'ms'],
+    ['.@size', 'integer', 'bytes'], ['.@http_status', 'integer', ''],
+    ['.@error', 'text', '']
+]) {
+    const row = externalStats.find(entry => entry.syntax === path);
+    assert.ok(row, `external statistic ${path} is documented`);
+    assert.strictEqual(row.kind, kind);
+    assert.strictEqual(row.unit, unit);
+    assert.ok(row.desc && row.example);
+}
+assert.ok(context._bhRenderScheme(scheme('ext')).includes('[ext:weather;.@duration;%.0f ms|Unknown]'));
+
 for (const field of [
     { tagName: 'INPUT', type: 'text' },
     { tagName: 'INPUT', type: 'search' },

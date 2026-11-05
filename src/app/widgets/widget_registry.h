@@ -84,6 +84,9 @@ void widget_register(const WidgetType* type);
 uint8_t widget_count();
 const WidgetType* widget_at(uint8_t index);
 void widget_preview_catalog_emit(JsonArray catalog);
+#if HAS_MCP
+bool widget_schema_emit(JsonArray widgets, const char* widget_filter = nullptr);
+#endif
 
 inline bool widget_supports_pad_swipe_control(const char* type) {
     return strcmp(type, "mousepad") == 0 || strcmp(type, "scrollpad") == 0 ||

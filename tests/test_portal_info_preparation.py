@@ -22,6 +22,7 @@ def section(start, end):
 
 harness = r'''
 #include "pad_config.h"
+#include "fill_pattern.h"
 #include "esp_heap_caps.h"
 #include "psram_json_allocator.h"
 #include <ArduinoJson.h>
@@ -35,6 +36,7 @@ harness = r'''
 #include <new>
 #include <string>
 #include <thread>
+#include <vector>
 using std::min;
 static bool fail_allocation = false;
 void* heap_caps_malloc(size_t size, uint32_t) {
@@ -123,7 +125,11 @@ uint32_t pad_icon_render_key(JsonObjectConst, JsonObjectConst) { return 1; }
 void icon_store_build_key(uint8_t, const char*, uint8_t, uint8_t, char* key_out, size_t size) {
     if (size) key_out[0] = '\0';
 }
-bool icon_store_source_delete_if_unreferenced(const char*) { return true; }
+static std::vector<std::string> cleaned_sources;
+bool icon_store_source_delete_if_unreferenced(const char* source) {
+    cleaned_sources.emplace_back(source);
+    return true;
+}
 void icon_store_delete_page_icons(uint8_t) {}
 void icon_store_cleanup_pad_icons(uint8_t) {}
 static ButtonDefaults defaults = {};
@@ -132,10 +138,6 @@ static const ButtonDefaults* button_defaults_get() { return &defaults; }
 static const char* btn_default(const char* value, const char* fallback) {
     return value[0] ? value : fallback;
 }
-static void parse_bindable_field(JsonVariantConst value, char* out,
-                                 size_t capacity, const char* fallback) {
-    strlcpy(out, value | fallback, capacity);
-}
 static ButtonShadowMode parse_button_shadow_mode(JsonVariantConst) {
     return BUTTON_SHADOW_INHERIT;
 }
@@ -143,12 +145,18 @@ static bool is_valid_binding_name(const char*) { return true; }
 static uint8_t action_list_parse(JsonVariantConst, ButtonAction*, size_t, bool) {
     return 0;
 }
+'''
+harness += section("static void parse_bindable_field", "// Parse a typed action object")
+harness += section("static bool parse_button_fill_style", "static bool parse_button(")
+harness += r'''
 static bool parse_button(JsonObject object, ScreenButtonConfig* button, const ButtonDefaults*) {
     button->col = object["col"] | uint8_t(0);
     button->row = object["row"] | uint8_t(0);
     button->col_span = object["col_span"] | uint8_t(1);
     button->row_span = object["row_span"] | uint8_t(1);
-    return true;
+    strlcpy(button->icon_source_id, object["icon"]["source_id"] | "",
+            sizeof(button->icon_source_id));
+    return parse_button_fill_style(object, button);
 }
 '''
 harness += icon_header[icon_header.index("#ifndef ICON_MAX_DIMENSION"):icon_header.index("// Icon kind")]
@@ -236,6 +244,28 @@ static void add_buttons(JsonArray buttons, unsigned count) {
     }
 }
 int main() {
+    {
+        JsonDocument doc;
+        JsonObject button = doc.to<JsonObject>();
+        ScreenButtonConfig parsed = {};
+        assert(parse_button_fill_style(button, &parsed) && !parsed.fill_style);
+        const std::string long_color(100, 'a');
+        button["bg_pattern"] = "dots";
+        button["bg_pattern_color"] = "[pad:color|#123456]";
+        button["widget_bar_pattern_color"] = 0x1234;
+        button["widget_bar_bg_pattern_color"] = long_color;
+        button["pattern_spacing"] = 4;
+        button["pattern_stroke_width"] = 8;
+        assert(parse_button_fill_style(button, &parsed) && parsed.fill_style);
+        assert(parsed.fill_style->patterns[0] == FillPattern::Dots);
+        assert(parsed.fill_style->spacing == 4 && parsed.fill_style->stroke == 4);
+        assert(strcmp(parsed.fill_style->color(0), "[pad:color|#123456]") == 0);
+        assert(strcmp(parsed.fill_style->color(1), "#001234") == 0);
+        assert(strcmp(parsed.fill_style->color(2), "#000000") == 0);
+        assert(strlen(parsed.fill_style->color(5)) == CONFIG_BINDABLE_SHORT_LEN - 1);
+        assert(strcmp(parsed.fill_style->color(6), "#000000") == 0);
+        free(parsed.fill_style);
+    }
     std::string stream_png("\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR\x00\x00\x00\x01\x00\x00\x00\x01", 24);
     stream_png.append(9, '\0');
     stream_png.append("\x00\x01\x00\x00IDAT", 8);
@@ -307,6 +337,25 @@ int main() {
     files.erase("/icons/pad_0_main_0_0.png");
     files["/config/pad_0.json"] = R"({"name":"Boot name","buttons":[]})";
     assert(pad_config_init());
+    {
+        const char* first_source = "s_000000000000000000000001";
+        const char* second_source = "s_000000000000000000000002";
+        JsonDocument original;
+        JsonArray buttons = original["buttons"].to<JsonArray>();
+        buttons.add<JsonObject>()["icon"]["source_id"] = first_source;
+        buttons.add<JsonObject>()["icon"]["source_id"] = first_source;
+        original["overlay_buttons"].to<JsonArray>().add<JsonObject>()["icon"]["source_id"] = second_source;
+        JsonDocument empty;
+        empty["buttons"].to<JsonArray>();
+        assert(save_document(2, original));
+        cleaned_sources.clear();
+        assert(save_document(2, empty));
+        assert((cleaned_sources == std::vector<std::string>{first_source, second_source}));
+        assert(save_document(2, original));
+        cleaned_sources.clear();
+        assert(pad_config_delete(2));
+        assert((cleaned_sources == std::vector<std::string>{first_source, second_source}));
+    }
     char copied[64];
     const unsigned reads = storage_reads;
     assert(pad_config_read_name(0, copied, sizeof(copied)));

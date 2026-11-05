@@ -39,5 +39,14 @@ bool binding_value_format_valid(const char* format, unsigned max_width, unsigned
 // Returns false for missing/null values, invalid paths or truncated output.
 bool binding_value_select_json(JsonVariantConst root, const char* path,
                                char* out, size_t out_len);
+
+#if HAS_MCP
+// Inspect one bounded page of a cached JSON value using the same path rules.
+bool binding_value_inspect_json(JsonVariantConst root, const char* path,
+                                size_t offset, JsonObject result);
+#endif
+
+// Format external numeric values, including scientific notation.
+void binding_value_format_external(const char* raw_value, const char* format, char* out, size_t out_len);
 #endif
 #endif

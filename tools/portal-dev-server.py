@@ -1049,7 +1049,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                         if (not re.fullmatch(r"[A-Za-z0-9_-]{1,32}", name)
                                 or name in names or not isinstance(url, str) or len(url) > 511
                                 or not url.startswith(("http://", "https://"))
-                                or type(interval) is not int or not 60 <= interval <= 86400):
+                                or type(interval) is not int or not 1 <= interval <= 86400):
                             self._serve_json({"success": False, "message": "Invalid external data sources"}, 400)
                             return
                         names.add(name)

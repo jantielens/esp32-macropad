@@ -438,6 +438,8 @@ int main(int argc, char** argv) {
         char value[192] = {};
         binding_template_resolve("[ext:weather;current.temperature_2m;%.1f C|No data]", value, sizeof(value));
         expect(std::strcmp(value, "12.5 C") == 0, "external data binding formats a cached value");
+        binding_template_resolve("[ext:weather;scientific;%d|No data]", value, sizeof(value));
+        expect(std::strcmp(value, "123456789") == 0, "external binding formats scientific numbers as integers");
         binding_template_resolve("[ext:weather;missing|No data]", value, sizeof(value));
         expect(std::strcmp(value, "No data") == 0, "external data binding uses fallback for missing data");
         binding_template_resolve("[ext:weather;current.temperature_2m;%200s|No data]", value, sizeof(value));

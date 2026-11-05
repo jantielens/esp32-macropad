@@ -27,6 +27,7 @@ bool external_data_get_value(const char* name, const char* path, char* out, size
     if (strcmp(name, "weather")) return false;
     const char* value = nullptr;
     if (!strcmp(path, "current.temperature_2m")) value = "12.5";
+    else if (!strcmp(path, "scientific")) value = "1.23456789e+08";
     else if (!strcmp(path, "duration")) value = "99";
     else if (!strcmp(path, "@duration")) value = "100";
     if (!value) return false;

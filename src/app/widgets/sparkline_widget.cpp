@@ -1250,6 +1250,7 @@ static bool sparkline_get_stream_params(const WidgetConfig* wcfg,
 
 #if HAS_MCP
 static void sparkline_describe(JsonObject& out) {
+    out["history_note"] = "External data is sampled from live cached values and builds history over time; it does not backfill provider history. Missing new data can carry the last value forward. Supported Home Assistant history sources can backfill.";
     JsonArray f = out.createNestedArray("config_fields");
     auto add = [&](const char* n, const char* t, const char* d){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]=t; o["desc"]=d; };
     auto addmax = [&](const char* n, const char* t, const char* d, int m){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]=t; o["desc"]=d; o["max"]=m; };

@@ -94,7 +94,7 @@ bool external_data_config_valid(const ExternalDataConfig& config) {
         if (!memchr(source.name, '\0', sizeof(source.name)) ||
             !memchr(source.url, '\0', sizeof(source.url)) ||
             !valid_name(source.name) || !valid_url(source.url) ||
-            source.refresh_seconds < 60 || source.refresh_seconds > 86400) return false;
+            source.refresh_seconds < 1 || source.refresh_seconds > 86400) return false;
         for (uint32_t j = 0; j < i; ++j)
             if (strcmp(source.name, config.sources[j].name) == 0) return false;
     }
@@ -125,4 +125,46 @@ bool external_data_parse_config(JsonVariantConst input, ExternalDataConfig& cand
     }
     return external_data_config_valid(candidate);
 }
+
+#if HAS_MCP
+bool external_data_parse_update(JsonObjectConst input, ExternalDataSourceUpdate& update) {
+    update = {};
+    if (!input["source"].is<const char*>()) return false;
+    const char* name = input["source"].as<const char*>();
+    if (input["source"].as<JsonString>().size() != strlen(name) || !valid_name(name)) return false;
+    memcpy(update.source.name, name, strlen(name) + 1);
+    if (input.containsKey("url")) {
+        if (!input["url"].is<const char*>()) return false;
+        const char* url = input["url"].as<const char*>();
+        if (input["url"].as<JsonString>().size() != strlen(url) || !valid_url(url)) return false;
+        memcpy(update.source.url, url, strlen(url) + 1);
+        update.has_url = true;
+    }
+    if (input.containsKey("refresh_seconds")) {
+        if (!input["refresh_seconds"].is<uint32_t>()) return false;
+        const uint32_t seconds = input["refresh_seconds"].as<uint32_t>();
+        if (seconds < 1 || seconds > 86400) return false;
+        update.source.refresh_seconds = seconds;
+        update.has_refresh_seconds = true;
+    }
+    return update.has_url || update.has_refresh_seconds;
+}
+
+bool external_data_apply_update(ExternalDataConfig& config, const ExternalDataSourceUpdate& update) {
+    if (config.count > EXTERNAL_DATA_MAX_SOURCES) return false;
+    uint32_t index = 0;
+    while (index < config.count && strcmp(config.sources[index].name, update.source.name) != 0) ++index;
+    if (index == config.count) {
+        if (!update.has_url || config.count == EXTERNAL_DATA_MAX_SOURCES) return false;
+        config.sources[index] = {};
+        memcpy(config.sources[index].name, update.source.name, sizeof(update.source.name));
+        config.sources[index].refresh_seconds = EXTERNAL_DATA_DEFAULT_INTERVAL;
+        ++config.count;
+    }
+    ExternalDataSourceConfig& source = config.sources[index];
+    if (update.has_url) memcpy(source.url, update.source.url, sizeof(source.url));
+    if (update.has_refresh_seconds) source.refresh_seconds = update.source.refresh_seconds;
+    return external_data_config_valid(config);
+}
+#endif
 #endif

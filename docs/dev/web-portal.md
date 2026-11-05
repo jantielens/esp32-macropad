@@ -1479,6 +1479,11 @@ format syntax. The device validates saved configurations authoritatively.
 
 The MCP `get_capabilities` manifest serializes its binding-scheme list from the
 same registry, so portal and MCP clients receive equivalent metadata.
+Passing `binding_scheme` to `get_capabilities` returns only that registered
+scheme under `bindings.schemes`; unknown names return a parameter error.
+Passing `widget` returns only that registered widget under `widgets`, plus
+`widget_common`. Use one filter at a time; unknown names are parameter errors.
+Omitting both arguments returns the full manifest.
 
 Display builds with local sensors register `[sensor:key;format]`. Its keys
 and descriptions come from the sensor registrations, including board-specific
@@ -2224,7 +2229,7 @@ When `HAS_EXTERNAL_DATA` is enabled, `external_data` contains each source's
 sanitized `error`. URLs are visible in the portal and configuration API; avoid
 including sensitive tokens or API keys.
 POST accepts an `external_data` array of source objects with `name`, a nonempty
-`url`, and `refresh_seconds`. An empty array deletes all sources. Omitting the array leaves it
+`url`, and `refresh_seconds` from 1 to 86400 seconds. An empty array deletes all sources. Omitting the array leaves it
 unchanged. Validated source changes apply after successful persistence without
 reboot when `no_reboot=1` is used.
 
@@ -3198,9 +3203,17 @@ Single Model Context Protocol endpoint — JSON-RPC 2.0 over the MCP **Streamabl
 
 - **Auth:** every request must carry `Authorization: Bearer <token>`. Fails closed: when `mcp_enabled` is true but no token has been generated, all requests are refused (`401`). Independent of portal Basic Auth.
 - **Availability:** returns `404` when `mcp_enabled` is false or the device is in AP/setup mode. Performs Origin validation (any browser `Origin` → `403`; native clients send none) and does not alter the global CORS allow-list.
-- **Tools:** read tools are always available once enabled; control tools (`press_button`, `set_screen`, `set_backlight`, `wake`, `system_command`) are hidden from `tools/list` and refused by `tools/call` unless `mcp_control_enabled` is true. Display tools are absent on `!HAS_DISPLAY` boards. Control tools run on the main loop, never on the async web task.
+- **Tools:** control and authoring tools are hidden and refused unless their respective permissions are enabled. Some read tools, including cached external data inspection, require authoring permission. Display tools are absent on `!HAS_DISPLAY` boards. Control tools run on the main loop, never on the async web task.
 - **Body cap:** request bodies above 8 KB are rejected with JSON-RPC `-32600`.
 - **Implementation note:** served by a custom `AsyncWebHandler` (not `server->on`) because MCP clients send `Accept: application/json, text/event-stream`, which the stock callback handler rejects via `isHTTP()`. `GET`/`DELETE /mcp` return `405` (no SSE stream offered) so client transport negotiation succeeds.
+
+When `HAS_EXTERNAL_DATA` is enabled, MCP `get_config` lists source names,
+intervals, and states without URLs. `set_external_data_source` requires control
+permission and a matching device identity, and updates one source after validation and persistence; its URL
+argument can contain sensitive data. `inspect_external_data` requires authoring
+permission and returns bounded pages from the cached snapshot, including source
+state and age, without fetching. Paths follow the same rules as external
+bindings. The cache may change between pages.
 
 **Example (`initialize`):**
 ```bash

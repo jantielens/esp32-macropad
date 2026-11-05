@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 #include <ArduinoJson.h>
 
@@ -167,6 +168,24 @@ int main() {
            "binding parameter emits its authoring default");
     expect(!docs_schemes[2]["authoring"].is<JsonObject>(),
            "docs-enabled schema accepts schemes without optional authoring metadata");
+
+    JsonDocument filtered_doc;
+    JsonArray filtered = filtered_doc["bindings"]["schemes"].to<JsonArray>();
+    expect(binding_schema_emit(&filtered, true, "free"), "registered filter is accepted");
+    expect(filtered_doc.size() == 1 && filtered_doc["bindings"].size() == 1 &&
+               filtered.size() == 1 && std::strcmp(filtered[0]["name"], "free") == 0,
+           "filtered response contains only the requested binding scheme");
+    std::string full_scheme;
+    std::string filtered_scheme;
+    serializeJson(docs_schemes[2], full_scheme);
+    serializeJson(filtered[0], filtered_scheme);
+    expect(full_scheme == filtered_scheme, "filtered documentation matches the full manifest");
+    JsonDocument missing_doc;
+    JsonArray missing = missing_doc["schemes"].to<JsonArray>();
+    expect(!binding_schema_emit(&missing, true, "unknown") && missing.size() == 0,
+           "unknown scheme does not fall back to all bindings");
+    expect(!binding_schema_emit(&missing, true, "") && missing.size() == 0,
+           "empty filter does not fall back to all bindings");
 
     expect(binding_template_register("patterned", resolve, nullptr,
         {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, false, patterned_key_count, patterned_key_at,

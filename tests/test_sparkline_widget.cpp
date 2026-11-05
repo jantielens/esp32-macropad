@@ -6,7 +6,7 @@
 #include <lvgl.h>
 #include "board_config.h"
 #include "log_manager.h"
-#define HAS_MCP 0
+#define HAS_MCP 1
 #include "data_stream.h"
 #include "binding_template.h"
 
@@ -40,6 +40,43 @@ bool data_stream_get(data_stream_handle_t handle, DataStreamSnapshot* out) {
 
 #include "widgets/widget.cpp"
 #include "widgets/sparkline_widget.cpp"
+
+static unsigned other_schema_calls = 0;
+static void describe_other_widget(JsonObject& out) {
+    ++other_schema_calls;
+    out["test"] = true;
+}
+
+TEST(SparklineSchema, FocusedLookupMatchesFullRegistry) {
+    static WidgetType other = {};
+    other.name = "other";
+    other.describeSchema = describe_other_widget;
+    widget_register(&other);
+    JsonDocument full_doc;
+    JsonArray full = full_doc.to<JsonArray>();
+    ASSERT_TRUE(widget_schema_emit(full));
+    ASSERT_EQ(full.size(), 2u);
+    ASSERT_EQ(other_schema_calls, 1u);
+    other_schema_calls = 0;
+    JsonDocument focused_doc;
+    JsonArray focused = focused_doc["widgets"].to<JsonArray>();
+    ASSERT_TRUE(widget_schema_emit(focused, "sparkline"));
+    ASSERT_EQ(focused.size(), 1u);
+    ASSERT_STREQ(focused[0]["type"], "sparkline");
+    EXPECT_EQ(other_schema_calls, 0u);
+    std::string full_json;
+    std::string focused_json;
+    serializeJson(full[0], full_json);
+    serializeJson(focused[0], focused_json);
+    EXPECT_EQ(focused_json, full_json);
+    EXPECT_FALSE(focused[0]["history_note"].isNull());
+
+    JsonDocument missing_doc;
+    JsonArray missing = missing_doc.to<JsonArray>();
+    EXPECT_FALSE(widget_schema_emit(missing, "unknown"));
+    EXPECT_FALSE(widget_schema_emit(missing, ""));
+    EXPECT_EQ(missing.size(), 0u);
+}
 
 class SparklineWidget : public testing::Test {
 protected:

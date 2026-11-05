@@ -29,6 +29,30 @@ const WidgetType* widget_at(uint8_t index) {
     return (index < s_widget_count) ? s_widget_types[index] : nullptr;
 }
 
+#if HAS_MCP
+bool widget_schema_emit(JsonArray widgets, const char* widget_filter) {
+    bool found = false;
+    for (uint8_t index = 0; index < widget_count(); ++index) {
+        const WidgetType* type = widget_at(index);
+        if (!type || (widget_filter && strcmp(type->name, widget_filter) != 0)) continue;
+        found = true;
+        JsonObject entry = widgets.createNestedObject();
+        entry["type"] = type->name;
+        if (type->describeSchema) type->describeSchema(entry);
+        if (widget_supports_pad_swipe_control(type->name)) {
+            JsonArray fields = entry["config_fields"].as<JsonArray>();
+            if (fields.isNull()) fields = entry.createNestedArray("config_fields");
+            JsonObject field = fields.createNestedObject();
+            field["name"] = "widget_disable_pad_swipes";
+            field["type"] = "boolean";
+            field["desc"] = "Disable all swipe actions across this pad when any input widget enables it (default false); independent of USB connection";
+        }
+        if (widget_filter) break;
+    }
+    return !widget_filter || found;
+}
+#endif
+
 void widget_preview_catalog_emit(JsonArray catalog) {
     for (uint8_t index = 0; index < widget_count(); ++index) {
         const WidgetType* type = widget_at(index);

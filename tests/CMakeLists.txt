@@ -483,7 +483,7 @@ add_host_legacy_test(test_binding_value
     SOURCES test_binding_value.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp
         ${PROJECT_SOURCE_DIR}/src/app/external_data_config.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
-    DEFINITIONS HAS_EXTERNAL_DATA=1 HAS_DISPLAY=1 HAS_PSRAM=1
+    DEFINITIONS HAS_EXTERNAL_DATA=1 HAS_DISPLAY=1 HAS_PSRAM=1 HAS_MCP=1
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h
     OPTIONS -Wno-deprecated-declarations)
 
@@ -846,7 +846,7 @@ add_host_legacy_test(test_expose_dry_down SOURCES test_expose_dry_down.cpp INCLU
 add_host_legacy_test(test_meter_mag SOURCES test_meter_mag.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer DEFINITIONS IS_DARKROOM_TIMER=1 LIBRARIES m)
 add_host_legacy_test(test_print_log SOURCES test_print_log.cpp ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/print_log_overrides ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer ${HOST_ARDUINOJSON_DIR} DEFINITIONS IS_DARKROOM_TIMER=1 HAS_FILESYSTEM=1 LIBRARIES m pthread)
 add_host_legacy_test(test_mcp_result_strings SOURCES test_mcp_result_strings.cpp INCLUDES ${HOST_ARDUINOJSON_DIR})
-add_host_legacy_test(test_mcp_device_identity SOURCES test_mcp_device_identity.cpp ${PROJECT_SOURCE_DIR}/src/app/mcp_device_identity.cpp INCLUDES ${HOST_ARDUINOJSON_DIR} DEFINITIONS HAS_MCP=1 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
+add_host_legacy_test(test_mcp_device_identity SOURCES test_mcp_device_identity.cpp ${PROJECT_SOURCE_DIR}/src/app/mcp_device_identity.cpp INCLUDES ${HOST_ARDUINOJSON_DIR} DEFINITIONS HAS_MCP=1 HAS_EXTERNAL_DATA=1 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_fs_health_littlefs SOURCES test_fs_health.cpp ${PROJECT_SOURCE_DIR}/src/app/fs_health.cpp DEFINITIONS USE_SD_STORAGE=0 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_fs_health_sdmmc SOURCES test_fs_health.cpp ${PROJECT_SOURCE_DIR}/src/app/fs_health.cpp DEFINITIONS USE_SD_STORAGE=1 HAS_SD_CARD=1 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_fs_health_sd_spi SOURCES test_fs_health.cpp ${PROJECT_SOURCE_DIR}/src/app/fs_health.cpp DEFINITIONS USE_SD_STORAGE=1 HAS_SD_CARD=1 SD_STORAGE_SPI=1 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
@@ -874,6 +874,7 @@ target_include_directories(binding_schema_json PRIVATE ${HOST_ARDUINOJSON_DIR} $
 add_library(binding_schema_values STATIC ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp)
 target_include_directories(binding_schema_values PRIVATE ${HOST_ARDUINOJSON_DIR}
     ${PROJECT_SOURCE_DIR}/tests ${PROJECT_SOURCE_DIR}/src/app)
+target_compile_definitions(binding_schema_values PRIVATE HAS_EXTERNAL_DATA=1 HAS_DISPLAY=1 HAS_PSRAM=1)
 target_compile_options(binding_schema_values PRIVATE -Wno-deprecated-declarations)
 target_link_libraries(test_pad_binding PRIVATE binding_schema_values)
 

@@ -730,11 +730,10 @@ bool config_manager_load(DeviceConfig *config) {
 		return true;
 }
 
-// Save configuration to NVS
 #if HAS_EXTERNAL_DATA
-bool config_manager_save(DeviceConfig *config, const ExternalDataConfig* external_override) {
+static bool save_config_locked(DeviceConfig *config, const ExternalDataConfig* external_override) {
 #else
-bool config_manager_save(const DeviceConfig *config) {
+static bool save_config_locked(const DeviceConfig *config) {
 #endif
 		if (!config) {
 				LOGE("Config", "Save failed: NULL pointer");
@@ -752,12 +751,6 @@ bool config_manager_save(const DeviceConfig *config) {
 				return false;
 		}
 #endif
-
-		ConfigSaveGuard save_progress_guard;
-		if (!save_progress_guard.begin()) {
-				LOGW("Config", "Save rejected: another write, update or network transition is active");
-				return false;
-		}
 
 		LOGT("Config", "Save start");
 		// ESP32-P4 USB CDC keeps its TX ring buffer in external RAM. Let the
@@ -971,6 +964,49 @@ bool config_manager_save(const DeviceConfig *config) {
 		LOGI("Config", "Save complete");
 		return true;
 }
+
+// Save configuration to NVS
+#if HAS_EXTERNAL_DATA
+bool config_manager_save(DeviceConfig *config, const ExternalDataConfig* external_override) {
+#else
+bool config_manager_save(const DeviceConfig *config) {
+#endif
+		ConfigSaveGuard guard;
+		if (!guard.begin()) {
+				LOGW("Config", "Save rejected: another write, update or network transition is active");
+				return false;
+		}
+#if HAS_EXTERNAL_DATA
+		return save_config_locked(config, external_override);
+#else
+		return save_config_locked(config);
+#endif
+}
+
+#if HAS_EXTERNAL_DATA && HAS_MCP
+bool config_manager_copy_external_sources(const DeviceConfig *config, ExternalDataConfig& snapshot) {
+		if (!config) return false;
+		bool expected = false;
+		if (!g_config_save_in_progress.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+				return false;
+		snapshot = config->external_data;
+		g_config_save_in_progress.store(false, std::memory_order_release);
+		return true;
+}
+
+ExternalDataSaveResult config_manager_save_external_source(DeviceConfig *config,
+		const ExternalDataSourceUpdate& update, ExternalDataConfig& candidate) {
+		ConfigSaveGuard guard;
+		if (!guard.begin()) {
+				LOGW("Config", "External source update rejected: another write, update or network transition is active");
+				return EXTERNAL_DATA_SAVE_FAILED;
+		}
+		if (!config) return EXTERNAL_DATA_SAVE_FAILED;
+		candidate = config->external_data;
+		if (!external_data_apply_update(candidate, update)) return EXTERNAL_DATA_SAVE_INVALID;
+		return save_config_locked(config, &candidate) ? EXTERNAL_DATA_SAVE_OK : EXTERNAL_DATA_SAVE_FAILED;
+}
+#endif
 
 // Recursively remove a directory tree on the active Storage backend.
 // Returns true if `path` no longer exists (or never did) after the call.

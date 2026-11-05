@@ -1552,7 +1552,7 @@
       "free_form": true,
       "category": "Data",
       "summary": "Cached JSON from a configured external HTTP or HTTPS source.",
-      "note": "Statistics: .@state, .@age, .@next, .@duration, .@size, .@http_status, .@error. Failed refreshes retain the last value. Keys containing dots or binding delimiters are unsupported.",
+      "note": "Failed refreshes retain the last value. Keys containing dots or binding delimiters are unsupported.",
       "params": [
         {
           "name": "source",
@@ -1587,7 +1587,69 @@
           "code": "[ext:weather;.@state|Unknown]",
           "desc": "Source state."
         }
-      ]
+      ],
+      "reference": {
+        "title": "Source statistics",
+        "formats": false,
+        "rows": [
+          {
+            "syntax": ".@state",
+            "sample": "healthy",
+            "desc": "waiting: no successful fetch yet; healthy: last fetch succeeded; stale: last fetch failed with cached data; error: no successful fetch or worker unavailable.",
+            "example": "[ext:weather;.@state|Unknown]",
+            "unit": "",
+            "kind": "text"
+          },
+          {
+            "syntax": ".@age",
+            "sample": "30",
+            "desc": "Seconds since the last successful fetch, not the age of provider data; unavailable before a success.",
+            "example": "[ext:weather;.@age;%.0f s|Unknown]",
+            "unit": "s",
+            "kind": "integer"
+          },
+          {
+            "syntax": ".@next",
+            "sample": "60",
+            "desc": "Estimated seconds until the next attempt, including retry backoff after failures; Wi-Fi or other work can delay it. Unavailable during a fetch, OTA, or worker failure.",
+            "example": "[ext:weather;.@next;%.0f s|Unknown]",
+            "unit": "s",
+            "kind": "integer"
+          },
+          {
+            "syntax": ".@duration",
+            "sample": "588",
+            "desc": "Elapsed milliseconds for the last completed attempt, successful or failed; unavailable before a completed attempt.",
+            "example": "[ext:weather;.@duration;%.0f ms|Unknown]",
+            "unit": "ms",
+            "kind": "integer"
+          },
+          {
+            "syntax": ".@size",
+            "sample": "1024",
+            "desc": "Decoded response size in bytes from the last successful fetch; unavailable before a success.",
+            "example": "[ext:weather;.@size;%.0f bytes|Unknown]",
+            "unit": "bytes",
+            "kind": "integer"
+          },
+          {
+            "syntax": ".@http_status",
+            "sample": "200",
+            "desc": "HTTP status from the last completed attempt; unavailable if no status was received.",
+            "example": "[ext:weather;.@http_status|Unknown]",
+            "unit": "",
+            "kind": "integer"
+          },
+          {
+            "syntax": ".@error",
+            "sample": "HTTP request failed",
+            "desc": "Last fetch error, or worker error; unavailable when there is no error.",
+            "example": "[ext:weather;.@error|No error]",
+            "unit": "",
+            "kind": "text"
+          }
+        ]
+      }
     },
     {
       "name": "mqtt",

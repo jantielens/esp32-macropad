@@ -50,6 +50,31 @@ Saving, reloading, importing, exporting, and copying a pad preserve both layers.
 Button-level operations such as blocks and button copy/paste apply to the
 selected layer.
 
+### Show a conditional icon
+
+To show an up or down icon in the same position, place one button on Main and
+one on Overlay with the same position and span. Select and save both icons in
+the portal so their artwork is prepared. Give each button the labels, styling,
+and actions it needs: the visible Overlay button can cover the Main content
+and blocks input to it.
+
+For example, set **Button State** on the up-icon Main button to:
+
+```text
+[expr:[mqtt:market;change]>0?"enabled":"hidden"|hidden]
+```
+
+Set **Button State** on the down-icon Overlay button to:
+
+```text
+[expr:[mqtt:market;change]<0?"enabled":"hidden"|hidden]
+```
+
+Replace the MQTT binding with your numeric change value. These conditions hide
+both buttons at zero or when the value is unavailable. Test positive, negative,
+zero, and unavailable values before relying on the result. See
+[expressions](expressions.md) for conditional syntax and fallback behavior.
+
 ### Customize row and column sizes
 
 Open **Custom Row / Column Sizes** at the bottom of the Pad inspector's **Layout**
