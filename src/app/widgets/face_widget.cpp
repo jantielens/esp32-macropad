@@ -42,6 +42,7 @@ static constexpr FacePose face_poses[] = {
 
 struct FaceState {
     lv_obj_t* object;
+    lv_obj_t* parent;
     FacePose pose, from;
     uint32_t transition_start, transition_ms, last_frame;
     uint32_t next_blink, blink_start, next_gaze, gaze_start, random;
@@ -49,7 +50,7 @@ struct FaceState {
     FaceStyle style;
     FaceEmotion emotion;
     FaceLiveliness liveliness;
-    bool active, blinking, invalid_emotion;
+    bool active, blinking, invalid_emotion, layout_dirty;
 };
 
 static_assert(sizeof(FaceConfig) <= WIDGET_CONFIG_MAX_BYTES, "Face config too large");
@@ -359,6 +360,22 @@ static void face_deleted(lv_event_t* event) {
     state->active = false;
 }
 
+static void face_parent_event(lv_event_t* event) {
+    auto* state = static_cast<FaceState*>(lv_event_get_user_data(event));
+    if (lv_event_get_target_obj(event) != state->parent) return;
+    if (lv_event_get_code(event) == LV_EVENT_DELETE) state->parent = nullptr;
+    else state->layout_dirty = true;
+}
+
+static void face_layout(FaceState* state) {
+    if (!state->object || !state->parent) return;
+    lv_obj_t* button = state->parent;
+    lv_obj_update_layout(button);
+    lv_obj_set_size(state->object, lv_obj_get_content_width(button), lv_obj_get_content_height(button));
+    lv_obj_set_pos(state->object, 0, 0);
+    state->layout_dirty = false;
+}
+
 static void face_update(lv_obj_t*, const WidgetConfig*, WidgetState* runtime, const char* value) {
     auto* state = reinterpret_cast<FaceState*>(runtime->data);
     if (!state->object) return;
@@ -374,8 +391,8 @@ static void face_update(lv_obj_t*, const WidgetConfig*, WidgetState* runtime, co
 }
 
 static void face_create(lv_obj_t* button, const WidgetConfig* config,
-                         const ScreenButtonConfig* source, const PadRect*, const UIScaleInfo*,
-                         lv_obj_t* icon, lv_obj_t* center, WidgetState* runtime) {
+                         const ScreenButtonConfig*, const PadRect*, const UIScaleInfo*,
+                         WidgetState* runtime) {
     const auto* settings = reinterpret_cast<const FaceConfig*>(config->data);
     auto* state = new (runtime->data) FaceState{};
     state->style = settings->style;
@@ -383,27 +400,16 @@ static void face_create(lv_obj_t* button, const WidgetConfig* config,
     state->pose = state->from = face_poses[0];
     state->emotion = FaceEmotion::Content;
     state->random = lv_rand(1, 0x7fffffffu);
-    if (icon) lv_obj_add_flag(icon, LV_OBJ_FLAG_HIDDEN);
-    if (center) lv_obj_add_flag(center, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_update_layout(button);
-    int top = 0, bottom = lv_obj_get_content_height(button);
-    for (uint32_t index = 0; index < lv_obj_get_child_count(button); ++index) {
-        lv_obj_t* child = lv_obj_get_child(button, index);
-        if (child == center || !lv_obj_check_type(child, &lv_label_class)) continue;
-        const lv_align_t align = lv_obj_get_style_align(child, LV_PART_MAIN);
-        if (align == LV_ALIGN_TOP_MID)
-            top = lv_obj_get_y(child) + widget_content_bounds(child).y2 + 5;
-        if (align == LV_ALIGN_BOTTOM_MID)
-            bottom = lv_obj_get_y(child) + widget_content_bounds(child).y1 - 4;
-    }
+    state->parent = button;
     state->object = lv_obj_create(button);
     lv_obj_remove_style_all(state->object);
     lv_obj_remove_flag(state->object, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_remove_flag(state->object, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_size(state->object, lv_obj_get_content_width(button), bottom > top ? bottom - top : 0);
-    lv_obj_set_pos(state->object, source->ui_offset_x, top + source->ui_offset_y);
+    face_layout(state);
     lv_obj_add_event_cb(state->object, face_draw, LV_EVENT_DRAW_MAIN, state);
     lv_obj_add_event_cb(state->object, face_deleted, LV_EVENT_DELETE, state);
+    lv_obj_add_event_cb(button, face_parent_event, LV_EVENT_SIZE_CHANGED, state);
+    lv_obj_add_event_cb(button, face_parent_event, LV_EVENT_DELETE, state);
     face_show(runtime);
     if (config->data_binding[0][0]) {
         char resolved[BINDING_TEMPLATE_MAX_LEN];
@@ -416,6 +422,7 @@ static void face_create(lv_obj_t* button, const WidgetConfig* config,
 
 static void face_tick(lv_obj_t*, const WidgetConfig*, WidgetState* runtime) {
     auto* state = reinterpret_cast<FaceState*>(runtime->data);
+    if (state->layout_dirty) face_layout(state);
     if (!state->object || !state->active) return;
     const uint32_t now = lv_tick_get();
     if ((DISPLAY_DISABLE_ANIMATIONS && !HAS_LVGL_EPAPER) || now - state->last_frame < 33) return;
@@ -472,6 +479,7 @@ static void face_tick(lv_obj_t*, const WidgetConfig*, WidgetState* runtime) {
 
 static void face_destroy(WidgetState* runtime) {
     auto* state = reinterpret_cast<FaceState*>(runtime->data);
+    if (state->parent) lv_obj_remove_event_cb_with_user_data(state->parent, face_parent_event, state);
     if (state->object) lv_obj_delete(state->object);
     state->active = false;
 }

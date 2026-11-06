@@ -163,7 +163,11 @@ const padButtonBuilders = [
             }
             track.appendChild(fill);
             bar.appendChild(track);
-            cell.insertBefore(bar, cell.querySelector('.pad-cell-label-bottom'));
+            const region = cell.querySelector('.pad-content-widget-region');
+            if (region) {
+                region.removeAttribute('aria-label');
+                region.replaceChildren(bar);
+            }
         }
     },
     {
@@ -249,7 +253,11 @@ const padButtonBuilders = [
                 line.setAttribute('stroke-width', '1');
                 gauge.appendChild(line);
             }
-            cell.insertBefore(gauge, cell.querySelector('.pad-cell-label-bottom'));
+            const region = cell.querySelector('.pad-content-widget-region');
+            if (region) {
+                region.removeAttribute('aria-label');
+                region.replaceChildren(gauge);
+            }
         }
     },
     {
@@ -329,9 +337,9 @@ const padButtonBuilders = [
                 const [source] = sources;
                 const sample = bindingBuilderIsNumeric(source.candidate.sample) ?
                     padButtonBuilderSampleLabel(source, source.options) : '---';
-                return { widget_type: '', label_top: options.title.trim(), label_center: sample };
+                return { label_top: options.title.trim(), label_center: sample };
             }
-            return { widget_type: '' };
+            return {};
         },
         previewNote({ options }) {
             const hours = Number(options.window) / 3600;
@@ -390,7 +398,11 @@ const padButtonBuilders = [
                 chart.appendChild(value);
             });
             chart.setAttribute('aria-label', 'Illustrative trend, not actual history. ' + descriptions.join('; '));
-            cell.appendChild(chart);
+            const region = cell.querySelector('.pad-content-widget-region');
+            if (region) {
+                region.removeAttribute('aria-label');
+                region.replaceChildren(chart);
+            }
         }
     },
     {

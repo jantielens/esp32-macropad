@@ -615,23 +615,20 @@ hides ordinary tap/long-press lists, and keeps the held-control section in
 Content. The firmware still owns release behavior.
 
 Toggle switch owns its state field, matching values, static palette, read-only,
-switch width, and icon position. It relabels `actions[]` and `lp_actions[]` as
+and switch width. It relabels `actions[]` and `lp_actions[]` as
 Turn-on and Turn-off actions without changing either action list's payload.
 Its State source uses the shared binding header, builder shortcut, and reference
 action. It uses the same catalog symbol and label rendering as other widgets;
 the pad editor does not simulate a switch. The width field
-retains `widget_toggle_width_pct`, now expressing a percentage of button content
-width with a default of 50%, capped by available height. Firmware uses a centered,
-height-capped 100% width when neither a center label nor a left icon is configured;
-otherwise the switch is right-aligned and label length does not affect its size.
-`widget_toggle_icon_position` accepts left,
-above, or below; the older switch placement field is ignored and not emitted.
+retains `widget_toggle_width_pct`, expressing a percentage of the assigned widget
+region width with a default of 50%, capped by available height.
 
-The shared cell renderer shows button styling and labels, with a large subdued
-Material Symbol behind widget labels. Symbols come from existing catalog
-metadata, including axis variants and the unknown-widget fallback. Widget
-buttons omit additional configured icons and image placeholders; ordinary
-buttons retain their configured icons. There are no per-widget drawing hooks,
+The shared cell renderer shows button styling and labels, with a subdued
+Material Symbol representing widget content in a separate region from the
+labels and configured icon. Symbols come from existing catalog metadata,
+including axis variants and the unknown-widget fallback. A fit warning uses
+estimated font metrics and button dimensions rather than simulating LVGL.
+There are no per-widget drawing hooks,
 sample values, binding resolution requests, or action dispatch in grid rendering.
 Bindings are abbreviated for display, with their full text retained in tooltips
 and accessible descriptions. Valid edits update the grid immediately; invalid

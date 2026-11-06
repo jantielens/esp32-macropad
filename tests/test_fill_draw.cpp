@@ -195,6 +195,10 @@ TEST_F(FillDraw, TrackOutlineRemainsAboveEmptyAndFullFill) {
     EXPECT_TRUE(black(16, 30));
     EXPECT_TRUE(black(47, 30));
     EXPECT_TRUE(black(24, 32));
+    lv_obj_set_width(track, 24);
+    render();
+    EXPECT_TRUE(black(39, 30));
+    EXPECT_FALSE(black(47, 30));
 }
 
 TEST_F(FillDraw, RoundedTracksClipDualFillsWithoutRoundingTheirBaseline) {

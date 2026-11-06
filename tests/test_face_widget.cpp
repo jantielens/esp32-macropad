@@ -64,7 +64,7 @@ protected:
         json["widget_face_style"] = style;
         json["widget_face_emotion"] = emotion;
         parse();
-        face_widget_type.createUI(button, &config, &source, nullptr, nullptr, nullptr, nullptr, &runtime);
+        face_widget_type.createUI(button, &config, &source, nullptr, nullptr, &runtime);
         created = true;
     }
 
@@ -296,25 +296,37 @@ TEST_F(FaceWidget, InheritsLiveButtonColorsAndDoesNotRedrawAtRest) {
     lv_display_remove_event_cb_with_user_data(display, observe, &invalidations);
 }
 
-TEST_F(FaceWidget, PreservesOuterLabelsAndPartialRedraws) {
-    lv_obj_t* top = lv_label_create(button);
-    lv_label_set_text(top, "Companion");
-    lv_obj_align(top, LV_ALIGN_TOP_MID, 0, 0);
-    lv_obj_t* bottom = lv_label_create(button);
-    lv_label_set_text(bottom, "Worried");
-    lv_obj_align(bottom, LV_ALIGN_BOTTOM_MID, 0, 0);
+TEST_F(FaceWidget, PartialRedrawMatchesFullRedraw) {
     create("doodle", "worried");
     tick(1000);
     const auto complete = render();
-    lv_area_t top_bounds, bottom_bounds, face_bounds;
-    lv_obj_get_coords(top, &top_bounds);
-    lv_obj_get_coords(bottom, &bottom_bounds);
-    lv_obj_get_coords(lv_obj_get_child(button, 2), &face_bounds);
-    EXPECT_GT(face_bounds.y1, top_bounds.y2);
-    EXPECT_LT(face_bounds.y2, bottom_bounds.y1);
     lv_area_t partial = {20, 45, 80, 95};
     lv_obj_invalidate_area(button, &partial);
     EXPECT_EQ(complete, render());
+}
+
+TEST_F(FaceWidget, ResizingPreservesEmotionAndFillsWidgetRegion) {
+    create("robot", "happy");
+    auto* state = reinterpret_cast<FaceState*>(runtime.data);
+    lv_obj_t* face = state->object;
+    lv_obj_set_size(button, 100, 100);
+    lv_obj_update_layout(button);
+    tick(0);
+    lv_obj_update_layout(button);
+    EXPECT_EQ(state->object, face);
+    EXPECT_EQ(state->emotion, FaceEmotion::Happy);
+    EXPECT_EQ(lv_obj_get_width(face), lv_obj_get_content_width(button));
+    EXPECT_EQ(lv_obj_get_height(face), lv_obj_get_content_height(button));
+}
+
+TEST_F(FaceWidget, ParentCanBeDeletedBeforeWidgetCleanup) {
+    create();
+    lv_obj_delete(button);
+    auto* state = reinterpret_cast<FaceState*>(runtime.data);
+    EXPECT_EQ(state->parent, nullptr);
+    EXPECT_EQ(state->object, nullptr);
+    face_widget_type.destroyUI(&runtime);
+    created = false;
 }
 
 TEST_F(FaceWidget, AnimatedRegionsMatchFullRedrawsAndReducePixelTransfers) {

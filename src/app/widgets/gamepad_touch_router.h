@@ -15,6 +15,23 @@ public:
         return false;
     }
 
+    void cancel_object_input(lv_obj_t* object, uint32_t previous_mouse_generation = mouse_hid_generation()) {
+        if (mouse_object_ == object) {
+            end_mouse(MouseTouchEvent::Cancel);
+        }
+        if (mouse_hid_generation() != previous_mouse_generation)
+            mouse_generation_ = mouse_hid_generation();
+        for (auto& slot : slots_) {
+            if (!slot.active || slot.object != object) continue;
+            if (!slot.mouse) dispatch(slot, GamepadTouchEvent::Cancel);
+            // Retain the contact ID until lift so it cannot reacquire the resized region.
+            slot.object = nullptr;
+            slot.mouse = false;
+            slot.navigation = false;
+            slot.changed = false;
+        }
+    }
+
     void cancel(bool require_release = true) {
         blocked_ = blocked_ || require_release;
         end_mouse(MouseTouchEvent::Cancel);

@@ -1,0 +1,177 @@
+#ifndef BUTTON_CONTENT_LVGL_H
+#define BUTTON_CONTENT_LVGL_H
+
+#include "pad_layout.h"
+
+struct ButtonContentRuntime {
+    ButtonContentLayoutInput input;
+    ButtonContentLayout layout;
+    lv_obj_t* labels[3];
+    lv_obj_t* label_regions[3];
+    lv_obj_t* icon;
+    lv_obj_t* icon_region;
+    lv_obj_t* widget_region;
+    int16_t offset_x;
+    int16_t offset_y;
+    int16_t label_offset_x[3];
+    int16_t label_offset_y[3];
+    uint16_t label_scale[3];
+    bool label_wrap[3];
+    uint16_t icon_scale;
+};
+
+inline lv_obj_t* button_content_region(lv_obj_t* parent, const ButtonContentRect& rect,
+                                       int16_t offset_x, int16_t offset_y) {
+    lv_obj_t* region = lv_obj_create(parent);
+    lv_obj_set_style_bg_opa(region, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(region, 0, 0);
+    lv_obj_set_style_pad_all(region, 0, 0);
+    lv_obj_set_style_radius(region, 0, 0);
+    lv_obj_clear_flag(region, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
+    lv_obj_set_size(region, rect.width, rect.height);
+    lv_obj_set_pos(region, rect.x + offset_x, rect.y + offset_y);
+    if (rect.width <= 0 || rect.height <= 0) lv_obj_add_flag(region, LV_OBJ_FLAG_HIDDEN);
+    return region;
+}
+
+inline void pad_measure_content_label(ButtonContentRuntime& runtime, int index, const char* text) {
+    lv_obj_t* label = runtime.labels[index];
+    if (!label) return;
+    const lv_font_t* font = lv_obj_get_style_text_font(label, LV_PART_MAIN);
+    lv_point_t size{};
+    lv_text_get_size(&size, text, font,
+                     lv_obj_get_style_text_letter_space(label, LV_PART_MAIN),
+                     lv_obj_get_style_text_line_space(label, LV_PART_MAIN),
+                     LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    runtime.input.label_width[index] = size.x * runtime.label_scale[index] / LV_SCALE_NONE;
+    const int32_t measured_height = size.y * runtime.label_scale[index] / LV_SCALE_NONE;
+    const int32_t line_height = lv_font_get_line_height(font) * runtime.label_scale[index] / LV_SCALE_NONE;
+    runtime.input.label_height[index] = measured_height > line_height ? measured_height : line_height;
+}
+
+inline void pad_set_content_label_text(ButtonContentRuntime& runtime, int index, const char* text) {
+    // DOT mode mutates LVGL's text buffer; retain natural metrics from the source.
+    pad_measure_content_label(runtime, index, text);
+    lv_label_set_text(runtime.labels[index], text);
+}
+
+inline ButtonContentLayout pad_measure_content_layout(lv_obj_t* tile, ButtonContentRuntime& runtime) {
+    lv_obj_update_layout(tile);
+    runtime.input.bounds = {0, 0, lv_obj_get_content_width(tile), lv_obj_get_content_height(tile)};
+    for (int i = 0; i < 3; ++i) {
+        if (runtime.labels[i] && runtime.label_wrap[i])
+            pad_measure_content_label(runtime, i, lv_label_get_text(runtime.labels[i]));
+    }
+    ButtonContentLayout layout = button_content_layout(runtime.input);
+    for (int i = 0; i < 3; ++i) {
+        lv_obj_t* label = runtime.labels[i];
+        if (!label || !runtime.label_wrap[i]) continue;
+        const lv_font_t* font = lv_obj_get_style_text_font(label, LV_PART_MAIN);
+        const int32_t width = layout.labels[i].width * LV_SCALE_NONE / runtime.label_scale[i];
+        lv_point_t size{};
+        lv_text_get_size(&size, lv_label_get_text(label), font,
+                         lv_obj_get_style_text_letter_space(label, LV_PART_MAIN),
+                         lv_obj_get_style_text_line_space(label, LV_PART_MAIN),
+                         width > 0 ? width : 1, LV_TEXT_FLAG_NONE);
+        const int32_t measured_height = size.y * runtime.label_scale[i] / LV_SCALE_NONE;
+        const int32_t line_height = lv_font_get_line_height(font) * runtime.label_scale[i] / LV_SCALE_NONE;
+        runtime.input.label_height[i] = measured_height > line_height ? measured_height : line_height;
+    }
+    return button_content_layout(runtime.input);
+}
+
+inline void pad_position_content_region(lv_obj_t* region, const ButtonContentRect& rect,
+                                        int16_t offset_x, int16_t offset_y) {
+    lv_obj_set_size(region, rect.width, rect.height);
+    lv_obj_set_pos(region, rect.x + offset_x, rect.y + offset_y);
+    if (rect.width <= 0 || rect.height <= 0) lv_obj_add_flag(region, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_remove_flag(region, LV_OBJ_FLAG_HIDDEN);
+}
+
+inline void pad_reflow_content_layout(ButtonContentRuntime& runtime, const ButtonContentLayout& layout) {
+    for (int i = 0; i < 3; ++i) {
+        if (!runtime.labels[i]) continue;
+        const ButtonContentRect& rect = layout.labels[i];
+        pad_position_content_region(runtime.label_regions[i], rect,
+                                    runtime.offset_x + runtime.label_offset_x[i],
+                                    runtime.offset_y + runtime.label_offset_y[i]);
+        lv_obj_set_size(runtime.labels[i], rect.width * LV_SCALE_NONE / runtime.label_scale[i],
+                        rect.height * LV_SCALE_NONE / runtime.label_scale[i]);
+    }
+    if (runtime.icon) {
+        const ButtonContentRect& rect = layout.icon;
+        pad_position_content_region(runtime.icon_region, rect, runtime.offset_x, runtime.offset_y);
+        if (runtime.input.icon_width > 0) {
+            const uint32_t fitted_scale = (uint32_t)runtime.icon_scale * rect.width / runtime.input.icon_width;
+            lv_image_set_scale(runtime.icon, fitted_scale > 0 ? fitted_scale : 1);
+        }
+    }
+    if (runtime.widget_region)
+        pad_position_content_region(runtime.widget_region, layout.widget, runtime.offset_x, runtime.offset_y);
+    runtime.layout = layout;
+}
+
+inline ButtonContentLayout pad_apply_content_layout(lv_obj_t* tile, const ScreenButtonConfig& button,
+                                                    lv_obj_t* icon, lv_obj_t* labels[3],
+                                                    const UIScaleInfo& scale, PadFontCache* fonts,
+                                                    ButtonContentRuntime* saved = nullptr) {
+    lv_obj_update_layout(tile);
+    const LabelStyle* styles[] = {&button.style_top, &button.style_center, &button.style_bottom};
+    const char* texts[] = {button.label_top, button.label_center, button.label_bottom};
+    const lv_font_t* fallback[] = {scale.font_small, scale.font_large, scale.font_small};
+    ButtonContentRuntime local{};
+    ButtonContentRuntime& runtime = saved ? *saved : local;
+    runtime = {};
+    ButtonContentLayoutInput& input = runtime.input;
+    input.bounds = {0, 0, lv_obj_get_content_width(tile), lv_obj_get_content_height(tile)};
+    input.widget_position = button.widget_position;
+    input.icon_position = button.icon_position;
+    input.group_size_pct = button.group_size_pct;
+    input.has_widget = button.widget.type[0];
+    input.has_icon = icon != nullptr;
+    runtime.icon = icon;
+    runtime.offset_x = button.ui_offset_x;
+    runtime.offset_y = button.ui_offset_y;
+    if (icon) {
+        lv_obj_update_layout(icon);
+        runtime.icon_scale = lv_image_get_scale_x(icon);
+        input.icon_width = lv_obj_get_width(icon) * lv_image_get_scale_x(icon) / LV_SCALE_NONE;
+        input.icon_height = lv_obj_get_height(icon) * lv_image_get_scale_y(icon) / LV_SCALE_NONE;
+    }
+    for (int i = 0; i < 3; ++i) {
+        input.has_label[i] = labels[i] != nullptr;
+        const lv_font_t* font = pad_resolve_font(*styles[i], fallback[i], fonts);
+        runtime.labels[i] = labels[i];
+        runtime.label_offset_x[i] = styles[i]->x_offset;
+        runtime.label_offset_y[i] = styles[i]->y_offset;
+        runtime.label_scale[i] = styles[i]->font_upscale && pad_is_bitmap_font(font)
+            ? styles[i]->font_upscale : LV_SCALE_NONE;
+        runtime.label_wrap[i] = styles[i]->long_mode == LABEL_MODE_WRAP;
+        pad_measure_content_label(runtime, i, texts[i]);
+    }
+    ButtonContentLayout layout = pad_measure_content_layout(tile, runtime);
+    for (int i = 0; i < 3; ++i) {
+        if (!labels[i]) continue;
+        const ButtonContentRect& rect = layout.labels[i];
+        lv_obj_t* region = button_content_region(tile, rect,
+            button.ui_offset_x + styles[i]->x_offset, button.ui_offset_y + styles[i]->y_offset);
+        runtime.label_regions[i] = region;
+        lv_obj_set_parent(labels[i], region);
+        lv_obj_align(labels[i], LV_ALIGN_TOP_LEFT, 0, 0);
+        lv_obj_set_style_transform_pivot_x(labels[i], 0, 0);
+        lv_obj_set_style_transform_pivot_y(labels[i], 0, 0);
+        lv_obj_set_style_text_align(labels[i], pad_resolve_align(*styles[i]), 0);
+    }
+    if (icon) {
+        const ButtonContentRect& rect = layout.icon;
+        lv_obj_t* region = button_content_region(tile, rect, button.ui_offset_x, button.ui_offset_y);
+        runtime.icon_region = region;
+        lv_obj_set_parent(icon, region);
+        lv_image_set_pivot(icon, 0, 0);
+        lv_obj_align(icon, LV_ALIGN_TOP_LEFT, 0, 0);
+    }
+    pad_reflow_content_layout(runtime, layout);
+    return layout;
+}
+
+#endif

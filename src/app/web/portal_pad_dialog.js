@@ -196,10 +196,13 @@ function padDialogOpen(col, row) {
     padIconEditorSetDraft(btn.icon || null);
     document.getElementById('pad-edit-icon-section').open = !!btn.icon;
     document.getElementById('pad-edit-icon-scale').value = (btn.icon_scale_pct !== undefined) ? btn.icon_scale_pct : 0;
-    document.getElementById('pad-edit-icon-position').value = btn.icon_position || 'above';
+    document.getElementById('pad-edit-icon-position').value =
+        btn.icon_position || padGetEffectiveDefault('icon_position') || 'above';
 
     // Widget type
     document.getElementById('pad-edit-widget-type').value = btn.widget_type || '';
+    document.getElementById('pad-edit-content-layout').value = btn.widget_position || 'right';
+    document.getElementById('pad-edit-group-width').value = btn.group_size_pct || 0;
     padFillLoad(btn);
     padWidgetTypeChanged();
 
@@ -332,6 +335,14 @@ function padDialogBuildButton() {
     const selectedType = document.getElementById('pad-edit-widget-type').value;
     const widgetEditor = padWidgetEditor(selectedType);
     const wtype = widgetEditor && widgetEditor.supported === false ? '' : selectedType;
+    if (wtype) {
+        const position = document.getElementById('pad-edit-content-layout').value;
+        if (position !== 'right') btn.widget_position = position;
+        const size = Number(document.getElementById('pad-edit-group-width').value);
+        if (!Number.isInteger(size) || (size !== 0 && (size < 10 || size > 90)))
+            throw Object.assign(new Error('Labels and icon size must be 0 (auto) or a whole number from 10 to 90.'), { fieldIds: ['pad-edit-group-width'] });
+        if (size) btn.group_size_pct = size;
+    }
     padFillBuild(btn, wtype);
     const actionPolicy = widgetEditor ? widgetEditor.actions : { tap: true, longPress: true };
     var tapArr = wtype && actionPolicy.buildTap ? actionPolicy.buildTap()
@@ -385,7 +396,7 @@ function padDialogBuildButton() {
     // Icon position (only relevant when icon is set)
     if (icon) {
         const iconPos = document.getElementById('pad-edit-icon-position').value;
-        if (iconPos && iconPos !== 'above') btn.icon_position = iconPos;
+        if (iconPos && iconPos !== (padGetEffectiveDefault('icon_position') || 'above')) btn.icon_position = iconPos;
     }
 
     // Widget type

@@ -26,10 +26,20 @@ struct ExternalWidgetState {
     uint32_t last_slow_warning_ms;
     uint32_t slow_ticks;
     uint32_t worst_tick_ms;
+    int32_t content_width;
+    int32_t content_height;
 };
 
 static_assert(sizeof(ExternalWidgetState) <= WIDGET_STATE_MAX_BYTES,
               "ExternalWidgetState exceeds WIDGET_STATE_MAX_BYTES");
+
+static void external_status_create(ExternalWidgetState* external, lv_obj_t* parent) {
+    if (external->status_label) return;
+    external->status_label = lv_label_create(parent);
+    lv_obj_set_width(external->status_label, lv_obj_get_content_width(parent));
+    lv_label_set_long_mode(external->status_label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_align(external->status_label, LV_TEXT_ALIGN_CENTER, 0);
+}
 
 static void external_parse(const JsonObject& btn, uint8_t* data) {
     auto* config = reinterpret_cast<ExternalWidgetConfig*>(data);
@@ -106,23 +116,21 @@ static void external_timer_cb(lv_timer_t* timer) {
 
 static void external_create(lv_obj_t* tile, const WidgetConfig* cfg,
                             const ScreenButtonConfig* btn, const PadRect* rect,
-                            const UIScaleInfo* scale, lv_obj_t* icon_img,
-                            lv_obj_t* center_label, WidgetState* state) {
+                            const UIScaleInfo* scale, WidgetState* state) {
     (void)cfg;
     (void)scale;
     auto* external = reinterpret_cast<ExternalWidgetState*>(state->data);
     memset(external, 0, sizeof(ExternalWidgetState));
 
-    if (icon_img) lv_obj_add_flag(icon_img, LV_OBJ_FLAG_HIDDEN);
-    if (center_label) lv_obj_add_flag(center_label, LV_OBJ_FLAG_HIDDEN);
-
     lv_obj_update_layout(tile);
     external->root = lv_obj_create(tile);
     const ExternalWidgetConfig* config = external_widget_config(cfg);
     const uint8_t upscale = config->upscale >= 1 && config->upscale <= 4 ? config->upscale : 1;
+    external->content_width = lv_obj_get_content_width(tile);
+    external->content_height = lv_obj_get_content_height(tile);
     lv_obj_set_size(external->root,
-                    (lv_obj_get_content_width(tile) + upscale - 1) / upscale,
-                    (lv_obj_get_content_height(tile) + upscale - 1) / upscale);
+                    (external->content_width + upscale - 1) / upscale,
+                    (external->content_height + upscale - 1) / upscale);
     lv_obj_set_pos(external->root, 0, 0);
     if (upscale > 1) {
         lv_obj_add_flag(external->root, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
@@ -153,15 +161,12 @@ static void external_create(lv_obj_t* tile, const WidgetConfig* cfg,
         button->page, owner && owner->buttonIsOverlay(button), btn->col, btn->row);
     native_extension_set_instance_binding_context(config->extension_id, external->instance_id,
                                                   button->pad_bindings, button->pad_binding_count);
-    native_extension_set_instance_button_context(config->extension_id, external->instance_id, tile,
+    native_extension_set_instance_button_context(config->extension_id, external->instance_id, button->obj,
                                                  button->label_top, button->label_center, button->label_bottom);
         LOGT("EXT", "create id=%s instance=%08lx root=%dx%d rect=%ux%u",
             config->extension_id, static_cast<unsigned long>(external->instance_id),
             lv_obj_get_width(external->root), lv_obj_get_height(external->root), rect->w, rect->h);
-    external->status_label = lv_label_create(tile);
-    lv_obj_set_width(external->status_label, lv_obj_get_content_width(tile));
-    lv_label_set_long_mode(external->status_label, LV_LABEL_LONG_WRAP);
-    lv_obj_set_style_text_align(external->status_label, LV_TEXT_ALIGN_CENTER, 0);
+    external_status_create(external, tile);
     external_create_instance(external);
     external->timer = lv_timer_create(external_timer_cb, external->tick_interval_ms, external);
     if (external->retry_after_stop) {
@@ -194,8 +199,35 @@ static void external_destroy(WidgetState* state) {
 
 static void external_tick(lv_obj_t* tile, const WidgetConfig* cfg, WidgetState* state) {
     (void)tile;
-    (void)cfg;
-    (void)state;
+    auto* external = reinterpret_cast<ExternalWidgetState*>(state->data);
+    if (!external->root || !external->config) return;
+    lv_obj_t* parent = lv_obj_get_parent(external->root);
+    const int32_t width = lv_obj_get_content_width(parent);
+    const int32_t height = lv_obj_get_content_height(parent);
+    if (width <= 0 || height <= 0 ||
+        (width == external->content_width && height == external->content_height)) return;
+
+    if (external->created) {
+        native_extension_destroy_instance(external->config->extension_id, external->instance_id);
+        external->created = false;
+    }
+    lv_obj_clean(external->root);
+    external->content_width = width;
+    external->content_height = height;
+    const uint8_t configured_upscale = external_widget_config(cfg)->upscale;
+    const uint8_t upscale = configured_upscale >= 1 && configured_upscale <= 4 ? configured_upscale : 1;
+    lv_obj_set_size(external->root, (width + upscale - 1) / upscale, (height + upscale - 1) / upscale);
+    lv_obj_update_layout(external->root);
+    if (upscale > 1) lv_obj_refresh_ext_draw_size(external->root);
+    external_status_create(external, parent);
+    lv_obj_set_width(external->status_label, width);
+    external_create_instance(external);
+    if (external->timer) {
+        lv_timer_set_period(external->timer, external->retry_after_stop
+            ? kStoppingRetryIntervalMs : external->tick_interval_ms);
+    } else {
+        LOGE("EXT", "Cannot schedule extension ticks after resize: id=%s", external->config->extension_id);
+    }
 }
 
 static const WidgetPreview external_preview = {"Extension", "extension"};

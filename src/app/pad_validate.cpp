@@ -249,6 +249,17 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
     const char* wt = b["widget_type"] | "";
     const WidgetType* wtype = wt[0] ? widget_find(wt) : nullptr;
     if (wt[0] && !wtype) return "unknown widget type";
+    for (const char* field : {"icon_position", "widget_position"}) {
+        if (!b.containsKey(field)) continue;
+        uint8_t position;
+        if (!button_position_parse(b[field] | "", &position))
+            return "icon_position and widget_position must be above, below, left, or right";
+    }
+    if (b.containsKey("group_size_pct")) {
+        if (!b["group_size_pct"].is<int>()) return "group_size_pct must be 0 (auto) or 10-90";
+        const int percent = b["group_size_pct"].as<int>();
+        if (percent != 0 && (percent < 10 || percent > 90)) return "group_size_pct must be 0 (auto) or 10-90";
+    }
     if (b.containsKey("widget_disable_pad_swipes")) {
         if (!widget_supports_pad_swipe_control(wt))
             return "widget_disable_pad_swipes is only supported on mousepad, scrollpad, and gamepad widgets";

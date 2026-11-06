@@ -207,6 +207,22 @@
                                 {{WIDGET_OPTIONS}}
                             </select>
                         </div>
+                        <div class="form-group" id="pad-edit-content-layout-group">
+                            <label for="pad-edit-content-layout">Widget position</label>
+                            <select id="pad-edit-content-layout" onchange="padContentLayoutRefresh()">
+                                <option value="right">Right of labels and icon</option>
+                                <option value="below">Below labels and icon</option>
+                                <option value="above">Above labels and icon</option>
+                                <option value="left">Left of labels and icon</option>
+                            </select>
+                            <small id="pad-edit-content-layout-help">The preview shows a placeholder, not the live widget.</small>
+                            <small id="pad-edit-content-fit-warning" role="status"></small>
+                        </div>
+                        <div class="form-group" id="pad-edit-group-width-group">
+                            <label for="pad-edit-group-width">Labels and icon size %</label>
+                            <input id="pad-edit-group-width" type="number" min="0" max="90" value="0">
+                            <small>0 = auto (up to half the available space); otherwise 10-90% of the split width or height.</small>
+                        </div>
                         <div class="form-group" id="pad-edit-input-navigation" style="display:none;">
                             <label><input type="checkbox" id="pad-edit-disable-pad-swipes"> Disable pad swipe actions (entire pad)</label>
                         </div>
@@ -310,13 +326,14 @@
                         </div>
 
                         <div class="form-group" id="pad-edit-icon-position-group">
-                            <label for="pad-edit-icon-position">Icon Position</label>
+                            <label for="pad-edit-icon-position">Icon position</label>
                             <select id="pad-edit-icon-position">
-                                <option value="above">Above label</option>
-                                <option value="left">Left of label</option>
-                                <option value="center">Centered (icon only)</option>
+                                <option value="above">Above labels</option>
+                                <option value="below">Below labels</option>
+                                <option value="left">Left of labels</option>
+                                <option value="right">Right of labels</option>
                             </select>
-                            <small>Controls how the icon relates to the center label.</small>
+                            <small>Places the icon relative to the three labels.</small>
                         </div>
 
                     </div>

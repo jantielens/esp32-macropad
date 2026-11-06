@@ -275,12 +275,25 @@ target_link_libraries(test_gamepad_widgets PRIVATE host_lvgl)
 
 add_host_gtest(test_sparkline_widget test_sparkline_widget.cpp)
 target_sources(test_sparkline_widget PRIVATE ${PROJECT_SOURCE_DIR}/src/app/pad_font_cache.cpp)
+target_sources(test_sparkline_widget PRIVATE ${PROJECT_SOURCE_DIR}/src/app/label_style.cpp)
+# Gauge's pointer-rich state needs more storage on the 64-bit host, not on firmware.
+target_compile_definitions(test_sparkline_widget PRIVATE WIDGET_STATE_MAX_BYTES=512 DISPLAY_DISABLE_ANIMATIONS=0)
 target_include_directories(test_sparkline_widget PRIVATE ${HOST_ARDUINOJSON_DIR})
 target_compile_options(test_sparkline_widget PRIVATE
     -Wno-deprecated-declarations -Wno-unused-parameter -Wno-unused-variable -Wno-format-truncation
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/Arduino.h"
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h")
 target_link_libraries(test_sparkline_widget PRIVATE host_lvgl m)
+
+add_host_gtest(test_external_widget test_external_widget.cpp)
+target_include_directories(test_external_widget PRIVATE ${HOST_ARDUINOJSON_DIR})
+target_compile_definitions(test_external_widget PRIVATE HAS_NATIVE_EXTENSIONS=1)
+target_compile_options(test_external_widget PRIVATE
+    -Wno-deprecated-declarations -Wno-unused-parameter -Wno-unused-variable
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/Arduino.h"
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h"
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/log_manager.h")
+target_link_libraries(test_external_widget PRIVATE host_lvgl m)
 
 add_host_gtest(test_slider_widget test_slider_widget.cpp)
 target_sources(test_slider_widget PRIVATE ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp

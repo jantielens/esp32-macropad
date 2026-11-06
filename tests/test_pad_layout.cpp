@@ -3,6 +3,7 @@
 #include <initializer_list>
 
 #include "pad_layout.h"
+#include "button_content_layout.h"
 
 extern const lv_font_t lv_font_montserrat_12 = {};
 extern const lv_font_t lv_font_montserrat_14 = {};
@@ -123,11 +124,112 @@ static void test_stopwatch_466_square_round_viewport() {
     assert(rects[0].y + rects[0].h <= size - 4 - settings.bottom);
 }
 
+static bool overlaps(const ButtonContentRect& a, const ButtonContentRect& b) {
+    return a.width > 0 && a.height > 0 && b.width > 0 && b.height > 0 &&
+        a.x < b.x + b.width && b.x < a.x + a.width &&
+        a.y < b.y + b.height && b.y < a.y + a.height;
+}
+
+static void test_button_content_regions() {
+    ButtonContentLayoutInput input = {{0, 0, 200, 100}, ButtonWidgetPosition::Right,
+        ButtonGroupIconPosition::Left, 40, true, true, {true, true, true},
+        {12, 24, 12}, 30, 30, {40, 60, 30}};
+    for (ButtonWidgetPosition position : {ButtonWidgetPosition::Above, ButtonWidgetPosition::Below,
+                                         ButtonWidgetPosition::Left, ButtonWidgetPosition::Right}) {
+        input.widget_position = position;
+        const ButtonContentLayout layout = button_content_layout(input);
+        for (const ButtonContentRect& label : layout.labels) {
+            assert(!overlaps(label, layout.widget));
+            assert(!overlaps(label, layout.icon));
+        }
+        assert(!overlaps(layout.icon, layout.widget));
+        for (int i = 0; i < 3; ++i)
+            for (int j = i + 1; j < 3; ++j)
+                assert(!overlaps(layout.labels[i], layout.labels[j]));
+    }
+
+    input.widget_position = ButtonWidgetPosition::Right;
+    ButtonContentLayout left = button_content_layout(input);
+    assert(left.widget.x == (200 - 4) * 40 / 100 + 4);
+    input.has_icon = false;
+    input.has_label[0] = false;
+    left = button_content_layout(input);
+    assert(left.labels[0].height == 0);
+    assert(left.labels[1].y < left.labels[2].y);
+    assert(left.icon.width == 0);
+    input.bounds = {0, 0, 12, 9};
+    input.has_icon = true;
+    left = button_content_layout(input);
+    assert(!overlaps(left.labels[1], left.widget));
+    assert(!overlaps(left.labels[2], left.icon));
+    assert(left.widget.x + left.widget.width <= input.bounds.width);
+    input.bounds = {0, 0, 200, 100};
+    input.has_widget = false;
+    input.icon_position = ButtonGroupIconPosition::Below;
+    const ButtonContentLayout below = button_content_layout(input);
+    assert(below.icon.y >= below.labels[2].y + below.labels[2].height);
+    assert(below.icon.height > 0);
+}
+
+static void test_button_content_auto_and_vertical_size() {
+    ButtonContentLayoutInput input = {{0, 0, 200, 100}, ButtonWidgetPosition::Right,
+        ButtonGroupIconPosition::Left, 0, true, true, {true, true, false},
+        {10, 20, 0}, 20, 20, {30, 40, 0}};
+    ButtonContentLayout result = button_content_layout(input);
+    assert(result.widget.x == 64 + 4);
+    input.label_width[1] = 180;
+    result = button_content_layout(input);
+    assert(result.widget.x == 98 + 4);
+    input.widget_position = ButtonWidgetPosition::Below;
+    input.icon_position = ButtonGroupIconPosition::Above;
+    result = button_content_layout(input);
+    assert(result.widget.y == 48 + 4);
+    input.group_size_pct = 25;
+    result = button_content_layout(input);
+    assert(result.widget.y == 24 + 4);
+    input.has_icon = false;
+    input.has_label[0] = input.has_label[1] = false;
+    result = button_content_layout(input);
+    assert(result.widget.width == 200 && result.widget.height == 100);
+}
+
+static void test_button_content_shrinks_side_icon_for_labels() {
+    ButtonContentLayoutInput input = {{0, 0, 200, 100}, ButtonWidgetPosition::Right,
+        ButtonGroupIconPosition::Left, 60, true, true, {false, true, false},
+        {0, 24, 0}, 60, 60, {0, 90, 0}};
+    ButtonContentLayout result = button_content_layout(input);
+    assert(result.labels[1].width >= 90);
+    assert(result.icon.width > 0 && result.icon.width < 60);
+    input.label_width[1] = 200;
+    result = button_content_layout(input);
+    assert(result.icon.width > 0);
+    assert(result.labels[1].width > result.icon.width);
+}
+
+static void test_widget_feedback_bands_exclude_content_group() {
+    const ButtonContentRect region = {80, 12, 101, 75};
+    const ButtonContentRect left = button_layout_band(region, 0, 51, true);
+    const ButtonContentRect right = button_layout_band(region, 51, 101, true);
+    assert(left.x == 80 && left.width == 51);
+    assert(right.x == 131 && right.width == 50);
+    assert(left.y == region.y && left.height == region.height);
+    assert(right.x + right.width == region.x + region.width);
+    const ButtonContentRect lower = button_layout_band(region, 38, 75, false);
+    assert(lower.x == region.x && lower.width == region.width);
+    assert(lower.y == 50 && lower.height == 37);
+    const ButtonContentRect clipped = button_layout_band(region, -10, 120, true);
+    assert(clipped.x == region.x && clipped.width == region.width);
+}
+
 int main() {
     test_layout_spacing_and_insets();
     test_nonuniform_tracks_spans_and_rounding();
     test_invalid_track_overrides_fall_back_to_uniform();
     test_stopwatch_466_square_round_viewport();
+    test_button_content_regions();
+    test_button_content_auto_and_vertical_size();
+    test_button_content_shrinks_side_icon_for_labels();
+    test_widget_feedback_bands_exclude_content_group();
     std::puts("pad_layout: PASS");
     return 0;
 }

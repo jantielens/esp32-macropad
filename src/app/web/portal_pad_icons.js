@@ -95,11 +95,7 @@ function padIconEditorRefresh() {
         ? icon.catalog_id ? icon.catalog_id.split(':').pop().replace(/-/g, ' ') : 'Local image'
         : 'Choose icon';
     if (remove) remove.disabled = !icon;
-    if (position) {
-        const widgetType = document.getElementById('pad-edit-widget-type');
-        const editor = widgetType && padWidgetEditor(widgetType.value);
-        position.style.display = icon && !(editor && editor.icon && editor.icon.fixedPosition) ? '' : 'none';
-    }
+    if (position) position.style.display = icon ? '' : 'none';
     const foreground = padIconEditorColors().foreground;
     const signature = JSON.stringify([icon, foreground]);
     if (image && image._padIconSignature === signature) return;
@@ -168,7 +164,8 @@ function padWidgetPreviewSymbol(preview) {
 const PAD_CELL_PREVIEW_PROPERTIES = [
     'label_top', 'label_center', 'label_bottom', 'bg_color', 'fg_color',
     'border_color', 'border_width', 'corner_radius', 'content_pad',
-    'icon', 'icon_position', 'bg_image_url', 'bg_image_path', 'widget_type'
+    'icon', 'icon_position', 'widget_position', 'group_size_pct',
+    'bg_image_url', 'bg_image_path', 'widget_type'
 ];
 
 function padCellPreviewSignature(button) {
@@ -198,6 +195,53 @@ function padUpdateCellBoundaryGuide(cell) {
     cell.style.setProperty('--pad-boundary-guide-color', padLuminance > 0.5 ? '#00000055' : '#ffffff55');
 }
 
+function padRenderGroupedContent(cell, btn, widget, existingIcon, foreground) {
+    const position = btn.widget_position || 'right';
+    const side = position === 'left' || position === 'right';
+    const group = document.createElement('div');
+    group.className = 'pad-cell-content-group';
+    const iconPosition = btn.icon_position || padGetEffectiveDefault('icon_position') || 'above';
+    group.dataset.iconPosition = iconPosition;
+    const labels = document.createElement('div');
+    labels.className = 'pad-cell-group-labels';
+    for (const [field, className] of [
+        ['label_top', 'pad-cell-label-top'], ['label_center', 'pad-cell-label-center'],
+        ['label_bottom', 'pad-cell-label-bottom']
+    ]) {
+        if (!btn[field]) continue;
+        const label = document.createElement('div');
+        label.className = className;
+        padAppendBindingPreview(label, btn[field]);
+        labels.appendChild(label);
+    }
+    if (btn.icon && iconPosition !== 'right' && iconPosition !== 'below') {
+        if (existingIcon) group.appendChild(existingIcon);
+        else padAppendIconPreview(group, btn.icon, foreground);
+    }
+    if (btn.label_top || btn.label_center || btn.label_bottom) group.appendChild(labels);
+    if (btn.icon && (iconPosition === 'right' || iconPosition === 'below')) {
+        if (existingIcon) group.appendChild(existingIcon);
+        else padAppendIconPreview(group, btn.icon, foreground);
+    }
+    if (widget) {
+        const marker = document.createElement('div');
+        marker.className = 'pad-content-widget-region';
+        marker.title = widget.name + ' widget placeholder, not a live rendering';
+        marker.setAttribute('aria-label', marker.title);
+        marker.appendChild(padWidgetPreviewSymbol(widget));
+        const hasGroup = !!(btn.icon || btn.label_top || btn.label_center || btn.label_bottom);
+        if (hasGroup && btn.group_size_pct) group.style.flex = '0 1 ' + btn.group_size_pct + '%';
+        else if (hasGroup) group.style[side ? 'maxWidth' : 'maxHeight'] = '50%';
+        if (!hasGroup) cell.appendChild(marker);
+        else if (position === 'left' || position === 'above') cell.append(marker, group);
+        else cell.append(group, marker);
+        cell.dataset.groupedLayout = side ? 'row' : 'column';
+    } else {
+        cell.appendChild(group);
+        cell.dataset.groupedLayout = 'only';
+    }
+}
+
 function padRenderCellContent(cell, btn, existingIcon) {
     const accessibleLabels = [btn.label_top, btn.label_center, btn.label_bottom].filter(Boolean).join('\n');
     if (accessibleLabels) cell.setAttribute('aria-description', accessibleLabels);
@@ -224,82 +268,8 @@ function padRenderCellContent(cell, btn, existingIcon) {
         cell.style.padding = cpNum + 'px';
     }
     const widget = padWidgetPreview(btn);
-    if (widget) {
-        cell.classList.add('pad-cell-has-widget');
-        const marker = document.createElement('span');
-        marker.className = 'pad-widget-marker';
-        marker.title = widget.name + ' Widget';
-        marker.setAttribute('aria-label', marker.title);
-        marker.appendChild(padWidgetPreviewSymbol(widget));
-        cell.appendChild(marker);
-    }
-    const hasTop = !!btn.label_top;
-    const hasBottom = !!btn.label_bottom;
-    if (hasTop || hasBottom) cell.style.justifyContent = 'space-between';
-    if (hasTop) {
-        const el = document.createElement('div');
-        el.className = 'pad-cell-label-top';
-        padAppendBindingPreview(el, btn.label_top);
-        cell.appendChild(el);
-    } else if (hasBottom) {
-        cell.appendChild(document.createElement('div'));
-    }
-    if (!widget && (btn.bg_image_url || btn.bg_image_path)) {
-        const img = document.createElement('div');
-        img.className = 'pad-cell-image-placeholder';
-        img.textContent = '\u{1F5BC}';
-        cell.appendChild(img);
-    }
-    if (btn.icon && !widget) {
-        const hasCenter = !!btn.label_center;
-        const pos = btn.icon_position || 'above';
-        if (hasCenter && pos === 'left') {
-            const row = document.createElement('div');
-            row.className = 'pad-cell-icon-row';
-            if (existingIcon) row.appendChild(existingIcon);
-            else padAppendIconPreview(row, btn.icon, fg);
-            const lbl = document.createElement('span');
-            lbl.className = 'pad-cell-label-center';
-            lbl.style.fontSize = '12px';
-            padAppendBindingPreview(lbl, btn.label_center);
-            row.appendChild(lbl);
-            cell.appendChild(row);
-        } else {
-            const iconSlot = document.createElement('div');
-            iconSlot.className = 'pad-cell-icon-slot';
-            if (existingIcon) iconSlot.appendChild(existingIcon);
-            else padAppendIconPreview(iconSlot, btn.icon, fg);
-            cell.appendChild(iconSlot);
-            if (hasCenter) {
-                const elc = document.createElement('div');
-                elc.className = 'pad-cell-label-center';
-                elc.style.fontSize = '11px';
-                padAppendBindingPreview(elc, btn.label_center);
-                cell.appendChild(elc);
-            }
-        }
-    } else if (!btn.bg_image_url && !btn.bg_image_path) {
-        const centerText = btn.label_center || (widget ? '' : '\u2022');
-        if (centerText) {
-            const elc = document.createElement('div');
-            elc.className = 'pad-cell-label-center';
-            padAppendBindingPreview(elc, centerText);
-            cell.appendChild(elc);
-        }
-    } else if (btn.label_center) {
-        const elc = document.createElement('div');
-        elc.className = 'pad-cell-label-center';
-        padAppendBindingPreview(elc, btn.label_center);
-        cell.appendChild(elc);
-    }
-    if (hasBottom) {
-        const el = document.createElement('div');
-        el.className = 'pad-cell-label-bottom';
-        padAppendBindingPreview(el, btn.label_bottom);
-        cell.appendChild(el);
-    } else if (hasTop) {
-        cell.appendChild(document.createElement('div'));
-    }
+    if (widget) cell.classList.add('pad-cell-has-widget');
+    padRenderGroupedContent(cell, btn, widget, existingIcon, fg);
 }
 
 async function padGetButtonSizes(cols, rows) {
@@ -1059,11 +1029,6 @@ async function padPreparePageSave(context) {
             const labelHeight = Number(buttonSizes.font_small_h) || 0;
             let iconWidth = fullWidth;
             let iconHeight = fullHeight - (button.label_top ? labelHeight : 0) - (button.label_bottom ? labelHeight : 0);
-            const widget = padWidgetEditor(button.widget_type);
-            if (widget && widget.icon) {
-                iconWidth = Math.floor(iconWidth * widget.icon.width);
-                iconHeight = Math.floor(iconHeight * widget.icon.height);
-            }
             if (button.icon_scale_pct && Number(button.icon_scale_pct) > 0) {
                 iconWidth = Math.round(iconWidth * Number(button.icon_scale_pct) / 100);
                 iconHeight = Math.round(iconHeight * Number(button.icon_scale_pct) / 100);

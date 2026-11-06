@@ -4,6 +4,7 @@
 #include "../log_manager.h"
 #include "../device_class.h"
 #include "../button_shadow_color.h"
+#include "../button_content_lvgl.h"
 #include "../fill_style_runtime.h"
 #if HAS_TOUCH
 #include "../touch_manager.h"
@@ -40,8 +41,7 @@ static PadGridLayoutSpace pad_layout_space(const PadLayoutSettings& layout) {
 
 static uint16_t capped_icon_scale(const ScreenButtonConfig& button,
                                   const PadRect& rect, int16_t padding,
-                                  const UIScaleInfo& scale,
-                                  const IconRef& icon, PadFontCache* font_owner) {
+                                  const IconRef& icon) {
     const uint32_t source_width = icon.dsc->header.w;
     const uint32_t source_height = icon.dsc->header.h;
     if (source_width != ICON_MAX_DIMENSION && source_height != ICON_MAX_DIMENSION) {
@@ -52,19 +52,6 @@ static uint16_t capped_icon_scale(const ScreenButtonConfig& button,
     int32_t target_width = rect.w - 2 * padding - 2 * border_width;
     int32_t target_height = rect.h - 2 * padding - 2 * border_width;
 
-    if (button.label_top[0]) {
-        target_height -= lv_font_get_line_height(
-            pad_resolve_font(button.style_top, scale.font_small, font_owner));
-    }
-    if (button.label_bottom[0]) {
-        target_height -= lv_font_get_line_height(
-            pad_resolve_font(button.style_bottom, scale.font_small, font_owner));
-    }
-    if (strcmp(button.widget.type, "bar_chart") == 0) target_height /= 2;
-    if (strcmp(button.widget.type, "gauge") == 0) {
-        target_width = target_width * 4 / 10;
-        target_height = target_height * 4 / 10;
-    }
     if (button.icon_scale_pct > 0) {
         const uint8_t percent = min<uint8_t>(button.icon_scale_pct, 250);
         target_width = target_width * percent / 100;
@@ -81,6 +68,20 @@ static uint16_t capped_icon_scale(const ScreenButtonConfig& button,
 
 // TAG, perceived_luminance(), rgb_to_lv(), and tile/tap-flash constants are
 // defined in pad_screen.cpp which is #included before this file in screens.cpp.
+
+static lv_obj_t* create_content_label(lv_obj_t* parent, const char* text, const LabelStyle& style,
+                                      const lv_font_t* fallback, lv_color_t foreground,
+                                      PadFontCache& fonts, PadLabelAnchorY anchor) {
+    if (!text[0]) return nullptr;
+    lv_obj_t* label = lv_label_create(parent);
+    lv_obj_set_style_text_color(label, pad_resolve_label_color(style, foreground), 0);
+    lv_obj_set_style_text_font(label, pad_resolve_font(style, fallback, &fonts), 0);
+    pad_apply_long_mode(label, style);
+    lv_label_set_text(label, text);
+    pad_apply_font_upscale(label, style, anchor);
+    lv_obj_clear_flag(label, LV_OBJ_FLAG_CLICKABLE);
+    return label;
+}
 
 // ============================================================================
 // Tile Management
@@ -258,6 +259,8 @@ void PadScreen::buildTiles() {
         const ScreenButtonConfig& bcfg = cfg->buttons[i];
         const PadRect& r = rects[i];
         ButtonTile& tile = tiles[i];
+        tile.content_layout_dirty = false;
+        tile.content_layout = {};
         tile.touch_start_valid = false;
         tile.shadow = nullptr;
         tile.shadow_follows_background = cfg->shadow.color_mode == BUTTON_SHADOW_COLOR_DARKEN_BACKGROUND;
@@ -351,45 +354,15 @@ void PadScreen::buildTiles() {
         long cp_raw = strtol(bcfg.content_pad, nullptr, 10);
         if (cp_raw < 0) cp_raw = 0; else if (cp_raw > 50) cp_raw = 50;
         const int16_t pad = (int16_t)cp_raw;
-        const int16_t lbl_w = (r.w > 2 * pad) ? (int16_t)(r.w - 2 * pad) : 0;
         lv_obj_set_style_pad_all(obj, pad, 0);
 
         lv_color_t fg = rgb_to_lv(fg_def);
         lv_obj_set_style_text_color(obj, fg, 0);
 
-        // Top label
-        lv_obj_t* lbl_top = nullptr;
-        if (bcfg.label_top[0]) {
-            lbl_top = lv_label_create(obj);
-            lv_obj_set_style_text_color(lbl_top, pad_resolve_label_color(bcfg.style_top, fg), 0);
-            lv_obj_set_style_text_font(lbl_top, pad_resolve_font(bcfg.style_top, scale.font_small, &fontCache), 0);
-            lv_obj_set_width(lbl_top, lbl_w);
-            pad_apply_long_mode(lbl_top, bcfg.style_top);
-            lv_label_set_text(lbl_top, bcfg.label_top);
-            pad_apply_font_upscale(lbl_top, bcfg.style_top, PAD_LABEL_ANCHOR_TOP);
-            lv_obj_align(lbl_top, LV_ALIGN_TOP_MID,
-                         ui_ofs_x + bcfg.style_top.x_offset,
-                         bcfg.style_top.y_offset + ui_ofs_y);
-            lv_obj_set_style_text_align(lbl_top, pad_resolve_align(bcfg.style_top), 0);
-            lv_obj_clear_flag(lbl_top, LV_OBJ_FLAG_CLICKABLE);
-        }
-
-        // Center label
-        lv_obj_t* lbl_center = nullptr;
-        if (bcfg.label_center[0]) {
-            lbl_center = lv_label_create(obj);
-            lv_obj_set_style_text_color(lbl_center, pad_resolve_label_color(bcfg.style_center, fg), 0);
-            lv_obj_set_style_text_font(lbl_center, pad_resolve_font(bcfg.style_center, scale.font_large, &fontCache), 0);
-            lv_obj_set_width(lbl_center, lbl_w);
-            pad_apply_long_mode(lbl_center, bcfg.style_center);
-            lv_label_set_text(lbl_center, bcfg.label_center);
-            pad_apply_font_upscale(lbl_center, bcfg.style_center, PAD_LABEL_ANCHOR_CENTER);
-            lv_obj_align(lbl_center, LV_ALIGN_CENTER,
-                         ui_ofs_x + bcfg.style_center.x_offset,
-                         bcfg.style_center.y_offset + ui_ofs_y);
-            lv_obj_set_style_text_align(lbl_center, pad_resolve_align(bcfg.style_center), 0);
-            lv_obj_clear_flag(lbl_center, LV_OBJ_FLAG_CLICKABLE);
-        }
+        lv_obj_t* lbl_top = create_content_label(obj, bcfg.label_top, bcfg.style_top,
+            scale.font_small, fg, fontCache, PAD_LABEL_ANCHOR_TOP);
+        lv_obj_t* lbl_center = create_content_label(obj, bcfg.label_center, bcfg.style_center,
+            scale.font_large, fg, fontCache, PAD_LABEL_ANCHOR_CENTER);
 
         // Icon image (shown when a source is set and its generated PNG is cached)
         lv_obj_t* icon_img = nullptr;
@@ -403,7 +376,7 @@ void PadScreen::buildTiles() {
             if (icon_store_lookup(icon_key, &ref)) {
                 icon_img = lv_image_create(obj);
                 lv_image_set_src(icon_img, ref.dsc);
-                icon_scale = capped_icon_scale(bcfg, r, pad, scale, ref, &fontCache);
+                icon_scale = capped_icon_scale(bcfg, r, pad, ref);
                 lv_image_set_scale(icon_img, icon_scale);
                 lv_obj_clear_flag(icon_img, LV_OBJ_FLAG_CLICKABLE);
                 if (ref.kind == ICON_KIND_MONO) {
@@ -414,87 +387,9 @@ void PadScreen::buildTiles() {
             }
         }
 
-        // Position icon + center label based on icon_position mode
-        // Widgets override layout, so clamp to ABOVE when a widget is active
-        const uint8_t effective_icon_pos = bcfg.widget.type[0] ? ICON_POS_ABOVE : bcfg.icon_position;
-        if (icon_img && lbl_center) {
-            // Force layout to get actual dimensions
-            lv_obj_update_layout(icon_img);
-            lv_obj_update_layout(lbl_center);
-            const int16_t icon_h = (int16_t)(lv_obj_get_height(icon_img) * icon_scale / LV_SCALE_NONE);
-            const int16_t icon_w = (int16_t)(lv_obj_get_width(icon_img) * icon_scale / LV_SCALE_NONE);
-            const int16_t lbl_h = (int16_t)lv_obj_get_height(lbl_center);
-
-            const lv_font_t* top_font = pad_resolve_font(bcfg.style_top, scale.font_small, &fontCache);
-            const lv_font_t* bot_font = pad_resolve_font(bcfg.style_bottom, scale.font_small, &fontCache);
-            const int16_t top_h = bcfg.label_top[0] ? lv_font_get_line_height(top_font) : 0;
-            const int16_t bot_h = bcfg.label_bottom[0] ? lv_font_get_line_height(bot_font) : 0;
-            const int16_t label_bias = (top_h - bot_h) / 2;
-
-            if (effective_icon_pos == ICON_POS_LEFT) {
-                // Horizontal row: icon left, label right, vertically centered
-                const int16_t inset_x = pad;
-                const int16_t gap = 4;
-                // Shrink label so icon + gap + label fits inside the button
-                const int16_t lbl_max_w = r.w - 2 * inset_x - icon_w - gap;
-                if (lbl_max_w > 0) {
-                    lv_obj_set_width(lbl_center, lbl_max_w);
-                    lv_obj_set_style_text_align(lbl_center, LV_TEXT_ALIGN_LEFT, 0);
-                }
-                // Position relative to button center (LV_ALIGN_CENTER offset 0 = middle)
-                const int16_t icon_cx = -r.w / 2 + inset_x + icon_w / 2;
-                const int16_t lbl_cx  = -r.w / 2 + inset_x + icon_w + gap
-                                        + (lbl_max_w > 0 ? lbl_max_w / 2 : 0);
-                lv_obj_align(icon_img, LV_ALIGN_CENTER,
-                             icon_cx + ui_ofs_x,
-                             label_bias + ui_ofs_y);
-                lv_obj_align(lbl_center, LV_ALIGN_CENTER,
-                             lbl_cx + ui_ofs_x + bcfg.style_center.x_offset,
-                             label_bias + bcfg.style_center.y_offset + ui_ofs_y);
-            } else if (effective_icon_pos == ICON_POS_CENTER) {
-                // Icon centered, label stays at its default position (no displacement)
-                lv_obj_align(icon_img, LV_ALIGN_CENTER, ui_ofs_x, label_bias + ui_ofs_y);
-                // lbl_center is already at LV_ALIGN_CENTER from initial creation above
-            } else {
-                // ICON_POS_ABOVE (default): icon above label, both centered
-                const int16_t gap = 4;
-                const int16_t stack_h = icon_h + gap + lbl_h;
-                const int16_t stack_top_ofs = -stack_h / 2 + label_bias;
-                lv_obj_align(icon_img, LV_ALIGN_CENTER,
-                             ui_ofs_x,
-                             stack_top_ofs + icon_h / 2 + ui_ofs_y);
-                lv_obj_align(lbl_center, LV_ALIGN_CENTER,
-                             ui_ofs_x + bcfg.style_center.x_offset,
-                             stack_top_ofs + icon_h + gap + lbl_h / 2
-                                 + bcfg.style_center.y_offset + ui_ofs_y);
-            }
-        } else if (icon_img) {
-            // Icon only (no center label) — center in available space
-            const lv_font_t* top_font = pad_resolve_font(bcfg.style_top, scale.font_small, &fontCache);
-            const lv_font_t* bot_font = pad_resolve_font(bcfg.style_bottom, scale.font_small, &fontCache);
-            const int16_t top_h = bcfg.label_top[0] ? lv_font_get_line_height(top_font) : 0;
-            const int16_t bot_h = bcfg.label_bottom[0] ? lv_font_get_line_height(bot_font) : 0;
-            const int16_t y_ofs = (top_h - bot_h) / 2;
-            lv_obj_align(icon_img, LV_ALIGN_CENTER, ui_ofs_x, y_ofs + ui_ofs_y);
-        }
-        // else: lbl_center only — already positioned at LV_ALIGN_CENTER above
-
-        // Bottom label
-        lv_obj_t* lbl_bottom = nullptr;
-        if (bcfg.label_bottom[0]) {
-            lbl_bottom = lv_label_create(obj);
-            lv_obj_set_style_text_color(lbl_bottom, pad_resolve_label_color(bcfg.style_bottom, fg), 0);
-            lv_obj_set_style_text_font(lbl_bottom, pad_resolve_font(bcfg.style_bottom, scale.font_small, &fontCache), 0);
-            lv_obj_set_width(lbl_bottom, lbl_w);
-            pad_apply_long_mode(lbl_bottom, bcfg.style_bottom);
-            lv_label_set_text(lbl_bottom, bcfg.label_bottom);
-            pad_apply_font_upscale(lbl_bottom, bcfg.style_bottom, PAD_LABEL_ANCHOR_BOTTOM);
-            lv_obj_align(lbl_bottom, LV_ALIGN_BOTTOM_MID,
-                         ui_ofs_x + bcfg.style_bottom.x_offset,
-                         bcfg.style_bottom.y_offset + ui_ofs_y);
-            lv_obj_set_style_text_align(lbl_bottom, pad_resolve_align(bcfg.style_bottom), 0);
-            lv_obj_clear_flag(lbl_bottom, LV_OBJ_FLAG_CLICKABLE);
-        }
+        const WidgetType* selected_widget = bcfg.widget.type[0] ? widget_find(bcfg.widget.type) : nullptr;
+        lv_obj_t* lbl_bottom = create_content_label(obj, bcfg.label_bottom, bcfg.style_bottom,
+            scale.font_small, fg, fontCache, PAD_LABEL_ANCHOR_BOTTOM);
 
         // Store runtime data
         tile.obj = obj;
@@ -513,23 +408,10 @@ void PadScreen::buildTiles() {
         tile.lp_action_count = bcfg.lp_action_count;
         memcpy(tile.lp_actions, bcfg.lp_actions, bcfg.lp_action_count * sizeof(ButtonAction));
 
-        // Create a bound center label early so widgets can position it
-#if HAS_DISPLAY
-        if (binding_template_has_bindings(bcfg.label_center) && !tile.label_center) {
-            tile.label_center = lv_label_create(obj);
-            lv_obj_set_style_text_color(tile.label_center, pad_resolve_label_color(bcfg.style_center, fg), 0);
-            lv_obj_set_style_text_font(tile.label_center, pad_resolve_font(bcfg.style_center, scale.font_large, &fontCache), 0);
-            lv_obj_set_width(tile.label_center, lbl_w);
-            pad_apply_long_mode(tile.label_center, bcfg.style_center);
-            lv_label_set_text(tile.label_center, "");
-            pad_apply_font_upscale(tile.label_center, bcfg.style_center, PAD_LABEL_ANCHOR_CENTER);
-            lv_obj_align(tile.label_center, LV_ALIGN_CENTER,
-                         ui_ofs_x + bcfg.style_center.x_offset,
-                         bcfg.style_center.y_offset + ui_ofs_y);
-            lv_obj_set_style_text_align(tile.label_center, pad_resolve_align(bcfg.style_center), 0);
-            lv_obj_clear_flag(tile.label_center, LV_OBJ_FLAG_CLICKABLE);
-        }
-#endif
+        ButtonContentLayout content_layout{};
+        lv_obj_t* labels[] = {tile.label_top, tile.label_center, tile.label_bottom};
+        content_layout = pad_apply_content_layout(obj, bcfg, icon_img, labels, scale, &fontCache,
+                                                  &tile.content_layout);
 
         // Widget initialization
         tile.widget_type = nullptr;
@@ -537,7 +419,7 @@ void PadScreen::buildTiles() {
         for (int wb = 0; wb < MAX_WIDGET_BINDINGS; wb++) tile.widget_binding[wb][0] = '\0';
         tile.widget_last[0] = '\0';
         if (bcfg.widget.type[0]) {
-            const WidgetType* wt = widget_find(bcfg.widget.type);
+            const WidgetType* wt = selected_widget;
             if (wt) {
                 tile.widget_type = wt;
                 memcpy(&tile.widget_cfg, &bcfg.widget, sizeof(WidgetConfig));
@@ -560,8 +442,16 @@ void PadScreen::buildTiles() {
                 }
                 if (wt->createUI) {
                     tile.widget_state.font_owner = &fontCache;
-                    wt->createUI(obj, &tile.widget_cfg, &bcfg, &r, &scale,
-                                 tile.icon_img, tile.label_center, &tile.widget_state);
+                    lv_obj_t* widget_parent = button_content_region(obj, content_layout.widget, ui_ofs_x, ui_ofs_y);
+                    lv_obj_set_style_bg_color(widget_parent, lv_obj_get_style_bg_color(obj, LV_PART_MAIN), 0);
+                    lv_obj_set_user_data(widget_parent, this);
+                    tile.content_layout.widget_region = widget_parent;
+                    if (widget_owns_input(wt)) {
+                        lv_obj_add_flag(widget_parent, LV_OBJ_FLAG_CLICKABLE);
+                        lv_obj_add_event_cb(widget_parent, onPress,
+                            static_cast<lv_event_code_t>(LV_EVENT_ALL | LV_EVENT_PREPROCESS), &tile);
+                    }
+                    wt->createUI(widget_parent, &tile.widget_cfg, &bcfg, &r, &scale, &tile.widget_state);
 #if HAS_TOUCH
                     if (strcmp(wt->name, "slider") == 0)
                         slider_attach(&tile.widget_state, tile.actions, tile.action_count,
@@ -573,27 +463,24 @@ void PadScreen::buildTiles() {
 
 #if HAS_DISPLAY
         // Register template-based label bindings for labels containing [scheme:...]
-        auto addTemplateBinding = [this](lv_obj_t* lbl, const char* label_text,
-                                         const LabelStyle& style,
-                                         PadLabelAnchorY anchorY) {
+        auto addTemplateBinding = [this, i](lv_obj_t* lbl, const char* label_text,
+                                         uint8_t labelIndex) {
             if (!lbl || !label_text || !label_text[0]) return;
             if (!binding_template_has_bindings(label_text)) return;
             if (bindingCount >= MAX_BINDINGS) return;
             RuntimeLabelBinding& rb = bindings[bindingCount];
-            rb.label = lbl;
             strlcpy(rb.templ, label_text, sizeof(rb.templ));
-            rb.last[0] = '\0';
-            rb.style = style;
-            rb.anchorY = (uint8_t)anchorY;
-            rb.active = true;
+            strlcpy(rb.last, "---", sizeof(rb.last));
+            rb.tileIndex = i;
+            rb.labelIndex = labelIndex;
             bindingCount++;
             // Show placeholder until first resolve
-            lv_label_set_text(lbl, "---");
-            pad_apply_font_upscale(lbl, style, anchorY);
+            pad_set_content_label_text(tiles[i].content_layout, labelIndex, "---");
+            tiles[i].content_layout_dirty = true;
         };
-        addTemplateBinding(tile.label_top, bcfg.label_top, bcfg.style_top, PAD_LABEL_ANCHOR_TOP);
-        addTemplateBinding(tile.label_center, bcfg.label_center, bcfg.style_center, PAD_LABEL_ANCHOR_CENTER);
-        addTemplateBinding(tile.label_bottom, bcfg.label_bottom, bcfg.style_bottom, PAD_LABEL_ANCHOR_BOTTOM);
+        addTemplateBinding(tile.label_top, bcfg.label_top, 0);
+        addTemplateBinding(tile.label_center, bcfg.label_center, 1);
+        addTemplateBinding(tile.label_bottom, bcfg.label_bottom, 2);
 
         // Register color bindings for binding-based colors
         auto addColorBinding = [this](uint8_t ti, const char* templ, uint32_t def, uint8_t target) {
@@ -618,7 +505,7 @@ void PadScreen::buildTiles() {
         // binding — sets an override bit so the fg (target=1) poll does not clobber
         // the label's text color. Binding-valued colors are additionally registered
         // as runtime color bindings (targets 3/4/5) resolved live each poll cycle.
-        if (!bcfg.widget.type[0]) {
+        {
             if (bcfg.style_top.color    & 0x01000000) tile.labelColorOverride |= 0x01;
             if (bcfg.style_center.color & 0x01000000) tile.labelColorOverride |= 0x02;
             if (bcfg.style_bottom.color & 0x01000000) tile.labelColorOverride |= 0x04;

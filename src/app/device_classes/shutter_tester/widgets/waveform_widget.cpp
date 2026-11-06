@@ -108,10 +108,7 @@ static void waveform_parse(const JsonObject& btn, uint8_t* data) {
 static void waveform_create(lv_obj_t* tile, const WidgetConfig* wcfg,
                             const ScreenButtonConfig* btn,
                             const PadRect* rect, const UIScaleInfo* scale,
-                            lv_obj_t* icon_img, lv_obj_t* center_label,
                             WidgetState* state) {
-    (void)icon_img;
-    (void)center_label;
 
     auto* cfg = reinterpret_cast<const WaveformConfig*>(wcfg->data);
     auto* st = reinterpret_cast<WaveformState*>(state->data);

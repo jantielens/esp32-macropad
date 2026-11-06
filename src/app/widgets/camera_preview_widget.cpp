@@ -64,7 +64,6 @@ static void camera_preview_apply_scale(lv_obj_t* image, CameraPreviewScaleMode s
 static void camera_preview_create(lv_obj_t* tile, const WidgetConfig* cfg,
                                   const ScreenButtonConfig* btn,
                                   const PadRect* rect, const UIScaleInfo* scale,
-                                  lv_obj_t* icon_img, lv_obj_t* center_label,
                                   WidgetState* state) {
     (void)btn;
     (void)rect;
@@ -72,9 +71,6 @@ static void camera_preview_create(lv_obj_t* tile, const WidgetConfig* cfg,
 
     auto* preview = reinterpret_cast<CameraPreviewWidgetState*>(state->data);
     memset(preview, 0, sizeof(CameraPreviewWidgetState));
-    if (icon_img) lv_obj_add_flag(icon_img, LV_OBJ_FLAG_HIDDEN);
-    if (center_label) lv_obj_add_flag(center_label, LV_OBJ_FLAG_HIDDEN);
-
     preview->image = lv_image_create(tile);
     lv_obj_set_size(preview->image, LV_PCT(100), LV_PCT(100));
     lv_obj_center(preview->image);

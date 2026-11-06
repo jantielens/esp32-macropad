@@ -26,6 +26,7 @@ struct GamepadJoystickState {
     lv_point_t base_position{};
     lv_point_t thumb_position{};
     bool geometry_initialized = false;
+    lv_area_t layout_area{};
     uint32_t last_axis_log = 0;
     int16_t logged_horizontal = 0;
     int16_t logged_vertical = 0;
@@ -172,7 +173,7 @@ static void gamepad_joystick_event(lv_event_t* event) {
 
 static void gamepad_stick_create(lv_obj_t* button, const WidgetConfig* config,
                                    const ScreenButtonConfig*, const PadRect*, const UIScaleInfo*,
-                                   lv_obj_t*, lv_obj_t* center_label, WidgetState* state) {
+                                   WidgetState* state) {
     auto* joystick = new (state->data) GamepadJoystickState{};
     joystick->button = button;
     joystick->touch.object = button;
@@ -190,9 +191,13 @@ static void gamepad_stick_create(lv_obj_t* button, const WidgetConfig* config,
     lv_obj_update_layout(button);
     lv_area_t area;
     lv_obj_get_content_coords(button, &area);
-    joystick->input.press(0, 0, area.x1, area.y1, area.x2 - area.x1 + 1, area.y2 - area.y1 + 1, false);
+    joystick->layout_area = area;
+    const bool fits = joystick->input.press(0, 0, area.x1, area.y1, area.x2 - area.x1 + 1, area.y2 - area.y1 + 1, false);
+    if (!fits) {
+        lv_obj_add_flag(joystick->base, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(joystick->thumb, LV_OBJ_FLAG_HIDDEN);
+    }
     gamepad_joystick_cancel(joystick, "initialize");
-    if (center_label) lv_obj_add_flag(center_label, LV_OBJ_FLAG_HIDDEN);
     joystick->touch.attach(button, gamepad_joystick_event, joystick, gamepad_joystick_point);
         LOGT("GamepadJoystick", "Created stick=%s center=%s dead_zone=%.2f invert=%u,%u size=%ldx%ld ready=%u",
             joystick->config.stick ? "right" : "left", joystick->config.floating ? "floating" : "fixed",
@@ -203,6 +208,19 @@ static void gamepad_stick_update(lv_obj_t*, const WidgetConfig*, WidgetState*, c
 static void gamepad_stick_tick(lv_obj_t*, const WidgetConfig*, WidgetState* state) {
     auto* joystick = reinterpret_cast<GamepadJoystickState*>(state->data);
     if (!joystick->touch.object) return;
+    lv_area_t area;
+    lv_obj_get_content_coords(joystick->button, &area);
+    if (memcmp(&area, &joystick->layout_area, sizeof(area)) != 0) {
+        gamepad_joystick_cancel(joystick, "region resized");
+        joystick->layout_area = area;
+        const bool fits = joystick->input.press(0, 0, area.x1, area.y1, area.x2 - area.x1 + 1,
+                                                area.y2 - area.y1 + 1, false);
+        for (lv_obj_t* object : {joystick->base, joystick->thumb}) {
+            if (fits) lv_obj_remove_flag(object, LV_OBJ_FLAG_HIDDEN);
+            else lv_obj_add_flag(object, LV_OBJ_FLAG_HIDDEN);
+        }
+        gamepad_joystick_cancel(joystick, "region reflow");
+    }
     gamepad_joystick_color(joystick);
     if (joystick->touch.owner && (!gamepad_hid_is_ready() || joystick->touch.generation != gamepad_hid_generation()))
         gamepad_joystick_cancel(joystick, "transport reset");
@@ -212,6 +230,9 @@ static void gamepad_stick_hide(WidgetState* state) {
 }
 static void gamepad_stick_show(WidgetState* state) {
     reinterpret_cast<GamepadJoystickState*>(state->data)->touch.show();
+}
+static void gamepad_stick_cancel_input(WidgetState* state) {
+    gamepad_joystick_cancel(reinterpret_cast<GamepadJoystickState*>(state->data), "input cancelled");
 }
 static void gamepad_stick_destroy(WidgetState* state) {
     auto* joystick = reinterpret_cast<GamepadJoystickState*>(state->data);
@@ -229,9 +250,9 @@ static void gamepad_stick_describe(JsonObject& out) {
         field["type"] = index < 2 ? "string" : index == 2 ? "number" : "boolean";
         field["desc"] = descriptions[index];
     }
-    out["note"] = "Absolute HID gamepad stick, with independent simultaneous contacts on multitouch drivers; release/cancel returns to neutral. One contact per widget; extras are ignored until lift. Ring fills the shorter padded content dimension; dot is one-third of its diameter (minimum 6 pixels) and stays inside the ring. Both use button foreground color. Floating center can shift only along the longer dimension. Areas smaller than 16 pixels are inactive. First interaction owns each stick until release. Positive X/Y are right/down. Center label is suppressed; top/bottom labels remain. Consumes normal actions and pad swipes. USB or BLE HID transport required.";
+    out["note"] = "Absolute HID gamepad stick, with independent simultaneous contacts on multitouch drivers; release/cancel returns to neutral. One contact per widget; extras are ignored until lift. Ring fills the shorter padded content dimension; dot is one-third of its diameter (minimum 6 pixels) and stays inside the ring. Both use button foreground color. Floating center can shift only along the longer dimension. Areas smaller than 16 pixels are inactive. First interaction owns each stick until release. Positive X/Y are right/down. Consumes normal actions and pad swipes. USB or BLE HID transport required.";
 }
 #endif
 static const WidgetPreview gamepad_stick_preview = {"Gamepad Joystick", "joystick"};
-REGISTER_WIDGET_SCHEMA_VALIDATED_LIFECYCLE(gamepad_stick, nullptr, false, gamepad_stick_validate);
+REGISTER_WIDGET_SCHEMA_INPUT_LIFECYCLE(gamepad_stick, nullptr, false, gamepad_stick_validate, gamepad_stick_cancel_input);
 #endif

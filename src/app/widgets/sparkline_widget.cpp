@@ -133,8 +133,8 @@ struct SparklineState {
     data_stream_handle_t ds_handles[MAX_SPARKLINE_LINES]; // Data stream handles
     uint32_t cached_revs[MAX_SPARKLINE_LINES]; // Change-detection: last drawn stream revision
 #endif
-    int16_t  cached_chart_w;         // Cached chart area width (set once in create)
-    int16_t  cached_chart_h;         // Cached chart area height (set once in create)
+    int16_t  cached_chart_w;
+    int16_t  cached_chart_h;
     lv_obj_t* dot_min;               // Min marker dot (tile child)
     lv_obj_t* dot_max;               // Max marker dot (tile child)
     lv_obj_t* lbl_min;               // Min value label (tile child)
@@ -296,11 +296,60 @@ static inline void sparkline_get_line_colors(const SparklineConfig* cfg,
     out[2] = resolve_color(cfg->line_color_3, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_3));
 }
 
+struct SparklineGeometry {
+    int16_t top;
+    int16_t width;
+    int16_t height;
+    int16_t label_margin;
+};
+
+static SparklineGeometry sparkline_geometry(const SparklineConfig* cfg, uint8_t line_count,
+                                           int16_t content_w, int16_t content_h,
+                                           int16_t marker_margin) {
+    // Keep chart dimensions valid even when its clipping parent is smaller.
+    content_w = content_w < 2 ? 2 : content_w;
+    content_h = content_h < 2 ? 2 : content_h;
+    SparklineGeometry geometry{};
+    geometry.top = button_layout_min(marker_margin, (content_h - 2) / 2);
+    geometry.height = content_h - 2 * geometry.top;
+    const char* labels[] = {cfg->current_label, cfg->current_label_2, cfg->current_label_3};
+    for (uint8_t i = 0; i < line_count; ++i) {
+        if (labels[i][0]) {
+            geometry.label_margin = button_layout_min(cfg->label_width ? cfg->label_width : 50,
+                                                       button_layout_nonnegative(content_w - 4));
+            break;
+        }
+    }
+    geometry.width = content_w - (geometry.label_margin ? geometry.label_margin + 2 : 0);
+    return geometry;
+}
+
+static bool sparkline_resize(const SparklineConfig* cfg, SparklineState* st) {
+    lv_obj_t* chart_area = lv_obj_get_parent(st->lines[0]);
+    lv_obj_t* parent = lv_obj_get_parent(chart_area);
+    lv_obj_t* marker_label = st->lbl_min ? st->lbl_min : st->lbl_max;
+    const int16_t margin = marker_label
+        ? lv_font_get_line_height(lv_obj_get_style_text_font(marker_label, LV_PART_MAIN)) + 5 : 0;
+    const SparklineGeometry geometry = sparkline_geometry(cfg, st->line_count,
+        lv_obj_get_content_width(parent), lv_obj_get_content_height(parent), margin);
+    if (geometry.width == st->cached_chart_w && geometry.height == st->cached_chart_h &&
+        geometry.label_margin == st->label_margin_r && geometry.top == lv_obj_get_y(chart_area))
+        return false;
+    st->cached_chart_w = geometry.width;
+    st->cached_chart_h = geometry.height;
+    st->label_margin_r = geometry.label_margin;
+    lv_obj_set_size(chart_area, geometry.width, geometry.height);
+    lv_obj_align(chart_area, LV_ALIGN_TOP_LEFT, 0, geometry.top);
+    for (lv_obj_t* label : st->lbl_current)
+        if (label) lv_obj_set_width(label, st->label_margin_r);
+    return true;
+}
+
 static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
                               const ScreenButtonConfig* btn,
                               const PadRect* rect, const UIScaleInfo* scale,
-                              lv_obj_t* icon_img, lv_obj_t* center_label,
                               WidgetState* state) {
+    (void)btn;
     auto* cfg = reinterpret_cast<const SparklineConfig*>(wcfg->data);
     auto* st = reinterpret_cast<SparklineState*>(state->data);
     memset(st, 0, sizeof(SparklineState));
@@ -347,61 +396,17 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         }
     }
 
-    // Compute layout — same pattern as bar chart
-    bool has_top = btn->label_top[0];
-    bool has_bot = btn->label_bottom[0];
     const lv_font_t* annotation_font = pad_typography_font(scale->font_small);
     int32_t label_h = lv_font_get_line_height(annotation_font) + 2;
-    int32_t top_h = has_top ? lv_font_get_line_height(pad_resolve_font(btn->style_top, scale->font_small, state->font_owner)) + 2 : 0;
-    int32_t bot_h = has_bot ? lv_font_get_line_height(pad_resolve_font(btn->style_bottom, scale->font_small, state->font_owner)) + 2 : 0;
-    const int16_t ui_ofs_x = btn->ui_offset_x;
-    const int16_t ui_ofs_y = btn->ui_offset_y;
-
-    int16_t icon_h = 0;
-    if (icon_img) {
-        lv_obj_update_layout(icon_img);
-        icon_h = (int16_t)lv_obj_get_height(icon_img);
-        if (icon_h <= 0) icon_h = rect->h / 4;
-    }
-    int32_t center_label_h = 0;
-    if (center_label) {
-        lv_obj_update_layout(center_label);
-        center_label_h = lv_obj_get_height(center_label);
-    }
-    int32_t header_h = icon_h;
-    if (center_label_h > 0) {
-        if (icon_h > 0) header_h += 4 + center_label_h;
-        else             header_h = center_label_h;
-    }
-    int16_t gap = (header_h > 0) ? 4 : 0;
-
-    if (icon_img) {
-        lv_obj_align(icon_img, LV_ALIGN_TOP_MID, ui_ofs_x, top_h + ui_ofs_y);
-    }
-    if (center_label && !icon_img) {
-        lv_obj_align(center_label, LV_ALIGN_TOP_MID, ui_ofs_x + btn->style_center.x_offset,
-                     top_h + btn->style_center.y_offset + ui_ofs_y);
-    } else if (center_label && icon_img) {
-        lv_obj_align(center_label, LV_ALIGN_TOP_MID, ui_ofs_x + btn->style_center.x_offset,
-                     top_h + icon_h + 4 + btn->style_center.y_offset + ui_ofs_y);
-    }
-
-    // Reserve margin for min/max labels above and below chart
-    int32_t mm_margin = 0;
-    if (cfg->marker_size_min > 0 || cfg->marker_size_max > 0) {
-        mm_margin = label_h + 3;  // label height + dot radius + gap
-    }
-
-    int32_t chart_top = top_h + header_h + gap + mm_margin;
-    int32_t bot_margin = bot_h + 4 + mm_margin;
     lv_obj_update_layout(tile);
     int16_t content_h = (int16_t)lv_obj_get_content_height(tile);
     int16_t content_w = (int16_t)lv_obj_get_content_width(tile);
-    if (chart_top > content_h) chart_top = content_h;
-    int32_t chart_h = content_h - chart_top - bot_margin;
-    if (chart_h < 8) chart_h = 8;
-    int16_t chart_w = content_w;
-    chart_top += ui_ofs_y;
+    const int16_t marker_margin = cfg->marker_size_min > 0 || cfg->marker_size_max > 0 ? label_h + 3 : 0;
+    const SparklineGeometry geometry = sparkline_geometry(cfg, st->line_count, content_w, content_h, marker_margin);
+    const int16_t chart_top = geometry.top;
+    const int16_t chart_h = st->cached_chart_h = geometry.height;
+    const int16_t chart_w = st->cached_chart_w = geometry.width;
+    st->label_margin_r = geometry.label_margin;
 
     // Reserve right margin for current-value labels (only when at least one is configured)
     const char* cur_labels[MAX_SPARKLINE_LINES] = { cfg->current_label, cfg->current_label_2, cfg->current_label_3 };
@@ -409,20 +414,6 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     for (uint8_t i = 0; i < st->line_count; i++) {
         if (cur_labels[i][0]) { has_cur_labels = true; break; }
     }
-    st->label_margin_r = 0;
-    if (has_cur_labels) {
-        if (cfg->label_width > 0) {
-            st->label_margin_r = cfg->label_width;
-        } else {
-            st->label_margin_r = 50;
-        }
-        chart_w -= (st->label_margin_r + 2);  // +2 gap between chart and labels
-        if (chart_w < 20) chart_w = 20;
-    }
-
-    st->cached_chart_w = chart_w;
-    st->cached_chart_h = chart_h;
-
     LOGT(TAG, "Layout: rect=%dx%d content=%dx%d chart_top=%d chart=%dx%d slots=%d window=%lus lines=%d",
          rect->w, rect->h, content_w, content_h, chart_top, chart_w, chart_h,
          cfg->slot_count, (unsigned long)cfg->window_secs, st->line_count);
@@ -430,7 +421,7 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     // Create a container for the sparkline area (clips the lines)
     lv_obj_t* chart_area = lv_obj_create(tile);
     lv_obj_set_size(chart_area, chart_w, chart_h);
-    int16_t chart_left = (content_w - chart_w - st->label_margin_r - (st->label_margin_r > 0 ? 2 : 0)) / 2 + ui_ofs_x;
+    int16_t chart_left = 0;
     lv_obj_align(chart_area, LV_ALIGN_TOP_LEFT, chart_left, chart_top);
     lv_obj_set_style_bg_opa(chart_area, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(chart_area, 0, 0);
@@ -727,7 +718,7 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
     if (!st->lines[0] || !st->points[0]) return;
 
 #if HAS_DISPLAY
-    // Use cached chart dimensions (set once in create; avoids lv_obj_update_layout)
+    // Dimensions are updated when the widget region changes.
     lv_obj_t* chart_area = lv_obj_get_parent(st->lines[0]);
     int16_t chart_w = st->cached_chart_w;
     int16_t chart_h = st->cached_chart_h;
@@ -1198,7 +1189,8 @@ static void sparkline_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
     // merges that write behind the head without moving it.
     // When current-value labels are present, also allow a throttled redraw
     // every ~1 s so binding text stays up-to-date without burning CPU.
-    bool data_changed = sparkline_reconnect_streams(wcfg, st);
+    bool data_changed = sparkline_resize(cfg, st);
+    data_changed |= sparkline_reconnect_streams(wcfg, st);
     for (uint8_t i = 0; i < st->line_count; i++) {
         if (st->ds_handles[i] == DATA_STREAM_INVALID) continue;
         DataStreamSnapshot snap;

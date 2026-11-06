@@ -37,7 +37,7 @@ then **Save Pad**.
 Configuration is trimmed opaque text, not automatically validated as JSON.
 Use the package's instructions and stay within the 511-byte limit.
 Each placement has its own instance and configuration, even for the same package.
-Labels, icons, and ordinary image controls are hidden for this content type.
+Labels and icons share the button with the extension's content region.
 
 Leave **Tick interval (ms)** empty to use the package default, or enter a whole
 number from 33 to 1000. Zero is not valid.
@@ -47,6 +47,8 @@ slow-refresh displays.
 For canvas-based content, **Upscale** 2x, 3x, or 4x reduces the allocated canvas
 dimensions and scales the result to the button, trading detail for memory.
 The default 1x keeps the native appearance. Non-canvas controls are not scaled.
+When the available region changes size, the Extension instance restarts and
+its in-memory state resets.
 
 Button action lists can run when the Extension passes through tap/hold input;
 an Extension that consumes the event can handle it itself.

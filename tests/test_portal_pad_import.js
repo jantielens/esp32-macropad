@@ -287,6 +287,16 @@ function pageRequests(result, page) {
 }
 
 (async function() {
+    const layoutImport = await runImport({
+        pads: [{ cols: 1, rows: 1, buttons: [{
+            col: 0, row: 0, widget_type: 'sparkline', widget_position: 'left',
+            icon_position: 'left', group_size_pct: 65
+        }] }]
+    });
+    const layoutBody = JSON.parse(layoutImport.requests.find(request => request.kind === 'pad-save').options.body);
+    assert.strictEqual(layoutBody.buttons[0].widget_position, 'left');
+    assert.strictEqual(layoutBody.buttons[0].icon_position, 'left');
+    assert.strictEqual(layoutBody.buttons[0].group_size_pct, 65);
     const success = await runImport();
     const uploadFetch = success.context.fetch;
     success.context.fetch = async () => response(false, { success: false, message: 'Invalid icon source or PNG' });

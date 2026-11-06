@@ -819,9 +819,26 @@ public:
 
 ### Native Widget Geometry And Input
 
-`widget_content_bounds()` shares transformed label and image geometry between
-Slider and Toggle, including image pivots, rotation, and scaling. Their layouts
-and interaction state machines remain separate.
+`button_content_layout.h` calculates bounded regions for the shared label/icon
+group and widget content. The pad builder applies those regions through
+`button_content_lvgl.h`. Binding changes can resize the widget region without
+rebuilding the button. Widgets keep their own input ownership and data captions.
+
+Natural label dimensions are measured from source text when it changes, before
+LVGL's ellipsis mode modifies its display buffer. Reflow reuses these dimensions;
+wrapped labels are measured again at the assigned width. Binding records retain
+the template, last value and content-group label index, not a second label style.
+
+`WidgetType.createUI` receives the widget region, configuration, button
+configuration, grid rectangle, UI scale and runtime state. It does not receive
+shared label or icon objects. Gauge and Bar Chart use the same geometry calculation
+for creation and resizing. Unchanged dimensions skip geometry work, and Gauge
+repositions existing tick objects rather than recreating them.
+
+When a region changes, `touch_manager_cancel_object_input()` cancels only its
+captured HID contacts and its active LVGL pointer gesture. Canceled contact IDs
+remain reserved until lift; the affected LVGL pointer waits for release. Other
+held widget contacts remain active.
 
 A widget with a `WidgetType.cancelInput` hook owns native input.
 `widget_owns_input()` suppresses ordinary tap and long-press dispatch for that

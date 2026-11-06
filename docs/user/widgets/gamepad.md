@@ -23,7 +23,7 @@ Save Pad and test full travel and release centering.
 Travel uses the shorter content dimension and clamps radially outside the
 button. Floating centers remain within the content region; a square region
 has no room to shift the maximized ring. Tiny content areas below 16 px are
-inactive. Center label is hidden; top/bottom labels remain.
+inactive. Labels and icons use the shared button content layout.
 Two widgets targeting one stick use first-owner-wins until release.
 
 ## Add held controls

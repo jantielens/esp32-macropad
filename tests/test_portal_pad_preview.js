@@ -97,13 +97,13 @@ for (const widget_type of types) {
     const cell = createElement();
     context.padRenderCellContent(cell, { widget_type });
     assert(cell.classes.has('pad-cell-has-widget'), widget_type);
-    assert.strictEqual(cell.children[0].className, 'pad-widget-marker', widget_type);
+    assert.strictEqual(cell.children[0].className, 'pad-content-widget-region', widget_type);
     assert.strictEqual(cell.children.length, 1, widget_type);
     assert.notStrictEqual(cell.children[0].title, 'Unknown Widget Widget', widget_type);
     assert(cell.children[0].attributes['aria-label']);
     const labeled = createElement();
     context.padRenderCellContent(labeled, { widget_type, label_center: 'My label' });
-    assert(labeled.children.some(child => child.textContent === 'My label'), widget_type);
+    assert(descendants(labeled).some(child => child.textContent === 'My label'), widget_type);
     assert(!labeled.children.some(child => child.className === 'pad-widget-fallback'), widget_type);
 }
 
@@ -153,7 +153,7 @@ const bindingButton = { label_center: mixedBindingText };
 const bindingButtonBefore = JSON.stringify(bindingButton);
 const bindingCell = createElement();
 context.padRenderCellContent(bindingCell, bindingButton);
-const bindingLabel = bindingCell.children.find(child => child.className === 'pad-cell-label-center');
+const bindingLabel = bindingCell.querySelector('.pad-cell-label-center');
 const bindingSpans = descendants(bindingLabel).filter(child => child.className === 'pad-cell-binding');
 const longAbbreviation = bindingSpans[0].textContent;
 assert(longAbbreviation.startsWith('[mqtt:...') && longAbbreviation.endsWith('/temperature]'));
@@ -172,7 +172,7 @@ for (const [field, value, expected] of [
     const labeledCell = createElement();
     context.padRenderCellContent(labeledCell, { [field]: value });
     const className = field === 'label_top' ? 'pad-cell-label-top' : 'pad-cell-label-bottom';
-    const label = labeledCell.children.find(child => child.className === className);
+    const label = labeledCell.querySelector('.' + className);
     assert.strictEqual(visibleText(label), expected);
     assert.strictEqual(descendants(label).find(child => child.className === 'pad-cell-binding').title, value);
 }
@@ -180,7 +180,7 @@ for (const [field, value, expected] of [
 const incompleteCell = createElement();
 const incompleteBinding = '[mqtt:home/building/temperature;state';
 context.padRenderCellContent(incompleteCell, { label_center: incompleteBinding });
-const incompleteLabel = incompleteCell.children.find(child => child.className === 'pad-cell-label-center');
+const incompleteLabel = incompleteCell.querySelector('.pad-cell-label-center');
 assert(visibleText(incompleteLabel).startsWith('[mqtt:...') && visibleText(incompleteLabel).endsWith('/temperature'));
 assert.strictEqual(incompleteCell.attributes['aria-description'], incompleteBinding);
 
@@ -188,9 +188,37 @@ const iconBindingCell = createElement();
 context.padRenderCellContent(iconBindingCell, {
     icon: { catalog_id: 'noto:thermometer', kind: 'color' }, icon_position: 'left', label_center: '[mqtt:home/very/long/temperature]'
 });
-const iconRow = iconBindingCell.children.find(child => child.className === 'pad-cell-icon-row');
-const iconRowLabel = iconRow.children.find(child => child.className === 'pad-cell-label-center');
+const iconRowLabel = iconBindingCell.querySelector('.pad-cell-label-center');
 assert(visibleText(iconRowLabel).startsWith('[mqtt:...') && visibleText(iconRowLabel).endsWith('/temperature]'));
+{
+    const button = { widget_type: 'sparkline', widget_position: 'left', group_size_pct: 35,
+        icon_position: 'right', icon: { kind: 'color' }, label_top: 'Room', label_center: '21',
+        label_bottom: 'C' };
+    const cell = createElement();
+    context.padRenderCellContent(cell, button);
+    assert.strictEqual(cell.dataset.groupedLayout, 'row');
+    assert.strictEqual(cell.children[0].attributes['aria-label'], 'Sparkline widget placeholder, not a live rendering');
+    const group = cell.children[1];
+    assert.strictEqual(group.style.flex, '0 1 35%');
+    assert.strictEqual(group.children[0].children.map(visibleText).join(','), 'Room,21,C');
+    assert.strictEqual(group.children[1].className, 'pad-cell-icon');
+    const defaultPosition = createElement();
+    const { widget_position, ...defaultButton } = button;
+    context.padRenderCellContent(defaultPosition, defaultButton);
+    assert.strictEqual(defaultPosition.dataset.groupedLayout, 'row');
+    assert.strictEqual(defaultPosition.children[1].className, 'pad-content-widget-region');
+    const below = createElement();
+    context.padRenderCellContent(below, { ...button, widget_position: 'above' });
+    assert.strictEqual(below.dataset.groupedLayout, 'column');
+    assert.strictEqual(below.children[0].className, 'pad-content-widget-region');
+    const empty = createElement();
+    context.padRenderCellContent(empty, { widget_type: 'sparkline', widget_position: 'right' });
+    assert.strictEqual(empty.children.length, 1);
+    assert.strictEqual(empty.children[0].className, 'pad-content-widget-region');
+    const iconBelow = createElement();
+    context.padRenderCellContent(iconBelow, { ...button, icon_position: 'below' });
+    assert.strictEqual(iconBelow.children[1].children[1].className, 'pad-cell-icon');
+}
 for (const icon_position of ['left', 'above']) {
     const cell = createElement();
     const button = { icon: { catalog_id: 'noto:thermometer', kind: 'color' }, icon_position, label_center: 'Before' };
@@ -219,7 +247,7 @@ for (const content of [{ label_top: 'Top' }, { label_bottom: 'Bottom' },
 }
 const normal = createElement();
 context.padRenderCellContent(normal, {});
-assert.strictEqual(normal.children[0].textContent, '\u2022');
+assert.strictEqual(normal.children[0].className, 'pad-cell-content-group');
 for (const width of ['1', '2', '3']) {
     const bordered = createElement();
     context.padRenderCellContent(bordered, { border_width: width, border_color: '#123456' });
@@ -264,14 +292,14 @@ assert.strictEqual(context.padResizeTrackDelta(-5, 'right', resizeGeometry, 0, 0
 context.padRenderResizeHandles = () => {};
 context.padRenderGrid();
 assert.strictEqual(gridElement.children.length, 2);
-for (const cell of gridElement.children) assert(cell.children.some(child => child.className === 'pad-widget-marker'));
+for (const cell of gridElement.children) assert(cell.children.some(child => child.className === 'pad-content-widget-region'));
 assert(!gridElement.children[0].children.some(child => child.className === 'pad-widget-fallback'));
 assert(!gridElement.children[1].children.some(child => child.className === 'pad-widget-fallback'));
 assert(gridElement.children[1].classes.has('pad-cell-ghost'));
 assert.strictEqual(gridElement.children[1].style.gridColumn, '2 / span 2');
 assert.strictEqual(gridElement.children[1].style.gridRow, '1 / span 1');
-assert.strictEqual(gridElement.children[1].children[0].title, 'Gauge Widget');
-const templateBindingLabel = gridElement.children[1].children.find(child => child.className === 'pad-cell-label-top');
+assert.strictEqual(gridElement.children[1].querySelector('.pad-content-widget-region').title, 'Gauge widget placeholder, not a live rendering');
+const templateBindingLabel = gridElement.children[1].querySelector('.pad-cell-label-top');
 assert(visibleText(templateBindingLabel).startsWith('[mqtt:...') && visibleText(templateBindingLabel).endsWith('/temperature]'));
 const css = fs.readFileSync('src/app/web/portal-custom.css', 'utf8');
 {
@@ -358,10 +386,10 @@ for (const widget_type of ['toggle', 'rocker', 'numericrocker', 'future_widget']
     const original = JSON.stringify(button);
     const cell = createElement();
     context.padRenderCellContent(cell, button);
-    const marker = cell.children.find(child => child.className === 'pad-widget-marker');
+    const marker = cell.querySelector('.pad-content-widget-region');
     assert(marker.attributes['aria-label']);
-    assert.strictEqual(cell.children.slice(1).map(visibleText).join('|'), 'Top|Center|Bottom');
-    assert.strictEqual(cell.querySelector('.pad-cell-icon'), null);
+    assert.strictEqual(cell.querySelector('.pad-cell-group-labels').children.map(visibleText).join('|'), 'Top|Center|Bottom');
+    assert(cell.querySelector('.pad-cell-icon'));
     assert.strictEqual(JSON.stringify(button), original, 'Preview rendering leaves widget configuration unchanged');
 }
 const ordinaryToggle = { col: 0, row: 0, widget_type: 'toggle', label_center: 'Ordinary',
@@ -377,8 +405,8 @@ context.padState = { cols: 3, rows: 1, selectedLayer: 'main', mainButtons: [ordi
 gridElement.children = [];
 context.padRenderGrid();
 assert.strictEqual(gridElement.children.length, 2);
-assert(gridElement.children[0].querySelector('.pad-widget-marker'));
-assert(gridElement.children[1].querySelector('.pad-widget-marker'));
+assert(gridElement.children[0].querySelector('.pad-content-widget-region'));
+assert(gridElement.children[1].querySelector('.pad-content-widget-region'));
 assert(gridElement.children[1].classes.has('pad-cell-ghost'));
 assert.strictEqual(gridElement.children[1].style.gridColumn, '2 / span 2');
 assert.strictEqual(JSON.stringify(ordinaryToggle), ordinaryToggleBefore);
@@ -460,7 +488,7 @@ for (const orientation of ['vertical', 'horizontal']) {
         assert.strictEqual(!!fill.hidden, state === 'unavailable');
         assert.strictEqual(track.style.background, '#1A1A1A');
         assert.strictEqual(fill.style.background, '#4CAF50');
-        assert.strictEqual(cell.children.indexOf(bar) + 1, cell.children.indexOf(cell.querySelector('.pad-cell-label-bottom')));
+        assert.strictEqual(cell.querySelector('.pad-content-widget-region').children[0], bar);
     }
 }
 const gaugeBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "gauge")', context);
@@ -478,9 +506,9 @@ for (const [state, min, max, percent] of [
     const cell = createElement();
     context.padRenderCellContent(cell, button);
     gaugeBuilder.renderPreview(session.draft, cell, button);
-    assert(cell.querySelector('.pad-widget-marker'));
+    assert(cell.querySelector('.pad-content-widget-region'));
     assert.strictEqual(cell.querySelector('.pad-cell-label-center'), null);
-    const gauge = cell.children.find(child => child.attributes.class === 'pad-button-builder-gauge');
+    const gauge = descendants(cell).find(child => child.attributes.class === 'pad-button-builder-gauge');
     assert.strictEqual(gauge.attributes.role, percent === null ? 'img' : 'meter');
     assert.strictEqual(gauge.children[0].attributes.stroke, '#1A1A1A');
     if (percent === null) {
@@ -498,7 +526,7 @@ for (const [state, min, max, percent] of [
         assert.strictEqual(gauge.children[2].attributes.stroke, '#FFFFFF');
         assert.strictEqual(gauge.children.length, 8, 'One track, one ring, one needle, and five ticks');
     }
-    assert.strictEqual(cell.children.indexOf(gauge) + 1, cell.children.indexOf(cell.querySelector('.pad-cell-label-bottom')));
+    assert.strictEqual(cell.querySelector('.pad-content-widget-region').children[0], gauge);
 }
 const historyBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "history")', context);
 let samplePoints;
@@ -514,9 +542,9 @@ for (const color of ['#4CAF50', '#2196F3']) {
     historyBuilder.renderPreview(session.draft, cell, button);
     assert.strictEqual(cell.querySelector('.pad-cell-label-top').textContent, 'Living room');
     assert.strictEqual(cell.querySelector('.pad-cell-label-center').textContent, '21.4 \u00b0C');
-    assert.strictEqual(cell.querySelector('.pad-widget-marker'), null);
+    assert(cell.querySelector('.pad-content-widget-region'));
     assert.ok(cell.classes.has('pad-button-builder-preview-single-history'));
-    const chart = cell.children.at(-1);
+    const chart = cell.querySelector('.pad-content-widget-region').children[0];
     assert.strictEqual(chart.attributes.role, 'img');
     assert.strictEqual(chart.attributes.viewBox, '0 0 280 190');
     assert.match(chart.attributes['aria-label'], /Illustrative trend, not actual history/);
@@ -549,28 +577,25 @@ for (const color of ['#4CAF50', '#2196F3']) {
         return cell;
     };
     const cell = render();
-    const chart = cell.children.at(-1);
+    const chart = cell.querySelector('.pad-content-widget-region').children[0];
     assert.strictEqual(chart.children.length, 6, 'Both values have a line, dot, and endpoint label');
     assert.strictEqual(chart.children[5].textContent, '54.2 %');
     assert.strictEqual(chart.children[5].attributes.fill, '#2196F3');
     assert.strictEqual(chart.children[5].attributes.y, chart.children[4].attributes.cy);
     session.draft.sources[1].candidate.sample = 'unavailable';
     const unavailable = render();
-    assert.strictEqual(unavailable.children.at(-1).children[3].textContent, '---');
-    assert.strictEqual(unavailable.children.at(-1).children.length, 4, 'Unavailable values have a label but no zero or fake trend');
+    assert.strictEqual(unavailable.querySelector('.pad-content-widget-region').children[0].children[3].textContent, '---');
+    assert.strictEqual(unavailable.querySelector('.pad-content-widget-region').children[0].children.length, 4, 'Unavailable values have a label but no zero or fake trend');
 }
 for (const source of ['', 'on', 'off', '[expr:[ha:climate.bureau_boven_thermostaat;attributes.temperature]>20?"on":"off"]']) {
     const cell = createElement();
     context.padRenderCellContent(cell, { widget_type: 'toggle', widget_data_binding: source,
         label_top: 'Bureau', label_bottom: '[ha:climate.bureau_boven_thermostaat;attributes.temperature;%.1f \u00b0C]',
         widget_toggle_on_color: '#123456' });
-    assert.strictEqual(cell.children[0].className, 'pad-widget-marker');
-    assert.strictEqual(cell.children[0].attributes['aria-label'], 'Toggle switch Widget');
+    assert.strictEqual(cell.querySelector('.pad-content-widget-region').attributes['aria-label'], 'Toggle switch widget placeholder, not a live rendering');
     assert(!cell.children.some(child => child.attributes.role === 'switch'));
-    assert(cell.children.some(child => child.textContent === 'Bureau'));
+    assert(descendants(cell).some(child => child.textContent === 'Bureau'));
 }
-assert.strictEqual(context.padWidgetEditor('toggle').icon.width, 0.4);
-assert.strictEqual(context.padWidgetEditor('toggle').icon.height, 0.4);
 const renderPad = { cols: 3, rows: 2, column_widths_px: [0, 40, 0] };
 const renderButton = { col: 1, row: 0, col_span: 2, row_span: 1, icon_scale_pct: 75,
     label_top: 'Name', border_width: '2', content_pad: '4', widget_type: 'gauge' };

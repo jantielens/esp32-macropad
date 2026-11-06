@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "image_library.h"
+#include "button_content_layout.h"
 
 // ============================================================================
 // Pad Config — per-pad button configuration stored on LittleFS
@@ -102,9 +103,10 @@ static inline bool parse_hex_color(const char* s, uint32_t* out) {
 #endif
 
 // Icon position relative to center label
-#define ICON_POS_ABOVE   0   // Default: icon above center label
-#define ICON_POS_LEFT    1   // Icon left of center label (row)
-#define ICON_POS_CENTER  2   // Icon centered (no label displacement)
+#define ICON_POS_ABOVE   0
+#define ICON_POS_BELOW   1
+#define ICON_POS_LEFT    2
+#define ICON_POS_RIGHT   3
 
 // ============================================================================
 // Label Style — per-label visual overrides (parsed from DSL string)
@@ -425,7 +427,9 @@ struct ScreenButtonConfig {
     char icon_source_id[CONFIG_ICON_SOURCE_ID_MAX_LEN];
     uint8_t icon_kind;
     uint8_t icon_scale_pct;             // 0 = auto (widget-aware), 1-250 = explicit scale %
-    uint8_t icon_position;              // 0=above (default), 1=left, 2=center
+    ButtonGroupIconPosition icon_position;
+    ButtonWidgetPosition widget_position;
+    uint8_t group_size_pct;             // 0 = auto, otherwise 10-90%
     int16_t ui_offset_x;                // Optional visual nudge X in px (+right, -left)
     int16_t ui_offset_y;                // Optional visual nudge Y in px (+down, -up)
 

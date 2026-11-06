@@ -360,13 +360,17 @@ static bool parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
             ? ICON_KIND_MONO : ICON_KIND_COLOR;
     }
     btn->icon_scale_pct = obj["icon_scale_pct"] | (uint8_t)0;
-    {
-        const char* ip = obj["icon_position"] | "";
-        if (ip[0] == 'l')      btn->icon_position = ICON_POS_LEFT;
-        else if (ip[0] == 'c') btn->icon_position = ICON_POS_CENTER;
-        else if (ip[0] == 'a') btn->icon_position = ICON_POS_ABOVE;
-        else                    btn->icon_position = defs ? defs->icon_position : ICON_POS_ABOVE;
-    }
+    uint8_t position = defs ? defs->icon_position : ICON_POS_ABOVE;
+    const char* icon_position = obj["icon_position"] | "";
+    if (icon_position[0] && !button_position_parse(icon_position, &position))
+        LOGW(TAG, "Invalid icon position: %s", icon_position);
+    btn->icon_position = static_cast<ButtonGroupIconPosition>(position);
+    position = static_cast<uint8_t>(ButtonWidgetPosition::Right);
+    const char* widget_position = obj["widget_position"] | "right";
+    if (!button_position_parse(widget_position, &position))
+        LOGW(TAG, "Invalid widget position: %s", widget_position);
+    btn->widget_position = static_cast<ButtonWidgetPosition>(position);
+    btn->group_size_pct = obj["group_size_pct"] | (uint8_t)0;
     parse_ui_offset_field(obj["ui_offset"], &btn->ui_offset_x, &btn->ui_offset_y);
 
     // Appearance fields: button JSON → device button_defaults → hardcoded default

@@ -40,6 +40,7 @@ struct TableWidgetState {
     bool       cell_text_set[TABLE_MAX_ROWS][TABLE_MAX_COLS];
     char       col_keys[TABLE_MAX_COLS][TABLE_COL_KEY_LEN];
     uint8_t    col_src_idx[TABLE_MAX_COLS];
+    uint8_t    col_width_pct[TABLE_MAX_COLS];
     uint8_t    col_count;
     uint16_t   row_count;
     uint32_t   last_payload_hash;
@@ -51,6 +52,51 @@ static inline TableWidgetState* table_get_state(WidgetState* state) {
     TableWidgetState* p;
     memcpy(&p, state->data, sizeof(p));
     return p;
+}
+
+static void table_size_columns(TableWidgetState* st, int width) {
+    if (!st->col_count) {
+        lv_table_set_column_width(st->table, 0, width);
+        return;
+    }
+    int assigned = 0, fill_count = 0;
+    for (uint8_t c = 0; c < st->col_count; c++) {
+        int col_width = width * st->col_width_pct[c] / 100;
+        if (col_width > 0) {
+            lv_table_set_column_width(st->table, c, col_width);
+            assigned += col_width;
+        } else {
+            fill_count++;
+        }
+    }
+    int fill_width = fill_count && width > assigned ? (width - assigned) / fill_count : width / st->col_count;
+    for (uint8_t c = 0; c < st->col_count; c++) {
+        if (width * st->col_width_pct[c] / 100 == 0)
+            lv_table_set_column_width(st->table, c, fill_width > 0 ? fill_width : 1);
+    }
+}
+
+static void table_resize(lv_event_t* event) {
+    auto* st = static_cast<TableWidgetState*>(lv_event_get_user_data(event));
+    lv_obj_t* parent = static_cast<lv_obj_t*>(lv_event_get_target(event));
+    if (!st || !st->table) return;
+    int width = lv_obj_get_content_width(parent) - 4;
+    int height = lv_obj_get_content_height(parent) - 4;
+    if (width < 1) width = 1;
+    if (height < 1) height = 1;
+#if defined(SOC_PPA_SUPPORTED) && SOC_PPA_SUPPORTED
+    if (width > 64) width = (width / 32) * 32;
+#endif
+    lv_obj_set_size(st->table, width, height);
+    table_size_columns(st, width);
+}
+
+static void table_deleted(lv_event_t* event) {
+    auto* st = static_cast<TableWidgetState*>(lv_event_get_user_data(event));
+    lv_obj_t* table = lv_event_get_target_obj(event);
+    lv_obj_t* parent = lv_obj_get_parent(table);
+    if (parent) lv_obj_remove_event_cb_with_user_data(parent, table_resize, st);
+    st->table = nullptr;
 }
 
 static inline void table_set_state(WidgetState* state, TableWidgetState* p) {
@@ -132,7 +178,9 @@ static void table_set_cell(TableWidgetState* st, uint16_t row, uint8_t col,
 
 static void table_apply_columns(TableWidgetState* st, JsonArrayConst columns,
                                 JsonObjectConst first_row) {
+    lv_obj_update_layout(st->table);
     st->col_count = 0;
+    memset(st->col_width_pct, 0, sizeof(st->col_width_pct));
 
     if (!columns.isNull()) {
         uint8_t src_idx = 0;
@@ -176,35 +224,17 @@ static void table_apply_columns(TableWidgetState* st, JsonArrayConst columns,
 
     int16_t usable_w = lv_obj_get_content_width(st->table);
     if (usable_w <= 0) usable_w = lv_obj_get_width(st->table);
-    int16_t assigned_px = 0;
-    uint8_t fill_count = 0;
-
     for (uint8_t c = 0; c < st->col_count; c++) {
-        int16_t col_w = 0;
         if (!columns.isNull()) {
             uint8_t src_idx = st->col_src_idx[c];
             if (src_idx != 0xFF && src_idx < columns.size()) {
                 JsonObjectConst col = columns[src_idx].as<JsonObjectConst>();
                 uint8_t pct = col["width_pct"] | (uint8_t)0;
-                if (pct > 0) col_w = (int16_t)((usable_w * pct) / 100);
+                st->col_width_pct[c] = pct;
             }
         }
-        if (col_w > 0) {
-            lv_table_set_column_width(st->table, c, col_w);
-            assigned_px += col_w;
-        } else {
-            lv_table_set_column_width(st->table, c, 0);
-            fill_count++;
-        }
     }
-
-    int16_t remaining = usable_w - assigned_px;
-    int16_t per_fill = (fill_count > 0 && remaining > 0) ? (remaining / fill_count) : (usable_w / st->col_count);
-    for (uint8_t c = 0; c < st->col_count; c++) {
-        if (lv_table_get_column_width(st->table, c) == 0) {
-            lv_table_set_column_width(st->table, c, per_fill > 0 ? per_fill : 1);
-        }
-    }
+    table_size_columns(st, usable_w);
 
     lv_table_set_row_count(st->table, 1);
     for (uint8_t c = 0; c < st->col_count; c++) {
@@ -303,10 +333,8 @@ static void table_parse(const JsonObject& btn, uint8_t* data) {
 static void table_create(lv_obj_t* tile, const WidgetConfig* wcfg,
                          const ScreenButtonConfig* btn,
                          const PadRect* rect, const UIScaleInfo* scale,
-                         lv_obj_t* icon_img, lv_obj_t* center_label,
                          WidgetState* state) {
-    (void)icon_img;
-    (void)center_label;
+    (void)rect;
 
     auto* cfg = reinterpret_cast<const TableWidgetConfig*>(wcfg->data);
     auto* st = (TableWidgetState*)lv_malloc(sizeof(TableWidgetState));
@@ -337,10 +365,11 @@ static void table_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     constexpr lv_coord_t k_table_h_inset = 2;
     constexpr lv_coord_t k_table_v_inset = 2;
 
+    lv_obj_update_layout(tile);
     lv_coord_t table_w = lv_obj_get_content_width(tile);
     lv_coord_t table_h = lv_obj_get_content_height(tile);
-    if (table_w <= 0) table_w = rect->w;
-    if (table_h <= 0) table_h = rect->h;
+    if (table_w <= 0) table_w = 1;
+    if (table_h <= 0) table_h = 1;
 
     if (table_w > (k_table_h_inset * 2)) {
         table_w -= (k_table_h_inset * 2);
@@ -399,7 +428,9 @@ static void table_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     lv_table_set_cell_value(tbl, 0, 0, "Table");
 
     lv_obj_add_event_cb(tbl, table_draw_cb, LV_EVENT_DRAW_TASK_ADDED, st);
+    lv_obj_add_event_cb(tbl, table_deleted, LV_EVENT_DELETE, st);
     lv_obj_add_flag(tbl, LV_OBJ_FLAG_SEND_DRAW_TASK_EVENTS);
+    lv_obj_add_event_cb(tile, table_resize, LV_EVENT_SIZE_CHANGED, st);
 
     lv_obj_remove_flag(tbl, LV_OBJ_FLAG_CLICKABLE);
     if (allow_scroll) {
@@ -517,6 +548,10 @@ static void table_update(lv_obj_t* tile, const WidgetConfig* wcfg,
 static void table_destroy(WidgetState* state) {
     auto* st = table_get_state(state);
     if (st) {
+        if (st->table) {
+            lv_obj_remove_event_cb_with_user_data(lv_obj_get_parent(st->table), table_resize, st);
+            lv_obj_remove_event_cb_with_user_data(st->table, table_deleted, st);
+        }
         lv_style_reset(&st->cell_style);
         lv_free(st);
         table_set_state(state, nullptr);

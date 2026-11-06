@@ -19,18 +19,8 @@
 // The arc fill angle, color, and needle position are driven by an MQTT/binding
 // value (via the existing widget binding system).
 //
-// Layout within the tile (180° example):
-//   ┌──────────────────────┐
-//   │   label_top (title)   │
-//   │     ╭─▓▓▓▓▓▓▓▓▓─╮    │
-//   │   ╭─▓▓▓▓▓▓▓▓▓▓▓▓▓─╮  │
-//   │   │▓▓    🔌    ▓▓│  │   ← icon + center label inside arc
-//   │   │▓  label_ctr   ▓│  │
-//   │   ╰─────────────────╯  │
-//   │  label_bottom (units)  │
-//   └──────────────────────┘
-//
-// The icon and center label are repositioned to the visual center of the arc.
+// The assigned widget region contains arcs, ticks, needle and binding captions.
+// Button labels and icons belong to the shared content group outside this region.
 //
 // LVGL lv_line note: all point coordinates must be non-negative because LVGL
 // computes the widget bounding box from max(x), max(y) of the points — negative
@@ -102,6 +92,7 @@ struct GaugeState {
     float     cached_min;           // Last resolved min (for detecting binding changes in tick)
     float     cached_max;           // Last resolved max (for detecting binding changes in tick)
     int16_t   cx, cy;              // Arc geometric center in tile coords
+    int16_t   layout_width, layout_height;
     int16_t   outer_radius;        // Outer ring radius in pixels
     int16_t   arc_width_px;        // Arc thickness in pixels
     int16_t   ring_gap_px;         // Gap between ring slots in pixels
@@ -146,38 +137,72 @@ static void gauge_arc_bbox(uint16_t start_deg, uint16_t arc_deg,
                            float* out_x_min, float* out_x_max,
                            float* out_y_min, float* out_y_max) {
     float xmn = 0.0f, xmx = 0.0f, ymn = 0.0f, ymx = 0.0f;
-    for (uint16_t i = 0; i <= arc_deg; i++) {
-        float a = (float)(start_deg + i) * (float)M_PI / 180.0f;
+    auto include_angle = [&](uint16_t degrees) {
+        float a = (float)degrees * (float)M_PI / 180.0f;
         float x = cosf(a), y = sinf(a);
         if (x < xmn) xmn = x;
         if (x > xmx) xmx = x;
         if (y < ymn) ymn = y;
         if (y > ymx) ymx = y;
-    }
+    };
+    include_angle(start_deg);
+    include_angle(start_deg + arc_deg);
+    // Arc extrema occur at endpoints or crossed quadrant boundaries.
+    for (uint16_t degrees = (start_deg / 90 + 1) * 90;
+         degrees < start_deg + arc_deg; degrees += 90)
+        include_angle(degrees);
     *out_x_min = xmn;  *out_x_max = xmx;
     *out_y_min = ymn;  *out_y_max = ymx;
+}
+
+struct GaugeGeometry {
+    int16_t cx, cy, radius, arc_width;
+};
+
+static GaugeGeometry gauge_geometry(const GaugeConfig* cfg, int16_t width, int16_t height) {
+    const int16_t available_width = width > 24 ? width - 4 : 20;
+    const int16_t available_height = height > 24 ? height - 4 : 20;
+    float x_min, x_max, y_min, y_max;
+    gauge_arc_bbox(cfg->start_angle, cfg->arc_degrees, &x_min, &x_max, &y_min, &y_max);
+    float x_span = x_max - x_min, y_span = y_max - y_min;
+    if (x_span < 0.01f) x_span = 1.0f;
+    if (y_span < 0.01f) y_span = 1.0f;
+    int16_t radius = (int16_t)(available_width / x_span);
+    const int16_t from_height = (int16_t)(available_height / y_span);
+    if (from_height < radius) radius = from_height;
+    if (radius < 15) radius = 15;
+    int16_t arc_width = radius * cfg->arc_width_pct / 100;
+    if (arc_width < 3) arc_width = 3;
+    return {int16_t(width / 2 - (int16_t)((x_min + x_max) * radius / 2)),
+            int16_t((available_height - (int16_t)(y_span * radius)) / 2 - (int16_t)(y_min * radius)),
+            radius, arc_width};
 }
 
 // ---- Helper: create an lv_line between two absolute tile-space points ----
 // Translates to non-negative local coordinates and positions accordingly.
 
+static void gauge_position_line(lv_obj_t* line, lv_point_precise_t* pts,
+                                int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
+    int16_t min_x = (x1 < x2) ? x1 : x2;
+    int16_t min_y = (y1 < y2) ? y1 : y2;
+    pts[0].x = x1 - min_x;  pts[0].y = y1 - min_y;
+    pts[1].x = x2 - min_x;  pts[1].y = y2 - min_y;
+    lv_line_set_points_mutable(line, pts, 2);
+    lv_obj_set_pos(line, min_x, min_y);
+}
+
 static lv_obj_t* gauge_create_line(lv_obj_t* parent,
                                    int16_t x1, int16_t y1,
                                    int16_t x2, int16_t y2,
                                    lv_color_t color, int16_t width) {
-    int16_t min_x = (x1 < x2) ? x1 : x2;
-    int16_t min_y = (y1 < y2) ? y1 : y2;
-
-    // Heap-allocate points (freed on LV_EVENT_DELETE)
     lv_point_precise_t* pts =
         (lv_point_precise_t*)lv_malloc(sizeof(lv_point_precise_t) * 2);
-    if (!pts) return nullptr;
-    pts[0].x = x1 - min_x;  pts[0].y = y1 - min_y;
-    pts[1].x = x2 - min_x;  pts[1].y = y2 - min_y;
-
+    if (!pts) {
+        LOGW(TAG, "Failed to allocate line points");
+        return nullptr;
+    }
     lv_obj_t* line = lv_line_create(parent);
-    lv_line_set_points(line, pts, 2);
-    lv_obj_set_pos(line, min_x, min_y);
+    gauge_position_line(line, pts, x1, y1, x2, y2);
     lv_obj_set_style_line_color(line, color, 0);
     lv_obj_set_style_line_width(line, width, 0);
     lv_obj_clear_flag(line, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
@@ -241,11 +266,12 @@ static lv_obj_t* gauge_create_arc(lv_obj_t* tile, const GaugeConfig* cfg,
     return arc;
 }
 
-static void gauge_create_ticks_for_radius(lv_obj_t* tile, GaugeState* st,
+static void gauge_place_ticks_for_radius(lv_obj_t* tile, GaugeState* st,
                                           const GaugeConfig* cfg,
                                           int16_t cx, int16_t cy,
                                           int16_t radius, int16_t arc_width,
-                                          lv_color_t tick_color) {
+                                          lv_color_t tick_color, bool create, uint8_t& index) {
+    if (!st->tick_lines) return;
     int16_t tick_outer = radius - 1;
     int16_t tick_inner = radius - arc_width + 1;
     if (tick_inner < 1) tick_inner = 1;
@@ -261,10 +287,13 @@ static void gauge_create_ticks_for_radius(lv_obj_t* tile, GaugeState* st,
         int16_t x2 = cx + (int16_t)roundf(cos_a * tick_outer);
         int16_t y2 = cy + (int16_t)roundf(sin_a * tick_outer);
 
-        lv_obj_t* tl = gauge_create_line(tile, x1, y1, x2, y2,
-                          tick_color, cfg->tick_width);
-        if (tl && st->tick_lines)
-            st->tick_lines[st->tick_line_count++] = tl;
+        if (create) {
+            lv_obj_t* line = gauge_create_line(tile, x1, y1, x2, y2, tick_color, cfg->tick_width);
+            if (line) st->tick_lines[st->tick_line_count++] = line;
+        } else if (index < st->tick_line_count) {
+            lv_obj_t* line = st->tick_lines[index++];
+            gauge_position_line(line, lv_line_get_points_mutable(line), x1, y1, x2, y2);
+        }
     }
 }
 
@@ -386,6 +415,22 @@ static void gauge_place_start_label(lv_obj_t* label, const GaugeConfig* cfg,
     lv_obj_set_pos(label,
                    (lv_coord_t)lroundf(anchor_x) - pivot_x,
                    (lv_coord_t)lroundf(anchor_y) - pivot_y);
+    lv_obj_update_layout(label);
+    const lv_area_t footprint = widget_content_bounds(label);
+    lv_area_t coordinates, available;
+    lv_obj_get_coords(label, &coordinates);
+    lv_obj_get_content_coords(lv_obj_get_parent(label), &available);
+    const int32_t left = coordinates.x1 + footprint.x1;
+    const int32_t right = coordinates.x1 + footprint.x2;
+    const int32_t top = coordinates.y1 + footprint.y1;
+    const int32_t bottom = coordinates.y1 + footprint.y2;
+    const int32_t shift_x = right - left > available.x2 - available.x1
+        ? (available.x1 + available.x2 - left - right) / 2
+        : left < available.x1 ? available.x1 - left : right > available.x2 ? available.x2 - right : 0;
+    const int32_t shift_y = bottom - top > available.y2 - available.y1
+        ? (available.y1 + available.y2 - top - bottom) / 2
+        : top < available.y1 ? available.y1 - top : bottom > available.y2 ? available.y2 - bottom : 0;
+    lv_obj_set_pos(label, lv_obj_get_x(label) + shift_x, lv_obj_get_y(label) + shift_y);
 }
 
 static void gauge_update_start_label(lv_obj_t* label, const char* templ,
@@ -470,10 +515,11 @@ static void gauge_parse(const JsonObject& btn, uint8_t* data) {
 static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
                           const ScreenButtonConfig* btn,
                           const PadRect* rect, const UIScaleInfo* scale,
-                          lv_obj_t* icon_img, lv_obj_t* center_label,
                           WidgetState* state) {
+    (void)btn;
     auto* cfg = reinterpret_cast<const GaugeConfig*>(wcfg->data);
     FillStyleRuntime* fill_style = fill_style_find(tile);
+    if (!fill_style && lv_obj_get_parent(tile)) fill_style = fill_style_find(lv_obj_get_parent(tile));
     auto* st = reinterpret_cast<GaugeState*>(state->data);
     memset(st, 0, sizeof(GaugeState));
     st->last_value = NAN;
@@ -518,48 +564,15 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     if (has_slot3) active_ring_count++;
     if (has_slot4 && !st->dual_pair_2_active) active_ring_count++;
 
-    // ---- Compute available space ----
-    bool has_top = btn->label_top[0];
-    bool has_bot = btn->label_bottom[0];
     const lv_font_t* annotation_font = pad_typography_font(scale->font_small);
-    int32_t top_h = has_top ? lv_font_get_line_height(pad_resolve_font(btn->style_top, scale->font_small, state->font_owner)) + 2 : 0;
-    int32_t bot_h = has_bot ? lv_font_get_line_height(pad_resolve_font(btn->style_bottom, scale->font_small, state->font_owner)) + 2 : 0;
-
     lv_obj_update_layout(tile);
     int16_t content_h = (int16_t)lv_obj_get_content_height(tile);
     int16_t content_w = (int16_t)lv_obj_get_content_width(tile);
-
-    if (top_h > content_h) top_h = content_h;
-    int32_t avail_h = content_h - top_h - bot_h - 4;
-    int16_t avail_w = content_w - 4;
-    if (avail_h < 20) avail_h = 20;
-    if (avail_w < 20) avail_w = 20;
-
-    // ---- Compute arc bounding box on unit circle ----
-    float x_min, x_max, y_min, y_max;
-    gauge_arc_bbox(cfg->start_angle, cfg->arc_degrees,
-                   &x_min, &x_max, &y_min, &y_max);
-    float x_span = x_max - x_min;
-    float y_span = y_max - y_min;
-    if (x_span < 0.01f) x_span = 1.0f;
-    if (y_span < 0.01f) y_span = 1.0f;
-
-    // ---- Fit radius so arc bbox fits available space ----
-    int16_t r_from_w = (int16_t)(avail_w / x_span);
-    int16_t r_from_h = (int16_t)(avail_h / y_span);
-    int16_t radius = (r_from_w < r_from_h) ? r_from_w : r_from_h;
-    if (radius < 15) radius = 15;
-
-    int16_t arc_width = (int16_t)(radius * cfg->arc_width_pct / 100);
-    if (arc_width < 3) arc_width = 3;
-
-    // ---- Compute geometric center of arc circle in tile coords ----
-    // Place center so the arc bbox is centered in available space.
-    int16_t arc_pixel_h = (int16_t)(y_span * radius);
-    int16_t cx = content_w / 2 - (int16_t)((x_min + x_max) * radius / 2);
-    int16_t cy = top_h + (avail_h - arc_pixel_h) / 2 - (int16_t)(y_min * radius);
-    cx += btn->ui_offset_x;
-    cy += btn->ui_offset_y;
+    st->layout_width = content_w;
+    st->layout_height = content_h;
+    const GaugeGeometry geometry = gauge_geometry(cfg, content_w, content_h);
+    const int16_t radius = geometry.radius, arc_width = geometry.arc_width;
+    const int16_t cx = geometry.cx, cy = geometry.cy;
 
     st->cx = cx;
     st->cy = cy;
@@ -570,8 +583,8 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     if (st->needle_len < 10) st->needle_len = 10;
     st->needle_inner = (int16_t)(st->needle_len * cfg->needle_cutoff_pct / 100);
 
-    LOGT(TAG, "Layout: rect=%dx%d avail=%dx%d radius=%d arc_w=%d cx=%d cy=%d rings=%d",
-            rect->w, rect->h, avail_w, avail_h, radius, arc_width, cx, cy, active_ring_count);
+    LOGT(TAG, "Layout: rect=%dx%d region=%dx%d radius=%d arc_w=%d cx=%d cy=%d rings=%d",
+            rect->w, rect->h, content_w, content_h, radius, arc_width, cx, cy, active_ring_count);
 
     // ---- Gap between concentric rings ----
     int16_t ring_gap = (arc_width >= 8) ? (arc_width / 4) : 2;
@@ -686,10 +699,11 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
             LOGW(TAG, "Failed to alloc tick_lines (%u)", total_tick_lines);
         }
 
+        uint8_t tick_index = 0;
         for (uint8_t i = 0; i < active_ring_count; i++) {
             int16_t rr = radius - (int16_t)i * (arc_width + ring_gap);
             if (rr < 8) rr = 8;
-            gauge_create_ticks_for_radius(tile, st, cfg, cx, cy, rr, arc_width, tick_color);
+            gauge_place_ticks_for_radius(tile, st, cfg, cx, cy, rr, arc_width, tick_color, true, tick_index);
         }
     }
 
@@ -767,57 +781,6 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         }
     }
 
-    // ---- Reposition icon and center label to the needle pivot (cx, cy) ----
-    // Use the explicit parameters passed by PadScreen.
-    lv_obj_t* real_icon = (icon_img && lv_obj_check_type(icon_img, &lv_image_class)) ? icon_img : nullptr;
-    lv_obj_t* center_lbl = center_label;
-
-    // Total height of stacked elements (icon + label) so we can center them
-    int16_t stack_h = 0;
-    int16_t icon_h = 0, icon_w = 0, lbl_total_h = 0;
-    if (real_icon) {
-        lv_obj_update_layout(real_icon);
-        icon_h = (int16_t)lv_obj_get_height(real_icon);
-        icon_w = (int16_t)lv_obj_get_width(real_icon);
-        stack_h += icon_h;
-    }
-    if (center_lbl) {
-        lv_obj_update_layout(center_lbl);
-        lbl_total_h = (int16_t)lv_obj_get_height(center_lbl);
-        if (real_icon) stack_h += 2; // gap between icon and label
-        stack_h += lbl_total_h;
-    }
-
-    // Center the stack on (cx, cy) — the needle pivot point
-    int16_t stack_top = cy - stack_h / 2;
-
-    if (real_icon) {
-        // Use lv_obj_align to override PadScreen's stored LV_ALIGN_CENTER;
-        // lv_obj_set_pos alone does NOT clear the alignment and LVGL may
-        // re-apply the old CENTER alignment on subsequent layout updates.
-        lv_obj_align(real_icon, LV_ALIGN_TOP_LEFT, cx - icon_w / 2, stack_top);
-        lv_obj_move_foreground(real_icon);
-    }
-
-    if (center_lbl) {
-        // Disable center-label clipping for gauge tiles by giving the label a
-        // wide draw area. This keeps CLIP-mode labels rendering reliably even
-        // when center text is updated dynamically from bindings.
-        lv_obj_add_flag(tile, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
-        lv_obj_add_flag(center_lbl, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
-        int16_t lbl_draw_w = content_w * 3;
-        if (lbl_draw_w < 30) lbl_draw_w = 30;
-        lv_obj_set_width(center_lbl, lbl_draw_w);
-        lv_obj_set_style_text_align(center_lbl, LV_TEXT_ALIGN_CENTER, 0);
-        int16_t lbl_y = (real_icon ? (stack_top + icon_h + 2) : (cy - lbl_total_h / 2))
-                        + btn->style_center.y_offset;
-        // Override PadScreen's LV_ALIGN_CENTER so LVGL won't revert
-        // position when binding text triggers a layout update.
-        // ui_offset_x/y are already absorbed into cx/cy; only add style offsets here.
-        lv_obj_align(center_lbl, LV_ALIGN_TOP_LEFT,
-                     cx - lbl_draw_w / 2 + btn->style_center.x_offset, lbl_y);
-        lv_obj_move_foreground(center_lbl);
-    }
 }
 
 // ---- Arc animation callback (normal mode: fill from 0) ----
@@ -1078,11 +1041,70 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
 
 // ---- Tick: re-resolve binding-driven colors (skip if unchanged) ----
 
+static void gauge_reflow(lv_obj_t* tile, const GaugeConfig* cfg, GaugeState* st) {
+    lv_obj_update_layout(tile);
+    const int16_t width = lv_obj_get_content_width(tile);
+    const int16_t height = lv_obj_get_content_height(tile);
+    if (width == st->layout_width && height == st->layout_height) return;
+    st->layout_width = width;
+    st->layout_height = height;
+    const GaugeGeometry geometry = gauge_geometry(cfg, width, height);
+    const int16_t radius = geometry.radius, arc_width = geometry.arc_width;
+    const int16_t cx = geometry.cx, cy = geometry.cy;
+    st->cx = cx;
+    st->cy = cy;
+    st->outer_radius = radius;
+    st->arc_width_px = arc_width;
+    st->ring_gap_px = arc_width >= 8 ? arc_width / 4 : 2;
+    st->needle_len = radius + 4;
+    if (st->needle_len < 10) st->needle_len = 10;
+    st->needle_inner = st->needle_len * cfg->needle_cutoff_pct / 100;
+    lv_obj_t* rings[] = {st->arc_bg, st->arc_ring2, st->arc_ring3, st->arc_ring4};
+    uint8_t count = 0;
+    for (lv_obj_t* ring : rings) if (ring) ++count;
+    auto place_arc = [&](lv_obj_t* arc, uint8_t slot) {
+        if (!arc) return;
+        int16_t r = gauge_radius_for_slot(st, slot);
+        if (slot && r < 8) r = 8;
+        lv_obj_set_size(arc, r * 2, r * 2);
+        lv_obj_set_pos(arc, cx - r, cy - r);
+        lv_obj_set_style_arc_width(arc, arc_width, LV_PART_MAIN);
+        lv_obj_set_style_arc_width(arc, arc_width, LV_PART_INDICATOR);
+    };
+    uint8_t slot = 0;
+    for (lv_obj_t* ring : rings) {
+        if (ring) place_arc(ring, slot++);
+    }
+    for (uint8_t i = 0; i < count; ++i) {
+        place_arc(st->marker_zones[i], i);
+    }
+    place_arc(st->arc_dual_1_neg, 0);
+    place_arc(st->arc_dual_2_neg, st->dual_pair_1_active || !st->arc_ring2 ? 1 : 2);
+    if (st->tick_lines) {
+        uint8_t tick_index = 0;
+        for (uint8_t i = 0; i < count; ++i) {
+            int16_t r = gauge_radius_for_slot(st, i);
+            if (r < 8) r = 8;
+            gauge_place_ticks_for_radius(tile, st, cfg, cx, cy, r, arc_width,
+                                         lv_color_black(), false, tick_index);
+        }
+    }
+    if (st->needle && st->n_pts)
+        gauge_set_needle(st->needle, st->n_pts, cx, cy, st->needle_len, st->needle_inner,
+                         (float)st->needle_cdeg / 100.0f * (float)M_PI / 180.0f);
+    gauge_place_start_label(st->start_label_1, cfg, st, st->start_label_slot_1);
+    gauge_place_start_label(st->start_label_2, cfg, st, st->start_label_slot_2);
+    gauge_place_start_label(st->start_label_3, cfg, st, st->start_label_slot_3);
+    gauge_place_start_label(st->start_label_4, cfg, st, st->start_label_slot_4);
+    st->cached_marker_val = NAN;
+}
+
 static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
                        WidgetState* state) {
     auto* cfg = reinterpret_cast<const GaugeConfig*>(wcfg->data);
     auto* st = reinterpret_cast<GaugeState*>(state->data);
     if (!st->arc_bg) return;
+    gauge_reflow(tile, cfg, st);
 
     // Re-resolve bindable min/max; invalidate last_values so next update re-applies
     float mn = resolve_number(cfg->min_value, 0.0f);

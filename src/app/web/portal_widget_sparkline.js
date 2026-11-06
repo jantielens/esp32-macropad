@@ -74,7 +74,6 @@
             { group: 'pad-edit-sparkline-sampling', key: 'widget_sparkline_slots', kind: 'number', default: defaultSlots },
             { group: 'pad-edit-sparkline-sampling', key: 'widget_sparkline_raw_hours', kind: 'number', default: 0 }
         ],
-        icon: { fixedPosition: true, width: 1, height: 1 },
         load(button) {
             const range = button.widget_sparkline_window === undefined ? defaultWindow : button.widget_sparkline_window;
             const slots = button.widget_sparkline_slots === undefined ? defaultSlots : button.widget_sparkline_slots;

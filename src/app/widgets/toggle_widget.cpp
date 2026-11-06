@@ -49,11 +49,6 @@ static const char* toggle_validate(JsonObjectConst button) {
     if (button.containsKey("widget_toggle_width_pct") &&
         (!button["widget_toggle_width_pct"].is<int>() || button["widget_toggle_width_pct"].as<int>() < 20 ||
          button["widget_toggle_width_pct"].as<int>() > 100)) return "toggle width must be an integer from 20 to 100";
-    if (button.containsKey("widget_toggle_icon_position")) {
-        const char* placement = button["widget_toggle_icon_position"] | "";
-        if (strcmp(placement, "left") && strcmp(placement, "above") && strcmp(placement, "below"))
-            return "toggle icon position must be left, above, or below";
-    }
     if (button.containsKey("widget_data_binding") && !button["widget_data_binding"].is<const char*>())
         return "toggle state source must be a string";
     return nullptr;
@@ -67,8 +62,6 @@ static void toggle_parse(const JsonObject& button, uint8_t* data) {
     strlcpy(config->off_color, button["widget_toggle_off_color"] | DEFAULT_WIDGET_TRACK_COLOR, sizeof(config->off_color));
     strlcpy(config->knob_color, button["widget_toggle_knob_color"] | DEFAULT_WIDGET_INDICATOR_COLOR, sizeof(config->knob_color));
     config->width_pct = clamp_val(button["widget_toggle_width_pct"] | 50, 20, 100);
-    const char* position = button["widget_toggle_icon_position"] | "left";
-    config->icon_position = strcmp(position, "above") == 0 ? 1 : strcmp(position, "below") == 0 ? 2 : 0;
     config->read_only = button["widget_toggle_read_only"] | false;
 }
 
@@ -84,61 +77,26 @@ static void toggle_layout(const WidgetConfig* config, ToggleState* state) {
     const auto* settings = reinterpret_cast<const ToggleConfig*>(config->data);
     lv_obj_t* button = state->button;
     lv_obj_update_layout(button);
-    const int available_width = lv_obj_get_content_width(button);
-    int top = 0, bottom = lv_obj_get_content_height(button);
-    if (state->top_label) top = lv_obj_get_y(state->top_label) + widget_content_bounds(state->top_label).y2 + 5;
-    if (state->bottom_label) bottom = lv_obj_get_y(state->bottom_label) + widget_content_bounds(state->bottom_label).y1 - 4;
-    const int height = bottom > top ? bottom - top : 0;
-    const lv_area_t icon_bounds = widget_content_bounds(state->icon);
-    const int icon_width = lv_area_get_width(&icon_bounds), icon_height = lv_area_get_height(&icon_bounds);
-    const bool side_icon = state->icon && settings->icon_position == 0;
-    const bool shared_row = side_icon || state->center_label;
-    const int row_height_limit = height - (state->icon && !side_icon ? icon_height + 4 : 0);
-    const int width_limit = available_width * (shared_row ? settings->width_pct : 100) / 100;
-    int switch_width = width_limit < row_height_limit * 2 ? width_limit : row_height_limit * 2;
+    const int width = lv_obj_get_content_width(button);
+    const int height = lv_obj_get_content_height(button);
+    if (state->layout_width == width && state->layout_height == height) return;
+    state->layout_width = width;
+    state->layout_height = height;
+    const int width_limit = width * settings->width_pct / 100;
+    const int height_limit = height * 2;
+    int switch_width = width_limit < height_limit ? width_limit : height_limit;
     if (switch_width < 0) switch_width = 0;
     switch_width -= switch_width % 2;
-    const int switch_left = shared_row ? available_width - switch_width : (available_width - switch_width) / 2;
-    if (side_icon && icon_width + 4 > switch_left) lv_obj_add_flag(state->icon, LV_OBJ_FLAG_HIDDEN);
-    else if (state->icon) lv_obj_remove_flag(state->icon, LV_OBJ_FLAG_HIDDEN);
-    if (state->center_label) {
-        const int label_space = switch_left - 4 - (side_icon ? icon_width + 4 : 0);
-        const int scale = lv_obj_get_style_transform_scale_x(state->center_label, LV_PART_MAIN);
-        lv_obj_set_width(state->center_label, label_space > 0 ? label_space * 256 / (scale > 0 ? scale : 256) : 0);
-        if (label_space <= 0) lv_obj_add_flag(state->center_label, LV_OBJ_FLAG_HIDDEN);
-        else lv_obj_remove_flag(state->center_label, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_update_layout(button);
-    }
-    const lv_area_t label_bounds = widget_content_bounds(state->center_label);
-    const int label_height = state->center_label && !lv_obj_has_flag(state->center_label, LV_OBJ_FLAG_HIDDEN)
-        ? lv_area_get_height(&label_bounds) : 0;
     if (switch_width < 4) lv_obj_add_flag(state->control, LV_OBJ_FLAG_HIDDEN);
     else lv_obj_remove_flag(state->control, LV_OBJ_FLAG_HIDDEN);
     lv_obj_set_size(state->control, switch_width, switch_width / 2);
-    int row_height = switch_width / 2;
-    if (label_height > row_height) row_height = label_height;
-    if (side_icon && !lv_obj_has_flag(state->icon, LV_OBJ_FLAG_HIDDEN) && icon_height > row_height) row_height = icon_height;
-    const int group_height = row_height + (state->icon && !side_icon ? icon_height + 4 : 0);
-    const int group_top = top + (height - group_height) / 2 + state->offset_y;
-    const int row_top = group_top + (state->icon && settings->icon_position == 1 ? icon_height + 4 : 0);
-    int cursor = state->offset_x;
-    if (state->icon) {
-        const int icon_left = side_icon ? cursor : (available_width - icon_width) / 2 + state->offset_x;
-        const int icon_top = side_icon ? row_top + (row_height - icon_height) / 2
-            : settings->icon_position == 1 ? group_top : row_top + row_height + 4;
-        lv_obj_set_pos(state->icon, icon_left - icon_bounds.x1, icon_top - icon_bounds.y1);
-        if (side_icon) cursor += icon_width + 4;
-    }
-    if (state->center_label) {
-        lv_obj_set_pos(state->center_label, cursor + state->label_offset_x - label_bounds.x1,
-                   row_top + (row_height - label_height) / 2 + state->label_offset_y - label_bounds.y1);
-    }
-    lv_obj_set_pos(state->control, switch_left + state->offset_x, row_top + (row_height - switch_width / 2) / 2);
+    lv_obj_align(state->control, LV_ALIGN_CENTER, 0, 0);
 }
 
 static void toggle_create(lv_obj_t* button, const WidgetConfig* config,
                           const ScreenButtonConfig* source, const PadRect*, const UIScaleInfo*,
-                          lv_obj_t* icon, lv_obj_t* center, WidgetState* runtime) {
+                          WidgetState* runtime) {
+    (void)source;
     const auto* settings = reinterpret_cast<const ToggleConfig*>(config->data);
     auto* state = new (runtime->data) ToggleState{};
     state->button = button;
@@ -148,26 +106,6 @@ static void toggle_create(lv_obj_t* button, const WidgetConfig* config,
     state->control = lv_switch_create(button);
     lv_obj_remove_flag(state->control, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_remove_flag(state->control, LV_OBJ_FLAG_SCROLLABLE);
-    state->icon = icon;
-    state->center_label = center;
-    state->offset_x = source->ui_offset_x;
-    state->offset_y = source->ui_offset_y;
-    state->label_offset_x = source->style_center.x_offset;
-    state->label_offset_y = source->style_center.y_offset;
-    for (uint32_t index = 0; index < lv_obj_get_child_count(button); ++index) {
-        lv_obj_t* child = lv_obj_get_child(button, index);
-        if (child == center || !lv_obj_check_type(child, &lv_label_class)) continue;
-        const lv_align_t align = lv_obj_get_style_align(child, LV_PART_MAIN);
-        if (align == LV_ALIGN_TOP_MID) state->top_label = child;
-        if (align == LV_ALIGN_BOTTOM_MID) state->bottom_label = child;
-    }
-    if (icon) lv_obj_set_align(icon, LV_ALIGN_TOP_LEFT);
-    if (center) {
-        lv_obj_update_layout(button);
-        lv_obj_set_align(center, LV_ALIGN_TOP_LEFT);
-        lv_label_set_long_mode(center, LV_LABEL_LONG_DOT);
-        lv_obj_set_style_max_width(center, lv_obj_get_content_width(button), 0);
-    }
     toggle_layout(config, state);
     lv_obj_set_style_bg_color(state->control, resolve_lv_color(settings->off_color, 0x1a1a1a), LV_PART_MAIN);
     lv_obj_set_style_bg_color(state->control, resolve_lv_color(settings->on_color, 0x4caf50), LV_PART_INDICATOR | LV_STATE_CHECKED);
@@ -260,18 +198,14 @@ static void toggle_destroy(WidgetState*) {}
 #if HAS_MCP
 static void toggle_describe(JsonObject& out) {
     JsonArray fields = out.createNestedArray("config_fields");
-    const char* names[] = {"widget_toggle_on_value", "widget_toggle_off_value", "widget_toggle_on_color", "widget_toggle_off_color", "widget_toggle_knob_color", "widget_toggle_icon_position"};
-    const char* defaults[] = {"on", "off", DEFAULT_WIDGET_SERIES_COLOR, DEFAULT_WIDGET_TRACK_COLOR, DEFAULT_WIDGET_INDICATOR_COLOR, "left"};
-    for (unsigned index = 0; index < 6; ++index) {
+    const char* names[] = {"widget_toggle_on_value", "widget_toggle_off_value", "widget_toggle_on_color", "widget_toggle_off_color", "widget_toggle_knob_color"};
+    const char* defaults[] = {"on", "off", DEFAULT_WIDGET_SERIES_COLOR, DEFAULT_WIDGET_TRACK_COLOR, DEFAULT_WIDGET_INDICATOR_COLOR};
+    for (unsigned index = 0; index < 5; ++index) {
         JsonObject item = fields.createNestedObject();
         item["name"] = names[index];
         item["type"] = index >= 2 && index <= 4 ? "color" : "string";
         item["max"] = index >= 2 && index <= 4 ? 7 : 63;
         item["default"] = defaults[index];
-        if (index == 5) {
-            JsonArray choices = item.createNestedArray("enum");
-            for (const char* choice : {"left", "above", "below"}) choices.add(choice);
-        }
     }
     JsonObject width = fields.createNestedObject();
     width["name"] = "widget_toggle_width_pct";

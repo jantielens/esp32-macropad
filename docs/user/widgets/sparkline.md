@@ -21,6 +21,16 @@ Collection continues for configured streams when their pad is not visible.
 It is runtime history, not a durable log. Missing new data carries the last
 observation forward, so a flat line does not prove fresh sensor messages.
 
+## Arrange the chart
+
+Choose the widget position and the size of the labels and icon group as
+described in [button appearance](../pads/appearance.md#arrange-button-content).
+
+Small regions compress or clip their contents; they do not switch layouts.
+The canvas shows a placeholder rather than a live chart, so verify labels,
+markers, and chart space on the device. Existing Sparkline buttons may need
+adjustments after updating.
+
 ## Choose the scale and annotations
 
 Leave Y Min/Max empty for automatic observed range, or set numeric/bindable limits.

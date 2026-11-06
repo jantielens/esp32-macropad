@@ -45,6 +45,8 @@ const context = {
     padLabelFromInput() { return ''; },
     padGetBindableColor() { return ''; },
     padGetEffectiveDefault() { return ''; },
+    padContentLayouts() { return []; },
+    padContentFitWarning() {},
     padFillBuild() {},
     actionEditorBuild() { throw new Error('Timer Duration is invalid'); },
     padActionPrefixes(gesture) { return [gesture + '-0', gesture + '-1', gesture + '-2']; },
@@ -774,7 +776,7 @@ assert.strictEqual(sliderDefaults.widget_slider_min, 0);
 assert.strictEqual(sliderDefaults.widget_slider_max, 100);
 assert.strictEqual(sliderDefaults.widget_slider_step, 1);
 assert.strictEqual(sliderDefaults.widget_slider_axis, 'horizontal');
-assert.strictEqual(sliderDefaults.widget_slider_length_pct, 50);
+assert.strictEqual(sliderDefaults.widget_slider_length_pct, 100);
 assert.strictEqual(sliderDefaults.widget_slider_knob_px, 0);
 assert.strictEqual(sliderDefaults.widget_slider_track_px, 0);
 assert.strictEqual(sliderDefaults.widget_slider_show_value, true);
@@ -916,7 +918,7 @@ async function checkSourceColors() {
     assert.strictEqual(button.fg_color, foreground);
     assert.strictEqual(button.widget_data_binding, source);
     assert.strictEqual(button.widget_toggle_width_pct, 50);
-    assert.strictEqual(button.widget_toggle_icon_position, 'left');
+    assert.strictEqual(button.widget_toggle_icon_position, undefined);
     assert.strictEqual(button.widget_toggle_placement, undefined);
     assert.deepStrictEqual(button.actions[0], on);
     assert.deepStrictEqual(button.lp_actions[0], off);
@@ -927,7 +929,7 @@ async function checkSourceColors() {
         widget_toggle_placement: 'top', widget_toggle_icon_position: 'below' });
     const positioned = context.padDialogBuildButton();
     assert.strictEqual(positioned.widget_toggle_width_pct, 60);
-    assert.strictEqual(positioned.widget_toggle_icon_position, 'below');
+    assert.strictEqual(positioned.widget_toggle_icon_position, undefined);
     assert.strictEqual(positioned.widget_toggle_placement, undefined);
     document.getElementById('pad-edit-toggle-on-value').value = ' OFF ';
     assert.throws(() => context.padDialogBuildButton(), /distinct/);
@@ -1090,6 +1092,53 @@ async function checkInspectorRequests() {
     await new Promise(resolve => setImmediate(resolve));
 }
 
+function checkContentLayoutControls() {
+    const nodes = new Map();
+    const find = id => {
+        if (!nodes.has(id)) nodes.set(id, new Element(id));
+        return nodes.get(id);
+    };
+    const select = find('pad-edit-content-layout');
+    select.value = 'left';
+    const type = find('pad-edit-widget-type');
+    type.value = 'sparkline';
+    const layoutContext = { document: { getElementById: find }, deviceInfoCache: {} };
+    vm.createContext(layoutContext);
+    vm.runInContext(fs.readFileSync('src/app/web/portal_pad_editor.js', 'utf8'), layoutContext);
+    layoutContext.padContentLayoutRefresh();
+    assert.strictEqual(find('pad-edit-group-width-group').style.display, '');
+    type.value = 'gauge';
+    layoutContext.padContentLayoutRefresh();
+    assert.strictEqual(find('pad-edit-group-width-group').style.display, '');
+    assert.strictEqual(select.value, 'left');
+    type.value = '';
+    layoutContext.padContentLayoutRefresh();
+    assert.strictEqual(find('pad-edit-content-layout-group').style.display, 'none');
+}
+
+function checkContentLayoutDraft() {
+    context.actionEditorListBuild = () => [];
+    document.getElementById('pad-edit-widget-type').value = 'sparkline';
+    document.getElementById('pad-edit-content-layout').value = 'left';
+    document.getElementById('pad-edit-icon-position').value = 'right';
+    document.getElementById('pad-edit-group-width').value = '65';
+    const savedIconReader = context.padIconEditorReadDraft;
+    context.padIconEditorReadDraft = () => ({ catalog_id: 'material-symbols:home', kind: 'mono' });
+    const button = context.padDialogBuildButton();
+    assert.strictEqual(button.widget_position, 'left');
+    assert.strictEqual(button.icon_position, 'right');
+    assert.strictEqual(button.group_size_pct, 65);
+    document.getElementById('pad-edit-widget-type').value = 'gauge';
+    assert.strictEqual(context.padDialogBuildButton().widget_position, 'left');
+    document.getElementById('pad-edit-content-layout').value = 'right';
+    assert.strictEqual(context.padDialogBuildButton().widget_position, undefined);
+    document.getElementById('pad-edit-content-layout').value = 'below';
+    assert.strictEqual(context.padDialogBuildButton().widget_position, 'below');
+    context.padIconEditorReadDraft = savedIconReader;
+}
+
+checkContentLayoutControls();
+checkContentLayoutDraft();
 checkSourceColors().then(checkBindingPreviewPlacement).then(checkInspectorRequests).then(() => console.log('portal_pad_dialog_transaction: PASS')).catch(error => {
     console.error(error);
     process.exitCode = 1;

@@ -253,7 +253,7 @@ protected:
         document["widget_mousepad_back"] = show_back;
         if (back_size) document["widget_mousepad_back_size"] = back_size;
         type->parseConfig(document.as<JsonObject>(), config.data);
-        type->createUI(button, &config, &button_config, nullptr, nullptr, nullptr, nullptr, &state);
+        type->createUI(button, &config, &button_config, nullptr, nullptr, &state);
         lv_obj_update_layout(button);
         lv_obj_add_event_cb(button, [](lv_event_t* event) {
             ++static_cast<GamepadWidget*>(lv_event_get_user_data(event))->ordinary_actions;
@@ -287,7 +287,7 @@ protected:
         extra_type->parseConfig(document.as<JsonObject>(), extra_config.data);
         ScreenButtonConfig configuration = button_config;
         configuration.actions[0].payload.gamepad = {uint8_t(control.kind), control.index, 1};
-        extra_type->createUI(extra_button, &extra_config, &configuration, nullptr, nullptr, nullptr, nullptr, &extra_state);
+        extra_type->createUI(extra_button, &extra_config, &configuration, nullptr, nullptr, &extra_state);
         lv_obj_update_layout(extra_button);
     }
 
@@ -562,6 +562,40 @@ static TouchSnapshot contacts(std::initializer_list<TouchContact> values) {
     return snapshot;
 }
 
+TEST_F(GamepadWidget, RouterCapturesNestedInputRegions) {
+    for (const char* name : {"mousepad", "scrollpad", "gamepad_button", "gamepad_stick"}) {
+        type = widget_find(name);
+        ASSERT_NE(type, nullptr);
+        ASSERT_TRUE(widget_owns_input(type)) << name;
+        strlcpy(config.type, name, sizeof(config.type));
+        JsonDocument document;
+        type->parseConfig(document.as<JsonObject>(), config.data);
+        lv_obj_t* region = lv_obj_create(button);
+        lv_obj_set_size(region, 150, 150);
+        lv_obj_set_style_pad_all(region, 0, 0);
+        lv_obj_set_style_border_width(region, 0, 0);
+        lv_obj_clear_flag(region, LV_OBJ_FLAG_CLICKABLE);
+        if (widget_owns_input(type)) lv_obj_add_flag(region, LV_OBJ_FLAG_CLICKABLE);
+        type->createUI(region, &config, &button_config, nullptr, nullptr, &state);
+        lv_obj_update_layout(button);
+        GamepadTouchRouter router;
+        EXPECT_FALSE(router.update(contacts({{3, 50, 50}}), false, widget_generation,
+                                   mouse_hid_generation()).pressed) << name;
+        EXPECT_TRUE(router.reset_navigation) << name;
+        if (strcmp(name, "gamepad_button") == 0) {
+            EXPECT_EQ(delivered().buttons, 1);
+        }
+        router.cancel();
+        if (strcmp(name, "gamepad_button") == 0) {
+            EXPECT_EQ(delivered().buttons, 0);
+        }
+        type->destroyUI(&state);
+        type = nullptr;
+        lv_obj_delete(region);
+        state = {};
+    }
+}
+
 TEST_F(GamepadWidget, RouterRetainsIdsAndDoesNotAdoptExtraFinger) {
     create("gamepad_button");
     GamepadTouchRouter router;
@@ -618,6 +652,47 @@ TEST_F(GamepadWidget, RouterIdleGenerationChangePreservesFirstPress) {
     EXPECT_TRUE(router.update(contacts({{1, 250, 250}}), false, widget_generation + 1, 1).pressed);
     router.update(contacts({}), false, widget_generation + 1, 1);
     EXPECT_TRUE(router.update(contacts({{1, 250, 250}}), false, widget_generation + 1, 2).pressed);
+    router.cancel();
+}
+
+TEST_F(GamepadWidget, RegionCancellationPreservesOtherHoldsAndRequiresAffectedContactLift) {
+    create("gamepad_button");
+    create_extra("gamepad_button");
+    GamepadTouchRouter router;
+    const auto held = contacts({{3, 50, 50}, {7, 250, 50}});
+    router.update(held, false, widget_generation);
+    ASSERT_EQ(delivered().buttons, 3);
+
+    lv_obj_t* unrelated = lv_obj_create(lv_screen_active());
+    router.cancel_object_input(unrelated);
+    EXPECT_NE(reinterpret_cast<GamepadButtonState*>(state.data)->touch.owner, 0u);
+    EXPECT_NE(reinterpret_cast<GamepadButtonState*>(extra_state.data)->touch.owner, 0u);
+    router.cancel_object_input(button);
+    EXPECT_EQ(delivered().buttons, 2);
+    router.update(held, false, widget_generation);
+    EXPECT_EQ(reinterpret_cast<GamepadButtonState*>(state.data)->touch.owner, 0u);
+    EXPECT_NE(reinterpret_cast<GamepadButtonState*>(extra_state.data)->touch.owner, 0u);
+    router.update(contacts({{7, 250, 50}}), false, widget_generation);
+    EXPECT_NE(reinterpret_cast<GamepadButtonState*>(extra_state.data)->touch.owner, 0u);
+    router.update(held, false, widget_generation);
+    EXPECT_EQ(delivered().buttons, 3);
+    router.cancel();
+}
+
+TEST_F(GamepadWidget, MouseRegionCancellationDoesNotReleaseGamepadHold) {
+    create("mousepad", true);
+    create_extra("gamepad_button");
+    GamepadTouchRouter router;
+    router.update(contacts({{3, 50, 185}, {7, 250, 50}}), false,
+                  widget_generation, mouse_hid_generation());
+    ASSERT_EQ(delivered().buttons, 2);
+    router.cancel_object_input(button);
+    EXPECT_EQ(MouseSurfaceTouch::session(), nullptr);
+    EXPECT_NE(reinterpret_cast<GamepadButtonState*>(extra_state.data)->touch.owner, 0u);
+    router.update(contacts({{3, 50, 50}, {7, 250, 50}}), false,
+                  widget_generation, mouse_hid_generation());
+    EXPECT_EQ(MouseSurfaceTouch::session(), nullptr);
+    EXPECT_NE(reinterpret_cast<GamepadButtonState*>(extra_state.data)->touch.owner, 0u);
     router.cancel();
 }
 
@@ -1420,6 +1495,22 @@ TEST_F(GamepadWidget, MousepadBackSizeFitsSmallWidget) {
     lv_obj_t* back = lv_obj_get_child(button, 0);
     EXPECT_EQ(lv_obj_get_width(back), 22);
     EXPECT_EQ(lv_obj_get_height(back), 22);
+    lv_obj_set_size(button, 100, 80);
+    lv_obj_update_layout(button);
+    EXPECT_EQ(lv_obj_get_width(back), 72);
+    EXPECT_EQ(lv_obj_get_height(back), 72);
+    lv_obj_set_size(button, 30, 20);
+    lv_obj_update_layout(button);
+    EXPECT_EQ(lv_obj_get_width(back), 12);
+    EXPECT_EQ(lv_obj_get_height(back), 12);
+}
+
+TEST_F(GamepadWidget, MousepadBackAllowsCleanupAfterSurfaceDeletion) {
+    create("mousepad", false, true);
+    lv_obj_delete(button);
+    button = nullptr;
+    type->destroyUI(&state);
+    type = nullptr;
 }
 
 TEST_F(GamepadWidget, MousepadBackSizeDoesNotEnableBack) {

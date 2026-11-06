@@ -522,7 +522,6 @@ const haButtonBuilderProvider = {
         const state = this.buildBinding(candidate, { format: '' });
         return {
             icon: { catalog_id: 'material-symbols:' + options.icon.replace(/_/g, '-'), kind: 'mono' },
-            icon_position: 'center',
             label_top_style: 'color:' + (padColorNormalizeLiteral(padGetEffectiveDefault('fg_color')) || '#FFFFFF'),
             fg_color: '[expr:' + state + '=="on"?"' + options.on + '":"' + options.off + '"|#EF6B73]',
             actions: [{ type: 'ha_service', entity_id: entityId, service: 'toggle' }]

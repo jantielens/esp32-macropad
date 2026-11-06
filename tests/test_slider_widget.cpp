@@ -112,23 +112,6 @@ static void read_slider_pointer(lv_indev_t* indev, lv_indev_data_t* data) {
     data->state = input->pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
 }
 
-static const lv_image_dsc_t* slider_test_icon_source() {
-    static const uint8_t pixels[24 * 24 * 2] = {};
-    static lv_image_dsc_t image{};
-    static bool initialized = false;
-    if (!initialized) {
-        image.header.magic = LV_IMAGE_HEADER_MAGIC;
-        image.header.cf = LV_COLOR_FORMAT_RGB565;
-        image.header.w = 24;
-        image.header.h = 24;
-        image.header.stride = 24 * 2;
-        image.data_size = sizeof(pixels);
-        image.data = pixels;
-        initialized = true;
-    }
-    return &image;
-}
-
 bool binding_template_resolve_checked(const char*, char* output, size_t size) {
     strlcpy(output, g_binding_value, size);
     return true;
@@ -181,8 +164,7 @@ protected:
         slider_parse(object, config.data);
         strlcpy(config.type, "slider", sizeof(config.type));
         runtime.font_owner = &fonts;
-        slider_create(button, &config, &source, nullptr, &UI_SCALE_TABLE[0],
-                      nullptr, nullptr, &runtime);
+        slider_create(button, &config, &source, nullptr, &UI_SCALE_TABLE[0], &runtime);
         lv_obj_update_layout(button);
     }
 
@@ -217,26 +199,13 @@ protected:
         runtime = WidgetState{};
         runtime.font_owner = &fonts;
         reinterpret_cast<SliderConfig*>(config.data)->axis = axis;
-        lv_obj_t* top = lv_label_create(button);
-        lv_label_set_text(top, "Top label");
-        lv_obj_align(top, LV_ALIGN_TOP_MID, 0, 0);
-        lv_obj_t* bottom = lv_label_create(button);
-        lv_label_set_text(bottom, "Bottom label");
-        lv_obj_align(bottom, LV_ALIGN_BOTTOM_MID, 0, 0);
-        lv_obj_t* center = lv_label_create(button);
-        lv_label_set_text(center, "Center label");
-        lv_obj_align(center, LV_ALIGN_CENTER, 0, 0);
-        lv_obj_t* icon = lv_image_create(button);
-        lv_image_set_src(icon, slider_test_icon_source());
-        lv_obj_align(icon, LV_ALIGN_CENTER, 0, 0);
-        slider_create(button, &config, &source, nullptr, &UI_SCALE_TABLE[0],
-                      icon, center, &runtime);
+        slider_create(button, &config, &source, nullptr, &UI_SCALE_TABLE[0], &runtime);
         lv_obj_update_layout(button);
         slider_layout(&state());
     }
 };
 
-TEST_F(SliderNativeWidget, AutomaticSizingUsesFullLengthAndShrinksToFitBothAxes) {
+TEST_F(SliderNativeWidget, AutomaticSizingUsesConfiguredLengthAndShrinksToFitBothAxes) {
     auto* settings = reinterpret_cast<SliderConfig*>(config.data);
     for (uint8_t axis : {0, 1}) {
         settings->axis = axis;
@@ -247,11 +216,12 @@ TEST_F(SliderNativeWidget, AutomaticSizingUsesFullLengthAndShrinksToFitBothAxes)
             lv_obj_set_size(button, axis == 0 ? size.x : size.y,
                             axis == 0 ? size.y : size.x);
             slider_layout(&state());
-            const int expected_knob = std::min(50, std::min(size.y * 3 / 5, size.x / 4));
+            const int target_length = size.x * settings->length_pct / 100;
+            const int expected_knob = std::min(50, std::min(size.y * 3 / 5, target_length / 4));
             const int expected_track = expected_knob * 2 / 5;
             EXPECT_TRUE(state().layout_usable);
             EXPECT_EQ(axis == 0 ? lv_obj_get_width(state().control) : lv_obj_get_height(state().control),
-                      size.x - expected_knob);
+                      target_length - expected_knob);
             EXPECT_EQ(axis == 0 ? lv_obj_get_height(state().control) : lv_obj_get_width(state().control),
                       expected_track);
             EXPECT_EQ(lv_obj_get_style_pad_left(state().control, LV_PART_KNOB),
@@ -261,22 +231,6 @@ TEST_F(SliderNativeWidget, AutomaticSizingUsesFullLengthAndShrinksToFitBothAxes)
             EXPECT_EQ(lv_obj_get_y(state().control),
                       (lv_obj_get_content_height(button) - lv_obj_get_height(state().control)) / 2);
         }
-    }
-}
-
-TEST_F(SliderNativeWidget, OuterIconDoesNotReserveHalfTheSliderLength) {
-    createLayout(0);
-    lv_obj_delete(state().center_label);
-    state().center_label = nullptr;
-    auto* settings = reinterpret_cast<SliderConfig*>(config.data);
-    settings->knob_px = 20;
-    settings->track_px = 4;
-    slider_layout(&state());
-    EXPECT_EQ(lv_obj_get_width(state().control) + 20, lv_obj_get_content_width(button) / 2);
-    for (uint8_t position : {1, 2}) {
-        settings->icon_position = position;
-        slider_layout(&state());
-        EXPECT_EQ(lv_obj_get_width(state().control) + 20, lv_obj_get_content_width(button));
     }
 }
 
@@ -366,8 +320,7 @@ TEST_F(SliderNativeWidget, UnavailableSourceUsesMinimumAndRemainsInteractive) {
         runtime = WidgetState{};
         runtime.font_owner = &fonts;
         settings->axis = axis;
-        slider_create(button, &config, &source, nullptr, &UI_SCALE_TABLE[0],
-                      nullptr, nullptr, &runtime);
+        slider_create(button, &config, &source, nullptr, &UI_SCALE_TABLE[0], &runtime);
         EXPECT_EQ(lv_slider_get_value(state().control), 0);
         EXPECT_FALSE(lv_obj_has_flag(state().control, LV_OBJ_FLAG_HIDDEN));
         EXPECT_FALSE(lv_obj_has_state(state().control, LV_STATE_DISABLED));
@@ -592,8 +545,7 @@ TEST_F(SliderNativeWidget, MissingActionBoundSliderReturnsToReportedValue) {
     auto* slider_config = reinterpret_cast<SliderConfig*>(config.data);
     ASSERT_TRUE(slider_numeric_range_init(0, 1, 0.01, &slider_config->range));
     source.action_count = 0;
-    slider_create(button, &config, &source, nullptr, &UI_SCALE_TABLE[0],
-                  nullptr, nullptr, &runtime);
+    slider_create(button, &config, &source, nullptr, &UI_SCALE_TABLE[0], &runtime);
     g_binding_value = "0.2";
     slider_tick(button, &config, &runtime);
     ASSERT_EQ(state().display_position, 20);
@@ -633,46 +585,8 @@ TEST_F(SliderNativeWidget, PointerDragAndTrackTapDispatchOnRelease) {
     EXPECT_EQ(swipes, 0u);
 }
 
-TEST_F(SliderNativeWidget, HorizontalLayoutPlacesIconAndCenterLabelBesideTrack) {
-    lv_obj_set_size(button, 120, 120);
-    createLayout(0);
-    const auto* layout = reinterpret_cast<const SliderState*>(runtime.data);
-    lv_area_t top{}, bottom{}, icon{}, center{}, control{};
-    lv_obj_get_coords(layout->top_label, &top);
-    lv_obj_get_coords(layout->bottom_label, &bottom);
-    lv_obj_get_coords(layout->icon, &icon);
-    lv_obj_get_coords(layout->center_label, &center);
-    lv_obj_get_coords(layout->control, &control);
-    EXPECT_FALSE(lv_obj_has_flag(layout->icon, LV_OBJ_FLAG_HIDDEN));
-    EXPECT_FALSE(lv_obj_has_flag(layout->center_label, LV_OBJ_FLAG_HIDDEN));
-    EXPECT_LT(top.y2, icon.y1);
-    EXPECT_LT(icon.x2, center.x1);
-    EXPECT_LT(center.x2, control.x1);
-    EXPECT_NEAR((icon.y1 + icon.y2) / 2, (center.y1 + center.y2) / 2, 1);
-    EXPECT_NEAR((center.y1 + center.y2) / 2, (control.y1 + control.y2) / 2, 1);
-    EXPECT_LT(control.y2, bottom.y1);
-}
-
-TEST_F(SliderNativeWidget, VerticalLayoutReservesOuterLabelsAndPlacesContentBesideTrack) {
-    createLayout(1);
-    const auto* layout = reinterpret_cast<const SliderState*>(runtime.data);
-    lv_area_t top{}, bottom{}, icon{}, center{}, control{};
-    lv_obj_get_coords(layout->top_label, &top);
-    lv_obj_get_coords(layout->bottom_label, &bottom);
-    lv_obj_get_coords(layout->icon, &icon);
-    lv_obj_get_coords(layout->center_label, &center);
-    lv_obj_get_coords(layout->control, &control);
-    EXPECT_FALSE(lv_obj_has_flag(layout->icon, LV_OBJ_FLAG_HIDDEN));
-    EXPECT_FALSE(lv_obj_has_flag(layout->center_label, LV_OBJ_FLAG_HIDDEN));
-    EXPECT_LT(top.y2, icon.y1);
-    EXPECT_LT(icon.y2, center.y1);
-    EXPECT_LT(control.x2, icon.x1);
-    EXPECT_LT(std::max(control.y1, icon.y1), bottom.y1);
-    EXPECT_LT(std::max(control.y2, center.y2), bottom.y1);
-}
-
 TEST_F(SliderNativeWidget, InsufficientContentHidesControlWithoutInvalidGeometry) {
-    lv_obj_set_size(button, 80, 40);
+    lv_obj_set_size(button, 10, 10);
     createLayout(0);
     const auto* layout = reinterpret_cast<const SliderState*>(runtime.data);
     EXPECT_FALSE(layout->layout_usable);
@@ -705,12 +619,8 @@ TEST_F(SliderNativeWidget, ThreeActionsShareReleaseSnapshotAndAllowLiteralAction
     EXPECT_STREQ(source.actions[0].payload.mqtt.mqtt_payload, "{value}");
 }
 
-TEST_F(SliderNativeWidget, LengthIsIndependentOfLabelAndTrackUsesConfiguredThickness) {
+TEST_F(SliderNativeWidget, LengthAndThicknessFollowConfiguration) {
     createLayout(0);
-    const int width = lv_obj_get_width(state().control);
-    lv_label_set_text(state().center_label, "A much longer label");
-    slider_layout(&state());
-    EXPECT_EQ(lv_obj_get_width(state().control), width);
     auto* settings = reinterpret_cast<SliderConfig*>(config.data);
     settings->track_px = 4;
     settings->knob_px = 20;
@@ -720,20 +630,6 @@ TEST_F(SliderNativeWidget, LengthIsIndependentOfLabelAndTrackUsesConfiguredThick
     settings->length_pct = 75;
     slider_layout(&state());
     EXPECT_EQ(lv_obj_get_width(state().control) + 20, lv_obj_get_content_width(button) * 75 / 100);
-}
-
-TEST_F(SliderNativeWidget, LargeTransformedIconFitsAndResizesWithoutAccumulatedScaling) {
-    createLayout(0);
-    state().icon_scale_x = 1024;
-    state().icon_scale_y = 1024;
-    slider_layout(&state());
-    EXPECT_FALSE(lv_obj_has_flag(state().icon, LV_OBJ_FLAG_HIDDEN));
-    const int initial_scale = lv_image_get_scale_x(state().icon);
-    slider_layout(&state());
-    EXPECT_EQ(lv_image_get_scale_x(state().icon), initial_scale);
-    lv_obj_set_size(button, 300, 220);
-    slider_layout(&state());
-    EXPECT_GT(lv_image_get_scale_x(state().icon), initial_scale);
 }
 
 TEST_F(SliderNativeWidget, PreprocessedPermissionGuardPreventsNativePress) {
@@ -785,8 +681,7 @@ TEST_F(SliderNativeWidget, BoundReportsDoNotDispatchAndPendingExpires) {
     runtime = WidgetState{};
     auto* slider_config = reinterpret_cast<SliderConfig*>(config.data);
     ASSERT_TRUE(slider_numeric_range_init(0, 1, 0.01, &slider_config->range));
-    slider_create(button, &config, &source, nullptr, &UI_SCALE_TABLE[0],
-                  nullptr, nullptr, &runtime);
+    slider_create(button, &config, &source, nullptr, &UI_SCALE_TABLE[0], &runtime);
     g_binding_value = "0";
     slider_tick(button, &config, &runtime);
     EXPECT_TRUE(state().available);
@@ -860,6 +755,10 @@ TEST(SliderSchema, RejectsInvalidRangesActionsAndUnsupportedFields) {
     WidgetConfig parsed{};
     slider_parse(button, parsed.data);
     const auto* settings = reinterpret_cast<const SliderConfig*>(parsed.data);
+    EXPECT_EQ(settings->length_pct, 100);
+    button["widget_slider_length_pct"] = 75;
+    slider_parse(button, parsed.data);
+    EXPECT_EQ(settings->length_pct, 75);
     EXPECT_FALSE(settings->show_value);
     EXPECT_EQ(settings->value_font_size, 24);
     button["widget_slider_value_font_size"] = 65560;

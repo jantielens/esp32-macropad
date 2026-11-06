@@ -40,10 +40,8 @@ static void poll_remote_image_source(ButtonTile& tile) {
 void PadScreen::pollMqttBindings(bool refreshPassive) {
 #if HAS_DISPLAY
     char resolved[BINDING_TEMPLATE_MAX_LEN];
-#if HAS_DISPLAY
     for (uint16_t i = 0; refreshPassive && i < bindingCount; i++) {
         RuntimeLabelBinding& rb = bindings[i];
-        if (!rb.active || !rb.label) continue;
 
         // Resolve template — replaces [scheme:...] tokens with live values
         binding_template_resolve(rb.templ, resolved, sizeof(resolved));
@@ -51,8 +49,24 @@ void PadScreen::pollMqttBindings(bool refreshPassive) {
         // Only update LVGL label if text changed
         if (strcmp(resolved, rb.last) == 0) continue;
         strlcpy(rb.last, resolved, sizeof(rb.last));
-        lv_label_set_text(rb.label, resolved);
-        pad_apply_font_upscale(rb.label, rb.style, (PadLabelAnchorY)rb.anchorY);
+        ButtonTile& tile = tiles[rb.tileIndex];
+        pad_set_content_label_text(tile.content_layout, rb.labelIndex, resolved);
+        tile.content_layout_dirty = true;
+    }
+
+    for (uint8_t i = 0; refreshPassive && i < tileCount; ++i) {
+        ButtonTile& tile = tiles[i];
+        if (!tile.content_layout_dirty) continue;
+        tile.content_layout_dirty = false;
+        ButtonContentRuntime& runtime = tile.content_layout;
+        const ButtonContentLayout next = pad_measure_content_layout(tile.obj, runtime);
+        if (memcmp(&next, &runtime.layout, sizeof(next)) == 0) continue;
+#if HAS_TOUCH
+        if (runtime.widget_region &&
+            memcmp(&next.widget, &runtime.layout.widget, sizeof(next.widget)) != 0)
+            touch_manager_cancel_object_input(runtime.widget_region);
+#endif
+        pad_reflow_content_layout(runtime, next);
     }
 
     // Update widget tiles from their data binding template(s)
@@ -101,16 +115,19 @@ void PadScreen::pollMqttBindings(bool refreshPassive) {
             // Only update widget if any resolved value changed
             if (strcmp(widget_combined, tile.widget_last) != 0) {
                 strlcpy(tile.widget_last, widget_combined, sizeof(tile.widget_last));
-                tile.widget_type->update(tile.obj, &tile.widget_cfg, &tile.widget_state, widget_combined);
+                lv_obj_t* widget_parent = tile.content_layout.widget_region
+                    ? tile.content_layout.widget_region : tile.obj;
+                tile.widget_type->update(widget_parent, &tile.widget_cfg, &tile.widget_state, widget_combined);
             }
         }
 
         // Always call tick (if implemented) for time-driven widgets
         if (tile.widget_type->tick) {
-            tile.widget_type->tick(tile.obj, &tile.widget_cfg, &tile.widget_state);
+            lv_obj_t* widget_parent = tile.content_layout.widget_region
+                ? tile.content_layout.widget_region : tile.obj;
+            tile.widget_type->tick(widget_parent, &tile.widget_cfg, &tile.widget_state);
         }
     }
-#endif
 
 #if HAS_IMAGE_FETCH
     for (uint8_t index = 0; refreshPassive && index < tileCount; ++index) {
@@ -214,6 +231,8 @@ void PadScreen::pollColorBindings() {
         switch (cb.target) {
         case 0: { // bg
             lv_obj_set_style_bg_color(tile.obj, rgb_to_lv(color), 0);
+            if (tile.content_layout.widget_region)
+                lv_obj_set_style_bg_color(tile.content_layout.widget_region, rgb_to_lv(color), 0);
 			const uint16_t letterbox_color = lv_color_to_u16(rgb_to_lv(color));
 #if HAS_IMAGE_LIBRARY
             if (tile.local_image_scale_mode == IMAGE_SCALE_LETTERBOX &&
@@ -321,6 +340,7 @@ void PadScreen::pollNumberBindings() {
         switch (nb.target) {
         case 0: // border_width
             lv_obj_set_style_border_width(tile.obj, val, 0);
+            tile.content_layout_dirty = true;
             break;
         case 1: // corner_radius
             lv_obj_set_style_radius(tile.obj, val, 0);
@@ -446,7 +466,8 @@ void PadScreen::pollBtnStateBindings() {
             auto* pad = static_cast<PadScreen*>(context);
             for (uint8_t index = 0; index < pad->tileCount; ++index) {
                 const ButtonTile& tile = pad->tiles[index];
-                if (tile.obj == object) return !pad->inputAllowed(tile, point);
+                if (tile.obj == object || tile.content_layout.widget_region == object)
+                    return !pad->inputAllowed(tile, point);
             }
             return false;
         }, this);

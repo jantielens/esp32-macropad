@@ -11,6 +11,10 @@ static PadScreen* tile_owner(const ButtonTile* tile) {
         ? static_cast<PadScreen*>(lv_obj_get_user_data(tile->obj)) : nullptr;
 }
 
+static lv_obj_t* tile_widget_object(const ButtonTile* tile) {
+    return tile->content_layout.widget_region ? tile->content_layout.widget_region : tile->obj;
+}
+
 #if HAS_DISPLAY
 bool PadScreen::isOverlayButton(const ButtonTile* tile) const {
     if (!tiles || !tile) return false;
@@ -95,7 +99,8 @@ uint8_t PadScreen::navigationZoneCount(const ButtonTile& tile) const {
 
 lv_area_t PadScreen::navigationArea(const ButtonTile& tile, uint8_t zone) const {
     lv_area_t area;
-    lv_obj_get_coords(tile.obj, &area);
+    lv_obj_t* target = tile.widget_type ? tile_widget_object(&tile) : tile.obj;
+    lv_obj_get_coords(target, &area);
     if (!tile.widget_type) return area;
     if (strcmp(tile.widget_type->name, "rocker") == 0) {
         if (tile.widget_cfg.data[0]) {
@@ -109,7 +114,7 @@ lv_area_t PadScreen::navigationArea(const ButtonTile& tile, uint8_t zone) const 
         }
     } else if (strcmp(tile.widget_type->name, "numericrocker") == 0 && navigationZoneCount(tile) == 5) {
         const auto* config = reinterpret_cast<const NumericRockerConfig*>(tile.widget_cfg.data);
-        lv_obj_get_content_coords(tile.obj, &area);
+        lv_obj_get_content_coords(target, &area);
         const int span = config->horizontal ? area.x2 - area.x1 + 1 : area.y2 - area.y1 + 1;
         const NRZoneLayout layout = nr_compute_zones(span, config->small_step, config->large_step, config->zone_scale_pct);
         const int bounds[] = {0, layout.outer_end, layout.inner_end, layout.inner2_start, layout.outer2_start, span};
@@ -282,8 +287,38 @@ void PadScreen::tapFlashTimerCb(lv_timer_t* timer) {
     lv_timer_delete(timer);
 }
 
-// zone: 0 = full button, 1 = zone A (top/left), 2 = zone B (bottom/right)
-// horizontal: only meaningful when zone != 0
+static void do_tap_flash_rect(ButtonTile* tile, const ButtonContentRect& rect) {
+    if (!tile->tap_overlay) return;
+
+    lv_obj_t* ov = tile->tap_overlay;
+    if (tile->tap_flash_timer) {
+        lv_timer_delete(tile->tap_flash_timer);
+        tile->tap_flash_timer = nullptr;
+        restore_tap_overlay(tile);
+    }
+
+    lv_obj_set_pos(ov, rect.x, rect.y);
+    lv_obj_set_size(ov, rect.width, rect.height);
+
+    if (button_overlay_uses_fade(tile->widget_cfg.type)) lv_obj_add_state(ov, LV_STATE_USER_1);
+    lv_obj_remove_flag(ov, LV_OBJ_FLAG_HIDDEN);
+    tile->tap_flash_timer = lv_timer_create(PadScreen::tapFlashTimerCb,
+                                             TAP_FLASH_DURATION_MS, tile);
+    if (!tile->tap_flash_timer) {
+        lv_obj_add_flag(ov, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_state(ov, LV_STATE_USER_1);
+        restore_tap_overlay(tile);
+    }
+}
+
+static ButtonContentRect widget_flash_region(const ButtonTile* tile) {
+    ButtonContentRect rect = tile->content_layout.layout.widget;
+    rect.x += tile->content_layout.offset_x;
+    rect.y += tile->content_layout.offset_y;
+    return rect;
+}
+
+// zone: 0 = full button, 1 = widget zone A, 2 = widget zone B
 static void do_tap_flash(ButtonTile* tile, uint8_t zone = 0, bool horizontal = false) {
     if (DISPLAY_DISABLE_ANIMATIONS) return;
     if (tile->obj && lv_obj_check_type(tile->obj, &lv_button_class)) {
@@ -295,43 +330,14 @@ static void do_tap_flash(ButtonTile* tile, uint8_t zone = 0, bool horizontal = f
         if (!tile->tap_flash_timer) lv_obj_remove_state(tile->obj, LV_STATE_PRESSED);
         return;
     }
-    if (!tile->tap_overlay) return;
-
-    lv_obj_t* ov = tile->tap_overlay;
-    if (tile->tap_flash_timer) {
-        lv_timer_delete(tile->tap_flash_timer);
-        tile->tap_flash_timer = nullptr;
-        restore_tap_overlay(tile);
+    ButtonContentRect rect = {tile->tap_flash_x, tile->tap_flash_y, tile->tap_flash_w, tile->tap_flash_h};
+    if (zone) {
+        rect = widget_flash_region(tile);
+        const int32_t span = horizontal ? rect.width : rect.height;
+        const int32_t split = (span + 1) / 2;
+        rect = button_layout_band(rect, zone == 1 ? 0 : split, zone == 1 ? split : span, horizontal);
     }
-
-    // Resize to cover only the tapped zone for rocker
-    if (zone == 1) {
-        // Zone A: top half (vertical) or left half (horizontal)
-        if (horizontal) {
-            lv_obj_set_size(ov, tile->tap_flash_w / 2, tile->tap_flash_h);
-        } else {
-            lv_obj_set_size(ov, tile->tap_flash_w, tile->tap_flash_h / 2);
-        }
-    } else if (zone == 2) {
-        // Zone B: bottom half (vertical) or right half (horizontal)
-        if (horizontal) {
-            lv_obj_set_pos(ov, tile->tap_flash_x + tile->tap_flash_w / 2, tile->tap_flash_y);
-            lv_obj_set_size(ov, tile->tap_flash_w - tile->tap_flash_w / 2, tile->tap_flash_h);
-        } else {
-            lv_obj_set_pos(ov, tile->tap_flash_x, tile->tap_flash_y + tile->tap_flash_h / 2);
-            lv_obj_set_size(ov, tile->tap_flash_w, tile->tap_flash_h - tile->tap_flash_h / 2);
-        }
-    }
-
-    if (button_overlay_uses_fade(tile->widget_cfg.type)) lv_obj_add_state(ov, LV_STATE_USER_1);
-    lv_obj_remove_flag(ov, LV_OBJ_FLAG_HIDDEN);
-    tile->tap_flash_timer = lv_timer_create(PadScreen::tapFlashTimerCb,
-                                             TAP_FLASH_DURATION_MS, tile);
-    if (!tile->tap_flash_timer) {
-        lv_obj_add_flag(ov, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_remove_state(ov, LV_STATE_USER_1);
-        restore_tap_overlay(tile);
-    }
+    do_tap_flash_rect(tile, rect);
 }
 
 void PadScreen::onWidgetPressFeedback(lv_event_t* event) {
@@ -365,36 +371,10 @@ void PadScreen::onWidgetPressFeedback(lv_event_t* event) {
     }
 }
 
-// Pixel-based tap flash: resize overlay to a pixel band of the tile.
-// px_start/px_end are tile-relative pixel offsets along the given axis.
+// Pixel offsets are relative to the widget region, not the outer button.
 static void do_tap_flash_px(ButtonTile* tile, int px_start, int px_end, bool horizontal) {
     if (DISPLAY_DISABLE_ANIMATIONS) return;
-    if (!tile->tap_overlay) return;
-
-    lv_obj_t* ov = tile->tap_overlay;
-    if (tile->tap_flash_timer) {
-        lv_timer_delete(tile->tap_flash_timer);
-        tile->tap_flash_timer = nullptr;
-        restore_tap_overlay(tile);
-    }
-
-    if (horizontal) {
-        lv_obj_set_pos(ov, tile->tap_flash_x + px_start, tile->tap_flash_y);
-        lv_obj_set_size(ov, px_end - px_start, tile->tap_flash_h);
-    } else {
-        lv_obj_set_pos(ov, tile->tap_flash_x, tile->tap_flash_y + px_start);
-        lv_obj_set_size(ov, tile->tap_flash_w, px_end - px_start);
-    }
-
-    if (button_overlay_uses_fade(tile->widget_cfg.type)) lv_obj_add_state(ov, LV_STATE_USER_1);
-    lv_obj_remove_flag(ov, LV_OBJ_FLAG_HIDDEN);
-    tile->tap_flash_timer = lv_timer_create(PadScreen::tapFlashTimerCb,
-                                             TAP_FLASH_DURATION_MS, tile);
-    if (!tile->tap_flash_timer) {
-        lv_obj_add_flag(ov, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_remove_state(ov, LV_STATE_USER_1);
-        restore_tap_overlay(tile);
-    }
+    do_tap_flash_rect(tile, button_layout_band(widget_flash_region(tile), px_start, px_end, horizontal));
 }
 
 
@@ -491,6 +471,14 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
     // Suppress taps that LVGL fires as part of a swipe gesture
     if (lv_tick_get() - swipe_actions_last_swipe_time() < 300) return;
 
+    if (tile->widget_type &&
+        (strcmp(tile->widget_type->name, "rocker") == 0 ||
+         strcmp(tile->widget_type->name, "numericrocker") == 0)) {
+        lv_area_t area;
+        lv_obj_get_coords(tile_widget_object(tile), &area);
+        if (point.x < area.x1 || point.x > area.x2 || point.y < area.y1 || point.y > area.y2) return;
+    }
+
     if (tile->widget_type && strcmp(tile->widget_type->name, "toggle") == 0) {
 #if HAS_AUDIO
         if (toggle_interactive(&tile->widget_state)) {
@@ -529,7 +517,7 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
     if (tile->widget_type && strcmp(tile->widget_type->name, "rocker") == 0) {
         // Determine which zone was tapped (primary vs secondary)
         lv_area_t area;
-        lv_obj_get_coords(tile->obj, &area);
+        lv_obj_get_coords(tile_widget_object(tile), &area);
 
         // Read axis from widget config
         rocker_horizontal = tile->widget_cfg.data[0]; // RockerConfig.horizontal is the first byte
@@ -559,17 +547,12 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
         auto* cfg = reinterpret_cast<const NumericRockerConfig*>(tile->widget_cfg.data);
 
         lv_area_t content;
-        lv_area_t tile_area;
-        lv_obj_get_content_coords(tile->obj, &content);
-        lv_obj_get_coords(tile->obj, &tile_area);
+        lv_obj_get_content_coords(tile_widget_object(tile), &content);
         int span = cfg->horizontal ? (content.x2 - content.x1 + 1)
                        : (content.y2 - content.y1 + 1);
         if (span <= 0) return;
         int rel = cfg->horizontal ? (point.x - content.x1) : (point.y - content.y1);
         rel = nr_clamp(rel, 0, span - 1);
-        int axis_offset = cfg->horizontal ? (content.x1 - tile_area.x1)
-                          : (content.y1 - tile_area.y1);
-
         NRZoneLayout z = nr_compute_zones(span, cfg->small_step, cfg->large_step,
                           cfg->zone_scale_pct);
 
@@ -608,8 +591,7 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
             memcpy(&local_nr, &cfg->adjust_action, sizeof(ButtonAction));
             if (!action_type_substitute_step(action_type_find(local_nr.type), local_nr, step)) return;
 
-            do_tap_flash_px(tile, axis_offset + flash_start, axis_offset + flash_end,
-                            cfg->horizontal);
+            do_tap_flash_px(tile, flash_start, flash_end, cfg->horizontal);
 #if HAS_AUDIO
             if (!has_audio_action(&local_nr, 1)) {
                 const char* pattern = is_large ? device_config.lp_beep : device_config.tap_beep;
@@ -698,7 +680,7 @@ void PadScreen::longPressAt(ButtonTile* tile, const lv_point_t& point) {
         strcmp(tile->widget_type->name, "numericrocker") == 0) {
         auto* cfg = reinterpret_cast<const NumericRockerConfig*>(tile->widget_cfg.data);
         lv_area_t area;
-        lv_obj_get_coords(tile->obj, &area);
+        lv_obj_get_coords(tile_widget_object(tile), &area);
         int span = cfg->horizontal ? (area.x2 - area.x1) : (area.y2 - area.y1);
         if (span > 0) {
             int rel = cfg->horizontal ? (point.x - area.x1) : (point.y - area.y1);

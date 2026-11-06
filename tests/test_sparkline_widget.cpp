@@ -9,6 +9,7 @@
 #define HAS_MCP 1
 #include "data_stream.h"
 #include "binding_template.h"
+#include "button_content_lvgl.h"
 
 static unsigned long now_ms = 10000;
 extern "C" unsigned long millis() { return now_ms; }
@@ -27,6 +28,10 @@ bool binding_template_resolve(const char* text, char* out, size_t size) {
     strlcpy(out, found == bindings.end() ? text : found->second.c_str(), size);
     return true;
 }
+bool binding_template_resolve_single_token(const char* text, char* out, size_t size) {
+    if (!text || text[0] != '[' || text[strlen(text) - 1] != ']') return false;
+    return binding_template_resolve(text, out, size);
+}
 data_stream_handle_t data_stream_find(const char* binding, uint32_t, uint16_t, const char*, uint16_t) {
     if (!streams_available) return DATA_STREAM_INVALID;
     if (strcmp(binding, "[test:stream3]") == 0) return 2;
@@ -40,6 +45,20 @@ bool data_stream_get(data_stream_handle_t handle, DataStreamSnapshot* out) {
 
 #include "widgets/widget.cpp"
 #include "widgets/sparkline_widget.cpp"
+#undef TAG
+static unsigned gauge_trig_calls = 0;
+static float gauge_count_sin(float angle) { ++gauge_trig_calls; return sinf(angle); }
+static float gauge_count_cos(float angle) { ++gauge_trig_calls; return cosf(angle); }
+#define sinf gauge_count_sin
+#define cosf gauge_count_cos
+#include "widgets/gauge_widget.cpp"
+#undef sinf
+#undef cosf
+#undef TAG
+#include "widgets/bar_chart_widget.cpp"
+#undef TAG
+#include "widgets/table_widget.cpp"
+#undef TAG
 
 static unsigned other_schema_calls = 0;
 static void describe_other_widget(JsonObject& out) {
@@ -55,7 +74,7 @@ TEST(SparklineSchema, FocusedLookupMatchesFullRegistry) {
     JsonDocument full_doc;
     JsonArray full = full_doc.to<JsonArray>();
     ASSERT_TRUE(widget_schema_emit(full));
-    ASSERT_EQ(full.size(), 2u);
+    ASSERT_EQ(full.size(), widget_count());
     ASSERT_EQ(other_schema_calls, 1u);
     other_schema_calls = 0;
     JsonDocument focused_doc;
@@ -156,7 +175,7 @@ protected:
         rect.h = 380;
         UIScaleInfo scale{};
         scale.font_small = LV_FONT_DEFAULT;
-        type->createUI(tile, &config, &button, &rect, &scale, nullptr, nullptr, &state);
+        type->createUI(tile, &config, &button, &rect, &scale, &state);
         ASSERT_NE(chart()->lines[0], nullptr);
         ASSERT_NE(chart()->lines[1], nullptr);
         ASSERT_NE(chart()->lines[2], nullptr);
@@ -177,10 +196,342 @@ protected:
     }
 };
 
+
 class SparklinePendingStreams : public SparklineWidget {
 protected:
     bool initial_streams_available() const override { return false; }
 };
+
+TEST_F(SparklineWidget, ResizingRegionReflowsWithoutNewSamples) {
+    lv_obj_t* line = chart()->lines[0];
+    lv_obj_t* area = lv_obj_get_parent(line);
+    auto* points = chart()->points[0];
+    const auto stream = chart()->ds_handles[0];
+    const int old_width = chart()->cached_chart_w;
+    const auto old_last_x = points[3].x;
+
+    lv_obj_set_size(tile, 240, 160);
+    lv_obj_update_layout(tile);
+    tick();
+    lv_obj_update_layout(tile);
+    EXPECT_LT(chart()->cached_chart_w, old_width);
+    EXPECT_EQ(lv_obj_get_width(area), chart()->cached_chart_w);
+    EXPECT_LT(points[3].x, old_last_x);
+    EXPECT_EQ(lv_obj_get_width(chart()->lbl_current[0]), chart()->label_margin_r);
+    EXPECT_EQ(chart()->lines[0], line);
+    EXPECT_EQ(chart()->points[0], points);
+    EXPECT_EQ(chart()->ds_handles[0], stream);
+
+    lv_obj_set_size(tile, 4, 4);
+    lv_obj_update_layout(tile);
+    tick();
+    EXPECT_GE(chart()->cached_chart_w, 2);
+    EXPECT_GE(chart()->cached_chart_h, 2);
+
+    lv_obj_set_size(tile, 400, 250);
+    lv_obj_update_layout(tile);
+    tick();
+    EXPECT_GT(chart()->cached_chart_w, 2);
+    EXPECT_EQ(chart()->lines[0], line);
+    EXPECT_EQ(chart()->ds_handles[0], stream);
+}
+
+TEST_F(SparklineWidget, SharedContentClipsUpscaledLabelsAndPreservesOffsets) {
+    lv_obj_set_style_pad_all(tile, 0, 0);
+    lv_obj_t* label = lv_label_create(tile);
+    lv_label_set_text(label, "A long label");
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_bg_color(label, lv_color_hex(0xff0000), 0);
+    lv_obj_set_style_bg_opa(label, LV_OPA_COVER, 0);
+    lv_obj_set_style_transform_scale(label, 512, 0);
+    ScreenButtonConfig button{};
+    button.widget_position = ButtonWidgetPosition::Right;
+    button.icon_position = ButtonGroupIconPosition::Above;
+    button.group_size_pct = 40;
+    button.ui_offset_x = 3;
+    button.style_center.x_offset = 2;
+    button.style_center.font_upscale = 512;
+    strlcpy(button.label_center, "A long label", sizeof(button.label_center));
+    strlcpy(button.widget.type, "sparkline", sizeof(button.widget.type));
+    lv_obj_t* labels[] = {nullptr, label, nullptr};
+    UIScaleInfo scale = pad_get_scale_info();
+    ButtonContentLayout layout = pad_apply_content_layout(tile, button, nullptr, labels, scale, nullptr);
+    lv_obj_t* region = lv_obj_get_parent(label);
+    lv_obj_update_layout(tile);
+    EXPECT_EQ(lv_obj_get_x(region), layout.labels[1].x + 5);
+    EXPECT_EQ(lv_obj_get_width(label) * 2, layout.labels[1].width - layout.labels[1].width % 2);
+    EXPECT_EQ(lv_obj_get_style_transform_pivot_x(label, LV_PART_MAIN), 0);
+    EXPECT_EQ(lv_obj_get_style_transform_pivot_y(label, LV_PART_MAIN), 0);
+    EXPECT_LE(layout.labels[1].x + layout.labels[1].width, layout.widget.x);
+    settle();
+    lv_area_t region_area;
+    lv_obj_get_coords(region, &region_area);
+    const int32_t x = region_area.x2 + 1;
+    const int32_t y = region_area.y1 + 1;
+    ASSERT_LT(x, 600);
+    ASSERT_LT(y, 400);
+    const size_t pixel = (y * 600 + x) * 2;
+    EXPECT_NE(framebuffer[pixel] | (framebuffer[pixel + 1] << 8), 0xf800);
+}
+
+TEST_F(SparklineWidget, AutoContentReflowsFromResolvedLabelText) {
+    lv_obj_set_size(tile, 200, 100);
+    lv_obj_set_style_pad_all(tile, 0, 0);
+    lv_obj_t* label = lv_label_create(tile);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
+    lv_label_set_text(label, "");
+    ScreenButtonConfig button{};
+    button.widget_position = ButtonWidgetPosition::Right;
+    button.icon_position = ButtonGroupIconPosition::Above;
+    button.group_size_pct = 0;
+    strlcpy(button.widget.type, "sparkline", sizeof(button.widget.type));
+    lv_obj_t* labels[] = {nullptr, label, nullptr};
+    UIScaleInfo scale = pad_get_scale_info();
+    ButtonContentRuntime runtime{};
+    ButtonContentLayout layout = pad_apply_content_layout(tile, button, nullptr, labels, scale, nullptr, &runtime);
+    runtime.widget_region = button_content_region(tile, layout.widget, 0, 0);
+    EXPECT_EQ(layout.labels[1].height, lv_font_get_line_height(&lv_font_montserrat_14));
+    const int initial_x = layout.widget.x;
+
+    pad_set_content_label_text(runtime, 1, "A longer resolved value");
+    layout = pad_measure_content_layout(tile, runtime);
+    pad_reflow_content_layout(runtime, layout);
+    lv_obj_update_layout(tile);
+    EXPECT_GT(layout.widget.x, initial_x);
+    EXPECT_LE(layout.widget.x, 102);
+    EXPECT_EQ(lv_obj_get_x(runtime.widget_region), layout.widget.x);
+
+    pad_set_content_label_text(runtime, 1, "A");
+    layout = pad_measure_content_layout(tile, runtime);
+    pad_reflow_content_layout(runtime, layout);
+    lv_obj_update_layout(tile);
+    EXPECT_LT(layout.widget.x, 102);
+    EXPECT_EQ(lv_obj_get_x(runtime.widget_region), layout.widget.x);
+}
+
+TEST_F(SparklineWidget, AutoDotLabelsRecoverAfterTextAndBoundsGrow) {
+    lv_obj_set_size(tile, 200, 100);
+    lv_obj_set_style_pad_all(tile, 0, 0);
+    lv_obj_set_style_border_width(tile, 0, 0);
+    lv_obj_t* label = lv_label_create(tile);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
+    lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
+    lv_label_set_text(label, "A");
+    ScreenButtonConfig button{};
+    strlcpy(button.label_center, "A", sizeof(button.label_center));
+    strlcpy(button.widget.type, "sparkline", sizeof(button.widget.type));
+    button.widget_position = ButtonWidgetPosition::Right;
+    button.style_center.long_mode = LABEL_MODE_DOT;
+    lv_obj_t* labels[] = {nullptr, label, nullptr};
+    ButtonContentRuntime runtime{};
+    pad_apply_content_layout(tile, button, nullptr, labels, pad_get_scale_info(), nullptr, &runtime);
+    const char* text = "Very long text that should retain its measured width";
+    pad_set_content_label_text(runtime, 1, text);
+    pad_reflow_content_layout(runtime, pad_measure_content_layout(tile, runtime));
+    lv_obj_update_layout(tile);
+    EXPECT_LT(lv_obj_get_width(label), runtime.input.label_width[1]);
+    EXPECT_STRNE(lv_label_get_text(label), text);
+    const int natural_width = runtime.input.label_width[1];
+
+    lv_obj_set_size(tile, 800, 100);
+    pad_reflow_content_layout(runtime, pad_measure_content_layout(tile, runtime));
+    lv_obj_update_layout(tile);
+    EXPECT_EQ(lv_obj_get_width(label), natural_width);
+    EXPECT_STREQ(lv_label_get_text(label), text);
+}
+
+TEST_F(SparklineWidget, ReflowRestoresIconScaleAfterRegionGrows) {
+    static const uint8_t pixels[24 * 24 * 2] = {};
+    lv_image_dsc_t image{};
+    image.header.magic = LV_IMAGE_HEADER_MAGIC;
+    image.header.cf = LV_COLOR_FORMAT_RGB565;
+    image.header.w = image.header.h = 24;
+    image.header.stride = 48;
+    image.data_size = sizeof(pixels);
+    image.data = pixels;
+    lv_obj_set_size(tile, 200, 100);
+    lv_obj_set_style_pad_all(tile, 0, 0);
+    lv_obj_t* icon = lv_image_create(tile);
+    lv_image_set_src(icon, &image);
+    lv_image_set_scale(icon, 512);
+    ScreenButtonConfig button{};
+    button.widget_position = ButtonWidgetPosition::Right;
+    button.group_size_pct = 10;
+    strlcpy(button.widget.type, "sparkline", sizeof(button.widget.type));
+    lv_obj_t* labels[] = {nullptr, nullptr, nullptr};
+    UIScaleInfo scale = pad_get_scale_info();
+    ButtonContentRuntime runtime{};
+    pad_apply_content_layout(tile, button, icon, labels, scale, nullptr, &runtime);
+    const uint32_t small_scale = lv_image_get_scale_x(icon);
+    EXPECT_LT(small_scale, 512u);
+
+    runtime.input.group_size_pct = 60;
+    pad_reflow_content_layout(runtime, pad_measure_content_layout(tile, runtime));
+    EXPECT_EQ(lv_image_get_scale_x(icon), 512u);
+    runtime.input.group_size_pct = 10;
+    pad_reflow_content_layout(runtime, pad_measure_content_layout(tile, runtime));
+    EXPECT_EQ(lv_image_get_scale_x(icon), small_scale);
+}
+
+TEST_F(SparklineWidget, GaugeResizeReusesTicksAndKeepsCaptionInsideRegion) {
+    lv_obj_t* region = button_content_region(tile, {0, 0, 240, 180}, 0, 0);
+    WidgetConfig config{};
+    WidgetState state{};
+    ScreenButtonConfig button{};
+    PadRect rect{0, 0, 240, 180};
+    UIScaleInfo scale = pad_get_scale_info();
+    JsonDocument document;
+    document["widget_gauge_start_label"] = "Power";
+    document["widget_gauge_ticks"] = 4;
+    gauge_parse(document.as<JsonObject>(), config.data);
+    gauge_create(region, &config, &button, &rect, &scale, &state);
+    auto* gauge = reinterpret_cast<GaugeState*>(state.data);
+    ASSERT_GT(gauge->tick_line_count, 0);
+    ASSERT_NE(gauge->start_label_1, nullptr);
+    gauge_tick(region, &config, &state);
+    const unsigned initial_calls = gauge_trig_calls;
+    for (int i = 0; i < 10; ++i) gauge_tick(region, &config, &state);
+    EXPECT_EQ(gauge_trig_calls, initial_calls);
+
+    unsigned deleted = 0;
+    auto on_delete = [](lv_event_t* event) { ++*static_cast<unsigned*>(lv_event_get_user_data(event)); };
+    std::vector<lv_obj_t*> ticks(gauge->tick_lines, gauge->tick_lines + gauge->tick_line_count);
+    for (lv_obj_t* line : ticks) lv_obj_add_event_cb(line, on_delete, LV_EVENT_DELETE, &deleted);
+    lv_obj_set_size(region, 160, 100);
+    gauge_tick(region, &config, &state);
+    EXPECT_EQ(deleted, 0u);
+    EXPECT_GT(gauge_trig_calls, initial_calls);
+    EXPECT_EQ(gauge->tick_line_count, ticks.size());
+    for (unsigned i = 0; i < ticks.size(); ++i) {
+        EXPECT_EQ(gauge->tick_lines[i], ticks[i]);
+        lv_obj_remove_event_cb_with_user_data(ticks[i], on_delete, &deleted);
+    }
+    lv_obj_update_layout(region);
+    const lv_area_t bounds = widget_content_bounds(gauge->start_label_1);
+    const int x = lv_obj_get_x(gauge->start_label_1), y = lv_obj_get_y(gauge->start_label_1);
+    EXPECT_GE(x + bounds.x1, 0);
+    EXPECT_GE(y + bounds.y1, 0);
+    EXPECT_LT(x + bounds.x2, lv_obj_get_content_width(region));
+    EXPECT_LT(y + bounds.y2, lv_obj_get_content_height(region));
+    gauge_destroy(&state);
+}
+
+TEST_F(SparklineWidget, BarChartResizeMatchesCreationGeometryWithDualCaptions) {
+    WidgetConfig config{};
+    ScreenButtonConfig button{};
+    PadRect rect{0, 0, 200, 140};
+    UIScaleInfo scale = pad_get_scale_info();
+    JsonDocument document;
+    document["widget_bar_label"] = "Near";
+    document["widget_bar_label_2"] = "Far";
+    document["widget_bar_dual_binding_pair_1"] = true;
+    strlcpy(config.data_binding[1], "second", sizeof(config.data_binding[1]));
+    for (bool horizontal : {false, true}) {
+        document["widget_orientation"] = horizontal ? "horizontal" : "vertical";
+        bar_chart_parse(document.as<JsonObject>(), config.data);
+        lv_obj_t* resized = button_content_region(tile, {0, 0, 300, 200}, 0, 0);
+        lv_obj_t* fresh = button_content_region(tile, {0, 0, rect.w, rect.h}, 0, 0);
+        struct StyleRecord {
+            ButtonFillStyle style;
+            char color[8];
+        } style{};
+        style.style.bytes = sizeof(style);
+        style.style.track_radius = 64;
+        strcpy(style.color, "#000000");
+        for (auto& offset : style.style.color_offsets) offset = offsetof(StyleRecord, color);
+        ASSERT_NE(fill_style_create(resized, &style.style), nullptr);
+        ASSERT_NE(fill_style_create(fresh, &style.style), nullptr);
+        WidgetState resized_state{}, fresh_state{};
+        bar_chart_create(resized, &config, &button, &rect, &scale, &resized_state);
+        bar_chart_create(fresh, &config, &button, &rect, &scale, &fresh_state);
+        lv_obj_set_size(resized, rect.w, rect.h);
+        bar_chart_tick(resized, &config, &resized_state);
+        lv_obj_update_layout(tile);
+        auto* actual = reinterpret_cast<BarChartState*>(resized_state.data);
+        auto* expected = reinterpret_cast<BarChartState*>(fresh_state.data);
+        ASSERT_EQ(actual->num_bars, 2);
+        for (int i = 0; i < 2; ++i) {
+            EXPECT_EQ(actual->slots[i].track_total, expected->slots[i].track_total);
+            EXPECT_EQ(actual->slots[i].track_cross, expected->slots[i].track_cross);
+            EXPECT_EQ(lv_obj_get_style_radius(actual->slots[i].fill, LV_PART_MAIN),
+                      lv_obj_get_style_radius(expected->slots[i].fill, LV_PART_MAIN));
+            ASSERT_NE(actual->slots[i].label, nullptr);
+            EXPECT_EQ(lv_obj_get_x(actual->slots[i].label), lv_obj_get_x(expected->slots[i].label));
+            EXPECT_EQ(lv_obj_get_y(actual->slots[i].label), lv_obj_get_y(expected->slots[i].label));
+        }
+        bar_chart_destroy(&resized_state);
+        bar_chart_destroy(&fresh_state);
+        lv_obj_delete(resized);
+        lv_obj_delete(fresh);
+    }
+}
+
+TEST_F(SparklineWidget, TableResizePreservesConfiguredAndAutomaticColumnWidths) {
+    lv_obj_t* region = button_content_region(tile, {0, 0, 200, 140}, 0, 0);
+    WidgetConfig config{};
+    WidgetState state{};
+    ScreenButtonConfig button{};
+    PadRect rect{0, 0, 200, 140};
+    UIScaleInfo scale = pad_get_scale_info();
+    table_create(region, &config, &button, &rect, &scale, &state);
+    const char* payload = R"({"columns":[{"key":"name","width_pct":25},{"key":"value"}],"rows":[{"name":"A","value":10}]})";
+    table_update(region, &config, &state, payload);
+    auto* table = table_get_state(&state);
+    ASSERT_EQ(table->col_count, 2);
+    const int original_width = lv_obj_get_width(table->table);
+    EXPECT_EQ(lv_table_get_column_width(table->table, 0), original_width / 4);
+    EXPECT_EQ(lv_table_get_column_width(table->table, 1), original_width - original_width / 4);
+    lv_obj_set_size(region, 280, 140);
+    lv_obj_update_layout(region);
+    const int width = lv_obj_get_width(table->table);
+    EXPECT_GT(width, original_width);
+    EXPECT_EQ(lv_table_get_column_width(table->table, 0), width / 4);
+    EXPECT_EQ(lv_table_get_column_width(table->table, 1), width - width / 4);
+    table_destroy(&state);
+}
+
+TEST_F(SparklineWidget, ChartAndAnnotationsUseAssignedRegion) {
+    lv_obj_t* region = button_content_region(tile, {40, 30, 120, 90}, 0, 0);
+    WidgetState region_state{};
+    ScreenButtonConfig button{};
+    PadRect rect{};
+    rect.w = 580;
+    rect.h = 380;
+    UIScaleInfo scale{};
+    scale.font_small = LV_FONT_DEFAULT;
+    type->createUI(region, &config, &button, &rect, &scale, &region_state);
+    auto* region_chart = reinterpret_cast<SparklineState*>(region_state.data);
+    ASSERT_NE(region_chart->lines[0], nullptr);
+    type->update(region, &config, &region_state, "ignored");
+    lv_obj_update_layout(region);
+    EXPECT_EQ(lv_obj_get_parent(lv_obj_get_parent(region_chart->lines[0])), region);
+    EXPECT_LE(region_chart->cached_chart_w + region_chart->label_margin_r, 120);
+    ASSERT_NE(region_chart->lbl_current[0], nullptr);
+    EXPECT_EQ(lv_obj_get_parent(region_chart->lbl_current[0]), region);
+    EXPECT_GE(lv_obj_get_x(region_chart->lbl_current[0]), 0);
+    EXPECT_LE(lv_obj_get_x(region_chart->lbl_current[0]) +
+              lv_obj_get_width(region_chart->lbl_current[0]), 120);
+    type->destroyUI(&region_state);
+}
+
+TEST_F(SparklineWidget, InitiallySmallRegionCanGrow) {
+    lv_obj_t* region = button_content_region(tile, {0, 0, 1, 1}, 0, 0);
+    WidgetState region_state{};
+    ScreenButtonConfig button{};
+    PadRect rect{};
+    UIScaleInfo scale{};
+    scale.font_small = LV_FONT_DEFAULT;
+    type->createUI(region, &config, &button, &rect, &scale, &region_state);
+    auto* region_chart = reinterpret_cast<SparklineState*>(region_state.data);
+    ASSERT_NE(region_chart->lines[0], nullptr);
+    lv_obj_set_size(region, 120, 90);
+    lv_obj_update_layout(region);
+    type->tick(region, &config, &region_state);
+    EXPECT_GT(region_chart->cached_chart_w, 2);
+    EXPECT_GT(region_chart->cached_chart_h, 2);
+    EXPECT_NE(region_chart->draw_context[0].count, 0);
+    type->destroyUI(&region_state);
+}
 
 TEST_F(SparklinePendingStreams, TickConnectsLateStreamsWithoutAnotherSaveOrRevisionChange) {
     for (uint8_t i = 0; i < 3; i++) {

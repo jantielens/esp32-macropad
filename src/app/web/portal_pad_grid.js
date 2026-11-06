@@ -246,6 +246,7 @@ function padUpdateButtonPreview(previous, button) {
     const icon = sameIcon ? cell.querySelector('.pad-cell-icon') : null;
     cell.replaceChildren();
     cell.classList.remove('pad-cell-has-widget');
+    delete cell.dataset.groupedLayout;
     cell.style.justifyContent = '';
     cell.style.padding = '';
     cell.removeAttribute('aria-description');

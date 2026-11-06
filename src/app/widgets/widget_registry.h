@@ -15,7 +15,9 @@ struct PadRect;
 struct UIScaleInfo;
 class PadFontCache;
 
+#ifndef WIDGET_STATE_MAX_BYTES
 #define WIDGET_STATE_MAX_BYTES 256
+#endif
 
 struct WidgetState {
     uint8_t data[WIDGET_STATE_MAX_BYTES];
@@ -49,7 +51,6 @@ struct WidgetType {
     void (*createUI)(lv_obj_t* tile, const WidgetConfig* cfg,
                      const struct ScreenButtonConfig* btn,
                      const PadRect* rect, const UIScaleInfo* scale,
-                     lv_obj_t* icon_img, lv_obj_t* center_label,
                      WidgetState* state);
     void (*update)(lv_obj_t* tile, const WidgetConfig* cfg,
                    WidgetState* state, const char* raw_value);

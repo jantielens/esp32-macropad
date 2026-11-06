@@ -50,8 +50,32 @@ Noto emoji and local images keep their original colors. **Apply** updates the
 button draft; **Cancel** leaves it unchanged. Remove icon clears the editor
 draft, and **Save Pad** persists the change. Icon Size 0 is automatic; 1-250%
 overrides it.
-Position Above/Left/Centered changes ordinary label/icon layout.
-Some widgets own placement and hide that selector.
+**Icon position** places the icon above, below, left, or right of the labels.
+
+### Arrange button content
+
+The top, center, and bottom labels form a group with the icon. For a button
+with a widget, **Widget position** places the widget above, below, left, or
+right of that group; right is the default. **Labels and icon size %** controls the group's share of
+the width for a side-by-side layout or the height for a vertical layout. Use
+0 for Auto, which measures the content and limits the group to half the
+available space, or 10-90 for a fixed percentage. Without a widget, the group
+uses the whole button.
+
+Missing labels and icons use no space. A configured binding that resolves to
+empty retains its label space. Label styles, including per-label colors and
+offsets, still apply. UI offset and style
+offsets nudge the resulting content. Small buttons compress or clip content
+instead of changing layouts. Enlarge the button or reduce content and font
+sizes if necessary. The editor may warn about a likely fit problem, but its font
+measurements and grid preview are approximate; check the device.
+
+Auto sizing follows resolved label text, even when the current label is shown
+with an ellipsis. If a widget region changes during a gesture, that gesture is
+canceled until you release; held input on other widgets is unaffected.
+
+Existing button configurations and layouts can change after updating; review
+and adjust them as needed.
 
 Material Symbols are distributed under the [Apache License 2.0](https://github.com/google/material-design-icons/blob/master/LICENSE).
 Noto Emoji artwork is distributed under the [SIL Open Font License 1.1](https://github.com/googlefonts/noto-emoji/blob/main/LICENSE).

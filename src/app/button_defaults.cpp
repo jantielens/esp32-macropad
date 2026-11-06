@@ -143,9 +143,9 @@ static bool load_from_flash(ButtonDefaults* d) {
     strlcpy(d->label_bottom_style, doc["label_bottom_style"] | "", CONFIG_LABEL_STYLE_MAX_LEN);
     {
         const char* ip = doc["icon_position"] | "";
-        if (ip[0] == 'l')      d->icon_position = ICON_POS_LEFT;
-        else if (ip[0] == 'c') d->icon_position = ICON_POS_CENTER;
-        else                    d->icon_position = ICON_POS_ABOVE;
+        uint8_t position = ICON_POS_ABOVE;
+        if (button_position_parse(ip, &position)) d->icon_position = position;
+        else d->icon_position = ICON_POS_ABOVE;
     }
 
     LOGI(TAG, "Loaded device pad and button defaults");

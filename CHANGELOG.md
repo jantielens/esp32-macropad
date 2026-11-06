@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+> [!WARNING]
+> The shared button/widget layout replaces the previous specialized widget
+> layouts. Existing pads may look different on the device after updating;
+> legacy layout settings are not migrated. Review your pads on the device and
+> adjust label/icon placement, widget position, and group sizing as needed.
+
 ### Added
 
 * Add a Face widget with Robot Eyes and Doodle Buddy styles, eight emotions,
@@ -34,6 +40,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Replace widget-specific layouts with a shared group of up to three labels
+  and an icon, positioned above, below, left, or right of the widget.
+  Configure icon placement independently, and choose Auto sizing or a fixed
+  group percentage. Unconfigured labels and icons consume no space;
+  widget-owned data captions and interactions remain available.
+  Default widgets to the right of the group and Slider length to 100%.
+  See [button appearance](docs/user/pads/appearance.md#arrange-button-content).
+* Restore large, subdued widget-type icons in the portal pad preview. Keep
+  them inside the widget region, scale them down on small buttons, and prevent
+  them from intercepting clicks or consuming label/icon layout space.
 * Document the Main and Overlay pattern for conditional icons and expose it to
   MCP assistants.
 * Let MCP assistants request focused binding-scheme or widget capabilities
@@ -46,6 +62,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Correct shared label sizing, including recovery from ellipsis truncation,
+  and Gauge caption bounds when widget regions resize. Preserve Mousepad and
+  Gamepad input ownership; resizing cancels only the affected widget's gesture,
+  not held input on other widgets.
 * Allow large MCP tool results without the copied-string size limit that can
   reject capability responses.
 * Reduce stack usage while parsing and saving pads to prevent crashes with

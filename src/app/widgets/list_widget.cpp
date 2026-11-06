@@ -78,7 +78,6 @@ static void list_parse(const JsonObject& btn, uint8_t* data) {
 static void list_create(lv_obj_t* tile, const WidgetConfig* wcfg,
                          const ScreenButtonConfig* btn,
                          const PadRect* rect, const UIScaleInfo* scale,
-                         lv_obj_t* icon_img, lv_obj_t* center_label,
                          WidgetState* state) {
     (void)rect;
     auto* st = reinterpret_cast<ListWidgetState*>(state->data);
@@ -96,10 +95,6 @@ static void list_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     st->item_font = pad_resolve_font(btn->style_center, scale->font_large, state->font_owner);
     st->item_color = pad_resolve_label_color(btn->style_center, fg);
     st->item_radius = (lv_coord_t)strtol(btn->corner_radius, nullptr, 10);
-
-    // Hide standard labels — widget controls the full tile
-    if (center_label) lv_obj_add_flag(center_label, LV_OBJ_FLAG_HIDDEN);
-    if (icon_img) lv_obj_add_flag(icon_img, LV_OBJ_FLAG_HIDDEN);
 
     // Look up provider from data binding
     const char* provider_id = wcfg->data_binding[0];
@@ -142,20 +137,9 @@ static void list_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     }
 
     // Create scrollable container (no flex/list — LV_USE_FLEX and LV_USE_LIST disabled).
-    // Inset vertically so top/bottom button labels remain visible above/below the list.
-    // Size from the tile's content area so the list honors the button's content
-    // padding (pad_all) consistently with labels and other widgets.
-    lv_obj_update_layout(tile);
-    const lv_coord_t cont_w_full = lv_obj_get_content_width(tile);
-    const lv_font_t* top_font = pad_resolve_font(btn->style_top, scale->font_small, state->font_owner);
-    const lv_font_t* bot_font = pad_resolve_font(btn->style_bottom, scale->font_small, state->font_owner);
-    const lv_coord_t top_h = btn->label_top[0] ? lv_font_get_line_height(top_font) : 0;
-    const lv_coord_t bot_h = btn->label_bottom[0] ? lv_font_get_line_height(bot_font) : 0;
-    const lv_coord_t cont_h = lv_obj_get_content_height(tile) - top_h - bot_h;
-
     lv_obj_t* cont = lv_obj_create(tile);
-    lv_obj_set_size(cont, cont_w_full, cont_h);
-    lv_obj_align(cont, LV_ALIGN_CENTER, 0, (top_h - bot_h) / 2);
+    lv_obj_set_size(cont, lv_pct(100), lv_pct(100));
+    lv_obj_align(cont, LV_ALIGN_TOP_LEFT, 0, 0);
     lv_obj_set_style_bg_opa(cont, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(cont, 0, 0);
     lv_obj_set_style_pad_all(cont, 2, 0);
@@ -168,11 +152,9 @@ static void list_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     const lv_coord_t item_pad_v = 4;
     const lv_coord_t item_h = lv_font_get_line_height(st->item_font) + item_pad_v * 2;
     const lv_coord_t gap = 2;
-    const lv_coord_t content_w = cont_w_full - 4; // account for cont pad_all=2
-
     for (uint8_t i = 0; i < count; i++) {
         lv_obj_t* item = lv_obj_create(cont);
-        lv_obj_set_size(item, content_w, item_h);
+        lv_obj_set_size(item, lv_pct(100), item_h);
         lv_obj_set_pos(item, 0, i * (item_h + gap));
         lv_obj_set_user_data(item, reinterpret_cast<void*>(static_cast<uintptr_t>(i)));
         lv_obj_add_event_cb(item, list_item_clicked, LV_EVENT_SHORT_CLICKED, st);

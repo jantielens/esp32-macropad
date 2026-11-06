@@ -74,7 +74,7 @@ static void gamepad_button_event(lv_event_t* event) {
 
 static void gamepad_button_create(lv_obj_t* button, const WidgetConfig*,
                                  const ScreenButtonConfig* config, const PadRect*,
-                                 const UIScaleInfo*, lv_obj_t*, lv_obj_t*, WidgetState* state) {
+                                 const UIScaleInfo*, WidgetState* state) {
     auto* held = new (state->data) GamepadButtonState{};
     held->button = button;
     if (config->action_count == 1 && strcmp(config->actions[0].type, ACTION_TYPE_GAMEPAD) == 0 &&
@@ -99,6 +99,9 @@ static void gamepad_button_hide(WidgetState* state) {
 static void gamepad_button_show(WidgetState* state) {
     reinterpret_cast<GamepadButtonState*>(state->data)->touch.show();
 }
+static void gamepad_button_cancel_input(WidgetState* state) {
+    gamepad_button_cancel(reinterpret_cast<GamepadButtonState*>(state->data), "input cancelled");
+}
 static void gamepad_button_destroy(WidgetState* state) {
     auto* held = reinterpret_cast<GamepadButtonState*>(state->data);
     held->touch.detach(gamepad_button_event);
@@ -114,5 +117,5 @@ static void gamepad_button_describe(JsonObject& out) {
 }
 #endif
 static const WidgetPreview gamepad_button_preview = {"Gamepad Button", "gamepad"};
-REGISTER_WIDGET_SCHEMA_VALIDATED_LIFECYCLE(gamepad_button, nullptr, false, gamepad_button_validate);
+REGISTER_WIDGET_SCHEMA_INPUT_LIFECYCLE(gamepad_button, nullptr, false, gamepad_button_validate, gamepad_button_cancel_input);
 #endif

@@ -56,6 +56,22 @@ static portMUX_TYPE g_physical_touch_mux = portMUX_INITIALIZER_UNLOCKED;
 static TouchSample g_cached_physical;
 
 #if HAS_DISPLAY
+static lv_obj_t* g_pointer_object = nullptr;
+static lv_indev_t* g_pointer_device = nullptr;
+
+static void track_pointer_target(lv_event_t* event) {
+		auto* device = static_cast<lv_indev_t*>(lv_event_get_target(event));
+		const lv_event_code_t code = lv_event_get_code(event);
+		if (code == LV_EVENT_PRESSED) {
+				g_pointer_object = static_cast<lv_obj_t*>(lv_event_get_param(event));
+				g_pointer_device = device;
+		} else if (g_pointer_device == device &&
+				(code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST || code == LV_EVENT_INDEV_RESET)) {
+				g_pointer_object = nullptr;
+				g_pointer_device = nullptr;
+		}
+}
+
 enum class SyntheticTapState : uint8_t {
 		Idle,
 		PendingPress,
@@ -359,6 +375,9 @@ bool TouchManager::tryRegisterWithLVGL() {
 				lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
 				lv_indev_set_read_cb(indev, TouchManager::readCallback);
 				lv_indev_set_user_data(indev, this);
+#if HAS_DISPLAY
+				lv_indev_add_event_cb(indev, track_pointer_target, LV_EVENT_ALL, nullptr);
+#endif
 				lv_timer_set_period(lv_indev_get_read_timer(indev), LV_DEF_INDEV_READ_PERIOD);
 		}
 
@@ -411,6 +430,26 @@ void touch_manager_cancel_physical_input() {
 }
 
 	#if HAS_DISPLAY
+	void touch_manager_cancel_object_input(lv_obj_t* object) {
+#if HAS_USB_HID || HAS_BLE_HID
+			const uint32_t mouse_generation = mouse_hid_generation();
+#endif
+			lv_indev_t* device = nullptr;
+			for (lv_obj_t* target = g_pointer_object; target; target = lv_obj_get_parent(target)) {
+					if (target == object) {
+							device = g_pointer_device;
+							break;
+					}
+			}
+			if (device) {
+					lv_indev_wait_release(device);
+					lv_indev_reset(device, nullptr);
+			}
+#if HAS_USB_HID || HAS_BLE_HID
+			g_gamepad_touch_router.cancel_object_input(object, mouse_generation);
+#endif
+	}
+
 	void touch_manager_cancel_blocked_input(bool (*blocked)(lv_obj_t*, const lv_point_t&, void*), void* context) {
 	#if HAS_USB_HID || HAS_BLE_HID
 			if (g_gamepad_touch_router.has_blocked_input(blocked, context)) touch_manager_cancel_physical_input();

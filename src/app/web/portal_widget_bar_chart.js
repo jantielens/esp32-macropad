@@ -57,7 +57,6 @@
             kind: 'color'
         })),
         patterns,
-        track: { host: 'pad-edit-bar-track-settings', outline: true, radius: true },
-        icon: { fixedPosition: true, width: 1, height: 0.5 }
+        track: { host: 'pad-edit-bar-track-settings', outline: true, radius: true }
     });
 })();

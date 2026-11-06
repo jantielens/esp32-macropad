@@ -16,22 +16,18 @@ after changing the selection.
    The range supports up to 10,000 steps and four decimal places.
 3. Choose **Horizontal** or **Vertical**. Horizontal values increase to the
    right; vertical values increase upward. **Slider length (%)** reserves a
-   percentage of the content width for a horizontal slider, or the height
-   between labels for a vertical slider, when a center label or side icon is
-   present. Without either, the slider uses the full available length. The
-   length includes the knob and does not change when label text changes.
+   percentage of the widget region's width for a horizontal slider, or its
+   height for a vertical slider. The default is 100%, and the length includes
+   the knob.
    **Track thickness (px)** and **Knob diameter (px)** values of `0` use
    automatic sizing: the knob targets 50 px,
    limited to 60% of the available thickness and 25% of the slider length.
    The automatic track is 40% of the knob diameter, normally 20 px for a
    50 px knob. Explicit sizes override automatic sizing and are limited by
    the available thickness.
-4. Choose literal track, fill, and knob colors. Existing top and bottom labels
-   remain in their reserved rows. The icon and center label sit to the left of a
-   horizontal slider or beside a vertical slider. **Icon position** can also
-   place the icon above or below the row. Use an existing label binding to
-   display a reported value. Increase the button size or reduce slider length
-   when more space is needed for its icon and label.
+4. Choose literal track, fill, and knob colors. Arrange labels and the icon
+   using the [shared content layout](../pads/appearance.md#arrange-button-content).
+   Use a label binding to display a reported value.
 5. Leave **Data binding** empty for a local control, or enter a binding such
    as `[mqtt:home/level]` or `[ha:media_player.living_room;attributes.volume_level]`.
    Until a valid numeric value arrives, a bound slider shows its configured
@@ -57,10 +53,10 @@ during the gesture. It can overlap other buttons without taking touch input
 or changing their layout. It disappears on release, cancellation, or leaving
 the pad. Release actions and the five-second confirmation window are unchanged.
 
-* Set **Font size (px)** to `0` to inherit the center label's font and size,
-   or the button's font when there is no center label. Enter a whole number
-   from 1 to 512 for an explicit size. TTF fonts use the requested size in the
-   inherited family. Built-in fonts use the nearest available size: 12, 14, 18,
+* Set **Font size (px)** to `0` to inherit the button's font and size. Enter a whole number
+   from 1 to 512 for an explicit size. The explicit size uses the center label's
+   font family when configured, or the device font otherwise. Built-in fonts use
+   the nearest available size: 12, 14, 18,
    24, 32, or 36 px. A missing TTF uses the same nearest-size bitmap fallback.
 * Leave **Text color** empty for the inherited text color, or choose a literal
    color. The bubble automatically uses a light or dark background for contrast.

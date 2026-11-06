@@ -25,6 +25,11 @@ const WidgetType* widget_find(const char* type_name) {
         field["type"] = "action";
     };
     static WidgetType test_widget = {};
+    static WidgetType sparkline_widget = {};
+    if (type_name && std::strcmp(type_name, "sparkline") == 0) {
+        sparkline_widget.name = "sparkline";
+        return &sparkline_widget;
+    }
     if (type_name && std::strcmp(type_name, "test") == 0) {
         test_widget.name = "test";
         test_widget.describeSchema = describe_test_widget;
@@ -100,6 +105,30 @@ static JsonObject make_button(JsonDocument& doc) {
 
 int main() {
     std::printf("=== pad confirmation validation tests ===\n");
+
+    {
+        JsonDocument doc;
+        JsonObject button = make_button(doc);
+        button["icon_position"] = "right";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        button["icon_position"] = "below";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        button["widget_position"] = "left";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        button["widget_type"] = "sparkline";
+        button["group_size_pct"] = 40;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        button["widget_position"] = "below";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        button["group_size_pct"] = 91;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["group_size_pct"] = 0;
+        button["icon_position"] = "center";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["icon_position"] = "left";
+        button["widget_type"] = "test";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+    }
 
     {
         JsonDocument doc;

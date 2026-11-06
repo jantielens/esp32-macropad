@@ -10,21 +10,14 @@ struct ToggleConfig {
     char off_color[8];
     char knob_color[8];
     uint8_t width_pct;
-    uint8_t icon_position;
     bool read_only;
 };
 
 struct ToggleState {
     lv_obj_t* control;
     lv_obj_t* button;
-    lv_obj_t* top_label;
-    lv_obj_t* bottom_label;
-    lv_obj_t* center_label;
-    lv_obj_t* icon;
-    int16_t offset_x;
-    int16_t offset_y;
-    int16_t label_offset_x;
-    int16_t label_offset_y;
+    int16_t layout_width;
+    int16_t layout_height;
     uint32_t pending_since;
     bool bound;
     bool value;

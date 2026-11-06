@@ -36,6 +36,8 @@ Ordinary buttons can instead use [labels/icons](../pads/appearance.md) or
 [background images](../media/images.md).
 Full-screen tap actions take precedence over widgets; touch-owning widgets
 can suppress ordinary tap/hold/swipe behavior.
+All widgets use the shared [labels and icon layout](../pads/appearance.md#arrange-button-content).
+Touch widgets keep their own input behavior.
 
 ## Face
 
@@ -60,8 +62,8 @@ pad widgets.
  only animates emotion changes. The other options change idle activity, not the
  emotion source. **Normal** is the default.
 5. Use the existing button text color for the face and background color for its
- background. Top and bottom labels remain available; the center label and icon
- are replaced by the face. Ordinary tap and long-press actions still work.
+ background. Labels and icons remain available in the shared content group.
+ Ordinary tap and long-press actions still work.
 6. Select **Save Pad**. No reboot is needed. Inspect the face on the device;
  the editor grid shows the widget symbol, not a live animation.
 
@@ -101,7 +103,7 @@ reload its configuration, or restart the device. No state is written to storage.
  For a lamp, use explicit HA `turn_on` and `turn_off` services, not `toggle`.
  An empty list is allowed; a bound switch with no selected actions does nothing.
 5. Choose track/knob colors and **Switch width (%)** (20-100%, default 50%).
- Choose **Icon Position**: Left, Above, or Below. **Read-only** follows the source
+ **Read-only** follows the source
  but ignores taps. State source has the standard binding-builder and reference buttons.
 6. Select **Save Pad**. No reboot is needed. Tap the switch or button background
  on the device; holding does not run a separate long-press action.
@@ -113,28 +115,11 @@ retrying. Unavailable data dims the switch, blocks input, and retains its last
 known position. Before the first valid report, its knob is hidden. Recovery
 adopts the current value without sending actions. Read-only alone does not dim it.
 
-Existing labels, fonts, foreground colors, and the icon remain available.
-Top and bottom labels reserve their own rows. Within the remaining area, the
-center label and switch share a row, with the label on the left and the switch
-anchored to the right. Switch width is a percentage of the button's content
-width, capped by the available height at a 2:1 aspect ratio. Label length does
-not change the switch size or position; long center labels use an ellipsis.
-With no configured center label and no left icon, the switch is centered and
-uses 100% width, subject to the height limit, regardless of the width setting.
-An icon defaults to the left of that row; Above and Below place it around the
-row, inside the outer labels. A configured label that temporarily resolves to
-empty still reserves its space. Existing saved percentages use this width rule;
-older top/bottom switch placement is ignored.
-
-Use Content Padding and Icon Scale to adjust spacing and icon size. UI Offset
-moves the middle group together; label-style offsets nudge the center label.
-Icon scaling and label font upscaling are included in the layout. A center label
-or left icon is hidden if its horizontal space runs out; the switch does not
-shrink to accommodate it. When less than four pixels of switch width fit within
-the available area, the switch is hidden. Enlarge the button or reduce its
-content if needed. Explicit offsets and oversized text
-are clipped at the button boundary. The pad editor shows button styling and
-labels, with a large subdued symbol identifying each widget behind its labels.
+Switch width is a percentage of the assigned widget region, capped by the
+available height at a 2:1 aspect ratio. When less than four pixels of switch
+width fit, the switch is hidden. Enlarge the button or reduce its content if
+needed. The pad editor shows button styling and labels, with a subdued symbol
+identifying the widget in its region.
 It does not reproduce widget graphics or widget-specific visual settings.
 Binding text is abbreviated to fit; hover over a binding or select the button
 to read its full text. The grid does not resolve bindings, show sample or live

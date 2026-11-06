@@ -5,6 +5,7 @@
 #include "../pad_config.h"
 #include "../pad_overlay.h"
 #include "../pad_layout.h"
+#include "../button_content_lvgl.h"
 #include "../binding_template.h"
 #include "../widgets/widget.h"
 #if HAS_IMAGE_FETCH
@@ -28,12 +29,10 @@ class PadScreen;
 // Runtime MQTT label binding — template-based
 // Labels containing [scheme:params] tokens are resolved on passive refresh.
 struct RuntimeLabelBinding {
-    lv_obj_t* label;                                  // LVGL label to update
     char templ[CONFIG_LABEL_MAX_LEN];                 // Original label text (template)
     char last[BINDING_TEMPLATE_MAX_LEN];              // Last rendered result (skip if unchanged)
-    LabelStyle style;                                 // Style used for alignment/font scaling
-    uint8_t anchorY;                                  // PadLabelAnchorY
-    bool active;
+    uint8_t tileIndex;
+    uint8_t labelIndex;
 };
 
 // Runtime color binding — a color field that may contain binding templates.
@@ -84,6 +83,8 @@ struct ButtonTile {
     lv_obj_t* label_bottom;   // Bottom label (Font S) or nullptr
     lv_obj_t* icon_img;       // Icon image widget (or nullptr)
     bool icon_is_mono;        // True if icon uses fg recolor
+    bool content_layout_dirty;
+    ButtonContentRuntime content_layout;
     // Per-label text-color override: bit0=top, bit1=center, bit2=bottom. Set when a
     // label has its own `color:` (static or binding) so the fg (target=1) poll does
     // not clobber it. Icon recolor is NOT gated by this mask.
