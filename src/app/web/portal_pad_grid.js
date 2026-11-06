@@ -59,6 +59,7 @@ function padRenderResizeHandles(cell) {
     for (const side of sides) {
         const handle = document.createElement('div');
         handle.className = 'pad-resize-handle pad-resize-handle-' + side;
+        handle.addEventListener('click', e => e.stopPropagation());
         handle.addEventListener('mousedown', ((s) => (e) => {
             e.stopPropagation();
             e.preventDefault();
@@ -131,12 +132,18 @@ function padResizeDragStart(col, row, side, startX, startY) {
     function onMouseMove(e) { onMove(e.clientX, e.clientY); }
     function onTouchMove(e) { if (e.touches.length) onMove(e.touches[0].clientX, e.touches[0].clientY); }
 
-    function onEnd() {
+    function onEnd(event) {
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onEnd);
         document.removeEventListener('touchmove', onTouchMove);
         document.removeEventListener('touchend', onEnd);
         document.removeEventListener('touchcancel', onEnd);
+        if (event.type === 'mouseup') {
+            // A resize can replace the handle before the browser dispatches its click.
+            const suppressClick = e => { e.preventDefault(); e.stopPropagation(); };
+            document.addEventListener('click', suppressClick, true);
+            setTimeout(() => document.removeEventListener('click', suppressClick, true), 0);
+        }
         const changed = btn.col !== origCol || btn.row !== origRow ||
                         (btn.col_span || 1) !== origCs || (btn.row_span || 1) !== origRs;
         if (changed) padMarkDirty();

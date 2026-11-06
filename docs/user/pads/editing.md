@@ -286,9 +286,9 @@ it to 1 x 1. Check the result before saving.
 
 Select a button to show an external selection frame and resize grips at its
 edge midpoints. Drag a grip to resize along that edge, or edit **Col Span** and
-**Row Span** under **Button > Content > Layout**. When the preview button is
-too small for the grips, use those span controls instead. You can also select
-a button using Tab and Enter or Space.
+**Row Span** under **Button > Content > Layout**. Grips shrink on small preview
+buttons; use the span controls if a grip is too small to drag. You can also
+select a button using Tab and Enter or Space.
 
 Click the empty canvas around the preview to deselect the button and return
 to Pad settings without discarding edits.

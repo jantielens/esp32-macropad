@@ -82,6 +82,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Make small buttons selectable in the pad editor and scale resize grips to
+  fit selected buttons. Keep the button selected after resizing.
+  See [move and resize](docs/user/pads/editing.md#move-and-resize).
 * Make Face artwork follow the button text color, including inherited defaults,
   button overrides, and live color bindings, instead of the widget container's
   theme color.
