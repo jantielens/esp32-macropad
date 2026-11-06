@@ -1846,7 +1846,6 @@ body {
   content: ''; position: absolute; width: 8px; height: 8px; box-sizing: border-box;
   background: var(--pad-resize-grip-color, #fff); border-radius: 1px;
 }
-.pad-cell:hover > .pad-resize-handle { opacity: .65; pointer-events: auto; }
 .pad-resize-handle-right  { top: calc(50% - 12px); right: 0; cursor: col-resize; }
 .pad-resize-handle-left   { top: calc(50% - 12px); left: 0; cursor: col-resize; }
 .pad-resize-handle-down   { left: calc(50% - 12px); bottom: 0; cursor: row-resize; }
@@ -2404,7 +2403,17 @@ body:has(#pad-editor-root) #toast-container {
   outline: 2px solid var(--portal-primary); outline-offset: 2px;
   box-shadow: 0 0 0 2px #fff, 0 0 0 5px #17212b; z-index: 1;
 }
+#pad-editor-root #pad-grid .pad-cell:focus-visible {
+  outline: 2px solid var(--portal-primary); outline-offset: 2px;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 5px #17212b; z-index: 2;
+}
 #pad-editor-root .pad-cell-selected > .pad-resize-handle { opacity: 1; pointer-events: auto; }
+@container (max-width: 48px) {
+  #pad-editor-root .pad-cell-selected > .pad-resize-handle { opacity: 0; pointer-events: none; }
+}
+@container (max-height: 48px) {
+  #pad-editor-root .pad-cell-selected > .pad-resize-handle { opacity: 0; pointer-events: none; }
+}
 #pad-editor-root .pad-cell-selected:active,
 .pad-cell:has(> .pad-resize-handle:active) { transform: none; }
 #pad-editor-root .pad-workspace-inspector { display: flex; flex-direction: column; min-height: 0; min-width: 0; border-left: 1px solid var(--pad-workspace-line); background: var(--portal-surface); overflow: hidden; }
