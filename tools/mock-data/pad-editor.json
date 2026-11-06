@@ -1,6 +1,7 @@
 {
   "firmware_defaults": {
     "default_pad_bg_color": "#000000", "bg_color": "#333333", "fg_color": "#FFFFFF",
+    "icon_badge_padding": 0, "icon_badge_color": "auto", "icon_color": "auto", "icon_position": "left",
     "border_color": "#000000", "border_width": "0", "corner_radius": "8", "content_pad": "4",
     "button_shadow_enabled": false, "button_shadow_type": "opaque", "button_shadow_color_mode": "fixed",
     "button_shadow_color": "#101010", "button_shadow_darken_pct": 35,

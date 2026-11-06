@@ -41,6 +41,24 @@ Line width 1-10 px, smoothing 0-8, and separation 0-6 px affect presentation.
 Smoothing also moves extrema markers/current dot to the smoothed curve.
 Separation shifts pixels away from exact values; leave it 0 for precise readout.
 
+**Fill opacity (%)** in **Line style** adds a solid area from each curve to
+the bottom of the chart. Use a whole percentage from 0 to 100; 0 disables
+fills and is the default for existing buttons. All series share the opacity,
+but each fill follows its own line color, including color bindings.
+Fills use the same smoothed, scaled points as the lines and never bridge
+missing-history gaps. Extra series fill first, the primary series fills last,
+and all lines and annotations remain above the fills. Overlapping translucent
+series blend their colors.
+
+For a compact temperature card, position the widget to the right of the group,
+put the icon to the left of the labels, and configure an
+[icon badge](../pads/appearance.md#add-an-icon-badge).
+Choose an orange line, a light peach badge background, and roughly 20%
+fill opacity on a white button. Keep marker sizes and current dot at 0
+for a plain trend area. **Save Pad**, then verify on the device:
+the pad preview omits the badge and shows a chart placeholder.
+Filling a large chart adds drawing work; e-paper may not distinguish pale fills.
+
 Min/Max marker size 0 disables it; 1-20 px shows a dot.
 An optional marker format permits one floating `%f`/`%e`/`%g` conversion,
 such as `hi %.1f`. Empty means dot only.

@@ -290,13 +290,18 @@ function pageRequests(result, page) {
     const layoutImport = await runImport({
         pads: [{ cols: 1, rows: 1, buttons: [{
             col: 0, row: 0, widget_type: 'sparkline', widget_position: 'left',
-            icon_position: 'left', group_size_pct: 65
+            icon_position: 'left', group_size_pct: 65,
+            icon_color: '[health:color]', icon_badge_padding: 0, icon_badge_color: '[health:color]', widget_sparkline_fill_opacity: 35
         }] }]
     });
     const layoutBody = JSON.parse(layoutImport.requests.find(request => request.kind === 'pad-save').options.body);
     assert.strictEqual(layoutBody.buttons[0].widget_position, 'left');
     assert.strictEqual(layoutBody.buttons[0].icon_position, 'left');
     assert.strictEqual(layoutBody.buttons[0].group_size_pct, 65);
+    assert.strictEqual(layoutBody.buttons[0].icon_badge_padding, 0);
+    assert.strictEqual(layoutBody.buttons[0].icon_badge_color, '[health:color]');
+    assert.strictEqual(layoutBody.buttons[0].icon_color, '[health:color]');
+    assert.strictEqual(layoutBody.buttons[0].widget_sparkline_fill_opacity, 35);
     const success = await runImport();
     const uploadFetch = success.context.fetch;
     success.context.fetch = async () => response(false, { success: false, message: 'Invalid icon source or PNG' });

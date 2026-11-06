@@ -20,7 +20,7 @@ static const char* BTN_DEFAULTS_PATH = "/config/button_defaults.json";
 
 static ButtonDefaults* g_defaults = nullptr;
 static const ButtonDefaults g_empty_defaults = {
-    "", "", "", "", "", "", "", "", "", "", ICON_POS_ABOVE,
+    "", "", "", "", "", "", "", "", "", "", DEFAULT_ICON_POSITION, DEFAULT_ICON_BADGE_PADDING, "", "",
     {DEFAULT_BUTTON_SHADOW_ENABLED, DEFAULT_BUTTON_SHADOW_TYPE, DEFAULT_BUTTON_SHADOW_COLOR_MODE,
      DEFAULT_BUTTON_SHADOW_COLOR, DEFAULT_BUTTON_SHADOW_DARKEN_PCT,
      DEFAULT_BUTTON_SHADOW_OFFSET_X_PX, DEFAULT_BUTTON_SHADOW_OFFSET_Y_PX, DEFAULT_BUTTON_SHADOW_DROP_BLUR_PX},
@@ -35,14 +35,6 @@ static bool ensure_defaults() {
         *g_defaults = g_empty_defaults;
     }
     return true;
-}
-
-static void init_shadow_defaults(ButtonShadowSettings* shadow) {
-    *shadow = g_empty_defaults.shadow;
-}
-
-static void init_layout_defaults(PadLayoutSettings* layout) {
-    *layout = g_empty_defaults.layout;
 }
 
 // Forward declaration of parse helper from pad_config.cpp — we duplicate the
@@ -97,10 +89,7 @@ bool button_defaults_load_overrides(JsonDocument& doc) {
 }
 
 static bool load_from_flash(ButtonDefaults* d) {
-    memset(d, 0, sizeof(ButtonDefaults));
-    strlcpy(d->default_font, "@builtin", sizeof(d->default_font));
-    init_shadow_defaults(&d->shadow);
-    init_layout_defaults(&d->layout);
+    *d = g_empty_defaults;
     BasicJsonDocument<PsramJsonAllocator> doc(2048);
     if (!button_defaults_load_overrides(doc)) return false;
 
@@ -113,6 +102,11 @@ static bool load_from_flash(ButtonDefaults* d) {
     parse_bindable(doc["default_pad_bg_color"], d->default_pad_bg_color,
                    CONFIG_COLOR_MAX_LEN, "");
     parse_bindable(doc["fg_color"], d->fg_color, CONFIG_COLOR_MAX_LEN, "");
+    if (doc["icon_badge_padding"].is<uint8_t>() &&
+        doc["icon_badge_padding"].as<uint8_t>() <= MAX_ICON_BADGE_PADDING)
+        d->icon_badge_padding = doc["icon_badge_padding"].as<uint8_t>();
+    parse_bindable(doc["icon_badge_color"], d->icon_badge_color, CONFIG_COLOR_MAX_LEN, "");
+    parse_bindable(doc["icon_color"], d->icon_color, CONFIG_COLOR_MAX_LEN, "");
     parse_bindable(doc["border_color"], d->border_color, CONFIG_COLOR_MAX_LEN, "");
     parse_bindable(doc["border_width"], d->border_width, CONFIG_BINDABLE_SHORT_LEN, "", false);
     parse_bindable(doc["corner_radius"], d->corner_radius, CONFIG_BINDABLE_SHORT_LEN, "", false);
@@ -143,9 +137,9 @@ static bool load_from_flash(ButtonDefaults* d) {
     strlcpy(d->label_bottom_style, doc["label_bottom_style"] | "", CONFIG_LABEL_STYLE_MAX_LEN);
     {
         const char* ip = doc["icon_position"] | "";
-        uint8_t position = ICON_POS_ABOVE;
+        uint8_t position = DEFAULT_ICON_POSITION;
         if (button_position_parse(ip, &position)) d->icon_position = position;
-        else d->icon_position = ICON_POS_ABOVE;
+        else d->icon_position = DEFAULT_ICON_POSITION;
     }
 
     LOGI(TAG, "Loaded device pad and button defaults");
@@ -166,6 +160,21 @@ uint8_t button_defaults_get_pixel_shift_distance() {
 }
 
 const char* button_defaults_validate(JsonObjectConst config) {
+    if (config.containsKey("icon_badge_padding") &&
+        (!config["icon_badge_padding"].is<uint8_t>() ||
+         config["icon_badge_padding"].as<uint8_t>() > MAX_ICON_BADGE_PADDING))
+        return "icon_badge_padding must be a whole number from 0 to 64";
+    for (const char* field : {"icon_badge_color", "icon_color"}) {
+        if (!config.containsKey(field)) continue;
+        const char* color = config[field] | "";
+        uint32_t rgb;
+        if (!config[field].is<const char*>() ||
+            strlen(color) >= CONFIG_COLOR_MAX_LEN ||
+            (color[0] && strcmp(color, "auto") != 0 && !parse_hex_color(color, &rgb) && !strchr(color, '[')))
+            return strcmp(field, "icon_color") == 0
+                ? "icon_color must be auto, hex or a binding (max 191 chars)"
+                : "icon_badge_color must be auto, hex or a binding (max 191 chars)";
+    }
     if (config.containsKey("default_font")) {
         if (!config["default_font"].is<const char*>()) return "default_font must be @builtin or an uploaded font ID";
         const char* name = config["default_font"].as<const char*>();

@@ -193,11 +193,16 @@ function padDialogOpen(col, row) {
         !!(btn.bg_image_path || btn.bg_image_url || btn.bg_image_letterbox);
 
     // Icon
+    padSetBindableColor('pad-edit-icon-color', btn.icon_color || padGetEffectiveDefault('icon_color') || 'auto');
+    document.getElementById('pad-edit-icon-badge-padding').value =
+        btn.icon_badge_padding ?? (padGetEffectiveDefault('icon_badge_padding') === '' ? 0 : padGetEffectiveDefault('icon_badge_padding'));
+    padSetBindableColor('pad-edit-icon-badge-color',
+        btn.icon_badge_color || padGetEffectiveDefault('icon_badge_color'));
     padIconEditorSetDraft(btn.icon || null);
     document.getElementById('pad-edit-icon-section').open = !!btn.icon;
     document.getElementById('pad-edit-icon-scale').value = (btn.icon_scale_pct !== undefined) ? btn.icon_scale_pct : 0;
     document.getElementById('pad-edit-icon-position').value =
-        btn.icon_position || padGetEffectiveDefault('icon_position') || 'above';
+        btn.icon_position || padGetEffectiveDefault('icon_position') || 'left';
 
     // Widget type
     document.getElementById('pad-edit-widget-type').value = btn.widget_type || '';
@@ -393,6 +398,20 @@ function padDialogBuildButton() {
     if (icon) btn.icon = icon;
     else delete btn.icon;
 
+    const iconColor = padGetBindableColor('pad-edit-icon-color');
+    if (iconColor && iconColor !== (padGetEffectiveDefault('icon_color') || 'auto'))
+        btn.icon_color = iconColor;
+    const badgeInput = document.getElementById('pad-edit-icon-badge-padding');
+    const badgePadding = Number(badgeInput.value);
+    if (badgeInput.value === '' || !Number.isInteger(badgePadding) || badgePadding < 0 || badgePadding > 64)
+        throw new Error('Badge padding must be a whole number from 0 to 64');
+    const defaultBadgePadding = padGetEffectiveDefault('icon_badge_padding');
+    if (badgePadding !== Number(defaultBadgePadding === '' ? 0 : defaultBadgePadding))
+        btn.icon_badge_padding = badgePadding;
+    const badgeColor = padGetBindableColor('pad-edit-icon-badge-color');
+    if (badgeColor && badgeColor !== padGetEffectiveDefault('icon_badge_color'))
+        btn.icon_badge_color = badgeColor;
+
     // Icon scale
     const iconScale = parseInt(document.getElementById('pad-edit-icon-scale').value);
     if (!isNaN(iconScale) && iconScale > 0 && iconScale <= 250) btn.icon_scale_pct = iconScale;
@@ -400,7 +419,7 @@ function padDialogBuildButton() {
     // Icon position (only relevant when icon is set)
     if (icon) {
         const iconPos = document.getElementById('pad-edit-icon-position').value;
-        if (iconPos && iconPos !== (padGetEffectiveDefault('icon_position') || 'above')) btn.icon_position = iconPos;
+        if (iconPos && iconPos !== (padGetEffectiveDefault('icon_position') || 'left')) btn.icon_position = iconPos;
     }
 
     // Widget type
@@ -483,6 +502,8 @@ var PAD_PV_FIELDS = [
     { id: 'pad-edit-label-bottom',        kind: 'text',  field: 'label_bottom' },
     { id: 'pad-edit-bg-color',            kind: 'color', field: 'bg_color' },
     { id: 'pad-edit-fg-color',            kind: 'color', field: 'fg_color' },
+    { id: 'pad-edit-icon-color',          kind: 'color', field: 'icon_color' },
+    { id: 'pad-edit-icon-badge-color',    kind: 'color', field: 'icon_badge_color' },
     { id: 'pad-edit-border-color',        kind: 'color', field: 'border_color' },
     { id: 'pad-edit-border-width',        kind: 'text',  field: 'border_width' },
     { id: 'pad-edit-corner-radius',       kind: 'text',  field: 'corner_radius' },

@@ -40,6 +40,8 @@ uint32_t pad_icon_render_key(JsonObjectConst pad, JsonObjectConst button) {
     };
     const int cols = pad["cols"] | 3;
     const int rows = pad["rows"] | 3;
+    // Keep the PNG generation version in sync with padIconRenderKey.
+    number(2);
     number(cols);
     number(rows);
     number(button["col"] | 0);
@@ -232,6 +234,24 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
     }
     const char* icon_error = validate_icon(b);
     if (icon_error) return icon_error;
+    if (b.containsKey("icon_badge_padding") &&
+        (!b["icon_badge_padding"].is<uint8_t>() ||
+         b["icon_badge_padding"].as<uint8_t>() > MAX_ICON_BADGE_PADDING))
+        return "icon_badge_padding must be a whole number from 0 to 64";
+    if (b.containsKey("icon_badge_color") &&
+        (!b["icon_badge_color"].is<const char*>() && !b["icon_badge_color"].is<uint32_t>()))
+        return "icon_badge_color must be auto, hex or a binding";
+    const char* badge_color = b["icon_badge_color"] | "";
+    if (strcmp(badge_color, "auto") != 0 && !color_ok(badge_color)) return "bad icon_badge_color";
+    if (b.containsKey("icon_color") &&
+        (!b["icon_color"].is<const char*>() && !b["icon_color"].is<uint32_t>()))
+        return "icon_color must be auto, hex or a binding";
+    const char* icon_color = b["icon_color"] | "";
+    if (strcmp(icon_color, "auto") != 0 && !color_ok(icon_color)) return "bad icon_color";
+    if (b.containsKey("widget_sparkline_fill_opacity") &&
+        (!b["widget_sparkline_fill_opacity"].is<unsigned>() ||
+         b["widget_sparkline_fill_opacity"].as<unsigned>() > 100))
+        return "widget_sparkline_fill_opacity must be a whole percentage from 0 to 100";
     if (!color_ok(b["bg_color"] | "")) return "bad bg_color";
     if (!color_ok(b["fg_color"] | "")) return "bad fg_color";
     if (!color_ok(b["border_color"] | "")) return "bad border_color";
@@ -332,6 +352,8 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
     if ((e = check_max(b, "btn_state",    CONFIG_BTN_STATE_MAX_LEN, LEN_MSG_LABEL))) return e;
     if ((e = check_max(b, "bg_color",     CONFIG_COLOR_MAX_LEN, LEN_MSG_LABEL))) return e;
     if ((e = check_max(b, "fg_color",     CONFIG_COLOR_MAX_LEN, LEN_MSG_LABEL))) return e;
+    if ((e = check_max(b, "icon_badge_color", CONFIG_COLOR_MAX_LEN, LEN_MSG_LABEL))) return e;
+    if ((e = check_max(b, "icon_color", CONFIG_COLOR_MAX_LEN, LEN_MSG_LABEL))) return e;
     if ((e = check_max(b, "border_color", CONFIG_COLOR_MAX_LEN, LEN_MSG_LABEL))) return e;
     if ((e = check_max(b, "border_width", CONFIG_BINDABLE_SHORT_LEN, LEN_MSG_SHORT))) return e;
     if ((e = check_max(b, "corner_radius",CONFIG_BINDABLE_SHORT_LEN, LEN_MSG_SHORT))) return e;

@@ -133,7 +133,7 @@ static bool overlaps(const ButtonContentRect& a, const ButtonContentRect& b) {
 static void test_button_content_regions() {
     ButtonContentLayoutInput input = {{0, 0, 200, 100}, ButtonWidgetPosition::Right,
         ButtonGroupIconPosition::Left, 40, true, true, {true, true, true},
-        {12, 24, 12}, 30, 30, {40, 60, 30}, false, false, 0, 0};
+        {12, 24, 12}, 30, 30, {40, 60, 30}, false, false, 0, 0, 4};
     for (ButtonWidgetPosition position : {ButtonWidgetPosition::Above, ButtonWidgetPosition::Below,
                                          ButtonWidgetPosition::Left, ButtonWidgetPosition::Right}) {
         input.widget_position = position;
@@ -174,7 +174,7 @@ static void test_button_content_regions() {
 static void test_button_content_auto_and_vertical_size() {
     ButtonContentLayoutInput input = {{0, 0, 200, 100}, ButtonWidgetPosition::Right,
         ButtonGroupIconPosition::Left, 0, true, true, {true, true, false},
-        {10, 20, 0}, 20, 20, {30, 40, 0}, false, false, 0, 0};
+        {10, 20, 0}, 20, 20, {30, 40, 0}, false, false, 0, 0, 4};
     ButtonContentLayout result = button_content_layout(input);
     assert(result.widget.x == 64 + 4);
     input.label_width[1] = 180;
@@ -196,7 +196,7 @@ static void test_button_content_auto_and_vertical_size() {
 static void test_button_content_shrinks_side_icon_for_labels() {
     ButtonContentLayoutInput input = {{0, 0, 200, 100}, ButtonWidgetPosition::Right,
         ButtonGroupIconPosition::Left, 60, true, true, {false, true, false},
-        {0, 24, 0}, 60, 60, {0, 90, 0}, false, false, 0, 0};
+        {0, 24, 0}, 60, 60, {0, 90, 0}, false, false, 0, 0, 4};
     ButtonContentLayout result = button_content_layout(input);
     assert(result.labels[1].width >= 90);
     assert(result.icon.width > 0 && result.icon.width < 60);
@@ -204,6 +204,35 @@ static void test_button_content_shrinks_side_icon_for_labels() {
     result = button_content_layout(input);
     assert(result.icon.width > 0);
     assert(result.labels[1].width > result.icon.width);
+}
+
+static void test_icon_label_gap_follows_padding() {
+    ButtonContentLayoutInput input = {{0, 0, 200, 200}, ButtonWidgetPosition::Right,
+        ButtonGroupIconPosition::Left, 0, true, true, {false, true, false},
+        {0, 20, 0}, 20, 20, {0, 40, 0}, false, false, 0, 0, 0};
+    for (int gap : {0, 12}) {
+        input.icon_label_gap = gap;
+        for (auto position : {ButtonGroupIconPosition::Left, ButtonGroupIconPosition::Right}) {
+            input.icon_position = position;
+            const auto layout = button_content_layout(input);
+            assert(layout.widget.x == 20 + 40 + gap + 4);
+            if (position == ButtonGroupIconPosition::Left)
+                assert(layout.labels[1].x - (layout.icon.x + layout.icon.width) == gap);
+            else
+                assert(layout.icon.x - (layout.labels[1].x + layout.labels[1].width) == gap);
+        }
+        input.widget_position = ButtonWidgetPosition::Below;
+        for (auto position : {ButtonGroupIconPosition::Above, ButtonGroupIconPosition::Below}) {
+            input.icon_position = position;
+            const auto layout = button_content_layout(input);
+            assert(layout.widget.y == 20 + 20 + gap + 4);
+            if (position == ButtonGroupIconPosition::Above)
+                assert(layout.labels[1].y - (layout.icon.y + layout.icon.height) == gap);
+            else
+                assert(layout.icon.y - (layout.labels[1].y + layout.labels[1].height) == gap);
+        }
+        input.widget_position = ButtonWidgetPosition::Right;
+    }
 }
 
 static void test_widget_feedback_bands_exclude_content_group() {
@@ -224,7 +253,7 @@ static void test_widget_feedback_bands_exclude_content_group() {
 static void test_centered_group_preserves_widget_region() {
     ButtonContentLayoutInput input = {{0, 0, 200, 100}, ButtonWidgetPosition::Right,
         ButtonGroupIconPosition::Left, 0, true, true, {false, true, false},
-        {0, 24, 0}, 20, 20, {0, 40, 0}, false, false, 0, 0};
+        {0, 24, 0}, 20, 20, {0, 40, 0}, false, false, 0, 0, 4};
     input.centered_group = true;
     input.center_horizontal = true;
     input.center_start = 60;
@@ -258,6 +287,7 @@ int main() {
     test_button_content_regions();
     test_button_content_auto_and_vertical_size();
     test_button_content_shrinks_side_icon_for_labels();
+    test_icon_label_gap_follows_padding();
     test_widget_feedback_bands_exclude_content_group();
     test_centered_group_preserves_widget_region();
     std::puts("pad_layout: PASS");

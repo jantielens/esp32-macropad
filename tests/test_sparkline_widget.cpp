@@ -111,6 +111,7 @@ protected:
 
     SparklineState* chart() { return reinterpret_cast<SparklineState*>(state.data); }
     virtual bool initial_streams_available() const { return true; }
+    virtual unsigned initial_fill_opacity() const { return 0; }
 
     void SetUp() override {
         static bool initialized = false;
@@ -163,6 +164,7 @@ protected:
         fields["widget_sparkline_ref_1_y"] = 35;
         fields["widget_sparkline_ref_1_color"] = "[test:reference]";
         fields["widget_sparkline_smooth"] = 2;
+        if (initial_fill_opacity()) fields["widget_sparkline_fill_opacity"] = initial_fill_opacity();
         type = widget_find("sparkline");
         ASSERT_NE(type, nullptr);
         type->parseConfig(fields, config.data);
@@ -194,7 +196,277 @@ protected:
         lv_refr_now(display);
         invalidations = flushes = 0;
     }
+    uint16_t pixel(int x, int y) {
+        uint16_t result;
+        memcpy(&result, framebuffer.data() + (y * 600 + x) * 2, sizeof(result));
+        return result;
+    }
 };
+
+class SparklineFilled : public SparklineWidget {
+protected:
+    unsigned initial_fill_opacity() const override { return 100; }
+};
+
+class SparklineTranslucent : public SparklineWidget {
+protected:
+    unsigned initial_fill_opacity() const override { return 50; }
+};
+
+TEST_F(SparklineTranslucent, FillOpacityIsUniformAcrossSegmentJoins) {
+    lv_obj_set_style_bg_color(tile, lv_color_white(), 0);
+    for (unsigned line = 0; line < 3; ++line) {
+        for (float& sample : samples[line]) sample = line == 0 ? 70 : NAN;
+        ++streams[line].rev;
+    }
+    update();
+    settle();
+    lv_area_t area;
+    lv_obj_get_coords(lv_obj_get_parent(chart()->lines[0]), &area);
+    const int y = area.y2 - 20;
+    const uint16_t color = pixel(area.x1 + 20, y);
+    EXPECT_NE(color, lv_color_to_u16(lv_color_hex(0x123456)));
+    EXPECT_NE(color, lv_color_to_u16(lv_color_white()));
+    for (int x = area.x1 + 20; x < area.x2 - 20; ++x)
+        EXPECT_EQ(pixel(x, y), color) << "x=" << x;
+}
+
+TEST(SparklineConfig, FillOpacityDefaultsAndBounds) {
+    JsonDocument document;
+    JsonObject fields = document.to<JsonObject>();
+    SparklineConfig config{};
+    sparkline_parse(fields, reinterpret_cast<uint8_t*>(&config));
+    EXPECT_EQ(config.fill_opacity, 0);
+    for (unsigned value : {0u, 25u, 100u}) {
+        fields["widget_sparkline_fill_opacity"] = value;
+        sparkline_parse(fields, reinterpret_cast<uint8_t*>(&config));
+        EXPECT_EQ(config.fill_opacity, value);
+    }
+    for (const char* invalid : {"-1", "101", "1.5", "true", "\"50\""}) {
+        JsonDocument value;
+        ASSERT_FALSE(deserializeJson(value, invalid));
+        fields["widget_sparkline_fill_opacity"] = value.as<JsonVariant>();
+        sparkline_parse(fields, reinterpret_cast<uint8_t*>(&config));
+        EXPECT_EQ(config.fill_opacity, 0);
+    }
+}
+
+TEST_F(SparklineFilled, FillPreservesGapsAndUpdatesColorBelowLineBounds) {
+    for (unsigned line = 0; line < 3; ++line) {
+        for (float& sample : samples[line]) sample = NAN;
+        ++streams[line].rev;
+    }
+    samples[0][0] = samples[0][1] = 70;
+    samples[0][3] = 90;
+    update();
+    settle();
+    lv_area_t area;
+    lv_obj_get_coords(lv_obj_get_parent(chart()->lines[0]), &area);
+    const int filled_x = area.x1 + (chart()->points[0][0].x + chart()->points[0][1].x) / 2;
+    const int gap_x = area.x1 + (chart()->points[0][1].x + chart()->points[0][3].x) / 2;
+    const int bottom_y = area.y2 - 3;
+    const uint16_t original = lv_color_to_u16(lv_color_hex(0x123456));
+    EXPECT_EQ(pixel(filled_x, bottom_y), original);
+    EXPECT_NE(pixel(gap_x, bottom_y), original);
+    bindings["[test:color]"] = "#FEDCBA";
+    update();
+    settle();
+    EXPECT_EQ(pixel(filled_x, bottom_y), lv_color_to_u16(lv_color_hex(0xFEDCBA)));
+    samples[0][1] = NAN;
+    ++streams[0].rev;
+    update();
+    settle();
+    EXPECT_NE(pixel(filled_x, bottom_y), lv_color_to_u16(lv_color_hex(0xFEDCBA)));
+}
+
+TEST_F(SparklineFilled, AllFillsStayBehindAllSeriesAndReferenceLines) {
+    for (unsigned line = 0; line < 3; ++line) {
+        for (float& sample : samples[line]) sample = 70 - line * 20;
+        ++streams[line].rev;
+    }
+    update();
+    settle();
+    lv_area_t area;
+    lv_obj_get_coords(chart()->lines[0], &area);
+    const int x = area.x1 + (chart()->points[0][1].x + chart()->points[0][2].x) / 2;
+    for (unsigned line = 1; line < 3; ++line) {
+        const uint16_t color = lv_color_to_u16(lv_obj_get_style_line_color(chart()->lines[line], LV_PART_MAIN));
+        const int y = area.y1 + chart()->points[line][1].y;
+        EXPECT_EQ(pixel(x, y), color);
+    }
+    lv_area_t chart_area;
+    lv_obj_get_coords(lv_obj_get_parent(chart()->lines[0]), &chart_area);
+    EXPECT_EQ(pixel(x, chart_area.y2 - 3), lv_color_to_u16(lv_color_hex(0x123456)));
+    const int reference_y = chart_area.y1 + chart()->ref_pts[0].y;
+    EXPECT_NE(pixel(x, reference_y), lv_color_to_u16(lv_color_hex(0x123456)));
+    settle();
+    now_ms += 1001;
+    tick();
+    EXPECT_EQ(invalidations, 0u);
+}
+
+TEST_F(SparklineWidget, DisabledFillDoesNotPaintBelowSeries) {
+    EXPECT_EQ(chart()->fill_opa, LV_OPA_TRANSP);
+    lv_area_t area;
+    lv_obj_get_coords(lv_obj_get_parent(chart()->lines[0]), &area);
+    EXPECT_NE(pixel((area.x1 + area.x2) / 2, area.y2 - 3),
+              lv_color_to_u16(lv_color_hex(0x123456)));
+}
+
+TEST_F(SparklineWidget, CompactIconBadgeFitsMovesAndHidesWithIcon) {
+    lv_obj_t* parent = lv_obj_create(lv_display_get_screen_active(display));
+    lv_obj_set_pos(parent, 0, 0);
+    lv_obj_set_size(parent, 180, 100);
+    lv_obj_set_style_pad_all(parent, 0, 0);
+    lv_obj_set_style_border_width(parent, 0, 0);
+    lv_obj_set_style_bg_color(parent, lv_color_white(), 0);
+    lv_obj_t* icon = lv_image_create(parent);
+    static const uint16_t data[20 * 12] = {};
+    static lv_image_dsc_t image{};
+    image.header.magic = LV_IMAGE_HEADER_MAGIC;
+    image.header.cf = LV_COLOR_FORMAT_RGB565;
+    image.header.w = 20;
+    image.header.h = 12;
+    image.header.stride = 40;
+    image.data_size = sizeof(data);
+    image.data = reinterpret_cast<const uint8_t*>(data);
+    lv_image_set_src(icon, &image);
+    lv_image_set_scale(icon, 512);
+    lv_obj_t* label = lv_label_create(parent);
+    lv_label_set_text(label, "Indoor");
+    lv_obj_t* labels[] = {label, nullptr, nullptr};
+    ScreenButtonConfig button{};
+    button.icon_badge_padding = 8;
+    button.icon_position = ButtonGroupIconPosition::Left;
+    button.ui_offset_x = 3;
+    strlcpy(button.icon_badge_color, "auto", sizeof(button.icon_badge_color));
+    strlcpy(button.label_top, "Indoor", sizeof(button.label_top));
+    ButtonContentRuntime runtime{};
+    const auto layout = pad_apply_content_layout(parent, button, icon, labels,
+                                                 pad_get_scale_info(), nullptr, &runtime);
+    lv_obj_update_layout(parent);
+    EXPECT_EQ(layout.icon.width, 56);
+    EXPECT_EQ(layout.icon.height, 56);
+    EXPECT_EQ(lv_obj_get_x(icon), 8);
+    EXPECT_EQ(lv_obj_get_y(icon), 16);
+    EXPECT_LE(layout.icon.x + layout.icon.width, layout.labels[0].x);
+    EXPECT_FALSE(lv_obj_has_flag(runtime.icon_region, LV_OBJ_FLAG_CLICKABLE));
+    settle();
+    lv_area_t area;
+    lv_obj_get_coords(runtime.icon_region, &area);
+    const int x = (area.x1 + area.x2) / 2, y = area.y1 + 4;
+    EXPECT_TRUE(runtime.icon_badge_auto_color);
+    EXPECT_EQ(pixel(x, y), lv_color_to_u16(pad_auto_icon_badge_color(parent, runtime)));
+    lv_obj_set_style_bg_color(runtime.icon_region, lv_color_hex(0xff0000), 0);
+    settle();
+    EXPECT_EQ(pixel(x, y), lv_color_to_u16(lv_color_hex(0xff0000)));
+    lv_obj_set_style_bg_color(parent, lv_color_black(), 0);
+    lv_obj_set_style_text_color(parent, lv_color_white(), 0);
+    pad_update_auto_icon_badge_color(parent, runtime);
+    settle();
+    const uint16_t dark_badge = pixel(x, y);
+    EXPECT_EQ(dark_badge, lv_color_to_u16(lv_color_mix(lv_color_white(), lv_color_black(), 38)));
+    lv_obj_set_style_bg_color(parent, lv_color_white(), 0);
+    lv_obj_set_style_text_color(parent, lv_color_black(), 0);
+    pad_update_auto_icon_badge_color(parent, runtime);
+    settle();
+    EXPECT_EQ(pixel(x, y), lv_color_to_u16(lv_color_mix(lv_color_black(), lv_color_white(), 38)));
+    runtime.icon_is_mono = true;
+    lv_obj_set_style_image_recolor(icon, lv_color_hex(0xff0000), 0);
+    pad_update_auto_icon_badge_color(parent, runtime);
+    settle();
+    EXPECT_EQ(pixel(x, y), lv_color_to_u16(lv_color_mix(lv_color_hex(0xff0000), lv_color_white(), 38)));
+    lv_obj_set_style_text_color(parent, lv_color_hex(0x00ff00), 0);
+    pad_update_auto_icon_badge_color(parent, runtime);
+    settle();
+    EXPECT_EQ(pixel(x, y), lv_color_to_u16(lv_color_mix(lv_color_hex(0xff0000), lv_color_white(), 38)));
+    lv_obj_set_style_image_recolor(icon, lv_color_hex(0x0000ff), 0);
+    pad_update_auto_icon_badge_color(parent, runtime);
+    settle();
+    EXPECT_EQ(pixel(x, y), lv_color_to_u16(lv_color_mix(lv_color_hex(0x0000ff), lv_color_white(), 38)));
+    runtime.icon_is_mono = false;
+    lv_obj_set_style_text_color(parent, lv_color_black(), 0);
+    pad_update_auto_icon_badge_color(parent, runtime);
+    settle();
+    lv_obj_add_flag(icon, LV_OBJ_FLAG_HIDDEN);
+    settle();
+    EXPECT_EQ(pixel(x, y), lv_color_to_u16(lv_color_white()));
+    lv_obj_remove_flag(icon, LV_OBJ_FLAG_HIDDEN);
+    settle();
+    EXPECT_EQ(pixel(x, y), lv_color_to_u16(lv_color_mix(lv_color_black(), lv_color_white(), 38)));
+    runtime.input.icon_position = ButtonGroupIconPosition::Right;
+    pad_reflow_content_layout(runtime, button_content_layout(runtime.input));
+    lv_obj_update_layout(parent);
+    EXPECT_GT(runtime.layout.icon.x, runtime.layout.labels[0].x);
+    ButtonContentLayout constrained = runtime.layout;
+    constrained.icon.width = constrained.icon.height = 36;
+    pad_reflow_content_layout(runtime, constrained);
+    lv_obj_update_layout(parent);
+    EXPECT_EQ(lv_obj_get_x(icon), 8);
+    EXPECT_EQ(lv_obj_get_width(icon) * lv_image_get_scale_x(icon) / LV_SCALE_NONE, 20);
+    lv_obj_set_size(parent, 12, 9);
+    const auto small = pad_measure_content_layout(parent, runtime);
+    pad_reflow_content_layout(runtime, small);
+    lv_obj_update_layout(parent);
+    EXPECT_EQ(small.icon.width, small.icon.height);
+    EXPECT_LE(small.icon.x + small.icon.width, 12);
+    EXPECT_LE(small.icon.y + small.icon.height, 9);
+    settle();
+}
+
+TEST_F(SparklineWidget, IconBadgeStaysInsidePaddedButtonContent) {
+    lv_obj_t* parent = lv_obj_create(lv_display_get_screen_active(display));
+    lv_obj_set_size(parent, 180, 100);
+    lv_obj_set_style_border_width(parent, 2, 0);
+    lv_obj_set_style_bg_color(parent, lv_color_white(), 0);
+    lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
+    lv_obj_t* icon = lv_image_create(parent);
+    static const uint16_t data[40 * 40] = {};
+    static lv_image_dsc_t image{};
+    image.header.magic = LV_IMAGE_HEADER_MAGIC;
+    image.header.cf = LV_COLOR_FORMAT_RGB565;
+    image.header.w = 40;
+    image.header.h = 40;
+    image.header.stride = 80;
+    image.data_size = sizeof(data);
+    image.data = reinterpret_cast<const uint8_t*>(data);
+    lv_image_set_src(icon, &image);
+    lv_obj_t* label = lv_label_create(parent);
+    lv_obj_t* labels[] = {label, nullptr, nullptr};
+    ScreenButtonConfig button{};
+    button.icon_badge_padding = 8;
+    button.icon_position = ButtonGroupIconPosition::Left;
+    strlcpy(button.icon_badge_color, "ff0000", sizeof(button.icon_badge_color));
+    strlcpy(button.label_top, "Indoor", sizeof(button.label_top));
+    lv_label_set_text(label, button.label_top);
+    lv_obj_set_style_pad_all(parent, 12, 0);
+    ButtonContentRuntime runtime{};
+    pad_apply_content_layout(parent, button, icon, labels, pad_get_scale_info(), nullptr, &runtime);
+
+    int32_t previous_left = -1;
+    for (int padding : {12, 24}) {
+        lv_obj_set_style_pad_all(parent, padding, 0);
+        pad_reflow_content_layout(runtime, pad_measure_content_layout(parent, runtime));
+        lv_obj_update_layout(parent);
+        lv_area_t content, badge;
+        lv_obj_get_content_coords(parent, &content);
+        lv_obj_get_coords(runtime.icon_region, &badge);
+        EXPECT_GE(badge.x1, content.x1);
+        EXPECT_GE(badge.y1, content.y1);
+        EXPECT_LE(badge.x2, content.x2);
+        EXPECT_LE(badge.y2, content.y2);
+        EXPECT_EQ(content.x1, padding + 2);
+        EXPECT_GE(runtime.layout.labels[0].x -
+                  (runtime.layout.icon.x + runtime.layout.icon.width), padding);
+        EXPECT_GT(badge.x1, previous_left);
+        previous_left = badge.x1;
+        settle();
+        EXPECT_EQ(pixel((badge.x1 + badge.x2) / 2, badge.y1 + 3),
+                  lv_color_to_u16(lv_color_hex(0xff0000)));
+        EXPECT_EQ(pixel(content.x1 - 1, (badge.y1 + badge.y2) / 2),
+                  lv_color_to_u16(lv_color_white()));
+    }
+}
 
 
 class SparklinePendingStreams : public SparklineWidget {
@@ -669,6 +941,36 @@ TEST_F(SparklineWidget, CurrentDotsAlignWithLineEndpointsOnFirstFrame) {
         const lv_point_precise_t& endpoint = chart()->points[i][count - 1];
         EXPECT_EQ(dot_bounds.x1 + lv_obj_get_width(dot) / 2, line_bounds.x1 + endpoint.x);
         EXPECT_EQ(dot_bounds.y1 + lv_obj_get_height(dot) / 2, line_bounds.y1 + endpoint.y);
+    }
+}
+
+TEST_F(SparklineWidget, CurrentDotFitsAtChartEdgesWithoutValueLabels) {
+    auto* cfg = reinterpret_cast<SparklineConfig*>(config.data);
+    cfg->current_label[0] = cfg->current_label_2[0] = cfg->current_label_3[0] = '\0';
+    cfg->smooth_factor = 0;
+    const SparklineGeometry geometry = sparkline_geometry(cfg, 3, 100, 50, 0);
+    EXPECT_EQ(geometry.top, 2);
+    EXPECT_EQ(geometry.height, 46);
+    EXPECT_EQ(geometry.width, 98);
+
+    for (float value : {0.0f, 50.0f, 100.0f}) {
+        samples[0][3] = value;
+        ++streams[0].rev;
+        tick();
+        settle();
+        lv_obj_t* dot = chart()->dot_current[0];
+        lv_area_t dot_bounds, content_bounds, line_bounds;
+        lv_obj_get_coords(dot, &dot_bounds);
+        lv_obj_get_content_coords(tile, &content_bounds);
+        lv_obj_get_coords(chart()->lines[0], &line_bounds);
+        const auto& endpoint = chart()->points[0][3];
+        EXPECT_EQ(dot_bounds.x1 + 2, line_bounds.x1 + endpoint.x);
+        EXPECT_EQ(dot_bounds.y1 + 2, line_bounds.y1 + endpoint.y);
+        EXPECT_LE(dot_bounds.x2, content_bounds.x2);
+        EXPECT_GE(dot_bounds.y1, content_bounds.y1);
+        EXPECT_LE(dot_bounds.y2, content_bounds.y2);
+        EXPECT_EQ(pixel(dot_bounds.x2 - 1, dot_bounds.y1 + 2),
+                  lv_color_to_u16(lv_color_hex(0x123456)));
     }
 }
 

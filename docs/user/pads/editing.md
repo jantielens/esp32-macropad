@@ -152,7 +152,8 @@ For a single field rather than a complete button, use the
    Choose **Continue to button**. These options carry
    into the button and are not requested again during customization.
 5. Under **What should this button do?**, choose **Show a value**,
-   **Show a bar**, **Show a gauge**, or **Show a value with history** for a numeric reading, or
+   **Show a bar**, **Show a gauge**, **Show values with history**, or
+   **Show a value with icon and history** for a numeric reading, or
    **Toggle an entity** for a light or switch, or **Show a toggle switch** to add an interactive switch widget. Adjust the title and available controls.
    Value buttons show the name, formatted value, and unit in three labels.
    Bar buttons show the title, a single bar, and the formatted value with its
@@ -176,7 +177,7 @@ For a single field rather than a complete button, use the
    It uses the same range suggestions as the bar, but fills from the minimum.
    Additional rings, targets, geometry, and other styling remain available in
    the normal editor; see [Gauge](../widgets/gauge.md).
-   **Show a value with history** requires sparkline widget support and
+   **Show values with history** requires sparkline widget support and
    non-truncated readings. With one value, the button shows its title,
    formatted current value, and trend. Choose **Add another value** to compare
    sources, including values from different providers. Two or three values
@@ -203,8 +204,13 @@ For a single field rather than a complete button, use the
    the mean statistic for eligible HA series only. MQTT and built-in series
    collect live values while the device runs. Statistics, reference lines,
    and other styling remain available in the
-   normal editor. Resize the generated button there if the chart needs more space;
-   the builder does not expand into neighboring positions.
+   normal editor.
+   **Show a value with icon and history** uses the same source and sampling
+   requirements for one value. Choose a time range, sample interval, and
+   accent color for the icon and filled trend. The builder suggests an icon
+   from available source metadata; you can change the icon and independently
+   adjust its color and the line color in the editor. Catalog artwork must be
+   available when you save the pad.
    Only supported Home Assistant lights and switches offer a toggle; MQTT and
    built-in sources never infer commands from their values.
    Toggle buttons have a Material Symbol, on/off colors, and a toggle tap action.
@@ -220,11 +226,14 @@ For a single field rather than a complete button, use the
    reflects the chosen range and orientation. The gauge preview reflects its
    range and arc color; out-of-range readings stop the indicator at the limit
    while the label still shows the actual value. Toggle preview states are
-   simulated and never send commands. The history template shows fixed,
-   illustrative trends, not actual history, with a left-aligned title and colored
-   current-value labels beside the right-hand line endpoints. Those labels use
-   fetched readings and their configured units. Changing the time range updates
-   the caption, not the sample curves.
+   simulated and never send commands. History previews show fixed, illustrative
+   trends, not actual history. Multi-value previews show colored current-value
+   labels beside the right-hand line endpoints. Those labels use fetched
+   readings and their configured units. Changing the time range updates the
+   caption, not the sample curves.
+   The builder may make the button wider by using empty positions to its right.
+   Its suggested width depends on the template and device grid. If space or
+   grid dimensions are unavailable, it uses a smaller width.
 7. Customize the generated button in the normal inspector if needed, then
    **Save Pad**.
 

@@ -52,7 +52,7 @@
         field(name + '-fmt', 'widget_sparkline_' + name + '_fmt', 'text', '');
         field(name + '-label-color', 'widget_sparkline_' + name + '_label_color', 'color', '', {});
     }
-    for (const [name, value] of [['line-width', 2], ['line-offset', 0], ['smooth', 0],
+    for (const [name, value] of [['line-width', 2], ['line-offset', 0], ['smooth', 0], ['fill-opacity', 0],
         ['marker-size-min', 0], ['marker-size-max', 0], ['current-dot', 0], ['label-width', 0]]) {
         field(name, 'widget_sparkline_' + name.replaceAll('-', '_'), 'number', value);
     }
@@ -86,6 +86,9 @@
             }
         },
         build(button) {
+            const opacity = Number(input('fill-opacity').value);
+            if (!Number.isInteger(opacity) || opacity < 0 || opacity > 100)
+                fail('fill-opacity', 'Fill opacity must be a whole percentage from 0 to 100');
             const sample = sampling();
             button.widget_sparkline_window = sample.windowSeconds;
             button.widget_sparkline_slots = sample.slots;

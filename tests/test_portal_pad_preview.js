@@ -67,13 +67,28 @@ vm.runInContext(fs.readFileSync('src/app/web/portal_widget_rocker.js', 'utf8'), 
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_numericrocker.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_binding_validator.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_icons.js', 'utf8'), context);
-context.padAppendIconPreview = function(container, icon) {
+context.padAppendIconPreview = function(container, icon, foreground) {
     const image = createElement();
     image.className = 'pad-cell-icon';
     image.dataset.kind = icon.kind;
+    image.dataset.foreground = foreground;
     container.appendChild(image);
     return image;
 };
+
+{
+    const icon = { catalog_id: 'material-symbols:home', kind: 'mono' };
+    const render = button => {
+        const cell = createElement();
+        context.padRenderCellContent(cell, { icon, ...button });
+        return cell.querySelector('.pad-cell-icon').dataset.foreground;
+    };
+    assert.strictEqual(render({ fg_color: '#abcdef' }), '#abcdef');
+    assert.strictEqual(render({ fg_color: '#abcdef', icon_color: '#ff0000' }), '#ff0000');
+    assert.strictEqual(render({ fg_color: '#abcdef', icon_color: '[health:color]' }), '#abcdef');
+    assert.notStrictEqual(context.padCellPreviewSignature({ icon, icon_color: '#ff0000' }),
+        context.padCellPreviewSignature({ icon, icon_color: '#0000ff' }));
+}
 
 const fields = ['name', 'icon', 'second_icon', 'axis_field', 'horizontal_icon', 'vertical_icon', 'default_axis'];
 const widgetFiles = fs.readdirSync('src/app/widgets').filter(name => name.endsWith('_widget.cpp'))
@@ -191,6 +206,19 @@ context.padRenderCellContent(iconBindingCell, {
 const iconRowLabel = iconBindingCell.querySelector('.pad-cell-label-center');
 assert(visibleText(iconRowLabel).startsWith('[mqtt:...') && visibleText(iconRowLabel).endsWith('/temperature]'));
 {
+    const cell = createElement();
+    context.padRenderCellContent(cell, { icon: { kind: 'color' }, label_center: 'Room' });
+    assert.strictEqual(cell.querySelector('.pad-cell-content-group').dataset.iconPosition, 'left');
+}
+for (const [padding, expected] of [[undefined, '4px'], [0, '0px'], [12, '12px']]) {
+    const cell = createElement();
+    context.padRenderCellContent(cell, {
+        icon: { kind: 'color' }, icon_position: 'left', label_center: 'Room',
+        ...(padding === undefined ? {} : { content_pad: padding })
+    });
+    assert.strictEqual(cell.querySelector('.pad-cell-content-group').style.gap, expected);
+}
+{
     const button = { widget_type: 'sparkline', widget_position: 'left', group_size_pct: 35,
         icon_position: 'right', icon: { kind: 'color' }, label_top: 'Room', label_center: '21',
         label_bottom: 'C' };
@@ -256,6 +284,27 @@ for (const icon_position of ['left', 'above']) {
     }
 }
 const widgetCatalog = context.deviceInfoCache;
+{
+    const icon = { catalog_id: 'noto:thermometer', kind: 'color' };
+    const button = { icon, icon_badge_padding: 8, icon_badge_color: '#123456', icon_position: 'left',
+        label_top: 'Indoor', label_center: '21.4 C', widget_type: 'sparkline' };
+    const cell = createElement();
+    context.padRenderCellContent(cell, button);
+    assert.strictEqual(cell.querySelector('.pad-cell-icon-badge'), null);
+    const retained = cell.querySelector('.pad-cell-icon');
+    cell.replaceChildren();
+    context.padRenderCellContent(cell, { ...button, icon_position: 'right', icon_badge_color: '#123456' }, retained);
+    assert.strictEqual(cell.querySelector('.pad-cell-icon-badge'), null);
+    assert.strictEqual(cell.querySelector('.pad-cell-icon'), retained);
+    const signature = context.padCellPreviewSignature(button);
+    assert.strictEqual(context.padCellPreviewSignature({ ...button, icon_badge_padding: 0 }), signature);
+    assert.strictEqual(context.padCellPreviewSignature({ ...button, icon_badge_color: '#654321' }), signature);
+    for (const changed of [{ ...button, icon_badge_padding: 0 }, { ...button, icon: undefined }]) {
+        const plain = createElement();
+        context.padRenderCellContent(plain, changed);
+        assert.strictEqual(plain.querySelector('.pad-cell-icon-badge'), null);
+    }
+}
 context.deviceInfoCache = null;
 assert.strictEqual(context.padWidgetPreview({ widget_type: 'gauge' }).name, 'Unknown Widget');
 
@@ -550,6 +599,22 @@ for (const [state, min, max, percent] of [
     assert.strictEqual(cell.querySelector('.pad-content-widget-region').children[0], gauge);
 }
 const historyBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "history")', context);
+const iconHistoryBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "icon_history")', context);
+{
+    const cell = createElement();
+    const session = { draft: makeDraft({ state: '21.37', unit: '\u00b0C' }, 'Living room') };
+    context.padButtonBuilderSetScenario(session, iconHistoryBuilder);
+    session.draft.options.color = '#123456';
+    const button = { ...iconHistoryBuilder.build(session.draft), ...iconHistoryBuilder.preview(session.draft) };
+    context.padRenderCellContent(cell, button);
+    iconHistoryBuilder.renderPreview(session.draft, cell, button);
+    assert.strictEqual(cell.querySelector('.pad-cell-icon').dataset.foreground, '#123456');
+    const [fill, line, dot] = cell.querySelector('.pad-content-widget-region').children[0].children;
+    assert.strictEqual(fill.attributes.fill, '#123456');
+    assert.strictEqual(fill.attributes['fill-opacity'], '0.5');
+    assert.strictEqual(line.attributes.stroke, '#123456');
+    assert.strictEqual(dot.attributes.fill, '#123456');
+}
 let samplePoints;
 for (const color of ['#4CAF50', '#2196F3']) {
     const cell = createElement();
@@ -621,12 +686,26 @@ const renderPad = { cols: 3, rows: 2, column_widths_px: [0, 40, 0] };
 const renderButton = { col: 1, row: 0, col_span: 2, row_span: 1, icon_scale_pct: 75,
     label_top: 'Name', border_width: '2', content_pad: '4', widget_type: 'gauge' };
 const originalKey = context.padIconRenderKey(renderPad, renderButton);
-assert.strictEqual(originalKey, '4c31e060');
+// The same vector is checked by the firmware validator in test_pad_confirmation.cpp.
+assert.strictEqual(originalKey, 'ac65574e');
+assert.notStrictEqual(originalKey, '4c31e060', 'Icons rendered before centering must regenerate');
 assert.strictEqual(context.padIconRenderKey(renderPad, { ...renderButton, label_top: 'Other text', fg_color: 'ff0000' }), originalKey);
 for (const change of [{ icon_scale_pct: 80 }, { col_span: 1 }, { label_top: '' }])
     assert.notStrictEqual(context.padIconRenderKey(renderPad, { ...renderButton, ...change }), originalKey);
 assert.notStrictEqual(context.padIconRenderKey({ ...renderPad, column_widths_px: [0, 50, 0] }, renderButton), originalKey);
 assert.notStrictEqual(context.padIconRenderKey({ ...renderPad, cols: 4 }, renderButton), originalKey);
+
+{
+    const size = 8;
+    const pixels = new Uint8ClampedArray(size * size * 4);
+    const offset = () => JSON.parse(JSON.stringify(context.padIconArtworkOffset(pixels, size)));
+    assert.deepStrictEqual(offset(), { x: 0, y: 0 }, 'Fully transparent images remain unchanged');
+    for (let y = 0; y < 3; y++) {
+        for (let x = 3; x < 6; x++) pixels[(y * size + x) * 4 + 3] = 255;
+    }
+    pixels[(1 * size + 6) * 4 + 3] = 1;
+    assert.deepStrictEqual(offset(), { x: -1, y: 3 }, 'Visible bounds, including translucent edges, are centered');
+}
 
 async function checkPickerResults() {
     vm.runInContext(fs.readFileSync('src/app/web/portal_icon_picker.js', 'utf8'), context);

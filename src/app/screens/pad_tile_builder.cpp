@@ -366,6 +366,9 @@ void PadScreen::buildTiles() {
 
         // Icon image (shown when a source is set and its generated PNG is cached)
         lv_obj_t* icon_img = nullptr;
+        uint32_t icon_def = fg_def;
+        const bool icon_follows_text = !bcfg.icon_color[0] || strcmp(bcfg.icon_color, "auto") == 0;
+        if (!icon_follows_text) parse_hex_color(bcfg.icon_color, &icon_def);
         uint16_t icon_scale = LV_SCALE_NONE;
         if (bcfg.icon_source_id[0]) {
             char icon_key[CONFIG_ICON_KEY_MAX_LEN];
@@ -380,7 +383,7 @@ void PadScreen::buildTiles() {
                 lv_image_set_scale(icon_img, icon_scale);
                 lv_obj_clear_flag(icon_img, LV_OBJ_FLAG_CLICKABLE);
                 if (ref.kind == ICON_KIND_MONO) {
-                    lv_obj_set_style_image_recolor(icon_img, fg, 0);
+                    lv_obj_set_style_image_recolor(icon_img, rgb_to_lv(icon_def), 0);
                     lv_obj_set_style_image_recolor_opa(icon_img, LV_OPA_COVER, 0);
                     tile.icon_is_mono = true;
                 }
@@ -397,6 +400,7 @@ void PadScreen::buildTiles() {
         tile.label_center = lbl_center;
         tile.label_bottom = lbl_bottom;
         tile.icon_img = icon_img;
+        tile.icon_follows_text = icon_follows_text;
         // icon_is_mono is set inside the icon block above; default false via clearTiles() memset
         tile.page = pageIndex;
         tile.pad_bindings = pageBindings;
@@ -411,7 +415,7 @@ void PadScreen::buildTiles() {
         ButtonContentLayout content_layout{};
         lv_obj_t* labels[] = {tile.label_top, tile.label_center, tile.label_bottom};
         content_layout = pad_apply_content_layout(obj, bcfg, icon_img, labels, scale, &fontCache,
-                                                  &tile.content_layout);
+                                                  &tile.content_layout, tile.icon_is_mono);
 
         // Widget initialization
         tile.widget_type = nullptr;
@@ -499,6 +503,15 @@ void PadScreen::buildTiles() {
         addColorBinding(i, bcfg.bg_color, bg_def, 0);
         addColorBinding(i, bcfg.fg_color, fg_def, 1);
         addColorBinding(i, bcfg.border_color, border_def, 2);
+        if (tile.icon_is_mono && !tile.icon_follows_text &&
+            binding_template_has_bindings(bcfg.icon_color))
+            addColorBinding(i, bcfg.icon_color, icon_def, 7);
+        if (bcfg.icon_badge_padding && tile.content_layout.icon_region &&
+            !tile.content_layout.icon_badge_auto_color) {
+            uint32_t badge_color = lv_color_to_u32(pad_auto_icon_badge_color(tile.obj, tile.content_layout));
+            parse_hex_color(bcfg.icon_badge_color, &badge_color);
+            addColorBinding(i, bcfg.icon_badge_color, badge_color, 6);
+        }
 
         // Per-label text colors. Only for normal button tiles (widget tiles manage
         // their own labels, which may be null). A per-label color — static or

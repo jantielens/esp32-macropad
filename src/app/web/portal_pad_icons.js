@@ -81,8 +81,15 @@ function padIconEditorSetDraft(icon) {
 
 function padIconEditorColors() {
     const background = padColorToHex(padGetBindableColor('pad-edit-bg-color'), padGetEffectiveDefault('bg_color'));
-    const foreground = padColorToHex(padGetBindableColor('pad-edit-fg-color'), padGetEffectiveDefault('fg_color'));
-    return { background: background || '#ffffff', foreground: foreground || '#222222' };
+    const text = padColorToHex(padGetBindableColor('pad-edit-fg-color'), padGetEffectiveDefault('fg_color'));
+    const foreground = padIconPreviewColor(padGetBindableColor('pad-edit-icon-color'), text);
+    return { background: background || '#ffffff', foreground };
+}
+
+function padIconPreviewColor(iconColor, textColor) {
+    const candidate = padColorToHex(iconColor, textColor);
+    if (/^#[0-9a-f]{6}$/i.test(candidate || '')) return candidate;
+    return /^#[0-9a-f]{6}$/i.test(textColor || '') ? textColor : '#222222';
 }
 
 function padIconEditorRefresh() {
@@ -91,6 +98,13 @@ function padIconEditorRefresh() {
     const remove = document.getElementById('pad-edit-icon-remove');
     const position = document.getElementById('pad-edit-icon-position-group');
     const icon = padIconEditorReadDraft();
+    const badge = document.getElementById('pad-edit-icon-badge-padding');
+    const badgeGroup = document.getElementById('pad-edit-icon-badge-group');
+    const badgeColorGroup = document.getElementById('pad-edit-icon-badge-color-group');
+    const iconColorGroup = document.getElementById('pad-edit-icon-color-group');
+    if (iconColorGroup) iconColorGroup.style.display = icon && icon.kind === 'mono' ? '' : 'none';
+    if (badgeGroup) badgeGroup.style.display = icon ? '' : 'none';
+    if (badgeColorGroup) badgeColorGroup.style.display = icon && badge && Number(badge.value) > 0 ? '' : 'none';
     if (name) name.textContent = icon
         ? icon.catalog_id ? icon.catalog_id.split(':').pop().replace(/-/g, ' ') : 'Local image'
         : 'Choose icon';
@@ -162,7 +176,7 @@ function padWidgetPreviewSymbol(preview) {
 // Shared cell content renderer for normal and ghost buttons.
 // Sets colors, border, labels, icon, and bg-image placeholder on the cell div.
 const PAD_CELL_PREVIEW_PROPERTIES = [
-    'label_top', 'label_center', 'label_bottom', 'bg_color', 'fg_color',
+    'label_top', 'label_center', 'label_bottom', 'bg_color', 'fg_color', 'icon_color',
     'border_color', 'border_width', 'corner_radius', 'content_pad',
     'icon', 'icon_position', 'widget_position', 'group_size_pct', 'rocker_group_layout',
     'bg_image_url', 'bg_image_path', 'widget_type',
@@ -202,7 +216,8 @@ function padRenderGroupedContent(cell, btn, widget, existingIcon, foreground) {
     const side = position === 'left' || position === 'right';
     const group = document.createElement('div');
     group.className = 'pad-cell-content-group';
-    const iconPosition = btn.icon_position || padGetEffectiveDefault('icon_position') || 'above';
+    group.style.gap = cell.style.padding || '4px';
+    const iconPosition = btn.icon_position || padGetEffectiveDefault('icon_position') || 'left';
     group.dataset.iconPosition = iconPosition;
     const labels = document.createElement('div');
     labels.className = 'pad-cell-group-labels';
@@ -216,15 +231,13 @@ function padRenderGroupedContent(cell, btn, widget, existingIcon, foreground) {
         padAppendBindingPreview(label, btn[field]);
         labels.appendChild(label);
     }
-    if (btn.icon && iconPosition !== 'right' && iconPosition !== 'below') {
+    const appendIcon = () => {
         if (existingIcon) group.appendChild(existingIcon);
         else padAppendIconPreview(group, btn.icon, foreground);
-    }
+    };
+    if (btn.icon && iconPosition !== 'right' && iconPosition !== 'below') appendIcon();
     if (btn.label_top || btn.label_center || btn.label_bottom) group.appendChild(labels);
-    if (btn.icon && (iconPosition === 'right' || iconPosition === 'below')) {
-        if (existingIcon) group.appendChild(existingIcon);
-        else padAppendIconPreview(group, btn.icon, foreground);
-    }
+    if (btn.icon && (iconPosition === 'right' || iconPosition === 'below')) appendIcon();
     if (widget) {
         const marker = document.createElement('div');
         marker.className = 'pad-content-widget-region';
@@ -303,7 +316,8 @@ function padRenderCellContent(cell, btn, existingIcon) {
     }
     const widget = padWidgetPreview(btn);
     if (widget) cell.classList.add('pad-cell-has-widget');
-    padRenderGroupedContent(cell, btn, widget, existingIcon, fg);
+    const iconColor = padIconPreviewColor(btn.icon_color ?? padGetEffectiveDefault('icon_color'), fg);
+    padRenderGroupedContent(cell, btn, widget, existingIcon, iconColor);
 }
 
 async function padGetButtonSizes(cols, rows) {
@@ -767,6 +781,24 @@ function padDecodeBase64Bytes(data) {
     return bytes;
 }
 
+function padIconArtworkOffset(pixels, size) {
+    let left = size, top = size, right = -1, bottom = -1;
+    for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+            if (!pixels[(y * size + x) * 4 + 3]) continue;
+            left = Math.min(left, x);
+            right = Math.max(right, x);
+            top = Math.min(top, y);
+            bottom = Math.max(bottom, y);
+        }
+    }
+    if (right < 0) return { x: 0, y: 0 };
+    return {
+        x: Math.round((size - 1 - left - right) / 2),
+        y: Math.round((size - 1 - top - bottom) / 2)
+    };
+}
+
 async function padRenderIconPNG(source, size, foreground) {
     let svg = source.data;
     if (source.kind === 'mono' && foreground) {
@@ -791,12 +823,17 @@ async function padRenderIconPNG(source, size, foreground) {
         canvas = document.createElement('canvas');
         canvas.width = size;
         canvas.height = size;
-        const context = canvas.getContext('2d');
+        const context = canvas.getContext('2d', { willReadFrequently: true });
         context.clearRect(0, 0, size, size);
         const factor = Math.min(size / image.naturalWidth, size / image.naturalHeight);
         const width = image.naturalWidth * factor;
         const height = image.naturalHeight * factor;
         context.drawImage(image, (size - width) / 2, (size - height) / 2, width, height);
+        const offset = padIconArtworkOffset(context.getImageData(0, 0, size, size).data, size);
+        if (offset.x || offset.y) {
+            context.clearRect(0, 0, size, size);
+            context.drawImage(image, (size - width) / 2 + offset.x, (size - height) / 2 + offset.y, width, height);
+        }
         const blob = await new Promise((resolve, reject) => canvas.toBlob(result =>
             result ? resolve(result) : reject(new Error('PNG rendering failed.')), 'image/png'));
         const pngLimit = Number(deviceInfoCache && deviceInfoCache.icon_max_png_size) || 512 * 1024;
@@ -821,7 +858,8 @@ function padCaptureIconLayout() {
 function padIconRenderKey(payload, button) {
     const cols = Number(payload.cols ?? 3);
     const rows = Number(payload.rows ?? 3);
-    const values = [cols, rows, button.col ?? 0, button.row ?? 0,
+    // Bump when PNG generation changes so older installed variants are rebuilt.
+    const values = [2, cols, rows, button.col ?? 0, button.row ?? 0,
         button.col_span ?? 1, button.row_span ?? 1, button.icon_scale_pct ?? 0,
         button.label_top ? 1 : 0, button.label_bottom ? 1 : 0,
         button.border_width ?? '', button.content_pad ?? '', button.widget_type ?? ''];

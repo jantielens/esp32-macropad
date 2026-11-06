@@ -242,7 +242,10 @@ function padUpdateButtonPreview(previous, button) {
     const cell = document.querySelector('#pad-grid .pad-cell-btn[data-layer="' + padState.selectedLayer + '"][data-col="' + button.col + '"][data-row="' + button.row + '"]');
     if (!cell) { padRenderGrid(); return; }
     const sameIcon = JSON.stringify(previous.icon) === JSON.stringify(button.icon) &&
-        padColorToHex(previous.fg_color, padGetEffectiveDefault('fg_color')) === padColorToHex(button.fg_color, padGetEffectiveDefault('fg_color'));
+        padIconPreviewColor(previous.icon_color ?? padGetEffectiveDefault('icon_color'),
+            padColorToHex(previous.fg_color, padGetEffectiveDefault('fg_color'))) ===
+        padIconPreviewColor(button.icon_color ?? padGetEffectiveDefault('icon_color'),
+            padColorToHex(button.fg_color, padGetEffectiveDefault('fg_color')));
     const icon = sameIcon ? cell.querySelector('.pad-cell-icon') : null;
     cell.replaceChildren();
     cell.classList.remove('pad-cell-has-widget');

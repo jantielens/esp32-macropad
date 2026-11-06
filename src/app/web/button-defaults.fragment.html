@@ -62,6 +62,29 @@
             <input type="number" id="pad-def-content-pad" class="form-control form-control-sm" min="0" max="50" style="width:100%;" placeholder="(firmware default)">
         </div>
     </div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap:12px; margin-top:8px;">
+        <div class="form-group" id="pad-def-icon-color-wrap" style="min-width:0; margin-bottom:4px;">
+            <label for="pad-def-icon-color" style="font-size:13px;">Material icon color</label>
+            <div class="bindable-color">
+                <div class="bc-swatch"></div>
+                <input type="text" id="pad-def-icon-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="auto" data-allow-auto="true">
+            </div>
+            <small class="form-text">Auto follows the button text color. You can also use a color or binding.</small>
+        </div>
+        <div class="form-group" style="min-width:0; margin-bottom:4px;">
+            <label for="pad-def-icon-badge-padding" style="font-size:13px;">Badge padding (px)</label>
+            <input type="number" id="pad-def-icon-badge-padding" class="form-control form-control-sm" min="0" max="64" step="1" value="0" style="width:100%; height:36px;">
+            <small class="form-text">Padding on each side of the icon. 0 disables the badge (default).</small>
+        </div>
+        <div class="form-group" id="pad-def-icon-badge-color-wrap" style="min-width:0; margin-bottom:4px;">
+            <label for="pad-def-icon-badge-color" style="font-size:13px;">Badge background</label>
+            <div class="bindable-color">
+                <div class="bc-swatch"></div>
+                <input type="text" id="pad-def-icon-badge-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="auto" data-allow-auto="true">
+            </div>
+            <small class="form-text">Auto blends the Material icon color and button background; color icons use the text color.</small>
+        </div>
+    </div>
 </div>
 </div>
 
@@ -148,7 +171,7 @@
         <select id="pad-def-icon-position" class="form-select form-select-sm" style="max-width:200px;">
             <option value="above">Above labels</option>
             <option value="below">Below labels</option>
-            <option value="left">Left of labels</option>
+            <option value="left" selected>Left of labels</option>
             <option value="right">Right of labels</option>
         </select>
     </div>

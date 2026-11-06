@@ -58,6 +58,11 @@
 #define PAD_MAX_BINDINGS              16
 #define PAD_BINDING_NAME_MAX_LEN      32
 
+static constexpr uint8_t DEFAULT_ICON_BADGE_PADDING = 0;
+static constexpr const char* DEFAULT_ICON_COLOR = "auto";
+static constexpr uint8_t MAX_ICON_BADGE_PADDING = 64;
+static constexpr const char* DEFAULT_ICON_BADGE_COLOR = "auto";
+
 // Parse hex color string (#RRGGBB, RRGGBB, 0xRRGGBB, or #RGB shorthand) to uint32_t.
 // Trailing whitespace is ignored. Returns false for anything else (e.g. "---",
 // "ERR:...", empty, wrong digit count).
@@ -107,6 +112,7 @@ static inline bool parse_hex_color(const char* s, uint32_t* out) {
 #define ICON_POS_BELOW   1
 #define ICON_POS_LEFT    2
 #define ICON_POS_RIGHT   3
+static constexpr uint8_t DEFAULT_ICON_POSITION = ICON_POS_LEFT;
 
 // ============================================================================
 // Label Style — per-label visual overrides (parsed from DSL string)
@@ -427,6 +433,9 @@ struct ScreenButtonConfig {
     char icon_source_id[CONFIG_ICON_SOURCE_ID_MAX_LEN];
     uint8_t icon_kind;
     uint8_t icon_scale_pct;             // 0 = auto (widget-aware), 1-250 = explicit scale %
+    uint8_t icon_badge_padding;
+    char icon_badge_color[CONFIG_COLOR_MAX_LEN];
+    char icon_color[CONFIG_COLOR_MAX_LEN];
     ButtonGroupIconPosition icon_position;
     ButtonWidgetPosition widget_position;
     uint8_t group_size_pct;             // 0 = auto, otherwise 10-90%
@@ -537,7 +546,10 @@ struct ButtonDefaults {
     char label_top_style[CONFIG_LABEL_STYLE_MAX_LEN];
     char label_center_style[CONFIG_LABEL_STYLE_MAX_LEN];
     char label_bottom_style[CONFIG_LABEL_STYLE_MAX_LEN];
-    uint8_t icon_position;                         // ICON_POS_ABOVE (0) = default
+    uint8_t icon_position;
+    uint8_t icon_badge_padding;
+    char icon_badge_color[CONFIG_COLOR_MAX_LEN];
+    char icon_color[CONFIG_COLOR_MAX_LEN];
     ButtonShadowSettings shadow;
     PadLayoutSettings layout;
     char default_font[CONFIG_FONT_ID_MAX_LEN];

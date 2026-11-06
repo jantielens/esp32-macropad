@@ -52,6 +52,7 @@ struct ButtonContentLayoutInput {
     bool center_horizontal;
     int32_t center_start;
     int32_t center_end;
+    int32_t icon_label_gap;
 };
 
 struct ButtonContentLayout {
@@ -87,6 +88,12 @@ inline int32_t button_layout_gap(int32_t available) {
     return button_layout_min(4, button_layout_nonnegative(available));
 }
 
+inline int32_t button_layout_icon_badge_size(int32_t width, int32_t height, int32_t padding) {
+    const int32_t size = width > height ? width : height;
+    if (size <= 0) return 0;
+    return size + 2 * padding;
+}
+
 inline int32_t button_layout_group_extent(const ButtonContentLayoutInput& input, bool horizontal) {
     int32_t label_width = 0;
     int32_t label_height = 0;
@@ -103,11 +110,11 @@ inline int32_t button_layout_group_extent(const ButtonContentLayoutInput& input,
     const bool side = input.icon_position == ButtonGroupIconPosition::Left ||
                       input.icon_position == ButtonGroupIconPosition::Right;
     if (horizontal) {
-        return side ? label_width + 4 + input.icon_width
+        return side ? label_width + button_layout_nonnegative(input.icon_label_gap) + input.icon_width
                     : (label_width > input.icon_width ? label_width : input.icon_width);
     }
     return side ? (label_height > input.icon_height ? label_height : input.icon_height)
-                : label_height + 4 + input.icon_height;
+                : label_height + button_layout_nonnegative(input.icon_label_gap) + input.icon_height;
 }
 
 inline ButtonContentRect button_layout_fit_icon(ButtonContentRect area, int32_t width, int32_t height) {
@@ -140,7 +147,8 @@ inline void button_layout_group(const ButtonContentLayoutInput& input,
     if (input.has_icon && count) {
         if (input.icon_position == ButtonGroupIconPosition::Above ||
                    input.icon_position == ButtonGroupIconPosition::Below) {
-            const int32_t gap = button_layout_gap(area.height);
+            const int32_t gap = button_layout_min(button_layout_nonnegative(input.icon_label_gap),
+                                                   button_layout_nonnegative(area.height));
             const int32_t icon_height = button_layout_min(input.icon_height,
                 button_layout_nonnegative(area.height - gap - requested));
             const bool above = input.icon_position == ButtonGroupIconPosition::Above;
@@ -150,7 +158,8 @@ inline void button_layout_group(const ButtonContentLayoutInput& input,
             if (above) label_area.y += icon_height + gap;
             label_area.height = button_layout_nonnegative(area.height - icon_height - gap);
         } else {
-            int32_t gap = button_layout_gap(area.width);
+            int32_t gap = button_layout_min(button_layout_nonnegative(input.icon_label_gap),
+                                             button_layout_nonnegative(area.width));
             const int32_t available = button_layout_nonnegative(area.width - gap);
             const int32_t remaining_for_icon = button_layout_nonnegative(available - requested_width);
             const int32_t minimum_icon = button_layout_min(input.icon_width, available / 8);

@@ -83,10 +83,33 @@ function padButtonBuilderHistorySampling({ window: range, interval }) {
     return { windowSeconds, slots, interval: windowSeconds / slots };
 }
 
+function padButtonBuilderHistoryIcon(candidate) {
+    if (candidate.providerId === 'ha' && !candidate.reference.path) {
+        const deviceClass = candidate.reference.detail?.paths?.find(
+            field => field.path === 'attributes.device_class' && !field.truncated)?.value;
+        if (deviceClass === 'temperature') return 'thermometer';
+        if (deviceClass === 'humidity') return 'humidity-percentage';
+    }
+    const unit = candidate.unit?.trim();
+    if (unit === '°C' || unit === '°F') return 'thermometer';
+    if (unit === '%') return 'percent';
+    return 'numbers';
+}
+
+function padButtonBuilderIconHistoryDraft(draft) {
+    return {
+        ...draft,
+        options: { ...draft.options, scale: 'shared' },
+        sources: draft.sources.slice(0, 1).map(source => ({
+            ...source, options: { ...source.options, color: draft.options.color }
+        }))
+    };
+}
+
 // Templates own their controls, configuration, and preview overrides.
 const padButtonBuilders = [
     {
-        id: 'value', label: 'Show a value',
+        id: 'value', label: 'Show a value', aspectRatio: 1,
         description: 'Show the source name, current value, and unit.',
         note: 'The unit is display text only; changing it does not convert the value.',
         available: () => true,
@@ -104,6 +127,7 @@ const padButtonBuilders = [
     },
     {
         id: 'bar', label: 'Show a bar',
+        aspectRatio: options => options.orientation === 'horizontal' ? 2 : 1,
         description: 'Show a numeric value as a single bar within a fixed range.',
         note: 'Check the suggested range before creating the button. The unit changes display text, not the value. Fine-tune styling in the pad editor.',
         available: ({ sources: [{ candidate }] }, runtime = deviceInfoCache) => candidate.capabilities.numericWidget &&
@@ -171,7 +195,7 @@ const padButtonBuilders = [
         }
     },
     {
-        id: 'gauge', label: 'Show a gauge',
+        id: 'gauge', label: 'Show a gauge', aspectRatio: 2,
         description: 'Show a numeric value as a single ring with a needle within a fixed range.',
         note: 'Check the suggested range before creating the button. The unit changes display text, not the value. Fine-tune styling in the pad editor.',
         available: ({ sources: [{ candidate }] }, runtime = deviceInfoCache) => candidate.capabilities.numericWidget &&
@@ -261,7 +285,7 @@ const padButtonBuilders = [
         }
     },
     {
-        id: 'history', label: 'Show a value with history',
+        id: 'history', label: 'Show values with history', aspectRatio: 3,
         description: 'Show a value and its trend, or compare up to three values.',
         note: 'Units change display text, not values. Automatic scale shares a scale only for matching known source units; otherwise each value has its own scale, so line heights are not directly comparable. Sampling is limited to 1024 points per line. Only eligible Home Assistant values load recorded history; other values are collected live while the device runs. Resize the button in the editor for more space.',
         maxSources: 3,
@@ -373,6 +397,13 @@ const padButtonBuilders = [
                     padButtonBuilderSampleLabel(source, source.options) : '---';
                 descriptions.push(source.name + ': ' + sample);
                 if (numeric) {
+                    if (button.widget_sparkline_fill_opacity) {
+                        const area = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                        area.setAttribute('points', curve + ' ' + x + ',190 4,190');
+                        area.setAttribute('fill', source.options.color);
+                        area.setAttribute('fill-opacity', String(button.widget_sparkline_fill_opacity / 100));
+                        chart.appendChild(area);
+                    }
                     const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
                     line.setAttribute('points', curve);
                     line.setAttribute('fill', 'none');
@@ -406,7 +437,43 @@ const padButtonBuilders = [
         }
     },
     {
-        id: 'toggle', label: 'Toggle an entity',
+        id: 'icon_history', label: 'Show a value with icon and history', aspectRatio: 3,
+        description: 'Show one value with an icon and a filled trend.',
+        note: 'The icon is suggested from the source metadata. Change it or fine-tune the colors in the pad editor. Resize the button there for more space.',
+        available: (draft, runtime) => padButtonBuilders.find(item => item.id === 'history').available(draft, runtime),
+        validateSource: source => padButtonBuilders.find(item => item.id === 'history').validateSource(source),
+        fields: () => [
+            ...padButtonBuilders.find(item => item.id === 'history').fields().slice(0, 2),
+            { name: 'color', label: 'Accent color', type: 'color', default: '#4CAF50',
+                error: 'Choose a valid accent color.' }
+        ],
+        sourceFields: ({ candidate }) => padButtonBuilderFormattingFields(candidate),
+        sourceOptions: (source, previous) =>
+            padButtonBuilders.find(item => item.id === 'history').sourceOptions(source, previous),
+        validateOutput: (draft, button) =>
+            padButtonBuilders.find(item => item.id === 'history').validateOutput(padButtonBuilderIconHistoryDraft(draft), button),
+        build(draft) {
+            const history = padButtonBuilders.find(item => item.id === 'history');
+            return {
+                ...history.build(padButtonBuilderIconHistoryDraft(draft)),
+                label_top_style: 'align:left', label_center_style: 'align:left',
+                group_size_pct: 60, icon_position: 'left', icon_scale_pct: 75,
+                icon: { catalog_id: 'material-symbols:' + padButtonBuilderHistoryIcon(draft.sources[0].candidate), kind: 'mono' },
+                icon_color: draft.options.color, icon_badge_padding: 4,
+                widget_sparkline_line_width: 3, widget_sparkline_fill_opacity: 50
+            };
+        },
+        preview: draft => padButtonBuilders.find(item => item.id === 'history').preview(padButtonBuilderIconHistoryDraft(draft)),
+        previewNote: draft => padButtonBuilders.find(item => item.id === 'history').previewNote(draft),
+        renderPreview(draft, cell, button) {
+            padButtonBuilders.find(item => item.id === 'history').renderPreview(padButtonBuilderIconHistoryDraft(draft), cell, button);
+            for (const label of cell.querySelectorAll('.pad-cell-label-top, .pad-cell-label-center')) {
+                label.style.textAlign = 'left';
+            }
+        }
+    },
+    {
+        id: 'toggle', label: 'Toggle an entity', aspectRatio: 1.5,
         description: 'Toggle a light or switch and show whether it is on or off.',
         note: 'Icon color follows the entity state. Unavailable data uses a pink-red icon.',
         preferred: true,
@@ -424,7 +491,7 @@ const padButtonBuilders = [
         previewStates: [['on', 'On'], ['off', 'Off'], ['unavailable', 'Unavailable']]
     },
     {
-        id: 'toggle_widget', label: 'Show a toggle switch',
+        id: 'toggle_widget', label: 'Show a toggle switch', aspectRatio: 2,
         description: 'Control a light or switch with an on/off switch in the button.',
         note: 'The switch follows the entity state and sends an explicit turn-on or turn-off action.',
         available: ({ sources: [source] }, runtime = deviceInfoCache) => {

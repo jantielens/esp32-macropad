@@ -27,6 +27,7 @@ class Element {
 }
 
 const elements = new Map();
+elements.set('pad-edit-icon-badge-padding', Object.assign(new Element('pad-edit-icon-badge-padding'), { value: '8' }));
 const document = {
     getElementById(id) {
         if (!elements.has(id)) elements.set(id, new Element(id));
@@ -600,6 +601,53 @@ assert.strictEqual(sparkline.widget_sparkline_slots, 1024);
 assert.strictEqual(sparkline.widget_sparkline_min, undefined);
 assert.strictEqual(sparkline.widget_sparkline_max_label_color, undefined);
 assert.strictEqual(sparkline.widget_sparkline_ref_1_color, '#123456');
+assert.strictEqual(sparkline.widget_sparkline_fill_opacity, 0);
+const fillOpacity = document.getElementById('pad-edit-sparkline-fill-opacity');
+fillOpacity.value = '35';
+assert.strictEqual(context.padDialogBuildButton().widget_sparkline_fill_opacity, 35);
+for (const value of ['-1', '101', '1.5', 'NaN']) {
+    fillOpacity.value = value;
+    assert.throws(() => context.padDialogBuildButton(), /whole percentage from 0 to 100/);
+}
+fillOpacity.value = '0';
+{
+    const defaultGetter = context.padGetEffectiveDefault;
+    const colorGetter = context.padGetBindableColor;
+    context.padGetEffectiveDefault = key => key === 'icon_badge_padding' ? 8 :
+        key === 'icon_badge_color' ? 'auto' : defaultGetter(key);
+    context.padGetBindableColor = id => id === 'pad-edit-icon-badge-color' ? '[health:color]' : colorGetter(id);
+    document.getElementById('pad-edit-icon-badge-padding').value = '0';
+    const disabledBadge = JSON.parse(JSON.stringify(context.padDialogBuildButton()));
+    assert.strictEqual(disabledBadge.icon_badge_padding, 0, 'Explicit off overrides an inherited badge');
+    assert.strictEqual(disabledBadge.icon_badge_color, '[health:color]');
+    context.padGetBindableColor = id => id === 'pad-edit-icon-color' ? '[health:color]' :
+        id === 'pad-edit-icon-badge-color' ? '[health:color]' : colorGetter(id);
+    assert.strictEqual(context.padDialogBuildButton().icon_color, '[health:color]');
+    context.padGetBindableColor = id => id === 'pad-edit-icon-color' ? 'auto' : colorGetter(id);
+    assert.strictEqual(context.padDialogBuildButton().icon_color, undefined, 'Auto follows text by default');
+    context.padGetEffectiveDefault = key => key === 'icon_color' ? '#123456' :
+        key === 'icon_badge_padding' ? 8 : key === 'icon_badge_color' ? 'auto' : defaultGetter(key);
+    assert.strictEqual(context.padDialogBuildButton().icon_color, 'auto', 'Auto overrides a configured device color');
+    document.getElementById('pad-edit-icon-badge-padding').value = '8';
+    assert.strictEqual(context.padDialogBuildButton().icon_badge_padding, undefined, 'Matching defaults stay inherited');
+    context.padGetEffectiveDefault = key => key === 'icon_badge_padding' ? 0 :
+        key === 'icon_badge_color' ? 'auto' : defaultGetter(key);
+    document.getElementById('pad-edit-icon-badge-padding').value = '0';
+    assert.strictEqual(context.padDialogBuildButton().icon_badge_padding, undefined, 'Default off stays inherited');
+    document.getElementById('pad-edit-icon-badge-padding').value = '8';
+    assert.strictEqual(context.padDialogBuildButton().icon_badge_padding, 8, 'Explicit padding enables the badge');
+    context.padGetEffectiveDefault = key => key === 'icon_badge_padding' ? '' :
+        key === 'icon_badge_color' ? 'auto' : defaultGetter(key);
+    document.getElementById('pad-edit-icon-badge-padding').value = '0';
+    assert.strictEqual(context.padDialogBuildButton().icon_badge_padding, undefined, 'Missing defaults fall back to off');
+    for (const invalid of ['-1', '65', '1.5', '']) {
+        document.getElementById('pad-edit-icon-badge-padding').value = invalid;
+        assert.throws(() => context.padDialogBuildButton(), /Badge padding must be a whole number/);
+    }
+    context.padGetEffectiveDefault = defaultGetter;
+    context.padGetBindableColor = colorGetter;
+    document.getElementById('pad-edit-icon-badge-padding').value = '8';
+}
 document.getElementById('pad-edit-sparkline-interval').value = '0.099';
 assert.throws(() => context.padWidgetEditorBuild({}, context.padWidgetEditor('sparkline')), /100 milliseconds/);
 assert.strictEqual(document.getElementById('pad-edit-sparkline-interval').value, '0.099');
@@ -1135,6 +1183,10 @@ function checkContentLayoutDraft() {
     assert.strictEqual(button.widget_position, 'left');
     assert.strictEqual(button.icon_position, 'right');
     assert.strictEqual(button.group_size_pct, 65);
+    document.getElementById('pad-edit-icon-position').value = 'left';
+    assert.strictEqual(context.padDialogBuildButton().icon_position, undefined);
+    document.getElementById('pad-edit-icon-position').value = 'above';
+    assert.strictEqual(context.padDialogBuildButton().icon_position, 'above');
     document.getElementById('pad-edit-widget-type').value = 'gauge';
     assert.strictEqual(context.padDialogBuildButton().widget_position, 'left');
     document.getElementById('pad-edit-content-layout').value = 'right';

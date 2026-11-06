@@ -42,8 +42,8 @@ struct RuntimeColorBinding {
     char templ[CONFIG_COLOR_MAX_LEN];                 // Original color string (template or static)
     uint32_t defaultColor;                            // Fallback color when unresolved
     uint32_t lastApplied;                             // Last applied color (skip if unchanged)
-    uint8_t target;                                   // 0=bg, 1=fg (labels+icon recolor), 2=border,
-                                                      // 3=label_top text, 4=label_center text, 5=label_bottom text
+    uint8_t target;                                   // 0=bg, 1=fg, 2=border, 3-5=labels,
+                                                      // 6=badge, 7=icon
     bool active;
     bool hasBindings;                                 // true if template contains [xxx:...] tokens
 };
@@ -82,12 +82,13 @@ struct ButtonTile {
     lv_obj_t* label_center;   // Center label (Font L) or nullptr
     lv_obj_t* label_bottom;   // Bottom label (Font S) or nullptr
     lv_obj_t* icon_img;       // Icon image widget (or nullptr)
-    bool icon_is_mono;        // True if icon uses fg recolor
+    bool icon_is_mono;
+    bool icon_follows_text;
     bool content_layout_dirty;
     ButtonContentRuntime content_layout;
     // Per-label text-color override: bit0=top, bit1=center, bit2=bottom. Set when a
     // label has its own `color:` (static or binding) so the fg (target=1) poll does
-    // not clobber it. Icon recolor is NOT gated by this mask.
+    // not clobber it.
     uint8_t labelColorOverride;
     uint8_t page;             // Page index (for HA event)
     const PadBinding* pad_bindings; // Owning pad's bindings for extension context
@@ -171,7 +172,7 @@ private:
     uint16_t bindingCount;
 
     // Up to 6 color bindings per button: bg + fg + border + 3 per-label text colors.
-    static const int MAX_COLOR_BINDINGS = MAX_PAD_BUTTONS * 6 + 1;
+    static const int MAX_COLOR_BINDINGS = MAX_PAD_BUTTONS * 8 + 1;
     RuntimeColorBinding* colorBindings;
     uint16_t colorBindingCount;
 

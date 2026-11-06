@@ -279,7 +279,10 @@ function padColorPopoverValidate(showError) {
     if (!_cpPopover) return null;
     var pop = _cpPopover.pop;
     var target = _cpPopover.target;
-    var res = padColorCheck(pop.querySelector('#cp-input').value, target && target.maxLength > 0 ? target.maxLength : 0, !target || target.dataset.allowBindings !== 'false');
+    var raw = pop.querySelector('#cp-input').value.trim();
+    var res = target && target.dataset.allowAuto === 'true' && raw === 'auto'
+        ? { value: 'auto', error: '' }
+        : padColorCheck(raw, target && target.maxLength > 0 ? target.maxLength : 0, !target || target.dataset.allowBindings !== 'false');
     if (_cpPopover.fill) {
         _cpPopover.fill[_cpPopover.layer] = pop.querySelector('#cp-input').value;
         pop.querySelector('#cp-base-value').textContent = padColorNormalizeLiteral(_cpPopover.fill.base) || _cpPopover.fill.base;

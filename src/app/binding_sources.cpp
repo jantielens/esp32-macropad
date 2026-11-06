@@ -34,7 +34,7 @@ void binding_sources_visit(BindingSourceVisitor visitor, void* user) {
         for (uint8_t b = 0; b < pad->button_count; ++b) {
             const auto& button = pad->buttons[b];
             const char* fields[] = {button.label_top, button.label_center, button.label_bottom,
-                button.bg_color, button.fg_color, button.border_color, button.border_width,
+                button.bg_color, button.fg_color, button.icon_color, button.icon_badge_color, button.border_color, button.border_width,
                 button.corner_radius, button.btn_state, button.label_top_color_bind,
                 button.label_center_color_bind, button.label_bottom_color_bind,
                 button.bg_image_url};

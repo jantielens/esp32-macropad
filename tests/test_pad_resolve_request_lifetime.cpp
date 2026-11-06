@@ -47,6 +47,13 @@ int main() {
     test_freertos_semaphore_take_hook = drain_on_wait;
     assert(submit_timeout_request() == PAD_RESOLVE_OK);
     assert(g_resolve_calls == 2);
+    JsonDocument args;
+    args["button"]["icon_color"] = "[test:icon-color]";
+    JsonDocument result;
+    const char* error = nullptr;
+    assert(pad_resolve_request(args.as<JsonObjectConst>(), result.to<JsonObject>(), &error) == PAD_RESOLVE_OK);
+    assert(strcmp(g_seen_input, "[test:icon-color]") == 0);
+    assert(g_resolve_calls == 3);
     puts("pad_resolve_request lifetime test passed");
     return 0;
 }

@@ -2,6 +2,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 #include "binding_template.h"
 #include "action_registry.h"
@@ -110,6 +111,44 @@ static JsonObject make_button(JsonDocument& doc) {
 
 int main() {
     std::printf("=== pad confirmation validation tests ===\n");
+
+    {
+        JsonDocument doc;
+        JsonObject button = make_button(doc);
+        button["icon_badge_padding"] = 0;
+        button["icon_badge_color"] = "[health:color]";
+        button["widget_type"] = "sparkline";
+        button["widget_sparkline_fill_opacity"] = 100;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        button["icon_badge_padding"] = 65;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["icon_badge_padding"] = 1.5;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["icon_badge_padding"] = 64;
+        button["icon_badge_color"] = "red";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["icon_badge_color"] = std::string(CONFIG_COLOR_MAX_LEN, 'a');
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["icon_badge_color"] = "auto";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        for (const char* color : {"auto", "#123456", "[health:color]"}) {
+            button["icon_color"] = color;
+            CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        }
+        button["icon_color"] = "red";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["icon_color"] = std::string(CONFIG_COLOR_MAX_LEN, 'a');
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button.remove("icon_color");
+        for (const char* invalid : {"-1", "101", "1.5", "true", "\"50\""}) {
+            JsonDocument value;
+            CHECK(!deserializeJson(value, invalid));
+            button["widget_sparkline_fill_opacity"] = value.as<JsonVariant>();
+            CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        }
+        button["widget_sparkline_fill_opacity"] = 0;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+    }
 
     {
         JsonDocument doc;
@@ -414,7 +453,7 @@ int main() {
         deserializeJson(doc, R"({"cols":3,"rows":2,"column_widths_px":[0,40,0],"buttons":[{"col":1,"row":0,"col_span":2,"row_span":1,"icon_scale_pct":75,"label_top":"Name","border_width":"2","content_pad":"4","widget_type":"gauge"}]})");
         JsonObject button = doc["buttons"][0];
         const uint32_t original = pad_icon_render_key(doc.as<JsonObjectConst>(), button);
-        CHECK(original == 0x4c31e060u);
+        CHECK(original == 0xac65574eu);
         button["label_top"] = "Other text";
         button["fg_color"] = "ff0000";
         CHECK(pad_icon_render_key(doc.as<JsonObjectConst>(), button) == original);

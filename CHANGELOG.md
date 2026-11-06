@@ -19,9 +19,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > layouts. Existing pads may look different on the device after updating;
 > legacy layout settings are not migrated. Review your pads on the device and
 > adjust label/icon placement, widget position, and group sizing as needed.
+> Buttons without a saved icon position or default now place icons to the left
+> of labels instead of above them.
 
 ### Added
 
+* Add a **Show a value with icon and history** Button Builder template with a
+  suggested icon and a shared initial accent color for the icon and history
+  line. See [create a button from a source](docs/user/pads/editing.md#create-a-button-from-a-source).
+* Add opt-in Sparkline area fills with shared 0-100% opacity, per-series
+  bound colors, and preserved history gaps. Add circular icon badges with
+  bindable or automatically blended backgrounds and adjustable padding that
+  follow shared icon layouts. Fill and badges default to off. Material icon
+  colors can follow text or use a separate color or binding; automatic badges
+  blend the resolved icon color with the button background.
+  Settings round-trip through pad editing
+  and import/export. See [Sparkline](docs/user/widgets/sparkline.md) and
+  [icon badges](docs/user/pads/appearance.md#add-an-icon-badge).
 * Add a Face widget with Robot Eyes and Doodle Buddy styles, eight emotions,
   irregular blinking, wandering gaze, and smooth emotion transitions. Use
   bindings to make the face react to your data, and choose Still liveliness
@@ -40,6 +54,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Choose a suitable button width for Button Builder templates based on the
+  grid and available space, falling back to a smaller width when needed.
 * Replace widget-specific layouts with a shared group of up to three labels
   and an icon, positioned above, below, left, or right of the widget.
   Configure icon placement independently, and choose Auto sizing or a fixed

@@ -360,7 +360,19 @@ static bool parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
             ? ICON_KIND_MONO : ICON_KIND_COLOR;
     }
     btn->icon_scale_pct = obj["icon_scale_pct"] | (uint8_t)0;
-    uint8_t position = defs ? defs->icon_position : ICON_POS_ABOVE;
+    btn->icon_badge_padding = defs ? defs->icon_badge_padding : DEFAULT_ICON_BADGE_PADDING;
+    if (!obj["icon_badge_padding"].isNull()) {
+        if (obj["icon_badge_padding"].is<uint8_t>() &&
+            obj["icon_badge_padding"].as<uint8_t>() <= MAX_ICON_BADGE_PADDING)
+            btn->icon_badge_padding = obj["icon_badge_padding"].as<uint8_t>();
+        else
+            LOGW(TAG, "Invalid icon badge padding; using device default");
+    }
+    parse_bindable_field(obj["icon_badge_color"], btn->icon_badge_color, CONFIG_COLOR_MAX_LEN,
+                         btn_default(defs ? defs->icon_badge_color : nullptr, DEFAULT_ICON_BADGE_COLOR));
+    parse_bindable_field(obj["icon_color"], btn->icon_color, CONFIG_COLOR_MAX_LEN,
+                         btn_default(defs ? defs->icon_color : nullptr, DEFAULT_ICON_COLOR));
+    uint8_t position = defs ? defs->icon_position : DEFAULT_ICON_POSITION;
     const char* icon_position = obj["icon_position"] | "";
     if (icon_position[0] && !button_position_parse(icon_position, &position))
         LOGW(TAG, "Invalid icon position: %s", icon_position);

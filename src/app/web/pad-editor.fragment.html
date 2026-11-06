@@ -338,10 +338,32 @@
                             <select id="pad-edit-icon-position">
                                 <option value="above">Above labels</option>
                                 <option value="below">Below labels</option>
-                                <option value="left">Left of labels</option>
+                                <option value="left" selected>Left of labels</option>
                                 <option value="right">Right of labels</option>
                             </select>
                             <small>Places the icon relative to the three labels.</small>
+                        </div>
+
+                        <div class="form-group" id="pad-edit-icon-color-group">
+                            <label for="pad-edit-icon-color">Material icon color <span class="fx-hint" onclick="showBindingHelp()">fx</span> <span class="reset-hint material-symbols-outlined" id="pad-edit-icon-color-reset" onclick="padResetAppearance('pad-edit-icon-color','icon_color')" title="Reset to default">restart_alt</span></label>
+                            <div class="bindable-color">
+                                <div class="bc-swatch"></div>
+                                <input type="text" id="pad-edit-icon-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="auto" data-allow-auto="true">
+                            </div>
+                            <small>Auto follows the button text color. Choose a color or binding to override it.</small>
+                        </div>
+                        <div class="form-group" id="pad-edit-icon-badge-group">
+                            <label for="pad-edit-icon-badge-padding">Badge padding (px)</label>
+                            <input type="number" id="pad-edit-icon-badge-padding" min="0" max="64" step="1" value="0" oninput="padIconEditorRefresh()">
+                            <small>Padding on each side of the icon. 0 disables the badge (default).</small>
+                            <div id="pad-edit-icon-badge-color-group">
+                                <label for="pad-edit-icon-badge-color">Badge background <span class="fx-hint" onclick="showBindingHelp()">fx</span> <span class="reset-hint material-symbols-outlined" id="pad-edit-icon-badge-color-reset" onclick="padResetAppearance('pad-edit-icon-badge-color','icon_badge_color')" title="Reset to default">restart_alt</span></label>
+                                <div class="bindable-color">
+                                    <div class="bc-swatch"></div>
+                                    <input type="text" id="pad-edit-icon-badge-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="auto" data-allow-auto="true">
+                                </div>
+                                <small>Auto blends the Material icon color and button background; color icons use the text color.</small>
+                            </div>
                         </div>
 
                     </div>

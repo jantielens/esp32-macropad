@@ -366,6 +366,10 @@ async function padInit() {
         var el = document.getElementById(f.input);
         if (el) el.addEventListener('input', padUpdateResetHints);
     });
+    ['pad-edit-fg-color', 'pad-edit-icon-color'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('input', padIconEditorRefresh);
+    });
 
     // Pad-level actions
     document.getElementById('pad-fill-btn').addEventListener('click', padFillWithClipboard);

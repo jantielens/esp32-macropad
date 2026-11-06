@@ -834,6 +834,30 @@ LVGL's ellipsis mode modifies its display buffer. Reflow reuses these dimensions
 wrapped labels are measured again at the assigned width. Binding records retain
 the template, last value and content-group label index, not a second label style.
 
+`icon_color` inherits device button defaults and defaults to `auto`, which
+follows the button foreground. A static color or binding overrides it for
+Material icons; color icons retain their artwork.
+`icon_badge_padding` inherits device button defaults and defaults to 0, which
+disables the badge. Positive values add padding per side. `icon_badge_color`
+accepts `auto` (the default), a static color or a binding. Auto blends 15%
+of the resolved Material icon color into the button background, or uses the
+button foreground for color icons. It follows changes to either color.
+Shared geometry reserves a square
+circular-badge footprint using the scaled image's longest side plus twice the
+padding. When constrained, the image shrinks to preserve the padding where
+possible. The existing icon region draws the circle behind its centered image;
+no extra LVGL object or image buffer is needed. Extended image draw bounds
+invalidate the whole badge when icon visibility changes.
+
+Sparkline's `widget_sparkline_fill_opacity` is a shared static percentage,
+0-100, default 0. A chart draw callback renders fills before child lines and
+annotations, reusing cached plotted points and their missing-data sentinels.
+Non-overlapping vertical strips avoid translucent tessellation seams;
+equal-height columns share rectangles, clipped work is bounded by visible
+width, and no additional sample or full-chart buffer is allocated.
+Point or line-color changes invalidate the filled chart bounds; unchanged
+output retains the existing revision/throttle behavior.
+
 `WidgetType.createUI` receives the widget region, configuration, button
 configuration, grid rectangle, UI scale and runtime state. It does not receive
 shared label or icon objects. Gauge and Bar Chart use the same geometry calculation

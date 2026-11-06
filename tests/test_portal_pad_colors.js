@@ -331,6 +331,15 @@ assert.strictEqual(zeroAppearance.border_width, '0');
 assert.strictEqual(zeroAppearance.corner_radius, '0');
 assert.strictEqual(zeroAppearance.content_pad, '0');
 
+defaultInputs.set('pad-def-icon-position', { value: '' });
+context.padLoadButtonDefaults({ firmware_defaults: defaultsFixture.firmware_defaults });
+assert.strictEqual(defaultInputs.get('pad-def-icon-position').value, 'left');
+assert.strictEqual(context.padCollectButtonDefaults().icon_position, undefined);
+defaultInputs.get('pad-def-icon-position').value = 'above';
+assert.strictEqual(context.padCollectButtonDefaults().icon_position, 'above');
+context.padLoadButtonDefaults({ firmware_defaults: defaultsFixture.firmware_defaults, icon_position: 'above' });
+assert.strictEqual(defaultInputs.get('pad-def-icon-position').value, 'above');
+
 (async function testDefaultsSaveRebootWarning() {
     let pendingCalls = 0;
     const messages = [];

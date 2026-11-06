@@ -273,11 +273,12 @@ void PadScreen::pollColorBindings() {
                 lv_obj_set_style_bg_color(tile.tap_overlay, is_light ? lv_color_black() : lv_color_white(), 0);
                 lv_obj_set_style_bg_opa(tile.tap_overlay, is_light ? TAP_OVERLAY_DARK_OPA : TAP_OVERLAY_LIGHT_OPA, 0);
             }
+            pad_update_auto_icon_badge_color(tile.obj, tile.content_layout);
             break;
         }
-        case 1: // fg (labels + mono icon recolor)
+        case 1: // fg (labels + icons following text)
             // Per-label color overrides win: skip a label's text color if it has its
-            // own color (static or binding). Icon recolor is NOT gated by the mask.
+            // own color (static or binding).
             lv_obj_set_style_text_color(tile.obj, rgb_to_lv(color), 0);
             if (tile.label_top && !(tile.labelColorOverride & 0x01))
                 lv_obj_set_style_text_color(tile.label_top, rgb_to_lv(color), 0);
@@ -285,9 +286,10 @@ void PadScreen::pollColorBindings() {
                 lv_obj_set_style_text_color(tile.label_center, rgb_to_lv(color), 0);
             if (tile.label_bottom && !(tile.labelColorOverride & 0x04))
                 lv_obj_set_style_text_color(tile.label_bottom, rgb_to_lv(color), 0);
-            if (tile.icon_img && tile.icon_is_mono) {
+            if (tile.icon_img && tile.icon_is_mono && tile.icon_follows_text) {
                 lv_obj_set_style_image_recolor(tile.icon_img, rgb_to_lv(color), 0);
             }
+            pad_update_auto_icon_badge_color(tile.obj, tile.content_layout);
             break;
         case 2: // border
             lv_obj_set_style_border_color(tile.obj, rgb_to_lv(color), 0);
@@ -300,6 +302,16 @@ void PadScreen::pollColorBindings() {
             break;
         case 5: // label_bottom text
             if (tile.label_bottom) lv_obj_set_style_text_color(tile.label_bottom, rgb_to_lv(color), 0);
+            break;
+        case 6: // icon badge
+            if (tile.content_layout.icon_region)
+                lv_obj_set_style_bg_color(tile.content_layout.icon_region, rgb_to_lv(color), 0);
+            break;
+        case 7: // Material icon
+            if (tile.icon_img && tile.icon_is_mono) {
+                lv_obj_set_style_image_recolor(tile.icon_img, rgb_to_lv(color), 0);
+                pad_update_auto_icon_badge_color(tile.obj, tile.content_layout);
+            }
             break;
         }
     }
