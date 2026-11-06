@@ -2,6 +2,7 @@
 #define BUTTON_CONTENT_LVGL_H
 
 #include "pad_layout.h"
+#include "widgets/numericrocker_zones.h"
 
 struct ButtonContentRuntime {
     ButtonContentLayoutInput input;
@@ -18,6 +19,11 @@ struct ButtonContentRuntime {
     uint16_t label_scale[3];
     bool label_wrap[3];
     uint16_t icon_scale;
+    bool numeric_center;
+    float small_step;
+    float large_step;
+    uint8_t zone_scale_pct;
+    int32_t indicator_inset;
 };
 
 inline lv_obj_t* button_content_region(lv_obj_t* parent, const ButtonContentRect& rect,
@@ -58,6 +64,19 @@ inline void pad_set_content_label_text(ButtonContentRuntime& runtime, int index,
 inline ButtonContentLayout pad_measure_content_layout(lv_obj_t* tile, ButtonContentRuntime& runtime) {
     lv_obj_update_layout(tile);
     runtime.input.bounds = {0, 0, lv_obj_get_content_width(tile), lv_obj_get_content_height(tile)};
+    if (runtime.input.centered_group) {
+        const int32_t span = runtime.input.center_horizontal
+            ? runtime.input.bounds.width : runtime.input.bounds.height;
+        if (runtime.numeric_center) {
+            const NRZoneLayout zones = nr_compute_zones(span, runtime.small_step,
+                                                        runtime.large_step, runtime.zone_scale_pct);
+            runtime.input.center_start = zones.inner_end;
+            runtime.input.center_end = zones.inner2_start;
+        } else {
+            runtime.input.center_start = runtime.indicator_inset;
+            runtime.input.center_end = span - runtime.indicator_inset;
+        }
+    }
     for (int i = 0; i < 3; ++i) {
         if (runtime.labels[i] && runtime.label_wrap[i])
             pad_measure_content_label(runtime, i, lv_label_get_text(runtime.labels[i]));
@@ -128,6 +147,28 @@ inline ButtonContentLayout pad_apply_content_layout(lv_obj_t* tile, const Screen
     input.icon_position = button.icon_position;
     input.group_size_pct = button.group_size_pct;
     input.has_widget = button.widget.type[0];
+    const bool rocker = strcmp(button.widget.type, "rocker") == 0;
+    runtime.numeric_center = strcmp(button.widget.type, "numericrocker") == 0;
+    input.centered_group = (rocker || runtime.numeric_center) && !button.rocker_group_beside;
+    if (input.centered_group) {
+        if (runtime.numeric_center) {
+            const auto* cfg = reinterpret_cast<const NumericRockerConfig*>(button.widget.data);
+            input.center_horizontal = cfg->horizontal;
+            runtime.small_step = cfg->small_step;
+            runtime.large_step = cfg->large_step;
+            runtime.zone_scale_pct = cfg->zone_scale_pct;
+        } else {
+            input.center_horizontal = button.widget.data[0];
+            lv_point_t symbol_a{}, symbol_b{};
+            lv_text_get_size(&symbol_a, input.center_horizontal ? LV_SYMBOL_LEFT : LV_SYMBOL_UP,
+                             scale.font_small, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+            lv_text_get_size(&symbol_b, input.center_horizontal ? LV_SYMBOL_RIGHT : LV_SYMBOL_DOWN,
+                             scale.font_small, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+            const int32_t a = input.center_horizontal ? symbol_a.x : symbol_a.y;
+            const int32_t b = input.center_horizontal ? symbol_b.x : symbol_b.y;
+            runtime.indicator_inset = (a > b ? a : b) + (input.center_horizontal ? 2 : 1) + 4;
+        }
+    }
     input.has_icon = icon != nullptr;
     runtime.icon = icon;
     runtime.offset_x = button.ui_offset_x;

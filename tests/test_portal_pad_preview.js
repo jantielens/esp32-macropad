@@ -219,6 +219,27 @@ assert(visibleText(iconRowLabel).startsWith('[mqtt:...') && visibleText(iconRowL
     context.padRenderCellContent(iconBelow, { ...button, icon_position: 'below' });
     assert.strictEqual(iconBelow.children[1].children[1].className, 'pad-cell-icon');
 }
+for (const widget_type of ['rocker', 'numericrocker']) {
+    for (const axis of ['horizontal', 'vertical']) {
+        const cell = createElement();
+        const button = { widget_type, label_center: 'Value',
+            [widget_type === 'rocker' ? 'widget_rocker_axis' : 'widget_numericrocker_axis']: axis };
+        context.padRenderCellContent(cell, button);
+        const marker = cell.querySelector('.pad-content-widget-region');
+        assert.strictEqual(marker.dataset.rockerAxis, axis);
+        assert(marker.querySelector('.pad-cell-group-labels'));
+        const beside = createElement();
+        context.padRenderCellContent(beside, { ...button, rocker_group_layout: 'beside' });
+        assert.strictEqual(beside.dataset.groupedLayout, 'row');
+        assert(beside.children.some(child => child.className === 'pad-cell-content-group'));
+    }
+}
+{
+    const cell = createElement();
+    context.padRenderCellContent(cell, { widget_type: 'numericrocker', widget_numericrocker_large_step: 0 });
+    const arrows = cell.querySelector('.pad-rocker-preview-arrows');
+    assert.deepStrictEqual(arrows.children.map(child => child.textContent), ['', '‹', '›', '']);
+}
 for (const icon_position of ['left', 'above']) {
     const cell = createElement();
     const button = { icon: { catalog_id: 'noto:thermometer', kind: 'color' }, icon_position, label_center: 'Before' };
@@ -328,9 +349,9 @@ const css = fs.readFileSync('src/app/web/portal-custom.css', 'utf8');
     assert.notStrictEqual(cell.querySelector('.pad-cell-icon'), icon, 'Foreground changes must rerender the artwork');
     const widget = { col: 0, row: 0, widget_type: 'rocker', widget_rocker_axis: 'horizontal' };
     context.padUpdateButtonPreview(colored, widget);
-    assert.strictEqual(cell.querySelector('.pad-widget-glyph').textContent, 'swap_horiz');
+    assert.strictEqual(cell.querySelector('.pad-content-widget-region').dataset.rockerAxis, 'horizontal');
     context.padUpdateButtonPreview(widget, { ...widget, widget_rocker_axis: 'vertical' });
-    assert.strictEqual(cell.querySelector('.pad-widget-glyph').textContent, 'swap_vert');
+    assert.strictEqual(cell.querySelector('.pad-content-widget-region').dataset.rockerAxis, 'vertical');
     assert.strictEqual(rebuilds, 0);
     context.padUpdateButtonPreview(widget, { ...widget, col_span: 2 });
     assert.strictEqual(rebuilds, 1, 'Geometry changes must rebuild the grid');

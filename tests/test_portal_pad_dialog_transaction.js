@@ -1111,6 +1111,13 @@ function checkContentLayoutControls() {
     layoutContext.padContentLayoutRefresh();
     assert.strictEqual(find('pad-edit-group-width-group').style.display, '');
     assert.strictEqual(select.value, 'left');
+    type.value = 'rocker';
+    find('pad-edit-rocker-group-layout').value = 'center';
+    layoutContext.padContentLayoutRefresh();
+    assert.strictEqual(find('pad-edit-content-layout-group').style.display, 'none');
+    find('pad-edit-rocker-group-layout').value = 'beside';
+    layoutContext.padContentLayoutRefresh();
+    assert.strictEqual(find('pad-edit-content-layout-group').style.display, '');
     type.value = '';
     layoutContext.padContentLayoutRefresh();
     assert.strictEqual(find('pad-edit-content-layout-group').style.display, 'none');
@@ -1134,6 +1141,13 @@ function checkContentLayoutDraft() {
     assert.strictEqual(context.padDialogBuildButton().widget_position, undefined);
     document.getElementById('pad-edit-content-layout').value = 'below';
     assert.strictEqual(context.padDialogBuildButton().widget_position, 'below');
+    for (const type of ['rocker', 'numericrocker']) {
+        document.getElementById('pad-edit-widget-type').value = type;
+        document.getElementById('pad-edit-rocker-group-layout').value = 'beside';
+        assert.strictEqual(context.padDialogBuildButton().rocker_group_layout, 'beside');
+        document.getElementById('pad-edit-rocker-group-layout').value = 'center';
+        assert.strictEqual(context.padDialogBuildButton().rocker_group_layout, undefined);
+    }
     context.padIconEditorReadDraft = savedIconReader;
 }
 

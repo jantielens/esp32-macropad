@@ -309,6 +309,97 @@ TEST_F(SparklineWidget, AutoContentReflowsFromResolvedLabelText) {
     EXPECT_EQ(lv_obj_get_x(runtime.widget_region), layout.widget.x);
 }
 
+TEST_F(SparklineWidget, CenteredRockerGroupUsesExistingWidgetAndZones) {
+    lv_obj_set_size(tile, 300, 180);
+    lv_obj_set_style_pad_all(tile, 0, 0);
+    lv_obj_set_style_border_width(tile, 0, 0);
+    lv_obj_t* label = lv_label_create(tile);
+    lv_label_set_text(label, "Value");
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
+    lv_obj_t* labels[] = {nullptr, label, nullptr};
+    ScreenButtonConfig button{};
+    strlcpy(button.widget.type, "numericrocker", sizeof(button.widget.type));
+    strlcpy(button.label_center, "Value", sizeof(button.label_center));
+    button.ui_offset_x = 3;
+    button.style_center.x_offset = 2;
+    button.group_size_pct = 90;
+    auto* config = reinterpret_cast<NumericRockerConfig*>(button.widget.data);
+    config->horizontal = true;
+    config->small_step = 1;
+    config->large_step = 10;
+    config->zone_scale_pct = 100;
+    ButtonContentRuntime runtime{};
+    ButtonContentLayout layout = pad_apply_content_layout(tile, button, nullptr, labels,
+                                                           pad_get_scale_info(), nullptr, &runtime);
+    NRZoneLayout zones = nr_compute_zones(300, 1, 10, 100);
+    EXPECT_EQ(layout.widget.width, 300);
+    EXPECT_EQ(layout.labels[1].x, zones.inner_end);
+    EXPECT_EQ(layout.labels[1].width, zones.inner2_start - zones.inner_end);
+    lv_obj_update_layout(tile);
+    EXPECT_EQ(lv_obj_get_x(runtime.label_regions[1]), layout.labels[1].x + 5);
+
+    lv_obj_set_size(tile, 100, 180);
+    layout = pad_measure_content_layout(tile, runtime);
+    zones = nr_compute_zones(100, 1, 10, 100);
+    EXPECT_EQ(layout.widget.width, 100);
+    EXPECT_EQ(layout.labels[1].width, zones.inner2_start - zones.inner_end);
+    pad_reflow_content_layout(runtime, layout);
+
+    lv_obj_delete(label);
+    label = lv_label_create(tile);
+    lv_label_set_text(label, "Value");
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
+    labels[1] = label;
+    config->horizontal = false;
+    layout = pad_apply_content_layout(tile, button, nullptr, labels, pad_get_scale_info(), nullptr, &runtime);
+    zones = nr_compute_zones(180, 1, 10, 100);
+    EXPECT_EQ(layout.widget.height, 180);
+    EXPECT_GE(layout.labels[1].y, zones.inner_end);
+    EXPECT_LE(layout.labels[1].y + layout.labels[1].height, zones.inner2_start);
+}
+
+TEST_F(SparklineWidget, RockerCentersOnBothAxesAndCanUseSplitLayout) {
+    lv_obj_set_size(tile, 300, 180);
+    lv_obj_set_style_pad_all(tile, 0, 0);
+    lv_obj_set_style_border_width(tile, 0, 0);
+    lv_obj_t* label = lv_label_create(tile);
+    lv_label_set_text(label, "Value");
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
+    lv_obj_t* labels[] = {nullptr, label, nullptr};
+    ScreenButtonConfig button{};
+    strlcpy(button.widget.type, "rocker", sizeof(button.widget.type));
+    strlcpy(button.label_center, "Value", sizeof(button.label_center));
+    button.widget.data[0] = 1;
+    ButtonContentRuntime runtime{};
+    ButtonContentLayout layout = pad_apply_content_layout(tile, button, nullptr, labels,
+                                                           pad_get_scale_info(), nullptr, &runtime);
+    EXPECT_EQ(layout.widget.width, 300);
+    EXPECT_GE(layout.labels[1].x, runtime.indicator_inset);
+    EXPECT_LE(layout.labels[1].x + layout.labels[1].width, 300 - runtime.indicator_inset);
+    lv_obj_delete(label);
+
+    label = lv_label_create(tile);
+    lv_label_set_text(label, "Value");
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
+    labels[1] = label;
+    button.widget.data[0] = 0;
+    layout = pad_apply_content_layout(tile, button, nullptr, labels, pad_get_scale_info(), nullptr, &runtime);
+    EXPECT_EQ(layout.widget.height, 180);
+    EXPECT_GE(layout.labels[1].y, runtime.indicator_inset);
+    EXPECT_LE(layout.labels[1].y + layout.labels[1].height, 180 - runtime.indicator_inset);
+    lv_obj_delete(label);
+
+    label = lv_label_create(tile);
+    lv_label_set_text(label, "Value");
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
+    labels[1] = label;
+    button.rocker_group_beside = true;
+    button.widget_position = ButtonWidgetPosition::Right;
+    layout = pad_apply_content_layout(tile, button, nullptr, labels, pad_get_scale_info(), nullptr, &runtime);
+    EXPECT_GT(layout.widget.x, 0);
+    EXPECT_LE(layout.labels[1].x + layout.labels[1].width, layout.widget.x);
+}
+
 TEST_F(SparklineWidget, AutoDotLabelsRecoverAfterTextAndBoundsGrow) {
     lv_obj_set_size(tile, 200, 100);
     lv_obj_set_style_pad_all(tile, 0, 0);

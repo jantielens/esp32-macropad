@@ -26,6 +26,11 @@ const WidgetType* widget_find(const char* type_name) {
     };
     static WidgetType test_widget = {};
     static WidgetType sparkline_widget = {};
+    static WidgetType rocker_widget = {};
+    if (type_name && (std::strcmp(type_name, "rocker") == 0 || std::strcmp(type_name, "numericrocker") == 0)) {
+        rocker_widget.name = type_name;
+        return &rocker_widget;
+    }
     if (type_name && std::strcmp(type_name, "sparkline") == 0) {
         sparkline_widget.name = "sparkline";
         return &sparkline_widget;
@@ -128,6 +133,15 @@ int main() {
         button["icon_position"] = "left";
         button["widget_type"] = "test";
         CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        button["rocker_group_layout"] = "beside";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["widget_type"] = "rocker";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        button["widget_type"] = "numericrocker";
+        button["rocker_group_layout"] = "center";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        button["rocker_group_layout"] = "invalid";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
     }
 
     {

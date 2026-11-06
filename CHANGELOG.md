@@ -46,10 +46,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   group percentage. Unconfigured labels and icons consume no space;
   widget-owned data captions and interactions remain available.
   Default widgets to the right of the group and Slider length to 100%.
+  Rocker and Numeric Rocker instead center the group between their directional
+  controls by default; choose **Beside widget** for the split layout. Group
+  sizing does not change their tap zones or actions.
   See [button appearance](docs/user/pads/appearance.md#arrange-button-content).
 * Restore large, subdued widget-type icons in the portal pad preview. Keep
   them inside the widget region, scale them down on small buttons, and prevent
-  them from intercepting clicks or consuming label/icon layout space.
+  them from intercepting clicks or consuming label/icon layout space. Centered
+  rockers show approximate directional markers around the group instead.
 * Document the Main and Overlay pattern for conditional icons and expose it to
   MCP assistants.
 * Let MCP assistants request focused binding-scheme or widget capabilities

@@ -48,6 +48,10 @@ struct ButtonContentLayoutInput {
     int32_t icon_width;
     int32_t icon_height;
     int32_t label_width[3];
+    bool centered_group;
+    bool center_horizontal;
+    int32_t center_start;
+    int32_t center_end;
 };
 
 struct ButtonContentLayout {
@@ -189,7 +193,25 @@ inline ButtonContentLayout button_content_layout(const ButtonContentLayoutInput&
     bool labels[] = {input.has_label[0], input.has_label[1], input.has_label[2]};
     const bool has_group = input.has_icon || labels[0] || labels[1] || labels[2];
 
-    if (input.has_widget && has_group) {
+    if (input.has_widget && input.centered_group) {
+        output.widget = bounds;
+        if (has_group) {
+            const int32_t span = input.center_horizontal ? bounds.width : bounds.height;
+            const int32_t start = button_layout_min(span, button_layout_nonnegative(input.center_start));
+            const int32_t end = button_layout_min(span, button_layout_nonnegative(input.center_end));
+            const int32_t lane = button_layout_nonnegative(end - start);
+            const int32_t percent = input.group_size_pct < 10 ? 10 :
+                                    input.group_size_pct > 90 ? 90 : input.group_size_pct;
+            const int32_t requested = input.group_size_pct == 0
+                ? button_layout_nonnegative(button_layout_group_extent(input, input.center_horizontal))
+                : span * percent / 100;
+            const int32_t size = button_layout_min(requested, lane);
+            group = button_layout_band(bounds, start + (lane - size) / 2,
+                                       start + (lane - size) / 2 + size, input.center_horizontal);
+        } else {
+            group = {bounds.x, bounds.y, 0, 0};
+        }
+    } else if (input.has_widget && has_group) {
         const bool horizontal = input.widget_position == ButtonWidgetPosition::Left ||
                                 input.widget_position == ButtonWidgetPosition::Right;
         const bool first = input.widget_position == ButtonWidgetPosition::Right ||

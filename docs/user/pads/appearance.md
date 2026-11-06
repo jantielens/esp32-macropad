@@ -56,7 +56,9 @@ overrides it.
 
 The top, center, and bottom labels form a group with the icon. For a button
 with a widget, **Widget position** places the widget above, below, left, or
-right of that group; right is the default. **Labels and icon size %** controls the group's share of
+right of that group; right is the default. Rocker and Numeric Rocker instead
+center the group by default; see [Rocker layout](../widgets/rockers.md#arrange-labels-and-icon).
+For other widgets and rockers placed beside the group, **Labels and icon size %** controls the group's share of
 the width for a side-by-side layout or the height for a vertical layout. Use
 0 for Auto, which measures the content and limits the group to half the
 available space, or 10-90 for a fixed percentage. Without a widget, the group

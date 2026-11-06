@@ -197,6 +197,7 @@ static void numericrocker_describe(JsonObject& out) {
     JsonArray f = out.createNestedArray("config_fields");
     auto add = [&](const char* n, const char* t, const char* d){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]=t; o["desc"]=d; };
     add("widget_numericrocker_axis","string","'h'/'horizontal' or 'v'/'vertical'");
+    add("rocker_group_layout","string","center (default) or beside; center does not change tap zones");
     add("widget_numericrocker_small_step","number","inner-arrow step (± per tap)");
     add("widget_numericrocker_large_step","number","outer-arrow step (± per tap)");
     add("widget_numericrocker_zone_scale_pct","number","tap-area scale percentage (50-150, default 100)");

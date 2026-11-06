@@ -611,12 +611,39 @@ function padContentFitWarning() {
             (upscale ? Number(upscale[1]) : 1) * (wrap ? 2 : 1);
     });
     const position = layout.value;
-    const widget = !!value('pad-edit-widget-type');
+    const type = value('pad-edit-widget-type');
+    const widget = !!type;
+    const centered = (type === 'rocker' || type === 'numericrocker') &&
+        value('pad-edit-rocker-group-layout') !== 'beside';
     const hasIcon = !!padIconEditorReadDraft();
     let groupWidth = innerWidth;
     let groupHeight = innerHeight;
     const size = Number(value('pad-edit-group-width')) || 50;
-    if (widget && (position === 'left' || position === 'right')) {
+    if (centered) {
+        const horizontal = value(type === 'rocker' ? 'pad-edit-rocker-axis' : 'pad-edit-numericrocker-axis') === 'horizontal';
+        const span = horizontal ? innerWidth : innerHeight;
+        let lane = Math.max(0, span - 36);
+        if (type === 'numericrocker') {
+            const small = Number(value('pad-edit-numericrocker-small-step')) > 0;
+            const large = Number(value('pad-edit-numericrocker-large-step')) > 0;
+            const scale = Math.max(50, Math.min(150, Number(value('pad-edit-numericrocker-zone-scale')) || 100));
+            const outerTarget = large ? 12 : 0;
+            const innerTarget = small ? 15 : 0;
+            let outer = large ? Math.min(span, Math.max(40, Math.floor(span * outerTarget * scale / 10000))) : 0;
+            let inner = small ? Math.min(span, Math.max(40, Math.floor(span * innerTarget * scale / 10000))) : 0;
+            const minimum = Math.floor(span / 10);
+            if (2 * (outer + inner) + minimum > span) {
+                const available = Math.max(4, span - minimum);
+                const denominator = Math.max(1, 2 * (outerTarget + innerTarget));
+                outer = large ? Math.max(1, Math.floor(available * outerTarget / denominator)) : 0;
+                inner = small ? Math.max(1, Math.floor(available * innerTarget / denominator)) : 0;
+            }
+            lane = Math.max(0, span - 2 * (outer + inner));
+        }
+        const extent = Math.min(lane, span * size / 100);
+        if (horizontal) groupWidth = extent;
+        else groupHeight = extent;
+    } else if (widget && (position === 'left' || position === 'right')) {
         groupWidth = Math.floor(Math.max(0, innerWidth - 4) *
             size / 100);
     } else if (widget) {
@@ -634,7 +661,10 @@ function padContentFitWarning() {
 
 function padContentLayoutRefresh() {
     const type = document.getElementById('pad-edit-widget-type').value;
-    document.getElementById('pad-edit-content-layout-group').style.display = type ? '' : 'none';
+    const rocker = type === 'rocker' || type === 'numericrocker';
+    const centered = rocker && document.getElementById('pad-edit-rocker-group-layout').value !== 'beside';
+    document.getElementById('pad-edit-rocker-group-layout-group').style.display = rocker ? '' : 'none';
+    document.getElementById('pad-edit-content-layout-group').style.display = type && !centered ? '' : 'none';
     document.getElementById('pad-edit-group-width-group').style.display = type ? '' : 'none';
     if (typeof padIconEditorRefresh === 'function') padIconEditorRefresh();
     padContentFitWarning();

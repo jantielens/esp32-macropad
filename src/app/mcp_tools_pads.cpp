@@ -151,13 +151,13 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
         "label_top_style", "label_center_style", "label_bottom_style",
         "bg_color", "fg_color", "border_color", "border_width", "corner_radius", "content_pad", "button_shadow",
         "bg_pattern", "bg_pattern_color", "pattern_spacing", "pattern_stroke_width",
-        "icon", "icon_scale_pct", "icon_position", "widget_position", "group_size_pct",
+        "icon", "icon_scale_pct", "icon_position", "widget_position", "group_size_pct", "rocker_group_layout",
         "btn_state", "widget_type", "widget_data_binding", "actions", "lp_actions"
     };
     for (const char* f : fields) bf.add(f);
     btn["layer_note"] = "Buttons are stored in buttons (Main) or overlay_buttons (Overlay). Authoring tools accept layer='main' or layer='overlay'; omitted layer means Main. Positions are local array indices, while col/row are grid coordinates.";
     btn["widget_note"] = "widget keys are flat: widget_type + widget_data_binding[_2.._4]; widget config fields (e.g. min/max/color) are flat on the button too";
-    btn["content_layout_note"] = "icon_position places the icon above, below, left or right of the labels. widget_position places widget content relative to the group (default right). group_size_pct is 0 for automatic sizing, or 10-90 percent of the split axis.";
+    btn["content_layout_note"] = "icon_position places the icon above, below, left or right of the labels. Rocker and Numeric Rocker default to rocker_group_layout center; beside uses widget_position (default right). group_size_pct is 0 for auto or 10-90 percent of the layout axis; centered groups are capped to the center lane without changing input zones.";
     btn["labels_note"] = "Default bitmap fonts cover Latin text, digits, and basic punctuation. Uploaded static TrueType font coverage depends on the font; missing glyphs fall back to the bitmap default. Use icon for retained catalog artwork.";
     btn["button_shadow_note"] = "accepts 'enabled' or 'disabled' to override the pad setting; omit to inherit. Shadow type, color mode, offsets, and blur are device-wide Pad and Button Defaults.";
     btn["fill_note"] = "Keep existing base colors. bg_pattern and supported bar patterns: none (default), diagonal, reverse_diagonal, crosshatch, dots, checkerboard; unknown names -> none. Pattern color defaults to #000000 and accepts the owning surface's color bindings. pattern_spacing: static logical px 2-64 (default 8), shared across this button. pattern_stroke_width: 1-8 (default 1), capped by spacing; dot diameter, ignored for checkerboard (spacing is square size). Numeric values clamp; malformed values use defaults. Gauge fills remain unpatterned. Track outline fields apply only to bar_chart/gauge; width 0 disables. widget_bar_track_radius: bar_chart only, static logical px 0-64 (default 4), capped at half the smaller track dimension; applies with outline off, dual baseline joins stay square. Portal badges preview fills with representative bound colors, not live widget rendering.";

@@ -1785,6 +1785,21 @@ body {
   container-type: size;
 }
 .pad-cell[data-grouped-layout="only"] > .pad-cell-content-group { flex: 1 1 auto; }
+.pad-content-widget-region[data-rocker-axis] { display: flex; align-items: center; justify-content: center; }
+.pad-rocker-preview-arrows { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0.35; pointer-events: none; }
+.pad-content-widget-region[data-rocker-axis="horizontal"] > .pad-rocker-preview-arrows { grid-template-columns: 20% 60% 20%; }
+.pad-content-widget-region[data-rocker-axis="horizontal"] > .pad-rocker-preview-arrows > :last-child { grid-column: 3; }
+.pad-content-widget-region[data-rocker-axis="vertical"] > .pad-rocker-preview-arrows { grid-template-rows: 20% 60% 20%; }
+.pad-content-widget-region[data-rocker-axis="vertical"] > .pad-rocker-preview-arrows > :last-child { grid-row: 3; }
+.pad-content-widget-region[data-rocker-axis="horizontal"][data-rocker-kind="numericrocker"] > .pad-rocker-preview-arrows { grid-template-columns: 12% 15% 46% 15% 12%; }
+.pad-content-widget-region[data-rocker-axis="horizontal"][data-rocker-kind="numericrocker"] > .pad-rocker-preview-arrows > :nth-child(3) { grid-column: 4; }
+.pad-content-widget-region[data-rocker-axis="horizontal"][data-rocker-kind="numericrocker"] > .pad-rocker-preview-arrows > :last-child { grid-column: 5; }
+.pad-content-widget-region[data-rocker-axis="vertical"][data-rocker-kind="numericrocker"] > .pad-rocker-preview-arrows { grid-template-rows: 12% 15% 46% 15% 12%; }
+.pad-content-widget-region[data-rocker-axis="vertical"][data-rocker-kind="numericrocker"] > .pad-rocker-preview-arrows > :nth-child(3) { grid-row: 4; }
+.pad-content-widget-region[data-rocker-axis="vertical"][data-rocker-kind="numericrocker"] > .pad-rocker-preview-arrows > :last-child { grid-row: 5; }
+.pad-content-widget-region[data-rocker-axis] > .pad-cell-content-group { position: relative; max-width: 60%; max-height: 60%; }
+.pad-content-widget-region[data-rocker-axis="horizontal"][data-rocker-kind="numericrocker"] > .pad-cell-content-group { max-width: 46%; max-height: 100%; }
+.pad-content-widget-region[data-rocker-axis="vertical"][data-rocker-kind="numericrocker"] > .pad-cell-content-group { max-height: 46%; max-width: 100%; }
 .pad-cell-binding {
   display: inline-block;
   max-width: min(28ch, 100%);

@@ -164,8 +164,10 @@ function padWidgetPreviewSymbol(preview) {
 const PAD_CELL_PREVIEW_PROPERTIES = [
     'label_top', 'label_center', 'label_bottom', 'bg_color', 'fg_color',
     'border_color', 'border_width', 'corner_radius', 'content_pad',
-    'icon', 'icon_position', 'widget_position', 'group_size_pct',
-    'bg_image_url', 'bg_image_path', 'widget_type'
+    'icon', 'icon_position', 'widget_position', 'group_size_pct', 'rocker_group_layout',
+    'bg_image_url', 'bg_image_path', 'widget_type',
+    'widget_rocker_axis', 'widget_numericrocker_axis',
+    'widget_numericrocker_small_step', 'widget_numericrocker_large_step'
 ];
 
 function padCellPreviewSignature(button) {
@@ -228,8 +230,40 @@ function padRenderGroupedContent(cell, btn, widget, existingIcon, foreground) {
         marker.className = 'pad-content-widget-region';
         marker.title = widget.name + ' widget placeholder, not a live rendering';
         marker.setAttribute('aria-label', marker.title);
-        marker.appendChild(padWidgetPreviewSymbol(widget));
         const hasGroup = !!(btn.icon || btn.label_top || btn.label_center || btn.label_bottom);
+        const rocker = btn.widget_type === 'rocker' || btn.widget_type === 'numericrocker';
+        const centered = rocker && btn.rocker_group_layout !== 'beside';
+        if (centered) {
+            const horizontal = btn.widget_type === 'rocker'
+                ? (btn.widget_rocker_axis || 'vertical').toLowerCase().startsWith('h')
+                : !(btn.widget_numericrocker_axis || 'horizontal').toLowerCase().startsWith('v');
+            marker.dataset.rockerAxis = horizontal ? 'horizontal' : 'vertical';
+            marker.dataset.rockerKind = btn.widget_type;
+            const arrows = document.createElement('div');
+            arrows.className = 'pad-rocker-preview-arrows';
+            arrows.setAttribute('aria-hidden', 'true');
+            const symbols = btn.widget_type === 'rocker'
+                ? (horizontal ? ['◀', '▶'] : ['▲', '▼'])
+                : (horizontal ? ['«', '‹', '›', '»'] : ['▲▲', '▲', '▼', '▼▼']);
+            if (btn.widget_type === 'numericrocker') {
+                if (Number(btn.widget_numericrocker_large_step ?? 10) <= 0) symbols[0] = symbols[3] = '';
+                if (Number(btn.widget_numericrocker_small_step ?? 1) <= 0) symbols[1] = symbols[2] = '';
+            }
+            for (const text of symbols) {
+                const arrow = document.createElement('span');
+                arrow.textContent = text;
+                arrows.appendChild(arrow);
+            }
+            marker.appendChild(arrows);
+            if (hasGroup) {
+                if (btn.group_size_pct) group.style[horizontal ? 'width' : 'height'] = btn.group_size_pct + '%';
+                marker.appendChild(group);
+            }
+            cell.appendChild(marker);
+            cell.dataset.groupedLayout = 'only';
+            return;
+        }
+        marker.appendChild(padWidgetPreviewSymbol(widget));
         if (hasGroup && btn.group_size_pct) group.style.flex = '0 1 ' + btn.group_size_pct + '%';
         else if (hasGroup) group.style[side ? 'maxWidth' : 'maxHeight'] = '50%';
         if (!hasGroup) cell.appendChild(marker);

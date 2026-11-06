@@ -625,8 +625,11 @@ region width with a default of 50%, capped by available height.
 
 The shared cell renderer shows button styling and labels, with a subdued
 Material Symbol representing widget content in a separate region from the
-labels and configured icon. Symbols come from existing catalog metadata,
-including axis variants and the unknown-widget fallback. A fit warning uses
+labels and configured icon. Centered Rocker and Numeric Rocker previews instead
+show directional markers around the shared content group. The marker positions
+are approximate and do not simulate device tap-zone dimensions. Other symbols
+come from catalog metadata, including axis variants and the unknown-widget
+fallback. A fit warning uses
 estimated font metrics and button dimensions rather than simulating LVGL.
 There are no per-widget drawing hooks,
 sample values, binding resolution requests, or action dispatch in grid rendering.
@@ -637,8 +640,8 @@ regression covers ordinary and template buttons.
 
 `PAD_CELL_PREVIEW_PROPERTIES` lives beside the cell renderer and declares the
 model properties it consumes. Preview comparisons also include the computed
-widget catalog metadata, so axis-dependent symbols participate without a second
-widget-specific field list. Keep this dependency declaration synchronized when
+widget catalog metadata. Centered rocker markers also depend on axis and step
+fields. Keep this dependency declaration synchronized when
 changing the renderer. Valid edits compare the previous and new button models:
 nonvisual changes leave the preview untouched, visual changes update only that
 button, and geometry changes rebuild the grid. Creating a unit-size button in

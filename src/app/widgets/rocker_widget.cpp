@@ -127,6 +127,7 @@ static void rocker_describe(JsonObject& out) {
     JsonArray f = out.createNestedArray("config_fields");
     auto add = [&](const char* n, const char* t, const char* d){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]=t; o["desc"]=d; };
     add("widget_rocker_axis","string","'h' or 'v' rocker direction");
+    add("rocker_group_layout","string","center (default) or beside; center does not change action zones");
     add("widget_rocker_color","color","rocker color"); add("widget_rocker_opacity","number","0-100");
     out["note"] = "Rocker has NO widget action field. Its two halves dispatch the BUTTON's action lists: "
                   "zone A (top for vertical / left for horizontal) runs actions[]; zone B (bottom / right) runs "

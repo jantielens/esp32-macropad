@@ -260,6 +260,12 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
         const int percent = b["group_size_pct"].as<int>();
         if (percent != 0 && (percent < 10 || percent > 90)) return "group_size_pct must be 0 (auto) or 10-90";
     }
+    if (b.containsKey("rocker_group_layout")) {
+        const char* layout = b["rocker_group_layout"] | "";
+        if ((strcmp(wt, "rocker") != 0 && strcmp(wt, "numericrocker") != 0) ||
+            (strcmp(layout, "center") != 0 && strcmp(layout, "beside") != 0))
+            return "rocker_group_layout must be center or beside for a rocker";
+    }
     if (b.containsKey("widget_disable_pad_swipes")) {
         if (!widget_supports_pad_swipe_control(wt))
             return "widget_disable_pad_swipes is only supported on mousepad, scrollpad, and gamepad widgets";

@@ -202,6 +202,7 @@ function padDialogOpen(col, row) {
     // Widget type
     document.getElementById('pad-edit-widget-type').value = btn.widget_type || '';
     document.getElementById('pad-edit-content-layout').value = btn.widget_position || 'right';
+    document.getElementById('pad-edit-rocker-group-layout').value = btn.rocker_group_layout || 'center';
     document.getElementById('pad-edit-group-width').value = btn.group_size_pct || 0;
     padFillLoad(btn);
     padWidgetTypeChanged();
@@ -336,6 +337,9 @@ function padDialogBuildButton() {
     const widgetEditor = padWidgetEditor(selectedType);
     const wtype = widgetEditor && widgetEditor.supported === false ? '' : selectedType;
     if (wtype) {
+        if ((wtype === 'rocker' || wtype === 'numericrocker') &&
+            document.getElementById('pad-edit-rocker-group-layout').value === 'beside')
+            btn.rocker_group_layout = 'beside';
         const position = document.getElementById('pad-edit-content-layout').value;
         if (position !== 'right') btn.widget_position = position;
         const size = Number(document.getElementById('pad-edit-group-width').value);

@@ -823,6 +823,11 @@ public:
 group and widget content. The pad builder applies those regions through
 `button_content_lvgl.h`. Binding changes can resize the widget region without
 rebuilding the button. Widgets keep their own input ownership and data captions.
+Rockers default to a full widget region with the shared group centered between
+the indicators. Numeric Rocker bounds the group to the computed center zone;
+neither layout changes input routing or zone boundaries. The `beside` option
+retains the ordinary split layout. Pad JSON stores the choice as
+`rocker_group_layout` (`center` by default, or `beside`).
 
 Natural label dimensions are measured from source text when it changes, before
 LVGL's ellipsis mode modifies its display buffer. Reflow reuses these dimensions;
