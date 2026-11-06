@@ -829,6 +829,109 @@ TEST_F(SparklineWidget, BarChartResizeMatchesCreationGeometryWithDualCaptions) {
     }
 }
 
+TEST_F(SparklineWidget, BarChartAutoCaptionsFitAndFollowBindingChanges) {
+    lv_obj_t* region = button_content_region(tile, {0, 0, 240, 140}, 0, 0);
+    WidgetConfig config{};
+    WidgetState state{};
+    ScreenButtonConfig button{};
+    PadRect rect{0, 0, 240, 140};
+    UIScaleInfo scale = pad_get_scale_info();
+    JsonDocument document;
+    document["widget_orientation"] = "horizontal";
+    document["widget_bar_label"] = "[test:label]";
+    document["widget_bar_label_2"] = "Far";
+    document["widget_bar_dual_binding_pair_1"] = true;
+    document["widget_bar_min"] = "-100";
+    document["widget_bar_max"] = "100";
+    document["widget_bar_marker_value"] = "50";
+    strlcpy(config.data_binding[1], "second", sizeof(config.data_binding[1]));
+    bindings["[test:label]"] = "PSRAM usage";
+    bar_chart_parse(document.as<JsonObject>(), config.data);
+    bar_chart_create(region, &config, &button, &rect, &scale, &state);
+    bar_chart_update(region, &config, &state, "40\t30");
+    bar_chart_tick(region, &config, &state);
+    lv_obj_update_layout(region);
+    auto* chart = reinterpret_cast<BarChartState*>(state.data);
+    auto* near = chart->slots[0].label;
+    auto* far = chart->slots[1].label;
+    ASSERT_NE(near, nullptr);
+    ASSERT_NE(far, nullptr);
+    lv_point_t text_size;
+    const lv_font_t* font = lv_obj_get_style_text_font(near, LV_PART_MAIN);
+    lv_text_get_size(&text_size, "PSRAM usage", font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    EXPECT_GE(lv_obj_get_width(near), text_size.x);
+    const int initial_length = chart->slots[0].track_total;
+    const int initial_near_width = lv_obj_get_width(near);
+    const int initial_far_width = lv_obj_get_width(far);
+
+    bindings["[test:label]"] = "PSRAM usage\nCPU";
+    bar_chart_tick(region, &config, &state);
+    lv_obj_update_layout(region);
+    EXPECT_EQ(lv_obj_get_width(near), initial_near_width);
+    EXPECT_NEAR(lv_obj_get_y(near) + lv_obj_get_height(near) / 2,
+                lv_obj_get_y(chart->slots[0].bg) + lv_obj_get_height(chart->slots[0].bg) / 2, 1);
+
+    bindings["[test:label]"] = "A much longer caption\nsecond line";
+    bar_chart_tick(region, &config, &state);
+    lv_obj_update_layout(region);
+    EXPECT_GT(lv_obj_get_width(near), initial_near_width);
+    EXPECT_EQ(lv_obj_get_width(far), initial_far_width);
+    EXPECT_LT(chart->slots[0].track_total, initial_length);
+    EXPECT_GE(chart->slots[0].track_total, rect.w / 3);
+    EXPECT_EQ(chart->slots[0].track_total, chart->slots[1].track_total);
+    ASSERT_NE(chart->slots[0].marker_line, nullptr);
+    EXPECT_GT(lv_obj_get_x(chart->slots[0].marker_line), 0);
+    EXPECT_GT(lv_obj_get_width(chart->slots[0].fill), 0);
+
+    bindings["[test:label]"] = "CPU";
+    bar_chart_tick(region, &config, &state);
+    lv_obj_update_layout(region);
+    EXPECT_LT(lv_obj_get_width(near), initial_near_width);
+    EXPECT_GT(chart->slots[0].track_total, initial_length);
+
+    bar_chart_destroy(&state);
+    lv_obj_delete(region);
+}
+
+TEST_F(SparklineWidget, BarChartCaptionOverrideAndSmallRegionKeepValidSizes) {
+    lv_obj_t* region = button_content_region(tile, {0, 0, 200, 100}, 0, 0);
+    WidgetConfig config{};
+    WidgetState state{};
+    ScreenButtonConfig button{};
+    PadRect rect{0, 0, 200, 100};
+    UIScaleInfo scale = pad_get_scale_info();
+    JsonDocument document;
+    document["widget_orientation"] = "horizontal";
+    document["widget_bar_label"] = "[test:label]";
+    document["widget_bar_label_2"] = "Far";
+    document["widget_bar_dual_binding_pair_1"] = true;
+    document["widget_bar_label_size"] = 48;
+    strlcpy(config.data_binding[1], "second", sizeof(config.data_binding[1]));
+    bar_chart_parse(document.as<JsonObject>(), config.data);
+    bar_chart_create(region, &config, &button, &rect, &scale, &state);
+    auto* chart = reinterpret_cast<BarChartState*>(state.data);
+    bindings["[test:label]"] = "A much longer caption";
+    bar_chart_tick(region, &config, &state);
+    lv_obj_update_layout(region);
+    EXPECT_EQ(lv_obj_get_width(chart->slots[0].label), 44);
+    EXPECT_EQ(lv_obj_get_width(chart->slots[1].label), 44);
+    bar_chart_destroy(&state);
+    lv_obj_delete(region);
+
+    region = button_content_region(tile, {0, 0, 20, 100}, 0, 0);
+    state = {};
+    document["widget_bar_label_size"] = 0;
+    bar_chart_parse(document.as<JsonObject>(), config.data);
+    bar_chart_create(region, &config, &button, &rect, &scale, &state);
+    lv_obj_update_layout(region);
+    chart = reinterpret_cast<BarChartState*>(state.data);
+    EXPECT_GE(lv_obj_get_width(chart->slots[0].label), 1);
+    EXPECT_GE(lv_obj_get_width(chart->slots[1].label), 1);
+    EXPECT_GE(chart->slots[0].track_total, 8);
+    bar_chart_destroy(&state);
+    lv_obj_delete(region);
+}
+
 TEST_F(SparklineWidget, TableResizePreservesConfiguredAndAutomaticColumnWidths) {
     lv_obj_t* region = button_content_region(tile, {0, 0, 200, 140}, 0, 0);
     WidgetConfig config{};

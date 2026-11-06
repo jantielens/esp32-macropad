@@ -107,6 +107,8 @@ struct BarChartState {
     int16_t   layout_width;
     int16_t   layout_height;
     int16_t   caption_line_height;
+    int16_t   near_caption_width;
+    int16_t   far_caption_width;
     uint8_t   num_bars;             // Number of active bars (1–MAX_WIDGET_BINDINGS)
     uint8_t   tick_line_count;      // Number of cached gridline pointers (all bars)
     bool      has_received_data;    // True after first value received (snap on first)
@@ -141,17 +143,15 @@ static const char* bar_slot_label_cfg(const BarChartConfig* cfg, uint8_t idx) {
 
 // Resolve a caption template (binding or static text) into a label's text.
 // Mirrors the gauge widget's start-label resolution.
-static void bar_chart_set_label_text(lv_obj_t* label, const char* templ) {
-    if (!label || !templ) return;
-    char resolved[CONFIG_BINDABLE_SHORT_LEN];
+static void bar_chart_resolve_label(const char* templ, char* resolved, size_t size) {
     resolved[0] = '\0';
 #if HAS_DISPLAY
     if (binding_template_has_bindings(templ)) {
-        binding_template_resolve(templ, resolved, sizeof(resolved));
+        binding_template_resolve(templ, resolved, size);
     } else
 #endif
     {
-        strlcpy(resolved, templ, sizeof(resolved));
+        strlcpy(resolved, templ, size);
     }
     // Decode literal "\n" escape sequences into real newlines (multi-line captions).
     char* r = resolved;
@@ -161,9 +161,22 @@ static void bar_chart_set_label_text(lv_obj_t* label, const char* templ) {
         else { *w++ = *r++; }
     }
     *w = '\0';
+}
+
+static bool bar_chart_set_label_text(lv_obj_t* label, const char* templ) {
+    char resolved[CONFIG_BINDABLE_SHORT_LEN];
+    bar_chart_resolve_label(templ, resolved, sizeof(resolved));
     if (strcmp(lv_label_get_text(label), resolved) != 0) {
         lv_label_set_text(label, resolved);
+        return true;
     }
+    return false;
+}
+
+static int16_t bar_chart_caption_width(const char* text, const lv_font_t* font) {
+    lv_point_t size;
+    lv_text_get_size(&size, text, font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    return size.x + 4;
 }
 
 
@@ -270,10 +283,21 @@ static BarChartGeometry bar_chart_geometry(const BarChartConfig* cfg, const BarC
         else near_labels = true;
     }
     const int16_t caption = cfg->bar_label_size ? cfg->bar_label_size : st->caption_line_height + 4;
-    const int16_t label_width = cfg->bar_label_size ? cfg->bar_label_size
-        : clamp_val<int16_t>(width * 28 / 100, 30, 120);
-    const int16_t near_width = near_labels ? label_width : 0;
-    const int16_t far_width = far_labels ? label_width : 0;
+    int16_t near_width = near_labels ? (cfg->bar_label_size ? cfg->bar_label_size : st->near_caption_width) : 0;
+    int16_t far_width = far_labels ? (cfg->bar_label_size ? cfg->bar_label_size : st->far_caption_width) : 0;
+    if (cfg->horizontal && !cfg->bar_label_size) {
+        int16_t budget = width * 2 / 3;
+        if (budget > width - 8) budget = width - 8;
+        if (budget < 0) budget = 0;
+        if (near_width + far_width > budget) {
+            if (near_width <= budget / 2) far_width = budget - near_width;
+            else if (far_width <= budget / 2) near_width = budget - far_width;
+            else {
+                near_width = budget / 2;
+                far_width = budget - near_width;
+            }
+        }
+    }
     const int16_t near_height = near_labels ? caption : 0;
     const int16_t far_height = far_labels ? caption : 0;
     int16_t band = cfg->horizontal ? height - 4 : width;
@@ -354,6 +378,18 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     int16_t content_w = (int16_t)lv_obj_get_content_width(tile);
     st->layout_width = content_w;
     st->layout_height = content_h;
+
+    char captions[MAX_WIDGET_BINDINGS][CONFIG_BINDABLE_SHORT_LEN] = {};
+    for (uint8_t i = 0; i < num_bars; ++i) {
+        const char* templ = bar_slot_label_cfg(cfg, i);
+        if (!templ[0]) continue;
+        bar_chart_resolve_label(templ, captions[i], sizeof(captions[i]));
+        if (cfg->horizontal && !cfg->bar_label_size) {
+            int16_t caption_width = bar_chart_caption_width(captions[i], annotation_font);
+            int16_t& side = st->slots[i].dual_dir == 1 ? st->far_caption_width : st->near_caption_width;
+            if (caption_width > side) side = caption_width;
+        }
+    }
 
     // ------------------------------------------------------------------
     // Per-bar layout. Each bar gets its own track (background) so the
@@ -548,9 +584,9 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
             lv_obj_set_style_pad_all(lbl, 0, 0);
             lv_label_set_long_mode(lbl, LV_LABEL_LONG_CLIP);
             lv_obj_clear_flag(lbl, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
-            bar_chart_set_label_text(lbl, lbl_templ);
+            lv_label_set_text(lbl, captions[oi]);
             if (cfg->horizontal) {
-                lv_obj_set_width(lbl, hlabel_w - 4);
+                lv_obj_set_width(lbl, LV_MAX(1, hlabel_w - 4));
                 lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_RIGHT, 0);
                 // Center the (possibly multi-line) caption block on the row.
                 lv_obj_update_layout(lbl);
@@ -576,9 +612,9 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
                 lv_obj_set_style_pad_all(lbl, 0, 0);
                 lv_label_set_long_mode(lbl, LV_LABEL_LONG_CLIP);
                 lv_obj_clear_flag(lbl, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
-                bar_chart_set_label_text(lbl, far_templ);
+                lv_label_set_text(lbl, captions[oi + 1]);
                 if (cfg->horizontal) {
-                    lv_obj_set_width(lbl, hlabel_w_far - 4);
+                    lv_obj_set_width(lbl, LV_MAX(1, hlabel_w_far - 4));
                     lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_LEFT, 0);
                     lv_obj_update_layout(lbl);
                     int16_t lbl_h = (int16_t)lv_obj_get_height(lbl);
@@ -680,11 +716,11 @@ static void bar_chart_position_marker(BarSlot* slot, const BarChartConfig* cfg,
     }
 }
 
-static void bar_chart_reflow(lv_obj_t* tile, const BarChartConfig* cfg, BarChartState* st) {
+static void bar_chart_reflow(lv_obj_t* tile, const BarChartConfig* cfg, BarChartState* st, bool captions_changed) {
     lv_obj_update_layout(tile);
     int16_t width = lv_obj_get_content_width(tile);
     int16_t height = lv_obj_get_content_height(tile);
-    if (width == st->layout_width && height == st->layout_height) return;
+    if (width == st->layout_width && height == st->layout_height && !captions_changed) return;
     st->layout_width = width;
     st->layout_height = height;
 
@@ -761,7 +797,7 @@ static void bar_chart_reflow(lv_obj_t* tile, const BarChartConfig* cfg, BarChart
             bar_chart_anim_cb(current, px);
             if (current->label) {
                 if (cfg->horizontal) {
-                    lv_obj_set_width(current->label, (s == i ? near_width : far_width) - 4);
+                    lv_obj_set_width(current->label, LV_MAX(1, (s == i ? near_width : far_width) - 4));
                     lv_obj_update_layout(current->label);
                     int16_t label_height = lv_obj_get_height(current->label);
                     lv_obj_align(current->label, LV_ALIGN_TOP_LEFT,
@@ -895,7 +931,29 @@ static void bar_chart_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
     auto* cfg = reinterpret_cast<const BarChartConfig*>(wcfg->data);
     auto* st = reinterpret_cast<BarChartState*>(state->data);
     if (!st->slots[0].fill || !st->slots[0].bg) return;
-    bar_chart_reflow(tile, cfg, st);
+    bool captions_changed = false;
+    for (uint8_t s = 0; s < st->num_bars; s++) {
+        if (st->slots[s].label &&
+            bar_chart_set_label_text(st->slots[s].label, bar_slot_label_cfg(cfg, s))) {
+            captions_changed = true;
+        }
+    }
+    if (captions_changed && cfg->horizontal && !cfg->bar_label_size) {
+        int16_t near_width = 0, far_width = 0;
+        for (uint8_t s = 0; s < st->num_bars; s++) {
+            lv_obj_t* label = st->slots[s].label;
+            if (!label) continue;
+            int16_t width = bar_chart_caption_width(lv_label_get_text(label),
+                                                     lv_obj_get_style_text_font(label, LV_PART_MAIN));
+            int16_t& side = st->slots[s].dual_dir == 1 ? far_width : near_width;
+            if (width > side) side = width;
+        }
+        st->near_caption_width = near_width;
+        st->far_caption_width = far_width;
+    } else if (!cfg->horizontal) {
+        captions_changed = false;
+    }
+    bar_chart_reflow(tile, cfg, st, captions_changed);
 
     // Re-resolve bindable min/max; invalidate slot values so next update re-applies
     float mn = resolve_number(cfg->bar_min, 0.0f);
@@ -920,13 +978,6 @@ static void bar_chart_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
             if (slot->cap) lv_obj_set_style_bg_color(slot->cap, clr, 0);
             if (slot->label) lv_obj_set_style_text_color(slot->label, clr, 0);
         }
-    }
-
-    // Re-resolve per-bar captions (binding-driven text updates live; static
-    // captions resolve to the same string and skip the relayout).
-    for (uint8_t s = 0; s < st->num_bars; s++) {
-        if (st->slots[s].label)
-            bar_chart_set_label_text(st->slots[s].label, bar_slot_label_cfg(cfg, s));
     }
 
     // Gridline color (uses cached pointers — no child scan)
