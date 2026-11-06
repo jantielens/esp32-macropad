@@ -8,7 +8,8 @@ function element() {
         dataset: {}, children: [], attributes: {}, classes: new Set(),
         classList: {
             add(...names) { names.forEach(name => this.owner.classes.add(name)); },
-            remove(...names) { names.forEach(name => this.owner.classes.delete(name)); }
+            remove(...names) { names.forEach(name => this.owner.classes.delete(name)); },
+            contains(name) { return this.owner.classes.has(name); }
         },
         appendChild(child) { this.children.push(child); },
         append(...children) { this.children.push(...children); },
@@ -431,6 +432,88 @@ const css = fs.readFileSync('src/app/web/portal-custom.css', 'utf8');
     assert.strictEqual(rebuilds, 3, 'Missing empty previews must fall back to a complete layout render');
     context.padRenderGrid = originalRenderGrid;
     delete context.document.querySelector;
+}
+{
+    const savedState = context.padState;
+    const savedGetElementById = context.document.getElementById;
+    const savedOccupancy = context.padBuildOccupancySet;
+    const savedGeometry = context.padGetGridGeometry;
+    const listeners = {};
+    const testGrid = createElement();
+    Object.defineProperty(testGrid, 'innerHTML', { set() { this.children = []; } });
+    testGrid.appendChild = function(child) {
+        this.children.push(child);
+        child.remove = () => { this.children.splice(this.children.indexOf(child), 1); };
+    };
+    context.document.getElementById = id => id === 'pad-grid' ? testGrid : null;
+    context.document.addEventListener = (name, handler) => { listeners[name] = handler; };
+    context.document.removeEventListener = name => { delete listeners[name]; };
+    context.padGetGridGeometry = () => ({ columnSizes: [100, 100, 100, 100], rowSizes: [100, 100], gapX: 0, gapY: 0 });
+    context.padBuildOccupancySet = () => new Set(context.padState.buttons.flatMap(button =>
+        Array.from({ length: button.col_span || 1 }, (_, dc) =>
+            Array.from({ length: button.row_span || 1 }, (_, dr) => (button.col + dc) + ',' + (button.row + dr))).flat()));
+    context.padMarkDirty = () => {};
+    const icon = { catalog_id: 'noto:thermometer', kind: 'color' };
+    const moved = { col: 0, row: 0, icon };
+    const other = { col: 3, row: 0, icon };
+    context.padState = { cols: 4, rows: 2, selectedLayer: 'main', mainButtons: [moved, other], overlayButtons: [],
+        get buttons() { return this.selectedLayer === 'overlay' ? this.overlayButtons : this.mainButtons; },
+        templateButtons: [{ col: 1, row: 0, icon }] };
+    context.padRenderGrid();
+    const movedCell = testGrid.children.find(cell => cell.dataset.col === 0 && cell.dataset.row === 0);
+    const otherCell = testGrid.children.find(cell => cell.dataset.col === 3 && cell.dataset.row === 0);
+    const movedIcon = movedCell.querySelector('.pad-cell-icon');
+    const otherIcon = otherCell.querySelector('.pad-cell-icon');
+
+    context.padResizeDragStart(0, 0, 'right', 0, 0);
+    listeners.mousemove({ clientX: 30, clientY: 0 });
+    assert.strictEqual(movedCell.style.gridColumn, '1 / span 2');
+    assert(!testGrid.children.some(cell => cell.classes.has('pad-cell-ghost')), 'A covered template must disappear');
+    assert.strictEqual(otherCell.querySelector('.pad-cell-icon'), otherIcon);
+    listeners.mousemove({ clientX: 0, clientY: 0 });
+    listeners.mouseup();
+    assert(testGrid.children.some(cell => cell.classes.has('pad-cell-ghost')), 'An uncovered template must return');
+    assert.strictEqual(movedCell.querySelector('.pad-cell-icon'), movedIcon);
+    assert(testGrid.children.includes(otherCell), 'Resize must retain unrelated buttons');
+
+    let animationFrame;
+    context.requestAnimationFrame = callback => { animationFrame = callback; };
+    movedCell.closest = () => movedCell;
+    context.padDragStart({ target: movedCell, dataTransfer: { setData() {} } }, 0, 0);
+    context.padDrop({ preventDefault() {} }, 2, 1);
+    context.padDragEnd({ target: movedCell });
+    animationFrame();
+    assert(testGrid.children.includes(movedCell), 'Move must retain the moved button');
+    assert.strictEqual(movedCell.style.gridColumn, '3 / span 1');
+    assert.strictEqual(movedCell.style.gridRow, '2 / span 1');
+    assert.strictEqual(movedCell.querySelector('.pad-cell-icon'), movedIcon);
+    assert.strictEqual(movedCell.style.opacity, '', 'A completed drag must not be dimmed by a late animation frame');
+    assert(testGrid.children.includes(otherCell), 'Move must retain unrelated buttons');
+    assert.strictEqual(otherCell.querySelector('.pad-cell-icon'), otherIcon);
+    assert(testGrid.children.some(cell => cell.classes.has('pad-cell-empty') && cell.dataset.col === 0 && cell.dataset.row === 0));
+
+    context.padState.selectedLayer = 'overlay';
+    const overlay = { col: 0, row: 0, icon };
+    context.padState.overlayButtons = [overlay];
+    context.padRenderGrid();
+    const mainPreview = testGrid.children.find(cell => cell.dataset.layer === 'main' && cell.dataset.col === 3);
+    const mainIcon = mainPreview.querySelector('.pad-cell-icon');
+    const overlayCell = testGrid.children.find(cell => cell.dataset.layer === 'overlay' && cell.dataset.col === 0);
+    context.padResizeDragStart(0, 0, 'right', 0, 0);
+    listeners.mousemove({ clientX: 30, clientY: 0 });
+    listeners.mouseup();
+    assert.strictEqual(overlayCell.style.gridColumn, '1 / span 2');
+    assert(testGrid.children.includes(mainPreview), 'Overlay resizing must retain main-layer previews');
+    assert.strictEqual(mainPreview.querySelector('.pad-cell-icon'), mainIcon);
+
+    context.padState = savedState;
+    context.document.getElementById = savedGetElementById;
+    delete context.document.addEventListener;
+    delete context.document.removeEventListener;
+    context.padBuildOccupancySet = savedOccupancy;
+    context.padGetGridGeometry = savedGeometry;
+    delete context.padMarkDirty;
+    delete context.requestAnimationFrame;
 }
 assert(!css.includes('data:font/woff2;base64,'));
 assert(!css.includes('.pad-cell-widget-'));

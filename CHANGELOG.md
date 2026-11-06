@@ -82,6 +82,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Prevent icons from reloading in the pad editor when moving or resizing
+  buttons and widgets.
 * Correct shared label sizing, including recovery from ellipsis truncation,
   and Gauge caption bounds when widget regions resize. Preserve Mousepad and
   Gamepad input ownership; resizing cancels only the affected widget's gesture,
