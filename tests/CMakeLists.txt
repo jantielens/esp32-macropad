@@ -368,6 +368,23 @@ target_compile_options(test_toggle_widget PRIVATE -Wno-deprecated-declarations
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/log_manager.h")
 target_link_libraries(test_toggle_widget PRIVATE host_lvgl m)
 
+foreach(animations 0 1 2)
+    add_host_gtest(test_face_widget_${animations} test_face_widget.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/expr_binding.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/expr_eval.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp stubs.cpp)
+    target_include_directories(test_face_widget_${animations} PRIVATE ${HOST_ARDUINOJSON_DIR})
+    target_compile_definitions(test_face_widget_${animations} PRIVATE
+        HAS_FACE_WIDGET=1 HAS_MCP=1 DISPLAY_DISABLE_ANIMATIONS=$<BOOL:${animations}>
+        HAS_LVGL_EPAPER=$<STREQUAL:${animations},2>)
+    target_compile_options(test_face_widget_${animations} PRIVATE -Wno-deprecated-declarations
+        "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/Arduino.h"
+        "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h"
+        "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/log_manager.h")
+    target_link_libraries(test_face_widget_${animations} PRIVATE host_lvgl m)
+endforeach()
+
 add_host_legacy_test(test_ota_activity
     SOURCES test_ota_activity.cpp ${PROJECT_SOURCE_DIR}/src/app/ota_activity.cpp
     OPTIONS -pthread

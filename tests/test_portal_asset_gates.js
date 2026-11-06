@@ -13,7 +13,8 @@ try {
         for (const module of [
             'device_dialog.cpp', 'dialog_appearance.cpp', 'actions/notify_action.cpp', 'actions/confirm_action.cpp',
             'pad_binding.cpp', 'pad_resolve_request.cpp', 'data_stream.cpp', 'web_portal_pad.cpp',
-            'widgets/bar_chart_widget.cpp', 'widgets/gauge_widget.cpp', 'widgets/sparkline_widget.cpp'
+            'widgets/bar_chart_widget.cpp', 'widgets/gauge_widget.cpp', 'widgets/sparkline_widget.cpp',
+            'widgets/face_widget.cpp'
         ]) {
             const object = path.join(nativeDirectory, 'module.o');
             execFileSync('c++', ['-std=c++17', '-c', 'src/app/' + module, '-o', object,
@@ -53,9 +54,29 @@ assert.equal(modules.length, new Set(widgets.filter(widget => widget.portal).map
 execFileSync('bash', ['tools/minify-web-assets.sh', 'esp32-macropad', 'ESP32 Macropad'],
     {cwd: root, stdio: 'pipe'});
 
+const guards = execFileSync('awk', [
+    '/^#if / { guard = substr($0, 5) } /^const uint8_t portal_js_gz\\[/ { print guard }',
+    'src/app/web_assets.h'
+], {cwd: root, encoding: 'utf8'}).trim().split('\n');
+const flags = [...new Set(guards.join(' ').match(/\b(?:HAS|IS)_[A-Z_0-9]+\b/g))];
+const independent = flags.filter(flag => flag.startsWith('HAS_'));
+const classes = flags.filter(flag => flag.startsWith('IS_'));
+const predicates = guards.map(guard => new Function(...flags, 'return ' + guard + ';'));
+assert(guards.length <= 512, 'Distinct portal bundles must remain within the asset variant cap');
+for (let mask = 0; mask < 2 ** independent.length; mask++) {
+    for (const deviceClass of [null, ...classes]) {
+        const enabled = new Set(independent.filter((_, bit) => mask & (1 << bit)));
+        if (deviceClass) enabled.add(deviceClass);
+        const values = flags.map(flag => enabled.has(flag));
+        assert.equal(predicates.filter(predicate => predicate(...values)).length, 1,
+            'Exactly one combined portal bundle must match ' + [...enabled].join(', '));
+    }
+}
+
 for (const [board, target, psram, integrationMode = 'default', epaperProfile = false] of [
     ['esp32c3-withsensors', 'ESP32C3', false],
     ['esp32-p4-lcd4b', 'ESP32P4', true],
+    ['esp32-p4-lcd4b', 'ESP32P4', true, 'face-disabled'],
     ['esp32-p4-lcd4b', 'ESP32P4', true, 'external-disabled'],
     ['esp32-p4-lcd4b', 'ESP32P4', false],
     ['esp32-p4-lcd4b', 'ESP32P4', false, 'builtin-only'],
@@ -67,6 +88,7 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
         ...(psram ? ['-DBOARD_HAS_PSRAM'] : []),
         ...(integrationMode === 'builtin-only' ? ['-DHAS_MQTT=0', '-DHAS_HA_LIVE=0'] : []),
         ...(integrationMode === 'ha-only' ? ['-DHAS_MQTT=0', '-DHAS_HA_LIVE=1'] : []),
+        ...(integrationMode === 'face-disabled' ? ['-DHAS_FACE_WIDGET=0'] : []),
         ...(integrationMode === 'external-disabled' ? ['-DHAS_EXTERNAL_DATA=0'] : [])],
         {cwd: root, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe']});
     const assets = new Map();
@@ -92,6 +114,14 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
     assert(js.includes('function uploadFirmware('), 'HTML upload callback was removed');
     assert(js.includes('function saveFragmentConfig('), 'Fragment save callback was removed');
     const display = board === 'esp32-p4-lcd4b';
+    const face = display && integrationMode !== 'face-disabled';
+    assert.equal(js.includes('widget_face_style'), face, 'Face editor JS must follow HAS_FACE_WIDGET');
+    assert.equal(js.includes('widget_face_liveliness'), face, 'Face validation must follow HAS_FACE_WIDGET');
+    const padEditor = assets.get('pad_editor_fragment_html_gz') || '';
+    assert.equal(padEditor.includes('id="pad-edit-face-widget-option"'), face,
+        'Face selector option must follow HAS_FACE_WIDGET');
+    assert.equal(padEditor.includes('id="pad-edit-face-section"'), face,
+        'Face editor HTML must follow HAS_FACE_WIDGET');
     const external = display && psram && integrationMode !== 'external-disabled';
     assert.equal(assets.has('external_data_fragment_html_gz'), external);
     assert.equal(assets.has('portal_external_data_js_gz'), external);

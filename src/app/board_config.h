@@ -942,6 +942,15 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define DISPLAY_DISABLE_ANIMATIONS false
 #endif
 
+// Companion faces support animated LCD/OLED displays and slow interactive e-paper updates.
+#ifndef HAS_FACE_WIDGET
+#define HAS_FACE_WIDGET (HAS_DISPLAY && (HAS_LVGL_EPAPER || (!HAS_EPAPER_PANEL && !DISPLAY_DISABLE_ANIMATIONS)))
+#endif
+
+#if HAS_FACE_WIDGET && !HAS_DISPLAY
+#error "HAS_FACE_WIDGET requires HAS_DISPLAY."
+#endif
+
 // Wall-clock-aligned interval between passive pad binding refreshes; 0 keeps every LVGL-cycle refresh.
 #ifndef DISPLAY_BINDING_REFRESH_INTERVAL_MS
 #define DISPLAY_BINDING_REFRESH_INTERVAL_MS 0

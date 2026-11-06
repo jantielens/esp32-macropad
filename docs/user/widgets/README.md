@@ -23,6 +23,7 @@ collapsing a section does not disable it.
 
 ## Visualize
 
+* [Face](#face) for an animated companion that reacts to emotion names
 * [Bar Chart](bar-chart.md) for one to four numeric sources
 * [Gauge](gauge.md) for rings, signed balance, needle, and targets
 * [Sparkline](sparkline.md) for sampled history
@@ -35,6 +36,51 @@ Ordinary buttons can instead use [labels/icons](../pads/appearance.md) or
 [background images](../media/images.md).
 Full-screen tap actions take precedence over widgets; touch-owning widgets
 can suppress ordinary tap/hold/swipe behavior.
+
+## Face
+
+A Face adds personality to a button rather than showing a measurement. On
+animated LCD/OLED displays, it blinks, looks around at irregular intervals, and
+transitions smoothly between emotions. Interactive e-paper displays also allow
+face motion, with a roughly one-second closed-eye hold instead of a quick blink.
+Updates still follow the device's binding and e-paper refresh settings, so gaze
+and emotion changes can appear as discrete steps. Long refresh or binding
+intervals can skip poses, including the closed-eye pose. The option appears only
+when your installed firmware includes it; E-Paper Frame firmware does not offer
+pad widgets.
+
+1. Select a button in **Pads**, then choose **Face** in **Content**.
+2. Choose **Style**: **Robot Eyes** for an eyes-only face, or **Doodle Buddy**
+ for eyes, eyebrows, and a mouth.
+3. Set **Emotion** to `content`, `relaxed`, `happy`, `worried`, `angry`, `sad`,
+ `surprised`, or `sleepy`. You can choose a suggested value or enter a binding
+ that returns one of these lowercase names. Blank means `content`.
+4. Choose **Liveliness**: **Still**, **Calm**, **Normal**, or **Lively**.
+ **Still** disables blinking and gaze movement, keeps the gaze centered, and
+ only animates emotion changes. The other options change idle activity, not the
+ emotion source. **Normal** is the default.
+5. Use the existing button text color for the face and background color for its
+ background. Top and bottom labels remain available; the center label and icon
+ are replaced by the face. Ordinary tap and long-press actions still work.
+6. Select **Save Pad**. No reboot is needed. Inspect the face on the device;
+ the editor grid shows the widget symbol, not a live animation.
+
+For example, to react to power consumption from MQTT, enter this in **Emotion**:
+
+```text
+[expr:[mqtt:home/power]>2000?"worried":"relaxed"]
+```
+
+Values above 2000 produce `worried`; 2000 or lower produces `relaxed`. This simple
+example has no hysteresis or duration tracking. To distinguish a brief spike
+from sustained high consumption, calculate a named emotion in your automation
+system and bind the face to that result.
+
+Missing or unrecognized results transition to `content`, with a device log
+warning once per invalid period. A valid result recovers automatically. Repeated
+values do not restart the transition. Standard
+[binding fallbacks](../pads/bindings.md) can explicitly choose another supported
+emotion when a source is unavailable.
 
 ## Toggle switch
 

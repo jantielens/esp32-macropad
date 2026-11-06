@@ -84,6 +84,7 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertNotIn("{{", fragment)
         self.assertIn('id="pad-edit-gauge-min"', fragment)
         self.assertIn('id="pad-edit-slider-axis"', fragment)
+        self.assertIn('id="pad-edit-face-emotion"', fragment)
         self.assertIn("Data binding", fragment)
         self.assertNotIn("pad-slider-preview", fragment)
         self.assertNotIn('id="binding-help-overlay"', fragment)
@@ -1043,6 +1044,10 @@ class PortalDevServerTest(unittest.TestCase):
 
         _, non_touch_info = self.request("/api/info?catalog=1", profile="crowpanel-4.2-interactive")
         self.assertFalse(any(widget["type"] == "slider" for widget in non_touch_info["widget_catalog"]))
+        self.assertTrue(any(widget["type"] == "face" for widget in touch_info["widget_catalog"]))
+        self.assertTrue(any(widget["type"] == "face" for widget in non_touch_info["widget_catalog"]))
+        _, lcd_info = self.request("/api/info?catalog=1", profile="jc3248w535")
+        self.assertTrue(any(widget["type"] == "face" for widget in lcd_info["widget_catalog"]))
 
     def test_binding_schema_source_parity(self):
         schema = self.server.pad_fixture["binding_schema"]["schemes"]

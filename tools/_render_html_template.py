@@ -26,7 +26,7 @@ import re
 import sys
 from pathlib import Path
 
-from widget_manifest import load_widgets, portal_assets
+from widget_manifest import load_widgets, portal_assets, portal_widgets
 
 # Placeholder key -> source filename under --web-dir.
 TEMPLATES = [
@@ -48,11 +48,12 @@ def load_template(web_dir: Path, filename: str) -> str:
 def render(input_path: Path, web_dir: Path,
            project_name: str, project_display_name: str,
            firmware_version: str, has_ble_hid: bool = True,
-           has_binding_help: bool = True) -> str:
+           has_binding_help: bool = True,
+           widget_flags: set[str] | None = None) -> str:
     html = input_path.read_text()
 
     if "{{WIDGET_OPTIONS}}" in html or "{{WIDGET_EDITORS}}" in html:
-        widgets = [widget for widget in load_widgets() if "portal" in widget]
+        widgets = portal_widgets(load_widgets(), widget_flags)
         html = html.replace("{{WIDGET_OPTIONS}}", "".join(
             f'<option value="{widget["type"]}" id="pad-edit-{widget["type"]}-widget-option">'
             f'{escape(widget["portal"]["label"])}</option>' for widget in widgets))
@@ -85,12 +86,14 @@ def main() -> int:
     p.add_argument("--firmware-version", required=True)
     p.add_argument("--without-ble-hid", action="store_true")
     p.add_argument("--without-binding-help", action="store_true")
+    p.add_argument("--widget-flags", nargs="*", default=None)
     args = p.parse_args()
 
     sys.stdout.write(render(args.input, args.web_dir,
                             args.project_name, args.project_display_name,
                             args.firmware_version, not args.without_ble_hid,
-                            not args.without_binding_help))
+                            not args.without_binding_help,
+                            None if args.widget_flags is None else set(args.widget_flags)))
     return 0
 
 

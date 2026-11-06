@@ -1247,6 +1247,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
             flags.add("HAS_HA_LIVE")
         if self._profile() == "crowpanel-4.2-interactive":
             flags = {"HAS_DISPLAY", "HAS_MQTT"}
+        if "HAS_DISPLAY" in flags:
+            flags.add("HAS_FACE_WIDGET")
         if self._profile() == "jc3248w535":
             flags.discard("HAS_SOUND_PLAYER")
         for line in expand_bundle(APP_WEB_DIR / manifest).splitlines():

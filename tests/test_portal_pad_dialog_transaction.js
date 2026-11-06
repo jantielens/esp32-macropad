@@ -450,6 +450,50 @@ context.padWorkspaceEdit();
 assert.strictEqual(context.padState.buttons[0].widget_type, 'table', 'Inactive Gauge fields must not block Table');
 
 const gamepadEditor = context.padWidgetEditor('gamepad_button');
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_face.js', 'utf8'), context);
+const faceEditor = context.padWidgetEditor('face');
+bindingContext.bindingRegisterSchema(JSON.parse(fs.readFileSync('tools/mock-data/pad-editor.json', 'utf8')).binding_schema.schemes);
+context.bindingValidateInput = (input, options) => bindingContext.validateBinding(input.value, options).valid;
+assert.strictEqual(faceEditor.available({ widget_catalog: [{ type: 'face' }] }), true);
+assert.strictEqual(faceEditor.available({ widget_catalog: [{ type: 'gauge' }] }), false);
+assert.strictEqual(faceEditor.available(null), false);
+document.getElementById('pad-edit-widget-type').value = 'face';
+for (const emotion of ['content', 'relaxed', 'happy', 'worried', 'angry', 'sad', 'surprised', 'sleepy',
+    '[pad:mood]', '[expr:[mqtt:home/power]>2000?"worried":"relaxed"]']) {
+    context.padWidgetEditorsLoad({ widget_type: 'face', widget_face_style: 'doodle',
+        widget_data_binding: emotion, widget_face_liveliness: 'lively' });
+    const face = context.padDialogBuildButton();
+    assert.strictEqual(face.widget_face_style, 'doodle');
+    assert.strictEqual(face.widget_data_binding, emotion);
+    assert.strictEqual(face.widget_face_liveliness, 'lively');
+}
+for (const liveliness of ['still', 'calm', 'normal', 'lively']) {
+    context.padWidgetEditorsLoad({ widget_type: 'face', widget_data_binding: 'worried',
+        widget_face_liveliness: liveliness });
+    assert.strictEqual(context.padDialogBuildButton().widget_face_liveliness, liveliness);
+}
+context.padWidgetEditorsLoad({ widget_type: 'face', widget_face_emotion: 'happy' });
+assert.strictEqual(context.padDialogBuildButton().widget_data_binding, 'happy', 'Load renderer-only fixed emotion settings');
+context.padWidgetEditorsLoad({ widget_type: 'face' });
+assert.strictEqual(context.padDialogBuildButton().widget_face_style, 'robot');
+assert.strictEqual(context.padDialogBuildButton().widget_data_binding, 'content');
+assert.strictEqual(context.padDialogBuildButton().widget_face_liveliness, 'normal');
+const faceEmotion = document.getElementById('pad-edit-face-emotion');
+for (const invalid of ['Happy', 'excited', '17', 'x'.repeat(192), '[pad:mood', '[mqt:home/mood]', '[garbage]']) {
+    faceEmotion.value = invalid;
+    assert.throws(() => context.padDialogBuildButton(), /emotion|Emotion|binding/);
+}
+faceEmotion.value = '';
+assert.strictEqual(context.padDialogBuildButton().widget_data_binding, 'content');
+for (const [id, message] of [['pad-edit-face-style', /Robot Eyes/], ['pad-edit-face-liveliness', /Calm/]]) {
+    const input = document.getElementById(id);
+    const previous = input.value;
+    input.value = 'invalid';
+    assert.throws(() => context.padDialogBuildButton(), message);
+    input.value = previous;
+}
+delete context.bindingValidateInput;
+document.getElementById('pad-edit-widget-type').value = 'gamepad_button';
 assert.strictEqual(gamepadEditor.available({ has_touch: true, has_usb_hid: true }), true);
 assert.strictEqual(gamepadEditor.available({ has_touch: true, has_usb_hid: false }), false);
 document.getElementById('pad-edit-widget-type').value = 'gamepad_button';

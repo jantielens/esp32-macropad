@@ -535,9 +535,50 @@ To add a widget:
 
 `source` is relative to `src/app`; portal paths are relative to `src/app/web`.
 `portal.css` is optional, and firmware-only widgets omit `portal` entirely.
+Use optional `portal.gates` for compile-time removal of an editor's JavaScript,
+CSS, selector option, and HTML controls. These gates must also appear in the
+widget's firmware `gates`. Face declares `"gates": ["HAS_FACE_WIDGET"]` inside
+its `portal` object so disabling the feature removes both native and portal code.
+The `face` widget uses `HAS_FACE_WIDGET`, enabled by default on interactive
+e-paper displays and non-e-paper displays with animations enabled. Interactive
+e-paper profiles retain `DISPLAY_DISABLE_ANIMATIONS` for other UI elements; Face
+alone permits motion and emotion interpolation, with a 1000 ms closed-eye hold.
+Existing binding polling and presentation still determine visible frame cadence;
+there is no presentation-aware scheduler or guarantee that every pose is shown.
+Its owner editor exposes style (`robot` or
+`doodle`), emotion, and liveliness (`still`, `calm`, `normal`, or `lively`).
+`still` disables autonomous blinking and gaze movement while preserving emotion
+transitions. Its gaze stays centered, and a settled face causes no animation redraws.
+`widget_data_binding` supplies an emotion name or a binding returning `content`,
+`relaxed`, `happy`, `worried`, `angry`, `sad`, `surprised`, or `sleepy`.
+It uses the shared widget resolution/update path, including MQTT/HA dependency
+discovery and pad bindings. Empty or unrecognized results transition to `content`
+and log once until a recognized value returns. Standard explicit pipe fallbacks
+remain available. Repeated targets do not restart transitions. Without a source,
+`widget_face_emotion` supplies a fixed emotion, default `content`; the editor
+loads this form and saves it through `widget_data_binding`.
+Style defaults to `robot`, liveliness to `normal`. The selector is available only
+when the compiled widget catalog includes `face`.
+
+Features inherit the button's `fg_color`; negative space inherits its `bg_color`.
+Top and bottom labels retain their space; the face replaces the icon and center
+label. Rendering uses procedural shapes without a per-button framebuffer.
+Gaze and blinking invalidate only the old/new eye regions; emotion transitions
+also invalidate changed eyebrows and mouth regions. Dirty bounds include mask
+extents and antialiasing margins, leaving surrounding empty space untouched.
+Idle animation stops while hidden, and an explicitly enabled face renders statically
+when `DISPLAY_DISABLE_ANIMATIONS` is set on a non-e-paper display.
+See the [Face user guide](../user/widgets/README.md#face)
+for configuration and a numeric-to-emotion example.
+
 Shared assets are included once, at their first manifest position. Put dependencies
 before consumers. Both bundles expand `@widgets` in their existing `HAS_DISPLAY`
-chunk; additional capability checks stay in owner `available()` callbacks.
+chunk, with gated subchunks generated from `portal.gates`; additional runtime
+capability checks stay in owner `available()` callbacks. Shared assets must
+declare identical portal gates in every owner. The minifier emits one combined
+gzip blob per distinct chunk selection, merging equivalent flag assignments
+without increasing the 512-variant limit. HTML variants use the same portal
+gates. Device-free template rendering includes all widget editors by default.
 The selector ID is `pad-edit-<type>-widget-option`, not an owner descriptor field.
 Do not edit bundle lists, template mappings, selector markup, or generic
 orchestration to add a widget.
@@ -552,8 +593,8 @@ prefixes; asset generation executes JS owners to verify exact manifest parity.
 Waveform's owned portal editor is included through the manifest and available
 only when the device's `widget_catalog` contains `waveform`. Its firmware
 implementation remains gated by `HAS_DISPLAY` and `IS_SHUTTER_TESTER`. Portal
-owners are packaged in the existing display bundle; availability is not a
-per-widget JavaScript size gate. No persisted JSON, firmware interaction, or
+owners without `portal.gates` are packaged in the existing display bundle;
+runtime availability alone is not a JavaScript size gate. No persisted JSON, firmware interaction, or
 native ABI changes are part of this wiring.
 
 Shared layout and ordinary field helpers stay shared. Use `.widget-row` for

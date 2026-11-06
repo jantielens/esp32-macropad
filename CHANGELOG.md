@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-11-05
+ms.date: 2026-11-06
 ms.topic: reference
 ---
 
@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add a Face widget with Robot Eyes and Doodle Buddy styles, eight emotions,
+  irregular blinking, wandering gaze, and smooth emotion transitions. Use
+  bindings to make the face react to your data, and choose Still liveliness
+  to disable idle motion while keeping emotion changes. Interactive e-paper
+  supports motion at its configured polling and presentation cadence.
+  See [Face widget](docs/user/widgets/README.md#face).
 * Add up to four external HTTP or HTTPS JSON data sources for display bindings,
   such as weather data. Configure refresh intervals in **Connectivity > External
   Data**, select JSON fields with `[ext:source;path]`, and use the binding

@@ -535,6 +535,8 @@ declare -A HTML_CONTENTS
 declare -A HTML_GZIP_CONTENTS
 declare -A FRAGMENT_CONTENTS
 declare -A FRAGMENT_GZIP_CONTENTS
+declare -A FRAGMENT_VARIANTS
+declare -A FRAGMENT_VARIANT_FLAGS
 declare -A CSS_CONTENTS
 declare -A CSS_GZIP_CONTENTS
 declare -A JS_CONTENTS
@@ -755,25 +757,8 @@ emit_chunked_variants() {
         n_indep=$((n_flags - n_classes))
         n_variants=$(( (1 << n_indep) * (n_classes + 1) ))
 
-        # Backstop against runaway header growth. With the exclusive-group
-        # model only independent flags expand exponentially, so this cap is
-        # far harder to hit than the old 2^N one; it exists to catch a bundle
-        # that accidentally accumulates many independent flags.
-        # Six independent feature chunks plus the five mutually exclusive
-        # device classes produce 384 variants. Keep a bounded cap so a future
-        # independent chunk cannot silently explode generated assets.
-        if [[ $n_variants -gt $max_variants ]]; then
-            echo "  ✗ Bundle $bundle_name expands to $n_variants variants" \
-                 "(${n_indep} independent flag(s), ${n_classes} device-class flag(s); max ${max_variants})." >&2
-            echo "     Independent flags (HAS_*) each double the gzipped variants emitted into" >&2
-            echo "     web_assets.h; device-class flags (IS_*) add only one variant each." >&2
-            echo "     Consolidate independent chunk flags, or split the bundle." >&2
-            unset unique_flags seen_flags
-            exit 1
-        fi
-
         echo "Building variants for ${bundle_name}_${kind}" \
-             "(${n_indep} independent + ${n_classes} device-class flag(s), ${n_variants} variant(s))..."
+             "(${n_indep} independent + ${n_classes} device-class flag(s), ${n_variants} flag assignments)..."
 
         cat >> "$OUTPUT_FILE" << EOF
 
@@ -785,10 +770,11 @@ emit_chunked_variants() {
 EOF
 
         vnum=0
+        local -A seen_selections=()
+        local selected selection_expr predicate
         while IFS=$'\t' read -r if_expr active_flags; do
-            vnum=$((vnum + 1))
-
-            variant_tmp=$(mktemp /tmp/bundle_variant_XXXXXX)
+            selected=""
+            selection_expr=""
             for ckey in $chunks; do
                 cflag="${chunk_flags_ref[$ckey]:-}"
                 include=0
@@ -805,8 +791,33 @@ EOF
                     done
                 fi
                 if [[ $include -eq 1 ]]; then
-                    printf '%s\n' "${contents_ref[$ckey]}" >> "$variant_tmp"
+                    selected+="${selected:+ }$ckey"
                 fi
+                if [[ -n "$cflag" ]]; then
+                    predicate=""
+                    for f in $cflag; do
+                        predicate+="${predicate:+ && }$f"
+                    done
+                    [[ $include -eq 0 ]] && predicate="!($predicate)"
+                    selection_expr+="${selection_expr:+ && }($predicate)"
+                fi
+            done
+            # Flags on a gated child chunk are irrelevant when its parent is
+            # absent. Emit one blob for each selection, guarded by the complete
+            # selection predicate rather than one arbitrary flag assignment.
+            if [[ -n "${seen_selections[${selected:-EMPTY}]:-}" ]]; then
+                continue
+            fi
+            seen_selections["${selected:-EMPTY}"]=1
+            vnum=$((vnum + 1))
+            if (( vnum > max_variants )); then
+                echo "Bundle $bundle_name exceeds $max_variants distinct asset variants; consolidate chunk flags." >&2
+                exit 1
+            fi
+            if_expr="${selection_expr:-ALWAYS}"
+            variant_tmp=$(mktemp /tmp/bundle_variant_XXXXXX)
+            for ckey in $selected; do
+                printf '%s\n' "${contents_ref[$ckey]}" >> "$variant_tmp"
             done
 
             variant_orig_size=$(wc -c <"$variant_tmp")
@@ -833,7 +844,7 @@ const size_t ${bundle_name}_${kind}_gz_len = sizeof(${bundle_name}_${kind}_gz);
 
 EOF
             fi
-            printf "  variant %d/%d [%s]: %d -> %d bytes\n" "$vnum" "$n_variants" "${if_expr/ALWAYS/always}" "$variant_orig_size" "$variant_gz_size"
+            printf "  variant %d [%s]: %d -> %d bytes\n" "$vnum" "${if_expr/ALWAYS/always}" "$variant_orig_size" "$variant_gz_size"
         done < <(enumerate_bundle_variants "${unique_flags[@]}")
 
         unset unique_flags seen_flags
@@ -913,6 +924,33 @@ for fragment_file in "${FRAGMENT_FILES[@]}"; do
             --firmware-version "$FIRMWARE_VERSION" \
             --without-ble-hid)
         FRAGMENT_GZIP_CONTENTS["${filename}_without_ble"]=$(gzip_to_c_array "$without_ble")
+        FRAGMENT_VARIANTS["$filename"]="$filename ${filename}_without_ble"
+        FRAGMENT_VARIANT_FLAGS["$filename"]="HAS_BLE_HID"
+        FRAGMENT_VARIANT_FLAGS["${filename}_without_ble"]="!HAS_BLE_HID"
+    fi
+    if [[ "$content" == *'{{WIDGET_OPTIONS}}'* || "$content" == *'{{WIDGET_EDITORS}}'* ]]; then
+        widget_gate_output=$(python3 "$SCRIPT_DIR/widget_manifest.py" --portal-gates)
+        widget_gates=()
+        while IFS= read -r widget_gate; do
+            [[ -n "$widget_gate" ]] && widget_gates+=("$widget_gate")
+        done <<< "$widget_gate_output"
+        if (( ${#widget_gates[@]} > 0 )); then
+            FRAGMENT_VARIANTS["$filename"]=""
+            variant_index=0
+            while IFS=$'\t' read -r variant_flags active_flags; do
+                read -r -a enabled_widget_flags <<< "$active_flags"
+                variant_key="${filename}_widgets_${variant_index}"
+                variant_content=$(python3 "$SCRIPT_DIR/_render_html_template.py" \
+                    --web-dir "$WEB_DIR" --input "$fragment_file" \
+                    --project-name "$PROJECT_NAME" --project-display-name "$PROJECT_DISPLAY_NAME" \
+                    --firmware-version "$FIRMWARE_VERSION" \
+                    --widget-flags "${enabled_widget_flags[@]}")
+                FRAGMENT_VARIANTS["$filename"]+=" $variant_key"
+                FRAGMENT_VARIANT_FLAGS["$variant_key"]="$variant_flags"
+                FRAGMENT_GZIP_CONTENTS["$variant_key"]=$(gzip_to_c_array "$variant_content")
+                variant_index=$((variant_index + 1))
+            done < <(enumerate_bundle_variants "${widget_gates[@]}")
+        fi
     fi
     
     ORIGINAL_SIZES["frag_$filename"]=$original_size
@@ -1152,14 +1190,11 @@ for filename in "${!FRAGMENT_CONTENTS[@]}"; do
     if [[ -n "$flag" ]]; then
         echo "#if $flag" >> "$OUTPUT_FILE"
     fi
-    fragment_variants=("$filename")
-    if [[ -n "${FRAGMENT_GZIP_CONTENTS[${filename}_without_ble]:-}" ]]; then
-        fragment_variants+=("${filename}_without_ble")
-        echo "#if HAS_BLE_HID" >> "$OUTPUT_FILE"
-    fi
+    read -r -a fragment_variants <<< "${FRAGMENT_VARIANTS[$filename]:-$filename}"
     for fragment_variant in "${fragment_variants[@]}"; do
-        if [[ "$fragment_variant" != "$filename" ]]; then
-            echo "#else" >> "$OUTPUT_FILE"
+        variant_flags="${FRAGMENT_VARIANT_FLAGS[$fragment_variant]:-}"
+        if [[ -n "$variant_flags" ]]; then
+            echo "#if $variant_flags" >> "$OUTPUT_FILE"
         fi
         cat >> "$OUTPUT_FILE" << EOF
 // Fragment from src/app/web/${filename%.fragment*}.fragment.html (gzipped)
@@ -1168,10 +1203,10 @@ ${FRAGMENT_GZIP_CONTENTS[$fragment_variant]}
 };
 
 EOF
+        if [[ -n "$variant_flags" ]]; then
+            echo "#endif // $variant_flags" >> "$OUTPUT_FILE"
+        fi
     done
-    if [[ ${#fragment_variants[@]} -gt 1 ]]; then
-        echo "#endif // HAS_BLE_HID" >> "$OUTPUT_FILE"
-    fi
     if [[ -n "$flag" ]]; then
         echo "#endif // $flag" >> "$OUTPUT_FILE"
         echo >> "$OUTPUT_FILE"

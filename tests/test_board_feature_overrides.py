@@ -35,6 +35,8 @@ for board, target in (("m5stack-stopwatch", "ESP32S3"), ("crowpanel-4.2-interact
         output.append(f'std::cout << {macro} << "\\n";')
     source = '''#include <iostream>
 #include "src/app/board_config.h"
+static_assert(HAS_FACE_WIDGET, "LCD and interactive e-paper profiles include Face");
+static_assert(!HAS_LVGL_EPAPER || DISPLAY_DISABLE_ANIMATIONS, "Other e-paper animations remain disabled");
 enum { BUTTON_SHADOW_TYPE_OPAQUE, BUTTON_SHADOW_TYPE_DROP };
 enum { BUTTON_SHADOW_COLOR_FIXED, BUTTON_SHADOW_COLOR_DARKEN_BACKGROUND };
 int main() {\n''' + "\n".join(output) + "\n}"
@@ -197,6 +199,7 @@ static_assert(HAS_BLE, "BLE telemetry must remain enabled");
 static_assert(!HAS_MQTT, "MQTT must be disabled to preserve OTA flash space");
 static_assert(!HAS_FILESYSTEM, "OTA-only C3 has no filesystem partition");
 static_assert(HAS_SENSOR_DUMMY, "Sample sensor must remain enabled");
+static_assert(!HAS_FACE_WIDGET, "Headless profiles exclude Face");
 ''',
     text=True, check=True,
 )

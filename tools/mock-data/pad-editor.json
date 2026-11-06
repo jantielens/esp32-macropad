@@ -122,6 +122,7 @@
     {"type": "gamepad", "group": "Gamepad", "label": "Gamepad", "button_count": 16}
   ],
   "widget_catalog": [
+    {"type": "face", "name": "Face", "icon": "face"},
     {"type": "toggle", "name": "Toggle switch", "icon": "toggle_on"},
     {"type": "bar_chart", "name": "Bar Chart", "icon": "bar_chart"},
     {"type": "gauge", "name": "Gauge", "icon": "speed"},
