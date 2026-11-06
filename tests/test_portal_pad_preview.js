@@ -450,6 +450,28 @@ vm.runInContext(`BUTTON_BUILDER_PROVIDERS.push({
 });`, context);
 context.PAD_FIRMWARE_DEFAULTS = { widget_track_color: '#1A1A1A', widget_series_color: '#4CAF50',
     widget_indicator_color: '#FFFFFF', widget_tick_color: '#AAAAAA' };
+const toggleBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "toggle_widget")', context);
+for (const state of ['on', 'off', 'unavailable']) {
+    const button = { widget_type: 'toggle', label_top: 'Kitchen light',
+        widget_toggle_on_color: '#2196f3', widget_toggle_off_color: '#59636e',
+        widget_toggle_knob_color: '#ffffff' };
+    const cell = createElement();
+    context.padRenderCellContent(cell, button);
+    toggleBuilder.renderPreview({ previewState: state }, cell, button);
+    const region = cell.querySelector('.pad-content-widget-region');
+    const toggle = region.querySelector('.pad-button-builder-toggle');
+    assert(toggle, 'The simulated switch must occupy the widget region');
+    assert.strictEqual(region.children.length, 1);
+    assert.strictEqual(cell.querySelector('.pad-widget-symbol'), null, 'Replace the placeholder switch');
+    assert.strictEqual(cell.children.length, 2, 'Keep the title and switch in the grouped layout');
+    assert.strictEqual(visibleText(cell.querySelector('.pad-cell-label-top')), 'Kitchen light');
+    assert.strictEqual(region.attributes['aria-label'], undefined);
+    assert.strictEqual(toggle.attributes['aria-label'], 'Switch ' + state);
+    assert.strictEqual(toggle.dataset.state, state);
+    assert.strictEqual(toggle.style.opacity, state === 'unavailable' ? '0.5' : undefined);
+    assert.strictEqual(toggle.querySelector('.pad-button-builder-toggle-track').style.background,
+        state === 'on' ? '#2196f3' : '#59636e');
+}
 for (const widget_type of ['toggle', 'rocker', 'numericrocker', 'future_widget']) {
     const button = { widget_type, label_top: 'Top', label_center: 'Center', label_bottom: 'Bottom',
         icon: { catalog_id: 'noto:thermometer', kind: 'color' } };

@@ -526,7 +526,12 @@ const padButtonBuilders = [
             knob.style.background = button.widget_toggle_knob_color || PAD_FIRMWARE_DEFAULTS.widget_indicator_color;
             toggle.append(track, knob);
             if (!available) toggle.style.opacity = '0.5';
-            cell.appendChild(toggle);
+            const region = cell.querySelector('.pad-content-widget-region');
+            if (region) {
+                region.removeAttribute('aria-label');
+                region.removeAttribute('title');
+                region.replaceChildren(toggle);
+            }
         }
     }
 ];
