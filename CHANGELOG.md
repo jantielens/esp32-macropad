@@ -82,6 +82,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Make Face artwork follow the button text color, including inherited defaults,
+  button overrides, and live color bindings, instead of the widget container's
+  theme color.
 * Prevent icons from reloading in the pad editor when moving or resizing
   buttons and widgets.
 * Correct shared label sizing, including recovery from ellipsis truncation,

@@ -448,6 +448,7 @@ void PadScreen::buildTiles() {
                     tile.widget_state.font_owner = &fontCache;
                     lv_obj_t* widget_parent = button_content_region(obj, content_layout.widget, ui_ofs_x, ui_ofs_y);
                     lv_obj_set_style_bg_color(widget_parent, lv_obj_get_style_bg_color(obj, LV_PART_MAIN), 0);
+                    lv_obj_set_style_text_color(widget_parent, lv_obj_get_style_text_color(obj, LV_PART_MAIN), 0);
                     lv_obj_set_user_data(widget_parent, this);
                     tile.content_layout.widget_region = widget_parent;
                     if (widget_owns_input(wt)) {

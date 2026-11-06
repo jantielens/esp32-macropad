@@ -280,6 +280,8 @@ void PadScreen::pollColorBindings() {
             // Per-label color overrides win: skip a label's text color if it has its
             // own color (static or binding).
             lv_obj_set_style_text_color(tile.obj, rgb_to_lv(color), 0);
+            if (tile.content_layout.widget_region)
+                lv_obj_set_style_text_color(tile.content_layout.widget_region, rgb_to_lv(color), 0);
             if (tile.label_top && !(tile.labelColorOverride & 0x01))
                 lv_obj_set_style_text_color(tile.label_top, rgb_to_lv(color), 0);
             if (tile.label_center && !(tile.labelColorOverride & 0x02))
