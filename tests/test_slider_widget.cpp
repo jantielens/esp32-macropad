@@ -922,6 +922,7 @@ protected:
     WidgetState runtime{};
     ScreenButtonConfig source{};
     PadFontCache fonts;
+    std::vector<lv_event_code_t> feedback_events;
 
     void SetUp() override {
         lv_init();
@@ -934,6 +935,11 @@ protected:
         lv_indev_set_read_cb(indev, read_slider_pointer);
         button = lv_obj_create(lv_screen_active());
         lv_obj_set_size(button, 200, 80);
+        lv_obj_add_event_cb(lv_screen_active(), [](lv_event_t* event) {
+            auto* self = static_cast<OptionSelectorNativeWidget*>(lv_event_get_user_data(event));
+            const auto* feedback = static_cast<const OptionSelectorFeedback*>(lv_event_get_param(event));
+            self->feedback_events.push_back(feedback->event);
+        }, LV_EVENT_VALUE_CHANGED, this);
         g_selector_config = {};
         g_selector_icon = nullptr;
         for (unsigned index = 0; index < 2; ++index) {
@@ -953,10 +959,10 @@ protected:
         g_dispatch_result = ACTION_COMPLETE;
     }
 
-    void create(OptionSelectorMode mode) {
+    void create(OptionSelectorMode mode, uint8_t action_count = 1) {
         g_selector_config.mode = mode;
         option_selector_widget_impl::create(button, &config, &source, nullptr, &UI_SCALE_TABLE[0], &runtime);
-        option_selector_attach(&runtime, source.actions, 1, 0, false, 0, 0, nullptr, nullptr);
+        option_selector_attach(&runtime, source.actions, action_count, 0, false, 0, 0, nullptr, nullptr);
     }
 
     option_selector_widget_impl::State* state() {
@@ -980,11 +986,98 @@ TEST_F(OptionSelectorNativeWidget, PointerTapDispatchesTheChosenOption) {
     lv_tick_inc(400);
     pointer.pressed = true;
     lv_indev_read(indev);
+    EXPECT_EQ(feedback_events, std::vector<lv_event_code_t>({LV_EVENT_PRESSED}));
+    EXPECT_FALSE(state()->slots[1].background_visible);
     pointer.pressed = false;
     lv_tick_inc(10);
     lv_indev_read(indev);
     EXPECT_EQ(g_dispatches, 1u);
     EXPECT_STREQ(g_dispatched_value, "heat");
+    EXPECT_EQ(feedback_events, std::vector<lv_event_code_t>(
+        {LV_EVENT_PRESSED, LV_EVENT_RELEASED, LV_EVENT_CLICKED}));
+}
+
+TEST_F(OptionSelectorNativeWidget, LocalSelectionWithoutActionsHasNoPressFeedback) {
+    create(OptionSelectorMode::Local, 0);
+    lv_obj_update_layout(button);
+    lv_area_t bounds{};
+    lv_obj_get_coords(state()->slots[1].hit, &bounds);
+    pointer.point = {(bounds.x1 + bounds.x2) / 2, (bounds.y1 + bounds.y2) / 2};
+    lv_tick_inc(400);
+    pointer.pressed = true;
+    lv_indev_read(indev);
+    EXPECT_TRUE(feedback_events.empty());
+    EXPECT_FALSE(state()->slots[1].background_visible);
+    pointer.pressed = false;
+    lv_tick_inc(10);
+    lv_indev_read(indev);
+    EXPECT_EQ(state()->selected, 1);
+    EXPECT_TRUE(state()->slots[1].background_visible);
+    EXPECT_EQ(g_dispatches, 0u);
+    EXPECT_EQ(feedback_events, std::vector<lv_event_code_t>({LV_EVENT_CLICKED}));
+
+    feedback_events.clear();
+    pointer.pressed = true;
+    lv_tick_inc(400);
+    lv_indev_read(indev);
+    pointer.pressed = false;
+    lv_tick_inc(10);
+    lv_indev_read(indev);
+    EXPECT_TRUE(feedback_events.empty());
+}
+
+TEST_F(OptionSelectorNativeWidget, BoundSelectedOptionHasNoFeedback) {
+    create(OptionSelectorMode::Bound);
+    option_selector_widget_impl::tick(button, &config, &runtime);
+    lv_obj_update_layout(button);
+    lv_area_t bounds{};
+    lv_obj_get_coords(state()->slots[0].hit, &bounds);
+    pointer.point = {(bounds.x1 + bounds.x2) / 2, (bounds.y1 + bounds.y2) / 2};
+    lv_tick_inc(400);
+    pointer.pressed = true;
+    lv_indev_read(indev);
+    pointer.pressed = false;
+    lv_tick_inc(10);
+    lv_indev_read(indev);
+    EXPECT_TRUE(feedback_events.empty());
+    EXPECT_EQ(g_dispatches, 0u);
+}
+
+TEST_F(OptionSelectorNativeWidget, BoundWithoutActionsHasNoFeedback) {
+    create(OptionSelectorMode::Bound, 0);
+    option_selector_widget_impl::tick(button, &config, &runtime);
+    lv_obj_update_layout(button);
+    lv_area_t bounds{};
+    lv_obj_get_coords(state()->slots[1].hit, &bounds);
+    pointer.point = {(bounds.x1 + bounds.x2) / 2, (bounds.y1 + bounds.y2) / 2};
+    lv_tick_inc(400);
+    pointer.pressed = true;
+    lv_indev_read(indev);
+    pointer.pressed = false;
+    lv_tick_inc(10);
+    lv_indev_read(indev);
+    EXPECT_TRUE(feedback_events.empty());
+    EXPECT_EQ(g_dispatches, 0u);
+}
+
+TEST_F(OptionSelectorNativeWidget, BecomingUnavailableCancelsPressFeedback) {
+    create(OptionSelectorMode::Bound);
+    option_selector_widget_impl::tick(button, &config, &runtime);
+    lv_obj_update_layout(button);
+    lv_area_t bounds{};
+    lv_obj_get_coords(state()->slots[1].hit, &bounds);
+    pointer.point = {(bounds.x1 + bounds.x2) / 2, (bounds.y1 + bounds.y2) / 2};
+    lv_tick_inc(400);
+    pointer.pressed = true;
+    lv_indev_read(indev);
+    g_selector_source_available = false;
+    option_selector_widget_impl::tick(button, &config, &runtime);
+    pointer.pressed = false;
+    lv_tick_inc(10);
+    lv_indev_read(indev);
+    EXPECT_EQ(feedback_events, std::vector<lv_event_code_t>(
+        {LV_EVENT_PRESSED, LV_EVENT_PRESS_LOST}));
+    EXPECT_EQ(g_dispatches, 0u);
 }
 
 TEST_F(OptionSelectorNativeWidget, InsetChangesBadgesWithoutShrinkingTouchTargets) {

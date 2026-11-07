@@ -46,6 +46,7 @@ struct State {
     bool overlay;
     bool available;
     bool layout_dirty;
+    bool press_feedback;
 };
 
 static_assert(sizeof(State) <= WIDGET_STATE_MAX_BYTES, "Option selector state exceeds widget storage");
@@ -153,6 +154,22 @@ void layout(State* state) {
     state->layout_dirty = false;
 }
 
+void feedback(State* state, uint8_t index, lv_event_code_t event) {
+    const SlotState& slot = state->slots[index];
+    OptionSelectorFeedback message{
+        event, slot.hit,
+        slot.background_visible ? slot.background : state->group_color,
+        slot.background_visible || state->config->group_background
+    };
+    lv_obj_send_event(lv_obj_get_parent(state->parent), LV_EVENT_VALUE_CHANGED, &message);
+}
+
+void end_feedback(State* state, uint8_t index, lv_event_code_t event) {
+    if (!state->press_feedback) return;
+    state->press_feedback = false;
+    feedback(state, index, event);
+}
+
 void render(State* state) {
     if (!state->parent) return;
     const auto& config = *state->config;
@@ -189,12 +206,15 @@ void render(State* state) {
         if (slot.state != status) {
             slot.state = status;
             lv_obj_set_style_opa(slot.hit, status == BTN_STATE_ENABLED ? LV_OPA_COVER : LV_OPA_50, 0);
-            if (status != BTN_STATE_ENABLED && state->pressed == index) state->pressed = NO_SLOT;
+        }
+        if ((!shown || status != BTN_STATE_ENABLED) && state->pressed == index) {
+            state->pressed = NO_SLOT;
+            end_feedback(state, index, LV_EVENT_PRESS_LOST);
         }
         const bool selected = state->selected == index;
         const uint32_t foreground = resolve_color(option.foreground, selected ? selected_fg : default_fg);
         const uint32_t background = resolve_color(option.background, selected ? selected_bg : option_bg);
-        const bool background_visible = config.option_backgrounds || selected || state->pressed == index;
+        const bool background_visible = config.option_backgrounds || selected;
         if (slot.foreground != foreground) {
             slot.foreground = foreground;
             if (option.kind == OptionSelectorContent::Icon && slot.icon_available && option.content.icon.mono)
@@ -219,7 +239,9 @@ void render(State* state) {
 
 void cancel(State* state) {
     if (state->pressed == NO_SLOT) return;
+    const uint8_t index = state->pressed;
     state->pressed = NO_SLOT;
+    end_feedback(state, index, LV_EVENT_PRESS_LOST);
     render(state);
 }
 
@@ -241,12 +263,14 @@ void activate(State* state, uint8_t index) {
             return;
         }
     }
+    const bool local_change = mode == OptionSelectorMode::Local && state->selected != index;
     if (mode == OptionSelectorMode::Local) state->selected = index;
     if (mode == OptionSelectorMode::Bound) {
         state->pending = index;
         state->pending_since = lv_tick_get();
     }
     render(state);
+    if (state->action_count || local_change) feedback(state, index, LV_EVENT_CLICKED);
     if (!state->action_count) return;
     lv_obj_t* parent = state->parent;
     bool deleted = false;
@@ -278,7 +302,11 @@ void event(lv_event_t* event) {
             !state->available || state->pending != NO_SLOT ||
             state->slots[index].state != BTN_STATE_ENABLED || !state->slots[index].shown) return;
         state->pressed = index;
-        render(state);
+        if (state->action_count &&
+            !(state->config->mode == OptionSelectorMode::Bound && state->selected == index)) {
+            state->press_feedback = true;
+            feedback(state, index, LV_EVENT_PRESSED);
+        }
     } else if (code == LV_EVENT_RELEASED) {
         if (state->pressed != index) return;
         lv_indev_t* input = lv_event_get_indev(event);
@@ -289,7 +317,7 @@ void event(lv_event_t* event) {
         const bool inside = input && point.x >= bounds.x1 && point.x <= bounds.x2 &&
                             point.y >= bounds.y1 && point.y <= bounds.y2;
         state->pressed = NO_SLOT;
-        render(state);
+        end_feedback(state, index, LV_EVENT_RELEASED);
         if (inside && !device_dialog_active() && lv_tick_get() - swipe_actions_last_swipe_time() >= 300)
             activate(state, index);
     } else if (code == LV_EVENT_PRESS_LOST || code == LV_EVENT_INDEV_RESET) {
@@ -383,7 +411,8 @@ void tick(lv_obj_t*, const WidgetConfig* widget, WidgetState* runtime) {
 void hide(WidgetState* runtime) {
     auto* state = reinterpret_cast<State*>(runtime->data);
     if (!state->config) return;
-    state->pressed = state->pending = NO_SLOT;
+    cancel(state);
+    state->pending = NO_SLOT;
     if (state->config->mode != OptionSelectorMode::None) state->selected = NO_SLOT;
     state->available = state->config->mode != OptionSelectorMode::Bound;
 }

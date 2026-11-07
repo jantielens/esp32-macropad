@@ -55,6 +55,10 @@ For JSON strings, include the quotes as in the example above. See
   value. Tapping the already selected option does nothing. Without option
   actions, a Bound selector follows its source but does not request changes.
 
+An option with actions shows tap feedback. Local mode still changes its
+highlight without actions. On devices with audio, accepted actions and Local
+selection changes use the configured tap sound unless an action produces audio.
+
 Matching ignores letter case and surrounding ASCII whitespace. A valid source
 value that matches no option leaves all options unselected but allows taps.
 An unavailable source leaves no option selected and blocks taps. After a

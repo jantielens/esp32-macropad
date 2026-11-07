@@ -18,7 +18,8 @@ static bool button_overlay_uses_fade(const char* widget_type) {
     return !DISPLAY_DISABLE_ANIMATIONS &&
         (strcmp(widget_type, "rocker") == 0 ||
          strcmp(widget_type, "numericrocker") == 0 ||
-         strcmp(widget_type, "gamepad_button") == 0);
+         strcmp(widget_type, "gamepad_button") == 0 ||
+         strcmp(widget_type, "option_selector") == 0);
 }
 
 static bool button_shadow_enabled(const PadConfig& cfg, const ScreenButtonConfig& button) {
@@ -697,7 +698,8 @@ void PadScreen::buildTiles() {
                 lv_obj_add_event_cb(obj, onWidgetPressFeedback, LV_EVENT_VALUE_CHANGED, &tiles[i]);
             }
         }
-        if (strcmp(tile.widget_cfg.type, "slider") == 0) {
+        if (strcmp(tile.widget_cfg.type, "slider") == 0 ||
+            strcmp(tile.widget_cfg.type, "option_selector") == 0) {
             lv_obj_add_event_cb(obj, onWidgetPressFeedback, LV_EVENT_VALUE_CHANGED, &tiles[i]);
         }
 

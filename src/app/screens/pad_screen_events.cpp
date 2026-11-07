@@ -342,8 +342,49 @@ static void do_tap_flash(ButtonTile* tile, uint8_t zone = 0, bool horizontal = f
 
 void PadScreen::onWidgetPressFeedback(lv_event_t* event) {
     auto* tile = static_cast<ButtonTile*>(lv_event_get_user_data(event));
+    if (!tile) return;
+#if HAS_TOUCH
+    if (strcmp(tile->widget_cfg.type, "option_selector") == 0) {
+        const auto* feedback = static_cast<const OptionSelectorFeedback*>(lv_event_get_param(event));
+        if (!feedback) return;
+#if HAS_AUDIO
+        if (feedback->event == LV_EVENT_CLICKED && !has_audio_action(tile->actions, tile->action_count)) {
+            const char* pattern = device_config.tap_beep;
+            if (pattern[0] && strcmp(pattern, "none") != 0) audio_feedback(pattern);
+        }
+#endif
+        if (DISPLAY_DISABLE_ANIMATIONS || !tile->tap_overlay || feedback->event == LV_EVENT_CLICKED) return;
+        lv_obj_t* overlay = tile->tap_overlay;
+        if (feedback->event == LV_EVENT_PRESSED) {
+            if (tile->tap_flash_timer) {
+                lv_timer_delete(tile->tap_flash_timer);
+                tile->tap_flash_timer = nullptr;
+            }
+            lv_area_t option, content;
+            lv_obj_get_coords(feedback->option, &option);
+            lv_obj_get_content_coords(tile->obj, &content);
+            lv_obj_set_pos(overlay, option.x1 - content.x1, option.y1 - content.y1);
+            lv_obj_set_size(overlay, option.x2 - option.x1 + 1, option.y2 - option.y1 + 1);
+            const uint32_t background = feedback->has_background ? feedback->background :
+                (lv_color_to_u32(lv_obj_get_style_bg_color(tile->obj, LV_PART_MAIN)) & 0xFFFFFFu);
+            const bool is_light = perceived_luminance(background) > TAP_LUMINANCE_THRESH;
+            lv_obj_set_style_bg_color(overlay, is_light ? lv_color_black() : lv_color_white(), 0);
+            lv_obj_set_style_bg_opa(overlay, is_light ? TAP_OVERLAY_DARK_OPA : TAP_OVERLAY_LIGHT_OPA, 0);
+            lv_obj_add_state(overlay, LV_STATE_USER_1);
+            lv_obj_remove_flag(overlay, LV_OBJ_FLAG_HIDDEN);
+        } else if (!lv_obj_has_flag(overlay, LV_OBJ_FLAG_HIDDEN)) {
+            lv_obj_remove_state(overlay, LV_STATE_USER_1);
+            tile->tap_flash_timer = lv_timer_create(PadScreen::tapFlashTimerCb, 80, tile);
+            if (!tile->tap_flash_timer) {
+                lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
+                restore_tap_overlay(tile);
+            }
+        }
+        return;
+    }
+#endif
     const auto* feedback = static_cast<const lv_event_code_t*>(lv_event_get_param(event));
-    if (!tile || !feedback) return;
+    if (!feedback) return;
 #if HAS_AUDIO
     if (*feedback == LV_EVENT_RELEASED && strcmp(tile->widget_cfg.type, "slider") == 0 &&
         !has_audio_action(tile->actions, tile->action_count)) {
