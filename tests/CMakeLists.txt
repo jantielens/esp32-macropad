@@ -768,6 +768,13 @@ add_host_legacy_test(test_camera_capture_action
 )
 add_host_legacy_test(test_pad_cycle SOURCES test_pad_cycle.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_cycle.cpp PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_pad_config_dynamic_layout SOURCES test_pad_config_dynamic_layout.cpp PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
+add_host_gtest(test_option_selector_config test_option_selector_config.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/widgets/option_selector_config.cpp)
+target_include_directories(test_option_selector_config PRIVATE ${HOST_ARDUINOJSON_DIR})
+target_compile_definitions(test_option_selector_config PRIVATE TEST_HEAP_CAPS_ALLOCATOR=1)
+target_compile_options(test_option_selector_config PRIVATE -Wno-deprecated-declarations
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/Arduino.h"
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h")
 add_host_legacy_test(test_pad_overlay_input
     SOURCES test_pad_overlay_input.cpp
     INCLUDES ${HOST_LVGL_DIR}

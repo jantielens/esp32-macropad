@@ -154,6 +154,7 @@ private:
     int16_t navigationTile = -1;
     uint8_t navigationZone = 0;
     lv_obj_t* navigationFocus = nullptr;
+    lv_obj_t* configError = nullptr;
     void refreshNavigationFocus();
     uint8_t navigationZoneCount(const ButtonTile& tile) const;
     bool navigationZoneAvailable(const ButtonTile& tile, uint8_t zone) const;

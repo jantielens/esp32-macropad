@@ -8,6 +8,7 @@
   {"type":"face","source":"widgets/face_widget.cpp","gates":["HAS_DISPLAY","HAS_FACE_WIDGET"],"portal":{"label":"Face","html":"_widget_face.html","js":"portal_widget_face.js","gates":["HAS_FACE_WIDGET"]}},
   {"type":"numericrocker","source":"widgets/numericrocker_widget.cpp","gates":["HAS_DISPLAY"],"portal":{"label":"Numeric Rocker","html":"_widget_numericrocker.html","js":"portal_widget_numericrocker.js"}},
   {"type":"slider","source":"widgets/slider_widget.cpp","gates":["HAS_DISPLAY","HAS_TOUCH"],"portal":{"label":"Slider","html":"_widget_slider.html","js":"portal_widget_slider.js"}},
+  {"type":"option_selector","source":"widgets/option_selector_widget.cpp","gates":["HAS_DISPLAY"],"portal":{"label":"Option selector","html":"_widget_option_selector.html","js":"portal_widget_option_selector.js"}},
   {"type":"list","source":"widgets/list_widget.cpp","gates":["HAS_DISPLAY"],"portal":{"label":"List","html":"_widget_list.html","js":"portal_widget_list.js"}},
   {"type":"mousepad","source":"widgets/mousepad_widget.cpp","gates":["HAS_DISPLAY","HAS_TOUCH"],"any_gates":["HAS_USB_HID","HAS_BLE_HID"],"portal":{"label":"Mousepad","html":"_widget_mousepad.html","js":"portal_widget_inputs.js"}},
   {"type":"scrollpad","source":"widgets/scrollpad_widget.cpp","gates":["HAS_DISPLAY","HAS_TOUCH"],"any_gates":["HAS_USB_HID","HAS_BLE_HID"],"portal":{"label":"Scrollpad","html":"_widget_scrollpad.html","js":"portal_widget_inputs.js"}},

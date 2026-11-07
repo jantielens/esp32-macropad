@@ -3,6 +3,7 @@
 
 #include "widgets/slider_numeric.h"
 #include "widgets/slider_widget.cpp"
+#include "widgets/option_selector_widget.cpp"
 #include "font_store.h"
 
 static const uint8_t slider_font_fixture[] = {
@@ -41,7 +42,53 @@ static ActionResult g_dispatch_result = ACTION_COMPLETE;
 static lv_obj_t* g_delete_on_dispatch = nullptr;
 
 static const WidgetType* g_registered_slider = nullptr;
-void widget_register(const WidgetType* type) { g_registered_slider = type; }
+void widget_register(const WidgetType* type) {
+    if (!strcmp(type->name, "slider")) g_registered_slider = type;
+}
+
+static OptionSelectorConfig g_selector_config{};
+static bool g_selector_source_available = true;
+static const char* g_selector_background = "#123456";
+static const lv_image_dsc_t* g_selector_icon = nullptr;
+static std::vector<std::string> g_validated_option_values;
+
+static const lv_image_dsc_t* selector_test_icon() {
+    static const uint16_t data[20 * 12] = {};
+    static lv_image_dsc_t image{};
+    image.header.magic = LV_IMAGE_HEADER_MAGIC;
+    image.header.cf = LV_COLOR_FORMAT_RGB565;
+    image.header.w = 20;
+    image.header.h = 12;
+    image.header.stride = 40;
+    image.data_size = sizeof(data);
+    image.data = reinterpret_cast<const uint8_t*>(data);
+    return &image;
+}
+
+const char* option_selector_validate_config(JsonObjectConst) { return nullptr; }
+bool option_selector_parse_config(const JsonObject&, uint8_t*) { return true; }
+void option_selector_retain_config(uint8_t*) {}
+void option_selector_release_config(uint8_t*) {}
+const OptionSelectorConfig* option_selector_config(const uint8_t*) { return &g_selector_config; }
+void option_selector_visit_resources(const uint8_t*, WidgetResourceVisitor, void*) {}
+const char* action_validate_json(JsonObjectConst, bool, const char*, const char* value) {
+    if (value) g_validated_option_values.emplace_back(value);
+    return nullptr;
+}
+bool binding_template_resolve(const char* value, char* output, size_t size) {
+    strlcpy(output, !strcmp(value, "[pad:background]") ? g_selector_background : value, size);
+    return true;
+}
+bool binding_template_has_bindings(const char* value) { return value && strchr(value, '['); }
+bool device_dialog_active() { return false; }
+bool device_dialog_notify(const char*, uint32_t) { return true; }
+uint32_t swipe_actions_last_swipe_time() { return 0; }
+bool icon_store_lookup(const char*, IconRef* ref) {
+    if (!g_selector_icon) return false;
+    ref->dsc = g_selector_icon;
+    return true;
+}
+void icon_store_build_option_key(uint8_t, const char*, uint8_t, uint8_t, uint8_t, char*, size_t) {}
 
 ActionResult action_list_dispatch_result(const ButtonAction* actions, uint8_t count,
                                          const char*, ActionContinuationOwner) {
@@ -112,7 +159,8 @@ static void read_slider_pointer(lv_indev_t* indev, lv_indev_data_t* data) {
     data->state = input->pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
 }
 
-bool binding_template_resolve_checked(const char*, char* output, size_t size) {
+bool binding_template_resolve_checked(const char* source, char* output, size_t size) {
+    if (!strcmp(source, "selector_source") && !g_selector_source_available) return false;
     strlcpy(output, g_binding_value, size);
     return true;
 }
@@ -862,4 +910,342 @@ TEST(SliderNumeric, FormatsWithoutExponentOrTrailingZeros) {
     std::strcpy(output, "unchanged");
     EXPECT_FALSE(slider_numeric_format(12345, output, 5));
     EXPECT_STREQ(output, "unchanged");
+}
+
+class OptionSelectorNativeWidget : public testing::Test {
+protected:
+    lv_display_t* display = nullptr;
+    lv_indev_t* indev = nullptr;
+    lv_obj_t* button = nullptr;
+    SliderPointerInput pointer{};
+    WidgetConfig config{};
+    WidgetState runtime{};
+    ScreenButtonConfig source{};
+    PadFontCache fonts;
+
+    void SetUp() override {
+        lv_init();
+        display = lv_display_create(320, 240);
+        lv_display_set_default(display);
+        indev = lv_indev_create();
+        lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
+        lv_indev_set_display(indev, display);
+        lv_indev_set_user_data(indev, &pointer);
+        lv_indev_set_read_cb(indev, read_slider_pointer);
+        button = lv_obj_create(lv_screen_active());
+        lv_obj_set_size(button, 200, 80);
+        g_selector_config = {};
+        g_selector_icon = nullptr;
+        for (unsigned index = 0; index < 2; ++index) {
+            auto& slot = g_selector_config.slots[index];
+            slot.kind = OptionSelectorContent::Label;
+            strlcpy(slot.value, index ? "heat" : "cool", sizeof(slot.value));
+            strlcpy(slot.content.label, slot.value, sizeof(slot.content.label));
+        }
+        strlcpy(config.data_binding[0], "selector_source", sizeof(config.data_binding[0]));
+        strlcpy(source.actions[0].type, "mqtt", sizeof(source.actions[0].type));
+        strlcpy(source.actions[0].payload.mqtt.mqtt_payload, "{value}",
+                sizeof(source.actions[0].payload.mqtt.mqtt_payload));
+        runtime.font_owner = &fonts;
+        g_binding_value = "cool";
+        g_selector_source_available = true;
+        g_dispatches = 0;
+        g_dispatch_result = ACTION_COMPLETE;
+    }
+
+    void create(OptionSelectorMode mode) {
+        g_selector_config.mode = mode;
+        option_selector_widget_impl::create(button, &config, &source, nullptr, &UI_SCALE_TABLE[0], &runtime);
+        option_selector_attach(&runtime, source.actions, 1, 0, false, 0, 0, nullptr, nullptr);
+    }
+
+    option_selector_widget_impl::State* state() {
+        return reinterpret_cast<option_selector_widget_impl::State*>(runtime.data);
+    }
+
+    void TearDown() override {
+        option_selector_widget_impl::destroy(&runtime);
+        lv_indev_delete(indev);
+        lv_display_delete(display);
+        fonts.clear();
+    }
+};
+
+TEST_F(OptionSelectorNativeWidget, PointerTapDispatchesTheChosenOption) {
+    create(OptionSelectorMode::None);
+    lv_obj_update_layout(button);
+    lv_area_t bounds{};
+    lv_obj_get_coords(state()->slots[1].hit, &bounds);
+    pointer.point = {(bounds.x1 + bounds.x2) / 2, (bounds.y1 + bounds.y2) / 2};
+    lv_tick_inc(400);
+    pointer.pressed = true;
+    lv_indev_read(indev);
+    pointer.pressed = false;
+    lv_tick_inc(10);
+    lv_indev_read(indev);
+    EXPECT_EQ(g_dispatches, 1u);
+    EXPECT_STREQ(g_dispatched_value, "heat");
+}
+
+TEST_F(OptionSelectorNativeWidget, InsetChangesBadgesWithoutShrinkingTouchTargets) {
+    g_selector_config.option_inset = 6;
+    g_selector_config.slots[1].kind = OptionSelectorContent::Icon;
+    create(OptionSelectorMode::None);
+    lv_obj_update_layout(button);
+    auto& slot = state()->slots[0];
+    EXPECT_EQ(lv_obj_get_width(slot.badge), lv_obj_get_width(slot.hit) - 12);
+    EXPECT_EQ(lv_obj_get_height(slot.badge), lv_obj_get_height(slot.hit) - 12);
+    auto& icon = state()->slots[1];
+    EXPECT_EQ(lv_obj_get_width(icon.badge), lv_obj_get_width(icon.hit) - 12);
+    EXPECT_EQ(lv_obj_get_height(icon.badge), lv_obj_get_height(icon.hit) - 12);
+    lv_area_t bounds{};
+    lv_obj_get_coords(slot.hit, &bounds);
+    pointer.point = {bounds.x1 + 1, (bounds.y1 + bounds.y2) / 2};
+    lv_tick_inc(400);
+    pointer.pressed = true;
+    lv_indev_read(indev);
+    pointer.pressed = false;
+    lv_tick_inc(10);
+    lv_indev_read(indev);
+    EXPECT_EQ(g_dispatches, 1u);
+    EXPECT_STREQ(g_dispatched_value, "cool");
+
+    g_selector_config.option_inset = OPTION_SELECTOR_MAX_INSET;
+    lv_obj_set_size(button, 30, 20);
+    option_selector_widget_impl::layout(state());
+    lv_obj_update_layout(button);
+    EXPECT_GE(lv_obj_get_width(slot.badge), 1);
+    EXPECT_GE(lv_obj_get_height(slot.badge), 1);
+}
+
+TEST_F(OptionSelectorNativeWidget, IconAndTextUseSamePillWithoutResizingIcon) {
+    g_selector_icon = selector_test_icon();
+    g_selector_config.slots[1] = {};
+    g_selector_config.slots[1].kind = OptionSelectorContent::Icon;
+    g_selector_config.slots[1].content.icon.mono = true;
+    strlcpy(g_selector_config.slots[1].value, "heat", sizeof(g_selector_config.slots[1].value));
+    strlcpy(g_selector_config.selected_foreground, "#FFFFFF", sizeof(g_selector_config.selected_foreground));
+    g_selector_config.option_inset = 4;
+    g_selector_config.icon_badge_padding = 4;
+    lv_obj_set_style_pad_all(button, 0, 0);
+    lv_obj_set_style_border_width(button, 0, 0);
+    lv_obj_set_style_text_color(button, lv_color_hex(0x395059), 0);
+    lv_obj_set_size(button, 240, 100);
+    create(OptionSelectorMode::Local);
+    lv_obj_t* icon_content = state()->slots[1].content;
+    EXPECT_EQ(lv_color_to_u32(lv_obj_get_style_image_recolor(icon_content, LV_PART_MAIN)) & 0xFFFFFFu, 0x395059u);
+    EXPECT_EQ(lv_obj_get_style_image_recolor_opa(icon_content, LV_PART_MAIN), LV_OPA_COVER);
+    option_selector_widget_impl::activate(state(), 1);
+    EXPECT_EQ(lv_color_to_u32(lv_obj_get_style_image_recolor(icon_content, LV_PART_MAIN)) & 0xFFFFFFu, 0xFFFFFFu);
+    option_selector_widget_impl::activate(state(), 0);
+    EXPECT_EQ(lv_color_to_u32(lv_obj_get_style_image_recolor(icon_content, LV_PART_MAIN)) & 0xFFFFFFu, 0x395059u);
+    for (const auto& size : {lv_point_t{240, 100}, lv_point_t{160, 140}}) {
+        lv_obj_set_size(button, size.x, size.y);
+        lv_obj_update_layout(button);
+        option_selector_widget_impl::tick(button, &config, &runtime);
+        lv_obj_update_layout(button);
+        const auto& text = state()->slots[0];
+        const auto& icon = state()->slots[1];
+        option_selector_widget_impl::activate(state(), 1);
+        EXPECT_EQ(lv_obj_get_style_bg_opa(icon.badge, LV_PART_MAIN), LV_OPA_COVER);
+        EXPECT_EQ(lv_obj_get_width(icon.badge), lv_obj_get_width(text.badge));
+        EXPECT_EQ(lv_obj_get_height(icon.badge), lv_obj_get_height(text.badge));
+        EXPECT_EQ(lv_obj_get_width(icon.hit), size.x / 2);
+        EXPECT_EQ(lv_obj_get_height(icon.hit), size.y);
+        const int square_size = std::min(size.x / 2 - 8, size.y - 8);
+        EXPECT_EQ(lv_image_get_scale_x(icon.content), (square_size - 8) * LV_SCALE_NONE / 20);
+        lv_area_t badge_area{}, icon_area{};
+        lv_obj_get_coords(icon.badge, &badge_area);
+        lv_obj_get_coords(icon.content, &icon_area);
+        EXPECT_NEAR(badge_area.x1 + badge_area.x2, icon_area.x1 + icon_area.x2, 1);
+        EXPECT_NEAR(badge_area.y1 + badge_area.y2, icon_area.y1 + icon_area.y2, 1);
+    }
+}
+
+TEST_F(OptionSelectorNativeWidget, IconInheritsWhiteOnInitialRender) {
+    g_selector_icon = selector_test_icon();
+    g_selector_config.slots[1] = {};
+    g_selector_config.slots[1].kind = OptionSelectorContent::Icon;
+    g_selector_config.slots[1].content.icon.mono = true;
+    lv_obj_set_style_text_color(button, lv_color_white(), 0);
+    create(OptionSelectorMode::None);
+    lv_obj_t* icon = state()->slots[1].content;
+    EXPECT_EQ(lv_color_to_u32(lv_obj_get_style_image_recolor(icon, LV_PART_MAIN)) & 0xFFFFFFu, 0xFFFFFFu);
+}
+
+TEST_F(OptionSelectorNativeWidget, MissingIconUsesConfiguredForeground) {
+    g_selector_config.slots[1] = {};
+    g_selector_config.slots[1].kind = OptionSelectorContent::Icon;
+    strlcpy(g_selector_config.slots[1].foreground, "#123456",
+            sizeof(g_selector_config.slots[1].foreground));
+    create(OptionSelectorMode::None);
+    const auto& icon = state()->slots[1];
+    ASSERT_TRUE(lv_obj_check_type(icon.content, &lv_label_class));
+    EXPECT_STREQ(lv_label_get_text(icon.content), "?");
+    EXPECT_EQ(lv_color_to_u32(lv_obj_get_style_text_color(icon.content, LV_PART_MAIN)) & 0xFFFFFFu, 0x123456u);
+}
+
+TEST_F(OptionSelectorNativeWidget, SelectedPillsStayInsideRoundedGroup) {
+    static uint8_t draw_buffer[320 * 240 * 3];
+    std::vector<uint8_t> pixels(sizeof(draw_buffer));
+    lv_display_set_color_format(display, LV_COLOR_FORMAT_RGB888);
+    lv_display_set_buffers(display, draw_buffer, nullptr, sizeof(draw_buffer), LV_DISPLAY_RENDER_MODE_FULL);
+    lv_display_set_user_data(display, &pixels);
+    lv_display_set_flush_cb(display, [](lv_display_t* output, const lv_area_t*, uint8_t* data) {
+        auto& image = *static_cast<std::vector<uint8_t>*>(lv_display_get_user_data(output));
+        std::copy(data, data + image.size(), image.begin());
+        lv_display_flush_ready(output);
+    });
+    lv_obj_set_style_bg_color(lv_screen_active(), lv_color_hex(0xFF0000), 0);
+    lv_obj_set_style_bg_opa(lv_screen_active(), LV_OPA_COVER, 0);
+    lv_obj_set_pos(button, 10, 10);
+    lv_obj_set_size(button, 260, 180);
+    lv_obj_set_style_pad_all(button, 0, 0);
+    lv_obj_set_style_border_width(button, 0, 0);
+    g_selector_config.group_background = true;
+    g_selector_config.option_inset = 4;
+    strlcpy(g_selector_config.group_color, "#808080", sizeof(g_selector_config.group_color));
+    strlcpy(g_selector_config.selected_background, "#0080FF", sizeof(g_selector_config.selected_background));
+    g_selector_config.slots[2].kind = OptionSelectorContent::Label;
+    strlcpy(g_selector_config.slots[2].value, "auto", sizeof(g_selector_config.slots[2].value));
+    strlcpy(g_selector_config.slots[2].content.label, "auto", sizeof(g_selector_config.slots[2].content.label));
+    create(OptionSelectorMode::Local);
+    for (int width : {260, 180}) {
+        g_selector_config.option_inset = width == 260 ? 4 : 0;
+        lv_obj_set_size(button, width, 180);
+        lv_obj_update_layout(button);
+        option_selector_widget_impl::tick(button, &config, &runtime);
+        for (unsigned index = 0; index < 3; ++index)
+            lv_obj_add_flag(state()->slots[index].hit, LV_OBJ_FLAG_HIDDEN);
+        lv_refr_now(display);
+        const auto group_pixels = pixels;
+        for (unsigned index = 0; index < 3; ++index)
+            lv_obj_clear_flag(state()->slots[index].hit, LV_OBJ_FLAG_HIDDEN);
+        for (unsigned selected : {0u, 2u}) {
+            option_selector_widget_impl::activate(state(), selected);
+            lv_refr_now(display);
+            unsigned blue_pixels = 0;
+            unsigned outside_pixels = 0;
+            for (size_t offset = 0; offset < pixels.size(); offset += 3) {
+                if (pixels[offset] != 255 || pixels[offset + 1] != 128 || pixels[offset + 2] != 0) continue;
+                ++blue_pixels;
+                if (group_pixels[offset] == 0 && group_pixels[offset + 1] == 0 && group_pixels[offset + 2] == 255)
+                    ++outside_pixels;
+            }
+            EXPECT_GT(blue_pixels, 100u);
+            EXPECT_EQ(outside_pixels, 0u);
+        }
+    }
+    lv_display_set_user_data(display, nullptr);
+    lv_display_set_flush_cb(display, [](lv_display_t* output, const lv_area_t*, uint8_t*) {
+        lv_display_flush_ready(output);
+    });
+}
+
+TEST_F(OptionSelectorNativeWidget, SharedBackgroundFollowsBindingAndSelectionPrecedence) {
+    g_selector_config.option_backgrounds = true;
+    strlcpy(g_selector_config.option_background, "[pad:background]", sizeof(g_selector_config.option_background));
+    strlcpy(g_selector_config.selected_background, "#ABCDEF", sizeof(g_selector_config.selected_background));
+    strlcpy(g_selector_config.slots[1].background, "#445566", sizeof(g_selector_config.slots[1].background));
+    g_selector_background = "#123456";
+    create(OptionSelectorMode::Local);
+    auto background = [&](unsigned index) {
+        return lv_color_to_u32(lv_obj_get_style_bg_color(state()->slots[index].badge, LV_PART_MAIN)) & 0xFFFFFFu;
+    };
+    EXPECT_EQ(background(0), 0x123456u);
+    EXPECT_EQ(background(1), 0x445566u);
+    g_selector_background = "#654321";
+    option_selector_widget_impl::tick(button, &config, &runtime);
+    EXPECT_EQ(background(0), 0x654321u);
+    option_selector_widget_impl::activate(state(), 0);
+    EXPECT_EQ(background(0), 0xABCDEFu);
+    option_selector_widget_impl::activate(state(), 1);
+    EXPECT_EQ(background(0), 0x654321u);
+    EXPECT_EQ(background(1), 0x445566u);
+    g_selector_background = "invalid";
+    option_selector_widget_impl::tick(button, &config, &runtime);
+    EXPECT_EQ(background(0), widget_default_rgb(DEFAULT_WIDGET_TRACK_COLOR));
+}
+
+TEST_F(OptionSelectorNativeWidget, NoneDispatchesRepeatedValuesAndLocalResetsOnHide) {
+    create(OptionSelectorMode::None);
+    option_selector_widget_impl::activate(state(), 0);
+    option_selector_widget_impl::activate(state(), 0);
+    EXPECT_EQ(g_dispatches, 2u);
+    EXPECT_STREQ(g_dispatched_value, "cool");
+
+    option_selector_widget_impl::destroy(&runtime);
+    lv_obj_clean(button);
+    runtime = WidgetState{};
+    runtime.font_owner = &fonts;
+    create(OptionSelectorMode::Local);
+    option_selector_widget_impl::activate(state(), 1);
+    EXPECT_STREQ(g_dispatched_value, "heat");
+    EXPECT_EQ(state()->selected, 1);
+    option_selector_widget_impl::hide(&runtime);
+    EXPECT_EQ(state()->selected, option_selector_widget_impl::NO_SLOT);
+}
+
+TEST_F(OptionSelectorNativeWidget, EmptyLocalValueSelectsAndExpandsToEmpty) {
+    g_selector_config.slots[0].value[0] = '\0';
+    strlcpy(source.actions[0].payload.mqtt.mqtt_payload, "before{value}after",
+            sizeof(source.actions[0].payload.mqtt.mqtt_payload));
+    create(OptionSelectorMode::Local);
+    option_selector_widget_impl::activate(state(), 0);
+    EXPECT_EQ(state()->selected, 0);
+    EXPECT_EQ(g_dispatches, 1u);
+    EXPECT_STREQ(g_dispatched_value, "beforeafter");
+}
+
+TEST_F(OptionSelectorNativeWidget, ValidatesActionsForEmptyAndNonemptyOptionValues) {
+    JsonDocument doc;
+    doc["widget_option_label"] = "Auto";
+    doc["widget_option_label_2"] = "Manual";
+    doc["widget_option_value_2"] = "manual";
+    JsonArray actions = doc.createNestedArray("actions");
+    actions.createNestedObject()["type"] = "mqtt";
+    g_validated_option_values.clear();
+    ASSERT_EQ(option_selector_widget_impl::validate_actions(doc.as<JsonObjectConst>(), actions), nullptr);
+    EXPECT_EQ(g_validated_option_values, (std::vector<std::string>{"", "manual"}));
+}
+
+TEST_F(OptionSelectorNativeWidget, BoundWaitsForConfirmationOrTimeoutAndBlocksUnavailableInput) {
+    create(OptionSelectorMode::Bound);
+    option_selector_widget_impl::tick(button, &config, &runtime);
+    option_selector_widget_impl::activate(state(), 1);
+    EXPECT_EQ(g_dispatches, 1u);
+    EXPECT_EQ(lv_obj_get_style_opa(state()->slots[0].hit, LV_PART_MAIN), LV_OPA_50);
+    option_selector_widget_impl::activate(state(), 1);
+    EXPECT_EQ(g_dispatches, 1u);
+    g_binding_value = "heat";
+    option_selector_widget_impl::tick(button, &config, &runtime);
+    EXPECT_EQ(lv_obj_get_style_opa(state()->slots[0].hit, LV_PART_MAIN), LV_OPA_COVER);
+    option_selector_widget_impl::activate(state(), 0);
+    EXPECT_EQ(g_dispatches, 2u);
+    lv_tick_inc(5000);
+    option_selector_widget_impl::tick(button, &config, &runtime);
+    option_selector_widget_impl::activate(state(), 0);
+    EXPECT_EQ(g_dispatches, 3u);
+    g_selector_source_available = false;
+    option_selector_widget_impl::tick(button, &config, &runtime);
+    option_selector_widget_impl::activate(state(), 0);
+    EXPECT_EQ(g_dispatches, 3u);
+}
+
+TEST_F(OptionSelectorNativeWidget, FailedActionRetainsLocalSelectionButClearsBoundPending) {
+    g_dispatch_result = ACTION_FAILED;
+    create(OptionSelectorMode::Local);
+    option_selector_widget_impl::activate(state(), 1);
+    EXPECT_EQ(state()->selected, 1);
+
+    option_selector_widget_impl::destroy(&runtime);
+    lv_obj_clean(button);
+    runtime = WidgetState{};
+    runtime.font_owner = &fonts;
+    create(OptionSelectorMode::Bound);
+    option_selector_widget_impl::tick(button, &config, &runtime);
+    option_selector_widget_impl::activate(state(), 1);
+    EXPECT_EQ(state()->pending, option_selector_widget_impl::NO_SLOT);
+    option_selector_widget_impl::activate(state(), 1);
+    EXPECT_EQ(g_dispatches, 3u);
 }

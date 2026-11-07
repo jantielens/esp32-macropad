@@ -390,6 +390,27 @@ function pageRequests(result, page) {
     }], [0], 1);
     assert.strictEqual(localExport[sourceId(100)].data, largeLocalPng.data,
         'Export restores the portable base64 envelope without changing retained PNG bytes');
+    const selectorImport = await runImport({
+        sources: [[localSourceId, largeLocalPng]],
+        pads: [{ cols: 1, rows: 1, buttons: [{ col: 0, row: 0, widget_type: 'option_selector',
+            widget_option_icon_5: { source_id: localSourceId, kind: 'color' },
+            widget_option_value_5: 'cool' }] }],
+    });
+    const selectorSave = selectorImport.requests.find(request => request.kind === 'pad-save');
+    assert.ok(selectorSave, JSON.stringify(selectorImport.messages));
+    assert.strictEqual(JSON.parse(selectorSave.options.body).buttons[0].widget_option_icon_5.source_id, sourceId(100));
+    assert.ok(selectorImport.requests.some(request => request.kind === 'icon-install' &&
+        request.url.includes('id=pad_0_main_0_0_opt_5')));
+    const selectorExport = await selectorImport.context.padCollectExportIconSources([{
+        page: 0, payload: { buttons: [{ widget_type: 'option_selector',
+            widget_option_icon_5: { source_id: sourceId(100), kind: 'color' } }] },
+    }], [0], 1);
+    assert.strictEqual(selectorExport[sourceId(100)].data, largeLocalPng.data);
+    assert.strictEqual(selectorImport.context.padOptionIconRenderKey(
+        { cols: 3, rows: 2, column_widths_px: [0, 40, 0] },
+        { col: 1, row: 0, col_span: 2, widget_type: 'option_selector',
+            widget_option_label: 'Cool', widget_option_icon_5: { kind: 'mono' },
+            widget_option_icon_size_pct: 75, widget_option_icon_badge_padding: 4 }, 5), 'e3f58eb6');
     await assert.rejects(localImport.context.padReadIconSourceResponse({
         headers: { get() { return 'image/png'; } },
         async blob() { return new Blob([new Uint8Array(512 * 1024 + 1)]); },
@@ -618,6 +639,20 @@ function pageRequests(result, page) {
     refreshFailure.context.padLoadPage = async () => { throw new Error('Refresh unavailable'); };
     await assert.rejects(refreshFailure.context.padSavePage({ operation }),
         /Pad saved, but finishing the save failed: Refresh unavailable/);
+
+    const validationFailure = await runImport();
+    const validationFetch = validationFailure.context.fetch;
+    for (const [body, expected] of [
+        [{ success: false, message: 'dialog message must be nonempty text' }, /dialog message must be nonempty text/],
+        [{ error: 'Legacy validation error' }, /Legacy validation error/],
+        [{}, /HTTP 500/],
+    ]) {
+        validationFailure.context.fetch = async (url, options = {}) => {
+            if (requestKind(url, options) === 'pad-save') return response(false, body);
+            return validationFetch(url, options);
+        };
+        await assert.rejects(validationFailure.context.padSavePage({ operation }), expected);
+    }
 
     const restoreFailure = await runImport();
     const restoreFetch = restoreFailure.context.fetch;

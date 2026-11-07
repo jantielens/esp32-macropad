@@ -393,6 +393,19 @@ function padTrackSpanSize(sizes, start, span, gap) {
 const padIconSourceCache = new Map();
 const padDraftIconSources = new Map();
 
+function padButtonIconUses(button) {
+    if (!button) return [];
+    const uses = [];
+    if (button.icon) uses.push({ icon: button.icon, slot: 0 });
+    if (button.widget_type === 'option_selector') {
+        for (let slot = 1; slot <= 5; slot++) {
+            const icon = button['widget_option_icon' + (slot === 1 ? '' : '_' + slot)];
+            if (icon) uses.push({ icon, slot });
+        }
+    }
+    return uses;
+}
+
 function padRegisterDraftIconSource(record) {
     const normalized = padNormalizeIconSource(record, record);
     padDraftIconSources.set(normalized.catalog_id, normalized);
@@ -421,8 +434,8 @@ function padRegisterLocalDraftIconSource(record) {
 function padDraftIconSourceReferences() {
     const references = new Set();
     const addButton = button => {
-        if (button && button.icon && button.icon.draft_source_id)
-            references.add(button.icon.draft_source_id);
+        for (const { icon } of padButtonIconUses(button))
+            if (icon.draft_source_id) references.add(icon.draft_source_id);
     };
     for (const button of [...(padState.mainButtons || []), ...(padState.overlayButtons || []),
         ...(padState.templateButtons || [])]) addButton(button);
@@ -594,8 +607,7 @@ function padValidateImportedIconSources(pads, supplied) {
                 if (!button || typeof button !== 'object' || Array.isArray(button)) continue;
                 if (Object.prototype.hasOwnProperty.call(button, 'icon_id'))
                     throw new Error('The previous icon format cannot be imported.');
-                const icon = button.icon;
-                if (!icon) continue;
+                for (const { icon } of padButtonIconUses(button)) {
                 if (typeof icon !== 'object' || Array.isArray(icon)) throw new Error('Imported icon metadata is invalid.');
                 if (icon.source_id !== undefined) {
                     if (!/^s_[0-9a-f]{24}$/.test(icon.source_id)) throw new Error('Imported icon source ID is invalid.');
@@ -604,10 +616,11 @@ function padValidateImportedIconSources(pads, supplied) {
                         throw new Error('An imported source ID has conflicting icon metadata.');
                     referenced.set(icon.source_id, icon);
                 }
+                }
             }
         }
     }
-    if (referenced.size > buttonCount) throw new Error('Imported icon source count exceeds the button count.');
+    if (referenced.size > buttonCount * 6) throw new Error('Imported icon source count exceeds the icon count.');
     const normalizedSources = {};
     const sourceJsonLimit = Number(deviceInfoCache && deviceInfoCache.icon_max_source_json_size) || 704 * 1024;
     for (const [sourceId, icon] of referenced) {
@@ -654,8 +667,7 @@ async function padCollectExportIconSources(pads, rootPages, maxPads, draftContex
                 buttonCount++;
                 if (Object.prototype.hasOwnProperty.call(button, 'icon_id'))
                     throw new Error('The previous icon format cannot be exported.');
-                const icon = button.icon;
-                if (!icon) continue;
+                for (const { icon } of padButtonIconUses(button)) {
                 if (icon.draft_source_id) {
                     if (!/^d_[0-9a-f]{24}$/.test(icon.draft_source_id) || icon.source_id ||
                         icon.catalog_id !== undefined)
@@ -683,12 +695,13 @@ async function padCollectExportIconSources(pads, rootPages, maxPads, draftContex
                     record: suppliedSources[icon.source_id]
                         ? padNormalizeIconSource(suppliedSources[icon.source_id], icon) : null,
                 });
+                }
             }
         }
         if (payload.template_pad !== undefined && payload.template_pad !== null && Number(payload.template_pad) >= 0)
             pending.push(Number(payload.template_pad));
     }
-    if (references.size + draftReferences.size > buttonCount)
+    if (references.size + draftReferences.size > buttonCount * 6)
         throw new Error('Exported source count exceeds the referenced button count.');
 
     for (const draft of draftReferences.values()) {
@@ -873,6 +886,23 @@ function padIconRenderKey(payload, button) {
     return (hash || 1).toString(16).padStart(8, '0');
 }
 
+function padOptionIconRenderKey(payload, button, slot) {
+    let hash = parseInt(padIconRenderKey(payload, button), 16);
+    const values = [slot, button.widget_option_icon_size_pct ?? 0,
+        button.widget_option_icon_badge_padding ?? 0, button.group_size_pct ?? 0,
+        button.label_center ? 1 : 0, button.icon ? 1 : 0,
+        button.widget_position ?? '', button.icon_position ?? ''];
+    for (let index = 1; index <= 5; index++) {
+        const suffix = index === 1 ? '' : '_' + index;
+        values.push(button['widget_option_label' + suffix] || button['widget_option_icon' + suffix] ? 1 : 0);
+    }
+    for (const value of values) {
+        for (const byte of new TextEncoder().encode(String(value))) hash = Math.imul(hash ^ byte, 16777619) >>> 0;
+        hash = Math.imul(hash, 16777619) >>> 0;
+    }
+    return (hash || 1).toString(16).padStart(8, '0');
+}
+
 function padSelectTemplateButtons(payload, templateButtons) {
     const cols = Number(payload.cols);
     const rows = Number(payload.rows);
@@ -936,8 +966,8 @@ async function padPreparePageSave(context) {
         for (const button of group) {
             if (Object.prototype.hasOwnProperty.call(button, 'icon_id'))
                 throw new Error('Unsupported icon_id field; choose an icon using the picker.');
-            if (button.icon && sourceIdMap[button.icon.source_id])
-                button.icon.source_id = sourceIdMap[button.icon.source_id];
+            for (const { icon } of padButtonIconUses(button))
+                if (sourceIdMap[icon.source_id]) icon.source_id = sourceIdMap[icon.source_id];
         }
     }
     const targetPage = Number(context.page);
@@ -965,8 +995,8 @@ async function padPreparePageSave(context) {
         for (const button of templateButtons) {
             if (Object.prototype.hasOwnProperty.call(button, 'icon_id'))
                 throw new Error('Unsupported icon_id field in template pad; choose an icon using the picker.');
-            if (button.icon && sourceIdMap[button.icon.source_id])
-                button.icon.source_id = sourceIdMap[button.icon.source_id];
+            for (const { icon } of padButtonIconUses(button))
+                if (sourceIdMap[icon.source_id]) icon.source_id = sourceIdMap[icon.source_id];
         }
         inheritedButtons = padSelectTemplateButtons(payload, templateButtons);
         for (const button of inheritedButtons)
@@ -977,7 +1007,7 @@ async function padPreparePageSave(context) {
         throw new Error('Combined Main and Overlay button limit exceeded.');
 
     if (!context.skipTemplateDependents && Number.isInteger(targetPage) &&
-        payload.buttons.some(button => button.icon)) {
+        payload.buttons.some(button => padButtonIconUses(button).length)) {
         const response = await fetch('/api/pad/icon_context?page=' + targetPage);
         if (!response.ok)
             throw new Error('Failed to read icon dependency context: HTTP ' + response.status);
@@ -988,7 +1018,7 @@ async function padPreparePageSave(context) {
             const inherited = padSelectTemplateButtons(dependentPayload, payload.buttons);
             if (dependentPayload.button_count + inherited.length > maxButtons)
                 throw new Error('Combined Main and Overlay button limit exceeded for dependent Pad ' + (page + 1) + '.');
-            buttons.push(...inherited.filter(button => button.icon).map(button => ({
+            buttons.push(...inherited.filter(button => padButtonIconUses(button).length).map(button => ({
                 button,
                 layer: 'main',
                 inherited: true,
@@ -1002,8 +1032,7 @@ async function padPreparePageSave(context) {
     const sourceRecords = new Map();
     const iconButtons = [];
     for (const entry of buttons) {
-        const icon = entry.button.icon;
-        if (!icon) continue;
+        for (const { icon, slot } of padButtonIconUses(entry.button)) {
         const importedSources = iconSources.bySourceId;
         const imported = icon.source_id && importedSources[icon.source_id];
         const lookupKey = imported ? 'import:' + icon.source_id : icon.source_id ||
@@ -1020,17 +1049,19 @@ async function padPreparePageSave(context) {
             targetPage: entry.targetPage,
             targetPayload: entry.targetPayload,
             icon,
+            slot,
             record,
             lookupKey,
         });
+        }
     }
 
     const estimatedPayload = JSON.parse(JSON.stringify(payload));
     for (const group of [estimatedPayload.buttons, estimatedPayload.overlay_buttons || []]) {
         for (const button of group) {
-            if (button.icon && !button.icon.source_id) {
-                button.icon.source_id = 's_' + '0'.repeat(24);
-                delete button.icon.draft_source_id;
+            for (const { icon } of padButtonIconUses(button)) if (!icon.source_id) {
+                icon.source_id = 's_' + '0'.repeat(24);
+                delete icon.draft_source_id;
             }
         }
     }
@@ -1092,7 +1123,8 @@ async function padPreparePageSave(context) {
             if (!Number.isInteger(col) || !Number.isInteger(row) || col < 0 || row < 0 ||
                 colSpan < 1 || rowSpan < 1)
                 throw new Error('Icon button position or span is outside the pad grid.');
-            const key = 'pad_' + entry.targetPage + '_' + entry.layer + '_' + col + '_' + row;
+            const key = 'pad_' + entry.targetPage + '_' + entry.layer + '_' + col + '_' + row +
+                (entry.slot ? '_opt_' + entry.slot : '');
             if (col + colSpan > cols || row + rowSpan > rows) continue;
             const borderWidth = button.border_width !== undefined ? Number(button.border_width) : 1;
             const padding = Number(buttonSizes.padding) || 0;
@@ -1101,12 +1133,24 @@ async function padPreparePageSave(context) {
             const labelHeight = Number(buttonSizes.font_small_h) || 0;
             let iconWidth = fullWidth;
             let iconHeight = fullHeight - (button.label_top ? labelHeight : 0) - (button.label_bottom ? labelHeight : 0);
-            if (button.icon_scale_pct && Number(button.icon_scale_pct) > 0) {
+            if (entry.slot) {
+                const count = padButtonIconUses(button).filter(use => use.slot).length +
+                    Array.from({ length: 5 }, (_, i) => button['widget_option_label' + (i ? '_' + (i + 1) : '')] ? 1 : 0)
+                        .reduce((a, b) => a + b, 0);
+                iconWidth /= Math.max(1, count);
+                const padding = Number(button.widget_option_icon_badge_padding) || 0;
+                iconWidth -= padding * 2;
+                iconHeight -= padding * 2;
+                const scale = Number(button.widget_option_icon_size_pct) || 100;
+                iconWidth *= scale / 100;
+                iconHeight *= scale / 100;
+            } else if (button.icon_scale_pct && Number(button.icon_scale_pct) > 0) {
                 iconWidth = Math.round(iconWidth * Number(button.icon_scale_pct) / 100);
                 iconHeight = Math.round(iconHeight * Number(button.icon_scale_pct) / 100);
             }
             const size = Math.max(1, Math.floor(Math.min(iconWidth, iconHeight, maxDimension)));
-            const renderKey = padIconRenderKey(targetPayload, button);
+            const renderKey = entry.slot ? padOptionIconRenderKey(targetPayload, button, entry.slot)
+                : padIconRenderKey(targetPayload, button);
             const installed = artifacts[key];
             if (installed && installed.source_id === entry.lookupKey &&
                 installed.kind === (entry.icon.kind === 'mono' ? 1 : 0) &&
@@ -1203,16 +1247,17 @@ async function padUploadIconSources(prepared) {
     }
     for (const group of [prepared.payload.buttons, prepared.payload.overlay_buttons || []]) {
         for (const button of group) {
-            if (!button.icon) continue;
-            const imported = prepared.iconSources.bySourceId[button.icon.source_id];
-            const sourceKey = imported ? 'import:' + button.icon.source_id
-                : button.icon.source_id ? null : button.icon.draft_source_id
-                    ? 'draft:' + button.icon.draft_source_id : 'catalog:' + button.icon.catalog_id;
+            for (const { icon } of padButtonIconUses(button)) {
+            const imported = prepared.iconSources.bySourceId[icon.source_id];
+            const sourceKey = imported ? 'import:' + icon.source_id
+                : icon.source_id ? null : icon.draft_source_id
+                    ? 'draft:' + icon.draft_source_id : 'catalog:' + icon.catalog_id;
             if (!sourceKey) continue;
-            const sourceId = sourceIds.get(sourceKey) || prepared.iconSources.sourceIdMap[button.icon.source_id];
+            const sourceId = sourceIds.get(sourceKey) || prepared.iconSources.sourceIdMap[icon.source_id];
             if (!sourceId) throw new Error('Prepared icon source ID is missing.');
-            button.icon.source_id = sourceId;
-            delete button.icon.draft_source_id;
+            icon.source_id = sourceId;
+            delete icon.draft_source_id;
+            }
         }
     }
     for (const variant of prepared.variants) {

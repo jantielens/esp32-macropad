@@ -239,7 +239,6 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 	}
 	boot_actions_init();
 	pad_block_init();
-	void list_provider_pads_init();
 	list_provider_pads_init();
 	icon_store_init();
 	set_boot_splash_status("Loading icons...");

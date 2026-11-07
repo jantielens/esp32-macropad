@@ -712,8 +712,9 @@ function padIconPickerClose(session) {
     if (session.opener && session.opener.isConnected) session.opener.focus();
 }
 
-function padOpenIconPicker() {
+function padOpenIconPicker(options) {
     if (padIconPickerSession) return;
+    const target = options && typeof options.onSelect === 'function' ? options : null;
     const dialog = document.createElement('dialog');
     dialog.className = 'pad-button-builder portal-form icon-picker';
     dialog.setAttribute('aria-labelledby', 'icon-picker-title');
@@ -878,14 +879,15 @@ function padOpenIconPicker() {
             padRegisterDraftIconSource(selected.record);
             icon = { catalog_id: selected.icon.catalog_id, kind: selected.icon.kind };
         }
-        padIconEditorSetDraft(icon);
+        if (target) target.onSelect(icon);
+        else padIconEditorSetDraft(icon);
         if (typeof padWorkspaceEdit === 'function') padWorkspaceEdit();
         if (typeof padPruneDraftIconSources === 'function') padPruneDraftIconSources();
         close();
     }, { signal });
 
     dialog.showModal();
-    const currentIcon = padIconEditorReadDraft();
+    const currentIcon = target ? target.currentIcon : padIconEditorReadDraft();
     const initialSource = currentIcon ? currentIcon.catalog_id ? currentIcon.kind : 'image' : 'all';
     padIconPickerActivateSource(session, initialSource);
     if (currentIcon) padIconPickerStartCurrentSelection(session, currentIcon);

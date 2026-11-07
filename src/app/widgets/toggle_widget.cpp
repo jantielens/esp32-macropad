@@ -2,40 +2,21 @@
 
 #if HAS_DISPLAY
 #include "../action_list.h"
+#include "widget_value.h"
 #include <new>
 #include <string.h>
 
 static_assert(sizeof(ToggleConfig) <= WIDGET_CONFIG_MAX_BYTES, "Toggle config too large");
 static_assert(sizeof(ToggleState) <= WIDGET_STATE_MAX_BYTES, "Toggle state too large");
 
-static bool toggle_space(char value) {
-    return value == ' ' || value == '\t' || value == '\r' || value == '\n' || value == '\f' || value == '\v';
-}
-
-static bool toggle_equal(const char* left, const char* right) {
-    while (toggle_space(*left)) ++left;
-    while (toggle_space(*right)) ++right;
-    size_t left_len = strlen(left), right_len = strlen(right);
-    while (left_len && toggle_space(left[left_len - 1])) --left_len;
-    while (right_len && toggle_space(right[right_len - 1])) --right_len;
-    if (left_len != right_len) return false;
-    for (size_t index = 0; index < left_len; ++index) {
-        char first = left[index], second = right[index];
-        if (first >= 'A' && first <= 'Z') first += 'a' - 'A';
-        if (second >= 'A' && second <= 'Z') second += 'a' - 'A';
-        if (first != second) return false;
-    }
-    return true;
-}
-
 static const char* toggle_validate(JsonObjectConst button) {
     const char* values[] = {"widget_toggle_on_value", "widget_toggle_off_value"};
     for (const char* field : values) {
         if (!button.containsKey(field)) continue;
         if (!button[field].is<const char*>() || strlen(button[field].as<const char*>()) >= 64 ||
-            toggle_equal(button[field].as<const char*>(), "")) return "toggle values must be nonempty strings of at most 63 bytes";
+            widget_value_equal(button[field].as<const char*>(), "")) return "toggle values must be nonempty strings of at most 63 bytes";
     }
-    if (toggle_equal(button[values[0]] | "on", button[values[1]] | "off"))
+    if (widget_value_equal(button[values[0]] | "on", button[values[1]] | "off"))
         return "toggle on and off values must differ";
     for (const char* field : {"widget_toggle_on_color", "widget_toggle_off_color", "widget_toggle_knob_color"}) {
         if (!button.containsKey(field)) continue;
@@ -101,7 +82,7 @@ static void toggle_create(lv_obj_t* button, const WidgetConfig* config,
     auto* state = new (runtime->data) ToggleState{};
     state->button = button;
     state->read_only = settings->read_only;
-    state->bound = !toggle_equal(config->data_binding[0], "");
+    state->bound = !widget_value_equal(config->data_binding[0], "");
     state->known = state->available = !state->bound;
     state->control = lv_switch_create(button);
     lv_obj_remove_flag(state->control, LV_OBJ_FLAG_CLICKABLE);
@@ -116,8 +97,8 @@ static void toggle_create(lv_obj_t* button, const WidgetConfig* config,
 static void toggle_report(const WidgetConfig* config, WidgetState* runtime, const char* value, bool valid) {
     auto* state = reinterpret_cast<ToggleState*>(runtime->data);
     const auto* settings = reinterpret_cast<const ToggleConfig*>(config->data);
-    const bool on = valid && toggle_equal(value, settings->on_value);
-    const bool off = valid && toggle_equal(value, settings->off_value);
+    const bool on = valid && widget_value_equal(value, settings->on_value);
+    const bool off = valid && widget_value_equal(value, settings->off_value);
     const bool available = on || off;
     const bool known = state->known || available;
     const bool reported = available ? on : state->value;

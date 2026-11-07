@@ -3664,11 +3664,11 @@ Firmware reconciles generated files for the saved pad after a successful save
 and dependent-cache refresh. It preserves main and overlay icon positions,
 including inherited template buttons, and retires obsolete decoded buffers until
 the owning screen releases them. Browser-issued pruning is not required. Pad
-deletion removes all matching files without a fixed file-count limit. Existing
-source cleanup removes previous artwork only when no saved pad references it.
+deletion removes all matching generated files without a fixed file-count limit.
+Unused source artwork is retained until the next normal-runtime startup.
 
-Initial normal-runtime startup also sweeps unreferenced sources and generated
-files, recovering leftovers from failed saves and interrupted browser sessions.
+Initial normal-runtime startup sweeps unreferenced sources and generated files,
+including leftovers from failed saves and interrupted browser sessions.
 The boot sweep skips deletion if a saved pad configuration cannot be read;
 pad-scoped cleanup also skips unreadable pad or template configurations. Cleanup
 stops for OTA activity and logs reclaimed file counts and bytes. There is no

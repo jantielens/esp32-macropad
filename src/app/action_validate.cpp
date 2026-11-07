@@ -225,7 +225,7 @@ static bool validate_binding_field(char* value, size_t, bool, void* context) {
 }
 
 const char* action_validate_json(JsonObjectConst action, bool require_known_type,
-                                 const char* value_token) {
+                                 const char* value_token, const char* event_value) {
     const char* type = action["type"] | "";
     if (!type[0]) return "action missing type";
     if (require_known_type && !action_type_known(type)) return "unknown action type";
@@ -248,17 +248,22 @@ const char* action_validate_json(JsonObjectConst action, bool require_known_type
                 "%s: %s is unavailable in this action context", name, token);
             return s_action_validation_error;
         }
-        struct Context { const char* name; const char* source; const char* token; JsonObject output; bool found; };
-        Context context = {name, source, token, normalized.as<JsonObject>(), false};
+        struct Context { const char* name; const char* source; const char* token;
+                         const char* event_value; JsonObject output; bool found; };
+        Context context = {name, source, token, event_value, normalized.as<JsonObject>(), false};
         auto visit = [](const char* name, char* field, size_t capacity, uint8_t flags, void* opaque) {
             auto* context = static_cast<Context*>(opaque);
             if (strcmp(name, context->name)) return true;
             context->found = flags & ACTION_FIELD_EVENT;
             if (!context->found || strlen(context->source) >= capacity) return false;
             strlcpy(field, context->source, capacity);
-            if (!action_substitute_token_field(field, capacity, context->token, "-999999.9999")) return false;
-            strlcpy(field, context->source, capacity);
-            if (!action_substitute_token_field(field, capacity, context->token, "0")) return false;
+            if (context->event_value) {
+                if (!action_substitute_token_field(field, capacity, context->token, context->event_value)) return false;
+            } else {
+                if (!action_substitute_token_field(field, capacity, context->token, "-999999.9999")) return false;
+                strlcpy(field, context->source, capacity);
+                if (!action_substitute_token_field(field, capacity, context->token, "0")) return false;
+            }
             context->output[name] = field;
             return true;
         };

@@ -861,6 +861,21 @@ for (const token of ['{value}', '{step}']) {
     assert.throws(() => context.actionEditorValidateEventTokens({ type: 'notify', message: 'x'.repeat(185) + token }, token, 'test'), /message.*exceeds/);
 }
 assert.throws(() => context.actionEditorValidateEventTokens({ type: 'notify', message: '{step}' }, '{value}', 'test'), /use \{value\}/);
+assert.doesNotThrow(() => context.actionEditorValidateEventTokens({
+    type: 'ha_service', entity_id: 'climate.room', service: 'set_mode', data_json: '{"mode":"{value}"}'
+}, '{value}', 'test', ['cool', 'heat']));
+assert.doesNotThrow(() => context.actionEditorValidateEventTokens({
+    type: 'ha_service', entity_id: 'climate.room', service: 'set_mode', data_json: '{"mode":"{value}"}'
+}, '{value}', 'test', ['']));
+assert.throws(() => context.actionEditorValidateEventTokens({
+    type: 'ha_service', entity_id: 'climate.room', service: 'set_mode', data_json: '{"mode":{value}}'
+}, '{value}', 'test', ['cool']), /JSON object/);
+assert.throws(() => context.actionEditorValidateEventTokens({
+    type: 'ha_service', entity_id: 'climate.room', service: 'set_mode', data_json: '{"mode":{value}}'
+}, '{value}', 'test', ['']), /JSON object/);
+assert.throws(() => context.actionEditorValidateEventTokens({
+    type: 'notify', message: 'x'.repeat(150) + '{value}'
+}, '{value}', 'test', ['a'.repeat(63)]), /exceeds/);
 
 async function checkSourceColors() {
     document.querySelector = () => null;
@@ -918,17 +933,17 @@ async function checkSourceColors() {
     assert.strictEqual(pending.length, 1, 'Accents reuse the existing batch request');
     input.value = '[pad:second]';
     context.padPvRefreshAll(0);
-    pending[0].resolve({ ok: true, json: () => ({ button: { widget_arc_color: '#ff0000' } }) });
+    pending[0].resolve({ ok: true, json: () => ({ resolved: pending[0].body.bindings.map(() => ({ value: '#ff0000' })) }) });
     await settle();
     assert.strictEqual(border('pad-edit-gauge-source-1'), '#123456', 'Changed expressions reject old results');
-    pending[1].resolve({ ok: true, json: () => ({ button: { widget_arc_color: '#00ff00' } }) });
+    pending[1].resolve({ ok: true, json: () => ({ resolved: pending[1].body.bindings.map(() => ({ value: '#00ff00' })) }) });
     await settle();
     assert.strictEqual(border('pad-edit-gauge-source-1'), '#00FF00');
     input.value = '[pad:first]';
     context.padPvRefreshAll(0);
     input.value = '[pad:second]';
     context.padPvRefreshAll(0);
-    pending[3].resolve({ ok: true, json: () => ({ button: { widget_arc_color: '#00ff00' } }) });
+    pending[3].resolve({ ok: true, json: () => ({ resolved: pending[3].body.bindings.map(() => ({ value: '#00ff00' })) }) });
     await settle();
     pending[2].reject(new Error('Old request failed'));
     await settle();
@@ -940,7 +955,7 @@ async function checkSourceColors() {
     context.padPvRefreshAll(0);
     context.padState.editCol++;
     context.padWidgetEditorsLoad({ widget_type: 'gauge', widget_arc_color: '[pad:second]' });
-    pending[5].resolve({ ok: true, json: () => ({ button: { widget_arc_color: '#ff0000' } }) });
+    pending[5].resolve({ ok: true, json: () => ({ resolved: pending[5].body.bindings.map(() => ({ value: '#ff0000' })) }) });
     await settle();
     assert.strictEqual(border('pad-edit-gauge-source-1'), '#123456', 'Switching buttons rejects old results');
 }
@@ -1011,6 +1026,8 @@ async function checkBindingPreviewPlacement() {
     const top = addField('pad-edit-label-top', '[ext:weather;current.temperature_2m]', true);
     const center = addField('pad-edit-label-center', '[health:cpu]', true);
     const color = addField('pad-edit-border-color', '[health:rssi]', false);
+    const option = addField('pad-edit-option-1-label', '[time:%H:%M:%S]', false);
+    widgetType.value = 'option_selector';
     const previewContext = {
         document: {
             getElementById: id => nodes.get(id) || null,
@@ -1018,19 +1035,25 @@ async function checkBindingPreviewPlacement() {
             querySelector: selector => chips.get(selector.match(/data-pv="([^"]+)"/)?.[1]) || null
         },
         padState: { page: 0, selectedLayer: 'main', editCol: 0, editRow: 0 },
-        padWidgetEditor: () => null,
+        padWidgetEditor: () => ({ fields: [{ id: 'pad-edit-option-1-label', key: 'widget_option_label', binding: {} }] }),
         padGetBindableColor: id => nodes.get(id)?.value || '',
         setTimeout,
         clearTimeout,
-        fetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve({
-            button: { label_top: '21.3 C', label_center: '23', border_color: '#123456' }
-        }) })
+        fetch: (url, options) => {
+            const body = JSON.parse(options.body);
+            assert.deepStrictEqual(body.bindings, [
+                '[ext:weather;current.temperature_2m]', '[health:cpu]', '[health:rssi]', '[time:%H:%M:%S]'
+            ]);
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({
+                resolved: ['21.3 C', '23', '#123456', '12:34:56'].map(value => ({ value }))
+            }) });
+        }
     };
     vm.createContext(previewContext);
     vm.runInContext(fs.readFileSync('src/app/web/portal_pad_dialog.js', 'utf8'), previewContext);
     previewContext.padPvOnOpen();
     await new Promise(resolve => setImmediate(resolve));
-    for (const [container, expected] of [[top, '21.3 C'], [center, '23'], [color, '#123456']]) {
+    for (const [container, expected] of [[top, '21.3 C'], [center, '23'], [color, '#123456'], [option, '12:34:56']]) {
         assert.strictEqual(container.children.length, 1, 'Each binding preview belongs to its own label');
         assert.strictEqual(container.children[0].style.display, 'inline-flex');
         assert.ok(container.children[0].innerHTML.includes(expected));
@@ -1041,6 +1064,24 @@ async function checkBindingPreviewPlacement() {
     nodes.get('pad-edit-label-top').value = 'Plain label';
     previewContext.padPvSetChip('pad-edit-label-top');
     assert.strictEqual(top.children[0].style.display, 'none');
+
+    const manyFields = Array.from({ length: 35 }, (_, i) => {
+        const id = 'widget-binding-' + i;
+        addField(id, '[test:' + i + ']', false);
+        return { id, key: id, binding: {} };
+    });
+    const batchSizes = [];
+    previewContext.padWidgetEditor = () => ({ fields: manyFields });
+    previewContext.fetch = (url, options) => {
+        const body = JSON.parse(options.body);
+        batchSizes.push(body.bindings.length);
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({
+            resolved: body.bindings.map(value => ({ value: 'resolved ' + value }))
+        }) });
+    };
+    await previewContext.padPvRefreshAll(0);
+    assert.deepStrictEqual(batchSizes, [8, 8, 8, 8, 5], 'Preview requests stay within device limits');
+    assert.ok(chips.get('widget-binding-34').innerHTML.includes('resolved [test:34]'));
 }
 
 async function checkInspectorRequests() {
@@ -1119,8 +1160,8 @@ async function checkInspectorRequests() {
     callback();
     assert.strictEqual(requests.length, 6);
     assert.strictEqual(requests[5].url, '/api/pad/resolve');
-    assert.strictEqual(JSON.parse(requests[5].options.body).button.label_center, '[health:heap_free]');
-    requests[5].resolve({ ok: true, json: () => ({ button: { label_center: '42' } }) });
+    assert.deepStrictEqual(JSON.parse(requests[5].options.body).bindings, ['[health:heap_free]']);
+    requests[5].resolve({ ok: true, json: () => ({ resolved: [{ value: '42' }] }) });
     await new Promise(resolve => setImmediate(resolve));
     listeners.input({ target: getElementById('pad-edit-bg-image-interval') });
     assert.strictEqual(timers.size, 0);
@@ -1136,7 +1177,7 @@ async function checkInspectorRequests() {
     requestContext.padPvOnOpen();
     assert.strictEqual(timers.size, 0, 'Opening a selection cancels refreshes scheduled while loading its fields');
     assert.strictEqual(requests.length, 7, 'Selection resolves once immediately instead of also resolving on a stale timer');
-    requests[6].resolve({ ok: true, json: () => ({ button: { label_center: '42' } }) });
+    requests[6].resolve({ ok: true, json: () => ({ resolved: [{ value: '42' }] }) });
     await new Promise(resolve => setImmediate(resolve));
 }
 

@@ -6,6 +6,7 @@
 #include "pad_config.h"
 #include "pad_validate.h"
 #include "ota_activity.h"
+#include "widgets/widget_registry.h"
 
 #include "storage.h"
 #include "psram_json_allocator.h"
@@ -260,6 +261,23 @@ static bool source_matches_kind_unlocked(const char* source_id, IconKind kind) {
         kind == ICON_KIND_MONO ? "mono" : "color");
 }
 
+using ButtonIconVisitor = void (*)(uint8_t slot, const char* source, IconKind kind, void* context);
+
+static void visit_button_icons(const ScreenButtonConfig& button, ButtonIconVisitor visitor, void* context) {
+    if (button.icon_source_id[0])
+        visitor(0, button.icon_source_id, static_cast<IconKind>(button.icon_kind), context);
+    const WidgetType* type = widget_find(button.widget.type);
+    if (!type || !type->visitResources) return;
+    struct Context { ButtonIconVisitor visitor; void* context; } wrapper{visitor, context};
+    type->visitResources(button.widget.data,
+        [](WidgetResourceKind kind, const char*, uint8_t slot, const char* source, void* opaque) {
+            if (kind == WidgetResourceKind::Binding || !source[0]) return;
+            auto& wrapper = *static_cast<Context*>(opaque);
+            wrapper.visitor(slot, source, kind == WidgetResourceKind::MonoIcon ? ICON_KIND_MONO : ICON_KIND_COLOR,
+                            wrapper.context);
+        }, &wrapper);
+}
+
 static bool source_reference_scan(const char* source_id, bool* referenced) {
     *referenced = false;
     for (uint8_t page = 0; page < MAX_PADS; ++page) {
@@ -267,10 +285,13 @@ static bool source_reference_scan(const char* source_id, bool* referenced) {
         const PadConfig* config = pad_config_acquire(page);
         if (!config) return false;
         for (uint8_t index = 0; index < config->button_count; ++index) {
-            if (strcmp(config->buttons[index].icon_source_id, source_id) == 0) {
-                *referenced = true;
-                break;
-            }
+            struct Context { const char* source; bool* found; } context{source_id, referenced};
+            visit_button_icons(config->buttons[index],
+                [](uint8_t, const char* source, IconKind, void* opaque) {
+                    auto& context = *static_cast<Context*>(opaque);
+                    if (!strcmp(source, context.source)) *context.found = true;
+                }, &context);
+            if (*referenced) break;
         }
         pad_config_release(config);
         if (*referenced) return true;
@@ -581,6 +602,12 @@ void icon_store_build_key(uint8_t page, const char* layer, uint8_t col, uint8_t 
              layer && strcmp(layer, "overlay") == 0 ? "overlay" : "main", col, row);
 }
 
+void icon_store_build_option_key(uint8_t page, const char* layer, uint8_t col, uint8_t row,
+                                 uint8_t slot, char* out, size_t out_size) {
+    snprintf(out, out_size, "pad_%u_%s_%u_%u_opt_%u", page,
+             layer && strcmp(layer, "overlay") == 0 ? "overlay" : "main", col, row, slot);
+}
+
 void icon_store_init() {
     if (!g_cache_mutex) {
         g_cache_mutex = xSemaphoreCreateMutex();
@@ -614,13 +641,22 @@ bool icon_store_key_valid(const char* key) {
     if (!key || !key[0] || strlen(key) >= CONFIG_ICON_KEY_MAX_LEN) return false;
     unsigned page = 0, col = 0, row = 0;
     char layer[9] = {};
-    char trailing = '\0';
-    if (sscanf(key, "pad_%u_%8[^_]_%u_%u%c", &page, layer, &col, &row, &trailing) != 4 ||
+    int consumed = 0;
+    if (sscanf(key, "pad_%u_%8[^_]_%u_%u%n", &page, layer, &col, &row, &consumed) != 4 ||
         page >= MAX_PADS || col >= MAX_GRID_COLS || row >= MAX_GRID_ROWS ||
         (strcmp(layer, "main") != 0 && strcmp(layer, "overlay") != 0)) return false;
     char canonical[CONFIG_ICON_KEY_MAX_LEN];
-    icon_store_build_key((uint8_t)page, layer, (uint8_t)col, (uint8_t)row,
-                         canonical, sizeof(canonical));
+    if (!key[consumed]) {
+        icon_store_build_key((uint8_t)page, layer, (uint8_t)col, (uint8_t)row,
+                             canonical, sizeof(canonical));
+    } else {
+        unsigned slot = 0;
+        int suffix_length = 0;
+        if (sscanf(key + consumed, "_opt_%u%n", &slot, &suffix_length) != 1 ||
+            key[consumed + suffix_length] || slot < 1 || slot > 5) return false;
+        icon_store_build_option_key((uint8_t)page, layer, (uint8_t)col, (uint8_t)row,
+                                    (uint8_t)slot, canonical, sizeof(canonical));
+    }
     return strcmp(key, canonical) == 0;
 }
 
@@ -991,32 +1027,36 @@ bool icon_store_lookup(const char* id, IconRef* out) {
 static uint16_t preload_pad_icons(uint8_t page, const PadConfig* cfg) {
     uint16_t loaded = 0;
     for (uint8_t i = 0; i < cfg->button_count; i++) {
-        if (!cfg->buttons[i].icon_source_id[0]) continue;
-
-        char key[CONFIG_ICON_KEY_MAX_LEN];
-        const char* layer = i >= cfg->main_button_count ? "overlay" : "main";
-        icon_store_build_key(page, layer, cfg->buttons[i].col,
-                             cfg->buttons[i].row, key, sizeof(key));
-
-        IconKind kind = (IconKind)cfg->buttons[i].icon_kind;
-        if (cache_entry_matches(key, cfg->buttons[i].icon_source_id, kind)) continue;
-        if (!invalidate_cache_entry(key, page)) continue;
-        if (artifact_matches_for_preload(key, cfg->buttons[i].icon_source_id, kind)) {
-            if (load_from_fs(key, kind, cfg->buttons[i].icon_source_id)) loaded++;
-            continue;
-        }
-
-        // Fallback: if this pad uses a template, try loading icon from
-        // the template pad's position (icon files live under original key)
-        if (cfg->template_pad >= 0 && cfg->template_pad != (int8_t)page) {
-            char tpl_key[CONFIG_ICON_KEY_MAX_LEN];
-            icon_store_build_key((uint8_t)cfg->template_pad, "main",
-                                 cfg->buttons[i].col,
-                                 cfg->buttons[i].row,
-                                 tpl_key, sizeof(tpl_key));
-            if (artifact_matches_for_preload(tpl_key, cfg->buttons[i].icon_source_id, kind) &&
-                load_from_fs(tpl_key, kind, cfg->buttons[i].icon_source_id, key)) loaded++;
-        }
+        struct Context {
+            uint8_t page;
+            const PadConfig* config;
+            const ScreenButtonConfig* button;
+            const char* layer;
+            uint16_t* loaded;
+        } context{page, cfg, &cfg->buttons[i], i >= cfg->main_button_count ? "overlay" : "main", &loaded};
+        visit_button_icons(cfg->buttons[i],
+            [](uint8_t slot, const char* source, IconKind kind, void* opaque) {
+                auto& context = *static_cast<Context*>(opaque);
+                char key[CONFIG_ICON_KEY_MAX_LEN];
+                if (slot) icon_store_build_option_key(context.page, context.layer, context.button->col,
+                                                      context.button->row, slot, key, sizeof(key));
+                else icon_store_build_key(context.page, context.layer, context.button->col,
+                                          context.button->row, key, sizeof(key));
+                if (cache_entry_matches(key, source, kind) || !invalidate_cache_entry(key, context.page)) return;
+                if (artifact_matches_for_preload(key, source, kind)) {
+                    if (load_from_fs(key, kind, source)) ++*context.loaded;
+                    return;
+                }
+                const int8_t parent = context.config->template_pad;
+                if (parent < 0 || parent == (int8_t)context.page) return;
+                char parent_key[CONFIG_ICON_KEY_MAX_LEN];
+                if (slot) icon_store_build_option_key((uint8_t)parent, "main", context.button->col,
+                                                      context.button->row, slot, parent_key, sizeof(parent_key));
+                else icon_store_build_key((uint8_t)parent, "main", context.button->col,
+                                          context.button->row, parent_key, sizeof(parent_key));
+                if (artifact_matches_for_preload(parent_key, source, kind) &&
+                    load_from_fs(parent_key, kind, source, key)) ++*context.loaded;
+            }, &context);
     }
     return loaded;
 }
@@ -1069,11 +1109,24 @@ static bool pad_uses_icon_key(uint8_t page, const PadConfig* config, const char*
     if (!config) return false;
     for (uint8_t index = 0; index < config->button_count; ++index) {
         const ScreenButtonConfig& button = config->buttons[index];
-        if (!button.icon_source_id[0]) continue;
-        char expected[CONFIG_ICON_KEY_MAX_LEN];
-        icon_store_build_key(page, index < config->main_button_count ? "main" : "overlay",
-                             button.col, button.row, expected, sizeof(expected));
-        if (strcmp(key, expected) == 0) return true;
+        struct Context {
+            uint8_t page;
+            const ScreenButtonConfig* button;
+            const char* layer;
+            const char* key;
+            bool found;
+        } context{page, &button, index < config->main_button_count ? "main" : "overlay", key, false};
+        visit_button_icons(button,
+            [](uint8_t slot, const char*, IconKind, void* opaque) {
+                auto& context = *static_cast<Context*>(opaque);
+                char expected[CONFIG_ICON_KEY_MAX_LEN];
+                if (slot) icon_store_build_option_key(context.page, context.layer, context.button->col,
+                                                      context.button->row, slot, expected, sizeof(expected));
+                else icon_store_build_key(context.page, context.layer, context.button->col,
+                                          context.button->row, expected, sizeof(expected));
+                if (!strcmp(context.key, expected)) context.found = true;
+            }, &context);
+        if (context.found) return true;
     }
     return false;
 }

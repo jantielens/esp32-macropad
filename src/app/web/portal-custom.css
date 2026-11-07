@@ -2078,6 +2078,7 @@ body {
   color: var(--portal-text-muted); cursor: pointer; user-select: none;
 }
 .reset-hint:hover { color: var(--portal-primary); }
+.option-color-reset { background: none; border: 0; padding: 0; }
 
 /* Pad bindings list */
 #pad-bindings-list { display: grid; gap: 10px; }
@@ -2125,6 +2126,12 @@ body {
 .widget-row label { min-height: 20px; }
 .widget-caption-row { grid-template-columns: minmax(0, 1fr) auto; }
 .widget-caption-row .bindable-color { width: auto; }
+#pad-edit-option-slots > .editor-group { margin-left: 0; }
+.option-selector-row { grid-template-columns: repeat(auto-fit, minmax(min(100%, 125px), 1fr)); }
+#pad-edit-option-colors-section > .editor-group-body > small,
+#pad-edit-option-layout-section > .editor-group-body > small { display: block; margin: 4px 0 10px; }
+#pad-edit-option-colors-section > .editor-group-body > small:last-child,
+#pad-edit-option-layout-section > .editor-group-body > small:last-child { margin-bottom: 0; }
 
 .pad-content-source { border-left: 2px solid var(--pad-source-color, var(--portal-border-light)); padding-left: 10px; }
 .pad-content-source > summary { cursor: pointer; padding: 6px 0; font-size: 13px; font-weight: 600; }

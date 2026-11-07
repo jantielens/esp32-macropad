@@ -12,7 +12,6 @@ pad_api_source = (root / "src/app/web_portal_pad.cpp").read_text()
 storage_source = (root / "src/app/storage.cpp").read_text()
 icon_source = (root / "src/app/icon_store.cpp").read_text()
 icon_header = (root / "src/app/icon_store.h").read_text()
-validation_source = (root / "src/app/pad_validate.cpp").read_text()
 
 
 def section(start, end):
@@ -22,6 +21,7 @@ def section(start, end):
 
 harness = r'''
 #include "pad_config.h"
+#include "pad_validate.h"
 #include "fill_pattern.h"
 #include "esp_heap_caps.h"
 #include "psram_json_allocator.h"
@@ -122,7 +122,11 @@ enum IconKind : uint8_t { ICON_KIND_COLOR = 0, ICON_KIND_MONO = 1 };
 bool icon_store_source_matches_metadata(const char*, const char*, const char*) { return true; }
 bool icon_store_artifact_matches(const char*, const char*, IconKind, uint32_t) { return true; }
 uint32_t pad_icon_render_key(JsonObjectConst, JsonObjectConst) { return 1; }
+uint32_t pad_option_icon_render_key(JsonObjectConst, JsonObjectConst, uint8_t) { return 1; }
 void icon_store_build_key(uint8_t, const char*, uint8_t, uint8_t, char* key_out, size_t size) {
+    if (size) key_out[0] = '\0';
+}
+void icon_store_build_option_key(uint8_t, const char*, uint8_t, uint8_t, uint8_t, char* key_out, size_t size) {
     if (size) key_out[0] = '\0';
 }
 static std::vector<std::string> cleaned_sources;
@@ -133,6 +137,8 @@ bool icon_store_source_delete_if_unreferenced(const char* source) {
 void icon_store_delete_page_icons(uint8_t) {}
 void icon_store_cleanup_pad_icons(uint8_t) {}
 static ButtonDefaults defaults = {};
+struct WidgetType { void (*releaseConfig)(uint8_t*) = nullptr; };
+static const WidgetType* widget_find(const char*) { return nullptr; }
 static void button_defaults_init() {}
 static const ButtonDefaults* button_defaults_get() { return &defaults; }
 static const char* btn_default(const char* value, const char* fallback) {
@@ -149,7 +155,7 @@ static uint8_t action_list_parse(JsonVariantConst, ButtonAction*, size_t, bool) 
 harness += section("static void parse_bindable_field", "// Parse a typed action object")
 harness += section("static bool parse_button_fill_style", "static bool parse_button(")
 harness += r'''
-static bool parse_button(JsonObject object, ScreenButtonConfig* button, const ButtonDefaults*) {
+static bool parse_button(JsonObject object, ScreenButtonConfig* button, const ButtonDefaults*, bool*) {
     button->col = object["col"] | uint8_t(0);
     button->row = object["row"] | uint8_t(0);
     button->col_span = object["col_span"] | uint8_t(1);
@@ -162,7 +168,6 @@ static bool parse_button(JsonObject object, ScreenButtonConfig* button, const Bu
 harness += icon_header[icon_header.index("#ifndef ICON_MAX_DIMENSION"):icon_header.index("// Icon kind")]
 harness += icon_header[icon_header.index("struct IconArtifactInfo"):icon_header.index("#ifdef __cplusplus")]
 harness += icon_header[icon_header.index("enum IconStoreResult"):icon_header.index("// Reference to a cached icon")]
-harness += validation_source[validation_source.index("bool pad_icon_source_id_valid"):validation_source.index("bool pad_icon_catalog_kind_valid")]
 harness += icon_source[icon_source.index("static bool validate_png"):icon_source.index("static bool source_matches_metadata_unlocked")]
 harness += icon_source[icon_source.index("bool icon_store_source_path"):icon_source.index("bool icon_store_source_matches_kind")]
 harness += icon_source[icon_source.index("struct IconSourceUpload {"):icon_source.index("IconStoreResult icon_store_source_install")]
@@ -174,7 +179,7 @@ harness += section("bool pad_config_init()", "// Internal: read and parse")
 harness += section("static int select_template_buttons",
                    "void pad_config_rebuild_all_caches()")
 harness += section("void pad_config_rebuild_all_caches()", "bool pad_config_get_data_stream_snapshot")
-harness += section("static const char* validate_pad_button_icon", "bool pad_config_save_raw")
+harness += section("static const char* validate_pad_icon_artifact", "bool pad_config_save_raw")
 harness += section("bool pad_config_save_raw", "bool pad_config_exists")
 harness += section("bool pad_config_exists", "uint32_t pad_config_get_generation()")
 harness += section("uint32_t pad_config_get_generation()", "uint32_t pad_config_get_eligible_mask()")
@@ -350,11 +355,11 @@ int main() {
         assert(save_document(2, original));
         cleaned_sources.clear();
         assert(save_document(2, empty));
-        assert((cleaned_sources == std::vector<std::string>{first_source, second_source}));
+        assert(cleaned_sources.empty());
         assert(save_document(2, original));
         cleaned_sources.clear();
         assert(pad_config_delete(2));
-        assert((cleaned_sources == std::vector<std::string>{first_source, second_source}));
+        assert(cleaned_sources.empty());
     }
     char copied[64];
     const unsigned reads = storage_reads;

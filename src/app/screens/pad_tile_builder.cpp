@@ -9,6 +9,7 @@
 #if HAS_TOUCH
 #include "../touch_manager.h"
 #include "../widgets/slider_widget.h"
+#include "../widgets/option_selector_widget.h"
 #endif
 #include <esp_heap_caps.h>
 #include <string.h>
@@ -88,6 +89,8 @@ static lv_obj_t* create_content_label(lv_obj_t* parent, const char* text, const 
 // ============================================================================
 
 void PadScreen::clearTiles() {
+    if (configError) lv_obj_delete(configError);
+    configError = nullptr;
     if (navigationFocus) lv_obj_delete(navigationFocus);
     navigationFocus = nullptr;
     destroyOverlayInputShield();
@@ -110,8 +113,10 @@ void PadScreen::clearTiles() {
         // Destroy widget state before LVGL objects are deleted
         if (tiles[i].widget_type && tiles[i].widget_type->destroyUI) {
             tiles[i].widget_type->destroyUI(&tiles[i].widget_state);
-            tiles[i].widget_type = nullptr;
         }
+        if (tiles[i].widget_type && tiles[i].widget_type->releaseConfig)
+            tiles[i].widget_type->releaseConfig(tiles[i].widget_cfg.data);
+        tiles[i].widget_type = nullptr;
 #if HAS_IMAGE_FETCH || HAS_IMAGE_LIBRARY
         // Cancel fetch slot first (stops background task from touching buffers)
 #if HAS_IMAGE_FETCH
@@ -189,6 +194,9 @@ void PadScreen::buildTiles() {
     const PadConfig* cfg = pad_config_acquire(pageIndex);
     if (!cfg) {
         LOGE(TAG, "Pad %u config unavailable", pageIndex);
+        configError = lv_label_create(container);
+        lv_label_set_text(configError, "Pad configuration unavailable");
+        lv_obj_center(configError);
         tilesBuilt = true; // Mark built (empty) to avoid retrying every frame
         return;
     }
@@ -427,6 +435,7 @@ void PadScreen::buildTiles() {
             if (wt) {
                 tile.widget_type = wt;
                 memcpy(&tile.widget_cfg, &bcfg.widget, sizeof(WidgetConfig));
+                if (wt->retainConfig) wt->retainConfig(tile.widget_cfg.data);
 #if HAS_DISPLAY
                 // Expand [pad:] tokens in widget data bindings so stream-based
                 // widgets (e.g. sparkline) look up their data stream by the same
@@ -457,6 +466,10 @@ void PadScreen::buildTiles() {
                             static_cast<lv_event_code_t>(LV_EVENT_ALL | LV_EVENT_PREPROCESS), &tile);
                     }
                     wt->createUI(widget_parent, &tile.widget_cfg, &bcfg, &r, &scale, &tile.widget_state);
+                    if (strcmp(wt->name, "option_selector") == 0)
+                        option_selector_attach(&tile.widget_state, tile.actions, tile.action_count,
+                                               pageIndex, i >= cfg->main_button_count, bcfg.col, bcfg.row,
+                                               PadScreen::onPress, &tile);
 #if HAS_TOUCH
                     if (strcmp(wt->name, "slider") == 0)
                         slider_attach(&tile.widget_state, tile.actions, tile.action_count,

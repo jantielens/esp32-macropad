@@ -86,6 +86,7 @@
   "blocks": [{"id": "navigation", "name": "Home navigation", "desc": "Navigate to the home pad", "icon": "Home", "min_cols": 1, "min_rows": 1, "min_free": 1, "bindings": {}, "buttons": [{"col_offset": 0, "row_offset": 0, "col_span": 1, "row_span": 1, "label_center": "Home", "actions": [{"type": "screen", "target": "pad_0"}]}]}],
   "binding_schema": {"schemes": [
     {"name": "pad", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": true},
+    {"name": "var", "min_params": 1, "max_params": 1, "widget_max_params": 1, "format_param": -1, "validation_mode": 0, "free_form": true},
     {"name": "mqtt", "min_params": 1, "max_params": 3, "widget_max_params": 2, "format_param": 2, "validation_mode": 0, "free_form": true},
     {"name": "expr", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": 1, "validation_mode": 1, "free_form": true},
     {"name": "time", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": -1, "validation_mode": 0, "free_form": true},

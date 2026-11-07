@@ -396,6 +396,17 @@ void PadScreen::pollLiveData(bool force) {
 #endif
 }
 
+static bool widget_has_scheme(const WidgetType* type, const WidgetConfig& config, const char* scheme) {
+    if (!type || !type->visitResources) return false;
+    struct Context { const char* scheme; bool found; } context{scheme, false};
+    type->visitResources(config.data,
+        [](WidgetResourceKind kind, const char*, uint8_t, const char* value, void* opaque) {
+            auto& context = *static_cast<Context*>(opaque);
+            if (kind == WidgetResourceKind::Binding && strstr(value, context.scheme)) context.found = true;
+        }, &context);
+    return context.found;
+}
+
 bool PadScreen::containsTimeBinding() const {
     static constexpr const char* TIME_SCHEME = "[time:";
     for (uint16_t i = 0; i < bindingCount; i++)
@@ -413,6 +424,7 @@ bool PadScreen::containsTimeBinding() const {
         if (fill_style_has_scheme(tiles[i].fill_style, TIME_SCHEME)) return true;
         for (uint8_t binding = 0; binding < MAX_WIDGET_BINDINGS; binding++)
             if (strstr(tiles[i].widget_binding[binding], TIME_SCHEME)) return true;
+        if (widget_has_scheme(tiles[i].widget_type, tiles[i].widget_cfg, TIME_SCHEME)) return true;
     }
     for (uint8_t i = 0; i < pageBindingCount; i++)
         if (strstr(pageBindings[i].value, TIME_SCHEME)) return true;
@@ -434,6 +446,7 @@ bool PadScreen::padHasScheme(const char* scheme) const {
         for (uint8_t w = 0; w < MAX_WIDGET_BINDINGS; w++) {
             if (strstr(t.widget_binding[w], scheme)) return true;
         }
+        if (widget_has_scheme(t.widget_type, t.widget_cfg, scheme)) return true;
     }
     for (uint16_t i = 0; i < bindingCount; i++)
         if (strstr(bindings[i].templ, scheme)) return true;

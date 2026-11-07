@@ -142,6 +142,8 @@ void icon_store_enumerate_cache(bool (*cb)(const IconCacheInfo* info, void* ctx)
 // Build a positional icon key for a button: "pad_<page>_<layer>_<col>_<row>"
 void icon_store_build_key(uint8_t page, const char* layer, uint8_t col, uint8_t row,
                           char* out, size_t out_size);
+void icon_store_build_option_key(uint8_t page, const char* layer, uint8_t col, uint8_t row,
+                                 uint8_t slot, char* out, size_t out_size);
 
 #ifdef __cplusplus
 }

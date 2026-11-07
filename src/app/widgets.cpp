@@ -11,6 +11,7 @@
 #if HAS_DISPLAY
 
 #include "widgets/widget.cpp"
+#include "widgets/option_selector_config.cpp"
 #include "widget_modules.h"
 
 #endif // HAS_DISPLAY

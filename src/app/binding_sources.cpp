@@ -5,6 +5,7 @@
 #include "display_manager.h"
 #include "fill_pattern.h"
 #include "action_registry.h"
+#include "widgets/widget_registry.h"
 
 struct SourceContext { BindingSourceVisitor visitor; void* user; };
 
@@ -42,6 +43,16 @@ void binding_sources_visit(BindingSourceVisitor visitor, void* user) {
             if (button.fill_style)
                 for (unsigned i = 0; i < 7; ++i) visitor(button.fill_style->color(i), user);
             for (uint8_t i = 0; i < MAX_WIDGET_BINDINGS; ++i) visitor(button.widget.data_binding[i], user);
+            const WidgetType* type = widget_find(button.widget.type);
+            if (type && type->visitResources) {
+                type->visitResources(button.widget.data,
+                    [](WidgetResourceKind kind, const char*, uint8_t, const char* value, void* opaque) {
+                        if (kind == WidgetResourceKind::Binding) {
+                            auto& source = *static_cast<SourceContext*>(opaque);
+                            source.visitor(value, source.user);
+                        }
+                    }, &context);
+            }
             for (uint8_t i = 0; i < button.action_count; ++i) visit_action(button.actions[i], context);
             for (uint8_t i = 0; i < button.lp_action_count; ++i) visit_action(button.lp_actions[i], context);
         }

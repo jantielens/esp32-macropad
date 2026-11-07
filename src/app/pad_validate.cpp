@@ -69,39 +69,39 @@ uint32_t pad_icon_render_key(JsonObjectConst pad, JsonObjectConst button) {
     return hash ? hash : 1;
 }
 
-bool pad_icon_source_id_valid(const char* source_id) {
-    if (!source_id || strlen(source_id) != 26 || source_id[0] != 's' || source_id[1] != '_')
-        return false;
-    for (size_t index = 2; index < 26; ++index) {
-        const char value = source_id[index];
-        if (!((value >= '0' && value <= '9') || (value >= 'a' && value <= 'f')))
-            return false;
+uint32_t pad_option_icon_render_key(JsonObjectConst pad, JsonObjectConst button, uint8_t slot) {
+    uint32_t hash = pad_icon_render_key(pad, button);
+    const auto text = [&hash](const char* value) {
+        do {
+            hash ^= (uint8_t)*value;
+            hash *= 16777619u;
+        } while (*value++);
+    };
+    const auto number = [&text](int value) {
+        char buffer[16];
+        snprintf(buffer, sizeof(buffer), "%d", value);
+        text(buffer);
+    };
+    number(slot);
+    number(button["widget_option_icon_size_pct"] | 0);
+    number(button["widget_option_icon_badge_padding"] | 0);
+    number(button["group_size_pct"] | 0);
+    number((button["label_center"] | "")[0] ? 1 : 0);
+    number(button["icon"].is<JsonObjectConst>() ? 1 : 0);
+    text(button["widget_position"] | "");
+    text(button["icon_position"] | "");
+    for (unsigned index = 0; index < 5; ++index) {
+        char label[32], icon[32];
+        if (index == 0) {
+            snprintf(label, sizeof(label), "widget_option_label");
+            snprintf(icon, sizeof(icon), "widget_option_icon");
+        } else {
+            snprintf(label, sizeof(label), "widget_option_label_%u", index + 1);
+            snprintf(icon, sizeof(icon), "widget_option_icon_%u", index + 1);
+        }
+        number((button[label] | "")[0] || button[icon].is<JsonObjectConst>() ? 1 : 0);
     }
-    return true;
-}
-
-bool pad_icon_catalog_kind_valid(const char* catalog_id, const char* kind) {
-    if (!catalog_id || !kind) return false;
-    const size_t length = strlen(catalog_id);
-    if (!length || length > 128) return false;
-
-    const char* name = nullptr;
-    bool material = false;
-    if (strncmp(catalog_id, "material-symbols:", 17) == 0) {
-        name = catalog_id + 17;
-        material = true;
-    } else if (strncmp(catalog_id, "noto:", 5) == 0) {
-        name = catalog_id + 5;
-    } else {
-        return false;
-    }
-    if (!name[0]) return false;
-    for (const char* cursor = name; *cursor; ++cursor) {
-        if (!((*cursor >= 'a' && *cursor <= 'z') ||
-              (*cursor >= '0' && *cursor <= '9') || *cursor == '-'))
-            return false;
-    }
-    return strcmp(kind, material ? "mono" : "color") == 0;
+    return hash ? hash : 1;
 }
 
 // A color is valid if it parses as hex or carries a binding template ([..]).
@@ -117,18 +117,7 @@ static const char* validate_icon(JsonObjectConst button) {
     if (!button.containsKey("icon")) return nullptr;
     if (!button["icon"].is<JsonObjectConst>()) return "icon must be an object";
 
-    JsonObjectConst icon = button["icon"].as<JsonObjectConst>();
-    const char* source_id = icon["source_id"] | "";
-    if (!pad_icon_source_id_valid(source_id))
-        return "icon source_id must be s_ followed by 24 lowercase hexadecimal digits";
-
-    const char* kind = icon["kind"] | "";
-    const bool has_catalog = icon.containsKey("catalog_id");
-    if (icon.size() != (has_catalog ? 3 : 2) ||
-        (has_catalog && !pad_icon_catalog_kind_valid(icon["catalog_id"] | "", kind)) ||
-        (!has_catalog && strcmp(kind, "color") != 0))
-        return "icon metadata must contain valid source_id, kind, and optional catalog_id";
-    return nullptr;
+    return pad_validate_icon_metadata(button["icon"].as<JsonObjectConst>());
 }
 
 // Return `msg` if b[key] would be truncated on store (>= cap, since strlcpy
@@ -385,7 +374,21 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
         if (!b["extension_upscale"].is<int>() || b["extension_upscale"].as<int>() < 1 ||
             b["extension_upscale"].as<int>() > 4) return "extension_upscale must be an integer from 1 to 4";
     }
-    if (b["actions"].is<JsonArrayConst>()) { const char* ae = validate_action_array(b["actions"], true, strcmp(wt, "slider") == 0 ? "{value}" : nullptr); if (ae) return ae; }
+    if (b["actions"].is<JsonArrayConst>()) {
+        JsonArrayConst actions = b["actions"].as<JsonArrayConst>();
+        if (wtype && wtype->validateActions) {
+            if (actions.size() > MAX_BUTTON_ACTIONS) return "too many actions (max 3)";
+            const char* error = wtype->validateActions(b, actions);
+            if (error) return error;
+            for (JsonObjectConst action : actions) {
+                error = validate_action_constraints(action);
+                if (error) return error;
+            }
+        } else {
+            const char* error = validate_action_array(actions, true, strcmp(wt, "slider") == 0 ? "{value}" : nullptr);
+            if (error) return error;
+        }
+    }
     if (b["lp_actions"].is<JsonArrayConst>()) { const char* ae = validate_action_array(b["lp_actions"]); if (ae) return ae; }
     // Reject invalid binding tokens (unknown scheme, bad health key / list
     // provider / timer id) in any string field (labels, widget bindings...).

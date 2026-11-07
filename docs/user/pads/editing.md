@@ -263,10 +263,10 @@ visible until you select **Close**. If the message says the pad was saved but
 finishing failed, check the device and reload the editor rather than saving again
 immediately. A lost connection can leave the save outcome unconfirmed.
 
-The device cleans up unused saved icons when you save or delete a pad. It keeps
-artwork still used by other buttons or inherited from a template. Interrupted or
-failed saves can leave uploaded artwork behind; the next normal startup checks
-for orphaned icon files and removes them. No manual cleanup is normally needed.
+The device cleans up unused generated icons when you save or delete a pad. It
+keeps artwork still used by other buttons or inherited from a template. Unused
+source artwork, including uploads left by interrupted saves, remains in storage
+until the next normal startup. No manual cleanup is normally needed.
 
 Leaving or switching pads offers **Keep Editing** or **Discard and Switch**.
 Browser reload/close warns about unsaved changes, but drafts are not durably

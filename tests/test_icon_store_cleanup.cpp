@@ -1,6 +1,7 @@
 #include "icon_store.h"
 #include "pad_config.h"
 #include "storage.h"
+#include "widgets/widget_registry.h"
 #include <cassert>
 #include <cstdio>
 #include <cstring>
@@ -19,10 +20,14 @@ uint32_t esp_random() { return 42; }
 bool pad_config_exists(uint8_t page) { return present[page]; }
 const PadConfig* pad_config_acquire(uint8_t page) { return configs[page]; }
 void pad_config_release(const PadConfig*) {}
-bool pad_icon_source_id_valid(const char* source) {
-    return source && strlen(source) == 26 && strncmp(source, "s_", 2) == 0;
+const WidgetType* widget_find(const char* type) {
+    static WidgetType selector{};
+    selector.visitResources = [](const uint8_t* data, WidgetResourceVisitor visitor, void* context) {
+        if (data[0]) visitor(WidgetResourceKind::ColorIcon, "widget_option_icon_5", 5,
+                             reinterpret_cast<const char*>(data), context);
+    };
+    return type && !strcmp(type, "test_option") ? &selector : nullptr;
 }
-bool pad_icon_catalog_kind_valid(const char*, const char*) { return true; }
 bool storage_write_atomic(const char*, const uint8_t*, size_t) { return false; }
 bool storage_write_verified(const char* path, const uint8_t* bytes, size_t length) {
     LittleFS.files[path] = std::vector<uint8_t>(bytes, bytes + length);
@@ -39,11 +44,14 @@ int main(int argc, char**) {
     IconSourceUpload* upload = nullptr;
     assert(icon_store_source_png_begin(100, &upload) == ICON_STORE_UNAVAILABLE);
     const char* used_source = "s_000000000000000000000001";
+    const char* option_source = "s_000000000000000000000003";
     ScreenButtonConfig buttons[3] = {};
     for (unsigned index = 0; index < 3; ++index) {
         strcpy(buttons[index].icon_source_id, used_source);
         buttons[index].col = index;
     }
+    strcpy(buttons[2].widget.type, "test_option");
+    strcpy(reinterpret_cast<char*>(buttons[2].widget.data), option_source);
     PadConfig config = {};
     config.buttons = buttons;
     config.button_count = 3;
@@ -59,12 +67,18 @@ int main(int argc, char**) {
     add_file("/icons/pad_0_main_0_0.meta");
     add_file("/icons/pad_0_main_1_0.png");
     add_file("/icons/pad_0_overlay_2_0.png");
+    add_file("/icons/pad_0_overlay_2_0_opt_5.png");
     add_file("/icons/pad_0_main_3_0.png");
     add_file("/icons/pad_0_main_3_0.meta");
     add_file("/icons/pad_2_main_0_0.png");
     add_file("/icons/pad_2_main_0_0.meta");
     add_file("/icon_sources/s_000000000000000000000001.png");
     add_file("/icon_sources/s_000000000000000000000002.png");
+    add_file("/icon_sources/s_000000000000000000000003.png");
+    assert(icon_store_key_valid("pad_0_overlay_2_0_opt_5"));
+    assert(!icon_store_key_valid("pad_0_overlay_2_0_opt_0"));
+    assert(!icon_store_key_valid("pad_0_overlay_2_0_opt_05"));
+    assert(!icon_store_key_valid("pad_0_overlay_2_0_opt_6"));
 
     if (argc > 1) {
         configs[1] = nullptr;
@@ -85,12 +99,14 @@ int main(int argc, char**) {
     assert(LittleFS.exists("/icons/pad_0_main_0_0.meta"));
     assert(LittleFS.exists("/icons/pad_0_main_1_0.png"));
     assert(LittleFS.exists("/icons/pad_0_overlay_2_0.png"));
+    assert(LittleFS.exists("/icons/pad_0_overlay_2_0_opt_5.png"));
     assert(!LittleFS.exists("/icons/pad_0_main_3_0.png"));
     assert(!LittleFS.exists("/icons/pad_0_main_3_0.meta"));
     assert(!LittleFS.exists("/icons/pad_2_main_0_0.png"));
     assert(!LittleFS.exists("/icons/pad_2_main_0_0.meta"));
     assert(LittleFS.exists("/icon_sources/s_000000000000000000000001.png"));
     assert(!LittleFS.exists("/icon_sources/s_000000000000000000000002.png"));
+    assert(LittleFS.exists("/icon_sources/s_000000000000000000000003.png"));
 
     add_file("/icons/pad_0_main_3_0.meta");
     add_file("/icons/pad_2_main_0_0.png");
@@ -129,6 +145,11 @@ int main(int argc, char**) {
     buttons[1].icon_source_id[0] = '\0';
     buttons[2].icon_source_id[0] = '\0';
     assert(icon_store_source_delete_if_unreferenced(used_source));
+    assert(!icon_store_source_delete_if_unreferenced(option_source));
+    buttons[2].widget.data[0] = '\0';
+    icon_store_cleanup_pad_icons(0);
+    assert(!LittleFS.exists("/icons/pad_0_overlay_2_0_opt_5.png"));
+    assert(icon_store_source_delete_if_unreferenced(option_source));
 
     for (unsigned index = 0; index < MAX_PAD_BUTTONS * 2 + 10; ++index) {
         char path[80];

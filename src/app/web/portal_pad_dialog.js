@@ -653,40 +653,44 @@ function padPvRefreshField(id, retriesLeft) {
 }
 
 // Batch-resolve all bound fields in one request (dialog open + debounced edits).
-function padPvRefreshAll(retriesLeft) {
+async function padPvRefreshAll(retriesLeft) {
     const current = padPvRequestGuard();
     padPvMount();
-    var rl = (retriesLeft === undefined) ? 2 : retriesLeft;
-    var btn = {}, any = false;
+    const rl = (retriesLeft === undefined) ? 2 : retriesLeft;
+    const bindings = [];
     padPvFields().forEach(function (f) {
-        var v = padPvFieldValue(f.id);
-        if (padPvIsBinding(v)) { btn[f.field] = v; any = true; padPvSetChip(f.id, null, 'loading'); }
+        const value = padPvFieldValue(f.id);
+        if (padPvIsBinding(value)) { bindings.push({ id: f.id, value }); padPvSetChip(f.id, null, 'loading'); }
         else padPvSetChip(f.id);
     });
-    if (!any) return;
-    fetch('/api/pad/resolve', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ screen: 'pad_' + padState.page, button: btn })
-    }).then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (j) {
-          if (!current()) return;
-          var fields = (j && j.button) || {};
-          var anyUnresolved = false;
-          padPvFields().forEach(function (f) {
-              if (padPvIsBinding(padPvFieldValue(f.id)) && padPvFieldValue(f.id) === btn[f.field]) {
-                  var v = fields[f.field] !== undefined ? fields[f.field] : '---';
-                  padPvSetChip(f.id, v);
-                  if (padPvUnresolved(v)) anyUnresolved = true;
-              }
-          });
-          if (anyUnresolved && rl > 0) setTimeout(function () { if (current()) padPvRefreshAll(rl - 1); }, 1000);
-      })
-      .catch(function () {
-          if (!current()) return;
-          padPvFields().forEach(function (f) {
-              if (padPvIsBinding(padPvFieldValue(f.id)) && padPvFieldValue(f.id) === btn[f.field]) padPvSetChip(f.id, '---');
-          });
-      });
+    let anyUnresolved = false;
+    // Keep requests and resolved input/value pairs within the device's JSON limits.
+    for (let offset = 0; offset < bindings.length; offset += 8) {
+        const batch = bindings.slice(offset, offset + 8);
+        let result;
+        try {
+            const response = await fetch('/api/pad/resolve', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ screen: 'pad_' + padState.page, bindings: batch.map(entry => entry.value) })
+            });
+            result = response.ok ? await response.json() : null;
+        } catch {
+            if (!current()) return;
+            batch.forEach(entry => {
+                if (padPvFieldValue(entry.id) === entry.value) padPvSetChip(entry.id, '---');
+            });
+            continue;
+        }
+        if (!current()) return;
+        batch.forEach((entry, index) => {
+            if (padPvFieldValue(entry.id) !== entry.value) return;
+            const value = result && result.resolved && result.resolved[index] ?
+                result.resolved[index].value : '---';
+            padPvSetChip(entry.id, value);
+            if (padPvUnresolved(value)) anyUnresolved = true;
+        });
+    }
+    if (anyUnresolved && rl > 0) setTimeout(function () { if (current()) padPvRefreshAll(rl - 1); }, 1000);
 }
 
 function padPvOnOpen() { clearTimeout(padPvTimer); padPvRefreshAll(); }

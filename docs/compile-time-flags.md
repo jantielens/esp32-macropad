@@ -893,6 +893,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/list_widget.cpp
   - src/app/widgets/mousepad_widget.cpp
   - src/app/widgets/numericrocker_widget.cpp
+  - src/app/widgets/option_selector_config.cpp
+  - src/app/widgets/option_selector_config.h
+  - src/app/widgets/option_selector_widget.cpp
+  - src/app/widgets/option_selector_widget.h
   - src/app/widgets/rocker_widget.cpp
   - src/app/widgets/scrollpad_widget.cpp
   - src/app/widgets/slider_widget.cpp
@@ -1115,6 +1119,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/list_widget.cpp
   - src/app/widgets/mousepad_widget.cpp
   - src/app/widgets/numericrocker_widget.cpp
+  - src/app/widgets/option_selector_widget.cpp
   - src/app/widgets/rocker_widget.cpp
   - src/app/widgets/scrollpad_widget.cpp
   - src/app/widgets/slider_widget.cpp
@@ -1351,6 +1356,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/gamepad_button_widget.cpp
   - src/app/widgets/gamepad_joystick_widget.cpp
   - src/app/widgets/mousepad_widget.cpp
+  - src/app/widgets/option_selector_widget.cpp
   - src/app/widgets/scrollpad_widget.cpp
   - src/app/widgets/slider_widget.cpp
 - **HAS_TTF_FONTS**

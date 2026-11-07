@@ -1035,7 +1035,7 @@ async function padPersistPage(context) {
         });
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
-            throw new Error(err.error || 'HTTP ' + resp.status);
+            throw new Error(err.message || err.error || 'HTTP ' + resp.status);
         }
 
         if (context.saveState) context.saveState.committed = true;
