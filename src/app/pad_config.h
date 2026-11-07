@@ -607,6 +607,11 @@ extern "C" {
 // Mount LittleFS filesystem. Call once at boot. Returns true on success.
 bool pad_config_init();
 
+// Serialize pad mutations with operations that use a reference snapshot.
+// Always acquire this lock before the icon file mutex.
+bool pad_config_lock_mutations();
+void pad_config_unlock_mutations();
+
 // Acquire the immutable in-memory config for a page. The returned reference
 // remains valid until paired with pad_config_release(). Returns nullptr when
 // the page is not configured.
@@ -658,6 +663,18 @@ uint32_t pad_config_get_eligible_mask();
 
 #ifdef __cplusplus
 }
+
+class PadConfigMutationGuard {
+public:
+    PadConfigMutationGuard() : locked_(pad_config_lock_mutations()) {}
+    ~PadConfigMutationGuard() { if (locked_) pad_config_unlock_mutations(); }
+    PadConfigMutationGuard(const PadConfigMutationGuard&) = delete;
+    PadConfigMutationGuard& operator=(const PadConfigMutationGuard&) = delete;
+    explicit operator bool() const { return locked_; }
+
+private:
+    bool locked_;
+};
 #endif
 
 #endif // PAD_CONFIG_H

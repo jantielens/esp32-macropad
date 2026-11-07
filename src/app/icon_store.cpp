@@ -287,6 +287,34 @@ static bool png_dimensions_allowed(const uint8_t* data, size_t len,
            png_width <= ICON_MAX_DIMENSION && png_height <= ICON_MAX_DIMENSION;
 }
 
+// ArduinoJson reads streams byte by byte, so buffer filesystem reads locally.
+class BufferedIconReader {
+public:
+    explicit BufferedIconReader(File& file) : file(file) {}
+    int read() {
+        if (position == length) {
+            length = file.read(buffer, sizeof(buffer));
+            position = 0;
+            if (!length) return -1;
+        }
+        return buffer[position++];
+    }
+    size_t readBytes(char* out, size_t count) {
+        size_t read_count = 0;
+        while (read_count < count) {
+            const int value = read();
+            if (value < 0) break;
+            out[read_count++] = (char)value;
+        }
+        return read_count;
+    }
+private:
+    File& file;
+    uint8_t buffer[512];
+    size_t position = 0;
+    size_t length = 0;
+};
+
 static bool read_source_metadata_unlocked(const char* source_id, char* catalog_id, size_t capacity,
                                           IconKind* kind) {
     if (!pad_icon_source_id_valid(source_id)) return false;
@@ -308,8 +336,9 @@ static bool read_source_metadata_unlocked(const char* source_id, char* catalog_i
     filter["kind"] = true;
     filter["media_type"] = true;
     BasicJsonDocument<PsramJsonAllocator> document(256);
+    BufferedIconReader reader(file);
     const DeserializationError error = deserializeJson(
-        document, file, DeserializationOption::Filter(filter));
+        document, reader, DeserializationOption::Filter(filter));
     file.close();
     if (error || document.overflowed()) return false;
     const JsonObjectConst source = document.as<JsonObjectConst>();
@@ -359,31 +388,84 @@ static void visit_button_icons(const ScreenButtonConfig& button, ButtonIconVisit
         }, &wrapper);
 }
 
-static bool source_reference_scan(const char* source_id, bool* referenced) {
-    *referenced = false;
-    for (uint8_t page = 0; page < MAX_PADS; ++page) {
-        if (!pad_config_exists(page)) continue;
-        const PadConfig* config = pad_config_acquire(page);
-        if (!config) return false;
-        for (uint8_t index = 0; index < config->button_count; ++index) {
-            struct Context { const char* source; bool* found; } context{source_id, referenced};
-            visit_button_icons(config->buttons[index],
-                [](uint8_t, const char* source, IconKind, void* opaque) {
-                    auto& context = *static_cast<Context*>(opaque);
-                    if (!strcmp(source, context.source)) *context.found = true;
-                }, &context);
-            if (*referenced) break;
-        }
-        pad_config_release(config);
-        if (*referenced) return true;
-    }
-    return true;
-}
+struct PadIconReferences {
+    struct Reference {
+        char key[CONFIG_ICON_KEY_MAX_LEN];
+        char source[CONFIG_ICON_SOURCE_ID_MAX_LEN];
+    };
+    const PadConfig* configs[MAX_PADS] = {};
+    Reference* entries = nullptr;
+    size_t count = 0;
+    bool readable = true;
 
-static bool read_artifact_unlocked(const char* key, IconArtifactInfo* out) {
-    char png_path[64];
+    PadIconReferences() {
+        size_t capacity = 0;
+        for (uint8_t page = 0; page < MAX_PADS; ++page) {
+            configs[page] = pad_config_acquire(page);
+            if (!configs[page]) {
+                if (pad_config_exists(page)) readable = false;
+                continue;
+            }
+            for (uint8_t index = 0; index < configs[page]->button_count; ++index)
+                visit_button_icons(configs[page]->buttons[index],
+                    [](uint8_t, const char*, IconKind, void* opaque) {
+                        ++*static_cast<size_t*>(opaque);
+                    }, &capacity);
+        }
+        if (!readable || !capacity) return;
+        PsramJsonAllocator allocator;
+        entries = static_cast<Reference*>(allocator.allocate(capacity * sizeof(Reference)));
+        if (!entries) {
+            LOGW(TAG, "Skipping icon cleanup: unable to allocate reference snapshot");
+            readable = false;
+            return;
+        }
+        for (uint8_t page = 0; page < MAX_PADS; ++page) {
+            const PadConfig* config = configs[page];
+            if (!config) continue;
+            for (uint8_t index = 0; index < config->button_count; ++index) {
+                struct Context {
+                    PadIconReferences* references;
+                    uint8_t page;
+                    const ScreenButtonConfig* button;
+                    const char* layer;
+                } context{this, page, &config->buttons[index],
+                          index < config->main_button_count ? "main" : "overlay"};
+                visit_button_icons(config->buttons[index],
+                    [](uint8_t slot, const char* source, IconKind, void* opaque) {
+                        auto& context = *static_cast<Context*>(opaque);
+                        Reference& entry = context.references->entries[context.references->count++];
+                        if (slot) icon_store_build_option_key(context.page, context.layer,
+                            context.button->col, context.button->row, slot, entry.key, sizeof(entry.key));
+                        else icon_store_build_key(context.page, context.layer,
+                            context.button->col, context.button->row, entry.key, sizeof(entry.key));
+                        strlcpy(entry.source, source, sizeof(entry.source));
+                    }, &context);
+            }
+        }
+    }
+
+    ~PadIconReferences() {
+        for (const PadConfig* config : configs)
+            if (config) pad_config_release(config);
+        free(entries);
+    }
+
+    bool uses_source(const char* source) const {
+        for (size_t index = 0; index < count; ++index)
+            if (!strcmp(entries[index].source, source)) return true;
+        return false;
+    }
+
+    bool uses_key(const char* key) const {
+        for (size_t index = 0; index < count; ++index)
+            if (!strcmp(entries[index].key, key)) return true;
+        return false;
+    }
+};
+
+static bool read_artifact_metadata_unlocked(const char* key, IconArtifactInfo* out) {
     char metadata_path[72];
-    snprintf(png_path, sizeof(png_path), "/icons/%s.png", key);
     snprintf(metadata_path, sizeof(metadata_path), "/icons/%s.meta", key);
     File metadata_file = Storage.open(metadata_path, "r");
     if (!metadata_file || metadata_file.size() > 256) {
@@ -391,8 +473,12 @@ static bool read_artifact_unlocked(const char* key, IconArtifactInfo* out) {
         return false;
     }
     BasicJsonDocument<PsramJsonAllocator> metadata(512);
-    const DeserializationError error = deserializeJson(metadata, metadata_file);
+    char bytes[256];
+    const size_t length = metadata_file.size();
+    const size_t read = metadata_file.readBytes(bytes, length);
     metadata_file.close();
+    if (read != length) return false;
+    const DeserializationError error = deserializeJson(metadata, bytes, length);
     if (error || metadata.overflowed()) return false;
     const char* stored_source = metadata["source_id"] | "";
     const uint8_t stored_kind = metadata["kind"] | (uint8_t)255;
@@ -402,6 +488,26 @@ static bool read_artifact_unlocked(const char* key, IconArtifactInfo* out) {
         !stored_width || !stored_height || stored_width > ICON_MAX_DIMENSION ||
         stored_height > ICON_MAX_DIMENSION) return false;
 
+    strlcpy(out->source_id, stored_source, sizeof(out->source_id));
+    out->kind = (IconKind)stored_kind;
+    out->width = stored_width;
+    out->height = stored_height;
+    out->render_key = metadata["render_key"] | (uint32_t)0;
+    return true;
+}
+
+static bool artifact_dimensions_match(const uint8_t* data, size_t length,
+                                      const IconArtifactInfo& info) {
+    unsigned width = 0, height = 0;
+    return png_dimensions_allowed(data, length, &width, &height) &&
+           width == info.width && height == info.height;
+}
+
+static bool read_artifact_unlocked(const char* key, IconArtifactInfo* out) {
+    IconArtifactInfo info = {};
+    if (!read_artifact_metadata_unlocked(key, &info)) return false;
+    char png_path[64];
+    snprintf(png_path, sizeof(png_path), "/icons/%s.png", key);
     File png_file = Storage.open(png_path, "r");
     if (!png_file || png_file.size() < 24 || png_file.size() > ICON_MAX_PNG_SIZE) {
         if (png_file) png_file.close();
@@ -410,15 +516,8 @@ static bool read_artifact_unlocked(const char* key, IconArtifactInfo* out) {
     uint8_t header[24];
     const size_t read = png_file.readBytes((char*)header, sizeof(header));
     png_file.close();
-    unsigned width = 0, height = 0;
-    if (read != sizeof(header) ||
-        !png_dimensions_allowed(header, sizeof(header), &width, &height) ||
-        width != stored_width || height != stored_height) return false;
-    strlcpy(out->source_id, stored_source, sizeof(out->source_id));
-    out->kind = (IconKind)stored_kind;
-    out->width = stored_width;
-    out->height = stored_height;
-    out->render_key = metadata["render_key"] | (uint32_t)0;
+    if (read != sizeof(header) || !artifact_dimensions_match(header, sizeof(header), info)) return false;
+    *out = info;
     return true;
 }
 
@@ -430,27 +529,115 @@ static bool artifact_matches_unlocked(const char* key, const char* source_id,
         (!render_key || info.render_key == render_key);
 }
 
-    static bool artifact_matches_for_preload(const char* key, const char* source_id,
-                         IconKind kind) {
-        if (!g_file_mutex) return false;
-        xSemaphoreTake(g_file_mutex, portMAX_DELAY);
-        const bool matches = source_matches_kind_unlocked(source_id, kind) &&
-                 artifact_matches_unlocked(key, source_id, kind);
-        xSemaphoreGive(g_file_mutex);
-        return matches;
-    }
+struct IconPreloadPass {
+    struct Source {
+        char id[CONFIG_ICON_SOURCE_ID_MAX_LEN];
+        IconKind kind;
+        bool valid;
+    };
+    Source* sources = nullptr;
+    size_t count = 0;
+    size_t capacity = 0;
+    bool cache_disabled = false;
+    uint32_t source_ms = 0;
+    uint32_t metadata_ms = 0;
+    uint32_t read_ms = 0;
+    uint32_t decode_ms = 0;
 
-static bool recover_icon_directory_entry(const char* directory) {
-    File dir = Storage.open(directory);
+    ~IconPreloadPass() { free(sources); }
+
+    // The file mutex is held for the pass, so cached validation cannot go stale.
+    bool source_matches(const char* id, IconKind kind) {
+        for (size_t index = 0; index < count; ++index)
+            if (sources[index].kind == kind && !strcmp(sources[index].id, id))
+                return sources[index].valid;
+        const uint32_t start = millis();
+        const bool valid = source_matches_kind_unlocked(id, kind);
+        source_ms += millis() - start;
+        if (cache_disabled) return valid;
+        if (count == capacity) {
+            const size_t new_capacity = capacity ? capacity * 2 : 16;
+            PsramJsonAllocator allocator;
+            auto* entries = static_cast<Source*>(
+                allocator.reallocate(sources, new_capacity * sizeof(Source)));
+            if (!entries) {
+                LOGW(TAG, "Unable to cache source validation; remaining icons will recheck sources");
+                cache_disabled = true;
+                return valid;
+            }
+            sources = entries;
+            capacity = new_capacity;
+        }
+        Source& entry = sources[count++];
+        strlcpy(entry.id, id, sizeof(entry.id));
+        entry.kind = kind;
+        entry.valid = valid;
+        return valid;
+    }
+};
+
+struct IconScanTiming {
+    uint32_t passes = 0;
+    uint32_t entries = 0;
+    uint32_t open_ms = 0;
+    uint32_t next_ms = 0;
+    uint32_t check_ms = 0;
+    uint32_t delete_ms = 0;
+    uint32_t retire_ms = 0;
+    uint32_t actions = 0;
+    uint32_t total_ms = 0;
+};
+
+static File open_icon_directory(const char* path, IconScanTiming* timing) {
+    const uint32_t start = timing ? millis() : 0;
+    File dir = Storage.open(path);
+    if (timing) {
+        ++timing->passes;
+        timing->open_ms += millis() - start;
+    }
+    return dir;
+}
+
+static bool next_icon_entry(File& dir, String& name, bool& is_directory, IconScanTiming* timing) {
+    const uint32_t start = timing ? millis() : 0;
+    name = dir.getNextFileName(&is_directory);
+    if (!name.length()) {
+        // Arduino's filename iterator also returns empty for unsupported entry
+        // types; openNextFile skips those rather than treating them as EOF.
+        File entry = dir.openNextFile();
+        if (entry) {
+            name = entry.name();
+            is_directory = entry.isDirectory();
+            entry.close();
+            if (!name.length()) LOGW(TAG, "Could not retain icon directory entry name");
+        }
+    }
+    if (timing) {
+        timing->next_ms += millis() - start;
+        if (name.length()) ++timing->entries;
+    }
+    return name.length() != 0;
+}
+
+static void log_icon_scan_timing(const char* phase, const IconScanTiming& timing) {
+    LOGI(TAG, "%s scan: passes=%u entries=%u actions=%u open=%ums next=%ums "
+              "check=%ums delete=%ums retire=%ums total=%ums",
+         phase, (unsigned)timing.passes, (unsigned)timing.entries, (unsigned)timing.actions,
+         (unsigned)timing.open_ms, (unsigned)timing.next_ms, (unsigned)timing.check_ms,
+         (unsigned)timing.delete_ms, (unsigned)timing.retire_ms,
+         (unsigned)timing.total_ms);
+}
+
+static bool recover_icon_directory_entry(const char* directory, IconScanTiming* timing) {
+    File dir = open_icon_directory(directory, timing);
     if (!dir || !dir.isDirectory()) return false;
-    File entry = dir.openNextFile();
-    while (entry) {
+    String entry;
+    bool is_directory = false;
+    while (next_icon_entry(dir, entry, is_directory, timing)) {
         char name[64] = {};
-        const char* raw_name = entry.name();
+        const char* raw_name = entry.c_str();
         const char* basename = raw_name ? strrchr(raw_name, '/') : nullptr;
         strlcpy(name, basename ? basename + 1 : (raw_name ? raw_name : ""), sizeof(name));
-        const bool is_directory = entry.isDirectory();
-        entry.close();
         if (!is_directory) {
             const size_t length = strlen(name);
             const bool temporary = length > 4 && strcmp(name + length - 4, ".tmp") == 0;
@@ -459,6 +646,7 @@ static bool recover_icon_directory_entry(const char* directory) {
                 char path[112];
                 snprintf(path, sizeof(path), "%s/%s", directory, name);
                 dir.close();
+                const uint32_t start = millis();
                 bool recovered;
                 if (temporary) {
                     recovered = Storage.remove(path);
@@ -468,11 +656,12 @@ static bool recover_icon_directory_entry(const char* directory) {
                     snprintf(target, sizeof(target), "%s/%s", directory, name);
                     recovered = Storage.exists(target) ? Storage.remove(path) : Storage.rename(path, target);
                 }
+                timing->delete_ms += millis() - start;
+                if (recovered) ++timing->actions;
                 if (!recovered) LOGW(TAG, "Could not recover icon file %s", path);
                 return recovered;
             }
         }
-        entry = dir.openNextFile();
     }
     dir.close();
     return false;
@@ -611,21 +800,32 @@ static bool cache_entry_buf(const char* id, const char* source_id,
 
 // Load an icon PNG from LittleFS, decode, and cache.
 // If cache_key is provided, the icon is cached under that key instead of fs_id.
-static bool load_from_fs(const char* fs_id, IconKind kind, const char* source_id,
-                         const char* cache_key = nullptr) {
+enum class IconLoadResult { InvalidArtifact, LoadFailed, Loaded };
+
+static IconLoadResult load_from_fs(const char* fs_id, IconKind kind, const char* source_id,
+                                   IconPreloadPass& pass, const char* cache_key = nullptr) {
+    IconArtifactInfo info = {};
+    uint32_t start = millis();
+    const bool matches = read_artifact_metadata_unlocked(fs_id, &info) &&
+                         !strcmp(info.source_id, source_id) && info.kind == kind;
+    pass.metadata_ms += millis() - start;
+    if (!matches) return IconLoadResult::InvalidArtifact;
+    start = millis();
     char path[64];
     snprintf(path, sizeof(path), "/icons/%s.png", fs_id);
 
-    if (!Storage.exists(path)) return false;
-
     File f = Storage.open(path, "r");
-    if (!f) return false;
+    if (!f) {
+        pass.read_ms += millis() - start;
+        return IconLoadResult::InvalidArtifact;
+    }
 
     size_t file_size = f.size();
-    if (file_size < 8 || file_size > ICON_MAX_PNG_SIZE) {
+    if (file_size < 24 || file_size > ICON_MAX_PNG_SIZE) {
         f.close();
         LOGW(TAG, "Invalid file size for '%s': %u", fs_id, (unsigned)file_size);
-        return false;
+        pass.read_ms += millis() - start;
+        return IconLoadResult::InvalidArtifact;
     }
 
     uint8_t* buf = nullptr;
@@ -637,32 +837,37 @@ static bool load_from_fs(const char* fs_id, IconKind kind, const char* source_id
     if (!buf) {
         f.close();
         LOGE(TAG, "OOM reading '%s' (%u bytes)", fs_id, (unsigned)file_size);
-        return false;
+        pass.read_ms += millis() - start;
+        return IconLoadResult::LoadFailed;
     }
 
     size_t read = f.readBytes((char*)buf, file_size);
     f.close();
+    pass.read_ms += millis() - start;
 
     if (read != file_size) {
         free(buf);
         LOGW(TAG, "Short read for '%s': %u/%u", fs_id, (unsigned)read, (unsigned)file_size);
-        return false;
+        return IconLoadResult::LoadFailed;
     }
 
     unsigned width = 0;
     unsigned height = 0;
-    if (!png_dimensions_allowed(buf, file_size, &width, &height)) {
+    if (!png_dimensions_allowed(buf, file_size, &width, &height) ||
+        width != info.width || height != info.height) {
         free(buf);
-        LOGW(TAG, "PNG rejected for '%s': %ux%u exceeds %u px limit or has invalid IHDR",
-             fs_id, width, height, ICON_MAX_DIMENSION);
-        return false;
+        LOGW(TAG, "PNG rejected for '%s': %ux%u invalid or differs from metadata %ux%u",
+             fs_id, width, height, (unsigned)info.width, (unsigned)info.height);
+        return IconLoadResult::InvalidArtifact;
     }
 
     // Decode PNG → LVGL draw buffer
+    start = millis();
     lv_draw_buf_t* draw_buf = decode_png(buf, file_size, fs_id);
+    pass.decode_ms += millis() - start;
     free(buf);
 
-    if (!draw_buf) return false;
+    if (!draw_buf) return IconLoadResult::LoadFailed;
 
     const char* key = cache_key ? cache_key : fs_id;
     LOGT(TAG, "Decoded '%s': %ux%u stride=%u cf=%u%s",
@@ -670,7 +875,8 @@ static bool load_from_fs(const char* fs_id, IconKind kind, const char* source_id
          draw_buf->header.stride, draw_buf->header.cf,
          cache_key ? " (alias)" : "");
 
-    return cache_entry_buf(key, source_id, kind, draw_buf);
+    return cache_entry_buf(key, source_id, kind, draw_buf)
+        ? IconLoadResult::Loaded : IconLoadResult::LoadFailed;
 }
 
 // ============================================================================
@@ -709,8 +915,16 @@ void icon_store_init() {
         Storage.mkdir("/icon_sources");
         LOGI(TAG, "Created /icon_sources directory");
     }
-    while (recover_icon_directory_entry("/icons")) {}
-    while (recover_icon_directory_entry("/icon_sources")) {}
+    IconScanTiming icon_recovery;
+    IconScanTiming source_recovery;
+    uint32_t recovery_start = millis();
+    while (recover_icon_directory_entry("/icons", &icon_recovery)) {}
+    icon_recovery.total_ms = millis() - recovery_start;
+    recovery_start = millis();
+    while (recover_icon_directory_entry("/icon_sources", &source_recovery)) {}
+    source_recovery.total_ms = millis() - recovery_start;
+    log_icon_scan_timing("Icon recovery", icon_recovery);
+    log_icon_scan_timing("Source recovery", source_recovery);
     LOGI(TAG, "Initialized");
 }
 
@@ -823,70 +1037,100 @@ bool icon_store_prepare_artifact(const char* key, IconArtifactInfo* out) {
     return read_artifact(key, out, true);
 }
 
-bool icon_store_source_delete_if_unreferenced(const char* source_id) {
-    if (!pad_icon_source_id_valid(source_id) || !g_file_mutex ||
-        xSemaphoreTake(g_file_mutex, 0) != pdTRUE) return false;
-    bool referenced = false;
-    const bool scanned = source_reference_scan(source_id, &referenced);
-    bool removed = false;
-    if (scanned && !referenced) {
-        invalidate_validated_artifacts();
-        char path[64];
-        removed = true;
-        for (const char* extension : {"png", "json"}) {
-            snprintf(path, sizeof(path), "/icon_sources/%s.%s", source_id, extension);
-            if (Storage.exists(path) && !Storage.remove(path)) removed = false;
+static bool delete_unreferenced_source(const char* source_id, const PadIconReferences& references,
+                                       IconScanTiming* timing = nullptr) {
+    if (!references.readable) return false;
+    const uint32_t check_start = timing ? millis() : 0;
+    const bool referenced = references.uses_source(source_id);
+    if (timing) timing->check_ms += millis() - check_start;
+    if (referenced) return false;
+    const uint32_t delete_start = timing ? millis() : 0;
+    invalidate_validated_artifacts();
+    char path[64];
+    bool removed = true;
+    for (const char* extension : {"png", "json"}) {
+        snprintf(path, sizeof(path), "/icon_sources/%s.%s", source_id, extension);
+        if (Storage.exists(path) && !Storage.remove(path)) {
+            LOGW(TAG, "Could not remove orphaned icon source %s", path);
+            removed = false;
         }
     }
-    xSemaphoreGive(g_file_mutex);
-    return scanned && removed;
+    if (timing) {
+        timing->delete_ms += millis() - delete_start;
+        if (removed) ++timing->actions;
+    }
+    return removed;
 }
 
-void icon_store_cleanup_unreferenced_sources() {
-    for (uint8_t page = 0; page < MAX_PADS; ++page) {
-        if (!pad_config_exists(page)) continue;
-        const PadConfig* config = pad_config_acquire(page);
-        if (!config) {
-            LOGW(TAG, "Skipping source cleanup: pad %u config could not be read", page);
-            return;
-        }
-        pad_config_release(config);
-    }
+bool icon_store_source_delete_if_unreferenced(const char* source_id) {
+    if (!pad_icon_source_id_valid(source_id)) return false;
+    const PadConfigMutationGuard guard;
+    if (!guard || !g_file_mutex ||
+        xSemaphoreTake(g_file_mutex, 0) != pdTRUE) return false;
+    const PadIconReferences references;
+    if (!references.readable)
+        LOGW(TAG, "Skipping source deletion: pad reference snapshot unavailable");
+    const bool removed = delete_unreferenced_source(source_id, references);
+    xSemaphoreGive(g_file_mutex);
+    return removed;
+}
 
+static void cleanup_unreferenced_sources(const PadIconReferences& references,
+                                         IconScanTiming* timing = nullptr) {
     uint32_t removed_files = 0;
     size_t reclaimed = 0;
     for (;;) {
         if (ota_activity_is_active()) break;
-        File dir = Storage.open("/icon_sources");
+        File dir = open_icon_directory("/icon_sources", timing);
         if (!dir || !dir.isDirectory()) break;
         bool removed = false;
-        File entry = dir.openNextFile();
-        while (entry) {
+        String entry;
+        bool is_directory = false;
+        while (next_icon_entry(dir, entry, is_directory, timing)) {
             char name[48] = {};
-            const char* raw_name = entry.name();
+            const char* raw_name = entry.c_str();
             const char* basename = raw_name ? strrchr(raw_name, '/') : nullptr;
             strlcpy(name, basename ? basename + 1 : (raw_name ? raw_name : ""), sizeof(name));
-            const bool is_directory = entry.isDirectory();
-            const size_t file_size = entry.size();
-            entry.close();
             const size_t length = strlen(name);
             if (!is_directory && ((length == 31 && strcmp(name + 26, ".json") == 0) ||
                                   (length == 30 && strcmp(name + 26, ".png") == 0))) {
+                char path[80];
+                snprintf(path, sizeof(path), "/icon_sources/%s", name);
                 name[26] = '\0';
-                if (pad_icon_source_id_valid(name) && icon_store_source_delete_if_unreferenced(name)) {
-                    ++removed_files;
-                    reclaimed += file_size;
-                    removed = true;
-                    break;
+                const uint32_t check_start = timing ? millis() : 0;
+                const bool valid_unreferenced = pad_icon_source_id_valid(name) && !references.uses_source(name);
+                if (timing) timing->check_ms += millis() - check_start;
+                if (valid_unreferenced) {
+                    File file = Storage.open(path, "r");
+                    if (!file) {
+                        LOGW(TAG, "Could not open orphaned icon source %s", path);
+                        break;
+                    }
+                    const size_t file_size = file.size();
+                    file.close();
+                    if (delete_unreferenced_source(name, references, timing)) {
+                        ++removed_files;
+                        reclaimed += file_size;
+                        removed = true;
+                        break;
+                    }
                 }
             }
-            entry = dir.openNextFile();
         }
         dir.close();
         if (!removed) break;
     }
     if (removed_files) LOGI(TAG, "Source cleanup: removed %u files, reclaimed %u bytes",
                            (unsigned)removed_files, (unsigned)reclaimed);
+}
+
+void icon_store_cleanup_unreferenced_sources() {
+    const PadConfigMutationGuard guard;
+    if (!guard || !g_file_mutex || xSemaphoreTake(g_file_mutex, 0) != pdTRUE) return;
+    const PadIconReferences references;
+    if (references.readable) cleanup_unreferenced_sources(references);
+    else LOGW(TAG, "Skipping source cleanup: pad reference snapshot unavailable");
+    xSemaphoreGive(g_file_mutex);
 }
 
 struct IconSourceUpload {
@@ -1139,7 +1383,7 @@ bool icon_store_lookup(const char* id, IconRef* out) {
 }
 
 // Preload icons for a single pad (with template fallback).
-static uint16_t preload_pad_icons(uint8_t page, const PadConfig* cfg) {
+static uint16_t preload_pad_icons(uint8_t page, const PadConfig* cfg, IconPreloadPass& pass) {
     uint16_t loaded = 0;
     for (uint8_t i = 0; i < cfg->button_count; i++) {
         struct Context {
@@ -1148,7 +1392,9 @@ static uint16_t preload_pad_icons(uint8_t page, const PadConfig* cfg) {
             const ScreenButtonConfig* button;
             const char* layer;
             uint16_t* loaded;
-        } context{page, cfg, &cfg->buttons[i], i >= cfg->main_button_count ? "overlay" : "main", &loaded};
+            IconPreloadPass* pass;
+        } context{page, cfg, &cfg->buttons[i], i >= cfg->main_button_count ? "overlay" : "main",
+                  &loaded, &pass};
         visit_button_icons(cfg->buttons[i],
             [](uint8_t slot, const char* source, IconKind kind, void* opaque) {
                 auto& context = *static_cast<Context*>(opaque);
@@ -1158,8 +1404,10 @@ static uint16_t preload_pad_icons(uint8_t page, const PadConfig* cfg) {
                 else icon_store_build_key(context.page, context.layer, context.button->col,
                                           context.button->row, key, sizeof(key));
                 if (cache_entry_matches(key, source, kind) || !invalidate_cache_entry(key, context.page)) return;
-                if (artifact_matches_for_preload(key, source, kind)) {
-                    if (load_from_fs(key, kind, source)) ++*context.loaded;
+                if (!context.pass->source_matches(source, kind)) return;
+                const IconLoadResult result = load_from_fs(key, kind, source, *context.pass);
+                if (result != IconLoadResult::InvalidArtifact) {
+                    if (result == IconLoadResult::Loaded) ++*context.loaded;
                     return;
                 }
                 const int8_t parent = context.config->template_pad;
@@ -1169,39 +1417,66 @@ static uint16_t preload_pad_icons(uint8_t page, const PadConfig* cfg) {
                                                       context.button->row, slot, parent_key, sizeof(parent_key));
                 else icon_store_build_key((uint8_t)parent, "main", context.button->col,
                                           context.button->row, parent_key, sizeof(parent_key));
-                if (artifact_matches_for_preload(parent_key, source, kind) &&
-                    load_from_fs(parent_key, kind, source, key)) ++*context.loaded;
+                if (load_from_fs(parent_key, kind, source, *context.pass, key) == IconLoadResult::Loaded)
+                    ++*context.loaded;
             }, &context);
     }
     return loaded;
 }
 
-static void cleanup_all_pad_icon_files();
+static void cleanup_icon_files(uint8_t page, const PadIconReferences* references,
+                               IconScanTiming* timing = nullptr);
 
 void icon_store_preload_pad_pages() {
     if (g_ready.load()) return;
+    const PadConfigMutationGuard guard;
+    if (!guard) {
+        LOGE(TAG, "Cannot preload icons without pad configuration lock");
+        return;
+    }
+    if (g_ready.load()) return;
+    if (!g_file_mutex) {
+        LOGE(TAG, "Cannot preload icons without file mutex");
+        return;
+    }
+    const uint32_t start = millis();
+    xSemaphoreTake(g_file_mutex, portMAX_DELAY);
+    const PadIconReferences references;
+    IconPreloadPass pass;
     uint16_t loaded = 0;
-    bool readable = true;
 
     for (uint8_t page = 0; page < MAX_PADS; page++) {
-        const PadConfig* cfg = pad_config_acquire(page);
-        if (!cfg) {
-            if (pad_config_exists(page)) readable = false;
-            continue;
-        }
-
-        loaded += preload_pad_icons(page, cfg);
-        pad_config_release(cfg);
+        const PadConfig* cfg = references.configs[page];
+        if (cfg) loaded += preload_pad_icons(page, cfg, pass);
     }
 
-    if (readable) {
-        icon_store_cleanup_unreferenced_sources();
-        cleanup_all_pad_icon_files();
+    const uint32_t load_ms = millis() - start;
+    uint32_t cleanup_start = millis();
+    IconScanTiming source_cleanup;
+    IconScanTiming artifact_cleanup;
+    if (references.readable) {
+        cleanup_unreferenced_sources(references, &source_cleanup);
     } else {
-        LOGW(TAG, "Skipping boot icon cleanup: saved pad config could not be read");
+        LOGW(TAG, "Skipping boot icon cleanup: pad reference snapshot unavailable");
     }
+    const uint32_t source_cleanup_ms = millis() - cleanup_start;
+    source_cleanup.total_ms = source_cleanup_ms;
+    xSemaphoreGive(g_file_mutex);
+    cleanup_start = millis();
+    if (references.readable) cleanup_icon_files(MAX_PADS, &references, &artifact_cleanup);
+    const uint32_t artifact_cleanup_ms = millis() - cleanup_start;
+    artifact_cleanup.total_ms = artifact_cleanup_ms;
     g_ready.store(true);
 
+    if (references.readable) {
+        log_icon_scan_timing("Source cleanup", source_cleanup);
+        log_icon_scan_timing("Artifact cleanup", artifact_cleanup);
+    }
+    LOGI(TAG, "Preload timing: source=%ums metadata=%ums read=%ums decode=%ums load=%ums "
+              "source_cleanup=%ums artifact_cleanup=%ums total=%ums",
+         (unsigned)pass.source_ms, (unsigned)pass.metadata_ms, (unsigned)pass.read_ms,
+         (unsigned)pass.decode_ms, (unsigned)load_ms, (unsigned)source_cleanup_ms,
+         (unsigned)artifact_cleanup_ms, (unsigned)(millis() - start));
     LOGI(TAG, "Preload complete: %u icons loaded, %u total cached",
          loaded, g_count);
 }
@@ -1212,7 +1487,15 @@ void icon_store_preload_pad(uint8_t page) {
     const PadConfig* cfg = pad_config_acquire(page);
     if (!cfg) return;
 
-    uint16_t loaded = preload_pad_icons(page, cfg);
+    if (!g_file_mutex) {
+        LOGE(TAG, "Cannot preload pad icons without file mutex");
+        pad_config_release(cfg);
+        return;
+    }
+    xSemaphoreTake(g_file_mutex, portMAX_DELAY);
+    IconPreloadPass pass;
+    uint16_t loaded = preload_pad_icons(page, cfg, pass);
+    xSemaphoreGive(g_file_mutex);
     pad_config_release(cfg);
 
     if (loaded > 0) {
@@ -1261,7 +1544,8 @@ static void retire_unused_icon_cache(uint8_t page, const PadConfig* const* confi
     cache_unlock();
 }
 
-static void cleanup_icon_files(uint8_t page, const PadConfig* const* configs) {
+static void cleanup_icon_files(uint8_t page, const PadIconReferences* references,
+                               IconScanTiming* timing) {
     if (ota_activity_is_active()) return;
     if (!g_file_mutex || xSemaphoreTake(g_file_mutex, 0) != pdTRUE) return;
     invalidate_validated_artifacts();
@@ -1270,19 +1554,20 @@ static void cleanup_icon_files(uint8_t page, const PadConfig* const* configs) {
     size_t reclaimed = 0;
     for (;;) {
         if (ota_activity_is_active()) break;
-        File dir = Storage.open("/icons");
+        File dir = open_icon_directory("/icons", timing);
         if (!dir || !dir.isDirectory()) break;
         char candidate[64] = {};
         size_t candidate_size = 0;
-        File entry = dir.openNextFile();
-        while (entry) {
-            const char* raw_name = entry.name();
+        String entry;
+        bool is_directory = false;
+        while (next_icon_entry(dir, entry, is_directory, timing)) {
+            const char* raw_name = entry.c_str();
             const char* basename = raw_name ? strrchr(raw_name, '/') : nullptr;
             const char* name = basename ? basename + 1 : raw_name;
             const uint8_t file_page = page_from_icon_id(name);
             char prefix[16];
             snprintf(prefix, sizeof(prefix), "pad_%u_", file_page);
-            if (!entry.isDirectory() && name && strlen(name) < sizeof(candidate) &&
+            if (!is_directory && name && strlen(name) < sizeof(candidate) &&
                 file_page < MAX_PADS && (page == MAX_PADS || page == file_page) &&
                 strncmp(name, prefix, strlen(prefix)) == 0) {
                 bool keep = false;
@@ -1291,57 +1576,47 @@ static void cleanup_icon_files(uint8_t page, const PadConfig* const* configs) {
                     (size_t)(extension - name) < CONFIG_ICON_KEY_MAX_LEN) {
                     char key[CONFIG_ICON_KEY_MAX_LEN] = {};
                     memcpy(key, name, extension - name);
-                    keep = pad_uses_icon_key(file_page, configs[file_page], key);
+                    const uint32_t check_start = timing ? millis() : 0;
+                    keep = references && references->uses_key(key);
+                    if (timing) timing->check_ms += millis() - check_start;
                 }
                 if (!keep) {
                     strlcpy(candidate, name, sizeof(candidate));
-                    candidate_size = entry.size();
-                    entry.close();
                     break;
                 }
             }
-            entry.close();
-            entry = dir.openNextFile();
         }
         dir.close();
         if (!candidate[0]) break;
         char path[80];
         snprintf(path, sizeof(path), "/icons/%s", candidate);
-        if (!Storage.remove(path)) {
+        File file = Storage.open(path, "r");
+        if (!file) {
+            LOGW(TAG, "Could not open orphaned icon file %s", path);
+            break;
+        }
+        candidate_size = file.size();
+        file.close();
+        const uint32_t delete_start = timing ? millis() : 0;
+        const bool deleted = Storage.remove(path);
+        if (timing) timing->delete_ms += millis() - delete_start;
+        if (!deleted) {
             LOGW(TAG, "Could not remove orphaned icon file %s", path);
             break;
         }
         ++removed;
+        if (timing) ++timing->actions;
         reclaimed += candidate_size;
     }
-    if (!ota_activity_is_active()) retire_unused_icon_cache(page, configs);
+    if (!ota_activity_is_active()) {
+        const uint32_t retire_start = timing ? millis() : 0;
+        const PadConfig* empty_configs[MAX_PADS] = {};
+        retire_unused_icon_cache(page, references ? references->configs : empty_configs);
+        if (timing) timing->retire_ms += millis() - retire_start;
+    }
     xSemaphoreGive(g_file_mutex);
     if (removed) LOGI(TAG, "Icon cleanup: removed %u files, reclaimed %u bytes",
                      (unsigned)removed, (unsigned)reclaimed);
-}
-
-static void cleanup_pad_icon_files(uint8_t page, const PadConfig* config) {
-    if (page >= MAX_PADS) return;
-    const PadConfig* configs[MAX_PADS] = {};
-    configs[page] = config;
-    cleanup_icon_files(page, configs);
-}
-
-static void cleanup_all_pad_icon_files() {
-    const PadConfig* configs[MAX_PADS] = {};
-    bool readable = true;
-    for (uint8_t page = 0; page < MAX_PADS; ++page) {
-        configs[page] = pad_config_acquire(page);
-        if (!configs[page] && pad_config_exists(page)) readable = false;
-    }
-    if (readable) {
-        cleanup_icon_files(MAX_PADS, configs);
-    } else {
-        LOGW(TAG, "Skipping boot icon cleanup: saved pad config could not be read");
-    }
-    for (uint8_t page = 0; page < MAX_PADS; ++page) {
-        pad_config_release(configs[page]);
-    }
 }
 
 void icon_store_retire_unused_pad_icons(uint8_t page) {
@@ -1359,7 +1634,7 @@ void icon_store_retire_unused_pad_icons(uint8_t page) {
 
 void icon_store_delete_page_icons(uint8_t page) {
     if (page >= MAX_PADS) return;
-    cleanup_pad_icon_files(page, nullptr);
+    cleanup_icon_files(page, nullptr);
     char prefix[16];
     snprintf(prefix, sizeof(prefix), "pad_%u_", page);
     invalidate_entries_with_prefix(prefix, page);

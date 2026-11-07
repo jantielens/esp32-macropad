@@ -3602,6 +3602,29 @@ when an update starts.
 Source and generated-icon uploads remain unavailable until initial icon preload
 and boot cleanup finish, even though the portal may already be listening.
 
+Boot still validates and loads icons for every pad before displaying the initial
+pad. Source metadata is read in buffered chunks and validation is reused within
+the preload pass while the icon file mutex prevents replacements. Each generated
+PNG is read once; its header and dimensions are checked against its metadata
+before decoding. Cleanup uses one retained pad-reference snapshot for source
+and generated-file checks, and is skipped if that snapshot is unavailable. Pad
+saves, deletes, and cache rebuilds wait until snapshot-based cleanup completes.
+Recovery and cleanup iterate names without opening every entry; cleanup opens
+an unreferenced file only when it needs its size before deletion. Unsupported
+directory entry types are skipped using the filesystem's regular iterator.
+
+The `IconStore` boot log reports `Preload timing` in milliseconds: `source`,
+`metadata`, `read`, and `decode` break down loading; `load` includes the reference
+snapshot and cache work. `source_cleanup` and `artifact_cleanup` measure the
+two cleanup phases, and `total` covers the complete preload operation. Use these
+timings to distinguish filesystem overhead from PNG decoding on the device.
+Separate recovery and cleanup scan lines report directory passes, entries,
+successful recovery or cleanup actions, and time spent opening directories,
+advancing entries, checking references, deleting or recovering files, and
+retiring cached buffers. Totals include other scan work. These are diagnostic
+wall-clock measurements; per-operation millisecond rounding and other tasks can
+affect them.
+
 The browser still packages local PNG sources in export JSON as
 `{"kind":"color","media_type":"image/png","data":"<canonical base64>"}`.
 `ICON_MAX_SOURCE_JSON_SIZE` (704 KiB) bounds that portable representation, not

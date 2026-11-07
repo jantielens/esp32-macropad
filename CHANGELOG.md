@@ -59,6 +59,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Reduce icon-preload filesystem work with buffered metadata reads, one PNG
+  read per icon, reused source validation, and a shared cleanup reference
+  snapshot. Scan recovery and cleanup directories by filename without opening
+  every entry. Keep all-pad loading before boot completes and log phase timings.
 * Choose a suitable button width for Button Builder templates based on the
   grid and available space, falling back to a smaller width when needed.
 * Replace widget-specific layouts with a shared group of up to three labels

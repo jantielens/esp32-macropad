@@ -112,6 +112,8 @@ bool icon_store_lookup(const char* id, IconRef* out);
 
 // Preload icons for all pad pages. Scans pad configs for source references,
 // computes positional keys, and loads matching generated files.
+// Reuses source validation while holding the file mutex, then performs cleanup
+// from the same retained pad-reference snapshot and logs phase timings.
 // Call from setup() after pad_config_init() and icon_store_init().
 void icon_store_preload_pad_pages();
 

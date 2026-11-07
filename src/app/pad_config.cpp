@@ -20,6 +20,8 @@
 
 #include <esp_heap_caps.h>
 #include <esp_partition.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 
 #include <stdio.h>
 #include <atomic>
@@ -29,6 +31,7 @@
 #define TAG "PadCfg"
 
 static bool g_fs_mounted = false;
+static std::atomic<SemaphoreHandle_t> g_mutation_mutex{nullptr};
 static uint32_t g_generation = 0;
 static std::atomic<uint32_t> g_eligible_mask{0};
 
@@ -495,10 +498,27 @@ static bool parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
 // ============================================================================
 
 bool pad_config_init() {
-    if (g_fs_mounted) return true;
+    SemaphoreHandle_t mutex = g_mutation_mutex.load(std::memory_order_acquire);
+    if (!mutex) {
+        mutex = xSemaphoreCreateMutex();
+        if (!mutex) {
+            LOGE(TAG, "Failed to create pad mutation mutex");
+            return false;
+        }
+        g_mutation_mutex.store(mutex, std::memory_order_release);
+    }
+    if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) {
+        LOGE(TAG, "Failed to lock pad configuration for initialization");
+        return false;
+    }
+    if (g_fs_mounted) {
+        xSemaphoreGive(mutex);
+        return true;
+    }
 
     if (!storage_mount()) {
         LOGW(TAG, "Storage mount failed — pad configs will not persist");
+        xSemaphoreGive(mutex);
         return false;
     }
     g_fs_mounted = true;
@@ -538,7 +558,26 @@ bool pad_config_init() {
         LOGI(TAG, "Configs cached, gen=%u", g_generation);
     }
 
+    xSemaphoreGive(mutex);
     return true;
+}
+
+bool pad_config_lock_mutations() {
+    SemaphoreHandle_t mutex = g_mutation_mutex.load(std::memory_order_acquire);
+    if (!mutex || xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) {
+        LOGW(TAG, "Pad configuration lock unavailable");
+        return false;
+    }
+    if (!g_fs_mounted) {
+        xSemaphoreGive(mutex);
+        LOGW(TAG, "Pad configuration is not initialized");
+        return false;
+    }
+    return true;
+}
+
+void pad_config_unlock_mutations() {
+    xSemaphoreGive(g_mutation_mutex.load(std::memory_order_acquire));
 }
 
 // Internal: read and parse page config from flash. Only call from a task
@@ -814,7 +853,8 @@ static bool cache_update(uint8_t page) {
 }
 
 void pad_config_rebuild_all_caches() {
-    if (!g_fs_mounted) return;
+    const PadConfigMutationGuard guard;
+    if (!guard) return;
     bool refresh_ok = true;
     for (uint8_t i = 0; i < MAX_PADS; i++) {
         if (!pad_config_exists(i)) continue;
@@ -951,8 +991,12 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
                          const char** error) {
     if (error) *error = nullptr;
     if (page >= MAX_PADS) return false;
-    if (!g_fs_mounted) return false;
     if (!json || len == 0 || len > 64 * 1024) return false;
+    const PadConfigMutationGuard guard;
+    if (!guard) {
+        if (error) *error = "pad configuration unavailable";
+        return false;
+    }
 
     [[maybe_unused]] const uint32_t started_ms = millis();
     BasicJsonDocument<PsramJsonAllocator> doc(len * 2 + 256);
@@ -1067,7 +1111,8 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
 
 bool pad_config_delete(uint8_t page) {
     if (page >= MAX_PADS) return false;
-    if (!g_fs_mounted) return false;
+    const PadConfigMutationGuard guard;
+    if (!guard) return false;
 
     char path[32];
     pad_config_path(page, path, sizeof(path));
