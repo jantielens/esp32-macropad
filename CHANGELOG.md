@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-11-06
+ms.date: 2026-11-07
 ms.topic: reference
 ---
 
@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add an Option selector widget with up to five labeled or icon choices.
+  Run shared actions with the selected value, and choose no selection, a
+  temporary local selection, or a selection reported by a binding. Changing
+  options requires pointer input.
+  See [Option selector](docs/user/widgets/option-selector.md).
 * Add a **Show a value with icon and history** Button Builder template with a
   suggested icon and a shared initial accent color for the icon and history
   line. See [create a button from a source](docs/user/pads/editing.md#create-a-button-from-a-source).
