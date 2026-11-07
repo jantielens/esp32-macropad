@@ -12,7 +12,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [1.46.0] - 2026-11-07
 
 > [!WARNING]
 > The shared button/widget layout replaces the previous specialized widget
@@ -24,47 +24,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* Add an Option selector widget with up to five labeled or icon choices.
-  Run shared actions with the selected value, and choose no selection, a
-  temporary local selection, or a selection reported by a binding. Changing
-  options requires pointer input.
-  See [Option selector](docs/user/widgets/option-selector.md).
-* Add a **Show a value with icon and history** Button Builder template with a
-  suggested icon and a shared initial accent color for the icon and history
-  line. See [create a button from a source](docs/user/pads/editing.md#create-a-button-from-a-source).
-* Add opt-in Sparkline area fills with shared 0-100% opacity, per-series
-  bound colors, and preserved history gaps. Add circular icon badges with
-  bindable or automatically blended backgrounds and adjustable padding that
-  follow shared icon layouts. Fill and badges default to off. Material icon
-  colors can follow text or use a separate color or binding; automatic badges
-  blend the resolved icon color with the button background.
-  Settings round-trip through pad editing
-  and import/export. See [Sparkline](docs/user/widgets/sparkline.md) and
-  [icon badges](docs/user/pads/appearance.md#add-an-icon-badge).
-* Add a Face widget with Robot Eyes and Doodle Buddy styles, eight emotions,
-  irregular blinking, wandering gaze, and smooth emotion transitions. Use
-  bindings to make the face react to your data, and choose Still liveliness
-  to disable idle motion while keeping emotion changes. Interactive e-paper
-  supports motion at its configured polling and presentation cadence.
-  See [Face widget](docs/user/widgets/README.md#face).
 * Add up to four external HTTP or HTTPS JSON data sources for display bindings,
   such as weather data. Configure refresh intervals in **Connectivity > External
   Data**, select JSON fields with `[ext:source;path]`, and use the binding
   builder to preview cached values and source statistics. Failed refreshes
   retain the last value. Saved URLs are visible in the portal and configuration
   API. See [external JSON data](docs/user/pads/data-sources.md#read-external-json).
-* Let MCP assistants configure external JSON sources and inspect cached fields
-  for use in pad bindings. Source writes need control permission; inspection
-  needs pad-authoring permission. Prefer keyless URLs.
+  MCP assistants can configure sources and inspect cached fields; source writes
+  need control permission and inspection needs pad-authoring permission.
+  Prefer keyless URLs.
+* Add a Face widget with Robot Eyes and Doodle Buddy styles, eight emotions,
+  irregular blinking, wandering gaze, and smooth emotion transitions. Its
+  artwork follows the button text color, including live bindings. Use bindings
+  to make the face react to your data, and choose Still liveliness to disable
+  idle motion while keeping emotion changes. Interactive e-paper supports motion
+  at its configured polling and presentation cadence.
+  See [Face widget](docs/user/widgets/README.md#face).
+* Add an Option selector widget with up to five labeled or icon choices.
+  Run shared actions with the selected value, and choose no selection, a
+  temporary local selection, or a selection reported by a binding. Changing
+  options requires pointer input.
+  See [Option selector](docs/user/widgets/option-selector.md).
+* Add opt-in Sparkline area fills with shared 0-100% opacity, per-series
+  bound colors, and preserved history gaps. Add circular icon badges with
+  bindable or automatically blended backgrounds and adjustable padding that
+  follow shared icon layouts. Fill and badges default to off. Material icon
+  colors can follow text or use a separate color or binding; automatic badges
+  blend the resolved icon color with the button background.
+  Settings round-trip through pad editing and import/export.
+  See [Sparkline](docs/user/widgets/sparkline.md) and
+  [icon badges](docs/user/pads/appearance.md#add-an-icon-badge).
+* Add a **Show a value with icon and history** Button Builder template with a
+  suggested icon and a shared initial accent color for the icon and history
+  line. See [create a button from a source](docs/user/pads/editing.md#create-a-button-from-a-source).
 
 ### Changed
 
-* Reduce icon-preload filesystem work with buffered metadata reads, one PNG
-  read per icon, reused source validation, and a shared cleanup reference
-  snapshot. Scan recovery and cleanup directories by filename without opening
-  every entry. Keep all-pad loading before boot completes and log phase timings.
-* Choose a suitable button width for Button Builder templates based on the
-  grid and available space, falling back to a smaller width when needed.
 * Replace widget-specific layouts with a shared group of up to three labels
   and an icon, positioned above, below, left, or right of the widget.
   Configure icon placement independently, and choose Auto sizing or a fixed
@@ -75,6 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   controls by default; choose **Beside widget** for the split layout. Group
   sizing does not change their tap zones or actions.
   See [button appearance](docs/user/pads/appearance.md#arrange-button-content).
+* Reduce icon-preload filesystem work when loading pads at startup.
 * Restore large, subdued widget-type icons in the portal pad preview. Keep
   them inside the widget region, scale them down on small buttons, and prevent
   them from intercepting clicks or consuming label/icon layout space. Centered
@@ -88,6 +84,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bindings. Simplify the Expression builder's output and validation messages,
   and allow unsupported values to be replaced explicitly.
   See [Expressions](docs/user/pads/expressions.md).
+* Choose a suitable button width for Button Builder templates based on the
+  grid and available space, falling back to a smaller width when needed.
 
 ### Fixed
 
@@ -97,15 +95,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Make small buttons selectable in the pad editor and scale resize grips to
   fit selected buttons. Keep the button selected after resizing.
   See [move and resize](docs/user/pads/editing.md#move-and-resize).
-* Make Face artwork follow the button text color, including inherited defaults,
-  button overrides, and live color bindings, instead of the widget container's
-  theme color.
 * Prevent icons from reloading in the pad editor when moving or resizing
   buttons and widgets.
-* Correct shared label sizing, including recovery from ellipsis truncation,
-  and Gauge caption bounds when widget regions resize. Preserve Mousepad and
-  Gamepad input ownership; resizing cancels only the affected widget's gesture,
-  not held input on other widgets.
+* Fit horizontal Bar chart captions to their text.
 * Allow large MCP tool results without the copied-string size limit that can
   reject capability responses.
 * Reduce stack usage while parsing and saving pads to prevent crashes with

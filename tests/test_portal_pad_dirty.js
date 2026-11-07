@@ -21,6 +21,10 @@ const elements = new Map([
 	['pad-edit-image-section', { style: {} }],
 	['pad-edit-background-image-section', { style: {} }],
 	['pad-edit-bg-image-scale-group', { style: {} }],
+	['pad-edit-rocker-group-layout-group', { style: {} }],
+	['pad-edit-content-layout-group', { style: {} }],
+	['pad-edit-group-width-group', { style: {} }],
+	['pad-edit-rocker-group-layout', { value: 'center' }],
 	['pad-edit-widget-type', { value: '' }]
 ]);
 vm.createContext(context);
@@ -393,6 +397,7 @@ const workspaceContext = {
 	revisions: 0,
 	padRenderGrid() {},
 	padUpdateButtonPreview() {},
+	padContentFitWarning() {},
 	padPvHide() {},
 	padDialogBuildButton() { return { col: 0, row: 0, label_center: draftInput.value }; },
 	padDialogValidateButton() { if (draftInput.value === '[unfinished') throw new Error('Incomplete binding'); },

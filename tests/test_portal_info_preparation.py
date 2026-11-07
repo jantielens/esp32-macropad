@@ -72,6 +72,11 @@ static bool ota_activity_is_active() { return ota_active; }
 static int g_file_mutex = 1;
 static bool xSemaphoreTake(int, int) { return true; }
 static void xSemaphoreGive(int) {}
+using SemaphoreHandle_t = std::mutex*;
+static constexpr int portMAX_DELAY = 0;
+static SemaphoreHandle_t xSemaphoreCreateMutex() { static std::mutex mutex; return &mutex; }
+static bool xSemaphoreTake(SemaphoreHandle_t mutex, int) { mutex->lock(); return true; }
+static void xSemaphoreGive(SemaphoreHandle_t mutex) { mutex->unlock(); }
 static const bool pdTRUE = true;
 static unsigned esp_random() { static unsigned value = 0; return ++value; }
 static unsigned storage_reads = 0;
@@ -84,6 +89,10 @@ struct File {
     int read() {
         if (offset >= size()) return -1;
         return static_cast<unsigned char>(files.at(path)[offset++]);
+    }
+    size_t read(uint8_t* dst, size_t count) {
+        count = std::min(count, size() - offset);
+        return readBytes(reinterpret_cast<char*>(dst), count);
     }
     size_t readBytes(char* dst, size_t size) {
         ++storage_reads;
@@ -174,7 +183,7 @@ harness += icon_header[icon_header.index("enum IconStoreResult"):icon_header.ind
 harness += icon_source[icon_source.index("static bool validate_png"):icon_source.index("static bool read_source_metadata_unlocked")]
 harness += icon_source[icon_source.index("bool icon_store_source_path"):icon_source.index("bool icon_store_source_matches_kind")]
 harness += icon_source[icon_source.index("struct IconSourceUpload {"):icon_source.index("IconStoreResult icon_store_source_install")]
-harness += icon_source[icon_source.index("static bool read_artifact_unlocked"):icon_source.index("    static bool artifact_matches_for_preload")]
+harness += icon_source[icon_source.index("static bool read_artifact_metadata_unlocked"):icon_source.index("struct IconPreloadPass")]
 harness += storage_source[storage_source.index("bool storage_write_verified"):storage_source.index("bool storage_mount")]
 harness += section("static bool g_fs_mounted", "// ============================================================================")
 harness += section("static void pad_config_path", "// ============================================================================")

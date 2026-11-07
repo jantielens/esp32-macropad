@@ -74,12 +74,12 @@ struct WidgetType {
     const char* (*validateConfig)(JsonObjectConst button);
     const WidgetPreview* preview;
     void (*cancelInput)(WidgetState* state);
-    bool (*parseOwnedConfig)(const JsonObject& btn, uint8_t* data) = nullptr;
-    void (*retainConfig)(uint8_t* data) = nullptr;
-    void (*releaseConfig)(uint8_t* data) = nullptr;
+    bool (*parseOwnedConfig)(const JsonObject& btn, uint8_t* data);
+    void (*retainConfig)(uint8_t* data);
+    void (*releaseConfig)(uint8_t* data);
     void (*visitResources)(const uint8_t* data, WidgetResourceVisitor visitor,
-                           void* context) = nullptr;
-    const char* (*validateActions)(JsonObjectConst button, JsonArrayConst actions) = nullptr;
+                           void* context);
+    const char* (*validateActions)(JsonObjectConst button, JsonArrayConst actions);
 };
 
 inline bool widget_owns_input(const WidgetType* type) {

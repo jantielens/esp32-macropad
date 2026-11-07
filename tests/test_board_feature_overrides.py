@@ -28,17 +28,19 @@ for board, target in (("m5stack-stopwatch", "ESP32S3"), ("crowpanel-4.2-interact
     output = []
     for field in expected:
         macro = appearance_macros.get(field, "DEFAULT_" + field.upper())
-        if field == "button_shadow_type":
+        if field == "icon_position":
+            macro = '(DEFAULT_ICON_POSITION == ICON_POS_LEFT ? "left" : "non-left")'
+        elif field == "icon_badge_padding":
+            macro = "int(DEFAULT_ICON_BADGE_PADDING)"
+        elif field == "button_shadow_type":
             macro = f'({macro} == BUTTON_SHADOW_TYPE_DROP ? "drop" : "opaque")'
         elif field == "button_shadow_color_mode":
             macro = f'({macro} == BUTTON_SHADOW_COLOR_DARKEN_BACKGROUND ? "darken_background" : "fixed")'
         output.append(f'std::cout << {macro} << "\\n";')
     source = '''#include <iostream>
-#include "src/app/board_config.h"
+#include "src/app/pad_config.h"
 static_assert(HAS_FACE_WIDGET, "LCD and interactive e-paper profiles include Face");
 static_assert(!HAS_LVGL_EPAPER || DISPLAY_DISABLE_ANIMATIONS, "Other e-paper animations remain disabled");
-enum { BUTTON_SHADOW_TYPE_OPAQUE, BUTTON_SHADOW_TYPE_DROP };
-enum { BUTTON_SHADOW_COLOR_FIXED, BUTTON_SHADOW_COLOR_DARKEN_BACKGROUND };
 int main() {\n''' + "\n".join(output) + "\n}"
     with tempfile.TemporaryDirectory() as directory:
         executable = pathlib.Path(directory) / "appearance"

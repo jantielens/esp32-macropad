@@ -30,7 +30,7 @@ ALLOWLIST = {
     "label_top", "label_center", "label_bottom",
     "label_top_style", "label_center_style", "label_bottom_style",
     "bg_color", "fg_color", "border_color", "border_width", "corner_radius",
-    "icon", "icon_id", "btn_state", "tap", "long_press",
+    "icon", "icon_id", "btn_state", "tap", "long_press", "rocker_group_layout",
     "widget_data_binding", "widget_data_binding_2",
     "widget_data_binding_3", "widget_data_binding_4",
 }
