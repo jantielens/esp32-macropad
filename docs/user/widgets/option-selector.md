@@ -11,7 +11,8 @@ button to each choice.
 The selection mode determines what the highlight means: no persistent
 selection, the last local tap, or a value reported by a binding. A Bound
 selector requests a change; it does not assume the receiving device accepted it.
-The widget needs a display with touch input. Hardware-button navigation between
+On a display without touch input, use Bound mode to show a reported selection.
+Changing options requires a pointer input; hardware-button navigation between
 individual options is not supported.
 
 ## Configure options

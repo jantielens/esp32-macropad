@@ -51,6 +51,17 @@ static bool g_selector_source_available = true;
 static const char* g_selector_background = "#123456";
 static const lv_image_dsc_t* g_selector_icon = nullptr;
 static std::vector<std::string> g_validated_option_values;
+static const PadBinding* g_pad_bindings = nullptr;
+static uint8_t g_pad_binding_count = 0;
+
+void pad_binding_set_bindings(const PadBinding* bindings, uint8_t count) {
+    g_pad_bindings = bindings;
+    g_pad_binding_count = bindings ? count : 0;
+}
+void pad_binding_get_bindings(const PadBinding** bindings, uint8_t* count) {
+    if (bindings) *bindings = g_pad_bindings;
+    if (count) *count = g_pad_binding_count;
+}
 
 static const lv_image_dsc_t* selector_test_icon() {
     static const uint16_t data[20 * 12] = {};
@@ -76,6 +87,17 @@ const char* action_validate_json(JsonObjectConst, bool, const char*, const char*
     return nullptr;
 }
 bool binding_template_resolve(const char* value, char* output, size_t size) {
+    if (!strncmp(value, "[pad:test_", 10)) {
+        for (uint8_t i = 0; i < g_pad_binding_count; ++i) {
+            std::string token = "[pad:" + std::string(g_pad_bindings[i].name) + "]";
+            if (token == value) {
+                strlcpy(output, g_pad_bindings[i].value, size);
+                return true;
+            }
+        }
+        if (size) output[0] = '\0';
+        return false;
+    }
     strlcpy(output, !strcmp(value, "[pad:background]") ? g_selector_background : value, size);
     return true;
 }
@@ -161,6 +183,7 @@ static void read_slider_pointer(lv_indev_t* indev, lv_indev_data_t* data) {
 
 bool binding_template_resolve_checked(const char* source, char* output, size_t size) {
     if (!strcmp(source, "selector_source") && !g_selector_source_available) return false;
+    if (!strncmp(source, "[pad:test_", 10)) return binding_template_resolve(source, output, size);
     strlcpy(output, g_binding_value, size);
     return true;
 }
@@ -203,6 +226,7 @@ protected:
         g_dispatched_value[0] = '\0';
         g_binding_value = "0";
         g_dispatch_result = ACTION_COMPLETE;
+        pad_binding_set_bindings(nullptr, 0);
         g_delete_on_dispatch = nullptr;
         pointer = {};
         JsonObject object = json.to<JsonObject>();
@@ -922,6 +946,8 @@ protected:
     WidgetState runtime{};
     ScreenButtonConfig source{};
     PadFontCache fonts;
+    PadBinding named_bindings[3]{};
+    uint8_t named_binding_count = 0;
     std::vector<lv_event_code_t> feedback_events;
 
     void SetUp() override {
@@ -957,12 +983,14 @@ protected:
         g_selector_source_available = true;
         g_dispatches = 0;
         g_dispatch_result = ACTION_COMPLETE;
+        pad_binding_set_bindings(nullptr, 0);
     }
 
     void create(OptionSelectorMode mode, uint8_t action_count = 1) {
         g_selector_config.mode = mode;
         option_selector_widget_impl::create(button, &config, &source, nullptr, &UI_SCALE_TABLE[0], &runtime);
-        option_selector_attach(&runtime, source.actions, action_count, 0, false, 0, 0, nullptr, nullptr);
+        option_selector_attach(&runtime, source.actions, action_count, 0, false, 0, 0, nullptr, nullptr,
+                               named_bindings, named_binding_count);
     }
 
     option_selector_widget_impl::State* state() {
@@ -970,12 +998,86 @@ protected:
     }
 
     void TearDown() override {
+        pad_binding_set_bindings(nullptr, 0);
         option_selector_widget_impl::destroy(&runtime);
         lv_indev_delete(indev);
         lv_display_delete(display);
         fonts.clear();
     }
 };
+
+TEST_F(OptionSelectorNativeWidget, ZeroWidthOptionsStayHiddenAcrossResizes) {
+    auto& third = g_selector_config.slots[2];
+    third.kind = OptionSelectorContent::Label;
+    strlcpy(third.content.label, "third", sizeof(third.content.label));
+    lv_obj_set_style_pad_all(button, 0, 0);
+    lv_obj_set_style_border_width(button, 0, 0);
+    lv_obj_set_size(button, 2, 20);
+    create(OptionSelectorMode::None);
+    const auto check_narrow = [&]() {
+        lv_obj_update_layout(button);
+        option_selector_widget_impl::layout(state());
+        option_selector_widget_impl::render(state());
+        lv_obj_update_layout(button);
+        unsigned visible = 0;
+        lv_area_t previous{};
+        for (auto& slot : state()->slots) {
+            if (!slot.hit) continue;
+            if (!slot.shown) {
+                EXPECT_TRUE(lv_obj_has_flag(slot.hit, LV_OBJ_FLAG_HIDDEN));
+                option_selector_widget_impl::activate(state(), &slot - state()->slots);
+            } else {
+                lv_area_t bounds{};
+                lv_obj_get_coords(slot.hit, &bounds);
+                EXPECT_GE(bounds.x2, bounds.x1);
+                if (visible) { EXPECT_GT(bounds.x1, previous.x2); }
+                previous = bounds;
+                ++visible;
+            }
+        }
+        EXPECT_EQ(visible, 2u);
+        EXPECT_EQ(g_dispatches, 0u);
+    };
+    check_narrow();
+    lv_obj_set_size(button, 30, 20);
+    option_selector_widget_impl::layout(state());
+    option_selector_widget_impl::render(state());
+    for (unsigned i = 0; i < 3; ++i) EXPECT_TRUE(state()->slots[i].shown);
+    lv_obj_set_size(button, 2, 20);
+    check_narrow();
+    lv_obj_set_size(button, 30, 20);
+    option_selector_widget_impl::layout(state());
+    option_selector_widget_impl::render(state());
+    for (unsigned i = 0; i < 3; ++i) EXPECT_TRUE(state()->slots[i].shown);
+}
+
+TEST_F(OptionSelectorNativeWidget, EventRenderUsesAndRestoresPadBindings) {
+    strlcpy(named_bindings[0].name, "test_label", sizeof(named_bindings[0].name));
+    strlcpy(named_bindings[0].value, "Own label", sizeof(named_bindings[0].value));
+    strlcpy(named_bindings[1].name, "test_state", sizeof(named_bindings[1].name));
+    strlcpy(named_bindings[1].value, "enabled", sizeof(named_bindings[1].value));
+    strlcpy(named_bindings[2].name, "test_color", sizeof(named_bindings[2].name));
+    strlcpy(named_bindings[2].value, "#abcdef", sizeof(named_bindings[2].value));
+    named_binding_count = 3;
+    strlcpy(g_selector_config.slots[1].content.label, "[pad:test_label]",
+            sizeof(g_selector_config.slots[1].content.label));
+    strlcpy(g_selector_config.slots[1].state, "[pad:test_state]", sizeof(g_selector_config.slots[1].state));
+    strlcpy(g_selector_config.slots[1].foreground, "[pad:test_color]",
+            sizeof(g_selector_config.slots[1].foreground));
+    create(OptionSelectorMode::Local);
+    PadBinding other{};
+    strlcpy(other.name, "test_label", sizeof(other.name));
+    strlcpy(other.value, "Wrong label", sizeof(other.value));
+    pad_binding_set_bindings(&other, 1);
+    option_selector_widget_impl::activate(state(), 1);
+    EXPECT_EQ(g_dispatches, 1u);
+    EXPECT_EQ(state()->selected, 1);
+    EXPECT_STREQ(lv_label_get_text(state()->slots[1].content), "Own label");
+    EXPECT_EQ(state()->slots[1].state, BTN_STATE_ENABLED);
+    EXPECT_EQ(state()->slots[1].foreground, 0xabcdefu);
+    EXPECT_EQ(g_pad_bindings, &other);
+    EXPECT_EQ(g_pad_binding_count, 1);
+}
 
 TEST_F(OptionSelectorNativeWidget, PointerTapDispatchesTheChosenOption) {
     create(OptionSelectorMode::None);

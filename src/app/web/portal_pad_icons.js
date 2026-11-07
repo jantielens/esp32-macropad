@@ -865,6 +865,8 @@ function padCaptureIconLayout() {
     const layout = {};
     keys.forEach(key => { layout[key] = typeof padGetEffectiveDefault === 'function'
         ? Number(padGetEffectiveDefault(key)) || 0 : 0; });
+    for (const key of ['content_pad', 'border_width'])
+        layout[key] = typeof padGetEffectiveDefault === 'function' ? padGetEffectiveDefault(key) : '';
     return layout;
 }
 
@@ -896,6 +898,8 @@ function padOptionIconRenderKey(payload, button, slot) {
         const suffix = index === 1 ? '' : '_' + index;
         values.push(button['widget_option_label' + suffix] || button['widget_option_icon' + suffix] ? 1 : 0);
     }
+    if (Number(button.widget_option_inset ?? 4) !== 4)
+        values.push('inset', button.widget_option_inset);
     for (const value of values) {
         for (const byte of new TextEncoder().encode(String(value))) hash = Math.imul(hash ^ byte, 16777619) >>> 0;
         hash = Math.imul(hash, 16777619) >>> 0;
@@ -1161,13 +1165,32 @@ async function padPreparePageSave(context) {
                 const count = padButtonIconUses(button).filter(use => use.slot).length +
                     Array.from({ length: 5 }, (_, i) => button['widget_option_label' + (i ? '_' + (i + 1) : '')] ? 1 : 0)
                         .reduce((a, b) => a + b, 0);
-                iconWidth /= Math.max(1, count);
-                const padding = Number(button.widget_option_icon_badge_padding) || 0;
-                iconWidth -= padding * 2;
-                iconHeight -= padding * 2;
+                const contentPad = Math.min(50, Math.max(0, parseInt(
+                    button.content_pad ?? layout.content_pad ?? padding, 10) || 0));
+                const border = Math.max(0, parseInt(button.border_width ?? layout.border_width ?? 1, 10) || 0);
+                iconWidth = Math.max(0, padTrackSpanSize(columnSizing.sizes, col, colSpan, gap) - 2 * (contentPad + border));
+                iconHeight = Math.max(0, padTrackSpanSize(rowSizing.sizes, row, rowSpan, gap) - 2 * (contentPad + border));
+                const hasGroup = button.icon || button.label_top || button.label_center || button.label_bottom;
+                if (hasGroup) {
+                    const horizontal = !button.widget_position || button.widget_position === 'left' || button.widget_position === 'right';
+                    const available = horizontal ? iconWidth : iconHeight;
+                    const remaining = Math.max(0, available - Math.min(4, available));
+                    const groupPercent = Number(button.group_size_pct) || 0;
+                    // Auto group size depends on live bindings and font metrics; retain its safe upper bound.
+                    const widgetSize = groupPercent
+                        ? remaining - Math.floor(remaining * Math.min(90, Math.max(10, groupPercent)) / 100)
+                        : remaining;
+                    if (horizontal) iconWidth = widgetSize;
+                    else iconHeight = widgetSize;
+                }
+                iconWidth = Math.ceil(iconWidth / Math.max(1, count));
+                const inset = Number(button.widget_option_inset ?? 4);
+                iconWidth -= 2 * Math.min(inset, Math.floor(Math.max(0, iconWidth - 1) / 2));
+                iconHeight -= 2 * Math.min(inset, Math.floor(Math.max(0, iconHeight - 1) / 2));
+                const badgePadding = Number(button.widget_option_icon_badge_padding) || 0;
+                const usable = Math.max(1, Math.min(iconWidth, iconHeight) - badgePadding * 2);
                 const scale = Number(button.widget_option_icon_size_pct) || 100;
-                iconWidth *= scale / 100;
-                iconHeight *= scale / 100;
+                iconWidth = iconHeight = Math.max(1, Math.floor(usable * scale / 100));
             } else if (button.icon_scale_pct && Number(button.icon_scale_pct) > 0) {
                 iconWidth = Math.round(iconWidth * Number(button.icon_scale_pct) / 100);
                 iconHeight = Math.round(iconHeight * Number(button.icon_scale_pct) / 100);

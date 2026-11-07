@@ -101,6 +101,11 @@ uint32_t pad_option_icon_render_key(JsonObjectConst pad, JsonObjectConst button,
         }
         number((button[label] | "")[0] || button[icon].is<JsonObjectConst>() ? 1 : 0);
     }
+    const int inset = button["widget_option_inset"] | 4;
+    if (inset != 4) {
+        text("inset");
+        number(inset);
+    }
     return hash ? hash : 1;
 }
 

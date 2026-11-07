@@ -468,6 +468,8 @@ int main() {
         JsonDocument doc;
         deserializeJson(doc, R"({"cols":3,"rows":2,"column_widths_px":[0,40,0],"buttons":[{"col":1,"row":0,"col_span":2,"widget_type":"option_selector","widget_option_label":"Cool","widget_option_icon_5":{"kind":"mono"},"widget_option_icon_size_pct":75,"widget_option_icon_badge_padding":4}]})");
         CHECK(pad_option_icon_render_key(doc.as<JsonObjectConst>(), doc["buttons"][0], 5) == 0xe3f58eb6u);
+        doc["buttons"][0]["widget_option_inset"] = 0;
+        CHECK(pad_option_icon_render_key(doc.as<JsonObjectConst>(), doc["buttons"][0], 5) == 0x3cf96935u);
     }
 
     const char* invalid_timer_bindings[] = {

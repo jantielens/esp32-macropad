@@ -413,6 +413,12 @@ function pageRequests(result, page) {
         { col: 1, row: 0, col_span: 2, widget_type: 'option_selector',
             widget_option_label: 'Cool', widget_option_icon_5: { kind: 'mono' },
             widget_option_icon_size_pct: 75, widget_option_icon_badge_padding: 4 }, 5), 'e3f58eb6');
+    assert.strictEqual(selectorImport.context.padOptionIconRenderKey(
+        { cols: 3, rows: 2, column_widths_px: [0, 40, 0] },
+        { col: 1, row: 0, col_span: 2, widget_type: 'option_selector',
+            widget_option_label: 'Cool', widget_option_icon_5: { kind: 'mono' },
+            widget_option_icon_size_pct: 75, widget_option_icon_badge_padding: 4,
+            widget_option_inset: 0 }, 5), '3cf96935');
     await assert.rejects(localImport.context.padReadIconSourceResponse({
         headers: { get() { return 'image/png'; } },
         async blob() { return new Blob([new Uint8Array(512 * 1024 + 1)]); },
@@ -629,6 +635,27 @@ function pageRequests(result, page) {
         .map(request => new URL(request.url, 'http://localhost').searchParams.get('keys').split(','));
     assert.deepStrictEqual(batches.map(batch => batch.length), [1, 1, 1, 1, 1]);
     assert(batches.flat().includes('pad_0_main_0_0_opt_5'));
+
+    const optionSizing = async (overrides, expected) => {
+        const button = {
+            col: 0, row: 0, widget_type: 'option_selector', border_width: '1', content_pad: '4',
+            widget_option_icon: reusePayload.buttons[0].icon, ...overrides,
+        };
+        const payload = { cols: 1, rows: 1, buttons: [button] };
+        await reuse.context.padPreparePageSave({ page: 0, payload, iconLayout: {} });
+        assert.strictEqual(reuse.renderedSizes.at(-1), expected);
+    };
+    await optionSizing({}, 82);
+    await optionSizing({ label_top: 'Title', widget_position: 'right', group_size_pct: 75 }, 14);
+    await optionSizing({ label_bottom: 'Title', widget_position: 'above', group_size_pct: 75 }, 14);
+    await optionSizing({ icon: reusePayload.buttons[0].icon, widget_position: 'below', group_size_pct: 75 }, 14);
+    await optionSizing({ label_center: 'Dynamic', widget_position: 'left' }, 78);
+    await optionSizing({ label_center: 'Title', group_size_pct: 75, content_pad: '10', border_width: '2' }, 10);
+    await optionSizing({ label_center: 'Title', group_size_pct: 50, widget_option_label_2: 'Other',
+        widget_option_inset: 2, widget_option_icon_badge_padding: 3, widget_option_icon_size_pct: 75 }, 9);
+    const defaultInsetKey = reuse.context.padOptionIconRenderKey(optionIcons, optionIcons.buttons[0], 1);
+    assert.notStrictEqual(reuse.context.padOptionIconRenderKey(optionIcons,
+        { ...optionIcons.buttons[0], widget_option_inset: 0 }, 1), defaultInsetKey);
 
     const templatePayload = { ...reusePayload, template_pad: 1 };
     const requestsBeforeTemplate = reuse.requests.length;

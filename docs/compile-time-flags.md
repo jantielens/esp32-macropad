@@ -1356,7 +1356,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/gamepad_button_widget.cpp
   - src/app/widgets/gamepad_joystick_widget.cpp
   - src/app/widgets/mousepad_widget.cpp
-  - src/app/widgets/option_selector_widget.cpp
   - src/app/widgets/scrollpad_widget.cpp
   - src/app/widgets/slider_widget.cpp
 - **HAS_TTF_FONTS**

@@ -6,10 +6,10 @@
 #include "../button_shadow_color.h"
 #include "../button_content_lvgl.h"
 #include "../fill_style_runtime.h"
+#include "../widgets/option_selector_widget.h"
 #if HAS_TOUCH
 #include "../touch_manager.h"
 #include "../widgets/slider_widget.h"
-#include "../widgets/option_selector_widget.h"
 #endif
 #include <esp_heap_caps.h>
 #include <string.h>
@@ -470,7 +470,7 @@ void PadScreen::buildTiles() {
                     if (strcmp(wt->name, "option_selector") == 0)
                         option_selector_attach(&tile.widget_state, tile.actions, tile.action_count,
                                                pageIndex, i >= cfg->main_button_count, bcfg.col, bcfg.row,
-                                               PadScreen::onPress, &tile);
+                                               PadScreen::onPress, &tile, pageBindings, pageBindingCount);
 #if HAS_TOUCH
                     if (strcmp(wt->name, "slider") == 0)
                         slider_attach(&tile.widget_state, tile.actions, tile.action_count,

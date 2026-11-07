@@ -10,6 +10,7 @@
 #include "../device_dialog.h"
 #include "../icon_store.h"
 #include "../log_manager.h"
+#include "../pad_binding.h"
 #include "../pad_overlay.h"
 #include "../swipe_actions.h"
 #include <new>
@@ -30,11 +31,13 @@ struct SlotState {
     bool icon_available;
     bool shown;
     bool background_visible;
+    bool layout_visible;
 };
 
 struct State {
     const OptionSelectorConfig* config;
     const ButtonAction* actions;
+    const PadBinding* bindings;
     lv_obj_t* parent;
     SlotState slots[OPTION_SELECTOR_SLOTS];
     uint32_t group_color;
@@ -43,6 +46,7 @@ struct State {
     uint8_t selected;
     uint8_t pending;
     uint8_t pressed;
+    uint8_t binding_count;
     bool overlay;
     bool available;
     bool layout_dirty;
@@ -115,6 +119,7 @@ void layout(State* state) {
         const int end = count && width > 0 ? width * (position + 1) / count : 0;
         ++position;
         const int cell_width = end - start;
+        slot.layout_visible = cell_width > 0 && height > 0;
         if (cell_width <= 0 || height <= 0) {
             lv_obj_add_flag(slot.hit, LV_OBJ_FLAG_HIDDEN);
             slot.shown = false;
@@ -172,6 +177,10 @@ void end_feedback(State* state, uint8_t index, lv_event_code_t event) {
 
 void render(State* state) {
     if (!state->parent) return;
+    const PadBinding* previous_bindings = nullptr;
+    uint8_t previous_count = 0;
+    pad_binding_get_bindings(&previous_bindings, &previous_count);
+    pad_binding_set_bindings(state->bindings, state->binding_count);
     const auto& config = *state->config;
     const uint32_t track = widget_default_rgb(DEFAULT_WIDGET_TRACK_COLOR);
     const uint32_t default_fg = lv_color_to_u32(lv_obj_get_style_text_color(state->parent, LV_PART_MAIN)) & 0xFFFFFFu;
@@ -193,8 +202,7 @@ void render(State* state) {
             valid = binding_template_resolve_checked(option.state, resolved, sizeof(resolved));
         else resolved[0] = '\0';
         const BtnState button_state = pad_overlay_resolve_state(resolved, valid, state->overlay, option.state[0]);
-        const bool shown = button_state != BTN_STATE_HIDDEN &&
-            lv_obj_get_width(slot.hit) > 0 && lv_obj_get_height(slot.hit) > 0;
+        const bool shown = button_state != BTN_STATE_HIDDEN && slot.layout_visible;
         if (slot.shown != shown) {
             slot.shown = shown;
             if (shown) lv_obj_clear_flag(slot.hit, LV_OBJ_FLAG_HIDDEN);
@@ -235,6 +243,7 @@ void render(State* state) {
             if (strcmp(lv_label_get_text(slot.content), resolved)) lv_label_set_text(slot.content, resolved);
         }
     }
+    pad_binding_set_bindings(previous_bindings, previous_count);
 }
 
 void cancel(State* state) {
@@ -287,7 +296,6 @@ void activate(State* state, uint8_t index) {
 }
 
 void event(lv_event_t* event) {
-#if HAS_TOUCH
     auto* state = static_cast<State*>(lv_event_get_user_data(event));
     lv_obj_t* target = static_cast<lv_obj_t*>(lv_event_get_target(event));
     if (!state || !target) return;
@@ -323,9 +331,6 @@ void event(lv_event_t* event) {
     } else if (code == LV_EVENT_PRESS_LOST || code == LV_EVENT_INDEV_RESET) {
         cancel(state);
     }
-#else
-    (void)event;
-#endif
 }
 
 void create(lv_obj_t* parent, const WidgetConfig* widget, const ScreenButtonConfig* button,
@@ -368,20 +373,14 @@ void create(lv_obj_t* parent, const WidgetConfig* widget, const ScreenButtonConf
             lv_obj_set_style_text_align(slot.content, LV_TEXT_ALIGN_CENTER, 0);
             lv_obj_set_style_text_font(slot.content, font, 0);
         }
-#if HAS_TOUCH
         lv_obj_add_flag(slot.hit, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_event_cb(slot.hit, event, LV_EVENT_ALL, state);
-#else
-        lv_obj_clear_flag(slot.hit, LV_OBJ_FLAG_CLICKABLE);
-#endif
     }
     lv_obj_add_event_cb(parent, mark_layout, LV_EVENT_SIZE_CHANGED, state);
     state->layout_dirty = true;
     layout(state);
     render(state);
 }
-
-void update(lv_obj_t*, const WidgetConfig*, WidgetState*, const char*) {}
 
 void tick(lv_obj_t*, const WidgetConfig* widget, WidgetState* runtime) {
     auto* state = reinterpret_cast<State*>(runtime->data);
@@ -485,7 +484,7 @@ const WidgetPreview preview{"Option selector", "view_week"};
 } // namespace option_selector_widget_impl
 
 static const WidgetType option_selector_widget_type{
-    "option_selector", nullptr, option_selector_widget_impl::create, option_selector_widget_impl::update,
+    "option_selector", nullptr, option_selector_widget_impl::create, nullptr,
     option_selector_widget_impl::destroy, option_selector_widget_impl::tick, nullptr, true,
 #if HAS_MCP
     option_selector_widget_impl::describe,
@@ -503,12 +502,15 @@ static struct OptionSelectorRegistration {
 
 void option_selector_attach(WidgetState* runtime, const ButtonAction* actions, uint8_t count,
                             uint8_t page, bool overlay, uint8_t col, uint8_t row,
-                            lv_event_cb_t input_guard, void* context) {
+                            lv_event_cb_t input_guard, void* context,
+                            const PadBinding* bindings, uint8_t binding_count) {
     using namespace option_selector_widget_impl;
     auto* state = reinterpret_cast<State*>(runtime->data);
     if (!state->config) return;
     state->actions = actions;
     state->action_count = count > MAX_BUTTON_ACTIONS ? MAX_BUTTON_ACTIONS : count;
+    state->bindings = bindings;
+    state->binding_count = binding_count;
     state->overlay = overlay;
     for (uint8_t index = 0; index < OPTION_SELECTOR_SLOTS; ++index) {
         SlotState& slot = state->slots[index];
