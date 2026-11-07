@@ -884,27 +884,29 @@ static const char* validate_pad_icon_artifact(JsonObjectConst pad, JsonObjectCon
     const char* catalog_id = icon.containsKey("catalog_id")
         ? icon["catalog_id"].as<const char*>() : nullptr;
     const char* kind_name = icon["kind"] | "";
-    if (!icon_store_source_matches_metadata(source_id, catalog_id, kind_name))
-        return "icon source is missing or does not match kind and optional catalog_id";
     const uint8_t col = button["col"] | (uint8_t)0;
     const uint8_t row = button["row"] | (uint8_t)0;
     const uint8_t col_span = button["col_span"] | (uint8_t)1;
     const uint8_t row_span = button["row_span"] | (uint8_t)1;
     if ((uint16_t)col + col_span > (uint8_t)(pad["cols"] | (uint8_t)3) ||
-        (uint16_t)row + row_span > (uint8_t)(pad["rows"] | (uint8_t)3)) return nullptr;
-    const IconKind kind = strcmp(kind_name, "mono") == 0
-        ? ICON_KIND_MONO : ICON_KIND_COLOR;
+        (uint16_t)row + row_span > (uint8_t)(pad["rows"] | (uint8_t)3))
+        return icon_store_source_matches_metadata(source_id, catalog_id, kind_name)
+            ? nullptr : "icon source is missing or does not match kind and optional catalog_id";
     const uint32_t render_key = slot ? pad_option_icon_render_key(pad, button, slot)
                                      : pad_icon_render_key(pad, button);
     char key[CONFIG_ICON_KEY_MAX_LEN];
     if (slot) icon_store_build_option_key(page, layer, col, row, slot, key, sizeof(key));
     else icon_store_build_key(page, layer, col, row, key, sizeof(key));
-    if (icon_store_artifact_matches(key, source_id, kind, render_key)) return nullptr;
+    char fallback[CONFIG_ICON_KEY_MAX_LEN] = {};
     if (strcmp(layer, "main") == 0 && template_page >= 0 && template_page < MAX_PADS) {
-        if (slot) icon_store_build_option_key((uint8_t)template_page, "main", col, row, slot, key, sizeof(key));
-        else icon_store_build_key((uint8_t)template_page, "main", col, row, key, sizeof(key));
-        if (icon_store_artifact_matches(key, source_id, kind, render_key)) return nullptr;
+        if (slot) icon_store_build_option_key((uint8_t)template_page, "main", col, row, slot, fallback, sizeof(fallback));
+        else icon_store_build_key((uint8_t)template_page, "main", col, row, fallback, sizeof(fallback));
     }
+    const IconArtifactValidation result = icon_store_validate_artifact(
+        key, fallback[0] ? fallback : nullptr, source_id, catalog_id, kind_name, render_key);
+    if (result == ICON_ARTIFACT_VALID) return nullptr;
+    if (result == ICON_ARTIFACT_INVALID_SOURCE)
+        return "icon source is missing or does not match kind and optional catalog_id";
     return "icon PNG is not prepared for its source, position, and layout; save through the portal";
 }
 
@@ -952,10 +954,12 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
     if (!g_fs_mounted) return false;
     if (!json || len == 0 || len > 64 * 1024) return false;
 
+    [[maybe_unused]] const uint32_t started_ms = millis();
     BasicJsonDocument<PsramJsonAllocator> doc(len * 2 + 256);
     if (deserializeJson(doc, json, len)) return false;
     PadConfig* replacement = pad_config_parse(page, doc);
     if (!replacement) return false;
+    LOGI(TAG, "Pad %u save parsed at %lu ms", page, (unsigned long)(millis() - started_ms));
     auto reject_icon_error = [&](const char* icon_error) {
         if (error) *error = icon_error;
         pad_config_release(replacement);
@@ -1005,6 +1009,7 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
         pad_config_release(replacement);
         return false;
     }
+    LOGI(TAG, "Pad %u save icons validated at %lu ms", page, (unsigned long)(millis() - started_ms));
 
     char path[32];
     pad_config_path(page, path, sizeof(path));
@@ -1013,6 +1018,7 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
         pad_config_release(replacement);
         return false;
     }
+    LOGI(TAG, "Pad %u save written at %lu ms", page, (unsigned long)(millis() - started_ms));
 
     // Update RAM cache BEFORE bumping generation so the LVGL task
     // always reads fresh data when it detects the new generation.
@@ -1024,6 +1030,7 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
 #if HAS_DISPLAY
     icon_store_preload_pad(page);
 #endif
+    LOGI(TAG, "Pad %u save icons preloaded at %lu ms", page, (unsigned long)(millis() - started_ms));
 
     // Also refresh any pad that references this page as its template_pad
     bool refresh_ok = true;
@@ -1041,17 +1048,20 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
     }
 
     g_generation++;
+    LOGI(TAG, "Pad %u save dependents refreshed at %lu ms", page, (unsigned long)(millis() - started_ms));
 
     // Update fs_health stats
     storage_publish_usage(false);
+    LOGI(TAG, "Pad %u save storage usage updated at %lu ms", page, (unsigned long)(millis() - started_ms));
 
     LOGI(TAG, "Pad %u saved (%u bytes, gen=%u)", page, (unsigned)len, g_generation);
     if (!refresh_ok) {
         LOGE(TAG, "Pad %u: dependent cache refresh incomplete", page);
     }
 #if HAS_DISPLAY
-    if (refresh_ok) icon_store_cleanup_pad_icons(page);
+    if (refresh_ok) icon_store_retire_unused_pad_icons(page);
 #endif
+    LOGI(TAG, "Pad %u save cleanup finished at %lu ms", page, (unsigned long)(millis() - started_ms));
     return refresh_ok;
 }
 

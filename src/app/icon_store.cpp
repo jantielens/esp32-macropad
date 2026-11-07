@@ -57,6 +57,73 @@ static SemaphoreHandle_t g_cache_mutex = nullptr;
 static SemaphoreHandle_t g_file_mutex = nullptr;
 static std::atomic<bool> g_ready{false};
 
+struct ValidatedArtifact {
+    char key[CONFIG_ICON_KEY_MAX_LEN];
+    char source_id[CONFIG_ICON_SOURCE_ID_MAX_LEN];
+    char catalog_id[129];
+    IconKind kind;
+    uint32_t render_key;
+};
+
+static ValidatedArtifact* g_validated = nullptr;
+static size_t g_validated_count = 0;
+static size_t g_validated_capacity = 0;
+
+// These entries are protected by g_file_mutex and never fall back to internal RAM.
+static void invalidate_validated_artifacts() {
+    g_validated_count = 0;
+}
+
+static void invalidate_validated_artifact(const char* key) {
+    for (size_t index = 0; index < g_validated_count; ++index) {
+        if (!strcmp(g_validated[index].key, key)) {
+            g_validated[index] = g_validated[--g_validated_count];
+            return;
+        }
+    }
+}
+
+static void remember_validated_artifact(const char* key, const char* source_id,
+                                        const char* catalog_id, IconKind kind,
+                                        uint32_t render_key) {
+    if (!psramFound()) return;
+    size_t index = 0;
+    while (index < g_validated_count && strcmp(g_validated[index].key, key)) ++index;
+    if (index == g_validated_count) {
+        if (g_validated_count == g_validated_capacity) {
+            const size_t capacity = g_validated_capacity ? g_validated_capacity * 2 : 16;
+            auto* entries = static_cast<ValidatedArtifact*>(heap_caps_realloc(
+                g_validated, capacity * sizeof(ValidatedArtifact), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+            if (!entries) {
+                LOGW(TAG, "Unable to cache icon validation; save will recheck files");
+                return;
+            }
+            g_validated = entries;
+            g_validated_capacity = capacity;
+        }
+        ++g_validated_count;
+    }
+    ValidatedArtifact& entry = g_validated[index];
+    strlcpy(entry.key, key, sizeof(entry.key));
+    strlcpy(entry.source_id, source_id, sizeof(entry.source_id));
+    strlcpy(entry.catalog_id, catalog_id, sizeof(entry.catalog_id));
+    entry.kind = kind;
+    entry.render_key = render_key;
+}
+
+static bool validated_artifact_matches(const char* key, const char* source_id,
+                                        const char* catalog_id, IconKind kind,
+                                        uint32_t render_key) {
+    if (!key || !source_id) return false;
+    for (size_t index = 0; index < g_validated_count; ++index) {
+        const ValidatedArtifact& entry = g_validated[index];
+        if (!strcmp(entry.key, key) && !strcmp(entry.source_id, source_id) &&
+            (!catalog_id || (entry.catalog_id[0] && !strcmp(entry.catalog_id, catalog_id))) && entry.kind == kind &&
+            (!render_key || entry.render_key == render_key)) return true;
+    }
+    return false;
+}
+
 static inline void cache_lock() {
     if (g_cache_mutex) xSemaphoreTake(g_cache_mutex, portMAX_DELAY);
 }
@@ -220,14 +287,17 @@ static bool png_dimensions_allowed(const uint8_t* data, size_t len,
            png_width <= ICON_MAX_DIMENSION && png_height <= ICON_MAX_DIMENSION;
 }
 
-static bool source_matches_metadata_unlocked(const char* source_id,
-                                            const char* catalog_id,
-                                            const char* kind) {
+static bool read_source_metadata_unlocked(const char* source_id, char* catalog_id, size_t capacity,
+                                          IconKind* kind) {
     if (!pad_icon_source_id_valid(source_id)) return false;
     char path[64];
     bool png = false;
     if (!icon_store_source_path(source_id, path, sizeof(path), &png)) return false;
-    if (png) return !catalog_id && strcmp(kind, "color") == 0;
+    if (png) {
+        catalog_id[0] = '\0';
+        *kind = ICON_KIND_COLOR;
+        return true;
+    }
     File file = Storage.open(path, "r");
     if (!file || file.size() > ICON_MAX_SOURCE_JSON_SIZE) {
         if (file) file.close();
@@ -251,9 +321,20 @@ static bool source_matches_metadata_unlocked(const char* source_id,
         ? !has_catalog && strcmp(source_kind, "color") == 0
         : strcmp(media_type, "image/svg+xml") == 0 && has_catalog &&
             pad_icon_catalog_kind_valid(stored_catalog_id, source_kind);
-    return valid_metadata &&
-        (!catalog_id || (has_catalog && strcmp(catalog_id, stored_catalog_id) == 0)) &&
-        strcmp(kind, source_kind) == 0;
+    if (!valid_metadata || strlcpy(catalog_id, has_catalog ? stored_catalog_id : "", capacity) >= capacity)
+        return false;
+    *kind = strcmp(source_kind, "mono") == 0 ? ICON_KIND_MONO : ICON_KIND_COLOR;
+    return true;
+}
+
+static bool source_matches_metadata_unlocked(const char* source_id,
+                                            const char* catalog_id,
+                                            const char* kind) {
+    char stored_catalog[129];
+    IconKind stored_kind;
+    return read_source_metadata_unlocked(source_id, stored_catalog, sizeof(stored_catalog), &stored_kind) &&
+        (!catalog_id || (stored_catalog[0] && !strcmp(catalog_id, stored_catalog))) &&
+        !strcmp(kind, stored_kind == ICON_KIND_MONO ? "mono" : "color");
 }
 
 static bool source_matches_kind_unlocked(const char* source_id, IconKind kind) {
@@ -696,22 +777,50 @@ bool icon_store_source_matches_metadata(const char* source_id,
     return matches;
 }
 
-bool icon_store_artifact_matches(const char* key, const char* source_id, IconKind kind,
-                                 uint32_t render_key) {
-    if (!icon_store_key_valid(key) || !pad_icon_source_id_valid(source_id) ||
-        !g_file_mutex || xSemaphoreTake(g_file_mutex, 0) != pdTRUE) return false;
-    const bool matches = source_matches_kind_unlocked(source_id, kind) &&
-        artifact_matches_unlocked(key, source_id, kind, render_key);
+IconArtifactValidation icon_store_validate_artifact(const char* key, const char* fallback_key,
+                                                    const char* source_id, const char* catalog_id,
+                                                    const char* kind, uint32_t render_key) {
+    if (!kind || !g_file_mutex || xSemaphoreTake(g_file_mutex, 0) != pdTRUE)
+        return ICON_ARTIFACT_INVALID_SOURCE;
+    IconArtifactValidation result = ICON_ARTIFACT_INVALID_SOURCE;
+    const IconKind icon_kind = strcmp(kind, "mono") == 0 ? ICON_KIND_MONO : ICON_KIND_COLOR;
+    if ((!strcmp(kind, "mono") || !strcmp(kind, "color")) &&
+        (validated_artifact_matches(key, source_id, catalog_id, icon_kind, render_key) ||
+         validated_artifact_matches(fallback_key, source_id, catalog_id, icon_kind, render_key))) {
+        result = ICON_ARTIFACT_VALID;
+    } else if (source_matches_metadata_unlocked(source_id, catalog_id, kind)) {
+        result = ((icon_store_key_valid(key) &&
+                   artifact_matches_unlocked(key, source_id, icon_kind, render_key)) ||
+                  (fallback_key && icon_store_key_valid(fallback_key) &&
+                   artifact_matches_unlocked(fallback_key, source_id, icon_kind, render_key)))
+            ? ICON_ARTIFACT_VALID : ICON_ARTIFACT_INVALID_PNG;
+    }
     xSemaphoreGive(g_file_mutex);
-    return matches;
+    return result;
+}
+
+static bool read_artifact(const char* key, IconArtifactInfo* out, bool prepare) {
+    if (!out || !icon_store_key_valid(key) || !g_file_mutex ||
+        xSemaphoreTake(g_file_mutex, 0) != pdTRUE) return false;
+    if (prepare) invalidate_validated_artifact(key);
+    const bool valid = read_artifact_unlocked(key, out);
+    if (valid && prepare && psramFound()) {
+        char catalog_id[129];
+        IconKind source_kind;
+        if (read_source_metadata_unlocked(out->source_id, catalog_id, sizeof(catalog_id), &source_kind) &&
+            source_kind == out->kind)
+            remember_validated_artifact(key, out->source_id, catalog_id, source_kind, out->render_key);
+    }
+    xSemaphoreGive(g_file_mutex);
+    return valid;
 }
 
 bool icon_store_read_artifact(const char* key, IconArtifactInfo* out) {
-    if (!out || !icon_store_key_valid(key) || !g_file_mutex ||
-        xSemaphoreTake(g_file_mutex, 0) != pdTRUE) return false;
-    const bool valid = read_artifact_unlocked(key, out);
-    xSemaphoreGive(g_file_mutex);
-    return valid;
+    return read_artifact(key, out, false);
+}
+
+bool icon_store_prepare_artifact(const char* key, IconArtifactInfo* out) {
+    return read_artifact(key, out, true);
 }
 
 bool icon_store_source_delete_if_unreferenced(const char* source_id) {
@@ -721,6 +830,7 @@ bool icon_store_source_delete_if_unreferenced(const char* source_id) {
     const bool scanned = source_reference_scan(source_id, &referenced);
     bool removed = false;
     if (scanned && !referenced) {
+        invalidate_validated_artifacts();
         char path[64];
         removed = true;
         for (const char* extension : {"png", "json"}) {
@@ -959,7 +1069,10 @@ IconStoreResult icon_store_install(const char* key, IconKind kind,
     if (png_len > ICON_MAX_PNG_SIZE) return ICON_STORE_TOO_LARGE;
     if (!g_file_mutex || xSemaphoreTake(g_file_mutex, 0) != pdTRUE)
         return ICON_STORE_BUSY;
-    if (!source_matches_kind_unlocked(source_id, kind)) {
+    char catalog_id[129];
+    IconKind source_kind;
+    if (!read_source_metadata_unlocked(source_id, catalog_id, sizeof(catalog_id), &source_kind) ||
+        source_kind != kind) {
         xSemaphoreGive(g_file_mutex);
         return ICON_STORE_INVALID;
     }
@@ -987,6 +1100,7 @@ IconStoreResult icon_store_install(const char* key, IconKind kind,
     const int metadata_length = snprintf(metadata, sizeof(metadata),
         "{\"source_id\":\"%s\",\"kind\":%u,\"width\":%u,\"height\":%u,\"render_key\":%u}",
         source_id, (unsigned)kind, width, height, (unsigned)render_key);
+    invalidate_validated_artifact(key);
     if (metadata_length <= 0 || metadata_length >= (int)sizeof(metadata) ||
         !write_icon_pair(png_path, metadata_path, png_data, png_len,
                          (const uint8_t*)metadata, (size_t)metadata_length)) {
@@ -994,6 +1108,7 @@ IconStoreResult icon_store_install(const char* key, IconKind kind,
         xSemaphoreGive(g_file_mutex);
         return ICON_STORE_IO_ERROR;
     }
+    remember_validated_artifact(key, source_id, catalog_id, kind, render_key);
 
     if (!cache_entry_buf(key, source_id, kind, draw_buf)) {
         xSemaphoreGive(g_file_mutex);
@@ -1131,9 +1246,25 @@ static bool pad_uses_icon_key(uint8_t page, const PadConfig* config, const char*
     return false;
 }
 
+static void retire_unused_icon_cache(uint8_t page, const PadConfig* const* configs) {
+    cache_lock();
+    for (uint16_t index = 0; index < g_count; ) {
+        const uint8_t entry_page = page_from_icon_id(g_entries[index].id);
+        if (entry_page < MAX_PADS && (page == MAX_PADS || page == entry_page) &&
+            !pad_uses_icon_key(entry_page, configs[entry_page], g_entries[index].id)) {
+            if (!retire_buffer(entry_page, g_entries[index].draw_buf)) break;
+            g_entries[index] = g_entries[--g_count];
+        } else {
+            ++index;
+        }
+    }
+    cache_unlock();
+}
+
 static void cleanup_icon_files(uint8_t page, const PadConfig* const* configs) {
     if (ota_activity_is_active()) return;
     if (!g_file_mutex || xSemaphoreTake(g_file_mutex, 0) != pdTRUE) return;
+    invalidate_validated_artifacts();
 
     uint32_t removed = 0;
     size_t reclaimed = 0;
@@ -1183,20 +1314,7 @@ static void cleanup_icon_files(uint8_t page, const PadConfig* const* configs) {
         ++removed;
         reclaimed += candidate_size;
     }
-    if (!ota_activity_is_active()) {
-        cache_lock();
-        for (uint16_t index = 0; index < g_count; ) {
-            const uint8_t entry_page = page_from_icon_id(g_entries[index].id);
-            if (entry_page < MAX_PADS && (page == MAX_PADS || page == entry_page) &&
-                !pad_uses_icon_key(entry_page, configs[entry_page], g_entries[index].id)) {
-                if (!retire_buffer(entry_page, g_entries[index].draw_buf)) break;
-                g_entries[index] = g_entries[--g_count];
-            } else {
-                ++index;
-            }
-        }
-        cache_unlock();
-    }
+    if (!ota_activity_is_active()) retire_unused_icon_cache(page, configs);
     xSemaphoreGive(g_file_mutex);
     if (removed) LOGI(TAG, "Icon cleanup: removed %u files, reclaimed %u bytes",
                      (unsigned)removed, (unsigned)reclaimed);
@@ -1226,24 +1344,16 @@ static void cleanup_all_pad_icon_files() {
     }
 }
 
-void icon_store_cleanup_pad_icons(uint8_t page) {
+void icon_store_retire_unused_pad_icons(uint8_t page) {
     if (page >= MAX_PADS) return;
     const PadConfig* config = pad_config_acquire(page);
-    if (!config && pad_config_exists(page)) {
-        LOGW(TAG, "Skipping icon cleanup: pad %u config could not be read", page);
+    if (!config) {
+        LOGW(TAG, "Skipping icon cache retirement: pad %u config unavailable", page);
         return;
     }
-    if (config && config->template_pad >= 0 && config->template_pad != page &&
-        pad_config_exists(config->template_pad)) {
-        const PadConfig* parent = pad_config_acquire(config->template_pad);
-        if (!parent) {
-            pad_config_release(config);
-            LOGW(TAG, "Skipping icon cleanup: pad %u template could not be read", page);
-            return;
-        }
-        pad_config_release(parent);
-    }
-    cleanup_pad_icon_files(page, config);
+    const PadConfig* configs[MAX_PADS] = {};
+    configs[page] = config;
+    retire_unused_icon_cache(page, configs);
     pad_config_release(config);
 }
 
@@ -1268,9 +1378,14 @@ bool icon_store_delete_file(const char* filename) {
     key[filename_len - 4] = '\0';
     if (!icon_store_key_valid(key)) return false;
 
+    if (!g_file_mutex || xSemaphoreTake(g_file_mutex, 0) != pdTRUE) return false;
+    invalidate_validated_artifact(key);
     char path[64];
     snprintf(path, sizeof(path), "/icons/%s", filename);
-    if (!Storage.exists(path) || !Storage.remove(path)) return false;
+    if (!Storage.exists(path) || !Storage.remove(path)) {
+        xSemaphoreGive(g_file_mutex);
+        return false;
+    }
 
     char metadata_path[72];
     snprintf(metadata_path, sizeof(metadata_path), "/icons/%s.meta", key);
@@ -1284,6 +1399,7 @@ bool icon_store_delete_file(const char* filename) {
         g_count--;
     }
     cache_unlock();
+    xSemaphoreGive(g_file_mutex);
     return true;
 }
 

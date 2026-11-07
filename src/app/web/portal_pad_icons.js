@@ -1075,12 +1075,36 @@ async function padPreparePageSave(context) {
 
     const variants = [];
     if (iconButtons.length) {
-        const pages = Array.from(new Set(iconButtons.map(entry => entry.targetPage)));
-        const response = await fetch('/api/icons/installed?pages=' + pages.join(','));
-        if (!response.ok) throw new Error('Failed to read icon metadata: HTTP ' + response.status);
-        const { artifacts } = await response.json();
-        if (!artifacts || typeof artifacts !== 'object' || Array.isArray(artifacts))
-            throw new Error('Installed icon metadata is unavailable.');
+        const keys = new Set();
+        for (const entry of iconButtons) {
+            const col = Number(entry.button.col);
+            const row = Number(entry.button.row);
+            const cols = Number(entry.targetPayload.cols);
+            const rows = Number(entry.targetPayload.rows);
+            const colSpan = Number(entry.button.col_span) || 1;
+            const rowSpan = Number(entry.button.row_span) || 1;
+            if (Number.isInteger(col) && Number.isInteger(row) && col >= 0 && row >= 0 &&
+                col + colSpan <= cols && row + rowSpan <= rows) {
+                keys.add('pad_' + entry.targetPage + '_' + entry.layer + '_' + col + '_' + row +
+                    (entry.slot ? '_opt_' + entry.slot : ''));
+                const fallbackPage = entry.targetPage === targetPage ? templatePage : targetPage;
+                if (entry.layer === 'main' && Number.isInteger(fallbackPage) && fallbackPage >= 0 &&
+                    fallbackPage < (Number(deviceInfoCache && deviceInfoCache.max_pads) || 16))
+                    keys.add('pad_' + fallbackPage + '_main_' + col + '_' + row +
+                        (entry.slot ? '_opt_' + entry.slot : ''));
+            }
+        }
+        const artifacts = {};
+        const keyList = Array.from(keys);
+        for (let offset = 0; offset < keyList.length; offset += 1) {
+            const response = await fetch('/api/icons/installed?keys=' +
+                encodeURIComponent(keyList[offset]));
+            if (!response.ok) throw new Error('Failed to read icon metadata: HTTP ' + response.status);
+            const result = await response.json();
+            if (!result.artifacts || typeof result.artifacts !== 'object' || Array.isArray(result.artifacts))
+                throw new Error('Installed icon metadata is unavailable.');
+            Object.assign(artifacts, result.artifacts);
+        }
         const layout = context.iconLayout || padCaptureIconLayout();
         const buttonSizeCache = new Map();
         const maxDimension = Number(deviceInfoCache && deviceInfoCache.icon_max_dimension) || 720;

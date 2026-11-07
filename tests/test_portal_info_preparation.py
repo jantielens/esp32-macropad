@@ -44,6 +44,7 @@ void* heap_caps_malloc(size_t size, uint32_t) {
 }
 void heap_caps_free(void* pointer) { free(pointer); }
 bool psramFound() { return false; }
+unsigned long millis() { return 0; }
 #define LOGD(...) ((void)0)
 #define LOGT(...) ((void)0)
 #define LOGI(...) ((void)0)
@@ -120,7 +121,9 @@ static std::atomic<bool> g_ready{true};
 static void icon_store_preload_pad(uint8_t) {}
 enum IconKind : uint8_t { ICON_KIND_COLOR = 0, ICON_KIND_MONO = 1 };
 bool icon_store_source_matches_metadata(const char*, const char*, const char*) { return true; }
-bool icon_store_artifact_matches(const char*, const char*, IconKind, uint32_t) { return true; }
+enum IconArtifactValidation : uint8_t { ICON_ARTIFACT_VALID, ICON_ARTIFACT_INVALID_SOURCE, ICON_ARTIFACT_INVALID_PNG };
+IconArtifactValidation icon_store_validate_artifact(const char*, const char*, const char*, const char*,
+                                                    const char*, uint32_t) { return ICON_ARTIFACT_VALID; }
 uint32_t pad_icon_render_key(JsonObjectConst, JsonObjectConst) { return 1; }
 uint32_t pad_option_icon_render_key(JsonObjectConst, JsonObjectConst, uint8_t) { return 1; }
 void icon_store_build_key(uint8_t, const char*, uint8_t, uint8_t, char* key_out, size_t size) {
@@ -135,7 +138,7 @@ bool icon_store_source_delete_if_unreferenced(const char* source) {
     return true;
 }
 void icon_store_delete_page_icons(uint8_t) {}
-void icon_store_cleanup_pad_icons(uint8_t) {}
+void icon_store_retire_unused_pad_icons(uint8_t) {}
 static ButtonDefaults defaults = {};
 struct WidgetType { void (*releaseConfig)(uint8_t*) = nullptr; };
 static const WidgetType* widget_find(const char*) { return nullptr; }
@@ -168,7 +171,7 @@ static bool parse_button(JsonObject object, ScreenButtonConfig* button, const Bu
 harness += icon_header[icon_header.index("#ifndef ICON_MAX_DIMENSION"):icon_header.index("// Icon kind")]
 harness += icon_header[icon_header.index("struct IconArtifactInfo"):icon_header.index("#ifdef __cplusplus")]
 harness += icon_header[icon_header.index("enum IconStoreResult"):icon_header.index("// Reference to a cached icon")]
-harness += icon_source[icon_source.index("static bool validate_png"):icon_source.index("static bool source_matches_metadata_unlocked")]
+harness += icon_source[icon_source.index("static bool validate_png"):icon_source.index("static bool read_source_metadata_unlocked")]
 harness += icon_source[icon_source.index("bool icon_store_source_path"):icon_source.index("bool icon_store_source_matches_kind")]
 harness += icon_source[icon_source.index("struct IconSourceUpload {"):icon_source.index("IconStoreResult icon_store_source_install")]
 harness += icon_source[icon_source.index("static bool read_artifact_unlocked"):icon_source.index("    static bool artifact_matches_for_preload")]

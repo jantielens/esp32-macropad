@@ -4,6 +4,7 @@
 #include "widgets/widget_registry.h"
 #include <cassert>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #define LODEPNG_NO_COMPILE_CPP
 #include <libs/lodepng/lodepng.h>
@@ -13,8 +14,12 @@ FakeFontStorage SD_MMC;
 static PadConfig* configs[MAX_PADS] = {};
 static bool present[MAX_PADS] = {};
 static bool ota_active = false;
+static unsigned reads = 0;
 
 void log_noop(const char*, const char*, ...) {}
+void* heap_caps_malloc(size_t size, uint32_t) { return malloc(size); }
+void heap_caps_free(void* ptr) { free(ptr); }
+bool psramFound() { return true; }
 bool ota_activity_is_active() { return ota_active; }
 uint32_t esp_random() { return 42; }
 bool pad_config_exists(uint8_t page) { return present[page]; }
@@ -86,8 +91,6 @@ int main(int argc, char**) {
         assert(LittleFS.exists("/icons/pad_0_main_3_0.png"));
         assert(LittleFS.exists("/icons/pad_2_main_0_0.meta"));
         assert(LittleFS.exists("/icon_sources/s_000000000000000000000002.png"));
-        icon_store_cleanup_pad_icons(0);
-        assert(LittleFS.exists("/icons/pad_0_main_3_0.png"));
         puts("icon_store_cleanup unreadable: PASS");
         return 0;
     }
@@ -108,19 +111,7 @@ int main(int argc, char**) {
     assert(!LittleFS.exists("/icon_sources/s_000000000000000000000002.png"));
     assert(LittleFS.exists("/icon_sources/s_000000000000000000000003.png"));
 
-    add_file("/icons/pad_0_main_3_0.meta");
     add_file("/icons/pad_2_main_0_0.png");
-    ota_active = true;
-    icon_store_cleanup_pad_icons(0);
-    assert(LittleFS.exists("/icons/pad_0_main_3_0.meta"));
-    ota_active = false;
-    LittleFS.remove_failure = true;
-    icon_store_cleanup_pad_icons(0);
-    assert(LittleFS.exists("/icons/pad_0_main_3_0.meta"));
-    LittleFS.remove_failure = false;
-    icon_store_cleanup_pad_icons(0);
-    assert(!LittleFS.exists("/icons/pad_0_main_3_0.meta"));
-    assert(LittleFS.exists("/icons/pad_2_main_0_0.png"));
 
     const uint8_t pixel[] = {255, 0, 0, 255};
     uint8_t* png = nullptr;
@@ -131,14 +122,79 @@ int main(int argc, char**) {
     icon_store_source_png_abort(ready_upload);
     assert(icon_store_install("pad_0_main_0_0", ICON_KIND_COLOR, used_source, 1,
                               png, png_size) == ICON_STORE_OK);
+    LittleFS.read_hook = []() { ++reads; };
+    assert(icon_store_validate_artifact("pad_0_main_0_0", nullptr, used_source, nullptr,
+                                        "color", 1) == ICON_ARTIFACT_VALID);
+    assert(reads == 0);
+    assert(icon_store_validate_artifact("pad_0_main_1_0", "pad_0_main_0_0", used_source, nullptr,
+                                        "color", 1) == ICON_ARTIFACT_VALID);
+    assert(reads == 0);
+    assert(icon_store_validate_artifact("pad_0_main_0_0", nullptr, used_source, nullptr,
+                                        "mono", 1) == ICON_ARTIFACT_INVALID_SOURCE);
+    assert(icon_store_validate_artifact("pad_0_main_0_0", nullptr, used_source, nullptr,
+                                        "color", 2) == ICON_ARTIFACT_INVALID_PNG);
+    assert(reads > 0);
+    assert(icon_store_install("pad_0_main_0_0", ICON_KIND_COLOR, used_source, 2,
+                              png, png_size) == ICON_STORE_OK);
+    assert(icon_store_validate_artifact("pad_0_main_0_0", nullptr, used_source, nullptr,
+                                        "color", 1) == ICON_ARTIFACT_INVALID_PNG);
+    assert(icon_store_validate_artifact("pad_0_main_0_0", nullptr, used_source, nullptr,
+                                        "color", 2) == ICON_ARTIFACT_VALID);
+    IconArtifactInfo artifact = {};
+    assert(icon_store_prepare_artifact("pad_0_main_0_0", &artifact));
+    reads = 0;
+    assert(icon_store_validate_artifact("pad_0_main_0_0", nullptr, used_source, nullptr,
+                                        "color", 2) == ICON_ARTIFACT_VALID);
+    assert(reads == 0);
+    assert(icon_store_install("pad_0_main_3_0", ICON_KIND_COLOR, used_source, 3,
+                              png, png_size) == ICON_STORE_OK);
+    reads = 0;
+    assert(icon_store_validate_artifact("pad_0_main_0_0", nullptr, used_source, nullptr,
+                                        "color", 2) == ICON_ARTIFACT_VALID);
+    assert(reads == 0);
+    assert(icon_store_delete_file("pad_0_main_3_0.png"));
+    assert(icon_store_validate_artifact("pad_0_main_3_0", nullptr, used_source, nullptr,
+                                        "color", 3) == ICON_ARTIFACT_INVALID_PNG);
+    assert(icon_store_validate_artifact("pad_0_main_0_0", nullptr, used_source, "noto:house",
+                                        "color", 2) == ICON_ARTIFACT_INVALID_SOURCE);
+    assert(icon_store_validate_artifact("pad_0_main_0_0", nullptr, used_source, "",
+                                        "color", 2) == ICON_ARTIFACT_INVALID_SOURCE);
+    const char* catalog_source = "s_000000000000000000000004";
+    const char* catalog_json = R"({"catalog_id":"material-symbols:home","kind":"mono","media_type":"image/svg+xml","data":"<svg/>"})";
+    LittleFS.files["/icon_sources/s_000000000000000000000004.json"] =
+        std::vector<uint8_t>(catalog_json, catalog_json + strlen(catalog_json));
+    assert(icon_store_install("pad_0_main_3_0", ICON_KIND_MONO, catalog_source, 3,
+                              png, png_size) == ICON_STORE_OK);
+    reads = 0;
+    assert(icon_store_validate_artifact("pad_0_main_3_0", nullptr, catalog_source,
+                                        "material-symbols:home", "mono", 3) == ICON_ARTIFACT_VALID);
+    assert(reads == 0);
+    assert(icon_store_validate_artifact("pad_0_main_3_0", nullptr, catalog_source,
+                                        "material-symbols:other", "mono", 3) == ICON_ARTIFACT_INVALID_SOURCE);
+    assert(icon_store_source_delete_if_unreferenced(catalog_source));
+    assert(icon_store_validate_artifact("pad_0_main_3_0", nullptr, catalog_source,
+                                        "material-symbols:home", "mono", 3) == ICON_ARTIFACT_INVALID_SOURCE);
+    std::vector<std::string> many_keys;
+    for (unsigned index = 0; index < 42; ++index) {
+        char key[CONFIG_ICON_KEY_MAX_LEN];
+        snprintf(key, sizeof(key), "pad_3_main_%u_%u", index % 8, index / 8);
+        assert(icon_store_install(key, ICON_KIND_COLOR, used_source, 1, png, png_size) == ICON_STORE_OK);
+        many_keys.emplace_back(key);
+    }
+    reads = 0;
+    for (const auto& key : many_keys)
+        assert(icon_store_validate_artifact(key.c_str(), nullptr, used_source, nullptr,
+                                            "color", 1) == ICON_ARTIFACT_VALID);
+    assert(reads == 0);
+    LittleFS.read_hook = nullptr;
     lv_free(png);
     IconRef cached = {};
     assert(icon_store_lookup("pad_0_main_0_0", &cached));
     const lv_draw_buf_t* retired = reinterpret_cast<const lv_draw_buf_t*>(cached.dsc);
     buttons[0].icon_source_id[0] = '\0';
-    icon_store_cleanup_pad_icons(0);
+    icon_store_retire_unused_pad_icons(0);
     assert(!icon_store_lookup("pad_0_main_0_0", &cached));
-    assert(!LittleFS.exists("/icons/pad_0_main_0_0.png"));
+    assert(LittleFS.exists("/icons/pad_0_main_0_0.png"));
     assert(retired->header.w == 1);
     icon_store_collect_retired(0);
     assert(!icon_store_source_delete_if_unreferenced(used_source));
@@ -147,8 +203,6 @@ int main(int argc, char**) {
     assert(icon_store_source_delete_if_unreferenced(used_source));
     assert(!icon_store_source_delete_if_unreferenced(option_source));
     buttons[2].widget.data[0] = '\0';
-    icon_store_cleanup_pad_icons(0);
-    assert(!LittleFS.exists("/icons/pad_0_overlay_2_0_opt_5.png"));
     assert(icon_store_source_delete_if_unreferenced(option_source));
 
     for (unsigned index = 0; index < MAX_PAD_BUTTONS * 2 + 10; ++index) {
@@ -156,6 +210,14 @@ int main(int argc, char**) {
         snprintf(path, sizeof(path), "/icons/pad_0_stale_%u.meta", index);
         add_file(path);
     }
+    ota_active = true;
+    icon_store_delete_page_icons(0);
+    assert(LittleFS.exists("/icons/pad_0_stale_0.meta"));
+    ota_active = false;
+    LittleFS.remove_failure = true;
+    icon_store_delete_page_icons(0);
+    assert(LittleFS.exists("/icons/pad_0_stale_0.meta"));
+    LittleFS.remove_failure = false;
     icon_store_delete_page_icons(0);
     for (const auto& file : LittleFS.files) assert(file.first.find("/icons/pad_0_") != 0);
     assert(LittleFS.exists("/icons/pad_2_main_0_0.png"));

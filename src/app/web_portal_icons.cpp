@@ -252,6 +252,49 @@ void handleDeletePageIcons(AsyncWebServerRequest *request) {
 void handleGetInstalledIcons(AsyncWebServerRequest *request) {
     if (!portal_auth_gate(request)) return;
 
+    const uint32_t started_ms = millis();
+    if (request->hasParam("keys")) {
+        const String& value = request->getParam("keys")->value();
+        if (request->hasParam("pages") || !value.length()) {
+            web_portal_send_json_error(request, 400, "Invalid keys parameter");
+            return;
+        }
+        char keys[4][CONFIG_ICON_KEY_MAX_LEN] = {};
+        size_t count = 0;
+        const char* cursor = value.c_str();
+        while (*cursor) {
+            const char* end = strchr(cursor, ',');
+            const size_t length = end ? (size_t)(end - cursor) : strlen(cursor);
+            if (count == 4 || !length || length >= sizeof(keys[0])) {
+                web_portal_send_json_error(request, 400, "Invalid keys parameter");
+                return;
+            }
+            memcpy(keys[count], cursor, length);
+            if (!icon_store_key_valid(keys[count++]) || (end && !end[1])) {
+                web_portal_send_json_error(request, 400, "Invalid keys parameter");
+                return;
+            }
+            cursor = end ? end + 1 : cursor + length;
+        }
+        AsyncResponseStream* response = request->beginResponseStream("application/json");
+        response->print("{\"artifacts\":{");
+        bool first = true;
+        for (size_t index = 0; index < count; ++index) {
+            IconArtifactInfo info = {};
+            if (!icon_store_prepare_artifact(keys[index], &info)) continue;
+            if (!first) response->print(",");
+            response->printf("\"%s\":{\"source_id\":\"%s\",\"kind\":%u,\"width\":%u,\"height\":%u,\"render_key\":\"%08x\"}",
+                keys[index], info.source_id, (unsigned)info.kind, (unsigned)info.width,
+                (unsigned)info.height, (unsigned)info.render_key);
+            first = false;
+        }
+        response->print("},\"cache_count\":");
+        response->print(icon_store_cache_count());
+        response->print("}");
+        LOGI(TAG, "Installed icons keys prepared in %lu ms", (unsigned long)(millis() - started_ms));
+        request->send(response);
+        return;
+    }
     const bool scoped = request->hasParam("pages");
     bool pages[MAX_PADS] = {};
     if (scoped) {
@@ -319,6 +362,8 @@ void handleGetInstalledIcons(AsyncWebServerRequest *request) {
     response->print(scoped ? "},\"cache_count\":" : "],\"cache_count\":");
     response->print(icon_store_cache_count());
     response->print("}");
+    LOGI(TAG, "Installed icons %s prepared in %lu ms",
+         scoped ? "scoped" : "all", (unsigned long)(millis() - started_ms));
     request->send(response);
 }
 

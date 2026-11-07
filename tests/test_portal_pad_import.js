@@ -103,7 +103,7 @@ function requestKind(url, options) {
     if (url === '/api/component/display/brightness') return 'brightness-' + JSON.parse(options.body).brightness;
     if (url.startsWith('/api/icons/page')) return 'icon-delete';
     if (url.startsWith('/api/icons/source')) return options && options.method === 'POST' ? 'icon-source-upload' : 'icon-source-read';
-    if (url.startsWith('/api/icons/installed?pages=')) return 'icon-metadata';
+    if (url.startsWith('/api/icons/installed?keys=')) return 'icon-metadata';
     if (url.startsWith('/api/icons/installed')) return 'icon-inventory';
     if (url.startsWith('/api/icons/install')) return 'icon-install';
     if (url.startsWith('/api/icons/file')) return options && options.method === 'DELETE' ? 'icon-file-delete' : 'icon-file-read';
@@ -340,10 +340,12 @@ function pageRequests(result, page) {
     const padSaves = success.requests.filter(request => request.kind === 'pad-save');
     assert.deepStrictEqual(padSaves.map(request => request.page), [0, 1], JSON.stringify(success.messages));
     assert.deepStrictEqual(success.requests.map(request => request.kind), [
-        'config-save', 'button-defaults', 'icon-context', 'icon-metadata',
+        'config-save', 'button-defaults', 'icon-context', 'icon-metadata', 'icon-metadata',
+        'icon-metadata', 'icon-metadata', 'icon-metadata',
         'button-sizes', 'icon-source-upload', 'icon-source-upload', 'config-read', 'brightness-0',
         'icon-install', 'icon-install', 'icon-install', 'pad-save', 'brightness-42',
-        'icon-context', 'icon-source-read', 'icon-metadata', 'button-sizes', 'config-read', 'brightness-0', 'icon-install', 'icon-install',
+        'icon-context', 'icon-source-read', 'icon-metadata', 'icon-metadata', 'icon-metadata', 'icon-metadata',
+        'button-sizes', 'config-read', 'brightness-0', 'icon-install', 'icon-install',
         'pad-save', 'brightness-42',
         'device-info', 'reboot',
     ]);
@@ -568,11 +570,12 @@ function pageRequests(result, page) {
         concurrent.context.padSavePage(),
     ]);
     assert.deepStrictEqual(
-        concurrent.requests.slice(firstConcurrentRequest).map(request => request.kind),
+        concurrent.requests.slice(firstConcurrentRequest).map(request => request.kind)
+            .filter(kind => kind !== 'icon-metadata'),
         [
-            'icon-context', 'icon-metadata', 'config-read', 'brightness-0', 'icon-install', 'icon-install', 'pad-save', 'brightness-42',
+            'icon-context', 'config-read', 'brightness-0', 'icon-install', 'icon-install', 'pad-save', 'brightness-42',
             'device-info',
-            'icon-context', 'icon-metadata', 'config-read', 'brightness-0', 'icon-install', 'icon-install', 'pad-save', 'brightness-42',
+            'icon-context', 'config-read', 'brightness-0', 'icon-install', 'icon-install', 'pad-save', 'brightness-42',
             'device-info',
         ],
         'concurrent saves must not overlap display blanking'
@@ -593,7 +596,7 @@ function pageRequests(result, page) {
     const reuseFetch = reuse.context.fetch;
     reuse.context.fetch = async function(url, fetchOptions = {}) {
         const result = await reuseFetch(url, fetchOptions);
-        if (url.startsWith('/api/icons/installed?pages=')) {
+        if (url.startsWith('/api/icons/installed?keys=')) {
             return response(true, { artifacts: reportedArtifact ? { pad_0_main_0_0: reportedArtifact } : {} });
         }
         if (url === '/api/icons/installed') return response(true, { icons: ['pad_0_main_0_0'] });
@@ -611,7 +614,31 @@ function pageRequests(result, page) {
     assert(!reuseRequests.some(request => request.kind === 'icon-install' || request.kind === 'icon-file-delete'),
         'An unchanged save must neither upload nor delete the matching artifact');
     assert.strictEqual(reuseRequests.find(request => request.kind === 'icon-metadata').url,
-        '/api/icons/installed?pages=0');
+        '/api/icons/installed?keys=pad_0_main_0_0');
+
+    const optionIcons = {
+        cols: 2, rows: 2,
+        buttons: [{ col: 0, row: 0, widget_type: 'option_selector',
+            ...Object.fromEntries(Array.from({ length: 5 }, (_, i) =>
+                ['widget_option_icon' + (i ? '_' + (i + 1) : ''), reusePayload.buttons[0].icon])) }],
+    };
+    const requestsBeforeBatch = reuse.requests.length;
+    await reuse.context.padPreparePageSave({ page: 0, payload: optionIcons, iconLayout: {} });
+    const batches = reuse.requests.slice(requestsBeforeBatch)
+        .filter(request => request.kind === 'icon-metadata')
+        .map(request => new URL(request.url, 'http://localhost').searchParams.get('keys').split(','));
+    assert.deepStrictEqual(batches.map(batch => batch.length), [1, 1, 1, 1, 1]);
+    assert(batches.flat().includes('pad_0_main_0_0_opt_5'));
+
+    const templatePayload = { ...reusePayload, template_pad: 1 };
+    const requestsBeforeTemplate = reuse.requests.length;
+    await reuse.context.padPreparePageSave({
+        page: 0, payload: templatePayload, iconLayout: {}, templatePage: 1, templateButtons: [],
+    });
+    const templateKeys = reuse.requests.slice(requestsBeforeTemplate)
+        .filter(request => request.kind === 'icon-metadata')
+        .flatMap(request => new URL(request.url, 'http://localhost').searchParams.get('keys').split(','));
+    assert(templateKeys.includes('pad_1_main_0_0'), 'Template fallback must be prepared');
 
     for (const mismatch of [null, { source_id: sourceId(2) }, { kind: 0 },
         { render_key: '00000001' }, { width: 89 }, { height: 89 }]) {

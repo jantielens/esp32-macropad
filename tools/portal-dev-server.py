@@ -252,7 +252,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
 
     @staticmethod
     def _valid_icon_key(key):
-        return re.fullmatch(r"pad_(?:[0-9]|1[0-5])_(?:main|overlay)_[0-7]_[0-7]", key) is not None
+        return re.fullmatch(r"pad_(?:[0-9]|1[0-5])_(?:main|overlay)_[0-7]_[0-7](?:_opt_[1-5])?", key) is not None
 
     def _page(self, query):
         value = query.get("page", [""])[0]
@@ -490,19 +490,26 @@ class PortalHandler(SimpleHTTPRequestHandler):
                     self._serve_json(copy.deepcopy(source))
         elif path == "/api/icons/installed":
             page_query = parse_qs(parsed.query, keep_blank_values=True)
-            if "pages" not in page_query:
+            if "keys" in page_query:
+                keys = page_query["keys"][0].split(",")
+                if "pages" in page_query or len(keys) > 4 or any(not self._valid_icon_key(key) for key in keys):
+                    self._serve_json({"error": "Invalid keys parameter"}, 400)
+                    return
+                pages = None
+            elif "pages" not in page_query:
                 self._serve_json({"icons": sorted(self.server.mock_icons), "cache_count": 0})
                 return
-            value = page_query["pages"][0]
-            if (len(value) > 64 or not re.fullmatch(r"[0-9]+(?:,[0-9]+)*", value) or
-                    any(int(page) >= 16 for page in value.split(","))):
-                self._serve_json({"error": "Invalid pages parameter"}, 400)
-                return
-            pages = {int(page) for page in value.split(",")}
+            else:
+                value = page_query["pages"][0]
+                if (len(value) > 64 or not re.fullmatch(r"[0-9]+(?:,[0-9]+)*", value) or
+                        any(int(page) >= 16 for page in value.split(","))):
+                    self._serve_json({"error": "Invalid pages parameter"}, 400)
+                    return
+                pages = {int(page) for page in value.split(",")}
             artifacts = {}
             for key, metadata in sorted(self.server.mock_icon_metadata.items()):
                 png = self.server.mock_icons.get(key, b"")
-                if (int(key.split("_")[1]) in pages and len(png) >= 24 and
+                if (((key in keys) if pages is None else (int(key.split("_")[1]) in pages)) and len(png) >= 24 and
                         png.startswith(b"\x89PNG\r\n\x1a\n") and
                         png[8:16] == b"\x00\x00\x00\rIHDR" and
                         int.from_bytes(png[16:20], "big") == metadata["width"] and

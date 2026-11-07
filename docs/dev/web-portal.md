@@ -3653,25 +3653,32 @@ The handler reads one artifact at a time and buffers only the serialized respons
 }
 ```
 
-Save preparation requests metadata once for the current pad and affected
-dependents. It skips PNG rendering and upload only when source ID, numeric kind,
+With `?keys=pad_0_main_0_0,pad_1_main_0_0`, return metadata for up to four
+explicit positional keys without scanning the icon directory. Invalid keys,
+empty lists, and requests combining `keys` with `pages` return `400`.
+
+Save preparation requests metadata for the required keys one at a time.
+It skips PNG rendering and upload only when source ID, numeric kind,
 render key, and both calculated PNG dimensions match. Dimensions are compared
 separately because device defaults can change sizing without changing the render
 key. New or imported sources still generate new artifacts. Saving pad JSON and
 firmware validation still run when all generated icons are reused.
+On devices with PSRAM, these requests also cache validated source and artifact
+metadata for the final save; icon-store installs and deletions invalidate affected
+entries. Cache allocation never falls back to internal RAM. If caching is
+unavailable, the save rechecks files synchronously.
 
-Firmware reconciles generated files for the saved pad after a successful save
-and dependent-cache refresh. It preserves main and overlay icon positions,
-including inherited template buttons, and retires obsolete decoded buffers until
-the owning screen releases them. Browser-issued pruning is not required. Pad
-deletion removes all matching generated files without a fixed file-count limit.
-Unused source artwork is retained until the next normal-runtime startup.
+After a successful save and dependent-cache refresh, firmware retires obsolete
+decoded buffers until the owning screen releases them. It keeps main and overlay
+icon positions, including inherited template buttons. Generated files left by
+saves and unused source artwork are retained until the next normal-runtime
+startup. Pad deletion removes matching generated files without a fixed
+file-count limit.
 
 Initial normal-runtime startup sweeps unreferenced sources and generated files,
 including leftovers from failed saves and interrupted browser sessions.
-The boot sweep skips deletion if a saved pad configuration cannot be read;
-pad-scoped cleanup also skips unreadable pad or template configurations. Cleanup
-stops for OTA activity and logs reclaimed file counts and bytes. There is no
+The boot sweep skips deletion if a saved pad configuration cannot be read.
+Cleanup stops for OTA activity and logs reclaimed file counts and bytes. There is no
 periodic global sweep or upload rollback, so completed but abandoned uploads can
 remain until the next normal-runtime startup. Generated files at referenced
 positions are retained conservatively rather than deleted for metadata mismatch.

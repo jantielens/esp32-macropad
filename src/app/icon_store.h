@@ -87,12 +87,19 @@ bool icon_store_source_matches_kind(const char* source_id, IconKind kind);
 bool icon_store_source_matches_metadata(const char* source_id,
                                         const char* catalog_id,
                                         const char* kind);
-bool icon_store_artifact_matches(const char* key, const char* source_id, IconKind kind,
-                                 uint32_t render_key);
+enum IconArtifactValidation : uint8_t {
+    ICON_ARTIFACT_VALID,
+    ICON_ARTIFACT_INVALID_SOURCE,
+    ICON_ARTIFACT_INVALID_PNG,
+};
+IconArtifactValidation icon_store_validate_artifact(const char* key, const char* fallback_key,
+                                                    const char* source_id, const char* catalog_id,
+                                                    const char* kind, uint32_t render_key);
 bool icon_store_read_artifact(const char* key, IconArtifactInfo* out);
+bool icon_store_prepare_artifact(const char* key, IconArtifactInfo* out);
 bool icon_store_source_delete_if_unreferenced(const char* source_id);
 void icon_store_cleanup_unreferenced_sources();
-void icon_store_cleanup_pad_icons(uint8_t page);
+void icon_store_retire_unused_pad_icons(uint8_t page);
 
 // Install a generated PNG and its source/kind/dimension metadata.
 IconStoreResult icon_store_install(const char* key, IconKind kind,

@@ -928,6 +928,11 @@ class PortalDevServerTest(unittest.TestCase):
         }})
         self.assertEqual(len(self.request("/api/icons/installed?pages=0,1")[1]["artifacts"]), 2)
         self.assertEqual(self.request("/api/icons/installed?pages=15")[1]["artifacts"], {})
+        self.assertEqual(self.request("/api/icons/installed?keys=pad_0_main_0_0")[1]["artifacts"], metadata)
+        self.assertEqual(self.request("/api/icons/installed?keys=pad_0_main_0_0_opt_5")[1]["artifacts"], {})
+        for keys in ("", "bad", "pad_0_main_0_0,", ",".join(["pad_0_main_0_0"] * 5)):
+            self.assertEqual(self.request("/api/icons/installed?keys=" + keys)[0], 400)
+        self.assertEqual(self.request("/api/icons/installed?keys=pad_0_main_0_0&pages=0")[0], 400)
         for pages in ("", "16", "-1", "0,,1"):
             self.assertEqual(self.request("/api/icons/installed?pages=" + pages)[0], 400)
         self.server.mock_icons["pad_0_main_0_0"] = png[:8]

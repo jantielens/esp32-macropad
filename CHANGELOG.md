@@ -82,6 +82,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Reduce pad save delays and watchdog risk on icon-heavy pads by preparing icon
+  validation incrementally. Unused generated icons are cleaned up at the next
+  normal startup.
 * Make small buttons selectable in the pad editor and scale resize grips to
   fit selected buttons. Keep the button selected after resizing.
   See [move and resize](docs/user/pads/editing.md#move-and-resize).
