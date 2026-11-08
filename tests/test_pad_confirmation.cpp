@@ -245,6 +245,29 @@ int main() {
     {
         JsonDocument doc;
         JsonObject button = make_button(doc);
+        doc["cols"] = 10;
+        doc["rows"] = 10;
+        button["col"] = 8;
+        button["row"] = 8;
+        button["col_span"] = 2;
+        button["row_span"] = 2;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        button["col"] = 9;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["col_span"] = 1;
+        button["row"] = 9;
+        button["row_span"] = 1;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        doc["cols"] = 11;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        doc["cols"] = 10;
+        doc["rows"] = 11;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+    }
+
+    {
+        JsonDocument doc;
+        JsonObject button = make_button(doc);
         JsonObject icon = button["icon"].to<JsonObject>();
         icon["source_id"] = "s_0123456789abcdef01234567";
         icon["catalog_id"] = "material-symbols:lightbulb";
@@ -461,6 +484,16 @@ int main() {
         CHECK(pad_icon_render_key(doc.as<JsonObjectConst>(), button) != original);
         button["icon_scale_pct"] = 75;
         doc["column_widths_px"][1] = 50;
+        CHECK(pad_icon_render_key(doc.as<JsonObjectConst>(), button) != original);
+    }
+
+    {
+        JsonDocument doc;
+        deserializeJson(doc, R"({"cols":10,"rows":10,"column_widths_px":[0,0,0,0,0,0,0,0,21,0],"row_heights_px":[0,0,0,0,0,0,0,0,0,31],"buttons":[{"col":9,"row":9}]})");
+        JsonObject button = doc["buttons"][0];
+        const uint32_t original = pad_icon_render_key(doc.as<JsonObjectConst>(), button);
+        CHECK(original == 0x027ad4aau);
+        doc["column_widths_px"][8] = 22;
         CHECK(pad_icon_render_key(doc.as<JsonObjectConst>(), button) != original);
     }
 

@@ -131,8 +131,8 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     JsonObject pf = pad.createNestedObject("fields");
     pf["name"] = "optional friendly label for the pad (shown in the UI; returned by get_pad/list_pads). The canonical id is still 'pad_N'. To SET it, call set_pad with the 'pad_name' argument (the key 'name' is avoided because some MCP clients reserve it).";
     pf["layout"] = "'grid' (default) or a curated layout name";
-    pf["cols"] = "grid columns 1-8";
-    pf["rows"] = "grid rows 1-8";
+    pf["cols"] = "grid columns from 1 to grid.max_cols";
+    pf["rows"] = "grid rows from 1 to grid.max_rows";
     pf["wake_screen"] = "screen id to navigate to on screensaver wake ('' = stay)";
     pf["bg_color"] = "pad background color #RRGGBB (default #000000)";
     pf["button_shadow"] = "'enabled' or 'disabled' to override the device button-shadow setting; omit to inherit";

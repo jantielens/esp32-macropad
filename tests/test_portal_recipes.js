@@ -158,6 +158,13 @@ const alarmRecipe = {
 };
 const alarmCatalog = { schema: 1, catalog_version: 'test', recipes: [alarmRecipe] };
 assert.doesNotThrow(() => context.recipeLoadCatalogJson(JSON.stringify(alarmCatalog)));
+alarmRecipe.layout.buttons[0].col_offset = 9;
+alarmRecipe.layout.buttons[0].row_offset = 9;
+assert.doesNotThrow(() => context.recipeLoadCatalogJson(JSON.stringify(alarmCatalog)));
+alarmRecipe.layout.buttons[0].col_offset = 10;
+assert.throws(() => context.recipeLoadCatalogJson(JSON.stringify(alarmCatalog)), /10x10/);
+alarmRecipe.layout.buttons[0].col_offset = 0;
+alarmRecipe.layout.buttons[0].row_offset = 0;
 assert.strictEqual(context.recipeExpand(alarmRecipe, { target_pad: 'pad_7' }).provision.components.alarms['1'].on_ring[0].target, 'pad_7');
 alarmRecipe.parameters = [{ id: 'target_pad', label: 'Target', type: 'string', default: 'pad_1' }];
 assert.throws(() => context.recipeLoadCatalogJson(JSON.stringify(alarmCatalog)), /reserved/);

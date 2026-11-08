@@ -878,8 +878,8 @@ function padIconRenderKey(payload, button) {
         button.col_span ?? 1, button.row_span ?? 1, button.icon_scale_pct ?? 0,
         button.label_top ? 1 : 0, button.label_bottom ? 1 : 0,
         button.border_width ?? '', button.content_pad ?? '', button.widget_type ?? ''];
-    for (let index = 0; index < Math.min(cols, 8); index++) values.push(payload.column_widths_px?.[index] ?? 0);
-    for (let index = 0; index < Math.min(rows, 8); index++) values.push(payload.row_heights_px?.[index] ?? 0);
+    for (let index = 0; index < cols; index++) values.push(payload.column_widths_px?.[index] ?? 0);
+    for (let index = 0; index < rows; index++) values.push(payload.row_heights_px?.[index] ?? 0);
     let hash = 2166136261;
     for (const value of values) {
         for (const byte of new TextEncoder().encode(String(value))) hash = Math.imul(hash ^ byte, 16777619) >>> 0;
@@ -918,7 +918,7 @@ function padSelectTemplateButtons(payload, templateButtons) {
         const rowSpan = Number(button.row_span) || 1;
         for (let x = col; x < col + colSpan; x++) {
             for (let y = row; y < row + rowSpan; y++) {
-                if (x >= 0 && x < 8 && y >= 0 && y < 8) occupied.add(x + ',' + y);
+                if (x >= 0 && x < cols && y >= 0 && y < rows) occupied.add(x + ',' + y);
             }
         }
     };

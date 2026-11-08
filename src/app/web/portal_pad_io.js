@@ -275,8 +275,10 @@ async function padImportPad(evt) {
         const importedSources = padValidateImportedIconSources([json], json._icon_sources);
         if (json.buttons.length + (json.overlay_buttons || []).length > padMaxButtons())
             throw new Error('Combined Main and Overlay button limit exceeded (' + padMaxButtons() + ')');
-        if (json.cols < 1 || json.cols > 8 || json.rows < 1 || json.rows > 8) {
-            throw new Error('Invalid grid size (1-8 cols/rows)');
+        const maxCols = (deviceInfoCache && deviceInfoCache.max_grid_cols) || 8;
+        const maxRows = (deviceInfoCache && deviceInfoCache.max_grid_rows) || 8;
+        if (json.cols < 1 || json.cols > maxCols || json.rows < 1 || json.rows > maxRows) {
+            throw new Error('Invalid grid size (maximum ' + maxCols + ' columns and ' + maxRows + ' rows)');
         }
 
         // Load into editor

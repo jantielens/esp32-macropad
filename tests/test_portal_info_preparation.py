@@ -409,6 +409,21 @@ int main() {
     assert(resized->name == reinterpret_cast<char*>(resized->buttons + 4));
     assert(!pad_config_resize(&resized, 0));
     pad_config_release(resized);
+    {
+        PadConfig* target = pad_config_create(1);
+        PadConfig* source = pad_config_create(2);
+        target->cols = target->rows = source->cols = source->rows = 10;
+        target->button_count = target->main_button_count = 1;
+        target->buttons[0].col = target->buttons[0].row = 8;
+        source->button_count = source->main_button_count = 2;
+        source->buttons[0].col = source->buttons[0].row = 8;
+        source->buttons[1].col = source->buttons[1].row = 9;
+        uint8_t selected[MAX_PAD_BUTTONS] = {};
+        assert(select_template_buttons(*target, *source, selected) == 1);
+        assert(selected[0] == 1);
+        pad_config_release(source);
+        pad_config_release(target);
+    }
     JsonDocument template_pad;
     template_pad["cols"] = 8;
     template_pad["rows"] = 8;

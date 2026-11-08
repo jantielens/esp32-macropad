@@ -64,6 +64,22 @@ static void test_nonuniform_tracks_spans_and_rounding() {
     assert(resized_columns[0] == 49 && resized_columns[1] == 20 && resized_columns[2] == 48);
 }
 
+static void test_ten_by_ten_grid() {
+    const uint8_t columns[] = {8, 9};
+    const uint8_t rows[] = {8, 9};
+    const uint8_t spans[] = {2, 1};
+    const uint16_t column_widths[] = {0, 0, 0, 0, 0, 0, 0, 0, 20, 0};
+    const uint16_t row_heights[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 30};
+    const PadGridLayoutSpace layout = {0, 0, 0, 0, 0, 0, 0};
+    PadRect rects[2] = {};
+    pad_compute_grid(10, 10, 120, 120, columns, rows, spans, spans, 2, rects,
+                     &layout, column_widths, row_heights);
+    assert(rects[0].x == 89 && rects[0].y == 80);
+    assert(rects[0].w == 31 && rects[0].h == 40);
+    assert(rects[1].x == 109 && rects[1].y == 90);
+    assert(rects[1].w == 11 && rects[1].h == 30);
+}
+
 static void test_invalid_track_overrides_fall_back_to_uniform() {
     const uint16_t all_fixed[] = {30, 30, 30};
     uint16_t sizes[3] = {};
@@ -282,6 +298,7 @@ static void test_centered_group_preserves_widget_region() {
 int main() {
     test_layout_spacing_and_insets();
     test_nonuniform_tracks_spans_and_rounding();
+    test_ten_by_ten_grid();
     test_invalid_track_overrides_fall_back_to_uniform();
     test_stopwatch_466_square_round_viewport();
     test_button_content_regions();

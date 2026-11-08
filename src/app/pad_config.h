@@ -23,10 +23,10 @@
 #define MAX_PAD_BUTTONS       64
 #endif
 #ifndef MAX_GRID_COLS
-#define MAX_GRID_COLS          8
+#define MAX_GRID_COLS         10
 #endif
 #ifndef MAX_GRID_ROWS
-#define MAX_GRID_ROWS          8
+#define MAX_GRID_ROWS         10
 #endif
 
 #define CONFIG_LABEL_MAX_LEN          192
@@ -562,8 +562,8 @@ struct PadConfig {
     uint8_t button_capacity;               // allocated entries in buttons
     const char* name;
     char layout[CONFIG_LAYOUT_NAME_MAX_LEN]; // "grid" or curated layout name
-    uint8_t cols;                            // 1-8 (grid mode only)
-    uint8_t rows;                            // 1-8 (grid mode only)
+    uint8_t cols;                            // 1-MAX_GRID_COLS (grid mode only)
+    uint8_t rows;                            // 1-MAX_GRID_ROWS (grid mode only)
     uint16_t column_widths_px[MAX_GRID_COLS]; // 0 = Auto
     uint16_t row_heights_px[MAX_GRID_ROWS];   // 0 = Auto
     char wake_screen[CONFIG_SCREEN_ID_MAX_LEN]; // screen to navigate to on screensaver sleep (empty = stay)

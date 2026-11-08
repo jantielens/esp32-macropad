@@ -205,7 +205,7 @@ struct PadGridLayoutSpace {
 // Compute tile rectangles for a grid layout.
 //
 // Inputs:
-//   cols, rows       — grid dimensions (1-8 each)
+//   cols, rows       — grid dimensions (up to MAX_GRID_COLS / MAX_GRID_ROWS)
 //   display_w/h      — full display resolution
 //   button_cols[]    — per-button column positions (0-based)
 //   button_rows[]    — per-button row positions (0-based)

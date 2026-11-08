@@ -303,6 +303,21 @@ function pageRequests(result, page) {
     assert.strictEqual(layoutBody.buttons[0].icon_color, '[health:color]');
     assert.strictEqual(layoutBody.buttons[0].widget_sparkline_fill_opacity, 35);
     const success = await runImport();
+    success.context.deviceInfoCache.max_grid_cols = 10;
+    success.context.deviceInfoCache.max_grid_rows = 10;
+    success.context.padPageBackgroundModeChanged = () => {};
+    success.context.padLoadTemplateButtons = async () => {};
+    success.context.padRenderGrid = () => {};
+    success.context.padMarkDirty = () => {};
+    const importPad = async pad => success.context.padImportPad({
+        target: { files: [{ text: async () => JSON.stringify(pad) }], value: 'pad.json' },
+    });
+    await importPad({ cols: 10, rows: 10, buttons: [{ col: 9, row: 9 }] });
+    assert(success.messages.some(message => message.type === 'success' && message.message.includes('Pad imported')));
+    assert.strictEqual(vm.runInContext('padState.cols', success.context), 10);
+    success.context.deviceInfoCache.max_grid_cols = 5;
+    await importPad({ cols: 10, rows: 10, buttons: [] });
+    assert(success.messages.some(message => message.type === 'error' && message.message.includes('maximum 5 columns')));
     const uploadFetch = success.context.fetch;
     success.context.fetch = async () => response(false, { success: false, message: 'Invalid icon source or PNG' });
     await assert.rejects(success.context.padUploadIconSources({ sourceUploads: [['draft:test', pngSource]] }),

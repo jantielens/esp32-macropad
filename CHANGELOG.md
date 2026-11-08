@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+* Increase the default pad grid limit to 10 columns and 10 rows for more
+  flexible layouts. Board-specific grid limits and button limits remain
+  unchanged. See [edit and save a pad](docs/user/pads/editing.md#build-the-layout).
+
 ### Fixed
 
 * Keep long-binding tips from disrupting the button editor layout. Show them in

@@ -21,6 +21,10 @@ The canvas reflects the device's aspect ratio and spacing, not an exact renderin
 of fonts, widgets, or live images. Each pad saves independently.
 **Show on Device** does not save the draft.
 
+Most devices support up to 10 columns and 10 rows; some offer smaller grids.
+The button limit is separate from the number of grid positions. Use spans to
+size buttons across multiple positions.
+
 Buttons whose fill and border blend into the pad background show a faint dotted
 boundary on the canvas. Selecting a button replaces this guide with the selection
 frame. The guide does not change saved styling or appear on the device.

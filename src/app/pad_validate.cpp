@@ -446,8 +446,8 @@ const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid,
     int rows = pad["rows"] | 0;
     bool is_grid = strcmp(layout, "grid") == 0;
     if (is_grid) {
-        if (cols < 1 || cols > MAX_GRID_COLS) return "cols must be 1-8";
-        if (rows < 1 || rows > MAX_GRID_ROWS) return "rows must be 1-8";
+        if (cols < 1 || cols > MAX_GRID_COLS) return "cols must be within device grid limits";
+        if (rows < 1 || rows > MAX_GRID_ROWS) return "rows must be within device grid limits";
     } else {
         if (pad.containsKey("column_widths_px") || pad.containsKey("row_heights_px"))
             return "track sizes are only supported for grid layouts";

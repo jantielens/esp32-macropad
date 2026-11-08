@@ -582,7 +582,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             try:
                 cols = int(query.get("cols", ["0"])[0])
                 rows = int(query.get("rows", ["0"])[0])
-                if not 1 <= cols <= 8 or not 1 <= rows <= 8:
+                if not 1 <= cols <= 10 or not 1 <= rows <= 10:
                     raise ValueError()
             except ValueError:
                 self._serve_json({"error": "Invalid grid dimensions"}, 400)
@@ -1197,9 +1197,12 @@ class PortalHandler(SimpleHTTPRequestHandler):
     @staticmethod
     def _valid_pad(data):
         cols, rows = data.get("cols"), data.get("rows")
-        if type(cols) is not int or type(rows) is not int or not 1 <= cols <= 8 or not 1 <= rows <= 8:
+        if type(cols) is not int or type(rows) is not int or not 1 <= cols <= 10 or not 1 <= rows <= 10:
             return False
         if not isinstance(data.get("buttons"), list):
+            return False
+        overlays = data.get("overlay_buttons", [])
+        if not isinstance(overlays, list) or len(data["buttons"]) + len(overlays) > 64:
             return False
         occupied = set()
         for button in data["buttons"]:
@@ -1368,7 +1371,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                         has_native_extensions=True, has_camera=False, has_image_fetch=True,
                         has_image_library=True, has_ble=False, has_ble_hid=False,
                         max_pads=16, configured_pads=sorted(int(page) for page in self.server.mock_pads),
-                        max_pad_buttons=64, max_grid_cols=8, max_grid_rows=8,
+                        max_pad_buttons=64, max_grid_cols=10, max_grid_rows=10,
                         icon_max_png_size=512 * 1024, icon_max_source_json_size=704 * 1024,
                         display_coord_width=720, display_coord_height=720, display_blank_on_save=True,
                         available_screens=[{"id": "pad_" + str(page), "name": self.server.mock_pads.get(str(page), {}).get("name", "Pad " + str(page + 1))}

@@ -810,6 +810,16 @@ for (const change of [{ icon_scale_pct: 80 }, { col_span: 1 }, { label_top: '' }
 assert.notStrictEqual(context.padIconRenderKey({ ...renderPad, column_widths_px: [0, 50, 0] }, renderButton), originalKey);
 assert.notStrictEqual(context.padIconRenderKey({ ...renderPad, cols: 4 }, renderButton), originalKey);
 
+const largePad = { cols: 10, rows: 10, column_widths_px: [0, 0, 0, 0, 0, 0, 0, 0, 21, 0],
+    row_heights_px: [0, 0, 0, 0, 0, 0, 0, 0, 0, 31] };
+const largeKey = context.padIconRenderKey(largePad, { col: 9, row: 9 });
+assert.strictEqual(largeKey, '027ad4aa');
+assert.notStrictEqual(context.padIconRenderKey({ ...largePad,
+    column_widths_px: [0, 0, 0, 0, 0, 0, 0, 0, 22, 0] }, { col: 9, row: 9 }), largeKey);
+assert.deepStrictEqual(Array.from(context.padSelectTemplateButtons(
+    { cols: 10, rows: 10, buttons: [{ col: 8, row: 8 }] },
+    [{ col: 8, row: 8 }, { col: 9, row: 9 }])), [{ col: 9, row: 9 }]);
+
 {
     const size = 8;
     const pixels = new Uint8ClampedArray(size * size * 4);
