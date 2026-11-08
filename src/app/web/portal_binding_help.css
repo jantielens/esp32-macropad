@@ -188,17 +188,6 @@
 .binding-insert-btn:hover { color: #fff; filter: brightness(1.1); }
 .binding-copy-btn.is-copied { border-color: #15803d; background: #dcfce7; color: #166534; }
 
-.binding-maxlen-hint {
-  display: block; width: 100%; box-sizing: border-box;
-  margin: 4px 0 2px; padding: 6px 10px;
-  border: 1px solid #f0c36d; border-left-width: 3px;
-  border-radius: 6px; background: rgba(240, 195, 109, 0.12);
-  color: var(--portal-docs-body, #5a4a1a); font-size: 12px; line-height: 1.5;
-}
-.binding-maxlen-hint a { color: var(--portal-link-blue); text-decoration: underline; cursor: pointer; }
-.binding-maxlen-hint code { font-size: 11px; }
-
-
 @media (max-width: 767px) {
   .binding-docs-overlay { padding: 0; }
   .binding-docs-modal { width: 100vw; height: 100%; border-radius: 0; }

@@ -495,9 +495,9 @@ function bindingHelpResolveTarget(trigger) {
     return null;
 }
 
-function showBindingHelp(onClose) {
+function showBindingHelp(onClose, view) {
     _bindingHelp.onClose = typeof onClose === 'function' ? onClose : null;
-    if (_bhOpen('guide:basics')) return true;
+    if (_bhOpen(view || 'guide:basics')) return true;
     _bindingHelp.onClose = null;
     return false;
 }

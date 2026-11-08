@@ -360,6 +360,68 @@ assert.strictEqual(bindingName.classList.contains('binding-error'), false);
 assert.strictEqual(bindingName.classList.contains('pad-field-error'), false);
 assert.strictEqual(bindingName.attributes['aria-invalid'], undefined);
 
+const warningOverlay = document.getElementById('pad-edit-overlay');
+const warningLabel = {
+    textContent: 'Caption restart_alt',
+    childNodes: [{ nodeType: 3, textContent: 'Caption' }, { nodeType: 1, textContent: 'restart_alt' }],
+    querySelector() { return null; }
+};
+const warningWidget = { parentElement: warningOverlay, dataset: { buttonTab: 'Content' }, style: {}, hidden: false };
+const warningInput = {
+    id: 'caption', value: '[mqtt:123]', maxLength: 10, disabled: false, hidden: false, style: {},
+    parentElement: warningWidget, labels: [warningLabel],
+    getAttribute() { return null; }, closest() { return null; }
+};
+warningOverlay.querySelectorAll = selector => selector === 'input[maxlength]' ? [warningInput] : [];
+const warning = document.getElementById('pad-edit-validation-error');
+const warningMessage = document.getElementById('pad-edit-validation-message');
+const warningHelp = document.getElementById('pad-edit-validation-help');
+vm.runInContext("padWorkspace.scope = 'button'; padWorkspace.selected = true; padWorkspace.errors.clear();", context);
+context.padDialogClearValidationError();
+context.padRefreshMaxlenWarning();
+assert.strictEqual(warning.style.display, '');
+assert.strictEqual(warning.dataset.kind, 'warning');
+assert.strictEqual(warningHelp.hidden, false);
+assert.strictEqual(warningMessage.textContent, 'Caption reached its length limit.');
+assert.doesNotMatch(warningMessage.textContent, /restart_alt/);
+assert.strictEqual(document.getElementById('pad-action-controls').inert, false);
+warningInput.closest = () => ({
+    dataset: { slotLabel: 'Tap action 1' },
+    querySelector() { return { textContent: 'Tap action 1: Publish MQTT message · [mqtt:123]' }; }
+});
+context.padRefreshMaxlenWarning();
+assert.strictEqual(warningMessage.textContent, 'Tap action 1 — Caption reached its length limit.');
+warningInput.closest = () => null;
+context.padDialogClearValidationError();
+assert.strictEqual(warning.style.display, '', 'Normal revalidation preserves the warning');
+context.padDialogDismissValidationError();
+context.padRefreshMaxlenWarning();
+assert.strictEqual(warning.style.display, 'none', 'Dismissal persists while the value is unchanged');
+warningInput.value = '[mqtt:456]';
+context.padRefreshMaxlenWarning();
+assert.strictEqual(warning.style.display, '', 'A changed value can show the warning again');
+context.padDialogShowValidationError('Invalid button');
+assert.strictEqual(warning.dataset.kind, 'error', 'Validation errors take priority');
+assert.strictEqual(warningHelp.hidden, true);
+context.padDialogClearValidationError();
+assert.strictEqual(warning.dataset.kind, 'warning', 'Warning returns after the error is cleared');
+warningWidget.style.display = 'none';
+context.padRefreshMaxlenWarning();
+assert.strictEqual(warning.style.display, 'none', 'Inactive widget fields do not trigger warnings');
+warningWidget.style.display = '';
+warningWidget.hidden = true;
+context.padRefreshMaxlenWarning();
+assert.strictEqual(warning.style.display, '', 'A warning remains available on other inspector tabs');
+warningWidget.hidden = false;
+warningInput.value = '[mqtt:1]';
+context.padRefreshMaxlenWarning();
+assert.strictEqual(warning.style.display, 'none', 'Shortening the value clears the warning');
+warningInput.value = '[mqtt:123]';
+vm.runInContext("padWorkspace.scope = 'pad';", context);
+context.padRefreshMaxlenWarning();
+assert.strictEqual(warning.style.display, 'none', 'The warning is limited to the selected button');
+delete warningOverlay.querySelectorAll;
+
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_icons.js', 'utf8'), context);
 const buildFill = context.padFillBuild;
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_colors.js', 'utf8'), context);

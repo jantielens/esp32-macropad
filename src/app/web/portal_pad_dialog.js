@@ -223,8 +223,7 @@ function padDialogOpen(col, row) {
     // Enable paste button if clipboard has content
     document.getElementById('pad-edit-paste').disabled = !padState.btnClipboard;
 
-    // Refresh binding length warnings for the loaded values
-    if (typeof padScanMaxlenHints === 'function') padScanMaxlenHints();
+    if (typeof padRefreshMaxlenWarning === 'function') padRefreshMaxlenWarning();
 
     // Mount + prefetch the in-context live-value preview affordances.
     if (typeof padPvOnOpen === 'function') padPvOnOpen();
@@ -251,6 +250,12 @@ function padDialogShowValidationError(message) {
     const alert = document.getElementById('pad-edit-validation-error');
     if (!alert) return;
     padDialogRefreshFieldErrors(message);
+    alert.dataset.kind = 'error';
+    alert.setAttribute('role', 'alert');
+    document.getElementById('pad-edit-validation-help').hidden = true;
+    const dismiss = document.getElementById('pad-edit-validation-dismiss');
+    dismiss.setAttribute('aria-label', 'Dismiss error');
+    dismiss.title = 'Dismiss error';
     document.getElementById('pad-edit-validation-message').textContent = message.message || message;
     alert.style.display = '';
     ['pad-action-controls', 'pad-workspace-mobile-save', 'pad-workspace-back'].forEach(function(id) {
@@ -274,14 +279,28 @@ function padDialogFocusValidationError(error) {
 
 function padDialogDismissValidationError() {
     const alert = document.getElementById('pad-edit-validation-error');
-    if (alert) alert.style.display = 'none';
+    if (alert && alert.dataset.kind === 'warning') {
+        padDismissMaxlenWarning();
+        return;
+    }
+    if (alert) {
+        alert.style.display = 'none';
+        delete alert.dataset.kind;
+    }
     ['pad-action-controls', 'pad-workspace-mobile-save', 'pad-workspace-back'].forEach(function(id) {
         const control = document.getElementById(id);
         if (control) control.inert = false;
     });
+    if (typeof padRefreshMaxlenWarning === 'function') padRefreshMaxlenWarning();
 }
 
 function padDialogClearValidationError() {
+    const alert = document.getElementById('pad-edit-validation-error');
+    if (alert && alert.dataset.kind === 'warning') {
+        padDialogRefreshFieldErrors();
+        if (typeof padRefreshMaxlenWarning === 'function') padRefreshMaxlenWarning();
+        return;
+    }
     const message = document.getElementById('pad-edit-validation-message');
     if (message) message.textContent = '';
     padDialogRefreshFieldErrors();

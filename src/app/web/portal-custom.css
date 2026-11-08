@@ -1572,7 +1572,8 @@ body {
   line-height: 14px;
   text-align: left;
 }
-#pad-edit-validation-message { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.pad-validation-content { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+#pad-edit-validation-help a { display: inline-block; color: inherit; text-decoration: underline; }
 .pad-validation-dismiss {
   display: inline-flex; align-items: center; justify-content: center;
   flex: 0 0 28px; width: 28px; height: 28px; padding: 0;

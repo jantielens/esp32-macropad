@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-11-07
+ms.date: 2026-11-08
 ms.topic: reference
 ---
 
@@ -11,6 +11,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Fixed
+
+* Keep long-binding tips from disrupting the button editor layout. Show them in
+  the existing validation banner with a link to named bindings.
 
 ## [1.46.0] - 2026-11-07
 

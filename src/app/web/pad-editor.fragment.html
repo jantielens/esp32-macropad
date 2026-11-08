@@ -186,8 +186,8 @@
             </div>
         </div>
         <div id="pad-edit-validation-error" class="pad-dialog-validation-error" role="alert" style="display:none;">
-            <span id="pad-edit-validation-message"></span>
-            <button type="button" class="pad-validation-dismiss" onclick="padDialogDismissValidationError()" aria-label="Dismiss error" title="Dismiss error"><span class="material-symbols-outlined" aria-hidden="true">close</span></button>
+            <span class="pad-validation-content"><span id="pad-edit-validation-message"></span><span id="pad-edit-validation-help" hidden> Use <a href="#" onclick="showBindingHelp(null, 'pad');return false;">named bindings</a> to shorten it.</span></span>
+            <button type="button" id="pad-edit-validation-dismiss" class="pad-validation-dismiss" onclick="padDialogDismissValidationError()" aria-label="Dismiss error" title="Dismiss error"><span class="material-symbols-outlined" aria-hidden="true">close</span></button>
         </div>
     </div>
 
