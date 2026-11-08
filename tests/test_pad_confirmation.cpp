@@ -503,6 +503,8 @@ int main() {
         CHECK(pad_option_icon_render_key(doc.as<JsonObjectConst>(), doc["buttons"][0], 5) == 0xe3f58eb6u);
         doc["buttons"][0]["widget_option_inset"] = 0;
         CHECK(pad_option_icon_render_key(doc.as<JsonObjectConst>(), doc["buttons"][0], 5) == 0x3cf96935u);
+        doc["buttons"][0]["widget_option_height_pct"] = 50;
+        CHECK(pad_option_icon_render_key(doc.as<JsonObjectConst>(), doc["buttons"][0], 5) == 0xf09f7bd1u);
     }
 
     const char* invalid_timer_bindings[] = {

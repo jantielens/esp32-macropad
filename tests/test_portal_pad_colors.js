@@ -418,6 +418,13 @@ assert.strictEqual(defaultInputs.get('pad-def-icon-position').value, 'above');
         'widget_option_selected_bg_color', 'widget_option_bg_color', 'widget_option_background_color'])
         assert.strictEqual(result[key], undefined);
     assert.strictEqual(result.widget_option_inset, 4);
+    assert.strictEqual(result.widget_option_height_pct, 100);
+    inputs.get('pad-edit-option-height').value = '40';
+    const heightResult = {};
+    selectorContext.padWidgetEditorBuild(heightResult, editor);
+    assert.strictEqual(heightResult.widget_option_height_pct, 40);
+    inputs.get('pad-edit-option-height').value = '0';
+    assert.throws(() => selectorContext.padWidgetEditorBuild({}, editor), /Selector height/);
     selectorContext.padWidgetEditorsLoad({ widget_type: 'option_selector', ...result });
     assert.strictEqual(inputs.get('pad-edit-option-selected-fg').value, '');
     assert.strictEqual(inputs.get('pad-edit-option-1-bg_color').swatch.style.background, '#111111');

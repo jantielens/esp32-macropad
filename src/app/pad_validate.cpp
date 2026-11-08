@@ -106,6 +106,11 @@ uint32_t pad_option_icon_render_key(JsonObjectConst pad, JsonObjectConst button,
         text("inset");
         number(inset);
     }
+    const int height = button["widget_option_height_pct"] | 100;
+    if (height != 100) {
+        text("height");
+        number(height);
+    }
     return hash ? hash : 1;
 }
 

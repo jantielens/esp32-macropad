@@ -900,6 +900,8 @@ function padOptionIconRenderKey(payload, button, slot) {
     }
     if (Number(button.widget_option_inset ?? 4) !== 4)
         values.push('inset', button.widget_option_inset);
+    if (Number(button.widget_option_height_pct ?? 100) !== 100)
+        values.push('height', button.widget_option_height_pct);
     for (const value of values) {
         for (const byte of new TextEncoder().encode(String(value))) hash = Math.imul(hash ^ byte, 16777619) >>> 0;
         hash = Math.imul(hash, 16777619) >>> 0;
@@ -1184,6 +1186,7 @@ async function padPreparePageSave(context) {
                     else iconHeight = widgetSize;
                 }
                 iconWidth = Math.ceil(iconWidth / Math.max(1, count));
+                iconHeight = Math.max(1, Math.floor(iconHeight * Number(button.widget_option_height_pct ?? 100) / 100));
                 const inset = Number(button.widget_option_inset ?? 4);
                 iconWidth -= 2 * Math.min(inset, Math.floor(Math.max(0, iconWidth - 1) / 2));
                 iconHeight -= 2 * Math.min(inset, Math.floor(Math.max(0, iconHeight - 1) / 2));

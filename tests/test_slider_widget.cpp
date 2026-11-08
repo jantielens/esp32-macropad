@@ -967,6 +967,7 @@ protected:
             self->feedback_events.push_back(feedback->event);
         }, LV_EVENT_VALUE_CHANGED, this);
         g_selector_config = {};
+        g_selector_config.height_pct = 100;
         g_selector_icon = nullptr;
         for (unsigned index = 0; index < 2; ++index) {
             auto& slot = g_selector_config.slots[index];
@@ -1005,6 +1006,39 @@ protected:
         fonts.clear();
     }
 };
+
+TEST_F(OptionSelectorNativeWidget, ReducedHeightCentersVisualsAndRetainsTouchTargets) {
+    lv_obj_set_style_pad_all(button, 0, 0);
+    lv_obj_set_style_border_width(button, 0, 0);
+    g_selector_config.height_pct = 50;
+    g_selector_config.group_background = true;
+    g_selector_config.option_inset = 4;
+    create(OptionSelectorMode::None);
+    lv_obj_update_layout(button);
+    lv_obj_t* group = lv_obj_get_child(button, 0);
+    EXPECT_EQ(lv_obj_get_height(group), 40);
+    EXPECT_EQ(lv_obj_get_y(group), 20);
+    EXPECT_EQ(lv_obj_get_height(state()->slots[0].badge), 32);
+    EXPECT_EQ(lv_obj_get_height(state()->slots[0].hit), 80);
+
+    lv_area_t bounds{};
+    lv_obj_get_coords(state()->slots[1].hit, &bounds);
+    pointer.point = {(bounds.x1 + bounds.x2) / 2, bounds.y1 + 1};
+    lv_tick_inc(400);
+    pointer.pressed = true;
+    lv_indev_read(indev);
+    pointer.pressed = false;
+    lv_tick_inc(10);
+    lv_indev_read(indev);
+    EXPECT_EQ(g_dispatches, 1u);
+
+    lv_obj_set_size(button, 200, 120);
+    option_selector_widget_impl::layout(state());
+    lv_obj_update_layout(button);
+    EXPECT_EQ(lv_obj_get_height(group), 60);
+    EXPECT_EQ(lv_obj_get_y(group), 30);
+    EXPECT_EQ(lv_obj_get_height(state()->slots[0].hit), 120);
+}
 
 TEST_F(OptionSelectorNativeWidget, ZeroWidthOptionsStayHiddenAcrossResizes) {
     auto& third = g_selector_config.slots[2];

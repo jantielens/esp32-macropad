@@ -434,6 +434,12 @@ function pageRequests(result, page) {
             widget_option_label: 'Cool', widget_option_icon_5: { kind: 'mono' },
             widget_option_icon_size_pct: 75, widget_option_icon_badge_padding: 4,
             widget_option_inset: 0 }, 5), '3cf96935');
+    assert.strictEqual(selectorImport.context.padOptionIconRenderKey(
+        { cols: 3, rows: 2, column_widths_px: [0, 40, 0] },
+        { col: 1, row: 0, col_span: 2, widget_type: 'option_selector',
+            widget_option_label: 'Cool', widget_option_icon_5: { kind: 'mono' },
+            widget_option_icon_size_pct: 75, widget_option_icon_badge_padding: 4,
+            widget_option_inset: 0, widget_option_height_pct: 50 }, 5), 'f09f7bd1');
     await assert.rejects(localImport.context.padReadIconSourceResponse({
         headers: { get() { return 'image/png'; } },
         async blob() { return new Blob([new Uint8Array(512 * 1024 + 1)]); },
@@ -661,6 +667,7 @@ function pageRequests(result, page) {
         assert.strictEqual(reuse.renderedSizes.at(-1), expected);
     };
     await optionSizing({}, 82);
+    await optionSizing({ widget_option_height_pct: 50 }, 37);
     await optionSizing({ label_top: 'Title', widget_position: 'right', group_size_pct: 75 }, 14);
     await optionSizing({ label_bottom: 'Title', widget_position: 'above', group_size_pct: 75 }, 14);
     await optionSizing({ icon: reusePayload.buttons[0].icon, widget_position: 'below', group_size_pct: 75 }, 14);
@@ -671,6 +678,8 @@ function pageRequests(result, page) {
     const defaultInsetKey = reuse.context.padOptionIconRenderKey(optionIcons, optionIcons.buttons[0], 1);
     assert.notStrictEqual(reuse.context.padOptionIconRenderKey(optionIcons,
         { ...optionIcons.buttons[0], widget_option_inset: 0 }, 1), defaultInsetKey);
+    assert.notStrictEqual(reuse.context.padOptionIconRenderKey(optionIcons,
+        { ...optionIcons.buttons[0], widget_option_height_pct: 50 }, 1), defaultInsetKey);
 
     const templatePayload = { ...reusePayload, template_pad: 1 };
     const requestsBeforeTemplate = reuse.requests.length;

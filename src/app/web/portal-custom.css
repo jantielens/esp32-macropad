@@ -2129,6 +2129,16 @@ body {
 .widget-caption-row .bindable-color { width: auto; }
 #pad-edit-option-slots > .editor-group { margin-left: 0; }
 .option-selector-row { grid-template-columns: repeat(auto-fit, minmax(min(100%, 125px), 1fr)); }
+#pad-editor-root .option-selector-row label:has(> .pad-pv-val) { flex-wrap: wrap; }
+#pad-editor-root .option-selector-row label > .pad-pv-val { min-width: 0; max-width: 100%; }
+#pad-editor-root .option-selector-row label > .pad-pv-val .pad-pv-text { min-width: 0; }
+#pad-edit-option-slots .option-selector-row > .form-group,
+#pad-edit-option-colors-section .option-selector-row:has(> .form-group > .bindable-color) > .form-group {
+  display: grid; grid-template-rows: subgrid; grid-row: span 2; align-self: stretch; row-gap: 0;
+}
+#pad-edit-option-layout-section .option-selector-row > .form-group {
+  display: grid; grid-template-rows: subgrid; grid-row: span 3; align-self: stretch; row-gap: 0;
+}
 #pad-edit-option-colors-section > .editor-group-body > small,
 #pad-edit-option-layout-section > .editor-group-body > small { display: block; margin: 4px 0 10px; }
 #pad-edit-option-colors-section > .editor-group-body > small:last-child,

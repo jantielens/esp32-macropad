@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* Adjust Option selector height without shrinking touch targets. Existing
+  selectors keep their full height by default.
+  See [Option selector](docs/user/widgets/option-selector.md#style-the-selector).
+
 ### Changed
 
 * Increase the default pad grid limit to 10 columns and 10 rows for more
@@ -22,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Keep Option selector color previews within the button editor and align color
+  controls when labels wrap.
 * Keep long-binding tips from disrupting the button editor layout. Show them in
   the existing validation banner with a link to named bindings.
 

@@ -40,6 +40,7 @@ struct OptionSelectorConfig {
     uint8_t icon_size_pct;
     uint8_t icon_badge_padding;
     uint8_t option_inset;
+    uint8_t height_pct;
     OptionSelectorMode mode;
     bool option_backgrounds;
     bool group_background;

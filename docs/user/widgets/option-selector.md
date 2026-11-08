@@ -81,7 +81,10 @@ and selected colors. Reset a color to its automatic default with the reset
 icon. Group and option background colors, individual colors, and labels can
 use [bindings](../pads/bindings.md); selected colors are literal colors.
 
-Under **Option selector layout**, set **Option inset** to add space around
+Under **Option selector layout**, use **Selector height (%)** to reduce the
+height of the centered group and options. The default is 100%; touch targets
+remain full height. Small heights can clip labels or icons.
+Set **Option inset** to add space around
 each visible option without shrinking its touch target. It defaults to 4 pixels;
 use 0 for no inset. **Label font size** changes option text; 0 inherits the
 button's center-label font size. **Icon size (%)** scales icons within the

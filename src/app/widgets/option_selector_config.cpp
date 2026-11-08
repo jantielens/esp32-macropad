@@ -78,14 +78,17 @@ const char* option_selector_validate_config(JsonObjectConst button) {
             return "option background controls must be boolean";
     }
     for (const char* field : {"widget_option_font_size", "widget_option_icon_size_pct",
-                              "widget_option_icon_badge_padding", "widget_option_inset"}) {
+                              "widget_option_icon_badge_padding", "widget_option_inset",
+                              "widget_option_height_pct"}) {
         if (button.containsKey(field) && !button[field].is<unsigned>())
             return "option sizes must be nonnegative integers";
     }
     if ((button["widget_option_font_size"] | 0U) > 512 ||
         (button["widget_option_icon_size_pct"] | 0U) > 100 ||
         (button["widget_option_icon_badge_padding"] | 0U) > MAX_ICON_BADGE_PADDING ||
-        (button["widget_option_inset"] | 0U) > OPTION_SELECTOR_MAX_INSET)
+        (button["widget_option_inset"] | 0U) > OPTION_SELECTOR_MAX_INSET ||
+        (button["widget_option_height_pct"] | 100U) < 1 ||
+        (button["widget_option_height_pct"] | 100U) > 100)
         return "option size is out of range";
     if (!valid_string(button, "widget_data_binding", CONFIG_LABEL_MAX_LEN))
         return "option state source must be a string of at most 191 bytes";
@@ -150,6 +153,7 @@ bool option_selector_parse_config(const JsonObject& button, uint8_t* data) {
     config.icon_size_pct = button["widget_option_icon_size_pct"] | 0;
     config.icon_badge_padding = button["widget_option_icon_badge_padding"] | 0;
     config.option_inset = button["widget_option_inset"] | OPTION_SELECTOR_DEFAULT_INSET;
+    config.height_pct = button["widget_option_height_pct"] | 100;
     for (unsigned index = 0; index < OPTION_SELECTOR_SLOTS; ++index) {
         OptionSelectorSlot& slot = config.slots[index];
         char field[48];

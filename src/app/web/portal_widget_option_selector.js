@@ -19,6 +19,7 @@
         { id: prefix + 'icon-size', key: 'widget_option_icon_size_pct', kind: 'number', default: 0 },
         { id: prefix + 'padding', key: 'widget_option_icon_badge_padding', kind: 'number', default: 0 },
         { id: prefix + 'inset', key: 'widget_option_inset', kind: 'number', default: 4 },
+        { id: prefix + 'height', key: 'widget_option_height_pct', kind: 'number', default: 100 },
     ];
     for (let slot = 1; slot <= 5; slot++) {
         fields.push(field(slot, 'label', 'label', true), field(slot, 'value', 'text', false),
@@ -157,6 +158,9 @@
         build(button) {
             const mode = button.widget_option_mode;
             const seen = new Set();
+            if (!Number.isInteger(button.widget_option_height_pct) ||
+                button.widget_option_height_pct < 1 || button.widget_option_height_pct > 100)
+                throw Object.assign(new Error('Selector height must be an integer from 1 to 100.'), { fieldIds: [prefix + 'height'] });
             for (const name of ['source', 'group-color', 'background-color']) {
                 if (new TextEncoder().encode(document.getElementById(prefix + name).value).length > 191)
                     throw Object.assign(new Error('Use at most 191 UTF-8 bytes.'), { fieldIds: [prefix + name] });
