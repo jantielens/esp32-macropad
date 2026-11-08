@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "image_library.h"
+#include "button_content_layout.h"
 
 // ============================================================================
 // Pad Config — per-pad button configuration stored on LittleFS
@@ -57,6 +58,11 @@
 #define PAD_MAX_BINDINGS              16
 #define PAD_BINDING_NAME_MAX_LEN      32
 
+static constexpr uint8_t DEFAULT_ICON_BADGE_PADDING = 0;
+static constexpr const char* DEFAULT_ICON_COLOR = "auto";
+static constexpr uint8_t MAX_ICON_BADGE_PADDING = 64;
+static constexpr const char* DEFAULT_ICON_BADGE_COLOR = "auto";
+
 // Parse hex color string (#RRGGBB, RRGGBB, 0xRRGGBB, or #RGB shorthand) to uint32_t.
 // Trailing whitespace is ignored. Returns false for anything else (e.g. "---",
 // "ERR:...", empty, wrong digit count).
@@ -102,9 +108,11 @@ static inline bool parse_hex_color(const char* s, uint32_t* out) {
 #endif
 
 // Icon position relative to center label
-#define ICON_POS_ABOVE   0   // Default: icon above center label
-#define ICON_POS_LEFT    1   // Icon left of center label (row)
-#define ICON_POS_CENTER  2   // Icon centered (no label displacement)
+#define ICON_POS_ABOVE   0
+#define ICON_POS_BELOW   1
+#define ICON_POS_LEFT    2
+#define ICON_POS_RIGHT   3
+static constexpr uint8_t DEFAULT_ICON_POSITION = ICON_POS_LEFT;
 
 // ============================================================================
 // Label Style — per-label visual overrides (parsed from DSL string)
@@ -425,7 +433,13 @@ struct ScreenButtonConfig {
     char icon_source_id[CONFIG_ICON_SOURCE_ID_MAX_LEN];
     uint8_t icon_kind;
     uint8_t icon_scale_pct;             // 0 = auto (widget-aware), 1-250 = explicit scale %
-    uint8_t icon_position;              // 0=above (default), 1=left, 2=center
+    uint8_t icon_badge_padding;
+    char icon_badge_color[CONFIG_COLOR_MAX_LEN];
+    char icon_color[CONFIG_COLOR_MAX_LEN];
+    ButtonGroupIconPosition icon_position;
+    ButtonWidgetPosition widget_position;
+    uint8_t group_size_pct;             // 0 = auto, otherwise 10-90%
+    bool rocker_group_beside;
     int16_t ui_offset_x;                // Optional visual nudge X in px (+right, -left)
     int16_t ui_offset_y;                // Optional visual nudge Y in px (+down, -up)
 
@@ -532,7 +546,10 @@ struct ButtonDefaults {
     char label_top_style[CONFIG_LABEL_STYLE_MAX_LEN];
     char label_center_style[CONFIG_LABEL_STYLE_MAX_LEN];
     char label_bottom_style[CONFIG_LABEL_STYLE_MAX_LEN];
-    uint8_t icon_position;                         // ICON_POS_ABOVE (0) = default
+    uint8_t icon_position;
+    uint8_t icon_badge_padding;
+    char icon_badge_color[CONFIG_COLOR_MAX_LEN];
+    char icon_color[CONFIG_COLOR_MAX_LEN];
     ButtonShadowSettings shadow;
     PadLayoutSettings layout;
     char default_font[CONFIG_FONT_ID_MAX_LEN];
@@ -590,6 +607,11 @@ extern "C" {
 // Mount LittleFS filesystem. Call once at boot. Returns true on success.
 bool pad_config_init();
 
+// Serialize pad mutations with operations that use a reference snapshot.
+// Always acquire this lock before the icon file mutex.
+bool pad_config_lock_mutations();
+void pad_config_unlock_mutations();
+
 // Acquire the immutable in-memory config for a page. The returned reference
 // remains valid until paired with pad_config_release(). Returns nullptr when
 // the page is not configured.
@@ -641,6 +663,18 @@ uint32_t pad_config_get_eligible_mask();
 
 #ifdef __cplusplus
 }
+
+class PadConfigMutationGuard {
+public:
+    PadConfigMutationGuard() : locked_(pad_config_lock_mutations()) {}
+    ~PadConfigMutationGuard() { if (locked_) pad_config_unlock_mutations(); }
+    PadConfigMutationGuard(const PadConfigMutationGuard&) = delete;
+    PadConfigMutationGuard& operator=(const PadConfigMutationGuard&) = delete;
+    explicit operator bool() const { return locked_; }
+
+private:
+    bool locked_;
+};
 #endif
 
 #endif // PAD_CONFIG_H

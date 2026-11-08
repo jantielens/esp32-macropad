@@ -22,6 +22,7 @@ PRELUDE = r'''
 #include <vector>
 #include <algorithm>
 #include <ArduinoJson.h>
+#include <freertos/portmacro.h>
 #include "board_config.h"
 #undef HAS_MQTT
 #define HAS_MQTT 1
@@ -55,11 +56,16 @@ static unsigned rebuilds = 0;
 void pad_config_rebuild_all_caches() { ++rebuilds; }
 void storage_publish_usage(bool) {}
 bool pad_config_exists(uint8_t id) { return id == 0 || id == 2; }
+static unsigned pad_reads = 0;
 char* pad_config_read_raw(uint8_t id, size_t* length) {
+    ++pad_reads;
     const char* json = id == 0 ? "{\"name\":\"Home\"}" : "{}";
     *length = strlen(json);
     return strdup(json);
 }
+static PadConfig cached_pad = {};
+const PadConfig* pad_config_acquire(uint8_t) { return &cached_pad; }
+void pad_config_release(const PadConfig*) {}
 static const ListProvider* registered_provider = nullptr;
 bool list_provider_register(const ListProvider* provider) {
     registered_provider = provider;
@@ -130,7 +136,7 @@ int main() {
     mqtt_binding_init();
     assert(mqtt_binding_resolve("topic;value", output, sizeof(output)) == BINDING_RESOLVER_RESOLVED);
     assert(!strcmp(output, "42"));
-    list_provider_pads_invalidate();
+    list_provider_pads_update(0, true);
     assert(registered_provider->provide(items, LIST_MAX_ITEMS) == 2);
     assert(!strcmp(items[0].id, "pad_0") && !strcmp(items[0].label, "Pad 0: Home"));
     assert(!strcmp(items[1].label, "Pad 2"));
@@ -138,10 +144,28 @@ int main() {
     assert(registered_provider->provide(items, 0) == 0);
     assert(registered_provider->provide(items, 1) == 1);
 
+    const unsigned reads = pad_reads;
+    cached_pad.name = "Renamed";
+    list_provider_pads_update(2, true);
+    cached_pad.name = "New";
+    list_provider_pads_update(1, true);
+    assert(registered_provider->provide(items, LIST_MAX_ITEMS) == 3);
+    assert(!strcmp(items[0].label, "Pad 0: Home"));
+    assert(!strcmp(items[1].id, "pad_1") && !strcmp(items[1].label, "Pad 1: New"));
+    assert(!strcmp(items[2].id, "pad_2") && !strcmp(items[2].label, "Pad 2: Renamed"));
+    cached_pad.name = "";
+    list_provider_pads_update(1, true);
+    assert(registered_provider->provide(items, LIST_MAX_ITEMS) == 3);
+    assert(!strcmp(items[1].label, "Pad 1"));
+    list_provider_pads_update(0, false);
+    assert(registered_provider->provide(items, LIST_MAX_ITEMS) == 2);
+    assert(!strcmp(items[0].id, "pad_1") && !strcmp(items[1].id, "pad_2"));
+    assert(pad_reads == reads);
+
     const unsigned allocated = allocations;
     allocation_fail = true;
     mqtt_binding_init();
-    list_provider_pads_invalidate();
+    list_provider_pads_update(2, true);
     button_defaults_init();
     assert(allocations == allocated);
     assert(button_defaults_get() == defaults);

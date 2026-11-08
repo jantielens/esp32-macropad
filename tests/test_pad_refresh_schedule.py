@@ -7,7 +7,7 @@ import tempfile
 root = pathlib.Path(__file__).resolve().parents[1]
 source = (root / "src/app/screens/pad_screen.cpp").read_text()
 start = source.index("void PadScreen::pollLiveData(")
-end = source.index("\nbool PadScreen::containsTimeBinding", start)
+end = source.index("\nstatic bool widget_has_scheme", start)
 poll = source[start:end]
 state_source = (root / "src/app/screens/pad_screen_poll.cpp").read_text()
 state_start = state_source.index("static void apply_btn_state(")
@@ -15,7 +15,7 @@ state_end = state_source.index("\nvoid PadScreen::pollBtnStateBindings", state_s
 apply_state = state_source[state_start:state_end]
 event_source = (root / "src/app/screens/pad_screen_events.cpp").read_text()
 feedback_start = event_source.index("void PadScreen::onWidgetPressFeedback(")
-feedback_end = event_source.index("\n// Pixel-based tap flash:", feedback_start)
+feedback_end = event_source.index("\n// Pixel offsets are relative", feedback_start)
 press_feedback = event_source[feedback_start:feedback_end]
 builder_source = (root / "src/app/screens/pad_tile_builder.cpp").read_text()
 fade_start = builder_source.index("static bool button_overlay_uses_fade(")

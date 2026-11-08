@@ -15,7 +15,9 @@ struct PadRect;
 struct UIScaleInfo;
 class PadFontCache;
 
+#ifndef WIDGET_STATE_MAX_BYTES
 #define WIDGET_STATE_MAX_BYTES 256
+#endif
 
 struct WidgetState {
     uint8_t data[WIDGET_STATE_MAX_BYTES];
@@ -43,13 +45,16 @@ struct WidgetPreview {
          vertical_icon(preview_vertical_icon), default_axis(preview_default_axis) {}
 };
 
+enum class WidgetResourceKind : uint8_t { Binding, MonoIcon, ColorIcon };
+using WidgetResourceVisitor = void (*)(WidgetResourceKind kind, const char* field,
+                                       uint8_t slot, const char* value, void* context);
+
 struct WidgetType {
     const char* name;
     void (*parseConfig)(const JsonObject& btn, uint8_t* data);
     void (*createUI)(lv_obj_t* tile, const WidgetConfig* cfg,
                      const struct ScreenButtonConfig* btn,
                      const PadRect* rect, const UIScaleInfo* scale,
-                     lv_obj_t* icon_img, lv_obj_t* center_label,
                      WidgetState* state);
     void (*update)(lv_obj_t* tile, const WidgetConfig* cfg,
                    WidgetState* state, const char* raw_value);
@@ -69,6 +74,12 @@ struct WidgetType {
     const char* (*validateConfig)(JsonObjectConst button);
     const WidgetPreview* preview;
     void (*cancelInput)(WidgetState* state);
+    bool (*parseOwnedConfig)(const JsonObject& btn, uint8_t* data);
+    void (*retainConfig)(uint8_t* data);
+    void (*releaseConfig)(uint8_t* data);
+    void (*visitResources)(const uint8_t* data, WidgetResourceVisitor visitor,
+                           void* context);
+    const char* (*validateActions)(JsonObjectConst button, JsonArrayConst actions);
 };
 
 inline bool widget_owns_input(const WidgetType* type) {
@@ -84,6 +95,9 @@ void widget_register(const WidgetType* type);
 uint8_t widget_count();
 const WidgetType* widget_at(uint8_t index);
 void widget_preview_catalog_emit(JsonArray catalog);
+#if HAS_MCP
+bool widget_schema_emit(JsonArray widgets, const char* widget_filter = nullptr);
+#endif
 
 inline bool widget_supports_pad_swipe_control(const char* type) {
     return strcmp(type, "mousepad") == 0 || strcmp(type, "scrollpad") == 0 ||

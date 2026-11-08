@@ -60,6 +60,9 @@ buttons and adjustment rockers. Advanced options include multi-ring gauges with
 target zones and multi-line sparklines; supported builds can backfill history
 from Home Assistant after reboot.
 
+For a playful alternative to readings, a [Face widget](docs/user/widgets/README.md#face)
+can blink, look around, and react to your data through emotion bindings.
+
 For a sensor publishing watts to `home/solar/power`, the label
 `Solar: [mqtt:home/solar/power;;%.0f W]` shows the live reading with its unit.
 

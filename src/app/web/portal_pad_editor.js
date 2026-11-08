@@ -366,6 +366,10 @@ async function padInit() {
         var el = document.getElementById(f.input);
         if (el) el.addEventListener('input', padUpdateResetHints);
     });
+    ['pad-edit-fg-color', 'pad-edit-icon-color'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('input', padIconEditorRefresh);
+    });
 
     // Pad-level actions
     document.getElementById('pad-fill-btn').addEventListener('click', padFillWithClipboard);
@@ -580,16 +584,103 @@ function padRefreshWidgetEditor() {
     if (editor && editor.refresh) editor.refresh();
 }
 
+function padContentFitWarning() {
+    const warning = document.getElementById('pad-edit-content-fit-warning');
+    const layout = document.getElementById('pad-edit-content-layout');
+    if (!warning || !layout) return;
+    warning.textContent = '';
+    const width = Number(deviceInfoCache && deviceInfoCache.display_coord_width);
+    const height = Number(deviceInfoCache && deviceInfoCache.display_coord_height);
+    if (!width || !height || !layout.value) return;
+    const gap = Number(padGetEffectiveDefault('button_spacing_px')) || 0;
+    const columns = padComputeAxisTrackSizes(padState.cols, padGetTrackAvailableSize('columns', width),
+        gap, padState.columnWidthsPx).sizes;
+    const rows = padComputeAxisTrackSizes(padState.rows, padGetTrackAvailableSize('rows', height),
+        gap, padState.rowHeightsPx).sizes;
+    const value = id => document.getElementById(id).value;
+    const padding = Number(value('pad-edit-content-pad')) || 0;
+    const border = Number(value('pad-edit-border-width')) || 0;
+    const innerWidth = Math.max(0, padTrackSpanSize(columns, padState.editCol,
+        Number(value('pad-edit-col-span')) || 1, gap) - 2 * (padding + border));
+    const innerHeight = Math.max(0, padTrackSpanSize(rows, padState.editRow,
+        Number(value('pad-edit-row-span')) || 1, gap) - 2 * (padding + border));
+    const labels = ['top', 'center', 'bottom'].map((slot, index) => {
+        if (!value('pad-edit-label-' + slot)) return 0;
+        const style = value('pad-edit-label-' + slot + '-style') ||
+            padState.buttonDefaults['label_' + slot + '_style'] || '';
+        const size = /(?:^|;)\s*font_size\s*:\s*(\d+)/i.exec(style);
+        const upscale = /(?:^|;)\s*font_upscale\s*:\s*([\d.]+)/i.exec(style);
+        const wrap = /(?:^|;)\s*mode\s*:\s*wrap(?:\s*;|$)/i.test(style);
+        return (size ? Number(size[1]) : index === 1 ? 24 : 14) *
+            (upscale ? Number(upscale[1]) : 1) * (wrap ? 2 : 1);
+    });
+    const position = layout.value;
+    const type = value('pad-edit-widget-type');
+    const widget = !!type;
+    const centered = (type === 'rocker' || type === 'numericrocker') &&
+        value('pad-edit-rocker-group-layout') !== 'beside';
+    const hasIcon = !!padIconEditorReadDraft();
+    let groupWidth = innerWidth;
+    let groupHeight = innerHeight;
+    const size = Number(value('pad-edit-group-width')) || 50;
+    if (centered) {
+        const horizontal = value(type === 'rocker' ? 'pad-edit-rocker-axis' : 'pad-edit-numericrocker-axis') === 'horizontal';
+        const span = horizontal ? innerWidth : innerHeight;
+        let lane = Math.max(0, span - 36);
+        if (type === 'numericrocker') {
+            const small = Number(value('pad-edit-numericrocker-small-step')) > 0;
+            const large = Number(value('pad-edit-numericrocker-large-step')) > 0;
+            const scale = Math.max(50, Math.min(150, Number(value('pad-edit-numericrocker-zone-scale')) || 100));
+            const outerTarget = large ? 12 : 0;
+            const innerTarget = small ? 15 : 0;
+            let outer = large ? Math.min(span, Math.max(40, Math.floor(span * outerTarget * scale / 10000))) : 0;
+            let inner = small ? Math.min(span, Math.max(40, Math.floor(span * innerTarget * scale / 10000))) : 0;
+            const minimum = Math.floor(span / 10);
+            if (2 * (outer + inner) + minimum > span) {
+                const available = Math.max(4, span - minimum);
+                const denominator = Math.max(1, 2 * (outerTarget + innerTarget));
+                outer = large ? Math.max(1, Math.floor(available * outerTarget / denominator)) : 0;
+                inner = small ? Math.max(1, Math.floor(available * innerTarget / denominator)) : 0;
+            }
+            lane = Math.max(0, span - 2 * (outer + inner));
+        }
+        const extent = Math.min(lane, span * size / 100);
+        if (horizontal) groupWidth = extent;
+        else groupHeight = extent;
+    } else if (widget && (position === 'left' || position === 'right')) {
+        groupWidth = Math.floor(Math.max(0, innerWidth - 4) *
+            size / 100);
+    } else if (widget) {
+        groupHeight = Math.floor(Math.max(0, innerHeight - 4) * size / 100);
+    }
+    const requestedHeight = labels.reduce((sum, height) => sum + height, 0);
+    if (labels.some(Boolean) || hasIcon) {
+        if (!groupWidth || requestedHeight > groupHeight ||
+            (hasIcon && requestedHeight && groupHeight <= requestedHeight + 4 &&
+             ['above', 'below'].includes(value('pad-edit-icon-position')))) {
+            warning.textContent = 'Content may not fit in this button. Labels or the icon can be clipped; reduce sizes or enlarge the button. Font measurements are approximate.';
+        }
+    }
+}
+
+function padContentLayoutRefresh() {
+    const type = document.getElementById('pad-edit-widget-type').value;
+    const rocker = type === 'rocker' || type === 'numericrocker';
+    const centered = rocker && document.getElementById('pad-edit-rocker-group-layout').value !== 'beside';
+    document.getElementById('pad-edit-rocker-group-layout-group').style.display = rocker ? '' : 'none';
+    document.getElementById('pad-edit-content-layout-group').style.display = type && !centered ? '' : 'none';
+    document.getElementById('pad-edit-group-width-group').style.display = type ? '' : 'none';
+    if (typeof padIconEditorRefresh === 'function') padIconEditorRefresh();
+    padContentFitWarning();
+}
+
 function padWidgetTypeChanged() {
     const wtype = document.getElementById('pad-edit-widget-type').value;
     const editor = padWidgetEditor(wtype);
     padWidgetEditorsRefresh(wtype);
     padFillRefreshVisibility();
     padRefreshWidgetEditor();
-    ['pad-edit-text-labels-section', 'pad-edit-icon-section'].forEach(function (id) {
-        var section = document.getElementById(id);
-        if (section) section.style.display = editor && editor.replacesContent ? 'none' : '';
-    });
+    padContentLayoutRefresh();
     padSetImageCapabilityVisibility(deviceInfoCache, !!(editor && editor.replacesContent));
     var confirmGroup = document.getElementById('pad-edit-confirm-group');
     var confirmInput = document.getElementById('pad-edit-confirm');
@@ -944,7 +1035,7 @@ async function padPersistPage(context) {
         });
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
-            throw new Error(err.error || 'HTTP ' + resp.status);
+            throw new Error(err.message || err.error || 'HTTP ' + resp.status);
         }
 
         if (context.saveState) context.saveState.committed = true;

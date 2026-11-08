@@ -8,6 +8,22 @@ A Rocker provides two action zones; a Numeric Rocker adds fine and coarse
 signed steps plus a center action. Use them for adjustments such as brightness,
 volume, or a countdown value.
 
+## Arrange labels and icon
+
+Labels and the icon appear between the directional controls by default.
+Choose **Labels and icon placement > Beside widget** to use **Widget position**
+instead. **Labels and icon size %** uses the rocker axis: 0 measures the
+content automatically, while 10-90 requests a percentage of the widget span.
+Centered content is capped to the space between the Rocker indicators or the
+Numeric Rocker center zone. This does not change tap-zone sizes.
+
+The group is not a separate control. Taps on it use the touched zone: Rocker
+still divides at the midpoint, and Numeric Rocker's center runs its center
+actions. Visual offsets can move content into another zone; the touch position
+determines the action. On small buttons content can shrink or be clipped.
+Enlarge the button or reduce the content if needed. The portal preview is
+approximate; check the device after saving.
+
 ## Use two action zones
 
 Choose Rocker in Button Content and Vertical or Horizontal.

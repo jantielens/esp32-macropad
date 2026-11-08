@@ -66,6 +66,11 @@ Use static labels, useful fallback text, and modest update rates.
 Avoid animations or second-by-second changes where minute-level information
 is enough.
 
+For a [Face widget](../widgets/README.md#face), choose **Still** under
+**Liveliness** to stop autonomous blinking and gaze movement while keeping emotion
+changes. Animated options cause ongoing panel updates and can increase ghosting;
+the polling and presentation intervals still limit visible motion.
+
 Check the physical panel, not only the portal preview/framebuffer.
 If content is correct in a screenshot but stale on glass, inspect presentation
 cadence and request a full refresh before changing bindings.

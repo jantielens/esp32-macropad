@@ -29,10 +29,12 @@
 // ============================================================================
 
 #include <ArduinoJson.h>
+#include "../src/app/mcp_tool_response.h"
 
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <memory>
 #include <string>
 
 // The device code wraps transient strings in Arduino's `String` to force a copy;
@@ -159,6 +161,84 @@ static void test_nested_objects_copy_from_reused_struct() {
           "nested objects copied from reused struct buffer");
 }
 
+static int response_frees = 0;
+
+static void* allocate_response(size_t size) { return std::malloc(size); }
+static void* fail_response_allocation(size_t) { return nullptr; }
+static void free_response(void* data) {
+    ++response_frees;
+    std::free(data);
+}
+
+static void test_large_async_tool_response() {
+    std::shared_ptr<JsonDocument> response;
+    std::string payload;
+    int frees_before = response_frees;
+    {
+        JsonDocument id_doc;
+        id_doc["id"] = std::string("request\"17");
+        JsonDocument value_doc;
+        JsonArray values = value_doc["values"].to<JsonArray>();
+        const std::string value(100, 'x');
+        for (int i = 0; i < 700; ++i) values.add(value);
+        value_doc["special"] = "quote \" slash \\ newline\n";
+        serializeJson(value_doc, payload);
+        CHECK(payload.size() > 65535, "fixture exceeds ArduinoJson copied-string limit");
+
+        auto envelope = std::make_shared<JsonDocument>();
+        response = mcp_make_tool_response(envelope, id_doc["id"], value_doc.as<JsonVariantConst>(),
+                                          allocate_response, free_response);
+        CHECK(bool(response), "large MCP response is built");
+    }
+
+    if (response) {
+        std::string escaped;
+        for (char c : payload) {
+            if (c == '"' || c == '\\') escaped += '\\';
+            escaped += c;
+        }
+        std::string actual;
+        serializeJson(*response, actual);
+        const std::string expected =
+            "{\"jsonrpc\":\"2.0\",\"id\":\"request\\\"17\",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"" +
+            escaped + "\"}],\"isError\":false}}";
+        CHECK(actual == expected, "large response retains exact escaped payload after source destruction");
+        CHECK(response_frees == frees_before, "async response retains linked payload");
+        response.reset();
+        CHECK(response_frees == frees_before + 1, "async response releases payload");
+    }
+}
+
+static void test_tool_response_allocation_failure() {
+    JsonDocument id_doc;
+    id_doc["id"] = 1;
+    JsonDocument value_doc;
+    value_doc["ok"] = true;
+    auto envelope = std::make_shared<JsonDocument>();
+    auto response = mcp_make_tool_response(envelope, id_doc["id"], value_doc.as<JsonVariantConst>(),
+                                            fail_response_allocation, free_response);
+    CHECK(!response, "MCP response reports payload allocation failure");
+}
+
+static void test_tool_response_envelope_failure() {
+    class FailingAllocator : public ArduinoJson::Allocator {
+    public:
+        void* allocate(size_t) override { return nullptr; }
+        void deallocate(void*) override {}
+        void* reallocate(void*, size_t) override { return nullptr; }
+    } allocator;
+    JsonDocument id_doc;
+    id_doc["id"] = 1;
+    JsonDocument value_doc;
+    value_doc["ok"] = true;
+    auto envelope = std::make_shared<JsonDocument>(&allocator);
+    int frees_before = response_frees;
+    auto response = mcp_make_tool_response(envelope, id_doc["id"], value_doc.as<JsonVariantConst>(),
+                                            allocate_response, free_response);
+    CHECK(!response, "MCP response reports envelope allocation failure");
+    CHECK(response_frees == frees_before + 1, "failed envelope releases payload");
+}
+
 int main() {
     test_control_status_copies_stack_buffer();
     test_read_field_copies_freed_heap();
@@ -166,6 +246,9 @@ int main() {
     test_const_char_ptr_links();
     test_ternary_with_literal_links();
     test_nested_objects_copy_from_reused_struct();
+    test_large_async_tool_response();
+    test_tool_response_allocation_failure();
+    test_tool_response_envelope_failure();
 
     if (g_failures) {
         std::printf("\n%d check(s) failed\n", g_failures);

@@ -70,6 +70,10 @@
     return Promise.all(loads);
   }
 
+  window.portalLoadItemAssets = function (itemId) {
+    return loadItemAssets(itemMap[itemId] && itemMap[itemId].item);
+  };
+
   function buildNav(cats) {
     categories = cats;
     itemMap = {};

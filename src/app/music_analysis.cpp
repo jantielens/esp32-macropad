@@ -260,7 +260,7 @@ void music_analysis_collect_pad_demand(const PadConfig* config, uint8_t* demand)
         const char* fields[] = {
             button.label_top, button.label_center, button.label_bottom,
             button.label_top_color_bind, button.label_center_color_bind,
-            button.label_bottom_color_bind, button.bg_color, button.fg_color,
+            button.label_bottom_color_bind, button.bg_color, button.fg_color, button.icon_color, button.icon_badge_color,
             button.border_color, button.border_width, button.corner_radius,
             button.btn_state,
         };

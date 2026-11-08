@@ -14,16 +14,7 @@
 // (or left/right) half dispatches the tap vs long-press action set.
 // Visual cue: small chevron triangles at opposite edges.
 //
-// Layout within the tile (vertical mode):
-//   ┌────────────────┐
-//   │       ▲        │  ← chevron at top edge
-//   │   label_top    │
-//   │  label_center  │
-//   │  label_bottom  │
-//   │       ▼        │  ← chevron at bottom edge
-//   └────────────────┘
-//
-// Horizontal mode: ◄ at left edge, ► at right edge.
+// The chevrons occupy opposite edges of the widget region.
 
 // ---- Config struct (packed into WidgetConfig.data[]) ----
 
@@ -63,11 +54,9 @@ static void rocker_parse(const JsonObject& btn, uint8_t* data) {
 }
 
 static void rocker_create(lv_obj_t* tile, const WidgetConfig* wcfg,
-                           const ScreenButtonConfig* btn,
-                           const PadRect* rect, const UIScaleInfo* scale,
-                           lv_obj_t* icon_img, lv_obj_t* center_label,
+                           const ScreenButtonConfig*,
+                           const PadRect*, const UIScaleInfo* scale,
                            WidgetState* state) {
-    (void)center_label;
     auto* cfg = reinterpret_cast<const RockerConfig*>(wcfg->data);
     auto* st = reinterpret_cast<RockerState*>(state->data);
     memset(st, 0, sizeof(RockerState));
@@ -88,9 +77,9 @@ static void rocker_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     lv_obj_set_style_text_opa(chev_a, cfg->indicator_opa, 0);
     lv_obj_set_style_text_font(chev_a, scale->font_small, 0);
     if (cfg->horizontal) {
-        lv_obj_align(chev_a, LV_ALIGN_LEFT_MID, 2, btn->ui_offset_y);
+        lv_obj_align(chev_a, LV_ALIGN_LEFT_MID, 2, 0);
     } else {
-        lv_obj_align(chev_a, LV_ALIGN_TOP_MID, btn->ui_offset_x, 1);
+        lv_obj_align(chev_a, LV_ALIGN_TOP_MID, 0, 1);
     }
     lv_obj_clear_flag(chev_a, LV_OBJ_FLAG_CLICKABLE);
 
@@ -101,9 +90,9 @@ static void rocker_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     lv_obj_set_style_text_opa(chev_b, cfg->indicator_opa, 0);
     lv_obj_set_style_text_font(chev_b, scale->font_small, 0);
     if (cfg->horizontal) {
-        lv_obj_align(chev_b, LV_ALIGN_RIGHT_MID, -2, btn->ui_offset_y);
+        lv_obj_align(chev_b, LV_ALIGN_RIGHT_MID, -2, 0);
     } else {
-        lv_obj_align(chev_b, LV_ALIGN_BOTTOM_MID, btn->ui_offset_x, -1);
+        lv_obj_align(chev_b, LV_ALIGN_BOTTOM_MID, 0, -1);
     }
     lv_obj_clear_flag(chev_b, LV_OBJ_FLAG_CLICKABLE);
 
@@ -138,6 +127,7 @@ static void rocker_describe(JsonObject& out) {
     JsonArray f = out.createNestedArray("config_fields");
     auto add = [&](const char* n, const char* t, const char* d){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]=t; o["desc"]=d; };
     add("widget_rocker_axis","string","'h' or 'v' rocker direction");
+    add("rocker_group_layout","string","center (default) or beside; center does not change action zones");
     add("widget_rocker_color","color","rocker color"); add("widget_rocker_opacity","number","0-100");
     out["note"] = "Rocker has NO widget action field. Its two halves dispatch the BUTTON's action lists: "
                   "zone A (top for vertical / left for horizontal) runs actions[]; zone B (bottom / right) runs "

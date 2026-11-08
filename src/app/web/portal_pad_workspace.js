@@ -268,6 +268,7 @@ function padWorkspaceWidgetSettled(type) {
 
 function padWorkspaceEdit(revalidate) {
     if (!padWorkspace || padWorkspace.loading || !padWorkspace.selected) return;
+    padContentFitWarning();
     const before = padWorkspace.forms.get(padWorkspaceKey());
     padWorkspaceCapture();
     const after = padWorkspace.forms.get(padWorkspaceKey());

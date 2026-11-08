@@ -22,6 +22,25 @@
 
 unsigned long millis() { return 10000; }
 
+#if HAS_EXTERNAL_DATA
+bool external_data_get_value(const char* name, const char* path, char* out, size_t size) {
+    if (strcmp(name, "weather")) return false;
+    const char* value = nullptr;
+    if (!strcmp(path, "current.temperature_2m")) value = "12.5";
+    else if (!strcmp(path, "scientific")) value = "1.23456789e+08";
+    else if (!strcmp(path, "duration")) value = "99";
+    else if (!strcmp(path, "@duration")) value = "100";
+    if (!value) return false;
+    const int written = snprintf(out, size, "%s", value);
+    return written >= 0 && static_cast<size_t>(written) < size;
+}
+bool external_data_get_stat(const char* name, const char* key, char* out, size_t size) {
+    if (strcmp(name, "weather") || strcmp(key, "duration")) return false;
+    const int written = snprintf(out, size, "420");
+    return written >= 0 && static_cast<size_t>(written) < size;
+}
+#endif
+
 #if HAS_IMAGE_LIBRARY
 bool image_library_runtime_current(char* out, size_t size) {
     snprintf(out, size, "/images/fixture.jpg");

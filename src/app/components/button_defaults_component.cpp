@@ -15,6 +15,10 @@ static void button_defaults_write_firmware_defaults(JsonObject defaults) {
     defaults["default_pad_bg_color"] = DEFAULT_PAD_BG_COLOR;
     defaults["bg_color"] = DEFAULT_BUTTON_BG_COLOR;
     defaults["fg_color"] = DEFAULT_BUTTON_FG_COLOR;
+    defaults["icon_color"] = DEFAULT_ICON_COLOR;
+    defaults["icon_position"] = "left";
+    defaults["icon_badge_padding"] = DEFAULT_ICON_BADGE_PADDING;
+    defaults["icon_badge_color"] = DEFAULT_ICON_BADGE_COLOR;
     defaults["border_color"] = DEFAULT_BUTTON_BORDER_COLOR;
     defaults["border_width"] = DEFAULT_BUTTON_BORDER_WIDTH;
     defaults["corner_radius"] = DEFAULT_BUTTON_CORNER_RADIUS;

@@ -1,0 +1,23 @@
+<details class="editor-group" id="pad-edit-face-section" style="display:none;" open>
+    <summary>Face</summary>
+    <div class="editor-group-body">
+        <div class="form-group">
+            <label for="pad-edit-face-style">Style</label>
+            <select id="pad-edit-face-style"><option value="robot">Robot Eyes</option><option value="doodle">Doodle Buddy</option></select>
+        </div>
+        <div class="form-group">
+            <label for="pad-edit-face-emotion">Emotion <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+            <div class="binding-input-wrap"><input type="text" class="binding-mono" id="pad-edit-face-emotion" list="pad-edit-face-emotions" maxlength="191" value="content" placeholder="content or [pad:mood]" aria-describedby="pad-edit-face-emotion-help"></div>
+            <datalist id="pad-edit-face-emotions">
+                <option value="content"></option><option value="relaxed"></option><option value="happy"></option><option value="worried"></option>
+                <option value="angry"></option><option value="sad"></option><option value="surprised"></option><option value="sleepy"></option>
+            </datalist>
+            <small id="pad-edit-face-emotion-help">Emotions: content, relaxed, happy, worried, angry, sad, surprised, sleepy. Choose one or enter a binding returning its lowercase name. Missing or unrecognized results use content. Blank also means content.</small>
+        </div>
+        <div class="form-group">
+            <label for="pad-edit-face-liveliness">Liveliness</label>
+            <select id="pad-edit-face-liveliness"><option value="still">Still</option><option value="calm">Calm</option><option value="normal" selected>Normal</option><option value="lively">Lively</option></select>
+        </div>
+        <small>The face blinks and looks around on its own unless Liveliness is Still. Still keeps its gaze centered and only animates emotion changes. It uses the button's text and background colors, replaces its center label and icon, and leaves room for top and bottom labels.</small>
+    </div>
+</details>

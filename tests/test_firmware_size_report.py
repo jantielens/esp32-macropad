@@ -202,6 +202,7 @@ Cross Reference Table
             "/build/sketch/objs.a(web_portal.cpp.o)": "Web portal (shared)",
             "/build/sketch/objs.a(web_mcp.cpp.o)": "MCP (HAS_MCP)",
             "/build/sketch/objs.a(alarm_binding.cpp.o)": "Alarms (ALARM_ENABLED)",
+            "/build/sketch/objs.a(ext_binding.cpp.o)": "External JSON data (HAS_EXTERNAL_DATA)",
             "/build/sketch/objs.a(pad_binding.cpp.o)": "Bindings / expressions",
             "/build/sketch/objs.a(pad_config.cpp.o)": "Pads / screens (HAS_DISPLAY)",
             "/build/sketch/objs.a(font_store.cpp.o)": "Fonts (HAS_TTF_FONTS)",

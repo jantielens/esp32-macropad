@@ -193,13 +193,22 @@ function padDialogOpen(col, row) {
         !!(btn.bg_image_path || btn.bg_image_url || btn.bg_image_letterbox);
 
     // Icon
+    padSetBindableColor('pad-edit-icon-color', btn.icon_color || padGetEffectiveDefault('icon_color') || 'auto');
+    document.getElementById('pad-edit-icon-badge-padding').value =
+        btn.icon_badge_padding ?? (padGetEffectiveDefault('icon_badge_padding') === '' ? 0 : padGetEffectiveDefault('icon_badge_padding'));
+    padSetBindableColor('pad-edit-icon-badge-color',
+        btn.icon_badge_color || padGetEffectiveDefault('icon_badge_color'));
     padIconEditorSetDraft(btn.icon || null);
     document.getElementById('pad-edit-icon-section').open = !!btn.icon;
     document.getElementById('pad-edit-icon-scale').value = (btn.icon_scale_pct !== undefined) ? btn.icon_scale_pct : 0;
-    document.getElementById('pad-edit-icon-position').value = btn.icon_position || 'above';
+    document.getElementById('pad-edit-icon-position').value =
+        btn.icon_position || padGetEffectiveDefault('icon_position') || 'left';
 
     // Widget type
     document.getElementById('pad-edit-widget-type').value = btn.widget_type || '';
+    document.getElementById('pad-edit-content-layout').value = btn.widget_position || 'right';
+    document.getElementById('pad-edit-rocker-group-layout').value = btn.rocker_group_layout || 'center';
+    document.getElementById('pad-edit-group-width').value = btn.group_size_pct || 0;
     padFillLoad(btn);
     padWidgetTypeChanged();
 
@@ -332,6 +341,17 @@ function padDialogBuildButton() {
     const selectedType = document.getElementById('pad-edit-widget-type').value;
     const widgetEditor = padWidgetEditor(selectedType);
     const wtype = widgetEditor && widgetEditor.supported === false ? '' : selectedType;
+    if (wtype) {
+        if ((wtype === 'rocker' || wtype === 'numericrocker') &&
+            document.getElementById('pad-edit-rocker-group-layout').value === 'beside')
+            btn.rocker_group_layout = 'beside';
+        const position = document.getElementById('pad-edit-content-layout').value;
+        if (position !== 'right') btn.widget_position = position;
+        const size = Number(document.getElementById('pad-edit-group-width').value);
+        if (!Number.isInteger(size) || (size !== 0 && (size < 10 || size > 90)))
+            throw Object.assign(new Error('Labels and icon size must be 0 (auto) or a whole number from 10 to 90.'), { fieldIds: ['pad-edit-group-width'] });
+        if (size) btn.group_size_pct = size;
+    }
     padFillBuild(btn, wtype);
     const actionPolicy = widgetEditor ? widgetEditor.actions : { tap: true, longPress: true };
     var tapArr = wtype && actionPolicy.buildTap ? actionPolicy.buildTap()
@@ -378,6 +398,20 @@ function padDialogBuildButton() {
     if (icon) btn.icon = icon;
     else delete btn.icon;
 
+    const iconColor = padGetBindableColor('pad-edit-icon-color');
+    if (iconColor && iconColor !== (padGetEffectiveDefault('icon_color') || 'auto'))
+        btn.icon_color = iconColor;
+    const badgeInput = document.getElementById('pad-edit-icon-badge-padding');
+    const badgePadding = Number(badgeInput.value);
+    if (badgeInput.value === '' || !Number.isInteger(badgePadding) || badgePadding < 0 || badgePadding > 64)
+        throw new Error('Badge padding must be a whole number from 0 to 64');
+    const defaultBadgePadding = padGetEffectiveDefault('icon_badge_padding');
+    if (badgePadding !== Number(defaultBadgePadding === '' ? 0 : defaultBadgePadding))
+        btn.icon_badge_padding = badgePadding;
+    const badgeColor = padGetBindableColor('pad-edit-icon-badge-color');
+    if (badgeColor && badgeColor !== padGetEffectiveDefault('icon_badge_color'))
+        btn.icon_badge_color = badgeColor;
+
     // Icon scale
     const iconScale = parseInt(document.getElementById('pad-edit-icon-scale').value);
     if (!isNaN(iconScale) && iconScale > 0 && iconScale <= 250) btn.icon_scale_pct = iconScale;
@@ -385,7 +419,7 @@ function padDialogBuildButton() {
     // Icon position (only relevant when icon is set)
     if (icon) {
         const iconPos = document.getElementById('pad-edit-icon-position').value;
-        if (iconPos && iconPos !== 'above') btn.icon_position = iconPos;
+        if (iconPos && iconPos !== (padGetEffectiveDefault('icon_position') || 'left')) btn.icon_position = iconPos;
     }
 
     // Widget type
@@ -457,8 +491,7 @@ function padDialogClear() {
 
 // --- Live binding preview (in-context) -------------------------------------
 // Each bindable field (labels, colors, state, primary data binding) that holds
-// a binding shows its live resolved value INLINE, right after the field's "fx"
-// hint — no popover, so nothing can be hidden behind the modal. Values resolve
+// a binding shows its live resolved value inline in the field's label. Values resolve
 // via POST /api/pad/resolve on dialog open and refresh (debounced) as bindings
 // are edited; click a value to force a fresh reading. Color values also show a
 // swatch. Resolves VALUES only (not a pixel render); reads fields from the form.
@@ -469,6 +502,8 @@ var PAD_PV_FIELDS = [
     { id: 'pad-edit-label-bottom',        kind: 'text',  field: 'label_bottom' },
     { id: 'pad-edit-bg-color',            kind: 'color', field: 'bg_color' },
     { id: 'pad-edit-fg-color',            kind: 'color', field: 'fg_color' },
+    { id: 'pad-edit-icon-color',          kind: 'color', field: 'icon_color' },
+    { id: 'pad-edit-icon-badge-color',    kind: 'color', field: 'icon_badge_color' },
     { id: 'pad-edit-border-color',        kind: 'color', field: 'border_color' },
     { id: 'pad-edit-border-width',        kind: 'text',  field: 'border_width' },
     { id: 'pad-edit-corner-radius',       kind: 'text',  field: 'corner_radius' },
@@ -528,18 +563,12 @@ function padPvUnresolved(v) {
     return s === '' || s.indexOf('---') !== -1;
 }
 
-// Anchor the inline value chip next to each field's visible "fx" hint (uniform
-// across text inputs and the display:none color inputs).
 function padPvAnchor(id) {
     var el = document.getElementById(id);
     if (!el) return null;
-    var node = el;
-    while (node && node !== document.body) {
-        var fx = node.querySelector ? node.querySelector('.fx-hint') : null;
-        if (fx) return fx;
-        node = node.parentElement;
-    }
-    return null;
+    var label = el.labels && el.labels[0];
+    if (!label && el.closest) label = el.closest('.bindable-color')?.parentElement.querySelector('label');
+    return label && (label.querySelector('.binding-field-header') || label);
 }
 
 // Create the inline value chip for each field once (idempotent), and hook a
@@ -547,13 +576,13 @@ function padPvAnchor(id) {
 function padPvMount() {
     padPvFields().forEach(function (f) {
         var anchor = padPvAnchor(f.id);
-        if (!anchor || anchor.parentNode.querySelector('.pad-pv-val[data-pv="' + f.id + '"]')) return;
+        if (!anchor || document.querySelector('.pad-pv-val[data-pv="' + f.id + '"]')) return;
         var chip = document.createElement('span');
         chip.className = 'pad-pv-val';
         chip.setAttribute('data-pv', f.id);
         chip.style.display = 'none';
         chip.addEventListener('click', function (ev) { ev.preventDefault(); ev.stopPropagation(); padPvRefreshField(f.id); });
-        anchor.insertAdjacentElement('afterend', chip);
+        anchor.appendChild(chip);
     });
     var overlay = document.getElementById('pad-edit-overlay');
     const bindings = () => JSON.stringify(padPvFields().map(field => [field.id, padPvFieldValue(field.id)])
@@ -624,40 +653,44 @@ function padPvRefreshField(id, retriesLeft) {
 }
 
 // Batch-resolve all bound fields in one request (dialog open + debounced edits).
-function padPvRefreshAll(retriesLeft) {
+async function padPvRefreshAll(retriesLeft) {
     const current = padPvRequestGuard();
     padPvMount();
-    var rl = (retriesLeft === undefined) ? 2 : retriesLeft;
-    var btn = {}, any = false;
+    const rl = (retriesLeft === undefined) ? 2 : retriesLeft;
+    const bindings = [];
     padPvFields().forEach(function (f) {
-        var v = padPvFieldValue(f.id);
-        if (padPvIsBinding(v)) { btn[f.field] = v; any = true; padPvSetChip(f.id, null, 'loading'); }
+        const value = padPvFieldValue(f.id);
+        if (padPvIsBinding(value)) { bindings.push({ id: f.id, value }); padPvSetChip(f.id, null, 'loading'); }
         else padPvSetChip(f.id);
     });
-    if (!any) return;
-    fetch('/api/pad/resolve', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ screen: 'pad_' + padState.page, button: btn })
-    }).then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (j) {
-          if (!current()) return;
-          var fields = (j && j.button) || {};
-          var anyUnresolved = false;
-          padPvFields().forEach(function (f) {
-              if (padPvIsBinding(padPvFieldValue(f.id)) && padPvFieldValue(f.id) === btn[f.field]) {
-                  var v = fields[f.field] !== undefined ? fields[f.field] : '---';
-                  padPvSetChip(f.id, v);
-                  if (padPvUnresolved(v)) anyUnresolved = true;
-              }
-          });
-          if (anyUnresolved && rl > 0) setTimeout(function () { if (current()) padPvRefreshAll(rl - 1); }, 1000);
-      })
-      .catch(function () {
-          if (!current()) return;
-          padPvFields().forEach(function (f) {
-              if (padPvIsBinding(padPvFieldValue(f.id)) && padPvFieldValue(f.id) === btn[f.field]) padPvSetChip(f.id, '---');
-          });
-      });
+    let anyUnresolved = false;
+    // Keep requests and resolved input/value pairs within the device's JSON limits.
+    for (let offset = 0; offset < bindings.length; offset += 8) {
+        const batch = bindings.slice(offset, offset + 8);
+        let result;
+        try {
+            const response = await fetch('/api/pad/resolve', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ screen: 'pad_' + padState.page, bindings: batch.map(entry => entry.value) })
+            });
+            result = response.ok ? await response.json() : null;
+        } catch {
+            if (!current()) return;
+            batch.forEach(entry => {
+                if (padPvFieldValue(entry.id) === entry.value) padPvSetChip(entry.id, '---');
+            });
+            continue;
+        }
+        if (!current()) return;
+        batch.forEach((entry, index) => {
+            if (padPvFieldValue(entry.id) !== entry.value) return;
+            const value = result && result.resolved && result.resolved[index] ?
+                result.resolved[index].value : '---';
+            padPvSetChip(entry.id, value);
+            if (padPvUnresolved(value)) anyUnresolved = true;
+        });
+    }
+    if (anyUnresolved && rl > 0) setTimeout(function () { if (current()) padPvRefreshAll(rl - 1); }, 1000);
 }
 
 function padPvOnOpen() { clearTimeout(padPvTimer); padPvRefreshAll(); }

@@ -135,6 +135,14 @@ void handlePortalLogsJS(AsyncWebServerRequest *request) {
 }
 #endif
 
+#if HAS_EXTERNAL_DATA
+void handlePortalExternalDataJS(AsyncWebServerRequest *request) {
+	if (!portal_auth_gate(request)) return;
+	request->send(begin_gzipped_asset_response(request, "application/javascript",
+		portal_external_data_js_gz, portal_external_data_js_gz_len, "no-store"));
+}
+#endif
+
 #if ALARM_ENABLED
 void handlePortalAlarmsJS(AsyncWebServerRequest *request) {
 	if (!portal_auth_gate(request)) return;

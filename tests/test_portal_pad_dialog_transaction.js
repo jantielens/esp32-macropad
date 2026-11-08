@@ -27,6 +27,7 @@ class Element {
 }
 
 const elements = new Map();
+elements.set('pad-edit-icon-badge-padding', Object.assign(new Element('pad-edit-icon-badge-padding'), { value: '8' }));
 const document = {
     getElementById(id) {
         if (!elements.has(id)) elements.set(id, new Element(id));
@@ -45,6 +46,8 @@ const context = {
     padLabelFromInput() { return ''; },
     padGetBindableColor() { return ''; },
     padGetEffectiveDefault() { return ''; },
+    padContentLayouts() { return []; },
+    padContentFitWarning() {},
     padFillBuild() {},
     actionEditorBuild() { throw new Error('Timer Duration is invalid'); },
     padActionPrefixes(gesture) { return [gesture + '-0', gesture + '-1', gesture + '-2']; },
@@ -450,6 +453,50 @@ context.padWorkspaceEdit();
 assert.strictEqual(context.padState.buttons[0].widget_type, 'table', 'Inactive Gauge fields must not block Table');
 
 const gamepadEditor = context.padWidgetEditor('gamepad_button');
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_face.js', 'utf8'), context);
+const faceEditor = context.padWidgetEditor('face');
+bindingContext.bindingRegisterSchema(JSON.parse(fs.readFileSync('tools/mock-data/pad-editor.json', 'utf8')).binding_schema.schemes);
+context.bindingValidateInput = (input, options) => bindingContext.validateBinding(input.value, options).valid;
+assert.strictEqual(faceEditor.available({ widget_catalog: [{ type: 'face' }] }), true);
+assert.strictEqual(faceEditor.available({ widget_catalog: [{ type: 'gauge' }] }), false);
+assert.strictEqual(faceEditor.available(null), false);
+document.getElementById('pad-edit-widget-type').value = 'face';
+for (const emotion of ['content', 'relaxed', 'happy', 'worried', 'angry', 'sad', 'surprised', 'sleepy',
+    '[pad:mood]', '[expr:[mqtt:home/power]>2000?"worried":"relaxed"]']) {
+    context.padWidgetEditorsLoad({ widget_type: 'face', widget_face_style: 'doodle',
+        widget_data_binding: emotion, widget_face_liveliness: 'lively' });
+    const face = context.padDialogBuildButton();
+    assert.strictEqual(face.widget_face_style, 'doodle');
+    assert.strictEqual(face.widget_data_binding, emotion);
+    assert.strictEqual(face.widget_face_liveliness, 'lively');
+}
+for (const liveliness of ['still', 'calm', 'normal', 'lively']) {
+    context.padWidgetEditorsLoad({ widget_type: 'face', widget_data_binding: 'worried',
+        widget_face_liveliness: liveliness });
+    assert.strictEqual(context.padDialogBuildButton().widget_face_liveliness, liveliness);
+}
+context.padWidgetEditorsLoad({ widget_type: 'face', widget_face_emotion: 'happy' });
+assert.strictEqual(context.padDialogBuildButton().widget_data_binding, 'happy', 'Load renderer-only fixed emotion settings');
+context.padWidgetEditorsLoad({ widget_type: 'face' });
+assert.strictEqual(context.padDialogBuildButton().widget_face_style, 'robot');
+assert.strictEqual(context.padDialogBuildButton().widget_data_binding, 'content');
+assert.strictEqual(context.padDialogBuildButton().widget_face_liveliness, 'normal');
+const faceEmotion = document.getElementById('pad-edit-face-emotion');
+for (const invalid of ['Happy', 'excited', '17', 'x'.repeat(192), '[pad:mood', '[mqt:home/mood]', '[garbage]']) {
+    faceEmotion.value = invalid;
+    assert.throws(() => context.padDialogBuildButton(), /emotion|Emotion|binding/);
+}
+faceEmotion.value = '';
+assert.strictEqual(context.padDialogBuildButton().widget_data_binding, 'content');
+for (const [id, message] of [['pad-edit-face-style', /Robot Eyes/], ['pad-edit-face-liveliness', /Calm/]]) {
+    const input = document.getElementById(id);
+    const previous = input.value;
+    input.value = 'invalid';
+    assert.throws(() => context.padDialogBuildButton(), message);
+    input.value = previous;
+}
+delete context.bindingValidateInput;
+document.getElementById('pad-edit-widget-type').value = 'gamepad_button';
 assert.strictEqual(gamepadEditor.available({ has_touch: true, has_usb_hid: true }), true);
 assert.strictEqual(gamepadEditor.available({ has_touch: true, has_usb_hid: false }), false);
 document.getElementById('pad-edit-widget-type').value = 'gamepad_button';
@@ -554,6 +601,53 @@ assert.strictEqual(sparkline.widget_sparkline_slots, 1024);
 assert.strictEqual(sparkline.widget_sparkline_min, undefined);
 assert.strictEqual(sparkline.widget_sparkline_max_label_color, undefined);
 assert.strictEqual(sparkline.widget_sparkline_ref_1_color, '#123456');
+assert.strictEqual(sparkline.widget_sparkline_fill_opacity, 0);
+const fillOpacity = document.getElementById('pad-edit-sparkline-fill-opacity');
+fillOpacity.value = '35';
+assert.strictEqual(context.padDialogBuildButton().widget_sparkline_fill_opacity, 35);
+for (const value of ['-1', '101', '1.5', 'NaN']) {
+    fillOpacity.value = value;
+    assert.throws(() => context.padDialogBuildButton(), /whole percentage from 0 to 100/);
+}
+fillOpacity.value = '0';
+{
+    const defaultGetter = context.padGetEffectiveDefault;
+    const colorGetter = context.padGetBindableColor;
+    context.padGetEffectiveDefault = key => key === 'icon_badge_padding' ? 8 :
+        key === 'icon_badge_color' ? 'auto' : defaultGetter(key);
+    context.padGetBindableColor = id => id === 'pad-edit-icon-badge-color' ? '[health:color]' : colorGetter(id);
+    document.getElementById('pad-edit-icon-badge-padding').value = '0';
+    const disabledBadge = JSON.parse(JSON.stringify(context.padDialogBuildButton()));
+    assert.strictEqual(disabledBadge.icon_badge_padding, 0, 'Explicit off overrides an inherited badge');
+    assert.strictEqual(disabledBadge.icon_badge_color, '[health:color]');
+    context.padGetBindableColor = id => id === 'pad-edit-icon-color' ? '[health:color]' :
+        id === 'pad-edit-icon-badge-color' ? '[health:color]' : colorGetter(id);
+    assert.strictEqual(context.padDialogBuildButton().icon_color, '[health:color]');
+    context.padGetBindableColor = id => id === 'pad-edit-icon-color' ? 'auto' : colorGetter(id);
+    assert.strictEqual(context.padDialogBuildButton().icon_color, undefined, 'Auto follows text by default');
+    context.padGetEffectiveDefault = key => key === 'icon_color' ? '#123456' :
+        key === 'icon_badge_padding' ? 8 : key === 'icon_badge_color' ? 'auto' : defaultGetter(key);
+    assert.strictEqual(context.padDialogBuildButton().icon_color, 'auto', 'Auto overrides a configured device color');
+    document.getElementById('pad-edit-icon-badge-padding').value = '8';
+    assert.strictEqual(context.padDialogBuildButton().icon_badge_padding, undefined, 'Matching defaults stay inherited');
+    context.padGetEffectiveDefault = key => key === 'icon_badge_padding' ? 0 :
+        key === 'icon_badge_color' ? 'auto' : defaultGetter(key);
+    document.getElementById('pad-edit-icon-badge-padding').value = '0';
+    assert.strictEqual(context.padDialogBuildButton().icon_badge_padding, undefined, 'Default off stays inherited');
+    document.getElementById('pad-edit-icon-badge-padding').value = '8';
+    assert.strictEqual(context.padDialogBuildButton().icon_badge_padding, 8, 'Explicit padding enables the badge');
+    context.padGetEffectiveDefault = key => key === 'icon_badge_padding' ? '' :
+        key === 'icon_badge_color' ? 'auto' : defaultGetter(key);
+    document.getElementById('pad-edit-icon-badge-padding').value = '0';
+    assert.strictEqual(context.padDialogBuildButton().icon_badge_padding, undefined, 'Missing defaults fall back to off');
+    for (const invalid of ['-1', '65', '1.5', '']) {
+        document.getElementById('pad-edit-icon-badge-padding').value = invalid;
+        assert.throws(() => context.padDialogBuildButton(), /Badge padding must be a whole number/);
+    }
+    context.padGetEffectiveDefault = defaultGetter;
+    context.padGetBindableColor = colorGetter;
+    document.getElementById('pad-edit-icon-badge-padding').value = '8';
+}
 document.getElementById('pad-edit-sparkline-interval').value = '0.099';
 assert.throws(() => context.padWidgetEditorBuild({}, context.padWidgetEditor('sparkline')), /100 milliseconds/);
 assert.strictEqual(document.getElementById('pad-edit-sparkline-interval').value, '0.099');
@@ -730,7 +824,7 @@ assert.strictEqual(sliderDefaults.widget_slider_min, 0);
 assert.strictEqual(sliderDefaults.widget_slider_max, 100);
 assert.strictEqual(sliderDefaults.widget_slider_step, 1);
 assert.strictEqual(sliderDefaults.widget_slider_axis, 'horizontal');
-assert.strictEqual(sliderDefaults.widget_slider_length_pct, 50);
+assert.strictEqual(sliderDefaults.widget_slider_length_pct, 100);
 assert.strictEqual(sliderDefaults.widget_slider_knob_px, 0);
 assert.strictEqual(sliderDefaults.widget_slider_track_px, 0);
 assert.strictEqual(sliderDefaults.widget_slider_show_value, true);
@@ -767,6 +861,21 @@ for (const token of ['{value}', '{step}']) {
     assert.throws(() => context.actionEditorValidateEventTokens({ type: 'notify', message: 'x'.repeat(185) + token }, token, 'test'), /message.*exceeds/);
 }
 assert.throws(() => context.actionEditorValidateEventTokens({ type: 'notify', message: '{step}' }, '{value}', 'test'), /use \{value\}/);
+assert.doesNotThrow(() => context.actionEditorValidateEventTokens({
+    type: 'ha_service', entity_id: 'climate.room', service: 'set_mode', data_json: '{"mode":"{value}"}'
+}, '{value}', 'test', ['cool', 'heat']));
+assert.doesNotThrow(() => context.actionEditorValidateEventTokens({
+    type: 'ha_service', entity_id: 'climate.room', service: 'set_mode', data_json: '{"mode":"{value}"}'
+}, '{value}', 'test', ['']));
+assert.throws(() => context.actionEditorValidateEventTokens({
+    type: 'ha_service', entity_id: 'climate.room', service: 'set_mode', data_json: '{"mode":{value}}'
+}, '{value}', 'test', ['cool']), /JSON object/);
+assert.throws(() => context.actionEditorValidateEventTokens({
+    type: 'ha_service', entity_id: 'climate.room', service: 'set_mode', data_json: '{"mode":{value}}'
+}, '{value}', 'test', ['']), /JSON object/);
+assert.throws(() => context.actionEditorValidateEventTokens({
+    type: 'notify', message: 'x'.repeat(150) + '{value}'
+}, '{value}', 'test', ['a'.repeat(63)]), /exceeds/);
 
 async function checkSourceColors() {
     document.querySelector = () => null;
@@ -824,17 +933,17 @@ async function checkSourceColors() {
     assert.strictEqual(pending.length, 1, 'Accents reuse the existing batch request');
     input.value = '[pad:second]';
     context.padPvRefreshAll(0);
-    pending[0].resolve({ ok: true, json: () => ({ button: { widget_arc_color: '#ff0000' } }) });
+    pending[0].resolve({ ok: true, json: () => ({ resolved: pending[0].body.bindings.map(() => ({ value: '#ff0000' })) }) });
     await settle();
     assert.strictEqual(border('pad-edit-gauge-source-1'), '#123456', 'Changed expressions reject old results');
-    pending[1].resolve({ ok: true, json: () => ({ button: { widget_arc_color: '#00ff00' } }) });
+    pending[1].resolve({ ok: true, json: () => ({ resolved: pending[1].body.bindings.map(() => ({ value: '#00ff00' })) }) });
     await settle();
     assert.strictEqual(border('pad-edit-gauge-source-1'), '#00FF00');
     input.value = '[pad:first]';
     context.padPvRefreshAll(0);
     input.value = '[pad:second]';
     context.padPvRefreshAll(0);
-    pending[3].resolve({ ok: true, json: () => ({ button: { widget_arc_color: '#00ff00' } }) });
+    pending[3].resolve({ ok: true, json: () => ({ resolved: pending[3].body.bindings.map(() => ({ value: '#00ff00' })) }) });
     await settle();
     pending[2].reject(new Error('Old request failed'));
     await settle();
@@ -846,7 +955,7 @@ async function checkSourceColors() {
     context.padPvRefreshAll(0);
     context.padState.editCol++;
     context.padWidgetEditorsLoad({ widget_type: 'gauge', widget_arc_color: '[pad:second]' });
-    pending[5].resolve({ ok: true, json: () => ({ button: { widget_arc_color: '#ff0000' } }) });
+    pending[5].resolve({ ok: true, json: () => ({ resolved: pending[5].body.bindings.map(() => ({ value: '#ff0000' })) }) });
     await settle();
     assert.strictEqual(border('pad-edit-gauge-source-1'), '#123456', 'Switching buttons rejects old results');
 }
@@ -872,7 +981,7 @@ async function checkSourceColors() {
     assert.strictEqual(button.fg_color, foreground);
     assert.strictEqual(button.widget_data_binding, source);
     assert.strictEqual(button.widget_toggle_width_pct, 50);
-    assert.strictEqual(button.widget_toggle_icon_position, 'left');
+    assert.strictEqual(button.widget_toggle_icon_position, undefined);
     assert.strictEqual(button.widget_toggle_placement, undefined);
     assert.deepStrictEqual(button.actions[0], on);
     assert.deepStrictEqual(button.lp_actions[0], off);
@@ -883,7 +992,7 @@ async function checkSourceColors() {
         widget_toggle_placement: 'top', widget_toggle_icon_position: 'below' });
     const positioned = context.padDialogBuildButton();
     assert.strictEqual(positioned.widget_toggle_width_pct, 60);
-    assert.strictEqual(positioned.widget_toggle_icon_position, 'below');
+    assert.strictEqual(positioned.widget_toggle_icon_position, undefined);
     assert.strictEqual(positioned.widget_toggle_placement, undefined);
     document.getElementById('pad-edit-toggle-on-value').value = ' OFF ';
     assert.throws(() => context.padDialogBuildButton(), /distinct/);
@@ -892,6 +1001,87 @@ async function checkSourceColors() {
     assert.throws(() => context.padDialogBuildButton(), /Switch width/);
     context.padLabelFromInput = savedLabel;
     context.actionEditorBuild = savedAction;
+}
+
+async function checkBindingPreviewPlacement() {
+    const nodes = new Map();
+    const chips = new Map();
+    const overlay = new Element('pad-edit-overlay');
+    const widgetType = new Element('pad-edit-widget-type');
+    nodes.set(overlay.id, overlay);
+    nodes.set(widgetType.id, widgetType);
+    const addField = (id, value, hasHeader) => {
+        const input = new Element(id);
+        input.value = value;
+        const container = {
+            children: [],
+            appendChild(chip) { this.children.push(chip); chips.set(chip.attributes['data-pv'], chip); }
+        };
+        const label = hasHeader ? { querySelector: () => container } :
+            Object.assign(container, { querySelector: () => null });
+        input.labels = [label];
+        nodes.set(id, input);
+        return container;
+    };
+    const top = addField('pad-edit-label-top', '[ext:weather;current.temperature_2m]', true);
+    const center = addField('pad-edit-label-center', '[health:cpu]', true);
+    const color = addField('pad-edit-border-color', '[health:rssi]', false);
+    const option = addField('pad-edit-option-1-label', '[time:%H:%M:%S]', false);
+    widgetType.value = 'option_selector';
+    const previewContext = {
+        document: {
+            getElementById: id => nodes.get(id) || null,
+            createElement: () => new Element(),
+            querySelector: selector => chips.get(selector.match(/data-pv="([^"]+)"/)?.[1]) || null
+        },
+        padState: { page: 0, selectedLayer: 'main', editCol: 0, editRow: 0 },
+        padWidgetEditor: () => ({ fields: [{ id: 'pad-edit-option-1-label', key: 'widget_option_label', binding: {} }] }),
+        padGetBindableColor: id => nodes.get(id)?.value || '',
+        setTimeout,
+        clearTimeout,
+        fetch: (url, options) => {
+            const body = JSON.parse(options.body);
+            assert.deepStrictEqual(body.bindings, [
+                '[ext:weather;current.temperature_2m]', '[health:cpu]', '[health:rssi]', '[time:%H:%M:%S]'
+            ]);
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({
+                resolved: ['21.3 C', '23', '#123456', '12:34:56'].map(value => ({ value }))
+            }) });
+        }
+    };
+    vm.createContext(previewContext);
+    vm.runInContext(fs.readFileSync('src/app/web/portal_pad_dialog.js', 'utf8'), previewContext);
+    previewContext.padPvOnOpen();
+    await new Promise(resolve => setImmediate(resolve));
+    for (const [container, expected] of [[top, '21.3 C'], [center, '23'], [color, '#123456'], [option, '12:34:56']]) {
+        assert.strictEqual(container.children.length, 1, 'Each binding preview belongs to its own label');
+        assert.strictEqual(container.children[0].style.display, 'inline-flex');
+        assert.ok(container.children[0].innerHTML.includes(expected));
+    }
+    previewContext.padPvOnOpen();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.strictEqual(top.children.length, 1, 'Reselecting a button does not duplicate its preview');
+    nodes.get('pad-edit-label-top').value = 'Plain label';
+    previewContext.padPvSetChip('pad-edit-label-top');
+    assert.strictEqual(top.children[0].style.display, 'none');
+
+    const manyFields = Array.from({ length: 35 }, (_, i) => {
+        const id = 'widget-binding-' + i;
+        addField(id, '[test:' + i + ']', false);
+        return { id, key: id, binding: {} };
+    });
+    const batchSizes = [];
+    previewContext.padWidgetEditor = () => ({ fields: manyFields });
+    previewContext.fetch = (url, options) => {
+        const body = JSON.parse(options.body);
+        batchSizes.push(body.bindings.length);
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({
+            resolved: body.bindings.map(value => ({ value: 'resolved ' + value }))
+        }) });
+    };
+    await previewContext.padPvRefreshAll(0);
+    assert.deepStrictEqual(batchSizes, [8, 8, 8, 8, 5], 'Preview requests stay within device limits');
+    assert.ok(chips.get('widget-binding-34').innerHTML.includes('resolved [test:34]'));
 }
 
 async function checkInspectorRequests() {
@@ -970,8 +1160,8 @@ async function checkInspectorRequests() {
     callback();
     assert.strictEqual(requests.length, 6);
     assert.strictEqual(requests[5].url, '/api/pad/resolve');
-    assert.strictEqual(JSON.parse(requests[5].options.body).button.label_center, '[health:heap_free]');
-    requests[5].resolve({ ok: true, json: () => ({ button: { label_center: '42' } }) });
+    assert.deepStrictEqual(JSON.parse(requests[5].options.body).bindings, ['[health:heap_free]']);
+    requests[5].resolve({ ok: true, json: () => ({ resolved: [{ value: '42' }] }) });
     await new Promise(resolve => setImmediate(resolve));
     listeners.input({ target: getElementById('pad-edit-bg-image-interval') });
     assert.strictEqual(timers.size, 0);
@@ -987,11 +1177,76 @@ async function checkInspectorRequests() {
     requestContext.padPvOnOpen();
     assert.strictEqual(timers.size, 0, 'Opening a selection cancels refreshes scheduled while loading its fields');
     assert.strictEqual(requests.length, 7, 'Selection resolves once immediately instead of also resolving on a stale timer');
-    requests[6].resolve({ ok: true, json: () => ({ button: { label_center: '42' } }) });
+    requests[6].resolve({ ok: true, json: () => ({ resolved: [{ value: '42' }] }) });
     await new Promise(resolve => setImmediate(resolve));
 }
 
-checkSourceColors().then(checkInspectorRequests).then(() => console.log('portal_pad_dialog_transaction: PASS')).catch(error => {
+function checkContentLayoutControls() {
+    const nodes = new Map();
+    const find = id => {
+        if (!nodes.has(id)) nodes.set(id, new Element(id));
+        return nodes.get(id);
+    };
+    const select = find('pad-edit-content-layout');
+    select.value = 'left';
+    const type = find('pad-edit-widget-type');
+    type.value = 'sparkline';
+    const layoutContext = { document: { getElementById: find }, deviceInfoCache: {} };
+    vm.createContext(layoutContext);
+    vm.runInContext(fs.readFileSync('src/app/web/portal_pad_editor.js', 'utf8'), layoutContext);
+    layoutContext.padContentLayoutRefresh();
+    assert.strictEqual(find('pad-edit-group-width-group').style.display, '');
+    type.value = 'gauge';
+    layoutContext.padContentLayoutRefresh();
+    assert.strictEqual(find('pad-edit-group-width-group').style.display, '');
+    assert.strictEqual(select.value, 'left');
+    type.value = 'rocker';
+    find('pad-edit-rocker-group-layout').value = 'center';
+    layoutContext.padContentLayoutRefresh();
+    assert.strictEqual(find('pad-edit-content-layout-group').style.display, 'none');
+    find('pad-edit-rocker-group-layout').value = 'beside';
+    layoutContext.padContentLayoutRefresh();
+    assert.strictEqual(find('pad-edit-content-layout-group').style.display, '');
+    type.value = '';
+    layoutContext.padContentLayoutRefresh();
+    assert.strictEqual(find('pad-edit-content-layout-group').style.display, 'none');
+}
+
+function checkContentLayoutDraft() {
+    context.actionEditorListBuild = () => [];
+    document.getElementById('pad-edit-widget-type').value = 'sparkline';
+    document.getElementById('pad-edit-content-layout').value = 'left';
+    document.getElementById('pad-edit-icon-position').value = 'right';
+    document.getElementById('pad-edit-group-width').value = '65';
+    const savedIconReader = context.padIconEditorReadDraft;
+    context.padIconEditorReadDraft = () => ({ catalog_id: 'material-symbols:home', kind: 'mono' });
+    const button = context.padDialogBuildButton();
+    assert.strictEqual(button.widget_position, 'left');
+    assert.strictEqual(button.icon_position, 'right');
+    assert.strictEqual(button.group_size_pct, 65);
+    document.getElementById('pad-edit-icon-position').value = 'left';
+    assert.strictEqual(context.padDialogBuildButton().icon_position, undefined);
+    document.getElementById('pad-edit-icon-position').value = 'above';
+    assert.strictEqual(context.padDialogBuildButton().icon_position, 'above');
+    document.getElementById('pad-edit-widget-type').value = 'gauge';
+    assert.strictEqual(context.padDialogBuildButton().widget_position, 'left');
+    document.getElementById('pad-edit-content-layout').value = 'right';
+    assert.strictEqual(context.padDialogBuildButton().widget_position, undefined);
+    document.getElementById('pad-edit-content-layout').value = 'below';
+    assert.strictEqual(context.padDialogBuildButton().widget_position, 'below');
+    for (const type of ['rocker', 'numericrocker']) {
+        document.getElementById('pad-edit-widget-type').value = type;
+        document.getElementById('pad-edit-rocker-group-layout').value = 'beside';
+        assert.strictEqual(context.padDialogBuildButton().rocker_group_layout, 'beside');
+        document.getElementById('pad-edit-rocker-group-layout').value = 'center';
+        assert.strictEqual(context.padDialogBuildButton().rocker_group_layout, undefined);
+    }
+    context.padIconEditorReadDraft = savedIconReader;
+}
+
+checkContentLayoutControls();
+checkContentLayoutDraft();
+checkSourceColors().then(checkBindingPreviewPlacement).then(checkInspectorRequests).then(() => console.log('portal_pad_dialog_transaction: PASS')).catch(error => {
     console.error(error);
     process.exitCode = 1;
 });

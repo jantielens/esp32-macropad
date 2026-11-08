@@ -39,8 +39,7 @@
         { id: prefix + 'min', key: 'widget_slider_min', kind: 'number', default: 0 },
         { id: prefix + 'max', key: 'widget_slider_max', kind: 'number', default: 100 },
         { id: prefix + 'step', key: 'widget_slider_step', kind: 'number', default: 1 },
-        { id: prefix + 'length', key: 'widget_slider_length_pct', kind: 'number', default: 50 },
-        { id: prefix + 'icon-position', key: 'widget_slider_icon_position', kind: 'text', default: 'left' },
+        { id: prefix + 'length', key: 'widget_slider_length_pct', kind: 'number', default: 100 },
         { id: prefix + 'track', key: 'widget_slider_track_px', kind: 'number', default: 0 },
         { id: prefix + 'knob', key: 'widget_slider_knob_px', kind: 'number', default: 0 },
         { id: prefix + 'track-color', key: 'widget_slider_track_color', kind: 'color', default: () => PAD_FIRMWARE_DEFAULTS.widget_track_color },
@@ -63,7 +62,6 @@
             { id: 'pad-edit-slider-action-note', tab: 'Actions' }
         ],
         fields,
-        icon: { fixedPosition: true, width: 0.4, height: 0.4 },
         actions: {
             tap: true, longPress: false,
             labels: () => ['Value set action', 'Long-press action'],
@@ -78,8 +76,6 @@
             const length = Number(input('length').value);
             if (!Number.isInteger(length) || length < 20 || length > 100)
                 fail('length', 'Length must be a whole number from 20 to 100');
-            if (!['left', 'above', 'below'].includes(button.widget_slider_icon_position))
-                fail('icon-position', 'Choose left, above, or below for the icon');
             const track = Number(input('track').value);
             if (!Number.isInteger(track) || track < 0 || track > 32)
                 fail('track', 'Track size must be 0 or a whole number from 1 to 32');

@@ -5,6 +5,7 @@
 #include "../pad_config.h"
 #include "../pad_overlay.h"
 #include "../pad_layout.h"
+#include "../button_content_lvgl.h"
 #include "../binding_template.h"
 #include "../widgets/widget.h"
 #if HAS_IMAGE_FETCH
@@ -28,12 +29,10 @@ class PadScreen;
 // Runtime MQTT label binding — template-based
 // Labels containing [scheme:params] tokens are resolved on passive refresh.
 struct RuntimeLabelBinding {
-    lv_obj_t* label;                                  // LVGL label to update
     char templ[CONFIG_LABEL_MAX_LEN];                 // Original label text (template)
     char last[BINDING_TEMPLATE_MAX_LEN];              // Last rendered result (skip if unchanged)
-    LabelStyle style;                                 // Style used for alignment/font scaling
-    uint8_t anchorY;                                  // PadLabelAnchorY
-    bool active;
+    uint8_t tileIndex;
+    uint8_t labelIndex;
 };
 
 // Runtime color binding — a color field that may contain binding templates.
@@ -43,8 +42,8 @@ struct RuntimeColorBinding {
     char templ[CONFIG_COLOR_MAX_LEN];                 // Original color string (template or static)
     uint32_t defaultColor;                            // Fallback color when unresolved
     uint32_t lastApplied;                             // Last applied color (skip if unchanged)
-    uint8_t target;                                   // 0=bg, 1=fg (labels+icon recolor), 2=border,
-                                                      // 3=label_top text, 4=label_center text, 5=label_bottom text
+    uint8_t target;                                   // 0=bg, 1=fg, 2=border, 3-5=labels,
+                                                      // 6=badge, 7=icon
     bool active;
     bool hasBindings;                                 // true if template contains [xxx:...] tokens
 };
@@ -83,10 +82,13 @@ struct ButtonTile {
     lv_obj_t* label_center;   // Center label (Font L) or nullptr
     lv_obj_t* label_bottom;   // Bottom label (Font S) or nullptr
     lv_obj_t* icon_img;       // Icon image widget (or nullptr)
-    bool icon_is_mono;        // True if icon uses fg recolor
+    bool icon_is_mono;
+    bool icon_follows_text;
+    bool content_layout_dirty;
+    ButtonContentRuntime content_layout;
     // Per-label text-color override: bit0=top, bit1=center, bit2=bottom. Set when a
     // label has its own `color:` (static or binding) so the fg (target=1) poll does
-    // not clobber it. Icon recolor is NOT gated by this mask.
+    // not clobber it.
     uint8_t labelColorOverride;
     uint8_t page;             // Page index (for HA event)
     const PadBinding* pad_bindings; // Owning pad's bindings for extension context
@@ -152,6 +154,7 @@ private:
     int16_t navigationTile = -1;
     uint8_t navigationZone = 0;
     lv_obj_t* navigationFocus = nullptr;
+    lv_obj_t* configError = nullptr;
     void refreshNavigationFocus();
     uint8_t navigationZoneCount(const ButtonTile& tile) const;
     bool navigationZoneAvailable(const ButtonTile& tile, uint8_t zone) const;
@@ -170,7 +173,7 @@ private:
     uint16_t bindingCount;
 
     // Up to 6 color bindings per button: bg + fg + border + 3 per-label text colors.
-    static const int MAX_COLOR_BINDINGS = MAX_PAD_BUTTONS * 6 + 1;
+    static const int MAX_COLOR_BINDINGS = MAX_PAD_BUTTONS * 8 + 1;
     RuntimeColorBinding* colorBindings;
     uint16_t colorBindingCount;
 

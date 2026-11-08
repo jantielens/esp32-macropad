@@ -195,7 +195,8 @@ inline void widget_describe_fill_fields(JsonArray fields, bool bar_patterns) {
     static const WidgetType prefix##_widget_type = {                           \
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
         prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \
-        nullptr, nullptr, nullptr, nullptr, &prefix##_preview, nullptr         \
+        nullptr, nullptr, nullptr, nullptr, &prefix##_preview, nullptr,        \
+        nullptr, nullptr, nullptr, nullptr, nullptr                            \
     };                                                                         \
     static struct prefix##AutoReg {                                            \
         prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \
@@ -213,7 +214,8 @@ inline void widget_describe_fill_fields(JsonArray fields, bool bar_patterns) {
     static const WidgetType prefix##_widget_type = {                           \
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
         prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \
-        prefix##_describe, nullptr, nullptr, nullptr, &prefix##_preview, nullptr \
+        prefix##_describe, nullptr, nullptr, nullptr, &prefix##_preview, nullptr, \
+        nullptr, nullptr, nullptr, nullptr, nullptr                            \
     };                                                                         \
     static struct prefix##AutoReg {                                            \
         prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \
@@ -225,14 +227,25 @@ inline void widget_describe_fill_fields(JsonArray fields, bool bar_patterns) {
     static const WidgetType prefix##_widget_type = {                           \
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
         prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \
-        prefix##_describe, prefix##_show, prefix##_hide, validate_fn, &prefix##_preview, cancel_fn \
+        prefix##_describe, prefix##_show, prefix##_hide, validate_fn, &prefix##_preview, cancel_fn, \
+        nullptr, nullptr, nullptr, nullptr, nullptr                            \
     };                                                                         \
     static struct prefix##AutoReg {                                            \
         prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \
     } _##prefix##_auto_reg
 #else
 #define REGISTER_WIDGET_SCHEMA(prefix, stream_fn, resolve_in_tick_flag)        \
-    REGISTER_WIDGET(prefix, stream_fn, resolve_in_tick_flag)
+    static_assert(sizeof(#prefix) <= CONFIG_WIDGET_TYPE_MAX_LEN,               \
+                  "Widget identifier exceeds CONFIG_WIDGET_TYPE_MAX_LEN; shorten the prefix"); \
+    static const WidgetType prefix##_widget_type = {                           \
+        #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
+        prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,     \
+        nullptr, nullptr, nullptr, nullptr, &prefix##_preview, nullptr,        \
+        nullptr, nullptr, nullptr, nullptr, nullptr                            \
+    };                                                                         \
+    static struct prefix##AutoReg {                                            \
+        prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \
+    } _##prefix##_auto_reg
 
 #define REGISTER_WIDGET_SCHEMA_INPUT_LIFECYCLE(prefix, stream_fn, resolve_in_tick_flag, validate_fn, cancel_fn) \
     static_assert(sizeof(#prefix) <= CONFIG_WIDGET_TYPE_MAX_LEN,               \
@@ -240,7 +253,8 @@ inline void widget_describe_fill_fields(JsonArray fields, bool bar_patterns) {
     static const WidgetType prefix##_widget_type = {                           \
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
         prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \
-        nullptr, prefix##_show, prefix##_hide, validate_fn, &prefix##_preview, cancel_fn \
+        nullptr, prefix##_show, prefix##_hide, validate_fn, &prefix##_preview, cancel_fn, \
+        nullptr, nullptr, nullptr, nullptr, nullptr                            \
     };                                                                         \
     static struct prefix##AutoReg {                                            \
         prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \

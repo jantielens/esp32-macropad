@@ -92,6 +92,15 @@ struct HwButtonDef {
 #define HAS_HA_LIVE (HAS_DISPLAY && HAS_PSRAM)
 #endif
 
+// External HTTP JSON sources and bindings require a display and PSRAM.
+#ifndef HAS_EXTERNAL_DATA
+#define HAS_EXTERNAL_DATA (HAS_DISPLAY && HAS_PSRAM)
+#endif
+
+#if HAS_EXTERNAL_DATA && (!HAS_DISPLAY || !HAS_PSRAM)
+#error "HAS_EXTERNAL_DATA requires HAS_DISPLAY and HAS_PSRAM."
+#endif
+
 // Developer-only display profiling; compile out detailed collection and health fields by default.
 #ifndef HAS_DISPLAY_DIAGNOSTICS
 #define HAS_DISPLAY_DIAGNOSTICS false
@@ -931,6 +940,15 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 // Suppress visual transitions on slow-refresh displays while preserving state updates.
 #ifndef DISPLAY_DISABLE_ANIMATIONS
 #define DISPLAY_DISABLE_ANIMATIONS false
+#endif
+
+// Companion faces support animated LCD/OLED displays and slow interactive e-paper updates.
+#ifndef HAS_FACE_WIDGET
+#define HAS_FACE_WIDGET (HAS_DISPLAY && (HAS_LVGL_EPAPER || (!HAS_EPAPER_PANEL && !DISPLAY_DISABLE_ANIMATIONS)))
+#endif
+
+#if HAS_FACE_WIDGET && !HAS_DISPLAY
+#error "HAS_FACE_WIDGET requires HAS_DISPLAY."
 #endif
 
 // Wall-clock-aligned interval between passive pad binding refreshes; 0 keeps every LVGL-cycle refresh.

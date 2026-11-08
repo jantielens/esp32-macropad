@@ -993,6 +993,23 @@ TEST(slider_value_action_validation) {
     }
 }
 
+TEST(option_id_action_validation) {
+    StaticJsonDocument<512> doc;
+    ASSERT_TRUE(deserializeJson(doc, R"({"type":"ha_service","entity_id":"fan.room","service":"set_fan_mode","data_json":"{\"fan_mode\":\"{value}\"}"})") == DeserializationError::Ok);
+    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}", "high") == nullptr);
+    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}", "") == nullptr);
+    doc["data_json"] = "{\"fan_mode\":{value}}";
+    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}", "high") != nullptr);
+    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}", "") != nullptr);
+
+    doc.clear();
+    doc["type"] = "mqtt";
+    doc["topic"] = "device/set";
+    doc["payload"] = std::string(120, 'x') + "{value}";
+    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}", "1234567") == nullptr);
+    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}", "12345678") != nullptr);
+}
+
 TEST(slider_ha_json_template_validation) {
     StaticJsonDocument<512> doc;
     ASSERT_TRUE(deserializeJson(doc, R"({"type":"ha_service","entity_id":"light.room","service":"turn_on","data_json":"{\"brightness\":{value}}"})") == DeserializationError::Ok);
@@ -1051,6 +1068,7 @@ int main(int argc, char** argv) {
     RUN(registered_identifiers_survive_storage);
     RUN(catalog_feature_gates_and_metadata_parity);
     RUN(slider_value_action_validation);
+    RUN(option_id_action_validation);
     RUN(slider_ha_json_template_validation);
     RUN(empty_json);
     RUN(empty_to_json_produces_empty_object);

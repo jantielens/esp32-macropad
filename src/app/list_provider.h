@@ -25,6 +25,8 @@ struct ListProvider {
 
 bool list_provider_register(const ListProvider* provider);
 const ListProvider* list_provider_find(const char* id);
+void list_provider_pads_init();
+void list_provider_pads_update(uint8_t page, bool exists);
 
 // Registry enumeration (for the MCP capability manifest): feature branches
 // register providers, so the manifest can list available [list:id] sources

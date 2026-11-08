@@ -5,6 +5,7 @@
 #include "display_manager.h"
 #include "fill_pattern.h"
 #include "action_registry.h"
+#include "widgets/widget_registry.h"
 
 struct SourceContext { BindingSourceVisitor visitor; void* user; };
 
@@ -34,7 +35,7 @@ void binding_sources_visit(BindingSourceVisitor visitor, void* user) {
         for (uint8_t b = 0; b < pad->button_count; ++b) {
             const auto& button = pad->buttons[b];
             const char* fields[] = {button.label_top, button.label_center, button.label_bottom,
-                button.bg_color, button.fg_color, button.border_color, button.border_width,
+                button.bg_color, button.fg_color, button.icon_color, button.icon_badge_color, button.border_color, button.border_width,
                 button.corner_radius, button.btn_state, button.label_top_color_bind,
                 button.label_center_color_bind, button.label_bottom_color_bind,
                 button.bg_image_url};
@@ -42,6 +43,16 @@ void binding_sources_visit(BindingSourceVisitor visitor, void* user) {
             if (button.fill_style)
                 for (unsigned i = 0; i < 7; ++i) visitor(button.fill_style->color(i), user);
             for (uint8_t i = 0; i < MAX_WIDGET_BINDINGS; ++i) visitor(button.widget.data_binding[i], user);
+            const WidgetType* type = widget_find(button.widget.type);
+            if (type && type->visitResources) {
+                type->visitResources(button.widget.data,
+                    [](WidgetResourceKind kind, const char*, uint8_t, const char* value, void* opaque) {
+                        if (kind == WidgetResourceKind::Binding) {
+                            auto& source = *static_cast<SourceContext*>(opaque);
+                            source.visitor(value, source.user);
+                        }
+                    }, &context);
+            }
             for (uint8_t i = 0; i < button.action_count; ++i) visit_action(button.actions[i], context);
             for (uint8_t i = 0; i < button.lp_action_count; ++i) visit_action(button.lp_actions[i], context);
         }

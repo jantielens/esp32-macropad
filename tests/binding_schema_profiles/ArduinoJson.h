@@ -2,6 +2,8 @@
 
 #include <stddef.h>
 class JsonObject;
+class JsonVariantConst;
+class JsonArray;
 
 class JsonValue {
 public:

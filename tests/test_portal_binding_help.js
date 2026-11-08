@@ -33,6 +33,21 @@ const haButtonBuilderProvider = vm.runInContext('haButtonBuilderProvider', conte
 const scheme = name => fixture.schemes.find(s => s.name === name);
 const haConfigured = { caps: { ha_live: true }, ha_url: 'http://ha.local:8123', ha_token_set: true };
 
+const externalStats = scheme('ext').reference.rows;
+for (const [path, kind, unit] of [
+    ['.@state', 'text', ''], ['.@age', 'integer', 's'],
+    ['.@next', 'integer', 's'], ['.@duration', 'integer', 'ms'],
+    ['.@size', 'integer', 'bytes'], ['.@http_status', 'integer', ''],
+    ['.@error', 'text', '']
+]) {
+    const row = externalStats.find(entry => entry.syntax === path);
+    assert.ok(row, `external statistic ${path} is documented`);
+    assert.strictEqual(row.kind, kind);
+    assert.strictEqual(row.unit, unit);
+    assert.ok(row.desc && row.example);
+}
+assert.ok(context._bhRenderScheme(scheme('ext')).includes('[ext:weather;.@duration;%.0f ms|Unknown]'));
+
 for (const field of [
     { tagName: 'INPUT', type: 'text' },
     { tagName: 'INPUT', type: 'search' },
@@ -365,9 +380,126 @@ delete context.testHelpSchemes;
 // Every documented example must pass the portal validator too.
 (async function() {
     await context.bindingLoadSchema();
+    {
+    vm.runInContext(fs.readFileSync('src/app/web/portal_external_data.js', 'utf8'), context);
+    const external = vm.runInContext('externalDataBuilderProvider', context);
+    assert.strictEqual(external.supported({ caps: {} }), false);
+    assert.strictEqual(external.supported({ external_data: [] }), true);
+    assert.match(external.availability({ external_data: [] }), /Configure/);
+    const originalFetch = context.fetch;
+    context.fetch = async () => ({ ok: true, json: async () => ({
+        external_data: [{ name: 'weather', state: 'healthy' }, { name: 'energy', state: 'waiting' }]
+    }) });
+    const sources = await external.search('weath', new AbortController().signal);
+    assert.deepStrictEqual(Array.from(sources.candidates, item => item.sourceId), ['weather']);
+    const fields = {
+        '[data-ext-name]': {}, '#external-builder-kind': { value: '', options: [{ value: '' }, { value: '.@state' }] },
+        '#external-builder-path': { value: '' }, '[data-ext-path-label]': {}, '[data-ext-path-help]': {},
+        '[data-ext-preview]': {}, '[data-ext-preview-label]': {}, '[data-ext-preview-value]': {},
+        '[data-ext-preview-status]': {}, '[data-ext-use]': {}, '[data-ext-change]': {}
+    };
+    const root = { isConnected: true, querySelector: selector => fields[selector] };
+    const requests = [];
+    context.fetch = (url, options) => new Promise(resolve => requests.push({ resolve, options }));
+    let selected;
+    const dispose = external.configureSelection(root, { source: 'weather' }, value => { selected = value; });
+    assert.strictEqual(fields['[data-ext-path-help]'].hidden, false);
+    fields['#external-builder-kind'].value = '.@state';
+    fields['#external-builder-kind'].onchange();
+    assert.strictEqual(fields['[data-ext-path-label]'].hidden, true);
+    assert.strictEqual(fields['[data-ext-path-help]'].hidden, true);
+    fields['#external-builder-kind'].value = '';
+    fields['#external-builder-kind'].onchange();
+    assert.strictEqual(fields['[data-ext-path-label]'].hidden, false);
+    assert.strictEqual(fields['[data-ext-path-help]'].hidden, false);
+    await new Promise(resolve => setTimeout(resolve, 350));
+    fields['#external-builder-path'].value = 'current.temperature';
+    fields['#external-builder-path'].oninput();
+    await new Promise(resolve => setTimeout(resolve, 350));
+    assert.strictEqual(requests.length, 2);
+    requests[0].resolve({ ok: true, json: async () => ({ resolved: [
+        { value: 'old' }, { value: 'old' }, { value: 'healthy' }
+    ] }) });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.strictEqual(fields['[data-ext-preview-status]'].textContent, 'Loading preview...');
+    assert.strictEqual(fields['[data-ext-preview]'].hidden, true);
+    requests[1].resolve({ ok: true, json: async () => ({ resolved: [
+        { value: '21.3' }, { value: '21.3' }, { value: 'stale' }
+    ] }) });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.strictEqual(fields['[data-ext-preview]'].hidden, false);
+    assert.strictEqual(fields['[data-ext-preview-label]'].textContent, 'Preview (cached, stale)');
+    assert.strictEqual(fields['[data-ext-preview-value]'].textContent, '21.3');
+    fields['[data-ext-use]'].onclick();
+    assert.strictEqual(selected.capabilities.numericWidget, true);
+    assert.strictEqual(external.buildBinding(selected, { format: '%.1f C', fallback: 'No data' }),
+        '[ext:weather;current.temperature;%.1f C|No data]');
+    assert.throws(() => external.buildBinding(selected, { format: 'x'.repeat(24) }), /24 UTF-8/);
+    fields['#external-builder-path'].value = 'missing';
+    fields['#external-builder-path'].oninput();
+    await new Promise(resolve => setTimeout(resolve, 350));
+    requests[2].resolve({ ok: true, json: async () => ({ resolved: [
+        { value: '__ext_missing_a__' }, { value: '__ext_missing_b__' }, { value: 'healthy' }
+    ] }) });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.strictEqual(fields['[data-ext-preview]'].hidden, true);
+    assert.match(fields['[data-ext-preview-status]'].textContent, /No cached value/);
+    fields['[data-ext-use]'].onclick();
+    assert.strictEqual(selected.capabilities.numericWidget, false);
+    fields['#external-builder-path'].value = 'error';
+    fields['#external-builder-path'].oninput();
+    await new Promise(resolve => setTimeout(resolve, 350));
+    requests[3].resolve({ ok: false, status: 503 });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.match(fields['[data-ext-preview-status]'].textContent, /HTTP 503/);
+    assert.strictEqual(fields['[data-ext-use]'].disabled, false);
+    fields['#external-builder-path'].value = 'changing';
+    fields['#external-builder-path'].oninput();
+    await new Promise(resolve => setTimeout(resolve, 350));
+    requests[4].resolve({ ok: true, json: async () => ({ resolved: [
+        { value: '21' }, { value: '22' }, { value: 'healthy' }
+    ] }) });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.match(fields['[data-ext-preview-status]'].textContent, /changed during preview/);
+    fields['#external-builder-kind'].value = '.@state';
+    fields['#external-builder-kind'].onchange();
+    await new Promise(resolve => setTimeout(resolve, 350));
+    requests[5].resolve({ ok: true, json: async () => ({ resolved: [
+        { value: 'stale' }, { value: 'stale' }, { value: 'stale' }
+    ] }) });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.strictEqual(fields['[data-ext-preview-label]'].textContent, 'Preview');
+    fields['[data-ext-use]'].onclick();
+    assert.strictEqual(selected.cached, false);
+    fields['#external-builder-kind'].value = '.@next';
+    fields['#external-builder-kind'].onchange();
+    await new Promise(resolve => setTimeout(resolve, 350));
+    requests[6].resolve({ ok: true, json: async () => ({ resolved: [
+        { value: '__ext_missing_a__' }, { value: '__ext_missing_b__' }, { value: 'healthy' }
+    ] }) });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.strictEqual(fields['[data-ext-preview-status]'].textContent, 'This statistic is not available yet.');
+    fields['#external-builder-kind'].value = '';
+    fields['#external-builder-path'].value = 'later';
+    fields['#external-builder-path'].oninput();
+    await new Promise(resolve => setTimeout(resolve, 350));
+    dispose();
+    requests[7].resolve({ ok: true, json: async () => ({ resolved: [
+        { value: 'late' }, { value: 'late' }, { value: 'healthy' }
+    ] }) });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.strictEqual(fields['[data-ext-preview-status]'].textContent, 'Loading preview...');
+    context.fetch = originalFetch;
+    }
     const expressionLoad = (value, validationOptions) => context.expressionBuilderLoad(value, validationOptions);
     const expressionGenerate = (value, formatting, limit, validationOptions) =>
         context.expressionBuilderGenerate(value, formatting, limit, validationOptions);
+    for (const blank of ['', ' \n\t ']) {
+        const blankResult = expressionGenerate(blank);
+        assert.strictEqual(blankResult.valid, false);
+        assert.strictEqual(blankResult.binding, '');
+        assert.strictEqual(blankResult.error, '');
+    }
     assert.deepStrictEqual(JSON.parse(JSON.stringify(expressionLoad('  \t'))), {
         supported: true, expression: '',
         formatting: { enabled: false, decimals: 1, unit: '' }, error: ''
@@ -379,10 +511,27 @@ delete context.testHelpSchemes;
     assert.deepStrictEqual(JSON.parse(JSON.stringify(expressionLoad(
         '[expr:[mqtt:topic;path|"offline|later"] + 1;%.2f %%]'))), {
         supported: true, expression: '[mqtt:topic;path|"offline|later"] + 1',
-        formatting: { enabled: true, decimals: 2, unit: '%' }, error: ''
+        formatting: { enabled: true, decimals: 2, unit: '%' }, error: '', prefix: '', suffix: ''
     });
+    const mixedExpression = expressionLoad('  Temperature: [expr:1 + 2] \u00b0C  ');
+    assert.strictEqual(mixedExpression.expression, '1 + 2');
+    assert.strictEqual(mixedExpression.prefix, '  Temperature: ');
+    assert.strictEqual(mixedExpression.suffix, ' \u00b0C  ');
+    const mixedReplacement = context.expressionBuilderGenerate('4 + 5', {}, 191, {}, mixedExpression);
+    assert.strictEqual(mixedReplacement.valid, true);
+    assert.strictEqual(mixedReplacement.binding, '[expr:4 + 5]');
+    assert.strictEqual(mixedReplacement.fieldValue, '  Temperature: [expr:4 + 5] \u00b0C  ');
+    assert.strictEqual(mixedReplacement.bytes, new TextEncoder().encode(mixedReplacement.fieldValue).length);
+    assert.strictEqual(context.expressionBuilderGenerate('4 + 5', {}, mixedReplacement.bytes, {}, mixedExpression).valid, true);
+    assert.strictEqual(context.expressionBuilderGenerate('4 + 5', {}, mixedReplacement.bytes - 1, {}, mixedExpression).valid, false);
+    const withOtherBinding = expressionLoad('[health:cpu] / [expr:[health:cpu] + 1]!');
+    assert.strictEqual(withOtherBinding.supported, true);
+    assert.strictEqual(context.expressionBuilderGenerate('2', {}, 191, {}, withOtherBinding).fieldValue,
+        '[health:cpu] / [expr:2]!');
+    assert.strictEqual(context.expressionBuilderGenerate('2', {}, 191, {},
+        expressionLoad('[unknown:bad] [expr:1]')).valid, false);
     for (const unsupported of [
-        'plain [expr:1]', '[expr:1] + [expr:2]', '[expr:1',
+        '[expr:1] + [expr:2]', '[expr:1', 'plain [health:cpu]', '[expr:1] [health:cpu',
         '[expr:1|offline]', '[expr:1;%.1f;extra]', '[expr:1;%d]', '[expr:1;%.7f]', '[expr:1;%.1f ]'
     ]) assert.strictEqual(expressionLoad(unsupported).supported, false, unsupported);
     assert.strictEqual(expressionLoad('[expr:"quoted ] value" + 1]').supported, true);
@@ -476,6 +625,12 @@ delete context.testHelpSchemes;
         context.expressionBuilderPreviewSchedule(invalidPreview.session, { valid: false, binding: '', error: 'invalid' });
         assert.strictEqual(previewTimers.size, 0, 'invalid edits cancel a pending preview timer');
         assert.strictEqual(invalidPreview.output.dataset.state, 'invalid');
+        assert.strictEqual(invalidPreview.output.textContent, 'Preview unavailable.');
+        assert.strictEqual(previewRequests.length, 0);
+        context.expressionBuilderPreviewSchedule(invalidPreview.session, expressionGenerate(' \n '));
+        assert.strictEqual(invalidPreview.output.dataset.state, 'empty');
+        assert.strictEqual(invalidPreview.output.textContent, 'Your result will appear here.');
+        assert.strictEqual(previewTimers.size, 0, 'blank input does not schedule a preview');
         assert.strictEqual(previewRequests.length, 0);
 
         const orderedPreview = makePreviewSession('[expr:1]');
@@ -601,6 +756,7 @@ delete context.testHelpSchemes;
     const barBuilder = builders.find(builder => builder.id === 'bar');
     const gaugeBuilder = builders.find(builder => builder.id === 'gauge');
     const historyBuilder = builders.find(builder => builder.id === 'history');
+    const iconHistoryBuilder = builders.find(builder => builder.id === 'icon_history');
     const temperature = { entity_id: 'sensor.living_room_temperature', state: '21.37', unit: '\u00b0C', paths: [] };
     const light = { entity_id: 'light.kitchen', state: 'on', unit: '', paths: [] };
     const makeCandidate = (detail, name = 'Living room') => context.haButtonBuilderCandidate(detail, name);
@@ -799,6 +955,40 @@ delete context.testHelpSchemes;
         widget_sparkline_unified_scale: true, widget_sparkline_window: 86400,
         widget_sparkline_slots: 288, widget_sparkline_ha_entity: temperature.entity_id
     });
+    const iconHistory = buildSession(temperature, iconHistoryBuilder);
+    assert.strictEqual(iconHistoryBuilder.available(iconHistory.draft), true);
+    assert.deepStrictEqual(Array.from(iconHistory.fields, field => field.name), ['title', 'window', 'interval', 'color']);
+    const iconButton = context.padButtonBuilderBuild(iconHistory);
+    assert.strictEqual(iconButton.label_center, '[ha:sensor.living_room_temperature;;%.1f \u00b0C]');
+    assert.strictEqual(iconButton.widget_data_binding, '[ha:sensor.living_room_temperature]');
+    assert.strictEqual(iconButton.widget_sparkline_ha_entity, temperature.entity_id);
+    assert.strictEqual(iconButton.icon.catalog_id, 'material-symbols:thermometer');
+    assert.strictEqual(iconButton.icon_scale_pct, 75);
+    assert.strictEqual(iconButton.icon_badge_padding, 4);
+    assert.strictEqual(iconButton.icon_position, 'left');
+    assert.strictEqual(iconButton.group_size_pct, 60);
+    assert.strictEqual(iconButton.label_top_style, 'align:left');
+    assert.strictEqual(iconButton.label_center_style, 'align:left');
+    assert.strictEqual(iconButton.widget_sparkline_line_width, 3);
+    assert.strictEqual(iconButton.widget_sparkline_fill_opacity, 50);
+    iconHistory.draft.options.color = '#123456';
+    iconHistory.draft.options.window = '18000';
+    iconHistory.draft.options.interval = 60;
+    const recolored = context.padButtonBuilderBuild(iconHistory);
+    assert.strictEqual(recolored.icon_color, '#123456');
+    assert.strictEqual(recolored.widget_sparkline_line_color, '#123456');
+    assert.strictEqual(recolored.widget_sparkline_window, 18000);
+    assert.strictEqual(recolored.widget_sparkline_slots, 300);
+    iconHistory.draft.options.color = 'invalid';
+    assert.throws(() => context.padButtonBuilderBuild(iconHistory), /accent color/);
+    for (const [detail, expected] of [
+        [{ ...temperature, unit: '%', paths: [{ path: 'attributes.device_class', value: 'humidity' }] }, 'humidity-percentage'],
+        [{ ...temperature, unit: '%', paths: [{ path: 'attributes.device_class', value: 'humidity', truncated: true }] }, 'percent'],
+        [{ ...temperature, unit: '\u00b0F', paths: [] }, 'thermometer'],
+        [{ ...temperature, unit: '', paths: [] }, 'numbers']
+    ]) {
+        assert.strictEqual(context.padButtonBuilderHistoryIcon(makeCandidate(detail)), expected);
+    }
     for (const [window, slots, caption] of [
         ['3600', 12, 'Last 1 hour.'], ['18000', 60, 'Last 5 hours.'], ['21600', 72, 'Last 6 hours.'],
         ['86400', 288, 'Last 24 hours.'], ['604800', 1024, 'Last 7 days.'],
@@ -1000,8 +1190,10 @@ delete context.testHelpSchemes;
     assert.throws(() => context.padButtonBuilderBuild(gaugeSession), /delimiters/);
 
     // Creation is draft-only and cannot overwrite local or inherited content.
-    context.padState = { cols: 4, rows: 3, page: 0, buttons: [], templateButtons: [] };
+    vm.runInContext(fs.readFileSync('src/app/web/portal_pad_icons.js', 'utf8'), context);
+    context.padState = { cols: 4, rows: 3, page: 0, selectedLayer: 'main', buttons: [], templateButtons: [] };
     context.padWorkspace = { errors: new Map() };
+    context.padWorkspaceButtonKey = (layer, col, row) => layer + ':' + col + ',' + row;
     context.padBuildOccupancySet = () => new Set(context.padState.buttons.flatMap(button =>
         Array.from({ length: button.col_span || 1 }, (_, col) => (button.col + col) + ',' + button.row)));
     context.padCanPlaceTemplateButton = () => true;
@@ -1012,7 +1204,7 @@ delete context.testHelpSchemes;
     context.padState.templateButtons = [{ col: 1, row: 1, col_span: 2 }];
     assert.strictEqual(context.padButtonBuilderCanCreate(2, 1), false);
     context.padState.templateButtons = [];
-    context.padWorkspace.errors.set('2,1', new Error('Unfinished manual edit'));
+    context.padWorkspace.errors.set('main:2,1', new Error('Unfinished manual edit'));
     assert.strictEqual(context.padButtonBuilderCanCreate(2, 1), false);
     context.padWorkspace.errors.clear();
     const validation = {};
@@ -1051,6 +1243,57 @@ delete context.testHelpSchemes;
     context.padButtonBuilderCreate();
     assert.strictEqual(context.padState.buttons.length, 0);
     assert.match(validation.textContent, /load its details/);
+
+    context.padState = { cols: 6, rows: 2, page: 0, selectedLayer: 'main',
+        buttons: [], templateButtons: [], columnWidthsPx: [], rowHeightsPx: [] };
+    context.deviceInfoCache = { display_coord_width: 600, display_coord_height: 200 };
+    context.padGetEffectiveDefault = () => 0;
+    const sizedSession = buildSession(temperature, iconHistoryBuilder);
+    sizedSession.col = 0;
+    sizedSession.row = 0;
+    sizedSession.dialog = { querySelector: () => validation };
+    assert.strictEqual(context.padButtonBuilderColumnSpan(sizedSession), 3);
+    context.padState.buttons.push({ col: 2, row: 0 });
+    assert.strictEqual(context.padButtonBuilderColumnSpan(sizedSession), 2);
+    context.padState.buttons = [];
+    context.padState.templateButtons = [{ col: 1, row: 0 }];
+    assert.strictEqual(context.padButtonBuilderColumnSpan(sizedSession), 1);
+    context.padState.templateButtons = [];
+    context.padWorkspace.errors.set('main:2,0', new Error('Unfinished manual edit'));
+    assert.strictEqual(context.padButtonBuilderColumnSpan(sizedSession), 2);
+    context.padWorkspace.errors.clear();
+    context.padState.columnWidthsPx = [30, 40, 0, 0, 0, 0];
+    assert.strictEqual(context.padButtonBuilderColumnSpan(sizedSession), 4, 'Custom track widths affect the chosen span');
+    context.padState.columnWidthsPx = [];
+    context.padState.rowHeightsPx = [40, 0];
+    assert.strictEqual(context.padButtonBuilderColumnSpan(sizedSession), 1, 'Custom row height affects the chosen span');
+    context.padState.rowHeightsPx = [];
+    context.deviceInfoCache = { display_coord_width: 650, display_coord_height: 210 };
+    context.padGetEffectiveDefault = key => key === 'button_spacing_px' ? 10 : 0;
+    assert.strictEqual(context.padButtonBuilderColumnSpan(sizedSession), 3, 'Grid spacing contributes to the span width');
+    sizedSession.col = 5;
+    assert.strictEqual(context.padButtonBuilderColumnSpan(sizedSession), 1, 'The pad edge limits expansion');
+    sizedSession.col = 0;
+    context.deviceInfoCache = { display_coord_width: 600, display_coord_height: 200 };
+    context.padGetEffectiveDefault = () => 0;
+    context.padButtonBuilderSetScenario(sizedSession, barBuilder);
+    assert.strictEqual(context.padButtonBuilderColumnSpan(sizedSession), 1);
+    sizedSession.draft.options.orientation = 'horizontal';
+    assert.strictEqual(context.padButtonBuilderColumnSpan(sizedSession), 2);
+    context.padButtonBuilderSetScenario(sizedSession, iconHistoryBuilder);
+    context.testButtonSession = sizedSession;
+    vm.runInContext('padButtonBuilderSession = testButtonSession', context);
+    const neighbor = { col: 2, row: 0 };
+    context.padState.buttons.push(neighbor);
+    context.padButtonBuilderCreate();
+    assert.strictEqual(context.padState.buttons[0], neighbor);
+    assert.strictEqual(context.padState.buttons[1].col_span, 2, 'Creation falls back without replacing a neighbor');
+    context.padState.buttons = [];
+    context.padButtonBuilderCreate();
+    assert.strictEqual(context.padState.buttons[0].col_span, 3, 'Creation applies the suggested span');
+    context.padState.buttons = [];
+    context.deviceInfoCache = {};
+    assert.strictEqual(context.padButtonBuilderColumnSpan(sizedSession), 1);
     context.padButtonBuilderClose = originalClose;
     vm.runInContext('padButtonBuilderSession = null', context);
 
@@ -1539,6 +1782,17 @@ delete context.testHelpSchemes;
     const selectedBrightness = { ...brightness, selection: {
         mode: 'number', decimals: '2', unit: 'level', fallback: 'Offline'
     } };
+    const selectedIconHistory = context.padButtonBuilderBuild(candidateSession(selectedBrightness, iconHistoryBuilder));
+    assert.strictEqual(selectedIconHistory.label_center, '[ha:light.desk;attributes.brightness;%.2f level|Offline]');
+    assert.strictEqual(selectedIconHistory.widget_data_binding, '[ha:light.desk;attributes.brightness]');
+    assert.strictEqual(selectedIconHistory.widget_sparkline_ha_entity, undefined);
+    const humidityAttribute = haButtonBuilderProvider.selectField(context.haButtonBuilderCandidate({
+        entity_id: 'sensor.room', state: '45', unit: '%',
+        paths: [{ path: 'attributes.device_class', value: 'humidity' },
+            { path: 'attributes.value', value: '12' }]
+    }), 'attributes.value');
+    assert.strictEqual(context.padButtonBuilderHistoryIcon(humidityAttribute), 'numbers',
+        'An entity device class must not be applied to an attribute');
     assert.strictEqual(context.bindingSourceToken(selectedBrightness, selectedBrightness.selection),
         '[ha:light.desk;attributes.brightness;%.2f level|Offline]');
     assert.strictEqual(context.bindingSourceToken(selectedBrightness, selectedBrightness.selection, true),
@@ -1733,10 +1987,23 @@ delete context.testHelpSchemes;
     context.padButtonBuilderChooseProvider('ha', pickerSession, false);
     assert.strictEqual(pickerRoot.querySelector('[data-bb-source]').hidden, true);
     assert.strictEqual(pickerRoot.querySelector('[data-bb-setup]').hidden, false);
-    assert.match(pickerRoot.querySelector('[data-bb-setup]').firstChild.textContent, /Configure Home Assistant/);
+    assert.match(pickerRoot.querySelector('[data-bb-setup-message]').textContent, /Configure Home Assistant/);
     assert.strictEqual(pickerRoot.querySelector('[data-bb-settings]').href, '#ha-discovery');
     context.padButtonBuilderChooseProvider('mqtt', pickerSession, false);
     assert.strictEqual(pickerRoot.querySelector('[data-bb-settings]').href, '#mqtt');
+    const closeBinding = context.closeBindingBuilder;
+    const closeButton = context.padButtonBuilderClose;
+    let settingsClosedBuilder = '';
+    context.closeBindingBuilder = () => { settingsClosedBuilder = 'binding'; };
+    context.padButtonBuilderClose = () => { settingsClosedBuilder = 'button'; };
+    context.bindingSourcePickerMount({ dialog: pickerRoot, bindingOnly: true });
+    pickerRoot.querySelector('[data-bb-settings]').onclick();
+    assert.strictEqual(settingsClosedBuilder, 'binding');
+    context.bindingSourcePickerMount({ dialog: pickerRoot, bindingOnly: false });
+    pickerRoot.querySelector('[data-bb-settings]').onclick();
+    assert.strictEqual(settingsClosedBuilder, 'button');
+    context.closeBindingBuilder = closeBinding;
+    context.padButtonBuilderClose = closeButton;
     context.padButtonBuilderStopLookup(pickerSession);
     pickerSession.disposed = true;
     assert.strictEqual(context.bindingSourceSessionActive(pickerSession), false);
@@ -1749,6 +2016,10 @@ delete context.testHelpSchemes;
     assert.strictEqual(barBuilder.available(candidateSession(cpuExample, barBuilder).draft, runtime), false,
         'Representative examples never qualify as numeric evidence');
     const cpuSession = candidateSession(cpu, valueBuilder);
+    assert.strictEqual(context.padButtonBuilderHistoryIcon(cpu), 'percent');
+    const cpuIconHistory = context.padButtonBuilderBuild(candidateSession(cpu, iconHistoryBuilder));
+    assert.strictEqual(cpuIconHistory.label_center, '[health:cpu;%ld] %');
+    assert.strictEqual(cpuIconHistory.widget_data_binding, '[health:cpu]');
     assert.strictEqual(context.padButtonBuilderBuild(cpuSession).label_center, '[health:cpu;%ld]');
     assert.strictEqual(cpuSession.fields.some(field => field.name === 'decimals'), false);
     assert.strictEqual(valueBuilder.preview(cpuSession.draft).label_center, '42');
@@ -1840,6 +2111,15 @@ delete context.testHelpSchemes;
     const mixed = candidateSession(makeCandidate(temperature), historyBuilder);
     mixed.draft.sources.push(context.padButtonBuilderSource(historyBuilder, mqttTemperature, 1),
         context.padButtonBuilderSource(historyBuilder, cpu, 2));
+    assert.strictEqual(context.padButtonBuilderHistoryIcon(mqttTemperature), 'numbers');
+    const mqttIconHistory = context.padButtonBuilderBuild(candidateSession(mqttTemperature, iconHistoryBuilder));
+    assert.strictEqual(mqttIconHistory.widget_data_binding, '[mqtt:sensors/room;temperature]');
+    assert.strictEqual(mqttIconHistory.widget_sparkline_ha_entity, undefined);
+    context.padButtonBuilderSetScenario(mixed, iconHistoryBuilder);
+    const singleFromMulti = context.padButtonBuilderBuild(mixed);
+    assert.strictEqual(singleFromMulti.widget_data_binding_2, undefined);
+    assert.strictEqual(singleFromMulti.label_top, 'Living room');
+    context.padButtonBuilderSetScenario(mixed, historyBuilder);
     let mixedButton = context.padButtonBuilderBuild(mixed);
     assert.strictEqual(mixedButton.widget_data_binding, '[ha:sensor.living_room_temperature]');
     assert.strictEqual(mixedButton.widget_data_binding_2, '[mqtt:sensors/room;temperature]');

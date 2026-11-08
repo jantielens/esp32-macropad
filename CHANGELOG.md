@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-11-04
+ms.date: 2026-11-07
 ms.topic: reference
 ---
 
@@ -11,6 +11,97 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.46.0] - 2026-11-07
+
+> [!WARNING]
+> The shared button/widget layout replaces the previous specialized widget
+> layouts. Existing pads may look different on the device after updating;
+> legacy layout settings are not migrated. Review your pads on the device and
+> adjust label/icon placement, widget position, and group sizing as needed.
+> Buttons without a saved icon position or default now place icons to the left
+> of labels instead of above them.
+
+### Added
+
+* Add up to four external HTTP or HTTPS JSON data sources for display bindings,
+  such as weather data. Configure refresh intervals in **Connectivity > External
+  Data**, select JSON fields with `[ext:source;path]`, and use the binding
+  builder to preview cached values and source statistics. Failed refreshes
+  retain the last value. Saved URLs are visible in the portal and configuration
+  API. See [external JSON data](docs/user/pads/data-sources.md#read-external-json).
+  MCP assistants can configure sources and inspect cached fields; source writes
+  need control permission and inspection needs pad-authoring permission.
+  Prefer keyless URLs.
+* Add a Face widget with Robot Eyes and Doodle Buddy styles, eight emotions,
+  irregular blinking, wandering gaze, and smooth emotion transitions. Its
+  artwork follows the button text color, including live bindings. Use bindings
+  to make the face react to your data, and choose Still liveliness to disable
+  idle motion while keeping emotion changes. Interactive e-paper supports motion
+  at its configured polling and presentation cadence.
+  See [Face widget](docs/user/widgets/README.md#face).
+* Add an Option selector widget with up to five labeled or icon choices.
+  Run shared actions with the selected value, and choose no selection, a
+  temporary local selection, or a selection reported by a binding. Changing
+  options requires pointer input.
+  See [Option selector](docs/user/widgets/option-selector.md).
+* Add opt-in Sparkline area fills with shared 0-100% opacity, per-series
+  bound colors, and preserved history gaps. Add circular icon badges with
+  bindable or automatically blended backgrounds and adjustable padding that
+  follow shared icon layouts. Fill and badges default to off. Material icon
+  colors can follow text or use a separate color or binding; automatic badges
+  blend the resolved icon color with the button background.
+  Settings round-trip through pad editing and import/export.
+  See [Sparkline](docs/user/widgets/sparkline.md) and
+  [icon badges](docs/user/pads/appearance.md#add-an-icon-badge).
+* Add a **Show a value with icon and history** Button Builder template with a
+  suggested icon and a shared initial accent color for the icon and history
+  line. See [create a button from a source](docs/user/pads/editing.md#create-a-button-from-a-source).
+
+### Changed
+
+* Replace widget-specific layouts with a shared group of up to three labels
+  and an icon, positioned above, below, left, or right of the widget.
+  Configure icon placement independently, and choose Auto sizing or a fixed
+  group percentage. Unconfigured labels and icons consume no space;
+  widget-owned data captions and interactions remain available.
+  Default widgets to the right of the group and Slider length to 100%.
+  Rocker and Numeric Rocker instead center the group between their directional
+  controls by default; choose **Beside widget** for the split layout. Group
+  sizing does not change their tap zones or actions.
+  See [button appearance](docs/user/pads/appearance.md#arrange-button-content).
+* Reduce icon-preload filesystem work when loading pads at startup.
+* Restore large, subdued widget-type icons in the portal pad preview. Keep
+  them inside the widget region, scale them down on small buttons, and prevent
+  them from intercepting clicks or consuming label/icon layout space. Centered
+  rockers show approximate directional markers around the group instead.
+* Document the Main and Overlay pattern for conditional icons and expose it to
+  MCP assistants.
+* Let MCP assistants request focused binding-scheme or widget capabilities
+  instead of the full manifest. Clarify that pad validation does not verify
+  live binding resolution.
+* Edit one expression within a field while preserving surrounding text and
+  bindings. Simplify the Expression builder's output and validation messages,
+  and allow unsupported values to be replaced explicitly.
+  See [Expressions](docs/user/pads/expressions.md).
+* Choose a suitable button width for Button Builder templates based on the
+  grid and available space, falling back to a smaller width when needed.
+
+### Fixed
+
+* Reduce pad save delays and watchdog risk on icon-heavy pads by preparing icon
+  validation incrementally. Unused generated icons are cleaned up at the next
+  normal startup.
+* Make small buttons selectable in the pad editor and scale resize grips to
+  fit selected buttons. Keep the button selected after resizing.
+  See [move and resize](docs/user/pads/editing.md#move-and-resize).
+* Prevent icons from reloading in the pad editor when moving or resizing
+  buttons and widgets.
+* Fit horizontal Bar chart captions to their text.
+* Allow large MCP tool results without the copied-string size limit that can
+  reject capability responses.
+* Reduce stack usage while parsing and saving pads to prevent crashes with
+  complex configurations.
 
 ## [1.45.0] - 2026-11-04
 

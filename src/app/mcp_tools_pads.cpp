@@ -78,28 +78,41 @@ static bool pad_fail(JsonObject& result, String& err, int code, const char* msg)
 // ============================================================================
 // get_capabilities — registry-generated manifest
 // ============================================================================
-static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, String& err) {
-    (void)args; (void)err;
+static const char* const WIDGET_COMMON = "all widgets: widget_type + widget_data_binding (and _2.._4 for extra binding templates); widget config fields are flat on the button. A config field whose \"type\" is \"action\" is a NESTED action object (same {type, <mode>, <value>} shape as a button action, and supports the {step} token), NOT a string — e.g. numericrocker's widget_numericrocker_action.";
 
-    // Widget types — generated from the live registry; per-widget config fields
-    // come from each type's describeSchema hook. Adding a widget auto-appears.
-    JsonArray widgets = result.createNestedArray("widgets");
-    for (uint8_t i = 0; i < widget_count(); ++i) {
-        const WidgetType* wt = widget_at(i);
-        if (!wt) continue;
-        JsonObject w = widgets.createNestedObject();
-        w["type"] = wt->name;
-        if (wt->describeSchema) wt->describeSchema(w);
-        if (widget_supports_pad_swipe_control(wt->name)) {
-            JsonArray fields = w["config_fields"].as<JsonArray>();
-            if (fields.isNull()) fields = w.createNestedArray("config_fields");
-            JsonObject field = fields.createNestedObject();
-            field["name"] = "widget_disable_pad_swipes";
-            field["type"] = "boolean";
-            field["desc"] = "Disable all swipe actions across this pad when any input widget enables it (default false); independent of USB connection";
-        }
+static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, String& err) {
+    if (args.containsKey("widget") && args.containsKey("binding_scheme"))
+        return pad_fail(result, err, PAD_ERR_PARAMS, "choose either widget or binding_scheme");
+    if (args.containsKey("widget")) {
+        if (!args["widget"].is<const char*>())
+            return pad_fail(result, err, PAD_ERR_PARAMS, "widget must be a non-empty string");
+        const JsonString selected = args["widget"].as<JsonString>();
+        const char* name = selected.c_str();
+        if (!name || !name[0] || selected.size() != strlen(name))
+            return pad_fail(result, err, PAD_ERR_PARAMS, "widget must be a non-empty string");
+        JsonArray widgets = result["widgets"].to<JsonArray>();
+        if (!widget_schema_emit(widgets, name))
+            return pad_fail(result, err, PAD_ERR_PARAMS, "unknown widget");
+        result["widget_common"] = WIDGET_COMMON;
+        return true;
     }
-    result["widget_common"] = "all widgets: widget_type + widget_data_binding (and _2.._4 for extra binding templates); widget config fields are flat on the button. A config field whose \"type\" is \"action\" is a NESTED action object (same {type, <mode>, <value>} shape as a button action, and supports the {step} token), NOT a string — e.g. numericrocker's widget_numericrocker_action.";
+    if (args.containsKey("binding_scheme")) {
+        if (!args["binding_scheme"].is<const char*>())
+            return pad_fail(result, err, PAD_ERR_PARAMS, "binding_scheme must be a non-empty string");
+        const JsonString selected = args["binding_scheme"].as<JsonString>();
+        const char* name = selected.c_str();
+        if (!name || !name[0] || selected.size() != strlen(name))
+            return pad_fail(result, err, PAD_ERR_PARAMS, "binding_scheme must be a non-empty string");
+        JsonObject bindings = result["bindings"].to<JsonObject>();
+        JsonArray schemes = bindings["schemes"].to<JsonArray>();
+        if (!binding_schema_emit(&schemes, true, name))
+            return pad_fail(result, err, PAD_ERR_PARAMS, "unknown binding scheme");
+        return true;
+    }
+
+    JsonArray widgets = result.createNestedArray("widgets");
+    widget_schema_emit(widgets);
+    result["widget_common"] = WIDGET_COMMON;
 
     JsonObject grid = result.createNestedObject("grid");
     grid["max_buttons"] = MAX_PAD_BUTTONS;
@@ -138,11 +151,15 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
         "label_top_style", "label_center_style", "label_bottom_style",
         "bg_color", "fg_color", "border_color", "border_width", "corner_radius", "content_pad", "button_shadow",
         "bg_pattern", "bg_pattern_color", "pattern_spacing", "pattern_stroke_width",
-        "icon", "icon_scale_pct", "icon_position", "btn_state", "widget_type", "widget_data_binding", "actions", "lp_actions"
+        "icon", "icon_scale_pct", "icon_position", "icon_color", "icon_badge_padding", "icon_badge_color",
+        "widget_position", "group_size_pct", "rocker_group_layout",
+        "btn_state", "widget_type", "widget_data_binding", "actions", "lp_actions"
     };
     for (const char* f : fields) bf.add(f);
     btn["layer_note"] = "Buttons are stored in buttons (Main) or overlay_buttons (Overlay). Authoring tools accept layer='main' or layer='overlay'; omitted layer means Main. Positions are local array indices, while col/row are grid coordinates.";
     btn["widget_note"] = "widget keys are flat: widget_type + widget_data_binding[_2.._4]; widget config fields (e.g. min/max/color) are flat on the button too";
+    btn["content_layout_note"] = "icon_position places the icon above, below, left or right of the labels; omit to inherit device defaults (firmware default left). Rocker and Numeric Rocker default to rocker_group_layout center; beside uses widget_position (default right). group_size_pct is 0 for auto or 10-90 percent of the layout axis; centered groups are capped to the center lane without changing input zones.";
+    btn["icon_badge_note"] = "icon_color is auto (follow button text), hex or a color binding, and applies to Material icons only. icon_badge_padding is 0-64 pixels per side (default 0, disables badge); omit to inherit device defaults. icon_badge_color is auto, hex or a color binding (max 191 chars, default auto). Auto blends 15% of the resolved Material icon color into the button background, or uses text color for color icons. The circle follows icon placement, visibility and clipping; the icon shrinks if space is limited.";
     btn["labels_note"] = "Default bitmap fonts cover Latin text, digits, and basic punctuation. Uploaded static TrueType font coverage depends on the font; missing glyphs fall back to the bitmap default. Use icon for retained catalog artwork.";
     btn["button_shadow_note"] = "accepts 'enabled' or 'disabled' to override the pad setting; omit to inherit. Shadow type, color mode, offsets, and blur are device-wide Pad and Button Defaults.";
     btn["fill_note"] = "Keep existing base colors. bg_pattern and supported bar patterns: none (default), diagonal, reverse_diagonal, crosshatch, dots, checkerboard; unknown names -> none. Pattern color defaults to #000000 and accepts the owning surface's color bindings. pattern_spacing: static logical px 2-64 (default 8), shared across this button. pattern_stroke_width: 1-8 (default 1), capped by spacing; dot diameter, ignored for checkerboard (spacing is square size). Numeric values clamp; malformed values use defaults. Gauge fills remain unpatterned. Track outline fields apply only to bar_chart/gauge; width 0 disables. widget_bar_track_radius: bar_chart only, static logical px 0-64 (default 4), capped at half the smaller track dimension; applies with outline off, dual baseline joins stay square. Portal badges preview fills with representative bound colors, not live widget rendering.";
@@ -150,6 +167,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     JsonArray states = btn.createNestedArray("btn_state");
     states.add("enabled"); states.add("disabled"); states.add("hidden");
     btn["btn_state_note"] = "accepts a binding for conditional visibility. enabled and disabled buttons both block underlying input; disabled buttons do not run actions. hidden buttons do not block. Empty means enabled; unresolved/invalid state bindings default to enabled on Main and hidden on Overlay.";
+    btn["conditional_icon_note"] = "For conditional icons, place one button on Main and another at the same col/row and span on Overlay. Use complementary btn_state bindings, e.g. Main [expr:[pad:change]>0?\"enabled\":\"hidden\"|hidden] and Overlay [expr:[pad:change]<0?\"enabled\":\"hidden\"|hidden], where change is a numeric pad binding. Both are hidden at zero or when unavailable. The visible Overlay covers Main content and blocks its input, so configure labels and actions accordingly. Prepare artwork for both buttons through the portal before writing.";
     btn["dialog_note"] = "Use a confirm action to pause a sequence for on-device approval, including programmatic presses. Cancel, timeout, replacement, or display/binding failure stops its remaining actions. Dialog messages resolve bindings once; later actions resolve their own values.";
 
     JsonObject style = result.createNestedObject("label_style");
@@ -349,10 +367,11 @@ static bool tool_validate_pad(const JsonObject& args, JsonObject& result, String
     const char* verr = pad_validate(pad, false, &geometry);
     if (verr) { result["valid"] = false; result["error"] = verr; return true; }
     result["valid"] = true;
+    result["binding_validation"] = "Syntax and supported key checks passed; live resolution, source availability, and external JSON paths were not verified.";
     return true;
 }
 
-#if HAS_MQTT || HAS_HA_LIVE
+#if HAS_MQTT || HAS_HA_LIVE || HAS_EXTERNAL_DATA
 // ============================================================================
 // resolve_bindings (read tool, authoring-gated) — resolve binding tokens
 // against LIVE data on the main loop; no save. Powers debugging/preview of what
@@ -371,7 +390,7 @@ static bool tool_resolve_bindings(const JsonObject& args, JsonObject& result, St
         default:                     return pad_fail(result, err, PAD_ERR_INTERNAL, em ? em : "resolve failed");
     }
 }
-#endif // HAS_MQTT
+#endif
 
 // get_pad_blocks — list pre-built button groups (building blocks) the client can
 // drop onto a pad instead of hand-building. Generated from the live catalog.
@@ -499,21 +518,21 @@ static bool tool_set_pad(const JsonObject& args, JsonObject& result, String& err
 // ============================================================================
 static const McpTool s_tool_get_capabilities = {
     "get_capabilities",
-    "Get the pad authoring manifest: widget types + config fields, button schema, label-style DSL, binding schemes (incl. [pad:name] + template_pad), grid limits, action targets, color/size formats. Read-only.",
-    "{\"type\":\"object\",\"properties\":{}}",
+    "Get the pad authoring manifest: widget types + config fields, button schema, label-style DSL, binding schemes (incl. [pad:name] + template_pad), grid limits, action targets, color/size formats. Pass widget (e.g. 'sparkline') for that widget in widgets, or binding_scheme (e.g. 'ext') for that scheme in bindings.schemes; omit both for the full manifest. Read-only.",
+    "{\"type\":\"object\",\"properties\":{\"widget\":{\"type\":\"string\",\"minLength\":1},\"binding_scheme\":{\"type\":\"string\",\"minLength\":1}}}",
     tool_get_capabilities, true, false, false, false
 };
 REGISTER_MCP_TOOL(s_tool_get_capabilities);
 
 static const McpTool s_tool_validate_pad = {
     "validate_pad",
-    "Dry-run validate a pad JSON (grid bounds, span overflow, widget types, colors, binding tokens) without saving. Args: pad (object). Read-only.",
+    "Dry-run validate a pad JSON (grid bounds, span overflow, widget types, colors, binding syntax and known keys where supported) without saving. Does not verify live resolution, source availability or external JSON paths; use resolve_bindings when available. Args: pad (object). Read-only.",
     "{\"type\":\"object\",\"properties\":{\"pad\":{\"type\":\"object\"}},\"required\":[\"pad\"]}",
     tool_validate_pad, true, false, false, false
 };
 REGISTER_MCP_TOOL(s_tool_validate_pad);
 
-#if HAS_MQTT || HAS_HA_LIVE
+#if HAS_MQTT || HAS_HA_LIVE || HAS_EXTERNAL_DATA
 static const McpTool s_tool_resolve_bindings = {
     "resolve_bindings",
     "Resolve [scheme:params] binding tokens against the device's LIVE data and return the resolved text — to debug/preview what a binding or a proposed button renders to, WITHOUT saving. Args: bindings (array of template strings) and/or button (a proposed button object; its bindable fields label_*/*_color/btn_state/widget_data_binding[_2..4] are resolved), plus optional screen (pad_N or friendly name) to supply that pad's [pad:name] context. Best practice: after adding or editing any binding, call this to confirm it resolves to the intended value — writes only check binding SYNTAX, so a valid binding can still resolve to '---' or the wrong value. Returns resolved VALUES only — it does not render pixels (use GET /api/screenshot for a visual). Read-only; nothing is persisted. Requires pad authoring.",
@@ -521,7 +540,7 @@ static const McpTool s_tool_resolve_bindings = {
     tool_resolve_bindings, true, false, false, true
 };
 REGISTER_MCP_TOOL(s_tool_resolve_bindings);
-#endif // HAS_MQTT
+#endif
 
 static const McpTool s_tool_get_pad_blocks = {
     "get_pad_blocks",
@@ -533,7 +552,7 @@ REGISTER_MCP_TOOL(s_tool_get_pad_blocks);
 
 static const McpTool s_tool_set_button = {
     "set_button",
-    "Create/replace one button in the selected layer. position is a 0-based layer-local array index (not a grid cell; placement is col/row). A position at/past the end appends. Args: screen, optional layer ('main' or 'overlay', default 'main'), position, button. The combined button capacity applies. Requires authoring.",
+    "Create/replace one button in the selected layer. position is a 0-based layer-local array index (not a grid cell; placement is col/row). A position at/past the end appends. Args: screen, optional layer ('main' or 'overlay', default 'main'), position, button. The combined button capacity applies. For conditional icons, use same-position Main and Overlay buttons with complementary btn_state bindings; see get_capabilities button.conditional_icon_note. Icon artwork must first be prepared in the portal. Requires authoring.",
     "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"layer\":{\"type\":\"string\",\"enum\":[\"main\",\"overlay\"]},\"position\":{\"type\":\"integer\"},\"button\":{\"type\":\"object\"}},\"required\":[\"screen\",\"position\",\"button\"]}",
     tool_set_button, false, true, false, true
 };

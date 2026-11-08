@@ -8,7 +8,8 @@ function element() {
         dataset: {}, children: [], attributes: {}, classes: new Set(),
         classList: {
             add(...names) { names.forEach(name => this.owner.classes.add(name)); },
-            remove(...names) { names.forEach(name => this.owner.classes.delete(name)); }
+            remove(...names) { names.forEach(name => this.owner.classes.delete(name)); },
+            contains(name) { return this.owner.classes.has(name); }
         },
         appendChild(child) { this.children.push(child); },
         append(...children) { this.children.push(...children); },
@@ -67,13 +68,28 @@ vm.runInContext(fs.readFileSync('src/app/web/portal_widget_rocker.js', 'utf8'), 
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_numericrocker.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_binding_validator.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_icons.js', 'utf8'), context);
-context.padAppendIconPreview = function(container, icon) {
+context.padAppendIconPreview = function(container, icon, foreground) {
     const image = createElement();
     image.className = 'pad-cell-icon';
     image.dataset.kind = icon.kind;
+    image.dataset.foreground = foreground;
     container.appendChild(image);
     return image;
 };
+
+{
+    const icon = { catalog_id: 'material-symbols:home', kind: 'mono' };
+    const render = button => {
+        const cell = createElement();
+        context.padRenderCellContent(cell, { icon, ...button });
+        return cell.querySelector('.pad-cell-icon').dataset.foreground;
+    };
+    assert.strictEqual(render({ fg_color: '#abcdef' }), '#abcdef');
+    assert.strictEqual(render({ fg_color: '#abcdef', icon_color: '#ff0000' }), '#ff0000');
+    assert.strictEqual(render({ fg_color: '#abcdef', icon_color: '[health:color]' }), '#abcdef');
+    assert.notStrictEqual(context.padCellPreviewSignature({ icon, icon_color: '#ff0000' }),
+        context.padCellPreviewSignature({ icon, icon_color: '#0000ff' }));
+}
 
 const fields = ['name', 'icon', 'second_icon', 'axis_field', 'horizontal_icon', 'vertical_icon', 'default_axis'];
 const widgetFiles = fs.readdirSync('src/app/widgets').filter(name => name.endsWith('_widget.cpp'))
@@ -97,13 +113,13 @@ for (const widget_type of types) {
     const cell = createElement();
     context.padRenderCellContent(cell, { widget_type });
     assert(cell.classes.has('pad-cell-has-widget'), widget_type);
-    assert.strictEqual(cell.children[0].className, 'pad-widget-marker', widget_type);
+    assert.strictEqual(cell.children[0].className, 'pad-content-widget-region', widget_type);
     assert.strictEqual(cell.children.length, 1, widget_type);
     assert.notStrictEqual(cell.children[0].title, 'Unknown Widget Widget', widget_type);
     assert(cell.children[0].attributes['aria-label']);
     const labeled = createElement();
     context.padRenderCellContent(labeled, { widget_type, label_center: 'My label' });
-    assert(labeled.children.some(child => child.textContent === 'My label'), widget_type);
+    assert(descendants(labeled).some(child => child.textContent === 'My label'), widget_type);
     assert(!labeled.children.some(child => child.className === 'pad-widget-fallback'), widget_type);
 }
 
@@ -153,7 +169,7 @@ const bindingButton = { label_center: mixedBindingText };
 const bindingButtonBefore = JSON.stringify(bindingButton);
 const bindingCell = createElement();
 context.padRenderCellContent(bindingCell, bindingButton);
-const bindingLabel = bindingCell.children.find(child => child.className === 'pad-cell-label-center');
+const bindingLabel = bindingCell.querySelector('.pad-cell-label-center');
 const bindingSpans = descendants(bindingLabel).filter(child => child.className === 'pad-cell-binding');
 const longAbbreviation = bindingSpans[0].textContent;
 assert(longAbbreviation.startsWith('[mqtt:...') && longAbbreviation.endsWith('/temperature]'));
@@ -172,7 +188,7 @@ for (const [field, value, expected] of [
     const labeledCell = createElement();
     context.padRenderCellContent(labeledCell, { [field]: value });
     const className = field === 'label_top' ? 'pad-cell-label-top' : 'pad-cell-label-bottom';
-    const label = labeledCell.children.find(child => child.className === className);
+    const label = labeledCell.querySelector('.' + className);
     assert.strictEqual(visibleText(label), expected);
     assert.strictEqual(descendants(label).find(child => child.className === 'pad-cell-binding').title, value);
 }
@@ -180,7 +196,7 @@ for (const [field, value, expected] of [
 const incompleteCell = createElement();
 const incompleteBinding = '[mqtt:home/building/temperature;state';
 context.padRenderCellContent(incompleteCell, { label_center: incompleteBinding });
-const incompleteLabel = incompleteCell.children.find(child => child.className === 'pad-cell-label-center');
+const incompleteLabel = incompleteCell.querySelector('.pad-cell-label-center');
 assert(visibleText(incompleteLabel).startsWith('[mqtt:...') && visibleText(incompleteLabel).endsWith('/temperature'));
 assert.strictEqual(incompleteCell.attributes['aria-description'], incompleteBinding);
 
@@ -188,9 +204,71 @@ const iconBindingCell = createElement();
 context.padRenderCellContent(iconBindingCell, {
     icon: { catalog_id: 'noto:thermometer', kind: 'color' }, icon_position: 'left', label_center: '[mqtt:home/very/long/temperature]'
 });
-const iconRow = iconBindingCell.children.find(child => child.className === 'pad-cell-icon-row');
-const iconRowLabel = iconRow.children.find(child => child.className === 'pad-cell-label-center');
+const iconRowLabel = iconBindingCell.querySelector('.pad-cell-label-center');
 assert(visibleText(iconRowLabel).startsWith('[mqtt:...') && visibleText(iconRowLabel).endsWith('/temperature]'));
+{
+    const cell = createElement();
+    context.padRenderCellContent(cell, { icon: { kind: 'color' }, label_center: 'Room' });
+    assert.strictEqual(cell.querySelector('.pad-cell-content-group').dataset.iconPosition, 'left');
+}
+for (const [padding, expected] of [[undefined, '4px'], [0, '0px'], [12, '12px']]) {
+    const cell = createElement();
+    context.padRenderCellContent(cell, {
+        icon: { kind: 'color' }, icon_position: 'left', label_center: 'Room',
+        ...(padding === undefined ? {} : { content_pad: padding })
+    });
+    assert.strictEqual(cell.querySelector('.pad-cell-content-group').style.gap, expected);
+}
+{
+    const button = { widget_type: 'sparkline', widget_position: 'left', group_size_pct: 35,
+        icon_position: 'right', icon: { kind: 'color' }, label_top: 'Room', label_center: '21',
+        label_bottom: 'C' };
+    const cell = createElement();
+    context.padRenderCellContent(cell, button);
+    assert.strictEqual(cell.dataset.groupedLayout, 'row');
+    assert.strictEqual(cell.children[0].attributes['aria-label'], 'Sparkline widget placeholder, not a live rendering');
+    const group = cell.children[1];
+    assert.strictEqual(group.style.flex, '0 1 35%');
+    assert.strictEqual(group.children[0].children.map(visibleText).join(','), 'Room,21,C');
+    assert.strictEqual(group.children[1].className, 'pad-cell-icon');
+    const defaultPosition = createElement();
+    const { widget_position, ...defaultButton } = button;
+    context.padRenderCellContent(defaultPosition, defaultButton);
+    assert.strictEqual(defaultPosition.dataset.groupedLayout, 'row');
+    assert.strictEqual(defaultPosition.children[1].className, 'pad-content-widget-region');
+    const below = createElement();
+    context.padRenderCellContent(below, { ...button, widget_position: 'above' });
+    assert.strictEqual(below.dataset.groupedLayout, 'column');
+    assert.strictEqual(below.children[0].className, 'pad-content-widget-region');
+    const empty = createElement();
+    context.padRenderCellContent(empty, { widget_type: 'sparkline', widget_position: 'right' });
+    assert.strictEqual(empty.children.length, 1);
+    assert.strictEqual(empty.children[0].className, 'pad-content-widget-region');
+    const iconBelow = createElement();
+    context.padRenderCellContent(iconBelow, { ...button, icon_position: 'below' });
+    assert.strictEqual(iconBelow.children[1].children[1].className, 'pad-cell-icon');
+}
+for (const widget_type of ['rocker', 'numericrocker']) {
+    for (const axis of ['horizontal', 'vertical']) {
+        const cell = createElement();
+        const button = { widget_type, label_center: 'Value',
+            [widget_type === 'rocker' ? 'widget_rocker_axis' : 'widget_numericrocker_axis']: axis };
+        context.padRenderCellContent(cell, button);
+        const marker = cell.querySelector('.pad-content-widget-region');
+        assert.strictEqual(marker.dataset.rockerAxis, axis);
+        assert(marker.querySelector('.pad-cell-group-labels'));
+        const beside = createElement();
+        context.padRenderCellContent(beside, { ...button, rocker_group_layout: 'beside' });
+        assert.strictEqual(beside.dataset.groupedLayout, 'row');
+        assert(beside.children.some(child => child.className === 'pad-cell-content-group'));
+    }
+}
+{
+    const cell = createElement();
+    context.padRenderCellContent(cell, { widget_type: 'numericrocker', widget_numericrocker_large_step: 0 });
+    const arrows = cell.querySelector('.pad-rocker-preview-arrows');
+    assert.deepStrictEqual(arrows.children.map(child => child.textContent), ['', '‹', '›', '']);
+}
 for (const icon_position of ['left', 'above']) {
     const cell = createElement();
     const button = { icon: { catalog_id: 'noto:thermometer', kind: 'color' }, icon_position, label_center: 'Before' };
@@ -207,6 +285,27 @@ for (const icon_position of ['left', 'above']) {
     }
 }
 const widgetCatalog = context.deviceInfoCache;
+{
+    const icon = { catalog_id: 'noto:thermometer', kind: 'color' };
+    const button = { icon, icon_badge_padding: 8, icon_badge_color: '#123456', icon_position: 'left',
+        label_top: 'Indoor', label_center: '21.4 C', widget_type: 'sparkline' };
+    const cell = createElement();
+    context.padRenderCellContent(cell, button);
+    assert.strictEqual(cell.querySelector('.pad-cell-icon-badge'), null);
+    const retained = cell.querySelector('.pad-cell-icon');
+    cell.replaceChildren();
+    context.padRenderCellContent(cell, { ...button, icon_position: 'right', icon_badge_color: '#123456' }, retained);
+    assert.strictEqual(cell.querySelector('.pad-cell-icon-badge'), null);
+    assert.strictEqual(cell.querySelector('.pad-cell-icon'), retained);
+    const signature = context.padCellPreviewSignature(button);
+    assert.strictEqual(context.padCellPreviewSignature({ ...button, icon_badge_padding: 0 }), signature);
+    assert.strictEqual(context.padCellPreviewSignature({ ...button, icon_badge_color: '#654321' }), signature);
+    for (const changed of [{ ...button, icon_badge_padding: 0 }, { ...button, icon: undefined }]) {
+        const plain = createElement();
+        context.padRenderCellContent(plain, changed);
+        assert.strictEqual(plain.querySelector('.pad-cell-icon-badge'), null);
+    }
+}
 context.deviceInfoCache = null;
 assert.strictEqual(context.padWidgetPreview({ widget_type: 'gauge' }).name, 'Unknown Widget');
 
@@ -219,7 +318,7 @@ for (const content of [{ label_top: 'Top' }, { label_bottom: 'Bottom' },
 }
 const normal = createElement();
 context.padRenderCellContent(normal, {});
-assert.strictEqual(normal.children[0].textContent, '\u2022');
+assert.strictEqual(normal.children[0].className, 'pad-cell-content-group');
 for (const width of ['1', '2', '3']) {
     const bordered = createElement();
     context.padRenderCellContent(bordered, { border_width: width, border_color: '#123456' });
@@ -264,14 +363,14 @@ assert.strictEqual(context.padResizeTrackDelta(-5, 'right', resizeGeometry, 0, 0
 context.padRenderResizeHandles = () => {};
 context.padRenderGrid();
 assert.strictEqual(gridElement.children.length, 2);
-for (const cell of gridElement.children) assert(cell.children.some(child => child.className === 'pad-widget-marker'));
+for (const cell of gridElement.children) assert(cell.children.some(child => child.className === 'pad-content-widget-region'));
 assert(!gridElement.children[0].children.some(child => child.className === 'pad-widget-fallback'));
 assert(!gridElement.children[1].children.some(child => child.className === 'pad-widget-fallback'));
 assert(gridElement.children[1].classes.has('pad-cell-ghost'));
 assert.strictEqual(gridElement.children[1].style.gridColumn, '2 / span 2');
 assert.strictEqual(gridElement.children[1].style.gridRow, '1 / span 1');
-assert.strictEqual(gridElement.children[1].children[0].title, 'Gauge Widget');
-const templateBindingLabel = gridElement.children[1].children.find(child => child.className === 'pad-cell-label-top');
+assert.strictEqual(gridElement.children[1].querySelector('.pad-content-widget-region').title, 'Gauge widget placeholder, not a live rendering');
+const templateBindingLabel = gridElement.children[1].querySelector('.pad-cell-label-top');
 assert(visibleText(templateBindingLabel).startsWith('[mqtt:...') && visibleText(templateBindingLabel).endsWith('/temperature]'));
 const css = fs.readFileSync('src/app/web/portal-custom.css', 'utf8');
 {
@@ -300,9 +399,9 @@ const css = fs.readFileSync('src/app/web/portal-custom.css', 'utf8');
     assert.notStrictEqual(cell.querySelector('.pad-cell-icon'), icon, 'Foreground changes must rerender the artwork');
     const widget = { col: 0, row: 0, widget_type: 'rocker', widget_rocker_axis: 'horizontal' };
     context.padUpdateButtonPreview(colored, widget);
-    assert.strictEqual(cell.querySelector('.pad-widget-glyph').textContent, 'swap_horiz');
+    assert.strictEqual(cell.querySelector('.pad-content-widget-region').dataset.rockerAxis, 'horizontal');
     context.padUpdateButtonPreview(widget, { ...widget, widget_rocker_axis: 'vertical' });
-    assert.strictEqual(cell.querySelector('.pad-widget-glyph').textContent, 'swap_vert');
+    assert.strictEqual(cell.querySelector('.pad-content-widget-region').dataset.rockerAxis, 'vertical');
     assert.strictEqual(rebuilds, 0);
     context.padUpdateButtonPreview(widget, { ...widget, col_span: 2 });
     assert.strictEqual(rebuilds, 1, 'Geometry changes must rebuild the grid');
@@ -334,6 +433,98 @@ const css = fs.readFileSync('src/app/web/portal-custom.css', 'utf8');
     context.padRenderGrid = originalRenderGrid;
     delete context.document.querySelector;
 }
+{
+    const savedState = context.padState;
+    const savedGetElementById = context.document.getElementById;
+    const savedOccupancy = context.padBuildOccupancySet;
+    const savedGeometry = context.padGetGridGeometry;
+    const listeners = {};
+    const testGrid = createElement();
+    Object.defineProperty(testGrid, 'innerHTML', { set() { this.children = []; } });
+    testGrid.appendChild = function(child) {
+        this.children.push(child);
+        child.remove = () => { this.children.splice(this.children.indexOf(child), 1); };
+    };
+    context.document.getElementById = id => id === 'pad-grid' ? testGrid : null;
+    context.document.addEventListener = (name, handler) => { listeners[name] = handler; };
+    context.document.removeEventListener = name => { delete listeners[name]; };
+    let timer;
+    context.setTimeout = callback => { timer = callback; };
+    context.padGetGridGeometry = () => ({ columnSizes: [100, 100, 100, 100], rowSizes: [100, 100], gapX: 0, gapY: 0 });
+    context.padBuildOccupancySet = () => new Set(context.padState.buttons.flatMap(button =>
+        Array.from({ length: button.col_span || 1 }, (_, dc) =>
+            Array.from({ length: button.row_span || 1 }, (_, dr) => (button.col + dc) + ',' + (button.row + dr))).flat()));
+    context.padMarkDirty = () => {};
+    const icon = { catalog_id: 'noto:thermometer', kind: 'color' };
+    const moved = { col: 0, row: 0, icon };
+    const other = { col: 3, row: 0, icon };
+    context.padState = { cols: 4, rows: 2, selectedLayer: 'main', mainButtons: [moved, other], overlayButtons: [],
+        get buttons() { return this.selectedLayer === 'overlay' ? this.overlayButtons : this.mainButtons; },
+        templateButtons: [{ col: 1, row: 0, icon }] };
+    context.padRenderGrid();
+    const movedCell = testGrid.children.find(cell => cell.dataset.col === 0 && cell.dataset.row === 0);
+    const otherCell = testGrid.children.find(cell => cell.dataset.col === 3 && cell.dataset.row === 0);
+    const movedIcon = movedCell.querySelector('.pad-cell-icon');
+    const otherIcon = otherCell.querySelector('.pad-cell-icon');
+
+    context.padResizeDragStart(0, 0, 'right', 0, 0);
+    listeners.mousemove({ clientX: 30, clientY: 0 });
+    assert.strictEqual(movedCell.style.gridColumn, '1 / span 2');
+    assert(!testGrid.children.some(cell => cell.classes.has('pad-cell-ghost')), 'A covered template must disappear');
+    assert.strictEqual(otherCell.querySelector('.pad-cell-icon'), otherIcon);
+    listeners.mousemove({ clientX: 0, clientY: 0 });
+    listeners.mouseup({ type: 'mouseup' });
+    let prevented = false;
+    let stopped = false;
+    listeners.click({ preventDefault() { prevented = true; }, stopPropagation() { stopped = true; } });
+    assert(prevented && stopped, 'The click following a resize must not deselect the button');
+    timer();
+    assert(!listeners.click, 'Click suppression must not affect later clicks');
+    assert(testGrid.children.some(cell => cell.classes.has('pad-cell-ghost')), 'An uncovered template must return');
+    assert.strictEqual(movedCell.querySelector('.pad-cell-icon'), movedIcon);
+    assert(testGrid.children.includes(otherCell), 'Resize must retain unrelated buttons');
+
+    let animationFrame;
+    context.requestAnimationFrame = callback => { animationFrame = callback; };
+    movedCell.closest = () => movedCell;
+    context.padDragStart({ target: movedCell, dataTransfer: { setData() {} } }, 0, 0);
+    context.padDrop({ preventDefault() {} }, 2, 1);
+    context.padDragEnd({ target: movedCell });
+    animationFrame();
+    assert(testGrid.children.includes(movedCell), 'Move must retain the moved button');
+    assert.strictEqual(movedCell.style.gridColumn, '3 / span 1');
+    assert.strictEqual(movedCell.style.gridRow, '2 / span 1');
+    assert.strictEqual(movedCell.querySelector('.pad-cell-icon'), movedIcon);
+    assert.strictEqual(movedCell.style.opacity, '', 'A completed drag must not be dimmed by a late animation frame');
+    assert(testGrid.children.includes(otherCell), 'Move must retain unrelated buttons');
+    assert.strictEqual(otherCell.querySelector('.pad-cell-icon'), otherIcon);
+    assert(testGrid.children.some(cell => cell.classes.has('pad-cell-empty') && cell.dataset.col === 0 && cell.dataset.row === 0));
+
+    context.padState.selectedLayer = 'overlay';
+    const overlay = { col: 0, row: 0, icon };
+    context.padState.overlayButtons = [overlay];
+    context.padRenderGrid();
+    const mainPreview = testGrid.children.find(cell => cell.dataset.layer === 'main' && cell.dataset.col === 3);
+    const mainIcon = mainPreview.querySelector('.pad-cell-icon');
+    const overlayCell = testGrid.children.find(cell => cell.dataset.layer === 'overlay' && cell.dataset.col === 0);
+    context.padResizeDragStart(0, 0, 'right', 0, 0);
+    listeners.mousemove({ clientX: 30, clientY: 0 });
+    listeners.mouseup({ type: 'mouseup' });
+    timer();
+    assert.strictEqual(overlayCell.style.gridColumn, '1 / span 2');
+    assert(testGrid.children.includes(mainPreview), 'Overlay resizing must retain main-layer previews');
+    assert.strictEqual(mainPreview.querySelector('.pad-cell-icon'), mainIcon);
+
+    context.padState = savedState;
+    context.document.getElementById = savedGetElementById;
+    delete context.document.addEventListener;
+    delete context.document.removeEventListener;
+    delete context.setTimeout;
+    context.padBuildOccupancySet = savedOccupancy;
+    context.padGetGridGeometry = savedGeometry;
+    delete context.padMarkDirty;
+    delete context.requestAnimationFrame;
+}
 assert(!css.includes('data:font/woff2;base64,'));
 assert(!css.includes('.pad-cell-widget-'));
 
@@ -352,16 +543,38 @@ vm.runInContext(`BUTTON_BUILDER_PROVIDERS.push({
 });`, context);
 context.PAD_FIRMWARE_DEFAULTS = { widget_track_color: '#1A1A1A', widget_series_color: '#4CAF50',
     widget_indicator_color: '#FFFFFF', widget_tick_color: '#AAAAAA' };
+const toggleBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "toggle_widget")', context);
+for (const state of ['on', 'off', 'unavailable']) {
+    const button = { widget_type: 'toggle', label_top: 'Kitchen light',
+        widget_toggle_on_color: '#2196f3', widget_toggle_off_color: '#59636e',
+        widget_toggle_knob_color: '#ffffff' };
+    const cell = createElement();
+    context.padRenderCellContent(cell, button);
+    toggleBuilder.renderPreview({ previewState: state }, cell, button);
+    const region = cell.querySelector('.pad-content-widget-region');
+    const toggle = region.querySelector('.pad-button-builder-toggle');
+    assert(toggle, 'The simulated switch must occupy the widget region');
+    assert.strictEqual(region.children.length, 1);
+    assert.strictEqual(cell.querySelector('.pad-widget-symbol'), null, 'Replace the placeholder switch');
+    assert.strictEqual(cell.children.length, 2, 'Keep the title and switch in the grouped layout');
+    assert.strictEqual(visibleText(cell.querySelector('.pad-cell-label-top')), 'Kitchen light');
+    assert.strictEqual(region.attributes['aria-label'], undefined);
+    assert.strictEqual(toggle.attributes['aria-label'], 'Switch ' + state);
+    assert.strictEqual(toggle.dataset.state, state);
+    assert.strictEqual(toggle.style.opacity, state === 'unavailable' ? '0.5' : undefined);
+    assert.strictEqual(toggle.querySelector('.pad-button-builder-toggle-track').style.background,
+        state === 'on' ? '#2196f3' : '#59636e');
+}
 for (const widget_type of ['toggle', 'rocker', 'numericrocker', 'future_widget']) {
     const button = { widget_type, label_top: 'Top', label_center: 'Center', label_bottom: 'Bottom',
         icon: { catalog_id: 'noto:thermometer', kind: 'color' } };
     const original = JSON.stringify(button);
     const cell = createElement();
     context.padRenderCellContent(cell, button);
-    const marker = cell.children.find(child => child.className === 'pad-widget-marker');
+    const marker = cell.querySelector('.pad-content-widget-region');
     assert(marker.attributes['aria-label']);
-    assert.strictEqual(cell.children.slice(1).map(visibleText).join('|'), 'Top|Center|Bottom');
-    assert.strictEqual(cell.querySelector('.pad-cell-icon'), null);
+    assert.strictEqual(cell.querySelector('.pad-cell-group-labels').children.map(visibleText).join('|'), 'Top|Center|Bottom');
+    assert(cell.querySelector('.pad-cell-icon'));
     assert.strictEqual(JSON.stringify(button), original, 'Preview rendering leaves widget configuration unchanged');
 }
 const ordinaryToggle = { col: 0, row: 0, widget_type: 'toggle', label_center: 'Ordinary',
@@ -377,8 +590,8 @@ context.padState = { cols: 3, rows: 1, selectedLayer: 'main', mainButtons: [ordi
 gridElement.children = [];
 context.padRenderGrid();
 assert.strictEqual(gridElement.children.length, 2);
-assert(gridElement.children[0].querySelector('.pad-widget-marker'));
-assert(gridElement.children[1].querySelector('.pad-widget-marker'));
+assert(gridElement.children[0].querySelector('.pad-content-widget-region'));
+assert(gridElement.children[1].querySelector('.pad-content-widget-region'));
 assert(gridElement.children[1].classes.has('pad-cell-ghost'));
 assert.strictEqual(gridElement.children[1].style.gridColumn, '2 / span 2');
 assert.strictEqual(JSON.stringify(ordinaryToggle), ordinaryToggleBefore);
@@ -460,7 +673,7 @@ for (const orientation of ['vertical', 'horizontal']) {
         assert.strictEqual(!!fill.hidden, state === 'unavailable');
         assert.strictEqual(track.style.background, '#1A1A1A');
         assert.strictEqual(fill.style.background, '#4CAF50');
-        assert.strictEqual(cell.children.indexOf(bar) + 1, cell.children.indexOf(cell.querySelector('.pad-cell-label-bottom')));
+        assert.strictEqual(cell.querySelector('.pad-content-widget-region').children[0], bar);
     }
 }
 const gaugeBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "gauge")', context);
@@ -478,9 +691,9 @@ for (const [state, min, max, percent] of [
     const cell = createElement();
     context.padRenderCellContent(cell, button);
     gaugeBuilder.renderPreview(session.draft, cell, button);
-    assert(cell.querySelector('.pad-widget-marker'));
+    assert(cell.querySelector('.pad-content-widget-region'));
     assert.strictEqual(cell.querySelector('.pad-cell-label-center'), null);
-    const gauge = cell.children.find(child => child.attributes.class === 'pad-button-builder-gauge');
+    const gauge = descendants(cell).find(child => child.attributes.class === 'pad-button-builder-gauge');
     assert.strictEqual(gauge.attributes.role, percent === null ? 'img' : 'meter');
     assert.strictEqual(gauge.children[0].attributes.stroke, '#1A1A1A');
     if (percent === null) {
@@ -498,9 +711,25 @@ for (const [state, min, max, percent] of [
         assert.strictEqual(gauge.children[2].attributes.stroke, '#FFFFFF');
         assert.strictEqual(gauge.children.length, 8, 'One track, one ring, one needle, and five ticks');
     }
-    assert.strictEqual(cell.children.indexOf(gauge) + 1, cell.children.indexOf(cell.querySelector('.pad-cell-label-bottom')));
+    assert.strictEqual(cell.querySelector('.pad-content-widget-region').children[0], gauge);
 }
 const historyBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "history")', context);
+const iconHistoryBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "icon_history")', context);
+{
+    const cell = createElement();
+    const session = { draft: makeDraft({ state: '21.37', unit: '\u00b0C' }, 'Living room') };
+    context.padButtonBuilderSetScenario(session, iconHistoryBuilder);
+    session.draft.options.color = '#123456';
+    const button = { ...iconHistoryBuilder.build(session.draft), ...iconHistoryBuilder.preview(session.draft) };
+    context.padRenderCellContent(cell, button);
+    iconHistoryBuilder.renderPreview(session.draft, cell, button);
+    assert.strictEqual(cell.querySelector('.pad-cell-icon').dataset.foreground, '#123456');
+    const [fill, line, dot] = cell.querySelector('.pad-content-widget-region').children[0].children;
+    assert.strictEqual(fill.attributes.fill, '#123456');
+    assert.strictEqual(fill.attributes['fill-opacity'], '0.5');
+    assert.strictEqual(line.attributes.stroke, '#123456');
+    assert.strictEqual(dot.attributes.fill, '#123456');
+}
 let samplePoints;
 for (const color of ['#4CAF50', '#2196F3']) {
     const cell = createElement();
@@ -514,9 +743,9 @@ for (const color of ['#4CAF50', '#2196F3']) {
     historyBuilder.renderPreview(session.draft, cell, button);
     assert.strictEqual(cell.querySelector('.pad-cell-label-top').textContent, 'Living room');
     assert.strictEqual(cell.querySelector('.pad-cell-label-center').textContent, '21.4 \u00b0C');
-    assert.strictEqual(cell.querySelector('.pad-widget-marker'), null);
+    assert(cell.querySelector('.pad-content-widget-region'));
     assert.ok(cell.classes.has('pad-button-builder-preview-single-history'));
-    const chart = cell.children.at(-1);
+    const chart = cell.querySelector('.pad-content-widget-region').children[0];
     assert.strictEqual(chart.attributes.role, 'img');
     assert.strictEqual(chart.attributes.viewBox, '0 0 280 190');
     assert.match(chart.attributes['aria-label'], /Illustrative trend, not actual history/);
@@ -549,38 +778,49 @@ for (const color of ['#4CAF50', '#2196F3']) {
         return cell;
     };
     const cell = render();
-    const chart = cell.children.at(-1);
+    const chart = cell.querySelector('.pad-content-widget-region').children[0];
     assert.strictEqual(chart.children.length, 6, 'Both values have a line, dot, and endpoint label');
     assert.strictEqual(chart.children[5].textContent, '54.2 %');
     assert.strictEqual(chart.children[5].attributes.fill, '#2196F3');
     assert.strictEqual(chart.children[5].attributes.y, chart.children[4].attributes.cy);
     session.draft.sources[1].candidate.sample = 'unavailable';
     const unavailable = render();
-    assert.strictEqual(unavailable.children.at(-1).children[3].textContent, '---');
-    assert.strictEqual(unavailable.children.at(-1).children.length, 4, 'Unavailable values have a label but no zero or fake trend');
+    assert.strictEqual(unavailable.querySelector('.pad-content-widget-region').children[0].children[3].textContent, '---');
+    assert.strictEqual(unavailable.querySelector('.pad-content-widget-region').children[0].children.length, 4, 'Unavailable values have a label but no zero or fake trend');
 }
 for (const source of ['', 'on', 'off', '[expr:[ha:climate.bureau_boven_thermostaat;attributes.temperature]>20?"on":"off"]']) {
     const cell = createElement();
     context.padRenderCellContent(cell, { widget_type: 'toggle', widget_data_binding: source,
         label_top: 'Bureau', label_bottom: '[ha:climate.bureau_boven_thermostaat;attributes.temperature;%.1f \u00b0C]',
         widget_toggle_on_color: '#123456' });
-    assert.strictEqual(cell.children[0].className, 'pad-widget-marker');
-    assert.strictEqual(cell.children[0].attributes['aria-label'], 'Toggle switch Widget');
+    assert.strictEqual(cell.querySelector('.pad-content-widget-region').attributes['aria-label'], 'Toggle switch widget placeholder, not a live rendering');
     assert(!cell.children.some(child => child.attributes.role === 'switch'));
-    assert(cell.children.some(child => child.textContent === 'Bureau'));
+    assert(descendants(cell).some(child => child.textContent === 'Bureau'));
 }
-assert.strictEqual(context.padWidgetEditor('toggle').icon.width, 0.4);
-assert.strictEqual(context.padWidgetEditor('toggle').icon.height, 0.4);
 const renderPad = { cols: 3, rows: 2, column_widths_px: [0, 40, 0] };
 const renderButton = { col: 1, row: 0, col_span: 2, row_span: 1, icon_scale_pct: 75,
     label_top: 'Name', border_width: '2', content_pad: '4', widget_type: 'gauge' };
 const originalKey = context.padIconRenderKey(renderPad, renderButton);
-assert.strictEqual(originalKey, '4c31e060');
+// The same vector is checked by the firmware validator in test_pad_confirmation.cpp.
+assert.strictEqual(originalKey, 'ac65574e');
+assert.notStrictEqual(originalKey, '4c31e060', 'Icons rendered before centering must regenerate');
 assert.strictEqual(context.padIconRenderKey(renderPad, { ...renderButton, label_top: 'Other text', fg_color: 'ff0000' }), originalKey);
 for (const change of [{ icon_scale_pct: 80 }, { col_span: 1 }, { label_top: '' }])
     assert.notStrictEqual(context.padIconRenderKey(renderPad, { ...renderButton, ...change }), originalKey);
 assert.notStrictEqual(context.padIconRenderKey({ ...renderPad, column_widths_px: [0, 50, 0] }, renderButton), originalKey);
 assert.notStrictEqual(context.padIconRenderKey({ ...renderPad, cols: 4 }, renderButton), originalKey);
+
+{
+    const size = 8;
+    const pixels = new Uint8ClampedArray(size * size * 4);
+    const offset = () => JSON.parse(JSON.stringify(context.padIconArtworkOffset(pixels, size)));
+    assert.deepStrictEqual(offset(), { x: 0, y: 0 }, 'Fully transparent images remain unchanged');
+    for (let y = 0; y < 3; y++) {
+        for (let x = 3; x < 6; x++) pixels[(y * size + x) * 4 + 3] = 255;
+    }
+    pixels[(1 * size + 6) * 4 + 3] = 1;
+    assert.deepStrictEqual(offset(), { x: -1, y: 3 }, 'Visible bounds, including translucent edges, are centered');
+}
 
 async function checkPickerResults() {
     vm.runInContext(fs.readFileSync('src/app/web/portal_icon_picker.js', 'utf8'), context);

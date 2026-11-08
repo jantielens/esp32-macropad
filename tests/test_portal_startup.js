@@ -436,7 +436,7 @@ async function main() {
     assert.strictEqual(soundSelect.value, 'saved.mp3');
     const navSource = fs.readFileSync('src/app/web/portal_nav.js', 'utf8');
     const assets = [];
-    const assetContext = { document: {
+    const assetContext = { window: {}, itemMap: {}, document: {
         createElement(tag) { return { tag, remove() {} }; },
         head: { appendChild(asset) { assets.push(asset); } }
     } };

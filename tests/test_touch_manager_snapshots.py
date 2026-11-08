@@ -32,6 +32,12 @@ enum LogLevel { LOG_LEVEL_WARN = 2, LOG_LEVEL_DEBUG = 4 };
 #define portEXIT_CRITICAL(mux) ((void)(mux))
 enum { LV_INDEV_STATE_RELEASED, LV_INDEV_STATE_PRESSED };
 struct lv_indev_t { void* user_data; };
+struct lv_obj_t {};
+enum lv_event_code_t { LV_EVENT_PRESSED, LV_EVENT_RELEASED, LV_EVENT_PRESS_LOST, LV_EVENT_INDEV_RESET };
+struct lv_event_t { void* target; void* parameter; lv_event_code_t code; };
+static void* lv_event_get_target(lv_event_t* event) { return event->target; }
+static void* lv_event_get_param(lv_event_t* event) { return event->parameter; }
+static lv_event_code_t lv_event_get_code(lv_event_t* event) { return event->code; }
 struct lv_indev_data_t { int state = LV_INDEV_STATE_RELEASED; struct { int x = 0, y = 0; } point; };
 static uint32_t clock_ms = 0;
 static unsigned resets = 0, activities = 0;
@@ -93,6 +99,17 @@ int main() {
     Driver driver;
     TouchManager manager{&driver};
     lv_indev_t indev{&manager};
+    lv_obj_t object;
+    lv_event_t press{&indev, &object, LV_EVENT_PRESSED};
+    track_pointer_target(&press);
+    assert(g_pointer_object == &object && g_pointer_device == &indev);
+    lv_event_t release{&indev, &object, LV_EVENT_RELEASED};
+    track_pointer_target(&release);
+    assert(!g_pointer_object && !g_pointer_device);
+    track_pointer_target(&press);
+    release.code = LV_EVENT_INDEV_RESET;
+    track_pointer_target(&release);
+    assert(!g_pointer_object && !g_pointer_device);
     lv_indev_data_t output;
     auto poll = [&]() { ++clock_ms; TouchManager::readCallback(&indev, &output); };
     poll();

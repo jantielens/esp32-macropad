@@ -21,7 +21,9 @@ Bindings 2-4 add bars with separate tracks but one scale.
 Each has its own color, optional pattern, and bindable caption.
 Captions appear below vertical bars or left of horizontal rows.
 Use `\n` for multiple lines and Caption area size 1-200 px to reserve space;
-0 is automatic. Empty captions reserve no caption strip.
+0 is automatic. Horizontal automatic sizing fits the widest caption on each
+side, while keeping space for the bars. Long captions can still be clipped.
+Empty captions reserve no caption strip.
 
 Thickness 1-100% changes each bar within its own column/row.
 Animation 0-5000 ms smooths changes; 0 is immediate and the first value snaps.

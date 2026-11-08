@@ -819,15 +819,152 @@ public:
 
 ### Native Widget Geometry And Input
 
-`widget_content_bounds()` shares transformed label and image geometry between
-Slider and Toggle, including image pivots, rotation, and scaling. Their layouts
-and interaction state machines remain separate.
+`button_content_layout.h` calculates bounded regions for the shared label/icon
+group and widget content. The pad builder applies those regions through
+`button_content_lvgl.h`. Binding changes can resize the widget region without
+rebuilding the button. Widgets keep their own input ownership and data captions.
+Rockers default to a full widget region with the shared group centered between
+the indicators. Numeric Rocker bounds the group to the computed center zone;
+neither layout changes input routing or zone boundaries. The `beside` option
+retains the ordinary split layout. Pad JSON stores the choice as
+`rocker_group_layout` (`center` by default, or `beside`).
+
+Natural label dimensions are measured from source text when it changes, before
+LVGL's ellipsis mode modifies its display buffer. Reflow reuses these dimensions;
+wrapped labels are measured again at the assigned width. Binding records retain
+the template, last value and content-group label index, not a second label style.
+
+`icon_color` inherits device button defaults and defaults to `auto`, which
+follows the button foreground. A static color or binding overrides it for
+Material icons; color icons retain their artwork.
+`icon_badge_padding` inherits device button defaults and defaults to 0, which
+disables the badge. Positive values add padding per side. `icon_badge_color`
+accepts `auto` (the default), a static color or a binding. Auto blends 15%
+of the resolved Material icon color into the button background, or uses the
+button foreground for color icons. It follows changes to either color.
+Shared geometry reserves a square
+circular-badge footprint using the scaled image's longest side plus twice the
+padding. When constrained, the image shrinks to preserve the padding where
+possible. The existing icon region draws the circle behind its centered image;
+no extra LVGL object or image buffer is needed. Extended image draw bounds
+invalidate the whole badge when icon visibility changes.
+
+Sparkline's `widget_sparkline_fill_opacity` is a shared static percentage,
+0-100, default 0. A chart draw callback renders fills before child lines and
+annotations, reusing cached plotted points and their missing-data sentinels.
+Non-overlapping vertical strips avoid translucent tessellation seams;
+equal-height columns share rectangles, clipped work is bounded by visible
+width, and no additional sample or full-chart buffer is allocated.
+Point or line-color changes invalidate the filled chart bounds; unchanged
+output retains the existing revision/throttle behavior.
+
+`WidgetType.createUI` receives the widget region, configuration, button
+configuration, grid rectangle, UI scale and runtime state. It does not receive
+shared label or icon objects. Gauge and Bar Chart use the same geometry calculation
+for creation and resizing. Unchanged dimensions skip geometry work, and Gauge
+repositions existing tick objects rather than recreating them.
+
+When a region changes, `touch_manager_cancel_object_input()` cancels only its
+captured HID contacts and its active LVGL pointer gesture. Canceled contact IDs
+remain reserved until lift; the affected LVGL pointer waits for release. Other
+held widget contacts remain active.
 
 A widget with a `WidgetType.cancelInput` hook owns native input.
 `widget_owns_input()` suppresses ordinary tap and long-press dispatch for that
 widget; `widget_cancel_input()` routes press loss, input reset, blocked overlays,
 and gesture cancellation to its hook. Slider registers this hook to discard an
 unfinished drag without dispatch. Toggle retains parent-button short clicks.
+
+### Host-Rendered Widget Previews
+
+Use the production widget renderer through host LVGL to review visual changes
+without building or flashing firmware. This catches drawing artifacts and lets
+you compare expressions before testing on a device; it is not a browser mockup
+or a separately implemented approximation.
+
+The existing [Face fixture](../../tests/test_face_widget.cpp) includes the
+production implementation, creates an off-screen 192x160 RGB888 LVGL display,
+and captures its flush output. Setting `FACE_WIDGET_PREVIEW_DIR` exports PPM
+images. The expression test exports both styles across all eight emotions;
+the sequence test exports 180 frames per style, advancing the animation clock
+by 66 ms per frame and changing target emotion every 20 frames through the
+eight emotions.
+
+#### Export Face Captures
+
+Run from the repository root, using the normal host-test prerequisites:
+
+```bash
+cmake -S . -B build/host-tests
+cmake --build build/host-tests --target test_face_widget_0 --parallel
+mkdir -p build/face-previews
+FACE_WIDGET_PREVIEW_DIR="$PWD/build/face-previews" \
+  build/host-tests/tests/test_face_widget_0 \
+  --gtest_filter='FaceWidget.EveryStyleAndEmotionProducesADistinctBoundedExpression:FaceWidget.RetargetingSequenceRendersIntermediateExpressions'
+```
+
+Use `test_face_widget_0`, the animation-enabled LCD profile. Profile `_1`
+disables animations and capture export; `_2` exercises interactive e-paper
+animation behavior, rather than simulating a physical panel. The destination
+directory must already exist. Output names include `robot_content.ppm`,
+`doodle_happy.ppm`, and `robot_frame_0.ppm` through `robot_frame_179.ppm`
+(with equivalent `doodle` frames). Outputs stay under ignored `build/`.
+
+#### Make an Expression Sheet and Animation
+
+The following optional conversion requires Pillow in the Python environment;
+the LVGL tests and PPM export do not. It produces a labeled PNG contact sheet,
+one PNG per expression, and a looping GIF per style. GIF playback uses 70 ms
+per frame because its timing is quantized to hundredths of a second.
+
+```bash
+python3 - <<'PY'
+from pathlib import Path
+from PIL import Image, ImageDraw
+
+directory = Path("build/face-previews")
+styles = ("robot", "doodle")
+emotions = "content relaxed happy worried angry sad surprised sleepy".split()
+tiles = []
+for style in styles:
+    for emotion in emotions:
+        name = f"{style}_{emotion}"
+        with Image.open(directory / f"{name}.ppm") as source:
+            image = source.convert("RGB")
+        image.save(directory / f"{name}.png")
+        tiles.append((name, image))
+
+width, height = tiles[0][1].size
+sheet = Image.new("RGB", (len(emotions) * width, len(styles) * (height + 24)), "#102030")
+draw = ImageDraw.Draw(sheet)
+for index, (name, image) in enumerate(tiles):
+    x = index % len(emotions) * width
+    y = index // len(emotions) * (height + 24)
+    sheet.paste(image, (x, y))
+    draw.text((x + 4, y + height + 4), name, fill="white")
+sheet.save(directory / "expressions.png")
+
+for style in styles:
+    frames = []
+    for index in range(180):
+        with Image.open(directory / f"{style}_frame_{index}.ppm") as source:
+            frames.append(source.convert("RGB"))
+    frames[0].save(directory / f"{style}.gif", save_all=True,
+                   append_images=frames[1:], duration=70, loop=0)
+PY
+```
+
+Open `build/face-previews/expressions.png`, `robot.gif`, and `doodle.gif` for
+review. After changing Face drawing, rebuild the same target and rerun both
+steps. When adding a style or emotion, update the existing fixture's cases and
+the conversion lists together. Other widgets should reuse their existing host
+fixtures where practical rather than copy the renderer into a preview tool.
+
+These are real LVGL pixels with synthetic time and fixture colors, geometry,
+and data. They do not measure device FPS, internal RAM, panel refresh latency,
+or e-paper ghosting. The animation profile does not reproduce physical panel
+presentation. Keep focused rendering tests and verify relevant behavior on
+hardware separately.
 
 ### Toggle Switch Widget Contract
 

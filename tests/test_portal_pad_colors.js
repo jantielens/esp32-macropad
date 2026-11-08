@@ -331,6 +331,142 @@ assert.strictEqual(zeroAppearance.border_width, '0');
 assert.strictEqual(zeroAppearance.corner_radius, '0');
 assert.strictEqual(zeroAppearance.content_pad, '0');
 
+defaultInputs.set('pad-def-icon-position', { value: '' });
+context.padLoadButtonDefaults({ firmware_defaults: defaultsFixture.firmware_defaults });
+assert.strictEqual(defaultInputs.get('pad-def-icon-position').value, 'left');
+assert.strictEqual(context.padCollectButtonDefaults().icon_position, undefined);
+defaultInputs.get('pad-def-icon-position').value = 'above';
+assert.strictEqual(context.padCollectButtonDefaults().icon_position, 'above');
+context.padLoadButtonDefaults({ firmware_defaults: defaultsFixture.firmware_defaults, icon_position: 'above' });
+assert.strictEqual(defaultInputs.get('pad-def-icon-position').value, 'above');
+
+{
+    const inputs = new Map();
+    const labels = new Map();
+    const selectorContext = {
+        TextEncoder, Event: class { constructor(type) { this.type = type; } },
+        PAD_FIRMWARE_DEFAULTS: { widget_track_color: '#111111', widget_indicator_color: '#FFFFFF', widget_series_color: '#00AA00' },
+        padGetEffectiveDefault: () => '#222222',
+        padLabelToInput: value => value,
+        padLabelFromInput: id => inputs.get(id).value,
+        document: {
+            getElementById(id) {
+                if (!inputs.has(id)) {
+                    const listeners = {};
+                    const classes = new Set();
+                    const swatch = { style: {}, classList: {
+                        add: value => classes.add(value), remove: value => classes.delete(value),
+                        contains: value => classes.has(value)
+                    } };
+                    const container = { dataset: {}, querySelector: () => swatch };
+                    inputs.set(id, {
+                        id, value: '', checked: false, dataset: {}, container, swatch,
+                        addEventListener(type, handler) { (listeners[type] ||= []).push(handler); },
+                        dispatchEvent(event) { (listeners[event.type] || []).forEach(handler => handler(event)); },
+                        closest() { return container; }
+                    });
+                }
+                return inputs.get(id);
+            },
+            querySelector(selector) {
+                if (!labels.has(selector)) labels.set(selector, { textContent: 'Color',
+                    appendChild(child) { inputs.set(child.id, child); } });
+                return labels.get(selector);
+            },
+            createElement() {
+                return { style: {}, setAttribute() {}, addEventListener(type, handler) { this[type] = handler; } };
+            }
+        }
+    };
+    vm.createContext(selectorContext);
+    for (const file of ['portal_widget_editor.js', 'portal_pad_colors.js', 'portal_widget_option_selector.js'])
+        vm.runInContext(fs.readFileSync('src/app/web/' + file, 'utf8'), selectorContext);
+    const editor = selectorContext.padWidgetEditor('option_selector');
+    editor.init();
+    selectorContext.padWidgetEditorsLoad({
+        widget_type: 'option_selector',
+        widget_option_group_color: '[pad:color]',
+        widget_option_background_color: '#334455',
+        widget_option_selected_fg_color: '#FFFFFF',
+        widget_option_selected_bg_color: '#123456',
+        widget_option_bg_color: '#ABCDEF'
+    });
+    assert.strictEqual(inputs.get('pad-edit-option-2-bg_color').swatch.style.background, '#334455');
+    assert.strictEqual(inputs.get('pad-edit-option-2-fg_color').swatch.style.background, '#222222');
+    assert.strictEqual(inputs.get('pad-edit-option-group-color').swatch.classList.contains('bc-binding'), true);
+    for (const id of ['pad-edit-option-group-color', 'pad-edit-option-selected-fg',
+        'pad-edit-option-selected-bg', 'pad-edit-option-1-bg_color', 'pad-edit-option-background-color']) {
+        const color = inputs.get(id);
+        const reset = inputs.get(id + '-reset');
+        assert.strictEqual(reset.style.display, 'inline');
+        reset.click();
+        assert.strictEqual(color.value, '');
+        assert.strictEqual(reset.style.display, 'none');
+    }
+    assert.strictEqual(inputs.get('pad-edit-option-group-color').swatch.style.background, '#111111');
+    assert.strictEqual(inputs.get('pad-edit-option-selected-fg').swatch.style.background, '#FFFFFF');
+    assert.strictEqual(inputs.get('pad-edit-option-selected-bg').swatch.style.background, '#00AA00');
+    assert.strictEqual(inputs.get('pad-edit-option-1-bg_color').swatch.style.background, '#111111');
+    selectorContext.padSetBindableColor('pad-edit-option-background-color', '[pad:shared]');
+    assert.strictEqual(inputs.get('pad-edit-option-1-bg_color').swatch.classList.contains('bc-binding'), true);
+    inputs.get('pad-edit-option-background-color-reset').click();
+    selectorContext.padSetBindableColor('pad-edit-fg-color', '#FEDCBA');
+    assert.strictEqual(inputs.get('pad-edit-option-1-fg_color').swatch.style.background, '#FEDCBA');
+    const result = {};
+    selectorContext.padWidgetEditorBuild(result, editor);
+    for (const key of ['widget_option_group_color', 'widget_option_selected_fg_color',
+        'widget_option_selected_bg_color', 'widget_option_bg_color', 'widget_option_background_color'])
+        assert.strictEqual(result[key], undefined);
+    assert.strictEqual(result.widget_option_inset, 4);
+    selectorContext.padWidgetEditorsLoad({ widget_type: 'option_selector', ...result });
+    assert.strictEqual(inputs.get('pad-edit-option-selected-fg').value, '');
+    assert.strictEqual(inputs.get('pad-edit-option-1-bg_color').swatch.style.background, '#111111');
+
+    const mode = inputs.get('pad-edit-option-mode');
+    const source = inputs.get('pad-edit-option-source');
+    const sourceGroup = inputs.get('pad-edit-option-source-group');
+    selectorContext.padWidgetEditorsLoad({
+        widget_type: 'option_selector', widget_option_mode: 'bound', widget_data_binding: '[var:a|unset]'
+    });
+    assert.strictEqual(sourceGroup.hidden, false);
+    mode.value = 'local';
+    mode.dispatchEvent(new selectorContext.Event('change'));
+    assert.strictEqual(sourceGroup.hidden, false, 'A saved source must remain editable in other modes');
+    const local = {};
+    selectorContext.padWidgetEditorBuild(local, editor);
+    assert.strictEqual(local.widget_data_binding, '[var:a|unset]');
+    mode.value = 'bound';
+    mode.dispatchEvent(new selectorContext.Event('change'));
+    assert.strictEqual(sourceGroup.hidden, false);
+    assert.strictEqual(source.value, '[var:a|unset]');
+    selectorContext.padWidgetEditorsLoad({ widget_type: 'option_selector', widget_option_mode: 'none' });
+    assert.strictEqual(sourceGroup.hidden, true);
+
+    inputs.get('pad-edit-option-1-label').value = 'First';
+    inputs.get('pad-edit-option-2-icon').value = JSON.stringify({ kind: 'mono', source_id: 'icon' });
+    const withoutValues = {};
+    selectorContext.padWidgetEditorBuild(withoutValues, editor);
+    assert.strictEqual(withoutValues.widget_option_label, 'First');
+    assert.strictEqual(withoutValues.widget_option_value, undefined);
+    assert.strictEqual(withoutValues.widget_option_icon_2.kind, 'mono');
+    mode.value = 'local';
+    assert.doesNotThrow(() => selectorContext.padWidgetEditorBuild({}, editor));
+    mode.value = 'bound';
+    assert.throws(() => selectorContext.padWidgetEditorBuild({}, editor), /required in Bound mode/);
+    inputs.get('pad-edit-option-1-value').value = 'first';
+    assert.throws(() => selectorContext.padWidgetEditorBuild({}, editor), /required in Bound mode/);
+    inputs.get('pad-edit-option-2-value').value = 'second';
+    assert.doesNotThrow(() => selectorContext.padWidgetEditorBuild({}, editor));
+
+    let actionValues;
+    selectorContext.padActionPrefixes = () => [];
+    selectorContext.actionEditorListBuild = (prefixes, token, values) => { actionValues = Array.from(values); return []; };
+    mode.value = 'local';
+    inputs.get('pad-edit-option-1-value').value = '';
+    editor.actions.buildTap();
+    assert.deepStrictEqual(actionValues, ['', 'second']);
+}
+
 (async function testDefaultsSaveRebootWarning() {
     let pendingCalls = 0;
     const messages = [];

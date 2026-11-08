@@ -13,7 +13,7 @@ Choose Gauge in Button Content and enter a numeric Ring 1 binding.
 Set Min/Max with minimum below maximum, Arc span 10-360 degrees, and Start angle.
 Angles use 0 at 3 o'clock, 90 at 6, 180 at 9, and 270 at 12.
 Save Pad and verify low/mid/high values on the device.
-Center label/icon sits near the pivot; top/bottom labels provide context.
+Labels and icons use the [shared content layout](../pads/appearance.md#arrange-button-content).
 
 For a seconds clock, use `[time:%S]`, Min 0/Max 60, span 359, start 270, and
 center label `[time:%H:%M]`.

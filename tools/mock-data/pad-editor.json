@@ -1,6 +1,7 @@
 {
   "firmware_defaults": {
     "default_pad_bg_color": "#000000", "bg_color": "#333333", "fg_color": "#FFFFFF",
+    "icon_badge_padding": 0, "icon_badge_color": "auto", "icon_color": "auto", "icon_position": "left",
     "border_color": "#000000", "border_width": "0", "corner_radius": "8", "content_pad": "4",
     "button_shadow_enabled": false, "button_shadow_type": "opaque", "button_shadow_color_mode": "fixed",
     "button_shadow_color": "#101010", "button_shadow_darken_pct": 35,
@@ -85,6 +86,7 @@
   "blocks": [{"id": "navigation", "name": "Home navigation", "desc": "Navigate to the home pad", "icon": "Home", "min_cols": 1, "min_rows": 1, "min_free": 1, "bindings": {}, "buttons": [{"col_offset": 0, "row_offset": 0, "col_span": 1, "row_span": 1, "label_center": "Home", "actions": [{"type": "screen", "target": "pad_0"}]}]}],
   "binding_schema": {"schemes": [
     {"name": "pad", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": true},
+    {"name": "var", "min_params": 1, "max_params": 1, "widget_max_params": 1, "format_param": -1, "validation_mode": 0, "free_form": true},
     {"name": "mqtt", "min_params": 1, "max_params": 3, "widget_max_params": 2, "format_param": 2, "validation_mode": 0, "free_form": true},
     {"name": "expr", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": 1, "validation_mode": 1, "free_form": true},
     {"name": "time", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": -1, "validation_mode": 0, "free_form": true},
@@ -122,6 +124,7 @@
     {"type": "gamepad", "group": "Gamepad", "label": "Gamepad", "button_count": 16}
   ],
   "widget_catalog": [
+    {"type": "face", "name": "Face", "icon": "face"},
     {"type": "toggle", "name": "Toggle switch", "icon": "toggle_on"},
     {"type": "bar_chart", "name": "Bar Chart", "icon": "bar_chart"},
     {"type": "gauge", "name": "Gauge", "icon": "speed"},

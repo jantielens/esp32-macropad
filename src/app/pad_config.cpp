@@ -20,6 +20,8 @@
 
 #include <esp_heap_caps.h>
 #include <esp_partition.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 
 #include <stdio.h>
 #include <atomic>
@@ -29,6 +31,7 @@
 #define TAG "PadCfg"
 
 static bool g_fs_mounted = false;
+static std::atomic<SemaphoreHandle_t> g_mutation_mutex{nullptr};
 static uint32_t g_generation = 0;
 static std::atomic<uint32_t> g_eligible_mask{0};
 
@@ -56,7 +59,8 @@ static void publish_eligibility(uint8_t page, bool eligible) {
 
 // Forward declaration — defined after pad_config_init().
 static PadConfig* pad_config_load_from_flash(uint8_t page,
-                                             bool skip_template = false);
+                                             bool skip_template = false,
+                                             bool* owned_failure = nullptr);
 
 // ============================================================================
 // Helpers
@@ -103,6 +107,11 @@ static PadConfig* pad_config_create(uint8_t button_capacity, const char* name = 
 
 static void pad_config_destroy(PadConfig* config) {
     for (uint8_t index = 0; index < config->button_count; ++index) {
+#if HAS_DISPLAY
+        WidgetConfig& widget = config->buttons[index].widget;
+        const WidgetType* type = widget_find(widget.type);
+        if (type && type->releaseConfig) type->releaseConfig(widget.data);
+#endif
         free(config->buttons[index].fill_style);
     }
     free(config);
@@ -299,14 +308,14 @@ static bool parse_button_fill_style(JsonObject obj, ScreenButtonConfig* btn) {
                                        header.spacing < 8 ? header.spacing : 8);
     header.outline_width = fill_geometry_clamp(obj["widget_track_outline_width"] | 0, 0, 8);
     header.track_radius = fill_geometry_clamp(obj["widget_bar_track_radius"] | 4, 0, 64);
-    char colors[7][CONFIG_COLOR_MAX_LEN];
+    char color[CONFIG_COLOR_MAX_LEN];
     size_t bytes = sizeof(header);
     for (unsigned index = 0; index < 7; ++index) {
         if (index < 6) header.patterns[index] = fill_pattern_parse(obj[pattern_fields[index]] | "none");
-        parse_bindable_field(obj[color_fields[index]], colors[index],
+        parse_bindable_field(obj[color_fields[index]], color,
                              index < 5 ? CONFIG_COLOR_MAX_LEN : CONFIG_BINDABLE_SHORT_LEN, "#000000");
         header.color_offsets[index] = bytes;
-        bytes += strlen(colors[index]) + 1;
+        bytes += strlen(color) + 1;
     }
     header.bytes = bytes;
     ButtonFillStyle* style = nullptr;
@@ -315,13 +324,16 @@ static bool parse_button_fill_style(JsonObject obj, ScreenButtonConfig* btn) {
     if (!style) return false;
     memcpy(style, &header, sizeof(header));
     for (unsigned index = 0; index < 7; ++index) {
-        memcpy(reinterpret_cast<char*>(style) + header.color_offsets[index], colors[index], strlen(colors[index]) + 1);
+        parse_bindable_field(obj[color_fields[index]], color,
+                             index < 5 ? CONFIG_COLOR_MAX_LEN : CONFIG_BINDABLE_SHORT_LEN, "#000000");
+        memcpy(reinterpret_cast<char*>(style) + header.color_offsets[index], color, strlen(color) + 1);
     }
     btn->fill_style = style;
     return true;
 }
 
-static bool parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDefaults* defs) {
+static bool parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDefaults* defs,
+                         bool* owned_failure) {
     init_button_defaults(btn);
 
     btn->col = obj["col"] | (uint8_t)0;
@@ -358,13 +370,30 @@ static bool parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
             ? ICON_KIND_MONO : ICON_KIND_COLOR;
     }
     btn->icon_scale_pct = obj["icon_scale_pct"] | (uint8_t)0;
-    {
-        const char* ip = obj["icon_position"] | "";
-        if (ip[0] == 'l')      btn->icon_position = ICON_POS_LEFT;
-        else if (ip[0] == 'c') btn->icon_position = ICON_POS_CENTER;
-        else if (ip[0] == 'a') btn->icon_position = ICON_POS_ABOVE;
-        else                    btn->icon_position = defs ? defs->icon_position : ICON_POS_ABOVE;
+    btn->icon_badge_padding = defs ? defs->icon_badge_padding : DEFAULT_ICON_BADGE_PADDING;
+    if (!obj["icon_badge_padding"].isNull()) {
+        if (obj["icon_badge_padding"].is<uint8_t>() &&
+            obj["icon_badge_padding"].as<uint8_t>() <= MAX_ICON_BADGE_PADDING)
+            btn->icon_badge_padding = obj["icon_badge_padding"].as<uint8_t>();
+        else
+            LOGW(TAG, "Invalid icon badge padding; using device default");
     }
+    parse_bindable_field(obj["icon_badge_color"], btn->icon_badge_color, CONFIG_COLOR_MAX_LEN,
+                         btn_default(defs ? defs->icon_badge_color : nullptr, DEFAULT_ICON_BADGE_COLOR));
+    parse_bindable_field(obj["icon_color"], btn->icon_color, CONFIG_COLOR_MAX_LEN,
+                         btn_default(defs ? defs->icon_color : nullptr, DEFAULT_ICON_COLOR));
+    uint8_t position = defs ? defs->icon_position : DEFAULT_ICON_POSITION;
+    const char* icon_position = obj["icon_position"] | "";
+    if (icon_position[0] && !button_position_parse(icon_position, &position))
+        LOGW(TAG, "Invalid icon position: %s", icon_position);
+    btn->icon_position = static_cast<ButtonGroupIconPosition>(position);
+    position = static_cast<uint8_t>(ButtonWidgetPosition::Right);
+    const char* widget_position = obj["widget_position"] | "right";
+    if (!button_position_parse(widget_position, &position))
+        LOGW(TAG, "Invalid widget position: %s", widget_position);
+    btn->widget_position = static_cast<ButtonWidgetPosition>(position);
+    btn->group_size_pct = obj["group_size_pct"] | (uint8_t)0;
+    btn->rocker_group_beside = strcmp(obj["rocker_group_layout"] | "center", "beside") == 0;
     parse_ui_offset_field(obj["ui_offset"], &btn->ui_offset_x, &btn->ui_offset_y);
 
     // Appearance fields: button JSON → device button_defaults → hardcoded default
@@ -446,12 +475,22 @@ static bool parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
         if (wt && wt->parseConfig) {
             wt->parseConfig(obj, btn->widget.data);
         }
+        if (wt && wt->parseOwnedConfig && !wt->parseOwnedConfig(obj, btn->widget.data)) {
+            LOGE(TAG, "Cannot allocate configuration for widget %s", wtype);
+            if (owned_failure) *owned_failure = true;
+            return false;
+        }
     }
 #endif
 
     // Button state (tri-state: "enabled", "disabled", "hidden"; empty = enabled)
     strlcpy(btn->btn_state, obj["btn_state"] | "", CONFIG_BTN_STATE_MAX_LEN);
-    return parse_button_fill_style(obj, btn);
+    if (parse_button_fill_style(obj, btn)) return true;
+#if HAS_DISPLAY
+    const WidgetType* wt = widget_find(btn->widget.type);
+    if (wt && wt->releaseConfig) wt->releaseConfig(btn->widget.data);
+#endif
+    return false;
 }
 
 // ============================================================================
@@ -459,10 +498,27 @@ static bool parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
 // ============================================================================
 
 bool pad_config_init() {
-    if (g_fs_mounted) return true;
+    SemaphoreHandle_t mutex = g_mutation_mutex.load(std::memory_order_acquire);
+    if (!mutex) {
+        mutex = xSemaphoreCreateMutex();
+        if (!mutex) {
+            LOGE(TAG, "Failed to create pad mutation mutex");
+            return false;
+        }
+        g_mutation_mutex.store(mutex, std::memory_order_release);
+    }
+    if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) {
+        LOGE(TAG, "Failed to lock pad configuration for initialization");
+        return false;
+    }
+    if (g_fs_mounted) {
+        xSemaphoreGive(mutex);
+        return true;
+    }
 
     if (!storage_mount()) {
         LOGW(TAG, "Storage mount failed — pad configs will not persist");
+        xSemaphoreGive(mutex);
         return false;
     }
     g_fs_mounted = true;
@@ -478,13 +534,17 @@ bool pad_config_init() {
         char path[32];
         pad_config_path(i, path, sizeof(path));
         if (Storage.exists(path)) {
-            PadConfig* cfg = pad_config_load_from_flash(i);
+            bool owned_failure = false;
+            PadConfig* cfg = pad_config_load_from_flash(i, false, &owned_failure);
             if (cfg) {
                 g_cache[i] = cfg;
                 publish_eligibility(i, cfg->button_count > 0 ||
                                        cfg->pad_action_count > 0);
                 any_loaded = true;
                 LOGT(TAG, "Cached pad %u", i);
+            } else if (owned_failure) {
+                publish_eligibility(i, true);
+                any_loaded = true;
             }
         }
     }
@@ -498,7 +558,26 @@ bool pad_config_init() {
         LOGI(TAG, "Configs cached, gen=%u", g_generation);
     }
 
+    xSemaphoreGive(mutex);
     return true;
+}
+
+bool pad_config_lock_mutations() {
+    SemaphoreHandle_t mutex = g_mutation_mutex.load(std::memory_order_acquire);
+    if (!mutex || xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) {
+        LOGW(TAG, "Pad configuration lock unavailable");
+        return false;
+    }
+    if (!g_fs_mounted) {
+        xSemaphoreGive(mutex);
+        LOGW(TAG, "Pad configuration is not initialized");
+        return false;
+    }
+    return true;
+}
+
+void pad_config_unlock_mutations() {
+    xSemaphoreGive(g_mutation_mutex.load(std::memory_order_acquire));
 }
 
 // Internal: read and parse page config from flash. Only call from a task
@@ -554,13 +633,17 @@ static int select_template_buttons(const PadConfig& out, const PadConfig& tpl,
 
 // Merge buttons from a template pad into empty grid positions.
 // Target pad's own buttons always win on col/row conflict.
-static bool merge_template_buttons(uint8_t page, PadConfig** out_ptr) {
+static bool merge_template_buttons(uint8_t page, PadConfig** out_ptr, bool* owned_failure = nullptr) {
     PadConfig* out = *out_ptr;
     const int8_t tpl = out->template_pad;
     if (tpl < 0 || tpl >= MAX_PADS || tpl == (int8_t)page) return true;
 
-    PadConfig* tpl_cfg = pad_config_load_from_flash((uint8_t)tpl, true);
-    if (!tpl_cfg) return true;
+    PadConfig* tpl_cfg = pad_config_load_from_flash((uint8_t)tpl, true, owned_failure);
+    if (!tpl_cfg) {
+        if (!pad_config_exists((uint8_t)tpl)) return true;
+        LOGE(TAG, "Pad %u: template pad %d could not be loaded", page, tpl);
+        return false;
+    }
     uint8_t selected[MAX_PAD_BUTTONS];
     const int merged = select_template_buttons(*out, *tpl_cfg, selected);
     if (merged < 0 || !pad_config_resize(out_ptr, out->button_count + merged)) {
@@ -578,6 +661,10 @@ static bool merge_template_buttons(uint8_t page, PadConfig** out_ptr) {
             ScreenButtonConfig& inherited = tpl_cfg->buttons[selected[index]];
             memcpy(&out->buttons[insertion + index], &inherited, sizeof(ScreenButtonConfig));
             inherited.fill_style = nullptr;
+#if HAS_DISPLAY
+            const WidgetType* type = widget_find(inherited.widget.type);
+            if (type && type->releaseConfig) memset(inherited.widget.data, 0, sizeof(inherited.widget.data));
+#endif
         }
         out->main_button_count += merged;
         out->button_count += merged;
@@ -608,7 +695,7 @@ static bool merge_template_buttons(uint8_t page, PadConfig** out_ptr) {
     return true;
 }
 
-static PadConfig* pad_config_parse(uint8_t page, JsonDocument& doc) {
+static PadConfig* pad_config_parse(uint8_t page, JsonDocument& doc, bool* owned_failure = nullptr) {
     (void)page;
     JsonArray buttons = doc["buttons"].as<JsonArray>();
     JsonArray overlay_buttons = doc["overlay_buttons"].as<JsonArray>();
@@ -693,8 +780,8 @@ static PadConfig* pad_config_parse(uint8_t page, JsonDocument& doc) {
 
     out->button_count = 0;
     for (JsonObject btn_obj : buttons) {
-        if (!parse_button(btn_obj, &out->buttons[out->button_count], defs)) {
-            LOGE(TAG, "Pad %u: OOM loading button styling", page);
+        if (!parse_button(btn_obj, &out->buttons[out->button_count], defs, owned_failure)) {
+            LOGE(TAG, "Pad %u: failed to load button configuration", page);
             pad_config_destroy(out);
             return nullptr;
         }
@@ -702,8 +789,8 @@ static PadConfig* pad_config_parse(uint8_t page, JsonDocument& doc) {
     }
     out->main_button_count = out->button_count;
     for (JsonObject btn_obj : overlay_buttons) {
-        if (!parse_button(btn_obj, &out->buttons[out->button_count], defs)) {
-            LOGE(TAG, "Pad %u: OOM loading button styling", page);
+        if (!parse_button(btn_obj, &out->buttons[out->button_count], defs, owned_failure)) {
+            LOGE(TAG, "Pad %u: failed to load button configuration", page);
             pad_config_destroy(out);
             return nullptr;
         }
@@ -715,7 +802,7 @@ static PadConfig* pad_config_parse(uint8_t page, JsonDocument& doc) {
     return out;
 }
 
-static PadConfig* pad_config_load_from_flash(uint8_t page, bool skip_template) {
+static PadConfig* pad_config_load_from_flash(uint8_t page, bool skip_template, bool* owned_failure) {
     if (page >= MAX_PADS || !g_fs_mounted) return nullptr;
     char path[32];
     pad_config_path(page, path, sizeof(path));
@@ -738,8 +825,8 @@ static PadConfig* pad_config_load_from_flash(uint8_t page, bool skip_template) {
         LOGE(TAG, "Pad %u: JSON parse error: %s", page, error.c_str());
         return nullptr;
     }
-    PadConfig* config = pad_config_parse(page, doc);
-    if (config && !skip_template && !merge_template_buttons(page, &config)) {
+    PadConfig* config = pad_config_parse(page, doc, owned_failure);
+    if (config && !skip_template && !merge_template_buttons(page, &config, owned_failure)) {
         pad_config_destroy(config);
         return nullptr;
     }
@@ -749,9 +836,14 @@ static PadConfig* pad_config_load_from_flash(uint8_t page, bool skip_template) {
 // Update the in-RAM cache for a page (parse from flash).
 // Call from a task with internal-RAM stack (web server, main task).
 static bool cache_update(uint8_t page) {
-    PadConfig* replacement = pad_config_load_from_flash(page);
+    bool owned_failure = false;
+    PadConfig* replacement = pad_config_load_from_flash(page, false, &owned_failure);
     if (!replacement) {
         LOGE(TAG, "Pad %u: cache load failed", page);
+        if (owned_failure) {
+            cache_replace(page, nullptr);
+            publish_eligibility(page, true);
+        }
         return false;
     }
     cache_replace(page, replacement);
@@ -761,7 +853,8 @@ static bool cache_update(uint8_t page) {
 }
 
 void pad_config_rebuild_all_caches() {
-    if (!g_fs_mounted) return;
+    const PadConfigMutationGuard guard;
+    if (!guard) return;
     bool refresh_ok = true;
     for (uint8_t i = 0; i < MAX_PADS; i++) {
         if (!pad_config_exists(i)) continue;
@@ -811,41 +904,72 @@ bool pad_config_get_data_stream_snapshot(uint8_t page,
     out->button_count = config->button_count;
     for (uint8_t button = 0; button < out->button_count; button++) {
         out->widgets[button] = config->buttons[button].widget;
+#if HAS_DISPLAY
+        const WidgetType* type = widget_find(out->widgets[button].type);
+        if (type && !type->getStreamParams) {
+            out->widgets[button].type[0] = '\0';
+            memset(out->widgets[button].data, 0, sizeof(out->widgets[button].data));
+        }
+#endif
     }
     pad_config_release(config);
     return true;
 }
 
-static const char* validate_pad_button_icon(JsonObjectConst pad, JsonObjectConst button,
-                                           uint8_t page, const char* layer) {
+static const char* validate_pad_icon_artifact(JsonObjectConst pad, JsonObjectConst button,
+                                              JsonObjectConst icon, uint8_t page,
+                                              const char* layer, uint8_t slot) {
     const int template_page = pad["template_pad"] | -1;
-    JsonVariantConst icon_value = button["icon"];
-    if (icon_value.isNull()) return nullptr;
-    if (!icon_value.is<JsonObjectConst>()) return "icon must be an object";
-    JsonObjectConst icon = icon_value.as<JsonObjectConst>();
     const char* source_id = icon["source_id"] | "";
     const char* catalog_id = icon.containsKey("catalog_id")
         ? icon["catalog_id"].as<const char*>() : nullptr;
     const char* kind_name = icon["kind"] | "";
-    if (!icon_store_source_matches_metadata(source_id, catalog_id, kind_name))
-        return "icon source is missing or does not match kind and optional catalog_id";
     const uint8_t col = button["col"] | (uint8_t)0;
     const uint8_t row = button["row"] | (uint8_t)0;
     const uint8_t col_span = button["col_span"] | (uint8_t)1;
     const uint8_t row_span = button["row_span"] | (uint8_t)1;
     if ((uint16_t)col + col_span > (uint8_t)(pad["cols"] | (uint8_t)3) ||
-        (uint16_t)row + row_span > (uint8_t)(pad["rows"] | (uint8_t)3)) return nullptr;
-    const IconKind kind = strcmp(kind_name, "mono") == 0
-        ? ICON_KIND_MONO : ICON_KIND_COLOR;
-    const uint32_t render_key = pad_icon_render_key(pad, button);
+        (uint16_t)row + row_span > (uint8_t)(pad["rows"] | (uint8_t)3))
+        return icon_store_source_matches_metadata(source_id, catalog_id, kind_name)
+            ? nullptr : "icon source is missing or does not match kind and optional catalog_id";
+    const uint32_t render_key = slot ? pad_option_icon_render_key(pad, button, slot)
+                                     : pad_icon_render_key(pad, button);
     char key[CONFIG_ICON_KEY_MAX_LEN];
-    icon_store_build_key(page, layer, col, row, key, sizeof(key));
-    if (icon_store_artifact_matches(key, source_id, kind, render_key)) return nullptr;
+    if (slot) icon_store_build_option_key(page, layer, col, row, slot, key, sizeof(key));
+    else icon_store_build_key(page, layer, col, row, key, sizeof(key));
+    char fallback[CONFIG_ICON_KEY_MAX_LEN] = {};
     if (strcmp(layer, "main") == 0 && template_page >= 0 && template_page < MAX_PADS) {
-        icon_store_build_key((uint8_t)template_page, "main", col, row, key, sizeof(key));
-        if (icon_store_artifact_matches(key, source_id, kind, render_key)) return nullptr;
+        if (slot) icon_store_build_option_key((uint8_t)template_page, "main", col, row, slot, fallback, sizeof(fallback));
+        else icon_store_build_key((uint8_t)template_page, "main", col, row, fallback, sizeof(fallback));
     }
+    const IconArtifactValidation result = icon_store_validate_artifact(
+        key, fallback[0] ? fallback : nullptr, source_id, catalog_id, kind_name, render_key);
+    if (result == ICON_ARTIFACT_VALID) return nullptr;
+    if (result == ICON_ARTIFACT_INVALID_SOURCE)
+        return "icon source is missing or does not match kind and optional catalog_id";
     return "icon PNG is not prepared for its source, position, and layout; save through the portal";
+}
+
+static const char* validate_pad_button_icon(JsonObjectConst pad, JsonObjectConst button,
+                                           uint8_t page, const char* layer) {
+    JsonVariantConst icon = button["icon"];
+    if (!icon.isNull()) {
+        if (!icon.is<JsonObjectConst>()) return "icon must be an object";
+        const char* error = validate_pad_icon_artifact(pad, button, icon.as<JsonObjectConst>(), page, layer, 0);
+        if (error) return error;
+    }
+    if (strcmp(button["widget_type"] | "", "option_selector") != 0) return nullptr;
+    for (uint8_t slot = 1; slot <= 5; ++slot) {
+        char field[32];
+        if (slot == 1) snprintf(field, sizeof(field), "widget_option_icon");
+        else snprintf(field, sizeof(field), "widget_option_icon_%u", slot);
+        JsonVariantConst option = button[field];
+        if (option.isNull()) continue;
+        if (!option.is<JsonObjectConst>()) return "option icon must be an object";
+        const char* error = validate_pad_icon_artifact(pad, button, option.as<JsonObjectConst>(), page, layer, slot);
+        if (error) return error;
+    }
+    return nullptr;
 }
 
 static const char* validate_inherited_icon_artifacts(JsonObjectConst pad, uint8_t page,
@@ -863,35 +987,23 @@ static const char* validate_inherited_icon_artifacts(JsonObjectConst pad, uint8_
     return nullptr;
 }
 
-static uint8_t collect_icon_sources(const PadConfig* config,
-                                    char source_ids[MAX_PAD_BUTTONS][CONFIG_ICON_SOURCE_ID_MAX_LEN]) {
-    if (!config) return 0;
-    uint8_t count = 0;
-    for (uint8_t index = 0; index < config->button_count; ++index) {
-        const char* source_id = config->buttons[index].icon_source_id;
-        if (!source_id[0]) continue;
-        bool duplicate = false;
-        for (uint8_t found = 0; found < count; ++found) {
-            if (strcmp(source_ids[found], source_id) == 0) duplicate = true;
-        }
-        if (!duplicate && count < MAX_PAD_BUTTONS) {
-            strlcpy(source_ids[count++], source_id, CONFIG_ICON_SOURCE_ID_MAX_LEN);
-        }
-    }
-    return count;
-}
-
 bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
                          const char** error) {
     if (error) *error = nullptr;
     if (page >= MAX_PADS) return false;
-    if (!g_fs_mounted) return false;
     if (!json || len == 0 || len > 64 * 1024) return false;
+    const PadConfigMutationGuard guard;
+    if (!guard) {
+        if (error) *error = "pad configuration unavailable";
+        return false;
+    }
 
+    [[maybe_unused]] const uint32_t started_ms = millis();
     BasicJsonDocument<PsramJsonAllocator> doc(len * 2 + 256);
     if (deserializeJson(doc, json, len)) return false;
     PadConfig* replacement = pad_config_parse(page, doc);
     if (!replacement) return false;
+    LOGI(TAG, "Pad %u save parsed at %lu ms", page, (unsigned long)(millis() - started_ms));
     auto reject_icon_error = [&](const char* icon_error) {
         if (error) *error = icon_error;
         pad_config_release(replacement);
@@ -906,6 +1018,8 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
     }
     if (replacement->template_pad >= 0 && replacement->template_pad != page) {
         PadConfig* template_config = pad_config_load_from_flash(replacement->template_pad, true);
+        if (!template_config && pad_config_exists(replacement->template_pad))
+            return reject_icon_error("could not load template pad");
         if (template_config) {
             size_t template_length = 0;
             char* template_json = pad_config_read_raw(replacement->template_pad, &template_length);
@@ -939,19 +1053,16 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
         pad_config_release(replacement);
         return false;
     }
-
-    const PadConfig* previous = pad_config_acquire(page);
-    char previous_sources[MAX_PAD_BUTTONS][CONFIG_ICON_SOURCE_ID_MAX_LEN] = {};
-    const uint8_t previous_source_count = collect_icon_sources(previous, previous_sources);
+    LOGI(TAG, "Pad %u save icons validated at %lu ms", page, (unsigned long)(millis() - started_ms));
 
     char path[32];
     pad_config_path(page, path, sizeof(path));
     if (!storage_write_atomic(path, json, len)) {
         LOGE(TAG, "Pad %u: atomic JSON write failed", page);
         pad_config_release(replacement);
-        pad_config_release(previous);
         return false;
     }
+    LOGI(TAG, "Pad %u save written at %lu ms", page, (unsigned long)(millis() - started_ms));
 
     // Update RAM cache BEFORE bumping generation so the LVGL task
     // always reads fresh data when it detects the new generation.
@@ -963,6 +1074,7 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
 #if HAS_DISPLAY
     icon_store_preload_pad(page);
 #endif
+    LOGI(TAG, "Pad %u save icons preloaded at %lu ms", page, (unsigned long)(millis() - started_ms));
 
     // Also refresh any pad that references this page as its template_pad
     bool refresh_ok = true;
@@ -980,38 +1092,34 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
     }
 
     g_generation++;
+    LOGI(TAG, "Pad %u save dependents refreshed at %lu ms", page, (unsigned long)(millis() - started_ms));
 
     // Update fs_health stats
     storage_publish_usage(false);
+    LOGI(TAG, "Pad %u save storage usage updated at %lu ms", page, (unsigned long)(millis() - started_ms));
 
     LOGI(TAG, "Pad %u saved (%u bytes, gen=%u)", page, (unsigned)len, g_generation);
     if (!refresh_ok) {
         LOGE(TAG, "Pad %u: dependent cache refresh incomplete", page);
     }
 #if HAS_DISPLAY
-    if (refresh_ok) icon_store_cleanup_pad_icons(page);
+    if (refresh_ok) icon_store_retire_unused_pad_icons(page);
 #endif
-    for (uint8_t source = 0; source < previous_source_count; ++source)
-        icon_store_source_delete_if_unreferenced(previous_sources[source]);
-    pad_config_release(previous);
+    LOGI(TAG, "Pad %u save cleanup finished at %lu ms", page, (unsigned long)(millis() - started_ms));
     return refresh_ok;
 }
 
 bool pad_config_delete(uint8_t page) {
     if (page >= MAX_PADS) return false;
-    if (!g_fs_mounted) return false;
+    const PadConfigMutationGuard guard;
+    if (!guard) return false;
 
     char path[32];
     pad_config_path(page, path, sizeof(path));
 
-    const PadConfig* previous = pad_config_acquire(page);
-    char previous_sources[MAX_PAD_BUTTONS][CONFIG_ICON_SOURCE_ID_MAX_LEN] = {};
-    const uint8_t previous_source_count = collect_icon_sources(previous, previous_sources);
-
     bool existed = Storage.exists(path);
     if (existed && !Storage.remove(path)) {
         LOGE(TAG, "Pad %u: delete failed", page);
-        pad_config_release(previous);
         return false;
     }
 
@@ -1042,9 +1150,6 @@ bool pad_config_delete(uint8_t page) {
     if (!refresh_ok) {
         LOGE(TAG, "Pad %u: dependent cache refresh incomplete", page);
     }
-    for (uint8_t source = 0; source < previous_source_count; ++source)
-        icon_store_source_delete_if_unreferenced(previous_sources[source]);
-    pad_config_release(previous);
     return refresh_ok;
 }
 

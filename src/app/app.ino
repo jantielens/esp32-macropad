@@ -2,6 +2,9 @@
 #include "board_config.h"
 #include "config_manager.h"
 #include "time_service.h"
+#if HAS_EXTERNAL_DATA
+#include "external_data.h"
+#endif
 #include "alarm_manager.h"
 #include "web_portal.h"
 #include "log_manager.h"
@@ -236,7 +239,6 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 	}
 	boot_actions_init();
 	pad_block_init();
-	void list_provider_pads_init();
 	list_provider_pads_init();
 	icon_store_init();
 	set_boot_splash_status("Loading icons...");
@@ -756,6 +758,9 @@ void setup()
 
 	g_boot_entered_setup_ap = enter_setup_ap;
 	g_setup_ap_active = enter_setup_ap;
+#if HAS_EXTERNAL_DATA
+	external_data_init(device_config.external_data);
+#endif
 	web_portal_init(&device_config);
 	portal_idle_init();
 	portal_idle_set_timeout_seconds(device_config.portal_idle_timeout_seconds);

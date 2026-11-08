@@ -144,6 +144,8 @@ def reset_pad_fixtures(server, scenario="normal"):
                  "min": 0, "max": 100, "default": "0", "help": "0 = use device volume; 1-100 overrides it."}]})
     fixture["binding_schema"]["schemes"].append({"name": "ha", "min_params": 1, "max_params": 3,
         "widget_max_params": 2, "format_param": 2, "validation_mode": 0, "free_form": True, "keys": []})
+    fixture["binding_schema"]["schemes"].append({"name": "ext", "min_params": 1, "max_params": 3,
+        "widget_max_params": 2, "format_param": 2, "validation_mode": 0, "free_form": True, "keys": []})
     fixture["binding_schema"]["schemes"].append({"name": "alarm", "min_params": 1, "max_params": 1,
         "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": False,
         "keys": ["1_time", "1_enabled", "1_state", "1_ready", "active_id", "1_hour", "1_minute", "1_minutes",
@@ -250,7 +252,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
 
     @staticmethod
     def _valid_icon_key(key):
-        return re.fullmatch(r"pad_(?:[0-9]|1[0-5])_(?:main|overlay)_[0-7]_[0-7]", key) is not None
+        return re.fullmatch(r"pad_(?:[0-9]|1[0-5])_(?:main|overlay)_[0-7]_[0-7](?:_opt_[1-5])?", key) is not None
 
     def _page(self, query):
         value = query.get("page", [""])[0]
@@ -277,6 +279,11 @@ class PortalHandler(SimpleHTTPRequestHandler):
             self._serve_file(EPAPER_WEB_DIR / "epaper_init.js")
         elif path == "/portal-logs.js":
             self._serve_file(APP_WEB_DIR / "portal_logs.js")
+        elif path == "/portal-external-data.js":
+            if self._profile() in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
+                self._serve_file(APP_WEB_DIR / "portal_external_data.js")
+            else:
+                self.send_error(404, "External data unavailable")
         elif path == "/portal-epaper-refresh.js":
             if self._profile() == "crowpanel-4.2-interactive":
                 self._serve_file(APP_WEB_DIR / "portal_epaper_refresh.js")
@@ -305,6 +312,10 @@ class PortalHandler(SimpleHTTPRequestHandler):
         elif path == "/api/config":
             config = copy.deepcopy(self.server.mock_config)
             config["caps"]["ha_live"] = self._profile() == "esp32-p4-lcd4b"
+            if self._profile() in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
+                config.setdefault("external_data", [])
+            else:
+                config.pop("external_data", None)
             config.setdefault("mqtt_host", "broker.example.test" if self._mqtt_enabled() else "")
             config.setdefault("ha_url", "")
             config["ha_token"] = ""
@@ -479,19 +490,26 @@ class PortalHandler(SimpleHTTPRequestHandler):
                     self._serve_json(copy.deepcopy(source))
         elif path == "/api/icons/installed":
             page_query = parse_qs(parsed.query, keep_blank_values=True)
-            if "pages" not in page_query:
+            if "keys" in page_query:
+                keys = page_query["keys"][0].split(",")
+                if "pages" in page_query or len(keys) > 4 or any(not self._valid_icon_key(key) for key in keys):
+                    self._serve_json({"error": "Invalid keys parameter"}, 400)
+                    return
+                pages = None
+            elif "pages" not in page_query:
                 self._serve_json({"icons": sorted(self.server.mock_icons), "cache_count": 0})
                 return
-            value = page_query["pages"][0]
-            if (len(value) > 64 or not re.fullmatch(r"[0-9]+(?:,[0-9]+)*", value) or
-                    any(int(page) >= 16 for page in value.split(","))):
-                self._serve_json({"error": "Invalid pages parameter"}, 400)
-                return
-            pages = {int(page) for page in value.split(",")}
+            else:
+                value = page_query["pages"][0]
+                if (len(value) > 64 or not re.fullmatch(r"[0-9]+(?:,[0-9]+)*", value) or
+                        any(int(page) >= 16 for page in value.split(","))):
+                    self._serve_json({"error": "Invalid pages parameter"}, 400)
+                    return
+                pages = {int(page) for page in value.split(",")}
             artifacts = {}
             for key, metadata in sorted(self.server.mock_icon_metadata.items()):
                 png = self.server.mock_icons.get(key, b"")
-                if (int(key.split("_")[1]) in pages and len(png) >= 24 and
+                if (((key in keys) if pages is None else (int(key.split("_")[1]) in pages)) and len(png) >= 24 and
                         png.startswith(b"\x89PNG\r\n\x1a\n") and
                         png[8:16] == b"\x00\x00\x00\rIHDR" and
                         int.from_bytes(png[16:20], "big") == metadata["width"] and
@@ -542,11 +560,13 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 schema["schemes"] = [scheme for scheme in schema["schemes"] if scheme["name"] != "mqtt"]
             if self._profile() != "esp32-p4-lcd4b":
                 schema["schemes"] = [scheme for scheme in schema["schemes"] if scheme["name"] != "ha"]
+            if self._profile() == "reterminal-e1003-frame":
+                schema["schemes"] = [scheme for scheme in schema["schemes"] if scheme["name"] != "ext"]
             if "docs" in query:
                 # Generated by: build/host-tests/tests/test_binding_schema_full --emit-json
                 docs = json.loads((MOCK_DIR / "binding-docs.json").read_text(encoding="utf-8"))
                 available = {scheme["name"] for scheme in schema["schemes"]}
-                docs["schemes"] = [s for s in docs["schemes"] if s["name"] not in ("alarm", "ha") or s["name"] in available]
+                docs["schemes"] = [s for s in docs["schemes"] if s["name"] not in ("alarm", "ha", "ext") or s["name"] in available]
                 mqtt_scheme = next((scheme for scheme in docs["schemes"] if scheme["name"] == "mqtt"), None)
                 if mqtt_scheme:
                     if not self._mqtt_configured():
@@ -612,6 +632,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
         # Fragment API — production fragments take precedence.
         elif path.startswith("/api/section/"):
             fragment = path[len("/api/section/"):]
+            if fragment == "external-data" and self._profile() not in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
+                self.send_error(404, "External data unavailable")
+                return
             if fragment == "fonts" and not self._fonts_available():
                 self.send_error(404, "Fonts unavailable")
                 return
@@ -969,6 +992,18 @@ class PortalHandler(SimpleHTTPRequestHandler):
 
                 def resolve_value(value):
                     source = names.get(value[5:-1], value) if value.startswith("[pad:") and value.endswith("]") else value
+                    if source.startswith("[ext:") and source.endswith("]"):
+                        params, _, fallback = source[5:-1].partition("|")
+                        parts = params.split(";")
+                        configured = next((item for item in self.server.mock_config.get("external_data", [])
+                                           if item["name"] == parts[0]), None)
+                        if configured:
+                            path = parts[1] if len(parts) > 1 else ""
+                            if path == ".@state":
+                                return configured["state"]
+                            if parts[0] == "weather" and path == "current.temperature":
+                                return "21.3"
+                        return fallback or "---"
                     return values.get(source, "---" if "[" in source else source)
 
                 self._serve_json({"resolved": [{"binding": value, "value": resolve_value(value)} for value in bindings],
@@ -1002,6 +1037,32 @@ class PortalHandler(SimpleHTTPRequestHandler):
         if path == "/api/config":
             try:
                 update = json.loads(body.decode("utf-8"))
+                if "external_data" in update:
+                    sources = update.pop("external_data")
+                    if not isinstance(sources, list) or len(sources) > 4:
+                        self._serve_json({"success": False, "message": "Invalid external data sources"}, 400)
+                        return
+                    saved, names = [], set()
+                    for source in sources:
+                        if not isinstance(source, dict):
+                            self._serve_json({"success": False, "message": "Invalid external data sources"}, 400)
+                            return
+                        name = source.get("name")
+                        if not isinstance(name, str):
+                            self._serve_json({"success": False, "message": "Invalid external data sources"}, 400)
+                            return
+                        url = source.get("url")
+                        interval = source.get("refresh_seconds", 1800)
+                        if (not re.fullmatch(r"[A-Za-z0-9_-]{1,32}", name)
+                                or name in names or not isinstance(url, str) or len(url) > 511
+                                or not url.startswith(("http://", "https://"))
+                                or type(interval) is not int or not 1 <= interval <= 86400):
+                            self._serve_json({"success": False, "message": "Invalid external data sources"}, 400)
+                            return
+                        names.add(name)
+                        saved.append({"name": name, "url": url, "refresh_seconds": interval,
+                                      "state": "healthy" if name == "weather" else "waiting"})
+                    update["external_data"] = saved
                 if update.pop("ha_token", ""):
                     self.server.mock_config["ha_token_set"] = True
                 if update.pop("save_current_volume", False):
@@ -1193,6 +1254,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
             flags.add("HAS_HA_LIVE")
         if self._profile() == "crowpanel-4.2-interactive":
             flags = {"HAS_DISPLAY", "HAS_MQTT"}
+        if "HAS_DISPLAY" in flags:
+            flags.add("HAS_FACE_WIDGET")
         if self._profile() == "jc3248w535":
             flags.discard("HAS_SOUND_PLAYER")
         for line in expand_bundle(APP_WEB_DIR / manifest).splitlines():
@@ -1249,7 +1312,12 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 {"id": "alarm-behavior", "display_name": "Behavior", "portal_script": "/portal_alarms.js"}]})
         for category in nav["categories"]:
             if category["id"] == "pads":
+                if profile in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
+                    next(item for item in category["items"] if item["id"] == "pad-editor")["portal_script"] = "/portal-external-data.js"
                 category["items"].append({"id": "dialog-appearance", "display_name": "Dialog appearance"})
+            if category["id"] == "connectivity" and profile in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
+                category["items"].append({"id": "external-data", "display_name": "External Data",
+                                          "portal_script": "/portal-external-data.js"})
             if category["id"] == "display" and profile == "crowpanel-4.2-interactive":
                 category["items"].append({"id": "epaper-refresh", "display_name": "E-paper Presentation",
                                           "portal_script": "/portal-epaper-refresh.js"})

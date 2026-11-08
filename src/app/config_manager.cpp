@@ -15,6 +15,9 @@
 #include "time_service.h"
 #include "ota_activity.h"
 #include "wifi_manager.h"
+#if HAS_EXTERNAL_DATA
+#include "external_data.h"
+#endif
 #if HAS_DISPLAY
 #include "device_dialog.h"
 #include "psram_json_allocator.h"
@@ -34,6 +37,9 @@
 #define CONFIG_NAMESPACE "device_cfg"
 
 // Preferences keys
+#if HAS_EXTERNAL_DATA
+#define KEY_EXTERNAL_DATA  "external_data"
+#endif
 #define KEY_WIFI_SSID      "wifi_ssid"
 #define KEY_WIFI_PASS      "wifi_pass"
 #define KEY_WIFI_FAILURE   "wifi_fail"
@@ -359,6 +365,9 @@ bool config_manager_load(DeviceConfig *config) {
 
 		strlcpy(config->wifi_failure_mode, "ap", sizeof(config->wifi_failure_mode));
 		config->ap_password[0] = '\0';
+#if HAS_EXTERNAL_DATA
+		config->external_data = {};
+#endif
 
 		#if HAS_BLE
 		config->ble_burst_count = BLE_TELEMETRY_DEFAULT_BURST_COUNT;
@@ -481,6 +490,19 @@ bool config_manager_load(DeviceConfig *config) {
 		}
 		
 		// Load WiFi settings
+#if HAS_EXTERNAL_DATA
+		if (preferences.isKey(KEY_EXTERNAL_DATA)) {
+				if (preferences.getBytesLength(KEY_EXTERNAL_DATA) != sizeof(config->external_data) ||
+						preferences.getBytes(KEY_EXTERNAL_DATA, &config->external_data,
+								sizeof(config->external_data)) != sizeof(config->external_data) ||
+						!external_data_config_valid(config->external_data)) {
+						LOGE("Config", "Invalid stored external data sources");
+						config->external_data = {};
+						preferences.end();
+						return false;
+				}
+		}
+#endif
 		preferences.getString(KEY_WIFI_SSID, config->wifi_ssid, CONFIG_SSID_MAX_LEN);
 		preferences.getString(KEY_WIFI_PASS, config->wifi_password, CONFIG_PASSWORD_MAX_LEN);
 		preferences.getString(KEY_WIFI_FAILURE, config->wifi_failure_mode, CONFIG_WIFI_FAILURE_MODE_MAX_LEN);
@@ -708,8 +730,11 @@ bool config_manager_load(DeviceConfig *config) {
 		return true;
 }
 
-// Save configuration to NVS
-bool config_manager_save(const DeviceConfig *config) {
+#if HAS_EXTERNAL_DATA
+static bool save_config_locked(DeviceConfig *config, const ExternalDataConfig* external_override) {
+#else
+static bool save_config_locked(const DeviceConfig *config) {
+#endif
 		if (!config) {
 				LOGE("Config", "Save failed: NULL pointer");
 				return false;
@@ -719,12 +744,13 @@ bool config_manager_save(const DeviceConfig *config) {
 				LOGE("Config", "Save failed: Invalid config");
 				return false;
 		}
-
-		ConfigSaveGuard save_progress_guard;
-		if (!save_progress_guard.begin()) {
-				LOGW("Config", "Save rejected: another write, update or network transition is active");
+#if HAS_EXTERNAL_DATA
+		const ExternalDataConfig& external = external_override ? *external_override : config->external_data;
+		if (!external_data_config_valid(external)) {
+				LOGE("Config", "Save failed: invalid external data sources");
 				return false;
 		}
+#endif
 
 		LOGT("Config", "Save start");
 		// ESP32-P4 USB CDC keeps its TX ring buffer in external RAM. Let the
@@ -906,15 +932,29 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putUInt(KEY_MAGIC, CONFIG_MAGIC);
 		const char* timezone = config->timezone[0] ? config->timezone : "UTC0";
 		const bool timezone_saved = preferences.putString(KEY_TIMEZONE, timezone) == strlen(timezone);
-		preferences.end();
 		#if !HAS_AUDIO
 		const bool volume_saved = true;
 		#endif
 		if (!timezone_saved || !boot_font_saved || !boot_text_saved ||
 				!boot_background_saved || !boot_logo_saved || !brightness_saved || !volume_saved) {
 				LOGE("Config", "Save failed: one or more configuration fields were not persisted");
+				preferences.end();
 				return false;
 		}
+#if HAS_EXTERNAL_DATA
+		if (preferences.putBytes(KEY_EXTERNAL_DATA, &external, sizeof(external)) != sizeof(external)) {
+				LOGE("Config", "Failed to persist external data sources");
+				preferences.end();
+				return false;
+		}
+#endif
+		preferences.end();
+#if HAS_EXTERNAL_DATA
+		if (external_override) {
+				config->external_data = *external_override;
+				external_data_configure(config->external_data);
+		}
+#endif
 		time_service_set_timezone(timezone);
 		#if HAS_DISPLAY
 		device_dialog_set_templates(config->dialog_appearance);
@@ -924,6 +964,49 @@ bool config_manager_save(const DeviceConfig *config) {
 		LOGI("Config", "Save complete");
 		return true;
 }
+
+// Save configuration to NVS
+#if HAS_EXTERNAL_DATA
+bool config_manager_save(DeviceConfig *config, const ExternalDataConfig* external_override) {
+#else
+bool config_manager_save(const DeviceConfig *config) {
+#endif
+		ConfigSaveGuard guard;
+		if (!guard.begin()) {
+				LOGW("Config", "Save rejected: another write, update or network transition is active");
+				return false;
+		}
+#if HAS_EXTERNAL_DATA
+		return save_config_locked(config, external_override);
+#else
+		return save_config_locked(config);
+#endif
+}
+
+#if HAS_EXTERNAL_DATA && HAS_MCP
+bool config_manager_copy_external_sources(const DeviceConfig *config, ExternalDataConfig& snapshot) {
+		if (!config) return false;
+		bool expected = false;
+		if (!g_config_save_in_progress.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+				return false;
+		snapshot = config->external_data;
+		g_config_save_in_progress.store(false, std::memory_order_release);
+		return true;
+}
+
+ExternalDataSaveResult config_manager_save_external_source(DeviceConfig *config,
+		const ExternalDataSourceUpdate& update, ExternalDataConfig& candidate) {
+		ConfigSaveGuard guard;
+		if (!guard.begin()) {
+				LOGW("Config", "External source update rejected: another write, update or network transition is active");
+				return EXTERNAL_DATA_SAVE_FAILED;
+		}
+		if (!config) return EXTERNAL_DATA_SAVE_FAILED;
+		candidate = config->external_data;
+		if (!external_data_apply_update(candidate, update)) return EXTERNAL_DATA_SAVE_INVALID;
+		return save_config_locked(config, &candidate) ? EXTERNAL_DATA_SAVE_OK : EXTERNAL_DATA_SAVE_FAILED;
+}
+#endif
 
 // Recursively remove a directory tree on the active Storage backend.
 // Returns true if `path` no longer exists (or never did) after the call.

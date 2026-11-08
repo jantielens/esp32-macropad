@@ -16,6 +16,7 @@ def load_widgets(path=MANIFEST):
                            (APP / "board_config.h").read_text(), re.MULTILINE))
     types = set()
     sources = set()
+    portal_asset_gates = {}
     if not isinstance(widgets, list):
         raise ValueError("Widget manifest must be a list")
     for widget in widgets:
@@ -35,6 +36,9 @@ def load_widgets(path=MANIFEST):
         assets = [(widget["source"], APP, ".cpp")]
         portal = widget.get("portal")
         if portal is not None:
+            portal_gates = portal.get("gates", [])
+            if not isinstance(portal_gates, list) or any(gate not in gates for gate in portal_gates):
+                raise ValueError(f"Portal gates must be widget gates: {kind}")
             if not isinstance(portal["label"], str) or not portal["label"]:
                 raise ValueError(f"Missing widget label: {kind}")
             assets.extend((portal[key], APP / "web", suffix)
@@ -42,6 +46,12 @@ def load_widgets(path=MANIFEST):
                           if key in portal)
             if "html" not in portal or "js" not in portal:
                 raise ValueError(f"Missing widget editor assets: {kind}")
+            for key in ("html", "js", "css"):
+                if key not in portal:
+                    continue
+                previous = portal_asset_gates.setdefault(portal[key], portal_gates)
+                if previous != portal_gates:
+                    raise ValueError(f"Shared portal asset has conflicting gates: {portal[key]}")
         for asset, base, suffix in assets:
             resolved = (base / asset).resolve()
             if not resolved.is_relative_to(base) or resolved.suffix != suffix or not resolved.is_file():
@@ -61,6 +71,11 @@ def firmware_includes(widgets):
                      f"static_assert(sizeof({widget['type']}_widget_type) == sizeof(WidgetType), "
                      f"\"Manifest widget registration: {widget['type']}\");\n#endif"
                      for widget in widgets) + "\n"
+
+
+def portal_widgets(widgets, enabled_flags=None):
+    return [widget for widget in widgets if "portal" in widget and
+            (enabled_flags is None or all(gate in enabled_flags for gate in widget["portal"].get("gates", [])))]
 
 
 def portal_assets(widgets, extension):
@@ -91,8 +106,39 @@ def expand_bundle(path):
     widgets = load_widgets()
     extension = "js" if path.name.endswith(".js.bundle") else "css"
     lines = []
+    chunk_name, chunk_flags = None, []
+    restore_chunk = False
+    serial = 0
     for line in path.read_text(encoding="utf-8").splitlines():
-        lines.extend(portal_assets(widgets, extension) if line.strip() == "@widgets" else [line])
+        marker = re.fullmatch(r"#\s*\[chunk:([a-z0-9_-]+)((?:\s+(?:HAS|IS)_[A-Z_0-9]+)*)\]\s*", line.strip())
+        if marker:
+            chunk_name, chunk_flags = marker[1], marker[2].split()
+            restore_chunk = False
+        if line.strip() == "@widgets":
+            seen = set()
+            active_flags = chunk_flags
+            for widget in portal_widgets(widgets):
+                portal = widget["portal"]
+                asset = portal.get(extension)
+                if not asset or asset in seen:
+                    continue
+                seen.add(asset)
+                flags = list(dict.fromkeys(chunk_flags + portal.get("gates", [])))
+                if flags != active_flags:
+                    if chunk_name is None:
+                        raise ValueError("Gated widget assets require a chunked bundle")
+                    serial += 1
+                    lines.append(f"# [chunk:{chunk_name}_widgets_{serial} {' '.join(flags)}]")
+                    active_flags = flags
+                lines.append(asset)
+            restore_chunk = active_flags != chunk_flags
+        else:
+            if restore_chunk and line.strip() and not line.lstrip().startswith("#"):
+                serial += 1
+                suffix = " " + " ".join(chunk_flags) if chunk_flags else ""
+                lines.append(f"# [chunk:{chunk_name}_widgets_{serial}{suffix}]")
+                restore_chunk = False
+            lines.append(line)
     return "\n".join(lines) + "\n"
 
 
@@ -101,8 +147,12 @@ def main():
     parser.add_argument("--firmware", type=Path)
     parser.add_argument("--bundle", type=Path)
     parser.add_argument("--validate-editors", action="store_true")
+    parser.add_argument("--portal-gates", action="store_true")
     args = parser.parse_args()
-    if args.validate_editors:
+    if args.portal_gates:
+        print("\n".join(dict.fromkeys(gate for widget in portal_widgets(load_widgets())
+                                     for gate in widget["portal"].get("gates", []))))
+    elif args.validate_editors:
         validate_editors(load_widgets())
     elif args.bundle:
         print(expand_bundle(args.bundle), end="")

@@ -30,9 +30,23 @@ struct MousepadState {
     bool button_zones_enabled = false;
     MouseSurfaceTouch touch;
     uint32_t owner = 0;
+    lv_obj_t* back = nullptr;
+    lv_obj_t* back_arrow = nullptr;
+    uint16_t back_size = 0;
     lv_point_t back_start{};
     bool back_tap = false;
 };
+
+static void mousepad_resize_back(lv_event_t* event) {
+    auto* state = static_cast<MousepadState*>(lv_event_get_user_data(event));
+    lv_obj_t* tile = state->touch.object;
+    const int available = std::max<int>(1, std::min(lv_obj_get_content_width(tile),
+                                                     lv_obj_get_content_height(tile)) - 8);
+    const int size = std::min<int>(state->back_size, available);
+    lv_obj_set_size(state->back, size, size);
+    lv_obj_set_style_transform_scale_x(state->back_arrow, size * 256 / 44, LV_PART_MAIN);
+    lv_obj_set_style_transform_scale_y(state->back_arrow, size * 256 / 44, LV_PART_MAIN);
+}
 
 static_assert(sizeof(MousepadConfig) <= WIDGET_CONFIG_MAX_BYTES, "Mousepad config too large");
 static_assert(sizeof(MousepadState) <= WIDGET_STATE_MAX_BYTES, "Mousepad state too large");
@@ -218,7 +232,7 @@ static void mousepad_event(lv_event_t* event) {
 
 static void mousepad_create(lv_obj_t* tile, const WidgetConfig* cfg,
                            const ScreenButtonConfig*, const PadRect*,
-                           const UIScaleInfo*, lv_obj_t*, lv_obj_t*,
+                           const UIScaleInfo*,
                            WidgetState* state) {
     auto* mousepad = new (state->data) MousepadState{};
     mousepad->sensitivity = reinterpret_cast<const MousepadConfig*>(cfg->data)->sensitivity;
@@ -249,6 +263,10 @@ static void mousepad_create(lv_obj_t* tile, const WidgetConfig* cfg,
         lv_obj_set_style_transform_scale_x(arrow, size * 256 / 44, LV_PART_MAIN);
         lv_obj_set_style_transform_scale_y(arrow, size * 256 / 44, LV_PART_MAIN);
         lv_obj_center(arrow);
+        mousepad->back = back;
+        mousepad->back_arrow = arrow;
+        mousepad->back_size = reinterpret_cast<const MousepadConfig*>(cfg->data)->back_size;
+        lv_obj_add_event_cb(tile, mousepad_resize_back, LV_EVENT_SIZE_CHANGED, mousepad);
     }
 }
 
@@ -262,10 +280,16 @@ static void mousepad_hide(WidgetState* state) {
 static void mousepad_show(WidgetState* state) {
     reinterpret_cast<MousepadState*>(state->data)->touch.show();
 }
+static void mousepad_cancel_input(WidgetState* state) {
+    reinterpret_cast<MousepadState*>(state->data)->touch.cancel();
+}
 
 static void mousepad_destroy(WidgetState* state) {
-    reinterpret_cast<MousepadState*>(state->data)->touch.detach(mousepad_event);
-    reinterpret_cast<MousepadState*>(state->data)->~MousepadState();
+    auto* mousepad = reinterpret_cast<MousepadState*>(state->data);
+    if (mousepad->back && mousepad->touch.object)
+        lv_obj_remove_event_cb_with_user_data(mousepad->touch.object, mousepad_resize_back, mousepad);
+    mousepad->touch.detach(mousepad_event);
+    mousepad->~MousepadState();
 }
 
 #if HAS_MCP
@@ -317,6 +341,6 @@ static void mousepad_describe(JsonObject& out) {
 #endif
 
 static const WidgetPreview mousepad_preview = {"Mousepad", "touchpad_mouse"};
-REGISTER_WIDGET_SCHEMA_VALIDATED_LIFECYCLE(mousepad, nullptr, false, mousepad_validate);
+REGISTER_WIDGET_SCHEMA_INPUT_LIFECYCLE(mousepad, nullptr, false, mousepad_validate, mousepad_cancel_input);
 
 #endif

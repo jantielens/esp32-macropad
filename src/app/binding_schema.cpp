@@ -123,12 +123,15 @@ static void emit_authoring(JsonObject scheme, const BindingSchemeSpec& spec) {
     if (keys.size() == 0) scheme.remove("authoring");
 }
 
-void binding_schema_emit(void* out_json, bool include_docs) {
+bool binding_schema_emit(void* out_json, bool include_docs, const char* scheme_filter) {
     JsonArray& out = *static_cast<JsonArray*>(out_json);
+    bool found = false;
     for (uint8_t index = 0; index < binding_template_scheme_count(); ++index) {
         const char* name = binding_template_scheme_name(index);
         const BindingSchemeSpec* spec = binding_template_scheme_spec(index);
         if (!name || !name[0] || !spec) continue;
+        if (scheme_filter && strcmp(name, scheme_filter) != 0) continue;
+        found = true;
 
         JsonObject scheme = out.add<JsonObject>();
         scheme["name"] = name;
@@ -151,5 +154,7 @@ void binding_schema_emit(void* out_json, bool include_docs) {
             emit_doc(scheme, *spec);
             emit_authoring(scheme, *spec);
         }
+        if (scheme_filter) break;
     }
+    return !scheme_filter || found;
 }

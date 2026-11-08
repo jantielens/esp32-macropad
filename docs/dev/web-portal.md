@@ -535,9 +535,50 @@ To add a widget:
 
 `source` is relative to `src/app`; portal paths are relative to `src/app/web`.
 `portal.css` is optional, and firmware-only widgets omit `portal` entirely.
+Use optional `portal.gates` for compile-time removal of an editor's JavaScript,
+CSS, selector option, and HTML controls. These gates must also appear in the
+widget's firmware `gates`. Face declares `"gates": ["HAS_FACE_WIDGET"]` inside
+its `portal` object so disabling the feature removes both native and portal code.
+The `face` widget uses `HAS_FACE_WIDGET`, enabled by default on interactive
+e-paper displays and non-e-paper displays with animations enabled. Interactive
+e-paper profiles retain `DISPLAY_DISABLE_ANIMATIONS` for other UI elements; Face
+alone permits motion and emotion interpolation, with a 1000 ms closed-eye hold.
+Existing binding polling and presentation still determine visible frame cadence;
+there is no presentation-aware scheduler or guarantee that every pose is shown.
+Its owner editor exposes style (`robot` or
+`doodle`), emotion, and liveliness (`still`, `calm`, `normal`, or `lively`).
+`still` disables autonomous blinking and gaze movement while preserving emotion
+transitions. Its gaze stays centered, and a settled face causes no animation redraws.
+`widget_data_binding` supplies an emotion name or a binding returning `content`,
+`relaxed`, `happy`, `worried`, `angry`, `sad`, `surprised`, or `sleepy`.
+It uses the shared widget resolution/update path, including MQTT/HA dependency
+discovery and pad bindings. Empty or unrecognized results transition to `content`
+and log once until a recognized value returns. Standard explicit pipe fallbacks
+remain available. Repeated targets do not restart transitions. Without a source,
+`widget_face_emotion` supplies a fixed emotion, default `content`; the editor
+loads this form and saves it through `widget_data_binding`.
+Style defaults to `robot`, liveliness to `normal`. The selector is available only
+when the compiled widget catalog includes `face`.
+
+Features inherit the button's `fg_color`; negative space inherits its `bg_color`.
+Top and bottom labels retain their space; the face replaces the icon and center
+label. Rendering uses procedural shapes without a per-button framebuffer.
+Gaze and blinking invalidate only the old/new eye regions; emotion transitions
+also invalidate changed eyebrows and mouth regions. Dirty bounds include mask
+extents and antialiasing margins, leaving surrounding empty space untouched.
+Idle animation stops while hidden, and an explicitly enabled face renders statically
+when `DISPLAY_DISABLE_ANIMATIONS` is set on a non-e-paper display.
+See the [Face user guide](../user/widgets/README.md#face)
+for configuration and a numeric-to-emotion example.
+
 Shared assets are included once, at their first manifest position. Put dependencies
 before consumers. Both bundles expand `@widgets` in their existing `HAS_DISPLAY`
-chunk; additional capability checks stay in owner `available()` callbacks.
+chunk, with gated subchunks generated from `portal.gates`; additional runtime
+capability checks stay in owner `available()` callbacks. Shared assets must
+declare identical portal gates in every owner. The minifier emits one combined
+gzip blob per distinct chunk selection, merging equivalent flag assignments
+without increasing the 512-variant limit. HTML variants use the same portal
+gates. Device-free template rendering includes all widget editors by default.
 The selector ID is `pad-edit-<type>-widget-option`, not an owner descriptor field.
 Do not edit bundle lists, template mappings, selector markup, or generic
 orchestration to add a widget.
@@ -552,8 +593,8 @@ prefixes; asset generation executes JS owners to verify exact manifest parity.
 Waveform's owned portal editor is included through the manifest and available
 only when the device's `widget_catalog` contains `waveform`. Its firmware
 implementation remains gated by `HAS_DISPLAY` and `IS_SHUTTER_TESTER`. Portal
-owners are packaged in the existing display bundle; availability is not a
-per-widget JavaScript size gate. No persisted JSON, firmware interaction, or
+owners without `portal.gates` are packaged in the existing display bundle;
+runtime availability alone is not a JavaScript size gate. No persisted JSON, firmware interaction, or
 native ABI changes are part of this wiring.
 
 Shared layout and ordinary field helpers stay shared. Use `.widget-row` for
@@ -574,23 +615,23 @@ hides ordinary tap/long-press lists, and keeps the held-control section in
 Content. The firmware still owns release behavior.
 
 Toggle switch owns its state field, matching values, static palette, read-only,
-switch width, and icon position. It relabels `actions[]` and `lp_actions[]` as
+and switch width. It relabels `actions[]` and `lp_actions[]` as
 Turn-on and Turn-off actions without changing either action list's payload.
 Its State source uses the shared binding header, builder shortcut, and reference
 action. It uses the same catalog symbol and label rendering as other widgets;
 the pad editor does not simulate a switch. The width field
-retains `widget_toggle_width_pct`, now expressing a percentage of button content
-width with a default of 50%, capped by available height. Firmware uses a centered,
-height-capped 100% width when neither a center label nor a left icon is configured;
-otherwise the switch is right-aligned and label length does not affect its size.
-`widget_toggle_icon_position` accepts left,
-above, or below; the older switch placement field is ignored and not emitted.
+retains `widget_toggle_width_pct`, expressing a percentage of the assigned widget
+region width with a default of 50%, capped by available height.
 
-The shared cell renderer shows button styling and labels, with a large subdued
-Material Symbol behind widget labels. Symbols come from existing catalog
-metadata, including axis variants and the unknown-widget fallback. Widget
-buttons omit additional configured icons and image placeholders; ordinary
-buttons retain their configured icons. There are no per-widget drawing hooks,
+The shared cell renderer shows button styling and labels, with a subdued
+Material Symbol representing widget content in a separate region from the
+labels and configured icon. Centered Rocker and Numeric Rocker previews instead
+show directional markers around the shared content group. The marker positions
+are approximate and do not simulate device tap-zone dimensions. Other symbols
+come from catalog metadata, including axis variants and the unknown-widget
+fallback. A fit warning uses
+estimated font metrics and button dimensions rather than simulating LVGL.
+There are no per-widget drawing hooks,
 sample values, binding resolution requests, or action dispatch in grid rendering.
 Bindings are abbreviated for display, with their full text retained in tooltips
 and accessible descriptions. Valid edits update the grid immediately; invalid
@@ -599,8 +640,8 @@ regression covers ordinary and template buttons.
 
 `PAD_CELL_PREVIEW_PROPERTIES` lives beside the cell renderer and declares the
 model properties it consumes. Preview comparisons also include the computed
-widget catalog metadata, so axis-dependent symbols participate without a second
-widget-specific field list. Keep this dependency declaration synchronized when
+widget catalog metadata. Centered rocker markers also depend on axis and step
+fields. Keep this dependency declaration synchronized when
 changing the renderer. Valid edits compare the previous and new button models:
 nonvisual changes leave the preview untouched, visual changes update only that
 button, and geometry changes rebuild the grid. Creating a unit-size button in
@@ -1479,6 +1520,11 @@ format syntax. The device validates saved configurations authoritatively.
 
 The MCP `get_capabilities` manifest serializes its binding-scheme list from the
 same registry, so portal and MCP clients receive equivalent metadata.
+Passing `binding_scheme` to `get_capabilities` returns only that registered
+scheme under `bindings.schemes`; unknown names return a parameter error.
+Passing `widget` returns only that registered widget under `widgets`, plus
+`widget_common`. Use one filter at a time; unknown names are parameter errors.
+Omitting both arguments returns the full manifest.
 
 Display builds with local sensors register `[sensor:key;format]`. Its keys
 and descriptions come from the sensor registrations, including board-specific
@@ -1523,8 +1569,11 @@ The binding and button builders share `bindingSourcePickerHTML`, the picker
 session lifecycle, and selected-value display options. On-device bindings and HA
 search after three characters; MQTT explicitly reads one exact topic and
 offers clickable scalar fields. HA defaults to state and permits attribute or
-custom-path selection. Display options travel with the selected candidate;
-button scenarios apply them to labels, never to raw numeric widget inputs.
+custom-path selection. External Data lists configured sources and previews JSON
+paths or source statistics via `/api/pad/resolve`, without fetching the source.
+Its provider is loaded from the `HAS_EXTERNAL_DATA`-gated component asset.
+Display options travel with the selected candidate; button scenarios apply them
+to labels, never to raw numeric widget inputs.
 Only missing required catalog parameters interrupt direct selection in either
 builder. Binding Builder's **Edit value** opens the catalog parameter form for
 optional changes, including expressions and named pad bindings.
@@ -1551,9 +1600,9 @@ The compact wand control opens a native modal Binding Builder
 source summary, customization/preview columns, and Cancel/Insert footer.
 Both dialogs use `portal-form` for shared input styles, plus shared design-grid
 and preview-panel classes. Generated binding text, sample provenance, and Copy
-remain visible during binding customization. Samples are declared examples or
-the first value acquired during HA/MQTT selection; neither builder offers a
-separate device-resolution action. Widget targets restrict display options.
+remain visible during binding customization. Samples are declared examples, the
+first value acquired during HA/MQTT selection, or the External Data preview.
+Widget targets restrict display options.
 Close disposes the picker and pending acquisition work before restoring focus.
 
 The separate Binding Reference dialog (`portal_binding_help.js`, markup in `_binding_help.html`) lists
@@ -2215,6 +2264,23 @@ sound library and retain missing saved file names.
 #### `GET /api/config`
 
 Returns current device configuration (passwords excluded).
+
+When `HAS_EXTERNAL_DATA` is enabled, `external_data` contains each source's
+`name`, `url`, `refresh_seconds`, `state`, optional `age_seconds`, and
+sanitized `error`. URLs are visible in the portal and configuration API; avoid
+including sensitive tokens or API keys.
+POST accepts an `external_data` array of source objects with `name`, a nonempty
+`url`, and `refresh_seconds` from 1 to 86400 seconds. An empty array deletes all sources. Omitting the array leaves it
+unchanged. Validated source changes apply after successful persistence without
+reboot when `no_reboot=1` is used.
+
+External HTTPS uses the Arduino ESP32 built-in CA bundle on core 3. Older cores
+use a legacy-format snapshot of the Arduino ESP32 3.3.12 trust anchors, compiled
+only when external data is enabled. Keep that snapshot current when updating
+the project's supported trust anchors; it adds approximately 67 KiB of flash.
+The worker checks a 30-second fetch deadline and OTA/configuration changes
+between network operations and while reading. DNS, connection, TLS, and write
+calls can delay those checks, so the deadline and cancellation are best effort.
 
 `backlight_brightness` and `audio_volume` are the saved levels. When their
 capabilities are available, `current_backlight_brightness` and
@@ -3178,9 +3244,17 @@ Single Model Context Protocol endpoint — JSON-RPC 2.0 over the MCP **Streamabl
 
 - **Auth:** every request must carry `Authorization: Bearer <token>`. Fails closed: when `mcp_enabled` is true but no token has been generated, all requests are refused (`401`). Independent of portal Basic Auth.
 - **Availability:** returns `404` when `mcp_enabled` is false or the device is in AP/setup mode. Performs Origin validation (any browser `Origin` → `403`; native clients send none) and does not alter the global CORS allow-list.
-- **Tools:** read tools are always available once enabled; control tools (`press_button`, `set_screen`, `set_backlight`, `wake`, `system_command`) are hidden from `tools/list` and refused by `tools/call` unless `mcp_control_enabled` is true. Display tools are absent on `!HAS_DISPLAY` boards. Control tools run on the main loop, never on the async web task.
+- **Tools:** control and authoring tools are hidden and refused unless their respective permissions are enabled. Some read tools, including cached external data inspection, require authoring permission. Display tools are absent on `!HAS_DISPLAY` boards. Control tools run on the main loop, never on the async web task.
 - **Body cap:** request bodies above 8 KB are rejected with JSON-RPC `-32600`.
 - **Implementation note:** served by a custom `AsyncWebHandler` (not `server->on`) because MCP clients send `Accept: application/json, text/event-stream`, which the stock callback handler rejects via `isHTTP()`. `GET`/`DELETE /mcp` return `405` (no SSE stream offered) so client transport negotiation succeeds.
+
+When `HAS_EXTERNAL_DATA` is enabled, MCP `get_config` lists source names,
+intervals, and states without URLs. `set_external_data_source` requires control
+permission and a matching device identity, and updates one source after validation and persistence; its URL
+argument can contain sensitive data. `inspect_external_data` requires authoring
+permission and returns bounded pages from the cached snapshot, including source
+state and age, without fetching. Paths follow the same rules as external
+bindings. The cache may change between pages.
 
 **Example (`initialize`):**
 ```bash
@@ -3448,7 +3522,7 @@ All pad-and-button-defaults endpoints require `HAS_DISPLAY` and are gated by Bas
 
 Returns saved device-level pad and button overrides and the board-selected firmware defaults.
 
-- **Response:** JSON object with explicitly saved fields and a read-only `firmware_defaults` object. Possible override fields: `default_pad_bg_color`, `button_spacing_px`, `pixel_shift_distance_px`, `pad_inset_top_px`, `pad_inset_right_px`, `pad_inset_bottom_px`, `pad_inset_left_px`, `bg_color`, `fg_color`, `border_color`, `border_width`, `corner_radius`, `content_pad`, `label_top_style`, `label_center_style`, `label_bottom_style`, `button_shadow_enabled`, `button_shadow_type`, `button_shadow_color_mode`, `button_shadow_color`, `button_shadow_darken_pct`, `button_shadow_offset_x_px`, `button_shadow_offset_y_px`, and `button_shadow_drop_blur_px`.
+- **Response:** JSON object with explicitly saved fields and a read-only `firmware_defaults` object. Possible override fields: `default_pad_bg_color`, `button_spacing_px`, `pixel_shift_distance_px`, `pad_inset_top_px`, `pad_inset_right_px`, `pad_inset_bottom_px`, `pad_inset_left_px`, `bg_color`, `fg_color`, `icon_color`, `icon_badge_padding`, `icon_badge_color`, `border_color`, `border_width`, `corner_radius`, `content_pad`, `label_top_style`, `label_center_style`, `label_bottom_style`, `button_shadow_enabled`, `button_shadow_type`, `button_shadow_color_mode`, `button_shadow_color`, `button_shadow_darken_pct`, `button_shadow_offset_x_px`, `button_shadow_offset_y_px`, and `button_shadow_drop_blur_px`.
 - `firmware_defaults` contains the board's appearance, layout, and shadow defaults plus widget palette fields: `widget_series_color` (and `_2`, `_3`, `_4`), `widget_track_color`, `widget_indicator_color`, `widget_tick_color`, `widget_zone_color`, `widget_reference_color`, `widget_table_bg_color`, `widget_table_fg_color`, and `widget_table_header_color`.
 - Typography overrides are `default_font` (`@builtin` or a valid uploaded ID) and `base_text_size` (`0` for Automatic, or an integer from 1 to 65535). Defaults are `@builtin` and `0`. Unavailable IDs remain saved and fall back to bitmap text.
 - Read-only `typography_status` contains `active_font`, `active_base_text_size`, `board_medium_size`, `ttf_supported`, and `reboot_required`. It describes the boot snapshot, not whether every requested font instance loaded successfully.
@@ -3528,6 +3602,29 @@ when an update starts.
 Source and generated-icon uploads remain unavailable until initial icon preload
 and boot cleanup finish, even though the portal may already be listening.
 
+Boot still validates and loads icons for every pad before displaying the initial
+pad. Source metadata is read in buffered chunks and validation is reused within
+the preload pass while the icon file mutex prevents replacements. Each generated
+PNG is read once; its header and dimensions are checked against its metadata
+before decoding. Cleanup uses one retained pad-reference snapshot for source
+and generated-file checks, and is skipped if that snapshot is unavailable. Pad
+saves, deletes, and cache rebuilds wait until snapshot-based cleanup completes.
+Recovery and cleanup iterate names without opening every entry; cleanup opens
+an unreferenced file only when it needs its size before deletion. Unsupported
+directory entry types are skipped using the filesystem's regular iterator.
+
+The `IconStore` boot log reports `Preload timing` in milliseconds: `source`,
+`metadata`, `read`, and `decode` break down loading; `load` includes the reference
+snapshot and cache work. `source_cleanup` and `artifact_cleanup` measure the
+two cleanup phases, and `total` covers the complete preload operation. Use these
+timings to distinguish filesystem overhead from PNG decoding on the device.
+Separate recovery and cleanup scan lines report directory passes, entries,
+successful recovery or cleanup actions, and time spent opening directories,
+advancing entries, checking references, deleting or recovering files, and
+retiring cached buffers. Totals include other scan work. These are diagnostic
+wall-clock measurements; per-operation millisecond rounding and other tasks can
+affect them.
+
 The browser still packages local PNG sources in export JSON as
 `{"kind":"color","media_type":"image/png","data":"<canonical base64>"}`.
 `ICON_MAX_SOURCE_JSON_SIZE` (704 KiB) bounds that portable representation, not
@@ -3579,25 +3676,32 @@ The handler reads one artifact at a time and buffers only the serialized respons
 }
 ```
 
-Save preparation requests metadata once for the current pad and affected
-dependents. It skips PNG rendering and upload only when source ID, numeric kind,
+With `?keys=pad_0_main_0_0,pad_1_main_0_0`, return metadata for up to four
+explicit positional keys without scanning the icon directory. Invalid keys,
+empty lists, and requests combining `keys` with `pages` return `400`.
+
+Save preparation requests metadata for the required keys one at a time.
+It skips PNG rendering and upload only when source ID, numeric kind,
 render key, and both calculated PNG dimensions match. Dimensions are compared
 separately because device defaults can change sizing without changing the render
 key. New or imported sources still generate new artifacts. Saving pad JSON and
 firmware validation still run when all generated icons are reused.
+On devices with PSRAM, these requests also cache validated source and artifact
+metadata for the final save; icon-store installs and deletions invalidate affected
+entries. Cache allocation never falls back to internal RAM. If caching is
+unavailable, the save rechecks files synchronously.
 
-Firmware reconciles generated files for the saved pad after a successful save
-and dependent-cache refresh. It preserves main and overlay icon positions,
-including inherited template buttons, and retires obsolete decoded buffers until
-the owning screen releases them. Browser-issued pruning is not required. Pad
-deletion removes all matching files without a fixed file-count limit. Existing
-source cleanup removes previous artwork only when no saved pad references it.
+After a successful save and dependent-cache refresh, firmware retires obsolete
+decoded buffers until the owning screen releases them. It keeps main and overlay
+icon positions, including inherited template buttons. Generated files left by
+saves and unused source artwork are retained until the next normal-runtime
+startup. Pad deletion removes matching generated files without a fixed
+file-count limit.
 
-Initial normal-runtime startup also sweeps unreferenced sources and generated
-files, recovering leftovers from failed saves and interrupted browser sessions.
-The boot sweep skips deletion if a saved pad configuration cannot be read;
-pad-scoped cleanup also skips unreadable pad or template configurations. Cleanup
-stops for OTA activity and logs reclaimed file counts and bytes. There is no
+Initial normal-runtime startup sweeps unreferenced sources and generated files,
+including leftovers from failed saves and interrupted browser sessions.
+The boot sweep skips deletion if a saved pad configuration cannot be read.
+Cleanup stops for OTA activity and logs reclaimed file counts and bytes. There is no
 periodic global sweep or upload rollback, so completed but abandoned uploads can
 remain until the next normal-runtime startup. Generated files at referenced
 positions are retained conservatively rather than deleted for metadata mismatch.

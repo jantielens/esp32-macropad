@@ -46,6 +46,10 @@ FEATURES = {
         ("logs_fragment_html_gz", "portal_logs_js_gz"),
     ),
     "Home Assistant": (("ha_*.cpp.o",), ()),
+    "External JSON data (HAS_EXTERNAL_DATA)": (
+        ("external_data*.cpp.o", "ext_binding.cpp.o"),
+        ("external_data_fragment_html_gz", "portal_external_data_js_gz"),
+    ),
     "Display / touch (HAS_DISPLAY / HAS_TOUCH)": (
         ("display*.cpp.o", "touch*.cpp.o", "dma2d_arbiter.cpp.o"),
         ("brightness_fragment_html_gz", "rotation_fragment_html_gz", "screen_preview_fragment_html_gz"),
@@ -155,6 +159,7 @@ LIBRARIES = {
     ),
 }
 FLAG_SUBSYSTEMS = {
+    "HAS_FACE_WIDGET": "Widgets (HAS_DISPLAY)",
     "HAS_DISPLAY_DIAGNOSTICS": "Display / touch (HAS_DISPLAY / HAS_TOUCH)",
     "HAS_BACKLIGHT": "Display / touch (HAS_DISPLAY / HAS_TOUCH)",
     "HAS_BUILTIN_LED": "Sensors / power",

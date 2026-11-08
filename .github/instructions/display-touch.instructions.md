@@ -1,6 +1,6 @@
 ---
-description: "Display and touch driver HAL conventions — driver selection, compilation units, buffered vs direct rendering, and board overrides"
-applyTo: "**/drivers/*, **/display_driver*, **/display_manager*, **/touch_driver*, **/touch_manager*, **/display_drivers.cpp, **/touch_drivers.cpp, **/board_config.h, **/board_overrides.h"
+description: "Display and touch HAL conventions, widget visual prototyping, and host-rendered LVGL previews"
+applyTo: "**/drivers/*, **/display_driver*, **/display_manager*, **/touch_driver*, **/touch_manager*, **/display_drivers.cpp, **/touch_drivers.cpp, **/board_config.h, **/board_overrides.h, src/app/widgets/**, tests/test_*widget*.cpp"
 ---
 
 # Display/Touch Driver Conventions
@@ -23,6 +23,15 @@ applyTo: "**/drivers/*, **/display_driver*, **/display_manager*, **/touch_driver
 |---|---|
 | Display | TFT_eSPI, Arduino_GFX, ST77916, CO5300, ST7701_RGB, MIPI-DSI base, ST7703_DSI, ST7701_DSI, JD9165_DSI |
 | Touch | XPT2046, AXS15231B, CST816S, CST820B, GT911 |
+
+## Widget Visual Prototyping
+
+When prototyping or changing widget visuals, consider host-rendered LVGL
+previews for visual review before flashing. Reuse existing renderer tests and
+capture hooks; do not duplicate rendering logic in a separate mockup.
+See [host-rendered widget previews](../../docs/dev/display-touch-architecture.md#host-rendered-widget-previews)
+for the Face expression-sheet and animation workflow. Host previews do not
+replace hardware performance or panel validation.
 
 ## Key Files
 

@@ -62,6 +62,7 @@ void touch_manager_set_lvgl_force_released(bool force_released);
 #if HAS_DISPLAY
 
 void touch_manager_cancel_blocked_input(bool (*blocked)(lv_obj_t*, const lv_point_t&, void*), void* context);
+void touch_manager_cancel_object_input(lv_obj_t* object);
 
 enum TouchManagerEnqueueResult {
 		TOUCH_MANAGER_ENQUEUE_QUEUED = 0,

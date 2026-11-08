@@ -21,6 +21,7 @@
 #include <Arduino.h>
 #include "board_config.h"
 #include "keyboard_transport.h"
+#include "external_data_config.h"
 #if HAS_CAMERA
 #include "camera_motion.h"
 #endif
@@ -95,6 +96,9 @@ struct EpaperRefreshSettings {
 #endif
 
 struct DeviceConfig {
+#if HAS_EXTERNAL_DATA
+		ExternalDataConfig external_data;
+#endif
 #if HAS_DISPLAY
 		DialogTemplates dialog_appearance;
 #endif
@@ -232,7 +236,21 @@ struct DeviceConfig {
 // API Functions
 void config_manager_init();                           // Initialize NVS
 bool config_manager_load(DeviceConfig *config);       // Load config from NVS
-bool config_manager_save(const DeviceConfig *config); // Save config to NVS
+#if HAS_EXTERNAL_DATA
+bool config_manager_save(DeviceConfig *config, const ExternalDataConfig* external_override = nullptr);
+#if HAS_MCP
+enum ExternalDataSaveResult {
+		EXTERNAL_DATA_SAVE_OK,
+		EXTERNAL_DATA_SAVE_INVALID,
+		EXTERNAL_DATA_SAVE_FAILED,
+};
+ExternalDataSaveResult config_manager_save_external_source(DeviceConfig *config,
+		const ExternalDataSourceUpdate& update, ExternalDataConfig& candidate);
+bool config_manager_copy_external_sources(const DeviceConfig *config, ExternalDataConfig& snapshot);
+#endif
+#else
+bool config_manager_save(const DeviceConfig *config);
+#endif
 #if HAS_DISPLAY
 bool config_manager_save_current_brightness(DeviceConfig *config);
 #endif

@@ -28,6 +28,7 @@
  * @property {string} id
  * @property {(candidate: BindingSourceCandidate, runtime: Object) => boolean} available
  * @property {(candidate: BindingSourceCandidate, draft: Object) => Object[]} [fields]
+ * @property {number|((options: Object) => number)} [aspectRatio] Suggested button width divided by height.
  * @property {(draft: Object) => Object} build Returns an ordinary, unsaved button object.
  */
 
@@ -60,7 +61,7 @@ function bindingSourcePickerMount(session) {
         root.querySelector('[data-bb-matches]').replaceChildren();
         root.querySelector('[data-bb-retry]').hidden = true;
         padButtonBuilderStatus('', false, session);
-        if (session.provider?.search && search.value.trim().length >= 3) {
+        if (session.provider?.search && (session.provider.listOnOpen || search.value.trim().length >= 3)) {
             session.timer = setTimeout(() => padButtonBuilderLookup(false, undefined, session), 300);
         }
     };
@@ -93,6 +94,10 @@ function bindingSourcePickerMount(session) {
         if (event.target.matches('[data-bb-provider]')) {
             padButtonBuilderChooseProvider(event.target.value, session, false);
         }
+    };
+    root.querySelector('[data-bb-settings]').onclick = () => {
+        if (session.bindingOnly) closeBindingBuilder();
+        else padButtonBuilderClose();
     };
     root.querySelector('[data-bb-confirm-value]').onclick = () => {
         try {
@@ -356,10 +361,40 @@ function padButtonBuilderCanCreate(col, row) {
     if (!Number.isInteger(col) || !Number.isInteger(row) || col < 0 || row < 0 ||
         col >= padState.cols || row >= padState.rows || padState.placingBlock ||
         padBuildOccupancySet().has(col + ',' + row)) return false;
-    if (padWorkspace && padWorkspace.errors.has(col + ',' + row)) return false;
+    if (padWorkspace && padWorkspace.errors.has(padWorkspaceButtonKey(padState.selectedLayer, col, row))) return false;
     return !padState.templateButtons.some(button => padCanPlaceTemplateButton(button) &&
         col >= button.col && col < button.col + (button.col_span || 1) &&
         row >= button.row && row < button.row + (button.row_span || 1));
+}
+
+function padButtonBuilderColumnSpan(session) {
+    const width = Number(deviceInfoCache?.display_coord_width);
+    const height = Number(deviceInfoCache?.display_coord_height);
+    const ratio = typeof session.scenario.aspectRatio === 'function'
+        ? session.scenario.aspectRatio(session.draft.options) : session.scenario.aspectRatio;
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0 ||
+        !Number.isFinite(ratio) || ratio <= 0) return 1;
+    const gap = Number(padGetEffectiveDefault('button_spacing_px')) || 0;
+    const columns = padComputeAxisTrackSizes(padState.cols,
+        padGetTrackAvailableSize('columns', width), gap, padState.columnWidthsPx);
+    const rows = padComputeAxisTrackSizes(padState.rows,
+        padGetTrackAvailableSize('rows', height), gap, padState.rowHeightsPx);
+    if (!columns.valid || !rows.valid || !rows.sizes[session.row] ||
+        columns.sizes.some(size => size <= 0)) return 1;
+    const target = rows.sizes[session.row] * ratio;
+    let span = 1;
+    let spanWidth = columns.sizes[session.col];
+    let distance = Math.abs(spanWidth - target);
+    for (let col = session.col + 1; col < padState.cols; col++) {
+        if (!padButtonBuilderCanCreate(col, session.row)) break;
+        spanWidth += gap + columns.sizes[col];
+        const nextDistance = Math.abs(spanWidth - target);
+        if (nextDistance < distance) {
+            distance = nextDistance;
+            span = col - session.col + 1;
+        }
+    }
+    return span;
 }
 
 function padButtonBuilderAfterSelect() {
@@ -536,7 +571,7 @@ function padButtonBuilderChooseProvider(id, session = padButtonBuilderSession, f
     const unavailable = provider.availability(session.config);
     const setup = dialog.querySelector('[data-bb-setup]');
     setup.hidden = !unavailable;
-    setup.firstChild.textContent = unavailable + ' ';
+    dialog.querySelector('[data-bb-setup-message]').textContent = unavailable;
     const settings = dialog.querySelector('[data-bb-settings]');
     settings.hidden = !provider.setupHref;
     settings.href = provider.setupHref || '#';
@@ -608,6 +643,7 @@ async function padButtonBuilderLoadConfig(session = padButtonBuilderSession) {
         const response = await fetch('/api/config', { cache: 'no-store', signal: controller.signal });
         if (!response.ok) throw new Error('Could not load source configuration (HTTP ' + response.status + ').');
         const config = await response.json();
+        await window.portalLoadItemAssets('pad-editor');
         await _bhLoad();
         if (_bindingHelp.error) throw new Error(_bindingHelp.error);
         if (!bindingSourceSessionActive(session) || controller !== session.controller || controller.signal.aborted) return;
@@ -990,6 +1026,7 @@ function padButtonBuilderUpdatePreview() {
     const create = session.dialog.querySelector('[data-bb-create]');
     const preview = session.dialog.querySelector('[data-bb-preview]');
     preview.replaceChildren();
+    preview.classList.remove('pad-button-builder-preview-single-history');
     try {
         const button = padButtonBuilderBuild(session);
         const source = draft.sources[0]?.candidate;
@@ -1025,6 +1062,8 @@ function padButtonBuilderCreate() {
             throw new Error('This position is no longer empty. Cancel and select an empty position.');
         }
         button = padButtonBuilderBuild(session);
+        const span = padButtonBuilderColumnSpan(session);
+        if (span > 1) button.col_span = span;
     } catch (error) {
         const validation = session.dialog.querySelector('[data-bb-validation]');
         validation.textContent = error.message;

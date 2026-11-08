@@ -107,7 +107,7 @@ inline void fill_style_attach_rect_outline(lv_obj_t* track, FillStyleRuntime* ru
     if (!runtime || !runtime->style()->outline_width) return;
     lv_obj_t* outline = lv_obj_create(track);
     lv_obj_remove_style_all(outline);
-    lv_obj_set_size(outline, lv_obj_get_style_width(track, LV_PART_MAIN), lv_obj_get_style_height(track, LV_PART_MAIN));
+    lv_obj_set_size(outline, lv_pct(100), lv_pct(100));
     lv_obj_set_pos(outline, 0, 0);
     lv_obj_set_scrollable(outline, false);
     lv_obj_set_clickable(outline, false);

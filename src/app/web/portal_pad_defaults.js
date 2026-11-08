@@ -87,15 +87,18 @@ function padLoadButtonDefaults(defs) {
     // safe no-ops. This is intentional and harmless; splitting into two
     // functions was considered but rejected as cosmetic-only churn.
     // Init bindable color controls
-    ['pad-def-pad-bg-color-wrap', 'pad-def-bg-color-wrap', 'pad-def-fg-color-wrap', 'pad-def-border-color-wrap'].forEach(id => {
+    ['pad-def-pad-bg-color-wrap', 'pad-def-bg-color-wrap', 'pad-def-fg-color-wrap', 'pad-def-border-color-wrap', 'pad-def-icon-color-wrap', 'pad-def-icon-badge-color-wrap'].forEach(id => {
         var el = document.getElementById(id);
         if (el) padInitBindableColor(el);
     });
     padSetBindableColor('pad-def-pad-bg-color', defs.default_pad_bg_color || '', PAD_FIRMWARE_DEFAULTS.default_pad_bg_color);
     padSetBindableColor('pad-def-bg-color', defs.bg_color || '', PAD_FIRMWARE_DEFAULTS.bg_color);
     padSetBindableColor('pad-def-fg-color', defs.fg_color || '', PAD_FIRMWARE_DEFAULTS.fg_color);
+    padSetBindableColor('pad-def-icon-color', defs.icon_color || '', PAD_FIRMWARE_DEFAULTS.icon_color || 'auto');
     padSetBindableColor('pad-def-border-color', defs.border_color || '', PAD_FIRMWARE_DEFAULTS.border_color);
+    padSetBindableColor('pad-def-icon-badge-color', defs.icon_badge_color || '', PAD_FIRMWARE_DEFAULTS.icon_badge_color);
     var el;
+    el = document.getElementById('pad-def-icon-badge-padding'); if (el) el.value = defs.icon_badge_padding ?? PAD_FIRMWARE_DEFAULTS.icon_badge_padding ?? 0;
     el = document.getElementById('pad-def-base-text-size'); if (el) el.value = defs.base_text_size || '';
     el = document.getElementById('pad-def-base-text-size-hint');
     if (el) el.textContent = 'Automatic: ' + (PAD_TYPOGRAPHY_STATUS.board_medium_size || 24) + ' px';
@@ -127,7 +130,7 @@ function padLoadButtonDefaults(defs) {
     el = document.getElementById('pad-def-label-center-style'); if (el) el.value = defs.label_center_style || '';
     el = document.getElementById('pad-def-label-bottom-style'); if (el) el.value = defs.label_bottom_style || '';
     var ipSel = document.getElementById('pad-def-icon-position');
-    if (ipSel) ipSel.value = defs.icon_position || 'above';
+    if (ipSel) ipSel.value = padGetEffectiveDefault('icon_position') || 'left';
 
 }
 
@@ -140,8 +143,19 @@ function padCollectButtonDefaults() {
     if (pbc) d.default_pad_bg_color = pbc;
     if (bgc) d.bg_color = bgc;
     if (fgc) d.fg_color = fgc;
+    var iconColor = padGetBindableColor('pad-def-icon-color');
+    if (iconColor) d.icon_color = iconColor;
     if (bdc) d.border_color = bdc;
+    var badgeColor = padGetBindableColor('pad-def-icon-badge-color');
+    if (badgeColor) d.icon_badge_color = badgeColor;
     var el;
+    el = document.getElementById('pad-def-icon-badge-padding');
+    if (el) {
+        const padding = Number(el.value);
+        if (el.value === '' || !Number.isInteger(padding) || padding < 0 || padding > 64)
+            throw new Error('Badge padding must be a whole number from 0 to 64');
+        d.icon_badge_padding = padding;
+    }
     el = document.getElementById('pad-def-default-font'); if (el) d.default_font = el.value;
     el = document.getElementById('pad-def-base-text-size');
     if (el) {
@@ -155,7 +169,7 @@ function padCollectButtonDefaults() {
     el = document.getElementById('pad-def-label-center-style'); if (el && el.value.trim()) d.label_center_style = el.value.trim();
     el = document.getElementById('pad-def-label-bottom-style'); if (el && el.value.trim()) d.label_bottom_style = el.value.trim();
     var ip = document.getElementById('pad-def-icon-position');
-    if (ip && ip.value && ip.value !== 'above') d.icon_position = ip.value;
+    if (ip && ip.value && ip.value !== (PAD_FIRMWARE_DEFAULTS.icon_position || 'left')) d.icon_position = ip.value;
     el = document.getElementById('pad-def-button-shadow-enabled'); if (el) d.button_shadow_enabled = el.checked;
     el = document.getElementById('pad-def-button-shadow-type'); if (el) d.button_shadow_type = el.value;
     el = document.getElementById('pad-def-button-shadow-color-mode'); if (el) d.button_shadow_color_mode = el.value;
@@ -328,6 +342,8 @@ function padResetAppearance(inputId, defaultKey) {
 var PAD_APPEARANCE_FIELDS = [
     { input: 'pad-edit-bg-color', key: 'bg_color', isColor: true },
     { input: 'pad-edit-fg-color', key: 'fg_color', isColor: true },
+    { input: 'pad-edit-icon-color', key: 'icon_color', isColor: true },
+    { input: 'pad-edit-icon-badge-color', key: 'icon_badge_color', isColor: true },
     { input: 'pad-edit-border-color', key: 'border_color', isColor: true },
     { input: 'pad-edit-border-width', key: 'border_width', isColor: false },
     { input: 'pad-edit-corner-radius', key: 'corner_radius', isColor: false },
@@ -484,7 +500,7 @@ function padCacheColors(page, buttons, pageBgColor) {
         seen.add(pageBgColor); colors.push(pageBgColor);
     }
     for (const b of buttons) {
-        [b.bg_color, b.fg_color, b.border_color].forEach(val => {
+        [b.bg_color, b.fg_color, b.border_color, b.icon_color, b.icon_badge_color].forEach(val => {
             const hex = padColorToHex(val, null);
             if (hex && !seen.has(hex)) { seen.add(hex); colors.push(hex); }
         });
@@ -505,12 +521,12 @@ function padCollectUsedColors(editCol, editRow) {
     }
     // 1) Current button first (highest priority)
     const cur = padFindButton(editCol, editRow);
-    if (cur) { add(cur.bg_color); add(cur.fg_color); add(cur.border_color); }
+    if (cur) { add(cur.bg_color); add(cur.fg_color); add(cur.border_color); add(cur.icon_color); add(cur.icon_badge_color); }
     // 2) Other buttons on same pad
     const currentButton = padFindButton(editCol, editRow);
     for (const b of padState.mainButtons.concat(padState.overlayButtons)) {
         if (b === currentButton) continue;
-        add(b.bg_color); add(b.fg_color); add(b.border_color);
+        add(b.bg_color); add(b.fg_color); add(b.border_color); add(b.icon_color); add(b.icon_badge_color);
     }
     // 3) Colors from other visited pads
     for (const [pg, hexArr] of Object.entries(padState.colorCache)) {

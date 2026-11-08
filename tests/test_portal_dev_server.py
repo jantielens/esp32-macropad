@@ -54,6 +54,7 @@ class PortalDevServerTest(unittest.TestCase):
     def setUp(self):
         PORTAL.reset_pad_fixtures(self.server)
         self.server.mock_fonts = {}
+        self.server.mock_config.pop("external_data", None)
 
     def request(self, path, method="GET", body=None, profile="esp32-p4-lcd4b", raw=False,
                 content_type="application/json"):
@@ -83,6 +84,7 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertNotIn("{{", fragment)
         self.assertIn('id="pad-edit-gauge-min"', fragment)
         self.assertIn('id="pad-edit-slider-axis"', fragment)
+        self.assertIn('id="pad-edit-face-emotion"', fragment)
         self.assertIn("Data binding", fragment)
         self.assertNotIn("pad-slider-preview", fragment)
         self.assertNotIn('id="binding-help-overlay"', fragment)
@@ -129,6 +131,37 @@ class PortalDevServerTest(unittest.TestCase):
             status, config = self.request("/api/config")
             self.assertEqual(status, 200)
             self.assertEqual(config["device_name"], "Mock")
+
+    def test_external_data_round_trip_and_partial_updates(self):
+        source = {"name": "weather", "url": "https://example.test/data?location=pelt", "refresh_seconds": 1}
+        self.assertEqual(self.request("/api/config?no_reboot=1", method="POST",
+                                      body={"external_data": [source]})[0], 200)
+        config = self.request("/api/config")[1]
+        self.assertEqual(config["external_data"][0]["url"], source["url"])
+        self.assertEqual(config["external_data"][0]["refresh_seconds"], 1)
+        resolved = self.request("/api/pad/resolve", method="POST", body={"bindings": [
+            "[ext:weather;current.temperature|missing]",
+            "[ext:weather;missing|not found]",
+            "[ext:weather;.@state|missing]"
+        ]})[1]["resolved"]
+        self.assertEqual([entry["value"] for entry in resolved], ["21.3", "not found", "healthy"])
+        source["name"] = "renamed"
+        source["refresh_seconds"] = 120
+        self.assertEqual(self.request("/api/config?no_reboot=1", method="POST",
+                                      body={"external_data": [source]})[0], 200)
+        self.assertEqual(self.request("/api/config?no_reboot=1", method="POST",
+                                      body={"device_name": "Mock"})[0], 200)
+        config = self.request("/api/config")[1]
+        self.assertEqual({key: config["external_data"][0][key] for key in source}, source)
+        for invalid in [{"name": "renamed"}, {"name": "renamed", "url": ""},
+                        {"name": "renamed", "url": source["url"], "refresh_seconds": 0},
+                        {"name": "renamed", "url": None}]:
+            self.assertEqual(self.request("/api/config?no_reboot=1", method="POST",
+                                          body={"external_data": [invalid]})[0], 400)
+        self.assertEqual(self.request("/api/config")[1]["external_data"][0]["url"], source["url"])
+        self.assertEqual(self.request("/api/config?no_reboot=1", method="POST", body={"external_data": []})[0], 200)
+        self.assertEqual(self.request("/api/config")[1]["external_data"], [])
+        self.assertEqual(self.request("/api/section/external-data", profile="reterminal-e1003-frame", raw=True)[0], 404)
 
     def test_wifi_setup_config_fixture(self):
         status, config = self.request("/api/config")
@@ -895,6 +928,11 @@ class PortalDevServerTest(unittest.TestCase):
         }})
         self.assertEqual(len(self.request("/api/icons/installed?pages=0,1")[1]["artifacts"]), 2)
         self.assertEqual(self.request("/api/icons/installed?pages=15")[1]["artifacts"], {})
+        self.assertEqual(self.request("/api/icons/installed?keys=pad_0_main_0_0")[1]["artifacts"], metadata)
+        self.assertEqual(self.request("/api/icons/installed?keys=pad_0_main_0_0_opt_5")[1]["artifacts"], {})
+        for keys in ("", "bad", "pad_0_main_0_0,", ",".join(["pad_0_main_0_0"] * 5)):
+            self.assertEqual(self.request("/api/icons/installed?keys=" + keys)[0], 400)
+        self.assertEqual(self.request("/api/icons/installed?keys=pad_0_main_0_0&pages=0")[0], 400)
         for pages in ("", "16", "-1", "0,,1"):
             self.assertEqual(self.request("/api/icons/installed?pages=" + pages)[0], 400)
         self.server.mock_icons["pad_0_main_0_0"] = png[:8]
@@ -1011,6 +1049,10 @@ class PortalDevServerTest(unittest.TestCase):
 
         _, non_touch_info = self.request("/api/info?catalog=1", profile="crowpanel-4.2-interactive")
         self.assertFalse(any(widget["type"] == "slider" for widget in non_touch_info["widget_catalog"]))
+        self.assertTrue(any(widget["type"] == "face" for widget in touch_info["widget_catalog"]))
+        self.assertTrue(any(widget["type"] == "face" for widget in non_touch_info["widget_catalog"]))
+        _, lcd_info = self.request("/api/info?catalog=1", profile="jc3248w535")
+        self.assertTrue(any(widget["type"] == "face" for widget in lcd_info["widget_catalog"]))
 
     def test_binding_schema_source_parity(self):
         schema = self.server.pad_fixture["binding_schema"]["schemes"]

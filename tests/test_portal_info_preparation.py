@@ -12,7 +12,6 @@ pad_api_source = (root / "src/app/web_portal_pad.cpp").read_text()
 storage_source = (root / "src/app/storage.cpp").read_text()
 icon_source = (root / "src/app/icon_store.cpp").read_text()
 icon_header = (root / "src/app/icon_store.h").read_text()
-validation_source = (root / "src/app/pad_validate.cpp").read_text()
 
 
 def section(start, end):
@@ -22,6 +21,8 @@ def section(start, end):
 
 harness = r'''
 #include "pad_config.h"
+#include "pad_validate.h"
+#include "fill_pattern.h"
 #include "esp_heap_caps.h"
 #include "psram_json_allocator.h"
 #include <ArduinoJson.h>
@@ -35,6 +36,7 @@ harness = r'''
 #include <new>
 #include <string>
 #include <thread>
+#include <vector>
 using std::min;
 static bool fail_allocation = false;
 void* heap_caps_malloc(size_t size, uint32_t) {
@@ -42,6 +44,7 @@ void* heap_caps_malloc(size_t size, uint32_t) {
 }
 void heap_caps_free(void* pointer) { free(pointer); }
 bool psramFound() { return false; }
+unsigned long millis() { return 0; }
 #define LOGD(...) ((void)0)
 #define LOGT(...) ((void)0)
 #define LOGI(...) ((void)0)
@@ -69,6 +72,11 @@ static bool ota_activity_is_active() { return ota_active; }
 static int g_file_mutex = 1;
 static bool xSemaphoreTake(int, int) { return true; }
 static void xSemaphoreGive(int) {}
+using SemaphoreHandle_t = std::mutex*;
+static constexpr int portMAX_DELAY = 0;
+static SemaphoreHandle_t xSemaphoreCreateMutex() { static std::mutex mutex; return &mutex; }
+static bool xSemaphoreTake(SemaphoreHandle_t mutex, int) { mutex->lock(); return true; }
+static void xSemaphoreGive(SemaphoreHandle_t mutex) { mutex->unlock(); }
 static const bool pdTRUE = true;
 static unsigned esp_random() { static unsigned value = 0; return ++value; }
 static unsigned storage_reads = 0;
@@ -81,6 +89,10 @@ struct File {
     int read() {
         if (offset >= size()) return -1;
         return static_cast<unsigned char>(files.at(path)[offset++]);
+    }
+    size_t read(uint8_t* dst, size_t count) {
+        count = std::min(count, size() - offset);
+        return readBytes(reinterpret_cast<char*>(dst), count);
     }
     size_t readBytes(char* dst, size_t size) {
         ++storage_reads;
@@ -118,23 +130,31 @@ static std::atomic<bool> g_ready{true};
 static void icon_store_preload_pad(uint8_t) {}
 enum IconKind : uint8_t { ICON_KIND_COLOR = 0, ICON_KIND_MONO = 1 };
 bool icon_store_source_matches_metadata(const char*, const char*, const char*) { return true; }
-bool icon_store_artifact_matches(const char*, const char*, IconKind, uint32_t) { return true; }
+enum IconArtifactValidation : uint8_t { ICON_ARTIFACT_VALID, ICON_ARTIFACT_INVALID_SOURCE, ICON_ARTIFACT_INVALID_PNG };
+IconArtifactValidation icon_store_validate_artifact(const char*, const char*, const char*, const char*,
+                                                    const char*, uint32_t) { return ICON_ARTIFACT_VALID; }
 uint32_t pad_icon_render_key(JsonObjectConst, JsonObjectConst) { return 1; }
+uint32_t pad_option_icon_render_key(JsonObjectConst, JsonObjectConst, uint8_t) { return 1; }
 void icon_store_build_key(uint8_t, const char*, uint8_t, uint8_t, char* key_out, size_t size) {
     if (size) key_out[0] = '\0';
 }
-bool icon_store_source_delete_if_unreferenced(const char*) { return true; }
+void icon_store_build_option_key(uint8_t, const char*, uint8_t, uint8_t, uint8_t, char* key_out, size_t size) {
+    if (size) key_out[0] = '\0';
+}
+static std::vector<std::string> cleaned_sources;
+bool icon_store_source_delete_if_unreferenced(const char* source) {
+    cleaned_sources.emplace_back(source);
+    return true;
+}
 void icon_store_delete_page_icons(uint8_t) {}
-void icon_store_cleanup_pad_icons(uint8_t) {}
+void icon_store_retire_unused_pad_icons(uint8_t) {}
 static ButtonDefaults defaults = {};
+struct WidgetType { void (*releaseConfig)(uint8_t*) = nullptr; };
+static const WidgetType* widget_find(const char*) { return nullptr; }
 static void button_defaults_init() {}
 static const ButtonDefaults* button_defaults_get() { return &defaults; }
 static const char* btn_default(const char* value, const char* fallback) {
     return value[0] ? value : fallback;
-}
-static void parse_bindable_field(JsonVariantConst value, char* out,
-                                 size_t capacity, const char* fallback) {
-    strlcpy(out, value | fallback, capacity);
 }
 static ButtonShadowMode parse_button_shadow_mode(JsonVariantConst) {
     return BUTTON_SHADOW_INHERIT;
@@ -143,22 +163,27 @@ static bool is_valid_binding_name(const char*) { return true; }
 static uint8_t action_list_parse(JsonVariantConst, ButtonAction*, size_t, bool) {
     return 0;
 }
-static bool parse_button(JsonObject object, ScreenButtonConfig* button, const ButtonDefaults*) {
+'''
+harness += section("static void parse_bindable_field", "// Parse a typed action object")
+harness += section("static bool parse_button_fill_style", "static bool parse_button(")
+harness += r'''
+static bool parse_button(JsonObject object, ScreenButtonConfig* button, const ButtonDefaults*, bool*) {
     button->col = object["col"] | uint8_t(0);
     button->row = object["row"] | uint8_t(0);
     button->col_span = object["col_span"] | uint8_t(1);
     button->row_span = object["row_span"] | uint8_t(1);
-    return true;
+    strlcpy(button->icon_source_id, object["icon"]["source_id"] | "",
+            sizeof(button->icon_source_id));
+    return parse_button_fill_style(object, button);
 }
 '''
 harness += icon_header[icon_header.index("#ifndef ICON_MAX_DIMENSION"):icon_header.index("// Icon kind")]
 harness += icon_header[icon_header.index("struct IconArtifactInfo"):icon_header.index("#ifdef __cplusplus")]
 harness += icon_header[icon_header.index("enum IconStoreResult"):icon_header.index("// Reference to a cached icon")]
-harness += validation_source[validation_source.index("bool pad_icon_source_id_valid"):validation_source.index("bool pad_icon_catalog_kind_valid")]
-harness += icon_source[icon_source.index("static bool validate_png"):icon_source.index("static bool source_matches_metadata_unlocked")]
+harness += icon_source[icon_source.index("static bool validate_png"):icon_source.index("static bool read_source_metadata_unlocked")]
 harness += icon_source[icon_source.index("bool icon_store_source_path"):icon_source.index("bool icon_store_source_matches_kind")]
 harness += icon_source[icon_source.index("struct IconSourceUpload {"):icon_source.index("IconStoreResult icon_store_source_install")]
-harness += icon_source[icon_source.index("static bool read_artifact_unlocked"):icon_source.index("    static bool artifact_matches_for_preload")]
+harness += icon_source[icon_source.index("static bool read_artifact_metadata_unlocked"):icon_source.index("struct IconPreloadPass")]
 harness += storage_source[storage_source.index("bool storage_write_verified"):storage_source.index("bool storage_mount")]
 harness += section("static bool g_fs_mounted", "// ============================================================================")
 harness += section("static void pad_config_path", "// ============================================================================")
@@ -166,7 +191,7 @@ harness += section("bool pad_config_init()", "// Internal: read and parse")
 harness += section("static int select_template_buttons",
                    "void pad_config_rebuild_all_caches()")
 harness += section("void pad_config_rebuild_all_caches()", "bool pad_config_get_data_stream_snapshot")
-harness += section("static const char* validate_pad_button_icon", "bool pad_config_save_raw")
+harness += section("static const char* validate_pad_icon_artifact", "bool pad_config_save_raw")
 harness += section("bool pad_config_save_raw", "bool pad_config_exists")
 harness += section("bool pad_config_exists", "uint32_t pad_config_get_generation()")
 harness += section("uint32_t pad_config_get_generation()", "uint32_t pad_config_get_eligible_mask()")
@@ -236,6 +261,28 @@ static void add_buttons(JsonArray buttons, unsigned count) {
     }
 }
 int main() {
+    {
+        JsonDocument doc;
+        JsonObject button = doc.to<JsonObject>();
+        ScreenButtonConfig parsed = {};
+        assert(parse_button_fill_style(button, &parsed) && !parsed.fill_style);
+        const std::string long_color(100, 'a');
+        button["bg_pattern"] = "dots";
+        button["bg_pattern_color"] = "[pad:color|#123456]";
+        button["widget_bar_pattern_color"] = 0x1234;
+        button["widget_bar_bg_pattern_color"] = long_color;
+        button["pattern_spacing"] = 4;
+        button["pattern_stroke_width"] = 8;
+        assert(parse_button_fill_style(button, &parsed) && parsed.fill_style);
+        assert(parsed.fill_style->patterns[0] == FillPattern::Dots);
+        assert(parsed.fill_style->spacing == 4 && parsed.fill_style->stroke == 4);
+        assert(strcmp(parsed.fill_style->color(0), "[pad:color|#123456]") == 0);
+        assert(strcmp(parsed.fill_style->color(1), "#001234") == 0);
+        assert(strcmp(parsed.fill_style->color(2), "#000000") == 0);
+        assert(strlen(parsed.fill_style->color(5)) == CONFIG_BINDABLE_SHORT_LEN - 1);
+        assert(strcmp(parsed.fill_style->color(6), "#000000") == 0);
+        free(parsed.fill_style);
+    }
     std::string stream_png("\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR\x00\x00\x00\x01\x00\x00\x00\x01", 24);
     stream_png.append(9, '\0');
     stream_png.append("\x00\x01\x00\x00IDAT", 8);
@@ -307,6 +354,25 @@ int main() {
     files.erase("/icons/pad_0_main_0_0.png");
     files["/config/pad_0.json"] = R"({"name":"Boot name","buttons":[]})";
     assert(pad_config_init());
+    {
+        const char* first_source = "s_000000000000000000000001";
+        const char* second_source = "s_000000000000000000000002";
+        JsonDocument original;
+        JsonArray buttons = original["buttons"].to<JsonArray>();
+        buttons.add<JsonObject>()["icon"]["source_id"] = first_source;
+        buttons.add<JsonObject>()["icon"]["source_id"] = first_source;
+        original["overlay_buttons"].to<JsonArray>().add<JsonObject>()["icon"]["source_id"] = second_source;
+        JsonDocument empty;
+        empty["buttons"].to<JsonArray>();
+        assert(save_document(2, original));
+        cleaned_sources.clear();
+        assert(save_document(2, empty));
+        assert(cleaned_sources.empty());
+        assert(save_document(2, original));
+        cleaned_sources.clear();
+        assert(pad_config_delete(2));
+        assert(cleaned_sources.empty());
+    }
     char copied[64];
     const unsigned reads = storage_reads;
     assert(pad_config_read_name(0, copied, sizeof(copied)));

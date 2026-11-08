@@ -103,7 +103,7 @@ function requestKind(url, options) {
     if (url === '/api/component/display/brightness') return 'brightness-' + JSON.parse(options.body).brightness;
     if (url.startsWith('/api/icons/page')) return 'icon-delete';
     if (url.startsWith('/api/icons/source')) return options && options.method === 'POST' ? 'icon-source-upload' : 'icon-source-read';
-    if (url.startsWith('/api/icons/installed?pages=')) return 'icon-metadata';
+    if (url.startsWith('/api/icons/installed?keys=')) return 'icon-metadata';
     if (url.startsWith('/api/icons/installed')) return 'icon-inventory';
     if (url.startsWith('/api/icons/install')) return 'icon-install';
     if (url.startsWith('/api/icons/file')) return options && options.method === 'DELETE' ? 'icon-file-delete' : 'icon-file-read';
@@ -287,6 +287,21 @@ function pageRequests(result, page) {
 }
 
 (async function() {
+    const layoutImport = await runImport({
+        pads: [{ cols: 1, rows: 1, buttons: [{
+            col: 0, row: 0, widget_type: 'sparkline', widget_position: 'left',
+            icon_position: 'left', group_size_pct: 65,
+            icon_color: '[health:color]', icon_badge_padding: 0, icon_badge_color: '[health:color]', widget_sparkline_fill_opacity: 35
+        }] }]
+    });
+    const layoutBody = JSON.parse(layoutImport.requests.find(request => request.kind === 'pad-save').options.body);
+    assert.strictEqual(layoutBody.buttons[0].widget_position, 'left');
+    assert.strictEqual(layoutBody.buttons[0].icon_position, 'left');
+    assert.strictEqual(layoutBody.buttons[0].group_size_pct, 65);
+    assert.strictEqual(layoutBody.buttons[0].icon_badge_padding, 0);
+    assert.strictEqual(layoutBody.buttons[0].icon_badge_color, '[health:color]');
+    assert.strictEqual(layoutBody.buttons[0].icon_color, '[health:color]');
+    assert.strictEqual(layoutBody.buttons[0].widget_sparkline_fill_opacity, 35);
     const success = await runImport();
     const uploadFetch = success.context.fetch;
     success.context.fetch = async () => response(false, { success: false, message: 'Invalid icon source or PNG' });
@@ -325,10 +340,12 @@ function pageRequests(result, page) {
     const padSaves = success.requests.filter(request => request.kind === 'pad-save');
     assert.deepStrictEqual(padSaves.map(request => request.page), [0, 1], JSON.stringify(success.messages));
     assert.deepStrictEqual(success.requests.map(request => request.kind), [
-        'config-save', 'button-defaults', 'icon-context', 'icon-metadata',
+        'config-save', 'button-defaults', 'icon-context', 'icon-metadata', 'icon-metadata',
+        'icon-metadata', 'icon-metadata', 'icon-metadata',
         'button-sizes', 'icon-source-upload', 'icon-source-upload', 'config-read', 'brightness-0',
         'icon-install', 'icon-install', 'icon-install', 'pad-save', 'brightness-42',
-        'icon-context', 'icon-source-read', 'icon-metadata', 'button-sizes', 'config-read', 'brightness-0', 'icon-install', 'icon-install',
+        'icon-context', 'icon-source-read', 'icon-metadata', 'icon-metadata', 'icon-metadata', 'icon-metadata',
+        'button-sizes', 'config-read', 'brightness-0', 'icon-install', 'icon-install',
         'pad-save', 'brightness-42',
         'device-info', 'reboot',
     ]);
@@ -375,6 +392,33 @@ function pageRequests(result, page) {
     }], [0], 1);
     assert.strictEqual(localExport[sourceId(100)].data, largeLocalPng.data,
         'Export restores the portable base64 envelope without changing retained PNG bytes');
+    const selectorImport = await runImport({
+        sources: [[localSourceId, largeLocalPng]],
+        pads: [{ cols: 1, rows: 1, buttons: [{ col: 0, row: 0, widget_type: 'option_selector',
+            widget_option_icon_5: { source_id: localSourceId, kind: 'color' },
+            widget_option_value_5: 'cool' }] }],
+    });
+    const selectorSave = selectorImport.requests.find(request => request.kind === 'pad-save');
+    assert.ok(selectorSave, JSON.stringify(selectorImport.messages));
+    assert.strictEqual(JSON.parse(selectorSave.options.body).buttons[0].widget_option_icon_5.source_id, sourceId(100));
+    assert.ok(selectorImport.requests.some(request => request.kind === 'icon-install' &&
+        request.url.includes('id=pad_0_main_0_0_opt_5')));
+    const selectorExport = await selectorImport.context.padCollectExportIconSources([{
+        page: 0, payload: { buttons: [{ widget_type: 'option_selector',
+            widget_option_icon_5: { source_id: sourceId(100), kind: 'color' } }] },
+    }], [0], 1);
+    assert.strictEqual(selectorExport[sourceId(100)].data, largeLocalPng.data);
+    assert.strictEqual(selectorImport.context.padOptionIconRenderKey(
+        { cols: 3, rows: 2, column_widths_px: [0, 40, 0] },
+        { col: 1, row: 0, col_span: 2, widget_type: 'option_selector',
+            widget_option_label: 'Cool', widget_option_icon_5: { kind: 'mono' },
+            widget_option_icon_size_pct: 75, widget_option_icon_badge_padding: 4 }, 5), 'e3f58eb6');
+    assert.strictEqual(selectorImport.context.padOptionIconRenderKey(
+        { cols: 3, rows: 2, column_widths_px: [0, 40, 0] },
+        { col: 1, row: 0, col_span: 2, widget_type: 'option_selector',
+            widget_option_label: 'Cool', widget_option_icon_5: { kind: 'mono' },
+            widget_option_icon_size_pct: 75, widget_option_icon_badge_padding: 4,
+            widget_option_inset: 0 }, 5), '3cf96935');
     await assert.rejects(localImport.context.padReadIconSourceResponse({
         headers: { get() { return 'image/png'; } },
         async blob() { return new Blob([new Uint8Array(512 * 1024 + 1)]); },
@@ -532,11 +576,12 @@ function pageRequests(result, page) {
         concurrent.context.padSavePage(),
     ]);
     assert.deepStrictEqual(
-        concurrent.requests.slice(firstConcurrentRequest).map(request => request.kind),
+        concurrent.requests.slice(firstConcurrentRequest).map(request => request.kind)
+            .filter(kind => kind !== 'icon-metadata'),
         [
-            'icon-context', 'icon-metadata', 'config-read', 'brightness-0', 'icon-install', 'icon-install', 'pad-save', 'brightness-42',
+            'icon-context', 'config-read', 'brightness-0', 'icon-install', 'icon-install', 'pad-save', 'brightness-42',
             'device-info',
-            'icon-context', 'icon-metadata', 'config-read', 'brightness-0', 'icon-install', 'icon-install', 'pad-save', 'brightness-42',
+            'icon-context', 'config-read', 'brightness-0', 'icon-install', 'icon-install', 'pad-save', 'brightness-42',
             'device-info',
         ],
         'concurrent saves must not overlap display blanking'
@@ -557,7 +602,7 @@ function pageRequests(result, page) {
     const reuseFetch = reuse.context.fetch;
     reuse.context.fetch = async function(url, fetchOptions = {}) {
         const result = await reuseFetch(url, fetchOptions);
-        if (url.startsWith('/api/icons/installed?pages=')) {
+        if (url.startsWith('/api/icons/installed?keys=')) {
             return response(true, { artifacts: reportedArtifact ? { pad_0_main_0_0: reportedArtifact } : {} });
         }
         if (url === '/api/icons/installed') return response(true, { icons: ['pad_0_main_0_0'] });
@@ -575,7 +620,52 @@ function pageRequests(result, page) {
     assert(!reuseRequests.some(request => request.kind === 'icon-install' || request.kind === 'icon-file-delete'),
         'An unchanged save must neither upload nor delete the matching artifact');
     assert.strictEqual(reuseRequests.find(request => request.kind === 'icon-metadata').url,
-        '/api/icons/installed?pages=0');
+        '/api/icons/installed?keys=pad_0_main_0_0');
+
+    const optionIcons = {
+        cols: 2, rows: 2,
+        buttons: [{ col: 0, row: 0, widget_type: 'option_selector',
+            ...Object.fromEntries(Array.from({ length: 5 }, (_, i) =>
+                ['widget_option_icon' + (i ? '_' + (i + 1) : ''), reusePayload.buttons[0].icon])) }],
+    };
+    const requestsBeforeBatch = reuse.requests.length;
+    await reuse.context.padPreparePageSave({ page: 0, payload: optionIcons, iconLayout: {} });
+    const batches = reuse.requests.slice(requestsBeforeBatch)
+        .filter(request => request.kind === 'icon-metadata')
+        .map(request => new URL(request.url, 'http://localhost').searchParams.get('keys').split(','));
+    assert.deepStrictEqual(batches.map(batch => batch.length), [1, 1, 1, 1, 1]);
+    assert(batches.flat().includes('pad_0_main_0_0_opt_5'));
+
+    const optionSizing = async (overrides, expected) => {
+        const button = {
+            col: 0, row: 0, widget_type: 'option_selector', border_width: '1', content_pad: '4',
+            widget_option_icon: reusePayload.buttons[0].icon, ...overrides,
+        };
+        const payload = { cols: 1, rows: 1, buttons: [button] };
+        await reuse.context.padPreparePageSave({ page: 0, payload, iconLayout: {} });
+        assert.strictEqual(reuse.renderedSizes.at(-1), expected);
+    };
+    await optionSizing({}, 82);
+    await optionSizing({ label_top: 'Title', widget_position: 'right', group_size_pct: 75 }, 14);
+    await optionSizing({ label_bottom: 'Title', widget_position: 'above', group_size_pct: 75 }, 14);
+    await optionSizing({ icon: reusePayload.buttons[0].icon, widget_position: 'below', group_size_pct: 75 }, 14);
+    await optionSizing({ label_center: 'Dynamic', widget_position: 'left' }, 78);
+    await optionSizing({ label_center: 'Title', group_size_pct: 75, content_pad: '10', border_width: '2' }, 10);
+    await optionSizing({ label_center: 'Title', group_size_pct: 50, widget_option_label_2: 'Other',
+        widget_option_inset: 2, widget_option_icon_badge_padding: 3, widget_option_icon_size_pct: 75 }, 9);
+    const defaultInsetKey = reuse.context.padOptionIconRenderKey(optionIcons, optionIcons.buttons[0], 1);
+    assert.notStrictEqual(reuse.context.padOptionIconRenderKey(optionIcons,
+        { ...optionIcons.buttons[0], widget_option_inset: 0 }, 1), defaultInsetKey);
+
+    const templatePayload = { ...reusePayload, template_pad: 1 };
+    const requestsBeforeTemplate = reuse.requests.length;
+    await reuse.context.padPreparePageSave({
+        page: 0, payload: templatePayload, iconLayout: {}, templatePage: 1, templateButtons: [],
+    });
+    const templateKeys = reuse.requests.slice(requestsBeforeTemplate)
+        .filter(request => request.kind === 'icon-metadata')
+        .flatMap(request => new URL(request.url, 'http://localhost').searchParams.get('keys').split(','));
+    assert(templateKeys.includes('pad_1_main_0_0'), 'Template fallback must be prepared');
 
     for (const mismatch of [null, { source_id: sourceId(2) }, { kind: 0 },
         { render_key: '00000001' }, { width: 89 }, { height: 89 }]) {
@@ -603,6 +693,20 @@ function pageRequests(result, page) {
     refreshFailure.context.padLoadPage = async () => { throw new Error('Refresh unavailable'); };
     await assert.rejects(refreshFailure.context.padSavePage({ operation }),
         /Pad saved, but finishing the save failed: Refresh unavailable/);
+
+    const validationFailure = await runImport();
+    const validationFetch = validationFailure.context.fetch;
+    for (const [body, expected] of [
+        [{ success: false, message: 'dialog message must be nonempty text' }, /dialog message must be nonempty text/],
+        [{ error: 'Legacy validation error' }, /Legacy validation error/],
+        [{}, /HTTP 500/],
+    ]) {
+        validationFailure.context.fetch = async (url, options = {}) => {
+            if (requestKind(url, options) === 'pad-save') return response(false, body);
+            return validationFetch(url, options);
+        };
+        await assert.rejects(validationFailure.context.padSavePage({ operation }), expected);
+    }
 
     const restoreFailure = await runImport();
     const restoreFetch = restoreFailure.context.fetch;

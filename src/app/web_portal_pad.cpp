@@ -6,6 +6,7 @@
 #include "button_defaults.h"
 #include "display_manager.h"
 #include "icon_store.h"
+#include "list_provider.h"
 #include "log_manager.h"
 #include "pad_block.h"
 #include "pad_config.h"
@@ -336,6 +337,8 @@ void handlePostPadConfig(AsyncWebServerRequest *request, uint8_t *data, size_t l
 
     // All data received — validate and save
     g_pad_post.buf[g_pad_post.total] = '\0';
+    const uint32_t save_started_ms = millis();
+    LOGI(TAG, "Pad %u save processing started", g_pad_post.page);
 
     size_t prepared_len = 0;
     uint8_t* prepared_json = prepare_pad_save_json(g_pad_post.page, g_pad_post.buf, g_pad_post.total, &prepared_len);
@@ -344,6 +347,8 @@ void handlePostPadConfig(AsyncWebServerRequest *request, uint8_t *data, size_t l
         pad_post_reset();
         return;
     }
+    LOGI(TAG, "Pad %u save prepared at %lu ms", g_pad_post.page,
+         (unsigned long)(millis() - save_started_ms));
 
     const char* err = validate_pad_json(prepared_json, prepared_len);
     if (err) {
@@ -353,6 +358,8 @@ void handlePostPadConfig(AsyncWebServerRequest *request, uint8_t *data, size_t l
         pad_post_reset();
         return;
     }
+    LOGI(TAG, "Pad %u save validated at %lu ms", g_pad_post.page,
+         (unsigned long)(millis() - save_started_ms));
 
     const char* save_error = nullptr;
     if (!pad_config_save_raw(g_pad_post.page, prepared_json, prepared_len, &save_error)) {
@@ -362,6 +369,8 @@ void handlePostPadConfig(AsyncWebServerRequest *request, uint8_t *data, size_t l
         pad_post_reset();
         return;
     }
+    LOGI(TAG, "Pad %u save stored at %lu ms", g_pad_post.page,
+         (unsigned long)(millis() - save_started_ms));
     heap_caps_free(prepared_json);
 
     uint8_t saved_page = g_pad_post.page;
@@ -373,11 +382,14 @@ void handlePostPadConfig(AsyncWebServerRequest *request, uint8_t *data, size_t l
 #if HAS_DISPLAY
     // Refresh the built-in 'pads' list provider so newly added/renamed pads
     // appear in list widgets without a reboot.
-    extern void list_provider_pads_invalidate();
-    list_provider_pads_invalidate();
+    list_provider_pads_update(saved_page, true);
+    LOGI(TAG, "Pad %u list updated at %lu ms", saved_page,
+         (unsigned long)(millis() - save_started_ms));
 #endif
 #if HAS_MQTT
     mqtt_sub_store_subscribe_all();
+    LOGI(TAG, "Pad %u subscriptions updated at %lu ms", saved_page,
+         (unsigned long)(millis() - save_started_ms));
 #endif
     request->send(200, "application/json", "{\"success\":true}");
 }
@@ -400,8 +412,7 @@ void handleDeletePadConfig(AsyncWebServerRequest *request) {
     }
 
 #if HAS_DISPLAY
-    extern void list_provider_pads_invalidate();
-    list_provider_pads_invalidate();
+    list_provider_pads_update((uint8_t)page, false);
 #endif
 #if HAS_MQTT
     mqtt_sub_store_subscribe_all();

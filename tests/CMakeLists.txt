@@ -190,7 +190,7 @@ set_tests_properties(test_runtime_ttf_oom PROPERTIES TIMEOUT 15 SKIP_RETURN_CODE
 add_host_legacy_test(test_icon_store_cleanup
     SOURCES test_icon_store_cleanup.cpp ${PROJECT_SOURCE_DIR}/src/app/icon_store.cpp
         ${HOST_LVGL_DIR}/libs/lodepng/lodepng.c
-    DEFINITIONS HAS_FILESYSTEM=1 USE_SD_STORAGE=0 HOST_LOG_CAPTURE LV_USE_LODEPNG=1
+    DEFINITIONS HAS_FILESYSTEM=1 USE_SD_STORAGE=0 HOST_LOG_CAPTURE LV_USE_LODEPNG=1 TEST_HEAP_CAPS_ALLOCATOR=1
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/font_store_overrides ${HOST_ARDUINOJSON_DIR}
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
     OPTIONS -Wno-deprecated-declarations
@@ -275,12 +275,25 @@ target_link_libraries(test_gamepad_widgets PRIVATE host_lvgl)
 
 add_host_gtest(test_sparkline_widget test_sparkline_widget.cpp)
 target_sources(test_sparkline_widget PRIVATE ${PROJECT_SOURCE_DIR}/src/app/pad_font_cache.cpp)
+target_sources(test_sparkline_widget PRIVATE ${PROJECT_SOURCE_DIR}/src/app/label_style.cpp)
+# Gauge's pointer-rich state needs more storage on the 64-bit host, not on firmware.
+target_compile_definitions(test_sparkline_widget PRIVATE WIDGET_STATE_MAX_BYTES=512 DISPLAY_DISABLE_ANIMATIONS=0)
 target_include_directories(test_sparkline_widget PRIVATE ${HOST_ARDUINOJSON_DIR})
 target_compile_options(test_sparkline_widget PRIVATE
     -Wno-deprecated-declarations -Wno-unused-parameter -Wno-unused-variable -Wno-format-truncation
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/Arduino.h"
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h")
 target_link_libraries(test_sparkline_widget PRIVATE host_lvgl m)
+
+add_host_gtest(test_external_widget test_external_widget.cpp)
+target_include_directories(test_external_widget PRIVATE ${HOST_ARDUINOJSON_DIR})
+target_compile_definitions(test_external_widget PRIVATE HAS_NATIVE_EXTENSIONS=1)
+target_compile_options(test_external_widget PRIVATE
+    -Wno-deprecated-declarations -Wno-unused-parameter -Wno-unused-variable
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/Arduino.h"
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h"
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/log_manager.h")
+target_link_libraries(test_external_widget PRIVATE host_lvgl m)
 
 add_host_gtest(test_slider_widget test_slider_widget.cpp)
 target_sources(test_slider_widget PRIVATE ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp
@@ -367,6 +380,23 @@ target_compile_options(test_toggle_widget PRIVATE -Wno-deprecated-declarations
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h"
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/log_manager.h")
 target_link_libraries(test_toggle_widget PRIVATE host_lvgl m)
+
+foreach(animations 0 1 2)
+    add_host_gtest(test_face_widget_${animations} test_face_widget.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/expr_binding.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/expr_eval.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp stubs.cpp)
+    target_include_directories(test_face_widget_${animations} PRIVATE ${HOST_ARDUINOJSON_DIR})
+    target_compile_definitions(test_face_widget_${animations} PRIVATE
+        HAS_FACE_WIDGET=1 HAS_MCP=1 DISPLAY_DISABLE_ANIMATIONS=$<BOOL:${animations}>
+        HAS_LVGL_EPAPER=$<STREQUAL:${animations},2>)
+    target_compile_options(test_face_widget_${animations} PRIVATE -Wno-deprecated-declarations
+        "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/Arduino.h"
+        "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h"
+        "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/log_manager.h")
+    target_link_libraries(test_face_widget_${animations} PRIVATE host_lvgl m)
+endforeach()
 
 add_host_legacy_test(test_ota_activity
     SOURCES test_ota_activity.cpp ${PROJECT_SOURCE_DIR}/src/app/ota_activity.cpp
@@ -481,7 +511,9 @@ target_compile_options(test_ha_live PRIVATE
 
 add_host_legacy_test(test_binding_value
     SOURCES test_binding_value.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/external_data_config.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS HAS_EXTERNAL_DATA=1 HAS_DISPLAY=1 HAS_PSRAM=1 HAS_MCP=1
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h
     OPTIONS -Wno-deprecated-declarations)
 
@@ -736,6 +768,13 @@ add_host_legacy_test(test_camera_capture_action
 )
 add_host_legacy_test(test_pad_cycle SOURCES test_pad_cycle.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_cycle.cpp PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_pad_config_dynamic_layout SOURCES test_pad_config_dynamic_layout.cpp PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
+add_host_gtest(test_option_selector_config test_option_selector_config.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/widgets/option_selector_config.cpp)
+target_include_directories(test_option_selector_config PRIVATE ${HOST_ARDUINOJSON_DIR})
+target_compile_definitions(test_option_selector_config PRIVATE TEST_HEAP_CAPS_ALLOCATOR=1)
+target_compile_options(test_option_selector_config PRIVATE -Wno-deprecated-declarations
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/Arduino.h"
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h")
 add_host_legacy_test(test_pad_overlay_input
     SOURCES test_pad_overlay_input.cpp
     INCLUDES ${HOST_LVGL_DIR}
@@ -844,7 +883,7 @@ add_host_legacy_test(test_expose_dry_down SOURCES test_expose_dry_down.cpp INCLU
 add_host_legacy_test(test_meter_mag SOURCES test_meter_mag.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer DEFINITIONS IS_DARKROOM_TIMER=1 LIBRARIES m)
 add_host_legacy_test(test_print_log SOURCES test_print_log.cpp ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/print_log_overrides ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer ${HOST_ARDUINOJSON_DIR} DEFINITIONS IS_DARKROOM_TIMER=1 HAS_FILESYSTEM=1 LIBRARIES m pthread)
 add_host_legacy_test(test_mcp_result_strings SOURCES test_mcp_result_strings.cpp INCLUDES ${HOST_ARDUINOJSON_DIR})
-add_host_legacy_test(test_mcp_device_identity SOURCES test_mcp_device_identity.cpp ${PROJECT_SOURCE_DIR}/src/app/mcp_device_identity.cpp INCLUDES ${HOST_ARDUINOJSON_DIR} DEFINITIONS HAS_MCP=1 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
+add_host_legacy_test(test_mcp_device_identity SOURCES test_mcp_device_identity.cpp ${PROJECT_SOURCE_DIR}/src/app/mcp_device_identity.cpp INCLUDES ${HOST_ARDUINOJSON_DIR} DEFINITIONS HAS_MCP=1 HAS_EXTERNAL_DATA=1 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_fs_health_littlefs SOURCES test_fs_health.cpp ${PROJECT_SOURCE_DIR}/src/app/fs_health.cpp DEFINITIONS USE_SD_STORAGE=0 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_fs_health_sdmmc SOURCES test_fs_health.cpp ${PROJECT_SOURCE_DIR}/src/app/fs_health.cpp DEFINITIONS USE_SD_STORAGE=1 HAS_SD_CARD=1 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_fs_health_sd_spi SOURCES test_fs_health.cpp ${PROJECT_SOURCE_DIR}/src/app/fs_health.cpp DEFINITIONS USE_SD_STORAGE=1 HAS_SD_CARD=1 SD_STORAGE_SPI=1 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
@@ -872,6 +911,7 @@ target_include_directories(binding_schema_json PRIVATE ${HOST_ARDUINOJSON_DIR} $
 add_library(binding_schema_values STATIC ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp)
 target_include_directories(binding_schema_values PRIVATE ${HOST_ARDUINOJSON_DIR}
     ${PROJECT_SOURCE_DIR}/tests ${PROJECT_SOURCE_DIR}/src/app)
+target_compile_definitions(binding_schema_values PRIVATE HAS_EXTERNAL_DATA=1 HAS_DISPLAY=1 HAS_PSRAM=1)
 target_compile_options(binding_schema_values PRIVATE -Wno-deprecated-declarations)
 target_link_libraries(test_pad_binding PRIVATE binding_schema_values)
 
@@ -889,6 +929,7 @@ function(add_binding_schema_profile name definition)
             ${PROJECT_SOURCE_DIR}/src/app/time_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp
             ${PROJECT_SOURCE_DIR}/src/app/mqtt_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/config_psram.cpp
             ${PROJECT_SOURCE_DIR}/src/app/ha_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/var_binding.cpp
+            ${PROJECT_SOURCE_DIR}/src/app/ext_binding.cpp
             ${PROJECT_SOURCE_DIR}/src/app/runtime_variables.cpp
             $<TARGET_OBJECTS:binding_schema_json> ${ARGN}
         INCLUDES ${PROJECT_SOURCE_DIR}/tests/binding_schema_profiles ${PROJECT_SOURCE_DIR}/src

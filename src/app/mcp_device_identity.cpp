@@ -53,7 +53,11 @@ McpIdentityRequirement mcp_device_identity_requirement(bool read_only,
     if (read_only) return MCP_IDENTITY_EXEMPT;
     if (destructive || requires_authoring ||
         strcmp(tool_name, "set_config") == 0 ||
-        strcmp(tool_name, "set_component_config") == 0) {
+        strcmp(tool_name, "set_component_config") == 0
+#if HAS_EXTERNAL_DATA
+        || strcmp(tool_name, "set_external_data_source") == 0
+#endif
+    ) {
         return MCP_IDENTITY_REQUIRED;
     }
     if (strcmp(tool_name, "scale_control") == 0) {

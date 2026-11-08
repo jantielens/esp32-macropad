@@ -28,7 +28,6 @@ struct SliderConfig {
     bool show_value;
     uint8_t axis;
     uint8_t length_pct;
-    uint8_t icon_position;
     uint8_t track_px;
     uint8_t knob_px;
     bool valid_range;
@@ -40,12 +39,8 @@ struct SliderState {
     uint8_t action_count;
     lv_obj_t* button;
     lv_obj_t* control;
-    lv_obj_t* icon;
-    lv_obj_t* center_label;
-    lv_obj_t* top_label;
-    lv_obj_t* bottom_label;
     lv_obj_t* value_label;
-    const LabelStyle* value_style;
+    LabelStyle value_style;
     PadFontCache* value_fonts;
     uint16_t value_width;
     uint16_t display_position;
@@ -54,12 +49,6 @@ struct SliderState {
     uint16_t gesture_start_position;
     uint16_t pending_position;
     uint32_t pending_since;
-    int16_t offset_x;
-    int16_t offset_y;
-    int16_t label_offset_x;
-    int16_t label_offset_y;
-    uint16_t icon_scale_x;
-    uint16_t icon_scale_y;
     bool bound;
     bool available;
     bool has_report;
@@ -79,7 +68,7 @@ static const char* const kSliderFields[] = {
     "widget_slider_min", "widget_slider_max", "widget_slider_step",
     "widget_slider_axis", "widget_slider_length_pct", "widget_slider_track_px",
     "widget_slider_knob_px", "widget_slider_track_color", "widget_slider_fill_color",
-    "widget_slider_knob_color", "widget_slider_icon_position",
+    "widget_slider_knob_color",
     "widget_slider_show_value", "widget_slider_value_font_size", "widget_slider_value_color",
     "widget_slider_value_side",
     "widget_slider_value_format", "widget_slider_value_clearance"
@@ -157,9 +146,6 @@ static const char* slider_validate(JsonObjectConst button) {
         return "slider colors must be #RRGGBB literals";
     if (button.containsKey("widget_data_binding") && !button["widget_data_binding"].is<const char*>())
         return "slider source must be a string";
-    const char* icon_position = button["widget_slider_icon_position"] | "left";
-    if (strcmp(icon_position, "left") && strcmp(icon_position, "above") && strcmp(icon_position, "below"))
-        return "slider icon position must be left, above, or below";
     if (slider_has_ordinary_actions(button, "lp_actions")) return "slider does not support long-press actions";
     if (button.containsKey("widget_slider_show_value") && !button["widget_slider_show_value"].is<bool>())
         return "slider show value must be a boolean";
@@ -199,9 +185,7 @@ static void slider_parse(const JsonObject& button, uint8_t* data) {
     config->valid_range = slider_numeric_range_init(minimum, maximum, step, &config->range);
     const char* axis = button["widget_slider_axis"] | "horizontal";
     config->axis = strcmp(axis, "vertical") == 0 ? 1 : 0;
-    config->length_pct = static_cast<uint8_t>(button["widget_slider_length_pct"] | 50);
-    const char* icon_position = button["widget_slider_icon_position"] | "left";
-    config->icon_position = !strcmp(icon_position, "above") ? 1 : !strcmp(icon_position, "below") ? 2 : 0;
+    config->length_pct = static_cast<uint8_t>(button["widget_slider_length_pct"] | 100);
     config->track_px = static_cast<uint8_t>(button["widget_slider_track_px"] | 0);
     config->knob_px = static_cast<uint8_t>(button["widget_slider_knob_px"] | 0);
     strlcpy(config->track_color, button["widget_slider_track_color"] | DEFAULT_WIDGET_TRACK_COLOR,
@@ -278,10 +262,10 @@ static void slider_update_value(SliderState* state) {
     slider_format_value(state->config, slider_numeric_value_at(state->config->range, state->display_position),
                         text, sizeof(text));
     lv_label_set_text(state->value_label, text);
-    lv_obj_t* typography = state->center_label ? state->center_label : state->button;
+    lv_obj_t* typography = state->button;
     const lv_font_t* font = lv_obj_get_style_text_font(typography, LV_PART_MAIN);
     if (state->config->value_font_size) {
-        LabelStyle style = state->center_label ? *state->value_style : LabelStyle{};
+        LabelStyle style = state->value_style;
         style.font_size = state->config->value_font_size;
         font = pad_resolve_font(style, font, state->value_fonts);
     }
@@ -364,117 +348,14 @@ static void slider_set_display(SliderState* state, uint16_t position) {
     slider_render(state);
 }
 
-struct SliderContentGroup {
-    lv_area_t icon_bounds;
-    lv_area_t label_bounds;
-    int icon_width;
-    int icon_height;
-    int label_width;
-    int label_height;
-    int gap;
-    int height;
-};
-
-static SliderContentGroup slider_measure_group(SliderState* state, int width) {
-    SliderContentGroup group{};
-    if (width <= 0) {
-        if (state->icon) lv_obj_add_flag(state->icon, LV_OBJ_FLAG_HIDDEN);
-        if (state->center_label) lv_obj_add_flag(state->center_label, LV_OBJ_FLAG_HIDDEN);
-        return group;
-    }
-    if (state->icon) lv_obj_remove_flag(state->icon, LV_OBJ_FLAG_HIDDEN);
-    if (state->center_label) lv_obj_remove_flag(state->center_label, LV_OBJ_FLAG_HIDDEN);
-    if (state->center_label) {
-        lv_obj_set_width(state->center_label, width);
-        lv_obj_set_height(state->center_label, lv_font_get_line_height(lv_obj_get_style_text_font(state->center_label, LV_PART_MAIN)));
-        lv_label_set_long_mode(state->center_label, LV_LABEL_LONG_DOT);
-        lv_obj_update_layout(state->button);
-    }
-    group.icon_bounds = widget_content_bounds(state->icon);
-    group.label_bounds = widget_content_bounds(state->center_label);
-    group.icon_width = state->icon ? lv_area_get_width(&group.icon_bounds) : 0;
-    group.icon_height = state->icon ? lv_area_get_height(&group.icon_bounds) : 0;
-    if (state->icon && group.icon_width > width) {
-        lv_obj_add_flag(state->icon, LV_OBJ_FLAG_HIDDEN);
-        group.icon_width = 0;
-        group.icon_height = 0;
-    }
-    group.label_width = state->center_label ? lv_area_get_width(&group.label_bounds) : 0;
-    group.label_height = state->center_label ? lv_area_get_height(&group.label_bounds) : 0;
-    group.gap = group.icon_height && group.label_height ? 4 : 0;
-    group.height = group.icon_height + group.gap + group.label_height;
-    return group;
-}
-
-static void slider_hide_content_group(SliderState* state) {
-    if (state->icon) lv_obj_add_flag(state->icon, LV_OBJ_FLAG_HIDDEN);
-    if (state->center_label) lv_obj_add_flag(state->center_label, LV_OBJ_FLAG_HIDDEN);
-}
-
-static void slider_place_group(SliderState* state, int x, int y, int width,
-                               const SliderContentGroup& group) {
-    if (group.height <= 0 || width <= 0) return;
-    x += state->offset_x;
-    y += state->offset_y;
-    int cursor_y = y;
-    if (state->icon && group.icon_height) {
-        lv_obj_set_pos(state->icon,
-                       x + (width - group.icon_width) / 2 - group.icon_bounds.x1,
-                       cursor_y - group.icon_bounds.y1);
-        cursor_y += group.icon_height + group.gap;
-    }
-    if (state->center_label) {
-        lv_obj_set_pos(state->center_label,
-                       x + (width - group.label_width) / 2 - group.label_bounds.x1
-                           + state->label_offset_x,
-                       cursor_y - group.label_bounds.y1 + state->label_offset_y);
-    }
-}
-
 static void slider_layout(SliderState* state) {
     if (!state->button || !state->control) return;
     const SliderConfig& config = *state->config;
     lv_obj_update_layout(state->button);
     const int content_width = lv_obj_get_content_width(state->button);
-    int body_top = 0;
-    int body_bottom = lv_obj_get_content_height(state->button);
-    if (state->top_label) {
-        const lv_area_t bounds = widget_content_bounds(state->top_label);
-        const int label_bottom = lv_obj_get_y(state->top_label) + bounds.y2 + 1;
-        if (label_bottom + 4 > body_top) body_top = label_bottom + 4;
-    }
-    if (state->bottom_label) {
-        const lv_area_t bounds = widget_content_bounds(state->bottom_label);
-        const int label_top = lv_obj_get_y(state->bottom_label) + bounds.y1;
-        if (label_top - 4 < body_bottom) body_bottom = label_top - 4;
-    }
-    if (state->icon) lv_obj_remove_flag(state->icon, LV_OBJ_FLAG_HIDDEN);
-    if (state->center_label) lv_obj_remove_flag(state->center_label, LV_OBJ_FLAG_HIDDEN);
-    if (state->icon && lv_obj_check_type(state->icon, &lv_image_class)) {
-        lv_image_set_scale_x(state->icon, state->icon_scale_x);
-        lv_image_set_scale_y(state->icon, state->icon_scale_y);
-        const lv_area_t bounds = widget_content_bounds(state->icon);
-        const int max_width = content_width * 4 / 10;
-        const int max_height = (body_bottom - body_top) * 4 / 10;
-        const int width_scale = max_width * 256 / lv_area_get_width(&bounds);
-        const int height_scale = max_height * 256 / lv_area_get_height(&bounds);
-        const int scale = clamp_val<int>(width_scale < height_scale ? width_scale : height_scale, 1, 256);
-        lv_image_set_scale_x(state->icon, state->icon_scale_x * scale / 256);
-        lv_image_set_scale_y(state->icon, state->icon_scale_y * scale / 256);
-    }
-    const lv_area_t icon_bounds = widget_content_bounds(state->icon);
-    const int icon_width = state->icon ? lv_area_get_width(&icon_bounds) : 0;
-    const int icon_height = state->icon ? lv_area_get_height(&icon_bounds) : 0;
-    const bool side_icon = config.icon_position == 0;
-    const int outer_icon_height = state->icon && !side_icon ? icon_height + 4 : 0;
-    const int full_top = body_top;
-    const int full_bottom = body_bottom;
-    if (config.icon_position == 1) body_top += outer_icon_height;
-    if (config.icon_position == 2) body_bottom -= outer_icon_height;
-    const int body_height = body_bottom > body_top ? body_bottom - body_top : 0;
-    const bool shared_row = (state->icon && side_icon) || state->center_label;
+    const int body_height = lv_obj_get_content_height(state->button);
     const int target_length = (config.axis == 0 ? content_width : body_height)
-        * (shared_row ? config.length_pct : 100) / 100;
+        * config.length_pct / 100;
     const int cross_available = config.axis == 0 ? body_height : content_width;
     const int cross_limit = cross_available > 0 ? cross_available : 1;
     const int automatic_knob = std::min(50, std::min(cross_available * 3 / 5, target_length / 4));
@@ -487,56 +368,19 @@ static void slider_layout(SliderState* state) {
         && cross_available >= 8 && knob >= 8;
     const int control_length = target_length > knob ? target_length - knob : 1;
     usable = usable && control_length >= knob && control_length > track;
-    int control_x = 0, control_y = body_top;
+    int control_x = 0, control_y = 0;
     if (config.axis == 0) {
-        const int slot_left = shared_row ? content_width - target_length : (content_width - target_length) / 2;
-        const bool show_icon = state->icon && side_icon && icon_width + 4 <= slot_left && icon_height <= body_height;
-        if (state->icon && side_icon && !show_icon) lv_obj_add_flag(state->icon, LV_OBJ_FLAG_HIDDEN);
-        const int label_left = show_icon ? icon_width + 4 : 0;
-        const int label_width = slot_left - label_left - 4;
-        if (state->center_label) {
-            lv_label_set_long_mode(state->center_label, LV_LABEL_LONG_DOT);
-            const int scale = lv_obj_get_style_transform_scale_x(state->center_label, LV_PART_MAIN);
-            lv_obj_set_width(state->center_label, label_width > 0 ? label_width * 256 / (scale > 0 ? scale : 256) : 0);
-            lv_obj_set_height(state->center_label, lv_font_get_line_height(lv_obj_get_style_text_font(state->center_label, LV_PART_MAIN)));
-            if (label_width <= 0) lv_obj_add_flag(state->center_label, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_update_layout(state->button);
-        }
-        const lv_area_t label_bounds = widget_content_bounds(state->center_label);
-        const int label_height = state->center_label && label_width > 0
-            ? lv_area_get_height(&label_bounds) : 0;
-        if (show_icon) lv_obj_set_pos(state->icon, state->offset_x - icon_bounds.x1,
-            body_top + (body_height - icon_height) / 2 + state->offset_y - icon_bounds.y1);
-        if (state->center_label) {
-            if (label_height > body_height) lv_obj_add_flag(state->center_label, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_set_pos(state->center_label, label_left + state->offset_x + state->label_offset_x - label_bounds.x1,
-                body_top + (body_height - label_height) / 2 + state->offset_y + state->label_offset_y - label_bounds.y1);
-        }
-        control_x = slot_left + knob / 2;
-        control_y = body_top + (body_height - track) / 2;
+        control_x = (content_width - control_length) / 2;
+        control_y = (body_height - track) / 2;
         lv_obj_set_size(state->control, control_length, track);
     } else {
-        const int group_width = content_width - knob - 4;
-        lv_obj_t* outer_icon = !side_icon ? state->icon : nullptr;
-        if (outer_icon) state->icon = nullptr;
-        const SliderContentGroup group = slider_measure_group(state, group_width);
-        const bool group_fits = group.height > 0 && group.height <= body_height && group_width > 0;
-        if (group.height && !group_fits) slider_hide_content_group(state);
-        else if (group_fits)
-            slider_place_group(state, knob + 4,
-                               body_top + (body_height - group.height) / 2,
-                               group_width, group);
-        if (outer_icon) state->icon = outer_icon;
-        control_x = shared_row ? (knob - track) / 2 : (content_width - track) / 2;
-        control_y = body_top + (body_height - control_length) / 2;
+        control_x = (content_width - track) / 2;
+        control_y = (body_height - control_length) / 2;
         lv_obj_set_size(state->control, track, control_length);
     }
-    if (state->icon && !side_icon) lv_obj_set_pos(state->icon,
-        (content_width - icon_width) / 2 + state->offset_x - icon_bounds.x1,
-        (config.icon_position == 1 ? full_top : full_bottom - icon_height) + state->offset_y - icon_bounds.y1);
     lv_obj_set_style_pad_all(state->control, (knob - track) / 2, LV_PART_KNOB);
     lv_obj_set_ext_click_area(state->control, (24 > knob ? 24 : knob) / 2);
-    lv_obj_set_pos(state->control, control_x + state->offset_x, control_y + state->offset_y);
+    lv_obj_set_pos(state->control, control_x, control_y);
     lv_obj_update_layout(state->button);
     state->layout_usable = usable;
     state->layout_dirty = false;
@@ -718,39 +562,18 @@ static void slider_event(lv_event_t* event) {
 
 static void slider_create(lv_obj_t* button, const WidgetConfig* widget,
                           const ScreenButtonConfig* source, const PadRect*,
-                          const UIScaleInfo*, lv_obj_t* icon,
-                          lv_obj_t* center, WidgetState* runtime) {
+                          const UIScaleInfo*, WidgetState* runtime) {
     const auto* config = reinterpret_cast<const SliderConfig*>(widget->data);
     auto* state = new (runtime->data) SliderState{};
     state->config = config;
-    state->value_style = &source->style_center;
+    state->value_style = source->style_center;
     state->value_fonts = runtime->font_owner;
     state->actions = source->actions;
     state->action_count = source->action_count;
     state->button = button;
-    state->icon = icon;
-    if (icon && lv_obj_check_type(icon, &lv_image_class)) {
-        state->icon_scale_x = lv_image_get_scale_x(icon);
-        state->icon_scale_y = lv_image_get_scale_y(icon);
-    }
-    state->center_label = center;
     state->bound = widget->data_binding[0][0] != '\0';
     state->available = !state->bound;
     state->layout_usable = true;
-    state->offset_x = source->ui_offset_x;
-    state->offset_y = source->ui_offset_y;
-    state->label_offset_x = source->style_center.x_offset;
-    state->label_offset_y = source->style_center.y_offset;
-    for (uint32_t index = 0; index < lv_obj_get_child_count(button); ++index) {
-        lv_obj_t* child = lv_obj_get_child(button, index);
-        if (child == center || !lv_obj_check_type(child, &lv_label_class)) continue;
-        const lv_align_t align = lv_obj_get_style_align(child, LV_PART_MAIN);
-        if (align == LV_ALIGN_TOP_MID) state->top_label = child;
-        if (align == LV_ALIGN_BOTTOM_MID) state->bottom_label = child;
-    }
-    if (icon) lv_obj_set_align(icon, LV_ALIGN_TOP_LEFT);
-    if (center) lv_obj_set_align(center, LV_ALIGN_TOP_LEFT);
-
     state->control = lv_slider_create(button);
     if (!state->control) {
         state->available = false;
@@ -765,11 +588,6 @@ static void slider_create(lv_obj_t* button, const WidgetConfig* widget,
     lv_obj_add_event_cb(state->control, slider_event, LV_EVENT_ALL, state);
     lv_obj_add_event_cb(button, slider_mark_layout_dirty, LV_EVENT_SIZE_CHANGED, state);
     lv_obj_add_event_cb(button, slider_mark_layout_dirty, LV_EVENT_STYLE_CHANGED, state);
-    for (lv_obj_t* child : {state->icon, state->center_label, state->top_label, state->bottom_label}) {
-        if (!child) continue;
-        lv_obj_add_event_cb(child, slider_mark_layout_dirty, LV_EVENT_SIZE_CHANGED, state);
-        lv_obj_add_event_cb(child, slider_mark_layout_dirty, LV_EVENT_STYLE_CHANGED, state);
-    }
     const uint32_t track_rgb = widget_default_rgb(DEFAULT_WIDGET_TRACK_COLOR);
     const uint32_t fill_rgb = widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR);
     const uint32_t knob_rgb = widget_default_rgb(DEFAULT_WIDGET_INDICATOR_COLOR);
@@ -858,16 +676,12 @@ static void slider_describe(JsonObject& out) {
     JsonObject axis = fields.createNestedObject();
     axis["name"] = "widget_slider_axis"; axis["type"] = "string"; axis["default"] = "horizontal";
     JsonArray axes = axis.createNestedArray("enum"); axes.add("horizontal"); axes.add("vertical");
-    add_number("widget_slider_length_pct", 20, 100, 50);
+    add_number("widget_slider_length_pct", 20, 100, 100);
     add_number("widget_slider_track_px", 0, 32, 0);
     add_number("widget_slider_knob_px", 0, 64, 0);
     for (const char* name : {"widget_slider_track_color", "widget_slider_fill_color", "widget_slider_knob_color"}) {
         JsonObject color = fields.createNestedObject(); color["name"] = name; color["type"] = "color";
     }
-    JsonObject placement = fields.createNestedObject();
-    placement["name"] = "widget_slider_icon_position"; placement["type"] = "string"; placement["default"] = "left";
-    JsonArray positions = placement.createNestedArray("enum");
-    for (const char* position : {"left", "above", "below"}) positions.add(position);
     JsonObject show_value = fields.createNestedObject();
     show_value["name"] = "widget_slider_show_value";
     show_value["type"] = "boolean"; show_value["default"] = true;
@@ -883,7 +697,7 @@ static void slider_describe(JsonObject& out) {
     side["name"] = "widget_slider_value_side"; side["type"] = "string"; side["default"] = "auto";
     JsonArray sides = side.createNestedArray("enum");
     for (const char* value : {"auto", "before", "after"}) sides.add(value);
-    out["note"] = "Touch slider. actions[] runs once on a changed release; {value} is optional in registered value fields. No long press. Length is a percentage of the content width (horizontal) or body height (vertical), including the knob; without a center label or side icon, it uses the full length. Automatic sizing targets a 50px knob and 20px track, shrinking to fit. Bound reports are authoritative, with a five-second confirmation timeout.";
+    out["note"] = "Touch slider. actions[] runs once on a changed release; {value} is optional in registered value fields. No long press. Length is a percentage of the widget region width (horizontal) or height (vertical), including the knob. Automatic sizing targets a 50px knob and 20px track, shrinking to fit. Bound reports are authoritative, with a five-second confirmation timeout.";
 }
 #endif
 

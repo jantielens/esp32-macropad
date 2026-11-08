@@ -36,6 +36,7 @@ struct NumericRockerState {
     lv_obj_t* chevron_inner_a;   // Inner dec chevron
     lv_obj_t* chevron_inner_b;   // Inner inc chevron
     lv_obj_t* chevron_outer_b;   // Outer inc chevron (right/bottom)
+    int16_t span;
 };
 
 static_assert(sizeof(NumericRockerState) <= WIDGET_STATE_MAX_BYTES,
@@ -77,10 +78,9 @@ static void numericrocker_parse(const JsonObject& btn, uint8_t* data) {
 static void numericrocker_create(lv_obj_t* tile, const WidgetConfig* wcfg,
                                   const ScreenButtonConfig* btn,
                                   const PadRect* rect, const UIScaleInfo* scale,
-                                  lv_obj_t* icon_img, lv_obj_t* center_label,
                                   WidgetState* state) {
-    (void)center_label;
     (void)rect;
+    (void)btn;
     auto* cfg = reinterpret_cast<const NumericRockerConfig*>(wcfg->data);
     auto* st = reinterpret_cast<NumericRockerState*>(state->data);
     memset(st, 0, sizeof(NumericRockerState));
@@ -136,13 +136,13 @@ static void numericrocker_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     int half = span / 2;
 
     auto place_chevron = [&](const char* sym, int zone_start, int zone_end, bool is_horizontal) -> lv_obj_t* {
-        if (zone_start >= zone_end) return nullptr; // disabled zone
         lv_obj_t* lbl = make_chevron(sym);
+        if (zone_start >= zone_end) lv_obj_add_flag(lbl, LV_OBJ_FLAG_HIDDEN);
         int center = (zone_start + zone_end) / 2;
         if (is_horizontal) {
-            lv_obj_align(lbl, LV_ALIGN_CENTER, center - half, btn->ui_offset_y);
+            lv_obj_align(lbl, LV_ALIGN_CENTER, center - half, 0);
         } else {
-            lv_obj_align(lbl, LV_ALIGN_CENTER, btn->ui_offset_x, center - half);
+            lv_obj_align(lbl, LV_ALIGN_CENTER, 0, center - half);
         }
         return lbl;
     };
@@ -152,6 +152,7 @@ static void numericrocker_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     st->chevron_inner_a = place_chevron(sym_inner_a, z.outer_end, z.inner_end, horiz);
     st->chevron_inner_b = place_chevron(sym_inner_b, z.inner2_start, z.outer2_start, horiz);
     st->chevron_outer_b = place_chevron(sym_outer_b, z.outer2_start, span, horiz);
+    st->span = span;
 
     LOGD(TAG, "Created numeric rocker: %s, small=%g, large=%g, opa=%d",
          cfg->horizontal ? "horizontal" : "vertical",
@@ -165,7 +166,24 @@ static void numericrocker_update(lv_obj_t* tile, const WidgetConfig* wcfg,
 
 static void numericrocker_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
                                 WidgetState* state) {
-    (void)tile; (void)wcfg; (void)state;
+    auto* cfg = reinterpret_cast<const NumericRockerConfig*>(wcfg->data);
+    auto* st = reinterpret_cast<NumericRockerState*>(state->data);
+    lv_obj_update_layout(tile);
+    int span = cfg->horizontal ? lv_obj_get_content_width(tile) : lv_obj_get_content_height(tile);
+    if (span == st->span) return;
+    st->span = span;
+    NRZoneLayout z = nr_compute_zones(span, cfg->small_step, cfg->large_step, cfg->zone_scale_pct);
+    lv_obj_t* labels[] = {st->chevron_outer_a, st->chevron_inner_a, st->chevron_inner_b, st->chevron_outer_b};
+    int starts[] = {0, z.outer_end, z.inner2_start, z.outer2_start};
+    int ends[] = {z.outer_end, z.inner_end, z.outer2_start, span};
+    for (int i = 0; i < 4; i++) {
+        if (!labels[i]) continue;
+        if (starts[i] >= ends[i]) lv_obj_add_flag(labels[i], LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_remove_flag(labels[i], LV_OBJ_FLAG_HIDDEN);
+        int offset = (starts[i] + ends[i]) / 2 - span / 2;
+        lv_obj_align(labels[i], LV_ALIGN_CENTER, cfg->horizontal ? offset : 0,
+                     cfg->horizontal ? 0 : offset);
+    }
 }
 
 static void numericrocker_destroy(WidgetState* state) {
@@ -179,6 +197,7 @@ static void numericrocker_describe(JsonObject& out) {
     JsonArray f = out.createNestedArray("config_fields");
     auto add = [&](const char* n, const char* t, const char* d){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]=t; o["desc"]=d; };
     add("widget_numericrocker_axis","string","'h'/'horizontal' or 'v'/'vertical'");
+    add("rocker_group_layout","string","center (default) or beside; center does not change tap zones");
     add("widget_numericrocker_small_step","number","inner-arrow step (± per tap)");
     add("widget_numericrocker_large_step","number","outer-arrow step (± per tap)");
     add("widget_numericrocker_zone_scale_pct","number","tap-area scale percentage (50-150, default 100)");

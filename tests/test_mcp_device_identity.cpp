@@ -54,6 +54,9 @@ static void test_decisions() {
           "set_config requires assertion");
     CHECK(decide(false, false, false, "set_component_config", nullptr, nullptr, ACTUAL) == MCP_IDENTITY_REJECT_MISSING,
           "set_component_config requires assertion");
+    CHECK(decide(false, false, false, "set_external_data_source", nullptr, nullptr, ACTUAL) == MCP_IDENTITY_REJECT_MISSING &&
+          decide(false, false, false, "set_external_data_source", nullptr, ACTUAL, ACTUAL) == MCP_IDENTITY_ALLOW,
+          "external source configuration requires a matching assertion");
     CHECK(decide(false, true, false, "system_command", "reboot", nullptr, ACTUAL) == MCP_IDENTITY_REJECT_MISSING &&
           decide(false, true, false, "system_command", "wifi_reconnect", nullptr, ACTUAL) == MCP_IDENTITY_REJECT_MISSING &&
           decide(false, true, false, "system_command", "screensaver", nullptr, ACTUAL) == MCP_IDENTITY_REJECT_MISSING,

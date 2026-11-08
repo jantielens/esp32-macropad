@@ -45,13 +45,71 @@ artwork, not the original file. This setting does not change the button's layout
 or its **Icon Size %**.
 
 After a pad is saved, its retained source can regenerate icons offline when you
-resize or copy buttons. Material Symbols follow the button's foreground color;
-Noto emoji and local images keep their original colors. **Apply** updates the
-button draft; **Cancel** leaves it unchanged. Remove icon clears the editor
+resize or copy buttons. Material Symbols follow the button's text color by
+default; Noto emoji and local images keep their original colors. Set **Material
+icon color** to a color or binding to change a Material icon independently.
+You can set a device-wide default under **Pads > Pad and Button Defaults** or
+override it on a button. Use `auto` to follow the button text color.
+Generated icons center
+their visible artwork without resizing it; the retained source is unchanged.
+Save a pad to regenerate icons created before this behavior was added.
+**Apply** updates the button draft; **Cancel** leaves it unchanged.
+Remove icon clears the editor
 draft, and **Save Pad** persists the change. Icon Size 0 is automatic; 1-250%
 overrides it.
-Position Above/Left/Centered changes ordinary label/icon layout.
-Some widgets own placement and hide that selector.
+**Icon position** places the icon above, below, left, or right of the labels.
+The default is left; buttons can inherit or override the device-wide position.
+
+### Add an icon badge
+
+Set **Badge padding (px)** in the button's **Content > Icon** controls.
+The default is 0, which disables the badge. Set a positive value, such as 8 px,
+to add padding on each side of the icon.
+**Badge background** defaults to `auto`, a subtle blend of the Material icon
+color and button background. For Noto emoji and local images, it uses the text
+color instead. Choose a color or use **fx** for a color binding.
+The existing foreground color and Icon Size controls still style the icon.
+
+The layout reserves the whole circle and centers the icon inside it. The icon
+shrinks to preserve the padding when space is limited; extremely small spaces
+can constrain the padding too.
+It follows every icon position and UI offset, does not intercept touch, and
+disappears when the icon or button is hidden or removed.
+
+Set shared padding and a background under **Pads > Pad and Button Defaults**,
+or override them on a button. Setting padding to 0 overrides a shared default.
+Existing saved defaults and button overrides remain in effect.
+Removing an icon leaves no circle; its badge settings remain available when
+you choose another icon. **Save Pad** persists button changes.
+The pad preview shows the icon without its badge.
+On e-paper, use a contrasting background if a pale tint is not visible.
+
+### Arrange button content
+
+The top, center, and bottom labels form a group with the icon. For a button
+with a widget, **Widget position** places the widget above, below, left, or
+right of that group; right is the default. Rocker and Numeric Rocker instead
+center the group by default; see [Rocker layout](../widgets/rockers.md#arrange-labels-and-icon).
+For other widgets and rockers placed beside the group, **Labels and icon size %** controls the group's share of
+the width for a side-by-side layout or the height for a vertical layout. Use
+0 for Auto, which measures the content and limits the group to half the
+available space, or 10-90 for a fixed percentage. Without a widget, the group
+uses the whole button.
+
+Missing labels and icons use no space. A configured binding that resolves to
+empty retains its label space. Label styles, including per-label colors and
+offsets, still apply. UI offset and style
+offsets nudge the resulting content. Small buttons compress or clip content
+instead of changing layouts. Enlarge the button or reduce content and font
+sizes if necessary. The editor may warn about a likely fit problem, but its font
+measurements and grid preview are approximate; check the device.
+
+Auto sizing follows resolved label text, even when the current label is shown
+with an ellipsis. If a widget region changes during a gesture, that gesture is
+canceled until you release; held input on other widgets is unaffected.
+
+Existing button configurations and layouts can change after updating; review
+and adjust them as needed.
 
 Material Symbols are distributed under the [Apache License 2.0](https://github.com/google/material-design-icons/blob/master/LICENSE).
 Noto Emoji artwork is distributed under the [SIL Open Font License 1.1](https://github.com/googlefonts/noto-emoji/blob/main/LICENSE).
@@ -93,6 +151,7 @@ Selecting a palette or recently used color keeps the picker open. Choose
 selection. Still **Save Pad** to keep your changes.
 
 Border width accepts 0-10 px, radius 0-50 px, and padding 0-50 px.
+Content padding also sets the gap between the icon or its badge and the labels.
 UI offset is `x;y` pixels, for example `20;-10`.
 Button shadow can inherit/enable/disable; type and sizing are device-wide.
 Grid spacing, edge insets, and burn-in movement are device-wide layout settings.

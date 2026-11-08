@@ -71,7 +71,7 @@ static void scrollpad_event(lv_event_t* event) {
 
 static void scrollpad_create(lv_obj_t* tile, const WidgetConfig* cfg,
                             const ScreenButtonConfig*, const PadRect*,
-                            const UIScaleInfo*, lv_obj_t*, lv_obj_t*,
+                            const UIScaleInfo*,
                             WidgetState* state) {
     auto* scrollpad = new (state->data) ScrollpadState{};
     scrollpad->config = *reinterpret_cast<const ScrollpadConfig*>(cfg->data);
@@ -87,6 +87,9 @@ static void scrollpad_show(WidgetState* state) {
 
 static void scrollpad_hide(WidgetState* state) {
     reinterpret_cast<ScrollpadState*>(state->data)->touch.hide();
+}
+static void scrollpad_cancel_input(WidgetState* state) {
+    reinterpret_cast<ScrollpadState*>(state->data)->touch.cancel();
 }
 
 static void scrollpad_destroy(WidgetState* state) {
@@ -121,6 +124,6 @@ static void scrollpad_describe(JsonObject& out) {
 #endif
 
 static const WidgetPreview scrollpad_preview = {"Scrollpad", "keyboard_double_arrow_up", nullptr, "widget_scrollpad_axis", "keyboard_double_arrow_left", "keyboard_double_arrow_up", "vertical"};
-REGISTER_WIDGET_SCHEMA_LIFECYCLE(scrollpad, nullptr, false);
+REGISTER_WIDGET_SCHEMA_INPUT_LIFECYCLE(scrollpad, nullptr, false, nullptr, scrollpad_cancel_input);
 
 #endif

@@ -53,22 +53,23 @@ function padResizeTrackDelta(raw, side, geometry, col, row, colSpan, rowSpan) {
     return delta;
 }
 
-function padRenderResizeHandles(cell, btn, col, row) {
+function padRenderResizeHandles(cell) {
     if (padState.placingBlock || padState.dragSource) return;
     const sides = ['right', 'left', 'down', 'up'];
     for (const side of sides) {
         const handle = document.createElement('div');
         handle.className = 'pad-resize-handle pad-resize-handle-' + side;
+        handle.addEventListener('click', e => e.stopPropagation());
         handle.addEventListener('mousedown', ((s) => (e) => {
             e.stopPropagation();
             e.preventDefault();
-            padResizeDragStart(col, row, s, e.clientX, e.clientY);
+            padResizeDragStart(Number(cell.dataset.col), Number(cell.dataset.row), s, e.clientX, e.clientY);
         })(side));
         handle.addEventListener('touchstart', ((s) => (e) => {
             e.stopPropagation();
             e.preventDefault();
             const t = e.touches[0];
-            padResizeDragStart(col, row, s, t.clientX, t.clientY);
+            padResizeDragStart(Number(cell.dataset.col), Number(cell.dataset.row), s, t.clientX, t.clientY);
         })(side), { passive: false });
         handle.draggable = false;
         cell.appendChild(handle);
@@ -120,26 +121,32 @@ function padResizeDragStart(col, row, side, startX, startY) {
         }
 
         // Apply preview
+        const previousCol = btn.col, previousRow = btn.row;
         btn.col = nc; btn.row = nr;
         btn.col_span = ncs; btn.row_span = nrs;
         if (btn.col_span === 1) delete btn.col_span;
         if (btn.row_span === 1) delete btn.row_span;
-        padRenderGrid();
+        padRenderGrid({ button: btn, col: previousCol, row: previousRow });
     }
 
     function onMouseMove(e) { onMove(e.clientX, e.clientY); }
     function onTouchMove(e) { if (e.touches.length) onMove(e.touches[0].clientX, e.touches[0].clientY); }
 
-    function onEnd() {
+    function onEnd(event) {
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onEnd);
         document.removeEventListener('touchmove', onTouchMove);
         document.removeEventListener('touchend', onEnd);
         document.removeEventListener('touchcancel', onEnd);
+        if (event.type === 'mouseup') {
+            // A resize can replace the handle before the browser dispatches its click.
+            const suppressClick = e => { e.preventDefault(); e.stopPropagation(); };
+            document.addEventListener('click', suppressClick, true);
+            setTimeout(() => document.removeEventListener('click', suppressClick, true), 0);
+        }
         const changed = btn.col !== origCol || btn.row !== origRow ||
                         (btn.col_span || 1) !== origCs || (btn.row_span || 1) !== origRs;
         if (changed) padMarkDirty();
-        padRenderGrid();
         if (typeof padWorkspaceMoveSelection === 'function') padWorkspaceMoveSelection(origCol, origRow, btn);
     }
 
@@ -214,11 +221,10 @@ function padCreateGridButton(button, layer, kind) {
     }
     padRenderCellContent(cell, button);
     if (kind === 'button' && layer === padState.selectedLayer && !padState.placingBlock) {
-        padRenderResizeHandles(cell, button, button.col, button.row);
-        const col = button.col, row = button.row;
-        cell.addEventListener('click', () => padWorkspaceSelect(col, row));
+        padRenderResizeHandles(cell);
+        cell.addEventListener('click', () => padWorkspaceSelect(Number(cell.dataset.col), Number(cell.dataset.row)));
         cell.draggable = true;
-        cell.addEventListener('dragstart', event => padDragStart(event, col, row));
+        cell.addEventListener('dragstart', event => padDragStart(event, Number(cell.dataset.col), Number(cell.dataset.row)));
         cell.addEventListener('dragend', padDragEnd);
     }
     return cell;
@@ -242,15 +248,19 @@ function padUpdateButtonPreview(previous, button) {
     const cell = document.querySelector('#pad-grid .pad-cell-btn[data-layer="' + padState.selectedLayer + '"][data-col="' + button.col + '"][data-row="' + button.row + '"]');
     if (!cell) { padRenderGrid(); return; }
     const sameIcon = JSON.stringify(previous.icon) === JSON.stringify(button.icon) &&
-        padColorToHex(previous.fg_color, padGetEffectiveDefault('fg_color')) === padColorToHex(button.fg_color, padGetEffectiveDefault('fg_color'));
+        padIconPreviewColor(previous.icon_color ?? padGetEffectiveDefault('icon_color'),
+            padColorToHex(previous.fg_color, padGetEffectiveDefault('fg_color'))) ===
+        padIconPreviewColor(button.icon_color ?? padGetEffectiveDefault('icon_color'),
+            padColorToHex(button.fg_color, padGetEffectiveDefault('fg_color')));
     const icon = sameIcon ? cell.querySelector('.pad-cell-icon') : null;
     cell.replaceChildren();
     cell.classList.remove('pad-cell-has-widget');
+    delete cell.dataset.groupedLayout;
     cell.style.justifyContent = '';
     cell.style.padding = '';
     cell.removeAttribute('aria-description');
     padRenderCellContent(cell, button, icon);
-    padRenderResizeHandles(cell, button, button.col, button.row);
+    padRenderResizeHandles(cell);
 }
 
 function padUpdateGridBackground() {
@@ -262,7 +272,7 @@ function padUpdateGridBackground() {
     grid.querySelectorAll('.pad-cell-btn').forEach(padUpdateCellBoundaryGuide);
 }
 
-function padRenderGrid() {
+function padRenderGrid(geometryChange) {
     const grid = document.getElementById('pad-grid');
     if (!grid) return;
 
@@ -274,7 +284,18 @@ function padRenderGrid() {
         grid.style.aspectRatio = deviceInfoCache.display_coord_width + ' / ' + deviceInfoCache.display_coord_height;
     }
     padUpdateGridBackground();
-    grid.innerHTML = '';
+    const existing = new Map();
+    const retained = new Set();
+    const key = (kind, layer, col, row) => kind + ':' + layer + ':' + col + ',' + row;
+    if (geometryChange) {
+        for (const cell of grid.children) {
+            const kind = cell.classList.contains('pad-cell-empty') ? 'empty' :
+                cell.classList.contains('pad-cell-ghost') ? 'template' : 'button';
+            existing.set(key(kind, cell.dataset.layer, cell.dataset.col, cell.dataset.row), cell);
+        }
+    } else {
+        grid.innerHTML = '';
+    }
 
     const editingOverlay = padState.selectedLayer === 'overlay';
     const mainOccupied = padGridOccupiedCells(padState.mainButtons, cols, rows);
@@ -289,7 +310,23 @@ function padRenderGrid() {
         }
     }
 
-    const makeCell = (button, layer, kind) => grid.appendChild(padCreateGridButton(button, layer, kind));
+    const makeCell = (button, layer, kind) => {
+        const moved = geometryChange && button === geometryChange.button && layer === padState.selectedLayer && kind === 'button';
+        const oldKey = moved ? key(kind, layer, geometryChange.col, geometryChange.row) :
+            key(kind, layer, button.col, button.row);
+        let cell = existing.get(oldKey);
+        existing.delete(oldKey);
+        if (!cell) {
+            cell = padCreateGridButton(button, layer, kind);
+            grid.appendChild(cell);
+        } else if (moved) {
+            cell.dataset.col = button.col;
+            cell.dataset.row = button.row;
+            cell.style.gridColumn = (button.col + 1) + ' / span ' + Math.max(1, Math.min(button.col_span || 1, cols - button.col));
+            cell.style.gridRow = (button.row + 1) + ' / span ' + Math.max(1, Math.min(button.row_span || 1, rows - button.row));
+        }
+        retained.add(cell);
+    };
 
     const addTemplatePreviews = () => {
         for (const button of padState.templateButtons) {
@@ -315,6 +352,13 @@ function padRenderGrid() {
     for (let row = 0; row < rows; row++) {
         for (let col = 0; col < cols; col++) {
             if (activeOccupied.has(col + ',' + row)) continue;
+            const oldKey = key('empty', padState.selectedLayer, col, row);
+            const previous = existing.get(oldKey);
+            if (previous) {
+                existing.delete(oldKey);
+                retained.add(previous);
+                continue;
+            }
             const cell = document.createElement('div');
             cell.classList.add('pad-cell', 'pad-cell-empty');
             cell.dataset.col = col;
@@ -331,6 +375,12 @@ function padRenderGrid() {
                 cell.addEventListener('drop', event => padDrop(event, col, row));
             }
             grid.appendChild(cell);
+            retained.add(cell);
+        }
+    }
+    if (geometryChange) {
+        for (const cell of Array.from(grid.children)) {
+            if (!retained.has(cell)) cell.remove();
         }
     }
 
@@ -391,11 +441,13 @@ function padPlacementClearGhosts(grid) {
 function padDragStart(e, col, row) {
     const btn = padFindButton(col, row);
     if (!btn) { e.preventDefault(); return; }
-    padState.dragSource = { col: col, row: row };
+    const dragSource = { col: col, row: row };
+    padState.dragSource = dragSource;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', col + ',' + row);
     // rAF so the browser captures the original cell as the drag image before dimming
     requestAnimationFrame(() => {
+        if (padState.dragSource !== dragSource) return;
         const cell = e.target.closest('.pad-cell');
         if (cell) cell.style.opacity = '0.3';
     });
@@ -476,7 +528,7 @@ function padDrop(e, col, row) {
 
     padState.buttons.push(btn);
     padMarkDirty();
-    padRenderGrid();
+    padRenderGrid({ button: btn, col: srcCol, row: srcRow });
     if (typeof padWorkspaceMoveSelection === 'function') padWorkspaceMoveSelection(srcCol, srcRow, btn);
 }
 

@@ -81,8 +81,15 @@ function padIconEditorSetDraft(icon) {
 
 function padIconEditorColors() {
     const background = padColorToHex(padGetBindableColor('pad-edit-bg-color'), padGetEffectiveDefault('bg_color'));
-    const foreground = padColorToHex(padGetBindableColor('pad-edit-fg-color'), padGetEffectiveDefault('fg_color'));
-    return { background: background || '#ffffff', foreground: foreground || '#222222' };
+    const text = padColorToHex(padGetBindableColor('pad-edit-fg-color'), padGetEffectiveDefault('fg_color'));
+    const foreground = padIconPreviewColor(padGetBindableColor('pad-edit-icon-color'), text);
+    return { background: background || '#ffffff', foreground };
+}
+
+function padIconPreviewColor(iconColor, textColor) {
+    const candidate = padColorToHex(iconColor, textColor);
+    if (/^#[0-9a-f]{6}$/i.test(candidate || '')) return candidate;
+    return /^#[0-9a-f]{6}$/i.test(textColor || '') ? textColor : '#222222';
 }
 
 function padIconEditorRefresh() {
@@ -91,15 +98,18 @@ function padIconEditorRefresh() {
     const remove = document.getElementById('pad-edit-icon-remove');
     const position = document.getElementById('pad-edit-icon-position-group');
     const icon = padIconEditorReadDraft();
+    const badge = document.getElementById('pad-edit-icon-badge-padding');
+    const badgeGroup = document.getElementById('pad-edit-icon-badge-group');
+    const badgeColorGroup = document.getElementById('pad-edit-icon-badge-color-group');
+    const iconColorGroup = document.getElementById('pad-edit-icon-color-group');
+    if (iconColorGroup) iconColorGroup.style.display = icon && icon.kind === 'mono' ? '' : 'none';
+    if (badgeGroup) badgeGroup.style.display = icon ? '' : 'none';
+    if (badgeColorGroup) badgeColorGroup.style.display = icon && badge && Number(badge.value) > 0 ? '' : 'none';
     if (name) name.textContent = icon
         ? icon.catalog_id ? icon.catalog_id.split(':').pop().replace(/-/g, ' ') : 'Local image'
         : 'Choose icon';
     if (remove) remove.disabled = !icon;
-    if (position) {
-        const widgetType = document.getElementById('pad-edit-widget-type');
-        const editor = widgetType && padWidgetEditor(widgetType.value);
-        position.style.display = icon && !(editor && editor.icon && editor.icon.fixedPosition) ? '' : 'none';
-    }
+    if (position) position.style.display = icon ? '' : 'none';
     const foreground = padIconEditorColors().foreground;
     const signature = JSON.stringify([icon, foreground]);
     if (image && image._padIconSignature === signature) return;
@@ -166,9 +176,12 @@ function padWidgetPreviewSymbol(preview) {
 // Shared cell content renderer for normal and ghost buttons.
 // Sets colors, border, labels, icon, and bg-image placeholder on the cell div.
 const PAD_CELL_PREVIEW_PROPERTIES = [
-    'label_top', 'label_center', 'label_bottom', 'bg_color', 'fg_color',
+    'label_top', 'label_center', 'label_bottom', 'bg_color', 'fg_color', 'icon_color',
     'border_color', 'border_width', 'corner_radius', 'content_pad',
-    'icon', 'icon_position', 'bg_image_url', 'bg_image_path', 'widget_type'
+    'icon', 'icon_position', 'widget_position', 'group_size_pct', 'rocker_group_layout',
+    'bg_image_url', 'bg_image_path', 'widget_type',
+    'widget_rocker_axis', 'widget_numericrocker_axis',
+    'widget_numericrocker_small_step', 'widget_numericrocker_large_step'
 ];
 
 function padCellPreviewSignature(button) {
@@ -198,6 +211,84 @@ function padUpdateCellBoundaryGuide(cell) {
     cell.style.setProperty('--pad-boundary-guide-color', padLuminance > 0.5 ? '#00000055' : '#ffffff55');
 }
 
+function padRenderGroupedContent(cell, btn, widget, existingIcon, foreground) {
+    const position = btn.widget_position || 'right';
+    const side = position === 'left' || position === 'right';
+    const group = document.createElement('div');
+    group.className = 'pad-cell-content-group';
+    group.style.gap = cell.style.padding || '4px';
+    const iconPosition = btn.icon_position || padGetEffectiveDefault('icon_position') || 'left';
+    group.dataset.iconPosition = iconPosition;
+    const labels = document.createElement('div');
+    labels.className = 'pad-cell-group-labels';
+    for (const [field, className] of [
+        ['label_top', 'pad-cell-label-top'], ['label_center', 'pad-cell-label-center'],
+        ['label_bottom', 'pad-cell-label-bottom']
+    ]) {
+        if (!btn[field]) continue;
+        const label = document.createElement('div');
+        label.className = className;
+        padAppendBindingPreview(label, btn[field]);
+        labels.appendChild(label);
+    }
+    const appendIcon = () => {
+        if (existingIcon) group.appendChild(existingIcon);
+        else padAppendIconPreview(group, btn.icon, foreground);
+    };
+    if (btn.icon && iconPosition !== 'right' && iconPosition !== 'below') appendIcon();
+    if (btn.label_top || btn.label_center || btn.label_bottom) group.appendChild(labels);
+    if (btn.icon && (iconPosition === 'right' || iconPosition === 'below')) appendIcon();
+    if (widget) {
+        const marker = document.createElement('div');
+        marker.className = 'pad-content-widget-region';
+        marker.title = widget.name + ' widget placeholder, not a live rendering';
+        marker.setAttribute('aria-label', marker.title);
+        const hasGroup = !!(btn.icon || btn.label_top || btn.label_center || btn.label_bottom);
+        const rocker = btn.widget_type === 'rocker' || btn.widget_type === 'numericrocker';
+        const centered = rocker && btn.rocker_group_layout !== 'beside';
+        if (centered) {
+            const horizontal = btn.widget_type === 'rocker'
+                ? (btn.widget_rocker_axis || 'vertical').toLowerCase().startsWith('h')
+                : !(btn.widget_numericrocker_axis || 'horizontal').toLowerCase().startsWith('v');
+            marker.dataset.rockerAxis = horizontal ? 'horizontal' : 'vertical';
+            marker.dataset.rockerKind = btn.widget_type;
+            const arrows = document.createElement('div');
+            arrows.className = 'pad-rocker-preview-arrows';
+            arrows.setAttribute('aria-hidden', 'true');
+            const symbols = btn.widget_type === 'rocker'
+                ? (horizontal ? ['◀', '▶'] : ['▲', '▼'])
+                : (horizontal ? ['«', '‹', '›', '»'] : ['▲▲', '▲', '▼', '▼▼']);
+            if (btn.widget_type === 'numericrocker') {
+                if (Number(btn.widget_numericrocker_large_step ?? 10) <= 0) symbols[0] = symbols[3] = '';
+                if (Number(btn.widget_numericrocker_small_step ?? 1) <= 0) symbols[1] = symbols[2] = '';
+            }
+            for (const text of symbols) {
+                const arrow = document.createElement('span');
+                arrow.textContent = text;
+                arrows.appendChild(arrow);
+            }
+            marker.appendChild(arrows);
+            if (hasGroup) {
+                if (btn.group_size_pct) group.style[horizontal ? 'width' : 'height'] = btn.group_size_pct + '%';
+                marker.appendChild(group);
+            }
+            cell.appendChild(marker);
+            cell.dataset.groupedLayout = 'only';
+            return;
+        }
+        marker.appendChild(padWidgetPreviewSymbol(widget));
+        if (hasGroup && btn.group_size_pct) group.style.flex = '0 1 ' + btn.group_size_pct + '%';
+        else if (hasGroup) group.style[side ? 'maxWidth' : 'maxHeight'] = '50%';
+        if (!hasGroup) cell.appendChild(marker);
+        else if (position === 'left' || position === 'above') cell.append(marker, group);
+        else cell.append(group, marker);
+        cell.dataset.groupedLayout = side ? 'row' : 'column';
+    } else {
+        cell.appendChild(group);
+        cell.dataset.groupedLayout = 'only';
+    }
+}
+
 function padRenderCellContent(cell, btn, existingIcon) {
     const accessibleLabels = [btn.label_top, btn.label_center, btn.label_bottom].filter(Boolean).join('\n');
     if (accessibleLabels) cell.setAttribute('aria-description', accessibleLabels);
@@ -224,82 +315,9 @@ function padRenderCellContent(cell, btn, existingIcon) {
         cell.style.padding = cpNum + 'px';
     }
     const widget = padWidgetPreview(btn);
-    if (widget) {
-        cell.classList.add('pad-cell-has-widget');
-        const marker = document.createElement('span');
-        marker.className = 'pad-widget-marker';
-        marker.title = widget.name + ' Widget';
-        marker.setAttribute('aria-label', marker.title);
-        marker.appendChild(padWidgetPreviewSymbol(widget));
-        cell.appendChild(marker);
-    }
-    const hasTop = !!btn.label_top;
-    const hasBottom = !!btn.label_bottom;
-    if (hasTop || hasBottom) cell.style.justifyContent = 'space-between';
-    if (hasTop) {
-        const el = document.createElement('div');
-        el.className = 'pad-cell-label-top';
-        padAppendBindingPreview(el, btn.label_top);
-        cell.appendChild(el);
-    } else if (hasBottom) {
-        cell.appendChild(document.createElement('div'));
-    }
-    if (!widget && (btn.bg_image_url || btn.bg_image_path)) {
-        const img = document.createElement('div');
-        img.className = 'pad-cell-image-placeholder';
-        img.textContent = '\u{1F5BC}';
-        cell.appendChild(img);
-    }
-    if (btn.icon && !widget) {
-        const hasCenter = !!btn.label_center;
-        const pos = btn.icon_position || 'above';
-        if (hasCenter && pos === 'left') {
-            const row = document.createElement('div');
-            row.className = 'pad-cell-icon-row';
-            if (existingIcon) row.appendChild(existingIcon);
-            else padAppendIconPreview(row, btn.icon, fg);
-            const lbl = document.createElement('span');
-            lbl.className = 'pad-cell-label-center';
-            lbl.style.fontSize = '12px';
-            padAppendBindingPreview(lbl, btn.label_center);
-            row.appendChild(lbl);
-            cell.appendChild(row);
-        } else {
-            const iconSlot = document.createElement('div');
-            iconSlot.className = 'pad-cell-icon-slot';
-            if (existingIcon) iconSlot.appendChild(existingIcon);
-            else padAppendIconPreview(iconSlot, btn.icon, fg);
-            cell.appendChild(iconSlot);
-            if (hasCenter) {
-                const elc = document.createElement('div');
-                elc.className = 'pad-cell-label-center';
-                elc.style.fontSize = '11px';
-                padAppendBindingPreview(elc, btn.label_center);
-                cell.appendChild(elc);
-            }
-        }
-    } else if (!btn.bg_image_url && !btn.bg_image_path) {
-        const centerText = btn.label_center || (widget ? '' : '\u2022');
-        if (centerText) {
-            const elc = document.createElement('div');
-            elc.className = 'pad-cell-label-center';
-            padAppendBindingPreview(elc, centerText);
-            cell.appendChild(elc);
-        }
-    } else if (btn.label_center) {
-        const elc = document.createElement('div');
-        elc.className = 'pad-cell-label-center';
-        padAppendBindingPreview(elc, btn.label_center);
-        cell.appendChild(elc);
-    }
-    if (hasBottom) {
-        const el = document.createElement('div');
-        el.className = 'pad-cell-label-bottom';
-        padAppendBindingPreview(el, btn.label_bottom);
-        cell.appendChild(el);
-    } else if (hasTop) {
-        cell.appendChild(document.createElement('div'));
-    }
+    if (widget) cell.classList.add('pad-cell-has-widget');
+    const iconColor = padIconPreviewColor(btn.icon_color ?? padGetEffectiveDefault('icon_color'), fg);
+    padRenderGroupedContent(cell, btn, widget, existingIcon, iconColor);
 }
 
 async function padGetButtonSizes(cols, rows) {
@@ -375,6 +393,19 @@ function padTrackSpanSize(sizes, start, span, gap) {
 const padIconSourceCache = new Map();
 const padDraftIconSources = new Map();
 
+function padButtonIconUses(button) {
+    if (!button) return [];
+    const uses = [];
+    if (button.icon) uses.push({ icon: button.icon, slot: 0 });
+    if (button.widget_type === 'option_selector') {
+        for (let slot = 1; slot <= 5; slot++) {
+            const icon = button['widget_option_icon' + (slot === 1 ? '' : '_' + slot)];
+            if (icon) uses.push({ icon, slot });
+        }
+    }
+    return uses;
+}
+
 function padRegisterDraftIconSource(record) {
     const normalized = padNormalizeIconSource(record, record);
     padDraftIconSources.set(normalized.catalog_id, normalized);
@@ -403,8 +434,8 @@ function padRegisterLocalDraftIconSource(record) {
 function padDraftIconSourceReferences() {
     const references = new Set();
     const addButton = button => {
-        if (button && button.icon && button.icon.draft_source_id)
-            references.add(button.icon.draft_source_id);
+        for (const { icon } of padButtonIconUses(button))
+            if (icon.draft_source_id) references.add(icon.draft_source_id);
     };
     for (const button of [...(padState.mainButtons || []), ...(padState.overlayButtons || []),
         ...(padState.templateButtons || [])]) addButton(button);
@@ -576,8 +607,7 @@ function padValidateImportedIconSources(pads, supplied) {
                 if (!button || typeof button !== 'object' || Array.isArray(button)) continue;
                 if (Object.prototype.hasOwnProperty.call(button, 'icon_id'))
                     throw new Error('The previous icon format cannot be imported.');
-                const icon = button.icon;
-                if (!icon) continue;
+                for (const { icon } of padButtonIconUses(button)) {
                 if (typeof icon !== 'object' || Array.isArray(icon)) throw new Error('Imported icon metadata is invalid.');
                 if (icon.source_id !== undefined) {
                     if (!/^s_[0-9a-f]{24}$/.test(icon.source_id)) throw new Error('Imported icon source ID is invalid.');
@@ -586,10 +616,11 @@ function padValidateImportedIconSources(pads, supplied) {
                         throw new Error('An imported source ID has conflicting icon metadata.');
                     referenced.set(icon.source_id, icon);
                 }
+                }
             }
         }
     }
-    if (referenced.size > buttonCount) throw new Error('Imported icon source count exceeds the button count.');
+    if (referenced.size > buttonCount * 6) throw new Error('Imported icon source count exceeds the icon count.');
     const normalizedSources = {};
     const sourceJsonLimit = Number(deviceInfoCache && deviceInfoCache.icon_max_source_json_size) || 704 * 1024;
     for (const [sourceId, icon] of referenced) {
@@ -636,8 +667,7 @@ async function padCollectExportIconSources(pads, rootPages, maxPads, draftContex
                 buttonCount++;
                 if (Object.prototype.hasOwnProperty.call(button, 'icon_id'))
                     throw new Error('The previous icon format cannot be exported.');
-                const icon = button.icon;
-                if (!icon) continue;
+                for (const { icon } of padButtonIconUses(button)) {
                 if (icon.draft_source_id) {
                     if (!/^d_[0-9a-f]{24}$/.test(icon.draft_source_id) || icon.source_id ||
                         icon.catalog_id !== undefined)
@@ -665,12 +695,13 @@ async function padCollectExportIconSources(pads, rootPages, maxPads, draftContex
                     record: suppliedSources[icon.source_id]
                         ? padNormalizeIconSource(suppliedSources[icon.source_id], icon) : null,
                 });
+                }
             }
         }
         if (payload.template_pad !== undefined && payload.template_pad !== null && Number(payload.template_pad) >= 0)
             pending.push(Number(payload.template_pad));
     }
-    if (references.size + draftReferences.size > buttonCount)
+    if (references.size + draftReferences.size > buttonCount * 6)
         throw new Error('Exported source count exceeds the referenced button count.');
 
     for (const draft of draftReferences.values()) {
@@ -763,6 +794,24 @@ function padDecodeBase64Bytes(data) {
     return bytes;
 }
 
+function padIconArtworkOffset(pixels, size) {
+    let left = size, top = size, right = -1, bottom = -1;
+    for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+            if (!pixels[(y * size + x) * 4 + 3]) continue;
+            left = Math.min(left, x);
+            right = Math.max(right, x);
+            top = Math.min(top, y);
+            bottom = Math.max(bottom, y);
+        }
+    }
+    if (right < 0) return { x: 0, y: 0 };
+    return {
+        x: Math.round((size - 1 - left - right) / 2),
+        y: Math.round((size - 1 - top - bottom) / 2)
+    };
+}
+
 async function padRenderIconPNG(source, size, foreground) {
     let svg = source.data;
     if (source.kind === 'mono' && foreground) {
@@ -787,12 +836,17 @@ async function padRenderIconPNG(source, size, foreground) {
         canvas = document.createElement('canvas');
         canvas.width = size;
         canvas.height = size;
-        const context = canvas.getContext('2d');
+        const context = canvas.getContext('2d', { willReadFrequently: true });
         context.clearRect(0, 0, size, size);
         const factor = Math.min(size / image.naturalWidth, size / image.naturalHeight);
         const width = image.naturalWidth * factor;
         const height = image.naturalHeight * factor;
         context.drawImage(image, (size - width) / 2, (size - height) / 2, width, height);
+        const offset = padIconArtworkOffset(context.getImageData(0, 0, size, size).data, size);
+        if (offset.x || offset.y) {
+            context.clearRect(0, 0, size, size);
+            context.drawImage(image, (size - width) / 2 + offset.x, (size - height) / 2 + offset.y, width, height);
+        }
         const blob = await new Promise((resolve, reject) => canvas.toBlob(result =>
             result ? resolve(result) : reject(new Error('PNG rendering failed.')), 'image/png'));
         const pngLimit = Number(deviceInfoCache && deviceInfoCache.icon_max_png_size) || 512 * 1024;
@@ -811,19 +865,41 @@ function padCaptureIconLayout() {
     const layout = {};
     keys.forEach(key => { layout[key] = typeof padGetEffectiveDefault === 'function'
         ? Number(padGetEffectiveDefault(key)) || 0 : 0; });
+    for (const key of ['content_pad', 'border_width'])
+        layout[key] = typeof padGetEffectiveDefault === 'function' ? padGetEffectiveDefault(key) : '';
     return layout;
 }
 
 function padIconRenderKey(payload, button) {
     const cols = Number(payload.cols ?? 3);
     const rows = Number(payload.rows ?? 3);
-    const values = [cols, rows, button.col ?? 0, button.row ?? 0,
+    // Bump when PNG generation changes so older installed variants are rebuilt.
+    const values = [2, cols, rows, button.col ?? 0, button.row ?? 0,
         button.col_span ?? 1, button.row_span ?? 1, button.icon_scale_pct ?? 0,
         button.label_top ? 1 : 0, button.label_bottom ? 1 : 0,
         button.border_width ?? '', button.content_pad ?? '', button.widget_type ?? ''];
     for (let index = 0; index < Math.min(cols, 8); index++) values.push(payload.column_widths_px?.[index] ?? 0);
     for (let index = 0; index < Math.min(rows, 8); index++) values.push(payload.row_heights_px?.[index] ?? 0);
     let hash = 2166136261;
+    for (const value of values) {
+        for (const byte of new TextEncoder().encode(String(value))) hash = Math.imul(hash ^ byte, 16777619) >>> 0;
+        hash = Math.imul(hash, 16777619) >>> 0;
+    }
+    return (hash || 1).toString(16).padStart(8, '0');
+}
+
+function padOptionIconRenderKey(payload, button, slot) {
+    let hash = parseInt(padIconRenderKey(payload, button), 16);
+    const values = [slot, button.widget_option_icon_size_pct ?? 0,
+        button.widget_option_icon_badge_padding ?? 0, button.group_size_pct ?? 0,
+        button.label_center ? 1 : 0, button.icon ? 1 : 0,
+        button.widget_position ?? '', button.icon_position ?? ''];
+    for (let index = 1; index <= 5; index++) {
+        const suffix = index === 1 ? '' : '_' + index;
+        values.push(button['widget_option_label' + suffix] || button['widget_option_icon' + suffix] ? 1 : 0);
+    }
+    if (Number(button.widget_option_inset ?? 4) !== 4)
+        values.push('inset', button.widget_option_inset);
     for (const value of values) {
         for (const byte of new TextEncoder().encode(String(value))) hash = Math.imul(hash ^ byte, 16777619) >>> 0;
         hash = Math.imul(hash, 16777619) >>> 0;
@@ -894,8 +970,8 @@ async function padPreparePageSave(context) {
         for (const button of group) {
             if (Object.prototype.hasOwnProperty.call(button, 'icon_id'))
                 throw new Error('Unsupported icon_id field; choose an icon using the picker.');
-            if (button.icon && sourceIdMap[button.icon.source_id])
-                button.icon.source_id = sourceIdMap[button.icon.source_id];
+            for (const { icon } of padButtonIconUses(button))
+                if (sourceIdMap[icon.source_id]) icon.source_id = sourceIdMap[icon.source_id];
         }
     }
     const targetPage = Number(context.page);
@@ -923,8 +999,8 @@ async function padPreparePageSave(context) {
         for (const button of templateButtons) {
             if (Object.prototype.hasOwnProperty.call(button, 'icon_id'))
                 throw new Error('Unsupported icon_id field in template pad; choose an icon using the picker.');
-            if (button.icon && sourceIdMap[button.icon.source_id])
-                button.icon.source_id = sourceIdMap[button.icon.source_id];
+            for (const { icon } of padButtonIconUses(button))
+                if (sourceIdMap[icon.source_id]) icon.source_id = sourceIdMap[icon.source_id];
         }
         inheritedButtons = padSelectTemplateButtons(payload, templateButtons);
         for (const button of inheritedButtons)
@@ -935,7 +1011,7 @@ async function padPreparePageSave(context) {
         throw new Error('Combined Main and Overlay button limit exceeded.');
 
     if (!context.skipTemplateDependents && Number.isInteger(targetPage) &&
-        payload.buttons.some(button => button.icon)) {
+        payload.buttons.some(button => padButtonIconUses(button).length)) {
         const response = await fetch('/api/pad/icon_context?page=' + targetPage);
         if (!response.ok)
             throw new Error('Failed to read icon dependency context: HTTP ' + response.status);
@@ -946,7 +1022,7 @@ async function padPreparePageSave(context) {
             const inherited = padSelectTemplateButtons(dependentPayload, payload.buttons);
             if (dependentPayload.button_count + inherited.length > maxButtons)
                 throw new Error('Combined Main and Overlay button limit exceeded for dependent Pad ' + (page + 1) + '.');
-            buttons.push(...inherited.filter(button => button.icon).map(button => ({
+            buttons.push(...inherited.filter(button => padButtonIconUses(button).length).map(button => ({
                 button,
                 layer: 'main',
                 inherited: true,
@@ -960,8 +1036,7 @@ async function padPreparePageSave(context) {
     const sourceRecords = new Map();
     const iconButtons = [];
     for (const entry of buttons) {
-        const icon = entry.button.icon;
-        if (!icon) continue;
+        for (const { icon, slot } of padButtonIconUses(entry.button)) {
         const importedSources = iconSources.bySourceId;
         const imported = icon.source_id && importedSources[icon.source_id];
         const lookupKey = imported ? 'import:' + icon.source_id : icon.source_id ||
@@ -978,17 +1053,19 @@ async function padPreparePageSave(context) {
             targetPage: entry.targetPage,
             targetPayload: entry.targetPayload,
             icon,
+            slot,
             record,
             lookupKey,
         });
+        }
     }
 
     const estimatedPayload = JSON.parse(JSON.stringify(payload));
     for (const group of [estimatedPayload.buttons, estimatedPayload.overlay_buttons || []]) {
         for (const button of group) {
-            if (button.icon && !button.icon.source_id) {
-                button.icon.source_id = 's_' + '0'.repeat(24);
-                delete button.icon.draft_source_id;
+            for (const { icon } of padButtonIconUses(button)) if (!icon.source_id) {
+                icon.source_id = 's_' + '0'.repeat(24);
+                delete icon.draft_source_id;
             }
         }
     }
@@ -1002,12 +1079,36 @@ async function padPreparePageSave(context) {
 
     const variants = [];
     if (iconButtons.length) {
-        const pages = Array.from(new Set(iconButtons.map(entry => entry.targetPage)));
-        const response = await fetch('/api/icons/installed?pages=' + pages.join(','));
-        if (!response.ok) throw new Error('Failed to read icon metadata: HTTP ' + response.status);
-        const { artifacts } = await response.json();
-        if (!artifacts || typeof artifacts !== 'object' || Array.isArray(artifacts))
-            throw new Error('Installed icon metadata is unavailable.');
+        const keys = new Set();
+        for (const entry of iconButtons) {
+            const col = Number(entry.button.col);
+            const row = Number(entry.button.row);
+            const cols = Number(entry.targetPayload.cols);
+            const rows = Number(entry.targetPayload.rows);
+            const colSpan = Number(entry.button.col_span) || 1;
+            const rowSpan = Number(entry.button.row_span) || 1;
+            if (Number.isInteger(col) && Number.isInteger(row) && col >= 0 && row >= 0 &&
+                col + colSpan <= cols && row + rowSpan <= rows) {
+                keys.add('pad_' + entry.targetPage + '_' + entry.layer + '_' + col + '_' + row +
+                    (entry.slot ? '_opt_' + entry.slot : ''));
+                const fallbackPage = entry.targetPage === targetPage ? templatePage : targetPage;
+                if (entry.layer === 'main' && Number.isInteger(fallbackPage) && fallbackPage >= 0 &&
+                    fallbackPage < (Number(deviceInfoCache && deviceInfoCache.max_pads) || 16))
+                    keys.add('pad_' + fallbackPage + '_main_' + col + '_' + row +
+                        (entry.slot ? '_opt_' + entry.slot : ''));
+            }
+        }
+        const artifacts = {};
+        const keyList = Array.from(keys);
+        for (let offset = 0; offset < keyList.length; offset += 1) {
+            const response = await fetch('/api/icons/installed?keys=' +
+                encodeURIComponent(keyList[offset]));
+            if (!response.ok) throw new Error('Failed to read icon metadata: HTTP ' + response.status);
+            const result = await response.json();
+            if (!result.artifacts || typeof result.artifacts !== 'object' || Array.isArray(result.artifacts))
+                throw new Error('Installed icon metadata is unavailable.');
+            Object.assign(artifacts, result.artifacts);
+        }
         const layout = context.iconLayout || padCaptureIconLayout();
         const buttonSizeCache = new Map();
         const maxDimension = Number(deviceInfoCache && deviceInfoCache.icon_max_dimension) || 720;
@@ -1050,7 +1151,8 @@ async function padPreparePageSave(context) {
             if (!Number.isInteger(col) || !Number.isInteger(row) || col < 0 || row < 0 ||
                 colSpan < 1 || rowSpan < 1)
                 throw new Error('Icon button position or span is outside the pad grid.');
-            const key = 'pad_' + entry.targetPage + '_' + entry.layer + '_' + col + '_' + row;
+            const key = 'pad_' + entry.targetPage + '_' + entry.layer + '_' + col + '_' + row +
+                (entry.slot ? '_opt_' + entry.slot : '');
             if (col + colSpan > cols || row + rowSpan > rows) continue;
             const borderWidth = button.border_width !== undefined ? Number(button.border_width) : 1;
             const padding = Number(buttonSizes.padding) || 0;
@@ -1059,17 +1161,43 @@ async function padPreparePageSave(context) {
             const labelHeight = Number(buttonSizes.font_small_h) || 0;
             let iconWidth = fullWidth;
             let iconHeight = fullHeight - (button.label_top ? labelHeight : 0) - (button.label_bottom ? labelHeight : 0);
-            const widget = padWidgetEditor(button.widget_type);
-            if (widget && widget.icon) {
-                iconWidth = Math.floor(iconWidth * widget.icon.width);
-                iconHeight = Math.floor(iconHeight * widget.icon.height);
-            }
-            if (button.icon_scale_pct && Number(button.icon_scale_pct) > 0) {
+            if (entry.slot) {
+                const count = padButtonIconUses(button).filter(use => use.slot).length +
+                    Array.from({ length: 5 }, (_, i) => button['widget_option_label' + (i ? '_' + (i + 1) : '')] ? 1 : 0)
+                        .reduce((a, b) => a + b, 0);
+                const contentPad = Math.min(50, Math.max(0, parseInt(
+                    button.content_pad ?? layout.content_pad ?? padding, 10) || 0));
+                const border = Math.max(0, parseInt(button.border_width ?? layout.border_width ?? 1, 10) || 0);
+                iconWidth = Math.max(0, padTrackSpanSize(columnSizing.sizes, col, colSpan, gap) - 2 * (contentPad + border));
+                iconHeight = Math.max(0, padTrackSpanSize(rowSizing.sizes, row, rowSpan, gap) - 2 * (contentPad + border));
+                const hasGroup = button.icon || button.label_top || button.label_center || button.label_bottom;
+                if (hasGroup) {
+                    const horizontal = !button.widget_position || button.widget_position === 'left' || button.widget_position === 'right';
+                    const available = horizontal ? iconWidth : iconHeight;
+                    const remaining = Math.max(0, available - Math.min(4, available));
+                    const groupPercent = Number(button.group_size_pct) || 0;
+                    // Auto group size depends on live bindings and font metrics; retain its safe upper bound.
+                    const widgetSize = groupPercent
+                        ? remaining - Math.floor(remaining * Math.min(90, Math.max(10, groupPercent)) / 100)
+                        : remaining;
+                    if (horizontal) iconWidth = widgetSize;
+                    else iconHeight = widgetSize;
+                }
+                iconWidth = Math.ceil(iconWidth / Math.max(1, count));
+                const inset = Number(button.widget_option_inset ?? 4);
+                iconWidth -= 2 * Math.min(inset, Math.floor(Math.max(0, iconWidth - 1) / 2));
+                iconHeight -= 2 * Math.min(inset, Math.floor(Math.max(0, iconHeight - 1) / 2));
+                const badgePadding = Number(button.widget_option_icon_badge_padding) || 0;
+                const usable = Math.max(1, Math.min(iconWidth, iconHeight) - badgePadding * 2);
+                const scale = Number(button.widget_option_icon_size_pct) || 100;
+                iconWidth = iconHeight = Math.max(1, Math.floor(usable * scale / 100));
+            } else if (button.icon_scale_pct && Number(button.icon_scale_pct) > 0) {
                 iconWidth = Math.round(iconWidth * Number(button.icon_scale_pct) / 100);
                 iconHeight = Math.round(iconHeight * Number(button.icon_scale_pct) / 100);
             }
             const size = Math.max(1, Math.floor(Math.min(iconWidth, iconHeight, maxDimension)));
-            const renderKey = padIconRenderKey(targetPayload, button);
+            const renderKey = entry.slot ? padOptionIconRenderKey(targetPayload, button, entry.slot)
+                : padIconRenderKey(targetPayload, button);
             const installed = artifacts[key];
             if (installed && installed.source_id === entry.lookupKey &&
                 installed.kind === (entry.icon.kind === 'mono' ? 1 : 0) &&
@@ -1166,16 +1294,17 @@ async function padUploadIconSources(prepared) {
     }
     for (const group of [prepared.payload.buttons, prepared.payload.overlay_buttons || []]) {
         for (const button of group) {
-            if (!button.icon) continue;
-            const imported = prepared.iconSources.bySourceId[button.icon.source_id];
-            const sourceKey = imported ? 'import:' + button.icon.source_id
-                : button.icon.source_id ? null : button.icon.draft_source_id
-                    ? 'draft:' + button.icon.draft_source_id : 'catalog:' + button.icon.catalog_id;
+            for (const { icon } of padButtonIconUses(button)) {
+            const imported = prepared.iconSources.bySourceId[icon.source_id];
+            const sourceKey = imported ? 'import:' + icon.source_id
+                : icon.source_id ? null : icon.draft_source_id
+                    ? 'draft:' + icon.draft_source_id : 'catalog:' + icon.catalog_id;
             if (!sourceKey) continue;
-            const sourceId = sourceIds.get(sourceKey) || prepared.iconSources.sourceIdMap[button.icon.source_id];
+            const sourceId = sourceIds.get(sourceKey) || prepared.iconSources.sourceIdMap[icon.source_id];
             if (!sourceId) throw new Error('Prepared icon source ID is missing.');
-            button.icon.source_id = sourceId;
-            delete button.icon.draft_source_id;
+            icon.source_id = sourceId;
+            delete icon.draft_source_id;
+            }
         }
     }
     for (const variant of prepared.variants) {

@@ -279,7 +279,10 @@ function padColorPopoverValidate(showError) {
     if (!_cpPopover) return null;
     var pop = _cpPopover.pop;
     var target = _cpPopover.target;
-    var res = padColorCheck(pop.querySelector('#cp-input').value, target && target.maxLength > 0 ? target.maxLength : 0, !target || target.dataset.allowBindings !== 'false');
+    var raw = pop.querySelector('#cp-input').value.trim();
+    var res = target && target.dataset.allowAuto === 'true' && raw === 'auto'
+        ? { value: 'auto', error: '' }
+        : padColorCheck(raw, target && target.maxLength > 0 ? target.maxLength : 0, !target || target.dataset.allowBindings !== 'false');
     if (_cpPopover.fill) {
         _cpPopover.fill[_cpPopover.layer] = pop.querySelector('#cp-input').value;
         pop.querySelector('#cp-base-value').textContent = padColorNormalizeLiteral(_cpPopover.fill.base) || _cpPopover.fill.base;
@@ -382,7 +385,8 @@ function padColorPopoverOpen(swatch, input) {
     if (bindingHint) bindingHint.hidden = !allowBindings;
     cp.pop.querySelector('#cp-input-label').textContent = cp.fill ? (allowBindings ? 'Base Color or expression' : 'Base Color') : allowBindings ? 'Color or expression' : 'Color';
     cp.pop.querySelector('#cp-input').placeholder = allowBindings ? '#RRGGBB or [expr:\u2026]' : '#RRGGBB';
-    padThresholdGenLoad(allowBindings ? input.value : '');
+    var current = input.value.trim() || input.dataset.colorFallback || '';
+    padThresholdGenLoad(allowBindings ? current : '');
     // Show off-screen first so we can measure
     cp.pop.style.left = '-9999px';
     cp.pop.style.top = '-9999px';
@@ -398,13 +402,13 @@ function padColorPopoverOpen(swatch, input) {
     });
     recentHeading.style.display = recentGrid.children.length ? '' : 'none';
     // Highlight active color in palette & used list
-    var cur = (padColorNormalizeLiteral(input.value) || input.value.trim()).toUpperCase();
+    var cur = (padColorNormalizeLiteral(current) || current).toUpperCase();
     cp.pop.querySelectorAll('.color-popover-swatch[data-value]').forEach(function(sw) {
         sw.classList.toggle('active', sw.dataset.value.toUpperCase() === cur);
     });
     var cpInput = cp.pop.querySelector('#cp-input');
     cpInput.maxLength = input.maxLength > 0 ? input.maxLength : 191;
-    cpInput.value = input.value.trim();
+    cpInput.value = current;
     if (cp.fill && cp.fill.pattern !== 'none') {
         cp.pop.querySelector('#cp-base').open = false;
         cp.pop.querySelector('#cp-fill').open = true;
@@ -635,6 +639,23 @@ function padColorPopoverClose() {
     if (rf && typeof rf.focus === 'function' && document.body.contains(rf)) rf.focus();
 }
 
+/** Refresh a color swatch without changing its stored value. */
+function padRefreshBindableColor(input) {
+    const swatch = input.closest('.bindable-color').querySelector('.bc-swatch');
+    const v = input.value.trim() || input.dataset.colorFallback || '';
+    if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+        swatch.style.background = v;
+        swatch.classList.remove('bc-binding');
+    } else if (v.length > 0) {
+        swatch.style.background = '';
+        swatch.classList.add('bc-binding');
+    } else {
+        swatch.style.background = '#e5e5ea';
+        swatch.classList.remove('bc-binding');
+    }
+    padFillSyncSwatch(input, swatch);
+}
+
 /** Initialize a .bindable-color container: wire swatch click to open popover. Idempotent. */
 function padInitBindableColor(container) {
     if (!container || container.dataset.bcInit) return;
@@ -642,27 +663,11 @@ function padInitBindableColor(container) {
     const input = container.querySelector('.bc-input');
     const swatch = container.querySelector('.bc-swatch');
     if (!input || !swatch) return;
-
-    function syncSwatch() {
-        const v = input.value.trim();
-        if (/^#[0-9a-fA-F]{6}$/.test(v)) {
-            swatch.style.background = v;
-            swatch.classList.remove('bc-binding');
-        } else if (v.length > 0) {
-            swatch.style.background = '';
-            swatch.classList.add('bc-binding');
-        } else {
-            swatch.style.background = '#e5e5ea';
-            swatch.classList.remove('bc-binding');
-        }
-        padFillSyncSwatch(input, swatch);
-    }
-
-    input.addEventListener('input', syncSwatch);
+    input.addEventListener('input', function() { padRefreshBindableColor(input); });
     swatch.addEventListener('click', function() {
         padColorPopoverOpen(swatch, input);
     });
-    syncSwatch();
+    padRefreshBindableColor(input);
     if (input.dataset.fillPattern) padInitFillColor(container, input);
 }
 

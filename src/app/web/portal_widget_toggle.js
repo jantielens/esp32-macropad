@@ -13,11 +13,9 @@ padRegisterWidgetEditor({
         { id: 'pad-edit-toggle-on-color', key: 'widget_toggle_on_color', kind: 'color', default: () => PAD_FIRMWARE_DEFAULTS.widget_series_color },
         { id: 'pad-edit-toggle-off-color', key: 'widget_toggle_off_color', kind: 'color', default: () => PAD_FIRMWARE_DEFAULTS.widget_track_color },
         { id: 'pad-edit-toggle-knob-color', key: 'widget_toggle_knob_color', kind: 'color', default: () => PAD_FIRMWARE_DEFAULTS.widget_indicator_color },
-        { id: 'pad-edit-toggle-width-pct', key: 'widget_toggle_width_pct', kind: 'number', default: 50 },
-        { id: 'pad-edit-toggle-icon-position', key: 'widget_toggle_icon_position', kind: 'text', default: 'left' }
+        { id: 'pad-edit-toggle-width-pct', key: 'widget_toggle_width_pct', kind: 'number', default: 50 }
     ],
     actions: { tap: true, longPress: true, labels: () => ['Turn-on actions', 'Turn-off actions'] },
-    icon: { fixedPosition: true, width: 0.4, height: 0.4 },
     build(button) {
         const fail = (message, fieldIds) => { throw Object.assign(new Error(message), { fieldIds }); };
         const on = padToggleNormalize(button.widget_toggle_on_value || '');
@@ -30,7 +28,5 @@ padRegisterWidgetEditor({
         }
         if (!Number.isInteger(button.widget_toggle_width_pct) || button.widget_toggle_width_pct < 20 || button.widget_toggle_width_pct > 100)
             fail('Switch width must be an integer from 20 to 100', ['pad-edit-toggle-width-pct']);
-        if (!['left', 'above', 'below'].includes(button.widget_toggle_icon_position))
-            fail('Choose left, above, or below for the icon', ['pad-edit-toggle-icon-position']);
     }
 });
