@@ -2178,7 +2178,7 @@ body {
 .cp-summary-preview { margin: 0 0 0 auto; flex: 0 0 24px; }
 .cp-summary-preview .bc-swatch { display: block; width: 24px; height: 24px; }
 .cp-pattern-settings { margin: 4px 0 12px; }
-.cp-actions { display: flex; justify-content: flex-end; padding-top: 12px; }
+.cp-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 12px; }
 .cp-actions button { min-height: 34px; }
 #cp-fill-pattern { width: 100%; }
 .bindable-color .bc-swatch.bc-pattern.bc-binding {

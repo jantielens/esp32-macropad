@@ -48,6 +48,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Apply valid color picker edits when clicking outside instead of losing them.
+  Use **Cancel** or Escape to discard changes; invalid edits stay open.
+  See [edit and save a pad](docs/user/pads/editing.md#build-the-layout).
 * Prevent the pad editor canvas from flashing when clearing a button by
   preserving unchanged button previews.
 * Remove unintended right and bottom margins caused by grid spacing on pads
