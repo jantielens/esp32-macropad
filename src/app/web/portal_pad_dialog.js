@@ -369,8 +369,10 @@ function padDialogBuildButton() {
         const position = document.getElementById('pad-edit-content-layout').value;
         if (position !== 'right') btn.widget_position = position;
         const size = Number(document.getElementById('pad-edit-group-width').value);
-        if (!Number.isInteger(size) || (size !== 0 && (size < 10 || size > 90)))
+        if (!Number.isInteger(size) || (size !== 0 && (size < 10 || size > 90))) {
+            document.getElementById('pad-edit-group-width-group').style.display = '';
             throw Object.assign(new Error('Labels and icon size must be 0 (auto) or a whole number from 10 to 90.'), { fieldIds: ['pad-edit-group-width'] });
+        }
         if (size) btn.group_size_pct = size;
     }
     padFillBuild(btn, wtype);

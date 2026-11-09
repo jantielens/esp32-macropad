@@ -290,12 +290,11 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
     const char* wt = b["widget_type"] | "";
     const WidgetType* wtype = wt[0] ? widget_find(wt) : nullptr;
     if (wt[0] && !wtype) return "unknown widget type";
-    for (const char* field : {"icon_position", "widget_position"}) {
-        if (!b.containsKey(field)) continue;
-        uint8_t position;
-        if (!button_position_parse(b[field] | "", &position))
-            return "icon_position and widget_position must be above, below, left, or right";
-    }
+    uint8_t position;
+    if (b.containsKey("icon_position") && !button_position_parse(b["icon_position"] | "", &position))
+        return "icon_position must be above, below, left, or right";
+    if (b.containsKey("widget_position") && !button_widget_position_parse(b["widget_position"] | "", &position))
+        return "invalid widget_position";
     if (b.containsKey("group_size_pct")) {
         if (!b["group_size_pct"].is<int>()) return "group_size_pct must be 0 (auto) or 10-90";
         const int percent = b["group_size_pct"].as<int>();

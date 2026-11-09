@@ -87,14 +87,18 @@ On e-paper, use a contrasting background if a pale tint is not visible.
 ### Arrange button content
 
 The top, center, and bottom labels form a group with the icon. For a button
-with a widget, **Widget position** places the widget above, below, left, or
-right of that group; right is the default. Rocker and Numeric Rocker instead
-center the group by default; see [Rocker layout](../widgets/rockers.md#arrange-labels-and-icon).
+with a widget, **Widget, labels and icon layout** places the widget above, below,
+left, or right of that group; right is the default. Choose an **Overlaid**
+position to place the group over the widget instead. The widget uses the full
+button content area, and the group sizes itself to its content. Adjust the
+position, colors, or existing offsets if the group obscures the widget. Rocker
+and Numeric Rocker center the group by default; see
+[Rocker layout](../widgets/rockers.md#arrange-labels-and-icon).
 For other widgets and rockers placed beside the group, **Labels and icon size %** controls the group's share of
 the width for a side-by-side layout or the height for a vertical layout. Use
 0 for Auto, which measures the content and limits the group to half the
-available space, or 10-90 for a fixed percentage. Without a widget, the group
-uses the whole button.
+available space, or 10-90 for a fixed percentage. This setting does not affect
+overlaid groups. Without a widget, the group uses the whole button.
 
 By default, the configured labels form a compact, centered group. The layout
 uses representative font metrics to keep them close without moving them as

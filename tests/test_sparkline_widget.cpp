@@ -798,6 +798,47 @@ TEST_F(SparklineWidget, AutoContentReflowsFromResolvedLabelText) {
     EXPECT_EQ(lv_obj_get_x(runtime.widget_region), layout.widget.x);
 }
 
+TEST_F(SparklineWidget, OverlayReflowsLabelsWithoutChangingWidgetOrInterceptingTouch) {
+    lv_obj_t* parent = lv_obj_create(lv_display_get_screen_active(display));
+    lv_obj_set_size(parent, 200, 100);
+    lv_obj_set_style_pad_all(parent, 0, 0);
+    lv_obj_set_style_border_width(parent, 0, 0);
+    lv_obj_t* label = lv_label_create(parent);
+    lv_obj_clear_flag(label, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
+    lv_label_set_text(label, "A");
+    ScreenButtonConfig button{};
+    strlcpy(button.widget.type, "sparkline", sizeof(button.widget.type));
+    strlcpy(button.label_center, "A", sizeof(button.label_center));
+    button.widget_position = ButtonWidgetPosition::OverlayBottomRight;
+    lv_obj_t* labels[] = {nullptr, label, nullptr};
+    ButtonContentRuntime runtime{};
+    const auto initial = pad_apply_content_layout(parent, button, nullptr, labels,
+                                                   pad_get_scale_info(), nullptr, &runtime);
+    runtime.widget_region = button_content_region(parent, initial.widget, 0, 0);
+    lv_obj_add_flag(runtime.widget_region, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_move_background(runtime.widget_region);
+    lv_obj_update_layout(parent);
+    EXPECT_EQ(initial.widget.width, 200);
+    EXPECT_EQ(initial.widget.height, 100);
+    EXPECT_EQ(initial.labels[1].x + initial.labels[1].width, 200);
+    EXPECT_EQ(initial.labels[1].y + initial.labels[1].height, 100);
+    lv_area_t coords;
+    lv_obj_get_coords(runtime.label_regions[1], &coords);
+    lv_point_t point = {coords.x1, coords.y1};
+    EXPECT_EQ(lv_indev_search_obj(parent, &point), runtime.widget_region);
+
+    pad_set_content_label_text(runtime, 1, "A longer value");
+    const auto updated = pad_measure_content_layout(parent, runtime);
+    pad_reflow_content_layout(runtime, updated);
+    EXPECT_LT(updated.labels[1].x, initial.labels[1].x);
+    EXPECT_EQ(updated.labels[1].x + updated.labels[1].width, 200);
+    EXPECT_EQ(updated.widget.x, initial.widget.x);
+    EXPECT_EQ(updated.widget.width, initial.widget.width);
+    EXPECT_EQ(updated.widget.height, initial.widget.height);
+    lv_obj_delete(parent);
+}
+
 TEST_F(SparklineWidget, CenteredRockerGroupUsesExistingWidgetAndZones) {
     lv_obj_set_size(tile, 300, 180);
     lv_obj_set_style_pad_all(tile, 0, 0);

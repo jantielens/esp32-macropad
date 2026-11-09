@@ -427,6 +427,33 @@ static void test_centered_group_preserves_widget_region() {
     assert(layout.widget.width == 200 && layout.widget.height == 100);
 }
 
+static void test_overlay_group_anchors() {
+    ButtonContentLayoutInput input = {{10, 20, 200, 100}, ButtonWidgetPosition::OverlayTopLeft,
+        ButtonGroupIconPosition::Left, 90, true, true, {false, true, false},
+        {0, 20, 0}, 20, 20, {0, 40, 0}, false, false, 0, 0, 4, false, {}, {}, {}};
+    for (int anchor = 0; anchor < 9; ++anchor) {
+        input.widget_position = static_cast<ButtonWidgetPosition>(
+            static_cast<int>(ButtonWidgetPosition::OverlayTopLeft) + anchor);
+        const auto layout = button_content_layout(input);
+        assert(layout.widget.x == 10 && layout.widget.y == 20);
+        assert(layout.widget.width == 200 && layout.widget.height == 100);
+        const int group_x = 10 + (200 - 64) * (anchor % 3) / 2;
+        const int group_y = 20 + (100 - 20) * (anchor / 3) / 2;
+        assert(layout.icon.x == group_x && layout.icon.y == group_y);
+        assert(layout.labels[1].x == group_x + 24 && layout.labels[1].y == group_y);
+        assert(overlaps(layout.labels[1], layout.widget));
+    }
+    input.bounds = {10, 20, 8, 6};
+    const auto small = button_content_layout(input);
+    assert(small.widget.width == 8 && small.widget.height == 6);
+    assert(small.icon.x >= 10 && small.icon.x + small.icon.width <= 18);
+    assert(small.labels[1].y >= 20 && small.labels[1].y + small.labels[1].height <= 26);
+    input.has_icon = input.has_label[1] = false;
+    const auto empty = button_content_layout(input);
+    assert(empty.widget.width == 8 && empty.widget.height == 6);
+    assert(empty.icon.width == 0 && empty.labels[1].height == 0);
+}
+
 int main() {
     test_layout_spacing_and_insets();
     test_nonuniform_tracks_spans_and_rounding();
@@ -443,6 +470,7 @@ int main() {
     test_icon_label_gap_follows_padding();
     test_widget_feedback_bands_exclude_content_group();
     test_centered_group_preserves_widget_region();
+    test_overlay_group_anchors();
     std::puts("pad_layout: PASS");
     return 0;
 }

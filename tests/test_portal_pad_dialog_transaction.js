@@ -1282,13 +1282,18 @@ function checkContentLayoutControls() {
     layoutContext.padContentLayoutRefresh();
     assert.strictEqual(find('pad-edit-group-width-group').style.display, '');
     assert.strictEqual(select.value, 'left');
+    select.value = 'overlay-top-left';
+    layoutContext.padContentLayoutRefresh();
+    assert.strictEqual(find('pad-edit-group-width-group').style.display, 'none');
     type.value = 'rocker';
     find('pad-edit-rocker-group-layout').value = 'center';
     layoutContext.padContentLayoutRefresh();
     assert.strictEqual(find('pad-edit-content-layout-group').style.display, 'none');
+    assert.strictEqual(find('pad-edit-group-width-group').style.display, '');
     find('pad-edit-rocker-group-layout').value = 'beside';
     layoutContext.padContentLayoutRefresh();
     assert.strictEqual(find('pad-edit-content-layout-group').style.display, '');
+    assert.strictEqual(find('pad-edit-group-width-group').style.display, 'none');
     type.value = '';
     layoutContext.padContentLayoutRefresh();
     assert.strictEqual(find('pad-edit-content-layout-group').style.display, 'none');
@@ -1316,6 +1321,14 @@ function checkContentLayoutDraft() {
     assert.strictEqual(context.padDialogBuildButton().widget_position, undefined);
     document.getElementById('pad-edit-content-layout').value = 'below';
     assert.strictEqual(context.padDialogBuildButton().widget_position, 'below');
+    document.getElementById('pad-edit-content-layout').value = 'overlay-top-left';
+    assert.strictEqual(context.padDialogBuildButton().widget_position, 'overlay-top-left');
+    assert.strictEqual(context.padDialogBuildButton().group_size_pct, 65);
+    document.getElementById('pad-edit-group-width-group').style.display = 'none';
+    document.getElementById('pad-edit-group-width').value = '5';
+    assert.throws(() => context.padDialogBuildButton(), /Labels and icon size/);
+    assert.strictEqual(document.getElementById('pad-edit-group-width-group').style.display, '');
+    document.getElementById('pad-edit-group-width').value = '65';
     for (const type of ['rocker', 'numericrocker']) {
         document.getElementById('pad-edit-widget-type').value = type;
         document.getElementById('pad-edit-rocker-group-layout').value = 'beside';

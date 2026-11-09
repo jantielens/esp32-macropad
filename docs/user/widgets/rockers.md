@@ -11,8 +11,9 @@ volume, or a countdown value.
 ## Arrange labels and icon
 
 Labels and the icon appear between the directional controls by default.
-Choose **Labels and icon placement > Beside widget** to use **Widget position**
-instead. **Labels and icon size %** uses the rocker axis: 0 measures the
+Choose **Labels and icon placement > Use widget layout** to use **Widget, labels
+and icon layout** instead, including its overlaid positions.
+**Labels and icon size %** uses the rocker axis: 0 measures the
 content automatically, while 10-90 requests a percentage of the widget span.
 Centered content is capped to the space between the Rocker indicators or the
 Numeric Rocker center zone. This does not change tap-zone sizes.

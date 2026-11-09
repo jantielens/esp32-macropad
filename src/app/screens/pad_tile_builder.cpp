@@ -457,6 +457,9 @@ void PadScreen::buildTiles() {
                 if (wt->createUI) {
                     tile.widget_state.font_owner = &fontCache;
                     lv_obj_t* widget_parent = button_content_region(obj, content_layout.widget, ui_ofs_x, ui_ofs_y);
+                    if (!tile.content_layout.input.centered_group &&
+                        button_widget_position_is_overlay(bcfg.widget_position))
+                        lv_obj_move_background(widget_parent);
                     lv_obj_set_style_bg_color(widget_parent, lv_obj_get_style_bg_color(obj, LV_PART_MAIN), 0);
                     lv_obj_set_style_text_color(widget_parent, lv_obj_get_style_text_color(obj, LV_PART_MAIN), 0);
                     lv_obj_set_user_data(widget_parent, this);

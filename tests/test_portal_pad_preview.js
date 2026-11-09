@@ -268,6 +268,23 @@ for (const [padding, expected] of [[undefined, '4px'], [0, '0px'], [12, '12px']]
     context.padRenderCellContent(iconBelow, { ...button, icon_position: 'below' });
     assert.strictEqual(iconBelow.children[1].children[1].className, 'pad-cell-icon');
 }
+for (const [position, vertical, horizontal] of [
+    ['overlay-top-left', 'start', 'start'], ['overlay-top-center', 'start', 'center'],
+    ['overlay-top-right', 'start', 'end'], ['overlay-center-left', 'center', 'start'],
+    ['overlay-center', 'center', 'center'], ['overlay-center-right', 'center', 'end'],
+    ['overlay-bottom-left', 'end', 'start'], ['overlay-bottom-center', 'end', 'center'],
+    ['overlay-bottom-right', 'end', 'end']
+]) {
+    const cell = createElement();
+    context.padRenderCellContent(cell, { widget_type: 'sparkline', widget_position: position,
+        label_center: 'Solar', group_size_pct: 75 });
+    assert.strictEqual(cell.dataset.groupedLayout, 'overlay');
+    assert.strictEqual(cell.children[0].className, 'pad-content-widget-region');
+    const group = cell.children[1];
+    assert.strictEqual(group.style.alignSelf, vertical);
+    assert.strictEqual(group.style.justifySelf, horizontal);
+    assert.strictEqual(group.style.flex, undefined);
+}
 for (const widget_type of ['rocker', 'numericrocker']) {
     for (const axis of ['horizontal', 'vertical']) {
         const cell = createElement();
@@ -281,6 +298,11 @@ for (const widget_type of ['rocker', 'numericrocker']) {
         context.padRenderCellContent(beside, { ...button, rocker_group_layout: 'beside' });
         assert.strictEqual(beside.dataset.groupedLayout, 'row');
         assert(beside.children.some(child => child.className === 'pad-cell-content-group'));
+        const overlay = createElement();
+        context.padRenderCellContent(overlay, { ...button, rocker_group_layout: 'beside',
+            widget_position: 'overlay-bottom-right' });
+        assert.strictEqual(overlay.dataset.groupedLayout, 'overlay');
+        assert.strictEqual(overlay.children[1].style.justifySelf, 'end');
     }
 }
 {

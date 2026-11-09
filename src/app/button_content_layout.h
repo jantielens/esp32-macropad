@@ -15,7 +15,16 @@ enum class ButtonWidgetPosition : uint8_t {
     Above,
     Below,
     Left,
-    Right
+    Right,
+    OverlayTopLeft,
+    OverlayTopCenter,
+    OverlayTopRight,
+    OverlayCenterLeft,
+    OverlayCenter,
+    OverlayCenterRight,
+    OverlayBottomLeft,
+    OverlayBottomCenter,
+    OverlayBottomRight
 };
 
 inline bool button_position_parse(const char* name, uint8_t* position) {
@@ -27,6 +36,25 @@ inline bool button_position_parse(const char* name, uint8_t* position) {
         }
     }
     return false;
+}
+
+inline bool button_widget_position_parse(const char* name, uint8_t* position) {
+    if (button_position_parse(name, position)) return true;
+    const char* names[] = {"overlay-top-left", "overlay-top-center", "overlay-top-right",
+                           "overlay-center-left", "overlay-center", "overlay-center-right",
+                           "overlay-bottom-left", "overlay-bottom-center", "overlay-bottom-right"};
+    for (uint8_t index = 0; index < 9; ++index) {
+        if (strcmp(name, names[index]) == 0) {
+            *position = static_cast<uint8_t>(ButtonWidgetPosition::OverlayTopLeft) + index;
+            return true;
+        }
+    }
+    return false;
+}
+
+inline bool button_widget_position_is_overlay(ButtonWidgetPosition position) {
+    return position >= ButtonWidgetPosition::OverlayTopLeft &&
+           position <= ButtonWidgetPosition::OverlayBottomRight;
 }
 
 struct ButtonContentRect {
@@ -280,7 +308,19 @@ inline ButtonContentLayout button_content_layout(const ButtonContentLayoutInput&
                      input.has_label[2] || input.reserve_label_slots};
     const bool has_group = input.has_icon || labels[0] || labels[1] || labels[2];
 
-    if (input.has_widget && input.centered_group) {
+    if (input.has_widget && !input.centered_group && button_widget_position_is_overlay(input.widget_position)) {
+        output.widget = bounds;
+        if (has_group) {
+            group.width = button_layout_min(bounds.width, button_layout_nonnegative(button_layout_group_extent(input, true)));
+            group.height = button_layout_min(bounds.height, button_layout_nonnegative(button_layout_group_extent(input, false)));
+            const uint8_t anchor = static_cast<uint8_t>(input.widget_position) -
+                                   static_cast<uint8_t>(ButtonWidgetPosition::OverlayTopLeft);
+            group.x += (bounds.width - group.width) * (anchor % 3) / 2;
+            group.y += (bounds.height - group.height) * (anchor / 3) / 2;
+        } else {
+            group = {bounds.x, bounds.y, 0, 0};
+        }
+    } else if (input.has_widget && input.centered_group) {
         output.widget = bounds;
         if (has_group) {
             const int32_t span = input.center_horizontal ? bounds.width : bounds.height;

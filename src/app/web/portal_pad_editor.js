@@ -650,7 +650,7 @@ function padContentFitWarning() {
     } else if (widget && (position === 'left' || position === 'right')) {
         groupWidth = Math.floor(Math.max(0, innerWidth - 4) *
             size / 100);
-    } else if (widget) {
+    } else if (widget && !position.startsWith('overlay-')) {
         groupHeight = Math.floor(Math.max(0, innerHeight - 4) * size / 100);
     }
     const requestedHeight = labels.reduce((sum, height) => sum + height, 0);
@@ -669,7 +669,8 @@ function padContentLayoutRefresh() {
     const centered = rocker && document.getElementById('pad-edit-rocker-group-layout').value !== 'beside';
     document.getElementById('pad-edit-rocker-group-layout-group').style.display = rocker ? '' : 'none';
     document.getElementById('pad-edit-content-layout-group').style.display = type && !centered ? '' : 'none';
-    document.getElementById('pad-edit-group-width-group').style.display = type ? '' : 'none';
+    const overlay = !centered && document.getElementById('pad-edit-content-layout').value.startsWith('overlay-');
+    document.getElementById('pad-edit-group-width-group').style.display = type && !overlay ? '' : 'none';
     if (typeof padIconEditorRefresh === 'function') padIconEditorRefresh();
     padContentFitWarning();
 }

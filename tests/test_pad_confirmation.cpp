@@ -180,6 +180,15 @@ int main() {
         CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
         button["widget_position"] = "below";
         CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        for (const char* position : {"overlay-top-left", "overlay-top-center", "overlay-top-right",
+                                     "overlay-center-left", "overlay-center", "overlay-center-right",
+                                     "overlay-bottom-left", "overlay-bottom-center", "overlay-bottom-right"}) {
+            button["widget_position"] = position;
+            CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        }
+        button["widget_position"] = "overlay-invalid";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["widget_position"] = "below";
         button["group_size_pct"] = 91;
         CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
         button["group_size_pct"] = 0;
@@ -189,6 +198,8 @@ int main() {
         CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
         button.remove("reserve_label_slots");
         button["icon_position"] = "center";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["icon_position"] = "overlay-top-left";
         CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
         button["icon_position"] = "left";
         button["widget_type"] = "test";

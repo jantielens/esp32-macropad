@@ -389,7 +389,7 @@ static bool parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
     btn->icon_position = static_cast<ButtonGroupIconPosition>(position);
     position = static_cast<uint8_t>(ButtonWidgetPosition::Right);
     const char* widget_position = obj["widget_position"] | "right";
-    if (!button_position_parse(widget_position, &position))
+    if (!button_widget_position_parse(widget_position, &position))
         LOGW(TAG, "Invalid widget position: %s", widget_position);
     btn->widget_position = static_cast<ButtonWidgetPosition>(position);
     btn->group_size_pct = obj["group_size_pct"] | (uint8_t)0;

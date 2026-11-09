@@ -211,19 +211,28 @@
                             <label for="pad-edit-rocker-group-layout">Labels and icon placement</label>
                             <select id="pad-edit-rocker-group-layout" onchange="padContentLayoutRefresh()">
                                 <option value="center">Between directional controls</option>
-                                <option value="beside">Beside widget</option>
+                                <option value="beside">Use widget layout</option>
                             </select>
                             <small>The touched zone determines the action, including on the centered group.</small>
                         </div>
                         <div class="form-group" id="pad-edit-content-layout-group">
-                            <label for="pad-edit-content-layout">Widget position</label>
+                            <label for="pad-edit-content-layout">Widget, labels and icon layout</label>
                             <select id="pad-edit-content-layout" onchange="padContentLayoutRefresh()">
                                 <option value="right">Right of labels and icon</option>
                                 <option value="below">Below labels and icon</option>
                                 <option value="above">Above labels and icon</option>
                                 <option value="left">Left of labels and icon</option>
+                                <option value="overlay-top-left">Overlaid &mdash; top left</option>
+                                <option value="overlay-top-center">Overlaid &mdash; top center</option>
+                                <option value="overlay-top-right">Overlaid &mdash; top right</option>
+                                <option value="overlay-center-left">Overlaid &mdash; center left</option>
+                                <option value="overlay-center">Overlaid &mdash; center</option>
+                                <option value="overlay-center-right">Overlaid &mdash; center right</option>
+                                <option value="overlay-bottom-left">Overlaid &mdash; bottom left</option>
+                                <option value="overlay-bottom-center">Overlaid &mdash; bottom center</option>
+                                <option value="overlay-bottom-right">Overlaid &mdash; bottom right</option>
                             </select>
-                            <small id="pad-edit-content-layout-help">The preview shows a placeholder, not the live widget.</small>
+                            <small id="pad-edit-content-layout-help">Overlaid positions place labels and icon over the widget. The preview shows a placeholder, not the live widget.</small>
                         </div>
                         <div class="form-group" id="pad-edit-group-width-group">
                             <label for="pad-edit-group-width">Labels and icon size %</label>

@@ -283,6 +283,19 @@ function padRenderGroupedContent(cell, btn, widget, existingIcon, foreground) {
             return;
         }
         marker.appendChild(padWidgetPreviewSymbol(widget));
+        if (position.startsWith('overlay-')) {
+            cell.appendChild(marker);
+            if (hasGroup) {
+                const anchor = position.slice('overlay-'.length).split('-');
+                const vertical = anchor[0];
+                const horizontal = anchor[1] || 'center';
+                group.style.alignSelf = vertical === 'top' ? 'start' : vertical === 'bottom' ? 'end' : 'center';
+                group.style.justifySelf = horizontal === 'left' ? 'start' : horizontal === 'right' ? 'end' : 'center';
+                cell.appendChild(group);
+            }
+            cell.dataset.groupedLayout = 'overlay';
+            return;
+        }
         if (hasGroup && btn.group_size_pct) group.style.flex = '0 1 ' + btn.group_size_pct + '%';
         else if (hasGroup) group.style[side ? 'maxWidth' : 'maxHeight'] = '50%';
         if (!hasGroup) cell.appendChild(marker);
@@ -1177,7 +1190,7 @@ async function padPreparePageSave(context) {
                 iconWidth = Math.max(0, padTrackSpanSize(columnSizing.sizes, col, colSpan, gap) - 2 * (contentPad + border));
                 iconHeight = Math.max(0, padTrackSpanSize(rowSizing.sizes, row, rowSpan, gap) - 2 * (contentPad + border));
                 const hasGroup = button.icon || button.label_top || button.label_center || button.label_bottom || button.reserve_label_slots;
-                if (hasGroup) {
+                if (hasGroup && !(button.widget_position || '').startsWith('overlay-')) {
                     const horizontal = !button.widget_position || button.widget_position === 'left' || button.widget_position === 'right';
                     const available = horizontal ? iconWidth : iconHeight;
                     const remaining = Math.max(0, available - Math.min(4, available));
