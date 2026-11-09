@@ -48,6 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Prevent the pad editor canvas from flashing when clearing a button by
+  preserving unchanged button previews.
 * Remove unintended right and bottom margins caused by grid spacing on pads
   and in the editor preview. Automatic tracks may differ by one pixel.
 * Keep standalone center labels vertically centered when oversized text is

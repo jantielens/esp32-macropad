@@ -511,7 +511,7 @@ function padDialogClear() {
     if (typeof padWorkspaceClearButton === 'function') padWorkspaceClearButton(col, row);
     padMarkDirty();
     padWorkspaceReturn();
-    padRenderGrid();
+    padRenderGrid({}); // Reconcile positions without rebuilding unchanged previews.
 }
 
 // --- Live binding preview (in-context) -------------------------------------

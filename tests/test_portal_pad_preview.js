@@ -565,6 +565,45 @@ const css = fs.readFileSync('src/app/web/portal-custom.css', 'utf8');
     assert(testGrid.children.includes(mainPreview), 'Overlay resizing must retain main-layer previews');
     assert.strictEqual(mainPreview.querySelector('.pad-cell-icon'), mainIcon);
 
+    vm.runInContext(fs.readFileSync('src/app/web/portal_pad_dialog.js', 'utf8'), context);
+    context.padWorkspaceClearButton = () => {};
+    context.padWorkspaceReturn = () => {};
+    context.padState = { cols: 4, rows: 2, selectedLayer: 'main', editCol: 0, editRow: 0,
+        mainButtons: [{ col: 0, row: 0, col_span: 2, row_span: 2, widget_type: 'gauge' }, other],
+        overlayButtons: [],
+        get buttons() { return this.selectedLayer === 'overlay' ? this.overlayButtons : this.mainButtons; },
+        set buttons(value) { if (this.selectedLayer === 'overlay') this.overlayButtons = value; else this.mainButtons = value; },
+        templateButtons: [{ col: 1, row: 0, icon }] };
+    context.padRenderGrid();
+    const retainedButton = testGrid.children.find(cell => cell.dataset.layer === 'main' && cell.dataset.col === 3);
+    const retainedIcon = retainedButton.querySelector('.pad-cell-icon');
+    const removedButton = testGrid.children.find(cell => cell.dataset.layer === 'main' && cell.dataset.col === 0);
+    context.padDialogClear();
+    assert(!testGrid.children.includes(removedButton), 'Clear must remove the selected button');
+    assert(testGrid.children.includes(retainedButton), 'Clear must retain unrelated buttons');
+    assert.strictEqual(retainedButton.querySelector('.pad-cell-icon'), retainedIcon);
+    assert(testGrid.children.some(cell => cell.classes.has('pad-cell-ghost') && cell.dataset.col === 1),
+        'Clear must reveal an unblocked template button');
+    for (const [col, row] of [[0, 0], [0, 1], [1, 1]]) {
+        assert(testGrid.children.some(cell => cell.classes.has('pad-cell-empty') &&
+            Number(cell.dataset.col) === col && Number(cell.dataset.row) === row), 'Clear must free the button span');
+    }
+
+    context.padState.selectedLayer = 'overlay';
+    context.padState.overlayButtons = [{ col: 0, row: 0, col_span: 2 }, { col: 3, row: 1, icon }];
+    context.padRenderGrid();
+    const retainedMain = testGrid.children.find(cell => cell.dataset.layer === 'main' && Number(cell.dataset.col) === 3);
+    const retainedOverlay = testGrid.children.find(cell => cell.dataset.layer === 'overlay' && Number(cell.dataset.col) === 3);
+    context.padDialogClear();
+    assert(testGrid.children.includes(retainedMain), 'Overlay clear must retain main-layer previews');
+    assert(testGrid.children.includes(retainedOverlay), 'Overlay clear must retain unrelated overlay buttons');
+    for (const col of [0, 1]) {
+        assert(testGrid.children.some(cell => cell.classes.has('pad-cell-empty') &&
+            cell.dataset.layer === 'overlay' && Number(cell.dataset.col) === col && Number(cell.dataset.row) === 0),
+        'Overlay clear must free its full span');
+    }
+    delete context.padWorkspaceClearButton;
+    delete context.padWorkspaceReturn;
     context.padState = savedState;
     context.document.getElementById = savedGetElementById;
     delete context.document.addEventListener;
