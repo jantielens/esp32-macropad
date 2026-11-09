@@ -28,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Keep standalone center labels vertically centered when oversized text is
+  clipped, including scaled text and binding updates. Buttons with other
+  labels, icons, or widgets retain their existing layouts.
 * Restore full-screen pad tap actions above Main and Overlay buttons, and fix
   their activation through physical-button navigation.
   See [full-screen tap actions](docs/user/pads/actions.md#use-full-screen-tap-actions).

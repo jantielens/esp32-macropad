@@ -546,6 +546,53 @@ TEST_F(SparklineWidget, SharedContentClipsUpscaledLabelsAndPreservesOffsets) {
     EXPECT_NE(framebuffer[pixel] | (framebuffer[pixel + 1] << 8), 0xf800);
 }
 
+TEST_F(SparklineWidget, StandaloneCenterLabelStaysCenteredWhenClippedAndReflowed) {
+    lv_obj_set_size(tile, 200, 21);
+    lv_obj_set_style_pad_all(tile, 0, 0);
+    lv_obj_set_style_border_width(tile, 0, 0);
+    for (uint16_t upscale : {uint16_t(256), uint16_t(512)}) {
+        lv_obj_set_height(tile, 21);
+        lv_obj_t* label = lv_label_create(tile);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_36, 0);
+        lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
+        lv_label_set_text(label, "10:15");
+        lv_obj_set_style_transform_scale(label, upscale, 0);
+        ScreenButtonConfig button{};
+        strlcpy(button.label_center, "10:15", sizeof(button.label_center));
+        button.style_center.font_upscale = upscale;
+        button.ui_offset_y = 3;
+        button.style_center.y_offset = 2;
+        UIScaleInfo scale = pad_get_scale_info();
+        scale.font_large = &lv_font_montserrat_36;
+        lv_obj_t* labels[] = {nullptr, label, nullptr};
+        ButtonContentRuntime runtime{};
+        pad_apply_content_layout(tile, button, nullptr, labels, scale, nullptr, &runtime);
+
+        auto expect_centered = [&]() {
+            lv_obj_update_layout(tile);
+            const int32_t height = lv_obj_get_height(label) * upscale / LV_SCALE_NONE;
+            const int32_t center = 2 * (lv_obj_get_y(runtime.label_regions[1]) +
+                                         lv_obj_get_y(label)) + height;
+            EXPECT_NEAR(center, lv_obj_get_content_height(tile) + 10, 1);
+            EXPECT_EQ(lv_obj_get_height(label),
+                      runtime.input.label_height[1] * LV_SCALE_NONE / upscale);
+        };
+        expect_centered();
+        EXPECT_LT(lv_obj_get_y(label), 0);
+        EXPECT_EQ(lv_obj_get_height(runtime.label_regions[1]), 21);
+
+        pad_set_content_label_text(runtime, 1, "10:15\nMonday");
+        pad_reflow_content_layout(runtime, pad_measure_content_layout(tile, runtime));
+        expect_centered();
+
+        lv_obj_set_height(tile, 300);
+        pad_reflow_content_layout(runtime, pad_measure_content_layout(tile, runtime));
+        expect_centered();
+        EXPECT_EQ(lv_obj_get_y(label), 0);
+        lv_obj_delete(runtime.label_regions[1]);
+    }
+}
+
 TEST_F(SparklineWidget, AutoContentReflowsFromResolvedLabelText) {
     lv_obj_set_size(tile, 200, 100);
     lv_obj_set_style_pad_all(tile, 0, 0);

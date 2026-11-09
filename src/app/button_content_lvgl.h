@@ -157,8 +157,17 @@ inline void pad_reflow_content_layout(ButtonContentRuntime& runtime, const Butto
         pad_position_content_region(runtime.label_regions[i], rect,
                                     runtime.offset_x + runtime.label_offset_x[i],
                                     runtime.offset_y + runtime.label_offset_y[i]);
+        const bool standalone_center = i == 1 && !runtime.input.has_widget &&
+            !runtime.input.has_icon && !runtime.input.has_label[0] && !runtime.input.has_label[2];
+        const int32_t height = standalone_center ? runtime.input.label_height[i] : rect.height;
+        const int32_t label_height = height * LV_SCALE_NONE / runtime.label_scale[i];
         lv_obj_set_size(runtime.labels[i], rect.width * LV_SCALE_NONE / runtime.label_scale[i],
-                        rect.height * LV_SCALE_NONE / runtime.label_scale[i]);
+                        label_height);
+        if (standalone_center) {
+            // Center the full text line, even when its region must clip it.
+            lv_obj_set_y(runtime.labels[i],
+                         (rect.height - label_height * runtime.label_scale[i] / LV_SCALE_NONE) / 2);
+        }
     }
     if (runtime.icon) {
         const ButtonContentRect& rect = layout.icon;
