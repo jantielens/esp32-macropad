@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-11-08
+ms.date: 2026-11-09
 ms.topic: reference
 ---
 
@@ -28,6 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Reset custom row heights, column widths, and stale editor state when using
+  Clear Pad so leftover settings cannot prevent saving the empty pad.
+  Preserve device-wide defaults and clipboards.
+  See [copy, fill, and clear](docs/user/pads/reuse.md#copy-fill-and-clear).
 * Keep Option selector color previews within the button editor and align color
   controls when labels wrap.
 * Keep long-binding tips from disrupting the button editor layout. Show them in

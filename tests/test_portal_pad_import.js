@@ -286,7 +286,103 @@ function pageRequests(result, page) {
     return result.requests.filter(request => request.page === page);
 }
 
+async function testClearPad() {
+    const document = makeDocument();
+    const messages = [];
+    let confirmed = false;
+    const context = {
+        console, document, deviceInfoCache: {}, MAX_ACTIONS: 3,
+        confirm() { return confirmed; },
+        showMessage(message, type) { messages.push({ message, type }); },
+        padGetEffectiveDefault() { return '#123456'; },
+        padGetBindableColor() { return document.getElementById('pad-edit-page-bg-color').value; },
+        padInitBindableColor() {},
+        padSetBindableColor(id, value) { document.getElementById(id).value = value; },
+        padRenderBindings() {},
+        actionEditorListLoad(prefixes, actions) { context.actions = actions; },
+        actionEditorListBuild() { return context.actions; },
+        padDialogClearValidationError() { context.validationError = ''; },
+        padRenderGrid() {},
+        padExitPlacementMode() { vm.runInContext('padState.placingBlock = null;', context); },
+    };
+    loadPortal(context);
+    context.padCaptureIconLayout = () => ({});
+    document.getElementById('pad-edit-page-bg-color').parentElement = { style: {} };
+    for (const id of ['pad-row-heights', 'pad-column-widths']) {
+        const field = document.getElementById(id);
+        field.classList = { toggle(name, enabled) { field.invalid = enabled; } };
+        field.setAttribute = (name, value) => { field[name] = value; };
+    }
+    vm.runInContext(`
+        padState.page = 4;
+        padState.cols = 5; padState.rows = 4;
+        padState.rawJson = { custom_setting: true, row_heights_px: [0, 0, 0, 100] };
+        padState.selectedLayer = 'overlay';
+        padState.layerSelections = { main: { col: 1, row: 1 }, overlay: { col: 2, row: 2 } };
+        padState.mainButtons = [{ col: 0, row: 0 }];
+        padState.overlayButtons = [{ col: 1, row: 1 }];
+        padState.bindings = [{ name: 'color', value: '#ffffff' }];
+        padState.templatePad = 1; padState.templateButtons = [{ col: 2, row: 0 }];
+        padState.trackValidationError = true;
+        padState.importedIconSources = { stale: {} };
+        padState.importedIconSourceIds = { stale: 'source' };
+        padState.importedPadConfigs = [{ cols: 5 }];
+        padState.placingBlock = {}; padState.dragSource = { col: 1, row: 1 };
+        padState.btnClipboard = { icon: { draft_source_id: 'clipboard', kind: 'color' } };
+        padState.padClipboard = { buttons: [], overlay_buttons: [] };
+        padState.draftIconSources = { stale: {}, clipboard: {} };
+        padState.buttonDefaults = { bg_color: '#abcdef' };
+    `, context);
+    context.actions = [{ type: 'screen' }];
+    context.validationError = 'Invalid track sizes';
+    document.getElementById('pad-row-heights').value = '4:100';
+    document.getElementById('pad-column-widths').value = '2:';
+    for (const id of ['pad-name', 'pad-wake-screen', 'pad-button-shadow', 'pad-page-bg-mode']) {
+        document.getElementById(id).value = 'override';
+    }
+    const before = vm.runInContext('JSON.stringify(padState)', context);
+    await context.padDeletePage();
+    assert.strictEqual(vm.runInContext('JSON.stringify(padState)', context), before,
+        'Cancelling Clear Pad must preserve the draft');
+    assert.strictEqual(document.getElementById('pad-row-heights').value, '4:100');
+    assert.strictEqual(messages.length, 0);
+
+    confirmed = true;
+    await context.padDeletePage();
+    assert.deepStrictEqual(messages, [{ message: 'Pad cleared (unsaved)', type: 'success' }]);
+    const saved = context.padBuildSaveContext();
+    assert.strictEqual(saved.page, 4);
+    assert.deepStrictEqual(JSON.parse(saved.body), { layout: 'grid', cols: 3, rows: 2, buttons: [] },
+        'Clearing a customized pad must produce a saveable empty pad without old settings');
+    for (const id of ['pad-row-heights', 'pad-column-widths']) {
+        const field = document.getElementById(id);
+        assert.strictEqual(field.value, '');
+        assert.strictEqual(field.invalid, false);
+        assert.strictEqual(field['aria-invalid'], 'false');
+        assert.strictEqual(document.getElementById(id + '-error').hidden, true);
+    }
+    assert.strictEqual(document.getElementById('pad-custom-track-sizes-section').open, false);
+    assert.strictEqual(document.getElementById('pad-edit-page-bg-color').readOnly, true);
+    assert.strictEqual(context.validationError, '');
+    assert.strictEqual(vm.runInContext('padDirty', context), true);
+    assert.strictEqual(vm.runInContext('padState.selectedLayer', context), 'main');
+    assert.strictEqual(vm.runInContext('padState.trackValidationError', context), false);
+    assert.strictEqual(vm.runInContext('padState.placingBlock', context), null);
+    assert.strictEqual(vm.runInContext('padState.dragSource', context), null);
+    assert.strictEqual(vm.runInContext('padState.importedPadConfigs', context), null);
+    assert.strictEqual(vm.runInContext('JSON.stringify(padState.layerSelections)', context), '{"main":null,"overlay":null}');
+    for (const key of ['importedIconSources', 'importedIconSourceIds']) {
+        assert.strictEqual(vm.runInContext('JSON.stringify(padState.' + key + ')', context), '{}');
+    }
+    assert.strictEqual(vm.runInContext('JSON.stringify(Object.keys(padState.draftIconSources))', context), '["clipboard"]');
+    assert.strictEqual(vm.runInContext('padState.buttonDefaults.bg_color', context), '#abcdef',
+        'Clear Pad must preserve device-wide defaults');
+    assert.strictEqual(vm.runInContext('padState.btnClipboard.icon.draft_source_id', context), 'clipboard');
+    assert.notStrictEqual(vm.runInContext('padState.padClipboard', context), null);
+}
+
 (async function() {
+    await testClearPad();
     const layoutImport = await runImport({
         pads: [{ cols: 1, rows: 1, buttons: [{
             col: 0, row: 0, widget_type: 'sparkline', widget_position: 'left',
