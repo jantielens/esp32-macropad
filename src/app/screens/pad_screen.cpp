@@ -265,7 +265,7 @@ void PadScreen::hide() {
 
 bool PadScreen::createOverlayInputShield() {
     if (!container) return false;
-    if (tileCount <= mainButtonCount) {
+    if (padActionOverlay || tileCount <= mainButtonCount) {
         lv_obj_set_hidden(container, false);
         return true;
     }

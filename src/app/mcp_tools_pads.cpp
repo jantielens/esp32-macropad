@@ -140,7 +140,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     pf["overlay_buttons"] = "Optional Overlay button array sharing the pad grid and combined button capacity.";
     pf["template_pad"] = "int pad index 0..MAX_PADS-1 to inherit source Main buttons into empty destination Main positions (-1 = none). Overlay buttons do not suppress inheritance.";
     pf["bindings"] = "object of name->binding-template, referenced elsewhere as [pad:name]. Names: [a-zA-Z][a-zA-Z0-9_]*";
-    pf["pad_actions"] = "ordered array of up to grid.max_actions background tap actions for unoccupied pad space. Buttons render above these actions; visible Overlay buttons block them. [] clears the list. Template pads never contribute pad_actions.";
+    pf["pad_actions"] = "ordered array of up to grid.max_actions full-screen tap actions. These capture taps before Main and Overlay buttons and widgets. [] clears the list. Template pads never contribute pad_actions.";
     pad["bindings_example"] = "{\"power\":\"[mqtt:home/solar/power;watts;%.0f]\",\"hot\":\"[expr:[pad:power]>3000?1:0]\"}";
 
     JsonObject btn = result.createNestedObject("button");

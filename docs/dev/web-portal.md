@@ -3408,9 +3408,10 @@ copy pad configurations, or access persistent storage from the display task.
 Pad JSON can include a local `pad_actions` array containing up to three flat
 `ButtonAction` objects. The portal exposes these below Pad Bindings as
 **Full-Screen Tap Actions**, using the shared action editor. A nonempty list
-creates a transparent full-pad input layer: normal taps dispatch the ordered
-list, swipes retain their configured behavior, and long-presses do not dispatch
-the list. The field is deliberately excluded from `template_pad` inheritance.
+creates a transparent full-pad input layer above Main and Overlay buttons:
+normal taps dispatch the ordered list instead of button or widget actions,
+swipes retain their configured behavior, and long-presses do not dispatch the
+list. The field is deliberately excluded from `template_pad` inheritance.
 
 The save API preserves an omitted `pad_actions` field. An empty array explicitly
 clears the list. Pad validation rejects non-array values, more than three

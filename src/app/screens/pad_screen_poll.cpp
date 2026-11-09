@@ -462,8 +462,6 @@ void PadScreen::pollBtnStateBindings() {
                 break;
             }
         }
-        if (pointer_pressed && padActionOverlay && lv_obj_has_state(padActionOverlay, LV_STATE_PRESSED) &&
-            pointBlockedByOverlay(pointer)) cancel_input = true;
         for (uint8_t index = 0; index < tileCount; ++index) {
             ButtonTile& tile = tiles[index];
             if (!tile.touch_start_valid) continue;

@@ -718,7 +718,6 @@ void PadScreen::buildTiles() {
                             LV_EVENT_SHORT_CLICKED, this);
         lv_obj_add_event_cb(padActionOverlay, onSwipeGuard, LV_EVENT_GESTURE, this);
         swipe_actions_register(padActionOverlay, swipes_enabled);
-        lv_obj_move_to_index(padActionOverlay, 0);
     }
 
     createOverlayInputShield();

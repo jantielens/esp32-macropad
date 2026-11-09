@@ -85,7 +85,8 @@ bool PadScreen::navigationZoneAvailable(const ButtonTile& tile, uint8_t zone) co
 }
 
 uint8_t PadScreen::navigationZoneCount(const ButtonTile& tile) const {
-    if (!tile.obj || lv_obj_has_flag(tile.obj, LV_OBJ_FLAG_HIDDEN) ||
+    if ((padActionOverlay && padActionCount) ||
+        !tile.obj || lv_obj_has_flag(tile.obj, LV_OBJ_FLAG_HIDDEN) ||
         lv_obj_has_state(tile.obj, LV_STATE_DISABLED) || coveredByOverlay(tile)) return 0;
     if (tile.widget_type && strcmp(tile.widget_type->name, "toggle") == 0)
         return toggle_interactive(&tile.widget_state) ? 1 : 0;
@@ -200,7 +201,7 @@ bool PadScreen::navigateButtons(const char* command) {
     if (strcmp(command, "tap") != 0 && strcmp(command, "tap_hold") != 0) return false;
     if (selected < 0) return true;
     if (targets[selected].tile == NAVIGATION_PAD_ACTION) {
-        if (strcmp(command, "tap") == 0) lv_obj_send_event(padActionOverlay, LV_EVENT_CLICKED, nullptr);
+        if (strcmp(command, "tap") == 0) lv_obj_send_event(padActionOverlay, LV_EVENT_SHORT_CLICKED, nullptr);
         return true;
     }
     lv_obj_update_layout(container);
@@ -811,9 +812,6 @@ void PadScreen::onPadActionTap(lv_event_t* e) {
     if (device_dialog_active()) return;
     auto* pad = (PadScreen*)lv_event_get_user_data(e);
     if (!pad || !pad->padActions || pad->padActionCount == 0) return;
-    lv_point_t point = {};
-    if (lv_indev_active()) lv_indev_get_point(lv_indev_active(), &point);
-    if (pad->pointBlockedByOverlay(point)) return;
     if (lv_tick_get() - swipe_actions_last_swipe_time() < 300) return;
 
     ButtonAction local[MAX_BUTTON_ACTIONS];
@@ -835,6 +833,7 @@ void PadScreen::onPadActionTap(lv_event_t* e) {
 void PadScreen::onSwipeGuard(lv_event_t* event) {
     auto* pad = static_cast<PadScreen*>(lv_event_get_user_data(event));
     if (!pad) return;
+    if (pad->padActionOverlay && pad->padActionCount) return;
     bool blocked = false;
     for (uint8_t index = 0; index < pad->tileCount; ++index) {
         const ButtonTile& tile = pad->tiles[index];

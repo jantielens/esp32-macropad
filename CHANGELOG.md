@@ -28,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Restore full-screen pad tap actions above Main and Overlay buttons, and fix
+  their activation through physical-button navigation.
+  See [full-screen tap actions](docs/user/pads/actions.md#use-full-screen-tap-actions).
 * Reset custom row heights, column widths, and stale editor state when using
   Clear Pad so leftover settings cannot prevent saving the empty pad.
   Preserve device-wide defaults and clipboards.
