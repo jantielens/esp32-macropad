@@ -1278,6 +1278,7 @@ function checkContentLayoutControls() {
     vm.runInContext(fs.readFileSync('src/app/web/portal_pad_editor.js', 'utf8'), layoutContext);
     layoutContext.padContentLayoutRefresh();
     assert.strictEqual(find('pad-edit-group-width-group').style.display, '');
+    assert.strictEqual(find('pad-edit-overlay-backdrop-group').style.display, 'none');
     type.value = 'gauge';
     layoutContext.padContentLayoutRefresh();
     assert.strictEqual(find('pad-edit-group-width-group').style.display, '');
@@ -1285,11 +1286,13 @@ function checkContentLayoutControls() {
     select.value = 'overlay-top-left';
     layoutContext.padContentLayoutRefresh();
     assert.strictEqual(find('pad-edit-group-width-group').style.display, 'none');
+    assert.strictEqual(find('pad-edit-overlay-backdrop-group').style.display, '');
     type.value = 'rocker';
     find('pad-edit-rocker-group-layout').value = 'center';
     layoutContext.padContentLayoutRefresh();
     assert.strictEqual(find('pad-edit-content-layout-group').style.display, 'none');
     assert.strictEqual(find('pad-edit-group-width-group').style.display, '');
+    assert.strictEqual(find('pad-edit-overlay-backdrop-group').style.display, 'none');
     find('pad-edit-rocker-group-layout').value = 'beside';
     layoutContext.padContentLayoutRefresh();
     assert.strictEqual(find('pad-edit-content-layout-group').style.display, '');
@@ -1297,6 +1300,7 @@ function checkContentLayoutControls() {
     type.value = '';
     layoutContext.padContentLayoutRefresh();
     assert.strictEqual(find('pad-edit-content-layout-group').style.display, 'none');
+    assert.strictEqual(find('pad-edit-overlay-backdrop-group').style.display, 'none');
 }
 
 function checkContentLayoutDraft() {
@@ -1323,6 +1327,10 @@ function checkContentLayoutDraft() {
     assert.strictEqual(context.padDialogBuildButton().widget_position, 'below');
     document.getElementById('pad-edit-content-layout').value = 'overlay-top-left';
     assert.strictEqual(context.padDialogBuildButton().widget_position, 'overlay-top-left');
+    assert.strictEqual(context.padDialogBuildButton().overlay_backdrop, undefined);
+    document.getElementById('pad-edit-overlay-backdrop').checked = true;
+    assert.strictEqual(context.padDialogBuildButton().overlay_backdrop, true);
+    document.getElementById('pad-edit-overlay-backdrop').checked = false;
     assert.strictEqual(context.padDialogBuildButton().group_size_pct, 65);
     document.getElementById('pad-edit-group-width-group').style.display = 'none';
     document.getElementById('pad-edit-group-width').value = '5';

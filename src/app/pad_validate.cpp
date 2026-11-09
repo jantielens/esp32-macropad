@@ -302,6 +302,8 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
     }
     if (b.containsKey("reserve_label_slots") && !b["reserve_label_slots"].is<bool>())
         return "reserve_label_slots must be a boolean";
+    if (b.containsKey("overlay_backdrop") && !b["overlay_backdrop"].is<bool>())
+        return "overlay_backdrop must be a boolean";
     if (b.containsKey("rocker_group_layout")) {
         const char* layout = b["rocker_group_layout"] | "";
         if ((strcmp(wt, "rocker") != 0 && strcmp(wt, "numericrocker") != 0) ||

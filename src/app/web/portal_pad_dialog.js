@@ -210,6 +210,7 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-content-layout').value = btn.widget_position || 'right';
     document.getElementById('pad-edit-rocker-group-layout').value = btn.rocker_group_layout || 'center';
     document.getElementById('pad-edit-group-width').value = btn.group_size_pct || 0;
+    document.getElementById('pad-edit-overlay-backdrop').checked = btn.overlay_backdrop === true;
     padFillLoad(btn);
     padWidgetTypeChanged();
 
@@ -368,6 +369,7 @@ function padDialogBuildButton() {
             btn.rocker_group_layout = 'beside';
         const position = document.getElementById('pad-edit-content-layout').value;
         if (position !== 'right') btn.widget_position = position;
+        if (document.getElementById('pad-edit-overlay-backdrop').checked) btn.overlay_backdrop = true;
         const size = Number(document.getElementById('pad-edit-group-width').value);
         if (!Number.isInteger(size) || (size !== 0 && (size < 10 || size > 90))) {
             document.getElementById('pad-edit-group-width-group').style.display = '';

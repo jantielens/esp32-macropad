@@ -800,9 +800,12 @@ TEST_F(SparklineWidget, AutoContentReflowsFromResolvedLabelText) {
 
 TEST_F(SparklineWidget, OverlayReflowsLabelsWithoutChangingWidgetOrInterceptingTouch) {
     lv_obj_t* parent = lv_obj_create(lv_display_get_screen_active(display));
+    lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_size(parent, 200, 100);
     lv_obj_set_style_pad_all(parent, 0, 0);
     lv_obj_set_style_border_width(parent, 0, 0);
+    lv_obj_set_style_bg_color(parent, lv_color_hex(0x303030), 0);
+    lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
     lv_obj_t* label = lv_label_create(parent);
     lv_obj_clear_flag(label, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
@@ -811,6 +814,7 @@ TEST_F(SparklineWidget, OverlayReflowsLabelsWithoutChangingWidgetOrInterceptingT
     strlcpy(button.widget.type, "sparkline", sizeof(button.widget.type));
     strlcpy(button.label_center, "A", sizeof(button.label_center));
     button.widget_position = ButtonWidgetPosition::OverlayBottomRight;
+    button.overlay_backdrop = true;
     lv_obj_t* labels[] = {nullptr, label, nullptr};
     ButtonContentRuntime runtime{};
     const auto initial = pad_apply_content_layout(parent, button, nullptr, labels,
@@ -819,6 +823,8 @@ TEST_F(SparklineWidget, OverlayReflowsLabelsWithoutChangingWidgetOrInterceptingT
     lv_obj_add_flag(runtime.widget_region, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_move_background(runtime.widget_region);
     lv_obj_update_layout(parent);
+    ASSERT_NE(runtime.backdrop_region, nullptr);
+    EXPECT_FALSE(lv_obj_has_flag(runtime.backdrop_region, LV_OBJ_FLAG_CLICKABLE));
     EXPECT_EQ(initial.widget.width, 200);
     EXPECT_EQ(initial.widget.height, 100);
     EXPECT_EQ(initial.labels[1].x + initial.labels[1].width, 200);
@@ -836,7 +842,54 @@ TEST_F(SparklineWidget, OverlayReflowsLabelsWithoutChangingWidgetOrInterceptingT
     EXPECT_EQ(updated.widget.x, initial.widget.x);
     EXPECT_EQ(updated.widget.width, initial.widget.width);
     EXPECT_EQ(updated.widget.height, initial.widget.height);
+    lv_obj_update_layout(parent);
+    lv_area_t backdrop;
+    lv_obj_get_coords(runtime.backdrop_region, &backdrop);
+    lv_obj_get_coords(runtime.label_regions[1], &coords);
+    EXPECT_LE(backdrop.x1, coords.x1);
+    EXPECT_GE(backdrop.x2, coords.x2);
+    EXPECT_LE(backdrop.y1, coords.y1);
+    EXPECT_GE(backdrop.y2, coords.y2);
+
+    lv_obj_add_flag(label, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_style_bg_color(runtime.widget_region, lv_color_hex(0x00ff00), 0);
+    lv_obj_set_style_bg_opa(runtime.widget_region, LV_OPA_COVER, 0);
+    settle();
+    const int x = (coords.x1 + coords.x2) / 2;
+    const int y = (coords.y1 + coords.y2) / 2;
+    const int outside_x = backdrop.x1 - 2;
+    ASSERT_GT(outside_x, 5);
+    const uint16_t faded = pixel(x, y);
+    const uint16_t green = pixel(5, 5);
+    EXPECT_NE(faded, green);
+    EXPECT_EQ(pixel(outside_x, y), green);
+    lv_obj_set_style_bg_color(runtime.widget_region, lv_color_hex(0x303030), 0);
+    settle();
+    const uint16_t background = pixel(5, 5);
+    EXPECT_EQ(pixel(x, y), background);
+    EXPECT_EQ(pixel(outside_x, y), background);
+    EXPECT_NE(faded, background);
     lv_obj_delete(parent);
+}
+
+TEST_F(SparklineWidget, OverlayBackdropIsOptInAndOnlyUsedForOverlaidGroups) {
+    ScreenButtonConfig button{};
+    strlcpy(button.widget.type, "sparkline", sizeof(button.widget.type));
+    strlcpy(button.label_center, "A", sizeof(button.label_center));
+    button.widget_position = ButtonWidgetPosition::OverlayCenter;
+    lv_obj_t* label = lv_label_create(tile);
+    lv_obj_t* labels[] = {nullptr, label, nullptr};
+    ButtonContentRuntime runtime{};
+    pad_apply_content_layout(tile, button, nullptr, labels, pad_get_scale_info(), nullptr, &runtime);
+    EXPECT_EQ(runtime.backdrop_region, nullptr);
+    lv_obj_delete(runtime.label_regions[1]);
+
+    label = lv_label_create(tile);
+    labels[1] = label;
+    button.overlay_backdrop = true;
+    button.widget_position = ButtonWidgetPosition::Right;
+    pad_apply_content_layout(tile, button, nullptr, labels, pad_get_scale_info(), nullptr, &runtime);
+    EXPECT_EQ(runtime.backdrop_region, nullptr);
 }
 
 TEST_F(SparklineWidget, CenteredRockerGroupUsesExistingWidgetAndZones) {

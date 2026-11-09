@@ -671,6 +671,7 @@ function padContentLayoutRefresh() {
     document.getElementById('pad-edit-content-layout-group').style.display = type && !centered ? '' : 'none';
     const overlay = !centered && document.getElementById('pad-edit-content-layout').value.startsWith('overlay-');
     document.getElementById('pad-edit-group-width-group').style.display = type && !overlay ? '' : 'none';
+    document.getElementById('pad-edit-overlay-backdrop-group').style.display = type && overlay ? '' : 'none';
     if (typeof padIconEditorRefresh === 'function') padIconEditorRefresh();
     padContentFitWarning();
 }

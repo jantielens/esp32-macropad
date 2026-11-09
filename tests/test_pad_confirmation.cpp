@@ -197,6 +197,13 @@ int main() {
         button["reserve_label_slots"] = "true";
         CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
         button.remove("reserve_label_slots");
+        button["overlay_backdrop"] = true;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        button["overlay_backdrop"] = false;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        button["overlay_backdrop"] = "true";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button.remove("overlay_backdrop");
         button["icon_position"] = "center";
         CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
         button["icon_position"] = "overlay-top-left";

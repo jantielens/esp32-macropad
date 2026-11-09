@@ -233,6 +233,8 @@ void PadScreen::pollColorBindings() {
             lv_obj_set_style_bg_color(tile.obj, rgb_to_lv(color), 0);
             if (tile.content_layout.widget_region)
                 lv_obj_set_style_bg_color(tile.content_layout.widget_region, rgb_to_lv(color), 0);
+            if (tile.content_layout.backdrop_region)
+                lv_obj_set_style_bg_color(tile.content_layout.backdrop_region, rgb_to_lv(color), 0);
 			const uint16_t letterbox_color = lv_color_to_u16(rgb_to_lv(color));
 #if HAS_IMAGE_LIBRARY
             if (tile.local_image_scale_mode == IMAGE_SCALE_LETTERBOX &&

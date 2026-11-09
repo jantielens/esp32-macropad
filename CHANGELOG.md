@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Place button labels and icons over a widget at nine anchor positions, while
   keeping the widget's full content area and existing touch behavior.
   See [button appearance](docs/user/pads/appearance.md#arrange-button-content).
+* Add an optional backdrop for overlaid labels and icons to improve readability
+  over widget content. It uses the button background color and is off by default.
+  See [button appearance](docs/user/pads/appearance.md#arrange-button-content).
 * Reserve empty label positions with a button's **Reserve space for empty
   labels** option. Each position reserves one line; longer text may be clipped.
   See [button appearance](docs/user/pads/appearance.md#arrange-button-content).

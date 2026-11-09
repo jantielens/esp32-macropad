@@ -12,6 +12,7 @@ struct ButtonContentRuntime {
     lv_obj_t* icon;
     lv_obj_t* icon_region;
     lv_obj_t* widget_region;
+    lv_obj_t* backdrop_region;
     int16_t offset_x;
     int16_t offset_y;
     int16_t label_offset_x[3];
@@ -152,6 +153,41 @@ inline void pad_position_content_region(lv_obj_t* region, const ButtonContentRec
 }
 
 inline void pad_reflow_content_layout(ButtonContentRuntime& runtime, const ButtonContentLayout& layout) {
+    if (runtime.backdrop_region) {
+        ButtonContentRect backdrop{};
+        bool has_content = false;
+        auto include = [&](ButtonContentRect rect, int32_t x, int32_t y) {
+            if (rect.width <= 0 || rect.height <= 0) return;
+            rect.x += x;
+            rect.y += y;
+            if (!has_content) {
+                backdrop = rect;
+                has_content = true;
+                return;
+            }
+            const int32_t right = backdrop.x + backdrop.width > rect.x + rect.width
+                ? backdrop.x + backdrop.width : rect.x + rect.width;
+            const int32_t bottom = backdrop.y + backdrop.height > rect.y + rect.height
+                ? backdrop.y + backdrop.height : rect.y + rect.height;
+            if (rect.x < backdrop.x) backdrop.x = rect.x;
+            if (rect.y < backdrop.y) backdrop.y = rect.y;
+            backdrop.width = right - backdrop.x;
+            backdrop.height = bottom - backdrop.y;
+        };
+        for (int i = 0; i < 3; ++i) {
+            if (runtime.labels[i])
+                include(layout.labels[i], runtime.offset_x + runtime.label_offset_x[i],
+                        runtime.offset_y + runtime.label_offset_y[i]);
+        }
+        if (runtime.icon) include(layout.icon, runtime.offset_x, runtime.offset_y);
+        if (has_content) {
+            backdrop.x -= 4;
+            backdrop.y -= 4;
+            backdrop.width += 8;
+            backdrop.height += 8;
+        }
+        pad_position_content_region(runtime.backdrop_region, backdrop, 0, 0);
+    }
     for (int i = 0; i < 3; ++i) {
         if (!runtime.labels[i]) continue;
         const ButtonContentRect& rect = layout.labels[i];
@@ -287,6 +323,14 @@ inline ButtonContentLayout pad_apply_content_layout(lv_obj_t* tile, const Screen
         pad_measure_content_label(runtime, i, texts[i]);
     }
     ButtonContentLayout layout = pad_measure_content_layout(tile, runtime);
+    if (button.overlay_backdrop && input.has_widget && !input.centered_group &&
+        button_widget_position_is_overlay(input.widget_position) &&
+        (icon || labels[0] || labels[1] || labels[2])) {
+        runtime.backdrop_region = button_content_region(tile, {}, 0, 0);
+        lv_obj_set_style_bg_color(runtime.backdrop_region, lv_obj_get_style_bg_color(tile, LV_PART_MAIN), 0);
+        lv_obj_set_style_bg_opa(runtime.backdrop_region, LV_OPA_70, 0);
+        lv_obj_set_style_radius(runtime.backdrop_region, 6, 0);
+    }
     for (int i = 0; i < 3; ++i) {
         if (!labels[i]) continue;
         const ButtonContentRect& rect = layout.labels[i];

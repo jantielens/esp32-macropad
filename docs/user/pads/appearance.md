@@ -91,7 +91,10 @@ with a widget, **Widget, labels and icon layout** places the widget above, below
 left, or right of that group; right is the default. Choose an **Overlaid**
 position to place the group over the widget instead. The widget uses the full
 button content area, and the group sizes itself to its content. Adjust the
-position, colors, or existing offsets if the group obscures the widget. Rocker
+position, colors, or existing offsets if the group obscures the widget.
+Enable **Overlay backdrop** to fade content behind the labels and icon using
+the button background color. It is off by default and can remain visible over
+images or patterns. Rocker
 and Numeric Rocker center the group by default; see
 [Rocker layout](../widgets/rockers.md#arrange-labels-and-icon).
 For other widgets and rockers placed beside the group, **Labels and icon size %** controls the group's share of
