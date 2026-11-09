@@ -38,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Simplify the pad editor overview to highlight button content and widget
+  purpose rather than device appearance, with larger background symbols.
+  Remove the redundant graphical preview from Button Builder.
+  See [edit and save a pad](docs/user/pads/editing.md).
 * Replace the button background `bg_image_letterbox` boolean with
   `bg_image_fit`. Old boolean settings are not migrated; reselect Letterbox
   where needed.
@@ -54,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Prevent edits from silently removing a widget that the device does not support.
 * Apply valid color picker edits when clicking outside instead of losing them.
   Use **Cancel** or Escape to discard changes; invalid edits stay open.
   See [edit and save a pad](docs/user/pads/editing.md#build-the-layout).

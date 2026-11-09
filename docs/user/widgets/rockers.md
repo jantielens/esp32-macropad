@@ -22,8 +22,8 @@ The group is not a separate control. Taps on it use the touched zone: Rocker
 still divides at the midpoint, and Numeric Rocker's center runs its center
 actions. Visual offsets can move content into another zone; the touch position
 determines the action. On small buttons content can shrink or be clipped.
-Enlarge the button or reduce the content if needed. The portal preview is
-approximate; check the device after saving.
+Enlarge the button or reduce the content if needed. The portal overview shows a
+directional symbol, not the actual layout; check the device after saving.
 
 ## Use two action zones
 

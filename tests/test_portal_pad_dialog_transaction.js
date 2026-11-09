@@ -113,6 +113,24 @@ assert.strictEqual(document.getElementById('pad-edit-validation-error').style.di
 assert.match(document.getElementById('pad-edit-validation-message').textContent, /1 binding error/);
 
 context.bindingValidateDialog = function() { return { valid: true, count: 0 }; };
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_extension.js', 'utf8'), context);
+context.padWidgetEditor('external').supported = false;
+const unavailableWidget = {
+    col: 1, row: 2, widget_type: 'external', extension_id: 'word-clock',
+    extension_config: '{"color":"white"}', extension_tick_interval_ms: 1000
+};
+context.padState.buttons = [unavailableWidget];
+document.getElementById('pad-edit-widget-type').value = 'external';
+context.padGetBindableColor = id => id === 'pad-edit-bg-color' ? '#03A9F4' : '';
+context.padWorkspaceEdit();
+assert.strictEqual(context.padState.buttons[0], unavailableWidget, 'An unrelated edit must not discard an unavailable widget');
+assert.match(validationErrors.get('main:1,2').message, /not supported/);
+document.getElementById('pad-edit-widget-type').value = '';
+context.padWorkspaceEdit();
+assert.strictEqual(context.padState.buttons[0].widget_type, undefined, 'Explicitly removing the widget permits editing');
+assert.strictEqual(context.padState.buttons[0].bg_color, '#03A9F4');
+context.padGetBindableColor = () => '';
+context.padState.buttons = originalButtons;
 document.getElementById('pad-edit-reserve-label-slots').checked = true;
 context.padWorkspaceEdit();
 assert.strictEqual(context.padState.buttons.length, 1);
@@ -576,10 +594,7 @@ assert.strictEqual(gamepadEditor.available({ has_touch: true, has_usb_hid: true 
 assert.strictEqual(gamepadEditor.available({ has_touch: true, has_usb_hid: false }), false);
 document.getElementById('pad-edit-widget-type').value = 'gamepad_button';
 gamepadEditor.supported = false;
-const unsupported = context.padDialogBuildButton();
-assert.strictEqual(unsupported.widget_type, undefined);
-assert.strictEqual(unsupported.actions, undefined);
-assert.strictEqual(unsupported.lp_actions, undefined);
+assert.throws(() => context.padDialogBuildButton(), /not supported/);
 
 context.padWidgetEditorsLoad({ widget_type: 'numericrocker', widget_numericrocker_small_step: 0.25 });
 document.getElementById('pad-edit-widget-type').value = 'numericrocker';

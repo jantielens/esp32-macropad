@@ -96,11 +96,11 @@ Auto track on each axis. Buttons keep their positions and spans; a span covers
 the combined size of its tracks and the gaps between them. Invalid geometry
 keeps the last valid canvas preview and prevents saving until corrected.
 
-Button styling and labels update as you edit valid settings. Widget buttons show
-a large subdued symbol behind their labels rather than simulated widget graphics;
-ordinary buttons retain their configured icons. Long bindings are abbreviated
-without substituting sample or live values. Hover over a binding or select its
-button to read the full text. The saved binding is unchanged.
+The button overview shows labels, icons, and large symbols for widgets or
+background images. It uses a consistent layout rather than reproducing device
+appearance. Long bindings are abbreviated without substituting sample or live
+values. Hover over a binding or select its button to read the full text. The
+saved binding is unchanged.
 
 ## Create a button from a source
 
@@ -194,11 +194,11 @@ For a single field rather than a complete button, use the
    options and line color; **Edit value** and
    **Remove value** affect only that value. Canceling selection preserves the
    chart design. An unavailable Home Assistant reading with a reported unit
-   can also be selected; its preview label shows `---` rather than plotting
-   zero. This exception does not apply to MQTT or catalog values.
+   can also be selected; its sample value shows `---` rather than zero. This
+   exception does not apply to MQTT or catalog values.
    Choose a shared time range (1 hour, 5 hours, 6 hours, 24 hours, 7 days, or
    30 days)
-   and requested sample interval in seconds. The preview caption shows the actual
+   and requested sample interval in seconds. The builder shows the actual
    interval after the 1024-point capacity limit is applied.
    **Automatic (based on source units)** uses a shared scale only when every
    value has the same known, nonempty provider-reported unit. Unknown units,
@@ -229,16 +229,7 @@ For a single field rather than a complete button, use the
    on and off positions send separate turn-on and turn-off actions. This is
    distinct from **Toggle an entity**, which uses a single toggle action on a
    regular button.
-6. Check the approximate **Preview**, then choose **Create button**.
-   Preview uses fetched data rather than continuous updates. The bar preview
-   reflects the chosen range and orientation. The gauge preview reflects its
-   range and arc color; out-of-range readings stop the indicator at the limit
-   while the label still shows the actual value. Toggle preview states are
-   simulated and never send commands. History previews show fixed, illustrative
-   trends, not actual history. Multi-value previews show colored current-value
-   labels beside the right-hand line endpoints. Those labels use fetched
-   readings and their configured units. Changing the time range updates the
-   caption, not the sample curves.
+6. Choose **Create button**.
    The builder may make the button wider by using empty positions to its right.
    Its suggested width depends on the template and device grid. If space or
    grid dimensions are unavailable, it uses a smaller width.

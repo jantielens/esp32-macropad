@@ -422,12 +422,6 @@ const catalogButtonBuilderProvider = {
     },
     configureSelection: (root, reference, onUse, screen, selected, onChange, rawOnly = false) =>
         catalogBindingMountForm(root, reference, onUse, screen, rawOnly, selected, onChange),
-    previewNote(candidate) {
-        return (candidate.sampleIsExample || candidate.sample === undefined && candidate.exampleValue !== undefined) &&
-            candidate.acquisitionState !== 'unavailable'
-            ? 'Illustrative sample preview. This is not the current device value.'
-            : 'Preview only. Does not control the entity.';
-    },
     buildBinding: (candidate, selection) => catalogBindingProvider.buildBinding(candidate, selection),
     buildLabel(candidate, options, includeUnit) {
         const scheme = catalogBindingScheme(candidate.reference.scheme);
@@ -438,9 +432,6 @@ const catalogButtonBuilderProvider = {
         if (/[;[\]|]/.test(suffix)) throw new Error('The unit cannot contain binding delimiters (; [ ] |).');
         return catalogBindingProvider.buildBinding(candidate, { mode }) + suffix;
     },
-    previewLabel: (candidate, options, includeUnit) =>
-        (candidate.sample ?? (candidate.acquisitionState === 'unavailable' ? '---' :
-            candidate.exampleValue ?? '---')) + (includeUnit ? bindingBuilderUnitSuffix(options.unit) : ''),
     dispose() {}
 };
 BUTTON_BUILDER_PROVIDERS.push(catalogButtonBuilderProvider);

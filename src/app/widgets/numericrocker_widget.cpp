@@ -222,7 +222,7 @@ static void numericrocker_describe(JsonObject& out) {
                   "Set small_step/large_step to the ± amounts (e.g. 5 and 20).";
 }
 #endif
-static const WidgetPreview numericrocker_preview = {"Numeric Rocker", "remove", "add", "widget_numericrocker_axis", nullptr, nullptr, "horizontal"};
+static const WidgetPreview numericrocker_preview = {"Numeric Rocker", "exposure"};
 REGISTER_WIDGET_SCHEMA(numericrocker, nullptr, false);
 
 #endif // HAS_DISPLAY

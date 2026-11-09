@@ -362,7 +362,12 @@ function padDialogBuildButton() {
     // Tap actions (array)
     const selectedType = document.getElementById('pad-edit-widget-type').value;
     const widgetEditor = padWidgetEditor(selectedType);
-    const wtype = widgetEditor && widgetEditor.supported === false ? '' : selectedType;
+    if (widgetEditor && widgetEditor.supported === false) {
+        throw Object.assign(new Error('This widget is not supported on this device. Choose a supported widget or remove it before editing this button.'), {
+            fieldIds: ['pad-edit-widget-type']
+        });
+    }
+    const wtype = selectedType;
     if (wtype) {
         if ((wtype === 'rocker' || wtype === 'numericrocker') &&
             document.getElementById('pad-edit-rocker-group-layout').value === 'beside')

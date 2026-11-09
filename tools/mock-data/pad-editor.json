@@ -131,7 +131,7 @@
     {"type": "sparkline", "name": "Sparkline", "icon": "show_chart"},
     {"type": "table", "name": "Table", "icon": "grid_on"},
     {"type": "rocker", "name": "Rocker", "icon": "swap_vert", "axis_field": "widget_rocker_axis", "horizontal_icon": "swap_horiz", "vertical_icon": "swap_vert", "default_axis": "vertical"},
-    {"type": "numericrocker", "name": "Numeric Rocker", "icon": "remove", "second_icon": "add", "axis_field": "widget_numericrocker_axis", "default_axis": "horizontal"},
+    {"type": "numericrocker", "name": "Numeric Rocker", "icon": "exposure"},
     {"type": "list", "name": "List", "icon": "list"},
     {"type": "mousepad", "name": "Mousepad", "icon": "touchpad_mouse"},
     {"type": "scrollpad", "name": "Scrollpad", "icon": "keyboard_double_arrow_up", "axis_field": "widget_scrollpad_axis", "horizontal_icon": "keyboard_double_arrow_left", "vertical_icon": "keyboard_double_arrow_up", "default_axis": "vertical"},

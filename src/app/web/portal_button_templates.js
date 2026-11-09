@@ -30,21 +30,6 @@ function padButtonBuilderLabel(source, options, includeUnit = true) {
         (mode === 'raw' ? suffix : '');
 }
 
-function padButtonBuilderSampleLabel(source, options, includeUnit = true) {
-    if (source.candidate.selection) {
-        const selection = source.candidate.selection;
-        const sample = bindingSourceSample(source.candidate,
-            { ...selection, unit: includeUnit ? selection.unit : '' });
-        return sample == null ? '---' : sample;
-    }
-    const provider = padButtonBuilderProvider(source.candidate);
-    if (provider.previewLabel) return provider.previewLabel(source.candidate, options, includeUnit);
-    const sample = source.candidate.sample ??
-        (source.candidate.acquisitionState === 'unavailable' ? undefined : source.candidate.exampleValue);
-    return bindingBuilderSample(sample, bindingBuilderIsNumeric(sample) ? 'number' : 'text',
-        Number(options.decimals), includeUnit ? bindingBuilderUnitSuffix(options.unit) : '');
-}
-
 function padButtonBuilderRangeFields(candidate) {
     const value = Number(candidate.sample);
     const percentage = candidate.unit?.trim() === '%';
@@ -106,7 +91,7 @@ function padButtonBuilderIconHistoryDraft(draft) {
     };
 }
 
-// Templates own their controls, configuration, and preview overrides.
+// Templates own their controls and configuration.
 const padButtonBuilders = [
     {
         id: 'value', label: 'Show a value', aspectRatio: 1,
@@ -119,10 +104,6 @@ const padButtonBuilders = [
                 label_center: padButtonBuilderLabel(source, options, false),
                 label_bottom: (source.candidate.selection?.unit ?? options.unit).trim()
             };
-        },
-        preview({ sources: [source] , options }) {
-            return { label_center: source.candidate.acquisitionState === 'unavailable' ? '---' :
-                padButtonBuilderSampleLabel(source, options, false) };
         }
     },
     {
@@ -151,47 +132,6 @@ const padButtonBuilders = [
                 widget_bar_zero_centered: min < 0 && max > 0,
                 label_bottom: padButtonBuilderLabel(source, options)
             };
-        },
-        preview({ sources: [source], options }) {
-            const sample = source.candidate.sample;
-            return { label_bottom: bindingBuilderIsNumeric(sample) ?
-                padButtonBuilderSampleLabel(source, options) : '---' };
-        },
-        renderPreview({ sources: [source] }, cell, button) {
-            const sample = source.candidate.sample;
-            const bar = document.createElement('div');
-            bar.className = 'pad-button-builder-bar';
-            bar.dataset.orientation = button.widget_orientation;
-            const track = document.createElement('div');
-            track.className = 'pad-button-builder-bar-track';
-            track.style.background = PAD_FIRMWARE_DEFAULTS.widget_track_color;
-            const fill = document.createElement('div');
-            fill.className = 'pad-button-builder-bar-fill';
-            fill.style.background = PAD_FIRMWARE_DEFAULTS.widget_series_color;
-            if (bindingBuilderIsNumeric(sample)) {
-                const min = button.widget_bar_min, max = button.widget_bar_max;
-                const value = Math.max(min, Math.min(max, Number(sample)));
-                const baseline = button.widget_bar_zero_centered ? 0 : min;
-                bar.setAttribute('role', 'meter');
-                bar.setAttribute('aria-label', button.label_top || 'Entity value');
-                bar.setAttribute('aria-valuemin', String(min));
-                bar.setAttribute('aria-valuemax', String(max));
-                bar.setAttribute('aria-valuenow', String(value));
-                bar.setAttribute('aria-valuetext', button.label_bottom);
-                track.style.setProperty('--bar-start', (Math.min(value, baseline) - min) / (max - min) * 100 + '%');
-                track.style.setProperty('--bar-size', Math.abs(value - baseline) / (max - min) * 100 + '%');
-            } else {
-                bar.setAttribute('role', 'img');
-                bar.setAttribute('aria-label', 'Bar value unavailable');
-                fill.hidden = true;
-            }
-            track.appendChild(fill);
-            bar.appendChild(track);
-            const region = cell.querySelector('.pad-content-widget-region');
-            if (region) {
-                region.removeAttribute('aria-label');
-                region.replaceChildren(bar);
-            }
         }
     },
     {
@@ -217,73 +157,6 @@ const padButtonBuilders = [
                 widget_arc_color: options.color,
                 label_bottom: padButtonBuilderLabel(source, options)
             };
-        },
-        preview({ sources: [source], options }) {
-            const sample = source.candidate.sample;
-            return { label_bottom: bindingBuilderIsNumeric(sample) ?
-                padButtonBuilderSampleLabel(source, options) : '---' };
-        },
-        previewNote: () => 'Approximate gauge using the fetched value. Preview only. Does not control the entity.',
-        renderPreview({ sources: [source] }, cell, button) {
-            const sample = source.candidate.sample;
-            const gauge = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            gauge.setAttribute('class', 'pad-button-builder-gauge');
-            gauge.setAttribute('viewBox', '0 0 280 145');
-            const track = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            track.setAttribute('d', 'M28 130 A112 112 0 0 1 252 130');
-            track.setAttribute('fill', 'none');
-            track.setAttribute('stroke', PAD_FIRMWARE_DEFAULTS.widget_track_color);
-            track.setAttribute('stroke-width', '17');
-            gauge.appendChild(track);
-            if (bindingBuilderIsNumeric(sample)) {
-                const min = button.widget_gauge_min, max = button.widget_gauge_max;
-                const value = Math.max(min, Math.min(max, Number(sample)));
-                const progress = (value - min) / (max - min);
-                gauge.setAttribute('role', 'meter');
-                gauge.setAttribute('aria-label', button.label_top || 'Entity value');
-                gauge.setAttribute('aria-valuemin', String(min));
-                gauge.setAttribute('aria-valuemax', String(max));
-                gauge.setAttribute('aria-valuenow', String(value));
-                gauge.setAttribute('aria-valuetext', button.label_bottom);
-                const fill = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                fill.setAttribute('d', 'M28 130 A112 112 0 0 1 252 130');
-                fill.setAttribute('fill', 'none');
-                fill.setAttribute('stroke', button.widget_arc_color);
-                fill.setAttribute('stroke-width', '17');
-                fill.setAttribute('pathLength', '100');
-                fill.setAttribute('stroke-dasharray', progress * 100 + ' 100');
-                gauge.appendChild(fill);
-                if (button.widget_gauge_show_needle) {
-                    const needle = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                    needle.setAttribute('x1', '140');
-                    needle.setAttribute('y1', '130');
-                    needle.setAttribute('x2', '42');
-                    needle.setAttribute('y2', '130');
-                    needle.setAttribute('stroke', PAD_FIRMWARE_DEFAULTS.widget_indicator_color);
-                    needle.setAttribute('stroke-width', '2');
-                    needle.setAttribute('transform', 'rotate(' + progress * 180 + ' 140 130)');
-                    gauge.appendChild(needle);
-                }
-            } else {
-                gauge.setAttribute('role', 'img');
-                gauge.setAttribute('aria-label', 'Gauge value unavailable');
-            }
-            for (let tick = 1; tick <= button.widget_gauge_ticks; tick++) {
-                const angle = Math.PI + tick * Math.PI / (button.widget_gauge_ticks + 1);
-                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                line.setAttribute('x1', String(140 + Math.cos(angle) * 95));
-                line.setAttribute('y1', String(130 + Math.sin(angle) * 95));
-                line.setAttribute('x2', String(140 + Math.cos(angle) * 87));
-                line.setAttribute('y2', String(130 + Math.sin(angle) * 87));
-                line.setAttribute('stroke', PAD_FIRMWARE_DEFAULTS.widget_tick_color);
-                line.setAttribute('stroke-width', '1');
-                gauge.appendChild(line);
-            }
-            const region = cell.querySelector('.pad-content-widget-region');
-            if (region) {
-                region.removeAttribute('aria-label');
-                region.replaceChildren(gauge);
-            }
         }
     },
     {
@@ -358,84 +231,11 @@ const padButtonBuilders = [
             });
             return button;
         },
-        preview({ options, sources }) {
-            if (sources.length === 1) {
-                const [source] = sources;
-                const sample = bindingBuilderIsNumeric(source.candidate.sample) ?
-                    padButtonBuilderSampleLabel(source, source.options) : '---';
-                return { label_top: options.title.trim(), label_center: sample };
-            }
-            return {};
-        },
-        previewNote({ options }) {
-            const hours = Number(options.window) / 3600;
-            const range = hours === 24 ? '24 hours' : hours % 24 === 0 ? (hours / 24) + ' days' :
-                hours + (hours === 1 ? ' hour' : ' hours');
+        samplingNote({ options }) {
             const sampling = padButtonBuilderHistorySampling(options);
             const slots = sampling.slots;
             const interval = Number(sampling.interval.toFixed(2));
-            return 'Last ' + range + '. Actual sample interval: ' + interval + ' seconds (' + slots +
-                ' points per line). Illustrative trend, not actual history. Preview only. Does not control the entity.';
-        },
-        renderPreview({ sources }, cell, button) {
-            const singleSource = sources.length === 1;
-            if (singleSource) cell.classList.add('pad-button-builder-preview-single-history');
-            const chart = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            chart.setAttribute('class', 'pad-button-builder-sparkline');
-            chart.setAttribute('viewBox', singleSource ? '0 0 280 190' : '0 0 280 70');
-            chart.setAttribute('role', 'img');
-            const curves = [
-                '8,54 22,50 36,52 50,30 64,26 78,40 92,44 106,24 120,18 134,22 148,38 162,36 176,20 200,12',
-                '8,18 22,22 36,30 50,28 64,36 78,30 92,20 106,26 120,38 134,42 148,40 162,48 176,44 200,54',
-                '8,36 22,32 36,38 50,44 64,42 78,50 92,46 106,38 120,30 134,34 148,22 162,28 176,32 200,33'
-            ];
-            const singleCurve = '4,72 16,48 28,20 40,47 52,69 64,104 76,129 88,151 100,166 112,178 124,187 136,188 148,166 160,119 172,93 184,70 196,45 208,57 220,76 232,84 244,81 256,94 268,109 276,116';
-            const descriptions = [];
-            sources.forEach((source, index) => {
-                const curve = singleSource ? singleCurve : curves[index];
-                const [x, y] = curve.split(' ').at(-1).split(',');
-                const numeric = bindingBuilderIsNumeric(source.candidate.sample);
-                const sample = numeric ?
-                    padButtonBuilderSampleLabel(source, source.options) : '---';
-                descriptions.push(source.name + ': ' + sample);
-                if (numeric) {
-                    if (button.widget_sparkline_fill_opacity) {
-                        const area = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-                        area.setAttribute('points', curve + ' ' + x + ',190 4,190');
-                        area.setAttribute('fill', source.options.color);
-                        area.setAttribute('fill-opacity', String(button.widget_sparkline_fill_opacity / 100));
-                        chart.appendChild(area);
-                    }
-                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-                    line.setAttribute('points', curve);
-                    line.setAttribute('fill', 'none');
-                    line.setAttribute('stroke', source.options.color);
-                    line.setAttribute('stroke-width', String(button.widget_sparkline_line_width));
-                    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                    dot.setAttribute('cx', x);
-                    dot.setAttribute('cy', y);
-                    dot.setAttribute('r', String(button.widget_sparkline_current_dot / 2));
-                    dot.setAttribute('fill', source.options.color);
-                    chart.appendChild(line);
-                    chart.appendChild(dot);
-                }
-                if (sources.length === 1) return;
-                const value = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                value.setAttribute('x', String(Number(x) + 8));
-                value.setAttribute('y', y);
-                value.setAttribute('dominant-baseline', 'middle');
-                value.setAttribute('font-size', '12');
-                value.setAttribute('font-family', 'inherit');
-                value.setAttribute('fill', source.options.color);
-                value.textContent = sample;
-                chart.appendChild(value);
-            });
-            chart.setAttribute('aria-label', 'Illustrative trend, not actual history. ' + descriptions.join('; '));
-            const region = cell.querySelector('.pad-content-widget-region');
-            if (region) {
-                region.removeAttribute('aria-label');
-                region.replaceChildren(chart);
-            }
+            return 'Actual sample interval: ' + interval + ' seconds (' + slots + ' points per line).';
         }
     },
     {
@@ -465,14 +265,7 @@ const padButtonBuilders = [
                 widget_sparkline_line_width: 3, widget_sparkline_fill_opacity: 50
             };
         },
-        preview: draft => padButtonBuilders.find(item => item.id === 'history').preview(padButtonBuilderIconHistoryDraft(draft)),
-        previewNote: draft => padButtonBuilders.find(item => item.id === 'history').previewNote(draft),
-        renderPreview(draft, cell, button) {
-            padButtonBuilders.find(item => item.id === 'history').renderPreview(padButtonBuilderIconHistoryDraft(draft), cell, button);
-            for (const label of cell.querySelectorAll('.pad-cell-label-top, .pad-cell-label-center')) {
-                label.style.textAlign = 'left';
-            }
-        }
+        samplingNote: draft => padButtonBuilders.find(item => item.id === 'history').samplingNote(draft)
     },
     {
         id: 'toggle', label: 'Toggle an entity', aspectRatio: 1.5,
@@ -486,11 +279,7 @@ const padButtonBuilders = [
             padButtonBuilderProvider(source.candidate).controlFields(source.candidate),
         build({ sources: [source], options }) {
             return padButtonBuilderProvider(source.candidate).buildControl(source.candidate, options);
-        },
-        preview({ options, previewState }) {
-            return { fg_color: previewState === 'on' ? options.on : previewState === 'off' ? options.off : '#EF6B73' };
-        },
-        previewStates: [['on', 'On'], ['off', 'Off'], ['unavailable', 'Unavailable']]
+        }
     },
     {
         id: 'toggle_widget', label: 'Show a toggle switch', aspectRatio: 2,
@@ -505,35 +294,6 @@ const padButtonBuilders = [
         fields: () => [],
         build({ sources: [source] }) {
             return padButtonBuilderProvider(source.candidate).buildToggleWidget(source.candidate);
-        },
-        preview: () => ({}),
-        previewNote: () => 'Shows the fetched entity state. Preview only. Does not control the entity.',
-        previewStates: [['on', 'On'], ['off', 'Off'], ['unavailable', 'Unavailable']],
-        renderPreview({ previewState }, cell, button) {
-            const state = String(previewState).trim().toLowerCase();
-            const available = state === 'on' || state === 'off';
-            const on = available && state === 'on';
-            const toggle = document.createElement('div');
-            toggle.className = 'pad-button-builder-toggle';
-            toggle.dataset.state = available ? (on ? 'on' : 'off') : 'unavailable';
-            toggle.setAttribute('role', 'img');
-            toggle.setAttribute('aria-label', available ? 'Switch ' + (on ? 'on' : 'off') : 'Switch unavailable');
-            const track = document.createElement('span');
-            track.className = 'pad-button-builder-toggle-track';
-            track.style.background = on ?
-                button.widget_toggle_on_color || PAD_FIRMWARE_DEFAULTS.widget_series_color :
-                button.widget_toggle_off_color || PAD_FIRMWARE_DEFAULTS.widget_track_color;
-            const knob = document.createElement('span');
-            knob.className = 'pad-button-builder-toggle-knob';
-            knob.style.background = button.widget_toggle_knob_color || PAD_FIRMWARE_DEFAULTS.widget_indicator_color;
-            toggle.append(track, knob);
-            if (!available) toggle.style.opacity = '0.5';
-            const region = cell.querySelector('.pad-content-widget-region');
-            if (region) {
-                region.removeAttribute('aria-label');
-                region.removeAttribute('title');
-                region.replaceChildren(toggle);
-            }
         }
     }
 ];

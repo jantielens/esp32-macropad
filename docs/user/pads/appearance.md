@@ -119,7 +119,7 @@ Label styles, including per-label colors and offsets, still apply. UI offset and
 offsets nudge the resulting content. Small buttons compress or clip content
 instead of changing layouts. Enlarge the button or reduce content and font
 sizes if necessary. The editor may warn about a likely fit problem, but its font
-measurements and grid preview are approximate; check the device.
+measurements are approximate and the grid is not a layout preview; check the device.
 
 Auto sizing follows resolved label text, even when the current label is shown
 with an ellipsis. If a widget region changes during a gesture, that gesture is
