@@ -64,6 +64,28 @@ static void test_nonuniform_tracks_spans_and_rounding() {
     assert(resized_columns[0] == 49 && resized_columns[1] == 20 && resized_columns[2] == 48);
 }
 
+static void test_auto_tracks_fill_screen() {
+    const uint8_t columns[] = {0, 1, 7};
+    const uint8_t rows[] = {0, 1, 5};
+    const uint8_t spans[] = {1, 1, 1};
+    const uint8_t full_col_spans[] = {8};
+    const uint8_t full_row_spans[] = {6};
+    const uint8_t origin[] = {0};
+    PadRect rects[3] = {};
+    for (uint16_t gap : {0, 6, 10}) {
+        const PadGridLayoutSpace layout = {0, 0, 0, 0, gap, gap, 0};
+        pad_compute_grid(8, 6, 400, 300, columns, rows, spans, spans, 3, rects, &layout);
+        assert(rects[0].x == 0 && rects[0].y == 0);
+        assert(rects[1].x == rects[0].x + rects[0].w + gap);
+        assert(rects[1].y == rects[0].y + rects[0].h + gap);
+        assert(rects[2].x + rects[2].w == 400);
+        assert(rects[2].y + rects[2].h == 300);
+        pad_compute_grid(8, 6, 400, 300, origin, origin,
+                         full_col_spans, full_row_spans, 1, rects, &layout);
+        assert(rects[0].w == 400 && rects[0].h == 300);
+    }
+}
+
 static void test_ten_by_ten_grid() {
     const uint8_t columns[] = {8, 9};
     const uint8_t rows[] = {8, 9};
@@ -113,7 +135,9 @@ static void test_stopwatch_466_square_round_viewport() {
     assert(full.x == 0 && full.y == 0 && full.w == size && full.h == size);
     assert(rects[0].x == 4 && rects[0].y == 4);
     const uint16_t baseline = (size - 8 - 4 * pad_get_scale_info().gap) / 5;
-    assert(rects[0].w == baseline && rects[0].h == baseline);
+    const uint16_t remainder = (size - 8 - 4 * pad_get_scale_info().gap) % 5;
+    assert(rects[0].w == baseline + (remainder ? 1 : 0));
+    assert(rects[0].h == baseline + (remainder ? 1 : 0));
     const PadGridLayoutSpace inscribed = {68, 68, 68, 68, 3, 3, 4};
     pad_compute_grid(5, 5, size, size, columns, rows, spans, spans, 25, rects, &inscribed);
     for (const PadRect& rect : rects) {
@@ -298,6 +322,7 @@ static void test_centered_group_preserves_widget_region() {
 int main() {
     test_layout_spacing_and_insets();
     test_nonuniform_tracks_spans_and_rounding();
+    test_auto_tracks_fill_screen();
     test_ten_by_ten_grid();
     test_invalid_track_overrides_fall_back_to_uniform();
     test_stopwatch_466_square_round_viewport();

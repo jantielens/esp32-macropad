@@ -351,10 +351,7 @@ function padComputeAxisTrackSizes(count, safeSize, gap, overrides) {
         return { sizes, valid: false };
     }
 
-    if (!hasOverrides) {
-        sizes.fill(count ? Math.floor(available / count) : 0);
-        return { sizes, valid: true };
-    }
+    if (!count) return { sizes, valid: true };
 
     let remainder = (available - fixedTotal) % autoCount;
     const autoSize = Math.floor((available - fixedTotal) / autoCount);

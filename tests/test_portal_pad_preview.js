@@ -330,6 +330,14 @@ const grid = fs.readFileSync('src/app/web/portal_pad_grid.js', 'utf8');
 assert.deepStrictEqual(JSON.parse(JSON.stringify(context.padComputeAxisTrackSizes(3, 101, 2, [0, 20, 0]))), {
     sizes: [39, 20, 38], valid: true
 });
+for (const gap of [0, 6, 10]) {
+    for (const [count, size] of [[8, 400], [6, 300]]) {
+        const result = context.padComputeAxisTrackSizes(count, size, gap, []);
+        assert.strictEqual(result.valid, true);
+        assert.strictEqual(result.sizes.reduce((sum, track) => sum + track, 0) + (count - 1) * gap, size);
+        assert(Math.max(...result.sizes) - Math.min(...result.sizes) <= 1);
+    }
+}
 assert.strictEqual(context.padComputeAxisTrackSizes(3, 100, 2, [30, 30, 30]).valid, false);
 assert.deepStrictEqual(Array.from(context.padComputeAxisTrackSizes(3, 100, 2, [30, 30, 30]).sizes), [32, 32, 32]);
 assert(grid.includes('padRenderCellContent(cell, button)'));
