@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "image_library.h"
+#include "image_decoder.h"
 #include "button_content_layout.h"
 
 // ============================================================================
@@ -468,7 +469,7 @@ struct ScreenButtonConfig {
     char bg_image_user[CONFIG_BG_IMAGE_USER_MAX_LEN];     // HTTP Basic Auth user
     char bg_image_password[CONFIG_BG_IMAGE_PASS_MAX_LEN]; // HTTP Basic Auth password
     uint32_t bg_image_interval_ms;                        // 0 = fetch once, >0 = periodic
-    bool bg_image_letterbox;                              // true = letterbox (fit + button-color bars), false = cover (fill + crop)
+    ImageScaleMode bg_image_fit;
 
     // Widget type (bar_chart, gauge, etc.) — empty = normal button
     WidgetConfig widget;

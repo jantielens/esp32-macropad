@@ -458,7 +458,13 @@ static bool parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
     strlcpy(btn->bg_image_user, obj["bg_image_user"] | "", CONFIG_BG_IMAGE_USER_MAX_LEN);
     strlcpy(btn->bg_image_password, obj["bg_image_password"] | "", CONFIG_BG_IMAGE_PASS_MAX_LEN);
     btn->bg_image_interval_ms = obj["bg_image_interval_ms"] | (uint32_t)0;
-    btn->bg_image_letterbox = obj["bg_image_letterbox"] | false;
+    btn->bg_image_fit = IMAGE_SCALE_COVER;
+    const char* image_fit = obj["bg_image_fit"] | "fill-center";
+    if (strcmp(image_fit, "letterbox") == 0) btn->bg_image_fit = IMAGE_SCALE_LETTERBOX;
+    else if (strcmp(image_fit, "fill-top") == 0) btn->bg_image_fit = IMAGE_SCALE_COVER_TOP;
+    else if (strcmp(image_fit, "fill-bottom") == 0) btn->bg_image_fit = IMAGE_SCALE_COVER_BOTTOM;
+    else if (strcmp(image_fit, "fill-left") == 0) btn->bg_image_fit = IMAGE_SCALE_COVER_LEFT;
+    else if (strcmp(image_fit, "fill-right") == 0) btn->bg_image_fit = IMAGE_SCALE_COVER_RIGHT;
 
     // Widget type (bar_chart, gauge, etc.)
     const char* wtype = obj["widget_type"] | "";

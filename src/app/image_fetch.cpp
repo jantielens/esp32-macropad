@@ -42,7 +42,7 @@ struct ImageSlot {
     uint32_t interval_ms;      // 0 = fetch once
     uint32_t last_fetch_ms;    // millis() of last completed attempt
     bool fetched_once;         // true after first completed attempt
-    ImageScaleMode scale_mode; // Cover or letterbox
+    ImageScaleMode scale_mode;
     uint16_t letterbox_color;  // RGB565 padding color for letterbox mode
 
     // Triple-buffered pixel data — fetch task rotates front/back;

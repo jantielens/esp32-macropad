@@ -601,7 +601,7 @@ void PadScreen::buildTiles() {
         tile.local_image_pending_slot = LOCAL_IMAGE_SLOT_INVALID;
         strlcpy(tile.local_image_template, bcfg.bg_image_path, sizeof(tile.local_image_template));
         tile.local_image_path[0] = '\0';
-        tile.local_image_scale_mode = bcfg.bg_image_letterbox ? IMAGE_SCALE_LETTERBOX : IMAGE_SCALE_COVER;
+        tile.local_image_scale_mode = bcfg.bg_image_fit;
         tile.local_image_letterbox_color = lv_color_to_u16(rgb_to_lv(bg_def));
         memset(&tile.local_img_dsc, 0, sizeof(tile.local_img_dsc));
 #endif
@@ -633,7 +633,7 @@ void PadScreen::buildTiles() {
                 tile.image_url_template = (char*)heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
                 if (tile.image_url_template) memcpy(tile.image_url_template, bcfg.bg_image_url, size);
             }
-            ImageScaleMode sm = bcfg.bg_image_letterbox ? IMAGE_SCALE_LETTERBOX : IMAGE_SCALE_COVER;
+            ImageScaleMode sm = bcfg.bg_image_fit;
             if (!dynamic || tile.image_url_template) {
                 tile.image_slot = image_fetch_request(
                     dynamic ? "" : bcfg.bg_image_url,

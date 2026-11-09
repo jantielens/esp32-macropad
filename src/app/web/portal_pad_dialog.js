@@ -187,11 +187,11 @@ function padDialogOpen(col, row) {
         'Not configured.', 'password');
     document.getElementById('pad-edit-bg-image-password').value = btn.bg_image_password || '';
     document.getElementById('pad-edit-bg-image-interval').value = (btn.bg_image_interval_ms !== undefined) ? btn.bg_image_interval_ms : 0;
-    document.getElementById('pad-edit-bg-image-scale').value = btn.bg_image_letterbox ? 'letterbox' : 'cover';
+    document.getElementById('pad-edit-bg-image-scale').value = btn.bg_image_fit || 'fill-center';
     document.getElementById('pad-edit-image-section').open = !!btn.bg_image_path;
     document.getElementById('pad-edit-camera-feed-section').open = !!btn.bg_image_url;
     document.getElementById('pad-edit-background-image-section').open =
-        !!(btn.bg_image_path || btn.bg_image_url || btn.bg_image_letterbox);
+        !!(btn.bg_image_path || btn.bg_image_url || btn.bg_image_fit);
 
     // Icon
     padSetBindableColor('pad-edit-icon-color', btn.icon_color || padGetEffectiveDefault('icon_color') || 'auto');
@@ -399,7 +399,8 @@ function padDialogBuildButton() {
     const localImagePath = document.getElementById('pad-edit-bg-image-path').value;
     if (localImageBinding) btn.bg_image_path = localImageBinding;
     else if (localImagePath) btn.bg_image_path = localImagePath;
-    if (document.getElementById('pad-edit-bg-image-scale').value === 'letterbox') btn.bg_image_letterbox = true;
+    const imageFit = document.getElementById('pad-edit-bg-image-scale').value;
+    if (imageFit && imageFit !== 'fill-center') btn.bg_image_fit = imageFit;
     if (imgUrl) {
         btn.bg_image_url = imgUrl;
         const imgUser = document.getElementById('pad-edit-bg-image-user').value.trim();

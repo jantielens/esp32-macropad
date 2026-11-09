@@ -122,6 +122,13 @@ assert.strictEqual(context.padState.buttons[0].col, 1);
 assert.strictEqual(context.padState.buttons[0].row, 2);
 assert.strictEqual(document.getElementById('pad-edit-validation-error').style.display, 'none');
 
+for (const fit of ['fill-top', 'fill-bottom', 'fill-left', 'fill-right', 'letterbox', 'fill-center']) {
+    document.getElementById('pad-edit-bg-image-scale').value = fit;
+    context.padWorkspaceEdit();
+    assert.strictEqual(context.padState.buttons[0].bg_image_fit,
+        fit === 'fill-center' ? undefined : fit);
+}
+
 let previewUpdates = 0;
 context.padUpdateButtonPreview = (previous, button) => {
     assert.strictEqual(previous.col, button.col);

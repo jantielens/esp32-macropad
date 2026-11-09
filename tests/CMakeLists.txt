@@ -196,6 +196,15 @@ add_host_legacy_test(test_icon_store_cleanup
     OPTIONS -Wno-deprecated-declarations
     LIBRARIES host_lvgl m
 )
+add_host_legacy_test(test_image_decoder
+    SOURCES test_image_decoder.cpp ${PROJECT_SOURCE_DIR}/src/app/image_decoder.cpp
+        ${HOST_LVGL_DIR}/libs/lodepng/lodepng.c
+        ${HOST_LVGL_DIR}/libs/tjpgd/tjpgd.c
+    DEFINITIONS HAS_IMAGE_LIBRARY=1 LV_USE_LODEPNG=1 LV_USE_TJPGD=1 HOST_LOG_CAPTURE taskYIELD=sched_yield
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h sched.h
+    OPTIONS -Wno-unused-variable
+    LIBRARIES host_lvgl m
+)
 set_tests_properties(test_icon_store_cleanup PROPERTIES TIMEOUT 15)
 add_host_command_test(test_icon_store_cleanup_unreadable $<TARGET_FILE:test_icon_store_cleanup> --unreadable)
 set_tests_properties(test_icon_store_cleanup_unreadable PROPERTIES TIMEOUT 15)

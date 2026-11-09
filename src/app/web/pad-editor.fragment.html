@@ -434,11 +434,16 @@
                 </details>
 
                 <div class="form-group" id="pad-edit-bg-image-scale-group" style="margin-top:8px;">
-                    <label for="pad-edit-bg-image-scale">Scale</label>
+                    <label for="pad-edit-bg-image-scale">Image fit</label>
                     <select id="pad-edit-bg-image-scale">
-                        <option value="cover">Cover (fill and crop)</option>
-                        <option value="letterbox">Letterbox (fit with button-color bars)</option>
+                        <option value="fill-center">Fill — center</option>
+                        <option value="fill-top">Fill — top</option>
+                        <option value="fill-bottom">Fill — bottom</option>
+                        <option value="fill-left">Fill — left</option>
+                        <option value="fill-right">Fill — right</option>
+                        <option value="letterbox">Letterbox — entire image</option>
                     </select>
+                    <small>Fill crops the image to fill the button. Letterbox shows the entire image with button-color bars. Neither stretches the image.</small>
                     <small>Applies to uploaded images and Camera Feed or Remote Image backgrounds. Camera Preview has its own scale setting.</small>
                 </div>
                     </div>

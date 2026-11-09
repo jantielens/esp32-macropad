@@ -2,11 +2,20 @@
 
 #include "board_config.h"
 
-#if HAS_IMAGE_LIBRARY || HAS_IMAGE_FETCH || HAS_BOOT_LOGO
-
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+
+enum ImageScaleMode : uint8_t {
+    IMAGE_SCALE_COVER = 0,
+    IMAGE_SCALE_LETTERBOX = 1,
+    IMAGE_SCALE_COVER_TOP,
+    IMAGE_SCALE_COVER_BOTTOM,
+    IMAGE_SCALE_COVER_LEFT,
+    IMAGE_SCALE_COVER_RIGHT,
+};
+
+#if HAS_IMAGE_LIBRARY || HAS_IMAGE_FETCH || HAS_BOOT_LOGO
 
 // ============================================================================
 // Image Decoder — stateless JPEG/PNG decode + scaled to RGB565
@@ -14,7 +23,7 @@
 // Decodes JPEG (via LVGL's built-in tjpgd) or PNG (via lodepng) to an RGB565
 // pixel buffer sized exactly target_w × target_h.  Format is auto-detected
 // from magic bytes.  Two scale modes:
-//   - Cover (default): fill target rect, center-crop excess (CSS object-fit: cover)
+//   - Cover (default): fill target rect, crop excess at the selected position
 //   - Letterbox: fit inside target rect with caller-provided padding (CSS object-fit: contain)
 //
 // All intermediate buffers are allocated from PSRAM.  The returned output
@@ -30,11 +39,6 @@ enum ImageFormat : uint8_t {
     IMAGE_FORMAT_PNG     = 2,
 };
 
-enum ImageScaleMode : uint8_t {
-    IMAGE_SCALE_COVER    = 0,   // Fill target, center-crop excess (CSS object-fit: cover)
-    IMAGE_SCALE_LETTERBOX = 1,  // Fit inside target with caller-provided padding (CSS object-fit: contain)
-};
-
 // PNG decoding expands the entire source image to RGBA8888 before scaling.
 // Keep this bounded so source, decode, and display buffers fit in PSRAM together.
 #define IMAGE_LIBRARY_MAX_PNG_PIXELS 2000000UL
@@ -47,7 +51,7 @@ ImageFormat image_detect_format(const uint8_t* data, size_t len);
 //
 //   data / len       — raw JPEG or PNG bytes
 //   target_w/h       — desired output pixel dimensions
-//   scale_mode       — IMAGE_SCALE_COVER (fill+crop) or IMAGE_SCALE_LETTERBOX (fit+bars)
+//   scale_mode       — IMAGE_SCALE_COVER[_position] (fill+crop) or IMAGE_SCALE_LETTERBOX (fit+bars)
 //   out_pixels       — receives heap_caps_malloc'd RGB565 buffer (PSRAM)
 //   out_size         — receives byte count of the output buffer
 //   letterbox_color  — RGB565 color for letterbox padding (defaults to black)

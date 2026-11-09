@@ -115,6 +115,20 @@ int main() {
     {
         JsonDocument doc;
         JsonObject button = make_button(doc);
+        for (const char* fit : {"fill-center", "fill-top", "fill-bottom",
+                                "fill-left", "fill-right", "letterbox"}) {
+            button["bg_image_fit"] = fit;
+            CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        }
+        button["bg_image_fit"] = "stretch";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["bg_image_fit"] = 42;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+    }
+
+    {
+        JsonDocument doc;
+        JsonObject button = make_button(doc);
         button["icon_badge_padding"] = 0;
         button["icon_badge_color"] = "[health:color]";
         button["widget_type"] = "sparkline";

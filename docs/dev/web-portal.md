@@ -1301,6 +1301,13 @@ not every authentication failure, redirect, or early error response is instrumen
 | `POST` | `/api/pad?page=N` | Validates and saves one complete pad object. `buttons` is Main; optional `overlay_buttons` is Overlay. Both share grid settings and `max_pad_buttons`. |
 | `DELETE` | `/api/pad?page=N` | Deletes the pad configuration. |
 
+Button backgrounds use `bg_image_fit`: `fill-center` (default when omitted),
+`fill-top`, `fill-bottom`, `fill-left`, `fill-right`, or `letterbox`.
+Fill preserves proportions and crops at the selected position; Letterbox
+preserves the entire image with button-color bars. This setting applies to
+both local images and remote feeds. It replaces `bg_image_letterbox`; the old
+boolean is not read or migrated.
+
 Button positions are local to their layer. Grid coordinates may overlap between
 layers, but button rectangles may not overlap within one layer. The shared
 validator rejects malformed collections and combined-capacity overflow before

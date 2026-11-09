@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Choose center, top, bottom, left, or right cropping for button backgrounds
+  with **Image fit**. **Letterbox** continues to show the entire image without
+  stretching. See [button images](docs/user/media/images.md).
 * Place button labels and icons over a widget at nine anchor positions, while
   keeping the widget's full content area and existing touch behavior.
   See [button appearance](docs/user/pads/appearance.md#arrange-button-content).
@@ -35,6 +38,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Replace the button background `bg_image_letterbox` boolean with
+  `bg_image_fit`. Old boolean settings are not migrated; reselect Letterbox
+  where needed.
 * Default Gauge needles to off and tick counts to 0. Gauges without explicit
   settings use these defaults; saved needle and tick settings remain unchanged.
   See [Gauge readability](docs/user/widgets/gauge.md#tune-readability).

@@ -386,6 +386,15 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
                        "bg_image_path too long (max 191 chars)"))) return e;
     if ((e = check_max(b, "bg_image_url", CONFIG_BG_IMAGE_URL_MAX_LEN,
                        "bg_image_url too long (max 255 chars)"))) return e;
+    if (b.containsKey("bg_image_fit")) {
+        const char* fit = b["bg_image_fit"].is<const char*>()
+            ? b["bg_image_fit"].as<const char*>() : "";
+        if (strcmp(fit, "fill-center") && strcmp(fit, "fill-top") &&
+            strcmp(fit, "fill-bottom") && strcmp(fit, "fill-left") &&
+            strcmp(fit, "fill-right") && strcmp(fit, "letterbox")) {
+            return "bg_image_fit must be fill-center, fill-top, fill-bottom, fill-left, fill-right, or letterbox";
+        }
+    }
     const char* image_url = b["bg_image_url"] | "";
     if (binding_template_has_bindings(image_url) &&
         ((b["bg_image_user"] | "")[0] || (b["bg_image_password"] | "")[0] ||
