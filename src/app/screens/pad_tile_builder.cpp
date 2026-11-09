@@ -457,6 +457,9 @@ void PadScreen::buildTiles() {
                 if (wt->createUI) {
                     tile.widget_state.font_owner = &fontCache;
                     lv_obj_t* widget_parent = button_content_region(obj, content_layout.widget, ui_ofs_x, ui_ofs_y);
+                    if (!tile.content_layout.input.centered_group &&
+                        button_widget_position_is_overlay(bcfg.widget_position))
+                        lv_obj_move_background(widget_parent);
                     lv_obj_set_style_bg_color(widget_parent, lv_obj_get_style_bg_color(obj, LV_PART_MAIN), 0);
                     lv_obj_set_style_text_color(widget_parent, lv_obj_get_style_text_color(obj, LV_PART_MAIN), 0);
                     lv_obj_set_user_data(widget_parent, this);
@@ -598,7 +601,7 @@ void PadScreen::buildTiles() {
         tile.local_image_pending_slot = LOCAL_IMAGE_SLOT_INVALID;
         strlcpy(tile.local_image_template, bcfg.bg_image_path, sizeof(tile.local_image_template));
         tile.local_image_path[0] = '\0';
-        tile.local_image_scale_mode = bcfg.bg_image_letterbox ? IMAGE_SCALE_LETTERBOX : IMAGE_SCALE_COVER;
+        tile.local_image_scale_mode = bcfg.bg_image_fit;
         tile.local_image_letterbox_color = lv_color_to_u16(rgb_to_lv(bg_def));
         memset(&tile.local_img_dsc, 0, sizeof(tile.local_img_dsc));
 #endif
@@ -630,7 +633,7 @@ void PadScreen::buildTiles() {
                 tile.image_url_template = (char*)heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
                 if (tile.image_url_template) memcpy(tile.image_url_template, bcfg.bg_image_url, size);
             }
-            ImageScaleMode sm = bcfg.bg_image_letterbox ? IMAGE_SCALE_LETTERBOX : IMAGE_SCALE_COVER;
+            ImageScaleMode sm = bcfg.bg_image_fit;
             if (!dynamic || tile.image_url_template) {
                 tile.image_slot = image_fetch_request(
                     dynamic ? "" : bcfg.bg_image_url,
@@ -718,7 +721,6 @@ void PadScreen::buildTiles() {
                             LV_EVENT_SHORT_CLICKED, this);
         lv_obj_add_event_cb(padActionOverlay, onSwipeGuard, LV_EVENT_GESTURE, this);
         swipe_actions_register(padActionOverlay, swipes_enabled);
-        lv_obj_move_to_index(padActionOverlay, 0);
     }
 
     createOverlayInputShield();

@@ -13,7 +13,6 @@
  * @property {(candidate: BindingSourceCandidate, selection: Object) => string} buildBinding
  * @property {(candidate: BindingSourceCandidate, path: string) => BindingSourceCandidate} [selectField]
  * @property {(candidate: BindingSourceCandidate, options: Object, includeUnit: boolean) => string} [buildLabel]
- * @property {(candidate: BindingSourceCandidate, options: Object, includeUnit: boolean) => string} [previewLabel]
  * @property {(candidate: BindingSourceCandidate) => boolean} [supportsHistory]
  * @property {(candidate: BindingSourceCandidate, suffix: string) => Object} [buildHistoryFields]
  * @property {(candidate: BindingSourceCandidate) => Object[]} [controlFields]
@@ -262,7 +261,7 @@ function padButtonBuilderCandidateValueText(candidate) {
             (candidate.sampleTruncated ? ' (truncated sample)' : '');
     }
     if (candidate.acquisitionState === 'unavailable') return 'Sample value: ---';
-    if (candidate.exampleValue !== undefined) return '';
+    if (candidate.exampleValue !== undefined) return 'Sample value (example): ' + candidate.exampleValue;
     return 'No sample available';
 }
 
@@ -314,7 +313,7 @@ function padButtonBuilderRenderSelection() {
     const state = session.dialog.querySelector('[data-bb-state]');
     const valueText = padButtonBuilderCandidateValueText(candidate);
     state.textContent = valueText + (valueText ? bindingBuilderUnitSuffix(candidate.unit || '') : '');
-    state.hidden = !!candidate.selection || !valueText;
+    state.hidden = !valueText;
 }
 
 function padButtonBuilderValidateFields(session) {
@@ -484,15 +483,10 @@ function padButtonBuilderOpen() {
             <div data-bb-design hidden>
                 <fieldset class="pad-button-builder-choices"><legend>What should this button do?</legend>
                     <div data-bb-choices></div></fieldset>
-                <div class="pad-button-builder-design">
-                    <div><h3>Customize</h3><div class="binding-builder-fields" data-bb-fields></div>
-                        <section data-bb-sources hidden aria-label="Button values"></section>
-                        <p class="binding-builder-note" data-bb-note></p></div>
-                    <section class="pad-button-builder-preview-panel" aria-labelledby="button-builder-preview-title">
-                        <h3 id="button-builder-preview-title">Preview</h3><div class="pad-cell pad-button-builder-preview" data-bb-preview></div>
-                        <div class="pad-button-builder-states" data-bb-states></div>
-                        <p class="binding-builder-note" data-bb-preview-note>Preview only. Does not control the entity.</p></section>
-                </div>
+                <h3>Customize</h3><div class="binding-builder-fields" data-bb-fields></div>
+                <p class="binding-builder-note" data-bb-sampling role="status" hidden></p>
+                <section data-bb-sources hidden aria-label="Button values"></section>
+                <p class="binding-builder-note" data-bb-note></p>
             </div>
             <p class="binding-builder-status" data-bb-validation role="alert" data-kind="error" hidden></p>
         </div>
@@ -501,7 +495,7 @@ function padButtonBuilderOpen() {
             <button type="button" class="btn btn-primary" data-bb-create disabled>Create button</button></div></footer>`;
     padWorkspace.root.appendChild(dialog);
     const session = { dialog, page: padState.page, col: padState.editCol, row: padState.editRow,
-        controller: null, timer: null, draft: { sources: [], options: {}, previewState: null } };
+        controller: null, timer: null, draft: { sources: [], options: {} } };
     padButtonBuilderSession = session;
     for (const selector of ['[data-bb-close]', '[data-bb-cancel]']) {
         dialog.querySelector(selector).onclick = padButtonBuilderClose;
@@ -780,7 +774,6 @@ function padButtonBuilderAcceptCandidate(session, candidate, confirmed = false) 
         scenario.validateSource?.(nextSource);
         draft.sources[index] = nextSource;
         if (previous && previous.candidate !== candidate) padButtonBuilderDisposeSource(previous);
-        if (index === 0) draft.previewState = candidate.sample;
         const titleEdited = draft.titleEdited ||
             (!!previous && draft.options.title !== previous.candidate.displayName);
         const title = titleEdited ? draft.options.title :
@@ -789,7 +782,6 @@ function padButtonBuilderAcceptCandidate(session, candidate, confirmed = false) 
         draft.titleEdited = titleEdited;
     } else {
         session.draft.sources = [padButtonBuilderSource(null, candidate, 0)];
-        session.draft.previewState = candidate.sample;
         const available = padButtonBuilders.filter(builder => builder.available(session.draft, deviceInfoCache));
         const scenario = available.find(builder => builder.preferred) || available[0];
         if (!scenario) throw new Error('No button scenarios are available for this value.');
@@ -852,25 +844,8 @@ function padButtonBuilderRenderFields() {
     padButtonBuilderRenderSelection();
     padButtonBuilderRenderOptions(fields, session.fields, draft.options);
     padButtonBuilderRenderSources();
-    const states = session.dialog.querySelector('[data-bb-states]');
-    states.replaceChildren();
-    if (builder.previewStates?.length) {
-        const caption = document.createElement('span');
-        caption.className = 'binding-builder-note';
-        caption.textContent = 'Simulate state:';
-        states.appendChild(caption);
-    }
-    for (const [state, label] of builder.previewStates || []) {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'btn btn-sm btn-secondary';
-        button.textContent = label;
-        button.dataset.state = state;
-        button.onclick = () => { draft.previewState = state; padButtonBuilderUpdatePreview(); };
-        states.appendChild(button);
-    }
     session.dialog.querySelector('[data-bb-note]').textContent = builder.note || '';
-    padButtonBuilderUpdatePreview();
+    padButtonBuilderUpdateValidation();
 }
 
 function padButtonBuilderRenderSources() {
@@ -911,7 +886,6 @@ function padButtonBuilderRenderSources() {
                 padColorPopoverClose();
                 padButtonBuilderDisposeSource(sources.splice(index, 1)[0]);
                 if (index === 0) {
-                    session.draft.previewState = sources[0].candidate.sample;
                     padButtonBuilderRenderChoices();
                 }
                 padButtonBuilderRenderFields();
@@ -961,7 +935,7 @@ function padButtonBuilderRenderOptions(host, fields, options) {
         input[field.type === 'select' ? 'onchange' : 'oninput'] = () => {
             options[field.name] = input.value;
             if (field.name === 'title') padButtonBuilderSession.draft.titleEdited = true;
-            padButtonBuilderUpdatePreview();
+            padButtonBuilderUpdateValidation();
         };
         if (field.type === 'color') {
             input.type = 'text';
@@ -1019,33 +993,21 @@ function padButtonBuilderValidateText(value, limit) {
     }
 }
 
-function padButtonBuilderUpdatePreview() {
+function padButtonBuilderUpdateValidation() {
     const session = padButtonBuilderSession;
     const draft = session.draft;
     const validation = session.dialog.querySelector('[data-bb-validation]');
     const create = session.dialog.querySelector('[data-bb-create]');
-    const preview = session.dialog.querySelector('[data-bb-preview]');
-    preview.replaceChildren();
-    preview.classList.remove('pad-button-builder-preview-single-history');
+    const sampling = session.dialog.querySelector('[data-bb-sampling]');
     try {
-        const button = padButtonBuilderBuild(session);
-        const source = draft.sources[0]?.candidate;
-        const provider = source ? padButtonBuilderProvider(source) : null;
-        session.dialog.querySelector('[data-bb-preview-note]').textContent =
-            session.scenario.previewNote?.(draft) || provider?.previewNote?.(source) ||
-            'Preview only. Does not control the entity.';
-        const overrides = session.scenario.preview(draft);
-        const sample = { ...button, ...overrides };
-        padRenderCellContent(preview, sample);
-        if (session.scenario.renderPreview) session.scenario.renderPreview(draft, preview, sample);
-        const title = preview.querySelector('.pad-cell-label-top');
-        if (title && button.label_top_style?.startsWith('color:')) title.style.color = button.label_top_style.slice(6);
-        session.dialog.querySelectorAll('[data-bb-states] button').forEach(button => {
-            button.setAttribute('aria-pressed', String(button.dataset.state === draft.previewState));
-        });
+        padButtonBuilderBuild(session);
+        sampling.textContent = session.scenario.samplingNote?.(draft) || '';
+        sampling.hidden = !sampling.textContent;
         validation.hidden = true;
         create.disabled = false;
     } catch (error) {
+        sampling.textContent = '';
+        sampling.hidden = true;
         validation.textContent = error.message;
         validation.hidden = false;
         create.disabled = true;

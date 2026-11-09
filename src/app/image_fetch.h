@@ -53,7 +53,7 @@ void image_fetch_init();
 //   user, pass  — optional HTTP Basic Auth credentials (empty string = no auth)
 //   target_w/h  — desired pixel dimensions
 //   interval_ms — 0 = fetch once, >0 = periodic refresh
-//   scale_mode  — IMAGE_SCALE_COVER or IMAGE_SCALE_LETTERBOX
+//   scale_mode  — IMAGE_SCALE_COVER[_position] or IMAGE_SCALE_LETTERBOX
 //   letterbox_color — RGB565 color for letterbox padding
 image_slot_t image_fetch_request(
     const char* url, const char* user, const char* pass,

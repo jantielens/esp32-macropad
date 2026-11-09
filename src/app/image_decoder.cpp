@@ -39,6 +39,13 @@ static void fill_rgb565(uint16_t* pixels, size_t count, uint16_t color) {
     for (size_t index = 0; index < count; ++index) pixels[index] = color;
 }
 
+static float cover_crop_offset(float excess, ImageScaleMode mode, bool horizontal) {
+    if (excess <= 0) return 0;
+    if (mode == (horizontal ? IMAGE_SCALE_COVER_LEFT : IMAGE_SCALE_COVER_TOP)) return 0;
+    if (mode == (horizontal ? IMAGE_SCALE_COVER_RIGHT : IMAGE_SCALE_COVER_BOTTOM)) return excess;
+    return excess * 0.5f;
+}
+
 // ============================================================================
 // ESP32-P4: Hardware JPEG decoder + PPA scaling
 // ============================================================================
@@ -196,7 +203,7 @@ static bool hw_decode_jpeg(
 static bool ppa_cover_scale(
     const uint16_t* src, int src_w, int src_h, int hw_src_w,
     uint16_t* out, size_t out_aligned_size,
-    uint16_t target_w, uint16_t target_h)
+    uint16_t target_w, uint16_t target_h, ImageScaleMode scale_mode)
 {
     float raw_scale_x = (float)target_w / src_w;
     float raw_scale_y = (float)target_h / src_h;
@@ -227,8 +234,8 @@ static bool ppa_cover_scale(
         return false;
     }
 
-    int off_x = (src_w - block_w) / 2;
-    int off_y = (src_h - block_h) / 2;
+    int off_x = (int)cover_crop_offset(src_w - block_w, scale_mode, true);
+    int off_y = (int)cover_crop_offset(src_h - block_h, scale_mode, false);
     float ppa_scale = found_m / 16.0f;
 
     ppa_srm_oper_config_t srm = {};
@@ -434,7 +441,7 @@ static bool hw_decode_and_scale(
                                            out, target_w, target_h, letterbox_color);
     } else {
         ok = ppa_cover_scale(decoded, actual_w, actual_h, decoded_w,
-                              out, out_aligned_size, target_w, target_h);
+                              out, out_aligned_size, target_w, target_h, scale_mode);
     }
 
     free(decoded);
@@ -472,15 +479,15 @@ static inline uint16_t pack_rgb565(uint8_t r, uint8_t g, uint8_t b) {
 }
 
 // ============================================================================
-// Cover-mode scale: bilinear resample + center-crop → RGB565
+// Cover-mode scale: bilinear resample + positioned crop → RGB565
 // ============================================================================
 // Source is RGB888 (3 bytes/pixel), output is RGB565 (2 bytes/pixel).
 // Computes which region of the source to sample so the output fills
-// target_w × target_h with center-cropping.
+// target_w × target_h with the selected crop position.
 
 static bool cover_scale_rgb888_to_565(
     const uint8_t* src, int src_w, int src_h,
-    uint16_t* dst, int dst_w, int dst_h)
+    uint16_t* dst, int dst_w, int dst_h, ImageScaleMode scale_mode)
 {
     if (!src || !dst || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) return false;
 
@@ -493,9 +500,8 @@ static bool cover_scale_rgb888_to_565(
     float scaled_w = src_w * scale;
     float scaled_h = src_h * scale;
 
-    // Crop offset in scaled space (center crop)
-    float crop_x = (scaled_w - dst_w) * 0.5f;
-    float crop_y = (scaled_h - dst_h) * 0.5f;
+    float crop_x = cover_crop_offset(scaled_w - dst_w, scale_mode, true);
+    float crop_y = cover_crop_offset(scaled_h - dst_h, scale_mode, false);
 
     // For each output pixel, map back to source coordinates
     for (int dy = 0; dy < dst_h; dy++) {
@@ -544,7 +550,7 @@ static bool cover_scale_rgb888_to_565(
 // Same but for RGBA8888 source (4 bytes/pixel, alpha discarded)
 static bool cover_scale_rgba8888_to_565(
     const uint8_t* src, int src_w, int src_h, size_t src_stride,
-    uint16_t* dst, int dst_w, int dst_h)
+    uint16_t* dst, int dst_w, int dst_h, ImageScaleMode scale_mode)
 {
     if (!src || !dst || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) return false;
 
@@ -554,8 +560,8 @@ static bool cover_scale_rgba8888_to_565(
 
     float scaled_w = src_w * scale;
     float scaled_h = src_h * scale;
-    float crop_x = (scaled_w - dst_w) * 0.5f;
-    float crop_y = (scaled_h - dst_h) * 0.5f;
+    float crop_x = cover_crop_offset(scaled_w - dst_w, scale_mode, true);
+    float crop_y = cover_crop_offset(scaled_h - dst_h, scale_mode, false);
 
     for (int dy = 0; dy < dst_h; dy++) {
         float src_yf = (dy + crop_y) / scale;
@@ -1015,7 +1021,7 @@ static bool image_decode_to_rgb565_impl(
                 ok = letterbox_scale_rgb888_to_565(
                     rgb888, src_w, src_h, out, target_w, target_h, letterbox_color);
             } else {
-                ok = cover_scale_rgb888_to_565(rgb888, src_w, src_h, out, target_w, target_h);
+                ok = cover_scale_rgb888_to_565(rgb888, src_w, src_h, out, target_w, target_h, scale_mode);
             }
             heap_caps_free(rgb888);
         }
@@ -1030,7 +1036,7 @@ static bool image_decode_to_rgb565_impl(
             } else {
                 ok = cover_scale_rgba8888_to_565(
                     draw_buf->data, src_w, src_h, draw_buf->header.stride,
-                    out, target_w, target_h);
+                    out, target_w, target_h, scale_mode);
             }
             lv_draw_buf_destroy(draw_buf);
         }

@@ -119,8 +119,8 @@ adopts the current value without sending actions. Read-only alone does not dim i
 Switch width is a percentage of the assigned widget region, capped by the
 available height at a 2:1 aspect ratio. When less than four pixels of switch
 width fit, the switch is hidden. Enlarge the button or reduce its content if
-needed. The pad editor shows button styling and labels, with a subdued symbol
-identifying the widget in its region.
+needed. The pad editor shows labels and a large symbol identifying the widget
+in a consistent overview.
 It does not reproduce widget graphics or widget-specific visual settings.
 Binding text is abbreviated to fit; hover over a binding or select the button
 to read its full text. The grid does not resolve bindings, show sample or live

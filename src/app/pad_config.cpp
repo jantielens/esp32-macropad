@@ -389,10 +389,12 @@ static bool parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
     btn->icon_position = static_cast<ButtonGroupIconPosition>(position);
     position = static_cast<uint8_t>(ButtonWidgetPosition::Right);
     const char* widget_position = obj["widget_position"] | "right";
-    if (!button_position_parse(widget_position, &position))
+    if (!button_widget_position_parse(widget_position, &position))
         LOGW(TAG, "Invalid widget position: %s", widget_position);
     btn->widget_position = static_cast<ButtonWidgetPosition>(position);
     btn->group_size_pct = obj["group_size_pct"] | (uint8_t)0;
+    btn->reserve_label_slots = obj["reserve_label_slots"] | false;
+    btn->overlay_backdrop = obj["overlay_backdrop"] | false;
     btn->rocker_group_beside = strcmp(obj["rocker_group_layout"] | "center", "beside") == 0;
     parse_ui_offset_field(obj["ui_offset"], &btn->ui_offset_x, &btn->ui_offset_y);
 
@@ -456,7 +458,13 @@ static bool parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
     strlcpy(btn->bg_image_user, obj["bg_image_user"] | "", CONFIG_BG_IMAGE_USER_MAX_LEN);
     strlcpy(btn->bg_image_password, obj["bg_image_password"] | "", CONFIG_BG_IMAGE_PASS_MAX_LEN);
     btn->bg_image_interval_ms = obj["bg_image_interval_ms"] | (uint32_t)0;
-    btn->bg_image_letterbox = obj["bg_image_letterbox"] | false;
+    btn->bg_image_fit = IMAGE_SCALE_COVER;
+    const char* image_fit = obj["bg_image_fit"] | "fill-center";
+    if (strcmp(image_fit, "letterbox") == 0) btn->bg_image_fit = IMAGE_SCALE_LETTERBOX;
+    else if (strcmp(image_fit, "fill-top") == 0) btn->bg_image_fit = IMAGE_SCALE_COVER_TOP;
+    else if (strcmp(image_fit, "fill-bottom") == 0) btn->bg_image_fit = IMAGE_SCALE_COVER_BOTTOM;
+    else if (strcmp(image_fit, "fill-left") == 0) btn->bg_image_fit = IMAGE_SCALE_COVER_LEFT;
+    else if (strcmp(image_fit, "fill-right") == 0) btn->bg_image_fit = IMAGE_SCALE_COVER_RIGHT;
 
     // Widget type (bar_chart, gauge, etc.)
     const char* wtype = obj["widget_type"] | "";

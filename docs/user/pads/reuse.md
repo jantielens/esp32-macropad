@@ -57,6 +57,11 @@ Clear Pad, paste, fill, and pad-file import change the draft.
 Export/save work first, then Save Pad only after checking the intended result.
 These operations are not device-wide undo or multi-pad draft storage.
 
+Clear Pad starts an empty 3-column, 2-row pad with Auto row heights and column
+widths. It removes both button layers, the name, wake screen, bindings,
+full-screen tap actions, template selection, and pad appearance overrides.
+Device-wide defaults and copied buttons or pads remain available.
+
 Recipe **Clear Buttons** is different: it confirms and writes an empty button
 list immediately while retaining other pad settings. See the recipe workflow.
 

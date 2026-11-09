@@ -33,21 +33,18 @@ static inline bool pad_compute_axis_track_sizes(
             return false;
         }
 
-        const uint16_t auto_size = (available - fixed_total) / auto_count;
-        uint8_t remainder = (available - fixed_total) % auto_count;
-        for (uint8_t track = 0; track < count; track++) {
-            const uint16_t fixed_size = overrides ? overrides[track] : 0;
-            if (fixed_size) {
-                sizes[track] = fixed_size;
-            } else {
-                sizes[track] = auto_size + (remainder ? 1 : 0);
-                if (remainder) remainder--;
-            }
-        }
-        return true;
     }
 
-    const uint16_t uniform = available / count;
-    for (uint8_t track = 0; track < count; track++) sizes[track] = uniform;
+    const uint16_t auto_size = (available - fixed_total) / auto_count;
+    uint8_t remainder = (available - fixed_total) % auto_count;
+    for (uint8_t track = 0; track < count; track++) {
+        const uint16_t fixed_size = overrides ? overrides[track] : 0;
+        if (fixed_size) {
+            sizes[track] = fixed_size;
+        } else {
+            sizes[track] = auto_size + (remainder ? 1 : 0);
+            if (remainder) remainder--;
+        }
+    }
     return true;
 }

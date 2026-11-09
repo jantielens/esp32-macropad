@@ -536,54 +536,74 @@ function padCollectUsedColors(editCol, editRow) {
     return colors.slice(0, 9);
 }
 
-// --- Binding length warning (pad editor) ---
-// When a bindable field is filled to its maxlength while it contains a binding
-// token, the value may be a truncated [scheme:...] expression. Show an inline
-// hint pointing the user at named pad bindings, which keep long topics short.
+let padMaxlenWarningSignature = '';
+let padMaxlenWarningDismissed = '';
 
-function padBindingMaxlenHint(input) {
-    if (!input || input.tagName !== 'INPUT') return;
-    const max = input.maxLength;
-    if (!max || max < 0) return;
-    const val = input.value || '';
-    const show = val.length >= max && val.indexOf('[') !== -1;
-    let hint = input._maxlenHint;
-    if (show) {
-        if (!hint) {
-            hint = document.createElement('div');
-            hint.className = 'binding-maxlen-hint';
-            hint.innerHTML = 'Reached the maximum length. For a long binding, define a ' +
-                '<a href="#" onclick="showBindingHelp(\'pad\');return false;">named pad binding</a> ' +
-                'and use the short <code>[pad:name]</code> alias here.';
-            // Anchor to the enclosing field block so the hint always lands on its
-            // own full-width line below the input, never as a flex sibling that
-            // would squeeze the textbox narrow.
-            const anchor = input.closest('.form-group') || input.closest('.bindable-color') || input;
-            anchor.insertAdjacentElement('afterend', hint);
-            input._maxlenHint = hint;
-        }
-        hint.style.display = '';
-    } else if (hint) {
-        hint.style.display = 'none';
+function padDismissMaxlenWarning() {
+    padMaxlenWarningDismissed = padMaxlenWarningSignature;
+    const alert = document.getElementById('pad-edit-validation-error');
+    if (alert && alert.dataset.kind === 'warning') {
+        alert.style.display = 'none';
+        delete alert.dataset.kind;
     }
 }
 
-// Re-evaluate every bindable field in the pad-edit dialog (clears stale hints
-// from a previous button and shows fresh ones for the current values).
-function padScanMaxlenHints() {
+function padRefreshMaxlenWarning() {
+    const alert = document.getElementById('pad-edit-validation-error');
     const overlay = document.getElementById('pad-edit-overlay');
-    if (!overlay) return;
-    overlay.querySelectorAll('input[maxlength]').forEach(padBindingMaxlenHint);
+    if (!alert || !overlay || !overlay.querySelectorAll) return;
+    const selected = typeof padWorkspace !== 'undefined' && padWorkspace &&
+        padWorkspace.selected && padWorkspace.scope === 'button';
+    const hasError = alert.dataset.kind === 'error' && alert.style.display !== 'none' ||
+        selected && padWorkspace.errors.has(padWorkspaceKey());
+    const fields = selected && !hasError ? Array.from(overlay.querySelectorAll('input[maxlength]')).filter(input => {
+        if (input.disabled || input.maxLength <= 0 ||
+            input.value.length < input.maxLength || !input.value.includes('[')) return false;
+        for (let node = input; node && node !== overlay; node = node.parentElement) {
+            if (node.style && node.style.display === 'none') return false;
+            if (node.hidden && !(node.dataset && node.dataset.buttonTab)) return false;
+        }
+        return true;
+    }) : [];
+    if (!fields.length) {
+        padMaxlenWarningSignature = '';
+        if (!hasError) padMaxlenWarningDismissed = '';
+        if (alert.dataset.kind === 'warning') {
+            alert.style.display = 'none';
+            delete alert.dataset.kind;
+        }
+        return;
+    }
+    padMaxlenWarningSignature = JSON.stringify([padWorkspaceKey(), fields.map(input => [input.id, input.value])]);
+    if (padMaxlenWarningSignature === padMaxlenWarningDismissed) return;
+    const input = fields[0];
+    const label = input.labels && input.labels[0];
+    const title = label && label.querySelector('.binding-field-title');
+    const labelText = title ? title.textContent.trim() : label &&
+        Array.from(label.childNodes).filter(node => node.nodeType === 3).map(node => node.textContent).join('').trim();
+    const name = input.getAttribute('aria-label') || labelText || label?.textContent.trim() || 'Binding field';
+    const section = input.closest('details');
+    const summary = section && section.querySelector(':scope > summary');
+    const sectionName = section && (section.dataset.slotLabel || summary?.textContent.trim());
+    const prefix = sectionName ? sectionName + ' \u2014 ' : '';
+    const message = prefix + name + ' reached its length limit' +
+        (fields.length > 1 ? ' (and ' + (fields.length - 1) + ' more)' : '') + '.';
+    const text = document.getElementById('pad-edit-validation-message');
+    if (text.textContent !== message) text.textContent = message;
+    alert.dataset.kind = 'warning';
+    alert.setAttribute('role', 'status');
+    document.getElementById('pad-edit-validation-help').hidden = false;
+    const dismiss = document.getElementById('pad-edit-validation-dismiss');
+    dismiss.setAttribute('aria-label', 'Dismiss tip');
+    dismiss.title = 'Dismiss tip';
+    alert.style.display = '';
 }
 
-// Delegated listener — fires for any bindable input typed in the pad editor.
 if (!window.__padMaxlenHintWired) {
     window.__padMaxlenHintWired = true;
-    document.addEventListener('input', function(e) {
-        const t = e.target;
-        if (t && t.tagName === 'INPUT' && t.maxLength > 0 &&
-            t.closest && t.closest('#pad-edit-overlay')) {
-            padBindingMaxlenHint(t);
-        }
+    ['input', 'change'].forEach(function(type) {
+        document.addEventListener(type, function(e) {
+            if (e.target.closest && e.target.closest('#pad-edit-overlay')) padRefreshMaxlenWarning();
+        });
     });
 }

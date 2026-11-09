@@ -404,6 +404,7 @@ function padWorkspaceSetScope(scope) {
     });
     padWorkspaceRenderTabs();
     padWorkspaceRefresh();
+    if (typeof padRefreshMaxlenWarning === 'function') padRefreshMaxlenWarning();
 }
 
 function padWorkspaceRenderTabs() {

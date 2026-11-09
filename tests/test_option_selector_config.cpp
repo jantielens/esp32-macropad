@@ -137,6 +137,22 @@ TEST(OptionSelectorConfig, ParsesInsetAndRejectsOutOfRange) {
     EXPECT_NE(option_selector_validate_config(doc.as<JsonObjectConst>()), nullptr);
 }
 
+TEST(OptionSelectorConfig, ParsesAndValidatesSelectorHeight) {
+    StaticJsonDocument<512> doc;
+    uint8_t data[WIDGET_CONFIG_MAX_BYTES] = {};
+    ASSERT_TRUE(option_selector_parse_config(doc.as<JsonObject>(), data));
+    EXPECT_EQ(option_selector_config(data)->height_pct, 100);
+    option_selector_release_config(data);
+    doc["widget_option_height_pct"] = 40;
+    ASSERT_TRUE(option_selector_parse_config(doc.as<JsonObject>(), data));
+    EXPECT_EQ(option_selector_config(data)->height_pct, 40);
+    option_selector_release_config(data);
+    for (int value : {0, 101, -1}) {
+        doc["widget_option_height_pct"] = value;
+        EXPECT_NE(option_selector_validate_config(doc.as<JsonObjectConst>()), nullptr);
+    }
+}
+
 TEST(OptionSelectorConfig, VisitsBoundFieldsAndStableIconSlots) {
     StaticJsonDocument<1024> doc;
     doc["widget_option_group_color"] = "[mqtt:group]";

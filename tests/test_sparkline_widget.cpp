@@ -112,6 +112,7 @@ protected:
     SparklineState* chart() { return reinterpret_cast<SparklineState*>(state.data); }
     virtual bool initial_streams_available() const { return true; }
     virtual unsigned initial_fill_opacity() const { return 0; }
+    virtual void configure(JsonObject) {}
 
     void SetUp() override {
         static bool initialized = false;
@@ -165,6 +166,7 @@ protected:
         fields["widget_sparkline_ref_1_color"] = "[test:reference]";
         fields["widget_sparkline_smooth"] = 2;
         if (initial_fill_opacity()) fields["widget_sparkline_fill_opacity"] = initial_fill_opacity();
+        configure(fields);
         type = widget_find("sparkline");
         ASSERT_NE(type, nullptr);
         type->parseConfig(fields, config.data);
@@ -236,19 +238,87 @@ TEST(SparklineConfig, FillOpacityDefaultsAndBounds) {
     JsonObject fields = document.to<JsonObject>();
     SparklineConfig config{};
     sparkline_parse(fields, reinterpret_cast<uint8_t*>(&config));
-    EXPECT_EQ(config.fill_opacity, 0);
+    EXPECT_EQ(config.fill_opacity[0], 0);
     for (unsigned value : {0u, 25u, 100u}) {
         fields["widget_sparkline_fill_opacity"] = value;
         sparkline_parse(fields, reinterpret_cast<uint8_t*>(&config));
-        EXPECT_EQ(config.fill_opacity, value);
+        EXPECT_EQ(config.fill_opacity[0], value);
     }
     for (const char* invalid : {"-1", "101", "1.5", "true", "\"50\""}) {
         JsonDocument value;
         ASSERT_FALSE(deserializeJson(value, invalid));
         fields["widget_sparkline_fill_opacity"] = value.as<JsonVariant>();
         sparkline_parse(fields, reinterpret_cast<uint8_t*>(&config));
-        EXPECT_EQ(config.fill_opacity, 0);
+        EXPECT_EQ(config.fill_opacity[0], 0);
     }
+}
+
+class SparklineOverrides : public SparklineWidget {
+protected:
+    void configure(JsonObject fields) override {
+        fields["widget_sparkline_height_pct"] = 50;
+        fields["widget_sparkline_fill_opacity"] = 0;
+        fields["widget_sparkline_fill_opacity_1"] = 100;
+        fields["widget_sparkline_fill_opacity_2"] = 0;
+        fields["widget_sparkline_fill_opacity_3"] = 0;
+        fields["widget_sparkline_line_width"] = 2;
+        fields["widget_sparkline_line_width_2"] = 6;
+        fields["widget_sparkline_current_dot_1"] = 0;
+        fields["widget_sparkline_current_dot_2"] = 9;
+    }
+};
+
+TEST_F(SparklineOverrides, OverridesAffectOnlySelectedLinesAndFillPixels) {
+    auto* cfg = reinterpret_cast<SparklineConfig*>(config.data);
+    EXPECT_EQ(cfg->fill_opacity[0], 100);
+    EXPECT_EQ(cfg->fill_opacity[1], 0);
+    EXPECT_EQ(cfg->line_width[0], 2);
+    EXPECT_EQ(lv_obj_get_style_line_width(chart()->lines[1], LV_PART_MAIN), 6);
+    EXPECT_EQ(chart()->dot_current[0], nullptr);
+    ASSERT_NE(chart()->dot_current[1], nullptr);
+    EXPECT_EQ(lv_obj_get_width(chart()->dot_current[1]), 9);
+    EXPECT_EQ(lv_obj_get_width(chart()->dot_current[2]), 5);
+
+    lv_obj_set_style_bg_color(tile, lv_color_white(), 0);
+    for (unsigned line = 0; line < 3; ++line) {
+        for (float& sample : samples[line]) sample = line == 0 ? 70 : 40;
+        ++streams[line].rev;
+    }
+    update();
+    settle();
+    lv_area_t area;
+    lv_obj_get_coords(lv_obj_get_parent(chart()->lines[0]), &area);
+    EXPECT_EQ(pixel(area.x1 + 20, area.y2 - 3), lv_color_to_u16(lv_color_hex(0x123456)));
+    for (float& sample : samples[0]) sample = NAN;
+    ++streams[0].rev;
+    update();
+    settle();
+    EXPECT_EQ(pixel(area.x1 + 20, area.y2 - 3), lv_color_to_u16(lv_color_white()));
+}
+
+TEST_F(SparklineOverrides, ReducedHeightStaysCenteredAndDotsTrackOnResize) {
+    lv_obj_t* area = lv_obj_get_parent(chart()->lines[0]);
+    auto* cfg = reinterpret_cast<SparklineConfig*>(config.data);
+    auto verify = [&]() {
+        lv_obj_update_layout(tile);
+        const int content_h = lv_obj_get_content_height(tile);
+        const int margin = lv_font_get_line_height(lv_obj_get_style_text_font(chart()->lbl_min, LV_PART_MAIN)) + 5;
+        const auto expected = sparkline_geometry(cfg, 3, lv_obj_get_content_width(tile), content_h, margin);
+        EXPECT_EQ(lv_obj_get_height(area), expected.height);
+        EXPECT_EQ(lv_obj_get_y(area), expected.top);
+        EXPECT_EQ(expected.top, (content_h - expected.height) / 2);
+        lv_area_t line_bounds, dot_bounds;
+        lv_obj_get_coords(chart()->lines[1], &line_bounds);
+        lv_obj_get_coords(chart()->dot_current[1], &dot_bounds);
+        const auto& endpoint = chart()->points[1][3];
+        EXPECT_EQ(dot_bounds.y1 + 4, line_bounds.y1 + endpoint.y);
+    };
+    verify();
+    lv_obj_set_height(tile, 240);
+    lv_obj_update_layout(tile);
+    tick();
+    settle();
+    verify();
 }
 
 TEST_F(SparklineFilled, FillPreservesGapsAndUpdatesColorBelowLineBounds) {
@@ -306,7 +376,7 @@ TEST_F(SparklineFilled, AllFillsStayBehindAllSeriesAndReferenceLines) {
 }
 
 TEST_F(SparklineWidget, DisabledFillDoesNotPaintBelowSeries) {
-    EXPECT_EQ(chart()->fill_opa, LV_OPA_TRANSP);
+    EXPECT_EQ(chart()->fill_opa[0], LV_OPA_TRANSP);
     lv_area_t area;
     lv_obj_get_coords(lv_obj_get_parent(chart()->lines[0]), &area);
     EXPECT_NE(pixel((area.x1 + area.x2) / 2, area.y2 - 3),
@@ -546,6 +616,153 @@ TEST_F(SparklineWidget, SharedContentClipsUpscaledLabelsAndPreservesOffsets) {
     EXPECT_NE(framebuffer[pixel] | (framebuffer[pixel + 1] << 8), 0xf800);
 }
 
+TEST_F(SparklineWidget, StandaloneCenterLabelStaysCenteredWhenClippedAndReflowed) {
+    lv_obj_set_size(tile, 200, 21);
+    lv_obj_set_style_pad_all(tile, 0, 0);
+    lv_obj_set_style_border_width(tile, 0, 0);
+    for (uint16_t upscale : {uint16_t(256), uint16_t(512)}) {
+        lv_obj_set_height(tile, 21);
+        lv_obj_t* label = lv_label_create(tile);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_36, 0);
+        lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
+        lv_label_set_text(label, "10:15");
+        lv_obj_set_style_transform_scale(label, upscale, 0);
+        ScreenButtonConfig button{};
+        strlcpy(button.label_center, "10:15", sizeof(button.label_center));
+        button.style_center.font_upscale = upscale;
+        button.ui_offset_y = 3;
+        button.style_center.y_offset = 2;
+        UIScaleInfo scale = pad_get_scale_info();
+        scale.font_large = &lv_font_montserrat_36;
+        lv_obj_t* labels[] = {nullptr, label, nullptr};
+        ButtonContentRuntime runtime{};
+        pad_apply_content_layout(tile, button, nullptr, labels, scale, nullptr, &runtime);
+
+        auto expect_centered = [&]() {
+            lv_obj_update_layout(tile);
+            const int32_t height = lv_obj_get_height(label) * upscale / LV_SCALE_NONE;
+            const int32_t center = 2 * (lv_obj_get_y(runtime.label_regions[1]) +
+                                         lv_obj_get_y(label)) + height;
+            const int32_t optical = height <= lv_obj_get_content_height(tile)
+                ? 2 * runtime.input.label_optical_offset[1] : 0;
+            EXPECT_NEAR(center, lv_obj_get_content_height(tile) + 10 + optical, 1);
+            EXPECT_EQ(lv_obj_get_height(label),
+                      runtime.input.label_height[1] * LV_SCALE_NONE / upscale);
+        };
+        expect_centered();
+        EXPECT_LT(lv_obj_get_y(label), 0);
+        EXPECT_EQ(lv_obj_get_height(runtime.label_regions[1]), 21);
+
+        pad_set_content_label_text(runtime, 1, "10:15\nMonday");
+        pad_reflow_content_layout(runtime, pad_measure_content_layout(tile, runtime));
+        expect_centered();
+
+        lv_obj_set_height(tile, 300);
+        pad_reflow_content_layout(runtime, pad_measure_content_layout(tile, runtime));
+        expect_centered();
+        EXPECT_EQ(lv_obj_get_y(label), 0);
+        lv_obj_delete(runtime.label_regions[1]);
+    }
+}
+
+TEST_F(SparklineWidget, LabelSlotsCenterTemperatureAndRetainEmptyPositions) {
+    lv_obj_t* parent = lv_obj_create(lv_display_get_screen_active(display));
+    lv_obj_set_pos(parent, 0, 0);
+    lv_obj_set_size(parent, 290, 160);
+    lv_obj_set_style_pad_all(parent, 4, 0);
+    lv_obj_set_style_border_width(parent, 0, 0);
+    lv_obj_set_style_bg_color(parent, lv_color_white(), 0);
+    const char* texts[] = {"Livingroom", "24.7 \xc2\xb0" "C", "36 % RLV"};
+    const lv_font_t* fonts[] = {&lv_font_montserrat_18, &lv_font_montserrat_36, &lv_font_montserrat_18};
+    const uint32_t colors[] = {0xff0000, 0x000000, 0x0000ff};
+    lv_obj_t* labels[3];
+    for (int i = 0; i < 3; ++i) {
+        labels[i] = lv_label_create(parent);
+        lv_obj_set_style_text_font(labels[i], fonts[i], 0);
+        lv_obj_set_style_text_color(labels[i], lv_color_hex(colors[i]), 0);
+        lv_label_set_text(labels[i], texts[i]);
+    }
+    ScreenButtonConfig button{};
+    strlcpy(button.label_top, texts[0], sizeof(button.label_top));
+    strlcpy(button.label_center, texts[1], sizeof(button.label_center));
+    strlcpy(button.label_bottom, texts[2], sizeof(button.label_bottom));
+    button.reserve_label_slots = true;
+    UIScaleInfo scale = pad_get_scale_info();
+    scale.font_small = fonts[0];
+    scale.font_large = fonts[1];
+    ButtonContentRuntime runtime{};
+    pad_apply_content_layout(parent, button, nullptr, labels, scale, nullptr, &runtime);
+    auto measure = [&](int height, int first[3], int last[3], int count[3]) {
+        settle();
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < 290; ++x) {
+                const uint16_t value = pixel(x, y);
+                for (int i = 0; i < 3; ++i) {
+                    if (value == lv_color_to_u16(lv_color_hex(colors[i]))) {
+                        first[i] = std::min(first[i], y);
+                        last[i] = std::max(last[i], y);
+                        ++count[i];
+                    }
+                }
+            }
+        }
+    };
+    int reference_first[3] = {160, 160, 160}, reference_last[3] = {-1, -1, -1};
+    int reference_count[3] = {};
+    measure(160, reference_first, reference_last, reference_count);
+    lv_obj_set_height(parent, 92);
+    const auto full = pad_measure_content_layout(parent, runtime);
+    pad_reflow_content_layout(runtime, full);
+    int first[3] = {92, 92, 92}, last[3] = {-1, -1, -1}, count[3] = {};
+    measure(92, first, last, count);
+    for (int i = 0; i < 3; ++i) ASSERT_GE(last[i], first[i]);
+    for (int i = 0; i < 3; ++i) EXPECT_EQ(count[i], reference_count[i]);
+    EXPECT_NEAR(first[1] + last[1], 91, 2);
+    EXPECT_NEAR(first[1] - last[0], first[2] - last[1], 3);
+    EXPECT_LE(first[1] - last[0], 12);
+    EXPECT_LE(first[2] - last[1], 12);
+    pad_set_content_label_text(runtime, 1, "10.0 \xc2\xb0" "C");
+    const auto changed = pad_measure_content_layout(parent, runtime);
+    for (int i = 0; i < 3; ++i) EXPECT_EQ(changed.labels[i].y, full.labels[i].y);
+    runtime.input.reserve_label_slots = true;
+    runtime.input.has_label[0] = runtime.input.has_label[2] = false;
+    const auto empty = button_content_layout(runtime.input);
+    for (int i = 0; i < 3; ++i) {
+        EXPECT_EQ(empty.labels[i].y, full.labels[i].y);
+        EXPECT_EQ(empty.labels[i].height, full.labels[i].height);
+    }
+    runtime.label_offset_y[1] = -4;
+    pad_reflow_content_layout(runtime, empty);
+    lv_obj_update_layout(parent);
+    EXPECT_EQ(lv_obj_get_y(runtime.label_regions[1]), full.labels[1].y - 4);
+    pad_set_content_label_text(runtime, 1, "24.7 C\nanother line");
+    EXPECT_EQ(runtime.input.label_height[1], full.labels[1].height);
+    runtime.label_offset_y[1] = 0;
+    runtime.input.reserve_label_slots = false;
+    runtime.input.has_label[0] = true;
+    lv_obj_add_flag(runtime.label_regions[2], LV_OBJ_FLAG_HIDDEN);
+    runtime.labels[2] = nullptr;
+    pad_set_content_label_text(runtime, 1, "24.7 \xc2\xb0" "C");
+    const auto compact = pad_measure_content_layout(parent, runtime);
+    pad_reflow_content_layout(runtime, compact);
+    int compact_first[3] = {92, 92, 92}, compact_last[3] = {-1, -1, -1}, compact_count[3] = {};
+    measure(92, compact_first, compact_last, compact_count);
+    // Representative font bounds include descenders that these values do not contain.
+    EXPECT_NEAR(compact_first[0] + compact_last[1], 91, 8);
+    EXPECT_GT(compact_first[1], first[1]);
+    EXPECT_EQ(compact_count[0], reference_count[0]);
+    EXPECT_EQ(compact_count[1], reference_count[1]);
+    pad_set_content_label_text(runtime, 0, "Test");
+    pad_set_content_label_text(runtime, 1, "Test");
+    pad_reflow_content_layout(runtime, pad_measure_content_layout(parent, runtime));
+    int test_first[3] = {92, 92, 92}, test_last[3] = {-1, -1, -1}, test_count[3] = {};
+    measure(92, test_first, test_last, test_count);
+    ASSERT_GE(test_last[0], test_first[0]);
+    ASSERT_GE(test_last[1], test_first[1]);
+    EXPECT_NEAR(test_first[0] + test_last[1], 91, 8);
+    lv_obj_delete(parent);
+}
+
 TEST_F(SparklineWidget, AutoContentReflowsFromResolvedLabelText) {
     lv_obj_set_size(tile, 200, 100);
     lv_obj_set_style_pad_all(tile, 0, 0);
@@ -579,6 +796,100 @@ TEST_F(SparklineWidget, AutoContentReflowsFromResolvedLabelText) {
     lv_obj_update_layout(tile);
     EXPECT_LT(layout.widget.x, 102);
     EXPECT_EQ(lv_obj_get_x(runtime.widget_region), layout.widget.x);
+}
+
+TEST_F(SparklineWidget, OverlayReflowsLabelsWithoutChangingWidgetOrInterceptingTouch) {
+    lv_obj_t* parent = lv_obj_create(lv_display_get_screen_active(display));
+    lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_size(parent, 200, 100);
+    lv_obj_set_style_pad_all(parent, 0, 0);
+    lv_obj_set_style_border_width(parent, 0, 0);
+    lv_obj_set_style_bg_color(parent, lv_color_hex(0x303030), 0);
+    lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
+    lv_obj_t* label = lv_label_create(parent);
+    lv_obj_clear_flag(label, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
+    lv_label_set_text(label, "A");
+    ScreenButtonConfig button{};
+    strlcpy(button.widget.type, "sparkline", sizeof(button.widget.type));
+    strlcpy(button.label_center, "A", sizeof(button.label_center));
+    button.widget_position = ButtonWidgetPosition::OverlayBottomRight;
+    button.overlay_backdrop = true;
+    lv_obj_t* labels[] = {nullptr, label, nullptr};
+    ButtonContentRuntime runtime{};
+    const auto initial = pad_apply_content_layout(parent, button, nullptr, labels,
+                                                   pad_get_scale_info(), nullptr, &runtime);
+    runtime.widget_region = button_content_region(parent, initial.widget, 0, 0);
+    lv_obj_add_flag(runtime.widget_region, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_move_background(runtime.widget_region);
+    lv_obj_update_layout(parent);
+    ASSERT_NE(runtime.backdrop_region, nullptr);
+    EXPECT_FALSE(lv_obj_has_flag(runtime.backdrop_region, LV_OBJ_FLAG_CLICKABLE));
+    EXPECT_EQ(initial.widget.width, 200);
+    EXPECT_EQ(initial.widget.height, 100);
+    EXPECT_EQ(initial.labels[1].x + initial.labels[1].width, 200);
+    EXPECT_EQ(initial.labels[1].y + initial.labels[1].height, 100);
+    lv_area_t coords;
+    lv_obj_get_coords(runtime.label_regions[1], &coords);
+    lv_point_t point = {coords.x1, coords.y1};
+    EXPECT_EQ(lv_indev_search_obj(parent, &point), runtime.widget_region);
+
+    pad_set_content_label_text(runtime, 1, "A longer value");
+    const auto updated = pad_measure_content_layout(parent, runtime);
+    pad_reflow_content_layout(runtime, updated);
+    EXPECT_LT(updated.labels[1].x, initial.labels[1].x);
+    EXPECT_EQ(updated.labels[1].x + updated.labels[1].width, 200);
+    EXPECT_EQ(updated.widget.x, initial.widget.x);
+    EXPECT_EQ(updated.widget.width, initial.widget.width);
+    EXPECT_EQ(updated.widget.height, initial.widget.height);
+    lv_obj_update_layout(parent);
+    lv_area_t backdrop;
+    lv_obj_get_coords(runtime.backdrop_region, &backdrop);
+    lv_obj_get_coords(runtime.label_regions[1], &coords);
+    EXPECT_LE(backdrop.x1, coords.x1);
+    EXPECT_GE(backdrop.x2, coords.x2);
+    EXPECT_LE(backdrop.y1, coords.y1);
+    EXPECT_GE(backdrop.y2, coords.y2);
+
+    lv_obj_add_flag(label, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_style_bg_color(runtime.widget_region, lv_color_hex(0x00ff00), 0);
+    lv_obj_set_style_bg_opa(runtime.widget_region, LV_OPA_COVER, 0);
+    settle();
+    const int x = (coords.x1 + coords.x2) / 2;
+    const int y = (coords.y1 + coords.y2) / 2;
+    const int outside_x = backdrop.x1 - 2;
+    ASSERT_GT(outside_x, 5);
+    const uint16_t faded = pixel(x, y);
+    const uint16_t green = pixel(5, 5);
+    EXPECT_NE(faded, green);
+    EXPECT_EQ(pixel(outside_x, y), green);
+    lv_obj_set_style_bg_color(runtime.widget_region, lv_color_hex(0x303030), 0);
+    settle();
+    const uint16_t background = pixel(5, 5);
+    EXPECT_EQ(pixel(x, y), background);
+    EXPECT_EQ(pixel(outside_x, y), background);
+    EXPECT_NE(faded, background);
+    lv_obj_delete(parent);
+}
+
+TEST_F(SparklineWidget, OverlayBackdropIsOptInAndOnlyUsedForOverlaidGroups) {
+    ScreenButtonConfig button{};
+    strlcpy(button.widget.type, "sparkline", sizeof(button.widget.type));
+    strlcpy(button.label_center, "A", sizeof(button.label_center));
+    button.widget_position = ButtonWidgetPosition::OverlayCenter;
+    lv_obj_t* label = lv_label_create(tile);
+    lv_obj_t* labels[] = {nullptr, label, nullptr};
+    ButtonContentRuntime runtime{};
+    pad_apply_content_layout(tile, button, nullptr, labels, pad_get_scale_info(), nullptr, &runtime);
+    EXPECT_EQ(runtime.backdrop_region, nullptr);
+    lv_obj_delete(runtime.label_regions[1]);
+
+    label = lv_label_create(tile);
+    labels[1] = label;
+    button.overlay_backdrop = true;
+    button.widget_position = ButtonWidgetPosition::Right;
+    pad_apply_content_layout(tile, button, nullptr, labels, pad_get_scale_info(), nullptr, &runtime);
+    EXPECT_EQ(runtime.backdrop_region, nullptr);
 }
 
 TEST_F(SparklineWidget, CenteredRockerGroupUsesExistingWidgetAndZones) {
@@ -734,6 +1045,21 @@ TEST_F(SparklineWidget, ReflowRestoresIconScaleAfterRegionGrows) {
     runtime.input.group_size_pct = 10;
     pad_reflow_content_layout(runtime, pad_measure_content_layout(tile, runtime));
     EXPECT_EQ(lv_image_get_scale_x(icon), small_scale);
+}
+
+TEST_F(SparklineWidget, GaugeNeedleAndTicksDefaultOffButCanBeEnabled) {
+    WidgetConfig config{};
+    JsonDocument document;
+    gauge_parse(document.as<JsonObject>(), config.data);
+    auto* gauge = reinterpret_cast<GaugeConfig*>(config.data);
+    EXPECT_FALSE(gauge->show_needle);
+    EXPECT_EQ(gauge->tick_count, 0);
+
+    document["widget_gauge_show_needle"] = true;
+    document["widget_gauge_ticks"] = 5;
+    gauge_parse(document.as<JsonObject>(), config.data);
+    EXPECT_TRUE(gauge->show_needle);
+    EXPECT_EQ(gauge->tick_count, 5);
 }
 
 TEST_F(SparklineWidget, GaugeResizeReusesTicksAndKeepsCaptionInsideRegion) {

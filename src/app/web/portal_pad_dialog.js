@@ -97,6 +97,7 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-label-top').value = padLabelToInput(btn.label_top);
     document.getElementById('pad-edit-label-center').value = padLabelToInput(btn.label_center);
     document.getElementById('pad-edit-label-bottom').value = padLabelToInput(btn.label_bottom);
+    document.getElementById('pad-edit-reserve-label-slots').checked = !!btn.reserve_label_slots;
     document.getElementById('pad-edit-label-top-style').value = btn.label_top_style || '';
     document.getElementById('pad-edit-label-center-style').value = btn.label_center_style || '';
     document.getElementById('pad-edit-label-bottom-style').value = btn.label_bottom_style || '';
@@ -186,11 +187,11 @@ function padDialogOpen(col, row) {
         'Not configured.', 'password');
     document.getElementById('pad-edit-bg-image-password').value = btn.bg_image_password || '';
     document.getElementById('pad-edit-bg-image-interval').value = (btn.bg_image_interval_ms !== undefined) ? btn.bg_image_interval_ms : 0;
-    document.getElementById('pad-edit-bg-image-scale').value = btn.bg_image_letterbox ? 'letterbox' : 'cover';
+    document.getElementById('pad-edit-bg-image-scale').value = btn.bg_image_fit || 'fill-center';
     document.getElementById('pad-edit-image-section').open = !!btn.bg_image_path;
     document.getElementById('pad-edit-camera-feed-section').open = !!btn.bg_image_url;
     document.getElementById('pad-edit-background-image-section').open =
-        !!(btn.bg_image_path || btn.bg_image_url || btn.bg_image_letterbox);
+        !!(btn.bg_image_path || btn.bg_image_url || btn.bg_image_fit);
 
     // Icon
     padSetBindableColor('pad-edit-icon-color', btn.icon_color || padGetEffectiveDefault('icon_color') || 'auto');
@@ -209,6 +210,7 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-content-layout').value = btn.widget_position || 'right';
     document.getElementById('pad-edit-rocker-group-layout').value = btn.rocker_group_layout || 'center';
     document.getElementById('pad-edit-group-width').value = btn.group_size_pct || 0;
+    document.getElementById('pad-edit-overlay-backdrop').checked = btn.overlay_backdrop === true;
     padFillLoad(btn);
     padWidgetTypeChanged();
 
@@ -223,8 +225,7 @@ function padDialogOpen(col, row) {
     // Enable paste button if clipboard has content
     document.getElementById('pad-edit-paste').disabled = !padState.btnClipboard;
 
-    // Refresh binding length warnings for the loaded values
-    if (typeof padScanMaxlenHints === 'function') padScanMaxlenHints();
+    if (typeof padRefreshMaxlenWarning === 'function') padRefreshMaxlenWarning();
 
     // Mount + prefetch the in-context live-value preview affordances.
     if (typeof padPvOnOpen === 'function') padPvOnOpen();
@@ -251,6 +252,12 @@ function padDialogShowValidationError(message) {
     const alert = document.getElementById('pad-edit-validation-error');
     if (!alert) return;
     padDialogRefreshFieldErrors(message);
+    alert.dataset.kind = 'error';
+    alert.setAttribute('role', 'alert');
+    document.getElementById('pad-edit-validation-help').hidden = true;
+    const dismiss = document.getElementById('pad-edit-validation-dismiss');
+    dismiss.setAttribute('aria-label', 'Dismiss error');
+    dismiss.title = 'Dismiss error';
     document.getElementById('pad-edit-validation-message').textContent = message.message || message;
     alert.style.display = '';
     ['pad-action-controls', 'pad-workspace-mobile-save', 'pad-workspace-back'].forEach(function(id) {
@@ -274,14 +281,28 @@ function padDialogFocusValidationError(error) {
 
 function padDialogDismissValidationError() {
     const alert = document.getElementById('pad-edit-validation-error');
-    if (alert) alert.style.display = 'none';
+    if (alert && alert.dataset.kind === 'warning') {
+        padDismissMaxlenWarning();
+        return;
+    }
+    if (alert) {
+        alert.style.display = 'none';
+        delete alert.dataset.kind;
+    }
     ['pad-action-controls', 'pad-workspace-mobile-save', 'pad-workspace-back'].forEach(function(id) {
         const control = document.getElementById(id);
         if (control) control.inert = false;
     });
+    if (typeof padRefreshMaxlenWarning === 'function') padRefreshMaxlenWarning();
 }
 
 function padDialogClearValidationError() {
+    const alert = document.getElementById('pad-edit-validation-error');
+    if (alert && alert.dataset.kind === 'warning') {
+        padDialogRefreshFieldErrors();
+        if (typeof padRefreshMaxlenWarning === 'function') padRefreshMaxlenWarning();
+        return;
+    }
     const message = document.getElementById('pad-edit-validation-message');
     if (message) message.textContent = '';
     padDialogRefreshFieldErrors();
@@ -306,6 +327,7 @@ function padDialogBuildButton() {
     if (lt) btn.label_top = lt;
     if (lc) btn.label_center = lc;
     if (lb) btn.label_bottom = lb;
+    if (document.getElementById('pad-edit-reserve-label-slots').checked) btn.reserve_label_slots = true;
 
     const lts = document.getElementById('pad-edit-label-top-style').value.trim();
     const lcs = document.getElementById('pad-edit-label-center-style').value.trim();
@@ -340,16 +362,24 @@ function padDialogBuildButton() {
     // Tap actions (array)
     const selectedType = document.getElementById('pad-edit-widget-type').value;
     const widgetEditor = padWidgetEditor(selectedType);
-    const wtype = widgetEditor && widgetEditor.supported === false ? '' : selectedType;
+    if (widgetEditor && widgetEditor.supported === false) {
+        throw Object.assign(new Error('This widget is not supported on this device. Choose a supported widget or remove it before editing this button.'), {
+            fieldIds: ['pad-edit-widget-type']
+        });
+    }
+    const wtype = selectedType;
     if (wtype) {
         if ((wtype === 'rocker' || wtype === 'numericrocker') &&
             document.getElementById('pad-edit-rocker-group-layout').value === 'beside')
             btn.rocker_group_layout = 'beside';
         const position = document.getElementById('pad-edit-content-layout').value;
         if (position !== 'right') btn.widget_position = position;
+        if (document.getElementById('pad-edit-overlay-backdrop').checked) btn.overlay_backdrop = true;
         const size = Number(document.getElementById('pad-edit-group-width').value);
-        if (!Number.isInteger(size) || (size !== 0 && (size < 10 || size > 90)))
+        if (!Number.isInteger(size) || (size !== 0 && (size < 10 || size > 90))) {
+            document.getElementById('pad-edit-group-width-group').style.display = '';
             throw Object.assign(new Error('Labels and icon size must be 0 (auto) or a whole number from 10 to 90.'), { fieldIds: ['pad-edit-group-width'] });
+        }
         if (size) btn.group_size_pct = size;
     }
     padFillBuild(btn, wtype);
@@ -374,7 +404,8 @@ function padDialogBuildButton() {
     const localImagePath = document.getElementById('pad-edit-bg-image-path').value;
     if (localImageBinding) btn.bg_image_path = localImageBinding;
     else if (localImagePath) btn.bg_image_path = localImagePath;
-    if (document.getElementById('pad-edit-bg-image-scale').value === 'letterbox') btn.bg_image_letterbox = true;
+    const imageFit = document.getElementById('pad-edit-bg-image-scale').value;
+    if (imageFit && imageFit !== 'fill-center') btn.bg_image_fit = imageFit;
     if (imgUrl) {
         btn.bg_image_url = imgUrl;
         const imgUser = document.getElementById('pad-edit-bg-image-user').value.trim();
@@ -486,7 +517,7 @@ function padDialogClear() {
     if (typeof padWorkspaceClearButton === 'function') padWorkspaceClearButton(col, row);
     padMarkDirty();
     padWorkspaceReturn();
-    padRenderGrid();
+    padRenderGrid({}); // Reconcile positions without rebuilding unchanged previews.
 }
 
 // --- Live binding preview (in-context) -------------------------------------

@@ -252,7 +252,7 @@ assert.deepStrictEqual({ ...pickerContext.padFillBackground('none', '#123456', 1
 const pickerNodes = {};
 for (const id of ['cp-input', 'cp-preview', 'cp-apply', 'cp-error']) {
     pickerNodes['#' + id] = { value: '#FFFFFF', style: {},
-        classList: { add() {}, remove() {}, toggle() {} } };
+        focus() { this.focused = true; }, classList: { add() {}, remove() {}, toggle() {} } };
 }
 pickerContext.document.createElement = () => ({
     style: {}, dataset: {}, classList: { add() {} }, setAttribute() {},
@@ -283,6 +283,37 @@ pickerContext.padColorPopoverSubmit(pickerNodes['#cp-input'].value);
 assert.strictEqual(plainTarget.value, '#2196F3');
 assert.strictEqual(plainApplyEvents, 1);
 assert.strictEqual(pickerContext._cpPopover.pop.style.display, 'none');
+
+pickerContext._cpPopover = plainDraft();
+pickerContext.padColorSwatchButton('#FF9800').click();
+pickerContext.padColorPopoverDismiss();
+assert.strictEqual(plainTarget.value, '#FF9800', 'Outside dismissal applies a valid selection');
+assert.strictEqual(plainApplyEvents, 2);
+assert.strictEqual(pickerContext._cpPopover.pop.style.display, 'none');
+
+pickerContext._cpPopover = plainDraft();
+pickerContext.padColorPopoverDismiss();
+assert.strictEqual(plainApplyEvents, 2, 'An unchanged picker does not modify its target');
+
+pickerContext._cpPopover = plainDraft();
+pickerNodes['#cp-input'].value = 'invalid';
+pickerContext._cpPopover.edited = true;
+pickerContext.padColorPopoverDismiss();
+assert.strictEqual(plainTarget.value, '#FF9800');
+assert.strictEqual(pickerContext._cpPopover.pop.style.display, '');
+assert.strictEqual(pickerNodes['#cp-input'].focused, true);
+
+pickerNodes['#cp-gen-source'] = { value: '', focus() { this.focused = true; } };
+pickerContext._cpPopover = plainDraft();
+pickerContext._cpPopover.edited = true;
+pickerContext._cpPopover.generatorInvalid = true;
+pickerNodes['#cp-input'].value = '#FFFFFF';
+pickerContext.padColorPopoverDismiss();
+assert.strictEqual(plainTarget.value, '#FF9800', 'An incomplete generator must not apply its previous value');
+assert.strictEqual(pickerContext._cpPopover.pop.style.display, '');
+assert.strictEqual(pickerNodes['#cp-gen-source'].focused, true);
+pickerContext.padColorPopoverClose();
+assert.strictEqual(plainTarget.value, '#FF9800', 'Cancel discards an incomplete edit');
 
 const defaultsFixture = JSON.parse(fs.readFileSync('tools/mock-data/pad-editor.json', 'utf8'));
 const defaultInputs = new Map();
@@ -418,6 +449,13 @@ assert.strictEqual(defaultInputs.get('pad-def-icon-position').value, 'above');
         'widget_option_selected_bg_color', 'widget_option_bg_color', 'widget_option_background_color'])
         assert.strictEqual(result[key], undefined);
     assert.strictEqual(result.widget_option_inset, 4);
+    assert.strictEqual(result.widget_option_height_pct, 100);
+    inputs.get('pad-edit-option-height').value = '40';
+    const heightResult = {};
+    selectorContext.padWidgetEditorBuild(heightResult, editor);
+    assert.strictEqual(heightResult.widget_option_height_pct, 40);
+    inputs.get('pad-edit-option-height').value = '0';
+    assert.throws(() => selectorContext.padWidgetEditorBuild({}, editor), /Selector height/);
     selectorContext.padWidgetEditorsLoad({ widget_type: 'option_selector', ...result });
     assert.strictEqual(inputs.get('pad-edit-option-selected-fg').value, '');
     assert.strictEqual(inputs.get('pad-edit-option-1-bg_color').swatch.style.background, '#111111');

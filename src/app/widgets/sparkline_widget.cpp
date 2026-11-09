@@ -59,12 +59,13 @@ struct SparklineConfig {
 #endif
     uint32_t window_secs;          // Time window in seconds (e.g. 300 = 5 min)
     uint16_t slot_count;           // Number of sample slots (default 60)
-    uint8_t  line_width;           // Line thickness in pixels (default 2)
-    uint8_t  fill_opacity;         // Shared percentage, 0 disables area fills
+    uint8_t  line_width[3];
+    uint8_t  fill_opacity[3];
+    uint8_t  height_pct;
     uint8_t  line_offset;          // Per-line vertical separation in px (0 = off; lines fanned symmetrically)
     uint8_t  marker_size_min;      // Min marker dot size (0 = off, default 5)
     uint8_t  marker_size_max;      // Max marker dot size (0 = off, default 5)
-    uint8_t  current_dot_size;     // Current-value dot size at right edge (0 = off)
+    uint8_t  current_dot_size[3];
     uint8_t  ref_line_pattern[MAX_REF_LINES]; // REF_LINE_SOLID/DOTTED/DASHED
     bool     unified_autoscale;    // true = shared auto min/max across all lines
     bool     ref_in_view;          // true = expand auto-scale to include ref lines
@@ -130,7 +131,7 @@ struct SparklineState {
     float*               scratch_vals;                 // Reusable render values
     float*               scratch_smooth;               // Reusable smoothing copy
     uint8_t  line_count;             // 1–3 (auto-detected from bindings)
-    lv_opa_t fill_opa;
+    lv_opa_t fill_opa[MAX_SPARKLINE_LINES];
 #if HAS_DISPLAY
     data_stream_handle_t ds_handles[MAX_SPARKLINE_LINES]; // Data stream handles
     uint32_t cached_revs[MAX_SPARKLINE_LINES]; // Change-detection: last drawn stream revision
@@ -152,19 +153,24 @@ struct SparklineState {
 static_assert(sizeof(SparklineState) <= WIDGET_STATE_MAX_BYTES,
               "SparklineState exceeds WIDGET_STATE_MAX_BYTES");
 
+static bool sparkline_has_fill(const SparklineState* st) {
+    for (uint8_t i = 0; i < st->line_count; ++i)
+        if (st->fill_opa[i]) return true;
+    return false;
+}
+
 #if HAS_DISPLAY
 static void sparkline_draw_fill_event(lv_event_t* event) {
     auto* st = static_cast<SparklineState*>(lv_event_get_user_data(event));
-    if (!st->fill_opa) return;
     lv_area_t area;
     lv_obj_get_coords(static_cast<lv_obj_t*>(lv_event_get_target(event)), &area);
     lv_layer_t* layer = lv_event_get_layer(event);
     lv_draw_rect_dsc_t descriptor;
     lv_draw_rect_dsc_init(&descriptor);
-    descriptor.bg_opa = st->fill_opa;
     // All series fills precede all lines, with the primary series on top.
     for (int8_t line = st->line_count - 1; line >= 0; --line) {
-        if (!st->lines[line]) continue;
+        if (!st->fill_opa[line] || !st->lines[line]) continue;
+        descriptor.bg_opa = st->fill_opa[line];
         const auto& context = st->draw_context[line];
         if (!context.points) continue;
         lv_area_t line_area;
@@ -242,14 +248,24 @@ static void sparkline_parse(const JsonObject& btn, uint8_t* data) {
     uint32_t sc = btn["widget_sparkline_slots"] | (uint32_t)60;
     cfg->slot_count = (sc < 2) ? 2 : (sc > SPARKLINE_SLOT_COUNT_MAX) ? SPARKLINE_SLOT_COUNT_MAX : (uint16_t)sc;
 
-    uint8_t lw = btn["widget_sparkline_line_width"] | (uint8_t)2;
-    cfg->line_width = (lw < 1) ? 1 : lw;
-    if (!btn["widget_sparkline_fill_opacity"].isNull()) {
-        if (btn["widget_sparkline_fill_opacity"].is<unsigned>() &&
-            btn["widget_sparkline_fill_opacity"].as<unsigned>() <= 100)
-            cfg->fill_opacity = btn["widget_sparkline_fill_opacity"].as<unsigned>();
-        else
-            LOGW(TAG, "Invalid fill opacity; using 0 (expected a whole percentage from 0 to 100)");
+    auto parse_number = [](JsonVariant value, const char* name, uint8_t fallback, unsigned min, unsigned max) -> uint8_t {
+        if (value.isNull()) return fallback;
+        if (value.is<unsigned>() && value.as<unsigned>() >= min && value.as<unsigned>() <= max)
+            return (uint8_t)value.as<unsigned>();
+        LOGW(TAG, "Invalid %s; using %u", name, (unsigned)fallback);
+        return fallback;
+    };
+    const uint8_t width = parse_number(btn["widget_sparkline_line_width"], "line width", 2, 1, 10);
+    const uint8_t fill = parse_number(btn["widget_sparkline_fill_opacity"], "fill opacity", 0, 0, 100);
+    const uint8_t dot = parse_number(btn["widget_sparkline_current_dot"], "current dot", 0, 0, 20);
+    cfg->height_pct = parse_number(btn["widget_sparkline_height_pct"], "chart height", 100, 10, 100);
+    JsonVariant widths[] = {btn["widget_sparkline_line_width_1"], btn["widget_sparkline_line_width_2"], btn["widget_sparkline_line_width_3"]};
+    JsonVariant fills[] = {btn["widget_sparkline_fill_opacity_1"], btn["widget_sparkline_fill_opacity_2"], btn["widget_sparkline_fill_opacity_3"]};
+    JsonVariant dots[] = {btn["widget_sparkline_current_dot_1"], btn["widget_sparkline_current_dot_2"], btn["widget_sparkline_current_dot_3"]};
+    for (uint8_t i = 0; i < MAX_SPARKLINE_LINES; ++i) {
+        cfg->line_width[i] = parse_number(widths[i], "line width override", width, 1, 10);
+        cfg->fill_opacity[i] = parse_number(fills[i], "fill opacity override", fill, 0, 100);
+        cfg->current_dot_size[i] = parse_number(dots[i], "current dot override", dot, 0, 20);
     }
 
     // Per-line vertical separation (0 = off; lines drawn exactly on value).
@@ -312,9 +328,6 @@ static void sparkline_parse(const JsonObject& btn, uint8_t* data) {
     parse_fmt(btn["widget_sparkline_min_fmt"] | "", cfg->min_fmt, sizeof(cfg->min_fmt));
     parse_fmt(btn["widget_sparkline_max_fmt"] | "", cfg->max_fmt, sizeof(cfg->max_fmt));
 
-    // Current-value dot
-    cfg->current_dot_size = btn["widget_sparkline_current_dot"] | (uint8_t)0;
-
     // Reference lines (up to 3)
     for (int i = 0; i < MAX_REF_LINES; i++) {
         char key_y[40], key_c[40], key_p[40];
@@ -365,10 +378,15 @@ static SparklineGeometry sparkline_geometry(const SparklineConfig* cfg, uint8_t 
     content_w = content_w < 2 ? 2 : content_w;
     content_h = content_h < 2 ? 2 : content_h;
     SparklineGeometry geometry{};
-    const int16_t dot_margin = cfg->current_dot_size / 2;
+    int16_t dot_margin = 0;
+    for (uint8_t i = 0; i < line_count; ++i)
+        if (cfg->current_dot_size[i] / 2 > dot_margin) dot_margin = cfg->current_dot_size[i] / 2;
     const int16_t vertical_margin = marker_margin > dot_margin ? marker_margin : dot_margin;
-    geometry.top = button_layout_min(vertical_margin, (content_h - 2) / 2);
-    geometry.height = content_h - 2 * geometry.top;
+    const int16_t margin = button_layout_min(vertical_margin, (content_h - 2) / 2);
+    geometry.height = button_layout_min(content_h - 2 * margin,
+                                       button_layout_nonnegative((content_h - 2 * margin) * cfg->height_pct / 100));
+    if (geometry.height < 2) geometry.height = 2;
+    geometry.top = (content_h - geometry.height) / 2;
     const char* labels[] = {cfg->current_label, cfg->current_label_2, cfg->current_label_3};
     for (uint8_t i = 0; i < line_count; ++i) {
         if (labels[i][0]) {
@@ -412,12 +430,12 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     auto* cfg = reinterpret_cast<const SparklineConfig*>(wcfg->data);
     auto* st = reinterpret_cast<SparklineState*>(state->data);
     memset(st, 0, sizeof(SparklineState));
-    st->fill_opa = (uint16_t)cfg->fill_opacity * LV_OPA_COVER / 100;
-
     // Determine line count from binding presence (same pattern as gauge rings)
     st->line_count = 1;
     if (wcfg->data_binding[1][0]) st->line_count = 2;
     if (wcfg->data_binding[2][0]) st->line_count = 3;
+    for (uint8_t i = 0; i < st->line_count; ++i)
+        st->fill_opa[i] = (uint16_t)cfg->fill_opacity[i] * LV_OPA_COVER / 100;
 
 #if HAS_DISPLAY
     // Look up data stream handles for each line
@@ -496,7 +514,7 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     lv_obj_set_scrollbar_mode(chart_area, LV_SCROLLBAR_MODE_OFF);
     lv_obj_set_scrollable(chart_area, false);
     lv_obj_set_clickable(chart_area, false);
-    if (st->fill_opa)
+    if (sparkline_has_fill(st))
         lv_obj_add_event_cb(chart_area, sparkline_draw_fill_event, LV_EVENT_DRAW_MAIN, st);
 
     // Create line objects — extra lines first (drawn behind main line)
@@ -505,7 +523,7 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     for (int8_t i = (int8_t)(st->line_count - 1); i >= 0; i--) {
         lv_obj_t* line = lv_line_create(chart_area);
         lv_obj_set_style_line_color(line, lv_color_make((line_colors[i] >> 16) & 0xFF, (line_colors[i] >> 8) & 0xFF, line_colors[i] & 0xFF), 0);
-        lv_obj_set_style_line_width(line, cfg->line_width, 0);
+        lv_obj_set_style_line_width(line, cfg->line_width[i], 0);
         lv_obj_set_style_line_rounded(line, true, 0);
         lv_obj_set_style_line_opa(line, LV_OPA_TRANSP, 0);
         lv_obj_set_scrollable(line, false);
@@ -569,10 +587,10 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     create_marker(cfg->marker_size_min, &st->dot_min, &st->lbl_min);
 
     // Current-value dots (one per line, tile children, rightmost point)
-    if (cfg->current_dot_size > 0) {
-        for (uint8_t i = 0; i < st->line_count; i++) {
+    for (uint8_t i = 0; i < st->line_count; i++) {
+        if (cfg->current_dot_size[i] > 0) {
             lv_obj_t* cd = lv_obj_create(tile);
-            lv_obj_set_size(cd, cfg->current_dot_size, cfg->current_dot_size);
+            lv_obj_set_size(cd, cfg->current_dot_size[i], cfg->current_dot_size[i]);
             lv_obj_set_style_radius(cd, LV_RADIUS_CIRCLE, 0);
             lv_obj_set_style_bg_opa(cd, LV_OPA_COVER, 0);
             lv_obj_set_style_border_width(cd, 0, 0);
@@ -870,7 +888,7 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
         }
         if (i == 0) { main_snap = snap; main_snap_valid = true; }
     }
-    if (st->fill_opa && fill_changed) lv_obj_invalidate(chart_area);
+    if (sparkline_has_fill(st) && fill_changed) lv_obj_invalidate(chart_area);
 
     // ---- Reference line positioning ----
     // Compute effective Y range once (shared by ref lines, min/max, current dot)
@@ -935,7 +953,7 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
         if (!st->dot_current[ci]) continue;
         const SmoothLineInfo& si = smooth_info[ci];
         if (si.valid_count > 0 && isfinite(si.smoothed_last)) {
-            int16_t cr = cfg->current_dot_size / 2;
+            int16_t cr = cfg->current_dot_size[ci] / 2;
 
             // Color: always use line color (threshold expressions are resolved in line_colors_resolved)
             lv_color_t cd_clr;
@@ -1320,10 +1338,22 @@ static void sparkline_describe(JsonObject& out) {
     add("widget_sparkline_min_label_color","color",""); add("widget_sparkline_max_label_color","color","");
     add("widget_sparkline_label_width","number","axis label strip px"); add("widget_sparkline_unified_scale","bool","share scale across lines"); add("widget_sparkline_ref_in_view","bool","keep min/max in view");
     add("widget_sparkline_line_color","color","line 1"); add("widget_sparkline_line_color_2","color","line 2"); add("widget_sparkline_line_color_3","color","line 3");
-    add("widget_sparkline_line_width","number","px"); add("widget_sparkline_line_offset","number","px"); add("widget_sparkline_smooth","number","smoothing amount, 0=off");
-    addrange("widget_sparkline_fill_opacity","area fill percentage for all series; 0 disables, each fill follows its line color and preserves gaps",0,100);
+    addrange("widget_sparkline_line_width","shared line width in px",1,10); add("widget_sparkline_line_offset","number","px"); add("widget_sparkline_smooth","number","smoothing amount, 0=off");
+    addrange("widget_sparkline_fill_opacity","shared area fill percentage; 0 disables",0,100);
     f[f.size() - 1]["default"] = 0;
-    add("widget_sparkline_current_dot","number","dot size px at latest sample, 0=off"); addmax("widget_sparkline_current_label","string","latest-value caption",63);
+    addrange("widget_sparkline_current_dot","shared current dot size in px; 0 disables",0,20);
+    addrange("widget_sparkline_height_pct","centered chart height percentage",10,100);
+    f[f.size() - 1]["default"] = 100;
+    addrange("widget_sparkline_fill_opacity_1","line 1 fill override; omit to inherit",0,100);
+    addrange("widget_sparkline_fill_opacity_2","line 2 fill override; omit to inherit",0,100);
+    addrange("widget_sparkline_fill_opacity_3","line 3 fill override; omit to inherit",0,100);
+    addrange("widget_sparkline_line_width_1","line 1 width override; omit to inherit",1,10);
+    addrange("widget_sparkline_line_width_2","line 2 width override; omit to inherit",1,10);
+    addrange("widget_sparkline_line_width_3","line 3 width override; omit to inherit",1,10);
+    addrange("widget_sparkline_current_dot_1","line 1 current dot override; omit to inherit",0,20);
+    addrange("widget_sparkline_current_dot_2","line 2 current dot override; omit to inherit",0,20);
+    addrange("widget_sparkline_current_dot_3","line 3 current dot override; omit to inherit",0,20);
+    addmax("widget_sparkline_current_label","string","latest-value caption",63);
     addmax("widget_sparkline_current_label_2","string","line 2 caption",63); addmax("widget_sparkline_current_label_3","string","line 3 caption",63);
     add("widget_sparkline_marker_size_min","number",""); add("widget_sparkline_marker_size_max","number","");
 #if HAS_HA_HISTORY

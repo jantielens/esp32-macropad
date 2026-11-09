@@ -1301,6 +1301,13 @@ not every authentication failure, redirect, or early error response is instrumen
 | `POST` | `/api/pad?page=N` | Validates and saves one complete pad object. `buttons` is Main; optional `overlay_buttons` is Overlay. Both share grid settings and `max_pad_buttons`. |
 | `DELETE` | `/api/pad?page=N` | Deletes the pad configuration. |
 
+Button backgrounds use `bg_image_fit`: `fill-center` (default when omitted),
+`fill-top`, `fill-bottom`, `fill-left`, `fill-right`, or `letterbox`.
+Fill preserves proportions and crops at the selected position; Letterbox
+preserves the entire image with button-color bars. This setting applies to
+both local images and remote feeds. It replaces `bg_image_letterbox`; the old
+boolean is not read or migrated.
+
 Button positions are local to their layer. Grid coordinates may overlap between
 layers, but button rectangles may not overlap within one layer. The shared
 validator rejects malformed collections and combined-capacity overflow before
@@ -3408,9 +3415,10 @@ copy pad configurations, or access persistent storage from the display task.
 Pad JSON can include a local `pad_actions` array containing up to three flat
 `ButtonAction` objects. The portal exposes these below Pad Bindings as
 **Full-Screen Tap Actions**, using the shared action editor. A nonempty list
-creates a transparent full-pad input layer: normal taps dispatch the ordered
-list, swipes retain their configured behavior, and long-presses do not dispatch
-the list. The field is deliberately excluded from `template_pad` inheritance.
+creates a transparent full-pad input layer above Main and Overlay buttons:
+normal taps dispatch the ordered list instead of button or widget actions,
+swipes retain their configured behavior, and long-presses do not dispatch the
+list. The field is deliberately excluded from `template_pad` inheritance.
 
 The save API preserves an omitted `pad_actions` field. An empty array explicitly
 clears the list. Pad validation rejects non-array values, more than three

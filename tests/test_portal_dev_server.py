@@ -694,6 +694,20 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(self.request("/api/pad?page=00")[1], self.request("/api/pad?page=0")[1])
         for query in ("", "?page=-1", "?page=16", "?page=wrong"):
             self.assertEqual(self.request("/api/pad" + query)[0], 400)
+        info = self.request("/api/info")[1]
+        self.assertEqual((info["max_grid_cols"], info["max_grid_rows"]), (10, 10))
+        pad = {"cols": 10, "rows": 10, "buttons": [{"col": 9, "row": 9}]}
+        self.assertEqual(self.request("/api/pad?page=0", "POST", pad)[0], 200)
+        self.assertEqual(self.request("/api/pad/button_sizes?cols=10&rows=10")[0], 200)
+        pad["cols"] = 11
+        self.assertEqual(self.request("/api/pad?page=0", "POST", pad)[0], 400)
+        self.assertEqual(self.request("/api/pad/button_sizes?cols=11&rows=10")[0], 400)
+        pad = {"cols": 10, "rows": 10,
+               "buttons": [{"col": index % 10, "row": index // 10} for index in range(64)],
+               "overlay_buttons": [{"col": 0, "row": 0}]}
+        self.assertEqual(self.request("/api/pad?page=0", "POST", pad)[0], 400)
+        pad["overlay_buttons"] = []
+        self.assertEqual(self.request("/api/pad?page=0", "POST", pad)[0], 200)
 
     def test_screensaver_panel_policy_and_save(self):
         for profile, keep_panel in (("esp32-p4-lcd4b", False), ("jc3248w535", True)):

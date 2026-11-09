@@ -15,7 +15,16 @@ enum class ButtonWidgetPosition : uint8_t {
     Above,
     Below,
     Left,
-    Right
+    Right,
+    OverlayTopLeft,
+    OverlayTopCenter,
+    OverlayTopRight,
+    OverlayCenterLeft,
+    OverlayCenter,
+    OverlayCenterRight,
+    OverlayBottomLeft,
+    OverlayBottomCenter,
+    OverlayBottomRight
 };
 
 inline bool button_position_parse(const char* name, uint8_t* position) {
@@ -27,6 +36,25 @@ inline bool button_position_parse(const char* name, uint8_t* position) {
         }
     }
     return false;
+}
+
+inline bool button_widget_position_parse(const char* name, uint8_t* position) {
+    if (button_position_parse(name, position)) return true;
+    const char* names[] = {"overlay-top-left", "overlay-top-center", "overlay-top-right",
+                           "overlay-center-left", "overlay-center", "overlay-center-right",
+                           "overlay-bottom-left", "overlay-bottom-center", "overlay-bottom-right"};
+    for (uint8_t index = 0; index < 9; ++index) {
+        if (strcmp(name, names[index]) == 0) {
+            *position = static_cast<uint8_t>(ButtonWidgetPosition::OverlayTopLeft) + index;
+            return true;
+        }
+    }
+    return false;
+}
+
+inline bool button_widget_position_is_overlay(ButtonWidgetPosition position) {
+    return position >= ButtonWidgetPosition::OverlayTopLeft &&
+           position <= ButtonWidgetPosition::OverlayBottomRight;
 }
 
 struct ButtonContentRect {
@@ -53,10 +81,15 @@ struct ButtonContentLayoutInput {
     int32_t center_start;
     int32_t center_end;
     int32_t icon_label_gap;
+    bool reserve_label_slots;
+    int32_t label_optical_offset[3];
+    int32_t label_ink_top[3];
+    int32_t label_ink_bottom_inset[3];
 };
 
 struct ButtonContentLayout {
     ButtonContentRect labels[3];
+    int32_t label_origin_y[3];
     ButtonContentRect icon;
     ButtonContentRect widget;
 };
@@ -94,17 +127,65 @@ inline int32_t button_layout_icon_badge_size(int32_t width, int32_t height, int3
     return size + 2 * padding;
 }
 
+inline int32_t button_layout_ink_top(const ButtonContentLayoutInput& input, int index) {
+    return button_layout_min(button_layout_nonnegative(input.label_ink_top[index]),
+                             button_layout_nonnegative(input.label_height[index]));
+}
+
+inline int32_t button_layout_ink_bottom(const ButtonContentLayoutInput& input, int index) {
+    const int32_t height = button_layout_nonnegative(input.label_height[index]);
+    const int32_t bottom = height - button_layout_min(height,
+        button_layout_nonnegative(input.label_ink_bottom_inset[index]));
+    const int32_t top = button_layout_ink_top(input, index);
+    return bottom > top ? bottom : top;
+}
+
+inline int32_t button_layout_ink_height(const ButtonContentLayoutInput& input, int index) {
+    return button_layout_ink_bottom(input, index) - button_layout_ink_top(input, index);
+}
+
+inline int32_t button_layout_anchor_radius(const ButtonContentLayoutInput& input, int index) {
+    const int32_t center = button_layout_nonnegative(input.label_height[index]) / 2 -
+                           input.label_optical_offset[index];
+    const int32_t above = center - button_layout_ink_top(input, index);
+    const int32_t below = button_layout_ink_bottom(input, index) - center;
+    return button_layout_nonnegative(above > below ? above : below);
+}
+
+static constexpr int32_t BUTTON_LABEL_GAP = 2;
+
+inline int32_t button_layout_label_extent(const ButtonContentLayoutInput& input, const bool labels[3]) {
+    const int count = (labels[0] ? 1 : 0) + (labels[1] ? 1 : 0) + (labels[2] ? 1 : 0);
+    if (!count) return 0;
+    if (input.reserve_label_slots || count == 1) {
+        const int anchor = labels[1] ? 1 : (labels[0] ? 0 : 2);
+        const int32_t radius = button_layout_anchor_radius(input, anchor);
+        int32_t top = -radius;
+        int32_t bottom = radius;
+        if (anchor == 1 && labels[0]) top -= BUTTON_LABEL_GAP + button_layout_ink_height(input, 0);
+        if (anchor == 1 && labels[2]) bottom += BUTTON_LABEL_GAP + button_layout_ink_height(input, 2);
+        const int32_t above = button_layout_nonnegative(-top);
+        const int32_t below = button_layout_nonnegative(bottom);
+        return 2 * (above > below ? above : below);
+    }
+    int32_t extent = (count - 1) * BUTTON_LABEL_GAP;
+    for (int i = 0; i < 3; ++i)
+        if (labels[i]) extent += button_layout_ink_height(input, i);
+    return extent;
+}
+
 inline int32_t button_layout_group_extent(const ButtonContentLayoutInput& input, bool horizontal) {
     int32_t label_width = 0;
-    int32_t label_height = 0;
     bool has_label = false;
+    bool labels[3];
     for (int i = 0; i < 3; ++i) {
-        if (!input.has_label[i]) continue;
+        labels[i] = input.has_label[i] || input.reserve_label_slots;
+        if (!labels[i]) continue;
         has_label = true;
         const int32_t width = button_layout_nonnegative(input.label_width[i]);
         if (width > label_width) label_width = width;
-        label_height += button_layout_nonnegative(input.label_height[i]);
     }
+    const int32_t label_height = button_layout_label_extent(input, labels);
     if (!input.has_icon) return horizontal ? label_width : label_height;
     if (!has_label) return horizontal ? input.icon_width : input.icon_height;
     const bool side = input.icon_position == ButtonGroupIconPosition::Left ||
@@ -131,15 +212,24 @@ inline ButtonContentRect button_layout_fit_icon(ButtonContentRect area, int32_t 
             fitted_width, fitted_height};
 }
 
+inline void button_layout_place_label(const ButtonContentLayoutInput& input, int index,
+                                      ButtonContentRect area, int32_t origin,
+                                      ButtonContentLayout& output) {
+    const int32_t end = origin + button_layout_nonnegative(input.label_height[index]);
+    const int32_t area_end = area.y + area.height;
+    const int32_t top = button_layout_min(area_end, origin > area.y ? origin : area.y);
+    const int32_t bottom = button_layout_min(area_end, end > area.y ? end : area.y);
+    output.labels[index] = {area.x, top, area.width, button_layout_nonnegative(bottom - top)};
+    output.label_origin_y[index] = origin - top;
+}
+
 inline void button_layout_group(const ButtonContentLayoutInput& input,
                                 ButtonContentRect area, bool labels[3],
                                 ButtonContentLayout& output) {
-    int32_t requested = 0;
     int32_t requested_width = 0;
     int count = 0;
     for (int i = 0; i < 3; ++i) {
         if (!labels[i]) continue;
-        requested += button_layout_nonnegative(input.label_height[i]);
         if (input.label_width[i] > requested_width) requested_width = input.label_width[i];
         ++count;
     }
@@ -147,10 +237,11 @@ inline void button_layout_group(const ButtonContentLayoutInput& input,
     if (input.has_icon && count) {
         if (input.icon_position == ButtonGroupIconPosition::Above ||
                    input.icon_position == ButtonGroupIconPosition::Below) {
+            const int32_t label_extent = button_layout_label_extent(input, labels);
             const int32_t gap = button_layout_min(button_layout_nonnegative(input.icon_label_gap),
                                                    button_layout_nonnegative(area.height));
             const int32_t icon_height = button_layout_min(input.icon_height,
-                button_layout_nonnegative(area.height - gap - requested));
+                button_layout_nonnegative(area.height - gap - label_extent));
             const bool above = input.icon_position == ButtonGroupIconPosition::Above;
             output.icon = button_layout_fit_icon(
                 {area.x, above ? area.y : area.y + area.height - icon_height,
@@ -177,19 +268,32 @@ inline void button_layout_group(const ButtonContentLayoutInput& input,
         output.icon = button_layout_fit_icon(area, input.icon_width, input.icon_height);
     }
 
-    int32_t remaining_height = label_area.height;
-    int32_t remaining_requested = requested;
-    int32_t y = label_area.y + button_layout_nonnegative(label_area.height - requested) / 2;
-    for (int i = 0; i < 3; ++i) {
-        if (!labels[i]) continue;
-        const int32_t wanted = button_layout_nonnegative(input.label_height[i]);
-        const int32_t height = remaining_requested > remaining_height && remaining_requested > 0
-            ? remaining_height * wanted / remaining_requested
-            : button_layout_min(wanted, remaining_height);
-        output.labels[i] = {label_area.x, y, label_area.width, height};
-        y += height;
-        remaining_height -= height;
-        remaining_requested -= wanted;
+    if (input.reserve_label_slots || count == 1) {
+        const int anchor = labels[1] ? 1 : (labels[0] ? 0 : 2);
+        const int32_t height = button_layout_nonnegative(input.label_height[anchor]);
+        const int32_t offset = height <= label_area.height ? input.label_optical_offset[anchor] : 0;
+        const int32_t y = label_area.y + (label_area.height - height) / 2 + offset;
+        button_layout_place_label(input, anchor, label_area, y, output);
+        const int32_t center = y + height / 2 - input.label_optical_offset[anchor];
+        const int32_t radius = button_layout_anchor_radius(input, anchor);
+        if (anchor == 1 && labels[0]) {
+            const int32_t top_y = center - radius - BUTTON_LABEL_GAP -
+                                  button_layout_ink_bottom(input, 0);
+            button_layout_place_label(input, 0, label_area, top_y, output);
+        }
+        if (anchor == 1 && labels[2]) {
+            const int32_t bottom_y = center + radius + BUTTON_LABEL_GAP -
+                                     button_layout_ink_top(input, 2);
+            button_layout_place_label(input, 2, label_area, bottom_y, output);
+        }
+    } else if (count > 1) {
+        const int32_t extent = button_layout_label_extent(input, labels);
+        int32_t top = label_area.y + (label_area.height - extent) / 2;
+        for (int i = 0; i < 3; ++i) {
+            if (!labels[i]) continue;
+            button_layout_place_label(input, i, label_area, top - button_layout_ink_top(input, i), output);
+            top += button_layout_ink_height(input, i) + BUTTON_LABEL_GAP;
+        }
     }
 }
 
@@ -199,10 +303,24 @@ inline ButtonContentLayout button_content_layout(const ButtonContentLayoutInput&
     bounds.width = button_layout_nonnegative(bounds.width);
     bounds.height = button_layout_nonnegative(bounds.height);
     ButtonContentRect group = bounds;
-    bool labels[] = {input.has_label[0], input.has_label[1], input.has_label[2]};
+    bool labels[] = {input.has_label[0] || input.reserve_label_slots,
+                     input.has_label[1] || input.reserve_label_slots,
+                     input.has_label[2] || input.reserve_label_slots};
     const bool has_group = input.has_icon || labels[0] || labels[1] || labels[2];
 
-    if (input.has_widget && input.centered_group) {
+    if (input.has_widget && !input.centered_group && button_widget_position_is_overlay(input.widget_position)) {
+        output.widget = bounds;
+        if (has_group) {
+            group.width = button_layout_min(bounds.width, button_layout_nonnegative(button_layout_group_extent(input, true)));
+            group.height = button_layout_min(bounds.height, button_layout_nonnegative(button_layout_group_extent(input, false)));
+            const uint8_t anchor = static_cast<uint8_t>(input.widget_position) -
+                                   static_cast<uint8_t>(ButtonWidgetPosition::OverlayTopLeft);
+            group.x += (bounds.width - group.width) * (anchor % 3) / 2;
+            group.y += (bounds.height - group.height) * (anchor / 3) / 2;
+        } else {
+            group = {bounds.x, bounds.y, 0, 0};
+        }
+    } else if (input.has_widget && input.centered_group) {
         output.widget = bounds;
         if (has_group) {
             const int32_t span = input.center_horizontal ? bounds.width : bounds.height;

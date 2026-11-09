@@ -505,7 +505,7 @@ void handleGetButtonSizes(AsyncWebServerRequest *request) {
     int cols = request->getParam("cols")->value().toInt();
     int rows = request->getParam("rows")->value().toInt();
     if (cols < 1 || cols > MAX_GRID_COLS || rows < 1 || rows > MAX_GRID_ROWS) {
-        web_portal_send_json_error(request, 400, "cols/rows must be 1-8");
+        web_portal_send_json_error(request, 400, "cols/rows must be within device grid limits");
         return;
     }
 

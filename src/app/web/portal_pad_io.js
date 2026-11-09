@@ -275,8 +275,10 @@ async function padImportPad(evt) {
         const importedSources = padValidateImportedIconSources([json], json._icon_sources);
         if (json.buttons.length + (json.overlay_buttons || []).length > padMaxButtons())
             throw new Error('Combined Main and Overlay button limit exceeded (' + padMaxButtons() + ')');
-        if (json.cols < 1 || json.cols > 8 || json.rows < 1 || json.rows > 8) {
-            throw new Error('Invalid grid size (1-8 cols/rows)');
+        const maxCols = (deviceInfoCache && deviceInfoCache.max_grid_cols) || 8;
+        const maxRows = (deviceInfoCache && deviceInfoCache.max_grid_rows) || 8;
+        if (json.cols < 1 || json.cols > maxCols || json.rows < 1 || json.rows > maxRows) {
+            throw new Error('Invalid grid size (maximum ' + maxCols + ' columns and ' + maxRows + ' rows)');
         }
 
         // Load into editor
@@ -501,13 +503,20 @@ async function padDeletePage() {
 
     try {
         if (typeof padWorkspaceReset === 'function') padWorkspaceReset();
-        showMessage('Pad cleared (unsaved)', 'success');
         padState.rawJson = null;
         padState.selectedLayer = 'main';
+        padState.layerSelections = { main: null, overlay: null };
         padState.mainButtons = [];
         padState.overlayButtons = [];
+        padState.importedIconSources = {};
+        padState.importedIconSourceIds = {};
+        padState.importedPadConfigs = null;
+        padState.dragSource = null;
         padState.cols = 3;
         padState.rows = 2;
+        padTrackLoad({});
+        padState.trackValidationError = false;
+        padDialogClearValidationError();
         document.getElementById('pad-cols').value = padState.cols;
         document.getElementById('pad-rows').value = padState.rows;
         document.getElementById('pad-name').value = '';
@@ -519,15 +528,19 @@ async function padDeletePage() {
         padLoadLevelActions([]);
         padState.templatePad = -1;
         padState.templateButtons = [];
+        padPruneDraftIconSources();
         padPopulateTemplateDropdown(padState.page);
         document.getElementById('pad-page-bg-mode').value = 'inherit';
+        padPageBackgroundModeChanged();
         document.getElementById('pad-button-shadow').value = 'inherit';
+        if (padState.placingBlock) padExitPlacementMode();
         if (typeof padWorkspaceRefresh === 'function') padWorkspaceRefresh();
         padRenderGrid();
         padMarkDirty();
+        showMessage('Pad cleared (unsaved)', 'success');
     } catch (err) {
         console.error('padDeletePage error:', err);
-        showMessage('Delete failed: ' + err.message, 'error');
+        showMessage('Clear failed: ' + err.message, 'error');
     }
 }
 

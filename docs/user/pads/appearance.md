@@ -87,22 +87,39 @@ On e-paper, use a contrasting background if a pale tint is not visible.
 ### Arrange button content
 
 The top, center, and bottom labels form a group with the icon. For a button
-with a widget, **Widget position** places the widget above, below, left, or
-right of that group; right is the default. Rocker and Numeric Rocker instead
-center the group by default; see [Rocker layout](../widgets/rockers.md#arrange-labels-and-icon).
+with a widget, **Widget, labels and icon layout** places the widget above, below,
+left, or right of that group; right is the default. Choose an **Overlaid**
+position to place the group over the widget instead. The widget uses the full
+button content area, and the group sizes itself to its content. Adjust the
+position, colors, or existing offsets if the group obscures the widget.
+Enable **Overlay backdrop** to fade content behind the labels and icon using
+the button background color. It is off by default and can remain visible over
+images or patterns. Rocker
+and Numeric Rocker center the group by default; see
+[Rocker layout](../widgets/rockers.md#arrange-labels-and-icon).
 For other widgets and rockers placed beside the group, **Labels and icon size %** controls the group's share of
 the width for a side-by-side layout or the height for a vertical layout. Use
 0 for Auto, which measures the content and limits the group to half the
-available space, or 10-90 for a fixed percentage. Without a widget, the group
-uses the whole button.
+available space, or 10-90 for a fixed percentage. This setting does not affect
+overlaid groups. Without a widget, the group uses the whole button.
 
-Missing labels and icons use no space. A configured binding that resolves to
-empty retains its label space. Label styles, including per-label colors and
-offsets, still apply. UI offset and style
+By default, the configured labels form a compact, centered group. The layout
+uses representative font metrics to keep them close without moving them as
+values change. Actual characters and font styles can affect the visible
+spacing or overlap.
+
+Enable **Reserve space for empty labels** in the button's **Labels** controls
+to keep all three positions when a label is empty and keep the center label
+centered. Each slot reserves one font line; wrapped or multiline text can be
+clipped. Without this option, missing labels use no space. A configured binding
+that resolves to empty retains its
+label space. Auto group width can still change with the text; use **Labels and
+icon size %** for a fixed group width when a widget is beside the labels.
+Label styles, including per-label colors and offsets, still apply. UI offset and style
 offsets nudge the resulting content. Small buttons compress or clip content
 instead of changing layouts. Enlarge the button or reduce content and font
 sizes if necessary. The editor may warn about a likely fit problem, but its font
-measurements and grid preview are approximate; check the device.
+measurements are approximate and the grid is not a layout preview; check the device.
 
 Auto sizing follows resolved label text, even when the current label is shown
 with an ellipsis. If a widget region changes during a gesture, that gesture is

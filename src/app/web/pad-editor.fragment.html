@@ -186,8 +186,8 @@
             </div>
         </div>
         <div id="pad-edit-validation-error" class="pad-dialog-validation-error" role="alert" style="display:none;">
-            <span id="pad-edit-validation-message"></span>
-            <button type="button" class="pad-validation-dismiss" onclick="padDialogDismissValidationError()" aria-label="Dismiss error" title="Dismiss error"><span class="material-symbols-outlined" aria-hidden="true">close</span></button>
+            <span class="pad-validation-content"><span id="pad-edit-validation-message"></span><span id="pad-edit-validation-help" hidden> Use <a href="#" onclick="showBindingHelp(null, 'pad');return false;">named bindings</a> to shorten it.</span></span>
+            <button type="button" id="pad-edit-validation-dismiss" class="pad-validation-dismiss" onclick="padDialogDismissValidationError()" aria-label="Dismiss error" title="Dismiss error"><span class="material-symbols-outlined" aria-hidden="true">close</span></button>
         </div>
     </div>
 
@@ -211,19 +211,32 @@
                             <label for="pad-edit-rocker-group-layout">Labels and icon placement</label>
                             <select id="pad-edit-rocker-group-layout" onchange="padContentLayoutRefresh()">
                                 <option value="center">Between directional controls</option>
-                                <option value="beside">Beside widget</option>
+                                <option value="beside">Use widget layout</option>
                             </select>
                             <small>The touched zone determines the action, including on the centered group.</small>
                         </div>
                         <div class="form-group" id="pad-edit-content-layout-group">
-                            <label for="pad-edit-content-layout">Widget position</label>
+                            <label for="pad-edit-content-layout">Widget, labels and icon layout</label>
                             <select id="pad-edit-content-layout" onchange="padContentLayoutRefresh()">
                                 <option value="right">Right of labels and icon</option>
                                 <option value="below">Below labels and icon</option>
                                 <option value="above">Above labels and icon</option>
                                 <option value="left">Left of labels and icon</option>
+                                <option value="overlay-top-left">Overlaid &mdash; top left</option>
+                                <option value="overlay-top-center">Overlaid &mdash; top center</option>
+                                <option value="overlay-top-right">Overlaid &mdash; top right</option>
+                                <option value="overlay-center-left">Overlaid &mdash; center left</option>
+                                <option value="overlay-center">Overlaid &mdash; center</option>
+                                <option value="overlay-center-right">Overlaid &mdash; center right</option>
+                                <option value="overlay-bottom-left">Overlaid &mdash; bottom left</option>
+                                <option value="overlay-bottom-center">Overlaid &mdash; bottom center</option>
+                                <option value="overlay-bottom-right">Overlaid &mdash; bottom right</option>
                             </select>
-                            <small id="pad-edit-content-layout-help">The preview shows a placeholder, not the live widget.</small>
+                            <small id="pad-edit-content-layout-help">Overlaid positions place labels and icon over the widget.</small>
+                        </div>
+                        <div class="form-group" id="pad-edit-overlay-backdrop-group" style="display:none;">
+                            <label><input type="checkbox" id="pad-edit-overlay-backdrop"> Overlay backdrop</label>
+                            <small>Fade content behind the labels and icon using the button background color.</small>
                         </div>
                         <div class="form-group" id="pad-edit-group-width-group">
                             <label for="pad-edit-group-width">Labels and icon size %</label>
@@ -286,6 +299,10 @@
                                 <input type="text" id="pad-edit-label-bottom-style" class="label-style-input" maxlength="127" placeholder="font_size:24;align:left;mode:dot">
                                 <button type="button" class="binding-help-btn" onclick="showStyleHelp()" title="Style reference">?</button>
                             </div>
+                        </div>
+                        <div class="form-group">
+                            <label><input type="checkbox" id="pad-edit-reserve-label-slots"> Reserve space for empty labels</label>
+                            <small>Keep label positions fixed when a label is empty. Each slot reserves one line; longer text may be clipped.</small>
                         </div>
                     </div>
                 </details>
@@ -417,11 +434,16 @@
                 </details>
 
                 <div class="form-group" id="pad-edit-bg-image-scale-group" style="margin-top:8px;">
-                    <label for="pad-edit-bg-image-scale">Scale</label>
+                    <label for="pad-edit-bg-image-scale">Image fit</label>
                     <select id="pad-edit-bg-image-scale">
-                        <option value="cover">Cover (fill and crop)</option>
-                        <option value="letterbox">Letterbox (fit with button-color bars)</option>
+                        <option value="fill-center">Fill — center</option>
+                        <option value="fill-top">Fill — top</option>
+                        <option value="fill-bottom">Fill — bottom</option>
+                        <option value="fill-left">Fill — left</option>
+                        <option value="fill-right">Fill — right</option>
+                        <option value="letterbox">Letterbox — entire image</option>
                     </select>
+                    <small>Fill crops the image to fill the button. Letterbox shows the entire image with button-color bars. Neither stretches the image.</small>
                     <small>Applies to uploaded images and Camera Feed or Remote Image backgrounds. Camera Preview has its own scale setting.</small>
                 </div>
                     </div>

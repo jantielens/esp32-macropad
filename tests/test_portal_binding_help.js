@@ -763,7 +763,7 @@ delete context.testHelpSchemes;
     const makeSource = (builder, detail, name = 'Living room', index = 0, previous) =>
         context.padButtonBuilderSource(builder, makeCandidate(detail, name), index, previous);
     const makeDraft = (detail, options = {}) => ({
-        sources: [makeSource(null, detail)], options, previewState: detail.state
+        sources: [makeSource(null, detail)], options
     });
     const buildSession = (detail, builder) => {
         const session = { col: 2, row: 1, page: 0, draft: makeDraft(detail) };
@@ -784,8 +784,6 @@ delete context.testHelpSchemes;
         col: 2, row: 1, label_top: 'Living room',
         label_center: '[ha:sensor.living_room_temperature;;%.1f]', label_bottom: '\u00b0C'
     });
-    assert.strictEqual(valueBuilder.preview(valueSession.draft).label_center, '21.4');
-    assert.strictEqual(valueBuilder.preview(makeDraft({ ...temperature, state: 'unavailable' }, valueSession.draft.options)).label_center, '---');
     const textSession = buildSession({ ...temperature, state: 'Ready', unit: '' }, valueBuilder);
     assert.strictEqual(context.padButtonBuilderBuild(textSession).label_center, '[ha:sensor.living_room_temperature;;%s]');
     assert.ok(!textSession.fields.some(field => field.name === 'decimals'));
@@ -911,9 +909,6 @@ delete context.testHelpSchemes;
     assert.strictEqual(toggleBuilder.available(makeDraft(light)), false);
     assert.strictEqual(toggleWidgetBuilder.available(makeDraft(light), toggleRuntime), false);
     context.actionEditorCatalogEntry = catalogEntry;
-    const previewColors = ['on', 'off', 'unavailable'].map(previewState =>
-        toggleBuilder.preview({ ...lightSession.draft, previewState }).fg_color);
-    assert.strictEqual(new Set(previewColors).size, 3);
     const longLight = { ...light, entity_id: 'light.' + 'a'.repeat(41) };
     assert.ok(context.padButtonBuilderBuild(buildSession(longLight, toggleBuilder)));
     assert.throws(() => context.padButtonBuilderBuild(buildSession({ ...longLight, entity_id: longLight.entity_id + 'a' }, toggleBuilder)), /48/);
@@ -989,17 +984,14 @@ delete context.testHelpSchemes;
     ]) {
         assert.strictEqual(context.padButtonBuilderHistoryIcon(makeCandidate(detail)), expected);
     }
-    for (const [window, slots, caption] of [
-        ['3600', 12, 'Last 1 hour.'], ['18000', 60, 'Last 5 hours.'], ['21600', 72, 'Last 6 hours.'],
-        ['86400', 288, 'Last 24 hours.'], ['604800', 1024, 'Last 7 days.'],
-        ['2592000', 1024, 'Last 30 days.']
+    for (const [window, slots] of [
+        ['3600', 12], ['18000', 60], ['21600', 72],
+        ['86400', 288], ['604800', 1024], ['2592000', 1024]
     ]) {
         historySession.draft.options.window = window;
         const button = context.padButtonBuilderBuild(historySession);
         assert.strictEqual(button.widget_sparkline_window, Number(window));
         assert.strictEqual(button.widget_sparkline_slots, slots);
-        assert.ok(historyBuilder.previewNote(historySession.draft).startsWith(caption));
-        assert.match(historyBuilder.previewNote(historySession.draft), /Illustrative trend, not actual history/);
     }
     const unknownUnitHistory = buildSession({ ...temperature, unit: undefined }, historyBuilder);
     assert.strictEqual(context.padButtonBuilderBuild(unknownUnitHistory).widget_sparkline_unified_scale,
@@ -1025,7 +1017,26 @@ delete context.testHelpSchemes;
     assert.strictEqual(multi.widget_sparkline_line_color_2, '#2196F3');
     assert.strictEqual(multi.widget_sparkline_ha_entity_2, humidity.entity_id);
     assert.strictEqual(multi.widget_sparkline_ha_stat_2, undefined);
-    assert.match(historyBuilder.previewNote(historySession.draft), /60 seconds \(300 points per line\)/);
+    assert.match(historyBuilder.samplingNote(historySession.draft), /60 seconds \(300 points per line\)/);
+    assert.strictEqual(iconHistoryBuilder.samplingNote(historySession.draft), historyBuilder.samplingNote(historySession.draft));
+    const builderStatus = { '[data-bb-validation]': {}, '[data-bb-create]': {}, '[data-bb-sampling]': {} };
+    historySession.dialog = { querySelector: selector => builderStatus[selector] };
+    context.testHistorySession = historySession;
+    vm.runInContext('padButtonBuilderSession = testHistorySession', context);
+    context.padButtonBuilderUpdateValidation();
+    assert.strictEqual(builderStatus['[data-bb-create]'].disabled, false);
+    assert.match(builderStatus['[data-bb-sampling]'].textContent, /60 seconds \(300 points per line\)/);
+    historySession.draft.options.interval = '';
+    context.padButtonBuilderUpdateValidation();
+    assert.strictEqual(builderStatus['[data-bb-create]'].disabled, true);
+    assert.match(builderStatus['[data-bb-validation]'].textContent, /sample interval/);
+    assert.strictEqual(builderStatus['[data-bb-sampling]'].hidden, true);
+    historySession.draft.options.interval = 300;
+    context.padButtonBuilderUpdateValidation();
+    assert.strictEqual(builderStatus['[data-bb-create]'].disabled, false);
+    assert.match(builderStatus['[data-bb-sampling]'].textContent, /300 seconds \(60 points per line\)/);
+    historySession.draft.options.interval = 60;
+    vm.runInContext('padButtonBuilderSession = null', context);
     historySession.draft.options.scale = 'shared';
     assert.strictEqual(context.padButtonBuilderBuild(historySession).widget_sparkline_unified_scale, true);
     historySession.draft.options.scale = 'independent';
@@ -1105,10 +1116,6 @@ delete context.testHelpSchemes;
         widget_orientation: 'horizontal', widget_bar_zero_centered: true,
         label_bottom: '[ha:sensor.living_room_temperature;;%.2f \u00b0C]'
     });
-    assert.strictEqual(barBuilder.preview(barSession.draft).label_bottom, '21.37 \u00b0C');
-    for (const state of ['unknown', 'unavailable', '']) {
-        assert.strictEqual(barBuilder.preview(makeDraft({ ...temperature, state }, barSession.draft.options)).label_bottom, '---');
-    }
     const percentSession = buildSession({ ...temperature, unit: ' % ' }, barBuilder);
     const generatedPercentBar = context.padButtonBuilderBuild(percentSession);
     assert.strictEqual(generatedPercentBar.widget_bar_min, 0);
@@ -1116,7 +1123,6 @@ delete context.testHelpSchemes;
     assert.strictEqual(generatedPercentBar.widget_orientation, 'vertical');
     assert.strictEqual(generatedPercentBar.widget_bar_zero_centered, false);
     assert.strictEqual(generatedPercentBar.label_bottom, '[ha:sensor.living_room_temperature;;%.1f %%]');
-    assert.strictEqual(barBuilder.preview(percentSession.draft).label_bottom, '21.4 %');
     for (const [min, max] of [['', 100], [0, ' '], ['12abc', 100], [0, 'Infinity']]) {
         Object.assign(barSession.draft.options, { min, max });
         assert.throws(() => context.padButtonBuilderBuild(barSession), /minimum and maximum/);
@@ -1154,7 +1160,7 @@ delete context.testHelpSchemes;
         widget_data_binding: '[ha:sensor.living_room_temperature]',
         widget_gauge_min: 0, widget_gauge_max: 50,
         widget_gauge_degrees: 180, widget_gauge_start_angle: 180,
-        widget_gauge_show_needle: true, widget_gauge_ticks: 5, widget_arc_color: '#4CAF50',
+        widget_gauge_show_needle: false, widget_gauge_ticks: 0, widget_arc_color: '#4CAF50',
         label_bottom: '[ha:sensor.living_room_temperature;;%.1f \u00b0C]'
     });
     for (const [state, unit, min, max] of [
@@ -1171,10 +1177,6 @@ delete context.testHelpSchemes;
     assert.strictEqual(customGauge.widget_arc_color, '#2196F3');
     assert.strictEqual(customGauge.widget_data_binding, '[ha:sensor.living_room_temperature]');
     assert.strictEqual(customGauge.label_bottom, '[ha:sensor.living_room_temperature;;%.2f %%]');
-    assert.strictEqual(gaugeBuilder.preview(gaugeSession.draft).label_bottom, '21.37 %');
-    for (const state of ['unknown', 'unavailable', '']) {
-        assert.strictEqual(gaugeBuilder.preview(makeDraft({ ...temperature, state }, gaugeSession.draft.options)).label_bottom, '---');
-    }
     for (const [min, max] of [['', 100], ['12abc', 100], [1, 1], [2, 1],
         [0, '1e99'], [1, 1.000000001], ['-3e38', '3e38']]) {
         Object.assign(gaugeSession.draft.options, { min, max });
@@ -1747,7 +1749,7 @@ delete context.testHelpSchemes;
         'catalog searches after three characters');
     const candidateSession = (candidate, builder) => {
         const session = { col: 2, row: 1, page: 0, draft: {
-            sources: [context.padButtonBuilderSource(null, candidate, 0)], options: {}, previewState: candidate.sample
+            sources: [context.padButtonBuilderSource(null, candidate, 0)], options: {}
         } };
         context.padButtonBuilderSetScenario(session, builder);
         return session;
@@ -2008,11 +2010,7 @@ delete context.testHelpSchemes;
     pickerSession.disposed = true;
     assert.strictEqual(context.bindingSourceSessionActive(pickerSession), false);
     const cpuExample = context.catalogBindingCandidate(catalogReference('health', 'cpu'));
-    const cpuExampleSession = candidateSession(cpuExample, valueBuilder);
-    assert.strictEqual(valueBuilder.preview(cpuExampleSession.draft).label_center, '42');
-    assert.strictEqual(context.padButtonBuilderCandidateValueText(cpuExample), '',
-        'example is rendered in the button preview, not repeated as current state');
-    assert.match(catalogButtons.previewNote(cpuExample), /Illustrative sample preview/);
+    assert.strictEqual(context.padButtonBuilderCandidateValueText(cpuExample), 'Sample value (example): 42');
     assert.strictEqual(barBuilder.available(candidateSession(cpuExample, barBuilder).draft, runtime), false,
         'Representative examples never qualify as numeric evidence');
     const cpuSession = candidateSession(cpu, valueBuilder);
@@ -2022,7 +2020,6 @@ delete context.testHelpSchemes;
     assert.strictEqual(cpuIconHistory.widget_data_binding, '[health:cpu]');
     assert.strictEqual(context.padButtonBuilderBuild(cpuSession).label_center, '[health:cpu;%ld]');
     assert.strictEqual(cpuSession.fields.some(field => field.name === 'decimals'), false);
-    assert.strictEqual(valueBuilder.preview(cpuSession.draft).label_center, '42');
     for (const builder of [barBuilder, gaugeBuilder, historyBuilder]) {
         const session = candidateSession(cpu, builder);
         const button = context.padButtonBuilderBuild(session);
@@ -2073,7 +2070,6 @@ delete context.testHelpSchemes;
             assert.strictEqual(builder.available(session.draft, runtime), sample === '0');
         }
         assert.strictEqual(toggleBuilder.available(session.draft), false);
-        assert.strictEqual(valueBuilder.preview(session.draft).label_center, sample === '0' ? '0.0' : sample);
         assert.ok(!JSON.stringify(context.padButtonBuilderBuild(session)).includes('ha_entity'));
     }
     const objectSample = await acquiredButton('{"temperature":21.37,"active":true,"custom":0,"text":"12abc"}');

@@ -173,15 +173,11 @@ function padWidgetPreviewSymbol(preview) {
     return symbol;
 }
 
-// Shared cell content renderer for normal and ghost buttons.
-// Sets colors, border, labels, icon, and bg-image placeholder on the cell div.
+// Shared semantic overview for grid buttons and the button builder.
 const PAD_CELL_PREVIEW_PROPERTIES = [
-    'label_top', 'label_center', 'label_bottom', 'bg_color', 'fg_color', 'icon_color',
-    'border_color', 'border_width', 'corner_radius', 'content_pad',
-    'icon', 'icon_position', 'widget_position', 'group_size_pct', 'rocker_group_layout',
+    'label_top', 'label_center', 'label_bottom', 'bg_color', 'fg_color', 'icon_color', 'icon',
     'bg_image_url', 'bg_image_path', 'widget_type',
-    'widget_rocker_axis', 'widget_numericrocker_axis',
-    'widget_numericrocker_small_step', 'widget_numericrocker_large_step'
+    'widget_rocker_axis'
 ];
 
 function padCellPreviewSignature(button) {
@@ -212,13 +208,31 @@ function padUpdateCellBoundaryGuide(cell) {
 }
 
 function padRenderGroupedContent(cell, btn, widget, existingIcon, foreground) {
-    const position = btn.widget_position || 'right';
-    const side = position === 'left' || position === 'right';
+    const hasImage = !!(btn.bg_image_url || btn.bg_image_path);
+    if (widget || hasImage) {
+        const marker = document.createElement('div');
+        marker.className = 'pad-content-widget-region';
+        const descriptions = [];
+        if (widget) descriptions.push(widget.name + ' widget placeholder, not a live rendering');
+        if (hasImage) descriptions.push('Background image configured');
+        marker.title = descriptions.join('; ');
+        marker.setAttribute('aria-label', marker.title);
+        const symbols = widget ? padWidgetPreviewSymbol(widget) : document.createElement('div');
+        if (!widget) {
+            symbols.className = 'pad-widget-symbol';
+            symbols.setAttribute('aria-hidden', 'true');
+        }
+        if (hasImage) {
+            const image = document.createElement('span');
+            image.className = 'pad-widget-glyph';
+            image.textContent = 'image';
+            symbols.appendChild(image);
+        }
+        marker.appendChild(symbols);
+        cell.appendChild(marker);
+    }
     const group = document.createElement('div');
     group.className = 'pad-cell-content-group';
-    group.style.gap = cell.style.padding || '4px';
-    const iconPosition = btn.icon_position || padGetEffectiveDefault('icon_position') || 'left';
-    group.dataset.iconPosition = iconPosition;
     const labels = document.createElement('div');
     labels.className = 'pad-cell-group-labels';
     for (const [field, className] of [
@@ -231,90 +245,34 @@ function padRenderGroupedContent(cell, btn, widget, existingIcon, foreground) {
         padAppendBindingPreview(label, btn[field]);
         labels.appendChild(label);
     }
-    const appendIcon = () => {
+    if (btn.icon) {
         if (existingIcon) group.appendChild(existingIcon);
         else padAppendIconPreview(group, btn.icon, foreground);
-    };
-    if (btn.icon && iconPosition !== 'right' && iconPosition !== 'below') appendIcon();
-    if (btn.label_top || btn.label_center || btn.label_bottom) group.appendChild(labels);
-    if (btn.icon && (iconPosition === 'right' || iconPosition === 'below')) appendIcon();
-    if (widget) {
-        const marker = document.createElement('div');
-        marker.className = 'pad-content-widget-region';
-        marker.title = widget.name + ' widget placeholder, not a live rendering';
-        marker.setAttribute('aria-label', marker.title);
-        const hasGroup = !!(btn.icon || btn.label_top || btn.label_center || btn.label_bottom);
-        const rocker = btn.widget_type === 'rocker' || btn.widget_type === 'numericrocker';
-        const centered = rocker && btn.rocker_group_layout !== 'beside';
-        if (centered) {
-            const horizontal = btn.widget_type === 'rocker'
-                ? (btn.widget_rocker_axis || 'vertical').toLowerCase().startsWith('h')
-                : !(btn.widget_numericrocker_axis || 'horizontal').toLowerCase().startsWith('v');
-            marker.dataset.rockerAxis = horizontal ? 'horizontal' : 'vertical';
-            marker.dataset.rockerKind = btn.widget_type;
-            const arrows = document.createElement('div');
-            arrows.className = 'pad-rocker-preview-arrows';
-            arrows.setAttribute('aria-hidden', 'true');
-            const symbols = btn.widget_type === 'rocker'
-                ? (horizontal ? ['◀', '▶'] : ['▲', '▼'])
-                : (horizontal ? ['«', '‹', '›', '»'] : ['▲▲', '▲', '▼', '▼▼']);
-            if (btn.widget_type === 'numericrocker') {
-                if (Number(btn.widget_numericrocker_large_step ?? 10) <= 0) symbols[0] = symbols[3] = '';
-                if (Number(btn.widget_numericrocker_small_step ?? 1) <= 0) symbols[1] = symbols[2] = '';
-            }
-            for (const text of symbols) {
-                const arrow = document.createElement('span');
-                arrow.textContent = text;
-                arrows.appendChild(arrow);
-            }
-            marker.appendChild(arrows);
-            if (hasGroup) {
-                if (btn.group_size_pct) group.style[horizontal ? 'width' : 'height'] = btn.group_size_pct + '%';
-                marker.appendChild(group);
-            }
-            cell.appendChild(marker);
-            cell.dataset.groupedLayout = 'only';
-            return;
-        }
-        marker.appendChild(padWidgetPreviewSymbol(widget));
-        if (hasGroup && btn.group_size_pct) group.style.flex = '0 1 ' + btn.group_size_pct + '%';
-        else if (hasGroup) group.style[side ? 'maxWidth' : 'maxHeight'] = '50%';
-        if (!hasGroup) cell.appendChild(marker);
-        else if (position === 'left' || position === 'above') cell.append(marker, group);
-        else cell.append(group, marker);
-        cell.dataset.groupedLayout = side ? 'row' : 'column';
-    } else {
-        cell.appendChild(group);
-        cell.dataset.groupedLayout = 'only';
     }
+    if (labels.children.length) group.appendChild(labels);
+    if (group.children.length) cell.appendChild(group);
 }
 
 function padRenderCellContent(cell, btn, existingIcon) {
-    const accessibleLabels = [btn.label_top, btn.label_center, btn.label_bottom].filter(Boolean).join('\n');
-    if (accessibleLabels) cell.setAttribute('aria-description', accessibleLabels);
+    const widget = padWidgetPreview(btn);
+    const indicators = [
+        widget && widget.name + ' widget placeholder, not a live rendering',
+        (btn.bg_image_url || btn.bg_image_path) && 'Background image configured'].filter(Boolean);
+    cell.title = [cell.classList.contains('pad-cell-ghost') && 'Inherited from template pad',
+        ...indicators].filter(Boolean).join('; ');
+    const description = [btn.label_top, btn.label_center, btn.label_bottom, ...indicators].filter(Boolean).join('\n');
+    if (description) cell.setAttribute('aria-description', description);
+    else cell.removeAttribute('aria-description');
     const bg = padColorToHex(btn.bg_color, padGetEffectiveDefault('bg_color'));
     const fg = padColorToHex(btn.fg_color, padGetEffectiveDefault('fg_color'));
     cell.style.background = bg;
     cell.style.color = fg;
     const luminance = padPreviewLuminance(bg);
     cell.style.setProperty('--pad-resize-grip-color', luminance > 0.5 ? '#17212b' : '#ffffff');
-    const borderColor = padColorToHex(btn.border_color, padGetEffectiveDefault('border_color'));
-    const borderWidth = (btn.border_width !== undefined) ? btn.border_width : padGetEffectiveDefault('border_width');
-    const cornerRadius = (btn.corner_radius !== undefined) ? btn.corner_radius : padGetEffectiveDefault('corner_radius');
-    cell.style.setProperty('--pad-cell-border-color', borderColor);
-    cell.style.border = borderWidth + 'px solid ' + borderColor;
-    cell.style.borderRadius = cornerRadius + 'px';
-    cell.dataset.previewEdgeColor = Number(borderWidth) > 0 ? borderColor : bg;
+    cell.dataset.previewEdgeColor = bg;
     cell.dataset.previewFillColor = bg;
     padUpdateCellBoundaryGuide(cell);
-    // Content padding — mirror the device inset so the preview stays WYSIWYG
-    var contentPad = (btn.content_pad !== undefined) ? btn.content_pad : padGetEffectiveDefault('content_pad');
-    var cpNum = parseInt(contentPad, 10);
-    if (!isNaN(cpNum)) {
-        if (cpNum < 0) cpNum = 0; else if (cpNum > 50) cpNum = 50;
-        cell.style.padding = cpNum + 'px';
-    }
-    const widget = padWidgetPreview(btn);
+    cell.classList.remove('pad-cell-has-widget');
     if (widget) cell.classList.add('pad-cell-has-widget');
     const iconColor = padIconPreviewColor(btn.icon_color ?? padGetEffectiveDefault('icon_color'), fg);
     padRenderGroupedContent(cell, btn, widget, existingIcon, iconColor);
@@ -351,10 +309,7 @@ function padComputeAxisTrackSizes(count, safeSize, gap, overrides) {
         return { sizes, valid: false };
     }
 
-    if (!hasOverrides) {
-        sizes.fill(count ? Math.floor(available / count) : 0);
-        return { sizes, valid: true };
-    }
+    if (!count) return { sizes, valid: true };
 
     let remainder = (available - fixedTotal) % autoCount;
     const autoSize = Math.floor((available - fixedTotal) / autoCount);
@@ -878,8 +833,8 @@ function padIconRenderKey(payload, button) {
         button.col_span ?? 1, button.row_span ?? 1, button.icon_scale_pct ?? 0,
         button.label_top ? 1 : 0, button.label_bottom ? 1 : 0,
         button.border_width ?? '', button.content_pad ?? '', button.widget_type ?? ''];
-    for (let index = 0; index < Math.min(cols, 8); index++) values.push(payload.column_widths_px?.[index] ?? 0);
-    for (let index = 0; index < Math.min(rows, 8); index++) values.push(payload.row_heights_px?.[index] ?? 0);
+    for (let index = 0; index < cols; index++) values.push(payload.column_widths_px?.[index] ?? 0);
+    for (let index = 0; index < rows; index++) values.push(payload.row_heights_px?.[index] ?? 0);
     let hash = 2166136261;
     for (const value of values) {
         for (const byte of new TextEncoder().encode(String(value))) hash = Math.imul(hash ^ byte, 16777619) >>> 0;
@@ -894,12 +849,15 @@ function padOptionIconRenderKey(payload, button, slot) {
         button.widget_option_icon_badge_padding ?? 0, button.group_size_pct ?? 0,
         button.label_center ? 1 : 0, button.icon ? 1 : 0,
         button.widget_position ?? '', button.icon_position ?? ''];
+    if (button.reserve_label_slots) values.push('reserve_label_slots');
     for (let index = 1; index <= 5; index++) {
         const suffix = index === 1 ? '' : '_' + index;
         values.push(button['widget_option_label' + suffix] || button['widget_option_icon' + suffix] ? 1 : 0);
     }
     if (Number(button.widget_option_inset ?? 4) !== 4)
         values.push('inset', button.widget_option_inset);
+    if (Number(button.widget_option_height_pct ?? 100) !== 100)
+        values.push('height', button.widget_option_height_pct);
     for (const value of values) {
         for (const byte of new TextEncoder().encode(String(value))) hash = Math.imul(hash ^ byte, 16777619) >>> 0;
         hash = Math.imul(hash, 16777619) >>> 0;
@@ -918,7 +876,7 @@ function padSelectTemplateButtons(payload, templateButtons) {
         const rowSpan = Number(button.row_span) || 1;
         for (let x = col; x < col + colSpan; x++) {
             for (let y = row; y < row + rowSpan; y++) {
-                if (x >= 0 && x < 8 && y >= 0 && y < 8) occupied.add(x + ',' + y);
+                if (x >= 0 && x < cols && y >= 0 && y < rows) occupied.add(x + ',' + y);
             }
         }
     };
@@ -1170,8 +1128,8 @@ async function padPreparePageSave(context) {
                 const border = Math.max(0, parseInt(button.border_width ?? layout.border_width ?? 1, 10) || 0);
                 iconWidth = Math.max(0, padTrackSpanSize(columnSizing.sizes, col, colSpan, gap) - 2 * (contentPad + border));
                 iconHeight = Math.max(0, padTrackSpanSize(rowSizing.sizes, row, rowSpan, gap) - 2 * (contentPad + border));
-                const hasGroup = button.icon || button.label_top || button.label_center || button.label_bottom;
-                if (hasGroup) {
+                const hasGroup = button.icon || button.label_top || button.label_center || button.label_bottom || button.reserve_label_slots;
+                if (hasGroup && !(button.widget_position || '').startsWith('overlay-')) {
                     const horizontal = !button.widget_position || button.widget_position === 'left' || button.widget_position === 'right';
                     const available = horizontal ? iconWidth : iconHeight;
                     const remaining = Math.max(0, available - Math.min(4, available));
@@ -1184,6 +1142,7 @@ async function padPreparePageSave(context) {
                     else iconHeight = widgetSize;
                 }
                 iconWidth = Math.ceil(iconWidth / Math.max(1, count));
+                iconHeight = Math.max(1, Math.floor(iconHeight * Number(button.widget_option_height_pct ?? 100) / 100));
                 const inset = Number(button.widget_option_inset ?? 4);
                 iconWidth -= 2 * Math.min(inset, Math.floor(Math.max(0, iconWidth - 1) / 2));
                 iconHeight -= 2 * Math.min(inset, Math.floor(Math.max(0, iconHeight - 1) / 2));

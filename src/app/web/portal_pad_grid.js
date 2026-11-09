@@ -217,7 +217,6 @@ function padCreateGridButton(button, layer, kind) {
     if (layer === 'overlay') cell.classList.add('pad-cell-overlay');
     if (kind === 'template') {
         cell.classList.add('pad-cell-ghost');
-        cell.title = 'Inherited from template pad';
     }
     padRenderCellContent(cell, button);
     if (kind === 'button' && layer === padState.selectedLayer && !padState.placingBlock) {
@@ -255,9 +254,6 @@ function padUpdateButtonPreview(previous, button) {
     const icon = sameIcon ? cell.querySelector('.pad-cell-icon') : null;
     cell.replaceChildren();
     cell.classList.remove('pad-cell-has-widget');
-    delete cell.dataset.groupedLayout;
-    cell.style.justifyContent = '';
-    cell.style.padding = '';
     cell.removeAttribute('aria-description');
     padRenderCellContent(cell, button, icon);
     padRenderResizeHandles(cell);

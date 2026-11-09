@@ -113,12 +113,39 @@ assert.strictEqual(document.getElementById('pad-edit-validation-error').style.di
 assert.match(document.getElementById('pad-edit-validation-message').textContent, /1 binding error/);
 
 context.bindingValidateDialog = function() { return { valid: true, count: 0 }; };
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_extension.js', 'utf8'), context);
+context.padWidgetEditor('external').supported = false;
+const unavailableWidget = {
+    col: 1, row: 2, widget_type: 'external', extension_id: 'word-clock',
+    extension_config: '{"color":"white"}', extension_tick_interval_ms: 1000
+};
+context.padState.buttons = [unavailableWidget];
+document.getElementById('pad-edit-widget-type').value = 'external';
+context.padGetBindableColor = id => id === 'pad-edit-bg-color' ? '#03A9F4' : '';
+context.padWorkspaceEdit();
+assert.strictEqual(context.padState.buttons[0], unavailableWidget, 'An unrelated edit must not discard an unavailable widget');
+assert.match(validationErrors.get('main:1,2').message, /not supported/);
+document.getElementById('pad-edit-widget-type').value = '';
+context.padWorkspaceEdit();
+assert.strictEqual(context.padState.buttons[0].widget_type, undefined, 'Explicitly removing the widget permits editing');
+assert.strictEqual(context.padState.buttons[0].bg_color, '#03A9F4');
+context.padGetBindableColor = () => '';
+context.padState.buttons = originalButtons;
+document.getElementById('pad-edit-reserve-label-slots').checked = true;
 context.padWorkspaceEdit();
 assert.strictEqual(context.padState.buttons.length, 1);
+assert.strictEqual(context.padState.buttons[0].reserve_label_slots, true);
 assert.notStrictEqual(context.padState.buttons[0], originalButton);
 assert.strictEqual(context.padState.buttons[0].col, 1);
 assert.strictEqual(context.padState.buttons[0].row, 2);
 assert.strictEqual(document.getElementById('pad-edit-validation-error').style.display, 'none');
+
+for (const fit of ['fill-top', 'fill-bottom', 'fill-left', 'fill-right', 'letterbox', 'fill-center']) {
+    document.getElementById('pad-edit-bg-image-scale').value = fit;
+    context.padWorkspaceEdit();
+    assert.strictEqual(context.padState.buttons[0].bg_image_fit,
+        fit === 'fill-center' ? undefined : fit);
+}
 
 let previewUpdates = 0;
 context.padUpdateButtonPreview = (previous, button) => {
@@ -360,6 +387,68 @@ assert.strictEqual(bindingName.classList.contains('binding-error'), false);
 assert.strictEqual(bindingName.classList.contains('pad-field-error'), false);
 assert.strictEqual(bindingName.attributes['aria-invalid'], undefined);
 
+const warningOverlay = document.getElementById('pad-edit-overlay');
+const warningLabel = {
+    textContent: 'Caption restart_alt',
+    childNodes: [{ nodeType: 3, textContent: 'Caption' }, { nodeType: 1, textContent: 'restart_alt' }],
+    querySelector() { return null; }
+};
+const warningWidget = { parentElement: warningOverlay, dataset: { buttonTab: 'Content' }, style: {}, hidden: false };
+const warningInput = {
+    id: 'caption', value: '[mqtt:123]', maxLength: 10, disabled: false, hidden: false, style: {},
+    parentElement: warningWidget, labels: [warningLabel],
+    getAttribute() { return null; }, closest() { return null; }
+};
+warningOverlay.querySelectorAll = selector => selector === 'input[maxlength]' ? [warningInput] : [];
+const warning = document.getElementById('pad-edit-validation-error');
+const warningMessage = document.getElementById('pad-edit-validation-message');
+const warningHelp = document.getElementById('pad-edit-validation-help');
+vm.runInContext("padWorkspace.scope = 'button'; padWorkspace.selected = true; padWorkspace.errors.clear();", context);
+context.padDialogClearValidationError();
+context.padRefreshMaxlenWarning();
+assert.strictEqual(warning.style.display, '');
+assert.strictEqual(warning.dataset.kind, 'warning');
+assert.strictEqual(warningHelp.hidden, false);
+assert.strictEqual(warningMessage.textContent, 'Caption reached its length limit.');
+assert.doesNotMatch(warningMessage.textContent, /restart_alt/);
+assert.strictEqual(document.getElementById('pad-action-controls').inert, false);
+warningInput.closest = () => ({
+    dataset: { slotLabel: 'Tap action 1' },
+    querySelector() { return { textContent: 'Tap action 1: Publish MQTT message · [mqtt:123]' }; }
+});
+context.padRefreshMaxlenWarning();
+assert.strictEqual(warningMessage.textContent, 'Tap action 1 — Caption reached its length limit.');
+warningInput.closest = () => null;
+context.padDialogClearValidationError();
+assert.strictEqual(warning.style.display, '', 'Normal revalidation preserves the warning');
+context.padDialogDismissValidationError();
+context.padRefreshMaxlenWarning();
+assert.strictEqual(warning.style.display, 'none', 'Dismissal persists while the value is unchanged');
+warningInput.value = '[mqtt:456]';
+context.padRefreshMaxlenWarning();
+assert.strictEqual(warning.style.display, '', 'A changed value can show the warning again');
+context.padDialogShowValidationError('Invalid button');
+assert.strictEqual(warning.dataset.kind, 'error', 'Validation errors take priority');
+assert.strictEqual(warningHelp.hidden, true);
+context.padDialogClearValidationError();
+assert.strictEqual(warning.dataset.kind, 'warning', 'Warning returns after the error is cleared');
+warningWidget.style.display = 'none';
+context.padRefreshMaxlenWarning();
+assert.strictEqual(warning.style.display, 'none', 'Inactive widget fields do not trigger warnings');
+warningWidget.style.display = '';
+warningWidget.hidden = true;
+context.padRefreshMaxlenWarning();
+assert.strictEqual(warning.style.display, '', 'A warning remains available on other inspector tabs');
+warningWidget.hidden = false;
+warningInput.value = '[mqtt:1]';
+context.padRefreshMaxlenWarning();
+assert.strictEqual(warning.style.display, 'none', 'Shortening the value clears the warning');
+warningInput.value = '[mqtt:123]';
+vm.runInContext("padWorkspace.scope = 'pad';", context);
+context.padRefreshMaxlenWarning();
+assert.strictEqual(warning.style.display, 'none', 'The warning is limited to the selected button');
+delete warningOverlay.querySelectorAll;
+
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_icons.js', 'utf8'), context);
 const buildFill = context.padFillBuild;
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_colors.js', 'utf8'), context);
@@ -388,11 +477,15 @@ gaugeEditor.groups = [
     disclosureGroup(gaugeEditor, 'pad-edit-gauge-tick-marks', ['widget_gauge_ticks']),
     disclosureGroup(gaugeEditor, 'pad-edit-gauge-target', ['widget_gauge_marker_value'])
 ];
-context.padWidgetEditorsLoad({ widget_type: 'gauge', widget_arc_color_2: '#234567', widget_gauge_ticks: '5' });
+context.padWidgetEditorsLoad({ widget_type: 'gauge' });
+assert.strictEqual(document.getElementById('pad-edit-gauge-show-needle').checked, false);
+assert.strictEqual(document.getElementById('pad-edit-gauge-ticks').value, '0');
+context.padWidgetEditorsLoad({ widget_type: 'gauge', widget_arc_color_2: '#234567',
+    widget_gauge_show_needle: false, widget_gauge_ticks: '0' });
 assert.deepStrictEqual(gaugeEditor.groups.map(group => group.element.open), [true, false, false, false, false, false], 'Explicit defaults must not expand optional groups');
 context.padWidgetEditorsLoad({ widget_type: 'gauge', widget_data_binding_2: ' [pad:source] ', widget_gauge_marker_value: 0,
-    widget_gauge_show_needle: false, widget_gauge_ticks: 0 });
-assert.deepStrictEqual(gaugeEditor.groups.map(group => group.element.open), [true, true, false, true, true, true], 'Data, zero targets, and changed false/zero defaults expand their groups');
+    widget_gauge_show_needle: true, widget_gauge_ticks: 5 });
+assert.deepStrictEqual(gaugeEditor.groups.map(group => group.element.open), [true, true, false, true, true, true], 'Data, zero targets, and changed needle/tick settings expand their groups');
 gaugeEditor.groups[1].element.open = false;
 context.padWidgetEditorsRefresh('gauge');
 assert.strictEqual(gaugeEditor.groups[1].element.open, false, 'Refresh must not override a manual disclosure choice');
@@ -501,10 +594,7 @@ assert.strictEqual(gamepadEditor.available({ has_touch: true, has_usb_hid: true 
 assert.strictEqual(gamepadEditor.available({ has_touch: true, has_usb_hid: false }), false);
 document.getElementById('pad-edit-widget-type').value = 'gamepad_button';
 gamepadEditor.supported = false;
-const unsupported = context.padDialogBuildButton();
-assert.strictEqual(unsupported.widget_type, undefined);
-assert.strictEqual(unsupported.actions, undefined);
-assert.strictEqual(unsupported.lp_actions, undefined);
+assert.throws(() => context.padDialogBuildButton(), /not supported/);
 
 context.padWidgetEditorsLoad({ widget_type: 'numericrocker', widget_numericrocker_small_step: 0.25 });
 document.getElementById('pad-edit-widget-type').value = 'numericrocker';
@@ -610,6 +700,24 @@ for (const value of ['-1', '101', '1.5', 'NaN']) {
     assert.throws(() => context.padDialogBuildButton(), /whole percentage from 0 to 100/);
 }
 fillOpacity.value = '0';
+document.getElementById('pad-edit-sparkline-height-pct').value = '50';
+document.getElementById('pad-edit-sparkline-fill-opacity-1').value = '50';
+document.getElementById('pad-edit-sparkline-fill-opacity-2').value = '0';
+document.getElementById('pad-edit-sparkline-line-width-2').value = '4';
+document.getElementById('pad-edit-sparkline-current-dot-2').value = '0';
+const styledSparkline = context.padDialogBuildButton();
+assert.strictEqual(styledSparkline.widget_sparkline_height_pct, 50);
+assert.strictEqual(styledSparkline.widget_sparkline_fill_opacity_1, 50);
+assert.strictEqual(styledSparkline.widget_sparkline_fill_opacity_2, 0);
+assert.strictEqual(styledSparkline.widget_sparkline_line_width_2, 4);
+assert.strictEqual(styledSparkline.widget_sparkline_current_dot_2, 0);
+assert.strictEqual(styledSparkline.widget_sparkline_line_width_1, undefined);
+document.getElementById('pad-edit-sparkline-height-pct').value = '9';
+assert.throws(() => context.padDialogBuildButton(), /whole number from 10 to 100/);
+document.getElementById('pad-edit-sparkline-height-pct').value = '100';
+document.getElementById('pad-edit-sparkline-line-width-2').value = '1.5';
+assert.throws(() => context.padDialogBuildButton(), /whole number from 1 to 10/);
+document.getElementById('pad-edit-sparkline-line-width-2').value = '';
 {
     const defaultGetter = context.padGetEffectiveDefault;
     const colorGetter = context.padGetBindableColor;
@@ -1196,20 +1304,29 @@ function checkContentLayoutControls() {
     vm.runInContext(fs.readFileSync('src/app/web/portal_pad_editor.js', 'utf8'), layoutContext);
     layoutContext.padContentLayoutRefresh();
     assert.strictEqual(find('pad-edit-group-width-group').style.display, '');
+    assert.strictEqual(find('pad-edit-overlay-backdrop-group').style.display, 'none');
     type.value = 'gauge';
     layoutContext.padContentLayoutRefresh();
     assert.strictEqual(find('pad-edit-group-width-group').style.display, '');
     assert.strictEqual(select.value, 'left');
+    select.value = 'overlay-top-left';
+    layoutContext.padContentLayoutRefresh();
+    assert.strictEqual(find('pad-edit-group-width-group').style.display, 'none');
+    assert.strictEqual(find('pad-edit-overlay-backdrop-group').style.display, '');
     type.value = 'rocker';
     find('pad-edit-rocker-group-layout').value = 'center';
     layoutContext.padContentLayoutRefresh();
     assert.strictEqual(find('pad-edit-content-layout-group').style.display, 'none');
+    assert.strictEqual(find('pad-edit-group-width-group').style.display, '');
+    assert.strictEqual(find('pad-edit-overlay-backdrop-group').style.display, 'none');
     find('pad-edit-rocker-group-layout').value = 'beside';
     layoutContext.padContentLayoutRefresh();
     assert.strictEqual(find('pad-edit-content-layout-group').style.display, '');
+    assert.strictEqual(find('pad-edit-group-width-group').style.display, 'none');
     type.value = '';
     layoutContext.padContentLayoutRefresh();
     assert.strictEqual(find('pad-edit-content-layout-group').style.display, 'none');
+    assert.strictEqual(find('pad-edit-overlay-backdrop-group').style.display, 'none');
 }
 
 function checkContentLayoutDraft() {
@@ -1234,6 +1351,18 @@ function checkContentLayoutDraft() {
     assert.strictEqual(context.padDialogBuildButton().widget_position, undefined);
     document.getElementById('pad-edit-content-layout').value = 'below';
     assert.strictEqual(context.padDialogBuildButton().widget_position, 'below');
+    document.getElementById('pad-edit-content-layout').value = 'overlay-top-left';
+    assert.strictEqual(context.padDialogBuildButton().widget_position, 'overlay-top-left');
+    assert.strictEqual(context.padDialogBuildButton().overlay_backdrop, undefined);
+    document.getElementById('pad-edit-overlay-backdrop').checked = true;
+    assert.strictEqual(context.padDialogBuildButton().overlay_backdrop, true);
+    document.getElementById('pad-edit-overlay-backdrop').checked = false;
+    assert.strictEqual(context.padDialogBuildButton().group_size_pct, 65);
+    document.getElementById('pad-edit-group-width-group').style.display = 'none';
+    document.getElementById('pad-edit-group-width').value = '5';
+    assert.throws(() => context.padDialogBuildButton(), /Labels and icon size/);
+    assert.strictEqual(document.getElementById('pad-edit-group-width-group').style.display, '');
+    document.getElementById('pad-edit-group-width').value = '65';
     for (const type of ['rocker', 'numericrocker']) {
         document.getElementById('pad-edit-widget-type').value = type;
         document.getElementById('pad-edit-rocker-group-layout').value = 'beside';

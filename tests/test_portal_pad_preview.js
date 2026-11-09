@@ -78,6 +78,23 @@ context.padAppendIconPreview = function(container, icon, foreground) {
 };
 
 {
+    const cell = createElement();
+    context.padRenderCellContent(cell, { label_center: '21.5', reserve_label_slots: true });
+    const labels = cell.querySelector('.pad-cell-group-labels');
+    assert.strictEqual(labels.children.length, 1);
+    assert.strictEqual(context.padCellPreviewSignature({ label_center: '21.5' }),
+        context.padCellPreviewSignature({ label_center: '21.5', reserve_label_slots: true }));
+}
+
+{
+    const cell = createElement();
+    context.padRenderCellContent(cell, { label_top: 'Test', label_center: 'Test' });
+    const labels = cell.querySelector('.pad-cell-group-labels');
+    assert.strictEqual(labels.children.length, 2);
+    assert.strictEqual(labels.dataset.centered, undefined);
+}
+
+{
     const icon = { catalog_id: 'material-symbols:home', kind: 'mono' };
     const render = button => {
         const cell = createElement();
@@ -127,8 +144,9 @@ assert.strictEqual(context.padWidgetPreview({ widget_type: 'rocker' }).icon, 'sw
 assert.strictEqual(context.padWidgetPreview({ widget_type: 'rocker', widget_rocker_axis: 'horizontal' }).icon, 'swap_horiz');
 assert.strictEqual(context.padWidgetPreview({ widget_type: 'scrollpad' }).icon, 'keyboard_double_arrow_up');
 assert.strictEqual(context.padWidgetPreview({ widget_type: 'scrollpad', widget_scrollpad_axis: 'horizontal' }).icon, 'keyboard_double_arrow_left');
-assert.strictEqual(context.padWidgetPreview({ widget_type: 'numericrocker' }).vertical, false);
-assert.strictEqual(context.padWidgetPreview({ widget_type: 'numericrocker', widget_numericrocker_axis: 'vertical' }).vertical, true);
+assert.strictEqual(context.padWidgetPreview({ widget_type: 'numericrocker' }).icon, 'exposure');
+assert.strictEqual(context.padCellPreviewSignature({ widget_type: 'numericrocker', widget_numericrocker_axis: 'horizontal' }),
+    context.padCellPreviewSignature({ widget_type: 'numericrocker', widget_numericrocker_axis: 'vertical' }));
 assert.strictEqual(context.padWidgetPreview({ widget_type: 'future_widget' }).name, 'Unknown Widget');
 assert.strictEqual(context.padWidgetPreview({}), null);
 for (const [background, gripColor] of [
@@ -148,7 +166,7 @@ for (const [background, button, expected] of [
     ['#000000', { bg_color: '#101010', border_width: '0' }, true],
     ['#000000', { bg_color: '#ffffff', border_width: '0' }, false],
     ['#000000', { bg_color: '#ffffff', border_color: '#000000', border_width: '2' }, false],
-    ['#000000', { bg_color: '#000000', border_color: '#ffffff', border_width: '2' }, false],
+    ['#000000', { bg_color: '#000000', border_color: '#ffffff', border_width: '2' }, true],
     ['#ffffff', { bg_color: '#ffffff', border_width: '0' }, true],
     ['#ffffff', { bg_color: '#000000', border_width: '0' }, false]
 ]) {
@@ -207,67 +225,32 @@ context.padRenderCellContent(iconBindingCell, {
 const iconRowLabel = iconBindingCell.querySelector('.pad-cell-label-center');
 assert(visibleText(iconRowLabel).startsWith('[mqtt:...') && visibleText(iconRowLabel).endsWith('/temperature]'));
 {
+    const button = { widget_type: 'sparkline', icon: { kind: 'color' }, label_center: 'Room' };
+    const appearance = { widget_position: 'overlay-bottom-right', group_size_pct: 90,
+        icon_position: 'below', content_pad: 50, border_width: 8, corner_radius: 30,
+        reserve_label_slots: true };
+    assert.strictEqual(context.padCellPreviewSignature(button), context.padCellPreviewSignature({ ...button, ...appearance }));
     const cell = createElement();
-    context.padRenderCellContent(cell, { icon: { kind: 'color' }, label_center: 'Room' });
-    assert.strictEqual(cell.querySelector('.pad-cell-content-group').dataset.iconPosition, 'left');
+    context.padRenderCellContent(cell, { ...button, ...appearance });
+    assert.strictEqual(cell.querySelector('.pad-content-widget-region').attributes['aria-label'],
+        'Sparkline widget placeholder, not a live rendering');
+    assert.strictEqual(visibleText(cell.querySelector('.pad-cell-label-center')), 'Room');
+    assert(cell.querySelector('.pad-cell-icon'));
 }
-for (const [padding, expected] of [[undefined, '4px'], [0, '0px'], [12, '12px']]) {
+for (const image of [{ bg_image_url: 'https://example.test/image.png' }, { bg_image_path: '/image.png' }]) {
+    const imageOnly = createElement();
+    context.padRenderCellContent(imageOnly, image);
+    assert.strictEqual(imageOnly.querySelector('.pad-content-widget-region').attributes['aria-label'],
+        'Background image configured');
+    assert.strictEqual(imageOnly.title, 'Background image configured');
+    assert(descendants(imageOnly).some(child => child.textContent === 'image'));
     const cell = createElement();
-    context.padRenderCellContent(cell, {
-        icon: { kind: 'color' }, icon_position: 'left', label_center: 'Room',
-        ...(padding === undefined ? {} : { content_pad: padding })
-    });
-    assert.strictEqual(cell.querySelector('.pad-cell-content-group').style.gap, expected);
-}
-{
-    const button = { widget_type: 'sparkline', widget_position: 'left', group_size_pct: 35,
-        icon_position: 'right', icon: { kind: 'color' }, label_top: 'Room', label_center: '21',
-        label_bottom: 'C' };
-    const cell = createElement();
-    context.padRenderCellContent(cell, button);
-    assert.strictEqual(cell.dataset.groupedLayout, 'row');
-    assert.strictEqual(cell.children[0].attributes['aria-label'], 'Sparkline widget placeholder, not a live rendering');
-    const group = cell.children[1];
-    assert.strictEqual(group.style.flex, '0 1 35%');
-    assert.strictEqual(group.children[0].children.map(visibleText).join(','), 'Room,21,C');
-    assert.strictEqual(group.children[1].className, 'pad-cell-icon');
-    const defaultPosition = createElement();
-    const { widget_position, ...defaultButton } = button;
-    context.padRenderCellContent(defaultPosition, defaultButton);
-    assert.strictEqual(defaultPosition.dataset.groupedLayout, 'row');
-    assert.strictEqual(defaultPosition.children[1].className, 'pad-content-widget-region');
-    const below = createElement();
-    context.padRenderCellContent(below, { ...button, widget_position: 'above' });
-    assert.strictEqual(below.dataset.groupedLayout, 'column');
-    assert.strictEqual(below.children[0].className, 'pad-content-widget-region');
-    const empty = createElement();
-    context.padRenderCellContent(empty, { widget_type: 'sparkline', widget_position: 'right' });
-    assert.strictEqual(empty.children.length, 1);
-    assert.strictEqual(empty.children[0].className, 'pad-content-widget-region');
-    const iconBelow = createElement();
-    context.padRenderCellContent(iconBelow, { ...button, icon_position: 'below' });
-    assert.strictEqual(iconBelow.children[1].children[1].className, 'pad-cell-icon');
-}
-for (const widget_type of ['rocker', 'numericrocker']) {
-    for (const axis of ['horizontal', 'vertical']) {
-        const cell = createElement();
-        const button = { widget_type, label_center: 'Value',
-            [widget_type === 'rocker' ? 'widget_rocker_axis' : 'widget_numericrocker_axis']: axis };
-        context.padRenderCellContent(cell, button);
-        const marker = cell.querySelector('.pad-content-widget-region');
-        assert.strictEqual(marker.dataset.rockerAxis, axis);
-        assert(marker.querySelector('.pad-cell-group-labels'));
-        const beside = createElement();
-        context.padRenderCellContent(beside, { ...button, rocker_group_layout: 'beside' });
-        assert.strictEqual(beside.dataset.groupedLayout, 'row');
-        assert(beside.children.some(child => child.className === 'pad-cell-content-group'));
-    }
-}
-{
-    const cell = createElement();
-    context.padRenderCellContent(cell, { widget_type: 'numericrocker', widget_numericrocker_large_step: 0 });
-    const arrows = cell.querySelector('.pad-rocker-preview-arrows');
-    assert.deepStrictEqual(arrows.children.map(child => child.textContent), ['', '‹', '›', '']);
+    context.padRenderCellContent(cell, { ...image, widget_type: 'gauge', label_center: 'Camera' });
+    const marker = cell.querySelector('.pad-content-widget-region');
+    assert.match(marker.attributes['aria-label'], /Gauge widget.*Background image configured/);
+    assert(descendants(marker).some(child => child.textContent === 'image'));
+    assert.strictEqual(visibleText(cell.querySelector('.pad-cell-label-center')), 'Camera');
+    assert.notStrictEqual(context.padCellPreviewSignature(image), context.padCellPreviewSignature({}));
 }
 for (const icon_position of ['left', 'above']) {
     const cell = createElement();
@@ -318,18 +301,20 @@ for (const content of [{ label_top: 'Top' }, { label_bottom: 'Bottom' },
 }
 const normal = createElement();
 context.padRenderCellContent(normal, {});
-assert.strictEqual(normal.children[0].className, 'pad-cell-content-group');
-for (const width of ['1', '2', '3']) {
-    const bordered = createElement();
-    context.padRenderCellContent(bordered, { border_width: width, border_color: '#123456' });
-    assert.strictEqual(bordered.style.border, width + 'px solid #123456');
-    assert.strictEqual(bordered.style['--pad-cell-border-color'], '#123456');
-}
+assert.strictEqual(normal.children.length, 0);
 
 const grid = fs.readFileSync('src/app/web/portal_pad_grid.js', 'utf8');
 assert.deepStrictEqual(JSON.parse(JSON.stringify(context.padComputeAxisTrackSizes(3, 101, 2, [0, 20, 0]))), {
     sizes: [39, 20, 38], valid: true
 });
+for (const gap of [0, 6, 10]) {
+    for (const [count, size] of [[8, 400], [6, 300]]) {
+        const result = context.padComputeAxisTrackSizes(count, size, gap, []);
+        assert.strictEqual(result.valid, true);
+        assert.strictEqual(result.sizes.reduce((sum, track) => sum + track, 0) + (count - 1) * gap, size);
+        assert(Math.max(...result.sizes) - Math.min(...result.sizes) <= 1);
+    }
+}
 assert.strictEqual(context.padComputeAxisTrackSizes(3, 100, 2, [30, 30, 30]).valid, false);
 assert.deepStrictEqual(Array.from(context.padComputeAxisTrackSizes(3, 100, 2, [30, 30, 30]).sizes), [32, 32, 32]);
 assert(grid.includes('padRenderCellContent(cell, button)'));
@@ -393,15 +378,23 @@ const css = fs.readFileSync('src/app/web/portal-custom.css', 'utf8');
     context.padUpdateButtonPreview(button, labeled);
     assert.strictEqual(visibleText(cell.querySelector('.pad-cell-label-center')), 'After');
     assert.strictEqual(cell.querySelector('.pad-cell-icon'), icon);
+    const withImage = { ...labeled, bg_image_path: '/image.png' };
+    context.padUpdateButtonPreview(labeled, withImage);
+    assert.match(cell.attributes['aria-description'], /Background image configured/);
+    assert(descendants(cell.querySelector('.pad-content-widget-region')).some(child => child.textContent === 'image'));
+    context.padUpdateButtonPreview(withImage, labeled);
+    assert.strictEqual(cell.querySelector('.pad-content-widget-region'), null);
+    assert.doesNotMatch(cell.attributes['aria-description'], /Background image configured/);
+    assert.strictEqual(cell.title, '');
     const colored = { ...labeled, fg_color: '#123456' };
     context.padUpdateButtonPreview(labeled, colored);
     assert.strictEqual(cell.style.color, '#123456');
     assert.notStrictEqual(cell.querySelector('.pad-cell-icon'), icon, 'Foreground changes must rerender the artwork');
     const widget = { col: 0, row: 0, widget_type: 'rocker', widget_rocker_axis: 'horizontal' };
     context.padUpdateButtonPreview(colored, widget);
-    assert.strictEqual(cell.querySelector('.pad-content-widget-region').dataset.rockerAxis, 'horizontal');
+    assert.strictEqual(cell.querySelector('.pad-widget-glyph').textContent, 'swap_horiz');
     context.padUpdateButtonPreview(widget, { ...widget, widget_rocker_axis: 'vertical' });
-    assert.strictEqual(cell.querySelector('.pad-content-widget-region').dataset.rockerAxis, 'vertical');
+    assert.strictEqual(cell.querySelector('.pad-widget-glyph').textContent, 'swap_vert');
     assert.strictEqual(rebuilds, 0);
     context.padUpdateButtonPreview(widget, { ...widget, col_span: 2 });
     assert.strictEqual(rebuilds, 1, 'Geometry changes must rebuild the grid');
@@ -515,6 +508,45 @@ const css = fs.readFileSync('src/app/web/portal-custom.css', 'utf8');
     assert(testGrid.children.includes(mainPreview), 'Overlay resizing must retain main-layer previews');
     assert.strictEqual(mainPreview.querySelector('.pad-cell-icon'), mainIcon);
 
+    vm.runInContext(fs.readFileSync('src/app/web/portal_pad_dialog.js', 'utf8'), context);
+    context.padWorkspaceClearButton = () => {};
+    context.padWorkspaceReturn = () => {};
+    context.padState = { cols: 4, rows: 2, selectedLayer: 'main', editCol: 0, editRow: 0,
+        mainButtons: [{ col: 0, row: 0, col_span: 2, row_span: 2, widget_type: 'gauge' }, other],
+        overlayButtons: [],
+        get buttons() { return this.selectedLayer === 'overlay' ? this.overlayButtons : this.mainButtons; },
+        set buttons(value) { if (this.selectedLayer === 'overlay') this.overlayButtons = value; else this.mainButtons = value; },
+        templateButtons: [{ col: 1, row: 0, icon }] };
+    context.padRenderGrid();
+    const retainedButton = testGrid.children.find(cell => cell.dataset.layer === 'main' && cell.dataset.col === 3);
+    const retainedIcon = retainedButton.querySelector('.pad-cell-icon');
+    const removedButton = testGrid.children.find(cell => cell.dataset.layer === 'main' && cell.dataset.col === 0);
+    context.padDialogClear();
+    assert(!testGrid.children.includes(removedButton), 'Clear must remove the selected button');
+    assert(testGrid.children.includes(retainedButton), 'Clear must retain unrelated buttons');
+    assert.strictEqual(retainedButton.querySelector('.pad-cell-icon'), retainedIcon);
+    assert(testGrid.children.some(cell => cell.classes.has('pad-cell-ghost') && cell.dataset.col === 1),
+        'Clear must reveal an unblocked template button');
+    for (const [col, row] of [[0, 0], [0, 1], [1, 1]]) {
+        assert(testGrid.children.some(cell => cell.classes.has('pad-cell-empty') &&
+            Number(cell.dataset.col) === col && Number(cell.dataset.row) === row), 'Clear must free the button span');
+    }
+
+    context.padState.selectedLayer = 'overlay';
+    context.padState.overlayButtons = [{ col: 0, row: 0, col_span: 2 }, { col: 3, row: 1, icon }];
+    context.padRenderGrid();
+    const retainedMain = testGrid.children.find(cell => cell.dataset.layer === 'main' && Number(cell.dataset.col) === 3);
+    const retainedOverlay = testGrid.children.find(cell => cell.dataset.layer === 'overlay' && Number(cell.dataset.col) === 3);
+    context.padDialogClear();
+    assert(testGrid.children.includes(retainedMain), 'Overlay clear must retain main-layer previews');
+    assert(testGrid.children.includes(retainedOverlay), 'Overlay clear must retain unrelated overlay buttons');
+    for (const col of [0, 1]) {
+        assert(testGrid.children.some(cell => cell.classes.has('pad-cell-empty') &&
+            cell.dataset.layer === 'overlay' && Number(cell.dataset.col) === col && Number(cell.dataset.row) === 0),
+        'Overlay clear must free its full span');
+    }
+    delete context.padWorkspaceClearButton;
+    delete context.padWorkspaceReturn;
     context.padState = savedState;
     context.document.getElementById = savedGetElementById;
     delete context.document.addEventListener;
@@ -543,28 +575,6 @@ vm.runInContext(`BUTTON_BUILDER_PROVIDERS.push({
 });`, context);
 context.PAD_FIRMWARE_DEFAULTS = { widget_track_color: '#1A1A1A', widget_series_color: '#4CAF50',
     widget_indicator_color: '#FFFFFF', widget_tick_color: '#AAAAAA' };
-const toggleBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "toggle_widget")', context);
-for (const state of ['on', 'off', 'unavailable']) {
-    const button = { widget_type: 'toggle', label_top: 'Kitchen light',
-        widget_toggle_on_color: '#2196f3', widget_toggle_off_color: '#59636e',
-        widget_toggle_knob_color: '#ffffff' };
-    const cell = createElement();
-    context.padRenderCellContent(cell, button);
-    toggleBuilder.renderPreview({ previewState: state }, cell, button);
-    const region = cell.querySelector('.pad-content-widget-region');
-    const toggle = region.querySelector('.pad-button-builder-toggle');
-    assert(toggle, 'The simulated switch must occupy the widget region');
-    assert.strictEqual(region.children.length, 1);
-    assert.strictEqual(cell.querySelector('.pad-widget-symbol'), null, 'Replace the placeholder switch');
-    assert.strictEqual(cell.children.length, 2, 'Keep the title and switch in the grouped layout');
-    assert.strictEqual(visibleText(cell.querySelector('.pad-cell-label-top')), 'Kitchen light');
-    assert.strictEqual(region.attributes['aria-label'], undefined);
-    assert.strictEqual(toggle.attributes['aria-label'], 'Switch ' + state);
-    assert.strictEqual(toggle.dataset.state, state);
-    assert.strictEqual(toggle.style.opacity, state === 'unavailable' ? '0.5' : undefined);
-    assert.strictEqual(toggle.querySelector('.pad-button-builder-toggle-track').style.background,
-        state === 'on' ? '#2196f3' : '#59636e');
-}
 for (const widget_type of ['toggle', 'rocker', 'numericrocker', 'future_widget']) {
     const button = { widget_type, label_top: 'Top', label_center: 'Center', label_bottom: 'Bottom',
         icon: { catalog_id: 'noto:thermometer', kind: 'color' } };
@@ -617,7 +627,7 @@ const makeDraft = (detail, name) => {
         displayName: name, reference: { entity_id: detail.entity_id || 'sensor.preview' },
         sample: detail.state, sampleTruncated: false, unit: detail.unit,
         formatModes: ['raw', 'number'], capabilities: { display: true, numericWidget: true, liveSampling: true } };
-    return { sources: [{ candidate, name, options: {} }], options: {}, previewState: detail.state };
+    return { sources: [{ candidate, name, options: {} }], options: {} };
 };
 context.testBuilderSession = {
     draft: makeDraft({ state: '42', unit: '%' }, 'Battery'), scenario: barBuilder,
@@ -626,9 +636,9 @@ context.testBuilderSession = {
 context.padButtonBuilderSetScenario(context.testBuilderSession, barBuilder);
 vm.runInContext('padButtonBuilderSession = testBuilderSession', context);
 context.padColorPopoverClose = () => {};
-const updatePreview = context.padButtonBuilderUpdatePreview;
-let previewUpdates = 0;
-context.padButtonBuilderUpdatePreview = () => previewUpdates++;
+const updateValidation = context.padButtonBuilderUpdateValidation;
+let validationUpdates = 0;
+context.padButtonBuilderUpdateValidation = () => validationUpdates++;
 context.padButtonBuilderRenderFields();
 const builderInputs = builderElements['[data-bb-fields]'].children.map(label => label.children[0]);
 assert.strictEqual(builderInputs.find(input => input.name === 'min').step, 'any');
@@ -637,7 +647,7 @@ const orientationInput = builderInputs.find(input => input.name === 'orientation
 orientationInput.value = 'horizontal';
 orientationInput.onchange();
 assert.strictEqual(context.testBuilderSession.draft.options.orientation, 'horizontal', 'Custom dropdowns dispatch change, not input');
-assert.strictEqual(previewUpdates, 2);
+assert.strictEqual(validationUpdates, 2);
 const minimumInput = builderInputs.find(input => input.name === 'min');
 minimumInput.value = '';
 minimumInput.oninput();
@@ -647,147 +657,8 @@ minimumInput.value = '-0.5';
 minimumInput.oninput();
 assert.strictEqual(context.testBuilderSession.draft.options.min, '-0.5');
 assert.doesNotThrow(() => context.padButtonBuilderValidateFields(context.testBuilderSession));
-context.padButtonBuilderUpdatePreview = updatePreview;
+context.padButtonBuilderUpdateValidation = updateValidation;
 vm.runInContext('padButtonBuilderSession = null', context);
-for (const orientation of ['vertical', 'horizontal']) {
-    for (const [state, signed, start, size] of [
-        ['0', false, '0%', '0%'], ['50', false, '0%', '50%'], ['100', false, '0%', '100%'],
-        ['200', false, '0%', '100%'], ['-200', false, '0%', '0%'],
-        ['-50', true, '25%', '25%'], ['0', true, '50%', '0%'], ['50', true, '50%', '25%'],
-        ['unavailable', false, undefined, undefined]
-    ]) {
-        const cell = createElement();
-        const detail = { state };
-        const button = { label_top: 'Power', label_bottom: state, widget_type: 'bar_chart',
-            widget_bar_min: signed ? -100 : 0, widget_bar_max: 100,
-            widget_bar_zero_centered: signed, widget_orientation: orientation };
-        context.padRenderCellContent(cell, button);
-        barBuilder.renderPreview(makeDraft(detail, 'Power'), cell, button);
-        const bar = cell.querySelector('.pad-button-builder-bar');
-        const track = cell.querySelector('.pad-button-builder-bar-track');
-        const fill = cell.querySelector('.pad-button-builder-bar-fill');
-        assert.strictEqual(bar.dataset.orientation, orientation);
-        assert.strictEqual(bar.attributes.role, state === 'unavailable' ? 'img' : 'meter');
-        assert.strictEqual(track.style['--bar-start'], start);
-        assert.strictEqual(track.style['--bar-size'], size);
-        assert.strictEqual(!!fill.hidden, state === 'unavailable');
-        assert.strictEqual(track.style.background, '#1A1A1A');
-        assert.strictEqual(fill.style.background, '#4CAF50');
-        assert.strictEqual(cell.querySelector('.pad-content-widget-region').children[0], bar);
-    }
-}
-const gaugeBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "gauge")', context);
-for (const [state, min, max, percent] of [
-    ['0', 0, 100, 0], ['50', 0, 100, 50], ['100', 0, 100, 100],
-    ['200', 0, 100, 100], ['-200', 0, 100, 0], ['-50', -100, 100, 25],
-    ['unavailable', 0, 100, null]
-]) {
-    const detail = { entity_id: 'sensor.power', state, unit: '%' };
-    const session = { draft: makeDraft(detail, 'Power') };
-    context.padButtonBuilderSetScenario(session, gaugeBuilder);
-    Object.assign(session.draft.options, { min, max, color: '#2196F3' });
-    const button = { label_top: 'Power', ...gaugeBuilder.build(session.draft),
-        ...gaugeBuilder.preview(session.draft) };
-    const cell = createElement();
-    context.padRenderCellContent(cell, button);
-    gaugeBuilder.renderPreview(session.draft, cell, button);
-    assert(cell.querySelector('.pad-content-widget-region'));
-    assert.strictEqual(cell.querySelector('.pad-cell-label-center'), null);
-    const gauge = descendants(cell).find(child => child.attributes.class === 'pad-button-builder-gauge');
-    assert.strictEqual(gauge.attributes.role, percent === null ? 'img' : 'meter');
-    assert.strictEqual(gauge.children[0].attributes.stroke, '#1A1A1A');
-    if (percent === null) {
-        assert.match(gauge.attributes['aria-label'], /unavailable/);
-        assert.strictEqual(gauge.children.length, 6, 'Only track and ticks remain when data is unavailable');
-        assert.strictEqual(button.label_bottom, '---');
-    } else {
-        assert.strictEqual(gauge.attributes['aria-valuemin'], String(min));
-        assert.strictEqual(gauge.attributes['aria-valuemax'], String(max));
-        assert.strictEqual(gauge.attributes['aria-valuenow'], String(Math.max(min, Math.min(max, Number(state)))));
-        assert.strictEqual(gauge.attributes['aria-valuetext'], Number(state).toFixed(1) + ' %');
-        assert.strictEqual(gauge.children[1].attributes['stroke-dasharray'], percent + ' 100');
-        assert.strictEqual(gauge.children[1].attributes.stroke, '#2196F3');
-        assert.strictEqual(gauge.children[2].attributes.transform, 'rotate(' + percent * 1.8 + ' 140 130)');
-        assert.strictEqual(gauge.children[2].attributes.stroke, '#FFFFFF');
-        assert.strictEqual(gauge.children.length, 8, 'One track, one ring, one needle, and five ticks');
-    }
-    assert.strictEqual(cell.querySelector('.pad-content-widget-region').children[0], gauge);
-}
-const historyBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "history")', context);
-const iconHistoryBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "icon_history")', context);
-{
-    const cell = createElement();
-    const session = { draft: makeDraft({ state: '21.37', unit: '\u00b0C' }, 'Living room') };
-    context.padButtonBuilderSetScenario(session, iconHistoryBuilder);
-    session.draft.options.color = '#123456';
-    const button = { ...iconHistoryBuilder.build(session.draft), ...iconHistoryBuilder.preview(session.draft) };
-    context.padRenderCellContent(cell, button);
-    iconHistoryBuilder.renderPreview(session.draft, cell, button);
-    assert.strictEqual(cell.querySelector('.pad-cell-icon').dataset.foreground, '#123456');
-    const [fill, line, dot] = cell.querySelector('.pad-content-widget-region').children[0].children;
-    assert.strictEqual(fill.attributes.fill, '#123456');
-    assert.strictEqual(fill.attributes['fill-opacity'], '0.5');
-    assert.strictEqual(line.attributes.stroke, '#123456');
-    assert.strictEqual(dot.attributes.fill, '#123456');
-}
-let samplePoints;
-for (const color of ['#4CAF50', '#2196F3']) {
-    const cell = createElement();
-    const detail = { entity_id: 'sensor.temperature', state: '21.37', unit: '\u00b0C' };
-    const session = { draft: makeDraft(detail, 'Living room') };
-    context.padButtonBuilderSetScenario(session, historyBuilder);
-    session.draft.sources[0].options.color = color;
-    const button = { ...historyBuilder.build(session.draft),
-        ...historyBuilder.preview(session.draft) };
-    context.padRenderCellContent(cell, button);
-    historyBuilder.renderPreview(session.draft, cell, button);
-    assert.strictEqual(cell.querySelector('.pad-cell-label-top').textContent, 'Living room');
-    assert.strictEqual(cell.querySelector('.pad-cell-label-center').textContent, '21.4 \u00b0C');
-    assert(cell.querySelector('.pad-content-widget-region'));
-    assert.ok(cell.classes.has('pad-button-builder-preview-single-history'));
-    const chart = cell.querySelector('.pad-content-widget-region').children[0];
-    assert.strictEqual(chart.attributes.role, 'img');
-    assert.strictEqual(chart.attributes.viewBox, '0 0 280 190');
-    assert.match(chart.attributes['aria-label'], /Illustrative trend, not actual history/);
-    assert.match(chart.attributes['aria-label'], /Living room: 21\.4/);
-    const [line, dot] = chart.children;
-    assert.strictEqual(line.attributes.stroke, color);
-    assert.strictEqual(dot.attributes.fill, color);
-    assert.strictEqual(line.attributes.points.split(' ').at(-1).split(',')[0], '276',
-        'The single-value trend spans the preview width without an endpoint label');
-    assert.strictEqual(Number(dot.attributes.r) * 2, 5);
-    const points = line.attributes.points.split(' ').map(point => point.split(',').map(Number));
-    assert.deepStrictEqual(points.at(-1), [Number(dot.attributes.cx), Number(dot.attributes.cy)]);
-    if (samplePoints) assert.strictEqual(line.attributes.points, samplePoints, 'The illustrative curve stays deterministic');
-    samplePoints = line.attributes.points;
-}
-{
-    const detail = { entity_id: 'sensor.temperature', state: '21.37', unit: '\u00b0C' };
-    const session = { draft: makeDraft(detail, 'Living room') };
-    context.padButtonBuilderSetScenario(session, historyBuilder);
-    session.draft.sources.push(context.padButtonBuilderSource(historyBuilder, {
-        providerId: 'ha', sourceId: 'sensor.humidity', displayName: 'Humidity',
-        reference: { entity_id: 'sensor.humidity' }, sample: '54.2', sampleTruncated: false, unit: '%',
-        formatModes: ['raw', 'number'], capabilities: { display: true, numericWidget: true, liveSampling: true }
-    }, 1));
-    const render = () => {
-        const cell = createElement();
-        const button = { ...historyBuilder.build(session.draft), ...historyBuilder.preview(session.draft) };
-        context.padRenderCellContent(cell, button);
-        historyBuilder.renderPreview(session.draft, cell, button);
-        return cell;
-    };
-    const cell = render();
-    const chart = cell.querySelector('.pad-content-widget-region').children[0];
-    assert.strictEqual(chart.children.length, 6, 'Both values have a line, dot, and endpoint label');
-    assert.strictEqual(chart.children[5].textContent, '54.2 %');
-    assert.strictEqual(chart.children[5].attributes.fill, '#2196F3');
-    assert.strictEqual(chart.children[5].attributes.y, chart.children[4].attributes.cy);
-    session.draft.sources[1].candidate.sample = 'unavailable';
-    const unavailable = render();
-    assert.strictEqual(unavailable.querySelector('.pad-content-widget-region').children[0].children[3].textContent, '---');
-    assert.strictEqual(unavailable.querySelector('.pad-content-widget-region').children[0].children.length, 4, 'Unavailable values have a label but no zero or fake trend');
-}
 for (const source of ['', 'on', 'off', '[expr:[ha:climate.bureau_boven_thermostaat;attributes.temperature]>20?"on":"off"]']) {
     const cell = createElement();
     context.padRenderCellContent(cell, { widget_type: 'toggle', widget_data_binding: source,
@@ -809,6 +680,16 @@ for (const change of [{ icon_scale_pct: 80 }, { col_span: 1 }, { label_top: '' }
     assert.notStrictEqual(context.padIconRenderKey(renderPad, { ...renderButton, ...change }), originalKey);
 assert.notStrictEqual(context.padIconRenderKey({ ...renderPad, column_widths_px: [0, 50, 0] }, renderButton), originalKey);
 assert.notStrictEqual(context.padIconRenderKey({ ...renderPad, cols: 4 }, renderButton), originalKey);
+
+const largePad = { cols: 10, rows: 10, column_widths_px: [0, 0, 0, 0, 0, 0, 0, 0, 21, 0],
+    row_heights_px: [0, 0, 0, 0, 0, 0, 0, 0, 0, 31] };
+const largeKey = context.padIconRenderKey(largePad, { col: 9, row: 9 });
+assert.strictEqual(largeKey, '027ad4aa');
+assert.notStrictEqual(context.padIconRenderKey({ ...largePad,
+    column_widths_px: [0, 0, 0, 0, 0, 0, 0, 0, 22, 0] }, { col: 9, row: 9 }), largeKey);
+assert.deepStrictEqual(Array.from(context.padSelectTemplateButtons(
+    { cols: 10, rows: 10, buttons: [{ col: 8, row: 8 }] },
+    [{ col: 8, row: 8 }, { col: 9, row: 9 }])), [{ col: 9, row: 9 }]);
 
 {
     const size = 8;

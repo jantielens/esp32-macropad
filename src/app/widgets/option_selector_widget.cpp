@@ -106,6 +106,10 @@ void layout(State* state) {
     lv_obj_update_layout(state->parent);
     const int width = lv_obj_get_content_width(state->parent);
     const int height = lv_obj_get_content_height(state->parent);
+    lv_obj_t* group = lv_obj_get_child(state->parent, 0);
+    const int group_height = height > 0 ? LV_MAX(1, height * state->config->height_pct / 100) : 0;
+    lv_obj_set_pos(group, 0, (height - group_height) / 2);
+    lv_obj_set_size(group, width, group_height);
     unsigned count = 0;
     for (const auto& slot : state->config->slots)
         if (slot.kind != OptionSelectorContent::None) ++count;
@@ -129,9 +133,9 @@ void layout(State* state) {
         lv_obj_set_size(slot.hit, cell_width, height);
         const int inset = state->config->option_inset;
         const int inset_x = inset < cell_width / 2 ? inset : (cell_width - 1) / 2;
-        const int inset_y = inset < height / 2 ? inset : (height - 1) / 2;
+        const int inset_y = inset < group_height / 2 ? inset : (group_height - 1) / 2;
         const int inner_width = cell_width - 2 * inset_x;
-        const int inner_height = height - 2 * inset_y;
+        const int inner_height = group_height - 2 * inset_y;
         const int badge_size = inner_width < inner_height ? inner_width : inner_height;
         if (badge_size / 2 < group_radius) group_radius = badge_size / 2;
         const bool icon = config.kind == OptionSelectorContent::Icon;
@@ -155,7 +159,7 @@ void layout(State* state) {
         }
         if (slot.content) lv_obj_center(slot.content);
     }
-    lv_obj_set_style_radius(state->parent, group_radius, 0);
+    lv_obj_set_style_radius(group, group_radius, 0);
     state->layout_dirty = false;
 }
 
@@ -190,7 +194,7 @@ void render(State* state) {
     const uint32_t option_bg = resolve_color(config.option_background, track);
     if (state->group_color != group) {
         state->group_color = group;
-        lv_obj_set_style_bg_color(state->parent, color(group), 0);
+        lv_obj_set_style_bg_color(lv_obj_get_child(state->parent, 0), color(group), 0);
     }
     for (unsigned index = 0; index < OPTION_SELECTOR_SLOTS; ++index) {
         const auto& option = config.slots[index];
@@ -342,8 +346,13 @@ void create(lv_obj_t* parent, const WidgetConfig* widget, const ScreenButtonConf
     state->available = state->config && state->config->mode != OptionSelectorMode::Bound;
     state->group_color = UINT32_MAX;
     if (!state->config) return;
-    lv_obj_set_style_bg_opa(parent, state->config->group_background ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
-    lv_obj_set_style_radius(parent, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_opa(parent, LV_OPA_TRANSP, 0);
+    lv_obj_t* group = lv_obj_create(parent);
+    lv_obj_remove_style_all(group);
+    lv_obj_set_style_pad_all(group, 0, 0);
+    lv_obj_set_style_bg_opa(group, state->config->group_background ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
+    lv_obj_clear_flag(group, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_clear_flag(group, LV_OBJ_FLAG_SCROLLABLE);
     LabelStyle label_style = button->style_center;
     if (state->config->font_size) label_style.font_size = state->config->font_size;
     const lv_font_t* font = pad_resolve_font(label_style, scale->font_large, runtime->font_owner);
@@ -458,6 +467,9 @@ void describe(JsonObject& out) {
         field["minimum"] = 0; field["maximum"] = size_maximums[index];
         field["default"] = index == 3 ? OPTION_SELECTOR_DEFAULT_INSET : 0;
     }
+    JsonObject height = fields.createNestedObject();
+    height["name"] = "widget_option_height_pct"; height["type"] = "number";
+    height["minimum"] = 1; height["maximum"] = 100; height["default"] = 100;
     const char* suffixes[] = {"label", "value", "fg_color", "bg_color", "state"};
     for (unsigned index = 0; index < OPTION_SELECTOR_SLOTS; ++index) {
         for (const char* suffix : suffixes) {

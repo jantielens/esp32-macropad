@@ -74,7 +74,8 @@ in **On-device bindings** or enter a complete token. Complete or edit its
 registered parameters, then choose **Continue** to customize and preview the
 binding. Use **Edit value** to adjust optional catalog parameters later.
 Both builders use declared samples or the HA/MQTT value acquired during source
-selection, without an extra device-preview request. When no sample is available,
+selection, without an extra device-preview request. The Button Builder shows the
+sample while you customize the button. When no sample is available,
 you can still copy or insert a valid binding. Parameter inputs do not infer types
 or units from a sample. Check named pad bindings in the button editor using saved
 definitions, not unsaved edits.

@@ -100,6 +100,8 @@ function padColorSwatchButton(val) {
     sw.addEventListener('click', function() {
         if (_cpPopover) {
             _cpPopover.pop.querySelector('#cp-input').value = val;
+            _cpPopover.edited = true;
+            _cpPopover.generatorInvalid = false;
             padColorPopoverValidate(true);
         }
     });
@@ -119,7 +121,7 @@ function padColorPopoverCreate() {
     var bd = document.createElement('div');
     bd.className = 'color-popover-backdrop';
     bd.style.display = 'none';
-    bd.addEventListener('click', padColorPopoverClose);
+    bd.addEventListener('click', padColorPopoverDismiss);
     document.body.appendChild(bd);
     // Popover
     var pop = document.createElement('div');
@@ -177,6 +179,7 @@ function padColorPopoverCreate() {
             '<div class="binding-error-msg" id="cp-error" role="alert" style="display:none;"></div>' +
         '</div></div>' +
         '<div class="cp-actions">' +
+            '<button type="button" class="btn btn-small" id="cp-cancel">Cancel</button>' +
             '<button type="button" class="btn btn-small btn-primary" id="cp-apply" disabled>Apply</button>' +
         '</div>';
     document.body.appendChild(pop);
@@ -200,6 +203,8 @@ function padColorPopoverCreate() {
     });
     picker.addEventListener('input', function() {
         pop.querySelector('#cp-input').value = picker.value.toUpperCase();
+        _cpPopover.edited = true;
+        _cpPopover.generatorInvalid = false;
         padColorPopoverValidate(true);
     });
     pg.appendChild(custom);
@@ -213,6 +218,8 @@ function padColorPopoverCreate() {
         if (e.key === 'Enter') { padColorPopoverSubmit(cpInput.value); e.preventDefault(); }
     });
     cpInput.addEventListener('input', function() {
+        _cpPopover.edited = true;
+        _cpPopover.generatorInvalid = false;
         padColorPopoverValidate(false);
         if (_cpErrorTimer) clearTimeout(_cpErrorTimer);
         _cpErrorTimer = setTimeout(function() { _cpErrorTimer = null; padColorPopoverValidate(true); }, 400);
@@ -230,17 +237,20 @@ function padColorPopoverCreate() {
         });
     });
     pop.querySelector('#cp-fill-pattern').addEventListener('change', function() {
+        _cpPopover.edited = true;
         _cpPopover.fill.pattern = padFillPattern(this.value);
         padColorPopoverValidate(true);
     });
     ['spacing', 'stroke'].forEach(function(field) {
         pop.querySelector('#cp-fill-' + field).addEventListener('input', function() {
             if (!_cpPopover.fill || !_cpPopover.fill.geometry) return;
+            _cpPopover.edited = true;
             _cpPopover.fill.geometry[field] = Number(this.value);
             padColorPopoverValidate(true);
         });
     });
     pop.querySelector('#cp-close').addEventListener('click', padColorPopoverClose);
+    pop.querySelector('#cp-cancel').addEventListener('click', padColorPopoverClose);
     // Escape closes from anywhere, unless the binding help overlay is on top
     document.addEventListener('keydown', function(e) {
         if (e.key !== 'Escape' || pop.style.display === 'none') return;
@@ -314,7 +324,7 @@ function padColorPopoverValidate(showError) {
     preview.classList.toggle('cp-preview-binding', ok && res.value.charAt(0) !== '#');
     preview.classList.toggle('cp-preview-none', !ok);
     preview.style.background = (ok && res.value.charAt(0) === '#') ? res.value : '';
-    pop.querySelector('#cp-apply').disabled = !ok;
+    pop.querySelector('#cp-apply').disabled = !ok || !!_cpPopover.generatorInvalid;
     var input = pop.querySelector('#cp-input');
     var err = pop.querySelector('#cp-error');
     if (res.error && showError) {
@@ -331,11 +341,32 @@ function padColorPopoverValidate(showError) {
 /** Apply a value if valid; otherwise load it into the textbox and show why. */
 function padColorPopoverSubmit(val) {
     if (!_cpPopover) return;
+    if (_cpPopover.generatorInvalid) {
+        var source = _cpPopover.pop.querySelector('#cp-gen-source');
+        if (!source.value.trim()) source.focus();
+        else _cpPopover.pop.querySelector('#cp-gen-stops .cp-gen-tval').focus();
+        return;
+    }
     var input = _cpPopover.pop.querySelector('#cp-input');
     input.value = String(val).trim();
     var res = padColorPopoverValidate(true);
     if (res && res.value && !res.error) padColorPopoverApply(res.value);
-    else input.focus();
+    else {
+        if (res && !res.value && !res.error) {
+            var error = _cpPopover.pop.querySelector('#cp-error');
+            error.textContent = 'Enter a color';
+            error.style.display = '';
+            input.classList.add('binding-error');
+        }
+        input.focus();
+    }
+}
+
+/** Apply an edited draft when dismissing the popover, or close an unchanged one. */
+function padColorPopoverDismiss() {
+    if (!_cpPopover || !_cpPopover.target) return;
+    if (!_cpPopover.edited) padColorPopoverClose();
+    else padColorPopoverSubmit(_cpPopover.pop.querySelector('#cp-input').value);
 }
 
 /** Open the color popover anchored to a swatch element, targeting a specific input. */
@@ -351,6 +382,8 @@ function padColorPopoverOpen(swatch, input) {
     cp.anchor = swatch;
     cp.returnFocus = document.activeElement;
     cp.layer = 'base';
+    cp.edited = false;
+    cp.generatorInvalid = false;
     var fillControls = padColorFillControls(input);
     cp.fill = fillControls ? {
         controls: fillControls, base: input.value,
@@ -535,6 +568,7 @@ function padThresholdGenParse(val) {
 /** Load the generator from an existing threshold expression, or reset to defaults. */
 function padThresholdGenLoad(val) {
     if (!_cpPopover) return;
+    _cpPopover.generatorInvalid = false;
     var pop = _cpPopover.pop;
     var parsed = padThresholdGenParse(val);
     var gen = pop.querySelector('#cp-gen');
@@ -563,6 +597,7 @@ function padThresholdSourceValidate() {
 
 function padThresholdGenerate() {
     if (!_cpPopover) return;
+    _cpPopover.edited = true;
     var pop = _cpPopover.pop;
     var src = pop.querySelector('#cp-gen-source').value.trim();
     var rows = pop.querySelectorAll('#cp-gen-stops .cp-gen-stop');
@@ -588,7 +623,11 @@ function padThresholdGenerate() {
     var err = pop.querySelector('#cp-gen-error');
     err.textContent = error;
     err.style.display = error ? '' : 'none';
-    if (!hasSource || error) return;
+    _cpPopover.generatorInvalid = !hasSource || !!error;
+    if (_cpPopover.generatorInvalid) {
+        padColorPopoverValidate(true);
+        return;
+    }
     var parts = '[expr:threshold(' + src + ', "' + colors[0] + '"';
     for (var k = 0; k < thresholds.length; k++) {
         parts += ', ' + thresholds[k] + ', "' + colors[k + 1] + '"';

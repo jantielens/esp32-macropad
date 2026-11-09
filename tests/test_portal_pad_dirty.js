@@ -23,8 +23,10 @@ const elements = new Map([
 	['pad-edit-bg-image-scale-group', { style: {} }],
 	['pad-edit-rocker-group-layout-group', { style: {} }],
 	['pad-edit-content-layout-group', { style: {} }],
+	['pad-edit-overlay-backdrop-group', { style: {} }],
 	['pad-edit-group-width-group', { style: {} }],
 	['pad-edit-rocker-group-layout', { value: 'center' }],
+	['pad-edit-content-layout', { value: 'right' }],
 	['pad-edit-widget-type', { value: '' }]
 ]);
 vm.createContext(context);

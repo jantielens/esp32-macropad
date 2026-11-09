@@ -115,6 +115,20 @@ int main() {
     {
         JsonDocument doc;
         JsonObject button = make_button(doc);
+        for (const char* fit : {"fill-center", "fill-top", "fill-bottom",
+                                "fill-left", "fill-right", "letterbox"}) {
+            button["bg_image_fit"] = fit;
+            CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        }
+        button["bg_image_fit"] = "stretch";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["bg_image_fit"] = 42;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+    }
+
+    {
+        JsonDocument doc;
+        JsonObject button = make_button(doc);
         button["icon_badge_padding"] = 0;
         button["icon_badge_color"] = "[health:color]";
         button["widget_type"] = "sparkline";
@@ -148,6 +162,22 @@ int main() {
         }
         button["widget_sparkline_fill_opacity"] = 0;
         CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        button["widget_sparkline_height_pct"] = 10;
+        button["widget_sparkline_fill_opacity_2"] = 0;
+        button["widget_sparkline_line_width_1"] = 10;
+        button["widget_sparkline_current_dot_3"] = 20;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        button["widget_sparkline_height_pct"] = 9;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["widget_sparkline_height_pct"] = 100;
+        button["widget_sparkline_fill_opacity_2"] = 101;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["widget_sparkline_fill_opacity_2"] = 0;
+        button["widget_sparkline_line_width_1"] = 0;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["widget_sparkline_line_width_1"] = 1;
+        button["widget_sparkline_current_dot_3"] = 1.5;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
     }
 
     {
@@ -164,10 +194,33 @@ int main() {
         CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
         button["widget_position"] = "below";
         CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        for (const char* position : {"overlay-top-left", "overlay-top-center", "overlay-top-right",
+                                     "overlay-center-left", "overlay-center", "overlay-center-right",
+                                     "overlay-bottom-left", "overlay-bottom-center", "overlay-bottom-right"}) {
+            button["widget_position"] = position;
+            CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        }
+        button["widget_position"] = "overlay-invalid";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["widget_position"] = "below";
         button["group_size_pct"] = 91;
         CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
         button["group_size_pct"] = 0;
+        button["reserve_label_slots"] = true;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        button["reserve_label_slots"] = "true";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button.remove("reserve_label_slots");
+        button["overlay_backdrop"] = true;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        button["overlay_backdrop"] = false;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        button["overlay_backdrop"] = "true";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button.remove("overlay_backdrop");
         button["icon_position"] = "center";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["icon_position"] = "overlay-top-left";
         CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
         button["icon_position"] = "left";
         button["widget_type"] = "test";
@@ -240,6 +293,29 @@ int main() {
         JsonDocument doc;
         make_button(doc);
         CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+    }
+
+    {
+        JsonDocument doc;
+        JsonObject button = make_button(doc);
+        doc["cols"] = 10;
+        doc["rows"] = 10;
+        button["col"] = 8;
+        button["row"] = 8;
+        button["col_span"] = 2;
+        button["row_span"] = 2;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        button["col"] = 9;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["col_span"] = 1;
+        button["row"] = 9;
+        button["row_span"] = 1;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        doc["cols"] = 11;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        doc["cols"] = 10;
+        doc["rows"] = 11;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
     }
 
     {
@@ -466,10 +542,25 @@ int main() {
 
     {
         JsonDocument doc;
+        deserializeJson(doc, R"({"cols":10,"rows":10,"column_widths_px":[0,0,0,0,0,0,0,0,21,0],"row_heights_px":[0,0,0,0,0,0,0,0,0,31],"buttons":[{"col":9,"row":9}]})");
+        JsonObject button = doc["buttons"][0];
+        const uint32_t original = pad_icon_render_key(doc.as<JsonObjectConst>(), button);
+        CHECK(original == 0x027ad4aau);
+        doc["column_widths_px"][8] = 22;
+        CHECK(pad_icon_render_key(doc.as<JsonObjectConst>(), button) != original);
+    }
+
+    {
+        JsonDocument doc;
         deserializeJson(doc, R"({"cols":3,"rows":2,"column_widths_px":[0,40,0],"buttons":[{"col":1,"row":0,"col_span":2,"widget_type":"option_selector","widget_option_label":"Cool","widget_option_icon_5":{"kind":"mono"},"widget_option_icon_size_pct":75,"widget_option_icon_badge_padding":4}]})");
         CHECK(pad_option_icon_render_key(doc.as<JsonObjectConst>(), doc["buttons"][0], 5) == 0xe3f58eb6u);
+        doc["buttons"][0]["reserve_label_slots"] = true;
+        CHECK(pad_option_icon_render_key(doc.as<JsonObjectConst>(), doc["buttons"][0], 5) == 0xf3611d57u);
+        doc["buttons"][0].remove("reserve_label_slots");
         doc["buttons"][0]["widget_option_inset"] = 0;
         CHECK(pad_option_icon_render_key(doc.as<JsonObjectConst>(), doc["buttons"][0], 5) == 0x3cf96935u);
+        doc["buttons"][0]["widget_option_height_pct"] = 50;
+        CHECK(pad_option_icon_render_key(doc.as<JsonObjectConst>(), doc["buttons"][0], 5) == 0xf09f7bd1u);
     }
 
     const char* invalid_timer_bindings[] = {

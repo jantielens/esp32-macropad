@@ -143,7 +143,7 @@ function recipeValidateCatalog(catalog) {
                 }
             });
             const bounds = recipeBounds(recipe.layout.buttons);
-            if (bounds.cols > 8 || bounds.rows > 8) recipeError('Recipe layout must fit within an 8x8 pad.');
+            if (bounds.cols > 10 || bounds.rows > 10) recipeError('Recipe layout must fit within a 10x10 pad.');
         }
         if (recipe.provision !== undefined) {
             if (!recipeIsObject(recipe.provision) ||

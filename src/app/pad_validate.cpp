@@ -90,6 +90,7 @@ uint32_t pad_option_icon_render_key(JsonObjectConst pad, JsonObjectConst button,
     number(button["icon"].is<JsonObjectConst>() ? 1 : 0);
     text(button["widget_position"] | "");
     text(button["icon_position"] | "");
+    if (button["reserve_label_slots"] | false) text("reserve_label_slots");
     for (unsigned index = 0; index < 5; ++index) {
         char label[32], icon[32];
         if (index == 0) {
@@ -105,6 +106,11 @@ uint32_t pad_option_icon_render_key(JsonObjectConst pad, JsonObjectConst button,
     if (inset != 4) {
         text("inset");
         number(inset);
+    }
+    const int height = button["widget_option_height_pct"] | 100;
+    if (height != 100) {
+        text("height");
+        number(height);
     }
     return hash ? hash : 1;
 }
@@ -246,6 +252,27 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
         (!b["widget_sparkline_fill_opacity"].is<unsigned>() ||
          b["widget_sparkline_fill_opacity"].as<unsigned>() > 100))
         return "widget_sparkline_fill_opacity must be a whole percentage from 0 to 100";
+    struct SparklineNumber { const char* key; unsigned min; unsigned max; };
+    const SparklineNumber sparkline_numbers[] = {
+        {"widget_sparkline_height_pct", 10, 100},
+        {"widget_sparkline_line_width", 1, 10},
+        {"widget_sparkline_current_dot", 0, 20},
+        {"widget_sparkline_fill_opacity_1", 0, 100},
+        {"widget_sparkline_fill_opacity_2", 0, 100},
+        {"widget_sparkline_fill_opacity_3", 0, 100},
+        {"widget_sparkline_line_width_1", 1, 10},
+        {"widget_sparkline_line_width_2", 1, 10},
+        {"widget_sparkline_line_width_3", 1, 10},
+        {"widget_sparkline_current_dot_1", 0, 20},
+        {"widget_sparkline_current_dot_2", 0, 20},
+        {"widget_sparkline_current_dot_3", 0, 20}
+    };
+    for (const auto& field : sparkline_numbers) {
+        if (b.containsKey(field.key) &&
+            (!b[field.key].is<unsigned>() || b[field.key].as<unsigned>() < field.min ||
+             b[field.key].as<unsigned>() > field.max))
+            return "sparkline style value must be a whole number within its allowed range";
+    }
     if (!color_ok(b["bg_color"] | "")) return "bad bg_color";
     if (!color_ok(b["fg_color"] | "")) return "bad fg_color";
     if (!color_ok(b["border_color"] | "")) return "bad border_color";
@@ -263,17 +290,20 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
     const char* wt = b["widget_type"] | "";
     const WidgetType* wtype = wt[0] ? widget_find(wt) : nullptr;
     if (wt[0] && !wtype) return "unknown widget type";
-    for (const char* field : {"icon_position", "widget_position"}) {
-        if (!b.containsKey(field)) continue;
-        uint8_t position;
-        if (!button_position_parse(b[field] | "", &position))
-            return "icon_position and widget_position must be above, below, left, or right";
-    }
+    uint8_t position;
+    if (b.containsKey("icon_position") && !button_position_parse(b["icon_position"] | "", &position))
+        return "icon_position must be above, below, left, or right";
+    if (b.containsKey("widget_position") && !button_widget_position_parse(b["widget_position"] | "", &position))
+        return "invalid widget_position";
     if (b.containsKey("group_size_pct")) {
         if (!b["group_size_pct"].is<int>()) return "group_size_pct must be 0 (auto) or 10-90";
         const int percent = b["group_size_pct"].as<int>();
         if (percent != 0 && (percent < 10 || percent > 90)) return "group_size_pct must be 0 (auto) or 10-90";
     }
+    if (b.containsKey("reserve_label_slots") && !b["reserve_label_slots"].is<bool>())
+        return "reserve_label_slots must be a boolean";
+    if (b.containsKey("overlay_backdrop") && !b["overlay_backdrop"].is<bool>())
+        return "overlay_backdrop must be a boolean";
     if (b.containsKey("rocker_group_layout")) {
         const char* layout = b["rocker_group_layout"] | "";
         if ((strcmp(wt, "rocker") != 0 && strcmp(wt, "numericrocker") != 0) ||
@@ -356,6 +386,15 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
                        "bg_image_path too long (max 191 chars)"))) return e;
     if ((e = check_max(b, "bg_image_url", CONFIG_BG_IMAGE_URL_MAX_LEN,
                        "bg_image_url too long (max 255 chars)"))) return e;
+    if (b.containsKey("bg_image_fit")) {
+        const char* fit = b["bg_image_fit"].is<const char*>()
+            ? b["bg_image_fit"].as<const char*>() : "";
+        if (strcmp(fit, "fill-center") && strcmp(fit, "fill-top") &&
+            strcmp(fit, "fill-bottom") && strcmp(fit, "fill-left") &&
+            strcmp(fit, "fill-right") && strcmp(fit, "letterbox")) {
+            return "bg_image_fit must be fill-center, fill-top, fill-bottom, fill-left, fill-right, or letterbox";
+        }
+    }
     const char* image_url = b["bg_image_url"] | "";
     if (binding_template_has_bindings(image_url) &&
         ((b["bg_image_user"] | "")[0] || (b["bg_image_password"] | "")[0] ||
@@ -446,8 +485,8 @@ const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid,
     int rows = pad["rows"] | 0;
     bool is_grid = strcmp(layout, "grid") == 0;
     if (is_grid) {
-        if (cols < 1 || cols > MAX_GRID_COLS) return "cols must be 1-8";
-        if (rows < 1 || rows > MAX_GRID_ROWS) return "rows must be 1-8";
+        if (cols < 1 || cols > MAX_GRID_COLS) return "cols must be within device grid limits";
+        if (rows < 1 || rows > MAX_GRID_ROWS) return "rows must be within device grid limits";
     } else {
         if (pad.containsKey("column_widths_px") || pad.containsKey("row_heights_px"))
             return "track sizes are only supported for grid layouts";

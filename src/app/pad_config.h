@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "image_library.h"
+#include "image_decoder.h"
 #include "button_content_layout.h"
 
 // ============================================================================
@@ -23,10 +24,10 @@
 #define MAX_PAD_BUTTONS       64
 #endif
 #ifndef MAX_GRID_COLS
-#define MAX_GRID_COLS          8
+#define MAX_GRID_COLS         10
 #endif
 #ifndef MAX_GRID_ROWS
-#define MAX_GRID_ROWS          8
+#define MAX_GRID_ROWS         10
 #endif
 
 #define CONFIG_LABEL_MAX_LEN          192
@@ -439,6 +440,8 @@ struct ScreenButtonConfig {
     ButtonGroupIconPosition icon_position;
     ButtonWidgetPosition widget_position;
     uint8_t group_size_pct;             // 0 = auto, otherwise 10-90%
+    bool reserve_label_slots;
+    bool overlay_backdrop;
     bool rocker_group_beside;
     int16_t ui_offset_x;                // Optional visual nudge X in px (+right, -left)
     int16_t ui_offset_y;                // Optional visual nudge Y in px (+down, -up)
@@ -466,7 +469,7 @@ struct ScreenButtonConfig {
     char bg_image_user[CONFIG_BG_IMAGE_USER_MAX_LEN];     // HTTP Basic Auth user
     char bg_image_password[CONFIG_BG_IMAGE_PASS_MAX_LEN]; // HTTP Basic Auth password
     uint32_t bg_image_interval_ms;                        // 0 = fetch once, >0 = periodic
-    bool bg_image_letterbox;                              // true = letterbox (fit + button-color bars), false = cover (fill + crop)
+    ImageScaleMode bg_image_fit;
 
     // Widget type (bar_chart, gauge, etc.) — empty = normal button
     WidgetConfig widget;
@@ -562,8 +565,8 @@ struct PadConfig {
     uint8_t button_capacity;               // allocated entries in buttons
     const char* name;
     char layout[CONFIG_LAYOUT_NAME_MAX_LEN]; // "grid" or curated layout name
-    uint8_t cols;                            // 1-8 (grid mode only)
-    uint8_t rows;                            // 1-8 (grid mode only)
+    uint8_t cols;                            // 1-MAX_GRID_COLS (grid mode only)
+    uint8_t rows;                            // 1-MAX_GRID_ROWS (grid mode only)
     uint16_t column_widths_px[MAX_GRID_COLS]; // 0 = Auto
     uint16_t row_heights_px[MAX_GRID_ROWS];   // 0 = Auto
     char wake_screen[CONFIG_SCREEN_ID_MAX_LEN]; // screen to navigate to on screensaver sleep (empty = stay)

@@ -131,8 +131,8 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     JsonObject pf = pad.createNestedObject("fields");
     pf["name"] = "optional friendly label for the pad (shown in the UI; returned by get_pad/list_pads). The canonical id is still 'pad_N'. To SET it, call set_pad with the 'pad_name' argument (the key 'name' is avoided because some MCP clients reserve it).";
     pf["layout"] = "'grid' (default) or a curated layout name";
-    pf["cols"] = "grid columns 1-8";
-    pf["rows"] = "grid rows 1-8";
+    pf["cols"] = "grid columns from 1 to grid.max_cols";
+    pf["rows"] = "grid rows from 1 to grid.max_rows";
     pf["wake_screen"] = "screen id to navigate to on screensaver wake ('' = stay)";
     pf["bg_color"] = "pad background color #RRGGBB (default #000000)";
     pf["button_shadow"] = "'enabled' or 'disabled' to override the device button-shadow setting; omit to inherit";
@@ -140,7 +140,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     pf["overlay_buttons"] = "Optional Overlay button array sharing the pad grid and combined button capacity.";
     pf["template_pad"] = "int pad index 0..MAX_PADS-1 to inherit source Main buttons into empty destination Main positions (-1 = none). Overlay buttons do not suppress inheritance.";
     pf["bindings"] = "object of name->binding-template, referenced elsewhere as [pad:name]. Names: [a-zA-Z][a-zA-Z0-9_]*";
-    pf["pad_actions"] = "ordered array of up to grid.max_actions background tap actions for unoccupied pad space. Buttons render above these actions; visible Overlay buttons block them. [] clears the list. Template pads never contribute pad_actions.";
+    pf["pad_actions"] = "ordered array of up to grid.max_actions full-screen tap actions. These capture taps before Main and Overlay buttons and widgets. [] clears the list. Template pads never contribute pad_actions.";
     pad["bindings_example"] = "{\"power\":\"[mqtt:home/solar/power;watts;%.0f]\",\"hot\":\"[expr:[pad:power]>3000?1:0]\"}";
 
     JsonObject btn = result.createNestedObject("button");
@@ -148,19 +148,19 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     const char* fields[] = {
         "col", "row", "col_span", "row_span",
         "label_top", "label_center", "label_bottom",
-        "label_top_style", "label_center_style", "label_bottom_style",
+        "label_top_style", "label_center_style", "label_bottom_style", "reserve_label_slots",
         "bg_color", "fg_color", "border_color", "border_width", "corner_radius", "content_pad", "button_shadow",
         "bg_pattern", "bg_pattern_color", "pattern_spacing", "pattern_stroke_width",
         "icon", "icon_scale_pct", "icon_position", "icon_color", "icon_badge_padding", "icon_badge_color",
-        "widget_position", "group_size_pct", "rocker_group_layout",
+        "widget_position", "group_size_pct", "rocker_group_layout", "overlay_backdrop",
         "btn_state", "widget_type", "widget_data_binding", "actions", "lp_actions"
     };
     for (const char* f : fields) bf.add(f);
     btn["layer_note"] = "Buttons are stored in buttons (Main) or overlay_buttons (Overlay). Authoring tools accept layer='main' or layer='overlay'; omitted layer means Main. Positions are local array indices, while col/row are grid coordinates.";
     btn["widget_note"] = "widget keys are flat: widget_type + widget_data_binding[_2.._4]; widget config fields (e.g. min/max/color) are flat on the button too";
-    btn["content_layout_note"] = "icon_position places the icon above, below, left or right of the labels; omit to inherit device defaults (firmware default left). Rocker and Numeric Rocker default to rocker_group_layout center; beside uses widget_position (default right). group_size_pct is 0 for auto or 10-90 percent of the layout axis; centered groups are capped to the center lane without changing input zones.";
+    btn["content_layout_note"] = "icon_position places the icon above, below, left or right of the labels; omit to inherit device defaults (firmware default left). widget_position defaults to right; overlay-top-left, overlay-top-center, overlay-top-right, overlay-center-left, overlay-center, overlay-center-right, overlay-bottom-left, overlay-bottom-center and overlay-bottom-right place labels and icon over the full widget. overlay_backdrop=true adds a translucent button-background-colored backdrop to overlaid labels and icon; default false. Rocker and Numeric Rocker default to rocker_group_layout center; beside uses widget_position. group_size_pct is 0 for auto or 10-90 percent of the layout axis, and is ignored for overlay; centered groups are capped to the center lane without changing input zones.";
     btn["icon_badge_note"] = "icon_color is auto (follow button text), hex or a color binding, and applies to Material icons only. icon_badge_padding is 0-64 pixels per side (default 0, disables badge); omit to inherit device defaults. icon_badge_color is auto, hex or a color binding (max 191 chars, default auto). Auto blends 15% of the resolved Material icon color into the button background, or uses text color for color icons. The circle follows icon placement, visibility and clipping; the icon shrinks if space is limited.";
-    btn["labels_note"] = "Default bitmap fonts cover Latin text, digits, and basic punctuation. Uploaded static TrueType font coverage depends on the font; missing glyphs fall back to the bitmap default. Use icon for retained catalog artwork.";
+    btn["labels_note"] = "reserve_label_slots=true reserves a single line for each label, even when empty; longer text may be clipped. Label style y offsets still apply. Default bitmap fonts cover Latin text, digits, and basic punctuation. Uploaded static TrueType font coverage depends on the font; missing glyphs fall back to the bitmap default. Use icon for retained catalog artwork.";
     btn["button_shadow_note"] = "accepts 'enabled' or 'disabled' to override the pad setting; omit to inherit. Shadow type, color mode, offsets, and blur are device-wide Pad and Button Defaults.";
     btn["fill_note"] = "Keep existing base colors. bg_pattern and supported bar patterns: none (default), diagonal, reverse_diagonal, crosshatch, dots, checkerboard; unknown names -> none. Pattern color defaults to #000000 and accepts the owning surface's color bindings. pattern_spacing: static logical px 2-64 (default 8), shared across this button. pattern_stroke_width: 1-8 (default 1), capped by spacing; dot diameter, ignored for checkerboard (spacing is square size). Numeric values clamp; malformed values use defaults. Gauge fills remain unpatterned. Track outline fields apply only to bar_chart/gauge; width 0 disables. widget_bar_track_radius: bar_chart only, static logical px 0-64 (default 4), capped at half the smaller track dimension; applies with outline off, dual baseline joins stay square. Portal badges preview fills with representative bound colors, not live widget rendering.";
     btn["limits_note"] = "max field lengths: button labels/colors/btn_state/widget_data_binding = 191 chars, border_width/corner_radius = 63, pad binding name = 31. Widget caption/text fields are shorter (see each field's \"max\" in widgets[].config_fields, typically 63). If a binding expression is too long, declare it once as a pad-level [pad:name] binding and reference [pad:name] instead of inlining it.";

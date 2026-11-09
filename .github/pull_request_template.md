@@ -1,21 +1,30 @@
-<!-- PR title: use a concise, descriptive summary of the overall change. Do not reuse the last commit message. -->
+<!--
+PR title: vX.Y.Z - Short, descriptive headline featuring the hero additions or changes.
+Read the release version from src/version.h on the PR branch. Do not invent or bump
+the version just to write the title. Do not reuse the last commit message.
+-->
 
-<!-- Lead with concise bullets for the most important user-facing behavior and why it matters. -->
+<!--
+Open with one paragraph describing the most important user-facing additions and
+changes. Explain what they bring and what users can achieve with them. Use natural,
+benefit-led prose, not a list, raw feature inventory, or marketing hype.
+-->
 
-* Highlight
+Describe the main user-facing improvements and what they enable.
 
 ## Changes
 
-### Area
+<!--
+List all additions, changes, and fixes across the complete PR diff, grouped under
+meaningful themes such as "New boards", "Widget improvements", or "Portal editing".
+Include relevant developer tooling, documentation, and test changes. Use as many
+theme headings as needed, omit empty categories, and consolidate related commits
+into clear change descriptions rather than copying the commit log.
+-->
 
-* Describe related behavior changes, fixes, documentation, and tests
+### Theme
 
-## Verification
-
-* [ ] Relevant focused checks passed locally (list commands and results)
-* [ ] Complete host test suite passed in CI (or record a local full-suite run)
-* [ ] Relevant firmware build passed, when required by the build verification policy
-* [ ] Hardware validation completed, where applicable
+* Describe related additions, behavior changes, and fixes
 
 ## Related Issues
 

@@ -19,12 +19,19 @@ Use the controls available on your device.
 3. Wait for success and the refreshed file list.
 4. In **Pads > Pad Editor**, select a button and open **Content > Background
    image > Local Image**.
-5. Choose the uploaded image, set **Scale**, then **Save Pad**.
+5. Choose the uploaded image, set **Image fit**, then **Save Pad**.
 
-Cover fills and crops to the button. Letterbox preserves the whole image
-with bars matching the button's background color. The shared Scale control
-also applies to remote backgrounds.
+Fill scales proportionally to fill the button and crops any excess. Choose
+center (the default), top, bottom, left, or right to keep that part visible.
+Top/bottom matter when the image is too tall; left/right matter when it is
+too wide. Letterbox preserves the whole image with bars matching the button's
+background color. Neither mode stretches the image. The shared **Image fit**
+control also applies to remote backgrounds.
 Prepare images near the intended display size to reduce decoding/memory load.
+
+> [!NOTE]
+> If an existing button used Letterbox, reselect **Image fit > Letterbox** and
+> choose **Save Pad**. The old setting is not migrated.
 
 Delete unused files through Image Library. A pad referencing a deleted image
 does not receive a replacement automatically.
@@ -60,7 +67,7 @@ Choose one intended source rather than leaving competing source settings.
   `5000` for five seconds.
 * For continuous MJPEG, set the interval to `0`. The endpoint must serve
   `multipart/x-mixed-replace`. For a static image, zero means fetch once.
-* Set Cover/Letterbox and **Save Pad**.
+* Set **Image fit** to a Fill position or Letterbox and **Save Pad**.
 
 The device, not just your browser, must be able to reach and authenticate to
 the URL. An RTSP camera can need an external image/MJPEG relay.

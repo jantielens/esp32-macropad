@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-11-07
+ms.date: 2026-11-09
 ms.topic: reference
 ---
 
@@ -11,6 +11,83 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [1.47.0] - 2026-11-09
+
+> [!NOTE]
+> If a button background used Letterbox, reselect **Letterbox** under
+> **Image fit** and save the pad after updating. Old Letterbox settings are
+> not migrated. Label spacing and alignment also changed; review existing
+> button layouts on the device.
+
+### Added
+
+* Place button labels and icons over a widget at nine anchor positions, while
+  keeping the widget's full content area and existing touch behavior. An
+  optional backdrop uses the button background color to improve readability
+  over widget content and is off by default.
+  See [button appearance](docs/user/pads/appearance.md#arrange-button-content).
+* Choose center, top, bottom, left, or right cropping for button backgrounds
+  with **Image fit**. **Letterbox** continues to show the entire image without
+  stretching. See [button images](docs/user/media/images.md).
+* Adjust Sparkline chart height and override fill opacity, line width, and
+  current dot size for individual lines. Shared settings remain available.
+  MCP assistants can discover the controls through widget capabilities.
+  See [Sparkline history](docs/user/widgets/sparkline.md#arrange-the-chart).
+* Reserve empty label positions with a button's **Reserve space for empty
+  labels** option. Each position reserves one line; longer text may be clipped.
+  See [button appearance](docs/user/pads/appearance.md#arrange-button-content).
+* Adjust Option selector height without shrinking touch targets. Existing
+  selectors keep their full height by default.
+  See [Option selector](docs/user/widgets/option-selector.md#style-the-selector).
+* Add an assistant-guided `/prep-release` workflow to prepare release notes,
+  validate changes, and prepare a pull request without publishing a release.
+
+### Changed
+
+* Center button labels predictably and reduce excess space between them using
+  font metrics. The configured labels form a compact group by default; reserve
+  empty positions to keep the center label centered. Existing button layouts
+  may shift; review them on the device.
+* Simplify the pad editor overview to highlight button content and widget
+  purpose rather than device appearance, with larger background symbols.
+  Remove the redundant graphical preview from Button Builder.
+  See [edit and save a pad](docs/user/pads/editing.md).
+* Increase the default pad grid limit to 10 columns and 10 rows for more
+  flexible layouts. Board-specific grid limits and button limits remain
+  unchanged. See [edit and save a pad](docs/user/pads/editing.md#build-the-layout).
+* Default Gauge needles to off and tick counts to 0. Gauges without explicit
+  settings use these defaults; saved needle and tick settings remain unchanged.
+  See [Gauge readability](docs/user/widgets/gauge.md#tune-readability).
+* Replace the button background `bg_image_letterbox` boolean with
+  `bg_image_fit`. Old boolean settings are not migrated; reselect Letterbox
+  where needed.
+
+### Fixed
+
+* Prevent edits from silently removing a widget that the device does not support.
+* Reset custom row heights, column widths, and stale editor state when using
+  Clear Pad so leftover settings cannot prevent saving the empty pad.
+  Preserve device-wide defaults and clipboards.
+  See [copy, fill, and clear](docs/user/pads/reuse.md#copy-fill-and-clear).
+* Restore full-screen pad tap actions above Main and Overlay buttons, and fix
+  their activation through physical-button navigation.
+  See [full-screen tap actions](docs/user/pads/actions.md#use-full-screen-tap-actions).
+* Apply valid color picker edits when clicking outside instead of losing them.
+  Use **Cancel** or Escape to discard changes; invalid edits stay open.
+  See [edit and save a pad](docs/user/pads/editing.md#build-the-layout).
+* Remove unintended right and bottom margins caused by grid spacing on pads
+  and in the pad editor grid. Automatic tracks may differ by one pixel.
+* Keep standalone center labels vertically centered when oversized text is
+  clipped, including scaled text and binding updates.
+* Prevent the pad editor canvas from flashing when clearing a button by
+  preserving unchanged button previews.
+* Keep Option selector color previews within the button editor and align color
+  controls when labels wrap.
+* Keep long-binding tips from disrupting the button editor layout. Show them in
+  the existing validation banner with a link to named bindings.
 
 ## [1.46.0] - 2026-11-07
 
