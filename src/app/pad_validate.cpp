@@ -251,6 +251,27 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
         (!b["widget_sparkline_fill_opacity"].is<unsigned>() ||
          b["widget_sparkline_fill_opacity"].as<unsigned>() > 100))
         return "widget_sparkline_fill_opacity must be a whole percentage from 0 to 100";
+    struct SparklineNumber { const char* key; unsigned min; unsigned max; };
+    const SparklineNumber sparkline_numbers[] = {
+        {"widget_sparkline_height_pct", 10, 100},
+        {"widget_sparkline_line_width", 1, 10},
+        {"widget_sparkline_current_dot", 0, 20},
+        {"widget_sparkline_fill_opacity_1", 0, 100},
+        {"widget_sparkline_fill_opacity_2", 0, 100},
+        {"widget_sparkline_fill_opacity_3", 0, 100},
+        {"widget_sparkline_line_width_1", 1, 10},
+        {"widget_sparkline_line_width_2", 1, 10},
+        {"widget_sparkline_line_width_3", 1, 10},
+        {"widget_sparkline_current_dot_1", 0, 20},
+        {"widget_sparkline_current_dot_2", 0, 20},
+        {"widget_sparkline_current_dot_3", 0, 20}
+    };
+    for (const auto& field : sparkline_numbers) {
+        if (b.containsKey(field.key) &&
+            (!b[field.key].is<unsigned>() || b[field.key].as<unsigned>() < field.min ||
+             b[field.key].as<unsigned>() > field.max))
+            return "sparkline style value must be a whole number within its allowed range";
+    }
     if (!color_ok(b["bg_color"] | "")) return "bad bg_color";
     if (!color_ok(b["fg_color"] | "")) return "bad fg_color";
     if (!color_ok(b["border_color"] | "")) return "bad border_color";

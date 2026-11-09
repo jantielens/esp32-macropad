@@ -672,6 +672,24 @@ for (const value of ['-1', '101', '1.5', 'NaN']) {
     assert.throws(() => context.padDialogBuildButton(), /whole percentage from 0 to 100/);
 }
 fillOpacity.value = '0';
+document.getElementById('pad-edit-sparkline-height-pct').value = '50';
+document.getElementById('pad-edit-sparkline-fill-opacity-1').value = '50';
+document.getElementById('pad-edit-sparkline-fill-opacity-2').value = '0';
+document.getElementById('pad-edit-sparkline-line-width-2').value = '4';
+document.getElementById('pad-edit-sparkline-current-dot-2').value = '0';
+const styledSparkline = context.padDialogBuildButton();
+assert.strictEqual(styledSparkline.widget_sparkline_height_pct, 50);
+assert.strictEqual(styledSparkline.widget_sparkline_fill_opacity_1, 50);
+assert.strictEqual(styledSparkline.widget_sparkline_fill_opacity_2, 0);
+assert.strictEqual(styledSparkline.widget_sparkline_line_width_2, 4);
+assert.strictEqual(styledSparkline.widget_sparkline_current_dot_2, 0);
+assert.strictEqual(styledSparkline.widget_sparkline_line_width_1, undefined);
+document.getElementById('pad-edit-sparkline-height-pct').value = '9';
+assert.throws(() => context.padDialogBuildButton(), /whole number from 10 to 100/);
+document.getElementById('pad-edit-sparkline-height-pct').value = '100';
+document.getElementById('pad-edit-sparkline-line-width-2').value = '1.5';
+assert.throws(() => context.padDialogBuildButton(), /whole number from 1 to 10/);
+document.getElementById('pad-edit-sparkline-line-width-2').value = '';
 {
     const defaultGetter = context.padGetEffectiveDefault;
     const colorGetter = context.padGetBindableColor;

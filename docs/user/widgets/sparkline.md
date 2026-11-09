@@ -25,6 +25,9 @@ observation forward, so a flat line does not prove fresh sensor messages.
 
 Choose the widget position and the size of the labels and icon group as
 described in [button appearance](../pads/appearance.md#arrange-button-content).
+Set **Chart height (%)** under **Line style** to 10-100% of the available
+chart height. The chart remains vertically centered; 100% uses the full height
+available after marker and dot margins.
 
 Small regions compress or clip their contents; they do not switch layouts.
 The canvas shows a placeholder rather than a live chart, so verify labels,
@@ -41,14 +44,18 @@ Line width 1-10 px, smoothing 0-8, and separation 0-6 px affect presentation.
 Smoothing also moves extrema markers/current dot to the smoothed curve.
 Separation shifts pixels away from exact values; leave it 0 for precise readout.
 
-**Fill opacity (%)** in **Line style** adds a solid area from each curve to
+**Shared fill opacity (%)** in **Line style** adds a solid area from each curve to
 the bottom of the chart. Use a whole percentage from 0 to 100; 0 disables
-fills and is the default for existing buttons. All series share the opacity,
-but each fill follows its own line color, including color bindings.
+fills. Each fill follows its own line color, including color bindings.
 Fills use the same smoothed, scaled points as the lines and never bridge
 missing-history gaps. Extra series fill first, the primary series fills last,
 and all lines and annotations remain above the fills. Overlapping translucent
 series blend their colors.
+
+Expand a line under **Data sources**, then open **Style overrides (optional)** to set
+its fill opacity, line width, or current dot size independently. Leave a field
+empty to use the shared value; set fill or dot size to 0 to turn it off for
+that line. Select **Save Pad** to apply the settings.
 
 For a compact temperature card, position the widget to the right of the group,
 put the icon to the left of the labels, and configure an

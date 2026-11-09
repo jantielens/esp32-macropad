@@ -849,9 +849,11 @@ possible. The existing icon region draws the circle behind its centered image;
 no extra LVGL object or image buffer is needed. Extended image draw bounds
 invalidate the whole badge when icon visibility changes.
 
-Sparkline's `widget_sparkline_fill_opacity` is a shared static percentage,
-0-100, default 0. A chart draw callback renders fills before child lines and
-annotations, reusing cached plotted points and their missing-data sentinels.
+Sparkline uses shared fill opacity, line width, and current dot size with
+optional per-line overrides. The chart height is a centered percentage of its
+available height after annotation margins. A chart draw callback renders fills
+before child lines and annotations, reusing cached plotted points and their
+missing-data sentinels.
 Non-overlapping vertical strips avoid translucent tessellation seams;
 equal-height columns share rectangles, clipped work is bounded by visible
 width, and no additional sample or full-chart buffer is allocated.

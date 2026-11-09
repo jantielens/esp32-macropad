@@ -112,6 +112,7 @@ protected:
     SparklineState* chart() { return reinterpret_cast<SparklineState*>(state.data); }
     virtual bool initial_streams_available() const { return true; }
     virtual unsigned initial_fill_opacity() const { return 0; }
+    virtual void configure(JsonObject) {}
 
     void SetUp() override {
         static bool initialized = false;
@@ -165,6 +166,7 @@ protected:
         fields["widget_sparkline_ref_1_color"] = "[test:reference]";
         fields["widget_sparkline_smooth"] = 2;
         if (initial_fill_opacity()) fields["widget_sparkline_fill_opacity"] = initial_fill_opacity();
+        configure(fields);
         type = widget_find("sparkline");
         ASSERT_NE(type, nullptr);
         type->parseConfig(fields, config.data);
@@ -236,19 +238,87 @@ TEST(SparklineConfig, FillOpacityDefaultsAndBounds) {
     JsonObject fields = document.to<JsonObject>();
     SparklineConfig config{};
     sparkline_parse(fields, reinterpret_cast<uint8_t*>(&config));
-    EXPECT_EQ(config.fill_opacity, 0);
+    EXPECT_EQ(config.fill_opacity[0], 0);
     for (unsigned value : {0u, 25u, 100u}) {
         fields["widget_sparkline_fill_opacity"] = value;
         sparkline_parse(fields, reinterpret_cast<uint8_t*>(&config));
-        EXPECT_EQ(config.fill_opacity, value);
+        EXPECT_EQ(config.fill_opacity[0], value);
     }
     for (const char* invalid : {"-1", "101", "1.5", "true", "\"50\""}) {
         JsonDocument value;
         ASSERT_FALSE(deserializeJson(value, invalid));
         fields["widget_sparkline_fill_opacity"] = value.as<JsonVariant>();
         sparkline_parse(fields, reinterpret_cast<uint8_t*>(&config));
-        EXPECT_EQ(config.fill_opacity, 0);
+        EXPECT_EQ(config.fill_opacity[0], 0);
     }
+}
+
+class SparklineOverrides : public SparklineWidget {
+protected:
+    void configure(JsonObject fields) override {
+        fields["widget_sparkline_height_pct"] = 50;
+        fields["widget_sparkline_fill_opacity"] = 0;
+        fields["widget_sparkline_fill_opacity_1"] = 100;
+        fields["widget_sparkline_fill_opacity_2"] = 0;
+        fields["widget_sparkline_fill_opacity_3"] = 0;
+        fields["widget_sparkline_line_width"] = 2;
+        fields["widget_sparkline_line_width_2"] = 6;
+        fields["widget_sparkline_current_dot_1"] = 0;
+        fields["widget_sparkline_current_dot_2"] = 9;
+    }
+};
+
+TEST_F(SparklineOverrides, OverridesAffectOnlySelectedLinesAndFillPixels) {
+    auto* cfg = reinterpret_cast<SparklineConfig*>(config.data);
+    EXPECT_EQ(cfg->fill_opacity[0], 100);
+    EXPECT_EQ(cfg->fill_opacity[1], 0);
+    EXPECT_EQ(cfg->line_width[0], 2);
+    EXPECT_EQ(lv_obj_get_style_line_width(chart()->lines[1], LV_PART_MAIN), 6);
+    EXPECT_EQ(chart()->dot_current[0], nullptr);
+    ASSERT_NE(chart()->dot_current[1], nullptr);
+    EXPECT_EQ(lv_obj_get_width(chart()->dot_current[1]), 9);
+    EXPECT_EQ(lv_obj_get_width(chart()->dot_current[2]), 5);
+
+    lv_obj_set_style_bg_color(tile, lv_color_white(), 0);
+    for (unsigned line = 0; line < 3; ++line) {
+        for (float& sample : samples[line]) sample = line == 0 ? 70 : 40;
+        ++streams[line].rev;
+    }
+    update();
+    settle();
+    lv_area_t area;
+    lv_obj_get_coords(lv_obj_get_parent(chart()->lines[0]), &area);
+    EXPECT_EQ(pixel(area.x1 + 20, area.y2 - 3), lv_color_to_u16(lv_color_hex(0x123456)));
+    for (float& sample : samples[0]) sample = NAN;
+    ++streams[0].rev;
+    update();
+    settle();
+    EXPECT_EQ(pixel(area.x1 + 20, area.y2 - 3), lv_color_to_u16(lv_color_white()));
+}
+
+TEST_F(SparklineOverrides, ReducedHeightStaysCenteredAndDotsTrackOnResize) {
+    lv_obj_t* area = lv_obj_get_parent(chart()->lines[0]);
+    auto* cfg = reinterpret_cast<SparklineConfig*>(config.data);
+    auto verify = [&]() {
+        lv_obj_update_layout(tile);
+        const int content_h = lv_obj_get_content_height(tile);
+        const int margin = lv_font_get_line_height(lv_obj_get_style_text_font(chart()->lbl_min, LV_PART_MAIN)) + 5;
+        const auto expected = sparkline_geometry(cfg, 3, lv_obj_get_content_width(tile), content_h, margin);
+        EXPECT_EQ(lv_obj_get_height(area), expected.height);
+        EXPECT_EQ(lv_obj_get_y(area), expected.top);
+        EXPECT_EQ(expected.top, (content_h - expected.height) / 2);
+        lv_area_t line_bounds, dot_bounds;
+        lv_obj_get_coords(chart()->lines[1], &line_bounds);
+        lv_obj_get_coords(chart()->dot_current[1], &dot_bounds);
+        const auto& endpoint = chart()->points[1][3];
+        EXPECT_EQ(dot_bounds.y1 + 4, line_bounds.y1 + endpoint.y);
+    };
+    verify();
+    lv_obj_set_height(tile, 240);
+    lv_obj_update_layout(tile);
+    tick();
+    settle();
+    verify();
 }
 
 TEST_F(SparklineFilled, FillPreservesGapsAndUpdatesColorBelowLineBounds) {
@@ -306,7 +376,7 @@ TEST_F(SparklineFilled, AllFillsStayBehindAllSeriesAndReferenceLines) {
 }
 
 TEST_F(SparklineWidget, DisabledFillDoesNotPaintBelowSeries) {
-    EXPECT_EQ(chart()->fill_opa, LV_OPA_TRANSP);
+    EXPECT_EQ(chart()->fill_opa[0], LV_OPA_TRANSP);
     lv_area_t area;
     lv_obj_get_coords(lv_obj_get_parent(chart()->lines[0]), &area);
     EXPECT_NE(pixel((area.x1 + area.x2) / 2, area.y2 - 3),

@@ -42,6 +42,9 @@
             () => PAD_FIRMWARE_DEFAULTS['widget_series_color' + keySuffix], {});
         sourceColor.preview = resolved => padWidgetSetGroupColor('pad-edit-sparkline-source-' + source, sourceColor, resolved);
         field('current-label' + suffix, 'widget_sparkline_current_label' + keySuffix, 'text', '', {});
+        for (const name of ['fill-opacity', 'line-width', 'current-dot']) {
+            field(name + '-' + source, 'widget_sparkline_' + name.replaceAll('-', '_') + '_' + source, 'number', '');
+        }
         field('ref-' + source + '-y', 'widget_sparkline_ref_' + source + '_y', 'number', '');
         field('ref-' + source + '-color', 'widget_sparkline_ref_' + source + '_color', 'color',
             () => PAD_FIRMWARE_DEFAULTS.widget_reference_color, {});
@@ -52,7 +55,7 @@
         field(name + '-fmt', 'widget_sparkline_' + name + '_fmt', 'text', '');
         field(name + '-label-color', 'widget_sparkline_' + name + '_label_color', 'color', '', {});
     }
-    for (const [name, value] of [['line-width', 2], ['line-offset', 0], ['smooth', 0], ['fill-opacity', 0],
+    for (const [name, value] of [['height-pct', 100], ['line-width', 2], ['line-offset', 0], ['smooth', 0], ['fill-opacity', 0],
         ['marker-size-min', 0], ['marker-size-max', 0], ['current-dot', 0], ['label-width', 0]]) {
         field(name, 'widget_sparkline_' + name.replaceAll('-', '_'), 'number', value);
     }
@@ -89,6 +92,19 @@
             const opacity = Number(input('fill-opacity').value);
             if (!Number.isInteger(opacity) || opacity < 0 || opacity > 100)
                 fail('fill-opacity', 'Fill opacity must be a whole percentage from 0 to 100');
+            for (const [name, min, max] of [
+                ['height-pct', 10, 100], ['line-width', 1, 10], ['current-dot', 0, 20],
+                ...[1, 2, 3].flatMap(source => [
+                    ['fill-opacity-' + source, 0, 100], ['line-width-' + source, 1, 10],
+                    ['current-dot-' + source, 0, 20]
+                ])
+            ]) {
+                const raw = input(name).value.trim();
+                if (!raw && /-[123]$/.test(name)) continue;
+                const value = Number(raw);
+                if (!raw || !Number.isInteger(value) || value < min || value > max)
+                    fail(name, 'Enter a whole number from ' + min + ' to ' + max);
+            }
             const sample = sampling();
             button.widget_sparkline_window = sample.windowSeconds;
             button.widget_sparkline_slots = sample.slots;

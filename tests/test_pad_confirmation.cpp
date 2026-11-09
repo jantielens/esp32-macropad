@@ -148,6 +148,22 @@ int main() {
         }
         button["widget_sparkline_fill_opacity"] = 0;
         CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        button["widget_sparkline_height_pct"] = 10;
+        button["widget_sparkline_fill_opacity_2"] = 0;
+        button["widget_sparkline_line_width_1"] = 10;
+        button["widget_sparkline_current_dot_3"] = 20;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        button["widget_sparkline_height_pct"] = 9;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["widget_sparkline_height_pct"] = 100;
+        button["widget_sparkline_fill_opacity_2"] = 101;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["widget_sparkline_fill_opacity_2"] = 0;
+        button["widget_sparkline_line_width_1"] = 0;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["widget_sparkline_line_width_1"] = 1;
+        button["widget_sparkline_current_dot_3"] = 1.5;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
     }
 
     {

@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Adjust Sparkline chart height and override fill opacity, line width, and
+  current dot size for individual lines. Shared settings remain available.
+  MCP assistants can discover the controls through widget capabilities.
+  See [Sparkline history](docs/user/widgets/sparkline.md#arrange-the-chart).
 * Adjust Option selector height without shrinking touch targets. Existing
   selectors keep their full height by default.
   See [Option selector](docs/user/widgets/option-selector.md#style-the-selector).
