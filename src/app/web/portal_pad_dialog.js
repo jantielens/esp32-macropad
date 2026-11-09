@@ -97,6 +97,7 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-label-top').value = padLabelToInput(btn.label_top);
     document.getElementById('pad-edit-label-center').value = padLabelToInput(btn.label_center);
     document.getElementById('pad-edit-label-bottom').value = padLabelToInput(btn.label_bottom);
+    document.getElementById('pad-edit-reserve-label-slots').checked = !!btn.reserve_label_slots;
     document.getElementById('pad-edit-label-top-style').value = btn.label_top_style || '';
     document.getElementById('pad-edit-label-center-style').value = btn.label_center_style || '';
     document.getElementById('pad-edit-label-bottom-style').value = btn.label_bottom_style || '';
@@ -325,6 +326,7 @@ function padDialogBuildButton() {
     if (lt) btn.label_top = lt;
     if (lc) btn.label_center = lc;
     if (lb) btn.label_bottom = lb;
+    if (document.getElementById('pad-edit-reserve-label-slots').checked) btn.reserve_label_slots = true;
 
     const lts = document.getElementById('pad-edit-label-top-style').value.trim();
     const lcs = document.getElementById('pad-edit-label-center-style').value.trim();

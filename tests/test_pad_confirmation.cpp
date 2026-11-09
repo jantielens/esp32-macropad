@@ -183,6 +183,11 @@ int main() {
         button["group_size_pct"] = 91;
         CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
         button["group_size_pct"] = 0;
+        button["reserve_label_slots"] = true;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        button["reserve_label_slots"] = "true";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button.remove("reserve_label_slots");
         button["icon_position"] = "center";
         CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
         button["icon_position"] = "left";
@@ -517,6 +522,9 @@ int main() {
         JsonDocument doc;
         deserializeJson(doc, R"({"cols":3,"rows":2,"column_widths_px":[0,40,0],"buttons":[{"col":1,"row":0,"col_span":2,"widget_type":"option_selector","widget_option_label":"Cool","widget_option_icon_5":{"kind":"mono"},"widget_option_icon_size_pct":75,"widget_option_icon_badge_padding":4}]})");
         CHECK(pad_option_icon_render_key(doc.as<JsonObjectConst>(), doc["buttons"][0], 5) == 0xe3f58eb6u);
+        doc["buttons"][0]["reserve_label_slots"] = true;
+        CHECK(pad_option_icon_render_key(doc.as<JsonObjectConst>(), doc["buttons"][0], 5) == 0xf3611d57u);
+        doc["buttons"][0].remove("reserve_label_slots");
         doc["buttons"][0]["widget_option_inset"] = 0;
         CHECK(pad_option_icon_render_key(doc.as<JsonObjectConst>(), doc["buttons"][0], 5) == 0x3cf96935u);
         doc["buttons"][0]["widget_option_height_pct"] = 50;

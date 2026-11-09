@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Reserve empty label positions with a button's **Reserve space for empty
+  labels** option. Each position reserves one line; longer text may be clipped.
+  See [button appearance](docs/user/pads/appearance.md#arrange-button-content).
 * Adjust Sparkline chart height and override fill opacity, line width, and
   current dot size for individual lines. Shared settings remain available.
   MCP assistants can discover the controls through widget capabilities.
@@ -26,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Center button labels predictably and reduce excess space between them using
+  font metrics. The configured labels form a compact group by default; reserve
+  empty positions to keep the center label centered. Existing button layouts
+  may shift; review them on the device.
 * Increase the default pad grid limit to 10 columns and 10 rows for more
   flexible layouts. Board-specific grid limits and button limits remain
   unchanged. See [edit and save a pad](docs/user/pads/editing.md#build-the-layout).
@@ -35,8 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Remove unintended right and bottom margins caused by grid spacing on pads
   and in the editor preview. Automatic tracks may differ by one pixel.
 * Keep standalone center labels vertically centered when oversized text is
-  clipped, including scaled text and binding updates. Buttons with other
-  labels, icons, or widgets retain their existing layouts.
+  clipped, including scaled text and binding updates.
 * Restore full-screen pad tap actions above Main and Overlay buttons, and fix
   their activation through physical-button navigation.
   See [full-screen tap actions](docs/user/pads/actions.md#use-full-screen-tap-actions).

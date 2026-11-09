@@ -113,8 +113,10 @@ assert.strictEqual(document.getElementById('pad-edit-validation-error').style.di
 assert.match(document.getElementById('pad-edit-validation-message').textContent, /1 binding error/);
 
 context.bindingValidateDialog = function() { return { valid: true, count: 0 }; };
+document.getElementById('pad-edit-reserve-label-slots').checked = true;
 context.padWorkspaceEdit();
 assert.strictEqual(context.padState.buttons.length, 1);
+assert.strictEqual(context.padState.buttons[0].reserve_label_slots, true);
 assert.notStrictEqual(context.padState.buttons[0], originalButton);
 assert.strictEqual(context.padState.buttons[0].col, 1);
 assert.strictEqual(context.padState.buttons[0].row, 2);

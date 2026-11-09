@@ -1774,7 +1774,15 @@ body {
 .pad-cell-content-group { display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; min-height: 0; overflow: hidden; }
 .pad-cell-content-group[data-icon-position="above"],
 .pad-cell-content-group[data-icon-position="below"] { flex-direction: column; }
-.pad-cell-group-labels { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.pad-cell-group-labels { display: flex; flex-direction: column; justify-content: center; align-self: stretch; min-width: 0; min-height: 0; overflow: hidden; }
+.pad-cell-group-labels[data-centered] { display: grid; grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr); }
+.pad-cell-group-labels[data-centered] > .pad-cell-label-top { grid-row: 1; align-self: end; }
+.pad-cell-group-labels[data-centered] > .pad-cell-label-center { grid-row: 2; }
+.pad-cell-group-labels[data-centered] > .pad-cell-label-bottom { grid-row: 3; align-self: start; }
+.pad-cell-group-labels > [aria-hidden="true"] { min-height: 1.2em; }
+.pad-cell-group-labels > .pad-cell-label-center[aria-hidden="true"] { min-height: 1.3em; }
+.pad-cell-group-labels[data-reserved] > * { max-height: 1.2em; }
+.pad-cell-group-labels[data-reserved] > .pad-cell-label-center { max-height: 1.3em; }
 .pad-cell-group-labels > * { overflow: hidden; }
 .pad-content-widget-region {
   position: relative;

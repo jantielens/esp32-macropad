@@ -96,9 +96,19 @@ the width for a side-by-side layout or the height for a vertical layout. Use
 available space, or 10-90 for a fixed percentage. Without a widget, the group
 uses the whole button.
 
-Missing labels and icons use no space. A configured binding that resolves to
-empty retains its label space. Label styles, including per-label colors and
-offsets, still apply. UI offset and style
+By default, the configured labels form a compact, centered group. The layout
+uses representative font metrics to keep them close without moving them as
+values change. Actual characters and font styles can affect the visible
+spacing or overlap.
+
+Enable **Reserve space for empty labels** in the button's **Labels** controls
+to keep all three positions when a label is empty and keep the center label
+centered. Each slot reserves one font line; wrapped or multiline text can be
+clipped. Without this option, missing labels use no space. A configured binding
+that resolves to empty retains its
+label space. Auto group width can still change with the text; use **Labels and
+icon size %** for a fixed group width when a widget is beside the labels.
+Label styles, including per-label colors and offsets, still apply. UI offset and style
 offsets nudge the resulting content. Small buttons compress or clip content
 instead of changing layouts. Enlarge the button or reduce content and font
 sizes if necessary. The editor may warn about a likely fit problem, but its font

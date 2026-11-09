@@ -94,7 +94,8 @@ inline void pad_measure_content_label(ButtonContentRuntime& runtime, int index, 
     runtime.input.label_width[index] = size.x * runtime.label_scale[index] / LV_SCALE_NONE;
     const int32_t measured_height = size.y * runtime.label_scale[index] / LV_SCALE_NONE;
     const int32_t line_height = lv_font_get_line_height(font) * runtime.label_scale[index] / LV_SCALE_NONE;
-    runtime.input.label_height[index] = measured_height > line_height ? measured_height : line_height;
+    runtime.input.label_height[index] = runtime.input.reserve_label_slots ? line_height :
+        (measured_height > line_height ? measured_height : line_height);
 }
 
 inline void pad_set_content_label_text(ButtonContentRuntime& runtime, int index, const char* text) {
@@ -121,13 +122,13 @@ inline ButtonContentLayout pad_measure_content_layout(lv_obj_t* tile, ButtonCont
         }
     }
     for (int i = 0; i < 3; ++i) {
-        if (runtime.labels[i] && runtime.label_wrap[i])
+        if (runtime.labels[i] && runtime.label_wrap[i] && !runtime.input.reserve_label_slots)
             pad_measure_content_label(runtime, i, lv_label_get_text(runtime.labels[i]));
     }
     ButtonContentLayout layout = button_content_layout(runtime.input);
     for (int i = 0; i < 3; ++i) {
         lv_obj_t* label = runtime.labels[i];
-        if (!label || !runtime.label_wrap[i]) continue;
+        if (!label || !runtime.label_wrap[i] || runtime.input.reserve_label_slots) continue;
         const lv_font_t* font = lv_obj_get_style_text_font(label, LV_PART_MAIN);
         const int32_t width = layout.labels[i].width * LV_SCALE_NONE / runtime.label_scale[i];
         lv_point_t size{};
@@ -157,17 +158,10 @@ inline void pad_reflow_content_layout(ButtonContentRuntime& runtime, const Butto
         pad_position_content_region(runtime.label_regions[i], rect,
                                     runtime.offset_x + runtime.label_offset_x[i],
                                     runtime.offset_y + runtime.label_offset_y[i]);
-        const bool standalone_center = i == 1 && !runtime.input.has_widget &&
-            !runtime.input.has_icon && !runtime.input.has_label[0] && !runtime.input.has_label[2];
-        const int32_t height = standalone_center ? runtime.input.label_height[i] : rect.height;
-        const int32_t label_height = height * LV_SCALE_NONE / runtime.label_scale[i];
+        const int32_t label_height = runtime.input.label_height[i] * LV_SCALE_NONE / runtime.label_scale[i];
         lv_obj_set_size(runtime.labels[i], rect.width * LV_SCALE_NONE / runtime.label_scale[i],
                         label_height);
-        if (standalone_center) {
-            // Center the full text line, even when its region must clip it.
-            lv_obj_set_y(runtime.labels[i],
-                         (rect.height - label_height * runtime.label_scale[i] / LV_SCALE_NONE) / 2);
-        }
+        lv_obj_set_y(runtime.labels[i], layout.label_origin_y[i]);
     }
     if (runtime.icon) {
         const ButtonContentRect& rect = layout.icon;
@@ -213,6 +207,7 @@ inline ButtonContentLayout pad_apply_content_layout(lv_obj_t* tile, const Screen
     input.widget_position = button.widget_position;
     input.icon_position = button.icon_position;
     input.group_size_pct = button.group_size_pct;
+    input.reserve_label_slots = button.reserve_label_slots;
     input.has_widget = button.widget.type[0];
     const bool rocker = strcmp(button.widget.type, "rocker") == 0;
     runtime.numeric_center = strcmp(button.widget.type, "numericrocker") == 0;
@@ -264,6 +259,31 @@ inline ButtonContentLayout pad_apply_content_layout(lv_obj_t* tile, const Screen
         runtime.label_scale[i] = styles[i]->font_upscale && pad_is_bitmap_font(font)
             ? styles[i]->font_upscale : LV_SCALE_NONE;
         runtime.label_wrap[i] = styles[i]->long_mode == LABEL_MODE_WRAP;
+        const int32_t line_height = lv_font_get_line_height(font);
+        input.label_height[i] = line_height * runtime.label_scale[i] / LV_SCALE_NONE;
+        // Fixed reference glyphs keep live values stable while reserving common accents and descenders.
+        lv_font_glyph_dsc_t glyph{};
+        if (lv_font_get_glyph_dsc(font, &glyph, '0', 0) && glyph.box_h) {
+            const int32_t ink_top = line_height - font->base_line - glyph.box_h - glyph.ofs_y;
+            input.label_optical_offset[i] =
+                (line_height - 2 * ink_top - glyph.box_h) * runtime.label_scale[i] / (2 * LV_SCALE_NONE);
+        }
+        int32_t top = line_height;
+        int32_t bottom = 0;
+        const uint32_t reference_chars[] = {'A', 'g', '0', 0x00b0, 0x00c5, 0x00e9};
+        for (uint32_t character : reference_chars) {
+            lv_font_glyph_dsc_t reference{};
+            if (!lv_font_get_glyph_dsc(font, &reference, character, 0) || !reference.box_h) continue;
+            const int32_t glyph_top = line_height - font->base_line - reference.box_h - reference.ofs_y;
+            if (glyph_top < top) top = glyph_top;
+            const int32_t glyph_bottom = glyph_top + reference.box_h;
+            if (glyph_bottom > bottom) bottom = glyph_bottom;
+        }
+        if (bottom > top) {
+            input.label_ink_top[i] = button_layout_nonnegative(top) * runtime.label_scale[i] / LV_SCALE_NONE;
+            input.label_ink_bottom_inset[i] = button_layout_nonnegative(line_height - bottom) *
+                runtime.label_scale[i] / LV_SCALE_NONE;
+        }
         pad_measure_content_label(runtime, i, texts[i]);
     }
     ButtonContentLayout layout = pad_measure_content_layout(tile, runtime);

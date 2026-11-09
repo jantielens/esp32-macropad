@@ -439,6 +439,7 @@ struct ScreenButtonConfig {
     ButtonGroupIconPosition icon_position;
     ButtonWidgetPosition widget_position;
     uint8_t group_size_pct;             // 0 = auto, otherwise 10-90%
+    bool reserve_label_slots;
     bool rocker_group_beside;
     int16_t ui_offset_x;                // Optional visual nudge X in px (+right, -left)
     int16_t ui_offset_y;                // Optional visual nudge Y in px (+down, -up)

@@ -90,6 +90,7 @@ uint32_t pad_option_icon_render_key(JsonObjectConst pad, JsonObjectConst button,
     number(button["icon"].is<JsonObjectConst>() ? 1 : 0);
     text(button["widget_position"] | "");
     text(button["icon_position"] | "");
+    if (button["reserve_label_slots"] | false) text("reserve_label_slots");
     for (unsigned index = 0; index < 5; ++index) {
         char label[32], icon[32];
         if (index == 0) {
@@ -300,6 +301,8 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
         const int percent = b["group_size_pct"].as<int>();
         if (percent != 0 && (percent < 10 || percent > 90)) return "group_size_pct must be 0 (auto) or 10-90";
     }
+    if (b.containsKey("reserve_label_slots") && !b["reserve_label_slots"].is<bool>())
+        return "reserve_label_slots must be a boolean";
     if (b.containsKey("rocker_group_layout")) {
         const char* layout = b["rocker_group_layout"] | "";
         if ((strcmp(wt, "rocker") != 0 && strcmp(wt, "numericrocker") != 0) ||

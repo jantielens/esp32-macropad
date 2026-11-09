@@ -393,6 +393,7 @@ static bool parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
         LOGW(TAG, "Invalid widget position: %s", widget_position);
     btn->widget_position = static_cast<ButtonWidgetPosition>(position);
     btn->group_size_pct = obj["group_size_pct"] | (uint8_t)0;
+    btn->reserve_label_slots = obj["reserve_label_slots"] | false;
     btn->rocker_group_beside = strcmp(obj["rocker_group_layout"] | "center", "beside") == 0;
     parse_ui_offset_field(obj["ui_offset"], &btn->ui_offset_x, &btn->ui_offset_y);
 

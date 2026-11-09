@@ -529,6 +529,12 @@ async function testClearPad() {
         { col: 1, row: 0, col_span: 2, widget_type: 'option_selector',
             widget_option_label: 'Cool', widget_option_icon_5: { kind: 'mono' },
             widget_option_icon_size_pct: 75, widget_option_icon_badge_padding: 4,
+            reserve_label_slots: true }, 5), 'f3611d57');
+    assert.strictEqual(selectorImport.context.padOptionIconRenderKey(
+        { cols: 3, rows: 2, column_widths_px: [0, 40, 0] },
+        { col: 1, row: 0, col_span: 2, widget_type: 'option_selector',
+            widget_option_label: 'Cool', widget_option_icon_5: { kind: 'mono' },
+            widget_option_icon_size_pct: 75, widget_option_icon_badge_padding: 4,
             widget_option_inset: 0 }, 5), '3cf96935');
     assert.strictEqual(selectorImport.context.padOptionIconRenderKey(
         { cols: 3, rows: 2, column_widths_px: [0, 40, 0] },
@@ -765,6 +771,7 @@ async function testClearPad() {
     await optionSizing({}, 82);
     await optionSizing({ widget_option_height_pct: 50 }, 37);
     await optionSizing({ label_top: 'Title', widget_position: 'right', group_size_pct: 75 }, 14);
+    await optionSizing({ reserve_label_slots: true, widget_position: 'right', group_size_pct: 75 }, 14);
     await optionSizing({ label_bottom: 'Title', widget_position: 'above', group_size_pct: 75 }, 14);
     await optionSizing({ icon: reusePayload.buttons[0].icon, widget_position: 'below', group_size_pct: 75 }, 14);
     await optionSizing({ label_center: 'Dynamic', widget_position: 'left' }, 78);

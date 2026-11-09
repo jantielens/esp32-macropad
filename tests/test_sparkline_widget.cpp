@@ -643,7 +643,9 @@ TEST_F(SparklineWidget, StandaloneCenterLabelStaysCenteredWhenClippedAndReflowed
             const int32_t height = lv_obj_get_height(label) * upscale / LV_SCALE_NONE;
             const int32_t center = 2 * (lv_obj_get_y(runtime.label_regions[1]) +
                                          lv_obj_get_y(label)) + height;
-            EXPECT_NEAR(center, lv_obj_get_content_height(tile) + 10, 1);
+            const int32_t optical = height <= lv_obj_get_content_height(tile)
+                ? 2 * runtime.input.label_optical_offset[1] : 0;
+            EXPECT_NEAR(center, lv_obj_get_content_height(tile) + 10 + optical, 1);
             EXPECT_EQ(lv_obj_get_height(label),
                       runtime.input.label_height[1] * LV_SCALE_NONE / upscale);
         };
@@ -661,6 +663,104 @@ TEST_F(SparklineWidget, StandaloneCenterLabelStaysCenteredWhenClippedAndReflowed
         EXPECT_EQ(lv_obj_get_y(label), 0);
         lv_obj_delete(runtime.label_regions[1]);
     }
+}
+
+TEST_F(SparklineWidget, LabelSlotsCenterTemperatureAndRetainEmptyPositions) {
+    lv_obj_t* parent = lv_obj_create(lv_display_get_screen_active(display));
+    lv_obj_set_pos(parent, 0, 0);
+    lv_obj_set_size(parent, 290, 160);
+    lv_obj_set_style_pad_all(parent, 4, 0);
+    lv_obj_set_style_border_width(parent, 0, 0);
+    lv_obj_set_style_bg_color(parent, lv_color_white(), 0);
+    const char* texts[] = {"Livingroom", "24.7 \xc2\xb0" "C", "36 % RLV"};
+    const lv_font_t* fonts[] = {&lv_font_montserrat_18, &lv_font_montserrat_36, &lv_font_montserrat_18};
+    const uint32_t colors[] = {0xff0000, 0x000000, 0x0000ff};
+    lv_obj_t* labels[3];
+    for (int i = 0; i < 3; ++i) {
+        labels[i] = lv_label_create(parent);
+        lv_obj_set_style_text_font(labels[i], fonts[i], 0);
+        lv_obj_set_style_text_color(labels[i], lv_color_hex(colors[i]), 0);
+        lv_label_set_text(labels[i], texts[i]);
+    }
+    ScreenButtonConfig button{};
+    strlcpy(button.label_top, texts[0], sizeof(button.label_top));
+    strlcpy(button.label_center, texts[1], sizeof(button.label_center));
+    strlcpy(button.label_bottom, texts[2], sizeof(button.label_bottom));
+    button.reserve_label_slots = true;
+    UIScaleInfo scale = pad_get_scale_info();
+    scale.font_small = fonts[0];
+    scale.font_large = fonts[1];
+    ButtonContentRuntime runtime{};
+    pad_apply_content_layout(parent, button, nullptr, labels, scale, nullptr, &runtime);
+    auto measure = [&](int height, int first[3], int last[3], int count[3]) {
+        settle();
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < 290; ++x) {
+                const uint16_t value = pixel(x, y);
+                for (int i = 0; i < 3; ++i) {
+                    if (value == lv_color_to_u16(lv_color_hex(colors[i]))) {
+                        first[i] = std::min(first[i], y);
+                        last[i] = std::max(last[i], y);
+                        ++count[i];
+                    }
+                }
+            }
+        }
+    };
+    int reference_first[3] = {160, 160, 160}, reference_last[3] = {-1, -1, -1};
+    int reference_count[3] = {};
+    measure(160, reference_first, reference_last, reference_count);
+    lv_obj_set_height(parent, 92);
+    const auto full = pad_measure_content_layout(parent, runtime);
+    pad_reflow_content_layout(runtime, full);
+    int first[3] = {92, 92, 92}, last[3] = {-1, -1, -1}, count[3] = {};
+    measure(92, first, last, count);
+    for (int i = 0; i < 3; ++i) ASSERT_GE(last[i], first[i]);
+    for (int i = 0; i < 3; ++i) EXPECT_EQ(count[i], reference_count[i]);
+    EXPECT_NEAR(first[1] + last[1], 91, 2);
+    EXPECT_NEAR(first[1] - last[0], first[2] - last[1], 3);
+    EXPECT_LE(first[1] - last[0], 12);
+    EXPECT_LE(first[2] - last[1], 12);
+    pad_set_content_label_text(runtime, 1, "10.0 \xc2\xb0" "C");
+    const auto changed = pad_measure_content_layout(parent, runtime);
+    for (int i = 0; i < 3; ++i) EXPECT_EQ(changed.labels[i].y, full.labels[i].y);
+    runtime.input.reserve_label_slots = true;
+    runtime.input.has_label[0] = runtime.input.has_label[2] = false;
+    const auto empty = button_content_layout(runtime.input);
+    for (int i = 0; i < 3; ++i) {
+        EXPECT_EQ(empty.labels[i].y, full.labels[i].y);
+        EXPECT_EQ(empty.labels[i].height, full.labels[i].height);
+    }
+    runtime.label_offset_y[1] = -4;
+    pad_reflow_content_layout(runtime, empty);
+    lv_obj_update_layout(parent);
+    EXPECT_EQ(lv_obj_get_y(runtime.label_regions[1]), full.labels[1].y - 4);
+    pad_set_content_label_text(runtime, 1, "24.7 C\nanother line");
+    EXPECT_EQ(runtime.input.label_height[1], full.labels[1].height);
+    runtime.label_offset_y[1] = 0;
+    runtime.input.reserve_label_slots = false;
+    runtime.input.has_label[0] = true;
+    lv_obj_add_flag(runtime.label_regions[2], LV_OBJ_FLAG_HIDDEN);
+    runtime.labels[2] = nullptr;
+    pad_set_content_label_text(runtime, 1, "24.7 \xc2\xb0" "C");
+    const auto compact = pad_measure_content_layout(parent, runtime);
+    pad_reflow_content_layout(runtime, compact);
+    int compact_first[3] = {92, 92, 92}, compact_last[3] = {-1, -1, -1}, compact_count[3] = {};
+    measure(92, compact_first, compact_last, compact_count);
+    // Representative font bounds include descenders that these values do not contain.
+    EXPECT_NEAR(compact_first[0] + compact_last[1], 91, 8);
+    EXPECT_GT(compact_first[1], first[1]);
+    EXPECT_EQ(compact_count[0], reference_count[0]);
+    EXPECT_EQ(compact_count[1], reference_count[1]);
+    pad_set_content_label_text(runtime, 0, "Test");
+    pad_set_content_label_text(runtime, 1, "Test");
+    pad_reflow_content_layout(runtime, pad_measure_content_layout(parent, runtime));
+    int test_first[3] = {92, 92, 92}, test_last[3] = {-1, -1, -1}, test_count[3] = {};
+    measure(92, test_first, test_last, test_count);
+    ASSERT_GE(test_last[0], test_first[0]);
+    ASSERT_GE(test_last[1], test_first[1]);
+    EXPECT_NEAR(test_first[0] + test_last[1], 91, 8);
+    lv_obj_delete(parent);
 }
 
 TEST_F(SparklineWidget, AutoContentReflowsFromResolvedLabelText) {

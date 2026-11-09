@@ -176,7 +176,7 @@ function padWidgetPreviewSymbol(preview) {
 // Shared cell content renderer for normal and ghost buttons.
 // Sets colors, border, labels, icon, and bg-image placeholder on the cell div.
 const PAD_CELL_PREVIEW_PROPERTIES = [
-    'label_top', 'label_center', 'label_bottom', 'bg_color', 'fg_color', 'icon_color',
+    'label_top', 'label_center', 'label_bottom', 'reserve_label_slots', 'bg_color', 'fg_color', 'icon_color',
     'border_color', 'border_width', 'corner_radius', 'content_pad',
     'icon', 'icon_position', 'widget_position', 'group_size_pct', 'rocker_group_layout',
     'bg_image_url', 'bg_image_path', 'widget_type',
@@ -221,14 +221,20 @@ function padRenderGroupedContent(cell, btn, widget, existingIcon, foreground) {
     group.dataset.iconPosition = iconPosition;
     const labels = document.createElement('div');
     labels.className = 'pad-cell-group-labels';
+    const hasLabels = !!(btn.label_top || btn.label_center || btn.label_bottom);
+    if (btn.reserve_label_slots) {
+        labels.dataset.centered = 'true';
+        labels.dataset.reserved = 'true';
+    }
     for (const [field, className] of [
         ['label_top', 'pad-cell-label-top'], ['label_center', 'pad-cell-label-center'],
         ['label_bottom', 'pad-cell-label-bottom']
     ]) {
-        if (!btn[field]) continue;
+        if (!btn[field] && !btn.reserve_label_slots) continue;
         const label = document.createElement('div');
         label.className = className;
-        padAppendBindingPreview(label, btn[field]);
+        if (btn[field]) padAppendBindingPreview(label, btn[field]);
+        else label.setAttribute('aria-hidden', 'true');
         labels.appendChild(label);
     }
     const appendIcon = () => {
@@ -236,14 +242,14 @@ function padRenderGroupedContent(cell, btn, widget, existingIcon, foreground) {
         else padAppendIconPreview(group, btn.icon, foreground);
     };
     if (btn.icon && iconPosition !== 'right' && iconPosition !== 'below') appendIcon();
-    if (btn.label_top || btn.label_center || btn.label_bottom) group.appendChild(labels);
+    if (hasLabels || btn.reserve_label_slots) group.appendChild(labels);
     if (btn.icon && (iconPosition === 'right' || iconPosition === 'below')) appendIcon();
     if (widget) {
         const marker = document.createElement('div');
         marker.className = 'pad-content-widget-region';
         marker.title = widget.name + ' widget placeholder, not a live rendering';
         marker.setAttribute('aria-label', marker.title);
-        const hasGroup = !!(btn.icon || btn.label_top || btn.label_center || btn.label_bottom);
+        const hasGroup = !!(btn.icon || hasLabels || btn.reserve_label_slots);
         const rocker = btn.widget_type === 'rocker' || btn.widget_type === 'numericrocker';
         const centered = rocker && btn.rocker_group_layout !== 'beside';
         if (centered) {
@@ -891,6 +897,7 @@ function padOptionIconRenderKey(payload, button, slot) {
         button.widget_option_icon_badge_padding ?? 0, button.group_size_pct ?? 0,
         button.label_center ? 1 : 0, button.icon ? 1 : 0,
         button.widget_position ?? '', button.icon_position ?? ''];
+    if (button.reserve_label_slots) values.push('reserve_label_slots');
     for (let index = 1; index <= 5; index++) {
         const suffix = index === 1 ? '' : '_' + index;
         values.push(button['widget_option_label' + suffix] || button['widget_option_icon' + suffix] ? 1 : 0);
@@ -1169,7 +1176,7 @@ async function padPreparePageSave(context) {
                 const border = Math.max(0, parseInt(button.border_width ?? layout.border_width ?? 1, 10) || 0);
                 iconWidth = Math.max(0, padTrackSpanSize(columnSizing.sizes, col, colSpan, gap) - 2 * (contentPad + border));
                 iconHeight = Math.max(0, padTrackSpanSize(rowSizing.sizes, row, rowSpan, gap) - 2 * (contentPad + border));
-                const hasGroup = button.icon || button.label_top || button.label_center || button.label_bottom;
+                const hasGroup = button.icon || button.label_top || button.label_center || button.label_bottom || button.reserve_label_slots;
                 if (hasGroup) {
                     const horizontal = !button.widget_position || button.widget_position === 'left' || button.widget_position === 'right';
                     const available = horizontal ? iconWidth : iconHeight;

@@ -78,6 +78,26 @@ context.padAppendIconPreview = function(container, icon, foreground) {
 };
 
 {
+    const cell = createElement();
+    context.padRenderCellContent(cell, { label_center: '21.5', reserve_label_slots: true });
+    const labels = cell.querySelector('.pad-cell-group-labels');
+    assert.strictEqual(labels.children.length, 3);
+    assert.strictEqual(labels.dataset.centered, 'true');
+    assert.strictEqual(labels.children[0].attributes['aria-hidden'], 'true');
+    assert.strictEqual(labels.children[2].attributes['aria-hidden'], 'true');
+    assert.notStrictEqual(context.padCellPreviewSignature({ label_center: '21.5' }),
+        context.padCellPreviewSignature({ label_center: '21.5', reserve_label_slots: true }));
+}
+
+{
+    const cell = createElement();
+    context.padRenderCellContent(cell, { label_top: 'Test', label_center: 'Test' });
+    const labels = cell.querySelector('.pad-cell-group-labels');
+    assert.strictEqual(labels.children.length, 2);
+    assert.strictEqual(labels.dataset.centered, undefined);
+}
+
+{
     const icon = { catalog_id: 'material-symbols:home', kind: 'mono' };
     const render = button => {
         const cell = createElement();
