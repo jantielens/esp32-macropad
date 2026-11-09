@@ -39,9 +39,10 @@ See [home energy](../examples/home-energy.md).
 ## Tune readability
 
 Arc thickness is 5-50% of radius. Multiple rings have automatic gaps.
-Needle applies to the outermost active ring; width 0 hides it.
+The needle is off by default. When enabled, it applies to the outermost active
+ring; width 0 hides it.
 Cutoff 0-99% removes the inner portion to avoid labels.
-Tick count creates interior divisions; N ticks divide into N+1 segments.
+Tick count defaults to 0. N ticks create interior divisions into N+1 segments.
 Animation 0-5000 ms applies to arcs/needle, with the initial value immediate.
 
 Track Outline Width 0-8 px follows the full track. Gauge fills are not patterned.

@@ -452,11 +452,15 @@ gaugeEditor.groups = [
     disclosureGroup(gaugeEditor, 'pad-edit-gauge-tick-marks', ['widget_gauge_ticks']),
     disclosureGroup(gaugeEditor, 'pad-edit-gauge-target', ['widget_gauge_marker_value'])
 ];
-context.padWidgetEditorsLoad({ widget_type: 'gauge', widget_arc_color_2: '#234567', widget_gauge_ticks: '5' });
+context.padWidgetEditorsLoad({ widget_type: 'gauge' });
+assert.strictEqual(document.getElementById('pad-edit-gauge-show-needle').checked, false);
+assert.strictEqual(document.getElementById('pad-edit-gauge-ticks').value, '0');
+context.padWidgetEditorsLoad({ widget_type: 'gauge', widget_arc_color_2: '#234567',
+    widget_gauge_show_needle: false, widget_gauge_ticks: '0' });
 assert.deepStrictEqual(gaugeEditor.groups.map(group => group.element.open), [true, false, false, false, false, false], 'Explicit defaults must not expand optional groups');
 context.padWidgetEditorsLoad({ widget_type: 'gauge', widget_data_binding_2: ' [pad:source] ', widget_gauge_marker_value: 0,
-    widget_gauge_show_needle: false, widget_gauge_ticks: 0 });
-assert.deepStrictEqual(gaugeEditor.groups.map(group => group.element.open), [true, true, false, true, true, true], 'Data, zero targets, and changed false/zero defaults expand their groups');
+    widget_gauge_show_needle: true, widget_gauge_ticks: 5 });
+assert.deepStrictEqual(gaugeEditor.groups.map(group => group.element.open), [true, true, false, true, true, true], 'Data, zero targets, and changed needle/tick settings expand their groups');
 gaugeEditor.groups[1].element.open = false;
 context.padWidgetEditorsRefresh('gauge');
 assert.strictEqual(gaugeEditor.groups[1].element.open, false, 'Refresh must not override a manual disclosure choice');

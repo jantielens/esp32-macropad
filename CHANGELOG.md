@@ -35,6 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Default Gauge needles to off and tick counts to 0. Gauges without explicit
+  settings use these defaults; saved needle and tick settings remain unchanged.
+  See [Gauge readability](docs/user/widgets/gauge.md#tune-readability).
 * Center button labels predictably and reduce excess space between them using
   font metrics. The configured labels form a compact group by default; reserve
   empty positions to keep the center label centered. Existing button layouts

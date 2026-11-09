@@ -196,7 +196,7 @@ const padButtonBuilders = [
     },
     {
         id: 'gauge', label: 'Show a gauge', aspectRatio: 2,
-        description: 'Show a numeric value as a single ring with a needle within a fixed range.',
+        description: 'Show a numeric value as a single ring within a fixed range.',
         note: 'Check the suggested range before creating the button. The unit changes display text, not the value. Fine-tune styling in the pad editor.',
         available: ({ sources: [{ candidate }] }, runtime = deviceInfoCache) => candidate.capabilities.numericWidget &&
             !!runtime?.widget_catalog?.some(widget => widget.type === 'gauge'),
@@ -213,7 +213,7 @@ const padButtonBuilders = [
                 widget_data_binding: padButtonBuilderBinding(source),
                 widget_gauge_min: min, widget_gauge_max: max,
                 widget_gauge_degrees: 180, widget_gauge_start_angle: 180,
-                widget_gauge_show_needle: true, widget_gauge_ticks: 5,
+                widget_gauge_show_needle: false, widget_gauge_ticks: 0,
                 widget_arc_color: options.color,
                 label_bottom: padButtonBuilderLabel(source, options)
             };
@@ -253,15 +253,17 @@ const padButtonBuilders = [
                 fill.setAttribute('pathLength', '100');
                 fill.setAttribute('stroke-dasharray', progress * 100 + ' 100');
                 gauge.appendChild(fill);
-                const needle = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                needle.setAttribute('x1', '140');
-                needle.setAttribute('y1', '130');
-                needle.setAttribute('x2', '42');
-                needle.setAttribute('y2', '130');
-                needle.setAttribute('stroke', PAD_FIRMWARE_DEFAULTS.widget_indicator_color);
-                needle.setAttribute('stroke-width', '2');
-                needle.setAttribute('transform', 'rotate(' + progress * 180 + ' 140 130)');
-                gauge.appendChild(needle);
+                if (button.widget_gauge_show_needle) {
+                    const needle = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    needle.setAttribute('x1', '140');
+                    needle.setAttribute('y1', '130');
+                    needle.setAttribute('x2', '42');
+                    needle.setAttribute('y2', '130');
+                    needle.setAttribute('stroke', PAD_FIRMWARE_DEFAULTS.widget_indicator_color);
+                    needle.setAttribute('stroke-width', '2');
+                    needle.setAttribute('transform', 'rotate(' + progress * 180 + ' 140 130)');
+                    gauge.appendChild(needle);
+                }
             } else {
                 gauge.setAttribute('role', 'img');
                 gauge.setAttribute('aria-label', 'Gauge value unavailable');

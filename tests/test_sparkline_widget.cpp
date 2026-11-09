@@ -1047,6 +1047,21 @@ TEST_F(SparklineWidget, ReflowRestoresIconScaleAfterRegionGrows) {
     EXPECT_EQ(lv_image_get_scale_x(icon), small_scale);
 }
 
+TEST_F(SparklineWidget, GaugeNeedleAndTicksDefaultOffButCanBeEnabled) {
+    WidgetConfig config{};
+    JsonDocument document;
+    gauge_parse(document.as<JsonObject>(), config.data);
+    auto* gauge = reinterpret_cast<GaugeConfig*>(config.data);
+    EXPECT_FALSE(gauge->show_needle);
+    EXPECT_EQ(gauge->tick_count, 0);
+
+    document["widget_gauge_show_needle"] = true;
+    document["widget_gauge_ticks"] = 5;
+    gauge_parse(document.as<JsonObject>(), config.data);
+    EXPECT_TRUE(gauge->show_needle);
+    EXPECT_EQ(gauge->tick_count, 5);
+}
+
 TEST_F(SparklineWidget, GaugeResizeReusesTicksAndKeepsCaptionInsideRegion) {
     lv_obj_t* region = button_content_region(tile, {0, 0, 240, 180}, 0, 0);
     WidgetConfig config{};

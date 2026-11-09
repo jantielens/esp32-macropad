@@ -1154,7 +1154,7 @@ delete context.testHelpSchemes;
         widget_data_binding: '[ha:sensor.living_room_temperature]',
         widget_gauge_min: 0, widget_gauge_max: 50,
         widget_gauge_degrees: 180, widget_gauge_start_angle: 180,
-        widget_gauge_show_needle: true, widget_gauge_ticks: 5, widget_arc_color: '#4CAF50',
+        widget_gauge_show_needle: false, widget_gauge_ticks: 0, widget_arc_color: '#4CAF50',
         label_bottom: '[ha:sensor.living_room_temperature;;%.1f \u00b0C]'
     });
     for (const [state, unit, min, max] of [

@@ -23,10 +23,10 @@
     field('zero-centered', 'widget_gauge_zero_centered', 'checkbox', false);
     field('dual-binding-pair-1', 'widget_gauge_dual_binding_pair_1', 'checkbox', false);
     field('dual-binding-pair-2', 'widget_gauge_dual_binding_pair_2', 'checkbox', false);
-    field('show-needle', 'widget_gauge_show_needle', 'checkbox', true);
+    field('show-needle', 'widget_gauge_show_needle', 'checkbox', false);
     field('anim-ms', 'widget_anim_ms', 'number', 300);
     field('arc-width-pct', 'widget_gauge_arc_width_pct', 'number', 15);
-    field('ticks', 'widget_gauge_ticks', 'number', 5);
+    field('ticks', 'widget_gauge_ticks', 'number', 0);
     field('needle-width', 'widget_gauge_needle_width', 'number', 2);
     field('needle-cutoff', 'widget_gauge_needle_cutoff_pct', 'number', 0);
     field('tick-width', 'widget_gauge_tick_width', 'number', 1);

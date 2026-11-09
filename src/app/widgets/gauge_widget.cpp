@@ -464,7 +464,7 @@ static void gauge_parse(const JsonObject& btn, uint8_t* data) {
     int sa = btn["widget_gauge_start_angle"] | 180;
     cfg->start_angle = (uint16_t)(sa % 360);
 
-    cfg->show_needle     = btn["widget_gauge_show_needle"] | true;
+    cfg->show_needle     = btn["widget_gauge_show_needle"] | false;
     cfg->zero_centered   = btn["widget_gauge_zero_centered"] | false;
     cfg->dual_binding_pair_1 = btn["widget_gauge_dual_binding_pair_1"] | false;
     cfg->dual_binding_pair_2 = btn["widget_gauge_dual_binding_pair_2"] | false;
@@ -487,7 +487,7 @@ static void gauge_parse(const JsonObject& btn, uint8_t* data) {
     uint8_t awpct = btn["widget_gauge_arc_width_pct"] | (uint8_t)15;
     cfg->arc_width_pct = clamp_val<uint8_t>(awpct, 5, 50);
 
-    uint8_t tc = btn["widget_gauge_ticks"] | (uint8_t)5;
+    uint8_t tc = btn["widget_gauge_ticks"] | (uint8_t)0;
     cfg->tick_count = (tc > 20) ? 20 : tc;
 
     uint8_t nw = btn["widget_gauge_needle_width"] | (uint8_t)2;
