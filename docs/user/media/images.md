@@ -29,6 +29,10 @@ background color. Neither mode stretches the image. The shared **Image fit**
 control also applies to remote backgrounds.
 Prepare images near the intended display size to reduce decoding/memory load.
 
+> [!NOTE]
+> If an existing button used Letterbox, reselect **Image fit > Letterbox** and
+> choose **Save Pad**. The old setting is not migrated.
+
 Delete unused files through Image Library. A pad referencing a deleted image
 does not receive a replacement automatically.
 
