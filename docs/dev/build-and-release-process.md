@@ -731,6 +731,16 @@ with `tools/firmware_size_report.py` as described in [Scripts](scripts.md).
 
 ### Step 1: Prepare the Release
 
+For an assistant-guided workflow, invoke `/prep-release` (optionally with
+`version=X.Y.Z` and `base=...`). The repository's
+[Prep Release skill](../../.github/skills/prep-release/SKILL.md) confirms the
+version, curates the changelog, reconciles documentation, runs validation, and
+creates or updates the PR using the current PR guidance. Commit and push
+approvals still apply. It checks CI on the final PR commit before reporting
+readiness and does not merge, tag, or publish the release.
+
+Alternatively, use the release preparation script:
+
 ```bash
 # Run the release preparation script
 ./create-release.sh 0.0.5 "Improved logging and stability"
