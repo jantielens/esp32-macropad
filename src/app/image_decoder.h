@@ -1,4 +1,5 @@
-#pragma once
+#ifndef IMAGE_DECODER_H
+#define IMAGE_DECODER_H
 
 #include "board_config.h"
 
@@ -74,3 +75,5 @@ bool image_decode_boot_logo(
 #endif
 
 #endif // HAS_IMAGE_LIBRARY || HAS_IMAGE_FETCH || HAS_BOOT_LOGO
+
+#endif // IMAGE_DECODER_H
