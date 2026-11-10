@@ -1062,6 +1062,32 @@ TEST_F(SparklineWidget, GaugeNeedleAndTicksDefaultOffButCanBeEnabled) {
     EXPECT_EQ(gauge->tick_count, 5);
 }
 
+TEST_F(SparklineWidget, GaugeDestroyCancelsNeedleAnimationBeforeStateReuse) {
+    lv_obj_t* region = button_content_region(tile, {0, 0, 240, 180}, 0, 0);
+    WidgetConfig config{};
+    WidgetState state{};
+    ScreenButtonConfig button{};
+    PadRect rect{0, 0, 240, 180};
+    UIScaleInfo scale = pad_get_scale_info();
+    JsonDocument document;
+    document["widget_gauge_show_needle"] = true;
+    document["widget_anim_ms"] = 300;
+    document["widget_gauge_min"] = "0";
+    document["widget_gauge_max"] = "100";
+    gauge_parse(document.as<JsonObject>(), config.data);
+    gauge_create(region, &config, &button, &rect, &scale, &state);
+    gauge_update(region, &config, &state, "10");
+    lv_tick_inc(400);
+    gauge_update(region, &config, &state, "80");
+    auto* gauge = reinterpret_cast<GaugeState*>(state.data);
+    EXPECT_NE(lv_anim_get(gauge, gauge_needle_anim_cb), nullptr);
+
+    gauge_destroy(&state);
+    lv_obj_delete(region);
+    EXPECT_EQ(lv_anim_get(gauge, gauge_needle_anim_cb), nullptr);
+    lv_anim_delete(gauge, gauge_needle_anim_cb);
+}
+
 TEST_F(SparklineWidget, GaugeResizeReusesTicksAndKeepsCaptionInsideRegion) {
     lv_obj_t* region = button_content_region(tile, {0, 0, 240, 180}, 0, 0);
     WidgetConfig config{};
@@ -1103,6 +1129,36 @@ TEST_F(SparklineWidget, GaugeResizeReusesTicksAndKeepsCaptionInsideRegion) {
     EXPECT_LT(x + bounds.x2, lv_obj_get_content_width(region));
     EXPECT_LT(y + bounds.y2, lv_obj_get_content_height(region));
     gauge_destroy(&state);
+}
+
+TEST_F(SparklineWidget, BarChartDestroyCancelsAnimationsBeforeStateReuse) {
+    lv_obj_t* region = button_content_region(tile, {0, 0, 240, 140}, 0, 0);
+    WidgetConfig config{};
+    WidgetState state{};
+    ScreenButtonConfig button{};
+    PadRect rect{0, 0, 240, 140};
+    UIScaleInfo scale = pad_get_scale_info();
+    JsonDocument document;
+    document["widget_anim_ms"] = 300;
+    document["widget_bar_min"] = "0";
+    document["widget_bar_max"] = "100";
+    for (uint8_t i = 1; i < MAX_WIDGET_BINDINGS; ++i)
+        strlcpy(config.data_binding[i], "binding", sizeof(config.data_binding[i]));
+    bar_chart_parse(document.as<JsonObject>(), config.data);
+    bar_chart_create(region, &config, &button, &rect, &scale, &state);
+    bar_chart_update(region, &config, &state, "10\t20\t30\t40");
+    lv_tick_inc(400);
+    bar_chart_update(region, &config, &state, "80\t70\t60\t50");
+    auto* chart = reinterpret_cast<BarChartState*>(state.data);
+    for (auto& slot : chart->slots)
+        EXPECT_NE(lv_anim_get(&slot, bar_chart_anim_cb), nullptr);
+
+    bar_chart_destroy(&state);
+    lv_obj_delete(region);
+    for (auto& slot : chart->slots) {
+        EXPECT_EQ(lv_anim_get(&slot, bar_chart_anim_cb), nullptr);
+        lv_anim_delete(&slot, bar_chart_anim_cb);
+    }
 }
 
 TEST_F(SparklineWidget, BarChartResizeMatchesCreationGeometryWithDualCaptions) {

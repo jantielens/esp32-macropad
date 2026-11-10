@@ -1008,8 +1008,8 @@ static void bar_chart_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
 
 static void bar_chart_destroy(WidgetState* state) {
     auto* st = reinterpret_cast<BarChartState*>(state->data);
-    // Null all fills + tracks so any in-flight animation callbacks bail out.
     for (uint8_t s = 0; s < MAX_WIDGET_BINDINGS; s++) {
+        lv_anim_delete(&st->slots[s], bar_chart_anim_cb);
         st->slots[s].fill = nullptr;
         st->slots[s].bg = nullptr;
         st->slots[s].label = nullptr;

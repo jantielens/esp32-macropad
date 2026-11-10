@@ -1271,7 +1271,7 @@ static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
 
 static void gauge_destroy(WidgetState* state) {
     auto* st = reinterpret_cast<GaugeState*>(state->data);
-    // Null LVGL pointers so in-flight animation callbacks bail out
+    lv_anim_delete(st, gauge_needle_anim_cb);
     st->needle = nullptr;
     // Free heap-allocated needle points
     if (st->n_pts) {
