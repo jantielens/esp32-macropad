@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Keep Gauge start labels aligned with their rings by fitting them together,
+  including when binding text changes. Center Gauges without labels vertically.
 * Prevent crashes when saving or rebuilding a pad while a Bar chart transition
   or Gauge needle animation is running by cancelling state-owned animations
   before widget state is reused.

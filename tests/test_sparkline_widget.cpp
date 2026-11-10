@@ -1131,6 +1131,145 @@ TEST_F(SparklineWidget, GaugeResizeReusesTicksAndKeepsCaptionInsideRegion) {
     gauge_destroy(&state);
 }
 
+TEST_F(SparklineWidget, GaugeWithoutCaptionIsVerticallyCentered) {
+    lv_obj_t* region = button_content_region(tile, {0, 0, 88, 91}, 0, 0);
+    WidgetConfig config{};
+    WidgetState state{};
+    ScreenButtonConfig button{};
+    PadRect rect{0, 0, 88, 91};
+    UIScaleInfo scale = pad_get_scale_info();
+    JsonDocument document;
+    document["widget_gauge_start_angle"] = 270;
+    document["widget_gauge_degrees"] = 270;
+    gauge_parse(document.as<JsonObject>(), config.data);
+    gauge_create(region, &config, &button, &rect, &scale, &state);
+    auto* gauge = reinterpret_cast<GaugeState*>(state.data);
+    auto check_center = [&]() {
+        lv_obj_update_layout(region);
+        lv_area_t region_area, ring_area;
+        lv_obj_get_content_coords(region, &region_area);
+        lv_obj_get_coords(gauge->arc_bg, &ring_area);
+        const int top_margin = ring_area.y1 - region_area.y1;
+        const int bottom_margin = region_area.y2 - ring_area.y2;
+        EXPECT_LE(std::abs(top_margin - bottom_margin), 1);
+    };
+    check_center();
+    lv_obj_set_size(region, 100, 120);
+    gauge_tick(region, &config, &state);
+    check_center();
+    gauge_destroy(&state);
+}
+
+TEST_F(SparklineWidget, GaugeFitsCaptionWithoutMovingItAwayFromRing) {
+    lv_obj_t* region = button_content_region(tile, {0, 0, 190, 159}, 0, 0);
+    WidgetConfig config{};
+    WidgetState state{};
+    ScreenButtonConfig button{};
+    PadRect rect{0, 0, 190, 159};
+    UIScaleInfo scale = pad_get_scale_info();
+    JsonDocument document;
+    document["widget_gauge_start_angle"] = 270;
+    document["widget_gauge_degrees"] = 270;
+    document["widget_gauge_start_label"] = "[test:label]";
+    gauge_parse(document.as<JsonObject>(), config.data);
+    bindings["[test:label]"] = "LABEL";
+    gauge_create(region, &config, &button, &rect, &scale, &state);
+    auto* gauge = reinterpret_cast<GaugeState*>(state.data);
+    auto* cfg = reinterpret_cast<GaugeConfig*>(config.data);
+    ASSERT_NE(gauge->start_label_1, nullptr);
+
+    auto check_layout = [&]() {
+        lv_obj_update_layout(region);
+        lv_area_t region_area, label_area;
+        lv_obj_get_content_coords(region, &region_area);
+        lv_obj_get_coords(gauge->start_label_1, &label_area);
+        const lv_area_t bounds = widget_content_bounds(gauge->start_label_1);
+        EXPECT_GE(label_area.x1 + bounds.x1, region_area.x1);
+        EXPECT_LE(label_area.x1 + bounds.x2, region_area.x2);
+        EXPECT_GE(label_area.y1 + bounds.y1, region_area.y1);
+        EXPECT_LE(label_area.y1 + bounds.y2, region_area.y2);
+        const float ring_y = region_area.y1 + gauge->cy - gauge->outer_radius + gauge->arc_width_px / 2.0f;
+        EXPECT_NEAR((label_area.y1 + label_area.y2 + 1) / 2.0f, ring_y, 1.0f);
+        EXPECT_GE(region_area.y1 + gauge->cy - gauge->outer_radius, region_area.y1);
+        EXPECT_LE(region_area.y1 + gauge->cy + gauge->outer_radius, region_area.y2);
+    };
+    check_layout();
+    EXPECT_LT(gauge->outer_radius, gauge_geometry(cfg, 190, 159).radius);
+
+    const int initial_radius = gauge->outer_radius;
+    bindings["[test:label]"] = "A much longer caption";
+    gauge_tick(region, &config, &state);
+    check_layout();
+    EXPECT_LT(gauge->outer_radius, initial_radius);
+
+    lv_obj_set_size(region, 160, 100);
+    gauge_tick(region, &config, &state);
+    check_layout();
+
+    bindings["[test:label]"] = "";
+    gauge_tick(region, &config, &state);
+    EXPECT_TRUE(lv_obj_has_flag(gauge->start_label_1, LV_OBJ_FLAG_HIDDEN));
+    EXPECT_EQ(gauge->outer_radius, gauge_geometry(cfg, 160, 100).radius);
+    bindings["[test:label]"] = "LABEL";
+    gauge_tick(region, &config, &state);
+    EXPECT_FALSE(lv_obj_has_flag(gauge->start_label_1, LV_OBJ_FLAG_HIDDEN));
+    check_layout();
+    gauge_destroy(&state);
+}
+
+TEST_F(SparklineWidget, GaugeFitsMultipleRotatedCaptionsAtTheirRingStarts) {
+    for (int angle : {0, 45, 90, 135, 180, 225, 270, 315}) {
+        SCOPED_TRACE(angle);
+        lv_obj_t* region = button_content_region(tile, {0, 0, 190, 159}, 0, 0);
+        WidgetConfig config{};
+        WidgetState state{};
+        ScreenButtonConfig button{};
+        PadRect rect{0, 0, 190, 159};
+        UIScaleInfo scale = pad_get_scale_info();
+        JsonDocument document;
+        document["widget_gauge_start_angle"] = angle;
+        document["widget_gauge_degrees"] = 270;
+        document["widget_gauge_show_needle"] = true;
+        document["widget_gauge_start_label"] = "Outer label";
+        document["widget_gauge_start_label_2"] = "Inner";
+        strlcpy(config.data_binding[1], "2", sizeof(config.data_binding[1]));
+        gauge_parse(document.as<JsonObject>(), config.data);
+        gauge_create(region, &config, &button, &rect, &scale, &state);
+        auto* gauge = reinterpret_cast<GaugeState*>(state.data);
+        ASSERT_NE(gauge->start_label_1, nullptr);
+        ASSERT_NE(gauge->start_label_2, nullptr);
+        lv_obj_update_layout(region);
+        lv_area_t region_area;
+        lv_obj_get_content_coords(region, &region_area);
+        const float radians = angle * (float)M_PI / 180.0f;
+        const float radial_x = cosf(radians), radial_y = sinf(radians);
+        const float tangent_x = radial_y, tangent_y = -radial_x;
+        lv_obj_t* labels[] = {gauge->start_label_1, gauge->start_label_2};
+        for (int slot = 0; slot < 2; ++slot) {
+            lv_area_t coordinates;
+            lv_obj_get_coords(labels[slot], &coordinates);
+            const lv_area_t bounds = widget_content_bounds(labels[slot]);
+            EXPECT_GE(coordinates.x1 + bounds.x1, region_area.x1);
+            EXPECT_LE(coordinates.x1 + bounds.x2, region_area.x2);
+            EXPECT_GE(coordinates.y1 + bounds.y1, region_area.y1);
+            EXPECT_LE(coordinates.y1 + bounds.y2, region_area.y2);
+            const int pivot_x = tangent_x < 0 ? lv_obj_get_width(labels[slot]) : 0;
+            const int pivot_y = lv_obj_get_height(labels[slot]) / 2;
+            const float ring_radius = gauge_radius_for_slot(gauge, slot) - gauge->arc_width_px / 2.0f;
+            EXPECT_NEAR(coordinates.x1 + pivot_x,
+                        region_area.x1 + gauge->cx + radial_x * ring_radius + tangent_x * 8, 1.0f);
+            EXPECT_NEAR(coordinates.y1 + pivot_y,
+                        region_area.y1 + gauge->cy + radial_y * ring_radius + tangent_y * 8, 1.0f);
+        }
+        EXPECT_GE(gauge->cx + radial_x * gauge->needle_len, 0);
+        EXPECT_LT(gauge->cx + radial_x * gauge->needle_len, lv_obj_get_content_width(region));
+        EXPECT_GE(gauge->cy + radial_y * gauge->needle_len, 0);
+        EXPECT_LT(gauge->cy + radial_y * gauge->needle_len, lv_obj_get_content_height(region));
+        gauge_destroy(&state);
+        lv_obj_delete(region);
+    }
+}
+
 TEST_F(SparklineWidget, BarChartDestroyCancelsAnimationsBeforeStateReuse) {
     lv_obj_t* region = button_content_region(tile, {0, 0, 240, 140}, 0, 0);
     WidgetConfig config{};

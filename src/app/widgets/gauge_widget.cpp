@@ -174,7 +174,7 @@ static GaugeGeometry gauge_geometry(const GaugeConfig* cfg, int16_t width, int16
     int16_t arc_width = radius * cfg->arc_width_pct / 100;
     if (arc_width < 3) arc_width = 3;
     return {int16_t(width / 2 - (int16_t)((x_min + x_max) * radius / 2)),
-            int16_t((available_height - (int16_t)(y_span * radius)) / 2 - (int16_t)(y_min * radius)),
+            int16_t((height - (int16_t)(y_span * radius)) / 2 - (int16_t)(y_min * radius)),
             radius, arc_width};
 }
 
@@ -298,7 +298,8 @@ static void gauge_place_ticks_for_radius(lv_obj_t* tile, GaugeState* st,
 }
 
 static int16_t gauge_radius_for_slot(const GaugeState* st, uint8_t slot_index) {
-    return st->outer_radius - (int16_t)slot_index * (st->arc_width_px + st->ring_gap_px);
+    int16_t radius = st->outer_radius - (int16_t)slot_index * (st->arc_width_px + st->ring_gap_px);
+    return slot_index && radius < 8 ? 8 : radius;
 }
 
 static float gauge_normalize_angle(float angle_deg) {
@@ -415,32 +416,89 @@ static void gauge_place_start_label(lv_obj_t* label, const GaugeConfig* cfg,
     lv_obj_set_pos(label,
                    (lv_coord_t)lroundf(anchor_x) - pivot_x,
                    (lv_coord_t)lroundf(anchor_y) - pivot_y);
-    lv_obj_update_layout(label);
-    const lv_area_t footprint = widget_content_bounds(label);
-    lv_area_t coordinates, available;
-    lv_obj_get_coords(label, &coordinates);
-    lv_obj_get_content_coords(lv_obj_get_parent(label), &available);
-    const int32_t left = coordinates.x1 + footprint.x1;
-    const int32_t right = coordinates.x1 + footprint.x2;
-    const int32_t top = coordinates.y1 + footprint.y1;
-    const int32_t bottom = coordinates.y1 + footprint.y2;
-    const int32_t shift_x = right - left > available.x2 - available.x1
-        ? (available.x1 + available.x2 - left - right) / 2
-        : left < available.x1 ? available.x1 - left : right > available.x2 ? available.x2 - right : 0;
-    const int32_t shift_y = bottom - top > available.y2 - available.y1
-        ? (available.y1 + available.y2 - top - bottom) / 2
-        : top < available.y1 ? available.y1 - top : bottom > available.y2 ? available.y2 - bottom : 0;
-    lv_obj_set_pos(label, lv_obj_get_x(label) + shift_x, lv_obj_get_y(label) + shift_y);
 }
 
-static void gauge_update_start_label(lv_obj_t* label, const char* templ,
+static bool gauge_update_start_label(lv_obj_t* label, const char* templ,
                                      const GaugeConfig* cfg, const GaugeState* st,
                                      uint8_t slot_index) {
-    if (!label || !templ || !templ[0]) return;
+    if (!label || !templ || !templ[0]) return false;
     if (gauge_set_start_label_text(label, templ)) {
         gauge_place_start_label(label, cfg, st, slot_index);
+        return true;
     }
+    return false;
 }
+
+static GaugeGeometry gauge_fit_labels(lv_obj_t* tile, const GaugeConfig* cfg,
+                                      GaugeState* st, int16_t width, int16_t height) {
+    const GaugeGeometry original = gauge_geometry(cfg, width, height);
+    lv_obj_t* labels[] = {st->start_label_1, st->start_label_2, st->start_label_3, st->start_label_4};
+    const uint8_t slots[] = {st->start_label_slot_1, st->start_label_slot_2,
+                             st->start_label_slot_3, st->start_label_slot_4};
+    bool has_label = false;
+    for (lv_obj_t* label : labels)
+        if (label && !lv_obj_has_flag(label, LV_OBJ_FLAG_HIDDEN)) has_label = true;
+    if (!has_label) return original;
+
+    float x_min, x_max, y_min, y_max;
+    gauge_arc_bbox(cfg->start_angle, cfg->arc_degrees, &x_min, &x_max, &y_min, &y_max);
+    lv_area_t available;
+    lv_obj_get_content_coords(tile, &available);
+    if (width > 24) { available.x1 += 2; available.x2 -= 2; }
+    if (height > 24) { available.y1 += 2; available.y2 -= 2; }
+    lv_area_t content;
+    lv_obj_get_content_coords(tile, &content);
+    GaugeGeometry best = original;
+    int32_t best_left = 0, best_right = 0, best_top = 0, best_bottom = 0;
+    bool fits = false;
+    int16_t low = 8, high = original.radius;
+    while (low <= high) {
+        const int16_t radius = low + (high - low) / 2;
+        st->cx = original.cx;
+        st->cy = original.cy;
+        st->outer_radius = radius;
+        st->arc_width_px = radius * cfg->arc_width_pct / 100;
+        if (st->arc_width_px < 3) st->arc_width_px = 3;
+        st->ring_gap_px = st->arc_width_px >= 8 ? st->arc_width_px / 4 : 2;
+
+        const int16_t extent = cfg->show_needle && cfg->needle_width > 0
+            ? radius + 4 + (cfg->needle_width + 1) / 2 : radius;
+        int32_t left = (int32_t)floorf(st->cx + x_min * extent) + content.x1;
+        int32_t right = (int32_t)ceilf(st->cx + x_max * extent) + content.x1;
+        int32_t top = (int32_t)floorf(st->cy + y_min * extent) + content.y1;
+        int32_t bottom = (int32_t)ceilf(st->cy + y_max * extent) + content.y1;
+        for (unsigned i = 0; i < 4; ++i) {
+            if (!labels[i] || lv_obj_has_flag(labels[i], LV_OBJ_FLAG_HIDDEN)) continue;
+            gauge_place_start_label(labels[i], cfg, st, slots[i]);
+            lv_obj_update_layout(labels[i]);
+            lv_area_t coords;
+            lv_obj_get_coords(labels[i], &coords);
+            const lv_area_t bounds = widget_content_bounds(labels[i]);
+            if (coords.x1 + bounds.x1 < left) left = coords.x1 + bounds.x1;
+            if (coords.x1 + bounds.x2 > right) right = coords.x1 + bounds.x2;
+            if (coords.y1 + bounds.y1 < top) top = coords.y1 + bounds.y1;
+            if (coords.y1 + bounds.y2 > bottom) bottom = coords.y1 + bounds.y2;
+        }
+        const bool candidate_fits = right - left <= available.x2 - available.x1 &&
+                                    bottom - top <= available.y2 - available.y1;
+        if (candidate_fits || !fits) {
+            best = {original.cx, original.cy, radius, st->arc_width_px};
+            best_left = left; best_right = right; best_top = top; best_bottom = bottom;
+        }
+        if (candidate_fits) {
+            fits = true;
+            low = radius + 1;
+        } else {
+            high = radius - 1;
+        }
+    }
+    if (!fits) LOGW(TAG, "Gauge captions cannot fit in %dx%d region", width, height);
+    best.cx += (available.x1 + available.x2 - best_left - best_right) / 2;
+    best.cy += (available.y1 + available.y2 - best_top - best_bottom) / 2;
+    return best;
+}
+
+static void gauge_reflow(lv_obj_t* tile, const GaugeConfig* cfg, GaugeState* st, bool force = false);
 
 static void gauge_sync_start_label_color(lv_obj_t* label, lv_obj_t* arc) {
     const lv_color_t color = lv_obj_get_style_arc_color(arc, LV_PART_INDICATOR);
@@ -781,6 +839,7 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         }
     }
 
+    gauge_reflow(tile, cfg, st, true);
 }
 
 // ---- Arc animation callback (normal mode: fill from 0) ----
@@ -1041,14 +1100,14 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
 
 // ---- Tick: re-resolve binding-driven colors (skip if unchanged) ----
 
-static void gauge_reflow(lv_obj_t* tile, const GaugeConfig* cfg, GaugeState* st) {
+static void gauge_reflow(lv_obj_t* tile, const GaugeConfig* cfg, GaugeState* st, bool force) {
     lv_obj_update_layout(tile);
     const int16_t width = lv_obj_get_content_width(tile);
     const int16_t height = lv_obj_get_content_height(tile);
-    if (width == st->layout_width && height == st->layout_height) return;
+    if (!force && width == st->layout_width && height == st->layout_height) return;
     st->layout_width = width;
     st->layout_height = height;
-    const GaugeGeometry geometry = gauge_geometry(cfg, width, height);
+    const GaugeGeometry geometry = gauge_fit_labels(tile, cfg, st, width, height);
     const int16_t radius = geometry.radius, arc_width = geometry.arc_width;
     const int16_t cx = geometry.cx, cy = geometry.cy;
     st->cx = cx;
@@ -1121,6 +1180,7 @@ static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
     }
 
     lv_color_t clr;
+    bool captions_changed = false;
 
     // Track color (background arc)
     if (resolve_color_changed(cfg->track_color, widget_default_rgb(DEFAULT_WIDGET_TRACK_COLOR), &st->cached_track, &clr)) {
@@ -1148,7 +1208,7 @@ static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
     if (resolve_color_changed(cfg->arc_color, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR), &st->cached_arc1, &clr))
         lv_obj_set_style_arc_color(st->arc_bg, clr, LV_PART_INDICATOR);
     if (st->start_label_1) {
-        gauge_update_start_label(st->start_label_1, cfg->start_label, cfg, st, st->start_label_slot_1);
+        captions_changed |= gauge_update_start_label(st->start_label_1, cfg->start_label, cfg, st, st->start_label_slot_1);
         gauge_sync_start_label_color(st->start_label_1, st->arc_bg);
     }
     if (st->arc_ring2) {
@@ -1159,7 +1219,7 @@ static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
             lv_obj_set_style_arc_color(st->arc_ring2, clr, LV_PART_INDICATOR);
         if (st->start_label_2) {
             const char* sl2 = st->dual_pair_1_active ? cfg->start_label_3 : cfg->start_label_2;
-            gauge_update_start_label(st->start_label_2, sl2, cfg, st, st->start_label_slot_2);
+            captions_changed |= gauge_update_start_label(st->start_label_2, sl2, cfg, st, st->start_label_slot_2);
             gauge_sync_start_label_color(st->start_label_2, st->arc_ring2);
         }
     }
@@ -1171,7 +1231,7 @@ static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
             lv_obj_set_style_arc_color(st->arc_ring3, clr, LV_PART_INDICATOR);
         if (st->start_label_3) {
             const char* sl3 = st->dual_pair_1_active ? cfg->start_label_4 : cfg->start_label_3;
-            gauge_update_start_label(st->start_label_3, sl3, cfg, st, st->start_label_slot_3);
+            captions_changed |= gauge_update_start_label(st->start_label_3, sl3, cfg, st, st->start_label_slot_3);
             gauge_sync_start_label_color(st->start_label_3, st->arc_ring3);
         }
     }
@@ -1179,7 +1239,7 @@ static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
         if (resolve_color_changed(cfg->arc_color_4, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_4), &st->cached_arc4, &clr))
             lv_obj_set_style_arc_color(st->arc_ring4, clr, LV_PART_INDICATOR);
         if (st->start_label_4) {
-            gauge_update_start_label(st->start_label_4, cfg->start_label_4, cfg, st, st->start_label_slot_4);
+            captions_changed |= gauge_update_start_label(st->start_label_4, cfg->start_label_4, cfg, st, st->start_label_slot_4);
             gauge_sync_start_label_color(st->start_label_4, st->arc_ring4);
         }
     }
@@ -1191,6 +1251,7 @@ static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
         if (resolve_color_changed(cfg->arc_color_4, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_4), &st->cached_arc_neg2, &clr))
             lv_obj_set_style_arc_color(st->arc_dual_2_neg, clr, LV_PART_INDICATOR);
     }
+    if (captions_changed) gauge_reflow(tile, cfg, st, true);
 
     // ---- Marker position + color update ----
     if (cfg->marker_value[0] && st->marker_ring_count > 0) {
