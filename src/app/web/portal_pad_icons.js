@@ -80,7 +80,7 @@ function padIconEditorSetDraft(icon) {
 }
 
 function padIconEditorColors() {
-    const background = padColorToHex(padGetBindableColor('pad-edit-bg-color'), padGetEffectiveDefault('bg_color'));
+    const background = padColorToHex(padGetBindableColor('pad-edit-bg-color'), padGetEffectiveDefault('bg_color'), true);
     const text = padColorToHex(padGetBindableColor('pad-edit-fg-color'), padGetEffectiveDefault('fg_color'));
     const foreground = padIconPreviewColor(padGetBindableColor('pad-edit-icon-color'), text);
     return { background: background || '#ffffff', foreground };
@@ -198,7 +198,7 @@ function padUpdateCellBoundaryGuide(cell) {
         ? input.value.trim() : padGetEffectiveDefault('default_pad_bg_color');
     const padLuminance = padPreviewLuminance(background);
     const blendsIn = [cell.dataset.previewEdgeColor, cell.dataset.previewFillColor].every(color => {
-        const luminance = padPreviewLuminance(color);
+        const luminance = padPreviewLuminance(color === 'transparent' ? background : color);
         return (Math.max(padLuminance, luminance) + 0.05) /
             (Math.min(padLuminance, luminance) + 0.05) < 1.3;
     });
@@ -263,11 +263,13 @@ function padRenderCellContent(cell, btn, existingIcon) {
     const description = [btn.label_top, btn.label_center, btn.label_bottom, ...indicators].filter(Boolean).join('\n');
     if (description) cell.setAttribute('aria-description', description);
     else cell.removeAttribute('aria-description');
-    const bg = padColorToHex(btn.bg_color, padGetEffectiveDefault('bg_color'));
+    const background = padColorToHex(btn.bg_color, padGetEffectiveDefault('bg_color'), true);
+    const bg = background === 'transparent' ? background :
+        padColorNormalizeLiteral(background) || padGetEffectiveDefault('bg_color');
     const fg = padColorToHex(btn.fg_color, padGetEffectiveDefault('fg_color'));
     cell.style.background = bg;
     cell.style.color = fg;
-    const luminance = padPreviewLuminance(bg);
+    const luminance = padPreviewLuminance(bg === 'transparent' ? padGetEffectiveDefault('default_pad_bg_color') : bg);
     cell.style.setProperty('--pad-resize-grip-color', luminance > 0.5 ? '#17212b' : '#ffffff');
     cell.dataset.previewEdgeColor = bg;
     cell.dataset.previewFillColor = bg;

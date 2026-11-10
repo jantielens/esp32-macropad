@@ -58,6 +58,31 @@ Saving, reloading, importing, exporting, and copying a pad preserve both layers.
 Button-level operations such as blocks and button copy/paste apply to the
 selected layer.
 
+### Use a transparent button background
+
+On either Main or Overlay, open Button **Appearance**, then the **Background**
+picker and choose **Transparent**, or enter the literal `transparent`.
+Apply the picker and **Save Pad**. The canvas shows the pad background or the
+buttons underneath; Main stays dimmed while editing Overlay.
+
+Only the button background fill becomes transparent. Labels, icons, borders,
+shadows, patterns, images, and widget fills keep their own appearance. Other
+color fields still require a color or binding. Leaving Background unset keeps
+the normal opaque default. A Background binding can return `transparent` or a
+hex color, for example:
+
+```text
+[expr:[mqtt:sensor;value]>0?"#4CAF50":"transparent"]
+```
+
+Invalid or unresolved results use the opaque default. The canvas does not
+resolve Background bindings; it previews them with the default color.
+
+Transparency does not change input behavior: enabled and disabled Overlay
+buttons still block Main underneath their full rectangles. Use **Hidden** in
+**Button State** when the Overlay button should neither draw nor block input.
+Save, reload, import, and export preserve transparent backgrounds.
+
 ### Show a conditional icon
 
 To show an up or down icon in the same position, place one button on Main and

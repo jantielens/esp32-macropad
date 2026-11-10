@@ -1943,6 +1943,12 @@ body {
   flex: 0 0 34px; width: 34px; height: 34px; border-radius: 6px; box-sizing: border-box;
   border: 2px solid var(--portal-border);
 }
+.color-popover-swatch.cp-transparent,
+.bindable-color .bc-swatch.bc-transparent,
+.cp-preview.bc-transparent {
+    background-image: repeating-conic-gradient(#ddd 0 25%, #fff 0 50%);
+    background-size: 8px 8px;
+}
 .cp-preview.cp-preview-none {
   background: repeating-conic-gradient(var(--portal-border) 0 25%, transparent 0 50%) 0 0 / 10px 10px;
 }

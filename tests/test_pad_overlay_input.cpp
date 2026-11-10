@@ -96,6 +96,7 @@ int main() {
     fixture.overlay_button = lv_button_create(lv_screen_active());
     lv_obj_set_pos(fixture.overlay_button, 50, 0);
     lv_obj_set_size(fixture.overlay_button, 100, 100);
+    lv_obj_set_style_bg_opa(fixture.overlay_button, LV_OPA_TRANSP, 0);
     lv_obj_set_scrollable(fixture.overlay_button, false);
     lv_obj_set_clickable(fixture.overlay_button, true);
     lv_obj_update_layout(fixture.overlay_button);

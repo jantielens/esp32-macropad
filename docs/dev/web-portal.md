@@ -3991,6 +3991,13 @@ Resolve `[scheme:params]` binding tokens against the device's **live** data and 
 
 > **Pad save validation.** `POST /api/pad` validates the submitted pad through the shared `pad_validate()` (the same validator the MCP write tools use): grid bounds, span overflow, widget types/config caps, colors, action arrays, binding tokens (unknown scheme, bad health key, …), and the one-level `[pad:name]` rule. Grid pads may include `column_widths_px` and `row_heights_px` integer arrays, one value per track, with `0` representing Auto. Each configured axis must retain at least one Auto track, and fixed sizes must fit the active display after spacing and insets while leaving at least one pixel for every Auto track. Buttons that fall outside a shrunken grid are tolerated (hidden, and reappear when the grid grows).
 
+> **Button background transparency.** A button's `bg_color` accepts the literal
+> `transparent` on both `buttons` (Main) and `overlay_buttons` (Overlay).
+> Background bindings can also resolve to `transparent`; invalid results restore
+> the opaque fallback. This changes only the background fill, not input blocking,
+> content opacity, or other color fields. The portal offers this choice only in
+> the button Background picker and preserves it through save/import/export.
+
 > **Image credentials.** `GET /api/pad` never returns a button's
 > `bg_image_password`. It supplies `bg_image_password_set` instead. On a later
 > save, the portal retains a password marked as stored unless the user enters a

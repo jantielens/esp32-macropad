@@ -56,11 +56,10 @@ const context = {
         getElementById: () => null,
         createTextNode: textContent => ({ textContent, querySelector: () => null })
     },
-    padColorToHex: (color, fallback) => color || fallback,
-    padColorNormalizeLiteral: color => /^#[0-9a-f]{6}$/i.test(color || '') ? color.toLowerCase() : '',
     padGetEffectiveDefault: key => ({ bg_color: '#333333', fg_color: '#ffffff', border_color: '#000000', border_width: '0', corner_radius: '8', content_pad: '4', default_pad_bg_color: '#000000' })[key]
 };
 vm.createContext(context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_pad_colors.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_editor.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_gauge.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_toggle.js', 'utf8'), context);
@@ -157,6 +156,21 @@ for (const [background, gripColor] of [
     const cell = createElement();
     context.padRenderCellContent(cell, { bg_color: background });
     assert.strictEqual(cell.style['--pad-resize-grip-color'], gripColor, background);
+}
+for (const layer of ['main', 'overlay']) {
+    const cell = createElement();
+    cell.dataset.layer = layer;
+    context.padRenderCellContent(cell, { bg_color: 'transparent', label_center: 'Visible content' });
+    assert.strictEqual(cell.style.background, 'transparent');
+    assert(descendants(cell).some(child => child.textContent === 'Visible content'));
+    context.padRenderCellContent(cell, { bg_color: '[mqtt:background]' });
+    assert.strictEqual(cell.style.background, '#333333', 'Unresolved preview must not retain stale transparency');
+    context.padRenderCellContent(cell, { bg_color: '#333333' });
+    assert.strictEqual(cell.style.background, '#333333', 'Opaque editing must clear transparency');
+    context.padRenderCellContent(cell, { bg_color: '#fff' });
+    assert.strictEqual(cell.style.background, '#FFFFFF', 'Short hex backgrounds remain supported');
+    context.padRenderCellContent(cell, {});
+    assert.strictEqual(cell.style.background, '#333333', 'Unset backgrounds remain opaque');
 }
 context.deviceInfoCache.widget_catalog.push({ type: 'future_widget', name: 'Future Widget', icon: 'list',
     axis_field: 'custom_axis', horizontal_icon: 'swap_horiz', vertical_icon: 'swap_vert', default_axis: 'vertical' });

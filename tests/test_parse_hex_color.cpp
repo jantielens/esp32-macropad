@@ -29,6 +29,7 @@ int main() {
     rejects("---");
     rejects("ERR:bad");
     rejects("red");
+    rejects("transparent");
     rejects("#12");
     rejects("#1234");
     rejects("#1234567");

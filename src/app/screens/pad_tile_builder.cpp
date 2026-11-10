@@ -326,7 +326,7 @@ void PadScreen::buildTiles() {
         uint32_t fg_def = widget_default_rgb(DEFAULT_BUTTON_FG_COLOR); parse_hex_color(bcfg.fg_color, &fg_def);
         uint32_t border_def = widget_default_rgb(DEFAULT_BUTTON_BORDER_COLOR); parse_hex_color(bcfg.border_color, &border_def);
         lv_obj_set_style_bg_color(obj, rgb_to_lv(bg_def), 0);
-        lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, 0);
+        lv_obj_set_style_bg_opa(obj, strcmp(bcfg.bg_color, "transparent") == 0 ? LV_OPA_TRANSP : LV_OPA_COVER, 0);
         lv_obj_set_style_border_color(obj, rgb_to_lv(border_def), 0);
         lv_coord_t bw_def = (lv_coord_t)strtol(bcfg.border_width, nullptr, 10);
         lv_obj_set_style_border_width(obj, bw_def, 0);
@@ -513,6 +513,7 @@ void PadScreen::buildTiles() {
             strlcpy(cb.templ, templ, sizeof(cb.templ));
             cb.defaultColor = def;
             cb.lastApplied = def; // Already rendered with default
+            cb.lastTransparent = target == 0 && strcmp(templ, "transparent") == 0;
             cb.target = target;
             cb.active = true;
             cb.hasBindings = binding_template_has_bindings(templ);
@@ -733,6 +734,7 @@ void PadScreen::buildTiles() {
         strlcpy(cb.templ, pageBgTemplate, sizeof(cb.templ));
         cb.defaultColor = pageBgDefault;
         cb.lastApplied = pageBgDefault;
+        cb.lastTransparent = false;
         cb.target = 0; // bg
         cb.active = true;
         cb.hasBindings = true;

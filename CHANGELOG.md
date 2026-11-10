@@ -14,6 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* Choose a transparent button background on Main or Overlay to place labels,
+  icons, or widgets over the content underneath. Background bindings can switch
+  between a color and transparency. The color picker uses a checkerboard swatch
+  with the same size and hover styling as other colors. Existing backgrounds
+  and Overlay input blocking remain unchanged.
+  See [transparent button backgrounds](docs/user/pads/editing.md#use-a-transparent-button-background).
+
 ### Fixed
 
 * Prevent crashes when saving or rebuilding a pad while a Bar chart transition

@@ -273,7 +273,8 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
              b[field.key].as<unsigned>() > field.max))
             return "sparkline style value must be a whole number within its allowed range";
     }
-    if (!color_ok(b["bg_color"] | "")) return "bad bg_color";
+    const char* bg_color = b["bg_color"] | "";
+    if (strcmp(bg_color, "transparent") != 0 && !color_ok(bg_color)) return "bad bg_color";
     if (!color_ok(b["fg_color"] | "")) return "bad fg_color";
     if (!color_ok(b["border_color"] | "")) return "bad border_color";
     const char* fill_colors[] = {"bg_pattern_color", "widget_bar_pattern_color", "widget_bar_pattern_color_2",

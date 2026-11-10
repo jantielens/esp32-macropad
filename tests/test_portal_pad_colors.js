@@ -29,6 +29,16 @@ const check = context.padColorCheck;
 assert.deepStrictEqual({ ...check('#fff', 0) }, { value: '#FFFFFF', error: '' });
 assert.deepStrictEqual({ ...check('', 0) }, { value: '', error: '' });
 assert.match(check('red', 0).error, /Not a color/);
+assert.match(check('transparent', 0).error, /Not a color/);
+assert.deepStrictEqual({ ...check('transparent', 0, true, true) }, { value: 'transparent', error: '' });
+assert.match(check('transparent', 5, true, true).error, /Too long/);
+assert.strictEqual(context.padColorToHex('transparent', '#333333', true), 'transparent');
+assert.strictEqual(context.padColorToHex('transparent', '#333333'), '#333333');
+const transparentButton = { bg_color: 'transparent', fg_color: '#FFFFFF', border_color: 0 };
+context.padColorsToHex(transparentButton);
+assert.deepStrictEqual(JSON.parse(JSON.stringify(transparentButton)),
+    { bg_color: 'transparent', fg_color: 'FFFFFF', border_color: '000000' });
+assert.strictEqual(context.padColorValue('transparent'), 'transparent');
 assert.strictEqual(check('[expr:1]', 0).error, '');
 assert.match(check('[expr:1]', 0, false).error, /requires a color/);
 assert.strictEqual(check('#abc', 0, false).value, '#AABBCC');
@@ -250,7 +260,7 @@ assert.deepStrictEqual({ ...pickerContext.padFillBackground('none', '#123456', 1
     { image: 'none', size: 'auto' });
 
 const pickerNodes = {};
-for (const id of ['cp-input', 'cp-preview', 'cp-apply', 'cp-error']) {
+for (const id of ['cp-input', 'cp-preview', 'cp-apply', 'cp-error', 'cp-transparent']) {
     pickerNodes['#' + id] = { value: '#FFFFFF', style: {},
         focus() { this.focused = true; }, classList: { add() {}, remove() {}, toggle() {} } };
 }
@@ -314,6 +324,30 @@ assert.strictEqual(pickerContext._cpPopover.pop.style.display, '');
 assert.strictEqual(pickerNodes['#cp-gen-source'].focused, true);
 pickerContext.padColorPopoverClose();
 assert.strictEqual(plainTarget.value, '#FF9800', 'Cancel discards an incomplete edit');
+
+pickerContext._cpPopover = plainDraft();
+pickerNodes['#cp-input'].value = 'transparent';
+assert(pickerContext.padColorPopoverValidate(true).error);
+assert.strictEqual(pickerNodes['#cp-transparent'].hidden, true);
+plainTarget.dataset.allowTransparent = 'true';
+assert.strictEqual(pickerContext.padColorPopoverValidate(true).error, '');
+assert.strictEqual(pickerNodes['#cp-transparent'].hidden, false);
+pickerContext.padColorPopoverSubmit('transparent');
+assert.strictEqual(plainTarget.value, 'transparent');
+assert.strictEqual(plainApplyEvents, 3);
+
+target.dataset.allowTransparent = 'true';
+target.dispatchEvent = function() { applyEvents++; };
+pickerContext._cpPopover = draft();
+pickerContext._cpPopover.fill.base = 'transparent';
+pickerContext.padColorPopoverApply('transparent');
+assert.strictEqual(target.value, 'transparent', 'Base transparency must survive the pattern picker');
+assert.strictEqual(applyEvents, 3);
+pickerContext._cpPopover = draft();
+pickerContext._cpPopover.fill.color = 'transparent';
+pickerContext.padColorPopoverApply('#123456');
+assert.strictEqual(applyEvents, 3, 'Pattern colors must not accept transparency');
+pickerContext.padColorPopoverClose();
 
 const defaultsFixture = JSON.parse(fs.readFileSync('tools/mock-data/pad-editor.json', 'utf8'));
 const defaultInputs = new Map();

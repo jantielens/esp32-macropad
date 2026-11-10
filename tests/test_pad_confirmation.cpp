@@ -112,6 +112,26 @@ static JsonObject make_button(JsonDocument& doc) {
 int main() {
     std::printf("=== pad confirmation validation tests ===\n");
 
+    for (const char* layer : {"buttons", "overlay_buttons"}) {
+        JsonDocument doc;
+        make_button(doc);
+        JsonObject button = doc[layer].to<JsonArray>().add<JsonObject>();
+        button["col"] = 0;
+        button["row"] = 0;
+        button["bg_color"] = "transparent";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        for (const char* field : {"fg_color", "border_color", "icon_color",
+                                  "icon_badge_color", "bg_pattern_color"}) {
+            button[field] = "transparent";
+            CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+            button.remove(field);
+        }
+        button["bg_color"] = "[mqtt:background|transparent]";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        button["bg_color"] = "translucent";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+    }
+
     {
         JsonDocument doc;
         JsonObject button = make_button(doc);

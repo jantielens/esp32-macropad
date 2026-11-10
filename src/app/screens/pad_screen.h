@@ -42,6 +42,7 @@ struct RuntimeColorBinding {
     char templ[CONFIG_COLOR_MAX_LEN];                 // Original color string (template or static)
     uint32_t defaultColor;                            // Fallback color when unresolved
     uint32_t lastApplied;                             // Last applied color (skip if unchanged)
+    bool lastTransparent;
     uint8_t target;                                   // 0=bg, 1=fg, 2=border, 3-5=labels,
                                                       // 6=badge, 7=icon
     bool active;

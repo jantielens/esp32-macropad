@@ -1,9 +1,10 @@
 // portal_pad_colors.js - Color management for the pad editor
 // Part of the ESP32 Macropad configuration portal.
 
-function padColorToHex(val, fallback) {
+function padColorToHex(val, fallback, allowTransparent) {
     if (val === undefined || val === null || val === '') return fallback;
     if (typeof val === 'string') {
+        if (allowTransparent && val === 'transparent') return val;
         if (val.startsWith('#')) return val;
         if (val.startsWith('[')) return val; // binding template — return as-is
         // Try parsing as bare hex string (legacy "4caf50" format)
@@ -64,7 +65,7 @@ function padColorNormalizeLiteral(val) {
  * normalized value to store, error is '' when valid. Empty input has no error
  * but an empty value.
  */
-function padColorCheck(raw, maxLen, allowBindings) {
+function padColorCheck(raw, maxLen, allowBindings, allowTransparent) {
     var v = String(raw == null ? '' : raw).trim();
     if (!v) return { value: '', error: '' };
     var value = v;
@@ -74,7 +75,7 @@ function padColorCheck(raw, maxLen, allowBindings) {
             var r = validateBinding(v);
             if (!r.valid) return { value: v, error: r.errors[0].message };
         }
-    } else {
+    } else if (!(allowTransparent && v === 'transparent')) {
         value = padColorNormalizeLiteral(v);
         if (!value) return { value: v, error: 'Not a color \u2014 use #RRGGBB or #RGB' + (allowBindings === false ? '' : ', or a [binding]') };
     }
@@ -95,7 +96,9 @@ function padColorSwatchButton(val) {
     sw.title = val;
     sw.setAttribute('aria-label', val);
     sw.dataset.value = val;
-    if (val.charAt(0) === '#') sw.style.background = val;
+    if (val === 'transparent') {
+        sw.classList.add('cp-transparent');
+    } else if (val.charAt(0) === '#') sw.style.background = val;
     else sw.classList.add('cp-swatch-binding');
     sw.addEventListener('click', function() {
         if (_cpPopover) {
@@ -187,6 +190,9 @@ function padColorPopoverCreate() {
     // Build palette grid (static) + custom picker
     var pg = pop.querySelector('#cp-palette-grid');
     PAD_COLOR_PALETTE.forEach(function(hex) { pg.appendChild(padColorSwatchButton(hex)); });
+    var transparent = padColorSwatchButton('transparent');
+    transparent.id = 'cp-transparent';
+    pg.appendChild(transparent);
     var custom = document.createElement('button');
     custom.type = 'button';
     custom.className = 'color-popover-swatch cp-custom';
@@ -289,10 +295,13 @@ function padColorPopoverValidate(showError) {
     if (!_cpPopover) return null;
     var pop = _cpPopover.pop;
     var target = _cpPopover.target;
+    var allowTransparent = !!target && target.dataset.allowTransparent === 'true' &&
+        (!_cpPopover.fill || _cpPopover.layer === 'base');
+    pop.querySelector('#cp-transparent').hidden = !allowTransparent;
     var raw = pop.querySelector('#cp-input').value.trim();
     var res = target && target.dataset.allowAuto === 'true' && raw === 'auto'
         ? { value: 'auto', error: '' }
-        : padColorCheck(raw, target && target.maxLength > 0 ? target.maxLength : 0, !target || target.dataset.allowBindings !== 'false');
+        : padColorCheck(raw, target && target.maxLength > 0 ? target.maxLength : 0, !target || target.dataset.allowBindings !== 'false', allowTransparent);
     if (_cpPopover.fill) {
         _cpPopover.fill[_cpPopover.layer] = pop.querySelector('#cp-input').value;
         pop.querySelector('#cp-base-value').textContent = padColorNormalizeLiteral(_cpPopover.fill.base) || _cpPopover.fill.base;
@@ -302,7 +311,8 @@ function padColorPopoverValidate(showError) {
         padFillPaintSwatch(pop.querySelector('#cp-fill-badge'), _cpPopover.fill.pattern,
             _cpPopover.fill.base, _cpPopover.fill.color, _cpPopover.fill.geometry);
         for (var layer of ['base', 'color']) {
-            var layerResult = padColorCheck(_cpPopover.fill[layer], target.maxLength, target.dataset.allowBindings !== 'false');
+            var layerResult = padColorCheck(_cpPopover.fill[layer], target.maxLength, target.dataset.allowBindings !== 'false',
+                layer === 'base' && target.dataset.allowTransparent === 'true');
             if (!layerResult.value || layerResult.error) {
                 res.error = (layer === 'base' ? 'Base Color: ' : 'Pattern Color: ') + (layerResult.error || 'Enter a color');
                 break;
@@ -321,7 +331,8 @@ function padColorPopoverValidate(showError) {
     pop.querySelectorAll('.color-popover-swatch').forEach(function(swatch) {
         swatch.classList.toggle('active', swatch.dataset.value === res.value);
     });
-    preview.classList.toggle('cp-preview-binding', ok && res.value.charAt(0) !== '#');
+    preview.classList.toggle('cp-preview-binding', ok && res.value.charAt(0) !== '#' && res.value !== 'transparent');
+    preview.classList.toggle('bc-transparent', ok && res.value === 'transparent');
     preview.classList.toggle('cp-preview-none', !ok);
     preview.style.background = (ok && res.value.charAt(0) === '#') ? res.value : '';
     pop.querySelector('#cp-apply').disabled = !ok || !!_cpPopover.generatorInvalid;
@@ -643,7 +654,8 @@ function padColorPopoverApply(val) {
     if (_cpPopover.fill) {
         var fill = _cpPopover.fill;
         var allowBindings = !_cpPopover.target.dataset || _cpPopover.target.dataset.allowBindings !== 'false';
-        var base = padColorCheck(fill.base, _cpPopover.target.maxLength, allowBindings);
+        var base = padColorCheck(fill.base, _cpPopover.target.maxLength, allowBindings,
+            !!_cpPopover.target.dataset && _cpPopover.target.dataset.allowTransparent === 'true');
         var color = padColorCheck(fill.color, _cpPopover.target.maxLength, allowBindings);
         if (!base.value || base.error || !color.value || color.error) return;
         fill.controls.querySelector('select').value = fill.pattern;
@@ -682,14 +694,17 @@ function padColorPopoverClose() {
 function padRefreshBindableColor(input) {
     const swatch = input.closest('.bindable-color').querySelector('.bc-swatch');
     const v = input.value.trim() || input.dataset.colorFallback || '';
+    const transparent = input.dataset.allowTransparent === 'true' && v === 'transparent';
+    if (transparent) swatch.classList.add('bc-transparent');
+    else swatch.classList.remove('bc-transparent');
     if (/^#[0-9a-fA-F]{6}$/.test(v)) {
         swatch.style.background = v;
         swatch.classList.remove('bc-binding');
-    } else if (v.length > 0) {
+    } else if (v.length > 0 && !transparent) {
         swatch.style.background = '';
         swatch.classList.add('bc-binding');
     } else {
-        swatch.style.background = '#e5e5ea';
+        swatch.style.background = transparent ? '' : '#e5e5ea';
         swatch.classList.remove('bc-binding');
     }
     padFillSyncSwatch(input, swatch);
@@ -783,12 +798,14 @@ function padColorFillControls(input) {
 }
 
 function padFillPaintSwatch(swatch, pattern, baseValue, patternValue, geometry) {
+    var transparent = baseValue === 'transparent';
+    swatch.classList.toggle('bc-transparent', transparent);
     swatch.classList.toggle('bc-pattern', pattern !== 'none');
     swatch.title = PAD_FILL_PATTERNS.find(function(entry) { return entry[0] === pattern; })[1];
     swatch.style.background = padColorNormalizeLiteral(baseValue) || (baseValue ? '' : '#e5e5ea');
-    swatch.classList.toggle('bc-binding', !!baseValue && !padColorNormalizeLiteral(baseValue));
+    swatch.classList.toggle('bc-binding', !!baseValue && !transparent && !padColorNormalizeLiteral(baseValue));
     if (pattern === 'none') return;
-    var base = padColorNormalizeLiteral(baseValue) || '#EEEEEE';
+    var base = transparent ? 'transparent' : padColorNormalizeLiteral(baseValue) || '#EEEEEE';
     var color = padColorNormalizeLiteral(patternValue) || '#111111';
     var spacing = padFillGeometry(geometry ? geometry.spacing : document.getElementById('pad-edit-pattern-spacing').value, 8, 2, 64);
     var stroke = padFillGeometry(geometry ? geometry.stroke : document.getElementById('pad-edit-pattern-stroke').value, 1, 1, Math.min(8, spacing));
@@ -799,7 +816,7 @@ function padFillPaintSwatch(swatch, pattern, baseValue, patternValue, geometry) 
     swatch.style.setProperty('--fill-base', base);
     swatch.style.setProperty('--fill-preview', background.image);
     swatch.style.setProperty('--fill-preview-size', background.size);
-    var bound = !padColorNormalizeLiteral(baseValue) || !padColorNormalizeLiteral(patternValue);
+    var bound = (!transparent && !padColorNormalizeLiteral(baseValue)) || !padColorNormalizeLiteral(patternValue);
     swatch.classList.toggle('bc-binding', bound);
     if (bound) swatch.title += ' (bound color; representative preview)';
 }

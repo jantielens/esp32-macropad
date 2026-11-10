@@ -254,8 +254,8 @@ async function runImport(options = {}) {
     });
 
     const pads = options.pads || [
-        { cols: 2, rows: 3, template_pad: 1, buttons: [{ col: 0, row: 0, icon: { source_id: sourceId(1), catalog_id: 'material-symbols:home', kind: 'mono' } }],
-            overlay_buttons: [{ col: 0, row: 0, icon: { source_id: sourceId(2), catalog_id: 'noto:house', kind: 'color' } }] },
+        { cols: 2, rows: 3, template_pad: 1, buttons: [{ col: 0, row: 0, bg_color: 'transparent', icon: { source_id: sourceId(1), catalog_id: 'material-symbols:home', kind: 'mono' } }],
+            overlay_buttons: [{ col: 0, row: 0, bg_color: 'transparent', icon: { source_id: sourceId(2), catalog_id: 'noto:house', kind: 'color' } }] },
         {
             cols: 4,
             rows: 1,
@@ -474,6 +474,8 @@ async function testClearPad() {
     assert.strictEqual(JSON.parse(padSaves[0].options.body).rows, 3);
     assert.strictEqual(JSON.parse(padSaves[0].options.body).buttons[0].icon.source_id, sourceId(100));
     assert.strictEqual(JSON.parse(padSaves[0].options.body).overlay_buttons[0].icon.source_id, sourceId(101));
+    assert.strictEqual(JSON.parse(padSaves[0].options.body).buttons[0].bg_color, 'transparent');
+    assert.strictEqual(JSON.parse(padSaves[0].options.body).overlay_buttons[0].bg_color, 'transparent');
     assert.strictEqual(JSON.parse(padSaves[1].options.body).cols, 4);
     assert.strictEqual(JSON.parse(padSaves[1].options.body).rows, 1);
     assert.strictEqual(JSON.parse(padSaves[1].options.body).buttons[0].icon.source_id, sourceId(100));

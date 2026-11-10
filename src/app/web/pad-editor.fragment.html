@@ -457,7 +457,7 @@
                                 <label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Background <span class="fx-hint" onclick="showBindingHelp()">fx</span> <span class="reset-hint material-symbols-outlined" id="pad-edit-bg-color-reset" onclick="padResetAppearance('pad-edit-bg-color','bg_color')" title="Reset to default">restart_alt</span></label>
                                 <div class="bindable-color">
                                     <div class="bc-swatch"></div>
-                                    <input type="text" id="pad-edit-bg-color" class="bc-input" data-fill-pattern="bg_pattern" data-fill-color="bg_pattern_color" maxlength="191" spellcheck="false" placeholder="#hex or [binding]">
+                                    <input type="text" id="pad-edit-bg-color" class="bc-input" data-allow-transparent="true" data-fill-pattern="bg_pattern" data-fill-color="bg_pattern_color" maxlength="191" spellcheck="false" placeholder="#hex, transparent or [binding]">
                                 </div>
                             </div>
                             <div id="pad-edit-fg-color-wrap" style="flex:1;">
@@ -468,7 +468,7 @@
                                 </div>
                             </div>
                         </div>
-                        <small>Enter a <code>#hex</code> color or a binding like <code>[expr:…]</code> for dynamic colors.</small>
+                        <small>Enter a <code>#hex</code> color or a binding like <code>[expr:…]</code> for dynamic colors. Background also accepts <code>transparent</code>.</small>
                         <div class="form-group" style="margin-top:12px;">
                             <label for="pad-edit-button-shadow">Button Shadow</label>
                             <select id="pad-edit-button-shadow" class="form-select form-select-sm">
