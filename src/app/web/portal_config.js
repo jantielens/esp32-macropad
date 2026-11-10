@@ -257,6 +257,12 @@ async function loadConfig() {
         // Power settings
         setRadioIfExists('operating_mode', config.operating_mode);
         setValueIfExists('duty_cycle_wake_seconds', config.duty_cycle_wake_seconds);
+        const sleepSeconds = document.getElementById('sleep-seconds');
+        if (sleepSeconds && config.duty_cycle_wake_seconds !== undefined) {
+            if (!sleepSeconds.value) sleepSeconds.value = Math.max(1, config.duty_cycle_wake_seconds);
+            const sleepButton = document.getElementById('sleep-now-btn');
+            if (sleepButton) sleepButton.disabled = false;
+        }
         setValueIfExists('mqtt_publish_interval_seconds', config.mqtt_publish_interval_seconds);
         setValueIfExists('portal_idle_timeout_seconds', config.portal_idle_timeout_seconds);
         setValueIfExists('wifi_backoff_max_seconds', config.wifi_backoff_max_seconds);

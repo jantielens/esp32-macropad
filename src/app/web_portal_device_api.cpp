@@ -4,6 +4,8 @@
 #include "web_portal_auth.h"
 #include "web_portal_state.h"
 #include "reboot_service.h"
+#include "main_loop_bridge.h"
+#include "portal_idle.h"
 
 #include "board_config.h"
 #include "ha_live.h"
@@ -629,4 +631,43 @@ void handleReboot(AsyncWebServerRequest *request) {
 		request->send(200, "application/json", "{\"success\":true,\"message\":\"Rebooting device...\"}");
 
 		reboot_request(100);
+}
+
+static void request_sleep_on_main_loop(const void* context, bool* ok, char*, size_t) {
+		const uint32_t seconds = *static_cast<const uint32_t*>(context);
+		*ok = portal_idle_request_sleep(seconds, 500);
+}
+
+void handleSleep(AsyncWebServerRequest *request) {
+		if (!portal_auth_gate(request)) return;
+		if (!request->hasParam("seconds")) {
+				request->send(400, "application/json", "{\"success\":false,\"message\":\"Sleep duration is required (1-65535 seconds)\"}");
+				return;
+		}
+		const String value = request->getParam("seconds")->value();
+		const char* text = value.c_str();
+		if (!*text || strspn(text, "0123456789") != value.length()) {
+				request->send(400, "application/json", "{\"success\":false,\"message\":\"Sleep duration must be an integer from 1 to 65535 seconds\"}");
+				return;
+		}
+		const unsigned long parsed = strtoul(text, nullptr, 10);
+		if (parsed < 1 || parsed > 65535) {
+				request->send(400, "application/json", "{\"success\":false,\"message\":\"Sleep duration must be an integer from 1 to 65535 seconds\"}");
+				return;
+		}
+		const uint32_t seconds = static_cast<uint32_t>(parsed);
+		bool ok = false;
+		const LoopBridgeResult dispatched = loop_bridge_dispatch(
+				request_sleep_on_main_loop, &seconds, sizeof(seconds), 2000, &ok, nullptr, 0);
+		if (dispatched != LOOP_BRIDGE_OK) {
+				LOGW("API", "Sleep request dispatch failed (%d)", static_cast<int>(dispatched));
+				request->send(503, "application/json", "{\"success\":false,\"message\":\"Device busy; sleep was not confirmed\"}");
+				return;
+		}
+		if (!ok) {
+				request->send(409, "application/json", "{\"success\":false,\"message\":\"Update, configuration upload, or network transition in progress\"}");
+				return;
+		}
+		LOGI("API", "Deep sleep requested for %us", static_cast<unsigned>(seconds));
+		request->send(200, "application/json", "{\"success\":true,\"message\":\"Entering deep sleep\"}");
 }

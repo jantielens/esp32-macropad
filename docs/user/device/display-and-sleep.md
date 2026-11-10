@@ -12,6 +12,10 @@ Use the controls your firmware exposes. Hardware-specific sleep behavior,
 frontlight availability, and defaults belong in the
 [board reference](../hardware.md), not in a universal display setup.
 
+To end a maintenance session with one timed deep sleep, use
+[Sleep now](updates-and-recovery.md#put-the-device-to-sleep-after-configuration)
+under **Device > Operating Mode**. This is separate from display inactivity.
+
 ## Set brightness and rotation
 
 Open **Display > Brightness** and adjust the slider. It changes the current

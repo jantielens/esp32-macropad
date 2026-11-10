@@ -27,6 +27,7 @@ static PowerMode g_boot_mode = PowerMode::AlwaysOn;
 static PowerMode g_current_mode = PowerMode::AlwaysOn;
 static bool g_force_config_mode = false;
 static bool g_force_setup_ap = false;
+static bool g_duty_cycle_recovery = false;
 
 #if POWERON_CONFIG_BURST_ENABLED
 static constexpr uint64_t kPoweronBurstWindowUs = 10000000ULL;
@@ -107,6 +108,7 @@ void power_manager_boot_init() {
 		g_is_deep_sleep_wake = (reason == ESP_RST_DEEPSLEEP);
 		g_force_config_mode = false;
 		g_force_setup_ap = false;
+		g_duty_cycle_recovery = false;
 
 		// Allow registered device classes to classify the wake reason and
 		// optionally request Config Mode. OR'd with any contribution from the
@@ -185,6 +187,7 @@ void power_manager_boot_init() {
 }
 
 void power_manager_configure(const DeviceConfig *config, bool config_loaded, bool force_config_mode) {
+		g_duty_cycle_recovery = false;
 		if (force_config_mode) {
 				g_boot_mode = PowerMode::Config;
 				g_current_mode = g_boot_mode;
@@ -198,6 +201,15 @@ void power_manager_configure(const DeviceConfig *config, bool config_loaded, boo
 		}
 
 		g_boot_mode = power_config_parse_power_mode(config);
+		#if !HAS_DISPLAY && !IS_EPAPER_FRAME
+		if (!g_is_deep_sleep_wake && !g_force_setup_ap &&
+				(g_boot_mode == PowerMode::DutyCycle || g_boot_mode == PowerMode::DutyCycleBle)) {
+				LOGI("Power", "Non-deep-sleep reset; entering Config Mode (saved mode=%s)",
+						power_config_power_mode_to_string(g_boot_mode));
+				g_duty_cycle_recovery = true;
+				g_boot_mode = PowerMode::Config;
+		}
+		#endif
 		g_current_mode = g_boot_mode;
 }
 
@@ -251,6 +263,10 @@ bool power_manager_request_setup_ap_restart() {
 
 bool power_manager_is_deep_sleep_wake() {
 		return g_is_deep_sleep_wake;
+}
+
+bool power_manager_is_duty_cycle_recovery() {
+		return g_duty_cycle_recovery;
 }
 
 bool power_manager_should_publish_mqtt_discovery() {

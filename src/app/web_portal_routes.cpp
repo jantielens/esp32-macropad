@@ -77,6 +77,7 @@ static const char* const core_preflight_paths[] = {
 #endif
 	"/api/health",
 	"/api/reboot",
+	"/api/sleep",
 	"/api/firmware/update/status",
 	"/api/firmware/update",
 #if HAS_DISPLAY
@@ -217,6 +218,7 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		server->on("/api/health", HTTP_GET, handleGetHealth);
 
 		server->on("/api/reboot", HTTP_POST, handleReboot);
+		server->on("/api/sleep", HTTP_POST, handleSleep);
 
 		// GitHub Pages-based firmware updates (URL-driven)
 		server->on("/api/firmware/update/status", HTTP_GET, handleGetFirmwareUpdateStatus);

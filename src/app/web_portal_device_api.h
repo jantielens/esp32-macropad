@@ -10,5 +10,6 @@ void handleGetHaLookup(AsyncWebServerRequest *request);
 void handleGetHealth(AsyncWebServerRequest *request);
 void handleGetHealthHistory(AsyncWebServerRequest *request);
 void handleReboot(AsyncWebServerRequest *request);
+void handleSleep(AsyncWebServerRequest *request);
 
 #endif // WEB_PORTAL_DEVICE_API_H

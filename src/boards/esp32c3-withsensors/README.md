@@ -24,15 +24,20 @@ wiring; do not mistake dummy readings for measurements.
 
 ## Configuration and recovery
 
-The configuration access point accepts one client at a time.
-For portal recovery, power the device on, switch it off before ten seconds
-have elapsed, then power it on again. Two consecutive power-on boots before
-the counter clears enter configuration mode. Ordinary software resets are
-not the same trigger.
+In duty-cycle mode, reset or power-cycle once to open temporary Config access
+on saved Wi-Fi. A deep-sleep wake continues normal duty cycling instead.
+The Recovery Portal Auto-Sleep default is 30 seconds of inactivity; saved
+values are preserved. When this temporary window expires, the device sleeps
+for its Wake Interval and resumes duty cycling.
+See [sensor-node recovery](../../../docs/user/device/updates-and-recovery.md#open-a-sleeping-sensor-nodes-portal).
+
+The configuration access point accepts one client at a time. To force the
+setup AP, interrupt power during the first ten seconds of a power-on boot,
+before the device sleeps, then power it on again.
 
 GPIO9/BOOT is also configured as an active-low startup recovery input. Holding
 it during reset can enter the chip's download mode instead, so use the
-power-cycle sequence for portal access. For USB flash recovery, deliberately
+single power cycle for portal access. For USB flash recovery, deliberately
 use BOOT/reset download mode and the
 [installer](https://jantielens.github.io/esp32-macropad/) with this exact target.
 

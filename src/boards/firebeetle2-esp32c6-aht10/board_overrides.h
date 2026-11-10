@@ -9,6 +9,9 @@
 #define HAS_BLE_HID false
 #define HAS_BUILTIN_LED false
 
+// Keep unattended recovery boots brief on battery power.
+#define CONFIG_DEFAULT_PORTAL_IDLE_SECONDS 30
+
 #define HAS_MQTT true
 #define HAS_BLE true
 #define HAS_STORAGE_BROWSER false

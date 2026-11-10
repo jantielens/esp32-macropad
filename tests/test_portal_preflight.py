@@ -57,7 +57,7 @@ int main() {
 #if HEALTH_HISTORY_ENABLED
         "/api/health/history",
 #endif
-        "/api/health", "/api/reboot", "/api/firmware/update/status", "/api/firmware/update",
+        "/api/health", "/api/reboot", "/api/sleep", "/api/firmware/update/status", "/api/firmware/update",
 #if HAS_DISPLAY
         "/api/recipes/catalog", "/api/pad/button_sizes", "/api/pad/icon_context", "/api/pad/blocks",
         "/api/pad/resolve",

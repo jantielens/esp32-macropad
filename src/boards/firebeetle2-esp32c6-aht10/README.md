@@ -32,10 +32,17 @@ button actions, and the storage browser are disabled.
 The USB connection provides flashing and native CDC serial, not HID output.
 The configuration access point accepts one client at a time.
 
-For portal recovery, power on, switch off before ten seconds of uptime, then
-power on again. Two consecutive power-on boots trigger configuration mode;
-software resets are not equivalent. GPIO9/BOOT is also a startup recovery
-input, but holding it during reset can select chip download mode instead.
+In MQTT or BLE duty-cycle mode, reset or power-cycle once to open temporary
+Config access on saved Wi-Fi. A deep-sleep wake continues normal duty cycling
+instead. The Recovery Portal Auto-Sleep default is 30 seconds of inactivity;
+saved values are preserved. When this temporary window expires, the device
+sleeps for its Wake Interval and resumes duty cycling.
+See [sensor-node recovery](../../../docs/user/device/updates-and-recovery.md#open-a-sleeping-sensor-nodes-portal).
+
+To force the setup AP, interrupt power during the first ten seconds of a
+power-on boot, before the device sleeps, then power it on again.
+GPIO9/BOOT is also a startup recovery input, but holding it during reset can
+select chip download mode instead.
 
 ## Firmware updates and power
 

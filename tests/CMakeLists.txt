@@ -1097,19 +1097,30 @@ add_host_gtest(test_power_config
     ${PROJECT_SOURCE_DIR}/src/app/power_config.cpp
 )
 
-add_host_gtest(test_power_manager
+set(POWER_MANAGER_TEST_SOURCES
     test_power_manager.cpp
     ${PROJECT_SOURCE_DIR}/src/app/power_manager.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/portal_idle.cpp
     ${PROJECT_SOURCE_DIR}/src/app/power_config.cpp
     ${PROJECT_SOURCE_DIR}/src/app/device_class.cpp
     ${PROJECT_SOURCE_DIR}/src/app/ota_activity.cpp
 )
+add_host_gtest(test_power_manager ${POWER_MANAGER_TEST_SOURCES})
 target_include_directories(test_power_manager BEFORE PRIVATE
     ${PROJECT_SOURCE_DIR}/tests/power_manager_overrides ${HOST_ARDUINOJSON_DIR})
 target_compile_definitions(test_power_manager PRIVATE
     OTA_ACTIVITY_HOST_TEST HAS_DISPLAY=0 HAS_BUTTON=1 HAS_BUILTIN_LED=0)
 target_compile_options(test_power_manager PRIVATE -Wno-unused-variable -Wno-deprecated-declarations
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/log_manager.h")
+
+add_host_legacy_test(test_power_manager_display
+    SOURCES ${POWER_MANAGER_TEST_SOURCES}
+    DEFINITIONS OTA_ACTIVITY_HOST_TEST HAS_DISPLAY=1 HAS_BUTTON=1 HAS_BUILTIN_LED=0
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/power_manager_overrides ${HOST_ARDUINOJSON_DIR}
+    LIBRARIES GTest::gtest_main
+    OPTIONS -Wno-unused-variable -Wno-deprecated-declarations
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+)
 
 add_host_gtest(test_epaper_frame_wake_journal
         test_epaper_frame_wake_journal.cpp

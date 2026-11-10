@@ -23,6 +23,7 @@ bool power_manager_should_force_setup_ap();
 bool power_manager_request_setup_ap_restart();
 
 bool power_manager_is_deep_sleep_wake();
+bool power_manager_is_duty_cycle_recovery();
 bool power_manager_should_publish_mqtt_discovery();
 
 // WiFi backoff tracking (RTC retained)

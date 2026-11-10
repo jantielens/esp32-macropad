@@ -1078,6 +1078,13 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 self.send_error(400, "Invalid JSON")
                 return
             self._serve_json({"success": True, "message": "Saved to local mock"})
+        elif path == "/api/sleep":
+            values = parse_qs(urlparse(self.path).query, keep_blank_values=True).get("seconds", [])
+            value = (values[0] if values else "").lstrip("0") or "0"
+            if not re.fullmatch(r"[0-9]{1,5}", value) or not 1 <= int(value) <= 65535:
+                self._serve_json({"success": False, "message": "Sleep duration must be an integer from 1 to 65535 seconds"}, status=400)
+                return
+            self._serve_json({"success": True, "message": "Entering deep sleep"})
         elif path == "/api/reboot":
             self.server.mock_typography = {"default_font": self.server.mock_defaults.get("default_font", "@builtin"),
                                           "base_text_size": self.server.mock_defaults.get("base_text_size", 0)}

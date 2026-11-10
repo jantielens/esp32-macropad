@@ -107,9 +107,11 @@
         <label class="form-label" for="portal_idle_timeout_seconds">Auto-Sleep Delay (seconds)</label>
         <input type="number" class="form-control" id="portal_idle_timeout_seconds" name="portal_idle_timeout_seconds" min="0" max="65535" placeholder="120">
         <div class="form-text">
-          Active only in Config / AP recovery mode (when Wi-Fi can't connect).
-          After this many seconds of no portal activity, the device deep-sleeps for the
-          same duration, then wakes to retry Wi-Fi. <code>0</code> = disabled (portal stays up indefinitely).
+          Active only in Config / AP recovery mode. Headless MQTT/BLE duty-cycle devices
+          open Config mode after a reset or power-on, but not after waking from deep sleep.
+          After this many seconds of no portal activity, they deep-sleep for the saved
+          Wake Interval and resume duty cycling. Other recovery entries sleep for the
+          Auto-Sleep Delay. <code>0</code> = disabled (portal stays up indefinitely).
         </div>
       </div>
   </div>
@@ -117,4 +119,17 @@
 
 <div class="save-bar">
   <button type="button" class="btn btn-primary btn-sm" id="mode-save-btn">Save Operating Mode</button>
+</div>
+
+<div class="card mt-3 mb-3">
+  <div class="card-header"><h5 class="mb-0">Sleep now</h5></div>
+  <div class="card-body">
+    <p>Save changes first. Deep sleep disconnects the device and restarts it after
+      this duration. Running timers and playback stop. The duration applies once;
+      the saved operating mode and Wake Interval are unchanged.</p>
+    <label class="form-label" for="sleep-seconds">Sleep duration (seconds)</label>
+    <input type="number" class="form-control mb-2" id="sleep-seconds" min="1" max="65535" step="1" required>
+    <button type="button" class="btn btn-primary btn-sm" id="sleep-now-btn" disabled>Sleep now</button>
+    <p class="form-text mb-0" id="sleep-status" role="status"></p>
+  </div>
 </div>

@@ -132,6 +132,16 @@ class PortalDevServerTest(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertEqual(config["device_name"], "Mock")
 
+    def test_manual_sleep_does_not_change_saved_configuration(self):
+        before = copy.deepcopy(self.server.mock_config)
+        status, result = self.request("/api/sleep?seconds=5", method="POST")
+        self.assertEqual(status, 200)
+        self.assertTrue(result["success"])
+        self.assertEqual(self.server.mock_config, before)
+        self.assertEqual(self.request("/api/sleep?seconds=0", method="POST")[0], 400)
+        self.assertEqual(self.request("/api/sleep?seconds=65535", method="POST")[0], 200)
+        self.assertEqual(self.request("/api/sleep?seconds=65536", method="POST")[0], 400)
+
     def test_external_data_round_trip_and_partial_updates(self):
         source = {"name": "weather", "url": "https://example.test/data?location=pelt", "refresh_seconds": 1}
         self.assertEqual(self.request("/api/config?no_reboot=1", method="POST",

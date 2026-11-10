@@ -434,6 +434,29 @@ window.init_mcp_fragment = function () {
 window.init_mode_fragment = function () {
     initConfigFragment('mode-save-btn', true);
 
+    var sleepButton = document.getElementById('sleep-now-btn');
+    if (sleepButton) sleepButton.addEventListener('click', async function () {
+        var input = document.getElementById('sleep-seconds');
+        var seconds = Number(input.value);
+        if (!Number.isInteger(seconds) || seconds < 1 || seconds > 65535) {
+            showMessage('Sleep duration must be an integer from 1 to 65535 seconds', 'error');
+            return;
+        }
+        sleepButton.disabled = true;
+        try {
+            var response = await fetch('/api/sleep?seconds=' + seconds, { method: 'POST' });
+            var result = await response.json();
+            if (!response.ok || !result.success) throw new Error(result.message || 'Sleep request failed');
+            input.disabled = true;
+            if (typeof stopHealthPolling === 'function') stopHealthPolling();
+            document.getElementById('sleep-status').textContent =
+                'Device sleeping for ' + seconds + ' seconds. Close this tab when finished.';
+        } catch (error) {
+            showMessage('Could not put device to sleep: ' + error.message, 'error');
+            sleepButton.disabled = false;
+        }
+    });
+
     // Hide the BLE option unless the firmware build advertises BLE telemetry.
     function applyCapsVisibility() {
         var caps = (window.__device_caps || {});

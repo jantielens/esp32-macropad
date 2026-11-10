@@ -74,9 +74,50 @@ If the firmware runs but the portal is unavailable:
 Configuration mode does not erase settings. Use it before factory reset.
 If boot fails, use the board's documented serial download recovery.
 
+## Open a sleeping sensor node's portal
+
+For a headless sensor node using MQTT or BLE duty cycling, press reset or
+disconnect and reconnect power once. The device temporarily enters Config mode
+and connects to saved Wi-Fi; open its usual portal address. If Wi-Fi cannot
+connect, join its setup AP instead. The saved operating mode is not changed.
+Waking from deep sleep continues normal duty cycling without opening this window.
+E-Paper Frames retain their board-specific recovery controls.
+
+In **Device > Operating Mode**, **Recovery Portal Auto-Sleep** controls how long
+the portal may be idle. Portal requests extend the window, and firmware or
+configuration uploads prevent auto-sleep while in progress. At timeout the
+device sleeps for the saved Wake Interval, then resumes duty cycling.
+Zero disables auto-sleep. Board defaults may differ; existing saved values
+remain unchanged after a firmware update.
+
+Software restarts, including after updates, and crash resets also open this
+temporary window. Repeated resets can therefore increase battery use.
+
+## Put the device to sleep after configuration
+
+Use **Device > Operating Mode > Sleep now** to end a maintenance session
+without waiting for recovery auto-sleep. This control is also available on
+devices saved in Always-On mode.
+
+1. Save any changes you want to keep. **Sleep now** does not save them.
+2. Set **Sleep duration (seconds)**, from 1 to 65535. It starts with the saved
+   Wake Interval (at least one second); use a shorter duration to test the next
+   duty-cycle wake.
+3. Select **Sleep now**. Wait for the accepted message, then close the tab.
+
+The device disconnects and enters deep sleep. Running timers and playback stop.
+The duration applies once and does not change the saved operating mode or Wake
+Interval. On timer wake, duty-cycle devices resume their cycle; an Always-On
+device returns to normal operation.
+
+Sleep is refused during firmware updates, configuration uploads/writes, or
+another network transition. Finish that operation before retrying. The portal
+does not poll for reconnection after sleep. Other open tabs can still extend a
+later recovery window through their automatic requests.
+
 ## Recover setup access with a power cycle
 
-If the device repeatedly fails to start normally, power it on, interrupt power
+If you need to force the setup AP, power the device on, interrupt power
 during the first ten seconds and before it intentionally sleeps, then power it
 on again. The second qualifying power-on starts the setup AP without changing
 the saved operating mode or AP password. A short startup or duty-cycle sleep

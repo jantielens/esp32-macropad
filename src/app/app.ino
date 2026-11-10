@@ -763,7 +763,10 @@ void setup()
 #endif
 	web_portal_init(&device_config);
 	portal_idle_init();
-	portal_idle_set_timeout_seconds(device_config.portal_idle_timeout_seconds);
+	portal_idle_set_timeout_seconds(device_config.portal_idle_timeout_seconds,
+			power_manager_is_duty_cycle_recovery()
+					? device_config.duty_cycle_wake_seconds
+					: device_config.portal_idle_timeout_seconds);
 	portal_idle_set_mode(power_manager_get_current_mode());
 
 	device_class_dispatch_setup_late(&device_config, power_manager_get_current_mode());

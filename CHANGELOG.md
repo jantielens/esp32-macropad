@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* End a maintenance session with **Device > Operating Mode > Sleep now**.
+  Choose a one-shot sleep duration without changing the saved mode or Wake
+  Interval. Sleep is refused during updates or configuration writes.
+  See [manual deep sleep](docs/user/device/updates-and-recovery.md#put-the-device-to-sleep-after-configuration).
 * Choose a transparent button background on Main or Overlay to place labels,
   icons, or widgets over the content underneath. Background bindings can switch
   between a color and transparency. The color picker uses a checkerboard swatch
@@ -25,6 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Open temporary configuration access on saved Wi-Fi after a reset or power
+  cycle on headless MQTT/BLE duty-cycle sensor nodes. Deep-sleep wakes keep
+  their normal duty cycle. New sensor-node configurations default to a
+  30-second portal idle window; existing saved timeouts remain unchanged.
+  See [sensor-node recovery](docs/user/device/updates-and-recovery.md#open-a-sleeping-sensor-nodes-portal).
 * Keep Gauge start labels aligned with their rings by fitting them together,
   including when binding text changes. Center Gauges without labels vertically.
 * Prevent crashes when saving or rebuilding a pad while a Bar chart transition

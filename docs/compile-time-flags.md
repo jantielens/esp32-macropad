@@ -840,6 +840,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/pad_validate.cpp
   - src/app/pad_validate.h
   - src/app/portal_components.cpp
+  - src/app/power_manager.cpp
   - src/app/runtime_variables.cpp
   - src/app/screen_saver_manager.cpp
   - src/app/screen_saver_manager.h
@@ -1795,6 +1796,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper_frame_device_class.cpp
   - src/app/mqtt_manager.cpp
   - src/app/portal_components.cpp
+  - src/app/power_manager.cpp
   - src/app/time_service.cpp
 - **IS_SHUTTER_TESTER**
   - src/app/board_config.h

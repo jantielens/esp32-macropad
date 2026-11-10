@@ -109,6 +109,8 @@ async function main() {
     }
     const requests = [];
     const timers = [];
+    const timeouts = [];
+    const clearedTimers = [];
     const nodes = new Map();
     const errors = [];
     const context = {
@@ -124,8 +126,8 @@ async function main() {
             }
         },
         setInterval(callback) { timers.push(callback); return timers.length; },
-        clearInterval() {},
-        setTimeout() {},
+        clearInterval(timer) { clearedTimers.push(timer); },
+        setTimeout(callback) { timeouts.push(callback); },
         formatBytes: String,
         healthFormatBytes: String
     };
@@ -173,6 +175,12 @@ async function main() {
     await context.fetchHealthOnce();
     await Promise.resolve();
     assert.deepStrictEqual(errors, [], 'startup must not log errors');
+    context.stopHealthPolling();
+    assert.deepStrictEqual(clearedTimers, [1]);
+    timeouts.forEach(callback => callback());
+    context.initHealthWidget();
+    assert.strictEqual(timers.length, 1, 'accepted sleep must prevent delayed polling restarts');
+    assert.strictEqual(requests.length, 4, 'stopped polling must not issue another health request');
 
     const editor = fs.readFileSync('src/app/web/portal_pad_editor.js', 'utf8');
     assert(!editor.includes("document.addEventListener('DOMContentLoaded'"));

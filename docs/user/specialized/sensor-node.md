@@ -20,7 +20,8 @@ save, then reboot.
 | Duty-Cycle (BLE)  | BTHome v2 advertising burst, then deep sleep; no Wi-Fi/MQTT              | Wake Interval and BLE Advertising |
 
 Duty-cycle operation does not keep the portal/display/audio running between
-samples. Use the [board's recovery control](../hardware.md) to open configuration.
+samples. On a headless sensor node, reset or power-cycle once to
+[open temporary configuration access](../device/updates-and-recovery.md#open-a-sleeping-sensor-nodes-portal).
 Wake Interval is sleep time between cycles, not guaranteed wall-clock sample
 spacing; awake work adds time. Zero requests immediate wake, not disabled sampling.
 MQTT's periodic interval is ignored in Duty-Cycle MQTT.
@@ -46,8 +47,11 @@ Check received freshness, not only the last retained measurement.
 
 ## Preserve recovery access
 
-Recovery Portal Auto-Sleep applies in Config/AP recovery.
-At nonzero delay, an idle portal sleeps for that duration then retries Wi-Fi.
+Recovery Portal Auto-Sleep applies in Config/AP recovery. After a reset or
+power-on opens temporary configuration access, an idle portal sleeps for the
+saved Wake Interval, then resumes duty cycling. Other recovery entries sleep
+for the Auto-Sleep Delay instead. Portal activity extends the window; firmware
+and configuration uploads prevent auto-sleep while in progress.
 Zero keeps recovery awake indefinitely.
 Choose a practical window for editing/updating, and test recovery before leaving
 the device unattended.

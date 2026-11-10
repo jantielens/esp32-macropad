@@ -12,10 +12,14 @@ const elements = {
 let stored = { ble_burst_count: 3, ble_adv_interval_ms: 100, ble_tx_power_dbm: 9 };
 let submitted;
 let pendingReboot = false;
+let healthPollingStopped = false;
 const messages = [];
 const context = {
     console,
     window: {},
+    setInterval() { return 1; },
+    clearInterval() {},
+    stopHealthPolling() { healthPollingStopped = true; },
     API_CONFIG: '/api/config',
     document: {
         getElementById(id) { return elements[id] || null; },
@@ -230,6 +234,58 @@ for (const file of ['portal_config.js', 'portal_fragment_init.js']) {
     assert.match(earlyDefaults, /config->keyboard_transport = keyboard_transport_default\(HAS_BLE_HID, HAS_USB_HID\);/);
     assert.match(storage, /config->ble_tx_power_dbm = preferences.getChar\(KEY_BLE_TX_POWER_DBM, CONFIG_DEFAULT_BLE_TX_POWER_DBM\);/);
     assert.match(storage, /putChar\(KEY_BLE_TX_POWER_DBM, config->ble_tx_power_dbm\)/);
+    let sleepClick;
+    elements['sleep-seconds'] = { value: '', disabled: false };
+    elements['sleep-status'] = { textContent: '' };
+    elements['sleep-now-btn'] = {
+        disabled: true,
+        addEventListener(event, callback) {
+            assert.strictEqual(event, 'click');
+            sleepClick = callback;
+        }
+    };
+    stored.duty_cycle_wake_seconds = 90;
+    const configFetch = context.fetch;
+    let sleepRequest;
+    let sleepAccepted = false;
+    context.fetch = async function (url, options) {
+        if (!url.startsWith('/api/sleep')) return configFetch(url, options);
+        sleepRequest = { url, options };
+        return {
+            ok: sleepAccepted,
+            json: async () => ({ success: sleepAccepted, message: 'Configuration write in progress' })
+        };
+    };
+    context.window.init_mode_fragment();
+    await context.loadConfig();
+    assert.strictEqual(Number(elements['sleep-seconds'].value), 90);
+    assert.strictEqual(elements['sleep-now-btn'].disabled, false);
+
+    elements['sleep-seconds'].value = '0';
+    await sleepClick();
+    assert.strictEqual(sleepRequest, undefined);
+    assert.strictEqual(messages.pop().type, 'error');
+    elements['sleep-seconds'].value = '5';
+    await sleepClick();
+    assert.strictEqual(sleepRequest.url, '/api/sleep?seconds=5');
+    assert.strictEqual(sleepRequest.options.method, 'POST');
+    assert.strictEqual(elements['sleep-now-btn'].disabled, false);
+    assert.match(messages.pop().message, /Configuration write in progress/);
+    assert.strictEqual(healthPollingStopped, false);
+
+    await context.loadConfig();
+    assert.strictEqual(elements['sleep-seconds'].value, '5');
+    sleepAccepted = true;
+    submitted = null;
+    pendingReboot = false;
+    await sleepClick();
+    assert.strictEqual(stored.duty_cycle_wake_seconds, 90);
+    assert.strictEqual(submitted, null);
+    assert.strictEqual(pendingReboot, false);
+    assert.strictEqual(healthPollingStopped, true);
+    assert.strictEqual(elements['sleep-now-btn'].disabled, true);
+    assert.strictEqual(elements['sleep-seconds'].disabled, true);
+    assert.match(elements['sleep-status'].textContent, /sleeping for 5 seconds/);
     console.log('portal_ble_config: PASS');
 })().catch(function (error) {
     console.error(error);

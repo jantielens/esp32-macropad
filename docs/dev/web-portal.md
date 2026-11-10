@@ -1292,6 +1292,32 @@ not every authentication failure, redirect, or early error response is instrumen
 
 ## REST API Reference
 
+### Device Power Control
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/reboot` | Reboots without saving configuration. |
+| `POST` | `/api/sleep?seconds=N` | Requests one timed deep sleep, without saving configuration or changing the stored mode or cadence. |
+
+Both routes use portal authentication. Sleep requires an ASCII decimal integer
+from 1 to 65535 seconds. It returns `400` for a missing or invalid duration,
+`409` when an update, configuration upload/write, or network transition prevents
+sleep, and `503` when main-loop dispatch cannot confirm admission.
+
+An accepted request returns `200 {"success":true,"message":"Entering deep sleep"}`.
+The main loop reserves the shared network transition before confirming sleep;
+new OTA/configuration writes cannot start afterward. A 500 ms grace period lets
+the response leave before deep sleep, but does not guarantee delivery. Automatic
+recovery idle sleep uses the same reservation without a response grace period.
+Neither path delays normal duty-cycle timer wakes.
+
+The Operating Mode fragment exposes this as **Sleep now** on every device that
+offers that fragment, including Always-On devices. Its duration defaults to the
+saved Wake Interval and is not a configuration field. It does not implicitly
+save, show a reboot dialog, or start reconnection polling; success stops this
+tab's health polling. See the
+[user workflow](../user/device/updates-and-recovery.md#put-the-device-to-sleep-after-configuration).
+
 ### Pad Configuration
 
 | Method | Path | Description |
@@ -4406,13 +4432,28 @@ If WiFi fails to connect after firmware update or reboot:
 
 ### Entering Config Mode Without a Button
 
-If `POWERON_CONFIG_BURST_ENABLED` is enabled at compile time, you can force Config Mode by power-cycling the device twice within ~10 seconds. This uses a small NVS counter and only triggers on `ESP_RST_POWERON`.
-This is intended for boards **without a reliable user button**.
+Headless sensor builds (`!HAS_DISPLAY && !IS_EPAPER_FRAME`) configured for
+`duty_cycle_mqtt` or `duty_cycle_ble` temporarily select `PowerMode::Config`
+on any reset other than `ESP_RST_DEEPSLEEP`. They connect to saved Wi-Fi,
+falling back to the setup AP if needed, without modifying `operating_mode`.
+Explicit Config/AP entry requests take precedence. Always-on and device-class
+duty-cycle modes retain their existing boot behavior.
 
-Behavior details:
-- Counter increments only on `ESP_RST_POWERON`.
-- Counter is cleared after ~10 seconds of uptime.
-- Deep sleep and other reset reasons do not affect the counter.
+`portal_idle_timeout_seconds` controls recovery inactivity; zero disables
+auto-sleep. Its compile-time default is `CONFIG_DEFAULT_PORTAL_IDLE_SECONDS`
+(120 seconds globally, overridden to 30 on the sensor-node boards).
+Persisted values take precedence. Portal activity resets the timer; OTA and
+configuration uploads inhibit timeout sleep. Automatic duty-cycle recovery
+sleeps for `duty_cycle_wake_seconds`, then resumes the saved mode on deep-sleep
+wake. Other recovery entries retain their existing sleep duration, equal to
+the portal timeout.
+
+If `POWERON_CONFIG_BURST_ENABLED` is enabled, two qualifying power-on boots
+force the setup AP. The first arms an NVS marker, which expires after about
+ten seconds of uptime or is cleared before intentional sleep. A second
+`ESP_RST_POWERON` while armed consumes the marker and requests the AP.
+Non-power-on resets clear the marker. This remains a fallback when a direct
+setup AP entry is needed; it does not change the saved operating mode.
 
 ## Security Considerations
 

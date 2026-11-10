@@ -8,6 +8,13 @@ const API_HEALTH_HISTORY = '/api/health/history';
 
 let healthExpanded = false;
 let healthPollTimer = null;
+let healthPollingStopped = false;
+
+function stopHealthPolling() {
+    healthPollingStopped = true;
+    if (healthPollTimer) clearInterval(healthPollTimer);
+    healthPollTimer = null;
+}
 
 // Most recent /api/health snapshot, updated by every successful poll inside
 // updateHealth(). Other portal fragments (welcome, version-info) read this
@@ -643,6 +650,7 @@ function initHealthWidget() {
 
     // Start polling. loadVersion() fills deviceInfoCache asynchronously; we tune interval after first info fetch.
     const startPolling = () => {
+        if (healthPollingStopped) return;
         if (healthPollTimer) {
             clearInterval(healthPollTimer);
             healthPollTimer = null;
@@ -652,7 +660,7 @@ function initHealthWidget() {
         healthPollTimer = setInterval(updateHealth, healthPollIntervalMs);
     };
 
-    if (!healthPollTimer) {
+    if (!healthPollTimer && !healthPollingStopped) {
         updateHealth();
         startPolling();
         setTimeout(startPolling, 1500);

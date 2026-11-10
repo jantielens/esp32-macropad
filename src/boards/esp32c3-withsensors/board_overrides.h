@@ -13,6 +13,9 @@
 #define HAS_BLE_HID false
 #define HAS_MCP false
 
+// Keep unattended recovery boots brief on battery power.
+#define CONFIG_DEFAULT_PORTAL_IDLE_SECONDS 30
+
 // The OTA-only partition table has no filesystem partition, so omit the
 // unusable portal/MCP storage browser and preserve firmware space.
 #define HAS_STORAGE_BROWSER false
