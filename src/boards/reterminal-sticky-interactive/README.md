@@ -12,8 +12,8 @@ not the sleep-first E-Paper Frame.
 > This target has no physical hardware acceptance yet. The implementation uses
 > the published Rev 01 schematic (2026-06-05) and vendor sources as its baseline,
 > not a verified shipping unit. Battery startup, power retention, both panel
-> variants, touch orientation, buzzer output, Wi-Fi, and OTA still require device
-> testing.
+> variants, touch orientation, buzzer output, sensors, Wi-Fi, and OTA still
+> require device testing.
 
 ## Display and controls
 
@@ -64,10 +64,27 @@ The build selects QIO flash, OPI PSRAM, and UART serial rather than USB CDC.
 Back up settings and files before changing firmware or partition layouts;
 an application-only OTA does not replace the partition table.
 
-Sensor readings, SD, microphone, IMU, RTC, BLE/BLE HID, USB HID,
+SD, microphone, IMU, RTC, BLE/BLE HID, USB HID,
 native Extensions, remote image fetching, and the image library are disabled.
 There is no custom charging policy, gauge calibration, low-battery shutdown,
 or battery-runtime guarantee.
+
+## Environmental and battery readings
+
+The SHT40 reports `temperature` in degrees Celsius and `humidity` in percent.
+Successful humidity readings are clamped to 0-100%, as recommended by Sensirion.
+The BQ27220 reports `battery_voltage` in volts and `battery_percentage` from
+the gauge. `external_power_present` indicates whether GPIO9 detects external
+power; it does not indicate battery charging. These fields are available through
+the sensor API, MQTT health state, Home Assistant discovery, and
+`[sensor:...]` bindings. For example, `[sensor:temperature;%.1f|N/A]` displays
+the cached temperature.
+
+Readings are unavailable until a valid sample arrives. After a read failure,
+the last good value remains visible and may be stale. The SHT40 is sampled
+approximately every five seconds and the gauge every two seconds when OTA is
+not active. Battery current is not exposed because the shipping gauge's
+calibration is unverified. No gauge configuration or calibration is written.
 
 ## Occupied onboard connections
 
@@ -93,7 +110,7 @@ startup work. It cannot guarantee retention before the application starts.
 Normal board initialization deselects and powers off SD before display SPI
 access, powers off the microphone, initializes the sensor bus once under the
 existing Wire0 lock, and allows touch/display rails to settle.
-Touch alone initializes Wire1; there is no sensor implementation in this build.
+Touch alone initializes Wire1; the sensors share the board-owned Wire0 bus.
 GPIO9 denotes external power, not proven battery-charging status.
 
 ## References

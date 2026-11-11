@@ -2,6 +2,7 @@
 
 #define BOARD_HARDWARE_SOURCE "sticky_hardware.cpp"
 #define BOARD_HARDWARE_HEADER "sticky_hardware.h"
+#define BOARD_SENSOR_SOURCE "drivers/sticky_sensors.cpp"
 // Optional power-latch hook called before the rest of application setup.
 #define BOARD_EARLY_POWER_INIT sticky_early_power_init
 // Board readiness prerequisite for the selected display driver.

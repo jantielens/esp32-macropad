@@ -1198,6 +1198,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_routes.cpp
   - src/boards/m5stack-stopwatch/stopwatch_battery_sensor.cpp
   - src/boards/m5stack-tab5/tab5_battery_sensor.cpp
+  - src/boards/reterminal-sticky-interactive/drivers/sticky_sensors.cpp
 - **HAS_MUSIC_ANALYSIS**
   - src/app/audio.cpp
   - src/app/board_config.h

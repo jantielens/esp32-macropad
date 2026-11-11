@@ -12,6 +12,7 @@ on 2026-11-10. The user approved combining Phases 1 and 2 on 2026-11-10.
 Phases 1 and 2 are implemented and software-validated. Both remain In progress
 because hardware acceptance is pending. The three P2 recovery findings have
 been fixed and regression-tested. Phase 3 software is implemented; physical
+acceptance remains pending. Phase 4 is software-validated; physical sensor
 acceptance remains pending.
 
 * Plan location: tracked `docs/dev/sticky-implementation-plan.md` on the Sticky
@@ -216,7 +217,7 @@ The Phase 0 design is approved; new filenames remain implementation proposals.
 | 1     | Board, power, Wi-Fi, and OTA bring-up | 0             | In progress | Checks pass; device pending  |
 | 2     | Display and touch                    | 0, with 1     | In progress | Checks pass; device pending  |
 | 3     | Physical buttons and tone feedback   | 1 software    | In progress | Checks pass; device pending  |
-| 4     | Environmental and battery sensors    | 1             | Not started | Not run                      |
+| 4     | Environmental and battery sensors    | 1             | In progress | Checks pass; device pending  |
 | 5     | Integrated acceptance and docs       | 2, 3, 4       | Not started | Not run                      |
 
 Phases 2, 3, and 4 have no required implementation dependency on each other.
@@ -434,28 +435,29 @@ Apply the native-tone worker seam and overlap policy recorded in D3.
 
 ### Tasks
 
-* [ ] Reuse the board-owned sensor bus; initialize it once and serialize any
+* [x] Reuse the board-owned sensor bus; initialize it once and serialize any
   cross-task access. Do not reinitialize touch's I2C controller.
-* [ ] Register SHT40 temperature and humidity using `SensorCallbacks` and the
+* [x] Register SHT40 temperature and humidity using `SensorCallbacks` and the
   existing `temperature`/`humidity` keys, units, and discovery conventions.
-* [ ] Register BQ27220 `battery_percentage` and `battery_voltage`, plus verified
+* [x] Register BQ27220 `battery_percentage` and `battery_voltage`, plus verified
   signed current with an explicit unit and reliable status fields. Current
   remains unavailable until its scale is established; do not blindly divide
   an already calibrated gauge reading by ten.
-* [ ] Use gauge percentage rather than the ADC voltage-to-percentage curve.
-  Validate read lengths, signed decoding, scaling, and plausible ranges.
-* [ ] Expose GPIO9 as `external_power_present`; do not advertise active charging
+* [x] Use gauge percentage rather than the ADC voltage-to-percentage curve.
+  Validate read lengths and plausible ranges. Signed decoding and scaling
+  remain deferred with current.
+* [x] Expose GPIO9 as `external_power_present`; do not advertise active charging
   from external-power presence or the gauge's non-discharging state.
-* [ ] Keep measurement reads free of gauge configuration/calibration writes.
+* [x] Keep measurement reads free of gauge configuration/calibration writes.
   Do not add remaining-time or learned-capacity estimates to this MVE.
-* [ ] Reuse sensor sampling cadence, API/MQTT caches, sensor bindings, and
+* [x] Reuse sensor sampling cadence, API/MQTT caches, sensor bindings, and
   Home Assistant discovery. Keep sensor I/O out of render/resolver callbacks.
-* [ ] Preserve null before any valid sample and approved last-good behavior
+* [x] Preserve null before any valid sample and approved last-good behavior
   after failed reads, with actionable low-rate diagnostics and recovery.
-* [ ] Let existing OTA-aware sampling defer nonessential measurements.
-* [ ] Register board sources through `sensors.cpp` and `BOARD_SENSOR_SOURCE`.
+* [x] Let existing OTA-aware sampling defer nonessential measurements.
+* [x] Register board sources through `sensors.cpp` and `BOARD_SENSOR_SOURCE`.
   Reuse one board-owned Wire0 bus for both devices.
-* [ ] Add focused decoding/error/registration coverage in the existing suite.
+* [x] Add focused decoding/error/registration coverage in the existing suite.
   A new hardware-adapter test is justified only for uncovered I2C/error contracts.
 
 Likely files: `sticky_sensors.cpp`, board hardware source, board overrides,
@@ -469,8 +471,8 @@ dependencies selected in D4; no new generic sensor flags/framework.
 * [ ] SHT40 values are plausible and respond to environmental changes; allow for
   enclosure/device heating rather than inventing calibration offsets.
 * [ ] Gauge percentage is within 0-100 and voltage uses volts consistently.
-* [ ] Test current decoding with positive, negative, and zero values and the
-  verified resistor/gauge scaling. Confirm actual USB/battery direction on device.
+* [ ] If current is enabled after calibration is established, test positive,
+  negative, and zero decoding and verify actual USB/battery direction on device.
 * [ ] Missing-device, NACK, short-read, invalid-value, and later recovery cases
   follow the approved cache/error contract and never fabricate zero readings.
 * [ ] Sampling both sensors does not disrupt touch, Wi-Fi, audio, or OTA.
@@ -1484,3 +1486,90 @@ passed for the two affected documents (53 links). No Markdown linter was run.
 Phase 3 software review findings are resolved. Physical acceptance for
 Phases 1/2/3 remains pending; no flashing, hardware validation, Phase 4 work,
 commit, or push was performed. Reassess the sensor design before Phase 4.
+
+### Phase 4 software checkpoint: 2026-11-11
+
+Status: In progress. Software checks pass; no physical acceptance is claimed.
+The board-local sensor adapter registers SHT40 temperature and humidity at five
+seconds and BQ27220 voltage, state of charge, and GPIO9 external-power presence
+at two seconds. It uses the board-owned Wire0 mutex and the existing per-field
+last-good cache, metadata, MQTT, bindings, and discovery. It does not initialize
+Wire1 or write gauge configuration. SHT40 errors use the Sensirion library's
+CRC and transaction handling. Invalid or missing measurements are logged at
+most once per minute per source during a persistent failure while retries
+continue. OTA defers sampling.
+
+Rechecked Seeed's hardware overview, Arduino peripheral examples, ESP-IDF
+peripheral guide and retained dashboard gauge source, schematic text, and TI
+technical reference. The schematic's R46 is 100 mOhm; the Arduino example
+scales by 0.1, while the IDF helper returns signed register values directly.
+Neither establishes the unseen unit's CC Gain calibration. Current therefore
+remains unregistered and unread; no signed conversion or scaling is claimed.
+GPIO9 is external-power detection, not a charging indication.
+
+The existing Sticky hardware test was extended with a small Sensirion test
+double. The existing generic cache test cannot exercise the board adapter's
+I2C transactions. Host checks cover initial nulls, missing devices, NACK,
+short and failed byte reads, failed writes and locks, partial invalid values,
+last-good retention, recovery, GPIO9, discovery registration, bus ownership,
+and OTA deferral. They do not prove physical sensor or CRC behavior.
+
+Validation:
+
+```bash
+./bin/arduino-cli lib install 'Sensirion I2C SHT4x@1.1.2' 'Sensirion Core@0.7.3'
+cmake -S . -B build/host-tests
+cmake --build build/host-tests --parallel 4 --target test_sticky_hardware test_sensor_manager
+ctest --test-dir build/host-tests --output-on-failure -R '^(test_sticky_hardware|test_sensor_manager(_duty_cycle)?)$'
+python3 tests/test_board_feature_overrides.py
+python3 tests/test_firmware_size_report.py
+bash tests/test_esp_web_tools_site.sh
+bash tests/test_mcp_scheme_parity.sh
+python3 tools/generate-board-driver-table.py --update-drivers-readme
+set -o pipefail; ./build.sh reterminal-sticky-interactive 2>&1 | tee build/temp/sticky-phase4-firmware.log
+```
+
+All passed. CTest passed 3/3, the size-report suite 28/28, and scheme parity
+25/25. The single-board build produced 3,175,026 bytes of sketch and 80,548
+bytes of static RAM, with no compiler warnings or errors. The first host-test
+compile lacked a host MQTT stub; the test was fixed and rerun successfully.
+The generated compile-time flag reference records the new MQTT-gated source;
+the generated board-driver table was unchanged. Installer metadata has no
+sensor capability badge and remains unchanged.
+`git diff --check` passed, and the focused documentation link/fence check
+passed for 58 local links. No Markdown linter was available.
+
+Physical checks remain open: confirm board revision, environmental response and
+enclosure heating, gauge voltage and percentage against a reference, GPIO9
+levels with external power connected and disconnected, missing-device recovery,
+and concurrent touch, Wi-Fi, audio, and OTA operation. Current calibration and
+charge/discharge direction require independent read-only or physical evidence
+before enabling current. No all-board build, flash, commit, push, Phase 5, or
+device test was performed.
+
+### Phase 4 humidity review fix: 2026-11-11
+
+Resolved the P2 finding: successful finite SHT40 humidity measurements now
+clamp to 0-100%, following Sensirion's uncropped conversion contract, instead
+of leaving stale cached readings at the physical boundaries. Transaction/CRC
+errors and non-finite readings still preserve the last-good value.
+
+Extended the existing Sticky hardware test with lower and upper boundary
+measurements, NaN, infinity, a failed measurement, and subsequent recovery.
+The regression failed before the production fix and passes afterward.
+Updated the board README; no shared sensor-cache behavior or gauge operations
+changed.
+
+Validation passed:
+
+```bash
+cmake --build build/host-tests --parallel 4 --target test_sticky_hardware test_sensor_manager
+ctest --test-dir build/host-tests --output-on-failure -R '^(test_sticky_hardware|test_sensor_manager(_duty_cycle)?)$'
+set -o pipefail; ./build.sh reterminal-sticky-interactive 2>&1 | tee build/temp/sticky-phase4-humidity-firmware.log
+```
+
+CTest passed 3/3. The single Sticky firmware build passed without compiler
+warnings or errors: 3,175,022 bytes sketch and 80,548 bytes static RAM.
+Used the previously selected Sticky verification board.
+Phase 4 software review findings are resolved; physical acceptance remains
+pending. No flashing, all-board build, Phase 5 work, or push was performed.

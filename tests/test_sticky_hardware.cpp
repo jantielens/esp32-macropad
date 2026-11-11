@@ -6,6 +6,18 @@
 #include <cstdio>
 #include <vector>
 #include <utility>
+#include <cmath>
+#include <string>
+#include "../src/boards/reterminal-sticky-interactive/drivers/sticky_sensors.cpp"
+#define MQTT_MANAGER_H
+class MqttManager {
+public:
+    const char *baseTopic() const { return "test"; }
+    bool connected() { return true; }
+    bool publishImmediate(const char *, const char *, bool) { return true; }
+};
+MqttManager mqtt_manager;
+#include "../src/app/sensors/sensor_manager.cpp"
 
 bool ledcAttach(uint8_t pin, uint32_t frequency, uint8_t resolution);
 bool ledcWrite(uint8_t pin, uint32_t duty);
@@ -21,6 +33,15 @@ static std::vector<unsigned long> waits;
 static int failPin = -1;
 static bool locked = false, failLock = false;
 static uint32_t clockMs = 0;
+static bool otaActive = false;
+int shtTestError = 1;
+float shtTestTemperature = 21.5f, shtTestHumidity = 50;
+unsigned shtTestSamples = 0;
+bool shtTestLockHeld = false;
+bool sticky_test_unlocked_wire0 = false;
+bool sticky_test_invalid_gauge_transaction = false;
+static std::vector<std::string> discoveryKeys;
+static int externalPower = 0;
 static uint32_t buzzerDuty = 0, buzzerFrequency = 0;
 static bool buzzerAttached = false, failFrequency = false, failSilence = false, failDetach = false;
 bool ledcAttach(uint8_t pin, uint32_t frequency, uint8_t resolution) {
@@ -51,6 +72,11 @@ extern "C" unsigned long millis() { return clockMs; }
 void delay(unsigned long ms) { waits.push_back(ms); clockMs += ms; }
 void pinMode(int, int) {}
 void digitalWrite(int pin, int level) { if (pin == 48 && level == LOW) buzzerDuty = 0; }
+int digitalRead(int pin) { CHECK(pin == 9); return externalPower; }
+bool ota_activity_is_active() { return otaActive; }
+void sensor_manager_register_all(SensorRegistry &registry) { board_register_sensors(registry); }
+bool ha_discovery_publish_sensor_config(MqttManager &, const char *key, const char *, const char *, const char *, const char *, const char *, const char *, bool) { discoveryKeys.emplace_back(key); return true; }
+bool ha_discovery_publish_binary_sensor_config(MqttManager &, const char *key, const char *, const char *, const char *, const char *, const char *) { discoveryKeys.emplace_back(key); return true; }
 esp_err_t gpio_set_level(gpio_num_t pin, int level) {
     if (pin == failPin) return 7;
     outputs.emplace_back(pin, level);
@@ -60,6 +86,7 @@ esp_err_t gpio_set_direction(gpio_num_t pin, int) { return pin == failPin ? 7 : 
 void i2c_bus_init() {}
 bool i2c_bus_lock(TickType_t) { if (failLock) return false; CHECK(!locked); locked = true; return true; }
 void i2c_bus_unlock() { CHECK(locked); locked = false; }
+bool sticky_test_bus_locked() { return locked; }
 
 static void resolution(uint16_t width, uint16_t height) {
     Wire1.registers[0x8146] = width & 255;
@@ -121,6 +148,14 @@ int main() {
     CHECK(!sticky_early_power_init());
     CHECK(outputs.empty());
     CHECK(!board_hardware_init() && Wire.begins == 0);
+    sensor_manager_init();
+    sensor_manager_sample_once();
+    JsonDocument sensorJson;
+    JsonObject sensorObject = sensorJson.to<JsonObject>();
+    sensor_manager_append_api(sensorObject);
+    CHECK(sensorJson["temperature"].isNull() && sensorJson["humidity"].isNull());
+    CHECK(sensorJson["battery_voltage"].isNull() && sensorJson["battery_percentage"].isNull());
+    CHECK(sensorJson["external_power_present"].isNull());
     failPin = -1;
     CHECK(sticky_early_power_init());
     CHECK((outputs == std::vector<std::pair<int, int>>{{45, 1}, {46, 1}}));
@@ -143,6 +178,122 @@ int main() {
         if (output.first == 8 || output.first == 15) CHECK(output.second == 1);
     }
     CHECK((waits == std::vector<unsigned long>{250, 100}));
+    Wire.failWrite = true;
+    CHECK(shtTestLockHeld && sensor_manager_field_count() == 5);
+    CHECK(std::string(sensor_manager_field_at(2)->key) == "battery_voltage");
+    CHECK(std::string(sensor_manager_field_at(2)->unit) == "V");
+    CHECK(std::string(sensor_manager_field_at(3)->key) == "battery_percentage");
+    CHECK(std::string(sensor_manager_field_at(3)->unit) == "%");
+    const unsigned beforeDiscovery = Wire.transactions;
+    sensor_manager_publish_ha_discovery(mqtt_manager);
+    CHECK((discoveryKeys == std::vector<std::string>{"temperature", "humidity", "battery_voltage", "battery_percentage", "external_power_present"}));
+    CHECK(Wire.transactions == beforeDiscovery);
+    clockMs += 5000;
+    sensor_manager_loop();
+    sensor_manager_append_api(sensorObject);
+    CHECK(sensorJson["temperature"].isNull() && sensorJson["humidity"].isNull());
+    CHECK(sensorJson["battery_voltage"].isNull() && sensorJson["battery_percentage"].isNull());
+    CHECK(sensorJson["external_power_present"].as<bool>() == false);
+    Wire.failWrite = false;
+    Wire.registers[0x08] = 0xd9; Wire.registers[0x09] = 0x0e;
+    Wire.registers[0x2c] = 73; Wire.registers[0x2d] = 0;
+    shtTestError = 0;
+    externalPower = 1;
+    clockMs += 5000;
+    sensor_manager_loop();
+    sensor_manager_append_api(sensorObject);
+    CHECK(std::fabs(sensorJson["battery_voltage"].as<double>() - 3.801) < 0.001);
+    CHECK(sensorJson["battery_percentage"].as<int>() == 73);
+    CHECK(sensorJson["temperature"].as<float>() == 21.5f && sensorJson["humidity"].as<float>() == 50);
+    CHECK(sensorJson["external_power_present"].as<bool>());
+    const unsigned transactions = Wire.transactions, samples = shtTestSamples;
+    sensor_manager_append_api(sensorObject);
+    sensor_manager_append_mqtt(sensorObject);
+    double reading = 0;
+    CHECK(sensor_manager_get_number("battery_voltage", &reading));
+    CHECK(Wire.transactions == transactions && shtTestSamples == samples);
+    otaActive = true;
+    clockMs += 5000;
+    sensor_manager_loop();
+    CHECK(Wire.transactions == transactions && shtTestSamples == samples);
+    otaActive = false;
+    failLock = true;
+    externalPower = 0;
+    sensor_manager_loop();
+    sensor_manager_append_api(sensorObject);
+    CHECK(!sensorJson["external_power_present"].as<bool>());
+    CHECK(std::fabs(sensorJson["battery_voltage"].as<double>() - 3.801) < 0.001);
+    CHECK(Wire.transactions == transactions && shtTestSamples == samples);
+    failLock = false;
+    Wire.nackRegister = 0x08;
+    Wire.registers[0x2c] = 80;
+    shtTestHumidity = NAN;
+    shtTestTemperature = 22;
+    clockMs += 5000;
+    sensor_manager_loop();
+    sensor_manager_append_api(sensorObject);
+    CHECK(std::fabs(sensorJson["battery_voltage"].as<double>() - 3.801) < 0.001);
+    CHECK(sensorJson["battery_percentage"].as<int>() == 80);
+    CHECK(sensorJson["temperature"].as<float>() == 22 && sensorJson["humidity"].as<float>() == 50);
+    CHECK(shtTestLockHeld && Wire.address == 0x55 && Wire1.begins == 0);
+    Wire.nackRegister = -1;
+    Wire.shortRegister = 0x2c;
+    Wire.registers[0x08] = 0xa0; Wire.registers[0x09] = 0x0f;
+    clockMs += 2000;
+    sensor_manager_loop();
+    sensor_manager_append_api(sensorObject);
+    CHECK(std::fabs(sensorJson["battery_voltage"].as<double>() - 4.0) < 0.001);
+    CHECK(sensorJson["battery_percentage"].as<int>() == 80);
+    Wire.shortRegister = -1;
+    Wire.failedByteRegister = 0x09;
+    Wire.registers[0x2c] = 101;
+    clockMs += 2000;
+    sensor_manager_loop();
+    sensor_manager_append_api(sensorObject);
+    CHECK(std::fabs(sensorJson["battery_voltage"].as<double>() - 4.0) < 0.001);
+    CHECK(sensorJson["battery_percentage"].as<int>() == 80);
+    Wire.failedByteRegister = -1;
+    Wire.failByteWrite = true;
+    clockMs += 2000;
+    sensor_manager_loop();
+    sensor_manager_append_api(sensorObject);
+    CHECK(std::fabs(sensorJson["battery_voltage"].as<double>() - 4.0) < 0.001);
+    Wire.failByteWrite = false;
+    Wire.registers[0x08] = 0; Wire.registers[0x09] = 0;
+    Wire.registers[0x2c] = 0;
+    shtTestHumidity = 60;
+    clockMs += 5000;
+    sensor_manager_loop();
+    sensor_manager_append_api(sensorObject);
+    CHECK(std::fabs(sensorJson["battery_voltage"].as<double>() - 4.0) < 0.001);
+    CHECK(sensorJson["battery_percentage"].as<int>() == 0 && sensorJson["humidity"].as<float>() == 60);
+    Wire.registers[0x08] = 0x10; Wire.registers[0x09] = 0x0e;
+    Wire.registers[0x2c] = 55;
+    clockMs += 2000;
+    sensor_manager_loop();
+    sensor_manager_append_api(sensorObject);
+    CHECK(std::fabs(sensorJson["battery_voltage"].as<double>() - 3.6) < 0.001);
+    CHECK(sensorJson["battery_percentage"].as<int>() == 55 && !locked && !sticky_test_unlocked_wire0);
+    CHECK(!sticky_test_invalid_gauge_transaction);
+    for (const auto sample : {std::pair<float, float>{-6, 0}, {100.813f, 100},
+                              {NAN, 100}, {INFINITY, 100}}) {
+        shtTestHumidity = sample.first;
+        clockMs += 5000;
+        sensor_manager_loop();
+        sensor_manager_append_api(sensorObject);
+        CHECK(sensorJson["humidity"].as<float>() == sample.second);
+    }
+    shtTestError = 1;
+    shtTestHumidity = 30;
+    clockMs += 5000;
+    sensor_manager_loop();
+    sensor_manager_append_api(sensorObject);
+    CHECK(sensorJson["humidity"].as<float>() == 100);
+    shtTestError = 0;
+    clockMs += 5000;
+    sensor_manager_loop();
+    sensor_manager_append_api(sensorObject);
+    CHECK(sensorJson["humidity"].as<float>() == 30);
     GT911_TouchDriver touch;
     resolution(800, 480);
     touch.init();

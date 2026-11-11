@@ -98,7 +98,7 @@ add_host_legacy_test(test_sticky_epaper_driver
 add_host_legacy_test(test_sticky_hardware
     SOURCES test_sticky_hardware.cpp ${PROJECT_SOURCE_DIR}/src/app/board_hardware.cpp
         ${PROJECT_SOURCE_DIR}/src/app/drivers/gt911_touch_driver.cpp
-    INCLUDES ${PROJECT_SOURCE_DIR}/tests/sticky_driver_test_overrides
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/sticky_driver_test_overrides ${HOST_ARDUINOJSON_DIR}
         ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive
     DEFINITIONS BOARD_HAS_OVERRIDE=1 BOARD_HAS_PSRAM=1 CONFIG_IDF_TARGET_ESP32S3=1
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/sticky_driver_test_overrides/SPI.h
