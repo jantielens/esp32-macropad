@@ -354,7 +354,9 @@ shared I2C. Version 1 selects ST7121 DSI timing and version 3 selects ST7123;
 unknown versions leave the display and touch unavailable. The older
 ILI9881C/GT911 hardware is not supported. The DSI driver uses the existing
 PSRAM framebuffer and asynchronous rendering path; panel command payloads
-remain in flash. The ST touch driver reads bounded 7-byte contact records and
+remain in flash. The display and touch adapters and licensed panel command
+table live in `src/boards/m5stack-tab5/drivers/`, shared with the SD variant;
+the MIPI DSI base remains central. The ST touch driver reads bounded 7-byte contact records and
 reports I2C errors distinctly from releases. It reads up to 10 controller records
 and reports up to the configured contact capacity. Display and touch have been
 observed on Tab5; the SD variant remains unverified.
@@ -362,7 +364,8 @@ observed on Tab5; the SD variant remains unverified.
 ### Inkplate 6 Flick LVGL
 
 `inkplate6flick-interactive` is an experimental always-on e-paper target. Its Inkplate
-driver is buffered: LVGL flushes update a framebuffer, then a presentation task
+display and touch adapters live in `src/boards/inkplate6flick-interactive/drivers/`.
+The display driver is buffered: LVGL flushes update a framebuffer, then a presentation task
 coalesces changes before a physical waveform. B/W mode uses partial updates with
 periodic full refreshes; grayscale uses full waveforms. The Cypress touch driver
 continues polling while a presentation is pending. This target uses a no-OTA
@@ -429,7 +432,8 @@ full refresh instead of treating the unsent snapshot as an unchanged frame.
 ### CrowPanel 4.2 A-Revision
 
 `crowpanel-4.2-interactive` selects `DISPLAY_DRIVER_CROWPANEL_42`, a buffered
-400 x 300 B/W driver. Two 15,000-byte PSRAM buffers separate LVGL writes from
+400 x 300 B/W driver in `src/boards/crowpanel-4.2-interactive/drivers/display/`.
+Two 15,000-byte PSRAM buffers separate LVGL writes from
 the SPI presentation snapshot. The driver follows Elecrow's V1.2A sample
 clear/partial sequence with GC/DU waveforms, applies cadence and no-op coalescing, and stops accepting
 requests after a bounded BUSY timeout. It has no touch or backlight control.
@@ -533,7 +537,9 @@ public:
 
 ### Arduino Build System Note (Driver Compilation Units)
 
-Arduino only compiles `.cpp` files in the sketch root directory. Driver implementations under `src/app/drivers/` are compiled by including the selected driver `.cpp` from dedicated translation units:
+Arduino only compiles `.cpp` files in the sketch root directory. Shared and
+board-local drivers are compiled by including the selected `.cpp` from
+dedicated translation units:
 
 - `src/app/display_drivers.cpp`
 - `src/app/touch_drivers.cpp`
@@ -1602,7 +1608,9 @@ public:
 
 ### Step 1: Create Driver Class
 
-Create `src/app/drivers/my_driver.h` and `.cpp`:
+For a reusable driver, create `src/app/drivers/my_driver.h` and `.cpp` as in
+this example. Put a board-exclusive driver under that board's `drivers/`
+directory instead.
 
 ```cpp
 #include "../display_driver.h"
@@ -1726,7 +1734,9 @@ To add a new display driver implementation (`src/app/drivers/my_driver.cpp`), in
 
 ### Step 1: Create Touch Driver Class
 
-Create `src/app/drivers/my_touch_driver.h` and `.cpp`:
+For a reusable driver, create `src/app/drivers/my_touch_driver.h` and `.cpp` as
+in this example. Put a board-exclusive driver under that board's `drivers/`
+directory instead.
 
 ```cpp
 #include "../touch_driver.h"
@@ -2293,6 +2303,9 @@ Key settings in `src/app/lv_conf.h`:
 ```
 
 ## File Organization
+
+The diagram shows shared driver examples. Board-owned implementations also
+live under `src/boards/<board>/drivers/` and use the same compilation units.
 
 ```mermaid
 graph LR

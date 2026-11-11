@@ -6,10 +6,18 @@ We intentionally keep this folder **flat** (no `display_*/touch_*` filename pref
 
 Board-exclusive drivers belong in `src/boards/<board>/drivers/`. Group a
 driver and its supporting files in a subdirectory when useful; keep board-wide
-initialization in the board hardware module. Reusable controller drivers and
-shared protocol/rendering helpers remain in this shared collection. Existing
-drivers are migrated separately after confirming ownership; a board-specific
-filename alone does not establish exclusivity.
+initialization in the board hardware module. Board variants may share an
+existing base board's drivers. Reusable controller drivers and shared
+protocol/rendering helpers remain central, even when only one board family
+currently selects them. A board-specific filename alone does not establish
+exclusivity.
+
+The CrowPanel and Inkplate interactive adapters are board-local. The Tab5
+display and touch adapters are owned by the base Tab5 board and used by its SD
+variant. The E1003 frame implementation is board-local; the Inkplate frame
+implementation remains shared across Inkplate 5 V2 and 6FLICK. The Tab5 panel
+command license is retained with that table and with the shared ES8388 codec
+implementation.
 
 ## Where driver selection lives
 
@@ -21,6 +29,8 @@ Only the selected driver implementations are compiled via the sketch-root transl
 - `src/app/display_drivers.cpp`
 - `src/app/touch_drivers.cpp`
 - `src/app/audio_output_drivers.cpp`
+- `src/app/device_classes/epaper_frame/epaper_frame_drivers.cpp` (included by
+  the sketch-root device-class compilation unit)
 
 Board-local `.cpp` files also require the appropriate explicit sketch-root
 include. Removing a board directory does not remove its integration references.

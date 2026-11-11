@@ -35,9 +35,9 @@ static GamepadTouchRouter g_gamepad_touch_router;
 #elif TOUCH_DRIVER == TOUCH_DRIVER_GT911
 #include "drivers/gt911_touch_driver.h"
 #elif TOUCH_DRIVER == TOUCH_DRIVER_ST7123
-#include "drivers/st7123_touch_driver.h"
+#include "boards/m5stack-tab5/drivers/st7123_touch_driver.h"
 #elif TOUCH_DRIVER == TOUCH_DRIVER_INKPLATE6FLICK
-#include "drivers/inkplate6flick_touch_driver.h"
+#include "boards/inkplate6flick-interactive/drivers/inkplate6flick_touch_driver.h"
 #endif
 
 // Global instance

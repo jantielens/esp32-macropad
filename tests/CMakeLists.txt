@@ -67,8 +67,8 @@ endfunction()
 
 add_host_legacy_test(test_tab5_hardware
     SOURCES test_tab5_hardware.cpp ${PROJECT_SOURCE_DIR}/src/boards/m5stack-tab5/tab5_hardware.cpp
-        ${PROJECT_SOURCE_DIR}/src/app/drivers/st7123_touch_driver.cpp
-    INCLUDES ${PROJECT_SOURCE_DIR}/tests/tab5_overrides ${PROJECT_SOURCE_DIR}/src/boards/m5stack-tab5
+        ${PROJECT_SOURCE_DIR}/src/boards/m5stack-tab5/drivers/st7123_touch_driver.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/tab5_overrides ${PROJECT_SOURCE_DIR}/src/boards/m5stack-tab5 ${PROJECT_SOURCE_DIR}/src
     DEFINITIONS BOARD_HAS_OVERRIDE BOARD_HAS_PSRAM CONFIG_IDF_TARGET_ESP32P4=1
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
 )
@@ -105,9 +105,9 @@ add_host_legacy_test(test_sticky_hardware
 )
 
 add_host_legacy_test(test_crowpanel_epaper_driver
-    SOURCES test_crowpanel_epaper_driver.cpp ${PROJECT_SOURCE_DIR}/src/app/drivers/crowpanel42_epaper_driver.cpp
+    SOURCES test_crowpanel_epaper_driver.cpp ${PROJECT_SOURCE_DIR}/src/boards/crowpanel-4.2-interactive/drivers/display/crowpanel42_epaper_driver.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/crowpanel_driver_test_overrides ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
-        ${PROJECT_SOURCE_DIR}/src/boards/crowpanel-4.2-interactive
+        ${PROJECT_SOURCE_DIR}/src/boards/crowpanel-4.2-interactive ${PROJECT_SOURCE_DIR}/src
     DEFINITIONS BOARD_HAS_OVERRIDE=1 BOARD_HAS_PSRAM=1 CONFIG_IDF_TARGET_ESP32S3=1 TEST_HEAP_CAPS_ALLOCATOR=1
         LV_CONF_SKIP=1 LV_USE_OS=0 LV_USE_LOG=0 TEST_FREERTOS_MUTEX_LIFECYCLE=1
     OPTIONS -Wno-unused-parameter

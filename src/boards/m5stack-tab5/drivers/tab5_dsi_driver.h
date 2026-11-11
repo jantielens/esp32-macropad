@@ -1,6 +1,6 @@
 #pragma once
 
-#include "mipi_dsi_driver.h"
+#include "app/drivers/mipi_dsi_driver.h"
 
 class Tab5DsiDriver : public MipiDsiDriver {
 public:

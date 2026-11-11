@@ -8,14 +8,13 @@
  * IMPLEMENTATION GUIDE FOR NEW DRIVERS:
  * =====================================
  * 
- * 1. Create driver class implementing this interface:
- *    - drivers/your_driver.h (interface)
- *    - drivers/your_driver.cpp (implementation)
+ * 1. Create a driver class implementing this interface under src/app/drivers/
+ *    for reusable drivers or src/boards/<board>/drivers/ for board-owned drivers.
  * 
  * 2. Register implementation include in src/app/display_drivers.cpp:
  *    Arduino build system only compiles .cpp files in the sketch root directory.
- *    Driver implementations under src/app/drivers/ are compiled by including the
- *    selected driver .cpp from display_drivers.cpp.
+ *    Include the selected driver .cpp from display_drivers.cpp regardless of
+ *    its directory.
  * 
  * 3. Add driver constant to board_config.h:
  *    #define DISPLAY_DRIVER_YOUR_DRIVER 3  // Next available number

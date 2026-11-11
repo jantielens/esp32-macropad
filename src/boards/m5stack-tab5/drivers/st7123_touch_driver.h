@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../board_config.h"
-#include "../touch_driver.h"
+#include "app/board_config.h"
+#include "app/touch_driver.h"
 
 class ST7123TouchDriver final : public TouchDriver {
 public:

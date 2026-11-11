@@ -1,6 +1,6 @@
 #include "st7123_touch_driver.h"
-#include "../board_config.h"
-#include "../i2c_bus.h"
+#include "app/board_config.h"
+#include "app/i2c_bus.h"
 #include BOARD_HARDWARE_HEADER
 #include <Wire.h>
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../display_driver.h"
+#include "app/display_driver.h"
 #include <SPI.h>
 #include <atomic>
 #include <freertos/FreeRTOS.h>

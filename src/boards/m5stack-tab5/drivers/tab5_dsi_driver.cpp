@@ -1,6 +1,6 @@
 #include "tab5_dsi_driver.h"
 #include BOARD_HARDWARE_HEADER
-#include "../log_manager.h"
+#include "app/log_manager.h"
 #include "tab5/vendor_panel_commands.h"
 
 void Tab5DsiDriver::init() {

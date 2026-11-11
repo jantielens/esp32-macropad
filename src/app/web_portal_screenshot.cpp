@@ -21,10 +21,10 @@
 #include <new>
 
 #if DISPLAY_DRIVER == DISPLAY_DRIVER_CROWPANEL_42
-#include "drivers/crowpanel42_epaper_driver.h"
+#include "boards/crowpanel-4.2-interactive/drivers/display/crowpanel42_epaper_driver.h"
 #define HAS_PRESENTED_FRAME_PNG 1
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_INKPLATE6FLICK
-#include "drivers/inkplate6flick_epaper_driver.h"
+#include "boards/inkplate6flick-interactive/drivers/inkplate6flick_epaper_driver.h"
 #define HAS_PRESENTED_FRAME_PNG 1
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_IT8951
 #include "drivers/it8951_epaper_driver.h"

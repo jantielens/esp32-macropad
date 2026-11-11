@@ -1,8 +1,8 @@
 #ifndef INKPLATE6FLICK_LVGL_DRIVER_H
 #define INKPLATE6FLICK_LVGL_DRIVER_H
 
-#include "../display_driver.h"
-#include "../config_manager.h"
+#include "app/display_driver.h"
+#include "app/config_manager.h"
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>

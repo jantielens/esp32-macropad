@@ -1,7 +1,7 @@
 #ifndef INKPLATE6FLICK_TOUCH_DRIVER_H
 #define INKPLATE6FLICK_TOUCH_DRIVER_H
 
-#include "../touch_driver.h"
+#include "app/touch_driver.h"
 
 #include <freertos/semphr.h>
 

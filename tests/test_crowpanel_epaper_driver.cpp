@@ -1,4 +1,4 @@
-#include "drivers/crowpanel42_epaper_driver.h"
+#include "boards/crowpanel-4.2-interactive/drivers/display/crowpanel42_epaper_driver.h"
 #include "drivers/monochrome_render.h"
 #include "presented_frame.h"
 #include "config_manager.h"

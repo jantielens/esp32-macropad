@@ -65,6 +65,6 @@ VCOM calibration used by Inkplate boards is not available.
 
 * [E-Paper Frame workflow](../../../docs/user/specialized/epaper-frame/README.md)
 * [Frame assignments](board_overrides.h)
-* [Frame driver and image validation](../../app/device_classes/epaper_frame/drivers/reterminal_e1003_driver.cpp)
+* [Frame driver and image validation](drivers/reterminal_e1003_driver.cpp)
 * [Build and partition selections](../../../config.sh)
 * [Hardware index](../../../docs/user/hardware.md)

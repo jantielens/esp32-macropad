@@ -1662,24 +1662,24 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **EPAPER_DEFAULT_VCOM_MV**
   - src/app/board_config.h
 - **EPAPER_FRAME_BATTERY_ADC_PIN**
-  - src/app/device_classes/epaper_frame/drivers/reterminal_e1003_driver.cpp
+  - src/boards/reterminal-e1003-frame/drivers/reterminal_e1003_driver.cpp
 - **EPAPER_FRAME_BATTERY_DIVIDER**
-  - src/app/device_classes/epaper_frame/drivers/reterminal_e1003_driver.cpp
+  - src/boards/reterminal-e1003-frame/drivers/reterminal_e1003_driver.cpp
 - **EPAPER_FRAME_BATTERY_ENABLE_PIN**
-  - src/app/device_classes/epaper_frame/drivers/reterminal_e1003_driver.cpp
+  - src/boards/reterminal-e1003-frame/drivers/reterminal_e1003_driver.cpp
 - **EPAPER_FRAME_BUTTON_PIN**
   - src/app/board_config.h
 - **EPAPER_FRAME_FAST_REFRESH**
   - src/app/board_config.h
 - **EPAPER_FRAME_SD_CS_PIN**
-  - src/app/device_classes/epaper_frame/drivers/reterminal_e1003_driver.cpp
   - src/app/device_classes/epaper_frame/epaper_frame_sd_cache.cpp
   - src/app/device_classes/epaper_frame/epaper_frame_sd_cache.h
   - src/app/device_classes/epaper_frame_device_class.cpp
+  - src/boards/reterminal-e1003-frame/drivers/reterminal_e1003_driver.cpp
 - **EPAPER_FRAME_SD_DET_PIN**
-  - src/app/device_classes/epaper_frame/drivers/reterminal_e1003_driver.cpp
+  - src/boards/reterminal-e1003-frame/drivers/reterminal_e1003_driver.cpp
 - **EPAPER_FRAME_SD_EN_PIN**
-  - src/app/device_classes/epaper_frame/drivers/reterminal_e1003_driver.cpp
+  - src/boards/reterminal-e1003-frame/drivers/reterminal_e1003_driver.cpp
 - **EPAPER_REFRESH_INTERVAL_MAX_MS**
   - src/app/board_config.h
 - **EPAPER_REFRESH_INTERVAL_MIN_MS**
@@ -1773,7 +1773,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper_frame/components/epaper_status_component.cpp
   - src/app/device_classes/epaper_frame/components/epaper_vcom_component.cpp
   - src/app/device_classes/epaper_frame/drivers/inkplate_driver.cpp
-  - src/app/device_classes/epaper_frame/drivers/reterminal_e1003_driver.cpp
   - src/app/device_classes/epaper_frame/epaper_frame_carousel.cpp
   - src/app/device_classes/epaper_frame/epaper_frame_carousel.h
   - src/app/device_classes/epaper_frame/epaper_frame_config.h
@@ -1810,6 +1809,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/portal_components.cpp
   - src/app/power_manager.cpp
   - src/app/time_service.cpp
+  - src/boards/reterminal-e1003-frame/drivers/reterminal_e1003_driver.cpp
 - **IS_SHUTTER_TESTER**
   - src/app/board_config.h
   - src/app/device_class_registry.cpp

@@ -5,7 +5,7 @@
 #include "board_hardware.h"
 #include "tab5_hardware.h"
 #include "i2c_bus.h"
-#include "drivers/st7123_touch_driver.h"
+#include "boards/m5stack-tab5/drivers/st7123_touch_driver.h"
 
 TwoWire Wire;
 static bool locked = false;

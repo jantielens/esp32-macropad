@@ -1,7 +1,7 @@
 #include "inkplate6flick_touch_driver.h"
 
 #include "inkplate6flick_epaper_driver.h"
-#include "../log_manager.h"
+#include "app/log_manager.h"
 
 #pragma push_macro("jd_prepare")
 #pragma push_macro("jd_decomp")

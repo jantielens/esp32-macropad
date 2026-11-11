@@ -180,7 +180,7 @@ The Phase 0 design is approved; new filenames remain implementation proposals.
   provide an e-paper profile reference, not a pin/controller template.
 * [Display HAL](../../src/app/display_driver.h),
   [display aggregator](../../src/app/display_drivers.cpp),
-  [CrowPanel buffered driver](../../src/app/drivers/crowpanel42_epaper_driver.cpp),
+  [CrowPanel buffered driver](../../src/boards/crowpanel-4.2-interactive/drivers/display/crowpanel42_epaper_driver.cpp),
   and [IT8951 driver](../../src/app/drivers/it8951_epaper_driver.cpp)
   provide presentation, coalescing, cleanup, and snapshot patterns.
 * [Touch aggregator](../../src/app/touch_drivers.cpp) and
@@ -1178,25 +1178,64 @@ git diff --check
 
 #### Deferred board-local ownership cleanup
 
-This follow-up is separate from the current Sticky move and does not authorize
-editing other boards during this task.
+This follow-up was separate from the Sticky move. The subsequent cleanup was
+approved independently and did not change Sticky hardware acceptance.
 
-* [ ] Move the CrowPanel-specific display driver and exclusively owned
+* [x] Move the CrowPanel-specific display driver and exclusively owned
   supporting source/license files under its board's `drivers/` directory.
   Keep the existing HAL, compilation aggregator, and normal test registration.
-* [ ] Audit other board-named or board-specific drivers, such as Inkplate and
+* [x] Audit other board-named or board-specific drivers, such as Inkplate and
   Tab5, for exclusive board ownership. Move confirmed board- or family-owned
   implementations under the appropriate board's `drivers/` directory; do not
   infer exclusivity from a filename.
-* [ ] Leave reusable controller drivers and shared protocol/rendering helpers
+* [x] Leave reusable controller drivers and shared protocol/rendering helpers
   central. Do not add a generic plugin/factory framework or migrate shared code
   merely to make every board removable by deleting one directory.
-* [ ] Update affected includes, test registrations, documentation paths, and
+* [x] Update affected includes, test registrations, documentation paths, and
   attribution references; validate each migration with focused tests and the
   repository's applicable single-board build procedure.
 * [x] Document the board-local `drivers/` ownership pattern and sketch-root
   integration in the shared driver reference and agent instructions so future
   work can discover it. Keep board-wide initialization in the hardware module.
+
+#### Cleanup results: 2026-11-11
+
+* CrowPanel display, Inkplate 6FLICK interactive display and touch, Tab5 display
+  and touch, and the E1003 frame implementation moved to their board owners.
+  The Tab5 SD variant uses the base Tab5 owner. Its panel commands retain the
+  original license; a matching copy remains with the shared ES8388 codec.
+* The Inkplate frame driver remains shared by the 5 V2 and 6FLICK frame targets.
+  IT8951, MIPI DSI, GT911, monochrome rendering, and configurable controller
+  drivers remain shared. ST7701 RGB, ST7703 DSI, ST7701 DSI, and JD9165 DSI
+  remain central pending a decision on their reusable panel-specific sequences.
+* Moved implementation contents were compared against the original files after
+  excluding include lines; all matched. Both Tab5 license copies match the
+  original. Active references were searched for the old paths; no stale paths
+  remained after regenerating the flag reference.
+* The approved firmware builds passed without compiler warnings or errors in
+  their logs. The Tab5 SD variant was not separately built. No hardware was
+  available, no device was flashed, and Phase 5 remains pending.
+
+Verification commands:
+
+```bash
+cmake -S . -B build/host-tests
+cmake --build build/host-tests --parallel 4 --target test_crowpanel_epaper_driver test_tab5_hardware
+ctest --test-dir build/host-tests --output-on-failure -R '^(test_crowpanel_epaper_driver|test_tab5_hardware|test_epaper_macro_contract|test_board_feature_overrides|test_epaper_frame_portal_contract)$'
+ctest --test-dir build/host-tests --output-on-failure -R '^(test_it8951_waveshare-7.8-interactive|test_it8951_reterminal-e1003-interactive|test_sticky_epaper_driver|test_sticky_hardware)$'
+ctest --test-dir build/host-tests --output-on-failure -R '^(test_touch_driver_samples|test_touch_manager_snapshots|test_gt911_touch)$'
+python3 tools/compile_flags_report.py md --out docs/compile-time-flags.md
+python3 tools/generate-board-driver-table.py --update-drivers-readme
+python3 tests/test_firmware_size_report.py
+./build.sh crowpanel-4.2-interactive
+./build.sh inkplate6flick-interactive
+./build.sh m5stack-tab5
+./build.sh reterminal-e1003-frame
+git diff --check
+```
+
+All commands passed. The three CTest selections passed 5/5, 4/4, and 3/3 tests;
+the firmware-size report passed 28 tests. The board table was unchanged.
 
 ### Phase 1/2 recovery fixes and Phase 3 handoff: 2026-11-10
 

@@ -1,9 +1,9 @@
 #include "crowpanel42_epaper_driver.h"
-#include "monochrome_render.h"
-#include "../presented_frame.h"
-#include "../config_manager.h"
-#include "../log_manager.h"
-#include "../ota_activity.h"
+#include "app/drivers/monochrome_render.h"
+#include "app/presented_frame.h"
+#include "app/config_manager.h"
+#include "app/log_manager.h"
+#include "app/ota_activity.h"
 #include <esp_heap_caps.h>
 #include <cstring>
 

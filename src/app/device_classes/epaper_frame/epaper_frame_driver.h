@@ -15,8 +15,8 @@
 // E-Paper Driver HAL
 // ----------------------------------------------------------------------------
 // Minimal interface used by duty_cycle_run() and the portal "manual refresh"
-// action. Implementations live in src/app/drivers/<board>_driver.cpp and are
-// aggregated by epaper_frame_drivers.cpp.
+// action. Shared and board-local implementations are aggregated by
+// epaper_frame_drivers.cpp.
 //
 // Lifecycle on each wake (duty_cycle_epaper_frame):
 //   1. epaper_frame_driver_begin()           — power up the panel

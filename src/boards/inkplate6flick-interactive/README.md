@@ -45,5 +45,5 @@ the backup afterward.
 ## References
 
 * [Variant assignments](board_overrides.h)
-* [Interactive display driver](../../app/drivers/inkplate6flick_epaper_driver.cpp)
+* [Interactive display driver](drivers/inkplate6flick_epaper_driver.cpp)
 * [Hardware index](../../../docs/user/hardware.md)

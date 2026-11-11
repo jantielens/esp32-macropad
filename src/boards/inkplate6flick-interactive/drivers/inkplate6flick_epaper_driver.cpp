@@ -1,9 +1,9 @@
 #include "inkplate6flick_epaper_driver.h"
-#include "monochrome_render.h"
-#include "../presented_frame.h"
+#include "app/drivers/monochrome_render.h"
+#include "app/presented_frame.h"
 
-#include "../board_config.h"
-#include "../log_manager.h"
+#include "app/board_config.h"
+#include "app/log_manager.h"
 
 #pragma push_macro("jd_prepare")
 #pragma push_macro("jd_decomp")

@@ -36,13 +36,13 @@
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_JD9165_DSI
 #include "drivers/jd9165_dsi_driver.h"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_TAB5_DSI
-#include "drivers/tab5_dsi_driver.h"
+#include "boards/m5stack-tab5/drivers/tab5_dsi_driver.h"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_INKPLATE6FLICK
-#include "drivers/inkplate6flick_epaper_driver.h"
+#include "boards/inkplate6flick-interactive/drivers/inkplate6flick_epaper_driver.h"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_IT8951
 #include "drivers/it8951_epaper_driver.h"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_CROWPANEL_42
-#include "drivers/crowpanel42_epaper_driver.h"
+#include "boards/crowpanel-4.2-interactive/drivers/display/crowpanel42_epaper_driver.h"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_STICKY_EPAPER
 #include "boards/reterminal-sticky-interactive/drivers/display/sticky_epaper_driver.h"
 #endif
