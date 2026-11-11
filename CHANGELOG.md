@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-11-10
+ms.date: 2026-11-11
 ms.topic: reference
 ---
 
@@ -16,10 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* Add the `reterminal-sticky-interactive` Macropad target with
-  board power bring-up, buffered SSD1677/SSD2677 black-and-white and four-level
-  grayscale rendering, GT911 touch, and Up startup recovery. Hardware acceptance
-  is pending; buzzer and sensor support are not enabled.
+* Add the `reterminal-sticky-interactive` Macropad target with Wi-Fi,
+  SSD1677/SSD2677 black-and-white rendering with partial refresh and full-refresh
+  cleanup, four-level grayscale full refresh, GT911 touch, three configurable
+  physical buttons, and Up startup recovery. Support buzzer feedback and alert
+  tones, SHT40 temperature and humidity, read-only BQ27220 battery percentage
+  and voltage, and external-power detection through the existing sensor
+  integrations.
   See [Sticky hardware and limits](src/boards/reterminal-sticky-interactive/README.md).
 * End a maintenance session with **Device > Operating Mode > Sleep now**.
   Choose a one-shot sleep duration without changing the saved mode or Wake
@@ -31,6 +34,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with the same size and hover styling as other colors. Existing backgrounds
   and Overlay input blocking remain unchanged.
   See [transparent button backgrounds](docs/user/pads/editing.md#use-a-transparent-button-background).
+
+### Changed
+
+* Organize board-exclusive display, touch, and sensor adapters under
+  `src/boards/<board>/drivers/`, keeping board-wide initialization separate
+  from drivers and reusable controllers and helpers shared. Apply this ownership
+  pattern to Sticky, CrowPanel, Inkplate interactive, Tab5 and its SD variant,
+  and the E1003 Frame adapter while preserving existing HAL interfaces and
+  explicit compilation registration.
+  See [driver ownership and selection](src/app/drivers/README.md).
 
 ### Fixed
 
