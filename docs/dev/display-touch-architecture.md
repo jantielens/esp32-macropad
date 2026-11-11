@@ -76,7 +76,7 @@ graph TD
 
 `DISPLAY_DRIVER_STICKY_EPAPER` selects a buffered 800 x 480 SSD1677/SSD2677
 driver, compiled through `display_drivers.cpp`. Its board-specific implementation
-lives under `src/boards/reterminal-sticky-interactive/display/`, rather than the
+lives under `src/boards/reterminal-sticky-interactive/drivers/display/`, rather than the
 shared driver collection. The driver-scoped protocol subset in its
 `sticky_epaper/` subdirectory adapts Seeed_GFX2 revision
 `0e8bac1188cb915d5ea26ea16d538aed13b3cf48` (MIT; retained license alongside

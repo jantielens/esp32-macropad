@@ -75,7 +75,7 @@ Total flags: 379
 
 ### Selectors (*_DRIVER)
 
-- **AUDIO_OUTPUT_DRIVER** default: `AUDIO_OUTPUT_DRIVER_ES8311` (values: AUDIO_OUTPUT_DRIVER_ES8311, AUDIO_OUTPUT_DRIVER_ES8388, AUDIO_OUTPUT_DRIVER_PCM510XA) — Select the audio output HAL backend (one of the AUDIO_OUTPUT_DRIVER_* constants).
+- **AUDIO_OUTPUT_DRIVER** default: `AUDIO_OUTPUT_DRIVER_ES8311` (values: AUDIO_OUTPUT_DRIVER_ES8311, AUDIO_OUTPUT_DRIVER_ES8388, AUDIO_OUTPUT_DRIVER_PCM510XA, AUDIO_OUTPUT_DRIVER_STICKY_PWM) — Select the audio output HAL backend (one of the AUDIO_OUTPUT_DRIVER_* constants).
 - **CAMERA_DRIVER** default: `CAMERA_DRIVER_NONE` (values: CAMERA_DRIVER_OV02C10_P4) — Select the board-specific camera driver.
 - **DISPLAY_DRIVER** default: `DISPLAY_DRIVER_TFT_ESPI` (values: DISPLAY_DRIVER_ARDUINO_GFX, DISPLAY_DRIVER_ARDUINO_GFX_CO5300, DISPLAY_DRIVER_ARDUINO_GFX_NV3041A, DISPLAY_DRIVER_ARDUINO_GFX_ST77916, DISPLAY_DRIVER_CROWPANEL_42, DISPLAY_DRIVER_INKPLATE6FLICK, DISPLAY_DRIVER_IT8951, DISPLAY_DRIVER_JD9165_DSI, DISPLAY_DRIVER_ST7701_DSI, DISPLAY_DRIVER_ST7701_RGB, DISPLAY_DRIVER_ST7703_DSI, DISPLAY_DRIVER_STICKY_EPAPER, DISPLAY_DRIVER_TAB5_DSI, DISPLAY_DRIVER_TFT_ESPI) — Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
 - **DISPLAY_SHAPE** default: `DISPLAY_SHAPE_RECT` (values: DISPLAY_SHAPE_ROUND) — Default display shape (boards override in board_overrides.h)
@@ -455,7 +455,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | inkplate6flick-interactive |  |  | ✅ |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  | ? | ? | ✅ | ? |  | ? |  |  | ✅ |  | ✅ |  | ✅ |  | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |
 | reterminal-e1003-frame |  |  |  |  |  | ? |  |  |  | ? |  |  | ✅ |  | ? | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  | ? |  | ✅ | ✅ |  |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |
 | reterminal-e1003-interactive |  |  |  |  | ✅ | ? |  |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ✅ |  | ✅ |  | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |
-| reterminal-sticky-interactive |  |  |  |  |  | ? |  | ✅ |  | ✅ | ✅ |  |  |  | ✅ | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ✅ |  |  | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |
+| reterminal-sticky-interactive | ✅ |  |  |  |  | ? |  | ✅ |  | ✅ | ✅ |  |  |  | ✅ | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ✅ |  |  | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -490,7 +490,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | inkplate6flick-interactive | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_INKPLATE6FLICK | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_INKPLATE6FLICK |
 | reterminal-e1003-frame | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | — | DISPLAY_SHAPE_RECT | — |
 | reterminal-e1003-interactive | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_RETERMINAL_E1003 | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_GT911 |
-| reterminal-sticky-interactive | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_STICKY_EPAPER | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_GT911 |
+| reterminal-sticky-interactive | AUDIO_OUTPUT_DRIVER_STICKY_PWM | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_STICKY_EPAPER | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_GT911 |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_SELECTORS -->
 
 ## Usage Map (preprocessor only, generated)

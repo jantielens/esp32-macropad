@@ -25,12 +25,13 @@
 #define HAS_NATIVE_EXTENSIONS false
 #define HAS_IMAGE_FETCH false
 #define HAS_IMAGE_LIBRARY false
-#define HAS_AUDIO false
+#define HAS_AUDIO true
 #define HAS_SOUND_PLAYER false
 #define HAS_AUDIO_INPUT false
 #define HAS_SD_CARD false
 #define USE_SD_STORAGE false
 #define HAS_SENSOR_BATTERY_ADC false
+#define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_STICKY_PWM
 
 // Driver Selection (HAL)
 #define DISPLAY_DRIVER DISPLAY_DRIVER_STICKY_EPAPER

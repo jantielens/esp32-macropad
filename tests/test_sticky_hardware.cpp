@@ -7,6 +7,12 @@
 #include <vector>
 #include <utility>
 
+bool ledcAttach(uint8_t pin, uint32_t frequency, uint8_t resolution);
+bool ledcWrite(uint8_t pin, uint32_t duty);
+uint32_t ledcChangeFrequency(uint8_t pin, uint32_t frequency, uint8_t resolution);
+bool ledcDetach(uint8_t pin);
+#include "../src/boards/reterminal-sticky-interactive/drivers/sticky_buzzer.cpp"
+
 static int failures = 0;
 #define CHECK(condition) do { if (!(condition)) { std::printf("FAIL %d: %s\n", __LINE__, #condition); ++failures; } } while (0)
 TwoWire Wire(0), Wire1(1);
@@ -15,10 +21,36 @@ static std::vector<unsigned long> waits;
 static int failPin = -1;
 static bool locked = false, failLock = false;
 static uint32_t clockMs = 0;
+static uint32_t buzzerDuty = 0, buzzerFrequency = 0;
+static bool buzzerAttached = false, failFrequency = false, failSilence = false, failDetach = false;
+bool ledcAttach(uint8_t pin, uint32_t frequency, uint8_t resolution) {
+    CHECK(pin == 48 && resolution == 10);
+    buzzerAttached = true;
+    buzzerFrequency = frequency;
+    return true;
+}
+bool ledcWrite(uint8_t pin, uint32_t duty) {
+    CHECK(pin == 48 && buzzerAttached);
+    if (!duty && failSilence) return false;
+    buzzerDuty = duty;
+    return true;
+}
+uint32_t ledcChangeFrequency(uint8_t pin, uint32_t frequency, uint8_t resolution) {
+    CHECK(pin == 48 && buzzerAttached && resolution == 10);
+    if (failFrequency) return 0;
+    buzzerFrequency = frequency;
+    return frequency;
+}
+bool ledcDetach(uint8_t pin) {
+    CHECK(pin == 48 && buzzerAttached);
+    if (failDetach) return false;
+    buzzerAttached = false;
+    return true;
+}
 extern "C" unsigned long millis() { return clockMs; }
 void delay(unsigned long ms) { waits.push_back(ms); clockMs += ms; }
 void pinMode(int, int) {}
-void digitalWrite(int, int) {}
+void digitalWrite(int pin, int level) { if (pin == 48 && level == LOW) buzzerDuty = 0; }
 esp_err_t gpio_set_level(gpio_num_t pin, int level) {
     if (pin == failPin) return 7;
     outputs.emplace_back(pin, level);
@@ -46,7 +78,8 @@ static void contact(uint16_t x, uint16_t y) {
 int main() {
     static_assert(HAS_DISPLAY && HAS_TOUCH && HAS_LVGL_EPAPER && HAS_EPAPER_GRAYSCALE);
     static_assert(!IS_EPAPER_FRAME && HAS_MCP && HAS_MQTT && HAS_FILESYSTEM);
-    static_assert(!HAS_AUDIO && !HAS_SOUND_PLAYER && !HAS_AUDIO_INPUT && !HAS_SD_CARD && !USE_SD_STORAGE);
+    static_assert(HAS_AUDIO && !HAS_SOUND_PLAYER && !HAS_AUDIO_INPUT && !HAS_SD_CARD && !USE_SD_STORAGE);
+    static_assert(AUDIO_OUTPUT_DRIVER == AUDIO_OUTPUT_DRIVER_STICKY_PWM);
     static_assert(!HAS_BLE && !HAS_BLE_HID && !HAS_USB_HID && !HAS_NATIVE_EXTENSIONS);
     static_assert(!HAS_SENSOR_BATTERY_ADC && !HAS_SENSOR_DUMMY && !HAS_SENSOR_BME280 && !HAS_SENSOR_AHT10);
     static_assert(!HAS_IMAGE_LIBRARY && !HAS_IMAGE_FETCH && HAS_CONFIG_MODE_BUTTON && BUTTON_PIN == 5);
@@ -55,6 +88,35 @@ int main() {
 #ifdef HW_BUTTON_DEFAULTS_JSON
 #error Sticky runtime button assignments must remain empty
 #endif
+    AudioOutputDriver* buzzer = audio_output_driver_create();
+    CHECK(buzzer->begin(48000) && buzzerDuty == 0 && buzzer->supportsNativeTone());
+    CHECK(!buzzer->supportsMute() && buzzer->needsRebootShutdown());
+    CHECK(buzzer->setVolume(100) && buzzer->setNativeTone(1000, 100));
+    CHECK(buzzerFrequency == 1000 && buzzerDuty == 512);
+    CHECK(buzzer->setNativeTone(500, 15) && buzzerFrequency == 500 && buzzerDuty == 76);
+    CHECK(buzzer->setVolume(0) && buzzerDuty == 0);
+    CHECK(buzzer->setVolume(50) && buzzerDuty == 38);
+    CHECK(buzzer->setNativeTone(0, 100) && buzzerDuty == 0);
+    CHECK(buzzer->setNativeTone(500, 100) && buzzerDuty == 256);
+    failFrequency = true;
+    CHECK(!buzzer->setNativeTone(1000, 100) && buzzerDuty == 0);
+    failFrequency = false;
+    CHECK(buzzer->end() && !buzzerAttached);
+    for (const bool cleanupFails : {false, true}) {
+        CHECK(buzzer->begin(48000));
+        CHECK(buzzer->setNativeTone(1000, 100) && buzzerDuty != 0);
+        failSilence = true;
+        failDetach = cleanupFails;
+        CHECK(!buzzer->setNativeTone(0, 0));
+        CHECK(buzzerAttached == cleanupFails && buzzer->isAvailable() == cleanupFails);
+        if (cleanupFails) {
+            CHECK(buzzerDuty != 0);
+            failDetach = false;
+            CHECK(buzzer->end());
+        }
+        CHECK(!buzzerAttached && buzzerDuty == 0);
+        failSilence = false;
+    }
     failPin = 45;
     CHECK(!sticky_early_power_init());
     CHECK(outputs.empty());

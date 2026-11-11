@@ -12,7 +12,8 @@ not the sleep-first E-Paper Frame.
 > This target has no physical hardware acceptance yet. The implementation uses
 > the published Rev 01 schematic (2026-06-05) and vendor sources as its baseline,
 > not a verified shipping unit. Battery startup, power retention, both panel
-> variants, touch orientation, Wi-Fi, and OTA still require device testing.
+> variants, touch orientation, buzzer output, Wi-Fi, and OTA still require device
+> testing.
 
 ## Display and controls
 
@@ -42,6 +43,13 @@ hold **Up** through the application's 1.5-second startup check. This opens
 configuration mode without erasing settings and is separate from runtime
 assignments. No button powers down or sleeps the device.
 
+The GPIO48 buzzer supports tone alerts and button feedback through the existing
+[audio controls](../../../docs/user/media/audio.md). It plays one pitch at a
+time: an active alert takes priority and overlapping feedback is discarded.
+Volume changes PWM duty, not a calibrated loudness. MP3, Music, microphone,
+and amplifier controls are unavailable. Physical sound and volume still need
+device validation.
+
 ## Provisioning, storage, and updates
 
 Use the existing [setup workflow](../../../docs/user/getting-started.md)
@@ -56,7 +64,7 @@ The build selects QIO flash, OPI PSRAM, and UART serial rather than USB CDC.
 Back up settings and files before changing firmware or partition layouts;
 an application-only OTA does not replace the partition table.
 
-Audio/buzzer, sensor readings, SD, microphone, IMU, RTC, BLE/BLE HID, USB HID,
+Sensor readings, SD, microphone, IMU, RTC, BLE/BLE HID, USB HID,
 native Extensions, remote image fetching, and the image library are disabled.
 There is no custom charging policy, gauge calibration, low-battery shutdown,
 or battery-runtime guarantee.
@@ -78,7 +86,7 @@ These are configured onboard signals, not free accessory pins.
 | External-power input             | 9                            |
 | Deferred SD CS / enable / detect | 8 high / 10 low / 11 unused   |
 | Deferred microphone enable      | 38, low                      |
-| Buzzer                           | 48, held low                 |
+| Buzzer                           | 48, PWM tone output          |
 
 The early application hook asserts the power latch before logging and other
 startup work. It cannot guarantee retention before the application starts.

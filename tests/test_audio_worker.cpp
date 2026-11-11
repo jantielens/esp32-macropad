@@ -61,12 +61,18 @@ void vQueueDelete(QueueHandle_t queue) { delete queue; }
 
 class TestOutput : public AudioOutputDriver {
 public:
+    struct Tone { uint16_t frequency; uint8_t gain; uint8_t volume; int64_t time; };
     size_t writes = 0;
     uint8_t volume = 0;
     bool fail = false;
     bool end_result = true;
     bool reboot_shutdown = true;
     bool continuous_idle = false;
+    bool native_tone = false;
+    bool fail_tone = false;
+    bool fail_silence = false;
+    uint16_t frequency = 0;
+    std::vector<Tone> tones;
     unsigned end_count = 0;
     bool muted = true;
     bool fail_unmute = false;
@@ -76,6 +82,7 @@ public:
     std::vector<int16_t> audible_pcm;
     std::function<void()> on_write;
     std::function<void(uint8_t)> on_volume;
+    std::function<void(uint16_t)> on_tone;
     bool begin(uint32_t) override { return true; }
     bool setVolume(uint8_t value) override {
         if (on_volume) on_volume(value);
@@ -91,9 +98,17 @@ public:
         return true;
     }
     bool isAvailable() const override { return true; }
+    bool supportsNativeTone() const override { return native_tone; }
+    bool setNativeTone(uint16_t hz, uint8_t gain) override {
+        if ((!hz && fail_silence) || (hz && fail_tone)) return false;
+        frequency = hz;
+        tones.push_back({hz, gain, volume, now_us});
+        if (on_tone) on_tone(hz);
+        return true;
+    }
     bool needsContinuousIdleOutput() const override { return continuous_idle; }
     bool needsRebootShutdown() const override { return reboot_shutdown; }
-    bool end() override { ++end_count; return end_result; }
+    bool end() override { ++end_count; if (native_tone && end_result) frequency = 0; return end_result; }
     bool write(const int16_t* frames, size_t count) override {
         assert(!muted);
         amplifier_wake_pending = false;
@@ -607,6 +622,194 @@ int main() {
     assert(audio_reboot_status() == AUDIO_REBOOT_PENDING);
     run_worker();
     assert(audio_reboot_status() == AUDIO_REBOOT_COMPLETE && output.end_count == 1);
+
+    reset();
+    output.native_tone = true;
+    audio_set_volume(40);
+    assert(audio_submit_tone("400:30 20 800:20", 0, false, owner_guard,
+                             owner_generation, false, owner_finished));
+    idle_hook = [] {
+        if (!audio_is_playing() && output.tones.size() >= 4) throw WorkerIdle{};
+    };
+    run_worker();
+    assert(output.writes == 0 && finished_generation == owner_generation);
+    assert(output.tones[1].frequency == 400 && output.tones[1].gain == 100 && output.tones[1].volume == 40);
+    assert(output.tones[2].frequency == 0 && output.tones[2].time - output.tones[1].time == 30000);
+    assert(output.tones[3].frequency == 800 && output.tones[3].time - output.tones[2].time == 20000);
+    assert(output.frequency == 0);
+
+    for (const int64_t lateness_us : {0, 17000}) {
+        reset();
+        output.native_tone = true;
+        assert(audio_submit_tone("400:15 5 800:15", 0, false, owner_guard,
+                                 owner_generation, false, owner_finished));
+        bool delayed = false;
+        idle_hook = [&] {
+            if (!delayed && output.frequency == 400) {
+                now_us += lateness_us;
+                delayed = true;
+            }
+            if (finished_generation) throw WorkerIdle{};
+        };
+        run_worker();
+        const auto start = std::find_if(output.tones.begin(), output.tones.end(),
+            [](const TestOutput::Tone& tone) { return tone.frequency == 400; });
+        const auto next = std::find_if(output.tones.begin(), output.tones.end(),
+            [](const TestOutput::Tone& tone) { return tone.frequency == 800; });
+        assert(start != output.tones.end() && next != output.tones.end());
+        assert(next->time - start->time == (lateness_us ? 27000 : 20000));
+        assert(output.tones.back().time - start->time == 35000);
+        assert(output.frequency == 0 && finished_generation == owner_generation);
+    }
+
+    reset();
+    output.native_tone = true;
+    assert(audio_submit_tone("400:1 1 800:1", 0, false));
+    idle_hook = [] {
+        if (!audio_is_playing() && output.tones.size() >= 4) throw WorkerIdle{};
+    };
+    run_worker();
+    assert(output.tones[2].time - output.tones[1].time == 1000);
+    assert(output.tones[3].time - output.tones[2].time == 1000);
+    assert(output.tones.back().time - output.tones[1].time == 3000);
+
+    for (const bool cleanup_fails : {false, true}) {
+        reset();
+        output.native_tone = true;
+        assert(audio_submit_tone("400:100", 0, true, owner_guard,
+                                 owner_generation, false, owner_finished));
+        bool stopped = false;
+        idle_hook = [&] {
+            if (!stopped && output.frequency) {
+                stopped = true;
+                output.fail_silence = true;
+                output.end_result = !cleanup_fails;
+                audio_stop();
+            } else if (output.end_count) {
+                if (!output.end_result) {
+                    assert(output.frequency == 400);
+                    output.end_result = true;
+                    assert(audio_submit_tone("800:20", 0, false));
+                    audio_feedback("900:20");
+                } else {
+                    assert(output.frequency == 0 && !audio_is_playing());
+                    throw WorkerIdle{};
+                }
+            } else {
+                assert(now_us < 200000);
+            }
+        };
+        run_worker();
+        assert(cleanup_fails ? output.end_count >= 2 : output.end_count == 1);
+        assert(finished_generation == owner_generation && output.frequency == 0);
+        assert(std::none_of(output.tones.begin(), output.tones.end(),
+            [](const TestOutput::Tone& tone) { return tone.frequency == 800 || tone.frequency == 900; }));
+    }
+
+    reset();
+    output.native_tone = true;
+    audio_feedback("1200:100");
+    bool submitted = false;
+    idle_hook = [&] {
+        if (!submitted) {
+            submitted = true;
+            assert(audio_submit_tone("400:20", 0, true, owner_guard, owner_generation, true, owner_finished));
+        } else if (output.frequency == 400) {
+            audio_feedback("900:30");
+            audio_stop();
+        } else if (finished_generation) throw WorkerIdle{};
+    };
+    run_worker();
+    assert(output.tones[0].frequency == 1200 && output.tones[0].gain == 15);
+    assert(finished_generation == owner_generation && output.frequency == 0);
+    auto alert_tone = std::find_if(output.tones.begin(), output.tones.end(),
+        [](const TestOutput::Tone& tone) { return tone.frequency == 400; });
+    assert(alert_tone != output.tones.end() && alert_tone->time - output.tones[0].time == 10000);
+    assert(std::none_of(output.tones.begin(), output.tones.end(),
+        [](const TestOutput::Tone& tone) { return tone.frequency == 900; }));
+
+    reset();
+    output.native_tone = true;
+    audio_feedback("500:100");
+    bool stopped_feedback = false;
+    idle_hook = [&] {
+        if (output.frequency && !stopped_feedback) {
+            stopped_feedback = true;
+            audio_stop();
+        } else if (stopped_feedback && output.frequency == 0) throw WorkerIdle{};
+    };
+    run_worker();
+    assert(stopped_feedback && output.frequency == 0);
+
+    reset();
+    output.native_tone = true;
+    audio_feedback("500:100");
+    audio_stop();
+    run_worker();
+    assert(output.tones.empty() && output.frequency == 0);
+
+    reset();
+    output.native_tone = true;
+    audio_feedback("500:100");
+    ++ota_epoch;
+    run_worker();
+    assert(output.tones.empty() && output.frequency == 0);
+
+    reset();
+    output.native_tone = true;
+    assert(audio_submit_tone("400:20 600:20", 0, true, owner_guard,
+                             owner_generation, true, owner_finished));
+    idle_hook = [] {
+        const auto count = std::count_if(output.tones.begin(), output.tones.end(),
+            [](const TestOutput::Tone& tone) { return tone.frequency == 400; });
+        if (count == 2) ++owner_generation;
+        if (!audio_is_playing() && finished_generation) throw WorkerIdle{};
+    };
+    const uint32_t looping_generation = owner_generation;
+    run_worker();
+    assert(finished_generation == looping_generation && output.frequency == 0);
+    assert(std::any_of(output.tones.begin(), output.tones.end(),
+        [](const TestOutput::Tone& tone) { return tone.frequency == 600; }));
+
+    reset();
+    output.native_tone = true;
+    output.fail_tone = true;
+    assert(audio_submit_tone("400:20", 0, false, owner_guard, owner_generation, false, owner_finished));
+    run_worker();
+    assert(!audio_is_playing() && output.frequency == 0 && finished_generation == owner_generation);
+
+    reset();
+    output.native_tone = true;
+    assert(audio_submit_tone("400:100", 0, true));
+    idle_hook = [] {
+        if (output.frequency) { ota = true; ++ota_epoch; }
+        else if (ota) throw WorkerIdle{};
+    };
+    run_worker();
+    assert(!audio_is_playing() && output.frequency == 0);
+
+    reset();
+    output.native_tone = true;
+    assert(audio_submit_tone("400:100", 0, true, owner_guard, owner_generation, true, owner_finished));
+    bool interrupted = false;
+    idle_hook = [&] {
+        if (output.frequency && !interrupted) {
+            interrupted = true;
+            ++ota_epoch;
+        } else if (finished_generation) throw WorkerIdle{};
+    };
+    run_worker();
+    assert(interrupted && finished_generation == owner_generation && output.frequency == 0);
+
+    reset();
+    output.native_tone = true;
+    assert(audio_submit_tone("400:100", 0, true));
+    idle_hook = [] {
+        if (output.frequency) audio_request_reboot();
+        else if (audio_reboot_status() == AUDIO_REBOOT_COMPLETE) throw WorkerIdle{};
+    };
+    run_worker();
+    assert(output.end_count == 1 && output.frequency == 0 && !audio_is_playing());
     std::puts("audio worker policy: PASS");
 }
 #else

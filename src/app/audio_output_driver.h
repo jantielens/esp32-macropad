@@ -20,6 +20,12 @@ public:
     virtual bool setVolume(uint8_t vol_0_100) = 0;
 
     virtual bool setMuted(bool muted) = 0;
+    virtual bool supportsNativeTone() const { return false; }
+    virtual bool setNativeTone(uint16_t frequency_hz, uint8_t gain_percent) {
+        (void)frequency_hz;
+        (void)gain_percent;
+        return false;
+    }
     virtual bool supportsMute() const { return false; }
     virtual bool needsContinuousIdleOutput() const { return false; }
     virtual bool needsRebootShutdown() const { return false; }

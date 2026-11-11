@@ -14,6 +14,9 @@ Arduino only compiles `.cpp` files at the sketch root. Code in subdirectories
 must be included through the appropriate sketch-root aggregator or manifest;
 otherwise registration can silently fail. Persistent file I/O uses the
 `src/app/storage.h` facade, not direct LittleFS or SD_MMC calls.
+Place board-exclusive drivers under `src/boards/<board>/drivers/`; keep shared
+drivers and board-wide initialization separate. Follow the
+[driver ownership and selection guide](../src/app/drivers/README.md).
 
 ## Keep It Simple
 

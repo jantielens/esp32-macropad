@@ -1,5 +1,5 @@
 #include "../src/app/board_config.h"
-#include "boards/reterminal-sticky-interactive/display/sticky_epaper_driver.h"
+#include "boards/reterminal-sticky-interactive/drivers/display/sticky_epaper_driver.h"
 #include "config_manager.h"
 #include "presented_frame.h"
 #include <esp_heap_caps.h>

@@ -44,7 +44,7 @@
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_CROWPANEL_42
 #include "drivers/crowpanel42_epaper_driver.h"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_STICKY_EPAPER
-#include "boards/reterminal-sticky-interactive/display/sticky_epaper_driver.h"
+#include "boards/reterminal-sticky-interactive/drivers/display/sticky_epaper_driver.h"
 #endif
 
 #include <SPI.h>

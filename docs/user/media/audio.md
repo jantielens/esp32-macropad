@@ -95,8 +95,10 @@ its desired state is still Playing; it is not sample-accurate resume.
 ## Understand sound priority
 
 Scheduled alarm audio has priority over ordinary alerts, then Music.
-Ordinary alerts cannot replace an alarm; short tap/confirmation feedback can
-overlay the active source.
+Ordinary alerts cannot replace an alarm. On PCM audio devices, short
+tap/confirmation feedback can overlay the active source. Single-pitch buzzer
+devices discard feedback while an alert is active and clear any current
+feedback when an alert starts.
 
 **Stop alerts** leaves Music intent and scheduled ringing ownership unchanged.
 **Stop all audio** also clears Music intent and feedback, but does not disable

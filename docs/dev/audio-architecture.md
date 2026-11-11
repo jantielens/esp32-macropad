@@ -20,7 +20,7 @@ flowchart TD
     Storage["LittleFS sound files"] --> Player["sound_player.cpp\nMP3 decode and resampling"]
     Audio --> Driver["AudioOutputDriver"]
     Player --> Driver
-    Driver --> Hardware["ES8311, ES8388, or PCM510xA\nI2S output hardware"]
+    Driver --> Hardware["I2S output or native PWM tone hardware"]
 ```
 
 `audio_output_drivers.cpp` includes exactly one concrete driver selected by
@@ -47,7 +47,21 @@ buffer duration plus a 100 ms idle grace period before muting. Paused music is
 idle; silence gaps within an active tone pattern are not. Rapid feedback can
 reuse the enabled amplifier during the grace period. OTA entry mutes immediately.
 Codec power and I2S clocks remain active while idle, including the PCM510xA
-clock configuration. This policy applies to all output drivers.
+clock configuration. This policy applies to PCM output drivers.
+
+Native-tone drivers use the same parsed segments and audio worker but do not
+render PCM or use amplifier wake delays and DMA starvation accounting. The
+worker carries absolute monotonic deadlines across segments and uses waits of
+at most 10 ms (subject to RTOS tick resolution). Scheduler lateness skips expired
+segments rather than extending the pattern. It silences gaps and discards
+feedback while an alert is active. The Sticky board's GPIO48 LEDC
+driver scales PWM duty for volume and quieter feedback; it does not expose
+physical amplifier controls or MP3 playback. OTA, stop, errors, and reboot
+cleanup silence the output. If a silence write fails, the driver attempts LEDC
+detach and GPIO-low cleanup. The worker logs the failure, disables native
+playback until reboot, and retries failed teardown at 100 ms intervals. A
+successful detach establishes silence even if clearing duty failed; failed
+detach retains ownership for another cleanup attempt.
 
 Drivers can opt into `needsContinuousIdleOutput()`; the default is false.
 With idle amplifier muting disabled, the worker continues sending silent PCM

@@ -40,7 +40,7 @@ bool board_hardware_init() {
         LOGE("Sticky", "Early power latch failed: %d", int(powerError));
         return false;
     }
-    // No SD, microphone, or buzzer backend takes ownership in this build.
+    // Keep deferred peripherals off and the buzzer low before audio initializes.
     if (!checked_output(8, 1) || !checked_output(10, 0) ||
         !checked_output(38, 0) || !checked_output(48, 0) ||
         !checked_output(39, 0) || !checked_output(EPAPER_CS_PIN, 1)) return false;

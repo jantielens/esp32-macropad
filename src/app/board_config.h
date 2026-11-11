@@ -523,6 +523,7 @@ struct HwButtonDef {
 #define AUDIO_OUTPUT_DRIVER_ES8311   0
 #define AUDIO_OUTPUT_DRIVER_PCM510XA 1
 #define AUDIO_OUTPUT_DRIVER_ES8388   2
+#define AUDIO_OUTPUT_DRIVER_STICKY_PWM 3
 
 // Select the audio output HAL backend (one of the AUDIO_OUTPUT_DRIVER_* constants).
 #ifndef AUDIO_OUTPUT_DRIVER

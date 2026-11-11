@@ -11,7 +11,8 @@ decisions are complete. The user signed off Phase 0 and its researched design
 on 2026-11-10. The user approved combining Phases 1 and 2 on 2026-11-10.
 Phases 1 and 2 are implemented and software-validated. Both remain In progress
 because hardware acceptance is pending. The three P2 recovery findings have
-been fixed and regression-tested; Phase 3 is the next software handoff.
+been fixed and regression-tested. Phase 3 software is implemented; physical
+acceptance remains pending.
 
 * Plan location: tracked `docs/dev/sticky-implementation-plan.md` on the Sticky
   feature branch only; delete this plan before merging back to `release/1.48.0`
@@ -214,7 +215,7 @@ The Phase 0 design is approved; new filenames remain implementation proposals.
 | 0     | Resolve hardware and design gates    | None          | Done        | Research/design signed off   |
 | 1     | Board, power, Wi-Fi, and OTA bring-up | 0             | In progress | Checks pass; device pending  |
 | 2     | Display and touch                    | 0, with 1     | In progress | Checks pass; device pending  |
-| 3     | Physical buttons and tone feedback   | 1 software    | Not started | Software handoff ready       |
+| 3     | Physical buttons and tone feedback   | 1 software    | In progress | Checks pass; device pending  |
 | 4     | Environmental and battery sensors    | 1             | Not started | Not run                      |
 | 5     | Integrated acceptance and docs       | 2, 3, 4       | Not started | Not run                      |
 
@@ -225,7 +226,7 @@ on-device behavior is accepted in Phase 5.
 After the recovery-fix checkpoint below, Phase 3 software implementation may
 proceed without declaring Phases 1/2 physically accepted. Carry their open
 hardware checks forward and exercise them alongside Phase 3 when hardware is
-available. Phase 3 itself has not started; this handoff does not implement it.
+available. Phase 3 software implementation is recorded in the latest checkpoint.
 
 ## Phase 0: Resolve hardware and design gates
 
@@ -397,19 +398,19 @@ Avoid changes to shared managers unless the HAL cannot express a present need.
 
 The two declarations above were explicitly included in the Phase 1 request.
 They do not start Phase 3 buzzer work or establish physical-button acceptance.
-* [ ] Implement the approved GPIO48 PWM backend using existing feedback/alert
+* [x] Implement the approved GPIO48 PWM backend using existing feedback/alert
   APIs, parser, queueing, cancellation, and ownership mechanisms.
-* [ ] Support multi-step tone patterns and silence gaps, one-shot/looping alerts,
+* [x] Support multi-step tone patterns and silence gaps, one-shot/looping alerts,
   stop, completion callbacks, and mute/volume behavior as agreed in Phase 0.
   Use the KISS single-pitch PWM path: active alerts take priority over feedback;
   discard overlapping feedback rather than replaying it later.
-* [ ] Preserve the existing tap-feedback suppression for actions that themselves
+* [x] Preserve the existing tap-feedback suppression for actions that themselves
   produce audio, and existing hold-feedback behavior.
-* [ ] Keep `HAS_SOUND_PLAYER` false. Ensure tone-only capability does not expose
+* [x] Keep `HAS_SOUND_PLAYER` false. Ensure tone-only capability does not expose
   MP3/Music controls or unsupported amplifier controls.
-* [ ] Leave the buzzer silent after stop, failure, reboot cleanup, and idle.
+* [x] Leave the buzzer silent after stop, failure, reboot cleanup, and idle.
   Avoid blocking delays in input or LVGL code.
-* [ ] Extend existing audio-worker tests with a buzzer profile or equivalent
+* [x] Extend existing audio-worker tests with a buzzer profile or equivalent
   narrow backend coverage; do not build a second pattern parser/test framework.
 
 Likely files: board overrides, `audio.cpp`, `audio_output_driver.h`,
@@ -425,7 +426,7 @@ Apply the native-tone worker seam and overlap policy recorded in D3.
 * [ ] Existing alert-tone patterns play correct pitches, durations, and gaps.
   Looping alerts stop promptly and obey the approved overlap policy.
 * [ ] Disabled feedback and zero volume remain silent.
-* [ ] Existing disabled/beep/MP3 worker profiles still pass after shared changes.
+* [x] Existing disabled/beep/MP3 worker profiles still pass after shared changes.
 * [ ] Audible feedback works during e-paper activity without blocking action
   dispatch or creating runaway playback.
 
@@ -536,6 +537,7 @@ node tests/test_portal_epaper_config.js
 cmake --build build/host-tests --parallel --target test_audio_worker_disabled test_audio_worker_beep test_audio_worker_mp3 test_tone_alert_overlay
 ctest --test-dir build/host-tests --output-on-failure -R '^(test_audio_worker_(disabled|beep|mp3)|test_tone_alert_overlay)$'
 node tests/test_portal_audio_config.js
+node tests/test_portal_action_list.js
 
 # Phase 4 shared sensor/cache behavior
 cmake --build build/host-tests --parallel --target test_sensor_manager
@@ -574,7 +576,7 @@ Approved research decision, signed off 2026-11-10:
 * Target both SSD1677 and SSD2677 with one buffered Sticky HAL driver.
 * Use the pinned Seeed_GFX2 MIT-licensed controller/detection source as the
   low-level reference/subset under
-  `src/boards/reterminal-sticky-interactive/display/sticky_epaper/`.
+  `src/boards/reterminal-sticky-interactive/drivers/display/sticky_epaper/`.
   Retain its license and attribution beside any adopted source and identify
   local changes and the upstream revision.
 * Do not import the dashboard UI, touch task, sensor stack, or ESP-IDF
@@ -614,7 +616,7 @@ Evidence:
 
 Required implementation boundaries:
 
-* New board-local `display/sticky_epaper_driver.h/.cpp`, a driver selector, and
+* New board-local `drivers/display/sticky_epaper_driver.h/.cpp`, a driver selector, and
   the existing display aggregator entry; any adopted vendor files stay
   driver-scoped. Board-local placement was approved after the combined-phase
   implementation; it does not change the HAL or controller behavior.
@@ -1177,18 +1179,22 @@ git diff --check
 This follow-up is separate from the current Sticky move and does not authorize
 editing other boards during this task.
 
-* [ ] Apply the same ownership pattern to the CrowPanel-specific display driver
-  and any exclusively owned supporting source/license files. Keep the existing
-  HAL, compilation aggregator, and normal test-suite registration.
+* [ ] Move the CrowPanel-specific display driver and exclusively owned
+  supporting source/license files under its board's `drivers/` directory.
+  Keep the existing HAL, compilation aggregator, and normal test registration.
 * [ ] Audit other board-named or board-specific drivers, such as Inkplate and
-  Tab5, for exclusive board ownership. Move only implementations actually tied
-  to one board or board family; do not infer exclusivity from a filename.
+  Tab5, for exclusive board ownership. Move confirmed board- or family-owned
+  implementations under the appropriate board's `drivers/` directory; do not
+  infer exclusivity from a filename.
 * [ ] Leave reusable controller drivers and shared protocol/rendering helpers
   central. Do not add a generic plugin/factory framework or migrate shared code
   merely to make every board removable by deleting one directory.
 * [ ] Update affected includes, test registrations, documentation paths, and
   attribution references; validate each migration with focused tests and the
   repository's applicable single-board build procedure.
+* [x] Document the board-local `drivers/` ownership pattern and sketch-root
+  integration in the shared driver reference and agent instructions so future
+  work can discover it. Keep board-wide initialization in the hardware module.
 
 ### Phase 1/2 recovery fixes and Phase 3 handoff: 2026-11-10
 
@@ -1311,3 +1317,170 @@ Pre-commit reconciliation and validation passed:
 * `git diff --check`: passed. No firmware source changed during this checkpoint,
   so the retained successful recovery firmware build remains the applicable
   single-board evidence; no new firmware build was required.
+
+### Phase 3 software checkpoint: 2026-11-11
+
+Status: In progress. The GPIO48 native PWM backend and worker integration are
+implemented and host-tested. Physical acceptance for Phases 1, 2, and 3 remains
+open; no hardware was available.
+
+The existing audio worker parses and times native-tone segments, prioritizes
+alerts, discards overlapping feedback, and silences output on stop, OTA,
+failure, and reboot. The board-local driver uses automatically assigned LEDC
+resources with checked frequency, duty, and detach operations. Zero volume is
+silent; feedback uses the existing 15% gain. PCM profiles retain their existing
+path. Button dispatch, defaults, and Up startup recovery were not changed.
+MP3, Music, audio input, and physical amplifier controls remain unavailable.
+
+Changed files at this checkpoint, before the later `drivers/` relocation:
+
+* `src/app/audio.cpp`, `src/app/audio_output_driver.h`,
+  `src/app/audio_output_drivers.cpp`, `src/app/board_config.h`
+* `src/boards/reterminal-sticky-interactive/sticky_buzzer.cpp`,
+  `sticky_hardware.cpp`, `board_overrides.h`, `metadata.json`, and `README.md`
+  in that board folder
+* `tests/test_audio_worker.cpp`, `tests/test_sticky_hardware.cpp`
+* `docs/dev/audio-architecture.md`, `docs/user/media/audio.md`,
+  `docs/compile-time-flags.md`, and this plan
+
+Checks completed:
+
+```bash
+cmake -S . -B build/host-tests
+cmake --build build/host-tests --parallel 4 --target test_sticky_hardware test_audio_worker_disabled test_audio_worker_beep test_audio_worker_mp3 test_tone_alert_overlay
+ctest --test-dir build/host-tests --output-on-failure -R '^(test_sticky_hardware|test_audio_worker_(disabled|beep|mp3)|test_tone_alert_overlay)$'
+node tests/test_portal_audio_config.js
+node tests/test_portal_action_list.js
+python3 tests/test_board_feature_overrides.py
+python3 tests/test_firmware_size_report.py
+bash tests/test_action_catalog_completeness.sh
+git diff --check
+python3 tools/generate-board-driver-table.py --update-drivers-readme
+python3 tools/compile_flags_report.py md --out docs/compile-time-flags.md
+set -o pipefail; ./build.sh reterminal-sticky-interactive 2>&1 | tee build/temp/sticky-phase3-firmware-verified.log
+```
+
+All commands passed; CTest passed 5/5, and the size-report suite passed 28/28.
+The final single-board build passed with no compiler warnings or errors:
+3,170,926 bytes sketch and 80,508 bytes static RAM. The build log remains
+ignored in `build/temp/`. The explicitly requested Sticky verification target
+was used; `/memories/board-preferences.md` is unavailable in this environment.
+The existing Sticky hardware test now exercises the actual PWM driver with LEDC
+stubs, including volume, feedback gain, silence, failure, and teardown. The
+worker test covers segment timing, preemption, no feedback replay, looping,
+ownership cancellation, stop, OTA epoch changes, and reboot. These tests do
+not establish physical or electrical behavior.
+
+Documentation links and fences were checked with:
+
+```bash
+node <<'NODE'
+const fs = require('fs'), path = require('path');
+const files = ['docs/dev/audio-architecture.md', 'docs/user/media/audio.md', 'src/boards/reterminal-sticky-interactive/README.md', 'docs/dev/sticky-implementation-plan.md'];
+let count = 0, missing = [];
+for (const file of files) {
+  const text = fs.readFileSync(file, 'utf8');
+  for (const match of text.matchAll(/\]\(([^)]+)\)/g)) {
+    const link = match[1].split('#')[0];
+    if (!link || /^(https?:|mailto:)/.test(link)) continue;
+    count++;
+    if (!fs.existsSync(path.resolve(path.dirname(file), link))) missing.push(`${file}: ${link}`);
+  }
+  if ((text.match(/^```/gm) || []).length % 2) missing.push(`${file}: unclosed fence`);
+}
+if (missing.length) { console.error(missing.join('\n')); process.exit(1); }
+console.log(`PASS: ${count} local links and code fences`);
+NODE
+```
+
+This passed for 65 local links and fences after the checkpoint was appended.
+No Markdown linter was installed. `ledcChangeFrequency` plus checked `ledcWrite`
+avoids `ledcWriteTone`'s fixed 50% duty while retaining automatic LEDC channel
+allocation. This is within D3's checked core API design. Native stop also clears
+feedback to satisfy the requested silent-stop behavior; PCM stop is unchanged.
+
+Before Phase 4, reassess the sensor design and available hardware separately.
+Do not treat this software checkpoint as audible output, electrical safety,
+physical button, loudness, or concurrent device acceptance. Carry forward
+Phases 1/2 recovery, display, touch, power, and OTA checks, plus all unchecked
+Phase 3 device checks. No Phase 4 dependencies or sensor implementation were
+added. The branch-only plan still must be deleted before merging into
+`release/1.48.0`.
+
+### Board-local drivers layout: 2026-11-11
+
+The user approved consolidating Sticky-owned drivers under the board's
+`drivers/` directory. Moved the five display implementation/license files to
+`drivers/display/` and the buzzer to `drivers/sticky_buzzer.cpp`. Kept
+`sticky_hardware.cpp` and its header at the board root for board-wide startup.
+The earlier execution-log paths describe the layout at those checkpoints.
+
+Updated the display and audio sketch-root aggregators, display-manager include,
+Sticky host-test paths, and display architecture reference. Documented driver
+ownership in `src/app/drivers/README.md`,
+`.github/instructions/compile-time-flags.instructions.md`, and
+`.github/copilot-instructions.md`. Updated the deferred other-board cleanup
+tasks above; no other board was migrated. There are no HAL or behavior changes.
+
+```bash
+mkdir -p src/boards/reterminal-sticky-interactive/drivers && mv src/boards/reterminal-sticky-interactive/display src/boards/reterminal-sticky-interactive/drivers/display && mv src/boards/reterminal-sticky-interactive/sticky_buzzer.cpp src/boards/reterminal-sticky-interactive/drivers/sticky_buzzer.cpp
+cmake -S . -B build/host-tests
+cmake --build build/host-tests --parallel 4 --target test_sticky_epaper_driver test_sticky_hardware test_audio_worker_disabled test_audio_worker_beep test_audio_worker_mp3 test_tone_alert_overlay
+ctest --test-dir build/host-tests --output-on-failure -R '^(test_sticky_epaper_driver|test_sticky_hardware|test_audio_worker_(disabled|beep|mp3)|test_tone_alert_overlay)$'
+bash tests/test_epaper_macro_contract.sh
+python3 tests/test_firmware_size_report.py
+set -o pipefail; ./build.sh reterminal-sticky-interactive 2>&1 | tee build/temp/sticky-drivers-placement-firmware.log
+git diff --check
+```
+
+All commands passed: CTest 6/6, size report 28/28, and Sticky firmware build
+with no compiler warnings or errors. Sketch and static RAM remained 3,170,926
+and 80,508 bytes. A local-link/fence check passed for 70 links in the changed
+ownership guidance and plan. A broader check also found eight pre-existing
+broken links in `docs/dev/display-touch-architecture.md`; none were introduced
+by this move, and they remain outside this task.
+
+No hardware validation, flashing, commit, push, all-board build, or Phase 4
+work was performed. Phases 1/2/3 remain In progress pending physical acceptance.
+
+### Phase 3 P2 review fixes: 2026-11-11
+
+Both reproduced software findings are fixed:
+
+* Native timing now carries absolute segment deadlines and waits for the
+  remaining duration, capped at 10 ms with a minimum of one RTOS tick.
+  Expired segments are skipped after scheduler lateness instead of adding
+  that lateness to every following segment. Catch-up work is bounded.
+* Failed PWM silence writes now attempt LEDC detach and GPIO-low cleanup.
+  Successful detach completes teardown even when the duty-clear operation
+  failed. Failed detach retains the attachment for retry. The worker logs
+  failed silence, disables native playback until reboot, discards pending
+  work, and retries unsuccessful teardown with 100 ms backoff.
+
+Extended the existing board and worker tests, without a new harness. They
+reproduced failures before the fixes and now cover the 35 ms pattern
+`400:15 5 800:15`, a 17 ms scheduler delay that skips the expired gap without
+extending the total pattern, 1 ms tone/gap segments, failed silence after
+active playback, and failed-detach retry without resuming queued playback.
+The existing PCM, ownership, OTA, stop, and reboot cases still pass.
+
+Validation passed:
+
+```bash
+cmake --build build/host-tests --parallel 4 --target test_sticky_hardware test_audio_worker_disabled test_audio_worker_beep test_audio_worker_mp3 test_tone_alert_overlay
+ctest --test-dir build/host-tests --output-on-failure -R '^(test_sticky_hardware|test_audio_worker_(disabled|beep|mp3)|test_tone_alert_overlay)$'
+set -o pipefail; ./build.sh reterminal-sticky-interactive 2>&1 | tee build/temp/sticky-phase3-p2-firmware.log
+git diff --check
+```
+
+CTest passed 5/5. The single Sticky firmware build passed without compiler
+warnings or errors: 3,171,522 bytes sketch and 80,508 bytes static RAM.
+Used the previously selected Sticky verification board;
+`/memories/board-preferences.md` remains unavailable. Updated the native-output
+lifecycle guidance in `docs/dev/audio-architecture.md`; user tone syntax and
+board-local ownership are unchanged. The local-link/fence check used above
+passed for the two affected documents (53 links). No Markdown linter was run.
+
+Phase 3 software review findings are resolved. Physical acceptance for
+Phases 1/2/3 remains pending; no flashing, hardware validation, Phase 4 work,
+commit, or push was performed. Reassess the sensor design before Phase 4.

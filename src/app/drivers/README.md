@@ -4,6 +4,13 @@ This folder contains reusable **display**, **touch**, and **audio** driver imple
 
 We intentionally keep this folder **flat** (no `display_*/touch_*` filename prefixes and no `display/` or `touch/` subfolders) to keep includes simple and minimize churn.
 
+Board-exclusive drivers belong in `src/boards/<board>/drivers/`. Group a
+driver and its supporting files in a subdirectory when useful; keep board-wide
+initialization in the board hardware module. Reusable controller drivers and
+shared protocol/rendering helpers remain in this shared collection. Existing
+drivers are migrated separately after confirming ownership; a board-specific
+filename alone does not establish exclusivity.
+
 ## Where driver selection lives
 
 Board selection is done at compile time in:
@@ -13,6 +20,10 @@ Board selection is done at compile time in:
 Only the selected driver implementations are compiled via the sketch-root translation units:
 - `src/app/display_drivers.cpp`
 - `src/app/touch_drivers.cpp`
+- `src/app/audio_output_drivers.cpp`
+
+Board-local `.cpp` files also require the appropriate explicit sketch-root
+include. Removing a board directory does not remove its integration references.
 
 ## Generated board → drivers table
 

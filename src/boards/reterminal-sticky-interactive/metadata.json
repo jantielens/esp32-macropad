@@ -5,7 +5,7 @@
   "chip_family": "ESP32-S3",
   "flash_mb": 32,
   "psram_mb": 8,
-  "capabilities": ["mcp", "mqtt"],
+  "capabilities": ["mcp", "mqtt", "audio"],
   "wireless": {"wifi": true, "ble": false},
   "display": {"size": "3.97\"", "resolution": "800x480", "type": "E-Paper", "touch": true}
 }

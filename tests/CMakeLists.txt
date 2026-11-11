@@ -85,8 +85,8 @@ set(HOST_ARDUINOJSON_DIR "$ENV{HOME}/Arduino/libraries/ArduinoJson/src")
 set(HOST_LVGL_DIR "$ENV{HOME}/Arduino/libraries/lvgl/src")
 
 add_host_legacy_test(test_sticky_epaper_driver
-    SOURCES test_sticky_epaper_driver.cpp ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive/display/sticky_epaper_driver.cpp
-        ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive/display/sticky_epaper/panel.cpp
+    SOURCES test_sticky_epaper_driver.cpp ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive/drivers/display/sticky_epaper_driver.cpp
+        ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive/drivers/display/sticky_epaper/panel.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/sticky_driver_test_overrides ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
         ${PROJECT_SOURCE_DIR}/src
         ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive
