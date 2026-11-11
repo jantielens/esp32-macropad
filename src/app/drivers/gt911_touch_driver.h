@@ -49,6 +49,11 @@ public:
 private:
 		uint8_t addr;
 		uint8_t rotation;
+		#if TOUCH_GT911_CONFIG_ORIENTATION
+		bool configured = false;
+		bool busStarted = false;
+		uint16_t rawWidth = 0, rawHeight = 0;
+		#endif
 
 		bool calibrationEnabled;
 		uint16_t calXMin;

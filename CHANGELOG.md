@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add the `reterminal-sticky-interactive` Macropad target with
+  board power bring-up, buffered SSD1677/SSD2677 black-and-white and four-level
+  grayscale rendering, GT911 touch, and Up startup recovery. Hardware acceptance
+  is pending; buzzer and sensor support are not enabled.
+  See [Sticky hardware and limits](src/boards/reterminal-sticky-interactive/README.md).
 * End a maintenance session with **Device > Operating Mode > Sleep now**.
   Choose a one-shot sleep duration without changing the saved mode or Wake
   Interval. Sleep is refused during updates or configuration writes.

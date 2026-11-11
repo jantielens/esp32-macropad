@@ -1,0 +1,11 @@
+{
+  "device_class": "macropad",
+  "board_label": "reTerminal Sticky Interactive",
+  "description": "Seeed reTerminal Sticky 3.97-inch 800x480 SSD1677/SSD2677 four-level e-paper with GT911 touch.",
+  "chip_family": "ESP32-S3",
+  "flash_mb": 32,
+  "psram_mb": 8,
+  "capabilities": ["mcp", "mqtt"],
+  "wireless": {"wifi": true, "ble": false},
+  "display": {"size": "3.97\"", "resolution": "800x480", "type": "E-Paper", "touch": true}
+}

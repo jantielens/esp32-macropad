@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 375
+Total flags: 379
 
 ### Features (HAS_*)
 
@@ -77,7 +77,7 @@ Total flags: 375
 
 - **AUDIO_OUTPUT_DRIVER** default: `AUDIO_OUTPUT_DRIVER_ES8311` (values: AUDIO_OUTPUT_DRIVER_ES8311, AUDIO_OUTPUT_DRIVER_ES8388, AUDIO_OUTPUT_DRIVER_PCM510XA) — Select the audio output HAL backend (one of the AUDIO_OUTPUT_DRIVER_* constants).
 - **CAMERA_DRIVER** default: `CAMERA_DRIVER_NONE` (values: CAMERA_DRIVER_OV02C10_P4) — Select the board-specific camera driver.
-- **DISPLAY_DRIVER** default: `DISPLAY_DRIVER_TFT_ESPI` (values: DISPLAY_DRIVER_ARDUINO_GFX, DISPLAY_DRIVER_ARDUINO_GFX_CO5300, DISPLAY_DRIVER_ARDUINO_GFX_NV3041A, DISPLAY_DRIVER_ARDUINO_GFX_ST77916, DISPLAY_DRIVER_CROWPANEL_42, DISPLAY_DRIVER_INKPLATE6FLICK, DISPLAY_DRIVER_IT8951, DISPLAY_DRIVER_JD9165_DSI, DISPLAY_DRIVER_ST7701_DSI, DISPLAY_DRIVER_ST7701_RGB, DISPLAY_DRIVER_ST7703_DSI, DISPLAY_DRIVER_TAB5_DSI, DISPLAY_DRIVER_TFT_ESPI) — Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
+- **DISPLAY_DRIVER** default: `DISPLAY_DRIVER_TFT_ESPI` (values: DISPLAY_DRIVER_ARDUINO_GFX, DISPLAY_DRIVER_ARDUINO_GFX_CO5300, DISPLAY_DRIVER_ARDUINO_GFX_NV3041A, DISPLAY_DRIVER_ARDUINO_GFX_ST77916, DISPLAY_DRIVER_CROWPANEL_42, DISPLAY_DRIVER_INKPLATE6FLICK, DISPLAY_DRIVER_IT8951, DISPLAY_DRIVER_JD9165_DSI, DISPLAY_DRIVER_ST7701_DSI, DISPLAY_DRIVER_ST7701_RGB, DISPLAY_DRIVER_ST7703_DSI, DISPLAY_DRIVER_STICKY_EPAPER, DISPLAY_DRIVER_TAB5_DSI, DISPLAY_DRIVER_TFT_ESPI) — Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
 - **DISPLAY_SHAPE** default: `DISPLAY_SHAPE_RECT` (values: DISPLAY_SHAPE_ROUND) — Default display shape (boards override in board_overrides.h)
 - **TOUCH_DRIVER** default: `TOUCH_DRIVER_XPT2046` (values: TOUCH_DRIVER_AXS15231B_I2C, TOUCH_DRIVER_CST816S_WIRE, TOUCH_DRIVER_CST820B_WIRE, TOUCH_DRIVER_GT911, TOUCH_DRIVER_INKPLATE6FLICK, TOUCH_DRIVER_ST7123, TOUCH_DRIVER_XPT2046) — Select the touch HAL backend (one of the TOUCH_DRIVER_* constants).
 
@@ -237,11 +237,14 @@ Total flags: 375
 - **BME280_I2C_ADDR** default: `0x76` — BME280 I2C address (0x76 or 0x77).
 - **BOARD_ACTION_SOURCE** default: `(no default)` — Board-local action module compiled through the action aggregator.
 - **BOARD_AUDIO_CONTROL_FACTORY** default: `(no default)` — Board-owned codec rail and amplifier controls for the selected audio driver.
+- **BOARD_DISPLAY_PREPARE** default: `(no default)` — Board readiness prerequisite for the selected display driver.
 - **BOARD_DRIVER_TABLE_NOTES** default: `(no default)` — Generated driver-table validation note.
+- **BOARD_EARLY_POWER_INIT** default: `(no default)` — Optional power-latch hook called before the rest of application setup.
 - **BOARD_HARDWARE_HEADER** default: `(no default)` — Board-local declarations used only by compilation and factory wiring.
 - **BOARD_HARDWARE_LOOP** default: `(no default)` — Board-owned deferred shutdown and motor safety deadlines.
 - **BOARD_HARDWARE_SOURCE** default: `(no default)` — Board-local shared hardware compiled through the sketch-root aggregator.
 - **BOARD_SENSOR_SOURCE** default: `(no default)` — Board-local sensor provider compiled and registered by the sensor aggregator.
+- **BOARD_TOUCH_PREPARE** default: `(no default)` — Board readiness prerequisite before touch reset and bus initialization.
 - **BUTTON_ACTIVE_LOW** default: `true` — Button polarity: true when pressed = LOW.
 - **CAMERA_CAPTURE_HEIGHT** default: `0` — Camera sensor raw capture height in pixels.
 - **CAMERA_CAPTURE_WIDTH** default: `0` — Camera sensor raw capture width in pixels.
@@ -403,6 +406,7 @@ Total flags: 375
 - **TOUCH_CAL_X_MIN** default: `(no default)` — Touch calibration: X minimum.
 - **TOUCH_CAL_Y_MAX** default: `(no default)` — Touch calibration: Y maximum.
 - **TOUCH_CAL_Y_MIN** default: `(no default)` — Touch calibration: Y minimum.
+- **TOUCH_GT911_CONFIG_ORIENTATION** default: `false` — Read GT911 resolution and map a portrait configuration to the board's landscape canvas.
 - **TOUCH_I2C_ADDR** default: `(no default)` — Touch I2C address.
 - **TOUCH_I2C_ADDR_ALT** default: `(no default)` — Optional alternate address (GT911 can be 0x5D or 0x14 depending on INT strap).
 - **TOUCH_I2C_BUS** default: `1` — ESP32-P4 can use Wire (bus 0) since WiFi runs on external C6 over SDIO.
@@ -451,6 +455,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | inkplate6flick-interactive |  |  | ✅ |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  | ? | ? | ✅ | ? |  | ? |  |  | ✅ |  | ✅ |  | ✅ |  | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |
 | reterminal-e1003-frame |  |  |  |  |  | ? |  |  |  | ? |  |  | ✅ |  | ? | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  | ? |  | ✅ | ✅ |  |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |
 | reterminal-e1003-interactive |  |  |  |  | ✅ | ? |  |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ✅ |  | ✅ |  | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |
+| reterminal-sticky-interactive |  |  |  |  |  | ? |  | ✅ |  | ✅ | ✅ |  |  |  | ✅ | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ✅ |  |  | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -485,6 +490,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | inkplate6flick-interactive | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_INKPLATE6FLICK | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_INKPLATE6FLICK |
 | reterminal-e1003-frame | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | — | DISPLAY_SHAPE_RECT | — |
 | reterminal-e1003-interactive | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_RETERMINAL_E1003 | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_GT911 |
+| reterminal-sticky-interactive | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_STICKY_EPAPER | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_GT911 |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_SELECTORS -->
 
 ## Usage Map (preprocessor only, generated)
@@ -1502,8 +1508,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions.cpp
 - **BOARD_AUDIO_CONTROL_FACTORY**
   - src/app/audio_output_drivers.cpp
+- **BOARD_EARLY_POWER_INIT**
+  - src/app/app.ino
 - **BOARD_HARDWARE_HEADER**
   - src/app/audio_output_drivers.cpp
+  - src/app/board_hardware.h
 - **BOARD_HARDWARE_LOOP**
   - src/app/app.ino
 - **BOARD_HARDWARE_SOURCE**
@@ -1511,6 +1520,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_hardware.cpp
 - **BOARD_SENSOR_SOURCE**
   - src/app/sensors.cpp
+- **BOARD_TOUCH_PREPARE**
+  - src/app/drivers/gt911_touch_driver.cpp
 - **BOOT_APPEARANCE_DEFAULT_FONT_SIZE**
   - src/app/board_config.h
 - **BUTTON_ACTIVE_LOW**
@@ -2140,6 +2151,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/touch_manager.cpp
 - **TOUCH_CAL_Y_MIN**
   - src/app/touch_manager.cpp
+- **TOUCH_GT911_CONFIG_ORIENTATION**
+  - src/app/board_config.h
+  - src/app/drivers/gt911_touch_driver.cpp
+  - src/app/drivers/gt911_touch_driver.h
 - **TOUCH_I2C_ADDR**
   - src/app/drivers/axs15231b_touch_driver.cpp
 - **TOUCH_I2C_ADDR_ALT**

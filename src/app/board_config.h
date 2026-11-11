@@ -1117,6 +1117,8 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define DISPLAY_DRIVER_ARDUINO_GFX_CO5300 14
 #define DISPLAY_DRIVER_CROWPANEL_42 15
 #define DISPLAY_DRIVER_TAB5_DSI 16
+// Buffered reTerminal Sticky SSD1677/SSD2677 e-paper backend.
+#define DISPLAY_DRIVER_STICKY_EPAPER 17
 
 // Use reTerminal E1003's controller firmware and reversed image-packing protocol.
 #ifndef IT8951_E1003_PROTOCOL
@@ -1543,6 +1545,11 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 // ESP32-P4 can use Wire (bus 0) since WiFi runs on external C6 over SDIO.
 #ifndef TOUCH_I2C_BUS
 #define TOUCH_I2C_BUS 1
+#endif
+
+// Read GT911 resolution and map a portrait configuration to the board's landscape canvas.
+#ifndef TOUCH_GT911_CONFIG_ORIENTATION
+#define TOUCH_GT911_CONFIG_ORIENTATION false
 #endif
 
 // Prefer allocating LVGL draw buffer in internal RAM before PSRAM.

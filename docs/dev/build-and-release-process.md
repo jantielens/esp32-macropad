@@ -152,6 +152,16 @@ Conventions:
 
 ## Build System
 
+The `reterminal-sticky-interactive` target uses the existing
+`macropad` class and
+`esp32:esp32:esp32s3:FlashSize=32M,PSRAM=opi,FlashMode=qio,PartitionScheme=ota_8mb_32MB,CDCOnBoot=default`.
+Build only this target with `./build.sh reterminal-sticky-interactive`.
+It reuses `partitions/partitions_ota_8mb_32MB.csv` without installer changes:
+two 8 MiB OTA application slots and internal filesystem storage, with no native
+Extension region. Logging/flashing use the CH343P UART0 bridge on GPIO43/44.
+Metadata advertises MCP/MQTT, not deferred audio, sensors, SD, or HID.
+See [Sticky hardware acceptance limits](../../src/boards/reterminal-sticky-interactive/README.md).
+
 The `waveshare-7.8-interactive` target uses
 `esp32:esp32:um_feathers3` with hardware USB CDC, enabled QSPI PSRAM, and
 the `ota_4mb_16MB_ext` OTA partition scheme. Build it with

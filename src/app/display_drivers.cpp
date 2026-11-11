@@ -36,6 +36,9 @@
 #include "drivers/it8951_epaper_driver.cpp"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_CROWPANEL_42
 #include "drivers/crowpanel42_epaper_driver.cpp"
+#elif DISPLAY_DRIVER == DISPLAY_DRIVER_STICKY_EPAPER
+#include "boards/reterminal-sticky-interactive/display/sticky_epaper/panel.cpp"
+#include "boards/reterminal-sticky-interactive/display/sticky_epaper_driver.cpp"
 #else
 #error "No display driver selected or unknown driver type"
 #endif

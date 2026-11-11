@@ -82,6 +82,7 @@ declare -A FQBN_TARGETS=(
     ["inkplate6flick-interactive"]="Inkplate_Boards:esp32:Inkplate6Flick:PartitionScheme=huge_app_ext" # Inkplate 6FLICK interactive LVGL firmware (3.5625MB no-OTA app, 280KB SPIFFS, one 32KB native Extension slot).
     ["reterminal-e1003-frame"]="esp32:esp32:esp32s3:FlashSize=32M,PSRAM=opi,PartitionScheme=ota_8mb_32MB,CDCOnBoot=default" # Seeed reTerminal E1003 (ESP32-S3, 10.3" 1404x1872 16-level grayscale IT8951 e-paper; 32MB flash + 8MB OPI PSRAM). Serial is a CH340 USB-UART bridge on UART0 (GPIO43/44), NOT native USB — use CDCOnBoot=default, no USBMode=hwcdc, or Serial.print blocks on the disconnected USB-CDC FIFO and the device appears to hang.
     ["reterminal-e1003-interactive"]="esp32:esp32:esp32s3:FlashSize=32M,PSRAM=opi,PartitionScheme=ota_8mb_e1003_ext_32MB,CDCOnBoot=default" # Seeed reTerminal E1003 interactive LVGL firmware (GT911 touch, IT8951 grayscale/B-W e-paper; 32MB flash + 8MB OPI PSRAM). Serial is a CH340 USB-UART bridge on UART0 (GPIO43/44), NOT native USB — use CDCOnBoot=default, no USBMode=hwcdc.
+    ["reterminal-sticky-interactive"]="esp32:esp32:esp32s3:FlashSize=32M,PSRAM=opi,FlashMode=qio,PartitionScheme=ota_8mb_32MB,CDCOnBoot=default" # CH343P UART0 bridge (GPIO43/44), not native USB CDC.
 )
 
 # Default board (used when only one board is configured)

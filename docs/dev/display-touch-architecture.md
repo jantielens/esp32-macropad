@@ -72,6 +72,67 @@ graph TD
 
 ## Display Driver HAL
 
+### reTerminal Sticky Interactive
+
+`DISPLAY_DRIVER_STICKY_EPAPER` selects a buffered 800 x 480 SSD1677/SSD2677
+driver, compiled through `display_drivers.cpp`. Its board-specific implementation
+lives under `src/boards/reterminal-sticky-interactive/display/`, rather than the
+shared driver collection. The driver-scoped protocol subset in its
+`sticky_epaper/` subdirectory adapts Seeed_GFX2 revision
+`0e8bac1188cb915d5ea26ea16d538aed13b3cf48` (MIT; retained license alongside
+the adapted code). It does not import the vendor graphics framework or demo
+application. Hardware acceptance is pending for both controllers.
+
+The optional `BOARD_EARLY_POWER_INIT` hook runs first in `setup()` only for
+boards that declare it. Sticky asserts GPIO45 hold before GPIO46 lock using
+checked GPIO operations; errors are reported once logging is available.
+Other boards retain their startup order. `BOARD_HARDWARE_SOURCE` owns safe
+peripheral states, Wire0 initialization under `i2c_bus`, and rail settling.
+The display/touch preparation hooks refuse initialization after a board error.
+
+Panel probing uses command 0x70, then a bounded reset BUSY-transition fallback
+for 0x00/0xff reads. Unlike the vendor's steady-level fallback, a disconnected
+or static BUSY line is not accepted as presence evidence. A failed initialization
+may retry the other controller only after a matching BUSY transition.
+Unwired/invalid SSD2677 temperature reads produce a warning and use the vendor's
+25 C waveform baseline, not a sensor measurement.
+
+LVGL flushes update only the drawing buffer. Presentation owns a separate
+in-flight buffer and a last-completed buffer/baseline. All three are checked
+PSRAM allocations: 144,000 bytes total in B&W or 576,000 bytes in grayscale.
+B&W uses 1-bpp snapshots; grayscale stores four levels as 4-bpp values
+0/5/10/15, preserving the shared snapshot ABI. Software rotation and clipping
+precede controller packing. The vendor's net native-X mirror is applied once
+for mono and not for grayscale; on-glass orientation remains an acceptance gate.
+
+SSD1677 receives full previous/current mono planes, or two Gray4 bitplanes.
+SSD2677 receives a full 2-bpp mono/gray frame or full-frame old/new transition
+pairs for partial waveforms, with 800 x 680 internal scan geometry and
+800 x 480 visible pixels. Grayscale always refreshes fully; B&W follows the
+existing cadence, settling, periodic cleanup, and manual full-refresh settings.
+Unchanged content causes no physical update. Failed/interrupted presentations
+invalidate the baseline and retry full on the next presentation request.
+Availability reflects successful initialization, not the last presentation result,
+so a transient timeout does not block the manual full-refresh recovery path.
+
+BUSY waits are bounded to 15 seconds per operation and yield to FreeRTOS.
+OTA is checked before work, while settling/waiting, and between transferred
+rows. Cancellation closes the driver's own SPI transaction and defers further
+rendering. An already-started SSD2677 drive session still finishes its bounded
+ready/power-off cleanup, yielding without pausing OTA transport or another task.
+If BUSY times out, the driver cuts the display rail, allows 100 ms off, and
+restores it with 100 ms settling before the next full-refresh retry.
+
+GT911 uses Wire1 SDA3/SCL2 at 400 kHz after touch power has settled for 250 ms.
+Wire0 remains on SDA1/SCL0 for later sensor adapters. The board-gated
+`TOUCH_GT911_CONFIG_ORIENTATION` option reads the GT911 resolution without
+programming it: native landscape passes through; portrait maps to landscape
+before existing calibration/user rotation. Unreadable/unsupported configuration
+or out-of-range coordinates report an error rather than synthesizing input.
+A fully read frame with invalid coordinates is acknowledged before discarding
+it, allowing the controller to deliver a subsequent release or valid contact.
+Existing boards leave this option disabled and retain their original mapping.
+
 ### StopWatch AMOLED Bring-Up
 
 `m5stack-stopwatch` uses a CO5300 adapter over the existing Arduino_GFX QSPI

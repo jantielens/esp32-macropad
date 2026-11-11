@@ -363,6 +363,10 @@ bool app_continue_offline_from_setup() {
 
 void setup()
 {
+	#ifdef BOARD_EARLY_POWER_INIT
+	const bool board_power_ready = BOARD_EARLY_POWER_INIT();
+	#endif
+
 	#if HAS_PSRAM && MALLOC_PSRAM_THRESHOLD_BYTES > 0
 	if (psramFound()) {
 		heap_caps_malloc_extmem_enable(MALLOC_PSRAM_THRESHOLD_BYTES);
@@ -386,6 +390,9 @@ void setup()
 
 	// Initialize logger (wraps Serial for web streaming)
 	log_init(115200);
+	#ifdef BOARD_EARLY_POWER_INIT
+	if (!board_power_ready) LOGE("Board", "Early power latch initialization failed");
+	#endif
 	if (power_manager_is_deep_sleep_wake()) {
 		delay(10);
 	} else {
