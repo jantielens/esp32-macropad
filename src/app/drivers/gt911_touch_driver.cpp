@@ -231,7 +231,7 @@ void GT911_TouchDriver::transform(uint16_t& tx, uint16_t& ty) const {
 		if (rawWidth == DISPLAY_HEIGHT && rawHeight == DISPLAY_WIDTH) {
 				const uint16_t portraitX = tx;
 				tx = ty;
-				ty = DISPLAY_HEIGHT - 1 - portraitX;
+				ty = portraitX;
 		}
 		#endif
 

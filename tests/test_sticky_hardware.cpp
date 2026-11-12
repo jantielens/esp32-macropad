@@ -1,6 +1,7 @@
 #include "../src/app/board_config.h"
 #include "board_hardware.h"
 #include "drivers/gt911_touch_driver.h"
+#include "../src/app/presented_frame.h"
 #include <SPI.h>
 #include <driver/gpio.h>
 #include <cstdio>
@@ -315,9 +316,28 @@ int main() {
     resolution(480, 800);
     touch.init();
     CHECK(Wire1.begins == 1);
+    for (uint8_t rotation = 0; rotation < 4; ++rotation) {
+        touch.setRotation(rotation);
+        for (auto point : {std::pair<uint16_t, uint16_t>{0, 0}, {799, 0}, {0, 479}, {799, 479}, {400, 240}}) {
+            contact(point.second, point.first);
+            auto sample = touch.readSample();
+            CHECK(sample.status == TouchReadStatus::Fresh && sample.pressed);
+            uint16_t nativeX = 0, nativeY = 0;
+            CHECK(presented_frame_native_coords(800, 480, rotation,
+                sample.horizontal, sample.vertical, &nativeX, &nativeY));
+            CHECK(nativeX == point.first && nativeY == point.second);
+        }
+    }
+    touch.setRotation(1);
+    for (auto point : {std::pair<uint16_t, uint16_t>{17, 18}, {454, 32}, {463, 763}, {14, 777}}) {
+        contact(point.first, 799 - point.second);
+        auto sample = touch.readSample();
+        CHECK(sample.horizontal == point.first && sample.vertical == point.second);
+    }
+    touch.setRotation(0);
     contact(479, 799);
     auto sample = touch.readSample();
-    CHECK(sample.horizontal == 799 && sample.vertical == 0);
+    CHECK(sample.horizontal == 799 && sample.vertical == 479);
     contact(480, 799);
     CHECK(touch.readSample().status == TouchReadStatus::Error);
     CHECK(Wire1.registers[0x814e] == 0);
@@ -326,7 +346,7 @@ int main() {
     CHECK(sample.status == TouchReadStatus::Fresh && !sample.pressed);
     contact(479, 799);
     sample = touch.readSample();
-    CHECK(sample.status == TouchReadStatus::Fresh && sample.horizontal == 799 && sample.vertical == 0);
+    CHECK(sample.status == TouchReadStatus::Fresh && sample.horizontal == 799 && sample.vertical == 479);
     resolution(123, 456);
     touch.init();
     CHECK(touch.readSample().status == TouchReadStatus::Error);

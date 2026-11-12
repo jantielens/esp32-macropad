@@ -126,8 +126,10 @@ restores it with 100 ms settling before the next full-refresh retry.
 GT911 uses Wire1 SDA3/SCL2 at 400 kHz after touch power has settled for 250 ms.
 Wire0 remains on SDA1/SCL0 for later sensor adapters. The board-gated
 `TOUCH_GT911_CONFIG_ORIENTATION` option reads the GT911 resolution without
-programming it: native landscape passes through; portrait maps to landscape
-before existing calibration/user rotation. Unreadable/unsupported configuration
+programming it: native landscape passes through; portrait swaps X/Y without
+inversion before existing calibration/user rotation. This aligns Sticky's
+touch coordinates with the display at every user rotation.
+Unreadable/unsupported configuration
 or out-of-range coordinates report an error rather than synthesizing input.
 A fully read frame with invalid coordinates is acknowledged before discarding
 it, allowing the controller to deliver a subsequent release or valid contact.
