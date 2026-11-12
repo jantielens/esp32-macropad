@@ -41,7 +41,7 @@ All three buttons are active low. Configure runtime actions through the
 existing physical-button settings in the portal. For configuration recovery,
 hold **Up** through the application's 1.5-second startup check. This opens
 configuration mode without erasing settings and is separate from runtime
-assignments. No button powers down or sleeps the device.
+assignments. No button powers down or sleeps the device by default.
 
 The GPIO48 buzzer supports tone alerts and button feedback through the existing
 [audio controls](../../../docs/user/media/audio.md). It plays one pitch at a
@@ -49,6 +49,31 @@ time: an active alert takes priority and overlapping feedback is discarded.
 Volume changes PWM duty, not a calibrated loudness. MP3, Music, microphone,
 and amplifier controls are unavailable. Physical sound and volume still need
 device validation.
+
+### Turn off the device
+
+The board-local **reTerminal Sticky > Shutdown** action (`shutdown`) requests
+hardware power-off, not deep sleep. Assign it to a pad button or a physical
+button hold through the existing action editor; default assignments stay empty.
+Use **Save Pad** for pad buttons or **Actions > Hardware Buttons > Save Hardware
+Buttons** for physical inputs. Physical-button assignments apply without reboot;
+see [trigger settings](../../../docs/user/device/triggers.md#physical-buttons).
+Shutdown does not save drafts; finish saves and uploads before invoking it.
+
+Disconnect USB/external power before using Shutdown. Release AI/OK after
+triggering it: that button directly keeps the supply enabled while held.
+The action fails if external power is present or AI/OK remains held for five
+seconds. It also refuses admission during OTA, configuration writes, or a
+reserved power/network transition. Put Shutdown last in an action sequence;
+successful power removal cannot run subsequent actions.
+
+The Rev 01 schematic requires GPIO46 low, GPIO45 low, then GPIO46 high to
+clock the power latch off. If the MCU is still running after 500 ms, firmware
+attempts to restore the latch and reports failure instead of entering sleep.
+The e-paper image remains visible after power removal and is not an off
+indicator. Press AI/OK to supply startup power, or reconnect USB.
+Battery-powered shutdown has been user-verified on one unit. Startup button
+timing and recovery still require physical validation on the shipping board.
 
 ## Provisioning, storage, and updates
 

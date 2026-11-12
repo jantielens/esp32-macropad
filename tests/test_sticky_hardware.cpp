@@ -2,6 +2,7 @@
 #include "board_hardware.h"
 #include "drivers/gt911_touch_driver.h"
 #include "../src/app/presented_frame.h"
+#include "../src/app/action_registry.h"
 #include <SPI.h>
 #include <driver/gpio.h>
 #include <cstdio>
@@ -26,6 +27,10 @@ uint32_t ledcChangeFrequency(uint8_t pin, uint32_t frequency, uint8_t resolution
 bool ledcDetach(uint8_t pin);
 #include "../src/boards/reterminal-sticky-interactive/drivers/sticky_buzzer.cpp"
 
+static const ActionTypeDef* shutdownAction = nullptr;
+void action_type_register(const ActionTypeDef* action) { shutdownAction = action; }
+#include BOARD_ACTION_SOURCE
+
 static int failures = 0;
 #define CHECK(condition) do { if (!(condition)) { std::printf("FAIL %d: %s\n", __LINE__, #condition); ++failures; } } while (0)
 TwoWire Wire(0), Wire1(1);
@@ -35,6 +40,13 @@ static int failPin = -1;
 static bool locked = false, failLock = false;
 static uint32_t clockMs = 0;
 static bool otaActive = false;
+static bool configWriteActive = false;
+static bool transitionActive = false;
+static bool aiButtonHeld = false;
+static int audioStops = 0;
+static std::vector<uint32_t> failedShutdowns;
+static int holdLevel = 0, lockLevel = 0;
+static bool powerLatched = false;
 int shtTestError = 1;
 float shtTestTemperature = 21.5f, shtTestHumidity = 50;
 unsigned shtTestSamples = 0;
@@ -73,14 +85,34 @@ extern "C" unsigned long millis() { return clockMs; }
 void delay(unsigned long ms) { waits.push_back(ms); clockMs += ms; }
 void pinMode(int, int) {}
 void digitalWrite(int pin, int level) { if (pin == 48 && level == LOW) buzzerDuty = 0; }
-int digitalRead(int pin) { CHECK(pin == 9); return externalPower; }
+int digitalRead(int pin) {
+    CHECK(pin == 9 || pin == 4);
+    return pin == 9 ? externalPower : (aiButtonHeld ? LOW : HIGH);
+}
 bool ota_activity_is_active() { return otaActive; }
+bool ota_activity_try_begin() {
+    if (otaActive || configWriteActive || transitionActive) return false;
+    otaActive = true;
+    return true;
+}
+void ota_activity_finish() { CHECK(otaActive); otaActive = false; }
+bool action_continuation_complete(uint32_t token, bool success) {
+    CHECK(!success);
+    failedShutdowns.push_back(token);
+    return true;
+}
+void audio_stop() { ++audioStops; }
 void sensor_manager_register_all(SensorRegistry &registry) { board_register_sensors(registry); }
 bool ha_discovery_publish_sensor_config(MqttManager &, const char *key, const char *, const char *, const char *, const char *, const char *, const char *, bool) { discoveryKeys.emplace_back(key); return true; }
 bool ha_discovery_publish_binary_sensor_config(MqttManager &, const char *key, const char *, const char *, const char *, const char *, const char *) { discoveryKeys.emplace_back(key); return true; }
 esp_err_t gpio_set_level(gpio_num_t pin, int level) {
     if (pin == failPin) return 7;
     outputs.emplace_back(pin, level);
+    if (pin == 45) holdLevel = level;
+    if (pin == 46) {
+        if (!lockLevel && level) powerLatched = holdLevel;
+        lockLevel = level;
+    }
     return ESP_OK;
 }
 esp_err_t gpio_set_direction(gpio_num_t pin, int) { return pin == failPin ? 7 : ESP_OK; }
@@ -149,6 +181,7 @@ int main() {
     CHECK(!sticky_early_power_init());
     CHECK(outputs.empty());
     CHECK(!board_hardware_init() && Wire.begins == 0);
+    CHECK(!sticky_request_shutdown(1));
     sensor_manager_init();
     sensor_manager_sample_once();
     JsonDocument sensorJson;
@@ -353,6 +386,60 @@ int main() {
     Wire1.failRead = true;
     touch.init();
     CHECK(touch.readSample().status == TouchReadStatus::Error && Wire1.begins == 1);
+    CHECK(shutdownAction && std::string(shutdownAction->type_name) == "shutdown");
+    CHECK(shutdownAction->execution == ACTION_EXECUTION_PAUSABLE && !shutdownAction->display_lock_required);
+    JsonDocument actionDoc;
+    JsonObject actionObject = actionDoc.to<JsonObject>();
+    shutdownAction->describe(actionObject);
+    CHECK(actionDoc["label"] == "Shutdown" && actionDoc["fields"].size() == 0);
+    ButtonAction shutdown{};
+    const auto requestShutdown = [&](uint32_t token) {
+        return shutdownAction->dispatch(shutdown, "test", token);
+    };
+    outputs.clear();
+    CHECK(requestShutdown(0) == ACTION_FAILED);
+    for (bool* busy : {&otaActive, &configWriteActive, &transitionActive}) {
+        *busy = true;
+        CHECK(requestShutdown(1) == ACTION_FAILED);
+        *busy = false;
+    }
+    BOARD_HARDWARE_LOOP();
+    CHECK(outputs.empty() && audioStops == 0);
+    externalPower = 1;
+    CHECK(requestShutdown(2) == ACTION_PENDING);
+    BOARD_HARDWARE_LOOP();
+    CHECK(!otaActive && outputs.empty() && failedShutdowns.back() == 2 && powerLatched);
+    externalPower = 0;
+    aiButtonHeld = true;
+    CHECK(requestShutdown(3) == ACTION_PENDING);
+    BOARD_HARDWARE_LOOP();
+    clockMs += 5000;
+    BOARD_HARDWARE_LOOP();
+    CHECK(!otaActive && outputs.empty() && failedShutdowns.back() == 3 && audioStops == 0);
+    CHECK(requestShutdown(4) == ACTION_PENDING);
+    BOARD_HARDWARE_LOOP();
+    CHECK(otaActive && outputs.empty());
+    CHECK(requestShutdown(5) == ACTION_FAILED);
+    aiButtonHeld = false;
+    BOARD_HARDWARE_LOOP();
+    CHECK((outputs == std::vector<std::pair<int, int>>{{46, 0}, {45, 0}, {46, 1}}));
+    CHECK(!powerLatched && otaActive && audioStops == 1);
+    clockMs += 499;
+    BOARD_HARDWARE_LOOP();
+    CHECK(otaActive && failedShutdowns.back() == 3);
+    ++clockMs;
+    BOARD_HARDWARE_LOOP();
+    CHECK(!otaActive && powerLatched && failedShutdowns.back() == 4);
+    CHECK((std::vector<std::pair<int, int>>(outputs.end() - 3, outputs.end()) ==
+        std::vector<std::pair<int, int>>{{46, 0}, {45, 1}, {46, 1}}));
+    for (const int pin : {45, 46}) {
+        failPin = pin;
+        CHECK(requestShutdown(6) == ACTION_PENDING);
+        BOARD_HARDWARE_LOOP();
+        CHECK(!otaActive && failedShutdowns.back() == 6 && powerLatched);
+        failPin = -1;
+        CHECK(sticky_early_power_init());
+    }
     std::printf("Sticky board/touch checks: %d failures\n", failures);
     return failures ? 1 : 0;
 }

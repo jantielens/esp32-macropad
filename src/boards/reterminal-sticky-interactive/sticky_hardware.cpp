@@ -1,15 +1,26 @@
 #include "sticky_hardware.h"
 #include "board_config.h"
+#include "action_continuation.h"
+#include "audio.h"
 #include "i2c_bus.h"
 #include "log_manager.h"
+#include "ota_activity.h"
 #include <Arduino.h>
 #include <Wire.h>
 #include <driver/gpio.h>
+#include <atomic>
 
 namespace {
 esp_err_t powerError = ESP_ERR_INVALID_STATE;
 bool ready = false;
 bool sensorBusStarted = false;
+std::atomic<uint32_t> shutdownToken{0};
+bool shutdownStarted = false;
+bool shutdownSent = false;
+uint32_t shutdownStartedAt = 0;
+uint32_t shutdownSentAt = 0;
+constexpr uint32_t kButtonReleaseTimeoutMs = 5000;
+constexpr uint32_t kPowerOffTimeoutMs = 500;
 
 esp_err_t output(int pin, int level) {
     const auto gpio = static_cast<gpio_num_t>(pin);
@@ -24,6 +35,23 @@ bool checked_output(int pin, int level) {
     if (result != ESP_OK) LOGE("Sticky", "GPIO%d output=%d failed: %d", pin, level, int(result));
     return result == ESP_OK;
 }
+
+void shutdown_failed(uint32_t token, const char* reason, bool restoreLatch) {
+    if (restoreLatch) {
+        const bool clockLow = checked_output(46, 0);
+        const bool holdHigh = checked_output(45, 1);
+        const bool clockHigh = holdHigh && checked_output(46, 1);
+        if (!clockLow || !holdHigh || !clockHigh)
+            LOGE("Sticky", "Power latch restoration failed; hardware recovery may be required");
+    }
+    LOGE("Sticky", "Shutdown failed: %s", reason);
+    shutdownStarted = false;
+    shutdownSent = false;
+    shutdownToken.store(0);
+    ota_activity_finish();
+    if (!action_continuation_complete(token, false))
+        LOGE("Sticky", "Shutdown continuation expired: %lu", static_cast<unsigned long>(token));
+}
 }
 
 bool sticky_early_power_init() {
@@ -33,6 +61,54 @@ bool sticky_early_power_init() {
 }
 
 bool sticky_hardware_ready() { return ready; }
+
+bool sticky_request_shutdown(uint32_t continuation_token) {
+    if (!continuation_token || !ready) {
+        LOGW("Sticky", "Shutdown rejected: board not ready or no action continuation");
+        return false;
+    }
+    if (!ota_activity_try_begin()) {
+        LOGW("Sticky", "Shutdown rejected: OTA, config write, or power transition active");
+        return false;
+    }
+    shutdownToken.store(continuation_token);
+    return true;
+}
+
+void sticky_hardware_loop() {
+    const uint32_t token = shutdownToken.load();
+    if (!token) return;
+    const uint32_t now = static_cast<uint32_t>(millis());
+    if (!shutdownStarted) {
+        shutdownStarted = true;
+        shutdownStartedAt = now;
+    }
+    if (shutdownSent) {
+        if (static_cast<uint32_t>(now - shutdownSentAt) >= kPowerOffTimeoutMs)
+            shutdown_failed(token, "device remains powered after latch release", true);
+        return;
+    }
+    if (digitalRead(9) == HIGH) {
+        shutdown_failed(token, "disconnect USB/external power first", false);
+        return;
+    }
+    // The AI/OK button directly enables the supply while held, bypassing the latch.
+    if (digitalRead(4) == LOW) {
+        if (static_cast<uint32_t>(now - shutdownStartedAt) >= kButtonReleaseTimeoutMs)
+            shutdown_failed(token, "AI/OK button is still held", false);
+        return;
+    }
+#if HAS_AUDIO
+    audio_stop();
+#endif
+    // Rev 01 U3 (74AHC1G79): Q samples HOLD on LOCK's rising edge.
+    if (!checked_output(46, 0) || !checked_output(45, 0) || !checked_output(46, 1)) {
+        shutdown_failed(token, "power latch GPIO write failed", true);
+        return;
+    }
+    shutdownSentAt = static_cast<uint32_t>(millis());
+    shutdownSent = true;
+}
 
 bool board_hardware_init() {
     if (ready) return true;

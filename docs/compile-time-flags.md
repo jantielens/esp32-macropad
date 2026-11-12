@@ -529,6 +529,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_device_api.cpp
   - src/boards/m5stack-stopwatch/board_overrides.h
   - src/boards/m5stack-stopwatch/stopwatch_hardware.cpp
+  - src/boards/reterminal-sticky-interactive/sticky_hardware.cpp
 - **HAS_AUDIO_INPUT**
   - src/app/app.ino
   - src/app/audio_input.cpp
@@ -676,6 +677,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/var_binding.cpp
   - src/app/web_portal_device_api.cpp
   - src/boards/m5stack-stopwatch/stopwatch_actions.cpp
+  - src/boards/reterminal-sticky-interactive/sticky_actions.cpp
 - **HAS_CAMERA**
   - src/app/actions/camera_capture_action.cpp
   - src/app/app.ino
@@ -916,6 +918,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/widget_registry.h
   - src/app/wifi_manager.cpp
   - src/boards/m5stack-stopwatch/stopwatch_actions.cpp
+  - src/boards/reterminal-sticky-interactive/sticky_actions.cpp
 - **HAS_DISPLAY_DIAGNOSTICS**
   - src/app/board_config.h
   - src/app/device_telemetry.cpp

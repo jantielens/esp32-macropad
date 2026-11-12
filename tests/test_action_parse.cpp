@@ -887,6 +887,7 @@ TEST(registered_identifiers_survive_storage) {
 }
 
 TEST(catalog_feature_gates_and_metadata_parity) {
+    ASSERT_TRUE(!action_type_is_supported("shutdown"));
     JsonDocument portal;
     action_catalog_emit(portal.to<JsonArray>(), false);
     JsonDocument mcp;
@@ -894,6 +895,7 @@ TEST(catalog_feature_gates_and_metadata_parity) {
     unsigned alarm_count = 0;
     for (JsonObject entry : mcp.as<JsonArray>()) {
         const char* name = entry["type"];
+        ASSERT_TRUE(strcmp(name, "shutdown") != 0);
         const ActionTypeDef* type = action_type_find(name);
         ASSERT_TRUE(type != nullptr);
         ASSERT_EQ(entry["alarm_hook_allowed"].as<bool>(), type->execution == ACTION_EXECUTION_SYNC);
