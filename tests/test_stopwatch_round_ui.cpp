@@ -22,6 +22,7 @@ void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
 }
 static uint32_t now_ms = 0;
 extern "C" unsigned long millis() { return now_ms; }
+int64_t esp_timer_get_time() { return uint64_t(now_ms) * 1000; }
 static bool ota = false;
 bool ota_activity_is_active() { return ota; }
 static int touch = 1;
@@ -36,6 +37,8 @@ public:
     int getActiveHeight() { return 466; }
     void lock() {}
     void unlock() {}
+    unsigned interaction_changes = 0;
+    void interactionChanged(uint64_t = 0) { ++interaction_changes; }
 };
 static DisplayManager manager;
 DisplayManager* displayManager = &manager;
@@ -333,9 +336,12 @@ static void dialog_lifecycle_checks() {
         token = reserve();
         assert(device_dialog_confirm(content, token));
         assert_dialog_selection(false, false);
+        const unsigned shown = manager.interaction_changes;
         device_dialog_navigate("tap_hold");
+        assert(manager.interaction_changes == shown);
         assert_dialog_selection(false, false);
         device_dialog_navigate(first);
+        assert(manager.interaction_changes == shown + 1);
         const bool approve = !strcmp(first, "previous");
         assert(device_dialog_active());
         assert_dialog_selection(!approve, approve);
@@ -347,6 +353,7 @@ static void dialog_lifecycle_checks() {
             assert_dialog_selection(true, false);
         }
         device_dialog_navigate("tap");
+        assert(manager.interaction_changes > shown + 1);
         assert(!device_dialog_active());
         assert(action_continuation_take(nullptr, nullptr, nullptr, 0) ==
             (approve ? ACTION_CONTINUATION_SUCCESS : ACTION_CONTINUATION_NONE));
@@ -412,7 +419,9 @@ static void dialog_lifecycle_checks() {
     assert_dialog_selection(false, true);
     lv_obj_t* original = dialog_box();
     fail_allocation = true;
+    const unsigned beforeFailure = manager.interaction_changes;
     assert(!device_dialog_notify("Allocation failure", 1000));
+    assert(manager.interaction_changes == beforeFailure);
     assert(dialog_box() == original);
     ota = true;
     assert(!device_dialog_notify("OTA owns the display", 1000));
@@ -439,7 +448,9 @@ static void dialog_lifecycle_checks() {
     assert(device_dialog_notify("Replacement", 0));
     auto* overlay = lv_obj_get_child(lv_layer_top(), -1);
     lv_obj_add_event_cb(overlay, old_callback, LV_EVENT_VALUE_CHANGED, old_user_data);
+    const unsigned beforeStale = manager.interaction_changes;
     lv_obj_send_event(overlay, LV_EVENT_VALUE_CHANGED, nullptr);
+    assert(manager.interaction_changes == beforeStale);
     assert(device_dialog_active() && !action_continuation_complete(token, true));
     now_ms += 900000;
     device_dialog_loop();

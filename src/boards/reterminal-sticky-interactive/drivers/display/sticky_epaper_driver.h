@@ -1,6 +1,7 @@
 #pragma once
 
 #include "app/display_driver.h"
+#include "app/drivers/epaper_schedule.h"
 #include "sticky_epaper/panel.h"
 #include <atomic>
 #include <freertos/FreeRTOS.h>
@@ -24,15 +25,26 @@ public:
     void pushColors(uint16_t* data, uint32_t len, bool swap_bytes) override;
     RenderMode renderMode() const override { return RenderMode::Buffered; }
     void present() override;
+    bool coherentFrames() const override { return true; }
+    void beginFrame() override;
+    void commitFrame(const DisplayFrame& frame) override;
+    void stopPresentation() override;
     bool requestFullRefresh() override;
     bool isAvailable() const override { return available.load(); }
     int presentationMode() const override { return grayscale ? 1 : 0; }
     bool getPresentedFrameInfo(PresentedFrameInfo& info) const override;
     bool copyPresentedFrame(uint8_t* pixels, size_t length) override;
+#if HAS_DISPLAY_DIAGNOSTICS
+    bool getPresentationStats(DisplayPresentationStats* out) override;
+#endif
 
 private:
     sticky_epaper::Panel panel;
     SemaphoreHandle_t mutex = nullptr;
+    StaticSemaphore_t wakeStorage{};
+    SemaphoreHandle_t wake = nullptr;
+    EpaperSchedule schedule;
+    std::atomic<bool> stopping{false};
     uint8_t* drawing = nullptr;
     uint8_t* sending = nullptr;
     uint8_t* presented = nullptr;
@@ -45,5 +57,10 @@ private:
     bool pending = false, forceFull = false, baselineValid = false;
     uint32_t lastChange = 0, firstPending = 0, lastRefresh = 0;
     uint16_t partialsSinceFull = 0;
+#if HAS_DISPLAY_DIAGNOSTICS
+    DisplayPresentationStats stats;
+    uint64_t frameConversionStart = 0, frameWaitStart = 0, framePixelsStart = 0, frameFlushesStart = 0;
+    uint64_t hardwareCompletedUs = 0;
+#endif
     void releaseResources();
 };

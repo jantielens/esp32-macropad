@@ -25,6 +25,14 @@ and there is no backlight control. Follow
 for rendering, dithering, cadence, Save/Reboot, and full refresh controls.
 VCOM settings are not consumed by this driver.
 
+Focus, navigation and dialog changes use interaction-priority presentation:
+they request a prompt coherent frame and bypass background settling/cadence.
+An active waveform, required full cleanup and recovery still complete normally.
+This does not shorten controller preparation or the physical waveform; latency
+and repeated-partial image quality still need physical measurement on each
+controller variant. Runtime controller probing, including BUSY fallback, remains
+enabled.
+
 Keep the buttons at the top for the default landscape orientation.
 Touch reads the controller's configured resolution without rewriting it.
 A reported 800 x 480 configuration is used directly; a 480 x 800 configuration

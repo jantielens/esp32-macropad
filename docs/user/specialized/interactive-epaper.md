@@ -30,8 +30,13 @@ Use [font guidance](../media/fonts.md) for legibility.
 ## Balance freshness and panel work
 
 Passive binding interval 100-60000 ms controls idle data checks.
-Minimum presentation interval 250-60000 ms bounds physical refresh frequency.
+Minimum presentation interval 250-60000 ms controls background presentation cadence.
 Higher values combine rapid changes and save panel work.
+On devices supporting interaction-priority presentation, focus, navigation and
+dialog changes bypass background settling and this interval once their frame
+is ready. An active panel refresh still completes first; rapid visual changes
+can combine into the latest frame without dropping their actions. Other devices
+retain interval-limited presentation; see [panel notes](../hardware.md).
 Refresh clock values on minute boundary keeps visible time bindings current
 between passive checks.
 

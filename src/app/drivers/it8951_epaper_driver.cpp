@@ -32,25 +32,8 @@ constexpr int kPanelWidth = 1872;
 constexpr int kPanelHeight = 1404;
 constexpr size_t kFramebufferBytes = (size_t)kPanelWidth * kPanelHeight / 2;
 
-struct LuminanceTables {
-		uint16_t red[32] = {};
-		uint16_t green[64] = {};
-		uint16_t blue[32] = {};
-
-		constexpr LuminanceTables() {
-			for (int i = 0; i < 32; ++i) {
-				red[i] = (i * 255 / 31) * 77;
-				blue[i] = (i * 255 / 31) * 29;
-			}
-			for (int i = 0; i < 64; ++i) green[i] = (i * 255 / 63) * 150;
-		}
-};
-
-constexpr LuminanceTables kLuminance;
-
 uint8_t pixelGray(uint16_t rgb565, int16_t x, int16_t y, bool bwMode, uint8_t conversion, uint8_t threshold) {
-		const uint8_t luminance = (kLuminance.red[rgb565 >> 11] + kLuminance.green[(rgb565 >> 5) & 0x3F] +
-				kLuminance.blue[rgb565 & 0x1F]) >> 8;
+		const uint8_t luminance = monochrome_rgb565_luminance(rgb565);
 		if (bwMode) return monochrome_is_white(luminance, x, y, conversion, threshold) ? 15 : 0;
 		return (uint16_t(luminance) * 15 + 127) / 255;
 }

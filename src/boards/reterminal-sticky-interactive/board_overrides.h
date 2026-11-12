@@ -15,6 +15,9 @@
 #define BOARD_TOUCH_PREPARE sticky_hardware_ready
 
 #define HAS_DISPLAY true
+#ifndef HAS_DISPLAY_DIAGNOSTICS
+#define HAS_DISPLAY_DIAGNOSTICS true
+#endif
 #define HAS_TOUCH true
 #define HAS_EPAPER_PANEL true
 #define HAS_LVGL_EPAPER true

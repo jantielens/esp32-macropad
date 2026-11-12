@@ -44,8 +44,12 @@ void DisplayManager::showSplash() {
 
 void DisplayManager::showInfo() {
 		// Defer screen switch to lvglTask (non-blocking)
+		bool didLock = false;
+		lockIfNeeded(didLock);
 		if (currentScreen == &wifiSetupScreen) skipHistoryPush = true;
 		pendingScreen = &infoScreen;
+		queueScreenIntent(false);
+		unlockIfNeeded(didLock);
 		LOGT("Display", "Queued switch to InfoScreen");
 }
 
@@ -54,12 +58,17 @@ void DisplayManager::showWifiSetup() {
 		lockIfNeeded(didLock);
 		skipHistoryPush = true;
 		pendingScreen = &wifiSetupScreen;
+		queueScreenIntent(false);
 		unlockIfNeeded(didLock);
 }
 
 void DisplayManager::showTest() {
 		// Defer screen switch to lvglTask (non-blocking)
+		bool didLock = false;
+		lockIfNeeded(didLock);
 		pendingScreen = &testScreen;
+		queueScreenIntent(false);
+		unlockIfNeeded(didLock);
 		LOGT("Display", "Queued switch to TestScreen");
 }
 
@@ -100,6 +109,7 @@ bool DisplayManager::showScreen(const char* screen_id, bool wake) {
 						// Defer screen switch to lvglTask (non-blocking)
 						if (currentScreen == &wifiSetupScreen) skipHistoryPush = true;
 						pendingScreen = availableScreens[i].instance;
+						queueScreenIntent(wake);
 						if (wake) {
 								skipHistoryPush = false;
 								prepareNavigationWake();
@@ -131,6 +141,7 @@ bool DisplayManager::showTransientScreen(const char* screen_id) {
 			}
 			skipHistoryPush = true;
 			pendingScreen = availableScreens[i].instance;
+			queueScreenIntent(false);
 			LOGT("Display", "Queued transient screen: %s", screen_id);
 			unlockIfNeeded(didLock);
 			return true;
@@ -160,6 +171,7 @@ bool DisplayManager::restoreTransientScreen() {
 		skipHistoryPush = true;
 		pendingHistoryScreen = target;
 		pendingScreen = target;
+		queueScreenIntent(false);
 		LOGT("Display", "Queued transient screen restore");
 		unlockIfNeeded(didLock);
 		return true;
@@ -173,8 +185,11 @@ bool DisplayManager::goBack(bool wake) {
 				return false;
 		}
 		pendingScreen = screenHistory[--screenHistoryCount];
+		queueScreenIntent(wake);
 		skipHistoryPush = true;
-		if (wake) prepareNavigationWake();
+		if (wake) {
+				prepareNavigationWake();
+		}
 		LOGT("Display", "Queued go-back (history depth: %zu)", screenHistoryCount);
 		unlockIfNeeded(didLock);
 		return true;
@@ -198,8 +213,11 @@ bool DisplayManager::cyclePad(int8_t direction, bool wrap, uint32_t excludedMask
 		                                     excludedMask, direction, wrap);
 		if (destination >= 0) {
 				pendingScreen = padScreens[destination];
+				queueScreenIntent(wake);
 				skipHistoryPush = false;
-				if (wake) prepareNavigationWake();
+				if (wake) {
+						prepareNavigationWake();
+				}
 		}
 		unlockIfNeeded(didLock);
 

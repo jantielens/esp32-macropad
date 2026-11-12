@@ -1,0 +1,1006 @@
+---
+title: Interactive e-paper responsiveness implementation plan
+description: Temporary phased coding-agent handoff with acceptance gates and progress tracking.
+ms.date: 2026-11-12
+---
+
+## Goal and approved scope
+
+Make hardware-button focus/navigation and touch-driven pad, screen and dialog
+navigation feel immediate. Prioritize B&W responsiveness during active use, allow
+temporary ghosting within qualified limits, and save power when idle.
+
+Build a shared interactive e-paper policy, using Sticky as the first implementation.
+Keep LVGL, the existing display HAL and the asynchronous presentation worker.
+Do not replace them with CrossPoint's framework.
+
+Milestone 1 software is implemented and host-verified. Device stage captures are
+available; controlled latency distributions, visible onset and panel quality
+qualification remain pending. This is not hardware acceptance.
+
+After the diagnostics capture, the user approved a separate follow-up:
+investigate and optimize render/conversion first, then packing/upload (phase 5).
+This does not approve phase 3 policy changes, phase 4 controller caching,
+waveform/clock changes or phase 6 rollout.
+
+* Include the interactive Sticky, CrowPanel, IT8951 and Inkplate paths.
+* Preserve LCD and dedicated e-paper frame-device behavior.
+* Do not expand the first milestone into sliders, local-control redesign,
+  optimistic MQTT/Home Assistant state, or faster passive binding polling.
+* Preserve tap-on-release, hold thresholds, debounce, input cancellation,
+  confirmation safety and action ordering.
+* Do not change LUTs, controller geometry, temperature policy or SPI clocks.
+* Do not add a new public API, NVS setting, dependency or worker framework unless
+  a concrete requirement emerges and the user approves that expansion.
+
+The user can test all repository boards. That does not establish access to both
+Sticky controller revisions or authorize an all-board build.
+
+## Evidence and starting point
+
+The [earlier audit](displayimprovements.md) remains the controller-protocol and
+vendor-reference baseline. Its packing-first priority is superseded here by the
+approved architecture-first sequence; its safety boundaries still apply.
+
+Current code establishes the following:
+
+* [Sticky defaults](board_overrides.h) select 150 ms settling, a 500 ms minimum
+  presentation interval, a 100 ms LVGL refresh period and 1 s passive binding
+  polling. Persisted configuration can override the presentation interval.
+* [Sticky presentation](drivers/display/sticky_epaper_driver.cpp) measures its
+  cooldown from refresh completion, takes the maximum of cooldown and settling,
+  caps settling at 500 ms, and snapshots drawing into an immutable sending buffer.
+* [Panel refresh](drivers/display/sticky_epaper/panel.cpp) initializes every time,
+  streams whole comparison frames, then waits for the controller.
+* [Display task](../../app/display_task.cpp) gives the presentation semaphore
+  after LVGL produces draw data. The driver still receives individual flushes;
+  quiet time is not a formal complete-frame publication boundary.
+* [Navigation](../../app/display_screen_nav.cpp) queues screen changes and routes
+  focus navigation on the LVGL task.
+  [Button navigation actions](../../app/actions/button_navigation_action.cpp)
+  use the existing deferred display dispatch slot.
+* [Pad input](../../app/screens/pad_screen_events.cpp) handles focus and touch
+  actions; [dialogs](../../app/device_dialog.cpp) own confirmation generations,
+  selection, replacement and cancellation.
+* [IT8951](../../app/drivers/it8951_epaper_driver.cpp),
+  [CrowPanel](../crowpanel-4.2-interactive/drivers/display/crowpanel42_epaper_driver.cpp)
+  and [Inkplate](../inkplate6flick-interactive/drivers/inkplate6flick_epaper_driver.cpp)
+  repeat similar scheduling. IT8951 already tracks dirty regions and detailed
+  presentation diagnostics. Some driver waits sleep for the entire computed
+  interval, so a new interaction must be able to interrupt policy waiting.
+
+The user's working Sticky logs select SSD1677 through BUSY-transition fallback.
+This identifies the active software path, not a positive chip-ID read. Preserve
+runtime detection and the SSD2677 path; do not hardcode the user's controller.
+
+CrossPoint reference points, inspected before this plan:
+
+* [Render task notification](https://github.com/crosspoint-reader/crosspoint-reader/blob/develop/src/activities/ActivityManager.cpp#L475)
+* [Pinned SDK SSD1677 implementation](https://github.com/Free-Ink/freeink-sdk/blob/6a208c0c46cce99bafa334bc4f171f5e558c5195/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp)
+* [Pinned SDK SSD2677 implementation](https://github.com/Free-Ink/freeink-sdk/blob/6a208c0c46cce99bafa334bc4f171f5e558c5195/libs/display/FreeInkDisplay/src/driver/Ssd2677Driver.cpp)
+
+These are behavioral comparisons, not permission to copy code or proof of timing
+on this hardware. No additional broad CrossPoint research is a prerequisite.
+
+## Coding-agent execution contract
+
+Read the current repository instructions before each phase, especially
+[display/touch](../../../.github/instructions/display-touch.instructions.md),
+[OTA activity](../../../.github/instructions/ota-activity.instructions.md) and
+[agent guidelines](../../../.github/instructions/agent-guidelines.instructions.md).
+Read action, configuration, binding and compile-time flag instructions if touching
+those contracts.
+
+Implement one phase at a time. Phases 1 and 2 form the first milestone. Record
+their measurements and request a checkpoint decision before phases 3 through 6.
+Do not turn this plan into an instruction to commit, flash, push or release.
+
+Use the smallest shared mechanism that serves the existing drivers. A small,
+header-only e-paper scheduling helper is a reasonable extraction; a generic
+priority queue or new scheduler service is not. Any new source must participate
+in the existing Arduino compilation path.
+
+### Required invariants
+
+1. LVGL remains owned by its rendering task. External tasks publish requests;
+   they do not call render APIs from input ISRs or panel workers.
+2. Interaction intent belongs to a successful UI change and its committed frame.
+   Do not use a global "everything is urgent for N milliseconds" shortcut.
+   Rejected/no-op input must not make unrelated future binding updates urgent.
+3. A panel worker may snapshot only a completed render generation. It must not
+   copy drawing midway through a multi-flush LVGL refresh, even if an older
+   semaphore signal is pending.
+4. Preserve driver-specific drawing, in-flight and completed-frame ownership.
+   No buffer mutation during transfer; publish a completed snapshot only after
+   success. Interrupted/failed presentations require the existing recovery path.
+5. Execute all accepted actions in order. Coalesce obsolete visual frames only;
+   never coalesce action side effects or confirmation decisions.
+6. Permit one in-flight presentation and bounded latest-state pending work.
+   A newer interaction survives completion of an older presentation. Preserve
+   manual full-refresh requests and newer generations across races.
+7. Interactive priority bypasses software policy waits, not BUSY, required power
+   transitions, physical minimum intervals, recovery or mandatory full refreshes.
+8. No LVGL lock or spinlock is held over panel I/O or a policy sleep. Synchronize
+   shared metadata; avoid reversed LVGL/framebuffer lock ordering.
+9. Keep OTA safe checkpoints, resource cleanup, timeout reporting, screenshot
+   validity and no-op suppression. Do not retry failed hardware indefinitely.
+
+## Phase overview and progress
+
+Order reflects expected benefit, not measured speedup. Later software optimization
+can proceed without enabling an unqualified controller experiment.
+
+| Phase | Improvement                        | Prerequisite | State            | Evidence or blocker       |
+|-------|------------------------------------|--------------|------------------|---------------------------|
+| 1     | Interactive presentation priority  | Baseline     | Hardware pending | Host suite passes         |
+| 2     | Prompt coherent LVGL rendering     | Phase 1      | Hardware pending | Host suite passes         |
+| 3     | Cleanup outside interaction bursts | Milestone 1  | Not started      | Hardware gate             |
+| 4     | Reuse controller preparation       | Milestone 1  | Not started      | Hardware gate             |
+| 5     | Faster packing and transfers       | Milestone 1  | Hardware pending | Sticky bytes host-verified |
+| 6     | Cross-board rollout and tuning     | Milestone 1  | Not started      | Per-board gates           |
+
+Use `Not started`, `In progress`, `Host verified`, `Hardware pending`,
+`Accepted`, `Blocked` or `Deferred`. Host verification is not hardware acceptance.
+Phases 3, 4 and 5 are independent after milestone 1; keep their A/B results separate.
+Phase 6 can qualify the shared milestone before later optimizations are enabled.
+
+## Baseline and timing contract
+
+Add lightweight stage timing alongside phase 1, capturing an unchanged-firmware
+baseline before changing its scheduling policy. Reuse
+[display diagnostics](../../app/display_perf.h) and existing logging. Keep detailed
+traces bounded and gated by `HAS_DISPLAY_DIAGNOSTICS`; do not log per pixel or
+perform I/O while holding a spinlock. Keep production correctness independent
+of whether diagnostics are compiled in.
+
+Record input recognition, action dispatch, committed-frame readiness, policy
+wait, snapshot/copy, controller preparation, packing/upload, waveform trigger,
+waveform completion and completed-frame publication. Carry a request/frame
+sequence through coalescing so timings cannot pair unrelated events.
+
+Separate these durations:
+
+* Dispatch to coherent frame ready
+* Policy-only wait after a coherent frame is eligible
+* Remaining time behind an already in-flight waveform
+* Controller preparation and upload before waveform trigger
+* Physical waveform and completed-frame publication
+
+Do not call the existing aggregate `present_us` SPI time, or equate a waveform
+trigger with visible feedback. Use video or a logic analyzer when measuring
+visible onset; BUSY completion is a separate endpoint.
+
+For each measured scenario, collect at least 30 comparable samples and report
+median, p95 and maximum. Record firmware revision, board/controller identification,
+persisted settings, mode, rotation, temperature, supply, background load and
+screenshot polling. Separate first-full, ordinary partial and cleanup samples.
+
+Initial engineering targets, to verify rather than claim:
+
+* Interactive policy delay is zero when the panel is available and the frame is
+  committed. No 150 ms settle or configured background cooldown is charged.
+* Aim for p95 dispatch-to-ready at or below 50 ms for warm, simple focus changes.
+  Report complex pad construction and font misses separately.
+* Target p95 wake/re-evaluation overhead at or below 20 ms after an interactive
+  frame becomes eligible, excluding active hardware work and RTOS tick rounding.
+* Hardware burst tests end on the latest requested focus/screen with no visual
+  backlog, lost action or extra activation.
+
+Missed targets require stage evidence and a checkpoint decision, not weaker tests
+or an unexplained claim that e-paper is inherently slow.
+
+## Phase 1 - Separate interactive and background presentation
+
+### Implementation
+
+* [x] Capture available baseline and current focused-test results (hardware pending).
+* [x] Introduce a small explicit `Background`/`Interactive` intent and committed
+  generation contract through
+  [the HAL](../../app/display_driver.h),
+  [manager](../../app/display_manager.h) and
+  [task coordination](../../app/display_task.cpp). Default behavior remains
+  unchanged for drivers that do not opt in.
+* [x] Establish a synchronized render-start/render-complete publication boundary
+  for opted-in buffered e-paper drivers. Use LVGL refresh lifecycle events or
+  equivalent production hooks, not diagnostics-only callbacks. Completion must
+  follow all flush conversions for that refresh.
+* [x] Associate successful focus changes, touch-driven navigation and dialog
+  mutations with the next corresponding committed frame. Instrument the
+  navigation and dialog owners, not every action type or every pointer event.
+  Clear intent for a no-change generation.
+* [x] Apply the shared scheduling decision to Sticky first. Keep background
+  configuration semantics unchanged in this phase. Interactive frames bypass
+  settling and discretionary cooldown; manual/recovery full refreshes retain
+  their existing semantics.
+* [x] Make policy waits interruptible by upgraded intent, new committed frames,
+  OTA and shutdown. Recheck predicates under synchronization after wakeup.
+  Signals may coalesce; state/generation remains authoritative.
+* [x] Keep existing immutable sending/completed buffers. A worker finishing an
+  older frame must not clear newer pending work or its interactive intent.
+  Do not allocate a new full-screen buffer merely to transport priority.
+
+### Acceptance and tests
+
+Extend [Sticky driver tests](../../../tests/test_sticky_epaper_driver.cpp) for
+background versus interactive waits, background-wait preemption, no-op intent
+consumption, and updates arriving during streaming/completion.
+
+Test a multi-flush render with a worker wake between flushes: no snapshot or
+physical refresh may contain an incomplete generation. Assert observable frames
+and dispatch counts, not private names or log wording.
+
+Existing driver doubles do not run the LVGL render loop. If they cannot cover
+the publication boundary, extend existing host-LVGL coverage or add one small
+registered integration test. Explain that specific gap before adding a new test
+file; do not build another miniature platform or source-extraction harness.
+
+* [x] Background cadence, reverted-change suppression, rotations and Gray4 remain
+  covered and unchanged.
+* [x] Interactive work overtakes a background policy wait without bypassing
+  active panel work.
+* [x] OTA/failure still invalidates interrupted snapshots and requires recovery.
+* [x] No changes to LCD, frame-device scheduling or tap/hold semantics.
+
+## Phase 2 - Render interaction results promptly
+
+### Implementation
+
+* [x] Wake the LVGL task after publishing display work rather than waiting only
+  for its periodic sleep. Preserve the existing
+  [deferred slot](../../app/deferred_dispatch_slot.h) ownership, timeout and
+  abandoned-context cleanup; do not add a parallel action queue.
+* [x] Drain accepted display jobs and apply pending screen/dialog/focus changes
+  on the LVGL task. Request a refresh for a changed interactive generation
+  without waiting for the normal 100 ms refresh period.
+* [x] Refresh only at a safe outer task boundary. Never call a forced refresh
+  recursively from a flush or LVGL input callback.
+* [x] Ensure changes produced during input processing or
+  `currentScreen->update()` receive the prompt render pass. A wakeup alone does
+  not make the display refresh timer due.
+* [x] Reuse phase 1's completed-generation handoff. Preserve initial binding
+  resolution before the first pad frame and existing screensaver wake/input
+  suppression.
+* [x] Keep idle timer scheduling and tap-flash suppression. Do not permanently
+  reduce every timer period or reintroduce transient press-feedback frames.
+
+### Acceptance and milestone 1 gate
+
+Extend [navigation/wake tests](../../../tests/test_navigation_wake.cpp) and the
+phase 1 render-boundary coverage for wake-only input, failed navigation, dialog
+selection/dismissal, new screen construction and work arriving around task sleep.
+Keep deferred-slot and confirmation tests passing.
+
+* [ ] Measure warm focus navigation, touch pad changes, and dialog open/select/
+  dismiss, both idle and during an existing refresh.
+* [x] Demonstrate in host tests that UI changes no longer wait for the background
+  refresh timer, settle delay or cooldown when the panel is free. Physical
+  distributions remain pending.
+* [x] Demonstrate unchanged action count/order and no stale dialog activation in
+  focused host coverage. Physical burst validation remains pending.
+* [ ] Record timing distributions and remaining preparation/waveform costs.
+* [x] Stop for user review of milestone 1 before later optimization.
+
+## Phase 3 - Schedule discretionary cleanup during idle
+
+### Implementation
+
+* [ ] Separate full-refresh reasons: manual request, first baseline, recovery,
+  mode/controller requirement, and periodic ghosting cleanup.
+* [ ] Defer only periodic cleanup during an interaction burst. Keep mandatory
+  reasons immediate and do not interrupt a waveform that has already started.
+* [ ] Record cleanup debt and trigger a worker wake when idle cleanup becomes
+  due, even if no new LVGL flush arrives. Clean the latest committed frame,
+  including when pixels otherwise compare equal.
+* [ ] Bound deferral by both elapsed time and a board-qualified maximum partial
+  count. Timer/count arithmetic must tolerate rollover and saturate safely.
+* [ ] Preserve threshold `0` as disabling scheduled periodic cleanup, not
+  disabling recovery or manual full refresh.
+
+Start hardware experiments with 750 ms of interaction idle and a 3 s maximum
+cleanup-debt age. These are candidate policy constants, not validated panel limits.
+Initially retain the existing partial threshold as the hard count cap. Increasing
+that cap requires a recorded per-board quality result and user acceptance; do not
+invent a universal safe count. Without qualification, retain the conservative
+count limit and report the resulting responsiveness limitation.
+
+Changing the existing threshold from an exact trigger to a soft cleanup request
+is an intentional user-visible change. Update its help/documentation in the same
+phase; do not silently reinterpret persisted settings or add a new settings page.
+
+### Acceptance
+
+* [ ] Periodic cleanup occurs after idle without requiring another input/flush.
+* [ ] Continuous navigation cannot postpone cleanup past qualified bounds.
+* [ ] Manual/recovery refresh, OTA interruption and snapshot invalidation remain
+  correct while cleanup is pending.
+* [ ] Run at least 50 small B&W changes with unchanged-region photos, alternating
+  focus edges and full-screen navigation; record ghosting and contrast.
+* [ ] Test policy timing/count boundaries deterministically in existing driver
+  coverage. Hardware quality acceptance is separate.
+
+## Phase 4 - Reuse controller preparation while active
+
+### Implementation
+
+* [ ] Begin with consecutive successful Sticky SSD1677 B&W partials only.
+  Retain preparation instead of running hardware/software reset each time.
+* [ ] Track prepared state in the board-local panel implementation. Invalidate
+  it on failure, cancellation, reset, power loss, sleep and incompatible mode/
+  refresh transitions. Keep full, Gray4 and uncertain-state paths conservative.
+* [ ] Preserve RAM addressing, previous/current comparison, BUSY completion and
+  existing waveform selection. A warm controller is not a valid image baseline.
+* [ ] Measure preparation savings independently of packing and scheduling.
+* [ ] Leave SSD2677 behavior unchanged unless separately qualified. Its retained
+  waveform/drive-power lifecycle is a distinct follow-up, not a consequence of
+  SSD1677 success.
+
+Any keep-powered active/idle policy must have a bounded idle transition that
+actually runs without another flush. Preserve safe OTA/deinit ownership and
+power cleanup; do not leave drive rails active indefinitely. If existing hardware
+sequencing cannot support that safely, defer this power-policy extension.
+
+### Acceptance
+
+* [ ] Host tests cover cold/full/partial/mode changes and invalidation on errors,
+  OTA, cancellation and reset. The next uncertain-state update is full.
+* [ ] Hardware A/B tests show retained preparation improves timing and preserves
+  unchanged pixels across repeated partials, restart and recovery.
+* [ ] SSD2677 tests remain passing without assuming its hardware was tested.
+* [ ] Do not enable an unqualified shortcut by default; record it as deferred
+  rather than adding an experimental public toggle.
+
+## Phase 5 - Reduce packing and transfer overhead
+
+### Implementation
+
+* [x] Profile conversion, packing, transfer and deliberate yields separately.
+  Device stage measurements are recorded in the second capture below; controlled
+  distributions and physical-visible timing remain pending.
+* [x] Replace Sticky per-pixel controller packing with byte-oriented operations
+  where equivalent, then evaluate bounded multi-row transfer chunks.
+  Keep single-row transactions for now: current measurements combine packing,
+  SPI and yields and do not justify weakening checkpoint granularity or adding
+  a larger buffer. Re-evaluate only after the new separated device capture.
+* [x] Preserve bit order, native mirroring, old/new transitions, Gray4 inversion,
+  CS/transaction semantics, OTA checks and watchdog/scheduler fairness.
+* [ ] Reuse IT8951's existing regional transfer path rather than adding another
+  generic dirty-region engine.
+* [ ] Consider other regional transfers only after the above results justify
+  them. SSD2677 remains whole-frame unless independently supported and qualified;
+  SSD1677 windowing is a separate hardware-gated experiment.
+
+### Acceptance
+
+* [x] Extend existing driver tests with byte-equivalent representative old/new
+  patterns, unaligned edges, rotations and Gray4 planes.
+* [x] Keep cancellation granularity bounded during larger transfers.
+  Transfers remain one row; OTA injected on the first row stops before row two.
+* [ ] Report CPU/transfer savings separately from unchanged physical waveform
+  time. Check internal RAM, PSRAM and stack cost.
+* [x] Skip screenshot optimization unless measurement shows screenshot polling
+  materially blocks interaction; it is not a prerequisite for this milestone.
+
+## Phase 6 - Roll out the shared policy across interactive boards
+
+### Implementation
+
+* [ ] Adopt the shared intent/publication/scheduling contract in CrowPanel,
+  both IT8951 board profiles and Inkplate, without copying another policy loop.
+* [ ] Preserve each driver's buffers, real hardware timing constraints, dirty
+  alignment, waveforms and grayscale behavior. Do not normalize these to Sticky.
+* [ ] Ensure long policy waits can be interrupted and idle maintenance can run
+  without a new render on every opted-in driver.
+* [ ] Qualify each board independently; enable only accepted controller-specific
+  optimizations. Keep unsupported optimizations conservative.
+* [ ] Reconcile final documentation and generated metadata only where changed.
+  Record LCD/frame-device non-regression evidence.
+
+### Board qualification checklist
+
+* [ ] Sticky SSD1677, the user's currently working path
+* [ ] Sticky SSD2677, only if a distinct unit/revision is available
+* [ ] CrowPanel 4.2 interactive, SSD1683
+* [ ] ReTerminal E1003 interactive, IT8951
+* [ ] Waveshare 7.8 interactive, IT8951
+* [ ] Inkplate 6 Flick interactive
+
+For each board, record status as host-only, hardware-pending or hardware-accepted.
+Do not infer grayscale partial support or physical quality from another board.
+
+## Verification commands and documentation ownership
+
+Run the smallest phase-relevant subset of existing checks first. Configure when
+needed, then build only selected test targets:
+
+```bash
+cmake -S . -B build/host-tests
+cmake --build build/host-tests --parallel 2 --target \
+  test_sticky_epaper_driver test_navigation_wake test_deferred_dispatch_slot
+ctest --test-dir build/host-tests --output-on-failure \
+  -R '^(test_sticky_epaper_driver|test_navigation_wake|test_deferred_dispatch_slot)$'
+```
+
+Additional existing coverage to select when affected, registered in
+[tests/CMakeLists.txt](../../../tests/CMakeLists.txt):
+
+* `test_crowpanel_epaper_driver`
+* `test_it8951_reterminal-e1003-interactive` and its `_diagnostics` variant
+* `test_it8951_waveshare-7.8-interactive` and its `_diagnostics` variant
+* `test_display_perf`, `test_display_perf_diagnostics`, `test_display_perf_api`
+* `test_pad_cycle`, `test_pad_confirmation`, `test_pad_overlay_input`
+* `test_pad_refresh_schedule`, `test_gt911_touch`, `test_touch_manager_snapshots`
+* `test_epaper_macro_contract`, `test_portal_epaper_config`
+
+Do not claim these existing checks cover the new publication/scheduler contract
+until relevant behavioral assertions have been added. There is no dedicated
+Inkplate driver target in the inspected registration; justify focused additional
+coverage if required, and retain hardware validation.
+
+Firmware/native HAL changes require a firmware build. Follow the board-preference
+workflow in the agent guidelines; no preference file was present when drafting.
+Ask which verification board to use and save that preference before the first
+build. Sticky is the recommended initial candidate. Run only the chosen board:
+
+```bash
+./build.sh reterminal-sticky-interactive
+```
+
+The command above is a proposed verification command, not an executed build or
+authorization to flash. Ask before expanding firmware builds to additional boards.
+Never use bare `./build.sh` without an explicit all-board request.
+
+Before handing off an implementation as commit-ready, reconcile affected owners:
+
+* [Display/touch architecture](../../../docs/dev/display-touch-architecture.md)
+  for intent, task wakeup and frame publication
+* [Interactive e-paper user topic](../../../docs/user/specialized/interactive-epaper.md)
+  for changed background/interactive cadence and cleanup behavior
+* [Dialogs and alerts](../../../docs/user/pads/dialogs-and-alerts.md) only if its
+  documented behavior changes
+* The relevant board README for qualified power/controller limitations
+* Portal help and configuration tests if a setting's meaning changes; API docs
+  only if the API contract changes
+
+Use compile-time flag and generated-driver-table workflows if flags or board
+selection actually change. Do not add flags or regenerate unrelated catalogs
+merely to satisfy a checklist. Leave the historical audit unchanged unless a
+later user request explicitly includes reconciling it.
+
+## Progress and outcome tracking options
+
+Use this file as the default single source of implementation progress. Select
+additional tracking only when useful:
+
+* Check the phase items and update the overview for lightweight tracking.
+* Add an outcome entry below after each phase or blocked attempt.
+* For multi-session work, carry the current phase, last passing command and next
+  gate in the handoff; optionally mirror phase IDs in the coding agent's task
+  tracker. Avoid a second conflicting plan.
+* If the user requests durable backlog tracking, mirror accepted phases into
+  GitHub issues. Do not create issues, commits or PRs automatically.
+
+### Phase 1 outcome, 2026-11-12
+
+* Baseline: `ba6672ee`; worktree initially contained only this untracked plan.
+* Unchanged baseline command:
+  `cmake --build build/host-tests --parallel 2 --target test_sticky_epaper_driver test_navigation_wake test_deferred_dispatch_slot`
+  passed. Then
+  `ctest --test-dir build/host-tests --output-on-failure -R '^(test_sticky_epaper_driver|test_navigation_wake|test_deferred_dispatch_slot)$'`
+  passed 3/3 (0.47 s total, not a device latency measurement).
+* Phase 1: `cmake -S . -B build/host-tests` passed; the same build and
+  CTest commands passed 3/3 after extension (0.63 s total).
+* Added opt-in HAL lifecycle hooks, shared scheduling/frame publication helpers,
+  Sticky wakeable policy waits, UI-owner intent, bounded diagnostics and graceful
+  presentation-worker shutdown. No controller detection or waveform changes.
+* Extended the existing Sticky test with real host LVGL rather than adding a
+  separate platform/harness. Physical snapshots remain immutable and are exposed
+  only after successful hardware completion.
+* Host scenarios cover both controller paths, background cadence, interaction
+  preemption, multi-flush stale wakes, no-op/reverted intent, work/manual refresh
+  arriving during transfer, OTA, shutdown, failures, rotations and Gray4.
+* Physical baseline and stage distributions: pending, zero hardware samples.
+  No serial capture, analyzer trace, temperature/supply measurements or physical
+  controller access is available in this session. The user's SSD1677 BUSY
+  fallback identification is preserved, not reinterpreted as a chip-ID read.
+* Verification preference was absent at literal `/memories/board-preferences.md`.
+  The existing durable file at `~/.copilot/memories/board-preferences.md` was found
+  and updated to the user's explicit selection, `reterminal-sticky-interactive`.
+  Firmware build follows phase 2; no flash is authorized.
+
+### Phase 2 and milestone 1 outcome, 2026-11-12
+
+Status: Hardware pending. Phases 1 and 2 are implemented; phases 3-6 remain
+unstarted. The later cross-board host checks are compatibility checks, not a
+phase 6 rollout.
+
+Changed owners:
+
+* HAL/task coordination: `display_driver.h`, `display_manager.{h,cpp}`,
+  `display_task.cpp`, `display_frame.h`, `display_frame_publisher.h`,
+  `deferred_dispatch_slot.h`
+* UI intent: `display_screen_nav.cpp`, `screens/pad_screen_events.cpp`,
+  `device_dialog.cpp`
+* Scheduling and diagnostics: `drivers/epaper_schedule.h`, Sticky's driver and
+  panel implementation, `display_perf.h`
+* Focused existing tests and their CMake registration; no new test source or
+  standalone platform harness
+* Display/touch architecture, interactive e-paper user topic, Sticky README,
+  presentation-setting help, and the generated flag-use reference
+
+Deferred-slot publication now notifies the opted-in LVGL consumer after the
+accepted job becomes visible. Existing context ownership, completion, timeout,
+abandoned cleanup and action ordering remain in that slot. Task notifications
+survive publication around task sleep; idle deadlines remain unchanged.
+
+The outer render boundary requests `lv_refr_now()` for a changed interactive
+generation after input timers and screen updates. Queued navigation attaches
+intent only when its target is applied, preserving initial binding construction.
+Dialog selection, dismissal, failed replacement, stale callback and continuation
+safety remain covered. No raw pointer press, wake-only input or rejected
+navigation is promoted to an interactive generation.
+
+Coherent completion wakes manual work even if a refresh converted no pixels.
+This closes the stale-wake/no-flush race without another queue or framebuffer.
+Graceful teardown drains accepted dispatch work, wakes policy waiting and
+finishes the driver's owned bounded power cleanup before worker deletion.
+
+#### Exact validation commands and results
+
+Configuration passed:
+
+```bash
+cmake -S . -B build/host-tests
+```
+
+The phase 2 build passed:
+
+```bash
+cmake --build build/host-tests --parallel 2 --target \
+  test_sticky_epaper_driver test_sticky_epaper_driver_diagnostics \
+  test_navigation_wake test_deferred_dispatch_slot test_stopwatch_round_ui \
+  test_pad_confirmation test_pad_overlay_input test_display_perf \
+  test_display_perf_diagnostics
+```
+
+The corresponding phase 2 CTest selection passed 9/9:
+
+```bash
+ctest --test-dir build/host-tests --output-on-failure \
+  -R '^(test_sticky_epaper_driver(_diagnostics)?|test_navigation_wake|test_deferred_dispatch_slot|test_stopwatch_round_ui|test_pad_confirmation|test_pad_overlay_input|test_display_perf(_diagnostics)?)$'
+```
+
+Additional host targets built successfully:
+
+```bash
+cmake --build build/host-tests --parallel 2 --target \
+  test_sticky_epaper_driver test_sticky_epaper_driver_diagnostics \
+  test_stopwatch_round_ui test_crowpanel_epaper_driver \
+  test_it8951_reterminal-e1003-interactive \
+  test_it8951_reterminal-e1003-interactive_diagnostics \
+  test_it8951_waveshare-7.8-interactive \
+  test_it8951_waveshare-7.8-interactive_diagnostics \
+  test_epaper_frame_battery test_epaper_frame_media_conformance
+cmake --build build/host-tests --parallel 2 --target test_pad_cycle
+cmake --build build/host-tests --parallel 2 --target \
+  test_sticky_epaper_driver test_sticky_epaper_driver_diagnostics \
+  test_pad_resolve_request_lifetime
+```
+
+The final rebuild and combined selection passed 25/25 (22.76 s total host test
+runtime, not panel latency):
+
+```bash
+cmake --build build/host-tests --parallel 2 --target \
+  test_sticky_epaper_driver test_sticky_epaper_driver_diagnostics
+ctest --test-dir build/host-tests --output-on-failure \
+  -R '^(test_sticky_epaper_driver(_diagnostics)?|test_navigation_wake|test_deferred_dispatch_slot|test_pad_resolve_request_lifetime|test_stopwatch_round_ui|test_pad_confirmation|test_pad_overlay_input|test_display_perf(_diagnostics|_api)?|test_pad_cycle|test_pad_refresh_schedule|test_epaper_macro_contract|test_portal_epaper_config|test_crowpanel_epaper_driver|test_it8951_.*|test_epaper_frame_battery|test_epaper_frame_media_conformance|test_gt911_touch|test_touch_manager_snapshots|test_display_safe_telemetry)$'
+```
+
+Only the selected firmware board was built:
+
+```bash
+./build.sh reterminal-sticky-interactive
+```
+
+The first attempt failed on duplicate header definitions across Arduino's
+mirrored sketch/repository include paths. Explicit include guards fixed it.
+Subsequent builds passed. The final rebuild after diagnostics byte accounting
+also passed: 3,177,926-byte sketch, 80,572 bytes of globals, no compiler warnings
+or errors in the captured output. The generated flag reference was unchanged
+on this final run.
+
+```bash
+git diff --check
+```
+
+Passed. No existing Markdown linter or link-check command was found; narrative
+edits retain existing link destinations. No dependency was installed for prose.
+
+#### Corrections and deviations
+
+* The expanded macro-contract test initially rejected an `EPAPER_*` include
+  guard as an unscoped configuration macro. Renaming the guard fixed the test;
+  no feature flag or board selector changed.
+* The first combined 25-test run failed the two Sticky variants on an idle
+  timer assertion. The fixture had inherited LVGL's startup-ready timer origin;
+  resetting that origin before the warm 99/100 ms boundary test fixed the
+  fixture. The assertion was retained, not weakened. Final result: 25/25 pass.
+* A real host-LVGL multi-flush check extends the existing Sticky test and uses
+  the same publication/prompt-render helpers as production. It is not a
+  substitute for the real FreeRTOS loop, touch timing or glass validation.
+* Timing starts at UI-owner entry/mutation, not an input ISR. Request/frame
+  sequences correlate committed readiness, eligibility, snapshot, preparation,
+  packing/upload, waveform trigger, BUSY completion and publication. Raw input
+  recognition and visible onset still require correlated hardware traces.
+* `eligible = max(ready, preceding hardware completion)` separates waiting
+  behind older hardware from subsequent policy/wakeup time. `upload_us`
+  includes packing, SPI and cooperative yields, not wire-only time.
+* The generated compile-time reference adds the four new Sticky diagnostics
+  use sites. No flag defaults, report classification, driver table, public API,
+  NVS schema, controller detection, cache or waveform was changed.
+
+#### Measurements and remaining hardware gate
+
+No measured physical latency improvement is claimed. Hardware samples: **0**.
+Median, p95 and maximum for dispatch-to-ready, eligible-to-snapshot,
+preparation/upload, waveform, publication and input-to-visible onset are all
+**pending**. Temperature, supply, background load and screenshot-polling
+conditions are likewise unrecorded.
+
+Deterministic host contracts pass: interactive policy time is zero when free,
+background cadence still applies, policy waiting is preemptible, prompt
+rendering does not wait for the 100 ms timer, and idle/background work still
+respects the warm timer boundary. Host-clock assertions do not establish the
+50 ms dispatch or 20 ms RTOS wake p95 targets.
+
+Remaining bottlenecks are intentionally unchanged: whole-frame comparison/copy,
+controller reset/preparation on every update, 96,000 payload bytes plus packing
+and cooperative yields, physical BUSY/waveform duration and mandatory full
+cleanup. Screenshot copying can still hold the driver mutex; no screenshot
+optimization was started.
+
+Before hardware acceptance:
+
+* Capture unchanged/revised firmware A/B traces under matching conditions, at
+  least 30 samples per focus, touch navigation and dialog open/select/dismiss
+  scenario, separately idle and behind an active waveform
+* Verify latest-state burst completion, action count/order, wake-only
+  suppression, confirmation replacement/cancellation and screenshot correctness
+* Exercise OTA during policy waits, upload and BUSY; verify full recovery and
+  SSD2677 bounded drive cleanup on an identified unit
+* Run repeated partial-quality checks and distinguish ordinary partials,
+  initial full and periodic/manual cleanup
+* Preserve the working SSD1677 BUSY-fallback path; qualify SSD2677 separately
+  if a distinct unit is available
+
+No flash, all-board build, commit or push was performed. Stop here before any
+phase 3 cleanup-policy or phase 4 controller-preparation experiment.
+
+### Diagnostics follow-up, 2026-11-12
+
+The user reports working firmware but no noticeable responsiveness improvement.
+This is functional feedback, not physical latency or image-quality acceptance.
+At the user's request, Sticky now defaults `HAS_DISPLAY_DIAGNOSTICS` to true;
+explicit test/build overrides can still disable it. Other board defaults are
+unchanged. Stage logs are split by frame sequence to fit the logger's 192-byte
+message buffer instead of truncating the completion timestamps.
+
+Checks:
+
+* `cmake --build build/host-tests --parallel 2 --target test_sticky_epaper_driver test_sticky_epaper_driver_diagnostics`
+  passed
+* `ctest --test-dir build/host-tests --output-on-failure -R '^test_sticky_epaper_driver(_diagnostics)?$'`
+  passed 2/2
+* `python3 tests/test_firmware_size_report.py` passed 28/28
+* After splitting the log,
+  `cmake --build build/host-tests --parallel 2 --target test_sticky_epaper_driver_diagnostics`
+  and `ctest --test-dir build/host-tests --output-on-failure -R '^test_sticky_epaper_driver_diagnostics$'`
+  passed
+* `git diff --check` passed
+* `./build.sh reterminal-sticky-interactive` passed, then passed again after
+  the log split to verify the final artifact: diagnostics active, 3,185,410-byte
+  sketch, 81,876 bytes of globals. No compiler warnings or errors were reported.
+  The generated flag reference now shows Sticky diagnostics enabled.
+
+No flash performed. Physical stage measurements were pending at this checkpoint.
+
+### Approved render and packing follow-up, 2026-11-12
+
+Status: Host verified; hardware pending. This separately approved work follows
+milestone 1; it does not start cleanup policy, controller caching or cross-board
+rollout. Runtime SPI-ID/BUSY controller selection, SSD2677 compatibility,
+waveforms, clocks, input/action semantics, frame publication and screenshot
+ownership are preserved.
+
+#### Device baseline supplied by the user
+
+The serial capture identifies ID `0xff` followed by the SSD1677 BUSY fallback.
+Settings: B&W, Bayer (`bw_conversion=1`), rotation 1 (480 x 800 logical),
+500 ms background minimum, 1000 ms binding interval, full threshold 200.
+Wi-Fi is active; MQTT/HA are disabled in configuration. Temperature, supply,
+visible onset and image-quality measurements are unavailable.
+
+Six correlated requests give the following durations, in milliseconds.
+Scenarios are mixed, not a statistically qualified latency distribution.
+
+| Request/frame | Request to ready | Eligible to snapshot | Preparation | Packing/upload | BUSY | Request to publication |
+|---------------|------------------|----------------------|-------------|----------------|------|------------------------|
+| 1/68 | 628.405 | 0.419 | 22.445 | 439.802 | 611.961 | 1709.089 |
+| 2/70 | 498.120 | 0.104 | 22.630 | 448.244 | 611.057 | 1586.387 |
+| 3/71 | 608.784 | 0.116 | 21.985 | 441.797 | 609.974 | 1687.847 |
+| 4/73 | 486.233 | 0.109 | 22.221 | 448.190 | 610.959 | 1573.786 |
+| 5/74 | 1908.105 | 0.105 | 23.417 | 443.300 | 611.474 | 2993.966 |
+| 6/76 | 496.043 | 14.008 | 23.454 | 446.829 | 611.910 | 1600.063 |
+
+Requests 1/3 open dialogs; 2/4 dismiss notifications; 5 constructs an uncached
+pad; 6 returns to a cached pad behind older hardware work. Dialog font loading
+adds approximately 49-55 ms plus 13 ms cache creation. Touch-task gaps during
+rendering confirm that rendering remains blocking. Existing telemetry cannot
+separate LVGL drawing/glyph work from conversion, or packing from SPI/yields.
+Preparation caching could save only about 22 ms in these samples. The ideal
+96,000-byte payload at 10 MHz is 76.8 ms of wire time, not measured attainable
+upload time. This evidence motivates render/conversion first, then packing.
+
+#### Implementation and bounded deviations
+
+* [x] Capture the current worktree and passing Sticky diagnostics-on/off baseline
+* [x] Traverse packed native bytes during conversion, loading/merging/writing
+  each byte once, including partial edges, rather than repeatedly touching
+  rotated PSRAM pixels
+* [x] Reuse IT8951's exact weighted RGB565 channel table through the existing
+  monochrome helper; no luminance, quantization or dithering changes
+* [x] Validate conversion before changing panel packing: diagnostics on/off pass
+  scalar-reference screenshots and wire bytes for both controllers, all
+  rotations, threshold/Bayer/blue-noise, swapped/padded input, clipping and Gray4
+* [x] Replace controller per-pixel lookups with mono byte reversal, SSD2677 bit
+  spreading/old-new interleave and Gray4 level/plane extraction
+* [x] Keep the same 200-byte maximum row buffer, SPI transactions, every-row
+  cancellation and every-16-row yields; do not introduce multi-row batching
+* [x] Add frame-correlated render/flush/glyph, conversion/framebuffer wait, and
+  packing/SPI/yield timing using existing diagnostics
+* [x] Capture post-change ESP32 stage timings
+* [ ] Complete controlled physical A/B acceptance, visible onset and quality
+
+The existing Sticky test now compares whole screenshots and complete controller
+payloads against scalar conversion/packing references. Its large patch visits
+every RGB565 value; subsequent clipped patches exercise byte/nibble boundaries
+and byte swapping. Two generations exercise previous/current transitions, and
+threshold-zero all-white generations exercise no-op suppression. Existing OTA,
+failure and teardown scenarios remain, with an explicit one-row OTA cancellation
+assertion. No new test file, platform harness, dependency, API or setting was
+added.
+
+The existing test executable also accepts an opt-in `--benchmark` mode, not a
+timing assertion in CTest. One warm-up and 30 measured runs use the same host
+build settings before/after. CMake build type and extra C++ flags are empty
+(unoptimized host build), diagnostics off; hardware delays/SPI are mocked.
+Conversion uses complete B&W threshold frames in 10-row strips. Mock-panel
+timings include the test's SPI command capture and exclude real wire/BUSY/yield
+delays, so they are not controller upload timings.
+
+| Host operation | Before median/p95/max (ms) | After median/p95/max (ms) |
+|----------------|---------------------------|--------------------------|
+| Conversion, rotation 0 | 11.862 / 12.084 / 12.184 | 4.725 / 4.834 / 4.847 |
+| Conversion, rotation 1 | 12.139 / 12.347 / 12.358 | 4.950 / 5.048 / 5.065 |
+| SSD1677 mono mock-panel | 12.457 / 12.672 / 13.209 | 2.159 / 2.218 / 2.223 |
+| SSD1677 Gray4 mock-panel | 7.259 / 7.665 / 7.839 | 2.897 / 2.986 / 2.997 |
+| SSD2677 mono mock-panel | 7.230 / 7.328 / 7.805 | 2.379 / 2.463 / 2.627 |
+| SSD2677 Gray4 mock-panel | 4.395 / 4.629 / 5.072 | 1.914 / 1.982 / 2.014 |
+
+These are host CPU trends only, not measured firmware latency improvements.
+Native framebuffer allocations and payload sizes are unchanged. The shared
+luminance table is 256 read-only bytes; diagnostics add small fixed counters
+and a frame refresh trace, not another framebuffer or task. Stack high-water,
+heap behavior, power and real-time fairness still require hardware validation.
+
+#### Follow-up validation
+
+The baseline, conversion-only, scalar-reference and final packing checks used:
+
+```bash
+cmake --build build/host-tests --parallel 2 --target \
+  test_sticky_epaper_driver test_sticky_epaper_driver_diagnostics
+ctest --test-dir build/host-tests --output-on-failure \
+  -R '^test_sticky_epaper_driver(_diagnostics)?$'
+build/host-tests/tests/test_sticky_epaper_driver --benchmark
+```
+
+Final targeted result: 2/2 pass. Benchmarks completed successfully. The first
+reference run expected a second transfer for a threshold-zero all-white frame;
+the implementation correctly suppressed it. The fixture now checks unchanged
+output and no transfer, rather than requiring redundant panel work.
+
+The combined regression build initially included the command-only
+`test_pad_refresh_schedule` as a build target and stopped with "No rule to make
+target". The corrected command builds executable targets and lets CTest run
+command-only checks:
+
+```bash
+cmake --build build/host-tests --parallel 2 --target \
+  test_sticky_epaper_driver test_sticky_epaper_driver_diagnostics \
+  test_navigation_wake test_deferred_dispatch_slot test_pad_resolve_request_lifetime \
+  test_stopwatch_round_ui test_pad_confirmation test_pad_overlay_input \
+  test_display_perf test_display_perf_diagnostics test_pad_cycle \
+  test_crowpanel_epaper_driver test_it8951_reterminal-e1003-interactive \
+  test_it8951_reterminal-e1003-interactive_diagnostics \
+  test_it8951_waveshare-7.8-interactive \
+  test_it8951_waveshare-7.8-interactive_diagnostics \
+  test_epaper_frame_battery test_epaper_frame_media_conformance
+ctest --test-dir build/host-tests --output-on-failure \
+  -R '^(test_sticky_epaper_driver(_diagnostics)?|test_navigation_wake|test_deferred_dispatch_slot|test_pad_resolve_request_lifetime|test_stopwatch_round_ui|test_pad_confirmation|test_pad_overlay_input|test_display_perf(_diagnostics|_api)?|test_pad_cycle|test_pad_refresh_schedule|test_epaper_macro_contract|test_portal_epaper_config|test_crowpanel_epaper_driver|test_it8951_.*|test_epaper_frame_battery|test_epaper_frame_media_conformance|test_gt911_touch|test_touch_manager_snapshots|test_display_safe_telemetry)$'
+python3 tools/compile_flags_report.py md --out docs/compile-time-flags.md
+python3 tests/test_firmware_size_report.py
+```
+
+Build passed; CTest passed 25/25; flag snapshot generation passed; size-report
+tests passed 28/28. IT8951 regional transport, LCD behavior and dedicated frame
+paths were not redesigned. These compatibility checks are not a phase 6 rollout.
+
+Preferred board remains `reterminal-sticky-interactive`, read from the existing
+`~/.copilot/memories/board-preferences.md` (literal `/memories` is unavailable).
+The final firmware command was:
+
+```bash
+./build.sh reterminal-sticky-interactive
+git diff --check
+```
+
+Both passed. The build enabled diagnostics, produced
+`build/reterminal-sticky-interactive/app.ino.bin`, and reported a 3,186,994-byte
+sketch and 81,876 bytes of globals. A scan of the captured build output found
+no `warning:` or `error:` diagnostics. Compared with the previous diagnostics
+firmware, flash increased by 1,584 bytes and reported globals are unchanged;
+this is not a measurement of peak heap/stack use. The generated flag report
+was unchanged by the build.
+
+After adding the explicit one-row OTA cancellation assertion, the final
+two-target build and Sticky CTest commands above passed again (2/2). No
+production source changed after the successful firmware build. Whitespace
+validation passed. Existing documentation links are retained; no Markdown
+linter or link checker was installed. No flash, all-board build, commit or
+push was performed.
+
+#### Remaining device verification
+
+Repeat the captured dialog open/dismiss and cached/uncached pad scenarios with
+the same settings. Correlate frame IDs across `Display` refresh/render/flush/
+glyph records and `Sticky` conversion/wait, preparation/upload, packing/SPI/
+yield and completion records. Render includes flush and glyph work; these
+durations overlap and must not be added together. SPI includes transaction/
+GPIO overhead. Existing request timestamps remain UI-owner timestamps, not raw
+touch onset.
+
+At the software-build checkpoint, post-change request-to-ready, upload,
+publication and physical-visible latency were pending; no device speedup was
+claimed. Font loading/LVGL drawing, uncached
+pad construction, unchanged full-frame wire volume, scheduler yields and the
+approximately 611 ms partial waveform remain possible bottlenecks. Verify OTA/
+recovery, orientation/unchanged pixels, screenshots, action ordering and
+confirmation safety on glass. Qualify SSD2677 separately if a unit is available.
+
+### Post-optimization device capture, 2026-11-12
+
+Status: Device stage improvement measured; hardware acceptance still pending.
+The second user-supplied capture contains firmware ELF prefix `0f755a7b6`,
+runtime SSD1677 selection through ID `0xff`/BUSY fallback, the same B&W Bayer
+settings and rotation 1, and ten complete correlated interaction presentations.
+All ten report `ok=1` and 96,000 payload bytes. There is a boot-log history gap;
+do not treat this as a complete stress/recovery trace. No source was changed,
+firmware built or device flashed during this analysis.
+
+The two read-only user captures were parsed locally with Node.js. Numeric
+`key=value` records were joined by frame ID, then filtered for nonzero
+`request_seq` and successful publication. Durations use microsecond event
+timestamps, not the rounded log prefix. Before/after requests were grouped by
+scenario, not request number. Medians below describe these small captures only;
+they are not controlled p95/max acceptance distributions.
+
+| Scenario | Before/after samples | Request to ready, before/after (ms) | Request to publication, before/after (ms) |
+|----------|----------------------|------------------------------------|-----------------------------------------|
+| Dialog open | 2 / 3 | 618.5945 / 394.039 | 1698.468 / 1222.843 |
+| Notification dismiss | 2 / 3 | 492.1765 / 283.347 | 1580.0865 / 1115.157 |
+| Return to cached pad 0 | 1 / 2 | 496.043 / 285.912 | 1600.063 / 1110.752 |
+| First uncached pad 15 | 1 / 1 | 1908.105 / 1600.020 | 2993.966 / 2431.723 |
+
+Old dialog-open requests 1/3 match new 3/5/9; old dismiss 2/4 match new 4/6/10;
+old cached-return 6 matches new 2/8; old uncached-pad 5 matches new 1.
+The old cached-return sample included older presentation activity, so it is
+not a perfectly matched idle A/B sample.
+
+Dialog open/dismiss improve request-to-publication by approximately 465-476 ms
+(28-29%) in these captures. These are measured device pipeline improvements,
+not physical input-to-visible-onset measurements. The old capture did not
+separate conversion from LVGL work, so it cannot establish a conversion-only
+before/after speedup.
+
+Across the ten new interaction frames:
+
+| Stage | Median (ms) | Observed range (ms) |
+|-------|-------------|---------------------|
+| RGB565 conversion | 215.232 | 212.730-217.204 |
+| Ready/eligible to snapshot | 0.394 | 0.383-0.465 |
+| Controller preparation | 22.3855 | 21.924-24.244 |
+| Packing | 24.0375 | 23.448-26.025 |
+| SPI transactions | 95.5145 | 94.090-96.696 |
+| Deliberate yields | 67.3855 | 62.049-72.301 |
+| Whole upload | 190.292 | 183.716-194.239 |
+| Trigger to BUSY done | 611.6965 | 610.416-612.034 |
+
+Whole upload was 439.802-448.244 ms in the first capture; its mixed-scenario
+median falls from 445.0645 to 190.292 ms (about 57%). The separated new stages
+show that packing is no longer the dominant upload cost. SPI and yields now
+dominate; clocks, row transactions and yield policy were deliberately unchanged.
+Boot-time contention includes a 599.831 ms upload with 249.895 ms in yields;
+it is excluded from the steady interaction table, not silently discarded as an
+interaction outlier.
+
+Ready-to-snapshot remains below 0.5 ms, confirming no discretionary wait in
+these ten samples. Every interaction still converts all 384,000 logical pixels
+in 50 flushes. Ordinary return/dismiss render time is approximately 270-275 ms,
+including about 215 ms of conversion and 53-56 ms of other LVGL render work.
+Dialog opens additionally reload the 53,504-byte font source in 50 ms, build
+its cache in 14 ms and reach the changed-UI marker about 90 ms after owner entry;
+their frame refresh is approximately 302-304 ms.
+
+Pad 15 remains a distinct slow path. Its first request takes 1,600.020 ms to a
+coherent frame, including construction/application and a 649.413 ms refresh.
+A subsequent cached visit (request 7/frame 80) still takes 1,026.636 ms to ready
+and 1,849.500 ms to publication. It spends 277.621 ms in glyph misses inside a
+664.392 ms render, plus approximately 355 ms from enqueue to screen switch.
+The first visit records 265.916 ms in glyph misses. Caching the screen therefore
+does not eliminate glyph-miss cost in this capture; the cause requires tracing,
+not an assumption that all cached navigation is warm.
+
+Next optimization candidates are the remaining full-frame conversion cost,
+unnecessary redraws if confirmed, and pad 15's glyph/screen-application path.
+Controller caching would save only about 22 ms here; it remains unstarted.
+The approximately 611 ms waveform remains the largest fixed presentation
+stage, unchanged and outside this software-only optimization.
+
+Still unverified: visible onset, ghosting/orientation/unchanged-pixel quality,
+physical screenshot consistency, action ordering and confirmation stress,
+OTA/recovery stress, peak memory/stack and power, controlled idle/burst p95,
+and SSD2677 hardware. No additional implementation scope is inferred from this
+capture.
+
+Validation: `git diff --check` and the untracked plan's trailing-whitespace
+check passed. A second local Node.js calculation verified all reported
+post-change stage medians/ranges. No firmware tests/build are needed for this
+measurement-only plan update.
+
+### Outcome entry template
+
+```text
+Phase / date / implementer:
+Status: Host verified | Hardware pending | Accepted | Blocked | Deferred
+Revision or scoped change reference:
+Files changed:
+Behavior implemented and intentional deviations:
+Exact checks and results:
+Board / selected controller / identification method:
+Configuration / mode / rotation / temperature / supply / background load:
+Scenarios and sample counts:
+Median / p95 / max for dispatch-to-ready:
+Median / p95 / max for policy wait and prior-waveform wait, separately:
+Preparation / packing-upload / waveform / end-to-end results:
+Ghosting / unchanged pixels / recovery / OTA / screenshot results:
+RAM / stack / idle-power observations, where relevant:
+Documentation and metadata updated:
+Unverified behavior or blocker:
+Decision: accept | revise | defer
+Next phase or user approval needed:
+```
+
+### Current handoff
+
+* Implementation: phases 1-2 host-verified; separately approved Sticky render/
+  packing follow-up host-verified, single-board firmware build passed
+* Hardware evidence: functioning SSD1677 BUSY-selected unit, six correlated
+  pre-optimization and ten post-optimization requests; device stage improvements
+  measured, physical-visible timing/quality pending
+* Next step: retain the measured checkpoint, complete physical acceptance and
+  agree on any further conversion/glyph work; do not start phases 3, 4 or 6
+* Deferred research: controller-specific questions arising from failed A/B tests,
+  not another broad CrossPoint architecture audit
+* Final narrative owner: display/touch architecture. No new user control or
+  setting requires another user-guide change; the historical audit stays intact.

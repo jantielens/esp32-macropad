@@ -105,11 +105,23 @@ B&W uses 1-bpp snapshots; grayscale stores four levels as 4-bpp values
 precede controller packing. The vendor's net native-X mirror is applied once
 for mono and not for grayscale; on-glass orientation remains an acceptance gate.
 
+Conversion traverses packed native bytes, merging each byte once rather than
+repeatedly touching rotated pixels in PSRAM. Clipped edge bits/nibbles are
+preserved. RGB565 luminance uses the same 256-byte compile-time channel table
+as IT8951, with unchanged rounding and logical-coordinate dithering.
+Controller packing reverses mono bytes/bits, spreads SSD2677 old/new bits,
+and extracts Gray4 levels/planes without per-pixel framebuffer lookups.
+Transfers still use the existing 100/200-byte row buffer, row cancellation
+checkpoints and one-tick yield every 16 rows. SPI clocks, CS boundaries,
+controller initialization, waveform selection and payload sizes are unchanged.
+
 SSD1677 receives full previous/current mono planes, or two Gray4 bitplanes.
 SSD2677 receives a full 2-bpp mono/gray frame or full-frame old/new transition
 pairs for partial waveforms, with 800 x 680 internal scan geometry and
-800 x 480 visible pixels. Grayscale always refreshes fully; B&W follows the
-existing cadence, settling, periodic cleanup, and manual full-refresh settings.
+800 x 480 visible pixels. Grayscale always refreshes fully. Background updates
+retain configured cadence and settling. Committed interaction frames bypass
+these software waits, but not hardware BUSY, required power transitions,
+recovery or periodic/manual full cleanup.
 Unchanged content causes no physical update. Failed/interrupted presentations
 invalidate the baseline and retry full on the next presentation request.
 Availability reflects successful initialization, not the last presentation result,
@@ -1357,6 +1369,51 @@ This means:
 
 Direct-mode boards are unaffected — no present task is created (their `present()` is a no-op).
 
+Sticky opts into `DisplayDriver::coherentFrames()`. The production
+`LV_EVENT_REFR_START`/`LV_EVENT_REFR_READY` callbacks bracket all synchronous
+flush conversions, independently of diagnostics. Under the framebuffer mutex,
+the worker refuses snapshots during a render generation. It copies only a
+completed generation into the existing immutable sending buffer; drawing can
+then continue while the panel uses sending and the previous completed frame.
+Successful completion alone publishes the screenshot baseline.
+
+Successful focus changes, applied interaction-driven screen changes and dialog
+mutations carry request/frame sequences. No-change generations consume intent,
+and pending newer work survives older hardware completion. Background policy
+waits use a driver-owned binary semaphore, rechecking state after commits and
+manual requests; a bounded 20 ms timeout also observes OTA. Shutdown wakes those
+waits, cancels at the panel's existing safe checkpoints, and waits for owned
+power cleanup before deleting the worker.
+
+On this opted-in path, deferred-slot publication and queued screen work notify
+the LVGL task. Notifications survive the unlock-to-sleep race. At the outer
+task boundary, after input timers and screen updates, pending interaction
+invalidations use `lv_refr_now()` without changing the normal refresh period.
+Pending screen switches defer that prompt pass until the new screen is applied.
+Sleep/OTA rendering gates, initial bindings, tap/hold semantics and suppressed
+tap flashes remain unchanged. Other drivers, including dedicated frame-device
+and LCD paths, retain their previous scheduling.
+
+With `HAS_DISPLAY_DIAGNOSTICS`, bounded per-interaction/presentation debug logs
+carry request/frame sequences and microsecond timestamps for UI-owner entry,
+mutation, committed readiness, hardware eligibility, snapshot, waveform trigger,
+BUSY completion and successful publication. Preparation and packing/upload are
+separate durations. `eligible = max(ready, preceding hardware completion)` splits
+time behind an in-flight update from subsequent policy/wakeup time. UI-owner
+entry is not raw physical-input recognition; correlate input logs/analyzer/video
+when measuring input-to-visible latency. BUSY completion is not visible onset.
+The existing aggregate `present_us` is not SPI transfer time.
+
+Sticky also logs per-frame conversion and framebuffer-lock wait, and separates
+upload into packing, SPI transaction and deliberate-yield durations. SPI timing
+includes transaction/GPIO/software overhead, not only wire time. The correlated
+`Display` record reports refresh, render, flush and glyph-miss time; render
+includes flush and glyph work, so these fields are not additive. Subtract flush
+from render to distinguish LVGL drawing from synchronous conversion, and use
+the glyph field to identify font-cache misses. Frames without rendering do not
+emit this render record. These diagnostics do not establish physical speedups
+or visible-onset latency without a new device capture.
+
 ### Thread Safety
 
 All display operations from outside the rendering task must be protected:
@@ -2250,9 +2307,9 @@ the label-refresh timestamp, avoiding a duplicate label refresh when widget
 `update()` and `tick()` run in the same poll. No geometry cache, additional
 allocation, or reduction in data polling is required.
 
-IT8951 RGB565 conversion uses a 256-byte compile-time table of weighted channel
+IT8951 and Sticky RGB565 conversion share a 256-byte compile-time table of weighted channel
 contributions, preserving the original channel expansion and luminance rounding.
-For in-bounds flush rectangles at rotations 0 and 2, it converts pairs of pixels
+For in-bounds flush rectangles at rotations 0 and 2, IT8951 converts pairs of pixels
 into complete packed framebuffer bytes. Only unpaired boundary pixels require
 read-modify-write operations, preserving neighboring nibbles. Dithering still
 uses logical pixel coordinates; quarter-turn rotations and clipped rectangles
@@ -2272,7 +2329,8 @@ visibility, widget-value updates, widget ticks, and image-frame handoff. Zero
 retains every-cycle passive resolution. The `jc1060p470c-sd` target uses 100 ms;
 other LCD targets retain their defaults. Initial/rebuilt pads, pad navigation,
 clock synchronization, and configured minute boundaries refresh passive values
-immediately. Interactive e-paper retains its existing all-content coalescing.
+immediately. Interactive e-paper passive binding polling retains its existing
+all-content coalescing.
 
 Gauge captions reuse their current resolved text to skip unchanged placement.
 Fonts and gauge geometry are fixed when the widget is created; configuration

@@ -84,17 +84,25 @@ add_host_legacy_test(test_image_fetch
 set(HOST_ARDUINOJSON_DIR "$ENV{HOME}/Arduino/libraries/ArduinoJson/src")
 set(HOST_LVGL_DIR "$ENV{HOME}/Arduino/libraries/lvgl/src")
 
-add_host_legacy_test(test_sticky_epaper_driver
+foreach(diagnostics 0 1)
+  set(sticky_target test_sticky_epaper_driver)
+  if(diagnostics)
+    set(sticky_target test_sticky_epaper_driver_diagnostics)
+  endif()
+  add_host_legacy_test(${sticky_target}
     SOURCES test_sticky_epaper_driver.cpp ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive/drivers/display/sticky_epaper_driver.cpp
         ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive/drivers/display/sticky_epaper/panel.cpp
-    INCLUDES ${PROJECT_SOURCE_DIR}/tests/sticky_driver_test_overrides ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/sticky_driver_test_overrides
+        ${PROJECT_SOURCE_DIR}/tests/audio_worker_overrides ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
         ${PROJECT_SOURCE_DIR}/src
         ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive
-    DEFINITIONS BOARD_HAS_OVERRIDE=1 BOARD_HAS_PSRAM=1 CONFIG_IDF_TARGET_ESP32S3=1 TEST_HEAP_CAPS_ALLOCATOR=1
+    DEFINITIONS HAS_DISPLAY_DIAGNOSTICS=${diagnostics}
+        BOARD_HAS_OVERRIDE=1 BOARD_HAS_PSRAM=1 CONFIG_IDF_TARGET_ESP32S3=1 TEST_HEAP_CAPS_ALLOCATOR=1
         LV_CONF_SKIP=1 LV_USE_OS=0 LV_USE_LOG=0 TEST_FREERTOS_MUTEX_LIFECYCLE=1
     OPTIONS -Wno-unused-parameter
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
-)
+  )
+endforeach()
 add_host_legacy_test(test_sticky_hardware
     SOURCES test_sticky_hardware.cpp ${PROJECT_SOURCE_DIR}/src/app/board_hardware.cpp
         ${PROJECT_SOURCE_DIR}/src/app/drivers/gt911_touch_driver.cpp
@@ -200,6 +208,8 @@ target_compile_definitions(host_lvgl PUBLIC LV_CONF_SKIP=1 LV_USE_OS=0 LV_USE_LO
     LV_TINY_TTF_CACHE_GLYPH_CNT=16 LV_TINY_TTF_CACHE_KERNING_CNT=16
     LV_FONT_MONTSERRAT_12=1 LV_FONT_MONTSERRAT_18=1 LV_FONT_MONTSERRAT_24=1
     LV_FONT_MONTSERRAT_32=1 LV_FONT_MONTSERRAT_36=1)
+target_link_libraries(test_sticky_epaper_driver PRIVATE host_lvgl)
+target_link_libraries(test_sticky_epaper_driver_diagnostics PRIVATE host_lvgl)
 add_host_legacy_test(test_runtime_ttf_oom
     SOURCES test_runtime_ttf_oom.cpp
     LIBRARIES host_lvgl m
@@ -472,6 +482,7 @@ add_host_legacy_test(test_stopwatch_round_ui
         BOOT_APPEARANCE_DEFAULT_BACKGROUND_RGB=0x000000 DISPLAY_SHAPE_ROUND=1 DISPLAY_SHAPE=1
     OPTIONS -Wno-missing-field-initializers -Wno-deprecated-declarations
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/system_screen_overrides
+        ${PROJECT_SOURCE_DIR}/tests/audio_worker_overrides
         ${CMAKE_CURRENT_BINARY_DIR} ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
     LIBRARIES host_lvgl
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h

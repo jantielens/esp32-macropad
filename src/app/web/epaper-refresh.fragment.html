@@ -48,7 +48,7 @@
     <div class="form-text">How often idle data bindings are checked. Higher values reduce panel updates.</div>
     <label class="form-label mt-3" for="epaper_min_refresh_interval_ms">Minimum presentation interval (ms)</label>
     <input class="form-control" type="number" min="250" max="60000" id="epaper_min_refresh_interval_ms" name="epaper_min_refresh_interval_ms">
-    <div class="form-text">The shortest delay between physical panel updates. Higher values combine rapid changes into one update.</div>
+    <div class="form-text">Minimum background presentation cadence. Higher values combine rapid changes. Devices supporting interaction priority can present navigation and dialog changes sooner, after active panel work completes.</div>
     <label class="form-label mt-3" for="epaper_full_refresh_threshold">Full-refresh threshold</label>
     <input class="form-control" type="number" min="0" max="65535" id="epaper_full_refresh_threshold" name="epaper_full_refresh_threshold">
     <div class="form-text">Run a full waveform after this many regional updates. Set 0 to disable scheduled full refreshes. Inkplate grayscale always refreshes the full panel.</div>

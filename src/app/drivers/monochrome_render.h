@@ -12,6 +12,25 @@ enum MonochromeConversion : uint8_t {
     MONOCHROME_CONVERSION_BLUE_NOISE,
 };
 
+struct Rgb565LuminanceTables {
+    uint16_t red[32] = {};
+    uint16_t green[64] = {};
+    uint16_t blue[32] = {};
+
+    constexpr Rgb565LuminanceTables() {
+        for (int i = 0; i < 32; ++i) {
+            red[i] = (i * 255 / 31) * 77;
+            blue[i] = (i * 255 / 31) * 29;
+        }
+        for (int i = 0; i < 64; ++i) green[i] = (i * 255 / 63) * 150;
+    }
+};
+
+inline uint8_t monochrome_rgb565_luminance(uint16_t color) {
+    static constexpr Rgb565LuminanceTables table;
+    return (table.red[color >> 11] + table.green[(color >> 5) & 63] + table.blue[color & 31]) >> 8;
+}
+
 inline bool monochrome_is_white(uint8_t luminance, int16_t x = 0, int16_t y = 0,
         uint8_t conversion = MONOCHROME_CONVERSION_THRESHOLD, uint8_t threshold = MONOCHROME_THRESHOLD) {
     static constexpr uint8_t bayer[4][4] = {

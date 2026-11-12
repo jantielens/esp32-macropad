@@ -1,10 +1,12 @@
 #include "pad_screen.h"
 #include "../action_registry.h"
+#include "../display_manager.h"
 #include "../touch_manager.h"
 #include "../widgets/numericrocker_zones.h"
 #include "../widgets/toggle_widget.h"
 #include <core/lv_obj_event_private.h>
 #include <cstring>
+#include <esp_timer.h>
 
 static PadScreen* tile_owner(const ButtonTile* tile) {
     return tile && tile->obj
@@ -172,6 +174,7 @@ void PadScreen::refreshNavigationFocus() {
 }
 
 bool PadScreen::navigateButtons(const char* command) {
+    const uint64_t navigationStart = esp_timer_get_time();
     update();
     struct Target { int16_t tile; uint8_t zone; };
     Target targets[MAX_PAD_BUTTONS * 5 + 1];
@@ -193,9 +196,11 @@ bool PadScreen::navigateButtons(const char* command) {
         const bool previous = strcmp(command, "previous") == 0;
         selected = selected < 0 ? (previous ? count - 1 : 0)
             : (previous ? (selected + count - 1) % count : (selected + 1) % count);
+        const bool changed = navigationTile != targets[selected].tile || navigationZone != targets[selected].zone;
         navigationTile = targets[selected].tile;
         navigationZone = targets[selected].zone;
         refreshNavigationFocus();
+        if (changed && displayManager) displayManager->interactionChanged(navigationStart);
         return true;
     }
     if (strcmp(command, "tap") != 0 && strcmp(command, "tap_hold") != 0) return false;

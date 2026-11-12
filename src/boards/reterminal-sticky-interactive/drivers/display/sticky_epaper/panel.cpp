@@ -4,20 +4,32 @@
 #include "app/ota_activity.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#if HAS_DISPLAY_DIAGNOSTICS
+#include <esp_timer.h>
+#endif
 
 namespace sticky_epaper {
+bool Panel::cancelled() const {
+    return ota_activity_is_active() || (stopFlag && stopFlag->load());
+}
+
 namespace {
 constexpr int panelWidth = 800, panelHeight = 480;
 constexpr uint32_t busyTimeoutMs = 15000;
 const SPISettings writeSettings(10000000, MSBFIRST, SPI_MODE0);
 const SPISettings readSettings(4000000, MSBFIRST, SPI_MODE0);
 
-uint8_t grayAt(const uint8_t* frame, int x, int y, bool grayscale) {
-    if (grayscale) {
-        const uint8_t packed = frame[size_t(y) * (panelWidth / 2) + x / 2];
-        return (x & 1 ? packed & 15 : packed >> 4) / 5;
-    }
-    return frame[size_t(y) * (panelWidth / 8) + x / 8] & (0x80 >> (x & 7)) ? 3 : 0;
+uint8_t reverseBits(uint8_t value) {
+    value = uint8_t((value >> 4) | (value << 4));
+    value = uint8_t(((value & 0xcc) >> 2) | ((value & 0x33) << 2));
+    return uint8_t(((value & 0xaa) >> 1) | ((value & 0x55) << 1));
+}
+
+uint16_t spreadBits(uint8_t value) {
+    uint16_t spread = value;
+    spread = (spread | (spread << 4)) & 0x0f0f;
+    spread = (spread | (spread << 2)) & 0x3333;
+    return (spread | (spread << 1)) & 0x5555;
 }
 }
 
@@ -56,14 +68,14 @@ Result Panel::waitReady(const char* stage, bool deferForOta) {
     const int active = controller == Controller::SSD2677 ? LOW : HIGH;
     const uint32_t start = millis();
     while (digitalRead(EPAPER_BUSY_PIN) == active) {
-        if (deferForOta && ota_activity_is_active()) return Result::Deferred;
+        if (deferForOta && cancelled()) return Result::Deferred;
         if (millis() - start >= busyTimeoutMs) {
             LOGE("Sticky", "BUSY timeout at %s (active=%d)", stage, active);
             return Result::Error;
         }
         vTaskDelay(pdMS_TO_TICKS(2) ? pdMS_TO_TICKS(2) : 1);
     }
-    return deferForOta && ota_activity_is_active() ? Result::Deferred : Result::Success;
+    return deferForOta && cancelled() ? Result::Deferred : Result::Success;
 }
 
 void Panel::restorePower() {
@@ -151,7 +163,7 @@ void Panel::end() {
 }
 
 Result Panel::initialize(bool grayscale) {
-    if (ota_activity_is_active()) return Result::Deferred;
+    if (cancelled()) return Result::Deferred;
     restorePower();
     if (controller == Controller::SSD1677) {
         reset(10, 10);
@@ -227,41 +239,82 @@ Result Panel::stream(uint8_t code, const uint8_t* current, const uint8_t* previo
     command(code);
     uint8_t row[panelWidth / 4];
     for (int y = 0; y < panelHeight; ++y) {
-        if (ota_activity_is_active()) return Result::Deferred;
+        if (cancelled()) return Result::Deferred;
         const bool twoBits = controller == Controller::SSD2677;
-        const int pixelsPerByte = twoBits ? 4 : 8;
-        for (int column = 0; column < panelWidth / pixelsPerByte; ++column) {
-            uint8_t packed = 0;
-            for (int pixel = 0; pixel < pixelsPerByte; ++pixel) {
-                const int outputX = column * pixelsPerByte + pixel;
-                // Vendor Sticky mono flips native X once; its Gray4 path flips
-                // twice (panel + controller). Keep that net transform here.
-                const int x = grayscale ? outputX : panelWidth - 1 - outputX;
-                const uint8_t gray = grayAt(current, x, y, grayscale);
-                uint8_t value;
-                if (twoBits) {
-                    value = !grayscale && !full
-                        ? uint8_t((grayAt(previous, x, y, false) ? 2 : 0) | (gray ? 1 : 0)) : gray;
-                } else if (grayscale) {
-                    value = highPlane ? !(gray & 1) : !(gray & 2);
-                } else {
-                    value = gray ? 1 : 0;
+#if HAS_DISPLAY_DIAGNOSTICS
+        const uint64_t packStart = esp_timer_get_time();
+#endif
+        if (!grayscale) {
+            const uint8_t* source = current + size_t(y) * (panelWidth / 8);
+            const uint8_t* old = previous + size_t(y) * (panelWidth / 8);
+            for (int column = 0; column < panelWidth / 8; ++column) {
+                // Mono mirrors native X, including both byte and bit order.
+                const int index = panelWidth / 8 - 1 - column;
+                const uint8_t value = reverseBits(source[index]);
+                if (!twoBits) row[column] = value;
+                else {
+                    const uint16_t currentBits = spreadBits(value);
+                    const uint16_t oldBits = full ? currentBits : spreadBits(reverseBits(old[index]));
+                    const uint16_t packed = uint16_t((oldBits << 1) | currentBits);
+                    row[column * 2] = packed >> 8;
+                    row[column * 2 + 1] = packed;
                 }
-                packed = uint8_t((packed << (twoBits ? 2 : 1)) | value);
             }
-            row[column] = packed;
+        } else {
+            const uint8_t* source = current + size_t(y) * (panelWidth / 2);
+            // Gray4 stores only 0/5/10/15: its low two nibble bits are the
+            // controller levels 0/1/2/3. Gray4 has no net native-X mirror.
+            if (twoBits) {
+                for (int column = 0; column < panelWidth / 4; ++column) {
+                    const uint8_t a = source[column * 2], b = source[column * 2 + 1];
+                    row[column] = uint8_t(((a & 0x30) << 2) | ((a & 3) << 4) | ((b & 0x30) >> 2) | (b & 3));
+                }
+            } else {
+                for (int column = 0; column < panelWidth / 8; ++column) {
+                    uint8_t packed = 0;
+                    for (int pair = 0; pair < 4; ++pair) {
+                        const uint8_t value = source[column * 4 + pair];
+                        const uint8_t levels = uint8_t(((value >> (highPlane ? 3 : 4)) & 2) |
+                            ((value >> (highPlane ? 0 : 1)) & 1));
+                        packed = uint8_t((packed << 2) | (levels ^ 3));
+                    }
+                    row[column] = packed;
+                }
+            }
         }
+#if HAS_DISPLAY_DIAGNOSTICS
+        const uint64_t spiStart = esp_timer_get_time();
+        timing.pack_us += spiStart - packStart;
+#endif
         spi.beginTransaction(writeSettings);
         digitalWrite(EPAPER_CS_PIN, LOW);
-        spi.writeBytes(row, panelWidth / pixelsPerByte);
+        spi.writeBytes(row, panelWidth / (twoBits ? 4 : 8));
+#if HAS_DISPLAY_DIAGNOSTICS
+        timing.uploaded_bytes += panelWidth / (twoBits ? 4 : 8);
+#endif
         digitalWrite(EPAPER_CS_PIN, HIGH);
         spi.endTransaction();
-        if ((y & 15) == 15) vTaskDelay(1);
+#if HAS_DISPLAY_DIAGNOSTICS
+        timing.spi_us += esp_timer_get_time() - spiStart;
+#endif
+        if ((y & 15) == 15) {
+#if HAS_DISPLAY_DIAGNOSTICS
+            const uint64_t yieldStart = esp_timer_get_time();
+#endif
+            vTaskDelay(1);
+#if HAS_DISPLAY_DIAGNOSTICS
+            timing.yield_us += esp_timer_get_time() - yieldStart;
+#endif
+        }
     }
     return Result::Success;
 }
 
 Result Panel::refresh(const uint8_t* current, const uint8_t* previous, bool grayscale, bool full) {
+#if HAS_DISPLAY_DIAGNOSTICS
+    timing = {};
+    const uint64_t preparationStart = esp_timer_get_time();
+#endif
     Result result = initialize(grayscale);
     if (result != Result::Success) return result;
     if (controller == Controller::SSD1677) {
@@ -269,6 +322,10 @@ Result Panel::refresh(const uint8_t* current, const uint8_t* previous, bool gray
             const uint8_t border = 0x80;
             command(0x3c, &border, 1);
         }
+#if HAS_DISPLAY_DIAGNOSTICS
+        timing.preparation_us = esp_timer_get_time() - preparationStart;
+        const uint64_t uploadStart = esp_timer_get_time();
+#endif
         if (grayscale) {
             result = stream(0x24, current, previous, true, true);
             if (result == Result::Success) result = stream(0x26, current, previous, true, true, true);
@@ -277,22 +334,45 @@ Result Panel::refresh(const uint8_t* current, const uint8_t* previous, bool gray
             if (result == Result::Success) result = stream(0x24, current, previous, false, true);
         }
         if (result != Result::Success) return result;
-        if (ota_activity_is_active()) return Result::Deferred;
+        if (cancelled()) return Result::Deferred;
+#if HAS_DISPLAY_DIAGNOSTICS
+        timing.upload_us = esp_timer_get_time() - uploadStart;
+#endif
         const uint8_t mode = grayscale ? 0xd7 : full ? 0xf7 : 0xff;
         command(0x22, &mode, 1);
+#if HAS_DISPLAY_DIAGNOSTICS
+        timing.trigger_us = esp_timer_get_time();
+#endif
         command(0x20);
-        return waitReady("SSD1677 refresh");
+        result = waitReady("SSD1677 refresh");
+#if HAS_DISPLAY_DIAGNOSTICS
+        timing.waveform_done_us = esp_timer_get_time();
+#endif
+        return result;
     }
     result = latchWaveform(grayscale, full);
+#if HAS_DISPLAY_DIAGNOSTICS
+    timing.preparation_us = esp_timer_get_time() - preparationStart;
+    const uint64_t uploadStart = esp_timer_get_time();
+#endif
     if (result == Result::Success) result = stream(0x10, current, previous, grayscale, full);
+#if HAS_DISPLAY_DIAGNOSTICS
+    timing.upload_us = esp_timer_get_time() - uploadStart;
+#endif
     if (result != Result::Success) return result;
-    if (ota_activity_is_active()) return Result::Deferred;
+    if (cancelled()) return Result::Deferred;
     command(0x04);
     result = waitReady("SSD2677 power on");
     if (result == Result::Success) {
         const uint8_t zero = 0;
+#if HAS_DISPLAY_DIAGNOSTICS
+        timing.trigger_us = esp_timer_get_time();
+#endif
         command(0x12, &zero, 1);
         result = waitReady("SSD2677 refresh");
+#if HAS_DISPLAY_DIAGNOSTICS
+        timing.waveform_done_us = esp_timer_get_time();
+#endif
     }
     return finishRefresh(result);
 }

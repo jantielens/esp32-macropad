@@ -455,7 +455,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | inkplate6flick-interactive |  |  | ✅ |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  | ? | ? | ✅ | ? |  | ? |  |  | ✅ |  | ✅ |  | ✅ |  | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |
 | reterminal-e1003-frame |  |  |  |  |  | ? |  |  |  | ? |  |  | ✅ |  | ? | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  | ? |  | ✅ | ✅ |  |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |
 | reterminal-e1003-interactive |  |  |  |  | ✅ | ? |  |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ✅ |  | ✅ |  | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |
-| reterminal-sticky-interactive | ✅ |  |  |  |  | ? |  | ✅ |  | ✅ | ✅ |  |  |  | ✅ | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ✅ |  |  | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |
+| reterminal-sticky-interactive | ✅ |  |  |  |  | ? |  | ✅ |  | ✅ | ✅ | ✅ |  |  | ✅ | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ✅ |  |  | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -931,6 +931,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/drivers/it8951_epaper_driver.h
   - src/app/freetype_mono_font.cpp
   - src/app/freetype_mono_font.h
+  - src/boards/reterminal-sticky-interactive/board_overrides.h
+  - src/boards/reterminal-sticky-interactive/drivers/display/sticky_epaper/panel.cpp
+  - src/boards/reterminal-sticky-interactive/drivers/display/sticky_epaper/panel.h
+  - src/boards/reterminal-sticky-interactive/drivers/display/sticky_epaper_driver.cpp
+  - src/boards/reterminal-sticky-interactive/drivers/display/sticky_epaper_driver.h
 - **HAS_EPAPER_FRAME_WAKE_BUTTON**
   - src/app/board_config.h
   - src/app/device_classes/epaper_frame/epaper_frame_config.h

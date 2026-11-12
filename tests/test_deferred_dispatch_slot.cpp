@@ -224,7 +224,41 @@ static void test_display_wrapper_quiesces_through_consumer() {
            DEFERRED_DISPATCH_UNAVAILABLE);
 }
 
+static void test_published_wake_and_order() {
+    reset_test_state();
+    Slot slot;
+    assert(slot.init());
+    unsigned wakes = 0;
+    struct Context { Slot* slot; unsigned* wakes; } context{&slot, &wakes};
+    auto wake = [](void* opaque) {
+        auto* ctx = static_cast<Context*>(opaque);
+        ++*ctx->wakes;
+        // The job is already visible when the consumer is notified, even if it
+        // drains before the producer starts waiting for completion.
+        ctx->slot->drain();
+    };
+    for (unsigned index = 0; index < 3; ++index) {
+        bool ok = false;
+        char message[16]{};
+        assert(slot.dispatch(run_ok, cleanup_count, nullptr, 0, 1, false, false,
+            &ok, message, sizeof(message), wake, &context) == DEFERRED_DISPATCH_OK);
+        assert(ok && wakes == index + 1 && g_runs == int(index + 1));
+        char expected[16];
+        snprintf(expected, sizeof(expected), "run-%u", index + 1);
+        assert(!strcmp(message, expected));
+    }
+    assert(g_cleanups == 0);
+    assert(slot.dispatch(nullptr, cleanup_count, nullptr, 0, 1, false, false,
+        nullptr, nullptr, 0, wake, &context) == DEFERRED_DISPATCH_INVALID);
+    assert(wakes == 3);
+    slot.beginShutdown();
+    assert(slot.dispatch(run_ok, cleanup_count, nullptr, 0, 1, false, false,
+        nullptr, nullptr, 0, wake, &context) == DEFERRED_DISPATCH_UNAVAILABLE);
+    assert(wakes == 3);
+}
+
 int main() {
+    test_published_wake_and_order();
     test_success_busy_and_limits();
     test_timeout_before_drain_and_cleanup();
     test_timeout_while_running();

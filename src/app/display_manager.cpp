@@ -147,6 +147,7 @@ DisplayManager::~DisplayManager() {
 		// the LVGL consumer before tearing down the objects it can access.
 		displayJobSlot().beginShutdown();
 		lvglStopRequested = true;
+		wakeRenderTask();
 		if (!lvglTaskHandle) {
 			device_dialog_close();
 			lvglTaskStopped = true;
@@ -157,6 +158,12 @@ DisplayManager::~DisplayManager() {
 
 		// Stop present task first (depends on driver, must be deleted before LVGL task)
 		if (presentTaskHandle) {
+				if (driver->coherentFrames()) {
+						presentStopRequested = true;
+						driver->stopPresentation();
+						xSemaphoreGive(presentSem);
+						while (!presentTaskStopped) vTaskDelay(pdMS_TO_TICKS(1));
+				}
 				vTaskDelete(presentTaskHandle);
 				presentTaskHandle = nullptr;
 		}
@@ -374,6 +381,9 @@ void DisplayManager::initLVGL() {
 		lv_display_set_user_data(display, this);
 #if HAS_DISPLAY_DIAGNOSTICS
 		lv_display_add_event_cb(display, DisplayManager::displayEventCallback, LV_EVENT_ALL, this);
+#else
+		if (driver->coherentFrames())
+				lv_display_add_event_cb(display, DisplayManager::displayEventCallback, LV_EVENT_ALL, this);
 #endif
 		
 		// Allocate LVGL draw buffer(s).

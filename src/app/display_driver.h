@@ -32,6 +32,7 @@
 
 #include <Arduino.h>
 #include <lvgl.h>
+#include "display_frame.h"
 #if HAS_DISPLAY_DIAGNOSTICS
 #include "display_perf.h"
 #endif
@@ -103,6 +104,12 @@ public:
 		virtual void present() {
 				// Override in buffered drivers (e.g., Arduino_GFX canvas)
 		}
+
+		// Opt-in: synchronous flush conversion bracketed by the LVGL refresh lifecycle.
+		virtual bool coherentFrames() const { return false; }
+		virtual void beginFrame() {}
+		virtual void commitFrame(const DisplayFrame&) {}
+		virtual void stopPresentation() {}
 
 		// Queue a full physical refresh of the current framebuffer. Buffered
 		// e-paper drivers override this; other drivers report unsupported.

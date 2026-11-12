@@ -18,6 +18,7 @@
 #include <atomic>
 #include <new>
 #include <lvgl.h>
+#include <esp_timer.h>
 
 namespace {
 struct DialogBackground {
@@ -96,6 +97,7 @@ void finish(bool approved, const char* reason) {
     reset_input();
     const uint32_t token = previous->token;
     delete previous;
+    if (displayManager) displayManager->interactionChanged();
     if (token) {
         if (approved) action_continuation_complete(token, true);
         else action_continuation_release(token);
@@ -298,6 +300,7 @@ bool create(Dialog& dialog, const char* message, const ConfirmPayload* confirmat
 bool show(const char* message, uint32_t duration, const ConfirmPayload* confirmation, uint32_t token,
           const DialogAppearance* test_appearance = nullptr) {
     if (!displayManager) return false;
+    const uint64_t requestedUs = esp_timer_get_time();
     bool locked = false;
     display_manager_lock_if_needed(&locked);
     Dialog* candidate = new (std::nothrow) Dialog;
@@ -316,6 +319,7 @@ bool show(const char* message, uint32_t duration, const ConfirmPayload* confirma
             candidate->deadline = millis() + duration;
             current = candidate;
             lv_obj_remove_flag(candidate->overlay, LV_OBJ_FLAG_HIDDEN);
+            displayManager->interactionChanged(requestedUs);
         } else {
             delete candidate;
         }
@@ -414,6 +418,7 @@ bool device_dialog_navigate(const char* command) {
             current->selection = current->selection == DialogSelection::Cancel ? DialogSelection::Approve : DialogSelection::Cancel;
         lv_obj_set_style_outline_width(current->cancel, current->selection == DialogSelection::Cancel ? 3 : 0, 0);
         lv_obj_set_style_outline_width(current->approve, current->selection == DialogSelection::Approve ? 3 : 0, 0);
+        if (displayManager) displayManager->interactionChanged();
     }
     return true;
 }
