@@ -2,16 +2,27 @@
 
 #include "BLEDevice.h"
 
+class NimBLEUUID {
+public:
+    explicit NimBLEUUID(uint16_t) {}
+};
+
 class NimBLEAdvertisementData {
 public:
     std::vector<uint8_t> bytes;
     bool addData(const uint8_t* data, size_t length) {
         bytes.assign(data, data + length);
-        return true;
+        return TestBle::data_succeeds;
     }
+    bool setFlags(uint8_t) { return TestBle::data_succeeds; }
+    bool setServiceData(NimBLEUUID, const uint8_t* data, size_t length) {
+        bytes.assign(data, data + length);
+        return TestBle::data_succeeds;
+    }
+    bool setName(const char*) { return TestBle::data_succeeds; }
 };
 
-class NimBLEAdvertising : public BLEAdvertising {
+class NimBLEAdvertising {
 public:
     void enableScanResponse(bool) {}
     void setMinInterval(uint16_t interval) { TestBle::event_parameters.itvl_min = interval; }
@@ -20,6 +31,12 @@ public:
     bool setDiscoverableMode(uint8_t mode) { TestBle::event_parameters.disc_mode = mode; return true; }
     bool setAdvertisementData(const NimBLEAdvertisementData& data) {
         TestBle::advertisement = data.bytes;
+        return TestBle::data_succeeds;
+    }
+    bool setScanResponseData(const NimBLEAdvertisementData&) { return TestBle::data_succeeds; }
+    bool stop() {
+        if (!TestBle::stop_succeeds) return false;
+        TestBle::radio_advertising = false;
         return true;
     }
     bool start() {
@@ -32,8 +49,13 @@ public:
 
 class NimBLEDevice {
 public:
+    inline static bool initialized = false;
+    inline static bool init_succeeds = true;
     inline static NimBLEAdvertising advertising;
-    static void init(const char* name) { BLEDevice::init(name); }
-    static bool isInitialized() { return BLEDevice::getInitialized(); }
+    static void init(const char*) { ++TestBle::host_inits; initialized = init_succeeds; }
+    static bool isInitialized() { return initialized; }
     static NimBLEAdvertising* getAdvertising() { return &advertising; }
+    static bool setPowerLevel(esp_power_level_t, esp_ble_power_type_t) {
+        return TestBle::power_succeeds;
+    }
 };

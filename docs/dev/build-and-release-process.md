@@ -207,23 +207,41 @@ Boards without a persistent filesystem partition or SD backend must set
 LittleFS; NVS settings and NVS-only factory reset remain available. Do not infer
 filesystem availability from the display or storage-browser feature flags.
 
-### Sticky Broadcast-Only BLE
+### BLE Backend and Broadcast Profile
 
-Only `reterminal-sticky-interactive` uses the pinned NimBLE-Arduino dependency.
-`build.sh` force-includes that board's `drivers/nimble_config.h` in C and C++
-translation units, after loading the SDK configuration. This disables central
-and observer roles, retains broadcasting, and moves eligible host
+`BLE_BACKEND` selects an implementation independently of `HAS_BLE`,
+`HAS_BLE_HID`, `LVGL_FAST_MEM_IN_IRAM`, and malloc tuning. Named constants live
+in [ble_backend_selection.h](../../src/app/ble_backend_selection.h):
+`BLE_BACKEND_ARDUINO_CORE` (`0`, the default) and
+`BLE_BACKEND_NIMBLE_ARDUINO` (`1`, opt-in). Use a numeric board override so
+`build.sh` exports the same selector through its narrow library flag allowlist.
+Sticky is the sole initial NimBLE-Arduino adopter; no other board changes
+backend, capabilities, or startup policy.
+
+The external backend currently supports only ESP32-S3 with a PSRAM-enabled
+board menu and `HAS_BLE_HID=0`, verified on Arduino ESP32 3.3.12 / ESP-IDF 5.5.5.
+Invalid selectors, unsupported targets, missing PSRAM, and external-backend
+HID combinations fail compilation. Client/scanning, bonding migration, and HID
+are not implemented by this profile; the selector is not a capability gate.
+Retain the core backend for other targets/SDKs pending separate validation.
+
+`build.sh` force-includes shared
+[ble_build_config.h](../../src/app/ble_build_config.h) in application and
+library C/C++ translation units, not assembly. It is inert for the core
+backend. The external profile normalizes legacy aliases after loading SDK
+configuration, disables central and observer roles, retains broadcasting,
+and moves eligible host
 allocations to PSRAM. Controller allocations and the host task stack remain in
-internal RAM. Connection retries are disabled and controller connection capacity
+internal RAM. Connection retries are disabled and host connection capacity
 is reduced to one. Peripheral-host code remains enabled because the pinned
 library's GAP/GATT initialization references it even without a server; no GATT
 server is created and both advertisers explicitly use nonconnectable mode.
-The event module includes the
+The shared [ble_backend.cpp](../../src/app/ble_backend.cpp) includes the
 Arduino core's BLE memory-retention constructor because this pinned library
-predates that mechanism. Do not edit the installed library or apply these overrides to
-other targets or prebuilt SDK structures.
+predates that mechanism. Do not edit the installed library or assume these
+macros reconfigure the precompiled controller.
 
-Both `bthome_events.cpp` and `ble_telemetry.cpp` select this backend for Sticky;
+Both `bthome_events.cpp` and `ble_telemetry.cpp` select APIs by backend;
 the built-in Arduino BLE wrapper must not be linked alongside it. Other boards
 retain their existing backend and lazy event initialization. Packet layout,
 queue admission, burst timing, and OTA cancellation remain shared.
@@ -231,23 +249,29 @@ The bundled core backend already uses NimBLE on the tested toolchain. The
 memory benefit comes from the selected host profile and eligible PSRAM
 allocations, not a Bluedroid-to-NimBLE migration.
 
-The always-on startup initializes Sticky BLE before Wi-Fi; setup/recovery starts
-it when normal runtime begins. It does not advertise until an action fires.
-The sensor-only BLE duty-cycle path initializes the same stack separately.
+The external backend initializes before Wi-Fi in always-on startup, then uses
+idempotent preparation when normal runtime begins (including setup/recovery).
+Identity configuration and host preparation do not advertise. The sensor-only
+BLE duty-cycle path prepares the same selected host without starting Wi-Fi or
+the action lifecycle. Telemetry deinit stops advertising, not the shared host.
 Startup logs record internal free heap and largest block before/after BLE, plus
 remaining PSRAM. Compare the final `Mem: setup` and loaded runtime minimums
 against the same configuration without BLE, not only the firmware size report.
 
-Sticky also uses a 128-byte ordinary-malloc PSRAM threshold and keeps the MQTT
-trigger subscription-topic cache in its existing PSRAM-first storage allocation.
-The pending bitmask and synchronization objects remain internal. On the first
-failed allocation per boot, the heap hook captures at most 12 stack frames without
-allocating memory, then prints an `[ALLOC-FAIL] Backtrace:` line outside its
-critical section. Decode its PC addresses using `xtensa-esp32s3-elf-addr2line -pfiaC
--e build/reterminal-sticky-interactive/app.ino.elf <PC> ...` from the matching
-firmware build. Keep that ELF until device validation is complete.
+MQTT trigger configuration and its registered-topic cache share one
+`config_psram_alloc()` block on all trigger-enabled boards. Reinitialization
+reuses that block and retains subscription history; mutex/allocation failure
+leaves the feature unavailable and is logged. Non-PSRAM boards allocate it on
+the heap rather than retaining a static topic array; this is not a universal
+1 KB heap saving. The pending bitmask and synchronization objects stay internal.
+The compact allocation-failed hook remains; temporary stack tracing is removed.
 
-This remains a board-scoped experiment. Home Assistant receipt of a Button 1
+To roll back a board independently, set `BLE_BACKEND` to `0` and restore its
+original `LVGL_FAST_MEM_IN_IRAM` and `MALLOC_PSRAM_THRESHOLD_BYTES` values.
+Keep the pinned dependency while any target selects it. Enabling radios or HID
+is a separate capability decision, not part of rollback.
+
+Hardware acceptance remains pending. Home Assistant receipt of a Button 1
 press was confirmed, and the subsequent
 [LVGL flash-placement change](display-touch-architecture.md#memory-usage)
 recovered 60,928 bytes of internal heap at boot. The latest capture confirms HA

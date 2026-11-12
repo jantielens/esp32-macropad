@@ -100,8 +100,9 @@ an application-only OTA does not replace the partition table.
 
 BLE supports the
 [Send BTHome event action](../../../docs/user/integrations/home-assistant.md#send-a-bthome-button-event)
-independently of MQTT sensor telemetry. This target uses an experimental
-broadcast-only BLE profile without scanning or connections. Validate delivery
+independently of MQTT sensor telemetry. This target selects the shared
+[NimBLE-Arduino broadcast profile](../../../docs/dev/build-and-release-process.md#ble-backend-and-broadcast-profile)
+without scanning, connections, or HID. Validate delivery
 for the button numbers and event types you use; queue admission does not
 confirm Home Assistant receipt. Sustained runtime memory headroom under
 MQTT-enabled load and OTA coexistence still require device validation.

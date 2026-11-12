@@ -235,6 +235,7 @@ build_board() {
         # NOTE: Keep this allowlist tight; only export values needed by libraries.
         numeric_allowlist=(
             CONFIG_ASYNC_TCP_STACK_SIZE
+            BLE_BACKEND
 
             # TFT_eSPI pinout and SPI frequencies
             TFT_MISO
@@ -297,9 +298,7 @@ build_board() {
     # regardless of staging behavior.
     local PROJECT_INCLUDE="-I$SCRIPT_DIR/src -I$SCRIPT_DIR/src/app"
 
-    if [[ "$board_name" == "reterminal-sticky-interactive" ]]; then
-        EXTRA_GLOBAL_FLAGS+=" -include $board_override_dir/drivers/nimble_config.h"
-    fi
+    EXTRA_GLOBAL_FLAGS+=" -include $SCRIPT_DIR/src/app/ble_build_config.h"
 
     if [[ -d "$board_override_dir" ]]; then
         echo -e "${YELLOW}Config:    Using board-specific overrides from src/boards/$board_name/${NC}"

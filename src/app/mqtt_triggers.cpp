@@ -26,15 +26,11 @@ static_assert(MAX_MQTT_TRIGGERS <= 32, "MAX_MQTT_TRIGGERS must be <= 32 (pending
 // RAM cache (PSRAM preferred, SRAM fallback). nullptr if allocation failed
 // (feature then degrades to a no-op).
 static MqttTriggerConfig* g_triggers = nullptr;
-#if defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
 struct MqttTriggerStorage {
     MqttTriggerConfig triggers[MAX_MQTT_TRIGGERS];
     char registered_topics[MAX_MQTT_TRIGGERS][CONFIG_MQTT_TOPIC_MAX_LEN];
 };
 static char (*g_registered_topics)[CONFIG_MQTT_TOPIC_MAX_LEN] = nullptr;
-#else
-static char g_registered_topics[MAX_MQTT_TRIGGERS][CONFIG_MQTT_TOPIC_MAX_LEN] = {};
-#endif
 
 // Mutex guarding the g_triggers array. The save path (load_from_flash) runs on
 // the async web-server task and mutates the cache, while the MQTT message
@@ -130,18 +126,19 @@ static bool load_from_flash() {
 
 void mqtt_triggers_init() {
     if (!g_lock) g_lock = xSemaphoreCreateMutex();
-    #if defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
-    auto* storage = static_cast<MqttTriggerStorage*>(
-        config_psram_alloc(sizeof(MqttTriggerStorage), "mqtt_triggers"));
-    g_triggers = storage ? storage->triggers : nullptr;
-    g_registered_topics = storage ? storage->registered_topics : nullptr;
-    #else
-    g_triggers = (MqttTriggerConfig*)config_psram_alloc(
-        (size_t)MAX_MQTT_TRIGGERS * sizeof(MqttTriggerConfig), "mqtt_triggers");
-    #endif
-    if (!g_triggers) {
-        LOGE(TAG, "Failed to allocate trigger config — feature disabled");
+    if (!g_lock) {
+        LOGE(TAG, "Failed to create trigger mutex — feature disabled");
         return;
+    }
+    if (!g_triggers) {
+        auto* storage = static_cast<MqttTriggerStorage*>(
+            config_psram_alloc(sizeof(MqttTriggerStorage), "mqtt_triggers"));
+        if (!storage) {
+            LOGE(TAG, "Failed to allocate trigger config — feature disabled");
+            return;
+        }
+        g_registered_topics = storage->registered_topics;
+        g_triggers = storage->triggers;
     }
     storage_mount();  // idempotent — ensures FS is mounted on headless boards too
     load_from_flash();

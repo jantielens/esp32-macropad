@@ -29,6 +29,11 @@
 #define HAS_FILESYSTEM true
 #define HAS_BLE true
 #define HAS_BLE_HID false
+// BLE_BACKEND_NIMBLE_ARDUINO; numeric for build.sh's library flag exporter.
+#ifndef BLE_BACKEND
+#define BLE_BACKEND 1
+#endif
+#define LVGL_FAST_MEM_IN_IRAM false
 // Prefer PSRAM for medium-sized ordinary allocations alongside Wi-Fi and BLE.
 #define MALLOC_PSRAM_THRESHOLD_BYTES 128
 #define HAS_USB_HID false

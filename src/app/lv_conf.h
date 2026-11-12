@@ -396,7 +396,7 @@
 
 /* Prefix performance critical functions to place them into a faster memory (e.g RAM).
  * Sticky uses cached flash to preserve shared SRAM for Wi-Fi and BLE. */
-#if defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+#if LVGL_FAST_MEM_IN_IRAM
     #define LV_ATTRIBUTE_FAST_MEM IRAM_ATTR
 #else
     #define LV_ATTRIBUTE_FAST_MEM

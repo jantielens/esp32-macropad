@@ -1,11 +1,16 @@
 #include "board_config.h"
 #include "BLEDevice.h"
+#if HAS_BLE_HID
 #include "../src/app/ble_hid.cpp"
+#endif
+#include "../src/app/ble_backend.cpp"
 #include "../src/app/bthome_events.cpp"
 #include <gtest/gtest.h>
 
 unsigned long millis() { return TestBle::clock_ms; }
+#if HAS_BLE_HID
 void net_activity_mark(net_channel_t) {}
+#endif
 static bool ota_active = false;
 static uint32_t ota_epoch = 1;
 bool ota_activity_is_active() { return ota_active; }
@@ -21,7 +26,9 @@ protected:
         BLEDevice::init_succeeds = true;
         ota_active = false;
         ota_epoch = 1;
+#if HAS_BLE_HID
         protocolMode = 1;
+#endif
         TestBle::clock_ms = 100;
         TestBle::claimed = false;
         TestBle::owner.clear();
@@ -39,10 +46,20 @@ protected:
         configured = false;
         event_active = false;
         packet_id = 0;
+#if HAS_BLE_HID
         ble_hid_init("Test", true);
+#else
+        NimBLEDevice::initialized = false;
+        NimBLEDevice::init_succeeds = true;
+        TestBle::radio_advertising = false;
+#endif
         bthome_events_configure("Test");
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+        bthome_events_prepare();
+#endif
     }
 
+#if HAS_BLE_HID
     void connect() {
         peer.sec_state = {false, false};
         BLEDevice::server.callbacks->onConnect(&BLEDevice::server, &peer);
@@ -64,6 +81,7 @@ protected:
         TestBle::stored_bond = true;
         TestBle::stored_peer = peer.peer_id_addr;
     }
+#endif
 };
 
 TEST_F(BleHid, BthomeUsesStableTenButtonPositionsAndDistinctPackets) {
@@ -94,11 +112,15 @@ TEST_F(BleHid, BthomeUsesStableTenButtonPositionsAndDistinctPackets) {
     TestBle::clock_ms += 350;
     bthome_events_loop();
     EXPECT_FALSE(event_active);
+#if HAS_BLE_HID
     EXPECT_TRUE(TestBle::radio_advertising);
     EXPECT_EQ(TestBle::appearance, HID_KEYBOARD);
+#else
+    EXPECT_FALSE(TestBle::radio_advertising);
+#endif
 }
 
-#if !defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+#if BLE_BACKEND == BLE_BACKEND_ARDUINO_CORE
 TEST_F(BleHid, BthomeKeepsLazyInitializationOnOtherBoards) {
     BLEDevice::initialized = false;
     BLEDevice::init_succeeds = false;
@@ -116,19 +138,24 @@ TEST_F(BleHid, BthomeKeepsLazyInitializationOnOtherBoards) {
 }
 #endif
 
-#if defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
-TEST_F(BleHid, BthomeStickyRejectsFailedStartupAndInitializesWithoutAdvertising) {
-    BLEDevice::initialized = false;
-    BLEDevice::init_succeeds = false;
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+TEST_F(BleHid, BthomeRejectsFailedStartupAndPreparesWithoutAdvertising) {
+    NimBLEDevice::initialized = false;
+    NimBLEDevice::init_succeeds = false;
     bthome_events_configure("Test");
+    ASSERT_FALSE(bthome_events_prepare());
     EXPECT_FALSE(bthome_events_send(1, bthome::press));
     bthome_events_loop();
     EXPECT_EQ(TestBle::event_starts, 0u);
 
-    BLEDevice::init_succeeds = true;
-    bthome_events_configure("Test");
-    ASSERT_TRUE(BLEDevice::getInitialized());
+    NimBLEDevice::init_succeeds = true;
+    ASSERT_TRUE(bthome_events_prepare());
+    ASSERT_TRUE(NimBLEDevice::isInitialized());
+    const auto inits = TestBle::host_inits;
+    ASSERT_TRUE(bthome_events_prepare());
+    EXPECT_EQ(TestBle::host_inits, inits);
     EXPECT_EQ(TestBle::event_starts, 0u);
+    EXPECT_FALSE(TestBle::radio_advertising);
     ASSERT_TRUE(bthome_events_send(1, bthome::press));
     bthome_events_loop();
     EXPECT_EQ(TestBle::event_starts, 1u);
@@ -153,6 +180,7 @@ TEST_F(BleHid, BthomeQueueRejectsNewestAndPreservesOrder) {
     EXPECT_EQ(TestBle::event_starts, 4u);
 }
 
+#if HAS_BLE_HID
 TEST_F(BleHid, BthomeDoesNotInterruptConnectedHidAndDefersReconnectAdvertising) {
     pair_owner();
     ASSERT_TRUE(bthome_events_send(4, bthome::long_press));
@@ -171,8 +199,26 @@ TEST_F(BleHid, BthomeDoesNotInterruptConnectedHidAndDefersReconnectAdvertising) 
     EXPECT_EQ(TestBle::appearance, HID_KEYBOARD);
 }
 
+TEST_F(BleHid, PairingRequestDoesNotReplaceActiveEventAdvertisement) {
+    ASSERT_TRUE(bthome_events_send(10, bthome::double_press));
+    bthome_events_loop();
+    const auto packet = TestBle::advertisement;
+    const auto starts = TestBle::hid_starts;
+    ble_hid_request_pairing();
+    ble_hid_loop();
+    EXPECT_EQ(TestBle::advertisement, packet);
+    EXPECT_EQ(TestBle::hid_starts, starts);
+    EXPECT_TRUE(event_active);
+    TestBle::clock_ms += 350;
+    bthome_events_loop();
+    EXPECT_GT(TestBle::hid_starts, starts);
+}
+#endif
+
 TEST_F(BleHid, BthomeWorksWithoutHidInitializationAndCancelsStaleOtaEvents) {
+#if HAS_BLE_HID
     hid_service_ready = false;
+#endif
     ASSERT_TRUE(bthome_events_send(1, bthome::press));
     bthome_events_loop();
     EXPECT_TRUE(event_active);
@@ -195,8 +241,12 @@ TEST_F(BleHid, BthomeAdvertisingFailureRestoresHidAndStopFailureRetainsOwnership
     ASSERT_TRUE(bthome_events_send(1, bthome::press));
     bthome_events_loop();
     EXPECT_FALSE(event_active);
+#if HAS_BLE_HID
     EXPECT_FALSE(advertising_paused);
     EXPECT_TRUE(TestBle::radio_advertising);
+#else
+    EXPECT_FALSE(TestBle::radio_advertising);
+#endif
     TestBle::event_start_result = 0;
     ASSERT_TRUE(bthome_events_send(1, bthome::press));
     bthome_events_loop();
@@ -204,13 +254,18 @@ TEST_F(BleHid, BthomeAdvertisingFailureRestoresHidAndStopFailureRetainsOwnership
     TestBle::clock_ms += 350;
     bthome_events_loop();
     EXPECT_TRUE(event_active);
+#if HAS_BLE_HID
     EXPECT_TRUE(advertising_paused);
+#endif
     TestBle::stop_succeeds = true;
     bthome_events_loop();
     EXPECT_FALSE(event_active);
+#if HAS_BLE_HID
     EXPECT_FALSE(advertising_paused);
+#endif
 }
 
+#if HAS_BLE_HID
 TEST_F(BleHid, LegacyJustWorksAndEncryptedReportGate) {
     EXPECT_TRUE(TestBle::bonding);
     EXPECT_FALSE(TestBle::mitm);
@@ -499,3 +554,4 @@ TEST_F(BleHid, PairingDeadlineSurvivesMillisWrap) {
     ble_hid_loop();
     EXPECT_FALSE(ble_hid_is_pairing());
 }
+#endif

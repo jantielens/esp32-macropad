@@ -16,8 +16,10 @@ inline bool valid_button_event(uint8_t button, uint8_t event) {
 }
 
 #if HAS_BLE || HAS_BLE_HID
-// Configure on the main loop; Sticky initializes BLE here, other boards on use.
+// Main-task identity configuration, without starting the host or advertising.
 void bthome_events_configure(const char* device_name);
+// Explicit preparation for early-start backends; core event use stays lazy.
+bool bthome_events_prepare();
 // Thread-safe admission. Success means queued, not received by Home Assistant.
 bool bthome_events_send(uint8_t button, uint8_t event);
 // Owns advertising and HID pause/resume on the Arduino main loop.

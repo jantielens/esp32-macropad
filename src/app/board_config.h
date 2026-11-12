@@ -2,6 +2,7 @@
 #define BOARD_CONFIG_H
 
 #include <stdint.h>
+#include "ble_backend_selection.h"
 
 
 // Per-button definition supplied by boards via HW_BUTTON_DEFS (see the
@@ -43,6 +44,23 @@ struct HwButtonDef {
 #include "board_overrides.h"
 #endif
 
+// BLE implementation; existing boards retain the bundled Arduino core backend.
+#ifndef BLE_BACKEND
+#define BLE_BACKEND BLE_BACKEND_ARDUINO_CORE
+#endif
+#if BLE_BACKEND != BLE_BACKEND_ARDUINO_CORE && BLE_BACKEND != BLE_BACKEND_NIMBLE_ARDUINO
+#error "Invalid BLE_BACKEND: select BLE_BACKEND_ARDUINO_CORE or BLE_BACKEND_NIMBLE_ARDUINO"
+#endif
+
+// Keep LVGL fast paths in IRAM on S3 by default; boards may trade speed for SRAM.
+#ifndef LVGL_FAST_MEM_IN_IRAM
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#define LVGL_FAST_MEM_IN_IRAM true
+#else
+#define LVGL_FAST_MEM_IN_IRAM false
+#endif
+#endif
+
 // Repo-owned PSRAM capability alias, derived from the Arduino core's
 // BOARD_HAS_PSRAM (defined by PSRAM-enabled board menus / FQBN options). Safe
 // default of 0 so a board that does not advertise PSRAM is treated as
@@ -54,6 +72,10 @@ struct HwButtonDef {
 #  else
 #    define HAS_PSRAM 0
 #  endif
+#endif
+
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO && !HAS_PSRAM
+#error "NimBLE-Arduino broadcast profile requires HAS_PSRAM; use the core backend otherwise"
 #endif
 
 // Ordinary malloc PSRAM preference threshold; ESP32/S3 with PSRAM use 512 bytes, 0 preserves SDK policy.
@@ -299,6 +321,10 @@ struct HwButtonDef {
 // for boards without a display (e.g. ESP32-C3 sensor nodes).
 #ifndef HAS_BLE
 #define HAS_BLE false
+#endif
+
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO && HAS_BLE_HID
+#error "NimBLE-Arduino HID is not supported yet; disable HAS_BLE_HID or select the core backend"
 #endif
 
 // BLE telemetry advertising burst count (packets per wake in duty_cycle_ble mode).

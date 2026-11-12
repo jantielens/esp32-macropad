@@ -218,8 +218,9 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 	if (g_normal_runtime_started) return;
 	g_normal_runtime_started = true;
 
-	#if defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+	#if (HAS_BLE || HAS_BLE_HID) && BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
 	bthome_events_configure(device_config.device_name);
+	bthome_events_prepare();
 	#endif
 
 	#if HAS_HA_HISTORY
@@ -262,7 +263,7 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 
 	sensor_manager_init();
 
-	#if (HAS_BLE || HAS_BLE_HID) && !defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+	#if (HAS_BLE || HAS_BLE_HID) && BLE_BACKEND == BLE_BACKEND_ARDUINO_CORE
 	bthome_events_configure(device_config.device_name);
 	#endif
 
@@ -556,10 +557,11 @@ void setup()
 	power_manager_set_current_mode(boot_mode);
 	power_manager_led_set_mode(boot_mode);
 
-	#if defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+	#if (HAS_BLE || HAS_BLE_HID) && BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
 	// Reserve BLE's internal RAM before WiFi and normal-runtime allocations.
 	if (boot_mode == PowerMode::AlwaysOn) {
 		bthome_events_configure(device_config.device_name);
+		bthome_events_prepare();
 	}
 	#endif
 

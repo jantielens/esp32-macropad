@@ -371,9 +371,9 @@ HID hosts or multiple power sources.
 Building firmware requires Node.js 18 or newer and npm for the pinned Terser
 asset minifier, alongside the Arduino and Python tooling. Run `npm ci --prefix tools`
 before building offline. See the [build guide](docs/dev/build-and-release-process.md).
-The Sticky target additionally selects the pinned NimBLE-Arduino
-[broadcast-only BLE profile](docs/dev/build-and-release-process.md#sticky-broadcast-only-ble);
-other boards retain their existing BLE backend.
+The compile-time `BLE_BACKEND` selector supports the pinned NimBLE-Arduino
+[broadcast profile](docs/dev/build-and-release-process.md#ble-backend-and-broadcast-profile),
+initially selected only by Sticky; other boards retain their core BLE backend.
 
 Building from source, contributing, or adding new board support? See the [developer docs](docs/dev/).
 For a feature-size attribution report from an existing build, use the

@@ -1763,10 +1763,10 @@ Returns comprehensive device information.
   editor metadata shared with MCP. The main-loop-owned `bthome_events.cpp`
   sends unencrypted BTHome v2 advertisements with all ten button positions,
   a per-activation packet ID, and a 350 ms burst at 100 ms intervals. It
-  initializes BLE lazily on other boards; Sticky uses the isolated
-  [broadcast-only profile](build-and-release-process.md#sticky-broadcast-only-ble)
+  initializes the core BLE backend lazily; the opt-in NimBLE-Arduino
+  [broadcast profile](build-and-release-process.md#ble-backend-and-broadcast-profile) prepares the host
   before Wi-Fi in always-on mode (or when normal runtime starts after setup).
-  It pauses/restores HID advertising without disconnecting
+  The core backend pauses/restores HID advertising without disconnecting
   its host, and uses nonconnectable NimBLE GAP advertising even when GATT
   connection slots are full. Its four-entry waiting FIFO rejects newest on
   overflow; queue admission is synchronous, not remote completion. OTA activity

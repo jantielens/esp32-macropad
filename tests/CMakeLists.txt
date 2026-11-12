@@ -84,6 +84,15 @@ add_host_legacy_test(test_image_fetch
 set(HOST_ARDUINOJSON_DIR "$ENV{HOME}/Arduino/libraries/ArduinoJson/src")
 set(HOST_LVGL_DIR "$ENV{HOME}/Arduino/libraries/lvgl/src")
 
+add_host_legacy_test(test_mqtt_triggers
+    SOURCES test_mqtt_triggers.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/font_store_overrides ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS MAX_MQTT_TRIGGERS=8 HAS_FILESYSTEM=1 USE_SD_STORAGE=0
+        TEST_FREERTOS_MUTEX_LIFECYCLE=1
+    LIBRARIES GTest::gtest_main
+    OPTIONS -Wno-deprecated-declarations
+)
+
 foreach(diagnostics 0 1)
   set(sticky_target test_sticky_epaper_driver)
   if(diagnostics)
@@ -700,12 +709,26 @@ add_host_legacy_test(test_ble_hid
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
 )
 
-add_host_legacy_test(test_bthome_sticky
+add_host_legacy_test(test_bthome_nimble_broadcast
     SOURCES test_ble_hid.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/ble_hid_overrides
-    DEFINITIONS BOARD_RETERMINAL_STICKY_INTERACTIVE=1
+    DEFINITIONS HAS_BLE=1 HAS_BLE_HID=0 BLE_BACKEND=1
     LIBRARIES GTest::gtest_main
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+)
+
+foreach(backend 0 1)
+    add_host_legacy_test(test_ble_telemetry_${backend}
+        SOURCES test_ble_telemetry.cpp
+        INCLUDES ${PROJECT_SOURCE_DIR}/tests/ble_hid_overrides
+        DEFINITIONS HAS_BLE=1 HAS_BLE_HID=0 BLE_BACKEND=${backend}
+        LIBRARIES GTest::gtest_main
+        PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+    )
+endforeach()
+
+add_host_command_test(test_ble_build_profiles
+    bash ${PROJECT_SOURCE_DIR}/tests/test_ble_build_profiles.sh ${CMAKE_CXX_COMPILER}
 )
 
 foreach(transport IN ITEMS both usb ble none)

@@ -2158,11 +2158,13 @@ Each board compiles with its own display driver and settings.
 - **Per screen:** ~200-500 bytes (depends on widget count)
 - **Total:** ~50-60 KB for display subsystem
 
-`LV_ATTRIBUTE_FAST_MEM` places LVGL fast-path functions in IRAM on ESP32-S3,
-except `reterminal-sticky-interactive`, which executes them from cached flash.
+`LVGL_FAST_MEM_IN_IRAM` maps to `LV_ATTRIBUTE_FAST_MEM` in `lv_conf.h`.
+It defaults to true on ESP32-S3 and false on other target families;
+`reterminal-sticky-interactive` explicitly selects false for cached flash.
 Sticky trades possible rendering overhead for more shared SRAM available to the
 internal heap alongside Wi-Fi and BLE. Other S3 boards retain IRAM placement;
-other chip families retain their existing flash placement. This selection does
+other chip families retain their existing flash placement. The selector is
+independent of BLE backend, capabilities, and PSRAM allocation policy. It does
 not move task stacks, DMA buffers, or ISR code. Compare linked IRAM size, device
 internal/DMA heap, navigation rendering times, and OTA behavior before considering
 the Sticky experiment validated.
