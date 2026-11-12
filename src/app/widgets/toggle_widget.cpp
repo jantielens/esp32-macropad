@@ -157,7 +157,7 @@ void toggle_tap(const WidgetConfig*, WidgetState* runtime,
         *static_cast<bool*>(lv_event_get_user_data(event)) = true;
     };
     lv_obj_add_event_cb(button, delete_callback, LV_EVENT_DELETE, &deleted);
-    const ActionResult result = action_list_dispatch_result(actions, count, target ? "ToggleOn" : "ToggleOff", ACTION_CONTINUATION_OWNER_LVGL);
+    const ActionResult result = action_list_dispatch_result(actions, count, target ? "ToggleOn" : "ToggleOff", ACTION_CONTINUATION_OWNER_LVGL, true);
     if (deleted) return;
     lv_obj_remove_event_cb_with_user_data(button, delete_callback, &deleted);
     if (result == ACTION_FAILED) {

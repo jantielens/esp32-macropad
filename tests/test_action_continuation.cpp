@@ -15,6 +15,7 @@ static int g_fail = 0;
 static uint32_t g_pending_token = 0;
 static char g_dispatched[4][CONFIG_ACTION_TYPE_MAX_LEN] = {};
 static uint8_t g_dispatched_count = 0;
+static bool g_interactive[4] = {};
 static char g_notification[CONFIG_DIALOG_MESSAGE_MAX_LEN] = {};
 
 #define TEST(name) static void test_##name()
@@ -31,7 +32,8 @@ static char g_notification[CONFIG_DIALOG_MESSAGE_MAX_LEN] = {};
 void action_parse(const JsonObject&, ButtonAction&) {}
 
 ActionResult action_dispatch(const ButtonAction& action, const char*,
-                             uint32_t continuation_token) {
+                             uint32_t continuation_token, bool interactive) {
+    g_interactive[g_dispatched_count] = interactive;
     strlcpy(g_dispatched[g_dispatched_count++], action.type,
             sizeof(g_dispatched[0]));
     if (!strcmp(action.type, ACTION_TYPE_NOTIFY))
@@ -242,6 +244,25 @@ TEST(dispatch_reports_initial_result_without_changing_suffix_policy) {
     action_list_dispatch_continuation();
 }
 
+TEST(interaction_origin_survives_pause_but_not_next_background_list) {
+    reset_dispatch();
+    ButtonAction actions[2] = {};
+    strcpy(actions[0].type, "pending");
+    strcpy(actions[1].type, "next");
+    action_list_dispatch(actions, 2, "User", ACTION_CONTINUATION_OWNER_LVGL, true);
+    ASSERT_TRUE(g_interactive[0]);
+    action_list_dispatch_continuation(ACTION_CONTINUATION_OWNER_LVGL);
+    ASSERT_EQ(g_dispatched_count, 1);
+    ASSERT_TRUE(action_continuation_complete(g_pending_token, true));
+    action_list_dispatch_continuation(ACTION_CONTINUATION_OWNER_LOOP);
+    ASSERT_EQ(g_dispatched_count, 1);
+    action_list_dispatch_continuation(ACTION_CONTINUATION_OWNER_LVGL);
+    ASSERT_EQ(g_dispatched_count, 2);
+    ASSERT_TRUE(g_interactive[1]);
+    action_list_dispatch(actions + 1, 1, "Background");
+    ASSERT_TRUE(!g_interactive[2]);
+}
+
 int main() {
     RUN(success_copies_saved_suffix);
     RUN(failure_discards_suffix);
@@ -255,6 +276,7 @@ int main() {
     RUN(failure_before_confirmation_stops_entire_suffix);
     RUN(explicit_input_wait_and_completion_are_single_use);
     RUN(dispatch_reports_initial_result_without_changing_suffix_policy);
+    RUN(interaction_origin_survives_pause_but_not_next_background_list);
     std::printf("action continuation: %d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }

@@ -647,7 +647,7 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
                 }
             }
 #endif
-            action_list_dispatch(&local_nr, 1, nr_event, ACTION_CONTINUATION_OWNER_LVGL);
+            action_list_dispatch(&local_nr, 1, nr_event, ACTION_CONTINUATION_OWNER_LVGL, true);
 #if HAS_MQTT
             publish_button_event(tile, "press", overlay);
 #endif
@@ -681,10 +681,10 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
     }
 
     if (tile->widget_type) {
-        action_list_dispatch(local, count, event_label, ACTION_CONTINUATION_OWNER_LVGL);
+        action_list_dispatch(local, count, event_label, ACTION_CONTINUATION_OWNER_LVGL, true);
     } else {
         if (!device_dialog_active())
-            action_list_dispatch(local, count, event_label, ACTION_CONTINUATION_OWNER_LVGL);
+            action_list_dispatch(local, count, event_label, ACTION_CONTINUATION_OWNER_LVGL, true);
     }
 
 #if HAS_MQTT
@@ -760,10 +760,10 @@ void PadScreen::longPressAt(ButtonTile* tile, const lv_point_t& point) {
     }
 
     if (tile->widget_type) {
-        action_list_dispatch(local, count, "LP", ACTION_CONTINUATION_OWNER_LVGL);
+        action_list_dispatch(local, count, "LP", ACTION_CONTINUATION_OWNER_LVGL, true);
     } else {
         if (!device_dialog_active())
-            action_list_dispatch(local, count, "LP", ACTION_CONTINUATION_OWNER_LVGL);
+            action_list_dispatch(local, count, "LP", ACTION_CONTINUATION_OWNER_LVGL, true);
     }
 
 #if HAS_MQTT
@@ -832,7 +832,7 @@ void PadScreen::onPadActionTap(lv_event_t* e) {
         }
     }
 #endif
-    action_list_dispatch(local, count, "PadTap", ACTION_CONTINUATION_OWNER_LVGL);
+    action_list_dispatch(local, count, "PadTap", ACTION_CONTINUATION_OWNER_LVGL, true);
 }
 
 void PadScreen::onSwipeGuard(lv_event_t* event) {

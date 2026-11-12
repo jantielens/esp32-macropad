@@ -113,7 +113,7 @@ bool icon_store_lookup(const char*, IconRef* ref) {
 void icon_store_build_option_key(uint8_t, const char*, uint8_t, uint8_t, uint8_t, char*, size_t) {}
 
 ActionResult action_list_dispatch_result(const ButtonAction* actions, uint8_t count,
-                                         const char*, ActionContinuationOwner) {
+                                         const char*, ActionContinuationOwner, bool) {
     if (count) {
         ++g_dispatches;
         g_action_count = count;

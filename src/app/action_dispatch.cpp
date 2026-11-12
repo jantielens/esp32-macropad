@@ -52,8 +52,8 @@ void action_collect_binding_topics(const ButtonAction& act, void* user_data) {
 static ActionResult action_dispatch_resolved(const ButtonAction& act, const char* label,
                                              uint32_t continuation_token);
 
-ActionResult action_dispatch(const ButtonAction& act_in, const char* label,
-                             uint32_t continuation_token) {
+static ActionResult dispatch_action(const ButtonAction& act_in, const char* label,
+                                    uint32_t continuation_token) {
     if (!act_in.type[0]) return ACTION_COMPLETE;
 
     // Ordinary bindable fields resolve before dispatch. Transactional actions
@@ -78,6 +78,15 @@ ActionResult action_dispatch(const ButtonAction& act_in, const char* label,
         return action_dispatch_resolved(act, label, continuation_token);
     }
     return action_dispatch_resolved(act_in, label, continuation_token);
+}
+
+ActionResult action_dispatch(const ButtonAction& act, const char* label,
+                             uint32_t continuation_token, bool interactive) {
+    const bool previous = dispatch_context.interactive;
+    dispatch_context.interactive = interactive;
+    const ActionResult result = dispatch_action(act, label, continuation_token);
+    dispatch_context.interactive = previous;
+    return result;
 }
 
 static ActionResult action_dispatch_resolved(const ButtonAction& act, const char* label,

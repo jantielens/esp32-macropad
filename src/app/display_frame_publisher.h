@@ -6,6 +6,18 @@
 // Owned exclusively by the LVGL task (or its mutex during external mutations).
 class DisplayFramePublisher {
 public:
+    void requestBindingRefresh(uint64_t now) {
+        if (!bindingRefreshPending) bindingRequestedUs = now;
+        bindingRefreshPending = true;
+    }
+
+    bool takeBindingRefresh(bool blocked, uint64_t& requestedUs) {
+        if (blocked || !bindingRefreshPending) return false;
+        bindingRefreshPending = false;
+        requestedUs = bindingRequestedUs;
+        return true;
+    }
+
     uint32_t interactionChanged(uint64_t now) {
         interaction.intent = DisplayIntent::Interactive;
         interaction.request_sequence = ++requestSequence;
@@ -39,6 +51,8 @@ public:
     }
 
 private:
+    bool bindingRefreshPending = false;
+    uint64_t bindingRequestedUs = 0;
     DisplayFrame interaction;
     DisplayFrame rendering;
     uint32_t sequence = 0;

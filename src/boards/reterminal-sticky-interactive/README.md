@@ -25,7 +25,8 @@ and there is no backlight control. Follow
 for rendering, dithering, cadence, Save/Reboot, and full refresh controls.
 VCOM settings are not consumed by this driver.
 
-Focus, navigation and dialog changes use interaction-priority presentation:
+Focus, navigation, dialog changes and user-triggered variable updates use
+interaction-priority presentation:
 they request a prompt coherent frame and bypass background settling/cadence.
 An active waveform, required full cleanup and recovery still complete normally.
 This does not shorten controller preparation or the physical waveform; latency

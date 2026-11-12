@@ -40,21 +40,21 @@ uint8_t action_list_parse(JsonVariant v, ButtonAction* out, uint8_t max,
 }
 
 void action_list_dispatch(const ButtonAction* actions, uint8_t count, const char* label,
-                          ActionContinuationOwner owner) {
-    action_list_dispatch_result(actions, count, label, owner);
+                          ActionContinuationOwner owner, bool interactive) {
+    action_list_dispatch_result(actions, count, label, owner, interactive);
 }
 
 ActionResult action_list_dispatch_result(const ButtonAction* actions, uint8_t count, const char* label,
-                                         ActionContinuationOwner owner) {
+                                         ActionContinuationOwner owner, bool interactive) {
     if (!actions) return ACTION_COMPLETE;
     for (uint8_t i = 0; i < count; i++) {
         const uint8_t remaining_count = count - i - 1;
         uint32_t continuation_token = 0;
         const bool reserved = action_continuation_begin(
-            actions + i + 1, remaining_count, label, &continuation_token, owner);
+            actions + i + 1, remaining_count, label, &continuation_token, owner, interactive);
 
         const ActionResult result = action_dispatch(actions[i], label,
-                                                    continuation_token);
+                                                    continuation_token, interactive);
         if (!reserved) {
             // Occupied continuation slots must not prevent unrelated synchronous
             // action arrays from running. Pending-capable actions treat token 0
@@ -81,10 +81,11 @@ void action_list_dispatch_continuation(ActionContinuationOwner owner) {
     ButtonAction actions[MAX_BUTTON_ACTIONS - 1] = {};
     uint8_t count = 0;
     char label[ACTION_CONTINUATION_LABEL_MAX_LEN];
+    bool interactive = false;
     const ActionContinuationTakeResult result = action_continuation_take(
-        actions, &count, label, sizeof(label), owner);
+        actions, &count, label, sizeof(label), owner, &interactive);
     if (result == ACTION_CONTINUATION_SUCCESS) {
-        action_list_dispatch(actions, count, label, owner);
+        action_list_dispatch(actions, count, label, owner, interactive);
     } else if (result == ACTION_CONTINUATION_FAILED) {
         LOGW("Action", "%s pausable action failed; remaining actions discarded", label);
     } else if (result == ACTION_CONTINUATION_TIMED_OUT) {

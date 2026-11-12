@@ -229,6 +229,36 @@ static void coherentLvglFrame() {
     CHECK(fixture.driver.getPresentationStats(&stats));
     CHECK(stats.last.frame_sequence == fixture.commits);
 #endif
+    // Local binding requests coalesce, survive blocked owner passes, and only
+    // become render intent after resolution at the safe outer boundary.
+    const uint64_t bindingRequest = uint64_t(clockMs) * 1000;
+    fixture.publisher.requestBindingRefresh(bindingRequest);
+    fixture.publisher.requestBindingRefresh(bindingRequest + 100);
+    CHECK(!fixture.publisher.needsPromptRender());
+    uint64_t requested = 0;
+    CHECK(!fixture.publisher.takeBindingRefresh(true, requested));
+    CHECK(fixture.publisher.takeBindingRefresh(false, requested) && requested == bindingRequest);
+    CHECK(!fixture.publisher.takeBindingRefresh(false, requested));
+    lv_obj_t* counter = lv_label_create(lv_screen_active());
+    lv_label_set_text(counter, "1");
+    fixture.publisher.interactionChanged(requested);
+    CHECK(fixture.publisher.renderIfNeeded(fixture.driver, display, false));
+    uint32_t uploadAt = 0;
+    streamHook = [&] { if (!uploadAt) uploadAt = clockMs; };
+    const uint32_t beforeLocalPresent = clockMs;
+    fixture.driver.present();
+    CHECK(uploadAt && uploadAt - beforeLocalPresent < EPAPER_REFRESH_SETTLE_MS);
+    streamHook = nullptr;
+
+    fixture.publisher.requestBindingRefresh(uint64_t(clockMs) * 1000);
+    CHECK(fixture.publisher.takeBindingRefresh(false, requested));
+    lv_label_set_text(counter, "1");
+    fixture.publisher.interactionChanged(requested);
+    const size_t beforeNoChange = modes().size();
+    CHECK(fixture.publisher.renderIfNeeded(fixture.driver, display, false));
+    fixture.driver.present();
+    CHECK(modes().size() == beforeNoChange && !fixture.publisher.needsPromptRender());
+
     // Idle/background invalidations still follow the unchanged display timer.
     const unsigned idleFlushes = fixture.flushes;
     lv_timer_reset(lv_display_get_refr_timer(display));

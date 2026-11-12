@@ -27,7 +27,8 @@ enum ActionContinuationOwner : uint8_t {
 // release it unless the dispatched action returns ACTION_PENDING.
 bool action_continuation_begin(const ButtonAction* remaining, uint8_t remaining_count,
                                const char* label, uint32_t* token,
-                               ActionContinuationOwner owner = ACTION_CONTINUATION_OWNER_LOOP);
+                               ActionContinuationOwner owner = ACTION_CONTINUATION_OWNER_LOOP,
+                               bool interactive = false);
 void action_continuation_release(uint32_t token);
 void action_continuation_mark_pending(uint32_t token);
 // Override only this reservation's watchdog. Zero disables it for an explicit
@@ -51,6 +52,7 @@ bool action_continuation_schedule_success(uint32_t token, uint32_t duration_ms);
 ActionContinuationTakeResult action_continuation_take(
     ButtonAction* out_actions, uint8_t* out_count,
     char* out_label, uint8_t out_label_len,
-    ActionContinuationOwner owner = ACTION_CONTINUATION_OWNER_LOOP);
+    ActionContinuationOwner owner = ACTION_CONTINUATION_OWNER_LOOP,
+    bool* out_interactive = nullptr);
 
 #endif // HAS_DISPLAY || HAS_BUTTON

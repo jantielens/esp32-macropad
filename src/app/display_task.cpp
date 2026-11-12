@@ -84,6 +84,20 @@ void DisplayManager::queueScreenIntent(bool interactive) {
 		wakeRenderTask();
 }
 
+void display_manager_request_binding_refresh() {
+		if (displayManager) displayManager->requestBindingRefresh();
+}
+
+void DisplayManager::requestBindingRefresh() {
+		bool didLock = false;
+		lockIfNeeded(didLock);
+		if (driver && driver->coherentFrames()) {
+				framePublisher.requestBindingRefresh(esp_timer_get_time());
+				wakeRenderTask();
+		}
+		unlockIfNeeded(didLock);
+}
+
 void DisplayManager::interactionChanged(uint64_t requestedUs) {
 		if (!driver || !driver->coherentFrames()) return;
 		const uint64_t changedUs = esp_timer_get_time();
@@ -428,6 +442,16 @@ void DisplayManager::lvglTask(void* pvParameter) {
 
 				// Input callbacks and screen updates may invalidate after the refresh
 				// timer ran. Render only here, never recursively inside those callbacks.
+				uint64_t bindingRequestedUs = 0;
+				if (mgr->framePublisher.takeBindingRefresh(mgr->pendingScreen ||
+						screen_saver_manager_is_rendering_suspended() || ota_activity_is_active(), bindingRequestedUs)) {
+						for (uint8_t pi = 0; mgr->padScreens && mgr->currentScreen && pi < MAX_PADS; ++pi) {
+								if (mgr->padScreens[pi] != mgr->currentScreen) continue;
+								mgr->interactionChanged(bindingRequestedUs);
+								mgr->padScreens[pi]->pollLiveData(true);
+								break;
+						}
+				}
 				if (mgr->driver->coherentFrames() && mgr->framePublisher.needsPromptRender()) {
 #if HAS_DISPLAY_DIAGNOSTICS
 						mgr->invalidationSource = DisplayInvalidationSource::Timer;

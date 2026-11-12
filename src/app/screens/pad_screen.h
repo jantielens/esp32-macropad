@@ -229,7 +229,6 @@ private:
     // Build/destroy tile LVGL objects from config
     void buildTiles();
     void clearTiles();
-    void pollLiveData(bool force = false);
     void pollMqttBindings(bool refreshPassive);
     void pollColorBindings();
     void pollNumberBindings();
@@ -270,6 +269,7 @@ public:
     void show() override;
     void hide() override;
     void update() override;
+    void pollLiveData(bool force = false);
     const char* wakeScreenId() const override;
 
     // LRU eviction: free heavy arrays while keeping LVGL shell alive

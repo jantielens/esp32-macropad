@@ -34,7 +34,11 @@ Minimum presentation interval 250-60000 ms controls background presentation cade
 Higher values combine rapid changes and save panel work.
 On devices supporting interaction-priority presentation, focus, navigation and
 dialog changes bypass background settling and this interval once their frame
-is ready. An active panel refresh still completes first; rapid visual changes
+is ready. A user-triggered **Set variable** action that changes a value also
+resolves the current pad's bindings promptly, without waiting for the passive
+interval. Background actions retain passive polling; unchanged values do not
+request an immediate update. An active panel refresh still completes first;
+rapid visual changes
 can combine into the latest frame without dropping their actions. Other devices
 retain interval-limited presentation; see [panel notes](../hardware.md).
 Refresh clock values on minute boundary keeps visible time bindings current

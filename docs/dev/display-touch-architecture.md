@@ -1394,6 +1394,19 @@ Sleep/OTA rendering gates, initial bindings, tap/hold semantics and suppressed
 tap flashes remain unchanged. Other drivers, including dedicated frame-device
 and LCD paths, retain their previous scheduling.
 
+Changed `set_var` actions from user input queue a coalesced binding refresh.
+Dispatch carries an explicit interaction flag, defaulting to background;
+pending action-list continuations preserve it without changing their execution
+order. The variable store remains independent of the display. Under the existing
+display lock, the action requests work only after a successful changed write.
+At the same safe outer task boundary, the manager resolves the current pad
+through `pollLiveData(true)`, then uses the existing interaction/coherent-frame
+path. Sleep, OTA and pending screen switches defer this work. Non-pad screens
+consume the request without creating future urgency. Unchanged/failed writes,
+automated actions and non-opted-in drivers retain their previous behavior.
+No-change render generations consume intent without a physical presentation;
+the passive polling period and panel waveform remain unchanged.
+
 With `HAS_DISPLAY_DIAGNOSTICS`, bounded per-interaction/presentation debug logs
 carry request/frame sequences and microsecond timestamps for UI-owner entry,
 mutation, committed readiness, hardware eligibility, snapshot, waveform trigger,

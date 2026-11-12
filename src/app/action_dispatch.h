@@ -13,13 +13,14 @@
 // An asynchronous action returns ACTION_PENDING and later uses its token to
 // resume the copied suffix on the task that dispatched the action list.
 ActionResult action_dispatch(const ButtonAction& act, const char* label,
-							 uint32_t continuation_token = 0);
+							 uint32_t continuation_token = 0, bool interactive = false);
 
 struct ActionDispatchContext {
 	bool synchronous = false;
 	bool (*work_guard)(uint32_t) = nullptr;
 	uint32_t generation = 0;
 	bool alarm_audio = false;
+	bool interactive = false;
 };
 ActionDispatchContext action_dispatch_context();
 ActionResult action_dispatch_synchronous(const ButtonAction& act, const char* label,

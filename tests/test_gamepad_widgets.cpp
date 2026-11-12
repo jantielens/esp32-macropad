@@ -88,7 +88,7 @@ static void joystick_set_pos(lv_obj_t* object, int32_t horizontal, int32_t verti
 static unsigned navigation_swipe_requests = 0;
 static SwipeConfig navigation_swipe_config{};
 const SwipeConfig* swipe_config_get() { return &navigation_swipe_config; }
-ActionResult action_dispatch(const ButtonAction&, const char*, uint32_t) {
+ActionResult action_dispatch(const ButtonAction&, const char*, uint32_t, bool) {
     ++navigation_swipe_requests;
     return ACTION_COMPLETE;
 }

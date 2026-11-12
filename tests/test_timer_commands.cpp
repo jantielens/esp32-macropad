@@ -28,7 +28,7 @@ static bool g_snapshot_ok = false;
 static TimerExpirySnapshot g_snapshot = {};
 
 void action_list_dispatch(const ButtonAction* actions, uint8_t count, const char*,
-                          ActionContinuationOwner) {
+                          ActionContinuationOwner, bool) {
     for (uint8_t index = 0; index < count; index++) {
         (void)actions[index];
         g_dispatched++;

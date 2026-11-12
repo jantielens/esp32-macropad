@@ -19,7 +19,9 @@
 #include <string>
 
 static unsigned g_followup_dispatches = 0;
-ActionResult action_dispatch(const ButtonAction& action, const char* label, uint32_t token) {
+ActionDispatchContext action_dispatch_context() { return {}; }
+void display_manager_request_binding_refresh() {}
+ActionResult action_dispatch(const ButtonAction& action, const char* label, uint32_t token, bool) {
     if (!strcmp(action.type, ACTION_TYPE_HA_SERVICE))
         return action_type_find(action.type)->dispatch(action, label, token);
     ++g_followup_dispatches;

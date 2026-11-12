@@ -289,7 +289,7 @@ void activate(State* state, uint8_t index) {
     bool deleted = false;
     lv_obj_add_event_cb(parent, delete_guard, LV_EVENT_DELETE, &deleted);
     const ActionResult result = action_list_dispatch_result(actions, state->action_count,
-                                                           "OptionValue", ACTION_CONTINUATION_OWNER_LVGL);
+                                                           "OptionValue", ACTION_CONTINUATION_OWNER_LVGL, true);
     if (deleted) return;
     lv_obj_remove_event_cb_with_user_data(parent, delete_guard, &deleted);
     if (result == ACTION_FAILED) {

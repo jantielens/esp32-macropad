@@ -968,6 +968,152 @@ check passed. A second local Node.js calculation verified all reported
 post-change stage medians/ranges. No firmware tests/build are needed for this
 measurement-only plan update.
 
+### Approved local-variable interaction follow-up
+
+Status: Host verified; preferred-board firmware build passed; hardware pending.
+Baseline: clean worktree at `fcf2b09a`. The existing counter capture has
+`request_seq=0`: a changed `set_var` waits for passive binding polling, then
+background settling/cadence. At the portal's 250 ms presentation minimum,
+release-to-ready is approximately 21-100 ms, upload approximately 186-197 ms
+and trigger-to-BUSY approximately 611 ms. These are pre-follow-up device
+observations, not measurements of this implementation.
+
+The approved correction reuses dispatch, continuation, binding polling and the
+coherent publication path; it does not restart the architecture or begin
+controller caching, waveform changes or phases 3-6.
+
+* [x] Carry explicit user-interaction origin from pad/widget, swipe and hardware
+  input; retain it across pending continuations without changing action order.
+* [x] Queue binding invalidation only after a changed, successful user `set_var`.
+  Background, unchanged and failed writes retain their previous behavior.
+* [x] Coalesce requests and retain the first request timestamp. At the safe LVGL
+  owner boundary, force existing current-pad binding resolution and request the
+  existing prompt coherent render. Retain requests through sleep/OTA/navigation
+  gates; consume them on non-pad screens without future urgency.
+* [x] Preserve normal passive intervals, no-change behavior, LCD/dedicated-frame
+  paths, buffer ownership, screenshot publication and hardware checkpoints.
+* [x] Extend existing tests for changed/unchanged/failed/background mutations,
+  origin restoration and continuation ownership, coalescing/deferred requests,
+  prompt/no-change presentation, and forced polling with a 1000 ms interval
+  without altering the following idle boundary. No new harness or test file.
+* [x] Reconcile the architecture, owning user topic and board summary. No
+  action schema/catalog metadata, API, setting or feature flag changed, so
+  generated catalogs and flag references need no refresh.
+* [x] Build only the saved verification preference,
+  `reterminal-sticky-interactive`, with diagnostics enabled.
+* [ ] Measure counter taps with passive 1000 ms / presentation 500 ms settings.
+  Expect nonzero interaction request sequences and no discretionary settling/
+  cadence wait when the panel is free. Record request-to-ready, eligible-to-
+  snapshot, upload, waveform and publication separately.
+* [ ] Complete physical visible-onset, burst/action-order/confirmation,
+  sleep/OTA/recovery/screenshot and SSD2677 acceptance.
+
+Validation commands and results:
+
+```bash
+cmake --build build/host-tests --parallel 2 --target test_runtime_variable_actions_display test_runtime_variable_actions_headless test_action_continuation test_sticky_epaper_driver test_sticky_epaper_driver_diagnostics
+```
+
+Passed. The initial focused CTest selection passed 5/5.
+
+```bash
+cmake --build build/host-tests --parallel 2 --target test_alarm_manager test_gamepad_widgets test_timer_format test_timer_commands test_timer_binding_target test_toggle_widget test_slider_widget test_stopwatch_round_ui test_pad_confirmation test_pad_overlay_input
+cmake --build build/host-tests --parallel 2 --target test_ota_activity test_binding_value test_runtime_variables test_runtime_variables_no_psram test_crowpanel_epaper_driver test_epaper_frame_battery test_epaper_frame_media_conformance
+ctest --test-dir build/host-tests --output-on-failure -R '^(test_sticky_epaper_driver(_diagnostics)?|test_crowpanel_epaper_driver|test_ota_activity|test_binding_value|test_runtime_variables(_no_psram)?|check_runtime_variables_disabled|test_runtime_variable_actions_(display|headless)|test_action_(continuation|parse(_alarm_disabled)?|bindings)|test_pad_(confirmation|overlay_input|refresh_schedule)|test_epaper_(frame_battery|frame_media_conformance|frame_portal_contract|macro_contract)|test_asset_variant_matrix|test_portal_epaper_config|test_alarm_manager(_allocation_failure)?|test_timer_(format|commands.*|binding_target)|test_stopwatch_round_ui)$'
+build/host-tests/tests/test_toggle_widget --gtest_brief=1
+build/host-tests/tests/test_slider_widget --gtest_brief=1
+bash tests/test_action_catalog_completeness.sh
+```
+
+Passed: compilation; 32/32 selected CTest checks; toggle 9/9; slider/option
+selector 49/49; action completeness (30 built-in, 9 device-class types).
+Initial dependent builds exposed missing test-only context/refresh stubs;
+their signatures and lightweight bridges were updated, then builds passed.
+
+```bash
+build/host-tests/tests/test_gamepad_widgets --gtest_brief=1
+build/host-tests/tests/test_gamepad_widgets --gtest_brief=1 --gtest_filter=-GamepadWidgetRegistry.SupportsFullFeaturedBoards
+```
+
+The full gamepad binary reports 68/69 passed: the existing
+`GamepadWidgetRegistry.SupportsFullFeaturedBoards` assertion expects 16 widgets
+but the registry has 17. That assertion and registry are unchanged; this file's
+only change is its dispatch-stub signature. Left this unrelated mismatch
+untouched. The explicit remaining selection passed 68/68.
+
+```bash
+./build.sh reterminal-sticky-interactive
+```
+
+Passed: sketch 3,187,398 bytes, globals 81,876 bytes; diagnostics enabled.
+Firmware output: `build/reterminal-sticky-interactive/app.ino.bin`.
+Compared with the preceding measured build: +404 sketch bytes, unchanged
+reported global allocation. Build log:
+`sticky-variable-refresh-build.log` in the session's persistent files.
+
+```bash
+git diff --check
+```
+
+Passed. The firmware log contains no compiler warnings/errors. Existing
+documentation links were unchanged; no Markdown lint executable is installed.
+
+No new physical latency improvement is claimed. The previously measured
+approximately 22 ms preparation, 190 ms full upload and 611 ms waveform remain
+the expected hardware-path bottlenecks, untouched by this correction.
+No flash, commit, push or all-board build was performed for this follow-up.
+
+### Counter capture after local-variable notification
+
+Status: Device pipeline measured; user reports the counter now starts to feel
+snappy. Physical visible-onset and broader hardware acceptance remain pending.
+Source: user-provided capture on 2026-11-12, log times 8.511-58.719 seconds.
+The capture does not restate controller identification or saved passive/
+presentation settings; do not assume the proposed 1000/500 ms settings were
+applied.
+
+Requests 1-10 correlate with successful presentations of frames 69-78, each
+with 5,694 converted pixels, one flush and a 96,000-byte upload. Request 11
+renders frame 79 but has no completed presentation in this excerpt; exclude it
+from completion statistics. Boot frames 66/68 are not counter samples.
+
+| Stage | Samples | Median (ms) | Range (ms) |
+|-------|---------|-------------|------------|
+| Request to coherent ready | 10 | 9.437 | 8.910-11.620 |
+| Release log to ready | 10 | 21.893 | 21.332-24.080 |
+| Prior waveform wait (ready to eligible) | 10 | 10.819 | 0-671.931 |
+| Eligible to snapshot | 10 | 25.539 | 0.667-37.033 |
+| Preparation | 10 | 22.465 | 21.843-23.374 |
+| Upload | 10 | 189.262 | 183.249-195.801 |
+| Trigger to BUSY done | 10 | 610.978 | 610.404-611.989 |
+| Request to successful publication | 10 | 879.660 | 833.524-1535.644 |
+| Request to publication, panel already eligible | 5 | 835.441 | 833.524-875.582 |
+
+Every completed counter frame now has a nonzero interaction sequence. Four
+uncontended snapshots start within 0.667-0.718 ms of readiness. Small worker
+turnaround remains during adjacent presentations: approximately 25-37 ms after
+eligibility, not the former 150 ms settling or configured background cadence.
+The cause of that turnaround is not established by these timestamps alone.
+Request 6 waits 671.931 ms behind an earlier waveform, explaining its 1.536 s
+request-to-publication time without attributing it to passive binding polling.
+
+Release-log-to-ready is now 21-24 ms, versus the previous 250 ms cadence capture's
+approximately 21-100 ms. These are small, differently paced samples, not a
+controlled A/B latency distribution or physical input-to-visible measurement.
+The successful change is explicit interaction classification and prompt binding
+resolution; the unchanged preparation/upload/waveform path still takes about
+0.83 seconds to complete when free.
+
+The touch warning occurs during startup and reports a 468 ms maximum sampling
+gap with zero errors; the same startup includes a 418.950 ms full-frame refresh.
+This capture alone does not establish a steady-state touch problem or prove
+the cause of that gap.
+
+Validation: a local Node.js calculation of the ten correlated records produced
+the table, separating prior-waveform wait from post-eligibility turnaround.
+`git diff --check` passed. No implementation change, firmware build, flash,
+commit or push accompanies this measurement-only update.
+
 ### Outcome entry template
 
 ```text
@@ -994,13 +1140,17 @@ Next phase or user approval needed:
 ### Current handoff
 
 * Implementation: phases 1-2 host-verified; separately approved Sticky render/
-  packing follow-up host-verified, single-board firmware build passed
+  packing and local-variable binding follow-ups host-verified, single-board
+  firmware builds passed
 * Hardware evidence: functioning SSD1677 BUSY-selected unit, six correlated
   pre-optimization and ten post-optimization requests; device stage improvements
-  measured, physical-visible timing/quality pending
-* Next step: retain the measured checkpoint, complete physical acceptance and
-  agree on any further conversion/glyph work; do not start phases 3, 4 or 6
+  measured; ten completed local-variable counter requests now show prompt
+  coherent readiness. Physical-visible timing/quality pending
+* Next step: complete physical acceptance and confirm saved settings for any
+  controlled counter comparison, then agree on further conversion/glyph work;
+  do not start phases 3, 4 or 6
 * Deferred research: controller-specific questions arising from failed A/B tests,
   not another broad CrossPoint architecture audit
-* Final narrative owner: display/touch architecture. No new user control or
-  setting requires another user-guide change; the historical audit stays intact.
+* Final narrative owners: display/touch architecture, Interactive E-Paper user
+  topic and board summary. No new control or setting; the historical audit
+  stays intact.

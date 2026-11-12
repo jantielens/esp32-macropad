@@ -91,7 +91,7 @@ static void dispatch_event(uint8_t index, bool is_hold) {
 #endif
     char label[16];
     snprintf(label, sizeof(label), "HWBtn%u%s", index, is_hold ? "H" : "T");
-    action_list_dispatch(actions, count, label);
+    action_list_dispatch(actions, count, label, ACTION_CONTINUATION_OWNER_LOOP, true);
 }
 
 void hw_buttons_init() {

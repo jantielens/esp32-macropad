@@ -30,6 +30,7 @@ struct ActionContinuation {
     uint8_t remaining_count;
     char label[ACTION_CONTINUATION_LABEL_MAX_LEN];
     ActionContinuationOwner owner;
+    bool interactive;
     bool active;
     bool pending;
     bool completed;
@@ -68,7 +69,7 @@ void clear_continuation(ActionContinuation* continuation) {
 
 bool action_continuation_begin(const ButtonAction* remaining, uint8_t remaining_count,
                                const char* label, uint32_t* token,
-                               ActionContinuationOwner owner) {
+                               ActionContinuationOwner owner, bool interactive) {
     if (!token || remaining_count > MAX_REMAINING_ACTIONS ||
         (remaining_count && !remaining)) {
         return false;
@@ -93,6 +94,7 @@ bool action_continuation_begin(const ButtonAction* remaining, uint8_t remaining_
     strlcpy(continuation->label, label ? label : "Action",
             sizeof(continuation->label));
     continuation->owner = owner;
+    continuation->interactive = interactive;
     continuation->timeout_ms = ACTION_CONTINUATION_TIMEOUT_MS;
     continuation->active = true;
     *token = continuation->token;
@@ -167,8 +169,9 @@ bool action_continuation_schedule_success(uint32_t token, uint32_t duration_ms) 
 
 ActionContinuationTakeResult action_continuation_take(
     ButtonAction* out_actions, uint8_t* out_count,
-    char* out_label, uint8_t out_label_len, ActionContinuationOwner owner) {
+    char* out_label, uint8_t out_label_len, ActionContinuationOwner owner, bool* out_interactive) {
     if (out_count) *out_count = 0;
+    if (out_interactive) *out_interactive = false;
     if (out_label && out_label_len) out_label[0] = '\0';
 
     ACTION_CONTINUATION_LOCK();
@@ -196,6 +199,7 @@ ActionContinuationTakeResult action_continuation_take(
             strlcpy(out_label, continuation->label, out_label_len);
         }
         if (result == ACTION_CONTINUATION_SUCCESS && out_actions && out_count) {
+            if (out_interactive) *out_interactive = continuation->interactive;
             *out_count = continuation->remaining_count;
             if (*out_count) {
                 memcpy(out_actions, continuation->remaining,

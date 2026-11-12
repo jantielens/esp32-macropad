@@ -39,7 +39,7 @@ static void list_dispatch_actions(ListWidgetState* st, uintptr_t idx,
     list_binding_set_selected(st->provider_id, st->ids[idx]);
     ButtonAction local[MAX_BUTTON_ACTIONS];
     memcpy(local, src, count * sizeof(ButtonAction));
-    action_list_dispatch(local, count, label, ACTION_CONTINUATION_OWNER_LVGL);
+    action_list_dispatch(local, count, label, ACTION_CONTINUATION_OWNER_LVGL, true);
 }
 
 // ---- Event handlers ----
