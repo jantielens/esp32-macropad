@@ -96,6 +96,7 @@ device is already in setup mode, use its displayed credentials and portal URL.
 
 * [Keyboard, mouse, and gamepad actions](../integrations/keyboard-mouse-gamepad.md)
 * [MQTT publishing](../integrations/mqtt.md) and [Home Assistant calls](../integrations/home-assistant.md)
+* [BTHome Bluetooth button events](../integrations/home-assistant.md#send-a-bthome-button-event)
 * [Timers](../device/timers.md), [alarms](../device/alarms.md), and [audio](../media/audio.md)
 * [Boot, swipe, physical-button, and MQTT-trigger hosts](../device/triggers.md)
 * [Voice capture and speech](../specialized/voice-assistant.md)

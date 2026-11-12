@@ -158,6 +158,7 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_NONE     ""
 #define ACTION_TYPE_SCREEN   "screen"
 #define ACTION_TYPE_MQTT     "mqtt"
+#define ACTION_TYPE_BTHOME   "bthome"
 #define ACTION_TYPE_BACK     "back"
 #define ACTION_TYPE_KEY      "key"
 #define ACTION_TYPE_MOUSE_BUTTON "mouse_button"
@@ -218,6 +219,10 @@ struct ScreenPayload {
 struct MqttPayload {
     char mqtt_topic[CONFIG_MQTT_TOPIC_MAX_LEN];      // publish topic
     char mqtt_payload[CONFIG_MQTT_PAYLOAD_MAX_LEN];  // publish payload
+};
+struct BthomePayload {
+    uint8_t button;
+    uint8_t event;
 };
 struct KeyPayload {
     char key_sequence[CONFIG_KEY_SEQ_MAX_LEN];       // DSL key sequence
@@ -330,6 +335,7 @@ static_assert(sizeof(SetVariablePayload) <= 256,
 union ActionPayload {
     ScreenPayload     screen;       // type == ACTION_TYPE_SCREEN
     MqttPayload       mqtt;         // type == ACTION_TYPE_MQTT
+    BthomePayload     bthome;       // type == ACTION_TYPE_BTHOME
     KeyPayload        key;          // type == ACTION_TYPE_KEY
     MouseButtonPayload mouse_button;
     GamepadPayload    gamepad;

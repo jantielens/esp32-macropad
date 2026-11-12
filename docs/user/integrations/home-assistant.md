@@ -1,12 +1,12 @@
 ---
 title: Set up Home Assistant
-description: Choose independent MQTT and direct HA paths, display live entity state, and configure service actions.
+description: Choose MQTT, direct HA, or BTHome Bluetooth integration, display live state, and configure actions.
 ---
 
 Home Assistant integration works in both directions: HA can monitor or control
-the device, and device actions can call HA services. MQTT and direct HA access
-are separate connection paths, so you only need to configure the ones your
-workflow uses.
+the device, and device actions can call HA services or broadcast Bluetooth
+button events. MQTT, direct HA access, and BTHome Bluetooth are separate
+connection paths. Configure only the ones your workflow uses.
 
 ## Choose a connection path
 
@@ -17,6 +17,47 @@ Direct live bindings, service actions, and Sparkline history share HA URL/token 
 They do not require MQTT. Either path can be used independently.
 Discovery does not enable service calls, and saving an HA token does not create
 an MQTT broker.
+
+BTHome broadcasts button events over Bluetooth. It needs HA's Bluetooth and
+BTHome integrations, but no MQTT broker, HA URL/token, or BLE keyboard pairing.
+Sensor telemetry can keep using MQTT.
+
+## Send a BTHome button event
+
+On BLE-capable firmware, choose **Connectivity > Send BTHome event** in a
+button's action dropdown. This sends a logical remote-control event; it does
+not call an HA service directly.
+
+1. Select **Button number** from **Button 1** through **Button 10**.
+   Numbers are device-wide, not pad/grid positions. Reusing the same number
+   and event on another pad deliberately triggers the same HA automation.
+2. Select **Event**: **Press**, **Double press**, or **Long press**.
+   The configured event is sent immediately when the action runs. Selecting
+   Long press does not require physically holding the button; put the action
+   in the pad button's Long-press list if you want that gesture.
+3. Choose **Save Pad**. No reboot is required for action changes.
+4. Ensure HA has a working Bluetooth adapter or Bluetooth proxy in range.
+   Activate the action, then add the discovered **BTHome** device under
+   **Settings > Devices & services**.
+5. Activate each logical button number you intend to use so HA discovers its
+   events. Create an automation with that device as the trigger, selecting the
+   matching button number and event. HA can list additional standard events;
+   this firmware sends only the three offered above.
+6. For example, match **Button 4 / Long press**, choose a harmless action such
+   as activating a scene, save the automation, and activate the pad action again.
+
+The ten button numbers and three event types give 30 combinations. Button
+numbering stays stable regardless of which pad is active. The action works
+with keyboard transport Off, USB, or BLE. BLE keyboard advertising pauses
+briefly for each event burst; an established HID connection stays connected.
+
+Events use short, unencrypted, repeated advertisements with packet IDs for
+duplicate filtering. They are best-effort: a queued or advertised event is not
+confirmation that HA received or executed it. Nearby devices can observe or
+spoof broadcasts, so do not use them for security-sensitive operations.
+Four events can wait behind the active burst. A full queue rejects the newest
+action, logs a warning, and stops its remaining action list. OTA cancels
+pending event work; rejected or cancelled events are not retried.
 
 ## Discover the device
 

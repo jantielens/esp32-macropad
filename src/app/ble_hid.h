@@ -24,6 +24,8 @@ void ble_hid_request_pairing();
 
 // Process pending BLE HID requests. Call from main loop() (non-PSRAM stack).
 void ble_hid_loop();
+// Main-loop-only arbitration with nonconnectable BTHome bursts.
+bool ble_hid_pause_advertising(bool paused);
 bool ble_hid_send_report(KsUsageType type, uint16_t usage, uint8_t modifiers);
 struct MouseHidReport;
 struct GamepadReport;

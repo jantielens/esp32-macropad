@@ -88,6 +88,7 @@
 #include "gamepad_hid.h"
 #endif
 #include "keyboard_hid.h"
+#include "bthome_events.h"
 
 #if HAS_AUDIO
 #include "audio.h"
@@ -256,6 +257,10 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 	#endif
 
 	sensor_manager_init();
+
+	#if HAS_BLE || HAS_BLE_HID
+	bthome_events_configure(device_config.device_name);
+	#endif
 
 	#if HAS_BLE_HID
 	if (keyboard_hid_transport() == KeyboardTransport::Ble) {
@@ -839,6 +844,10 @@ void loop()
 	if (keyboard_hid_transport() == KeyboardTransport::Ble) {
 		ble_hid_loop();
 	}
+	#endif
+
+	#if HAS_BLE || HAS_BLE_HID
+	bthome_events_loop();
 	#endif
 
 	#if HAS_BLE_HID || HAS_USB_HID

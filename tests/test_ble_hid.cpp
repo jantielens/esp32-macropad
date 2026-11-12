@@ -1,6 +1,7 @@
 #include "board_config.h"
 #include "BLEDevice.h"
 #include "../src/app/ble_hid.cpp"
+#include "../src/app/bthome_events.cpp"
 #include <gtest/gtest.h>
 
 unsigned long millis() { return TestBle::clock_ms; }
@@ -28,7 +29,16 @@ protected:
         TestBle::notifications = 0;
         TestBle::terminations.clear();
         TestBle::last_report.clear();
+        TestBle::stop_succeeds = true;
+        TestBle::event_start_result = 0;
+        TestBle::hid_starts = 0;
+        TestBle::event_starts = 0;
+        queue_head = queue_count = 0;
+        configured = false;
+        event_active = false;
+        packet_id = 0;
         ble_hid_init("Test", true);
+        bthome_events_configure("Test");
     }
 
     void connect() {
@@ -53,6 +63,114 @@ protected:
         TestBle::stored_peer = peer.peer_id_addr;
     }
 };
+
+TEST_F(BleHid, BthomeUsesStableTenButtonPositionsAndDistinctPackets) {
+    ASSERT_TRUE(bthome_events_send(1, bthome::press));
+    bthome_events_loop();
+    ASSERT_EQ(TestBle::advertisement.size(), 30u);
+    EXPECT_EQ(TestBle::advertisement,
+        (std::vector<uint8_t>{2, 1, 6, 26, 22, 0xD2, 0xFC, 0x44, 0, 0,
+            0x3A, 1, 0x3A, 0, 0x3A, 0, 0x3A, 0, 0x3A, 0,
+            0x3A, 0, 0x3A, 0, 0x3A, 0, 0x3A, 0, 0x3A, 0}));
+    const auto first_packet = TestBle::advertisement;
+    EXPECT_EQ(TestBle::event_parameters.conn_mode, BLE_GAP_CONN_MODE_NON);
+    TestBle::clock_ms += 349;
+    bthome_events_loop();
+    EXPECT_EQ(TestBle::event_starts, 1u);
+    EXPECT_EQ(TestBle::advertisement, first_packet);
+    ASSERT_TRUE(bthome_events_send(10, bthome::long_press));
+    ++TestBle::clock_ms;
+    bthome_events_loop();
+    EXPECT_EQ(TestBle::advertisement[9], 1);
+    EXPECT_EQ(TestBle::advertisement[11], 0);
+    EXPECT_EQ(TestBle::advertisement[29], 4);
+    ASSERT_TRUE(bthome_events_send(10, bthome::long_press));
+    TestBle::clock_ms += 350;
+    bthome_events_loop();
+    EXPECT_EQ(TestBle::advertisement[9], 2);
+    EXPECT_EQ(TestBle::advertisement[29], 4);
+    TestBle::clock_ms += 350;
+    bthome_events_loop();
+    EXPECT_FALSE(event_active);
+    EXPECT_TRUE(TestBle::radio_advertising);
+    EXPECT_EQ(TestBle::appearance, HID_KEYBOARD);
+}
+
+TEST_F(BleHid, BthomeQueueRejectsNewestAndPreservesOrder) {
+    for (uint8_t button = 1; button <= 4; ++button)
+        ASSERT_TRUE(bthome_events_send(button, bthome::double_press));
+    EXPECT_FALSE(bthome_events_send(5, bthome::press));
+    EXPECT_FALSE(bthome_events_send(0, bthome::press));
+    EXPECT_FALSE(bthome_events_send(11, bthome::press));
+    EXPECT_FALSE(bthome_events_send(1, 3));
+    for (uint8_t button = 1; button <= 4; ++button) {
+        bthome_events_loop();
+        ASSERT_EQ(TestBle::advertisement.size(), 30u);
+        for (uint8_t position = 1; position <= 10; ++position)
+            EXPECT_EQ(TestBle::advertisement[9 + 2 * position], position == button ? 2 : 0);
+        TestBle::clock_ms += 350;
+    }
+    bthome_events_loop();
+    EXPECT_EQ(TestBle::event_starts, 4u);
+}
+
+TEST_F(BleHid, BthomeDoesNotInterruptConnectedHidAndDefersReconnectAdvertising) {
+    pair_owner();
+    ASSERT_TRUE(bthome_events_send(4, bthome::long_press));
+    bthome_events_loop();
+    EXPECT_TRUE(ble_hid_is_connected());
+    EXPECT_TRUE(ble_hid_send_report(KS_USAGE_KEYBOARD, 4, 0));
+    const auto event_packet = TestBle::advertisement;
+    const auto starts = TestBle::hid_starts;
+    disconnect();
+    ble_hid_loop();
+    EXPECT_EQ(TestBle::hid_starts, starts);
+    EXPECT_EQ(TestBle::advertisement, event_packet);
+    TestBle::clock_ms += 350;
+    bthome_events_loop();
+    EXPECT_EQ(TestBle::hid_starts, starts + 1);
+    EXPECT_EQ(TestBle::appearance, HID_KEYBOARD);
+}
+
+TEST_F(BleHid, BthomeWorksWithoutHidInitializationAndCancelsStaleOtaEvents) {
+    hid_service_ready = false;
+    ASSERT_TRUE(bthome_events_send(1, bthome::press));
+    bthome_events_loop();
+    EXPECT_TRUE(event_active);
+    ASSERT_TRUE(bthome_events_send(2, bthome::press));
+    ota_active = true;
+    ++ota_epoch;
+    EXPECT_FALSE(bthome_events_send(3, bthome::press));
+    bthome_events_loop();
+    EXPECT_FALSE(TestBle::radio_advertising);
+    ota_active = false;
+    EXPECT_EQ(TestBle::event_starts, 1u);
+    ASSERT_TRUE(bthome_events_send(4, bthome::press));
+    ++ota_epoch; // An update can begin and fail between main-loop ticks.
+    bthome_events_loop();
+    EXPECT_EQ(TestBle::event_starts, 1u);
+}
+
+TEST_F(BleHid, BthomeAdvertisingFailureRestoresHidAndStopFailureRetainsOwnership) {
+    TestBle::event_start_result = 5;
+    ASSERT_TRUE(bthome_events_send(1, bthome::press));
+    bthome_events_loop();
+    EXPECT_FALSE(event_active);
+    EXPECT_FALSE(advertising_paused);
+    EXPECT_TRUE(TestBle::radio_advertising);
+    TestBle::event_start_result = 0;
+    ASSERT_TRUE(bthome_events_send(1, bthome::press));
+    bthome_events_loop();
+    TestBle::stop_succeeds = false;
+    TestBle::clock_ms += 350;
+    bthome_events_loop();
+    EXPECT_TRUE(event_active);
+    EXPECT_TRUE(advertising_paused);
+    TestBle::stop_succeeds = true;
+    bthome_events_loop();
+    EXPECT_FALSE(event_active);
+    EXPECT_FALSE(advertising_paused);
+}
 
 TEST_F(BleHid, LegacyJustWorksAndEncryptedReportGate) {
     EXPECT_TRUE(TestBle::bonding);

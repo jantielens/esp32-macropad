@@ -163,6 +163,39 @@ TEST(type_only) {
 #endif
 }
 
+TEST(bthome_round_trip_and_validation) {
+    const auto defaults = round_trip("{\"type\":\"bthome\"}");
+    ASSERT_EQ(defaults.payload.bthome.button, 1);
+    ASSERT_EQ(defaults.payload.bthome.event, 1);
+    for (const char* json : {
+            "{\"type\":\"bthome\",\"button\":1,\"event\":\"press\"}",
+            "{\"type\":\"bthome\",\"button\":4,\"event\":\"double_press\"}",
+            "{\"type\":\"bthome\",\"button\":10,\"event\":\"long_press\"}"}) {
+        JsonDocument original;
+        deserializeJson(original, json);
+        ASSERT_TRUE(action_validate_json(original.as<JsonObjectConst>()) == nullptr);
+        const auto action = round_trip(json);
+        JsonDocument output;
+        action_to_json(action, output.to<JsonObject>());
+        ASSERT_EQ(output["button"].as<int>(), original["button"].as<int>());
+        ASSERT_STR(output["event"].as<const char*>(), original["event"].as<const char*>());
+    }
+    for (const char* json : {
+            "{\"type\":\"bthome\",\"button\":0}",
+            "{\"type\":\"bthome\",\"button\":11}",
+            "{\"type\":\"bthome\",\"button\":1.5}",
+            "{\"type\":\"bthome\",\"button\":\"4\"}",
+            "{\"type\":\"bthome\",\"event\":\"triple_press\"}",
+            "{\"type\":\"bthome\",\"event\":1}"}) {
+        JsonDocument invalid;
+        deserializeJson(invalid, json);
+        ASSERT_TRUE(action_validate_json(invalid.as<JsonObjectConst>()) != nullptr);
+        const auto parsed = parse_from_string(json);
+        ASSERT_STR(parsed.type, "");
+    }
+    ASSERT_TRUE(!action_type_find(ACTION_TYPE_BTHOME)->display_lock_required);
+}
+
 TEST(set_var_round_trip_and_validation) {
     ButtonAction act = round_trip(
         "{\"type\":\"set_var\",\"var_name\":\"counter\",\"var_value\":\"[expr:[var:counter|0] + 1]\"}");
@@ -1079,6 +1112,7 @@ int main(int argc, char** argv) {
     RUN(action_list_filters_literal_none_for_pad_callers);
     RUN(action_list_retains_literal_none_for_existing_callers);
     RUN(type_only);
+    RUN(bthome_round_trip_and_validation);
     RUN(set_var_round_trip_and_validation);
     RUN(gamepad_round_trip_and_validation);
 

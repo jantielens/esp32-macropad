@@ -32,6 +32,17 @@
 #define BLE_GAP_EVENT_PARING_COMPLETE 2
 #define BLE_GAP_EVENT_REPEAT_PAIRING 3
 #define BLE_UUID16_INIT(value) {{value}}
+#define CONFIG_NIMBLE_ENABLED 1
+#define BLE_GAP_CONN_MODE_NON 0
+#define BLE_GAP_DISC_MODE_NON 0
+#define BLE_HS_FOREVER (-1)
+
+struct ble_gap_adv_params {
+    uint8_t conn_mode;
+    uint8_t disc_mode;
+    uint16_t itvl_min;
+    uint16_t itvl_max;
+};
 
 struct ble_addr_t { uint8_t type; uint8_t val[6]; };
 struct ble_gap_conn_desc {
@@ -94,6 +105,28 @@ inline std::vector<std::pair<uint16_t, int>> terminations;
 inline std::vector<uint8_t> last_report;
 inline const ble_gatt_svc_def* services = nullptr;
 inline int (*gap_handler)(ble_gap_event*, void*) = nullptr;
+inline bool radio_advertising = false;
+inline bool stop_succeeds = true;
+inline int event_start_result = 0;
+inline unsigned hid_starts = 0;
+inline unsigned event_starts = 0;
+inline uint16_t appearance = 0;
+inline std::vector<uint8_t> advertisement;
+inline ble_gap_adv_params event_parameters = {};
+}
+
+inline int ble_hs_id_infer_auto(int, uint8_t* type) { *type = 0; return 0; }
+inline int ble_gap_adv_set_data(const uint8_t* data, size_t length) {
+    TestBle::advertisement.assign(data, data + length);
+    return 0;
+}
+inline int ble_gap_adv_start(uint8_t, const void*, int32_t, const ble_gap_adv_params* parameters,
+                            int (*)(ble_gap_event*, void*), void*) {
+    ++TestBle::event_starts;
+    TestBle::event_parameters = *parameters;
+    if (TestBle::event_start_result) return TestBle::event_start_result;
+    TestBle::radio_advertising = true;
+    return 0;
 }
 
 inline size_t strlcpy(char* out, const char* text, size_t capacity) {
@@ -185,7 +218,10 @@ public:
 };
 class BLEAdvertising {
 public:
-    void setAppearance(uint16_t) {}
+    void reset() { TestBle::radio_advertising = false; TestBle::advertisement.clear(); TestBle::appearance = 0; }
+    bool start() { ++TestBle::hid_starts; TestBle::radio_advertising = true; return true; }
+    bool stop() { if (!TestBle::stop_succeeds) return false; TestBle::radio_advertising = false; return true; }
+    void setAppearance(uint16_t appearance) { TestBle::appearance = appearance; }
     void addServiceUUID(BLEUUID) {}
     void setScanResponse(bool) {}
     void setMinPreferred(uint16_t) {}

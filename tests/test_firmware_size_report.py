@@ -214,6 +214,7 @@ Cross Reference Table
             "/build/sketch/objs.a(gamepad_hid.cpp.o)": "USB HID (HAS_USB_HID)",
             "/build/sketch/objs.a(keyboard_hid.cpp.o)": "Shared HID",
             "/build/sketch/objs.a(ble_telemetry.cpp.o)": "Bluetooth stack / telemetry (HAS_BLE_HID / HAS_BLE)",
+            "/build/sketch/objs.a(bthome_events.cpp.o)": "Bluetooth stack / telemetry (HAS_BLE_HID / HAS_BLE)",
             "/build/libraries/BLE/objs.a(BLEDevice.cpp.o)": "Bluetooth stack / telemetry (HAS_BLE_HID / HAS_BLE)",
             "/build/libraries/USB/objs.a(USBHIDKeyboard.cpp.o)": "USB HID (HAS_USB_HID)",
             "/sdk/libbt.a(bt.c.obj)": "Bluetooth stack / telemetry (HAS_BLE_HID / HAS_BLE)",

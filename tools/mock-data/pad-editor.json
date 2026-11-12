@@ -104,6 +104,15 @@
     {"type": "set_var", "group": "Variables", "label": "Set variable", "template_fields": {"var_value": {"max": 191}}, "editor_fields": [{"name": "var_name", "label": "Name", "type": "text"}, {"name": "var_value", "label": "Value", "type": "text", "bindable": true}]},
     {"type": "button_navigation", "group": "Navigation", "label": "Navigate buttons", "commands": [{"id": "previous", "label": "Previous"}, {"id": "next", "label": "Next"}, {"id": "tap", "label": "Tap"}, {"id": "tap_hold", "label": "Tap & Hold"}], "fields": [{"name": "command", "description": "previous, next, tap, or tap_hold"}], "editor_fields": [{"name": "command", "label": "Command", "type": "select", "command_options": true}]},
     {"type": "mqtt", "group": "Connectivity", "label": "Publish MQTT message", "template_fields": {"topic": {"max": 127}, "payload": {"max": 127}}, "editor_fields": [{"name": "topic", "label": "Topic", "type": "text", "bindable": true, "max": 127}, {"name": "payload", "label": "Payload", "type": "text", "bindable": true, "max": 127}]},
+    {"type": "bthome", "group": "Connectivity", "label": "Send BTHome event", "alarm_hook_allowed": true, "pausable": false, "note": "Unencrypted Bluetooth broadcast; no delivery acknowledgement. Independent of MQTT. Four waiting events; rejects newest when full.", "editor_fields": [
+      {"name": "button", "label": "Button number", "type": "select", "numeric": true, "min": 1, "max": 10, "default": 1, "help": "Device-wide number. Match Button 1-10 in Home Assistant.", "options": [
+        {"id": 1, "label": "Button 1"}, {"id": 2, "label": "Button 2"}, {"id": 3, "label": "Button 3"}, {"id": 4, "label": "Button 4"}, {"id": 5, "label": "Button 5"},
+        {"id": 6, "label": "Button 6"}, {"id": 7, "label": "Button 7"}, {"id": 8, "label": "Button 8"}, {"id": 9, "label": "Button 9"}, {"id": 10, "label": "Button 10"}
+      ]},
+      {"name": "event", "label": "Event", "type": "select", "default": "press", "help": "Sends the selected event immediately over Bluetooth. Match this button number and event in your Home Assistant automation.", "options": [
+        {"id": "press", "label": "Press"}, {"id": "double_press", "label": "Double press"}, {"id": "long_press", "label": "Long press"}
+      ]}
+    ]},
     {"type": "ha_service", "group": "Connectivity", "label": "Call Home Assistant service", "template_fields": {"entity_id": {"max": 47}, "service": {"max": 63}, "data_json": {"max": 63}}},
     {"type": "notify", "group": "Display", "label": "Show notification", "template_fields": {"message": {"max": 191}}},
     {"type": "confirm", "group": "Display", "label": "Ask for confirmation", "template_fields": {"message": {"max": 191}}, "pausable": true},

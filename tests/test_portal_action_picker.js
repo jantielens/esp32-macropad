@@ -70,6 +70,7 @@ const FIXTURE_CATALOG = [
     { type: 'back', group: 'Navigation', label: 'Navigate back' },
     { type: 'mqtt', group: 'Connectivity', label: 'Publish MQTT message' },
     { type: 'ha_service', group: 'Connectivity', label: 'Call Home Assistant service' },
+    ...productionCatalogs.portal.filter(entry => entry.type === 'bthome'),
     { type: 'gamepad', group: 'Gamepad', label: 'Gamepad', button_count: 16 },
     {
         type: 'mouse_button', group: 'Mouse', label: 'Mouse button',
@@ -278,6 +279,20 @@ assert(!commandEl.innerHTML.includes('toggle_lock'));
 context.actionEditorLoad(prefix, { type: 'shutter', shutter_command: 'sess_start' });
 assert.strictEqual(familyEl.value, 'session');
 assert(document.getElementById(prefix + '-shutter-command').innerHTML.includes('sess_start'));
+
+const bthomeCatalog = productionCatalogs.portal.find(entry => entry.type === 'bthome');
+assert(bthomeCatalog, 'BLE-capable firmware exposes the BTHome action');
+const bthomeFields = context.actionEditorGenericFields('bthome');
+assert.strictEqual(bthomeFields[0].options.length, 10);
+assert.strictEqual(bthomeFields[1].type, 'select');
+assert.deepStrictEqual(bthomeFields[1].options.map(option => option.id),
+    ['press', 'double_press', 'long_press']);
+context.actionEditorLoad(prefix, {type: 'bthome'});
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(prefix))),
+    {type: 'bthome', button: 1, event: 'press'});
+context.actionEditorLoad(prefix, {type: 'bthome', button: 10, event: 'long_press'});
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(prefix))),
+    {type: 'bthome', button: 10, event: 'long_press'});
 
 // Delay uses a bounded numeric duration and persists the flat JSON contract.
 context.actionEditorLoad(prefix, { type: 'delay', duration_ms: 2500 });
