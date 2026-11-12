@@ -1527,6 +1527,555 @@ large-font safety is not established. The issue requests measurement and a
 smallest-fit policy proposal, not an immediate cache architecture rewrite.
 No new optimization phase, flash, push or all-board build is authorized.
 
+### Full-frame conversion investigation, 2026-11-12
+
+Status: Investigation complete; implementation awaits new approval. The worktree
+was clean at `46f1b16c`, after `fcf2b09a` and `a4db178d`. This outcome changes
+only the existing plan. No production source, test, firmware or device changed.
+
+#### Baseline and timing attribution
+
+Re-read the latest capture from the preceding local session, turn 4, and joined
+the numeric records for request 10/frame 84. The existing firmware ELF has
+SHA256 `fa9b56d2d15e94766c489b187d948ccd6321ae214fcd0f3b05521c722a24af34`,
+matching the capture's prefix. Its compile database selects `-Os` and the S3
+`qio_opi` SDK profile. SSD1677 remains selected through ID `0xff` and BUSY
+fallback, not positive chip identification.
+
+| Frame 84 measurement                         | Time (ms) |
+|----------------------------------------------|-----------|
+| Request to coherent ready                    | 444.168   |
+| Refresh, containing render                   | 375.826   |
+| Render, containing flush                     | 374.227   |
+| Flush callbacks, containing conversion/wait   | 219.422   |
+| Conversion inside framebuffer mutex          | 216.176   |
+| Framebuffer mutex acquisition                | 0.257     |
+| Flush less conversion                        | 3.246     |
+| Flush less conversion and mutex acquisition   | 2.989     |
+
+Conversion accounts for about 57.8% of render. It processes 384,000 pixels in
+50 flushes, about 0.563 us/pixel. At 240 MHz that is 135.11 elapsed-cycle
+equivalents/pixel, not measured exclusive CPU cycles. Interrupts, preemption
+and memory stalls remain included.
+
+The callback remainder averages about 59.8 us/flush after subtracting the
+separately measured mutex wait. It includes callback/setup/bookkeeping and
+other elapsed work; it is not an exclusive measurement of setup. Timer/counter
+updates inside the conversion boundary are not separately timed. These records
+rule out external callback overhead or mutex contention as the main explanation
+for this sample, but do not alone partition the conversion loop.
+
+Other recent full-frame records are approximately 213-216 ms, with a 231.021 ms
+dialog sample and a 356.164 ms startup sample. They are different scenarios,
+not a controlled distribution. The existing one-flush 5,694-pixel records take
+about 3.05 ms, approximately 0.535 us/pixel. This is supporting evidence for
+pixel-proportional work, not authorization to optimize the counter or a fitted
+per-flush cost model.
+
+#### Call path, geometry and ownership
+
+The LVGL owner runs the partial renderer and synchronously calls
+`DisplayManager::flushCallback()` in `display_task.cpp`. It supplies the actual
+RGB565 byte stride, sets the logical window, and calls Sticky's `pushColors()`
+with byte swapping disabled for this buffered driver. Flush completion occurs
+after conversion, so the single LVGL source buffer cannot be reused midway.
+
+The capture confirms a 16,000-byte, single PSRAM draw buffer. At logical
+480 x 800, full-screen rendering uses 50 strips of 16 rows (7,680 pixels,
+15,360 active source bytes), not 800-pixel-wide ten-row strips. Full redraw on
+pad changes is necessary under the existing root-screen model.
+
+`pushColors()` already clips once, transforms opposite corners once, and walks
+packed native bytes. For rotation 1, each native row has constant logical X;
+successive native pixels read logical Y in reverse, with source step `-480`
+RGB565 elements for these full-width strips. Each flush visits two adjacent
+destination bytes per native row, across 480 native rows. Across the frame this
+is 384,000 RGB565 loads and 48,000 drawing-byte reads, with stores only when
+packed bytes change. Do not revert to per-pixel destination read/modify/write.
+
+The drawing mutex covers conversion and pending/change metadata. `beginFrame()`
+and `commitFrame()` bracket the coherent render generation independently of
+individual flushes. The panel worker cannot snapshot a rendering generation;
+after commitment it copies drawing into immutable sending under the mutex,
+then releases it before panel I/O. Only successful presentation updates the
+completed buffer. Screenshot copies read that completed buffer. None of these
+ownership or publication boundaries needs to change.
+
+#### Evidenced avoidable work and unresolved cost
+
+Disassembled the existing captured S3 ELF, rather than extrapolating from host
+timings. In `StickyEpaperDriver::pushColors()`:
+
+* Address `0x42022e9f` executes signed `quos` for native byte indexing once per
+  packed byte, about 48,000 times for this frame.
+* Address `0x42022f87` executes signed `rems` for the intra-byte bit position
+  once per pixel, 384,000 times. Its divisor is runtime `pixelsPerByte`, although
+  the only values are 8 for B/W and 2 for Gray4.
+* The loop retains runtime byte-swap, grayscale and dither-mode decisions,
+  variable shifts/masks, and stack spills. Existing RGB565 luminance is already
+  three channel-table loads plus additions/shift; there is no remaining
+  per-channel division to remove.
+* Bayer uses logical `x & 3`, `y & 3`, a threshold-table read and the existing
+  `>=` comparison. Rotation is already reduced to source increments within the
+  pixel loop. Dither phase must not be changed to native coordinates.
+
+Thus generic packed-position arithmetic demonstrably leaves avoidable divider
+instructions in the hot loop. This is a confirmed inefficiency, not proof that
+division explains all or most of 216 ms. Exclusive arithmetic, cache-miss and
+preemption costs are not available in the captures.
+
+Both source and destination are PSRAM allocations. The selected SDK has a
+32 KiB, eight-way data cache with 32-byte lines and 80 MHz PSRAM. Rotated source
+gathers are strided; destination writes are packed but span native rows.
+Cache locality/conflicts and scheduling may contribute, but there are no miss
+counters or controlled internal-RAM/PSRAM comparisons. Do not describe the
+216 ms as raw PSRAM bandwidth or introduce a transpose buffer on this evidence.
+
+There are no deliberate yields, panel operations, or OTA polls inside the
+conversion loop. The every-16-row `vTaskDelay(1)` belongs to later panel upload;
+the screenshot copy has its own separate yields. They do not explain this
+conversion sample. Existing OTA safe points are the owner loop/prompt-render
+guard, presentation entry/policy waits, and panel row/BUSY checkpoints. Do not
+add waits under the conversion mutex, remove transfer checkpoints, or silently
+drop a flush when OTA begins midway. The proposed arithmetic-only change keeps
+these existing safety boundaries unchanged.
+
+#### Smallest proposed fix and realistic gain boundary
+
+Request approval for packed-position arithmetic only in the board-local
+`sticky_epaper_driver.cpp`:
+
+* Select a log2 pixel-group size once per flush (3 for B/W, 1 for Gray4).
+* Replace native-X division by right shift and remainder by a group-size mask.
+  Use the same power-of-two identity for the next byte boundary.
+* Retain the current traversal, scalar luminance/dither helper, clipping,
+  source stride, Gray4 quantization, byte merge/change detection and locks.
+
+Clipped native X is nonnegative and below 800, so these identities preserve
+signed arithmetic results. A temporary read-only Node.js calculation checked
+all 640,800 `(mode, nativeX, nativeRight)` combinations with
+`0 <= nativeX < nativeRight <= 800`: old/new byte indices, clipped byte ends
+and bit shifts matched exactly. This is an arithmetic sanity check, not a
+replacement for production output-equivalence tests or physical acceptance.
+
+The fix removes approximately 432,000 dynamic divide/remainder executions per
+full B/W frame without allocating memory or skipping pixels. No defensible
+ESP32 speedup percentage follows from instruction counts alone. As sensitivity,
+each net cycle saved per pixel is 1.6 ms/frame at 240 MHz; ten is 16 ms.
+An incremental tens-of-ms gain is a reasonable experiment objective, not a
+measured forecast. Saving 25% of conversion would save 54.044 ms, only about
+4.24% of the current 1,275.345 ms request-to-publication sample. Even eliminating
+conversion entirely could save no more than 216.176 ms (16.95%) in this sample.
+The approximately 831 ms post-ready path is unaffected.
+
+Affected implementation owners would be the existing Sticky driver, this plan,
+and the existing conversion description in the display/touch developer guide
+if needed. Reuse the current Sticky scalar-reference screenshot/wire tests for
+both controllers, all rotations, all conversion modes, swapped/padded input,
+clipped edges and Gray4. Extend that same test only if aligned strip output
+needs coverage; do not add another harness. Build the preferred Sticky board
+after an approved native change and inspect its new disassembly to confirm
+the divider instructions are gone.
+
+Do not bundle mode-specialized kernels, precomputed color/pattern caches,
+internal-RAM staging, yield-policy changes or label-dedup work into this fix.
+If the arithmetic-only result is immaterial, stop and obtain separately approved
+device CPU/cache attribution rather than assuming a broader rewrite is needed.
+
+#### Exact investigation checks and remaining gate
+
+The existing focused targets rebuilt successfully:
+
+```bash
+cmake --build build/host-tests --parallel 2 --target \
+  test_sticky_epaper_driver test_sticky_epaper_driver_diagnostics \
+  test_display_perf test_display_perf_diagnostics
+ctest --test-dir build/host-tests --output-on-failure \
+  -R '^(test_sticky_epaper_driver(_diagnostics)?|test_display_perf(_diagnostics)?)$'
+```
+
+Result: 4/4 passed, 3.92 s after rebuild. The same selection also passed before
+rebuild (3.93 s). Existing benchmark command:
+
+```bash
+build/host-tests/tests/test_sticky_epaper_driver --benchmark
+```
+
+Result: passed. Rotation-0 conversion median/p95/max was
+4.775/6.327/7.064 ms; rotation 1 was 4.996/5.124/5.136 ms, 30 samples each.
+This unchanged host benchmark uses threshold mode, ten-row strips and mocked
+platform calls. It does not measure captured Bayer/16-row ESP32 performance.
+Both mock controller/Gray4 benchmark paths also completed; no new speedup
+is claimed.
+
+Existing firmware inspection command, using the installed S3 toolchain:
+
+```bash
+~/.arduino15/packages/esp32/tools/esp-x32/2601/bin/xtensa-esp32s3-elf-objdump \
+  -d --disassemble=_ZN18StickyEpaperDriver10pushColorsEPtmb \
+  build/reterminal-sticky-interactive/app.ino.elf
+sha256sum build/reterminal-sticky-interactive/app.ino.elf
+```
+
+Result: matching captured ELF prefix and the divider instructions described
+above. Explicit start/stop-address reads resolved disassembler alignment at
+the source-load and Bayer branch targets; misleading linear decoding there
+was not used as evidence. Node.js arithmetic/timing calculations passed.
+
+No firmware build is warranted for this investigation-only plan update.
+No new dependency, flash, commit, push or all-board build occurred.
+Device cycle/cache attribution, controlled 30-sample navigation distributions,
+memory/stack peaks, physical visible onset/quality, confirmation/action-order,
+OTA/recovery/screenshot stress and separate SSD2677 hardware acceptance remain
+unverified. Approval for this arithmetic-only experiment is the next gate.
+
+### Approved packed-position arithmetic follow-up, 2026-11-12
+
+Status: Host verified; hardware performance and acceptance pending.
+After the investigation, the user explicitly selected
+"Approve arithmetic-only implementation and focused validation."
+This authorizes only the narrow experiment above, not any other optimization
+candidate or phase.
+
+Changed `sticky_epaper_driver.cpp` to select the pixel-group shift once per
+flush, reuse the shifted native byte index for addressing/boundaries, and mask
+the intra-byte position. The nonnegative clipped native-X invariant makes these
+identities exact for both B/W and Gray4. No pixel work was skipped; buffer
+allocation, stride, rotation, dither/luminance, edge merging, locks, diagnostics,
+frame publication, controller detection, transfers and OTA checkpoints are
+unchanged. No new helper, buffer, test file or permanent test was needed.
+
+Existing scalar-reference coverage exercises complete screenshots and controller
+wire payloads across every RGB565 value, all rotations, conversion modes,
+both controllers, Gray4, padded/swapped sources and clipped byte/nibble edges.
+It is sufficient for this arithmetic-only change. Existing failure, OTA,
+coherent-frame and screenshot scenarios also remain passing. No claim is made
+that these host checks establish physical behavior.
+
+#### Validation and generated S3 code
+
+Exact host build and CTest commands:
+
+```bash
+cmake --build build/host-tests --parallel 2 --target \
+  test_sticky_epaper_driver test_sticky_epaper_driver_diagnostics \
+  test_display_perf test_display_perf_diagnostics
+ctest --test-dir build/host-tests --output-on-failure \
+  -R '^(test_sticky_epaper_driver(_diagnostics)?|test_display_perf(_diagnostics)?)$'
+build/host-tests/tests/test_sticky_epaper_driver --benchmark
+```
+
+Result: build passed; 4/4 CTest checks passed in 3.98 s; benchmark completed.
+Conversion median/p95/max for 30 host samples:
+
+| Rotation | Before (ms)           | After (ms)            |
+|----------|-----------------------|-----------------------|
+| 0        | 4.775 / 6.327 / 7.064 | 4.930 / 5.153 / 5.213 |
+| 1        | 4.996 / 5.124 / 5.136 | 5.268 / 5.355 / 5.472 |
+
+These runs do not demonstrate a host speedup; both post-change medians are
+slightly higher. The after run overlapped the firmware build, and the host
+benchmark is unoptimized, threshold-only, ten-row/mock-platform code rather
+than the captured S3 Bayer/16-row workload. Do not extrapolate a device
+regression or gain from this uncontrolled comparison.
+
+Firmware verification followed the existing preference at
+`~/.copilot/memories/board-preferences.md`; literal
+`/memories/board-preferences.md` remains absent. Exact build:
+
+```bash
+./build.sh reterminal-sticky-interactive
+```
+
+Passed: sketch 3,187,398 bytes (12 bytes below the preceding build), globals
+81,876 bytes (unchanged). Build-log scan found zero compiler warning/error
+lines; generated compile-time flag report was unchanged. Output is retained
+in the session's `files/sticky-conversion-arithmetic-build.log`.
+New ELF SHA256:
+`db818d5771b1956b09402263eb544cb2e06650ce68d4d8d23c58bb639e613bcb`.
+
+Repeated the investigation's exact `objdump` and `sha256sum` commands against
+the new ELF. The conversion symbol is present with zero `quos`, `quou`, `rems`
+or `remu` instructions. Address `0x42022e9d` now uses `sra` for byte indexing;
+`0x42022f82` uses `and` for the intra-byte position. This verifies the actual
+S3 code-generation objective, not merely a source spelling change.
+
+`git diff --check` passed during implementation. Only the board-local driver
+and this existing plan are changed. The developer guides' packed-byte
+conversion, logical dithering, ownership and safety descriptions remain
+accurate; no external behavior or user/API/metadata contract changed, so no
+narrative guide or generated catalog update is needed.
+
+#### Remaining device gate
+
+The compiled inefficiency is removed, but no new S3 timing capture is available.
+The approximately 216 ms conversion baseline must not be reported as improved
+until measured. Collect at least 30 comparable cached-navigation samples on
+the existing configuration, separating conversion, framebuffer wait, other
+render work and post-ready stages; record firmware hash, controller-selection
+method, settings, temperature, supply and background/screenshot load.
+
+Retain the prior physical onset, image-quality/ghosting, memory/stack,
+confirmation/action-order, OTA/recovery/screenshot and separate SSD2677 hardware
+gates. No flash, commit, push or all-board build occurred. Label deduplication,
+mode-specialized kernels, memory staging, controller caching and phases 3/4/6
+remain unapproved. If the device gain is immaterial, stop at this checkpoint
+and request a new evidence/implementation decision.
+
+### Device capture after packed-position arithmetic, 2026-11-12
+
+Status: No material device speedup demonstrated; physical acceptance pending.
+The new 514-line user capture identifies ELF prefix `db818d577`, matching the
+arithmetic-only build. It confirms S3/240 MHz, B/W Bayer, rotation 1,
+480 x 800 logical, passive binding 1000 ms, presentation minimum 500 ms,
+full threshold 200, always-on and screen sleep disabled. Runtime controller
+selection remains ID `0xff` followed by SSD1677 BUSY-transition fallback.
+Temperature, supply and screenshot polling remain unrecorded.
+
+A read-only local Node.js parser joined Sticky conversion/presentation and
+Display render records by frame ID, then selected nonzero request sequences
+with completed publication. All 13 interaction presentations succeeded,
+transferred 96,000 bytes and reported zero measured render glyph-miss time.
+Nine interaction frames converted all 384,000 pixels in 50 flushes; their
+conversion median is 214.904 ms, range 211.075-221.600 ms. This mixed set
+contains dialogs, first navigation and cached navigation, not a controlled
+cached-navigation distribution.
+
+The closest same-input/scenario comparison is the cached touch visit to pad 15:
+previous request 10/frame 84 versus new request 9/frame 82.
+
+| Cached touch pad-15 stage | Before arithmetic (ms) | After arithmetic (ms) |
+|---------------------------|------------------------|-----------------------|
+| Conversion                | 216.176                | 216.872               |
+| Refresh                   | 375.826                | 404.892               |
+| Render within refresh     | 374.227                | 404.442               |
+| Request to coherent ready | 444.168                | 425.978               |
+| Request to publication    | 1,275.345              | 1,265.699             |
+
+Conversion is 0.696 ms slower (0.32%), effectively unchanged on this evidence.
+Readiness is 18.190 ms earlier (4.10%) and publication 9.646 ms earlier (0.76%),
+but these differences cannot be attributed to the arithmetic change.
+Render is 30.215 ms longer; other application-side elapsed work is shorter.
+These nested stages must not be added as independent costs.
+
+The configuration is not controlled: pad 15 now builds five buttons, including
+a bar chart, rather than the previous four. Home Assistant live connects one
+entity and hydrates history, whereas the preceding capture had HA disabled.
+Full pad configurations are unavailable. Additional background updates convert
+47,216 pixels. Do not call this a proven regression or a successful speedup.
+
+Two later hardware-button cached pad-15 visits take 490.153 and 499.269 ms to
+ready, with 216.692 and 221.600 ms conversion. Across these and the cached touch
+visit, conversion median is 216.872 ms. Mixing input origins does not produce
+the required comparable 30-sample acceptance distribution.
+
+Across all 13 completed interactions, preparation median is 22.603 ms, upload
+190.778 ms, and trigger-to-BUSY-completion 611.026 ms. Post-ready publication
+median is 831.905 ms. The post-ready path is therefore essentially unchanged.
+Only request 3 waits behind an earlier waveform (1.186 ms); the cached pad-15
+visits have no prior-waveform wait. Touch sampling gaps still occur during
+blocking render work; zero reported sampling errors does not qualify input
+responsiveness or physical display behavior.
+
+Conclusion: output/code-generation verification established that the dynamic
+divider instructions were removed, but this capture does not establish a
+meaningful reduction of the approximately 216 ms conversion cost. The removed
+arithmetic is not demonstrated to dominate elapsed conversion. Stop the
+optimization experiment here rather than expanding it into specialized kernels
+or a memory-layout rewrite. Further work needs a separately approved, bounded
+CPU-cycle/cache/scheduling attribution investigation; label application/layout
+remains a separate candidate, not an established explanation for all latency.
+
+Validation: the Node.js frame join verified counts, per-request timestamp
+differences, stage medians/ranges and the before/after deltas above.
+`git diff --check` passed before this measurement-only update. No production
+source, tests or firmware changed after the passing checks/build above; no
+additional host run or firmware build is warranted for this prose update.
+No flash, commit or push was performed by the agent. Physical visible onset,
+image quality/ghosting, memory/stack and OTA/recovery/confirmation/screenshot
+stress, controlled distributions and SSD2677 hardware acceptance remain pending.
+
+### Arithmetic experiment reverted, 2026-11-12
+
+Status: Reverted by explicit user decision. The measured result did not justify
+keeping lower-level indexing complexity without demonstrated responsiveness
+benefit. Restored only the uncommitted shift/mask changes in
+`sticky_epaper_driver.cpp`; the driver now exactly matches `HEAD` (`46f1b16c`).
+The earlier frame prioritization, conversion/upload optimizations, prompt local
+binding refresh and 96-glyph cache remain intact. Preserve the experiment and
+capture entries above as evidence, not as the current implementation.
+
+Verification:
+
+```bash
+git diff --exit-code -- src/boards/reterminal-sticky-interactive/drivers/display/sticky_epaper_driver.cpp
+cmake --build build/host-tests --parallel 2 --target \
+  test_sticky_epaper_driver test_sticky_epaper_driver_diagnostics \
+  test_display_perf test_display_perf_diagnostics
+ctest --test-dir build/host-tests --output-on-failure \
+  -R '^(test_sticky_epaper_driver(_diagnostics)?|test_display_perf(_diagnostics)?)$'
+./build.sh reterminal-sticky-interactive
+sha256sum build/reterminal-sticky-interactive/app.ino.elf
+git diff --check
+```
+
+Results: driver comparison passed with no differences; host targets rebuilt
+and 4/4 checks passed in 4.13 s. The preferred single-board firmware build
+passed with zero compiler warning/error lines, sketch 3,187,410 bytes and
+81,876 bytes of globals. Generated flag report unchanged. Build output is in
+the session's `files/sticky-conversion-revert-build.log`.
+
+The regenerated ELF SHA256 is
+`fa9b56d2d15e94766c489b187d948ccd6321ae214fcd0f3b05521c722a24af34`,
+exactly matching the pre-experiment firmware. Local build artifacts therefore
+no longer contain the experiment. No device flash was performed: the latest
+supplied device capture still identifies experimental `db818d577`, so source/
+artifact restoration must not be mistaken for changing the running device.
+Only this existing plan remains modified. No commit or push occurred.
+
+Suggested next work, not implementation approval: a bounded diagnostics-only
+conversion attribution investigation, preceded by a fixed pad configuration
+and unchanged HA/background load. Collect at least 30 comparable cached touch
+visits and separate elapsed conversion, task execution/preemption and
+memory/cache-stall evidence where the hardware instrumentation permits.
+Check pixel scaling and flush geometry without changing output, storage,
+ownership or yield policy. Existing wall-clock timings cannot isolate those
+costs; do not propose another arithmetic or traversal rewrite from instruction
+counts alone.
+
+A separate subsequent candidate is screen application/layout and remaining
+LVGL rendering. The latest cached touch visit spends about 183.729 ms in
+render outside flush callbacks (`404.442 - 220.713`), in addition to conversion.
+That is not all label remeasurement; label deduplication remains an unapproved
+hypothesis requiring its own timing. Do not bundle this candidate with
+conversion diagnostics or relax any physical/OTA/controller acceptance gate.
+
+### Portal presentation-knob assessment, 2026-11-12
+
+Status: Read-only behavior/default assessment; no settings, portal or firmware
+changes approved or implemented. The user reports using full-refresh threshold
+100 without visible ghosting. This is new qualitative evidence for their
+working unit; earlier numeric captures used 200. Do not relabel those captures
+as threshold-100 tests or infer SSD2677/other-panel qualification.
+
+Traced `epaper-refresh.fragment.html`, `portal_epaper_refresh.js`, configuration
+defaults/validation/persistence/API, `PadScreen::pollLiveData()`, Sticky's
+`EpaperSchedule` and other interactive driver presentation paths.
+
+* Passive binding interval remains applicable to idle data. Sticky's default
+  is 1000 ms, with a permitted 100-60000 ms range. Successful changed
+  user-origin local-variable actions and initial screen binding resolution use
+  the prompt path instead; ordinary background HA/MQTT data still uses passive
+  resolution and background presentation scheduling.
+* Minimum presentation interval remains applicable to background presentations.
+  Sticky's default is 500 ms; both HTML and backend enforce 250-60000 ms.
+  Its elapsed interval starts after successful refresh completion, not at
+  waveform start. Under continuously pending background work, an approximately
+  831 ms physical path plus a 500 ms cooldown can yield about 1331 ms between
+  completed updates. Interaction-priority frames bypass that discretionary
+  interval and the 150 ms settling delay, but not active hardware work or
+  required full refreshes. Other interactive drivers have not adopted this
+  priority path, so their interval still gates user-driven changes too.
+* Full-refresh threshold remains applicable to successful B/W partial-waveform
+  presentations, including interactive ones. Sticky inherits default 10;
+  its board does not override the shared default. The next changed presentation
+  after the configured partial count uses a full waveform. Counts are physical
+  successful presentations, not flushes, actions, pixels or seconds. Zero
+  disables count-triggered cleanup only; startup/manual/recovery full refreshes
+  remain. Sticky grayscale always uses full waveforms, making this counter
+  irrelevant in that mode.
+* Rendering mode, B/W conversion and threshold remain applicable and boot-only.
+  The threshold level affects only threshold conversion, not Bayer/blue noise.
+  Sticky defaults to B/W and threshold 128; dithering is an image-quality choice,
+  not a new scheduling requirement. Minute-boundary refresh remains useful and
+  defaults on, but requests binding evaluation rather than guaranteeing a
+  physical update at the exact minute.
+* VCOM is stored/exposed generically but is not consumed by Sticky's driver.
+  Its zero selection should remain unchanged on this board. It remains relevant
+  for consuming IT8951 drivers; do not remove it from their portal path.
+
+Recommendations, not implementation authorization:
+
+1. Keep the 250 ms permitted minimum for now. Reducing it cannot improve Sticky
+   navigation/dialog/local-variable latency because those already bypass it.
+   Try the existing 250 ms setting only if passive-data freshness is a problem,
+   before expanding the shared range. The lower bound is software policy,
+   not evidence of a universal controller safety requirement.
+2. Keep Sticky's 1000 ms passive interval, 500 ms background interval, B/W,
+   threshold 128 and minute-boundary default. No evidence requires more frequent
+   background work or a different universal visual conversion default.
+3. Threshold 100 is a reasonable user-selected setting for the reported working
+   unit. Shared default 10 is conservative and may cause unnecessarily frequent
+   flashing there; 100 is a candidate Sticky-specific default after a targeted
+   contrasting-content/cleanup check and an explicit decision about the
+   unqualified SSD2677 path. Do not increase every board's default from this
+   report or introduce idle-cleanup/phase-3 policy changes. A default change
+   must preserve explicitly saved settings.
+4. Clarify the portal's interval label as background-only on priority-capable
+   devices; retain the caveat for other drivers. Replace "regional updates" in
+   full-refresh help with "partial-waveform presentations": Sticky transfers
+   whole-panel frames even for partial waveforms. Explain that Sticky grayscale
+   ignores the threshold and that VCOM is unused on Sticky, without implying
+   that grayscale/VCOM are obsolete on other boards.
+
+Validation command:
+
+```bash
+ctest --test-dir build/host-tests --output-on-failure \
+  -R '^(test_portal_epaper_config|test_sticky_epaper_driver(_diagnostics)?)$'
+```
+
+Result: 3/3 passed in 4.01 s. These existing checks establish the inspected
+portal/presentation baseline, not suitability of new limits/defaults or physical
+ghosting acceptance. No implementation or firmware build was needed.
+
+### Approved generic portal wording follow-up, 2026-11-12
+
+Status: Implemented and focused checks passed. User approved wording/notes only
+and explicitly required the fragment to remain generic across e-paper devices.
+No defaults, limits, saved settings, API fields, driver behavior or rollout
+policy changed.
+
+Updated `src/app/web/epaper-refresh.fragment.html` and the matching explanation
+in `docs/user/specialized/interactive-epaper.md`:
+
+* Explain passive binding checks and supported prompt local-variable updates.
+* Keep the generic minimum-presentation label: notes explain that the interval
+  follows presentation completion, priority-capable devices can bypass it for
+  interactions, and other devices still apply it to interactive updates.
+* Describe the full-refresh threshold as successful partial updates, which can
+  mean regional updates or panel-wide partial waveforms depending on the driver.
+  Do not call all of them partial-waveform presentations: IT8951 regional
+  grayscale updates use GC16 and also contribute to its cleanup count.
+* Explain that zero disables count-based cleanup, not startup/recovery/manual
+  full refreshes, and that always-full modes ignore the threshold.
+* Describe minute-boundary evaluation without promising immediate on-glass
+  feedback.
+
+Removed the board-specific grayscale example from the shared fragment. Existing
+capability-based VCOM and rendering/conversion notes remain unchanged; no
+Sticky-specific text was added. The generic user guide stays consistent without
+adding board names or duplicating hardware references. No new test is justified
+for copy-only changes; existing portal/feature contracts cover the retained
+structure, with production asset generation validating the normal build path.
+
+Exact checks:
+
+```bash
+ctest --test-dir build/host-tests --output-on-failure \
+  -R '^(test_portal_epaper_config|test_epaper_macro_contract)$'
+bash tools/minify-web-assets.sh esp32-macropad 'ESP32 Macropad'
+git diff --check
+```
+
+Results: 2/2 focused checks passed (0.13 s); production asset generation passed,
+including its existing editor/JavaScript checks; whitespace check passed.
+Asset-generation output is retained in the session's
+`files/epaper-portal-wording-assets.log`. No links or heading anchors changed,
+and no Markdown checker was added. Firmware was not rebuilt because only portal
+copy and prose changed, not the firmware contract or native behavior.
+No flash, commit or push occurred.
+
 ### Outcome entry template
 
 ```text
@@ -1571,10 +2120,28 @@ Next phase or user approval needed:
   single samples; measured render glyph-miss time falls from 277.621 ms to zero.
   Late snapshot shows about 5.99 MiB PSRAM and 90.6 KiB internal RAM free;
   peak/stress memory remains unqualified
-* Next step: controlled cached pad-15 distributions and device memory/stress
-  acceptance. Do not bundle label-dedup changes into that A/B experiment or
-  start phases 3, 4 or 6. Complete physical visible-onset/quality acceptance
-  separately; the latest capture confirms passive 1000/presentation 500 ms
+* Conversion investigation: captured S3 ELF confirms a runtime remainder per
+  pixel and division per packed byte despite power-of-two group sizes.
+  Conversion is 216.176 ms; external callback work and framebuffer wait are
+  small. CPU/cache/preemption shares remain unmeasured
+* Arithmetic experiment rejected and reverted: new capture showed no material
+  gain (cached touch conversion 216.872 ms versus 216.176 ms), with pad/HA
+  differences preventing controlled attribution. Driver exactly matches HEAD;
+  4/4 restored-source checks and warning-free Sticky rebuild pass. Regenerated
+  ELF matches pre-experiment `fa9b56d2d`; the driver has no local edits.
+  Running device firmware has not been changed by the agent
+* Approved portal wording follow-up: generic capability-based notes and matching
+  user guide updated. Defaults/ranges/behavior unchanged; 2/2 focused portal/
+  e-paper checks and production asset generation pass. Current edits also
+  include the shared fragment and owning user topic
+* Next gate: separate approval for bounded conversion CPU/cache/scheduling
+  diagnostics on a fixed workload, not another speculative optimization.
+  Screen application/layout is a separate later candidate. Controlled cached
+  navigation distributions and device memory/stress acceptance remain pending.
+  No flash, commit or push authorized.
+  Do not bundle label-dedup changes or start phases 3, 4 or 6. Complete physical
+  visible-onset/quality acceptance separately; the latest capture confirms
+  passive 1000/presentation 500 ms
 * Deferred research: controller-specific questions arising from failed A/B tests,
   not another broad CrossPoint architecture audit
 * Final narrative owners: display/touch architecture, Interactive E-Paper user
