@@ -2294,8 +2294,13 @@ Monochrome FreeType cache diagnostics count hits, misses, successful evictions,
 and failed misses across font instances. Only miss handling is timed, using
 wrap-safe microsecond intervals; cache hits have no timestamp calls. Miss work
 includes loading/hinting, rasterization, expanded bitmap creation, and replacement,
-not all font callback or text blending work. The cache remains 16 glyphs per
-font instance. Counts and time are retained cumulatively and per active cycle,
+not all font callback or text blending work. The cache holds up to 96 glyphs per
+font instance, avoiding the former 16-glyph residency cliff for ordinary Latin
+text. This count is not a byte budget: glyph bitmaps use A8 storage and grow
+roughly with pixel size squared. See the
+[font memory estimates](interactive-epaper.md#monochrome-uploaded-fonts)
+for resident-instance and PSRAM considerations.
+Counts and time are retained cumulatively and per active cycle,
 with `render_glyph_miss_us` isolating miss work inside render events. Glyph
 activity in non-flushing cycles is included in cumulative totals. Updates and
 snapshot collection use existing LVGL ownership; the health API only reads the

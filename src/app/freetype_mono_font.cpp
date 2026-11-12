@@ -10,7 +10,7 @@
 #include <new>
 
 namespace {
-constexpr size_t glyph_cache_size = 16;
+constexpr size_t glyph_cache_size = 96;
 #if HAS_DISPLAY_DIAGNOSTICS
 DisplayGlyphStats glyph_stats;
 

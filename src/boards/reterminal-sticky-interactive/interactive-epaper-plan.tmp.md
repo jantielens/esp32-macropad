@@ -1114,6 +1114,419 @@ the table, separating prior-waveform wait from post-eligibility turnaround.
 `git diff --check` passed. No implementation change, firmware build, flash,
 commit or push accompanies this measurement-only update.
 
+### Cached pad-navigation investigation, 2026-11-12
+
+Status: Investigation complete within available evidence; implementation approval
+pending. Baseline is clean `a4db178d`, with `fcf2b09a` immediately before it.
+No new device capture is available. The earlier capture's request 7/frame 80
+is the cached-navigation sample, not the later counter capture.
+
+#### Font lifetime and working-set evidence
+
+* [PadScreen](../../app/screens/pad_screen.cpp) retains its objects and fonts on
+  ordinary hide/show. `update()` rebuilds only when tiles are absent or the pad
+  configuration generation changes. `clearTiles()` destroys referencing objects
+  before clearing the pad-owned font cache.
+* [DisplayManager](../../app/display_manager.cpp) evicts the least-recent pad at
+  `SCREEN_HISTORY_MAX` residency, not on every visit.
+  [The render task](../../app/display_task.cpp) also evicts pad caches after a
+  font-store generation change; only successful font upload/delete advances
+  [that generation](../../app/font_store.cpp).
+* [Font resolution](../../app/pad_layout.h) sends inherited typography to the
+  device-lifetime cache, shared across screens at matching size/fallback/metrics/
+  rasterizer. Explicit per-style fonts use their pad's cache. The device cache's
+  32-instance limit is not a glyph limit. Cached font/source ownership does not
+  imply cached glyph residency.
+* [The monochrome rasterizer](../../app/freetype_mono_font.cpp) retains only
+  **16 glyphs per font instance**, using reference-aware LRU replacement.
+  Descriptor queries call the same rasterizing lookup as bitmap queries; a
+  layout/width query can auto-hint, rasterize and expand an A8 bitmap. Kerning
+  queries look up the next glyph too. LVGL repeats descriptor work across text
+  measurement and partial-buffer rendering.
+* The supplied capture logs no pad allocation/build, source load, instance
+  creation, generation invalidation or font-cache teardown around the cached
+  pad-15 visit. Its earlier pad-15 construction also creates no explicit font
+  instance; inherited shared typography is consistent with that trace. Dialog
+  loads/clears belong to a different cache owner and do not clear pad fonts.
+  The rasterizer can silently recreate its FreeType face after allocation
+  failure; the capture lacks failure counters, so that path is not ruled out.
+
+A temporary opt-in probe extended the existing `test_pad_font_cache.cpp` target,
+using the existing BebasNeue fixture and real host LVGL. It retained the same
+font and screen, navigated to a blank screen and back twice, and compared the
+complete returned RGB565 frame with its initial frame. Display: 480 x 800,
+24 px font, 8,000-pixel partial draw buffer, matching Sticky's buffer geometry.
+Each alphabet prefix used 16, 17 or 26 distinct glyphs at one size. These are
+synthetic working sets, not an export of the user's pad.
+
+| Distinct glyphs | Original 16-entry cache misses per cached render | Temporary 32-entry trial |
+|-----------------|--------------------------------------------------|--------------------------|
+| 16              | 0                                                | 0                        |
+| 17              | 34                                               | 0                        |
+| 26              | 52                                               | 0                        |
+
+Both cached visits reproduced each result. Original-cache evictions equalled
+misses; every probe had zero failed misses, zero source reloads, a retained font
+pointer and identical cold/returned pixels. In the 26-glyph case, initial
+show/layout incurred 130 misses with 16 entries versus 26 with 32 entries.
+A standalone text measurement incurred 52 versus zero misses. Re-measuring and
+setting the unchanged label followed by layout incurred 130 versus zero.
+This confirms capacity thrashing without font invalidation, including work
+outside render callbacks. Probe `micros()` is the test's synthetic clock:
+**no probe duration is a real latency measurement**.
+
+Host LVGL monitored use after the same operations increased from 64,336 to
+67,360 bytes in the 26-glyph case (3,024 bytes), and from 64,016 to 65,424 bytes
+for 16 glyphs (1,408 bytes). These are fixture-specific total allocator snapshots,
+not ESP32 peak memory or a general per-font bitmap budget. Larger fonts and
+many resident instances can cost substantially more.
+
+#### Screen application, rendering and panel waiting are distinct
+
+For the existing request 7/frame 80, rechecked against the original attachment:
+
+* Request to coherent ready: 1,026.636 ms
+* Enqueue log to switched log: approximately 355 ms; no pad rebuild is logged
+* Refresh: 669.074 ms; render within it: 664.392 ms
+* Flush within render: 220.245 ms, including 217.147 ms RGB565 conversion
+* Glyph-miss handling within render: 277.621 ms
+* Prior-waveform wait: zero; ready and eligible timestamps are identical
+* Eligible to snapshot: 0.394 ms
+* Preparation: 22.388 ms; upload: 183.716 ms; waveform: 611.973 ms
+* Request to successful publication: 1,849.500 ms
+
+The approximately 355 ms is application-side work before the switched marker,
+not a 355 ms panel-policy sleep. Current diagnostics do not divide that interval
+among `show()`, forced binding polling, layout and widget work. In particular,
+`show()` clears binding text deduplication state even on a cached visit, then
+resets the passive slot to force resolution. The subsequent poll measures and
+sets bound labels even if their resolved value did not change. This is a
+confirmed redundant path, but its contribution to this sample is unmeasured.
+Do not attribute the entire interval to glyph misses or screen construction.
+Render includes flush and glyph time; these figures are not additive stages.
+
+#### Full-screen redraw finding
+
+The manager already uses `LV_DISPLAY_RENDER_MODE_PARTIAL`. Sticky neither
+forces full invalidation nor overrides LVGL configuration to select full mode.
+`PadScreen::show()` calls `lv_screen_load()`. The installed LVGL immediate screen
+load invalidates the newly active root; both original and 32-entry probes
+therefore flush 384,000 pixels in 50 strips on every return.
+
+Cached objects are not a saved screen bitmap. When switching between arbitrary
+different pads, the existing framebuffer contains the other screen, so full
+reconstruction is correct under this architecture. Skipping root invalidation
+would leave stale pixels; a selective cross-screen diff or screen bitmap cache
+would be a separate design, not a justified small fix. This does not mean every
+local change needs a full redraw: the counter already demonstrates one small
+flush. Leave conversion and framebuffer/controller ownership unchanged for this
+follow-up.
+
+#### Proposed smallest follow-up and approval boundary
+
+The evidenced mechanism is a 16-glyph residency cliff amplified by eager
+descriptor rasterization and repeated text passes, not loss of the cached pad.
+The exact pad-15 per-font working set and any allocation failures remain unknown;
+the host probe does not establish that 32 entries cover it or promise removal
+of all 277.621 ms.
+
+The user challenged 32 as insufficient for upper/lowercase Latin. Correct:
+26 lowercase plus 26 uppercase already requires 52 distinct glyphs, before
+digits, punctuation or accents, at each font instance/size. The 32-entry value
+was the smallest comparative probe covering its synthetic 26-glyph text, not
+an evidenced production working-set size. Do not select the shipping limit from
+that probe. Measure the actual per-instance working set and memory first;
+64 covers letters plus digits with little punctuation headroom, while 96 can
+cover printable ASCII but not arbitrary Unicode or every shared-screen workload.
+No implementation approval was received.
+
+A bounded 32-entry monochrome-cache trial remains an experimental comparison,
+not the recommended shipping capacity. Any approved capacity change should retain
+the current LRU,
+pin/release, allocation recovery and font lifetimes. Extend the existing font
+test with warm text beyond 16 distinct glyphs and retain meaningful pinned
+eviction/OOM coverage for the new limit. Update the two existing developer
+font-cache descriptions. No new cache framework, new test harness, setting,
+dependency, controller caching or waveform change is needed.
+
+Before calling the device cause fully isolated, obtain the pad-15 configuration
+and correlated glyph hit/miss/eviction/failure deltas around screen application
+and rendering, keyed by font instance/size. Existing aggregate diagnostics can
+show total failures; bounded diagnostics would be needed for per-font attribution.
+Approval can instead select diagnostic-only evidence collection first.
+Preserving label deduplication on cached `show()` is a separate small candidate;
+do not bundle it into a cache-only A/B test. It must still resolve changed hidden
+values promptly on return and preserve DOT-mode source metrics.
+
+#### Exact checks, experiments and remaining gate
+
+Before the probe, these existing commands passed (six CTest registrations):
+
+```bash
+cmake --build build/host-tests --parallel 2 --target test_pad_font_cache test_pad_font_cache_freetype test_pad_font_cache_freetype_diagnostics
+ctest --test-dir build/host-tests --output-on-failure -R '^(test_pad_font_cache(_freetype(_diagnostics)?)?|test_freetype_disabled_.*)$'
+```
+
+The temporary probe command passed with the original 16-entry cache, the
+32-entry trial, and again with the original cache plus the unchanged-label
+measurement:
+
+```bash
+cmake --build build/host-tests --parallel 2 --target test_pad_font_cache_freetype_diagnostics
+build/host-tests/tests/test_pad_font_cache_freetype_diagnostics --probe-navigation
+```
+
+The first probe compilation failed on two `printf` specifiers for `size_t`;
+changing them to `%zu` fixed it. No production failure was hidden. The temporary
+probe and capacity trial were removed after measurement; production and test
+source return to baseline. The three-target build and six-check CTest selection
+above passed again after restoration (6/6, 0.32 s). `git diff --check` passed;
+`git diff --quiet -- src/app/freetype_mono_font.cpp tests/test_pad_font_cache.cpp`
+returned zero, and `git status --short` showed only this plan modified. A local
+Node.js calculation independently checked the reported frame-80 timestamp
+differences and host memory deltas. No Markdown linter is installed.
+
+Only this existing plan is intended to remain modified. No firmware build is
+needed for investigation-only results; any approved firmware change must follow
+the saved `reterminal-sticky-interactive` preference and its single-board build.
+No flash, commit, push or all-board build is authorized. All prior physical
+acceptance items remain pending, including SSD2677 hardware; preserve runtime
+SSD1677 BUSY-fallback detection and both controller paths.
+
+### Approved 96-glyph cache follow-up, 2026-11-12
+
+Status: Host verified; preferred-board firmware build passed; hardware
+pending. The user explicitly selected 96 entries after challenging the
+synthetic 32-entry trial and requested font-memory estimates. This approves
+the bounded cache-size follow-up, not a byte-budget framework, binding-dedup
+change, new diagnostics phase or controller/policy experiment.
+
+Changed [the monochrome adapter](../../app/freetype_mono_font.cpp) from 16 to
+96 entries per font instance. Bitmap allocation remains on demand; no 96-glyph
+pixel atlas is allocated up front. Reference-aware LRU, immutable pinned
+bitmaps, allocation recovery, source/instance ownership and OTA guards remain
+unchanged. LCD/built-in fonts and grayscale/STB are unchanged.
+
+Extended the existing [font-cache test](../../../tests/test_pad_font_cache.cpp),
+without a new harness, to discover 97 distinct drawable fixture glyphs, warm
+96 and compare their pixels over two revisits with zero diagnostic misses or
+evictions. The pin test now fills all 96 slots, rejects an additional glyph
+without corruption, releases one slot and verifies successful replacement
+and the remaining pinned pixels. The allocation-failure retry test now drives
+97 distinct glyphs while a bitmap is pinned, retaining actual eviction pressure
+instead of the former alphabet-only loop that would fit the larger cache.
+
+#### Memory estimate and risk
+
+A temporary `--font-memory` mode in that same test used the installed
+`/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf` and the production adapter,
+loading printable ASCII U+0020 through U+007E (95 glyphs). Each font size used
+a new instance; LVGL allocator state was checked to return to its pre-instance
+baseline after destruction. Source input occupied ordinary host storage, not
+the monitored LVGL heap. Host allocator snapshots include the retained FreeType
+library/face, caches, bitmap buffers and allocator overhead, but not transient
+peak workspaces, the font file or display allocations.
+
+| Pixel size | Original 16-entry retained bytes | New 96-entry retained bytes | A8 payload for all 95 glyphs |
+|------------|----------------------------------|-----------------------------|-----------------------------|
+| 24         | 70,712                           | 97,400                      | 17,345                      |
+| 32         | 72,664                           | 110,048                     | 29,837                      |
+| 48         | 78,472                           | 149,200                     | 68,821                      |
+| 64         | 86,616                           | 201,912                     | 121,492                     |
+| 96         | 109,776                          | 353,112                     | 272,719                     |
+| 128        | 142,608                          | 564,568                     | 484,161                     |
+
+The original cache retains only its final 16 entries; the payload column
+describes the complete alphabet, not simultaneous original-cache residency.
+Empty-instance monitored allocation was 8,656 bytes before versus 15,696 after
+on this 64-bit host, a 7,040-byte fixed increase. These sizes are not target ABI
+measurements. The input file is 759,720 bytes, additional to the table and
+shared only within one owning `PadFontCache` asset, not between explicit-font
+pad owners. The user's Atkinson source was only 53,504 bytes in the earlier
+capture; its glyph-memory shape has not been measured.
+
+The dominant large-size term is `sum(aligned_A8_stride * glyph_height)`,
+roughly proportional to pixel size squared for the same characters. B/W
+coverage is expanded to one byte per pixel, not retained as packed 1-bit data.
+Multiple sizes/metrics/backends create distinct instances; inherited typography
+shares device-lifetime instances, while explicit pad-owned caches and hidden
+resident pads can multiply memory use. Sparse numeric labels allocate fewer
+bitmaps. The 96 limit is not a global byte budget, and PSRAM-first allocation
+falls back to internal RAM. Replacement briefly retains the victim and new
+bitmap together; FreeType has additional temporary workspaces. Large fonts,
+many resident instances, fragmentation and OTA/background allocations can still
+exhaust memory. No guarantee of graceful global OOM recovery is inferred from
+the focused allocation-failure tests.
+
+Documented the new limit and sizing caveats in
+[Interactive E-Paper](../../../docs/dev/interactive-epaper.md) and
+[display/touch architecture](../../../docs/dev/display-touch-architecture.md).
+No setting, schema, action/binding metadata, feature flag or controller changed.
+
+#### Validation and next device gate
+
+The memory experiment used these commands at 96 entries, then temporarily at
+the original 16 entries for comparison; both passed:
+
+```bash
+cmake --build build/host-tests --parallel 2 --target test_pad_font_cache_freetype_diagnostics
+build/host-tests/tests/test_pad_font_cache_freetype_diagnostics --font-memory /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
+```
+
+The temporary memory mode was removed and the production limit restored to 96.
+The first final-source selection passed 8/8 (4.22 s):
+
+```bash
+cmake --build build/host-tests --parallel 2 --target test_pad_font_cache test_pad_font_cache_freetype test_pad_font_cache_freetype_diagnostics test_sticky_epaper_driver test_sticky_epaper_driver_diagnostics
+ctest --test-dir build/host-tests --output-on-failure -R '^(test_pad_font_cache(_freetype(_diagnostics)?)?|test_freetype_disabled_.*|test_sticky_epaper_driver(_diagnostics)?)$'
+git diff --check
+```
+
+After the final pinned-pixel and OOM eviction-pressure extensions, the same
+build/CTest selection passed again: 8/8, 4.60 s. `git diff --check` passed.
+The saved verification preference was read from
+`~/.copilot/memories/board-preferences.md`; literal `/memories` is unavailable.
+Only `./build.sh reterminal-sticky-interactive` was run and passed. Its output is
+captured in the current session's `files/sticky-96-glyph-cache-build.log`.
+Diagnostics are enabled; sketch size is 3,187,410 bytes (+12), globals 81,876
+bytes (unchanged). These static sizes do not account for the larger heap-resident
+cache. No compiler warnings or errors appear in the captured output. The
+generated flag reference is unchanged. Firmware output:
+`build/reterminal-sticky-interactive/app.ino.bin`.
+No production source changed after that firmware build; only tests and prose
+were finalized. The worktree contains exactly the adapter, existing font test,
+two developer descriptions and this plan. No Markdown linter is installed.
+
+Repeat the actual cached pad-15 scenario on device and collect coherent-ready,
+glyph, conversion and application timings along with PSRAM/internal heap
+headroom. No new device latency or quality improvement is yet claimed. The
+exact pad working set, visible onset, physical action-order/confirmation stress,
+OTA/recovery/screenshot stress and SSD2677 hardware remain pending. Preserve
+runtime controller detection. No flash, commit, push or all-board build.
+
+### Device capture after the 96-glyph change, 2026-11-12
+
+Status: Device stage improvement measured; physical acceptance remains pending.
+User-supplied log identifies ELF prefix `fa9b56d2d`, ESP32-S3 at 240 MHz,
+runtime SSD1677 selection through ID `0xff`/BUSY-transition fallback, B/W Bayer,
+rotation 1 (480 x 800 logical), passive binding 1000 ms, presentation minimum
+500 ms and full threshold 200. Always-on, screen sleep disabled, Wi-Fi active,
+MQTT/HA disabled. Temperature, supply and screenshot polling are unrecorded.
+These settings are confirmed in this capture, unlike the preceding counter
+excerpt. No new firmware source, build or flash accompanies this analysis.
+
+All 16 completed interaction requests (1-16) correlate with successful
+presentations (`ok=1`) and 96,000-byte uploads. Their render records all show
+`glyph=0`. This is zero measured miss time **inside rendering**, not proof of
+zero font work during screen construction/application or zero misses across
+the whole session. The cache's per-font working set and failure counters are
+still unavailable.
+
+#### Cached pad-15 comparison
+
+New request 10/frame 84 is the cached visit; request 8/frame 81 is first pad-15
+construction. Compare the cached visit with the previous 16-entry request
+7/frame 80, not with a counter or a first visit:
+
+| Cached visit stage | Previous 16-entry capture (ms) | New 96-entry capture (ms) |
+|--------------------|--------------------------------|--------------------------|
+| Request to coherent ready | 1,026.636 | 444.168 |
+| Enqueue log to switched log | approximately 355 | approximately 67 |
+| Refresh | 669.074 | 375.826 |
+| Render within refresh | 664.392 | 374.227 |
+| Glyph misses within render | 277.621 | 0 |
+| RGB565 conversion within flush/render | 217.147 | 216.176 |
+| Prior-waveform wait, ready to eligible | 0 | 0 |
+| Eligible to snapshot | 0.394 | 0.397 |
+| Preparation | 22.388 | 22.793 |
+| Upload | 183.716 | 191.824 |
+| Waveform, trigger to BUSY done | 611.973 | 610.346 |
+| Request to successful publication | 1,849.500 | 1,275.345 |
+
+This cached sample reaches a coherent frame 582.468 ms sooner (56.7%) and
+completed publication 574.155 ms sooner (31.0%). Render improves 290.165 ms,
+with the formerly measured 277.621 ms glyph-miss cost absent. Conversion is
+essentially unchanged; both still convert all 384,000 pixels in 50 flushes.
+Application-side time also falls, but the approximately 67/355 ms intervals
+do not isolate layout, binding reapplication and other work. Do not assign
+their entire difference to one operation. Render, flush/conversion and glyph
+measurements overlap; do not sum them as additional independent stages.
+
+The new first visit takes 649.429 ms request-to-ready and 1,481.863 ms to
+publication, with 376.251 ms refresh and no measured render glyph misses.
+Construction still occurs and can warm glyphs before rendering. Subsequent
+navigation to pad 0 takes 319.343 and 315.047 ms to ready. The current pad 0
+has four buttons and a preloaded icon, whereas the older navigation capture
+had two buttons and no cached icon; these are not controlled matched A/B
+distributions. Pad 15 still logs four buttons and the same gauge geometry,
+but its complete configuration is not available for equality checking.
+There is only one matched-kind cached pad-15 sample per capture, not the
+required 30-sample median/p95/max qualification.
+
+#### Counter and remaining hardware path
+
+Eight counter requests (1-5, 14-16) still convert 5,694 pixels in one flush:
+
+* Request-to-ready median 9.9405 ms, range 7.208-31.345 ms
+* Request-to-publication median 861.0555 ms, range 834.802-1,183.562 ms
+* Five requests with the panel already eligible: publication median 856.619 ms,
+  range 834.802-863.679 ms
+* Three overlapping requests wait 314.499, 66.232 and 141.226 ms behind an
+  earlier waveform, then about 25.5-26.1 ms from eligibility to snapshot
+
+No discretionary 150 ms settling or configured 500 ms cadence appears on
+these interactive snapshots. Across all 16 interactions, preparation median
+is 22.7345 ms (22.048-25.237), upload 192.312 ms (185.787-199.297), and waveform
+611.3955 ms (610.346-612.000). The cached pad's post-ready physical path is
+831.177 ms. It remains largely unchanged; neither the cache fix nor BUSY
+completion establishes physical visible onset.
+
+#### Memory evidence and pending acceptance
+
+At 36.831 seconds, after cached navigation and before creating another dialog
+font instance, the log reports 6,276,060 bytes free PSRAM (about 5.99 MiB),
+largest PSRAM block 6,160,372 bytes (about 5.88 MiB), and 92,760 bytes free
+internal RAM (about 90.6 KiB), largest internal block 49,140 bytes (about
+48.0 KiB). This snapshot has substantial PSRAM headroom for the captured
+19/24/32 px typography, not proof that large-font stress cannot exhaust memory.
+
+Do not interpret the free-memory difference from the earlier dialog snapshot
+as a font leak: intervening pad construction, retained screen objects and glyph
+warming also allocate. No post-navigation stack watermark, steady-state memory
+plateau or repeated large-font/eviction/OTA stress is captured. Touch sampling
+warnings include long render/startup gaps with zero reported sampling errors;
+the cache change has not eliminated all blocking UI work.
+
+Validation: a local Node.js parser read the supplied session message, joined
+`Display`/`Sticky` numeric records by frame ID and selected nonzero request
+sequences with successful publication. It verified all counts, per-request
+timestamp differences, medians/ranges and cached before/after percentages.
+`git diff --check` passed before and after the measurement-only update.
+No host tests or firmware build are needed for this prose
+update. No dependency, flash, commit or push was performed.
+
+Next gate: retain the 96-entry change as measured software improvement and
+collect controlled cached navigation and memory/stress acceptance. Continue
+to defer label-dedup changes, conversion redesign, controller caching,
+waveform/clock changes and phases 3/4/6 unless separately approved.
+
+### Commit checkpoint and deferred memory work, 2026-11-12
+
+User authorized committing the 96-entry change. Reviewed the aggregate five-file
+change set, including tests and the two developer documentation owners.
+No new user control, schema, action/binding metadata or board capability requires
+a user-guide or generated-reference update. The focused CTest command recorded
+above passed again: 8/8, 4.61 s. The earlier warning-free Sticky firmware build
+still covers the unchanged production source. No Markdown linter or existing
+focused documentation check was found; documentation was reviewed directly.
+
+Memory-aware font/glyph management is deferred to
+[issue #151](https://github.com/jantielens/esp32-macropad/issues/151).
+Current PSRAM headroom is sufficient for the captured configuration; arbitrary
+large-font safety is not established. The issue requests measurement and a
+smallest-fit policy proposal, not an immediate cache architecture rewrite.
+No new optimization phase, flash, push or all-board build is authorized.
+
 ### Outcome entry template
 
 ```text
@@ -1146,9 +1559,22 @@ Next phase or user approval needed:
   pre-optimization and ten post-optimization requests; device stage improvements
   measured; ten completed local-variable counter requests now show prompt
   coherent readiness. Physical-visible timing/quality pending
-* Next step: complete physical acceptance and confirm saved settings for any
-  controlled counter comparison, then agree on further conversion/glyph work;
-  do not start phases 3, 4 or 6
+* Investigation: cached navigation retains fonts; a host probe confirms the
+  16-glyph residency cliff and shows why layout also incurs rasterization.
+  Full root redraw on a different pad is correct under the existing LVGL path
+* Approved follow-up: user selected 96 glyphs per monochrome instance; production
+  limit, existing tests and developer descriptions updated. Temporary probes
+  removed; font-memory host estimates recorded above. Eight focused checks and
+  the Sticky firmware build pass; no compiler warnings/errors
+* New device evidence: cached pad-15 coherent readiness improves from
+  1,026.636 to 444.168 ms and publication from 1,849.500 to 1,275.345 ms in
+  single samples; measured render glyph-miss time falls from 277.621 ms to zero.
+  Late snapshot shows about 5.99 MiB PSRAM and 90.6 KiB internal RAM free;
+  peak/stress memory remains unqualified
+* Next step: controlled cached pad-15 distributions and device memory/stress
+  acceptance. Do not bundle label-dedup changes into that A/B experiment or
+  start phases 3, 4 or 6. Complete physical visible-onset/quality acceptance
+  separately; the latest capture confirms passive 1000/presentation 500 ms
 * Deferred research: controller-specific questions arising from failed A/B tests,
   not another broad CrossPoint architecture audit
 * Final narrative owners: display/touch architecture, Interactive E-Paper user

@@ -211,13 +211,33 @@ The monochrome adapter loads outlines with
 only 0 and 255. Existing fallback fonts and metrics corrections still apply.
 The active presentation mode participates in the font-instance cache key.
 
-Each instance owns a FreeType library and face and caches up to 16 glyphs.
+Each instance owns a FreeType library and face and caches up to 96 glyphs.
 Drawing pins bitmap buffers until LVGL releases them. FreeType allocations use
 the PSRAM-first LVGL allocator, with internal RAM fallback. Failed allocations
 invalidate the face and library; the next glyph request recreates them before
 retrying. Cached bitmap buffers remain independent and valid while pinned.
 Initial instance-creation failures use the existing cached bitmap fallback.
 OTA guards block new font resolution and glyph work while an update is active.
+
+The limit counts glyphs, not bytes. Bitmaps are allocated on demand as A8
+coverage: approximately `aligned_width * height` bytes per glyph, plus buffer
+and allocator overhead. Doubling the pixel size roughly quadruples bitmap
+memory. Different sizes/metrics create separate instances; hidden cached pads
+retain their glyphs. Explicit fonts are pad-owned, while inherited typography
+shares device-lifetime instances. Font source bytes are additional and shared
+only within their owning cache. PSRAM exhaustion can spill glyph allocations
+into scarce internal RAM; the cache has no global byte budget.
+Replacement allocates the incoming bitmap before freeing its victim, and
+FreeType also uses temporary rasterization workspaces, so peak use exceeds
+retained bitmap storage.
+
+For orientation, a host measurement of DejaVu Sans after loading 95 printable
+ASCII characters used approximately 107 KiB at 32 px, 146 KiB at 48 px,
+345 KiB at 96 px and 551 KiB at 128 px per instance, including FreeType/cache
+allocations but excluding its 759,720-byte source file. These are font-specific
+host estimates, not ESP32 peak memory or guarantees for other fonts. Sparse
+numeric labels retain fewer glyphs; large alphabets and multiple resident
+instances cost more. Monitor device PSRAM and internal RAM with the actual pads.
 
 The pinned minimal library, license notices, provenance, and heap-workspace patch
 live in `libraries/MacropadFreeType`. `build.sh` discovers this project-local
