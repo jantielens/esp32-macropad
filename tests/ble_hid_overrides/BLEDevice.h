@@ -229,11 +229,13 @@ public:
 };
 class BLEDevice {
 public:
+    inline static bool initialized = true;
+    inline static bool init_succeeds = true;
     inline static BLEServer server;
     inline static BLEAdvertising advertising;
     inline static BLESecurityCallbacks* security = nullptr;
-    static void init(const char*) {}
-    static bool getInitialized() { return true; }
+    static void init(const char*) { initialized = init_succeeds; }
+    static bool getInitialized() { return initialized; }
     static void setSecurityCallbacks(BLESecurityCallbacks* callbacks) { security = callbacks; }
     static void setCustomGapHandler(int (*handler)(ble_gap_event*, void*)) { TestBle::gap_handler = handler; }
     static BLEServer* createServer() { return &server; }

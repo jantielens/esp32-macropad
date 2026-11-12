@@ -133,7 +133,7 @@ LIBRARIES = {
         "NetworkClientSecure", "Hash", "libmbed*.a", "libesp-tls.a", "libespressif__libsodium.a",
     ),
     "MQTT (HAS_MQTT)": ("PubSubClient", "libmqtt.a"),
-    "Bluetooth stack / telemetry (HAS_BLE_HID / HAS_BLE)": ("BLE", "libbt.a"),
+    "Bluetooth stack / telemetry (HAS_BLE_HID / HAS_BLE)": ("BLE", "NimBLE-Arduino", "libbt.a"),
     "USB HID (HAS_USB_HID)": ("USB", "libarduino_tinyusb.a", "libusb.a"),
     "Shared HID": ("libesp_hid.a",),
     "Storage": (

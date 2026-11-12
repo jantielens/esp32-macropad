@@ -2158,6 +2158,25 @@ Each board compiles with its own display driver and settings.
 - **Per screen:** ~200-500 bytes (depends on widget count)
 - **Total:** ~50-60 KB for display subsystem
 
+`LV_ATTRIBUTE_FAST_MEM` places LVGL fast-path functions in IRAM on ESP32-S3,
+except `reterminal-sticky-interactive`, which executes them from cached flash.
+Sticky trades possible rendering overhead for more shared SRAM available to the
+internal heap alongside Wi-Fi and BLE. Other S3 boards retain IRAM placement;
+other chip families retain their existing flash placement. This selection does
+not move task stacks, DMA buffers, or ISR code. Compare linked IRAM size, device
+internal/DMA heap, navigation rendering times, and OTA behavior before considering
+the Sticky experiment validated.
+
+A Sticky A/B build with Arduino core 3.3.12 reduced `.iram0.text` from 167,179
+to 106,455 bytes and the shared-SRAM `.dram0.dummy` reservation from 152,064
+to 91,136 bytes. Static data/BSS sizes were unchanged. Device boot logs confirmed
+the corresponding 60,928-byte internal-heap gain: 182,000 to 242,928 bytes free.
+The latest setup completed with 97,484 bytes free internally, a 79,952-byte
+minimum through setup, and a 55,284-byte largest internal block.
+Navigation and HA live data worked in the supplied capture without allocation
+failures. These observations do not establish sustained rendering performance,
+MQTT-enabled load, OTA safety, or a completed soak of the final configuration.
+
 Alarm configuration and session actions, timer instances, MQTT binding scratch,
 device-level button defaults, and the pad-list cache
 use `config_psram_alloc()`. Each block is allocated once when its subsystem

@@ -27,8 +27,10 @@
 #define HAS_MQTT true
 #define HAS_MCP true
 #define HAS_FILESYSTEM true
-#define HAS_BLE false
+#define HAS_BLE true
 #define HAS_BLE_HID false
+// Prefer PSRAM for medium-sized ordinary allocations alongside Wi-Fi and BLE.
+#define MALLOC_PSRAM_THRESHOLD_BYTES 128
 #define HAS_USB_HID false
 #define HAS_NATIVE_EXTENSIONS false
 #define HAS_IMAGE_FETCH false

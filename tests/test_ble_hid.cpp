@@ -17,6 +17,8 @@ protected:
     ble_gap_conn_desc peer = {7, {0, {1, 2, 3, 4, 5, 6}}, {0, {1, 2, 3, 4, 5, 6}}, {false, false}};
 
     void SetUp() override {
+        BLEDevice::initialized = true;
+        BLEDevice::init_succeeds = true;
         ota_active = false;
         ota_epoch = 1;
         protocolMode = 1;
@@ -95,6 +97,43 @@ TEST_F(BleHid, BthomeUsesStableTenButtonPositionsAndDistinctPackets) {
     EXPECT_TRUE(TestBle::radio_advertising);
     EXPECT_EQ(TestBle::appearance, HID_KEYBOARD);
 }
+
+#if !defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+TEST_F(BleHid, BthomeKeepsLazyInitializationOnOtherBoards) {
+    BLEDevice::initialized = false;
+    BLEDevice::init_succeeds = false;
+    bthome_events_configure("Test");
+    EXPECT_FALSE(BLEDevice::getInitialized());
+    ASSERT_TRUE(bthome_events_send(1, bthome::press));
+    bthome_events_loop();
+    EXPECT_EQ(TestBle::event_starts, 0u);
+
+    BLEDevice::init_succeeds = true;
+    ASSERT_TRUE(bthome_events_send(1, bthome::press));
+    bthome_events_loop();
+    EXPECT_TRUE(BLEDevice::getInitialized());
+    EXPECT_EQ(TestBle::event_starts, 1u);
+}
+#endif
+
+#if defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+TEST_F(BleHid, BthomeStickyRejectsFailedStartupAndInitializesWithoutAdvertising) {
+    BLEDevice::initialized = false;
+    BLEDevice::init_succeeds = false;
+    bthome_events_configure("Test");
+    EXPECT_FALSE(bthome_events_send(1, bthome::press));
+    bthome_events_loop();
+    EXPECT_EQ(TestBle::event_starts, 0u);
+
+    BLEDevice::init_succeeds = true;
+    bthome_events_configure("Test");
+    ASSERT_TRUE(BLEDevice::getInitialized());
+    EXPECT_EQ(TestBle::event_starts, 0u);
+    ASSERT_TRUE(bthome_events_send(1, bthome::press));
+    bthome_events_loop();
+    EXPECT_EQ(TestBle::event_starts, 1u);
+}
+#endif
 
 TEST_F(BleHid, BthomeQueueRejectsNewestAndPreservesOrder) {
     for (uint8_t button = 1; button <= 4; ++button)

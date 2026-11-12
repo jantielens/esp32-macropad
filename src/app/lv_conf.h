@@ -395,8 +395,8 @@
 #define LV_ATTRIBUTE_LARGE_RAM_ARRAY
 
 /* Prefix performance critical functions to place them into a faster memory (e.g RAM).
- * Keep the ESP32-S3 setting; P4 is an explicit A/B measurement to recover IRAM. */
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+ * Sticky uses cached flash to preserve shared SRAM for Wi-Fi and BLE. */
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
     #define LV_ATTRIBUTE_FAST_MEM IRAM_ATTR
 #else
     #define LV_ATTRIBUTE_FAST_MEM

@@ -700,6 +700,14 @@ add_host_legacy_test(test_ble_hid
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
 )
 
+add_host_legacy_test(test_bthome_sticky
+    SOURCES test_ble_hid.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/ble_hid_overrides
+    DEFINITIONS BOARD_RETERMINAL_STICKY_INTERACTIVE=1
+    LIBRARIES GTest::gtest_main
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+)
+
 foreach(transport IN ITEMS both usb ble none)
     if(transport STREQUAL "usb" OR transport STREQUAL "both")
         set(test_usb_transport 1)

@@ -16,7 +16,7 @@ inline bool valid_button_event(uint8_t button, uint8_t event) {
 }
 
 #if HAS_BLE || HAS_BLE_HID
-// Configure before action hosts start; BLE initialization is deferred until use.
+// Configure on the main loop; Sticky initializes BLE here, other boards on use.
 void bthome_events_configure(const char* device_name);
 // Thread-safe admission. Success means queued, not received by Home Assistant.
 bool bthome_events_send(uint8_t button, uint8_t event);

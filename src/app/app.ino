@@ -218,6 +218,10 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 	if (g_normal_runtime_started) return;
 	g_normal_runtime_started = true;
 
+	#if defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+	bthome_events_configure(device_config.device_name);
+	#endif
+
 	#if HAS_HA_HISTORY
 	ha_stats_begin_startup();
 	#endif
@@ -258,7 +262,7 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 
 	sensor_manager_init();
 
-	#if HAS_BLE || HAS_BLE_HID
+	#if (HAS_BLE || HAS_BLE_HID) && !defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
 	bthome_events_configure(device_config.device_name);
 	#endif
 
@@ -551,6 +555,13 @@ void setup()
 	}
 	power_manager_set_current_mode(boot_mode);
 	power_manager_led_set_mode(boot_mode);
+
+	#if defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+	// Reserve BLE's internal RAM before WiFi and normal-runtime allocations.
+	if (boot_mode == PowerMode::AlwaysOn) {
+		bthome_events_configure(device_config.device_name);
+	}
+	#endif
 
 	// Start WiFi hardware after required storage is known to be available.
 	// On ESP32-P4 this kicks off the SDIO link to the C6 co-processor (~2-5 s)

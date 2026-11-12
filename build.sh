@@ -297,6 +297,10 @@ build_board() {
     # regardless of staging behavior.
     local PROJECT_INCLUDE="-I$SCRIPT_DIR/src -I$SCRIPT_DIR/src/app"
 
+    if [[ "$board_name" == "reterminal-sticky-interactive" ]]; then
+        EXTRA_GLOBAL_FLAGS+=" -include $board_override_dir/drivers/nimble_config.h"
+    fi
+
     if [[ -d "$board_override_dir" ]]; then
         echo -e "${YELLOW}Config:    Using board-specific overrides from src/boards/$board_name/${NC}"
         # Add include path and define BOARD_HAS_OVERRIDE to trigger board_overrides.h inclusion

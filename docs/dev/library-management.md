@@ -39,6 +39,12 @@ This software is based in part on the work of the FreeType Team.
 
 **`arduino-libraries.txt`** - Contains the list of required Arduino libraries
 
+`NimBLE-Arduino@2.5.0` is used only by the Sticky
+[broadcast-only BLE profile](build-and-release-process.md#sticky-broadcast-only-ble).
+Its board-local compiler settings apply consistently to library and application
+sources; other boards continue using the Arduino core's BLE library. Install
+through the manifest rather than modifying the installed library configuration.
+
 ### Format
 
 ```

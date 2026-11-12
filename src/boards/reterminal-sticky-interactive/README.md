@@ -98,7 +98,15 @@ The build selects QIO flash, OPI PSRAM, and UART serial rather than USB CDC.
 Back up settings and files before changing firmware or partition layouts;
 an application-only OTA does not replace the partition table.
 
-SD, microphone, IMU, RTC, BLE/BLE HID, USB HID,
+BLE supports the
+[Send BTHome event action](../../../docs/user/integrations/home-assistant.md#send-a-bthome-button-event)
+independently of MQTT sensor telemetry. This target uses an experimental
+broadcast-only BLE profile without scanning or connections. Validate delivery
+for the button numbers and event types you use; queue admission does not
+confirm Home Assistant receipt. Sustained runtime memory headroom under
+MQTT-enabled load and OTA coexistence still require device validation.
+
+SD, microphone, IMU, RTC, BLE HID, USB HID,
 native Extensions, remote image fetching, and the image library are disabled.
 There is no custom charging policy, gauge calibration, low-battery shutdown,
 or battery-runtime guarantee.

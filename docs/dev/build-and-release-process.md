@@ -207,6 +207,57 @@ Boards without a persistent filesystem partition or SD backend must set
 LittleFS; NVS settings and NVS-only factory reset remain available. Do not infer
 filesystem availability from the display or storage-browser feature flags.
 
+### Sticky Broadcast-Only BLE
+
+Only `reterminal-sticky-interactive` uses the pinned NimBLE-Arduino dependency.
+`build.sh` force-includes that board's `drivers/nimble_config.h` in C and C++
+translation units, after loading the SDK configuration. This disables central
+and observer roles, retains broadcasting, and moves eligible host
+allocations to PSRAM. Controller allocations and the host task stack remain in
+internal RAM. Connection retries are disabled and controller connection capacity
+is reduced to one. Peripheral-host code remains enabled because the pinned
+library's GAP/GATT initialization references it even without a server; no GATT
+server is created and both advertisers explicitly use nonconnectable mode.
+The event module includes the
+Arduino core's BLE memory-retention constructor because this pinned library
+predates that mechanism. Do not edit the installed library or apply these overrides to
+other targets or prebuilt SDK structures.
+
+Both `bthome_events.cpp` and `ble_telemetry.cpp` select this backend for Sticky;
+the built-in Arduino BLE wrapper must not be linked alongside it. Other boards
+retain their existing backend and lazy event initialization. Packet layout,
+queue admission, burst timing, and OTA cancellation remain shared.
+The bundled core backend already uses NimBLE on the tested toolchain. The
+memory benefit comes from the selected host profile and eligible PSRAM
+allocations, not a Bluedroid-to-NimBLE migration.
+
+The always-on startup initializes Sticky BLE before Wi-Fi; setup/recovery starts
+it when normal runtime begins. It does not advertise until an action fires.
+The sensor-only BLE duty-cycle path initializes the same stack separately.
+Startup logs record internal free heap and largest block before/after BLE, plus
+remaining PSRAM. Compare the final `Mem: setup` and loaded runtime minimums
+against the same configuration without BLE, not only the firmware size report.
+
+Sticky also uses a 128-byte ordinary-malloc PSRAM threshold and keeps the MQTT
+trigger subscription-topic cache in its existing PSRAM-first storage allocation.
+The pending bitmask and synchronization objects remain internal. On the first
+failed allocation per boot, the heap hook captures at most 12 stack frames without
+allocating memory, then prints an `[ALLOC-FAIL] Backtrace:` line outside its
+critical section. Decode its PC addresses using `xtensa-esp32s3-elf-addr2line -pfiaC
+-e build/reterminal-sticky-interactive/app.ino.elf <PC> ...` from the matching
+firmware build. Keep that ELF until device validation is complete.
+
+This remains a board-scoped experiment. Home Assistant receipt of a Button 1
+press was confirmed, and the subsequent
+[LVGL flash-placement change](display-touch-architecture.md#memory-usage)
+recovered 60,928 bytes of internal heap at boot. The latest capture confirms HA
+live connection and navigation without allocation failures, with MQTT disabled.
+The earlier four-hour stable run preceded the LVGL placement change and is not
+a soak of the final configuration. Verify repeated Button 1/10 events and all
+supported event types alongside live HA/MQTT, ping monitoring, display
+interaction, and OTA before declaring acceptance. Do not enable BLE HID with
+this profile.
+
 ### Firmware Size Verification
 
 Fresh before/after builds on 2026-10-09 with ESP32 Arduino core 3.3.12 measured
@@ -235,8 +286,9 @@ At the beginning of `setup()`, before subsystem initialization, firmware applies
 the preference through `heap_caps_malloc_extmem_enable()` only when PSRAM is
 compiled in and `psramFound()` confirms it is available.
 
-Ordinary allocations larger than 512 bytes prefer PSRAM, while smaller
-allocations prefer internal RAM. The allocator can fall back to the other pool.
+Ordinary allocations larger than the selected threshold prefer PSRAM; allocations
+at or below it prefer internal RAM. Sticky overrides the threshold to 128 bytes.
+The allocator can fall back to the other pool.
 Explicit capability allocations, including DMA-specific buffers, and task-stack
 policy are unchanged. The preference does not move existing allocations,
 including those made before `setup()`.

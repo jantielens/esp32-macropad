@@ -2,9 +2,13 @@
 
 #if HAS_BLE
 
+#if defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+#include <NimBLEDevice.h>
+#else
 #include <BLEDevice.h>
 #include <BLEAdvertising.h>
 #include <BLEUUID.h>
+#endif
 #include <string>
 
 // NimBLE headers (pulled in transitively by BLEDevice.h) redefine LOG_LEVEL_*
@@ -89,7 +93,11 @@ void ble_telemetry_init(const char *device_name, int8_t tx_power_dbm) {
     const char *name = (device_name && device_name[0]) ? device_name : "esp32-telemetry";
     strlcpy(g_device_name, name, sizeof(g_device_name));
     BLEDevice::init(g_device_name);
+#if defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+    if (!BLEDevice::isInitialized()) {
+#else
     if (!BLEDevice::getInitialized()) {
+#endif
         LOGE(TAG, "BLE stack init failed");
         return;
     }
@@ -107,8 +115,16 @@ void ble_telemetry_init(const char *device_name, int8_t tx_power_dbm) {
             LOGE(TAG, "Unsupported TX power: %d dBm", (int)tx_power_dbm);
             return;
     }
+#if defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+    if (!BLEDevice::setPowerLevel(power_level, ESP_BLE_PWR_TYPE_ADV) ||
+        !BLEDevice::setPowerLevel(power_level, ESP_BLE_PWR_TYPE_DEFAULT)) {
+        LOGE(TAG, "Could not set BLE transmit power");
+        return;
+    }
+#else
     BLEDevice::setPower(power_level, ESP_BLE_PWR_TYPE_ADV);
     BLEDevice::setPower(power_level, ESP_BLE_PWR_TYPE_DEFAULT);
+#endif
     g_initialized = true;
     LOGI(TAG, "BLE telemetry initialized as '%s' (TX %+d dBm)", g_device_name, (int)tx_power_dbm);
 }
@@ -168,6 +184,18 @@ bool ble_telemetry_advertise_burst(uint8_t burst_count, uint16_t interval_ms) {
     // this split, a long device name silently squeezes out the BTHome payload
     // and the device becomes invisible to BTHome receivers.
     BLEAdvertisementData adv_data;
+#if defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+    BLEAdvertisementData scan_resp;
+    if (!adv->setConnectableMode(BLE_GAP_CONN_MODE_NON) ||
+        !adv->setDiscoverableMode(BLE_GAP_DISC_MODE_GEN) ||
+        !adv_data.setFlags(0x06) ||
+        !adv_data.setServiceData(BLEUUID((uint16_t)BTHOME_SERVICE_UUID), payload, payload_len) ||
+        !adv->setAdvertisementData(adv_data) ||
+        !scan_resp.setName(g_device_name) || !adv->setScanResponseData(scan_resp)) {
+        LOGE(TAG, "Could not configure BTHome telemetry advertisement");
+        return false;
+    }
+#else
     adv_data.setFlags(0x06);  // LE General Discoverable | BR/EDR Not Supported
     // Arduino-ESP32 BLE API expects an Arduino String. We use concat(buf, len)
     // (NOT a (const char*) ctor or operator+=) because BTHome payloads can
@@ -187,24 +215,43 @@ bool ble_telemetry_advertise_burst(uint8_t burst_count, uint16_t interval_ms) {
     BLEAdvertisementData scan_resp;
     scan_resp.setName(String(g_device_name));
     adv->setScanResponseData(scan_resp);
+#endif
 
     // Convert ms to BLE adv interval units (0.625 ms each).
     const uint16_t interval_units = (uint16_t)((interval_ms * 1000UL) / 625UL);
     adv->setMinInterval(interval_units);
     adv->setMaxInterval(interval_units);
+#if defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+    adv->enableScanResponse(true);
+#else
     adv->setScanResponse(true);
+#endif
 
     LOGI(TAG, "Advertising BTHome burst: %u packets @ %u ms (payload %u bytes, %u objects)",
          (unsigned)burst_count, (unsigned)interval_ms,
          (unsigned)payload_len, (unsigned)g_pending_count);
 
+#if defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+    if (!adv->start()) {
+        LOGE(TAG, "Could not start BTHome telemetry advertisement");
+        return false;
+    }
+#else
     adv->start();
+#endif
     // Hold advertising long enough for `burst_count` packets at `interval_ms` to
     // be transmitted. Add a small grace margin so the controller actually emits
     // the last packet before we stop.
     const uint32_t hold_ms = (uint32_t)burst_count * (uint32_t)interval_ms + 50UL;
     delay(hold_ms);
+#if defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+    if (!adv->stop()) {
+        LOGE(TAG, "Could not stop BTHome telemetry advertisement");
+        return false;
+    }
+#else
     adv->stop();
+#endif
 
     return true;
 }

@@ -9,9 +9,21 @@ static constexpr uint8_t kBthomeLogLevel = LOG_LEVEL;
 #include <Arduino.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/portmacro.h>
+#if defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+#include <NimBLEDevice.h>
+#else
 #include <BLEDevice.h>
 #include <BLEAdvertising.h>
-#if defined(CONFIG_NIMBLE_ENABLED)
+#endif
+#ifdef ARDUINO
+#include <esp_heap_caps.h>
+#include <esp32-hal-bt.h>
+#if defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+// NimBLE-Arduino 2.5.0 predates the core's BLE memory-retention constructor.
+#include <esp32-hal-alloc-ble-mem.h>
+#endif
+#endif
+#if defined(CONFIG_NIMBLE_ENABLED) && !defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
 #include <host/ble_hs_id.h>
 #endif
 
@@ -44,6 +56,14 @@ uint32_t event_started_ms = 0;
 uint32_t active_ota_epoch = 0;
 uint8_t packet_id = 0;
 
+bool ble_initialized() {
+#if defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+    return NimBLEDevice::isInitialized();
+#else
+    return BLEDevice::getInitialized();
+#endif
+}
+
 void restore_hid_advertising() {
 #if HAS_BLE_HID
     if (!ble_hid_pause_advertising(false))
@@ -52,9 +72,11 @@ void restore_hid_advertising() {
 }
 
 bool start_event(const ButtonEvent& event) {
-    if (!BLEDevice::getInitialized()) BLEDevice::init(event_device_name);
-    if (!BLEDevice::getInitialized()) {
-        LOGE(kBthomeTag, "BLE initialization failed; event dropped");
+#if !defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+    if (!ble_initialized()) BLEDevice::init(event_device_name);
+#endif
+    if (!ble_initialized()) {
+        LOGE(kBthomeTag, "BLE unavailable; event dropped");
         return false;
     }
 #if HAS_BLE_HID
@@ -76,7 +98,18 @@ bool start_event(const ButtonEvent& event) {
     static_assert(sizeof(advertisement) <= 31, "BTHome event exceeds legacy advertisement budget");
 
     bool started;
-#if defined(CONFIG_NIMBLE_ENABLED)
+#if defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+    NimBLEAdvertising* advertiser = NimBLEDevice::getAdvertising();
+    NimBLEAdvertisementData data;
+    advertiser->enableScanResponse(false);
+    advertiser->setMinInterval(kEventIntervalMs * 8 / 5);
+    advertiser->setMaxInterval(kEventIntervalMs * 8 / 5);
+    started = advertiser->setConnectableMode(BLE_GAP_CONN_MODE_NON) &&
+        advertiser->setDiscoverableMode(BLE_GAP_DISC_MODE_NON) &&
+        data.addData(advertisement, sizeof(advertisement)) &&
+        advertiser->setAdvertisementData(data) && advertiser->start();
+    if (!started) LOGE(kBthomeTag, "Broadcast advertising failed; event dropped");
+#elif defined(CONFIG_NIMBLE_ENABLED)
     // Arduino BLEAdvertising::start rejects a full GATT connection table even
     // for nonconnectable advertisements. These events need no connection slot.
     uint8_t address_type = 0;
@@ -111,8 +144,40 @@ bool start_event(const ButtonEvent& event) {
 void bthome_events_configure(const char* device_name) {
     strlcpy(event_device_name, device_name && device_name[0] ? device_name : "esp32-macropad",
             sizeof(event_device_name));
+#if defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+    if (!ble_initialized()) {
+#ifdef ARDUINO
+        LOGI(kBthomeTag, "Initializing broadcast-only BLE: internal free=%u largest=%u released=%u",
+            unsigned(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
+            unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
+            unsigned(btMemReleased(BT_MODE_BLE)));
+#endif
+        NimBLEDevice::init(event_device_name);
+        if (ble_initialized()) {
+            LOGI(kBthomeTag, "Broadcast-only BLE initialized");
+        } else {
+            LOGE(kBthomeTag, "BLE initialization failed; BTHome events unavailable");
+#ifdef ARDUINO
+            LOGE(kBthomeTag, "Internal free=%u largest=%u released=%u",
+                unsigned(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
+                unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
+                unsigned(btMemReleased(BT_MODE_BLE)));
+#endif
+        }
+#ifdef ARDUINO
+        LOGI(kBthomeTag, "After BLE: internal free=%u largest=%u PSRAM free=%u",
+            unsigned(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
+            unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
+            unsigned(heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)));
+#endif
+    }
+#endif
     portENTER_CRITICAL(&queue_mux);
+#if defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+    configured = ble_initialized();
+#else
     configured = true;
+#endif
     portEXIT_CRITICAL(&queue_mux);
 }
 
@@ -140,7 +205,12 @@ void bthome_events_loop() {
     if (event_active) {
         if (!ota_active && epoch == active_ota_epoch &&
             uint32_t(now - event_started_ms) < kEventBurstMs) return;
-        if (!BLEDevice::getAdvertising()->stop()) {
+#if defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+        const bool stopped = NimBLEDevice::getAdvertising()->stop();
+#else
+        const bool stopped = BLEDevice::getAdvertising()->stop();
+#endif
+        if (!stopped) {
             LOGE(kBthomeTag, "Could not stop event advertising");
             return;
         }

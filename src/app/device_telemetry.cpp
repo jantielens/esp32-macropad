@@ -22,6 +22,40 @@
 #include <esp_timer.h>
 #include <esp_idf_version.h>
 
+#if defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+#include <esp_cpu_utils.h>
+#include <esp_debug_helpers.h>
+
+static void IRAM_ATTR trace_first_allocation_failure() {
+	static portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+	static bool captured = false;
+	uint32_t pcs[12];
+	uint32_t sps[12];
+	size_t count = 0;
+
+	// Flush and walk the current stack without task migration; print after unlocking.
+	portENTER_CRITICAL_SAFE(&mux);
+	if (!captured) {
+		captured = true;
+		esp_backtrace_frame_t frame = {};
+		esp_backtrace_get_start(&frame.pc, &frame.sp, &frame.next_pc);
+		do {
+			pcs[count] = esp_cpu_process_stack_pc(frame.pc);
+			sps[count++] = frame.sp;
+		} while (count < 12 && frame.next_pc && esp_backtrace_get_next_frame(&frame));
+	}
+	portEXIT_CRITICAL_SAFE(&mux);
+
+	if (count) {
+		esp_rom_printf(DRAM_STR("[ALLOC-FAIL] Backtrace:"));
+		for (size_t i = 0; i < count; ++i) {
+			esp_rom_printf(DRAM_STR(" 0x%08x:0x%08x"), (unsigned)pcs[i], (unsigned)sps[i]);
+		}
+		esp_rom_printf(DRAM_STR("\n"));
+	}
+}
+#endif
+
 // Per-core idle-task run-time counter API was added in ESP-IDF v5.x.
 // Inkplate's bundled arduino-esp32 fork ships an older IDF (4.x) that lacks
 // `configRUN_TIME_COUNTER_TYPE` and `ulTaskGetIdleRunTimeCounterForCore`. On
@@ -783,6 +817,9 @@ void device_telemetry_init() {
 					(unsigned)dma_free, (unsigned)dma_largest, (unsigned)int_free,
 					function_name ? function_name : "?"
 				);
+				#if defined(BOARD_RETERMINAL_STICKY_INTERACTIVE)
+				trace_first_allocation_failure();
+				#endif
 			}
 		};
 		heap_caps_register_failed_alloc_callback(&AllocFailHook::on_failed);
