@@ -64,6 +64,7 @@
 #define EPAPER_FRAME_BUTTON_PIN 3
 
 // --- Battery monitoring (E1003) --------------------------------------------
+#define HAS_BATTERY_INFO true
 // Battery voltage is read on GPIO1 (ADC) behind a 2:1 divider, gated by an
 // enable pin that must be driven HIGH a few ms before sampling. On the E1003
 // that enable pin is GPIO40 (it is GPIO21 on the other reTerminal E models).

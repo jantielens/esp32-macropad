@@ -15,6 +15,10 @@
 #include "device_classes/epaper_frame/epaper_frame_driver.h"
 #include "device_classes/epaper_frame/epaper_frame_http.h"
 #include "log_manager.h"
+#if HAS_BATTERY_INFO
+#include "sensors/sensor_manager.h"
+#include "device_classes/epaper_frame/epaper_frame_battery.h"
+#endif
 
 #include <Inkplate.h>
 #include <Wire.h>
@@ -137,8 +141,16 @@ void epaper_frame_driver_sleep() {
 uint16_t epaper_frame_driver_battery_mv() {
 		if (!s_began || !s_display) return 0;
 		const double v = s_display->readBattery();
-		if (v <= 0.0) return 0;
-		return (uint16_t)(v * 1000.0);
+		const uint16_t mv = isfinite(v) && v > 0 && v * 1000 <= UINT16_MAX ? (uint16_t)(v * 1000.0) : 0;
+#if HAS_BATTERY_INFO
+		BatterySample sample;
+		if (mv && v >= 2.5 && v <= 4.35) {
+				sample.set(BatteryField::Voltage, mv / 1000.0f);
+				sample.set(BatteryField::Percentage, epaper_frame_battery_percent(mv));
+		}
+		sensor_manager_record_battery(sample);
+#endif
+		return mv;
 }
 
 // SD image cache is unsupported on this board (no shared-bus SD slot); the

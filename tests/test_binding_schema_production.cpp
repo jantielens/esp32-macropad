@@ -517,6 +517,14 @@ int main(int argc, char** argv) {
 
     expect(binding_template_scheme_count() > 0, "production profile registered binding schemes");
     expect(scheme_is_registered("mqtt") == bool(HAS_MQTT), "MQTT registration matches gate");
+    expect(scheme_is_registered("battery") == bool(HAS_BATTERY_INFO), "battery registration matches gate");
+#if !HAS_BATTERY_INFO
+    {
+        char value[64] = {};
+        binding_template_resolve("[battery:percentage|N/A]", value, sizeof(value));
+        expect(std::strcmp(value, "ERR:unknown") == 0, "excluded battery scheme does not register a fallback stub");
+    }
+#endif
     expect(scheme_is_registered("ext") == bool(HAS_EXTERNAL_DATA), "external data registration matches gate");
     expect(scheme_is_registered("pad") == bool(HAS_DISPLAY),
            "named bindings are registered whenever display is enabled");
@@ -619,7 +627,7 @@ int main(int argc, char** argv) {
             if (std::strcmp(binding_template_scheme_name(index), "sensor") == 0)
                 sensor = binding_template_scheme_spec(index);
         }
-        expect(sensor && sensor->authoring && sensor->authoring->key_count == 4,
+        expect(sensor && sensor->authoring && sensor->authoring->key_count == 3,
                "local sensors declare authoring metadata for each registered field");
         if (sensor && sensor->authoring) {
             const BindingAuthoringKey& temperature = sensor->authoring->keys[0];

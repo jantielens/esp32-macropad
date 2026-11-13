@@ -34,6 +34,21 @@
 #endif
 
 void sensor_manager_register_all(SensorRegistry &registry) {
+	#if HAS_BATTERY_INFO && IS_EPAPER_FRAME && (defined(BOARD_INKPLATE5V2_FRAME) || defined(BOARD_INKPLATE6FLICK_FRAME) || \
+		(defined(EPAPER_FRAME_BATTERY_ADC_PIN) && EPAPER_FRAME_BATTERY_ADC_PIN >= 0))
+	static const BatteryProvider frame_battery = {
+		"E-Paper Frame: driver-owned voltage samples and approximate voltage-derived percentage. "
+		"Sampling follows frame wake/refresh operations, not periodic polling; readings expire after three minutes of active runtime.",
+		battery_field_mask(BatteryField::Voltage) | battery_field_mask(BatteryField::Percentage),
+		nullptr,
+	};
+	SensorCallbacks frame = {};
+	frame.name = "E-Paper Frame battery";
+	frame.battery = &frame_battery;
+	frame.event_driven = true;
+	frame.sample_interval_ms = 60000;
+	registry.add(frame);
+	#endif
 	#ifdef BOARD_SENSOR_SOURCE
 	board_register_sensors(registry);
 	#endif

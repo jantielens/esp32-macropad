@@ -88,6 +88,10 @@ bindings keep it reusable. The editor checks syntax and previews live values.
 Read enabled local sensors without MQTT using
 `[sensor:temperature;%.1f|N/A]` or a key listed for your board. See
 [local sensor bindings](docs/user/pads/data-sources.md#read-local-sensors-and-health).
+Use `[battery:percentage;%.0f|N/A]` for
+[shared battery information](docs/user/pads/data-sources.md#show-battery-information);
+unsupported measurements use the fallback on battery-telemetry boards with
+fewer capabilities. Boards without battery telemetry omit the battery scheme.
 
 [Explore binding templates](docs/user/pads/bindings.md).
 

@@ -312,3 +312,21 @@ with tempfile.TemporaryDirectory() as directory:
         )
         subprocess.run([executable], check=True)
 print("PASS: malloc policy startup guards")
+
+battery_boards = {
+    "firebeetle2-esp32c6-aht10", "inkplate5v2-frame", "inkplate6flick-frame",
+    "m5stack-stopwatch", "m5stack-tab5", "m5stack-tab5-sd",
+    "reterminal-e1003-frame", "reterminal-sticky-interactive",
+}
+for override in sorted((root / "src/boards").glob("*/board_overrides.h")):
+    board = override.parent.name
+    subprocess.run(
+        ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+         "-x", "c++", "-", "-I", str(root), "-I", str(root / "src/app"),
+         "-I", str(override.parent),
+         "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM"],
+        input=f'''#include "src/app/board_config.h"
+static_assert(HAS_BATTERY_INFO == {int(board in battery_boards)}, "Battery provider gate mismatch");
+''', text=True, check=True,
+    )
+print("PASS: battery info enabled only on existing provider boards and inherited variants")

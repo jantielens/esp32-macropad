@@ -72,7 +72,6 @@ static const SensorField kFixtureSensorFields[] = {
 #else
     {"temperature", "Temperature in degrees Celsius.", "\xC2\xB0" "C", "21.37"},
     {"humidity", "Relative humidity in percent.", "%", "54.2"},
-    {"battery_voltage", "Battery voltage in volts.", "V", "3.85"},
     {"presence", "Presence detected: 1 or 0.", "", "1"},
 #endif
 };
@@ -87,6 +86,17 @@ const SensorField *sensor_manager_field_at(size_t index) {
     return index < sensor_manager_field_count() ? &kFixtureSensorFields[index] : nullptr;
 }
 bool sensor_manager_get_number(const char*, double*, bool*) { return false; }
+#if HAS_BATTERY_INFO
+void sensor_manager_get_battery(BatterySnapshot &snapshot) {
+    snapshot = {};
+#if defined(BINDING_SCHEMA_PROFILE_FULL)
+    snapshot.supported = battery_supported_fields(
+        battery_field_mask(BatteryField::Voltage) | battery_field_mask(BatteryField::Percentage) |
+        battery_field_mask(BatteryField::Current));
+    snapshot.description = "Fixture battery provider: voltage, percentage and signed current; no status or runtime estimates.";
+#endif
+}
+#endif
 #if ALARM_ENABLED
 AlarmSnapshot binding_test_alarm = {true, 7, 30, ALARM_RINGING, true, false, false, false, 0};
 AlarmSnapshot alarm_snapshot() { return binding_test_alarm; }

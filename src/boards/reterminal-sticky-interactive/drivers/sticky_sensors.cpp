@@ -9,9 +9,15 @@
 
 namespace {
 constexpr uint8_t kShtAddress = 0x44;
+#if HAS_BATTERY_INFO
 constexpr uint8_t kGaugeAddress = 0x55;
 constexpr uint8_t kVoltage = 0x08;
 constexpr uint8_t kStateOfCharge = 0x2c;
+constexpr uint8_t kStatus = 0x0a;
+constexpr uint8_t kCurrent = 0x0c;
+constexpr uint8_t kTimeToEmpty = 0x16;
+constexpr uint8_t kTimeToFull = 0x18;
+#endif
 constexpr uint32_t kLogIntervalMs = 60000;
 SensirionI2cSht4x sht;
 
@@ -30,7 +36,10 @@ struct FailureLog {
     }
 };
 
-FailureLog shtFailure, voltageFailure, chargeFailure;
+FailureLog shtFailure;
+#if HAS_BATTERY_INFO
+FailureLog voltageFailure, chargeFailure, currentFailure, statusFailure, runtimeFailure;
+#endif
 
 void sht_init() {
     sht.begin(Wire, kShtAddress);
@@ -52,6 +61,7 @@ void sht_sample(JsonObject &doc) {
     sensor_manager_set_number(doc, "humidity", humidity, humidityValid);
 }
 
+#if HAS_BATTERY_INFO
 bool gauge_word(uint8_t command, uint16_t &value) {
     Wire.beginTransmission(kGaugeAddress);
     const bool wrote = Wire.write(command) == 1;
@@ -65,23 +75,43 @@ bool gauge_word(uint8_t command, uint16_t &value) {
     return true;
 }
 
-void gauge_sample(JsonObject &doc) {
-    uint16_t voltage = 0, charge = 0;
-    bool voltageRead = false, chargeRead = false;
+void gauge_sample(BatterySample &sample) {
+    uint16_t voltage = 0, charge = 0, current = 0, status = 0, timeEmpty = 0xffff, timeFull = 0xffff;
+    bool voltageRead = false, chargeRead = false, currentRead = false, statusRead = false;
+    bool emptyRead = false, fullRead = false;
     const bool ready = sticky_hardware_ready();
     if (ready && i2c_bus_lock()) {
         voltageRead = gauge_word(kVoltage, voltage);
         chargeRead = gauge_word(kStateOfCharge, charge);
+        currentRead = gauge_word(kCurrent, current);
+        statusRead = gauge_word(kStatus, status);
+        emptyRead = gauge_word(kTimeToEmpty, timeEmpty);
+        fullRead = gauge_word(kTimeToFull, timeFull);
         i2c_bus_unlock();
     }
     const bool voltageValid = voltageRead && voltage >= 2000 && voltage <= 5000;
     const bool chargeValid = chargeRead && charge <= 100;
     voltageFailure.update(!voltageValid, "BQ27220 voltage read invalid or failed (check Wire0 and 0x55)");
     chargeFailure.update(!chargeValid, "BQ27220 charge read invalid or failed (check Wire0 and 0x55)");
-    sensor_manager_set_number(doc, "battery_voltage", voltage / 1000.0f, voltageValid);
-    sensor_manager_set_number(doc, "battery_percentage", charge, chargeValid);
-    sensor_manager_set_bool(doc, "external_power_present", ready && digitalRead(9) == HIGH, ready);
+    currentFailure.update(!currentRead, "BQ27220 current read failed");
+    statusFailure.update(!statusRead, "BQ27220 status read failed");
+    runtimeFailure.update(!emptyRead || !fullRead, "BQ27220 runtime read failed");
+    if (voltageValid) sample.set(BatteryField::Voltage, voltage / 1000.0f);
+    if (chargeValid) sample.set(BatteryField::Percentage, charge);
+    // Decode two's complement without unsigned-to-signed overflow.
+    const int32_t signedCurrent = current & 0x8000 ? int32_t(current) - 65536 : current;
+    if (currentRead) sample.set(BatteryField::Current, signedCurrent / 1000.0f);
+    if (ready) sample.set(BatteryField::ExternalPowerPresent, digitalRead(9) == HIGH ? 1 : 0);
+    if (statusRead && (status & 0x0008)) {
+        if (status & 0x0001) sample.set_status(BatteryStatus::Discharging);
+        else if (status & 0x0200) sample.set_status(BatteryStatus::Full);
+        else if (currentRead && signedCurrent > 0) sample.set_status(BatteryStatus::Charging);
+        else if (currentRead && signedCurrent == 0) sample.set_status(BatteryStatus::Idle);
+    }
+    if (emptyRead && timeEmpty != 0xffff) sample.set(BatteryField::TimeRemaining, timeEmpty);
+    if (fullRead && timeFull != 0xffff) sample.set(BatteryField::TimeToFull, timeFull);
 }
+#endif
 
 #if HAS_MQTT
 void sht_discovery(MqttManager &mqtt) {
@@ -89,12 +119,6 @@ void sht_discovery(MqttManager &mqtt) {
     ha_discovery_publish_sensor_config(mqtt, "humidity", "Humidity", "{{ value_json.humidity }}", "%", "humidity", "measurement", nullptr);
 }
 
-void gauge_discovery(MqttManager &mqtt) {
-    ha_discovery_publish_sensor_config(mqtt, "battery_voltage", "Battery Voltage", "{{ value_json.battery_voltage }}", "V", "voltage", "measurement", "diagnostic");
-    ha_discovery_publish_sensor_config(mqtt, "battery_percentage", "Battery", "{{ value_json.battery_percentage }}", "%", "battery", "measurement", nullptr);
-    ha_discovery_publish_binary_sensor_config(mqtt, "external_power_present", "External Power",
-        "{{ 'None' if value_json.external_power_present is none else ('ON' if value_json.external_power_present else 'OFF') }}", "power", "diagnostic");
-}
 #endif
 }
 
@@ -115,19 +139,19 @@ void board_register_sensors(SensorRegistry &registry) {
 #endif
     registry.add(env);
 
-    static const SensorField battery[] = {
-        {"battery_voltage", "Battery voltage in volts.", "V", "3.85"},
-        {"battery_percentage", "Battery gauge state of charge in percent.", "%", "73"},
-        {"external_power_present", "External power present: 1 or 0.", nullptr, "1"},
+#if HAS_BATTERY_INFO
+    static const BatteryProvider battery = {
+        "BQ27220: Current() is sampled current updated every second, not peak or averaged current. Power uses the same voltage/current sample. Runtime uses native TimeToEmpty/TimeToFull estimates. Shipping current calibration and capacity configuration are unverified; readings require hardware validation. No gauge settings are written.",
+        battery_field_mask(BatteryField::Voltage) | battery_field_mask(BatteryField::Percentage) |
+            battery_field_mask(BatteryField::Current) | battery_field_mask(BatteryField::Status) |
+            battery_field_mask(BatteryField::ExternalPowerPresent) |
+            battery_field_mask(BatteryField::TimeRemaining) | battery_field_mask(BatteryField::TimeToFull),
+        gauge_sample,
     };
     SensorCallbacks gauge = {};
     gauge.name = "BQ27220 and external power";
-    gauge.sample = gauge_sample;
     gauge.sample_interval_ms = 2000;
-    gauge.fields = battery;
-    gauge.field_count = sizeof(battery) / sizeof(battery[0]);
-#if HAS_MQTT
-    gauge.publish_ha = gauge_discovery;
-#endif
+    gauge.battery = &battery;
     registry.add(gauge);
+#endif
 }

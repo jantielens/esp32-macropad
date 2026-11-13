@@ -778,9 +778,18 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define HAS_SENSOR_AHT10 false
 #endif
 
+// Enable shared battery telemetry, bindings, and metadata for boards with a battery provider.
+#ifndef HAS_BATTERY_INFO
+#define HAS_BATTERY_INFO false
+#endif
+
 // Enable an ADC-connected LiPo battery monitor sensor adapter.
 #ifndef HAS_SENSOR_BATTERY_ADC
 #define HAS_SENSOR_BATTERY_ADC false
+#endif
+
+#if HAS_SENSOR_BATTERY_ADC && !HAS_BATTERY_INFO
+#error "HAS_SENSOR_BATTERY_ADC requires HAS_BATTERY_INFO"
 #endif
 
 // Enable LD2410 OUT pin presence sensor adapter.

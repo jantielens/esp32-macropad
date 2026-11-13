@@ -157,17 +157,30 @@ or battery-runtime guarantee.
 The SHT40 reports `temperature` in degrees Celsius and `humidity` in percent.
 Successful humidity readings are clamped to 0-100%, as recommended by Sensirion.
 The BQ27220 reports `battery_voltage` in volts and `battery_percentage` from
-the gauge. `external_power_present` indicates whether GPIO9 detects external
+the gauge, plus signed battery current, calculated battery power, readable
+status and native time-to-empty/time-to-full estimates in minutes.
+`external_power_present` indicates whether GPIO9 detects external
 power; it does not indicate battery charging. These fields are available through
 the sensor API, MQTT health state, Home Assistant discovery, and
-`[sensor:...]` bindings. For example, `[sensor:temperature;%.1f|N/A]` displays
+`[battery:...]` bindings for battery information and `[sensor:...]` for
+environmental readings. For example, `[sensor:temperature;%.1f|N/A]` displays
 the cached temperature.
 
 Readings are unavailable until a valid sample arrives. After a read failure,
-the last good value remains visible and may be stale. The SHT40 is sampled
+environmental values retain their last good sample. The SHT40 is sampled
 approximately every five seconds and the gauge every two seconds when OTA is
-not active. Battery current is not exposed because the shipping gauge's
-calibration is unverified. No gauge configuration or calibration is written.
+not active. Battery measurements expire after six seconds without a successful
+sample, excluding observed OTA pauses. Invalid or inapplicable status/runtime
+clears immediately. Use `[battery:discharge_power;%.2f|N/A]` for battery draw
+and `[battery:time_remaining;%.0f|N/A]` for estimated remaining minutes.
+See [shared battery semantics](../../../docs/user/pads/data-sources.md#show-battery-information).
+
+Current comes from `Current()`, updated by the gauge every second; it is not a
+peak measurement or `AverageCurrent()`. Power is calculated from that sample's
+voltage and current, not total USB/device input power. Shipping current
+calibration and capacity configuration remain unverified, so current, power
+and runtime estimates require comparison with external measurements.
+No gauge configuration or calibration is written.
 
 ## Occupied onboard connections
 

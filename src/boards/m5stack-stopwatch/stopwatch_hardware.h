@@ -18,5 +18,5 @@ bool m5stack_stopwatch_request_shutdown(uint32_t continuation_token);
 void m5stack_stopwatch_loop();
 bool m5stack_stopwatch_audio_power(bool enabled);
 bool m5stack_stopwatch_audio_mute(bool muted);
-bool m5stack_stopwatch_battery_read(uint16_t& millivolts, bool& charging);
+bool m5stack_stopwatch_battery_read(uint16_t& millivolts, bool& charging, bool& external_power);
 AudioBoardControl stopwatch_audio_control();

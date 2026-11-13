@@ -81,6 +81,9 @@
     "[health:heap_free]": "184320", "[health:wifi_connected]": "ON",
     "[health:wifi_ssid]": "Portal dev Wi-Fi", "[health:wifi_state]": "CONNECTED",
     "[health:wifi_ip]": "192.168.1.42", "[health:wifi_hostname]": "portal-dev",
+    "[battery:voltage]": "3.85", "[battery:percentage]": "73",
+    "[battery:current]": "-0.25", "[battery:power]": "-0.9625",
+    "[battery:discharge_power]": "0.9625",
     "[health:wifi_ap_active]": "OFF", "[health:wifi_last_error]": ""
   },
   "sounds": ["/sounds/chime.mp3", "/sounds/notification.mp3"],
@@ -89,6 +92,7 @@
   "binding_schema": {"schemes": [
     {"name": "pad", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": true},
     {"name": "var", "min_params": 1, "max_params": 1, "widget_max_params": 1, "format_param": -1, "validation_mode": 0, "free_form": true},
+    {"name": "battery", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": false, "keys": ["voltage", "percentage", "current", "power", "discharge_power", "status", "external_power_present", "time_remaining", "time_to_full"]},
     {"name": "mqtt", "min_params": 1, "max_params": 3, "widget_max_params": 2, "format_param": 2, "validation_mode": 0, "free_form": true},
     {"name": "expr", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": 1, "validation_mode": 1, "free_form": true},
     {"name": "time", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": -1, "validation_mode": 0, "free_form": true},

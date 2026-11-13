@@ -27,7 +27,6 @@ uint8_t battery_adc_lipo_percentage(float voltage) {
 #if HAS_SENSOR_BATTERY_ADC
 
 #include "../ble_telemetry.h"
-#include "ha_discovery.h"
 #include "log_manager.h"
 #include "sensor_manager.h"
 
@@ -73,43 +72,24 @@ void BatteryAdcSensor::update() {
 #endif
 }
 
-void BatteryAdcSensor::appendJson(JsonObject &doc) {
-	update();
-	sensor_manager_set_number(doc, "battery_voltage", voltage(), hasValidReading());
-	if (hasValidReading()) {
-		doc["battery_percentage"] = percentage();
-	} else {
-		doc["battery_percentage"] = nullptr;
-	}
-}
-
-#if HAS_MQTT
-void BatteryAdcSensor::publishHaDiscovery(MqttManager &mqtt) {
-	ha_discovery_publish_sensor_config(mqtt, "battery_voltage", "Battery Voltage", "{{ value_json.battery_voltage }}", "V", "voltage", "measurement", "diagnostic");
-	ha_discovery_publish_sensor_config(mqtt, "battery_percentage", "Battery", "{{ value_json.battery_percentage }}", "%", "battery", "measurement", nullptr);
-}
-#endif
-
 static void battery_adc_init() { g_battery_adc_adapter.begin(); }
-static void battery_adc_sample(JsonObject &doc) { g_battery_adc_adapter.appendJson(doc); }
-#if HAS_MQTT
-static void battery_adc_publish_ha(MqttManager &mqtt) { g_battery_adc_adapter.publishHaDiscovery(mqtt); }
-#endif
+static void battery_adc_sample(BatterySample &sample) {
+	g_battery_adc_adapter.update();
+	if (!g_battery_adc_adapter.hasValidReading()) return;
+	sample.set(BatteryField::Voltage, g_battery_adc_adapter.voltage());
+	sample.set(BatteryField::Percentage, g_battery_adc_adapter.percentage());
+}
 
 void register_battery_adc_sensor(SensorRegistry &registry) {
-	static const SensorField fields[] = {
-		{"battery_voltage", "Battery voltage in volts.", "V", "3.85"},
-		{"battery_percentage", "Estimated battery charge in percent.", "%", "73"},
+	static const BatteryProvider provider = {
+		"ADC: averaged calibrated voltage samples; percentage is a resting single-cell LiPo estimate. Current, charging state and runtime are not measured.",
+		battery_field_mask(BatteryField::Voltage) | battery_field_mask(BatteryField::Percentage),
+		battery_adc_sample,
 	};
 	SensorCallbacks callbacks = {};
 	callbacks.name = "Battery ADC";
 	callbacks.init = battery_adc_init;
-	callbacks.sample = battery_adc_sample;
-	callbacks.fields = fields;
-	callbacks.field_count = sizeof(fields) / sizeof(fields[0]);
-#if HAS_MQTT
-	callbacks.publish_ha = battery_adc_publish_ha;
-#endif
+	callbacks.battery = &provider;
 	registry.add(callbacks);
 }
 

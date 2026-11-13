@@ -64,6 +64,21 @@ StopWatch** action group adds:
   powers off. It is rejected during active OTA. It does not save unsaved
   portal edits or finish uploads; save/complete those first.
 
+## Battery readings
+
+The M5PM1 supplies measured voltage and an approximate voltage-derived
+single-cell LiPo percentage through `[battery:voltage]` and
+`[battery:percentage]`. A valid charger signal supplies Charging status;
+non-charging status remains unavailable because that signal alone cannot
+distinguish Discharging, Idle or Full. Current, power and runtime estimates
+are not measured. `[battery:external_power_present]` reports whether the PMIC
+input voltage exceeds 4 V; it does not prove charging.
+
+The provider samples every two seconds. Measurements expire after six seconds
+without success, excluding observed OTA pauses; invalid status clears immediately.
+See [shared battery bindings](../../../docs/user/pads/data-sources.md#show-battery-information)
+for formatting and fallbacks. Telemetry does not change charging controls.
+
 ## Configured onboard signals
 
 These pins are occupied. Use the vendor connector diagrams, including the

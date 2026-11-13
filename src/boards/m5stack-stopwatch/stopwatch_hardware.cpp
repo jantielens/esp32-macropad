@@ -408,7 +408,7 @@ AudioBoardControl stopwatch_audio_control() {
     return control;
 }
 
-bool m5stack_stopwatch_battery_read(uint16_t& millivolts, bool& charging) {
+bool m5stack_stopwatch_battery_read(uint16_t& millivolts, bool& charging, bool& external_power) {
     if (!i2c_bus_lock()) return false;
     uint8_t voltages[4], gpio;
     const bool ok = ready && read(kPmic, 0x22, voltages, sizeof(voltages)) &&
@@ -416,7 +416,8 @@ bool m5stack_stopwatch_battery_read(uint16_t& millivolts, bool& charging) {
     if (ok) {
         millivolts = voltages[0] | (uint16_t(voltages[1]) << 8);
         const uint16_t vin = voltages[2] | (uint16_t(voltages[3]) << 8);
-        charging = vin > 4000 && !(gpio & 0x04);
+        external_power = vin > 4000;
+        charging = external_power && !(gpio & 0x04);
     }
     i2c_bus_unlock();
     return ok;

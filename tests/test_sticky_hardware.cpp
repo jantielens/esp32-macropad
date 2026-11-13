@@ -140,7 +140,7 @@ int main() {
     static_assert(!IS_EPAPER_FRAME && HAS_MCP && HAS_MQTT && HAS_FILESYSTEM);
     static_assert(HAS_AUDIO && !HAS_SOUND_PLAYER && !HAS_AUDIO_INPUT && !HAS_SD_CARD && !USE_SD_STORAGE);
     static_assert(AUDIO_OUTPUT_DRIVER == AUDIO_OUTPUT_DRIVER_STICKY_PWM);
-    static_assert(!HAS_BLE && !HAS_BLE_HID && !HAS_USB_HID && !HAS_NATIVE_EXTENSIONS);
+    static_assert(HAS_BLE && !HAS_BLE_HID && !HAS_USB_HID && !HAS_NATIVE_EXTENSIONS);
     static_assert(!HAS_SENSOR_BATTERY_ADC && !HAS_SENSOR_DUMMY && !HAS_SENSOR_BME280 && !HAS_SENSOR_AHT10);
     static_assert(!HAS_IMAGE_LIBRARY && !HAS_IMAGE_FETCH && HAS_CONFIG_MODE_BUTTON && BUTTON_PIN == 5);
     static_assert(NUM_HW_BUTTONS == 3 && HW_BUTTON_DEFS[0].pin == 4 && HW_BUTTON_DEFS[1].pin == 5 && HW_BUTTON_DEFS[2].pin == 6);
@@ -213,14 +213,15 @@ int main() {
     }
     CHECK((waits == std::vector<unsigned long>{250, 100}));
     Wire.failWrite = true;
-    CHECK(shtTestLockHeld && sensor_manager_field_count() == 5);
-    CHECK(std::string(sensor_manager_field_at(2)->key) == "battery_voltage");
-    CHECK(std::string(sensor_manager_field_at(2)->unit) == "V");
-    CHECK(std::string(sensor_manager_field_at(3)->key) == "battery_percentage");
-    CHECK(std::string(sensor_manager_field_at(3)->unit) == "%");
+    CHECK(shtTestLockHeld && sensor_manager_field_count() == 2);
+    BatterySnapshot batterySnapshot;
+    sensor_manager_get_battery(batterySnapshot);
+    CHECK(batterySnapshot.supported & battery_field_mask(BatteryField::Current));
     const unsigned beforeDiscovery = Wire.transactions;
     sensor_manager_publish_ha_discovery(mqtt_manager);
-    CHECK((discoveryKeys == std::vector<std::string>{"temperature", "humidity", "battery_voltage", "battery_percentage", "external_power_present"}));
+    CHECK((discoveryKeys == std::vector<std::string>{"temperature", "humidity", "battery_voltage",
+        "battery_percentage", "battery_current", "battery_power", "battery_discharge_power",
+        "battery_status", "external_power_present", "battery_time_remaining", "battery_time_to_full"}));
     CHECK(Wire.transactions == beforeDiscovery);
     clockMs += 5000;
     sensor_manager_loop();
@@ -231,6 +232,10 @@ int main() {
     Wire.failWrite = false;
     Wire.registers[0x08] = 0xd9; Wire.registers[0x09] = 0x0e;
     Wire.registers[0x2c] = 73; Wire.registers[0x2d] = 0;
+    Wire.registers[0x0c] = 0x06; Wire.registers[0x0d] = 0xff;
+    Wire.registers[0x0a] = 0x09; Wire.registers[0x0b] = 0;
+    Wire.registers[0x16] = 120; Wire.registers[0x17] = 0;
+    Wire.registers[0x18] = 0xff; Wire.registers[0x19] = 0xff;
     shtTestError = 0;
     externalPower = 1;
     clockMs += 5000;
@@ -238,13 +243,19 @@ int main() {
     sensor_manager_append_api(sensorObject);
     CHECK(std::fabs(sensorJson["battery_voltage"].as<double>() - 3.801) < 0.001);
     CHECK(sensorJson["battery_percentage"].as<int>() == 73);
+    CHECK(sensorJson["battery_current"].as<float>() == -0.25f);
+    CHECK(std::fabs(sensorJson["battery_power"].as<float>() + 0.95025f) < 0.0001f);
+    CHECK(sensorJson["battery_discharge_power"].as<float>() > 0.95f);
+    CHECK(std::string(sensorJson["battery_status"].as<const char *>()) == "Discharging");
+    CHECK(sensorJson["battery_time_remaining"].as<int>() == 120);
+    CHECK(sensorJson["battery_time_to_full"].isNull());
     CHECK(sensorJson["temperature"].as<float>() == 21.5f && sensorJson["humidity"].as<float>() == 50);
     CHECK(sensorJson["external_power_present"].as<bool>());
     const unsigned transactions = Wire.transactions, samples = shtTestSamples;
     sensor_manager_append_api(sensorObject);
     sensor_manager_append_mqtt(sensorObject);
-    double reading = 0;
-    CHECK(sensor_manager_get_number("battery_voltage", &reading));
+    sensor_manager_get_battery(batterySnapshot);
+    CHECK(batterySnapshot.readings.get(BatteryField::Voltage) > 3.8f);
     CHECK(Wire.transactions == transactions && shtTestSamples == samples);
     otaActive = true;
     clockMs += 5000;
@@ -299,7 +310,7 @@ int main() {
     clockMs += 5000;
     sensor_manager_loop();
     sensor_manager_append_api(sensorObject);
-    CHECK(std::fabs(sensorJson["battery_voltage"].as<double>() - 4.0) < 0.001);
+    CHECK(sensorJson["battery_voltage"].isNull());
     CHECK(sensorJson["battery_percentage"].as<int>() == 0 && sensorJson["humidity"].as<float>() == 60);
     Wire.registers[0x08] = 0x10; Wire.registers[0x09] = 0x0e;
     Wire.registers[0x2c] = 55;
@@ -309,6 +320,23 @@ int main() {
     CHECK(std::fabs(sensorJson["battery_voltage"].as<double>() - 3.6) < 0.001);
     CHECK(sensorJson["battery_percentage"].as<int>() == 55 && !locked && !sticky_test_unlocked_wire0);
     CHECK(!sticky_test_invalid_gauge_transaction);
+    Wire.registers[0x0c] = 200; Wire.registers[0x0d] = 0;
+    Wire.registers[0x0a] = 0x08;
+    Wire.registers[0x16] = 0xff; Wire.registers[0x17] = 0xff;
+    Wire.registers[0x18] = 45; Wire.registers[0x19] = 0;
+    clockMs += 2000;
+    sensor_manager_loop();
+    sensor_manager_append_api(sensorObject);
+    CHECK(std::string(sensorJson["battery_status"].as<const char *>()) == "Charging");
+    CHECK(sensorJson["battery_time_remaining"].isNull());
+    CHECK(sensorJson["battery_time_to_full"].as<int>() == 45);
+    CHECK(sensorJson["battery_discharge_power"].as<float>() == 0);
+    Wire.registers[0x0b] = 0x02;
+    clockMs += 2000;
+    sensor_manager_loop();
+    sensor_manager_append_api(sensorObject);
+    CHECK(std::string(sensorJson["battery_status"].as<const char *>()) == "Full");
+    CHECK(sensorJson["battery_time_to_full"].isNull());
     for (const auto sample : {std::pair<float, float>{-6, 0}, {100.813f, 100},
                               {NAN, 100}, {INFINITY, 100}}) {
         shtTestHumidity = sample.first;

@@ -11,7 +11,8 @@ Key points:
   facade; board-specific register transactions stay in that facade.
 - Adapters declare their fields and sampling interval, and produce one JSON sample.
 - The manager schedules sampling and shares cached readings with the API, MQTT,
-  and `[sensor:key;format]` bindings; consumers never trigger hardware reads.
+  and `[sensor:key;format]` or `[battery:key;format]` bindings; consumers never
+  trigger hardware reads.
 - Home Assistant discovery is still supported via the adapter.
 - Only enabled sensors are compiled (guarded in `src/app/sensors.cpp`).
 
@@ -56,6 +57,90 @@ API and MQTT retain their existing field names and native JSON booleans.
 Sensors that publish only dedicated event topics can set
 `include_in_mqtt = false`; their values remain available in the API and bindings.
 
+## Shared battery contract
+
+`HAS_BATTERY_INFO` defaults to false. Enable it in board overrides only when
+the firmware has a battery provider, including inherited board variants.
+It gates the typed cache, battery sampling integration, API/MQTT serialization,
+Home Assistant discovery, binding resolver and generated reference metadata.
+Ordinary sensor support is independent. `HAS_SENSOR_BATTERY_ADC` requires
+`HAS_BATTERY_INFO`; native frame battery reads used for low-battery control
+remain independent of telemetry.
+
+Battery adapters register a `BatteryProvider` through `SensorCallbacks::battery`
+instead of generic sensor fields. A board has one battery provider. It declares
+supported `BatteryField` values, a persistent measurement description, and a
+callback that fills a `BatterySample`. The sensor manager owns scheduling,
+one typed battery cache, and its existing cache lock; there is no second polling
+task or duplicate JSON reading cache. API/MQTT serialization and Home Assistant
+discovery use the shared field definitions.
+
+```cpp
+static void sample_battery(BatterySample &sample) {
+  float voltage = 0, current = 0;
+  if (!board_battery_read(voltage, current)) return;
+  sample.set(BatteryField::Voltage, voltage);
+  sample.set(BatteryField::Current, current);
+}
+
+static const BatteryProvider provider = {
+  "Monitor conversion readings; current is positive when charging.",
+  battery_field_mask(BatteryField::Voltage) |
+    battery_field_mask(BatteryField::Current),
+  sample_battery,
+};
+
+SensorCallbacks callbacks = {};
+callbacks.name = "Battery monitor";
+callbacks.battery = &provider;
+callbacks.sample_interval_ms = 5000;
+registry.add(callbacks);
+```
+
+Omitted or invalid sample values are unavailable, never successful empty strings
+or default zero readings. Normalize hardware units and signed current in the
+adapter. Voltage represents the whole battery pack, not necessarily one cell.
+Power and positive discharge power are derived centrally from the same
+voltage/current sample. A partial sample cannot synthesize power from cached
+inputs. Describe sampled versus averaged measurements and calibration limits
+in the provider description.
+
+Supply `BatteryStatus` only from reliable device flags or documented thresholds.
+Do not infer Full from percentage or charging from external supply detection.
+A provider supplying runtime estimates must also establish the applicable
+Charging/Discharging state. Convert native sentinel values to unavailable in
+the adapter; zero minutes remains valid. Runtime comes from the provider, not
+a generic guessed capacity model.
+
+Each field expires after three sampling intervals without a successful sample,
+excluding OTA pauses observed by the sensor loop or cache readers. Status and
+runtime clear immediately on invalid or inapplicable samples. State changes
+invalidate incompatible cached current/power before applying the new sample.
+Unrelated sensors retain their existing last-good-value policy.
+
+Driver-owned sampling uses an event-driven registration with a null provider
+callback. The driver calls `sensor_manager_record_battery()` after its existing
+read, under normal task context, instead of adding periodic hardware polling.
+E-Paper Frame providers use a 60-second freshness interval, giving three minutes
+of active cache lifetime. This does not change frame refresh, sleep or low-battery
+control behavior.
+
+`[battery:...]` is registered only when `HAS_BATTERY_INFO` is enabled.
+On those builds, all canonical keys validate; unsupported fields resolve
+unavailable. Disabled builds omit the scheme, its metadata and cache entirely;
+battery tokens produce `ERR:unknown` even with a fallback. Supported
+and unsupported keys are grouped in generated binding metadata, with text status
+and numeric measurement authoring types. Battery fields are not duplicated as
+`[sensor:...]` aliases. API/MQTT include only supported battery fields, using
+the shared JSON names such as `battery_voltage`, `battery_power`,
+`battery_status` (string), and `external_power_present` (boolean).
+
+To add a genuinely new measurement, extend `BatteryField` and its shared
+definition, then implement it only in providers that support its semantics.
+Keep averaged power, capacity, battery temperature, cycle count and health
+distinct from existing sampled measurements rather than mapping unlike gauge
+registers onto one key. Update binding metadata and focused tests together.
+See [battery pad examples](../user/pads/data-sources.md#show-battery-information).
 
 ## Step-by-Step: Add Your Own Sensor (BME280 Example)
 This is the full pattern using the BME280 adapter as reference.
@@ -171,6 +256,7 @@ BTHome temperature and humidity objects when `HAS_BLE` is enabled.
 Enable the generic adapter with the hardware-specific voltage-divider values:
 
 ```cpp
+#define HAS_BATTERY_INFO true
 #define HAS_SENSOR_BATTERY_ADC true
 #define BATTERY_ADC_PIN 0
 #define BATTERY_ADC_DIVIDER 2.0f
@@ -199,10 +285,12 @@ Battery millivolts come from registers 0x22/0x23; input voltage and the
 active-low charger-status GPIO determine charging state.
 
 It publishes `battery_voltage` (volts), `battery_percentage` (the shared
-approximate single-cell LiPo voltage curve), and `battery_charging` (boolean)
-in `/api/health`'s `sensors` object and the normal MQTT state/discovery path.
+approximate single-cell LiPo voltage curve), and `battery_status` (text)
+plus `external_power_present` (boolean) in `/api/health`'s `sensors` object and
+the normal MQTT state/discovery path. PMIC input voltage above 4 V establishes
+external power; a non-charging signal does not establish Discharging, Idle or Full.
 Invalid readings produce `null` until a successful sample; subsequent failures
-retain the last good values. Percentage is not a fuel-gauge measurement and can vary under load or
+expire according to the shared battery contract. Percentage is not a fuel-gauge measurement and can vary under load or
 while charging. Verify voltage and charging behavior on hardware before
 relying on them. Charging-current configuration and power-button defaults are
 not changed by telemetry.

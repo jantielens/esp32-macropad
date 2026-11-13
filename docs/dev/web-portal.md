@@ -1587,6 +1587,19 @@ last-good values until reboot; fields with no successful sample are unavailable.
 Boolean bindings resolve as `0` or `1`, while API/MQTT retain JSON booleans.
 See the [sensor registration contract](sensors.md#sampling-contract).
 
+Battery providers use the separate `[battery:key;format]` scheme, compiled only
+with `HAS_BATTERY_INFO`. Its canonical keys validate on battery-enabled builds;
+unsupported or unavailable
+measurements use fallbacks. Key-doc groups identify board support, and provider
+notes explain measurement/averaging and calibration limits. Text status and
+numeric values carry explicit authoring types. Battery readings share the sensor
+manager's scheduling and lock, but use a typed cache with bounded freshness
+rather than generic sensors' indefinite last-good retention.
+Disabled builds omit battery metadata from the portal and MCP reference and
+resolve battery tokens as `ERR:unknown`, even with a fallback. The portal uses
+generic binding assets; there are no separate battery assets to include.
+See the [shared battery contract](sensors.md#shared-battery-contract).
+
 `GET /api/bindings?docs=1` adds the user-facing reference that each scheme
 registers next to its resolver (`BindingSchemeDoc`): `category`, `summary`,
 `params` (`name`, `desc`, `required`, optional `default`), `key_docs` (`key`,
@@ -2129,6 +2142,13 @@ not report a PSRAM largest-block value on those boards.
   `null` when not connected
 - `*_min_window` / `*_max_window`: sampled continuously by firmware and returned as a multi-client-safe snapshot (captures short-lived dips/spikes)
 - `sensors`: object containing optional sensor values (empty object when no sensors are available)
+  and supported battery readings. Battery numeric values expire after three
+  sampling intervals without success, excluding observed OTA pauses.
+  `battery_status` is text; `external_power_present` is a JSON boolean.
+  Invalid/inapplicable status and runtime estimates become `null` immediately.
+  Unsupported battery fields are omitted. See the
+  [shared battery contract](sensors.md#shared-battery-contract) for units and
+  provider-specific sampling.
 - `runtime`: last checkpoints from the Arduino main loop and LVGL task, plus
   display-lock ownership and wait state. A growing `*_age_ms` identifies the
   task or lock wait that stopped making progress. `lvgl_extension` identifies

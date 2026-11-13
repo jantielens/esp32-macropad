@@ -20,6 +20,10 @@
 #if IS_EPAPER_FRAME && defined(BOARD_RETERMINAL_E1003_FRAME)
 
 #include "device_classes/epaper_frame/epaper_frame_driver.h"
+#include "device_classes/epaper_frame/epaper_frame_battery.h"
+#if HAS_BATTERY_INFO
+#include "sensors/sensor_manager.h"
+#endif
 #include "device_classes/epaper_frame/epaper_frame_http.h"
 #include "device_classes/epaper_frame/epaper_frame_media_validation.h"
 #include "device_classes/epaper_frame/epaper_frame_sd_cache.h"
@@ -1187,6 +1191,16 @@ uint16_t epaper_frame_driver_battery_mv() {
 		const uint32_t raw_mv = analogReadMilliVolts(EPAPER_FRAME_BATTERY_ADC_PIN);
 #if EPAPER_FRAME_BATTERY_ENABLE_PIN >= 0
 		digitalWrite(EPAPER_FRAME_BATTERY_ENABLE_PIN, LOW);  // power the divider back down
+#endif
+#if HAS_BATTERY_INFO
+		const float voltage = raw_mv * EPAPER_FRAME_BATTERY_DIVIDER / 1000.0f;
+		BatterySample sample;
+		const bool valid = isfinite(voltage) && voltage >= 2.5f && voltage <= 4.35f;
+		if (valid) {
+				sample.set(BatteryField::Voltage, voltage);
+				sample.set(BatteryField::Percentage, epaper_frame_battery_percent((uint16_t)(voltage * 1000)));
+		}
+		sensor_manager_record_battery(sample);
 #endif
 		return (uint16_t)((float)raw_mv * EPAPER_FRAME_BATTERY_DIVIDER);
 #else

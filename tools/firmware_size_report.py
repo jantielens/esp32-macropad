@@ -105,7 +105,7 @@ FEATURES = {
         ("firmware_fragment_html_gz",),
     ),
     "Timers / time": (("timer*.cpp.o", "time_service.cpp.o"), ("timers_fragment_html_gz",)),
-    "Sensors / power": (("sensors.cpp.o", "power*.cpp.o", "hw_button*.cpp.o", "duty_cycle.cpp.o", "board_hardware.cpp.o"), ()),
+    "Sensors / power": (("sensors.cpp.o", "battery_info.cpp.o", "power*.cpp.o", "hw_button*.cpp.o", "duty_cycle.cpp.o", "board_hardware.cpp.o"), ()),
     "Configuration": (("config*.cpp.o",), ()),
     "Device classes": (("device_class*.cpp.o", "class_branding.cpp.o"), ()),
     "Built-in image assets": (("png_assets.cpp.o",), ()),
@@ -159,6 +159,7 @@ LIBRARIES = {
     ),
 }
 FLAG_SUBSYSTEMS = {
+    "HAS_BATTERY_INFO": "Sensors / power",
     "HAS_FACE_WIDGET": "Widgets (HAS_DISPLAY)",
     "HAS_DISPLAY_DIAGNOSTICS": "Display / touch (HAS_DISPLAY / HAS_TOUCH)",
     "HAS_BACKLIGHT": "Display / touch (HAS_DISPLAY / HAS_TOUCH)",

@@ -12,7 +12,10 @@ def production(path):
     return re.sub(r"^\s*#include[^\n]*", "", (ROOT / path).read_text(), flags=re.M)
 
 
-PRELUDE = r'''
+PRELUDE = (
+    '#define BOARD_CONFIG_H\n#define HAS_BATTERY_INFO true\n'
+    f'#include "{ROOT / "src/app/battery_info.cpp"}"\n'
+) + r'''
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -27,6 +30,7 @@ PRELUDE = r'''
 #include <tuple>
 #include <vector>
 using std::min;
+struct DisplayFrame;
 #define HAS_SENSOR_BATTERY_ADC false
 #define HAS_MQTT false
 #define HAS_BLE false
@@ -394,6 +398,7 @@ struct SensorCallbacks {
     void (*sample)(JsonObject&) = nullptr;
     const SensorField* fields = nullptr;
     size_t field_count = 0;
+    const BatteryProvider* battery = nullptr;
 };
 class SensorRegistry {
 public:
@@ -1017,29 +1022,40 @@ int main() {
     assert(!m5stack_stopwatch_ready());
     assert(!m5stack_stopwatch_audio_power(true));
     assert(!m5stack_stopwatch_set_charging_mode(StopWatchChargingMode::High));
-    assert(!m5stack_stopwatch_battery_read(millivolts, charging));
+    bool externalPower = false;
+    assert(!m5stack_stopwatch_battery_read(millivolts, charging, externalPower));
     assert(Wire.transactions == beforeLock && lockDepth == 0);
     lockFails = false;
     battery(3897, 5000, 0);
-    assert(m5stack_stopwatch_battery_read(millivolts, charging) && millivolts == 3897 && charging);
+    assert(m5stack_stopwatch_battery_read(millivolts, charging, externalPower) && millivolts == 3897 && charging && externalPower);
     battery(3897, 5000, 4);
-    assert(m5stack_stopwatch_battery_read(millivolts, charging) && !charging);
+    assert(m5stack_stopwatch_battery_read(millivolts, charging, externalPower) && !charging && externalPower);
     battery(3897, 3999, 0);
-    assert(m5stack_stopwatch_battery_read(millivolts, charging) && !charging);
+    assert(m5stack_stopwatch_battery_read(millivolts, charging, externalPower) && !charging && !externalPower);
     Wire.shortRead = true;
-    assert(!m5stack_stopwatch_battery_read(millivolts, charging));
+    assert(!m5stack_stopwatch_battery_read(millivolts, charging, externalPower));
     Wire.shortRead = false;
 
     SensorRegistry registry;
     board_register_sensors(registry);
-    assert(registry.callbacks.sample && registry.callbacks.field_count == 3);
-    JsonObject doc;
+    assert(registry.callbacks.battery && registry.callbacks.battery->sample);
+    BatterySample sample;
     battery(4200, 5000, 0);
-    registry.callbacks.sample(doc);
-    assert(doc["battery_percentage"].value == 100 && doc["battery_charging"].value == 1);
+    registry.callbacks.battery->sample(sample);
+    assert(sample.get(BatteryField::Percentage) == 100 &&
+           sample.get(BatteryField::Status) == static_cast<float>(BatteryStatus::Charging) &&
+           sample.get(BatteryField::ExternalPowerPresent) == 1);
+    sample = {};
+    battery(3897, 5000, 4);
+    registry.callbacks.battery->sample(sample);
+    assert(sample.get(BatteryField::Voltage) > 3.89f && !isfinite(sample.get(BatteryField::Status)));
     battery(2000, 5000, 0);
-    registry.callbacks.sample(doc);
-    assert(doc["battery_voltage"].null && doc["battery_percentage"].null && doc["battery_charging"].null);
+    sample = {};
+    registry.callbacks.battery->sample(sample);
+    assert(!isfinite(sample.get(BatteryField::Voltage)) &&
+           !isfinite(sample.get(BatteryField::Percentage)) &&
+           !isfinite(sample.get(BatteryField::Status)));
+    assert(sample.get(BatteryField::ExternalPowerPresent) == 1);
 
     Wire_CST820B_TouchDriver driver(board_cst820b_config());
     driver.init();

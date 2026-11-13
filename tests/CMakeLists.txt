@@ -78,8 +78,10 @@ add_host_legacy_test(test_wifi_lifecycle
 
 add_host_legacy_test(test_tab5_hardware
     SOURCES test_tab5_hardware.cpp ${PROJECT_SOURCE_DIR}/src/boards/m5stack-tab5/tab5_hardware.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/battery_info.cpp
         ${PROJECT_SOURCE_DIR}/src/boards/m5stack-tab5/drivers/st7123_touch_driver.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/tab5_overrides ${PROJECT_SOURCE_DIR}/src/boards/m5stack-tab5 ${PROJECT_SOURCE_DIR}/src
+        "$ENV{HOME}/Arduino/libraries/ArduinoJson/src"
     DEFINITIONS BOARD_HAS_OVERRIDE BOARD_HAS_PSRAM CONFIG_IDF_TARGET_ESP32P4=1
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
 )
@@ -125,6 +127,7 @@ foreach(diagnostics 0 1)
 endforeach()
 add_host_legacy_test(test_sticky_hardware
     SOURCES test_sticky_hardware.cpp ${PROJECT_SOURCE_DIR}/src/app/board_hardware.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/battery_info.cpp
         ${PROJECT_SOURCE_DIR}/src/app/drivers/gt911_touch_driver.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/sticky_driver_test_overrides ${HOST_ARDUINOJSON_DIR}
         ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive
@@ -183,10 +186,30 @@ add_host_legacy_test(test_inkplate_epaper_driver
 
 add_host_legacy_test(test_sensor_manager
     SOURCES test_sensor_manager.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/battery_info.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS HAS_BATTERY_INFO=1
+    OPTIONS -Wno-deprecated-declarations
+)
+add_host_legacy_test(test_sensor_manager_no_battery
+    SOURCES test_sensor_manager.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/battery_info.cpp
+    INCLUDES ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS HAS_BATTERY_INFO=0
+    OPTIONS -Wno-deprecated-declarations
+)
+add_host_legacy_test(test_sensor_manager_no_battery_mqtt
+    SOURCES test_sensor_manager.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/battery_info.cpp
+    INCLUDES ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS HAS_BATTERY_INFO=0 HAS_MQTT=1
     OPTIONS -Wno-deprecated-declarations
 )
 add_host_command_test(test_sensor_manager_duty_cycle $<TARGET_FILE:test_sensor_manager> --duty-cycle)
+add_host_command_test(test_sensor_manager_battery $<TARGET_FILE:test_sensor_manager> --battery)
+add_host_command_test(test_sensor_manager_battery_adc $<TARGET_FILE:test_sensor_manager> --battery-adc)
+add_host_command_test(test_sensor_manager_battery_frame $<TARGET_FILE:test_sensor_manager> --battery-frame)
+add_host_command_test(test_sensor_manager_concurrent_init $<TARGET_FILE:test_sensor_manager> --concurrent-init)
 
 file(READ "${PROJECT_SOURCE_DIR}/src/app/web_portal_component_api.cpp" PORTAL_ROUTE_SOURCE)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
@@ -1055,6 +1078,7 @@ function(add_binding_schema_profile name definition)
             ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_builtin_schemes.cpp
             ${PROJECT_SOURCE_DIR}/src/app/health_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/timer_binding.cpp
             ${PROJECT_SOURCE_DIR}/src/app/sensor_binding.cpp
+            ${PROJECT_SOURCE_DIR}/src/app/battery_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/battery_info.cpp
             ${PROJECT_SOURCE_DIR}/src/app/alarm_binding.cpp
             ${PROJECT_SOURCE_DIR}/src/app/music_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/net_binding.cpp
             ${PROJECT_SOURCE_DIR}/src/app/list_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/list_provider.cpp

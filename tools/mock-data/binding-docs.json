@@ -1193,6 +1193,251 @@
       }
     },
     {
+      "name": "battery",
+      "min_params": 1,
+      "max_params": 2,
+      "widget_max_params": 1,
+      "format_param": 1,
+      "validation_mode": 0,
+      "free_form": false,
+      "keys": [
+        "voltage",
+        "percentage",
+        "current",
+        "power",
+        "discharge_power",
+        "status",
+        "external_power_present",
+        "time_remaining",
+        "time_to_full"
+      ],
+      "category": "Device",
+      "summary": "Board-independent battery telemetry; individual measurements depend on hardware.",
+      "note": "Unsupported or stale fields use the unavailable fallback, never an invented zero. Readings expire after three sampling intervals, excluding OTA pauses. Status and runtime estimates clear immediately when invalid or inapplicable. Numeric formatting uses printf; status is text. Units stay outside the token. Fixture battery provider: voltage, percentage and signed current; no status or runtime estimates.",
+      "params": [
+        {
+          "name": "key",
+          "desc": "A canonical battery field; unsupported fields remain valid bindings.",
+          "required": true
+        },
+        {
+          "name": "format",
+          "desc": "Optional numeric printf format, e.g. %.2f; status is returned as text.",
+          "required": false
+        }
+      ],
+      "key_docs": [
+        {
+          "key": "voltage",
+          "desc": "Battery pack voltage in volts.",
+          "group": "Supported on this board"
+        },
+        {
+          "key": "percentage",
+          "desc": "Battery state of charge in percent; may be voltage-estimated.",
+          "group": "Supported on this board"
+        },
+        {
+          "key": "current",
+          "desc": "Battery current in amperes; positive charging, negative discharging. See provider measurement notes.",
+          "group": "Supported on this board"
+        },
+        {
+          "key": "power",
+          "desc": "Signed battery power in watts, calculated from voltage and current in the same sample; not USB/device input power.",
+          "group": "Supported on this board"
+        },
+        {
+          "key": "discharge_power",
+          "desc": "Positive battery discharge power in watts; zero when not discharging. Not total device consumption on external power.",
+          "group": "Supported on this board"
+        },
+        {
+          "key": "status",
+          "desc": "Charging, Discharging, Idle or Full, only when the provider can establish the state.",
+          "group": "Unsupported on this board"
+        },
+        {
+          "key": "external_power_present",
+          "desc": "External supply detected: 1 or 0. Does not establish battery charging.",
+          "group": "Unsupported on this board"
+        },
+        {
+          "key": "time_remaining",
+          "desc": "Provider-estimated minutes to empty at the current load; unavailable unless discharging.",
+          "group": "Unsupported on this board"
+        },
+        {
+          "key": "time_to_full",
+          "desc": "Provider-estimated minutes to full; unavailable unless charging.",
+          "group": "Unsupported on this board"
+        }
+      ],
+      "examples": [
+        {
+          "code": "[battery:percentage;%.0f|N/A]",
+          "desc": "Battery charge percentage, when available."
+        },
+        {
+          "code": "[battery:status|Unknown]",
+          "desc": "Readable battery state without a conditional expression."
+        },
+        {
+          "code": "[battery:discharge_power;%.2f|N/A]",
+          "desc": "Positive battery draw in watts, not total device power."
+        },
+        {
+          "code": "[battery:time_remaining;%.0f|N/A]",
+          "desc": "Estimated remaining runtime in minutes while discharging."
+        }
+      ],
+      "authoring": {
+        "keys": [
+          {
+            "key": "voltage",
+            "kind": "number",
+            "unit": "V",
+            "example_value": "3.85",
+            "formats": [
+              "raw",
+              "number"
+            ],
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "percentage",
+            "kind": "number",
+            "unit": "%",
+            "example_value": "73",
+            "formats": [
+              "raw",
+              "number"
+            ],
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "current",
+            "kind": "number",
+            "unit": "A",
+            "example_value": "-0.25",
+            "formats": [
+              "raw",
+              "number"
+            ],
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "power",
+            "kind": "number",
+            "unit": "W",
+            "example_value": "-0.96",
+            "formats": [
+              "raw",
+              "number"
+            ],
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "discharge_power",
+            "kind": "number",
+            "unit": "W",
+            "example_value": "0.96",
+            "formats": [
+              "raw",
+              "number"
+            ],
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "status",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Discharging",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "external_power_present",
+            "kind": "number",
+            "unit": "",
+            "example_value": "0",
+            "formats": [
+              "raw",
+              "number"
+            ],
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "time_remaining",
+            "kind": "number",
+            "unit": "min",
+            "example_value": "120",
+            "formats": [
+              "raw",
+              "number"
+            ],
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "time_to_full",
+            "kind": "number",
+            "unit": "min",
+            "example_value": "45",
+            "formats": [
+              "raw",
+              "number"
+            ],
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          }
+        ]
+      }
+    },
+    {
       "name": "sensor",
       "min_params": 1,
       "max_params": 2,
@@ -1203,7 +1448,6 @@
       "keys": [
         "temperature",
         "humidity",
-        "battery_voltage",
         "presence"
       ],
       "category": "Device",
@@ -1229,10 +1473,6 @@
         {
           "key": "humidity",
           "desc": "Relative humidity in percent."
-        },
-        {
-          "key": "battery_voltage",
-          "desc": "Battery voltage in volts."
         },
         {
           "key": "presence",
@@ -1268,22 +1508,6 @@
             "kind": "number",
             "unit": "%",
             "example_value": "54.2",
-            "formats": [
-              "raw",
-              "number"
-            ],
-            "capabilities": [
-              "display",
-              "numeric_widget",
-              "live_sampling"
-            ],
-            "read_only": true
-          },
-          {
-            "key": "battery_voltage",
-            "kind": "number",
-            "unit": "V",
-            "example_value": "3.85",
             "formats": [
               "raw",
               "number"

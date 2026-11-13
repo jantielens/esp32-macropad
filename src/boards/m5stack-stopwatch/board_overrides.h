@@ -14,6 +14,7 @@
 #define BOARD_AUDIO_CONTROL_FACTORY stopwatch_audio_control
 // Board-local sensor provider compiled and registered by the sensor aggregator.
 #define BOARD_SENSOR_SOURCE "stopwatch_battery_sensor.cpp"
+#define HAS_BATTERY_INFO true
 // Board-local action module compiled through the action aggregator.
 #define BOARD_ACTION_SOURCE "stopwatch_actions.cpp"
 // Room for the built-in catalog and four board-local actions.

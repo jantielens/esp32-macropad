@@ -46,6 +46,7 @@
 #define HAS_SD_CARD false
 #define USE_SD_STORAGE false
 #define HAS_SENSOR_BATTERY_ADC false
+#define HAS_BATTERY_INFO true
 #define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_STICKY_PWM
 
 // Driver Selection (HAL)

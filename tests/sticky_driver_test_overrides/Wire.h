@@ -34,7 +34,9 @@ public:
     size_t write(uint8_t value) {
         if (bus == 0 && failByteWrite) return 0;
         if (bus == 0) {
-            if (address != 0x55 || writes != 0 || (value != 0x08 && value != 0x2c))
+            if (address != 0x55 || writes != 0 ||
+                (value != 0x08 && value != 0x2c && value != 0x0a && value != 0x0c &&
+                 value != 0x16 && value != 0x18))
                 sticky_test_invalid_gauge_transaction = true;
             reg = value; ++writes; return 1;
         }

@@ -1,6 +1,10 @@
 #include "binding_builtin_schemes.h"
+#include "board_config.h"
 
 #include "audio_input_binding.h"
+#if HAS_BATTERY_INFO
+#include "battery_binding.h"
+#endif
 #include "camera_binding.h"
 #include "expr_binding.h"
 #include "ext_binding.h"
@@ -26,6 +30,9 @@ void binding_builtin_schemes_init() {
     image_binding_init();
 #endif
     health_binding_init();
+#if HAS_BATTERY_INFO
+    battery_binding_init();
+#endif
     sensor_binding_init();
     time_binding_init();
     expr_binding_init();
