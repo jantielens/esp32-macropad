@@ -33,7 +33,7 @@ uint8_t pad_block_catalog_count() {
 
 static const PadBlockButton sysinfo_buttons[] = {
     // Row 0: network info bar (spans 3 cols)
-    { 0, 0, 3, 1, R"json({"label_top":"http://[health:hostname].local","label_center":"[health:ip]","label_bottom":"WiFi: [health:wifi_ssid] ([health:rssi] dBm)"})json" },
+    { 0, 0, 3, 1, R"json({"label_top":"http://[health:wifi_hostname].local","label_center":"[health:wifi_ip]","label_bottom":"WiFi: [health:wifi_ssid] ([health:wifi_rssi] dBm)"})json" },
     // Row 1-2, col 0-1: triple gauge (CPU / RAM / PSRAM)
     { 0, 1, 2, 2, R"json({"widget_type":"gauge","widget_data_binding":"[health:cpu]","widget_data_binding_2":"[expr:([health:heap_internal]/[health:heap_internal_total]) * 100]","widget_data_binding_3":"[expr:([health:psram_free]/[health:psram_total]) * 100]","widget_gauge_start_label":"CPU: [health:cpu]%","widget_gauge_start_label_2":"RAM: [expr:[health:heap_internal]/1024;%d] KiB","widget_gauge_start_label_3":"PSRAM: [expr:[health:psram_free]/(1024*1024);%d] MiB","widget_gauge_max":100,"widget_gauge_degrees":270,"widget_gauge_start_angle":270,"widget_arc_color":"#4CAF50","widget_arc_color_2":"#2196F3","widget_arc_color_3":"#FF5722","widget_gauge_track_color":"#1A1A1A","widget_gauge_arc_width_pct":15,"widget_gauge_ticks":5,"widget_gauge_tick_color":"#808080","widget_gauge_tick_width":1,"widget_gauge_show_needle":false,"widget_anim_ms":300})json" },
     // Row 1, col 2: chip info

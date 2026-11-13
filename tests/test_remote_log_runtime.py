@@ -230,7 +230,7 @@ inline void heap_caps_free(void* memory) { free(memory); }
 ''',
             "esp_random.h": "#pragma once\ninline unsigned esp_random() { return 123; }\n",
             "config_manager.h": "#pragma once\nstruct DeviceConfig { bool basic_auth_enabled = true; };\n",
-            "web_portal_state.h": "#pragma once\n#include \"config_manager.h\"\nDeviceConfig* web_portal_get_current_config();\nbool web_portal_is_ap_mode_active();\n",
+            "web_portal_state.h": "#pragma once\n#include \"config_manager.h\"\nDeviceConfig* web_portal_get_current_config();\nbool web_portal_is_recovery_ap_active();\n",
             "web_portal_auth.h": "#pragma once\n#include <ESPAsyncWebServer.h>\nbool portal_auth_gate(AsyncWebServerRequest* request);\n",
             "ESPAsyncWebServer.h": r'''
 #pragma once
@@ -380,9 +380,10 @@ bool ota_activity_is_active() { return ota.load(); }
 #if HAS_REMOTE_LOG
 DeviceConfig config;
 bool ap_mode = false;
+bool full_ap = false;
 bool authenticated = true;
 DeviceConfig* web_portal_get_current_config() { return &config; }
-bool web_portal_is_ap_mode_active() { return ap_mode; }
+bool web_portal_is_recovery_ap_active() { return ap_mode && !full_ap; }
 bool portal_auth_gate(AsyncWebServerRequest*) { return !config.basic_auth_enabled || authenticated; }
 #endif
 int main() {
@@ -409,7 +410,9 @@ int main() {
     assert(denied.response->code() == 403);
     handleDownloadCrashLog(&denied);
     assert(denied.response->code() == 403);
-    ap_mode = false;
+    for (const bool live_ap : {false, true}) {
+    ap_mode = live_ap;
+    full_ap = live_ap;
     config.basic_auth_enabled = false;
     authenticated = false;
     {
@@ -427,6 +430,9 @@ int main() {
     assert(!unauthorized.response);
     handleDownloadCrashLog(&unauthorized);
     assert(!unauthorized.response);
+    }
+    ap_mode = false;
+    full_ap = false;
     authenticated = true;
 #if DEBUG_CRASH_API_ENABLED
     AsyncWebServerRequest injection;

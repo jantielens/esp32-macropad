@@ -7,7 +7,7 @@ const BINDING_HELP_NUMBER_FORMATS = [
     ['%.0f', '21', 'Round to a whole number', '[expr:[health:cpu];%.0f]'],
     ['%.1f', '21.4', 'One decimal', '[mqtt:sensors/state;temperature;%.1f]'],
     ['%.2f', '21.37', 'Two decimals', '[mqtt:energy;cost;%.2f]'],
-    ['%d', '42', 'Integer', '[health:rssi;%d]'],
+    ['%d', '42', 'Integer', '[health:wifi_rssi;%d]'],
     ['%05d', '00042', 'Zero-padded, fixed width', '[health:uptime;%05d]'],
     ['%+.1f', '+1.5', 'Always show the sign', '[mqtt:grid;delta;%+.1f]'],
     ['%.1f \u00b0C', '21.4 \u00b0C', 'Unit inside the format', '[mqtt:sensors/state;temperature;%.1f \u00b0C]'],

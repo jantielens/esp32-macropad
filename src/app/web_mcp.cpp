@@ -87,8 +87,8 @@ static bool mcp_token_equal_fixed(const uint8_t* a, const uint8_t* b) {
 // ----------------------------------------------------------------------------
 // Returns 0 when the request may proceed, otherwise the HTTP status to send.
 static int mcp_gate(AsyncWebServerRequest* request) {
-    // STA-only: behave as disabled in AP/setup mode.
-    if (web_portal_is_ap_mode_active()) return 404;
+    // Recovery portals keep MCP disabled; live APs use the ordinary token gate.
+    if (web_portal_is_recovery_ap_active()) return 404;
 
     DeviceConfig* cfg = web_portal_get_current_config();
     if (!cfg) return 404;
@@ -685,9 +685,9 @@ static void mcp_dispatch(AsyncWebServerRequest* request, uint8_t* body, size_t l
 // server->client SSE stream, so per the MCP Streamable HTTP spec it returns
 // 405 Method Not Allowed (not 404) — otherwise clients like VS Code treat the
 // endpoint as missing and fall back to the legacy SSE transport. When MCP is
-// disabled or in AP mode the endpoint stays invisible (404), matching POST.
+// disabled or in recovery AP mode the endpoint stays invisible (404), matching POST.
 static void handle_mcp_other_method(AsyncWebServerRequest* request) {
-    if (web_portal_is_ap_mode_active()) { mcp_send_http(request, 404); return; }
+    if (web_portal_is_recovery_ap_active()) { mcp_send_http(request, 404); return; }
     DeviceConfig* cfg = web_portal_get_current_config();
     if (!cfg || !cfg->mcp_enabled) { mcp_send_http(request, 404); return; }
     AsyncWebServerResponse* resp = request->beginResponse(405, "application/json",

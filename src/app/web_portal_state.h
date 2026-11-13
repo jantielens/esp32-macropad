@@ -6,6 +6,7 @@ struct DeviceConfig;
 // Internal web portal state accessors used by helper modules.
 // Implemented in web_portal.cpp.
 bool web_portal_is_ap_mode_active();
+bool web_portal_is_recovery_ap_active();
 DeviceConfig* web_portal_get_current_config();
 
 // OTA in-progress flag shared across /api/update and GitHub online updates.

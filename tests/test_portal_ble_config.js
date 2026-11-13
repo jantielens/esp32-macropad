@@ -14,23 +14,30 @@ let pendingReboot = false;
 let healthPollingStopped = false;
 let saveFailure = false;
 const messages = [];
+let modeVisibilityTimer;
+let operatingRadios = [];
 const context = {
     console,
     window: {
         __extra_config_fields: [],
         registerConfigFields(names) { this.__extra_config_fields.push(...names); }
     },
-    setInterval() { return 1; },
+    setInterval(callback) { modeVisibilityTimer = callback; return 1; },
     clearInterval() {},
     stopHealthPolling() { healthPollingStopped = true; },
     API_CONFIG: '/api/config',
     document: {
         getElementById(id) { return elements[id] || null; },
         querySelectorAll(selector) {
+            if (selector === 'input[type="radio"][name="operating_mode"]') return operatingRadios;
             return selector === 'input[type="radio"][name="keyboard_transport"]' ?
                 ['none', 'usb', 'ble'].map(transport => elements['keyboard-transport-' + transport]).filter(Boolean) : [];
         },
         querySelector(selector) {
+            if (selector.startsWith('input[type="radio"][name="operating_mode"]')) {
+                const value = selector.match(/\[value="([^"]+)"\]/);
+                return operatingRadios.find(radio => value ? radio.value === value[1] : radio.checked) || null;
+            }
             const label = selector.match(/^label\[for="([^"]+)"\]$/);
             if (label) return elements[label[1] + '-label'] || null;
             if (selector === 'input[type="radio"][name="keyboard_transport"]:checked') {
@@ -61,6 +68,74 @@ for (const file of ['portal_config.js', 'portal_fragment_init.js']) {
 }
 
 (async function () {
+    const sensorFields = { ...elements };
+    for (const name of Object.keys(sensorFields)) delete elements[name];
+    const modeFragment = fs.readFileSync('src/app/web/mode.fragment.html', 'utf8');
+    operatingRadios = [...modeFragment.matchAll(/<input[^>]*name="operating_mode"[^>]*id="([^"]+)"[^>]*value="([^"]+)"/g)]
+        .map(match => {
+            let checked = false;
+            const radio = { value: match[2], disabled: false, listeners: {},
+                addEventListener(event, listener) { this.listeners[event] = listener; } };
+            Object.defineProperty(radio, 'checked', {
+                get() { return checked; },
+                set(value) {
+                    if (value) operatingRadios.forEach(other => { if (other !== radio) other.checked = false; });
+                    checked = value;
+                }
+            });
+            elements[match[1]] = radio;
+            return radio;
+        });
+    assert(operatingRadios.some(radio => radio.value === 'offline'), 'Offline must be selectable in the production fragment');
+    for (const id of ['duty-cycle-settings', 'wifi-backoff-row', 'ble-telemetry-settings',
+        'mode_opt_duty_cycle_ble']) elements[id] = { style: {} };
+    let saveMode;
+    elements['mode-save-btn'] = { addEventListener(event, listener) { saveMode = listener; } };
+    stored = { caps: { ble: true } };
+    context.window.init_mode_fragment();
+    await context.loadConfig();
+    modeVisibilityTimer();
+    assert.strictEqual(elements.operating_mode_always_on.checked, true, 'Missing mode defaults to online');
+    for (const mode of ['duty_cycle_mqtt', 'duty_cycle_ble', 'offline']) {
+        elements['operating_mode_' + mode].checked = true;
+        elements['operating_mode_' + mode].listeners.change();
+        assert.strictEqual(elements['duty-cycle-settings'].style.display, mode === 'offline' ? 'none' : '');
+        assert.strictEqual(elements['ble-telemetry-settings'].style.display, mode === 'duty_cycle_ble' ? '' : 'none');
+    }
+    pendingReboot = false;
+    await saveMode();
+    assert.deepStrictEqual(submitted, { operating_mode: 'offline' });
+    assert.strictEqual(pendingReboot, true);
+    assert.strictEqual(context.window.deviceConfig.operating_mode, 'offline', 'Save updates validation before a reboot or reload');
+    await context.loadConfig();
+    assert.strictEqual(elements.operating_mode_offline.checked, true, 'Offline round-trips through config loading');
+    assert.strictEqual(context.validateConfig({ wifi_ssid: '' }).valid, true);
+    assert.strictEqual(context.validateConfig({ operating_mode: 'offline', wifi_ssid: ' ' }).valid, true);
+    assert.strictEqual(context.validateConfig({ operating_mode: 'always_on', wifi_ssid: '' }).valid, false,
+        'A submitted online mode overrides the saved Offline mode');
+    assert.strictEqual(context.validateConfig({ operating_mode: 'offline', ap_password: 'short' }).valid, false);
+    assert.strictEqual(context.validateConfig({ operating_mode: 'offline', device_name: '' }).valid, false);
+    elements.operating_mode_always_on.checked = true;
+    saveFailure = true;
+    pendingReboot = false;
+    await saveMode();
+    assert.strictEqual(context.window.deviceConfig.operating_mode, 'offline', 'Failed saves must not change validation mode');
+    assert.strictEqual(pendingReboot, false);
+    messages.pop();
+    saveFailure = false;
+    await saveMode();
+    assert.strictEqual(context.validateConfig({ wifi_ssid: '', wifi_failure_mode: 'offline' }).valid, false,
+        'Continue offline fallback still requires an SSID for online operation');
+    for (const name of Object.keys(elements)) delete elements[name];
+    operatingRadios = [];
+    stored = { operating_mode: 'offline', wifi_ssid: '', ap_password: '' };
+    elements.wifi_ssid = { value: '', disabled: false };
+    await context.loadConfig();
+    await context.saveFragmentConfig(true);
+    assert.deepStrictEqual(submitted, { wifi_ssid: '' }, 'WiFi fragment accepts empty SSID in saved Offline mode');
+    delete elements.wifi_ssid;
+    Object.assign(elements, sensorFields);
+    stored = { ble_burst_count: 3, ble_adv_interval_ms: 100 };
     await context.loadConfig();
     await context.saveFragmentConfig(true);
     assert.deepStrictEqual(submitted, {ble_burst_count: 3, ble_adv_interval_ms: 100});
@@ -295,7 +370,7 @@ for (const file of ['portal_config.js', 'portal_fragment_init.js']) {
     assert.match(startup, /#if HAS_BLE_HID \|\| HAS_USB_HID\s*keyboard_hid_loop\(\);\s*#endif/);
     assert.match(usbBackend, /if \(enable_hid\) \{\s*static USBHID active_hid[\s\S]*static USBHIDKeyboard keyboard;[\s\S]*static USBHIDConsumerControl consumer;/);
     assert.match(startup, /usb_hid_init\(device_config.device_name, device_config.keyboard_transport == KeyboardTransport::Usb\);/);
-    assert.match(startup, /const bool defer_wifi_init\s*=\s*boot_mode == PowerMode::DutyCycleBle\s*\|\|\s*device_class_dispatch_defer_wifi_init\(&device_config, boot_mode\);\s*if \(!defer_wifi_init\) \{\s*wifi_manager_early_init\(\);/);
+    assert.match(startup, /const bool defer_wifi_init\s*=\s*boot_mode == PowerMode::Offline\s*\|\|\s*boot_mode == PowerMode::DutyCycleBle\s*\|\|\s*device_class_dispatch_defer_wifi_init\(&device_config, boot_mode\);\s*if \(!defer_wifi_init\) \{\s*wifi_manager_early_init\(\);/);
     assert.match(startup, /ble_backend_configure_power\(device_config.bluetooth_tx_power_dbm\)/);
     const storage = fs.readFileSync('src/app/config_manager.cpp', 'utf8');
     assert(!storage.includes('HAS_BLE_HID && HAS_USB_HID'));

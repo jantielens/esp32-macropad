@@ -512,6 +512,7 @@ void setup()
 		strlcpy(device_config.device_name, default_name.c_str(), CONFIG_DEVICE_NAME_MAX_LEN);
 		device_config.magic = CONFIG_MAGIC;
 	}
+	wifi_manager_init_network_snapshot(device_config);
 
 	#if HAS_USB_HID
 	usb_hid_init(device_config.device_name, device_config.keyboard_transport == KeyboardTransport::Usb);
@@ -564,7 +565,7 @@ void setup()
 
 	#if (HAS_BLE || HAS_BLE_HID) && BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
 	// Reserve BLE's internal RAM before WiFi and normal-runtime allocations.
-	if (boot_mode == PowerMode::AlwaysOn) {
+	if (boot_mode == PowerMode::AlwaysOn || boot_mode == PowerMode::Offline) {
 		bthome_events_configure(device_config.device_name, device_config.bthome_event);
 		bthome_events_prepare();
 	}
@@ -574,6 +575,7 @@ void setup()
 	// On ESP32-P4 this kicks off the SDIO link to the C6 co-processor (~2-5 s)
 	// which can run in the background while touch, config, and pads initialize.
 	const bool defer_wifi_init =
+			boot_mode == PowerMode::Offline ||
 			boot_mode == PowerMode::DutyCycleBle ||
 			device_class_dispatch_defer_wifi_init(&device_config, boot_mode);
 	if (!defer_wifi_init) {
@@ -747,6 +749,9 @@ void setup()
 			display_manager_set_splash_status("Setup network failed");
 			#endif
 		}
+	} else if (boot_mode == PowerMode::Offline) {
+		LOGI("Main", "Offline mode: starting local runtime without Wi-Fi");
+		wifi_manager_enter_offline();
 	} else {
 		LOGI("Main", "Connecting to saved Wi-Fi");
 		#if HAS_DISPLAY

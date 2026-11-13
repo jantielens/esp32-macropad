@@ -7,7 +7,7 @@
 #include "net_activity.h"
 
 static bool portal_auth_required() {
-		if (web_portal_is_ap_mode_active()) return false;
+		if (web_portal_is_recovery_ap_active()) return false;
 
 		DeviceConfig *config = web_portal_get_current_config();
 		if (!config) return false;

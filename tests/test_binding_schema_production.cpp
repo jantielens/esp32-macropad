@@ -14,6 +14,10 @@
 #include "time_binding.h"
 #include "alarm_manager.h"
 #include "psram_json_allocator.h"
+#include "wifi_manager.h"
+
+extern unsigned long binding_test_now_ms;
+extern WifiNetworkSnapshot binding_test_network;
 
 #if IS_VOICE_ASSISTANT
 #include "device_classes/voice_assistant/voice_binding.h"
@@ -235,7 +239,7 @@ static void expect_health_authoring_contract() {
 
     const BindingAuthoringSpec& authoring = *spec->authoring;
     static const char* const expected_keys[] = {
-        "cpu", "rssi", "uptime", "heap_free", "wifi_ssid", "wifi_connected",
+        "cpu", "wifi_rssi", "uptime", "heap_free", "wifi_ssid", "wifi_connected",
     };
     static const char* const expected_kinds[] = {
         "integer", "integer", "integer", "integer", "text", "text",
@@ -286,9 +290,9 @@ static void expect_health_authoring_contract() {
     expect(binding_template_resolve_registered("health", 6, "cpu;%ld", value, sizeof(value)) ==
                BINDING_RESOLVER_RESOLVED && std::strcmp(value, "73") == 0,
            "health CPU integer format resolves safely");
-    expect(binding_template_resolve_registered("health", 6, "rssi", value, sizeof(value)) ==
-               BINDING_RESOLVER_RESOLVED && std::strcmp(value, "-55") == 0,
-           "health RSSI raw output matches integer resolver data");
+    expect(binding_template_resolve_registered("health", 6, "wifi_rssi", value, sizeof(value)) ==
+               BINDING_RESOLVER_UNAVAILABLE,
+           "Wi-Fi signal supports fallback when disconnected");
     expect(binding_template_resolve_registered("health", 6, "uptime", value, sizeof(value)) ==
                BINDING_RESOLVER_RESOLVED && std::strcmp(value, "10") == 0,
            "health uptime is emitted in whole seconds");
@@ -302,11 +306,95 @@ static void expect_health_authoring_contract() {
                BINDING_RESOLVER_RESOLVED && std::strcmp(value, "0 B") == 0,
            "health free heap accepts the advertised integer format");
     expect(binding_template_resolve_registered("health", 6, "wifi_ssid", value, sizeof(value)) ==
-               BINDING_RESOLVER_RESOLVED && std::strcmp(value, "?") == 0,
-           "health SSID preserves the resolver's unavailable text output");
+               BINDING_RESOLVER_UNAVAILABLE,
+           "inactive network name supports fallback");
     expect(binding_template_resolve_registered("health", 6, "wifi_connected", value, sizeof(value)) ==
                BINDING_RESOLVER_RESOLVED && std::strcmp(value, "OFF") == 0,
            "health connection state is raw text");
+    expect(binding_template_resolve_registered("health", 6, "wifi_state", value, sizeof(value)) ==
+               BINDING_RESOLVER_RESOLVED && std::strcmp(value, "OFF") == 0,
+           "inactive Wi-Fi has OFF state");
+    expect(binding_template_resolve_registered("health", 6, "wifi_ap_purpose", value, sizeof(value)) ==
+               BINDING_RESOLVER_UNAVAILABLE,
+           "inactive AP purpose supports binding fallback");
+    binding_test_network.state = WifiNetworkState::Connecting;
+    std::strcpy(binding_test_network.last_error, "Connection timed out");
+    binding_test_now_ms += 2000;
+    expect(binding_template_resolve_registered("health", 6, "wifi_state", value, sizeof(value)) ==
+               BINDING_RESOLVER_RESOLVED && std::strcmp(value, "CONNECTING") == 0,
+           "station startup status resolves from the network snapshot");
+    expect(binding_template_resolve_registered("health", 6, "wifi_last_error", value, sizeof(value)) ==
+               BINDING_RESOLVER_RESOLVED && std::strcmp(value, "Connection timed out") == 0,
+           "failure diagnostics resolve separately from activity");
+    binding_test_network.state = WifiNetworkState::Ap;
+    binding_test_network.ap_active = true;
+    std::strcpy(binding_test_network.ssid, "Remote-AP");
+    std::strcpy(binding_test_network.ip, "192.168.4.1");
+    binding_test_now_ms += 2000;
+    expect(binding_template_resolve_registered("health", 6, "wifi_ap_active", value, sizeof(value)) ==
+               BINDING_RESOLVER_RESOLVED && std::strcmp(value, "ON") == 0,
+           "AP active resolves independently of station");
+    expect(binding_template_resolve_registered("health", 6, "wifi_ssid", value, sizeof(value)) ==
+               BINDING_RESOLVER_RESOLVED && std::strcmp(value, "Remote-AP") == 0,
+           "active AP exposes its public network name");
+    expect(binding_template_resolve_registered("health", 6, "wifi_ip", value, sizeof(value)) ==
+               BINDING_RESOLVER_RESOLVED && std::strcmp(value, "192.168.4.1") == 0,
+           "active AP exposes its public address");
+    expect(binding_template_resolve_registered("health", 6, "wifi_connected", value, sizeof(value)) ==
+               BINDING_RESOLVER_RESOLVED && std::strcmp(value, "OFF") == 0,
+           "AP is not a network connection");
+    expect(binding_template_resolve_registered("health", 6, "wifi_ap_purpose", value, sizeof(value)) ==
+               BINDING_RESOLVER_RESOLVED && std::strcmp(value, "INTERACTIVE") == 0,
+           "full-portal AP purpose resolves");
+    binding_test_network.recovery_ap = true;
+    binding_test_now_ms += 2000;
+    expect(binding_template_resolve_registered("health", 6, "wifi_ap_purpose", value, sizeof(value)) ==
+               BINDING_RESOLVER_RESOLVED && std::strcmp(value, "RECOVERY") == 0,
+           "restricted AP purpose resolves");
+    expect(binding_template_resolve_registered("health", 6, "wifi_rssi", value, sizeof(value)) ==
+               BINDING_RESOLVER_UNAVAILABLE,
+           "AP never exposes cached station signal strength");
+    binding_test_network.state = WifiNetworkState::Connected;
+    std::strcpy(binding_test_network.ssid, "Home network");
+    std::strcpy(binding_test_network.ip, "192.0.2.10");
+    std::strcpy(binding_test_network.hostname, "desk-device");
+    binding_test_now_ms += 2000;
+    expect(binding_template_resolve_registered("health", 6, "wifi_ssid", value, sizeof(value)) ==
+               BINDING_RESOLVER_RESOLVED && std::strcmp(value, "Home network") == 0,
+           "station and AP share the active network name binding");
+    expect(binding_template_resolve_registered("health", 6, "wifi_ip", value, sizeof(value)) ==
+               BINDING_RESOLVER_RESOLVED && std::strcmp(value, "192.0.2.10") == 0,
+           "station and AP share the active address binding");
+    expect(binding_template_resolve_registered("health", 6, "wifi_rssi;%ld dBm", value, sizeof(value)) ==
+               BINDING_RESOLVER_RESOLVED && std::strcmp(value, "-55 dBm") == 0,
+           "connected signal retains numeric formatting");
+    static const struct { WifiNetworkState state; const char* text; } states[] = {
+        {WifiNetworkState::Off, "OFF"}, {WifiNetworkState::Starting, "STARTING"},
+        {WifiNetworkState::Connecting, "CONNECTING"}, {WifiNetworkState::Connected, "CONNECTED"},
+        {WifiNetworkState::Reconnecting, "RECONNECTING"}, {WifiNetworkState::Ap, "AP"},
+        {WifiNetworkState::Stopping, "STOPPING"}, {WifiNetworkState::Error, "ERROR"},
+    };
+    for (const auto& state : states) {
+        binding_test_network.state = state.state;
+        binding_test_now_ms += 2000;
+        expect(binding_template_resolve_registered("health", 6, "wifi_state", value, sizeof(value)) ==
+                   BINDING_RESOLVER_RESOLVED && std::strcmp(value, state.text) == 0,
+               "overall Wi-Fi state renders each lifecycle state");
+    }
+    binding_test_network.state = WifiNetworkState::Off;
+    binding_test_now_ms += 2000;
+    expect(binding_template_resolve_registered("health", 6, "wifi_hostname", value, sizeof(value)) ==
+               BINDING_RESOLVER_RESOLVED && std::strcmp(value, "desk-device") == 0,
+           "configured hostname remains available while off");
+    for (const char* old_key : {"wifi_status", "ap_active", "ap_ssid", "ap_ip", "rssi", "ip", "hostname"}) {
+        expect(binding_template_validate_params("health", 6, old_key) != nullptr,
+               "retired Wi-Fi keys are not retained as aliases");
+    }
+    binding_test_network = {};
+    binding_test_now_ms += 2000;
+    expect(binding_template_resolve_registered("health", 6, "wifi_ip", value, sizeof(value)) ==
+               BINDING_RESOLVER_UNAVAILABLE,
+           "stopped AP address becomes unavailable");
 #endif
 }
 

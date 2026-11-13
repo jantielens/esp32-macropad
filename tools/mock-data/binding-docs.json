@@ -106,11 +106,15 @@
         "psram_used",
         "psram_min",
         "psram_largest",
+        "wifi_state",
         "wifi_connected",
         "wifi_ssid",
-        "rssi",
-        "ip",
-        "hostname",
+        "wifi_ip",
+        "wifi_rssi",
+        "wifi_hostname",
+        "wifi_ap_active",
+        "wifi_ap_purpose",
+        "wifi_last_error",
         "brightness",
         "volume",
         "ble_status",
@@ -126,6 +130,7 @@
       ],
       "category": "Device",
       "summary": "Local device telemetry. Works without a network.",
+      "note": "Wi-Fi values refresh every two seconds; brief transitions may not appear.",
       "params": [
         {
           "name": "key",
@@ -265,28 +270,48 @@
           "group": "Memory"
         },
         {
+          "key": "wifi_state",
+          "desc": "Wi-Fi state",
+          "group": "WiFi"
+        },
+        {
           "key": "wifi_connected",
-          "desc": "ON/OFF WiFi connection state",
+          "desc": "Wi-Fi network connection",
           "group": "WiFi"
         },
         {
           "key": "wifi_ssid",
-          "desc": "Connected network name",
+          "desc": "Wi-Fi network name",
           "group": "WiFi"
         },
         {
-          "key": "rssi",
-          "desc": "WiFi signal strength, dBm",
+          "key": "wifi_ip",
+          "desc": "Wi-Fi IP address",
           "group": "WiFi"
         },
         {
-          "key": "ip",
-          "desc": "Device IP address",
+          "key": "wifi_rssi",
+          "desc": "Wi-Fi signal strength",
           "group": "WiFi"
         },
         {
-          "key": "hostname",
-          "desc": "Device hostname",
+          "key": "wifi_hostname",
+          "desc": "Wi-Fi hostname",
+          "group": "WiFi"
+        },
+        {
+          "key": "wifi_ap_active",
+          "desc": "Wi-Fi AP activity",
+          "group": "WiFi"
+        },
+        {
+          "key": "wifi_ap_purpose",
+          "desc": "Wi-Fi AP purpose",
+          "group": "WiFi"
+        },
+        {
+          "key": "wifi_last_error",
+          "desc": "Last Wi-Fi error",
           "group": "WiFi"
         },
         {
@@ -360,8 +385,16 @@
           "desc": "Number with a unit inside the format."
         },
         {
-          "code": "[health:wifi_ssid] ([health:rssi] dBm)",
-          "desc": "Network name and signal strength."
+          "code": "[health:wifi_ssid|off] ([health:wifi_rssi|n/a] dBm)",
+          "desc": "Active network name; signal strength is available only while connected to a network."
+        },
+        {
+          "code": "[health:wifi_state]",
+          "desc": "Overall Wi-Fi state, including AP operation; not internet or MQTT readiness."
+        },
+        {
+          "code": "[health:wifi_ip|off]",
+          "desc": "Active network or AP address with an explicit inactive fallback."
         },
         {
           "code": "[expr:[health:wifi_connected]==\"ON\"?\"#16a34a\":\"#dc2626\"]",
@@ -372,6 +405,102 @@
           "desc": "Exact single token for a Table widget."
         }
       ],
+      "reference": {
+        "title": "Wi-Fi states and details",
+        "formats": false,
+        "rows": [
+          {
+            "group": "Wi-Fi states",
+            "syntax": "OFF",
+            "desc": "Wi-Fi is disabled."
+          },
+          {
+            "group": "Wi-Fi states",
+            "syntax": "STARTING",
+            "desc": "Radio or transport initialization is underway."
+          },
+          {
+            "group": "Wi-Fi states",
+            "syntax": "CONNECTING",
+            "desc": "Connecting to the configured Wi-Fi network."
+          },
+          {
+            "group": "Wi-Fi states",
+            "syntax": "CONNECTED",
+            "desc": "Connected to a network with an IP address; not service readiness."
+          },
+          {
+            "group": "Wi-Fi states",
+            "syntax": "RECONNECTING",
+            "desc": "Recovering a lost Wi-Fi connection."
+          },
+          {
+            "group": "Wi-Fi states",
+            "syntax": "AP",
+            "desc": "The device's AP is active."
+          },
+          {
+            "group": "Wi-Fi states",
+            "syntax": "STOPPING",
+            "desc": "Wi-Fi transport shutdown is underway."
+          },
+          {
+            "group": "Wi-Fi states",
+            "syntax": "ERROR",
+            "desc": "Radio shutdown failed; Wi-Fi-off cannot be confirmed."
+          },
+          {
+            "group": "Wi-Fi details",
+            "syntax": "wifi_connected",
+            "sample": "ON / OFF",
+            "desc": "ON only while connected to a network, not while serving an AP.",
+            "unit": "",
+            "kind": "text"
+          },
+          {
+            "group": "Wi-Fi details",
+            "syntax": "wifi_ssid / wifi_ip",
+            "desc": "Name and address of the active network or AP. Unavailable otherwise; use a |fallback."
+          },
+          {
+            "group": "Wi-Fi details",
+            "syntax": "wifi_rssi",
+            "sample": "-62",
+            "desc": "Signal strength in dBm while connected to a network. Unavailable otherwise; use a |fallback.",
+            "unit": "",
+            "kind": "text"
+          },
+          {
+            "group": "Wi-Fi details",
+            "syntax": "wifi_hostname",
+            "sample": "kitchen-pad",
+            "desc": "Configured Wi-Fi hostname, including while Wi-Fi is off.",
+            "unit": "",
+            "kind": "text"
+          },
+          {
+            "group": "Wi-Fi details",
+            "syntax": "wifi_ap_active",
+            "sample": "ON / OFF",
+            "desc": "Whether the AP is active.",
+            "unit": "",
+            "kind": "text"
+          },
+          {
+            "group": "Wi-Fi details",
+            "syntax": "wifi_ap_purpose",
+            "sample": "INTERACTIVE / RECOVERY",
+            "desc": "Full-portal or restricted recovery AP. Unavailable without AP; use a |fallback.",
+            "unit": "",
+            "kind": "text"
+          },
+          {
+            "group": "Wi-Fi details",
+            "syntax": "wifi_last_error",
+            "desc": "Last network, AP, or radio failure. Empty until failure; cleared by successful connection, AP startup, or reboot."
+          }
+        ]
+      },
       "authoring": {
         "keys": [
           {
@@ -776,6 +905,19 @@
             "read_only": true
           },
           {
+            "key": "wifi_state",
+            "kind": "text",
+            "unit": "",
+            "example_value": "CONNECTED",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
             "key": "wifi_connected",
             "kind": "text",
             "unit": "",
@@ -802,7 +944,20 @@
             "read_only": true
           },
           {
-            "key": "rssi",
+            "key": "wifi_ip",
+            "kind": "text",
+            "unit": "",
+            "example_value": "192.0.2.10",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "wifi_rssi",
             "kind": "integer",
             "unit": "dBm",
             "example_value": "-62",
@@ -819,10 +974,10 @@
             "read_only": true
           },
           {
-            "key": "ip",
+            "key": "wifi_hostname",
             "kind": "text",
             "unit": "",
-            "example_value": "192.0.2.10",
+            "example_value": "kitchen-pad",
             "formats": [
               "raw"
             ],
@@ -832,10 +987,36 @@
             "read_only": true
           },
           {
-            "key": "hostname",
+            "key": "wifi_ap_active",
             "kind": "text",
             "unit": "",
-            "example_value": "kitchen-pad",
+            "example_value": "ON",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "wifi_ap_purpose",
+            "kind": "text",
+            "unit": "",
+            "example_value": "INTERACTIVE",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "wifi_last_error",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Connection timed out",
             "formats": [
               "raw"
             ],
@@ -1429,7 +1610,7 @@
           "desc": "Derived number with a unit."
         },
         {
-          "code": "[expr:abs([health:rssi])]",
+          "code": "[expr:abs([health:wifi_rssi])]",
           "desc": "Show the magnitude of a signed value."
         },
         {
@@ -1465,7 +1646,7 @@
             "group": "Arithmetic",
             "syntax": "-a",
             "desc": "Negate",
-            "example": "[expr:-[health:rssi]]"
+            "example": "[expr:-[health:wifi_rssi]]"
           },
           {
             "group": "Arithmetic",
@@ -1495,7 +1676,7 @@
             "group": "Functions",
             "syntax": "abs(x)",
             "desc": "Absolute value",
-            "example": "[expr:abs([health:rssi])]"
+            "example": "[expr:abs([health:wifi_rssi])]"
           },
           {
             "group": "Functions",

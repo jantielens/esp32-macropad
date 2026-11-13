@@ -1179,7 +1179,8 @@ bool config_manager_is_valid(const DeviceConfig *config) {
 #endif
 
 		const PowerMode mode = power_config_parse_power_mode(config);
-		const bool needs_wifi = (mode != PowerMode::DutyCycle && mode != PowerMode::DutyCycleBle);
+		const bool needs_wifi = (mode != PowerMode::Offline &&
+				mode != PowerMode::DutyCycle && mode != PowerMode::DutyCycleBle);
 
 		if (needs_wifi && strlen(config->wifi_ssid) == 0) return false;
 

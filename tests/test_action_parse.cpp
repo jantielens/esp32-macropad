@@ -761,9 +761,13 @@ TEST(system_action_parse) {
 }
 
 TEST(system_action_round_trip) {
-    ButtonAction act = round_trip("{\"type\":\"system\",\"system_command\":\"wifi_reconnect\"}");
-    ASSERT_STR(act.type, "system");
-    ASSERT_STR(act.payload.system.system_command, "wifi_reconnect");
+    for (const char* command : {"wifi_connect", "wifi_disconnect", "wifi_off", "ap_enable", "ap_disable"}) {
+        char json[128];
+        snprintf(json, sizeof(json), "{\"type\":\"system\",\"system_command\":\"%s\"}", command);
+        ButtonAction act = round_trip(json);
+        ASSERT_STR(act.type, "system");
+        ASSERT_STR(act.payload.system.system_command, command);
+    }
 }
 
 TEST(system_command_not_serialized_when_empty) {

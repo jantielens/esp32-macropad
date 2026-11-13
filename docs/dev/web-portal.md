@@ -304,6 +304,8 @@ rejection policy or increase any buffer capacity.
 - WiFi credentials not configured
 - Configuration reset
 - WiFi connection failed
+- A live Enable AP action requests direct device access; this uses Full Mode
+  rather than the restricted recovery wizard below.
 
 **Access:**
 - SSID: `ESP32-XXXXXX` (where XXXXXX is chip ID)
@@ -311,19 +313,29 @@ rejection policy or increase any buffer capacity.
 - Captive portal auto-redirects to configuration page
 
 **Features:**
-- One-page setup wizard (`setup` component, fragment `setup.fragment.html`) that handles WiFi SSID + password (required), friendly name, optional portal basic auth, and optional static IP. The wizard is the only Device-category nav item visible in AP mode and is selected automatically via the `ap_mode` + `primary.fragment` fields on `/api/portal/nav`.
+- One-page setup wizard (`setup` component, fragment `setup.fragment.html`) that handles WiFi SSID + password (required), friendly name, optional portal basic auth, and optional static IP. The wizard is the only Device-category nav item visible in recovery AP mode and is selected automatically via the `recovery_ap` + `primary.fragment` fields on `/api/portal/nav`.
 - WiFi SSID and password setup
 - Device name configuration
 - Fixed IP settings (optional)
+
+Boot-time provisioning, fallback, and Restart into AP retain this restricted
+portal. The AP owner's purpose distinguishes recovery from an action-enabled
+AP; the Wi-Fi transport alone does not determine portal navigation or login.
+Device info reports `ap_active`; navigation's `ap_mode` remains a transport
+indicator. Both expose `recovery_ap` for access policy and setup routing.
 
 ### Full Mode (WiFi Connected)
 
 **When it runs:**
 - Device successfully connected to WiFi network
+- An interactive device explicitly enabled its AP through `ap_enable`
 
 **Access:**
 - Device IP address (displayed in serial monitor)
 - mDNS hostname: `http://<device-name>.local`
+- For an action-enabled AP, join its network and use `http://192.168.4.1`.
+  It retains the existing AP password (empty permits an open AP) and the normal
+  configured Basic Authentication policy.
 
 **Features:**
 - All Core Mode features
@@ -908,6 +920,12 @@ every component in that custom section to the same category ID.
 
 **Sections:**
 - **⚡ Operating Mode**: Mode selection, duty-cycle wake interval, Wi-Fi backoff cap, and the recovery-portal auto-sleep. MQTT publish interval and payload scope live on the Network page in the MQTT card.
+  `operating_mode` accepts `offline` on interactive firmware; Always-On remains
+  the default. Offline skips early Wi-Fi initialization and connection/fallback
+  routing but preserves normal runtime and supported BLE. Empty SSID is valid
+  for saved Offline configuration. Image-frame firmware retains its specialized
+  mode ownership and rejects Offline. Saving the mode requires reboot; manual
+  network commands never rewrite it.
 - **BLE Advertising**: Sensor burst count and advertising interval
   selection (only shown in Duty-Cycle BLE mode when firmware enables BLE).
   Defaults are three repeats and 100 ms. Shared transmit power lives under
@@ -1766,12 +1784,57 @@ Returns comprehensive device information.
   350 ms at 100 ms intervals, +9 dBm). It
   initializes the core BLE backend lazily; the opt-in NimBLE-Arduino
   [broadcast profile](build-and-release-process.md#ble-backend-and-broadcast-profile) prepares the host
-  before Wi-Fi in always-on mode (or when normal runtime starts after setup).
+  before Wi-Fi in Always-On and Offline modes (or when normal runtime starts after setup).
   The core backend pauses/restores HID advertising without disconnecting
   its host, and uses nonconnectable NimBLE GAP advertising even when GATT
   connection slots are full. Its four-entry waiting FIFO rejects newest on
   overflow; queue admission is synchronous, not remote completion. OTA activity
   and epoch changes cancel pending work.
+- Device commands `wifi_connect`, `wifi_disconnect`, `wifi_off`, `ap_enable`, and `ap_disable`
+  are registered by `system_action.cpp` and exposed through MCP's
+  `system_command`. They replace `wifi_reconnect` without an alias. Admission
+  holds the existing network-transition guard, excluding OTA/config writes;
+  duplicates are no-ops and conflicts fail without cancelling the current work.
+  The main-loop Wi-Fi owner starts one transient FreeRTOS worker for radio
+  transitions, using a 6 KiB internal stack because initialization can touch
+  flash/NVS. A manual Connect retains that worker until association completes or
+  times out, permitting teardown without another allocation. The main loop owns
+  readiness and the ten-second association deadline, which starts after radio
+  initialization, scanning, and `WiFi.begin()`. The worker reuses the boot
+  strongest-AP selector and directed BSSID/channel connection, falling back to
+  SDK selection if scanning cannot select an AP. ESP32-P4 retains coprocessor
+  selection without a directed scan. There is no synchronous scan or blocking
+  association wait on the main loop.
+  Worker resources are released after task deletion; normal online boot still
+  uses its optimized early initialization and strongest-AP selection.
+  Offline uses normal automatic recovery without outage reboot.
+  Portal initialization explicitly initializes the software TCP/IP stack before
+  opening the AsyncTCP listener, including on Wi-Fi-free Offline boots. This
+  creates software networking resources but does not enable the Wi-Fi radio;
+  those resources remain available for later Connect or Enable AP commands.
+  Live AP operation neither replaces the pad nor changes power/portal-idle mode.
+  `wifi_off` shuts down either station or AP access, including captive DNS and
+  mDNS, suppresses reconnection, and leaves BLE and the saved operating mode
+  unchanged. The transport-specific Disconnect and Disable AP commands remain.
+  Health bindings consume a bounded synchronized network snapshot at their
+  existing two-second cadence. The network owner refreshes station SSID/IP on
+  connection transitions and every two seconds, formatting IPv4 without
+  temporary strings; lifecycle states still update on each loop. The snapshot
+  hostname is initialized from boot configuration before portal tasks start
+  and remains unchanged until reboot, avoiding reads of mutable configuration
+  during polling. `health:wifi_state` covers OFF, STARTING,
+  CONNECTING, CONNECTED, RECONNECTING, AP, STOPPING, and ERROR. ERROR means radio
+  shutdown failed, not an ordinary connection failure followed by successful
+  shutdown. `wifi_ssid` and `wifi_ip` expose the active network or AP, while
+  `wifi_rssi` is available only for a network connection. `wifi_hostname` is the
+  configured hostname; `wifi_ap_active` and `wifi_ap_purpose` expose AP activity
+  and INTERACTIVE/RECOVERY purpose. `wifi_last_error` retains network, AP, and
+  radio failures until successful connection, AP startup, or reboot.
+  Unavailable details return the standard binding fallback. Retired keys
+  `wifi_status`, `ap_active`, `ap_ssid`, `ap_ip`, `rssi`, `ip`, and `hostname`
+  have no health-binding aliases; HTTP telemetry field names are unchanged.
+  AP passwords are not included. Builder titles stay short; value semantics
+  live in the generated reference's Wi-Fi states and details section.
 - Actions declare named text fields through `ActionTypeDef::fields` and
   `action_visit_field()`. Flags independently enable live bindings, event tokens,
   and binding-overflow rejection. Event-capable fields are projected as
@@ -4489,7 +4552,7 @@ If WiFi fails to connect after firmware update or reboot:
 Headless sensor builds (`!HAS_DISPLAY && !IS_EPAPER_FRAME`) configured for
 `duty_cycle_mqtt` or `duty_cycle_ble` temporarily select `PowerMode::Config`
 on any reset other than `ESP_RST_DEEPSLEEP`. They connect to saved Wi-Fi,
-falling back to the setup AP if needed, without modifying `operating_mode`.
+falling back to the recovery AP if needed, without modifying `operating_mode`.
 Explicit Config/AP entry requests take precedence. Always-on and device-class
 duty-cycle modes retain their existing boot behavior.
 
@@ -4503,11 +4566,11 @@ wake. Other recovery entries retain their existing sleep duration, equal to
 the portal timeout.
 
 If `POWERON_CONFIG_BURST_ENABLED` is enabled, two qualifying power-on boots
-force the setup AP. The first arms an NVS marker, which expires after about
+force the recovery AP. The first arms an NVS marker, which expires after about
 ten seconds of uptime or is cleared before intentional sleep. A second
 `ESP_RST_POWERON` while armed consumes the marker and requests the AP.
 Non-power-on resets clear the marker. This remains a fallback when a direct
-setup AP entry is needed; it does not change the saved operating mode.
+recovery AP entry is needed; it does not change the saved operating mode.
 
 ## Security Considerations
 

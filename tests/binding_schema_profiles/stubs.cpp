@@ -13,6 +13,7 @@
 #include "ha_live.h"
 #include "binding_value.h"
 #include "sensors/sensor_manager.h"
+#include "wifi_manager.h"
 #if HAS_CAMERA
 #include "camera_motion.h"
 #endif
@@ -20,7 +21,12 @@
 #include <cstdio>
 #include <cstring>
 
-unsigned long millis() { return 10000; }
+unsigned long binding_test_now_ms = 10000;
+unsigned long millis() { return binding_test_now_ms; }
+WifiNetworkSnapshot binding_test_network = {};
+void wifi_manager_get_network_snapshot(WifiNetworkSnapshot* snapshot) {
+    *snapshot = binding_test_network;
+}
 
 #if HAS_EXTERNAL_DATA
 bool external_data_get_value(const char* name, const char* path, char* out, size_t size) {

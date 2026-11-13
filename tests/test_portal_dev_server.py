@@ -840,9 +840,10 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(result["button"]["label_center"], "21.5 C")
         self.assertEqual(self.request("/api/pad/resolve", "POST", {"button": {"label_center": 5}})[0], 400)
         _, local = self.request("/api/pad/resolve", "POST", {
-            "bindings": ["[health:cpu]", "[health:rssi]", "[health:wifi_ssid]"],
+            "bindings": ["[health:cpu]", "[health:wifi_rssi]", "[health:wifi_ssid]", "[health:wifi_state]"],
         }, profile="jc3248w535")
-        self.assertEqual([value["value"] for value in local["resolved"]], ["23", "-55", "?"])
+        self.assertEqual([value["value"] for value in local["resolved"]],
+                         ["23", "-55", "Portal dev Wi-Fi", "CONNECTED"])
 
     def test_mqtt_inspection_fixtures_and_limits(self):
         status, waiting = self.request("/api/mqtt/inspect", "POST", {"topic": "mock/waiting"})

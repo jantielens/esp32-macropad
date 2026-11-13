@@ -65,6 +65,17 @@ function(add_host_command_test name)
     set_tests_properties(${name} PROPERTIES WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 endfunction()
 
+add_host_legacy_test(test_wifi_lifecycle
+    SOURCES test_wifi_lifecycle.cpp ${PROJECT_SOURCE_DIR}/src/app/wifi_manager.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/wifi_reconnect.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/web_portal_ap.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/ota_activity.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/wifi_lifecycle_overrides ${PROJECT_SOURCE_DIR}/src
+    DEFINITIONS OTA_ACTIVITY_HOST_TEST=1
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/wifi_lifecycle_overrides/host.h
+    LIBRARIES GTest::gtest_main
+)
+
 add_host_legacy_test(test_tab5_hardware
     SOURCES test_tab5_hardware.cpp ${PROJECT_SOURCE_DIR}/src/boards/m5stack-tab5/tab5_hardware.cpp
         ${PROJECT_SOURCE_DIR}/src/boards/m5stack-tab5/drivers/st7123_touch_driver.cpp
@@ -183,6 +194,36 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
 string(FIND "${PORTAL_ROUTE_SOURCE}" "static void handleComponentGetConfig(" PORTAL_ROUTE_START)
 string(SUBSTRING "${PORTAL_ROUTE_SOURCE}" ${PORTAL_ROUTE_START} -1 PORTAL_ROUTE_HANDLERS)
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/portal_route_handlers.inc" "${PORTAL_ROUTE_HANDLERS}")
+string(FIND "${PORTAL_ROUTE_SOURCE}" "struct NavCategory" PORTAL_NAV_START)
+string(FIND "${PORTAL_ROUTE_SOURCE}" "static const ComponentAction* find_action(" PORTAL_NAV_END)
+math(EXPR PORTAL_NAV_LENGTH "${PORTAL_NAV_END} - ${PORTAL_NAV_START}")
+string(SUBSTRING "${PORTAL_ROUTE_SOURCE}" ${PORTAL_NAV_START} ${PORTAL_NAV_LENGTH} PORTAL_NAV_CATEGORIES)
+string(FIND "${PORTAL_ROUTE_SOURCE}" "static bool is_hardcoded_category(" PORTAL_NAV_START)
+math(EXPR PORTAL_NAV_LENGTH "${PORTAL_ROUTE_START} - ${PORTAL_NAV_START}")
+string(SUBSTRING "${PORTAL_ROUTE_SOURCE}" ${PORTAL_NAV_START} ${PORTAL_NAV_LENGTH} PORTAL_NAV_HANDLER)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/portal_nav_handler.inc" "${PORTAL_NAV_CATEGORIES}${PORTAL_NAV_HANDLER}")
+file(READ "${PROJECT_SOURCE_DIR}/src/app/web_portal_auth.cpp" PORTAL_AUTH_SOURCE)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${PROJECT_SOURCE_DIR}/src/app/web_portal_auth.cpp")
+string(FIND "${PORTAL_AUTH_SOURCE}" "static bool portal_auth_required(" PORTAL_AUTH_START)
+string(SUBSTRING "${PORTAL_AUTH_SOURCE}" ${PORTAL_AUTH_START} -1 PORTAL_AUTH_HANDLER)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/portal_auth_handler.inc" "${PORTAL_AUTH_HANDLER}")
+file(READ "${PROJECT_SOURCE_DIR}/src/app/web_mcp.cpp" PORTAL_MCP_SOURCE)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${PROJECT_SOURCE_DIR}/src/app/web_mcp.cpp")
+string(FIND "${PORTAL_MCP_SOURCE}" "static bool mcp_token_equal_fixed(" PORTAL_MCP_START)
+string(FIND "${PORTAL_MCP_SOURCE}" "static bool mcp_control_enabled(" PORTAL_MCP_END)
+math(EXPR PORTAL_MCP_LENGTH "${PORTAL_MCP_END} - ${PORTAL_MCP_START}")
+string(SUBSTRING "${PORTAL_MCP_SOURCE}" ${PORTAL_MCP_START} ${PORTAL_MCP_LENGTH} PORTAL_MCP_GATE)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/portal_mcp_gate.inc" "${PORTAL_MCP_GATE}")
+file(READ "${PROJECT_SOURCE_DIR}/src/app/web_portal_config.cpp" PORTAL_CONFIG_SOURCE)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${PROJECT_SOURCE_DIR}/src/app/web_portal_config.cpp")
+string(FIND "${PORTAL_CONFIG_SOURCE}" "\t\t#if IS_EPAPER_FRAME" PORTAL_FRAME_START)
+string(FIND "${PORTAL_CONFIG_SOURCE}" "\t\tconst bool bthome_update =" PORTAL_FRAME_END)
+math(EXPR PORTAL_FRAME_LENGTH "${PORTAL_FRAME_END} - ${PORTAL_FRAME_START}")
+string(SUBSTRING "${PORTAL_CONFIG_SOURCE}" ${PORTAL_FRAME_START} ${PORTAL_FRAME_LENGTH} PORTAL_FRAME_GUARD)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/portal_frame_mode_guard.inc" "${PORTAL_FRAME_GUARD}")
 file(READ "${PROJECT_SOURCE_DIR}/src/app/web_portal_fs_store.cpp" PORTAL_STORE_SOURCE)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${PROJECT_SOURCE_DIR}/src/app/web_portal_fs_store.cpp")
@@ -191,7 +232,8 @@ string(FIND "${PORTAL_STORE_SOURCE}" "#endif // HAS_DISPLAY" PORTAL_STORE_END)
 math(EXPR PORTAL_STORE_LENGTH "${PORTAL_STORE_END} - ${PORTAL_STORE_START}")
 string(SUBSTRING "${PORTAL_STORE_SOURCE}" ${PORTAL_STORE_START} ${PORTAL_STORE_LENGTH} PORTAL_STORE_HANDLERS)
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/portal_store_handlers.inc" "${PORTAL_STORE_HANDLERS}")
-add_host_legacy_test(test_web_portal_path SOURCES test_web_portal_path.cpp)
+add_host_legacy_test(test_web_portal_path SOURCES test_web_portal_path.cpp
+    INCLUDES ${HOST_ARDUINOJSON_DIR} OPTIONS -Wno-deprecated-declarations)
 target_include_directories(test_web_portal_path PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 add_host_legacy_test(test_alarm_clock_core SOURCES test_alarm_clock_core.cpp)
 add_host_legacy_test(test_alarm_dispatch_lock

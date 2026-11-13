@@ -25,6 +25,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **Connectivity > Bluetooth**. Timing saves apply to the next burst without
   reboot; a burst already running keeps its original timing.
   See [BTHome publishing settings](docs/user/integrations/home-assistant.md#send-a-bthome-button-event).
+* Add opt-in **Offline** operation to shared firmware across supported
+  interactive devices. Boot without Wi-Fi initialization or connection
+  attempts while keeping local controls and supported Bluetooth/BTHome actions
+  available. Always-On remains the default; existing devices keep their normal
+  behavior unless Offline is selected.
+  See [Offline boot](docs/user/device/network-and-access.md#boot-offline).
+* Control network access without reboot using **Connect to Wi-Fi**,
+  **Disconnect from Wi-Fi**, **Enable AP**, **Disable AP**, and **Turn off Wi-Fi**
+  device commands, also available through MCP. Turn off Wi-Fi stops either
+  network or AP access while preserving Bluetooth. An action-enabled AP keeps
+  the current pad and exposes the full portal; restart/recovery APs remain
+  restricted. Choose AP or offline fallback when saved Wi-Fi fails at normal
+  boot, and optionally protect either AP purpose with an AP password.
+  These controls are shared-firmware features on supported devices.
+  See [network actions and access](docs/user/device/network-and-access.md#enable-network-access-from-an-action).
 * Add the `reterminal-sticky-interactive` Macropad target with Wi-Fi,
   SSD1677/SSD2677 black-and-white rendering with partial refresh and full-refresh
   cleanup, four-level grayscale full refresh, GT911 touch, three configurable
@@ -46,6 +61,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Use the boot connection's strongest matching AP selection for manual
+  **Connect to Wi-Fi** actions, with scanning in a background worker and the
+  association timeout starting after preparation. Keep SDK fallback and
+  coprocessor-managed AP selection where applicable. Replace the saved
+  `wifi_reconnect` command with `wifi_connect` without an alias; update existing
+  actions that use the old command.
+  See [network actions](docs/user/device/network-and-access.md#enable-network-access-from-an-action).
+* Consolidate shared Wi-Fi health bindings around `wifi_state`, covering radio
+  off, startup, connection, recovery, AP, shutdown, and shutdown failure.
+  `wifi_ssid` and `wifi_ip` describe the active network or AP; supporting details
+  use consistent `wifi_` names. Remove the old `wifi_status`, `ap_active`,
+  `ap_ssid`, `ap_ip`, `rssi`, `ip`, and `hostname` health keys without aliases;
+  update affected bindings. HTTP telemetry field names are unchanged.
+  See [Wi-Fi status bindings](docs/user/device/network-and-access.md#enable-network-access-from-an-action).
 * Extend coherent, interaction-priority presentation to CrowPanel 4.2,
   reTerminal E1003 Interactive, and Waveshare 7.8 Interactive. Present completed
   render frames, preserve newer updates during active waveforms, and let changed
@@ -79,6 +108,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Prevent a shared-firmware Offline startup crash by initializing the portal's
+  software TCP/IP stack before its listener, without enabling the Wi-Fi radio.
+* Reduce repeated Wi-Fi snapshot string allocations by refreshing network
+  details on connection transitions and every two seconds. Cache the snapshot
+  hostname before portal tasks start to avoid racing configuration writes;
+  saved name changes appear in the binding after reboot.
 * Wait for IT8951 display-engine completion rather than HRDY readiness alone
   before validating the presented frame. Keep screenshots invalid after
   cancelled or incomplete presentations and recover with a full refresh.

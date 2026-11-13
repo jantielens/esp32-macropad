@@ -8,6 +8,7 @@
 #include "display_manager.h"
 #include "health_table_builder.h"
 #include "log_manager.h"
+#include "wifi_manager.h"
 
 #if HAS_USB_HID
 #include "usb_hid.h"
@@ -82,9 +83,7 @@ static int s_cpu_cores[kHealthCpuCoreCount] = {-1, -1};
 static int16_t s_rssi = 0;
 static bool s_rssi_valid = false;
 static DeviceMemorySnapshot s_mem = {};
-static bool s_wifi_connected = false;
-static char s_wifi_ssid[33] = "";   // max SSID length is 32 + null
-static char s_ip[16] = "";          // "255.255.255.255" + null
+static WifiNetworkSnapshot s_network = {};
 
 static void refresh_if_stale() {
     uint32_t now = millis();
@@ -93,15 +92,8 @@ static void refresh_if_stale() {
 
     device_telemetry_get_cpu_usage_snapshot(&s_cpu, s_cpu_cores, kHealthCpuCoreCount);
     s_rssi = device_telemetry_get_cached_rssi(&s_rssi_valid);
+    wifi_manager_get_network_snapshot(&s_network);
 
-    s_wifi_connected = (WiFi.status() == WL_CONNECTED);
-    if (s_wifi_connected) {
-        strlcpy(s_wifi_ssid, WiFi.SSID().c_str(), sizeof(s_wifi_ssid));
-        strlcpy(s_ip, WiFi.localIP().toString().c_str(), sizeof(s_ip));
-    } else {
-        s_wifi_ssid[0] = '\0';
-        s_ip[0] = '\0';
-    }
 }
 
 static void refresh_memory_if_stale() {
@@ -178,8 +170,8 @@ static bool lookup_value(const char* key, char* out, size_t out_len) {
         snprintf(out, out_len, "%d", usage);
         return true;
     }
-    if (strcmp(key, "rssi") == 0) {
-        if (!s_rssi_valid) { strlcpy(out, "?", out_len); return true; }
+    if (strcmp(key, "wifi_rssi") == 0) {
+        if (!s_rssi_valid || s_network.state != WifiNetworkState::Connected) return false;
         snprintf(out, out_len, "%d", (int)s_rssi);
         return true;
     }
@@ -300,20 +292,48 @@ static bool lookup_value(const char* key, char* out, size_t out_len) {
         return true;
     }
     if (strcmp(key, "wifi_connected") == 0) {
-        strlcpy(out, s_wifi_connected ? "ON" : "OFF", out_len);
+        strlcpy(out, s_network.state == WifiNetworkState::Connected ? "ON" : "OFF", out_len);
         return true;
     }
-    if (strcmp(key, "wifi_ssid") == 0) {
-        strlcpy(out, s_wifi_connected ? s_wifi_ssid : "?", out_len);
+    if (strcmp(key, "wifi_ssid") == 0 || strcmp(key, "wifi_ip") == 0) {
+        if (s_network.state != WifiNetworkState::Connected && s_network.state != WifiNetworkState::Ap)
+            return false;
+        const char* value = strcmp(key, "wifi_ssid") == 0 ? s_network.ssid : s_network.ip;
+        if (!value[0]) return false;
+        strlcpy(out, value, out_len);
         return true;
     }
-    if (strcmp(key, "ip") == 0) {
-        strlcpy(out, s_ip[0] ? s_ip : "0.0.0.0", out_len);
+    if (strcmp(key, "wifi_state") == 0) {
+        const char* status = "OFF";
+        switch (s_network.state) {
+            case WifiNetworkState::Off: break;
+            case WifiNetworkState::Starting: status = "STARTING"; break;
+            case WifiNetworkState::Connecting: status = "CONNECTING"; break;
+            case WifiNetworkState::Connected: status = "CONNECTED"; break;
+            case WifiNetworkState::Reconnecting: status = "RECONNECTING"; break;
+            case WifiNetworkState::Ap: status = "AP"; break;
+            case WifiNetworkState::Stopping: status = "STOPPING"; break;
+            case WifiNetworkState::Error: status = "ERROR"; break;
+        }
+        strlcpy(out, status, out_len);
         return true;
     }
-    if (strcmp(key, "hostname") == 0) {
-        const char* h = WiFi.getHostname();
-        strlcpy(out, h ? h : "?", out_len);
+    if (strcmp(key, "wifi_last_error") == 0) {
+        strlcpy(out, s_network.last_error, out_len);
+        return true;
+    }
+    if (strcmp(key, "wifi_ap_active") == 0) {
+        strlcpy(out, s_network.state == WifiNetworkState::Ap ? "ON" : "OFF", out_len);
+        return true;
+    }
+    if (strcmp(key, "wifi_ap_purpose") == 0) {
+        if (s_network.state != WifiNetworkState::Ap) return false;
+        strlcpy(out, s_network.recovery_ap ? "RECOVERY" : "INTERACTIVE", out_len);
+        return true;
+    }
+    if (strcmp(key, "wifi_hostname") == 0) {
+        if (!s_network.hostname[0]) return false;
+        strlcpy(out, s_network.hostname, out_len);
         return true;
     }
     // --- Display & audio ---
@@ -411,14 +431,7 @@ static BindingResolverStatus health_binding_resolve(const char* params, char* ou
 
     char raw[64];
     if (!lookup_value(key, raw, sizeof(raw))) {
-#if !TELEMETRY_ALLOW_PSRAM_POOL_WALK
-        if (strcmp(key, "psram_largest") == 0) {
-            strlcpy(out, "---", out_len);
-            return BINDING_RESOLVER_UNAVAILABLE;
-        }
-#endif
-        strlcpy(out, "ERR:bad key", out_len);
-        return BINDING_RESOLVER_UNKNOWN;
+        return BINDING_RESOLVER_UNAVAILABLE;
     }
 
     if (fmt[0]) {
@@ -479,11 +492,15 @@ static const BindingKeyDoc HEALTH_KEYS[] = {
 #else
     {"psram_largest",       "Unavailable on this board; add a |fallback", "Memory"},
 #endif
-    {"wifi_connected",      "ON/OFF WiFi connection state", "WiFi"},
-    {"wifi_ssid",           "Connected network name", "WiFi"},
-    {"rssi",                "WiFi signal strength, dBm", "WiFi"},
-    {"ip",                  "Device IP address", "WiFi"},
-    {"hostname",            "Device hostname", "WiFi"},
+    {"wifi_state",          "Wi-Fi state", "WiFi"},
+    {"wifi_connected",      "Wi-Fi network connection", "WiFi"},
+    {"wifi_ssid",           "Wi-Fi network name", "WiFi"},
+    {"wifi_ip",             "Wi-Fi IP address", "WiFi"},
+    {"wifi_rssi",           "Wi-Fi signal strength", "WiFi"},
+    {"wifi_hostname",       "Wi-Fi hostname", "WiFi"},
+    {"wifi_ap_active",      "Wi-Fi AP activity", "WiFi"},
+    {"wifi_ap_purpose",     "Wi-Fi AP purpose", "WiFi"},
+    {"wifi_last_error",     "Last Wi-Fi error", "WiFi"},
     {"brightness",          "Backlight brightness 0-100", "Display & audio"},
 #if HAS_AUDIO
     {"volume",              "Audio volume 0-100", "Display & audio"},
@@ -513,24 +530,49 @@ static const BindingParamDoc kHealthParams[] = {
 static const BindingExampleDoc kHealthExamples[] = {
     {"CPU [health:cpu]%", "Text around a token is kept."},
     {"[health:heap_free;%d B]", "Number with a unit inside the format."},
-    {"[health:wifi_ssid] ([health:rssi] dBm)", "Network name and signal strength."},
+    {"[health:wifi_ssid|off] ([health:wifi_rssi|n/a] dBm)", "Active network name; signal strength is available only while connected to a network."},
+    {"[health:wifi_state]", "Overall Wi-Fi state, including AP operation; not internet or MQTT readiness."},
+    {"[health:wifi_ip|off]", "Active network or AP address with an explicit inactive fallback."},
     {"[expr:[health:wifi_connected]==\"ON\"?\"#16a34a\":\"#dc2626\"]", "Green or red color for WiFi state."},
     {"[health:table]", "Exact single token for a Table widget."},
+};
+
+static const BindingReferenceDoc kHealthWifiReference[] = {
+    {"Wi-Fi states", "OFF", nullptr, "Wi-Fi is disabled."},
+    {"Wi-Fi states", "STARTING", nullptr, "Radio or transport initialization is underway."},
+    {"Wi-Fi states", "CONNECTING", nullptr, "Connecting to the configured Wi-Fi network."},
+    {"Wi-Fi states", "CONNECTED", nullptr, "Connected to a network with an IP address; not service readiness."},
+    {"Wi-Fi states", "RECONNECTING", nullptr, "Recovering a lost Wi-Fi connection."},
+    {"Wi-Fi states", "AP", nullptr, "The device's AP is active."},
+    {"Wi-Fi states", "STOPPING", nullptr, "Wi-Fi transport shutdown is underway."},
+    {"Wi-Fi states", "ERROR", nullptr, "Radio shutdown failed; Wi-Fi-off cannot be confirmed."},
+    {"Wi-Fi details", "wifi_connected", "ON / OFF", "ON only while connected to a network, not while serving an AP."},
+    {"Wi-Fi details", "wifi_ssid / wifi_ip", nullptr, "Name and address of the active network or AP. Unavailable otherwise; use a |fallback."},
+    {"Wi-Fi details", "wifi_rssi", "-62", "Signal strength in dBm while connected to a network. Unavailable otherwise; use a |fallback."},
+    {"Wi-Fi details", "wifi_hostname", "kitchen-pad", "Configured Wi-Fi hostname, including while Wi-Fi is off."},
+    {"Wi-Fi details", "wifi_ap_active", "ON / OFF", "Whether the AP is active."},
+    {"Wi-Fi details", "wifi_ap_purpose", "INTERACTIVE / RECOVERY", "Full-portal or restricted recovery AP. Unavailable without AP; use a |fallback."},
+    {"Wi-Fi details", "wifi_last_error", nullptr, "Last network, AP, or radio failure. Empty until failure; cleared by successful connection, AP startup, or reboot."},
 };
 
 static const BindingSchemeDoc kHealthDoc = {
     "Device", "Local device telemetry. Works without a network.",
     BINDING_DOC_LIST(kHealthParams), BINDING_DOC_LIST(HEALTH_KEYS), BINDING_DOC_LIST(kHealthExamples),
-    nullptr, false, BINDING_DOC_NONE, nullptr, nullptr,
+    "Wi-Fi states and details", false, BINDING_DOC_LIST(kHealthWifiReference),
+    "Wi-Fi values refresh every two seconds; brief transitions may not appear.", nullptr,
 };
 
 static const BindingAuthoringKey kHealthAuthoringKeys[] = {
     binding_authoring_integer("cpu", "%", "42", "%ld"),
-    binding_authoring_integer("rssi", "dBm", "-62", "%ld"),
+    binding_authoring_integer("wifi_rssi", "dBm", "-62", "%ld"),
     binding_authoring_integer("uptime", "s", "12345", "%ld"),
     binding_authoring_integer("heap_free", "B", "245760", "%ld"),
     binding_authoring_text("wifi_ssid", "Home WiFi"),
     binding_authoring_text("wifi_connected", "ON"),
+    binding_authoring_text("wifi_state", "CONNECTED"),
+    binding_authoring_text("wifi_last_error", "Connection timed out"),
+    binding_authoring_text("wifi_ap_active", "ON"),
+    binding_authoring_text("wifi_ap_purpose", "INTERACTIVE"),
     binding_authoring_integer("cpu_core_#", "%", "38", "%ld"),
     binding_authoring_text("chip", "ESP32-S3"),
     binding_authoring_integer("chip_rev", "", "1", "%ld"),
@@ -557,8 +599,8 @@ static const BindingAuthoringKey kHealthAuthoringKeys[] = {
     {"psram_largest", BINDING_AUTHORING_KIND_INTEGER, "B", BINDING_AUTHORING_FORMAT_RAW,
         nullptr, BINDING_AUTHORING_CAP_DISPLAY, true, "4194304"},
 #endif
-    binding_authoring_text("ip", "192.0.2.10"),
-    binding_authoring_text("hostname", "kitchen-pad"),
+    binding_authoring_text("wifi_ip", "192.0.2.10"),
+    binding_authoring_text("wifi_hostname", "kitchen-pad"),
     binding_authoring_integer("brightness", "%", "80", "%ld"),
 #if HAS_AUDIO
     binding_authoring_integer("volume", "%", "50", "%ld"),

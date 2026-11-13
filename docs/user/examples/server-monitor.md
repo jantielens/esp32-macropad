@@ -29,7 +29,7 @@ Save Pad and publish varying fixture values before enabling the collector.
 ## Separate local diagnostics
 
 Add another clearly named button, `Pad health`, using `[health:cpu]%` and
-`[health:rssi] dBm`, or a [health Table](../widgets/table.md).
+`[health:wifi_rssi] dBm`, or a [health Table](../widgets/table.md).
 Do not label a local health sparkline `NAS CPU`.
 
 Disconnect the publisher and inspect what remains displayed.

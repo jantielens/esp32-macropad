@@ -80,7 +80,9 @@ All three buttons are active low. Configure runtime actions through the
 existing physical-button settings in the portal. For configuration recovery,
 hold **Up** through the application's 1.5-second startup check. This opens
 configuration mode without erasing settings and is separate from runtime
-assignments. No button powers down or sleeps the device by default.
+assignments. Configuration recovery overrides saved Offline mode, tries saved
+Wi-Fi, and starts an AP if connection fails; it does not immediately force AP.
+No button powers down or sleeps the device by default.
 
 The GPIO48 buzzer supports tone alerts and button feedback through the existing
 [audio controls](../../../docs/user/media/audio.md). It plays one pitch at a
@@ -136,6 +138,14 @@ without scanning, connections, or HID. Validate delivery
 for the button numbers and event types you use; queue admission does not
 confirm Home Assistant receipt. Sustained runtime memory headroom under
 MQTT-enabled load and OTA coexistence still require device validation.
+
+The shared [Offline mode](../../../docs/user/device/network-and-access.md#boot-offline)
+supports local pad and physical-button BTHome controls without starting Wi-Fi.
+BLE prepares before runtime actions. Verify startup to
+first usable physical button and first received advertisement on hardware;
+a retained e-paper image or queued event does not prove readiness or delivery.
+Offline boot, AP/station switching with BLE, recovery, temporary RAM reclamation,
+and interaction latency during connection attempts remain user hardware checks.
 
 SD, microphone, IMU, RTC, BLE HID, USB HID,
 native Extensions, remote image fetching, and the image library are disabled.

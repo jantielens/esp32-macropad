@@ -2,6 +2,7 @@
 #define WIFI_MANAGER_H
 
 #include <Arduino.h>
+#include <string.h>
 
 struct DeviceConfig;
 
@@ -39,6 +40,31 @@ struct WifiConnectionDiagnostics {
     bool has_disconnect_reason;
 };
 
+enum class WifiNetworkCommand : uint8_t { None, Connect, Disconnect, EnableAp, DisableAp, TurnOff };
+enum class WifiNetworkState : uint8_t {
+    Off, Starting, Connecting, Connected, Reconnecting, Ap, Stopping, Error
+};
+
+inline WifiNetworkCommand wifi_network_command_from_string(const char* command) {
+    if (!command) return WifiNetworkCommand::None;
+    if (!strcmp(command, "wifi_connect")) return WifiNetworkCommand::Connect;
+    if (!strcmp(command, "wifi_disconnect")) return WifiNetworkCommand::Disconnect;
+    if (!strcmp(command, "wifi_off")) return WifiNetworkCommand::TurnOff;
+    if (!strcmp(command, "ap_enable")) return WifiNetworkCommand::EnableAp;
+    if (!strcmp(command, "ap_disable")) return WifiNetworkCommand::DisableAp;
+    return WifiNetworkCommand::None;
+}
+
+struct WifiNetworkSnapshot {
+    WifiNetworkState state;
+    bool ap_active;
+    bool recovery_ap;
+    char ssid[33];
+    char ip[16];
+    char hostname[32];
+    char last_error[64];
+};
+
 // Start WiFi hardware early (SDIO link on P4, STA mode on others).
 // Call before wifi_manager_connect() to overlap hardware bring-up with other init.
 void wifi_manager_early_init();
@@ -56,10 +82,15 @@ void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool 
 // Call once after the first successful WiFi connection.
 void wifi_manager_register_events();
 
-// Request a WiFi reconnect cycle from any task context.
-// Sets an atomic flag consumed by the watchdog in loop().
-void wifi_manager_request_reconnect();
-// Keep the radio off until an explicit reconnect request is made.
+// Admit one request from any task; duplicates are harmless, conflicts fail.
+// Acceptance does not mean association or AP startup has completed.
+bool wifi_manager_request_network_command(WifiNetworkCommand command);
+bool wifi_manager_network_transition_pending();
+void wifi_manager_get_network_snapshot(WifiNetworkSnapshot* snapshot);
+// Call once after loading boot configuration, before starting portal tasks.
+// The hostname remains this boot's configured value until restart.
+void wifi_manager_init_network_snapshot(const DeviceConfig& config);
+// Keep Wi-Fi off until an explicit Connect or Enable AP request.
 void wifi_manager_enter_offline();
 
 // Pure configuration validation helper.
@@ -84,7 +115,8 @@ WifiRecoveryAction wifi_reconnect_next_action(unsigned long outage_ms,
                                               unsigned long since_last_attempt_ms,
                                               unsigned int retry_count,
                                               bool manual_request,
-                                              const WifiRecoveryPolicy& policy);
+                                              const WifiRecoveryPolicy& policy,
+                                              bool allow_reboot = true);
 
 // Copy cached association and recovery diagnostics. This does not query WiFi.
 void wifi_manager_get_diagnostics(WifiConnectionDiagnostics* diagnostics);

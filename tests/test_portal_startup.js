@@ -443,6 +443,37 @@ async function main() {
     assert(soundSelect.options.some(option => option.value === 'new.mp3'));
     assert.strictEqual(soundSelect.value, 'saved.mp3');
     const navSource = fs.readFileSync('src/app/web/portal_nav.js', 'utf8');
+    const navInit = navSource.slice(navSource.indexOf('  function init()'),
+        navSource.indexOf("  if (document.readyState === 'loading')"));
+    const headerLookup = context.document.getElementById;
+    context.document.getElementById = id => {
+        if (!nodes.has(id)) nodes.set(id, {style: {}, textContent: ''});
+        return nodes.get(id);
+    };
+    for (const recovery of [false, true]) {
+        let selected;
+        const data = { ap_mode: true, recovery_ap: recovery,
+            primary: {fragment: recovery ? 'setup' : 'special-home'},
+            categories: [] };
+        const routing = {
+            window: { addEventListener() {} }, NAV_API: '/api/portal/nav',
+            itemMap: recovery ? {setup: {}} : {mode: {}, 'special-home': {}},
+            portalEnsureMaterialSymbols() {}, updateLayoutHeight() {}, buildNav() {},
+            getItemFromHash() { return 'mode'; },
+            navigateTo(id) { selected = id; },
+            fetch: async () => ({ok: true, json: async () => data})
+        };
+        vm.createContext(routing);
+        vm.runInContext(navInit + '\ninit();', routing);
+        await new Promise(resolve => setImmediate(resolve));
+        assert.strictEqual(selected, recovery ? 'setup' : 'mode',
+            'Only recovery APs override the saved hash with the setup wizard');
+        context.getDeviceInfo = async () => ({version: 'test', ap_active: true, recovery_ap: recovery});
+        await context.loadVersion();
+        assert.strictEqual(vm.runInContext('portalMode', context), recovery ? 'core' : 'full',
+            'An active live AP must not become a core portal');
+    }
+    context.document.getElementById = headerLookup;
     const assets = [];
     const assetContext = { window: {}, itemMap: {}, document: {
         createElement(tag) { return { tag, remove() {} }; },

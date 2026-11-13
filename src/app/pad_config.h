@@ -277,7 +277,7 @@ struct ConfirmPayload {
 static_assert(sizeof(NotifyPayload) <= 256 && sizeof(ConfirmPayload) <= 256,
               "Dialog payloads must fit the MQTT/key payload budget");
 struct SystemPayload {
-    char system_command[CONFIG_ACTION_TYPE_MAX_LEN];      // "reboot", "wifi_reconnect", "screensaver"
+    char system_command[CONFIG_ACTION_TYPE_MAX_LEN];      // Device command ID
 };
 struct HaServicePayload {
     char entity_id[48];   // e.g. "light.living_room" (domain = text before first '.')

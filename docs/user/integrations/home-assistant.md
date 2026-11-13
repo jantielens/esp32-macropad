@@ -79,6 +79,26 @@ Four events can wait behind the active burst. A full queue rejects the newest
 action, logs a warning, and stops its remaining action list. OTA cancels
 pending event work; rejected or cancelled events are not retried.
 
+## Use BTHome with Offline boot
+
+On supported interactive BLE firmware, configure pad or
+[physical-button actions](../device/triggers.md#physical-buttons) to send the
+events above. Set up the matching HA automations, then select **Offline** under
+**Device > Operating Mode**, save, and reboot. The device starts local controls
+without a Wi-Fi connection attempt or automatic AP and can broadcast BTHome
+events with no MQTT broker or HA URL/token configured.
+
+HA still needs a Bluetooth adapter or proxy within range; the receiver's own
+network requirements are separate. Input feedback or event queue acceptance
+does not confirm that HA received or executed an automation. BTHome supplies
+remote-control events, not acknowledgement or the actual state of the target.
+
+Configure an **Enable AP** action before switching modes if you want direct
+portal access for maintenance. Wi-Fi and AP commands leave BTHome publishing
+available and do not change the saved boot mode. See
+[network access](../device/network-and-access.md#enable-network-access-from-an-action)
+for password, login, and recovery behavior.
+
 ## Discover the device
 
 Connect both the device and HA to the same broker. In HA, open

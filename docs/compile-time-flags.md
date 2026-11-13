@@ -1845,6 +1845,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/portal_components.cpp
   - src/app/power_manager.cpp
   - src/app/time_service.cpp
+  - src/app/web_portal_config.cpp
   - src/boards/reterminal-e1003-frame/drivers/reterminal_e1003_driver.cpp
 - **IS_SHUTTER_TESTER**
   - src/app/board_config.h

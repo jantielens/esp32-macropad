@@ -15,3 +15,11 @@ TEST(PowerConfig, ParsesFullEpaperFrameMode) {
     EXPECT_STREQ(config.operating_mode, kFrameMode);
     EXPECT_EQ(power_config_parse_power_mode(&config), PowerMode::DutyCycleEpaperFrame);
 }
+
+TEST(PowerConfig, OfflineRoundTripsWithoutChangingDefault) {
+    DeviceConfig config = {};
+    EXPECT_EQ(power_config_parse_power_mode(&config), PowerMode::AlwaysOn);
+    std::strcpy(config.operating_mode, "offline");
+    EXPECT_EQ(power_config_parse_power_mode(&config), PowerMode::Offline);
+    EXPECT_STREQ(power_config_power_mode_to_string(PowerMode::Offline), "offline");
+}

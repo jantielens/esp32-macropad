@@ -115,6 +115,9 @@ async function saveFragmentConfig(requiresReboot, fieldNames) {
         if (!response.ok) throw new Error(result.message || 'Failed to save configuration');
         if (result.success) {
             if (level) await loadConfig();
+            if (config.operating_mode !== undefined && window.deviceConfig) {
+                window.deviceConfig.operating_mode = config.operating_mode;
+            }
             if (window.deviceConfig) {
                 ['bluetooth_tx_power_dbm', 'bthome_event_burst_ms', 'bthome_event_adv_interval_ms'].forEach(function (name) {
                     if (config[name] !== undefined) window.deviceConfig[name] = Number(config[name]);

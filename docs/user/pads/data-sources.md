@@ -136,8 +136,8 @@ Use `[sensor:key;format|fallback]`, for example:
 ```text
 [sensor:temperature;%.1f|N/A]
 [health:cpu;%.0f]
-[health:rssi]
-[health:ip]
+[health:wifi_rssi]
+[health:wifi_ip]
 ```
 
 Sensor keys depend on registered hardware. Boolean sensor values are 0/1.

@@ -197,6 +197,13 @@ TEST(policy_escalates_to_reset_and_reboot) {
               (int)WifiRecoveryAction::Reboot);
 }
 
+TEST(offline_policy_recovers_without_outage_reboot) {
+    ASSERT_EQ((int)wifi_reconnect_next_action(300000, ~0UL, 0, false, kPolicy, false),
+              (int)WifiRecoveryAction::ResetRadio);
+    ASSERT_EQ((int)wifi_reconnect_next_action(4000000000UL, ~0UL, 0, false, kPolicy, false),
+              (int)WifiRecoveryAction::ResetRadio);
+}
+
 // ============================================================================
 // millis() rollover simulation
 // ============================================================================
@@ -280,6 +287,7 @@ int main() {
     RUN(policy_honors_exponential_backoff);
     RUN(policy_manual_reconnect_is_immediate);
     RUN(policy_escalates_to_reset_and_reboot);
+    RUN(offline_policy_recovers_without_outage_reboot);
 
     printf("\n--- Edge cases ---\n");
     RUN(backoff_with_large_values);

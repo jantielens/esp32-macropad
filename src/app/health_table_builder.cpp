@@ -138,15 +138,17 @@ bool health_table_build(bool extended, HealthTableLookupFn lookup, char* out, si
                              (free_pct >= 35) ? kFgOk : (free_pct >= 15 ? kFgWarn : kFgErr));
     }
 
-    char wifi_state_raw[12];
-    char rssi_raw[24];
-    lookup("wifi_connected", wifi_state_raw, sizeof(wifi_state_raw));
-    lookup("rssi", rssi_raw, sizeof(rssi_raw));
-    bool wifi_on = (strcmp(wifi_state_raw, "ON") == 0);
+    char wifi_state_raw[16] = {};
+    char rssi_raw[24] = {};
+    lookup("wifi_state", wifi_state_raw, sizeof(wifi_state_raw));
+    const bool has_rssi = lookup("wifi_rssi", rssi_raw, sizeof(rssi_raw));
+    bool wifi_on = (strcmp(wifi_state_raw, "CONNECTED") == 0);
+    bool ap_active = (strcmp(wifi_state_raw, "AP") == 0);
     long rssi = parse_long_or(rssi_raw, -1000);
-    if (!wifi_on) {
-        strlcpy(wifi_val, "Disconnected", sizeof(wifi_val));
-        add_health_table_row(rows, "WiFi", wifi_val, kBgErr, kFgErr);
+    if (!wifi_on || !has_rssi) {
+        strlcpy(wifi_val, wifi_state_raw[0] ? wifi_state_raw : "?", sizeof(wifi_val));
+        add_health_table_row(rows, "WiFi", wifi_val,
+                             ap_active ? kBgOk : kBgNeutral, ap_active ? kFgOk : kFgNeutral);
     } else {
         snprintf(wifi_val, sizeof(wifi_val), "%ld dBm", rssi);
         add_health_table_row(rows, "WiFi", wifi_val,
@@ -158,11 +160,11 @@ bool health_table_build(bool extended, HealthTableLookupFn lookup, char* out, si
     format_uptime(parse_long_or(raw, 0), uptime_val, sizeof(uptime_val));
     add_health_table_row(rows, "Uptime", uptime_val, kBgNeutral, kFgNeutral);
 
-    lookup("ip", raw, sizeof(raw));
-    strlcpy(ip_val, raw[0] ? raw : "0.0.0.0", sizeof(ip_val));
+    const bool has_ip = lookup("wifi_ip", raw, sizeof(raw));
+    strlcpy(ip_val, has_ip && raw[0] ? raw : "---", sizeof(ip_val));
     add_health_table_row(rows, "IP", ip_val,
-                         (!wifi_on || strcmp(ip_val, "0.0.0.0") == 0) ? kBgErr : kBgOk,
-                         (!wifi_on || strcmp(ip_val, "0.0.0.0") == 0) ? kFgErr : kFgOk);
+                         ((wifi_on || ap_active) && has_ip) ? kBgOk : kBgNeutral,
+                         ((wifi_on || ap_active) && has_ip) ? kFgOk : kFgNeutral);
 
     char bright_val[16];
     if (lookup("brightness", raw, sizeof(raw))) {

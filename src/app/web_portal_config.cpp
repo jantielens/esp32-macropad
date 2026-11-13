@@ -11,6 +11,7 @@
 #include "font_store.h"
 #endif
 #include "config_manager.h"
+#include "power_config.h"
 #include "bthome_event_json.h"
 #include "bthome_events.h"
 #include "ble_backend.h"
@@ -47,6 +48,7 @@
 
 #include <ArduinoJson.h>
 #include <WiFi.h>
+#include <strings.h>
 
 #include <esp_heap_caps.h>
 #include <errno.h>
@@ -165,7 +167,7 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				return;
 		}
 
-		// Home Wi-Fi credentials remain write-only. The setup AP password is
+		// Home Wi-Fi credentials remain write-only. The AP password is
 		// intentionally ordinary, shareable configuration.
 		std::shared_ptr<BasicJsonDocument<PsramJsonAllocator>> doc = make_psram_json_doc(HAS_DISPLAY ? 6144 : 2560);
 		if (doc && doc->capacity() > 0) {
@@ -480,6 +482,18 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				return;
 		}
 
+		#if IS_EPAPER_FRAME
+		if (doc.containsKey("operating_mode") &&
+				strcasecmp(doc["operating_mode"] | "", "offline") == 0) {
+				request->send(400, "application/json",
+						"{\"success\":false,\"message\":\"Offline operating mode is unavailable on E-Paper Frame devices\"}");
+				portENTER_CRITICAL(&g_config_post_mux);
+				config_post_reset();
+				portEXIT_CRITICAL(&g_config_post_mux);
+				return;
+		}
+		#endif
+
 		const bool bthome_update = bthome::event_settings_update_present(doc.as<JsonObjectConst>());
 #if HAS_BLE || HAS_BLE_HID
 		const bthome::EventSettings previous_bthome_settings = current_config->bthome_event;
@@ -610,12 +624,13 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		// Security hardening: never allow changing Basic Auth settings in AP/core
 		// mode AFTER initial setup. Otherwise, an attacker near the device could
 		// wait for fallback AP mode and lock out the owner. EXCEPTION: during
-		// true first-boot (no WiFi configured yet) the wizard legitimately needs
-		// to set auth, so we only enforce the guard when an SSID is already on
-		// file (i.e., this is a fallback AP session, not first-boot).
-		bool first_boot = (current_config->wifi_ssid[0] == '\0');
-		if (web_portal_is_ap_mode_active() && !first_boot && (doc.containsKey("basic_auth_enabled") || doc.containsKey("basic_auth_username") || doc.containsKey("basic_auth_password"))) {
-				request->send(403, "application/json", "{\"success\":false,\"message\":\"Basic Auth settings cannot be changed in AP mode\"}");
+		// true first-boot (no WiFi or Offline mode configured yet), the wizard
+		// legitimately needs to set auth. A saved Offline mode with no SSID
+		// still counts as configured, so its recovery session is protected.
+		bool first_boot = (current_config->wifi_ssid[0] == '\0' &&
+				power_config_parse_power_mode(current_config) != PowerMode::Offline);
+		if (web_portal_is_recovery_ap_active() && !first_boot && (doc.containsKey("basic_auth_enabled") || doc.containsKey("basic_auth_username") || doc.containsKey("basic_auth_password"))) {
+				request->send(403, "application/json", "{\"success\":false,\"message\":\"Basic Auth settings cannot be changed in recovery AP mode\"}");
 				portENTER_CRITICAL(&g_config_post_mux);
 				config_post_reset();
 				portEXIT_CRITICAL(&g_config_post_mux);
@@ -828,7 +843,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		}
 
 
-		// Operating mode (transport + duty cycle selector)
+		// Operating mode (online/offline runtime + duty cycle selector)
 		if (doc.containsKey("operating_mode")) {
 				strlcpy(current_config->operating_mode, doc["operating_mode"] | "always_on", CONFIG_OPERATING_MODE_MAX_LEN);
 		}

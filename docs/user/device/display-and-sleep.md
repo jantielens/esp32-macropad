@@ -16,6 +16,11 @@ To end a maintenance session with one timed deep sleep, use
 [Sleep now](updates-and-recovery.md#put-the-device-to-sleep-after-configuration)
 under **Device > Operating Mode**. This is separate from display inactivity.
 
+**Offline** operating mode keeps the interactive runtime active without starting
+Wi-Fi. It does not put the device or display into deep sleep, and supported
+Bluetooth controls remain available. See
+[Offline boot and explicit network access](network-and-access.md#boot-offline).
+
 ## Set brightness and rotation
 
 Open **Display > Brightness** and adjust the slider. It changes the current

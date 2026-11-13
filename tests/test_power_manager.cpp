@@ -5,6 +5,7 @@
 #include "main_loop_bridge.h"
 #include "reboot_service.h"
 #include "portal_idle.h"
+#include "wifi_manager.h"
 
 #include <Preferences.h>
 #include <esp_sleep.h>
@@ -17,7 +18,12 @@ static RebootOwnership last_reboot_ownership = REBOOT_NORMAL;
 static const ActionTypeDef* system_action = nullptr;
 
 void action_type_register(const ActionTypeDef* type) { system_action = type; }
-void wifi_manager_request_reconnect() {}
+static bool network_command_allowed = true;
+static WifiNetworkCommand last_network_command = WifiNetworkCommand::None;
+bool wifi_manager_request_network_command(WifiNetworkCommand command) {
+    last_network_command = command;
+    return network_command_allowed;
+}
 #if HAS_DISPLAY
 void screen_saver_manager_sleep_now() {}
 void screen_saver_manager_wake() {}
@@ -164,7 +170,7 @@ TEST(PowerManager, DutyCycleRecoveryPreservesExplicitModes) {
     test_power_reset_reason = ESP_RST_SW;
     power_manager_boot_init();
     DeviceConfig config = {};
-    for (const auto name : {"always_on", "duty_cycle_epaper_frame"}) {
+    for (const auto name : {"always_on", "offline", "duty_cycle_epaper_frame"}) {
         std::strcpy(config.operating_mode, name);
         power_manager_configure(&config, true, false);
         EXPECT_EQ(power_manager_get_boot_mode(), power_config_parse_power_mode(&config));
@@ -290,6 +296,33 @@ TEST(PortalIdle, DisabledTimeoutAndAlwaysOnStayAwake) {
     portal_idle_set_mode(PowerMode::AlwaysOn);
     portal_idle_loop();
     EXPECT_FALSE(test_power_slept);
+    portal_idle_set_mode(PowerMode::Offline);
+    now_ms += 60000;
+    portal_idle_loop();
+    EXPECT_FALSE(test_power_slept);
+}
+
+TEST(PowerManager, OfflinePreservesProvisioningAndForcedRecovery) {
+    DeviceConfig config = {};
+    std::strcpy(config.operating_mode, "offline");
+    power_manager_configure(&config, true, false);
+    EXPECT_EQ(power_manager_get_boot_mode(), PowerMode::Offline);
+    EXPECT_FALSE(power_manager_is_duty_cycle_recovery());
+    power_manager_configure(&config, false, false);
+    EXPECT_EQ(power_manager_get_boot_mode(), PowerMode::Ap);
+    power_manager_configure(&config, true, true);
+    EXPECT_EQ(power_manager_get_boot_mode(), PowerMode::Config);
+    EXPECT_STREQ(config.operating_mode, "offline");
+}
+
+TEST(SystemAction, NetworkAdmissionDoesNotClaimSuccessOnRejection) {
+    ButtonAction action = {};
+    std::strcpy(action.payload.system.system_command, "wifi_connect");
+    network_command_allowed = false;
+    EXPECT_EQ(system_action->dispatch(action, "test", 0), ACTION_FAILED);
+    EXPECT_EQ(last_network_command, WifiNetworkCommand::Connect);
+    network_command_allowed = true;
+    EXPECT_EQ(system_action->dispatch(action, "test", 0), ACTION_COMPLETE);
 }
 
 TEST(DeviceClass, SetupRegistrationAndNormalRuntimeAreSeparate) {
