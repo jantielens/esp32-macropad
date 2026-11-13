@@ -2,6 +2,7 @@
 
 #include "board_config.h"
 #include <stdint.h>
+#include "bthome_event_settings.h"
 
 namespace bthome {
 constexpr uint8_t button_count = 10;
@@ -17,7 +18,9 @@ inline bool valid_button_event(uint8_t button, uint8_t event) {
 
 #if HAS_BLE || HAS_BLE_HID
 // Main-task identity configuration, without starting the host or advertising.
-void bthome_events_configure(const char* device_name);
+void bthome_events_configure(const char* device_name, const bthome::EventSettings& settings = {});
+// Stage a coherent snapshot without touching the radio; active bursts keep theirs.
+bool bthome_events_apply_settings(const bthome::EventSettings& settings);
 // Explicit preparation for early-start backends; core event use stays lazy.
 bool bthome_events_prepare();
 // Thread-safe admission. Success means queued, not received by Home Assistant.

@@ -88,6 +88,49 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertIn("Data binding", fragment)
         self.assertNotIn("pad-slider-preview", fragment)
         self.assertNotIn('id="binding-help-overlay"', fragment)
+
+    def test_bthome_capability_validation_save_reload_and_failure(self):
+        profile = "reterminal-sticky-interactive"
+        status, config = self.request("/api/config", profile=profile)
+        self.assertEqual(status, 200)
+        self.assertTrue(config["caps"]["bthome_events"])
+        self.assertFalse(config["caps"]["ble_hid"])
+        nav = self.request("/api/portal/nav", profile=profile)[1]
+        connectivity = next(category for category in nav["categories"] if category["id"] == "connectivity")
+        self.assertIn("bluetooth", {item["id"] for item in connectivity["items"]})
+        self.assertEqual(self.request("/api/section/bluetooth", profile=profile, raw=True)[0], 200)
+        update = {"bluetooth_tx_power_dbm": "-12", "bthome_event_burst_ms": "900",
+                  "bthome_event_adv_interval_ms": "300"}
+        self.assertEqual(self.request("/api/config?no_reboot=1", "POST", update, profile=profile)[0], 200)
+        saved = self.request("/api/config", profile=profile)[1]
+        self.assertEqual(saved["bluetooth_tx_power_dbm"], -12)
+        self.assertEqual(saved["bluetooth_active_tx_power_dbm"], 9)
+        self.assertEqual(self.request("/api/reboot", "POST", {}, profile=profile)[0], 200)
+        self.assertEqual(self.request("/api/config", profile=profile)[1]["bluetooth_active_tx_power_dbm"], -12)
+        self.assertEqual(saved["bthome_event_burst_ms"], 900)
+        for update in [{"bthome_event_burst_ms": 899}, {"bthome_event_burst_ms": False},
+                       {"bthome_event_burst_ms": None}, {"bthome_event_burst_ms": "900junk"},
+                       {"bluetooth_tx_power_dbm": 4294967296}, {"bluetooth_tx_power_dbm": None},
+                       {"bluetooth_tx_power_dbm": True}, {"bluetooth_tx_power_dbm": " 3"},
+                       {"bluetooth_tx_power_dbm": 1}]:
+            self.assertEqual(self.request("/api/config", "POST", update, profile=profile)[0], 400)
+        self.assertEqual(self.request("/api/config", profile=profile)[1]["bthome_event_burst_ms"], 900)
+        self.server.scenario = "save-error"
+        self.assertEqual(self.request("/api/config", "POST", {"bthome_event_burst_ms": 1000}, profile=profile)[0], 500)
+        self.assertEqual(self.request("/api/config", profile=profile)[1]["bthome_event_burst_ms"], 900)
+        self.server.scenario = "normal"
+        for disabled in ("esp32-p4-lcd4b", "reterminal-e1003-frame"):
+            config = self.request("/api/config", profile=disabled)[1]
+            self.assertFalse(config["caps"]["bthome_events"])
+            self.assertNotIn("bthome_event_burst_ms", config)
+            nav = self.request("/api/portal/nav", profile=disabled)[1]
+            self.assertNotIn("bluetooth", {item["id"] for category in nav["categories"] for item in category["items"]})
+            self.assertEqual(self.request("/api/section/bluetooth", profile=disabled, raw=True)[0], 404)
+            self.assertNotIn("bluetooth_tx_power_dbm", config)
+            self.assertEqual(self.request("/api/config", "POST", {"bluetooth_tx_power_dbm": 3}, profile=disabled)[0], 400)
+            self.assertEqual(self.request("/api/config", "POST", {"bthome_event_burst_ms": 350}, profile=disabled)[0], 400)
+
+    def test_production_bundles_and_binding_templates(self):
         status, bundle = self.request("/portal.js", raw=True)
         self.assertEqual(status, 200)
         self.assertIn("async function padInit()", bundle)

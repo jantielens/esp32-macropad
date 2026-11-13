@@ -908,11 +908,11 @@ every component in that custom section to the same category ID.
 
 **Sections:**
 - **⚡ Operating Mode**: Mode selection, duty-cycle wake interval, Wi-Fi backoff cap, and the recovery-portal auto-sleep. MQTT publish interval and payload scope live on the Network page in the MQTT card.
-- **BLE Advertising**: Burst count, advertising interval, and transmit power
+- **BLE Advertising**: Sensor burst count and advertising interval
   selection (only shown in Duty-Cycle BLE mode when firmware enables BLE).
-  Defaults are three repeats, 100 ms, and +9 dBm. Normal BLE wakes skip early
-  Wi-Fi initialization; config/recovery modes retain it. Saving marks a reboot
-  pending, and the next boot applies the selected power.
+  Defaults are three repeats and 100 ms. Shared transmit power lives under
+  Connectivity > Bluetooth. Normal BLE wakes skip early Wi-Fi initialization;
+  config/recovery modes retain it.
 - **Sensor & Display settings**: Thresholds, brightness, on-demand screen preview,
   and screen saver configuration. Interactive display builds expose screen
   rotation as a separate Rotation component under Display; changes take effect
@@ -1762,7 +1762,8 @@ Returns comprehensive device information.
   `double_press`, or `long_press`. Both selectors use registry-authored generic
   editor metadata shared with MCP. The main-loop-owned `bthome_events.cpp`
   sends unencrypted BTHome v2 advertisements with all ten button positions,
-  a per-activation packet ID, and a 350 ms burst at 100 ms intervals. It
+  a per-activation packet ID, and device-wide configurable bursts (defaults:
+  350 ms at 100 ms intervals, +9 dBm). It
   initializes the core BLE backend lazily; the opt-in NimBLE-Arduino
   [broadcast profile](build-and-release-process.md#ble-backend-and-broadcast-profile) prepares the host
   before Wi-Fi in always-on mode (or when normal runtime starts after setup).
@@ -2372,7 +2373,10 @@ timezone and alarm session.
   "wifi_backoff_max_seconds": 900,
   "ble_burst_count": 3,
   "ble_adv_interval_ms": 100,
-  "ble_tx_power_dbm": 9,
+  "bluetooth_tx_power_dbm": 9,
+  "bluetooth_active_tx_power_dbm": 9,
+  "bthome_event_burst_ms": 350,
+  "bthome_event_adv_interval_ms": 100,
   "mqtt_publish_scope": "sensors_only",
 
   "basic_auth_enabled": false,
@@ -2460,9 +2464,20 @@ timezone and alarm session.
   Assistant credentials. The e-paper service endpoint follows the same
   write-only pattern with `epaper_service_token_set`.
 - `ha_url` is the Home Assistant base URL used by the **Home Assistant Service** button action. `ha_token` (the long-lived access token) is never returned by `GET /api/config`.
-- `ble_burst_count`, `ble_adv_interval_ms`, and `ble_tx_power_dbm` are present
-  only when `HAS_BLE` is enabled. TX power is a signed dBm value, not an ESP-IDF
-  enum index. It is stored in NVS and also exposed by MCP `get_config`.
+- `ble_burst_count` and `ble_adv_interval_ms` are present only when `HAS_BLE`
+  is enabled. These timings remain sensor-only, stored in NVS and also
+  exposed by MCP `get_config`.
+- `bluetooth_tx_power_dbm` is the shared saved power in signed dBm, exposed
+  by the API and MCP `get_config` on supported backends. The API also returns
+  `bluetooth_active_tx_power_dbm`, the boot-latched selection, so pending-reboot
+  feedback survives fragment reloads. `caps.bluetooth_tx_power` reports support;
+  hosted HCI omits the power fields and shows a co-processor-control notice.
+- `bthome_event_burst_ms` and
+  `bthome_event_adv_interval_ms` are present with `HAS_BLE || HAS_BLE_HID`,
+  also exposed by MCP `get_config`. `caps.bthome_events` reports this
+  capability independently of keyboard transport. The `bluetooth` nav component
+  registers under Connectivity and serves `bluetooth.fragment.html` through
+  the normal section API; the component and HTML asset share that gate.
 - MCP fields (`mcp_enabled`, `mcp_control_enabled`, `mcp_token_set`) are present when `HAS_MCP` is enabled. The MCP bearer token itself is never returned — only `mcp_token_set` (boolean) indicates whether one has been generated. A `caps.mcp` flag in the capability map reflects the build flag so the portal can hide the MCP card when compiled out.
 
 Keyboard builds expose `keyboard_transport` (saved preference),
@@ -2796,11 +2811,34 @@ Save new configuration. Device reboots after successful save.
   after OTA, not to every sound. Zero skips the wait and can clip short tones.
   Forced muting for OTA and hardware failures is unaffected. The buffer-drain
   and 100 ms idle grace timing remain internal.
-- `ble_tx_power_dbm` accepts an integer or integer string: `-12`, `-9`, `-6`,
+- `bluetooth_tx_power_dbm` accepts an integer or decimal integer string:
+  `-12`, `-9`, `-6`,
   `-3`, `0`, `3`, `6`, or `9`. Unsupported values return HTTP 400 before any
   configuration fields are updated. Omission leaves the setting unchanged.
-  It takes effect at BLE initialization after reboot. Use `?no_reboot=1` to
-  save without immediately restarting, as the portal does.
+  It defaults to +9 and takes effect at shared BLE initialization after reboot.
+  Power applies to BTHome button events, HID, and sensor telemetry, not just
+  advertising. Hosted-HCI power writes return HTTP 400. Use `?no_reboot=1`
+  to save without immediately restarting, as the portal does.
+- BTHome event settings accept integer JSON values or decimal integer strings.
+  Burst duration
+  accepts 100-1000 ms (default 350); interval accepts 20-300 ms (default 100).
+  The merged duration must be at least three intervals. Partial updates retain
+  omitted fields; booleans, null, fractions, junk, overflow, unsupported
+  capabilities, or an invalid merged tuple return HTTP 400 before mutation.
+  Shared power and event timing persist together as one five-byte NVS value
+  (`bt_settings`), so a failed write cannot persist timing without power.
+  Missing records use +9 dBm and 350/100 ms; corrupt records log a warning
+  and reset all three values to those defaults. This greenfield format does
+  not import the earlier separate power or timing keys.
+  Failed Bluetooth writes preserve the prior persisted Bluetooth record,
+  event config, and runtime snapshot.
+  Successful saves stage a coherent snapshot for the main task without
+  initializing BLE. Each queued event captures the latest snapshot at burst
+  start; an active burst keeps its original timing. Each Bluetooth card saves
+  only its own fields with `?no_reboot=1`. Event timing includes the collapsed
+  Advanced interval and requires no reboot; power saves mark reboot pending
+  when the saved choice differs from the boot-latched value. Event bursts do
+  not override radio power. Sensor timing and HID transport are unchanged.
 - Write-only credentials use the same preservation rule: an empty string keeps
   the existing value, while a non-empty value replaces it. `POST /api/config`
   cannot clear a stored credential.

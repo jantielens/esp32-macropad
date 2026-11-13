@@ -704,14 +704,14 @@ add_host_command_test(check_keyboard_transport_cpp11
 
 add_host_legacy_test(test_ble_hid
     SOURCES test_ble_hid.cpp
-    INCLUDES ${PROJECT_SOURCE_DIR}/tests/ble_hid_overrides
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/ble_hid_overrides ${HOST_ARDUINOJSON_DIR}
     LIBRARIES GTest::gtest_main
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
 )
 
 add_host_legacy_test(test_bthome_nimble_broadcast
     SOURCES test_ble_hid.cpp
-    INCLUDES ${PROJECT_SOURCE_DIR}/tests/ble_hid_overrides
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/ble_hid_overrides ${HOST_ARDUINOJSON_DIR}
     DEFINITIONS HAS_BLE=1 HAS_BLE_HID=0 BLE_BACKEND=1
     LIBRARIES GTest::gtest_main
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h

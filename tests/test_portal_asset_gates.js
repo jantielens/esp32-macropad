@@ -78,6 +78,7 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
     ['esp32-p4-lcd4b', 'ESP32P4', true],
     ['esp32-p4-lcd4b', 'ESP32P4', true, 'face-disabled'],
     ['esp32-p4-lcd4b', 'ESP32P4', true, 'external-disabled'],
+    ['esp32-p4-lcd4b', 'ESP32P4', true, 'bluetooth-disabled'],
     ['esp32-p4-lcd4b', 'ESP32P4', false],
     ['esp32-p4-lcd4b', 'ESP32P4', false, 'builtin-only'],
     ['esp32-p4-lcd4b', 'ESP32P4', true, 'ha-only'],
@@ -89,6 +90,7 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
         ...(integrationMode === 'builtin-only' ? ['-DHAS_MQTT=0', '-DHAS_HA_LIVE=0'] : []),
         ...(integrationMode === 'ha-only' ? ['-DHAS_MQTT=0', '-DHAS_HA_LIVE=1'] : []),
         ...(integrationMode === 'face-disabled' ? ['-DHAS_FACE_WIDGET=0'] : []),
+        ...(integrationMode === 'bluetooth-disabled' ? ['-DHAS_BLE=0', '-DHAS_BLE_HID=0'] : []),
         ...(integrationMode === 'external-disabled' ? ['-DHAS_EXTERNAL_DATA=0'] : [])],
         {cwd: root, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe']});
     const assets = new Map();
@@ -99,6 +101,9 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
         assets.set(match[1], zlib.gunzipSync(bytes).toString());
     }
     assert(assets.has('portal_js_gz'));
+    assert.equal(assets.has('bluetooth_fragment_html_gz'),
+        board !== 'reterminal-e1003-frame' && integrationMode !== 'bluetooth-disabled',
+        'Bluetooth fragment must follow HAS_BLE || HAS_BLE_HID independently of display and HID transport');
     if (!epaperProfile) {
         assert(!assets.has('epaper_refresh_fragment_html_gz'));
         assert(!assets.has('portal_epaper_refresh_js_gz'));

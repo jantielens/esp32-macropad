@@ -117,6 +117,11 @@ inline ble_gap_adv_params event_parameters = {};
 inline unsigned host_inits = 0;
 inline bool data_succeeds = true;
 inline bool power_succeeds = true;
+inline int advertising_power = 4;
+inline int default_power = 4;
+inline int scan_power = 4;
+inline bool power_read_succeeds = true;
+inline std::vector<std::pair<int, int>> power_calls;
 inline bool telemetry_start_succeeds = true;
 }
 
@@ -225,7 +230,23 @@ enum esp_power_level_t {
     ESP_PWR_LVL_N12, ESP_PWR_LVL_N9, ESP_PWR_LVL_N6, ESP_PWR_LVL_N3,
     ESP_PWR_LVL_N0, ESP_PWR_LVL_P3, ESP_PWR_LVL_P6, ESP_PWR_LVL_P9
 };
-enum esp_ble_power_type_t { ESP_BLE_PWR_TYPE_ADV, ESP_BLE_PWR_TYPE_DEFAULT };
+enum esp_ble_power_type_t { ESP_BLE_PWR_TYPE_ADV, ESP_BLE_PWR_TYPE_DEFAULT, ESP_BLE_PWR_TYPE_SCAN };
+inline esp_power_level_t esp_ble_tx_power_get(esp_ble_power_type_t type) {
+    return static_cast<esp_power_level_t>(!TestBle::power_read_succeeds ? 0xFF :
+        type == ESP_BLE_PWR_TYPE_ADV ? TestBle::advertising_power :
+        type == ESP_BLE_PWR_TYPE_SCAN ? TestBle::scan_power : TestBle::default_power);
+}
+inline void test_set_power(esp_power_level_t power, esp_ble_power_type_t type) {
+    TestBle::power_calls.emplace_back(type, power);
+    if (!TestBle::power_succeeds) return;
+    (type == ESP_BLE_PWR_TYPE_ADV ? TestBle::advertising_power :
+        type == ESP_BLE_PWR_TYPE_SCAN ? TestBle::scan_power : TestBle::default_power) = power;
+}
+constexpr int ESP_OK = 0;
+inline int esp_ble_tx_power_set(esp_ble_power_type_t type, esp_power_level_t power) {
+    test_set_power(power, type);
+    return TestBle::power_succeeds ? ESP_OK : 1;
+}
 class BLEAdvertisementData {
 public:
     std::vector<uint8_t> bytes;
@@ -274,7 +295,7 @@ public:
     static BLEAdvertising* getAdvertising() { return &advertising; }
     static void startAdvertising() {}
     static void stopAdvertising() { advertising.stop(); }
-    static void setPower(esp_power_level_t, esp_ble_power_type_t) {}
+    static void setPower(esp_power_level_t power, esp_ble_power_type_t type) { test_set_power(power, type); }
 };
 class BLESecurity {
 public:

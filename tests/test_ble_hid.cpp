@@ -5,6 +5,8 @@
 #endif
 #include "../src/app/ble_backend.cpp"
 #include "../src/app/bthome_events.cpp"
+#include "../src/app/bthome_event_settings.cpp"
+#include "../src/app/bthome_event_json.h"
 #include <gtest/gtest.h>
 
 unsigned long millis() { return TestBle::clock_ms; }
@@ -22,7 +24,7 @@ protected:
     ble_gap_conn_desc peer = {7, {0, {1, 2, 3, 4, 5, 6}}, {0, {1, 2, 3, 4, 5, 6}}, {false, false}};
 
     void SetUp() override {
-        BLEDevice::initialized = true;
+        BLEDevice::initialized = false;
         BLEDevice::init_succeeds = true;
         ota_active = false;
         ota_epoch = 1;
@@ -42,10 +44,18 @@ protected:
         TestBle::event_start_result = 0;
         TestBle::hid_starts = 0;
         TestBle::event_starts = 0;
+        TestBle::power_succeeds = TestBle::power_read_succeeds = true;
+        TestBle::advertising_power = TestBle::default_power = ESP_PWR_LVL_N0;
+        TestBle::power_calls.clear();
         queue_head = queue_count = 0;
         configured = false;
         event_active = false;
+        radio_owned = false;
         packet_id = 0;
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+        NimBLEDevice::initialized = false;
+#endif
+        ASSERT_TRUE(ble_backend_configure_power(9));
 #if HAS_BLE_HID
         ble_hid_init("Test", true);
 #else
@@ -180,7 +190,187 @@ TEST_F(BleHid, BthomeQueueRejectsNewestAndPreservesOrder) {
     EXPECT_EQ(TestBle::event_starts, 4u);
 }
 
+TEST_F(BleHid, BluetoothPowerAndTimingPersistTogetherAcrossFailedWrites) {
+    Preferences preferences;
+    auto loaded = bthome::load_bluetooth_settings(preferences, 9);
+    EXPECT_EQ(loaded.tx_power_dbm, 9);
+    EXPECT_EQ(loaded.events.burst_ms, 350);
+    EXPECT_EQ(loaded.events.adv_interval_ms, 100);
+    ASSERT_TRUE(bthome::save_bluetooth_settings(preferences, {-6, {1000, 300}}));
+    loaded = bthome::load_bluetooth_settings(preferences, 9);
+    EXPECT_EQ(loaded.tx_power_dbm, -6);
+    EXPECT_EQ(loaded.events.burst_ms, 1000);
+    EXPECT_EQ(loaded.events.adv_interval_ms, 300);
+    preferences.write_succeeds = false;
+    EXPECT_FALSE(bthome::save_bluetooth_settings(preferences, {3, {100, 20}}));
+    loaded = bthome::load_bluetooth_settings(preferences, 9);
+    EXPECT_EQ(loaded.tx_power_dbm, -6);
+    EXPECT_EQ(loaded.events.burst_ms, 1000);
+    EXPECT_EQ(loaded.events.adv_interval_ms, 300);
+    preferences.write_succeeds = true;
+    EXPECT_FALSE(bthome::save_bluetooth_settings(preferences, {1, {100, 20}}));
+    EXPECT_FALSE(bthome::save_bluetooth_settings(preferences, {3, {100, 100}}));
+    loaded = bthome::load_bluetooth_settings(preferences, 9);
+    EXPECT_EQ(loaded.tx_power_dbm, -6);
+    EXPECT_EQ(loaded.events.burst_ms, 1000);
+}
+
+TEST_F(BleHid, CorruptBluetoothRecordResetsPowerAndTimingTogether) {
+    Preferences preferences;
+    ASSERT_TRUE(bthome::save_bluetooth_settings(preferences, {-12, {1000, 300}}));
+    for (const std::vector<uint8_t>& corrupt : {
+            std::vector<uint8_t>{100, 0, 100, 0, 0},
+            std::vector<uint8_t>{100, 0, 20, 0, 1},
+            std::vector<uint8_t>{2, 0}}) {
+        preferences.values.begin()->second = corrupt;
+        const auto loaded = bthome::load_bluetooth_settings(preferences, 9);
+        EXPECT_EQ(loaded.tx_power_dbm, 9);
+        EXPECT_EQ(loaded.events.burst_ms, 350);
+        EXPECT_EQ(loaded.events.adv_interval_ms, 100);
+    }
+}
+
+TEST_F(BleHid, JsonSettingsValidateStrictIntegersAndMergedPartialTuples) {
+    const bthome::EventSettings previous{350, 100};
+    bthome::EventSettings candidate;
+    for (const char* json : {
+            "{\"bthome_event_burst_ms\":100,\"bthome_event_adv_interval_ms\":20}",
+            "{\"bthome_event_burst_ms\":\"1000\",\"bthome_event_adv_interval_ms\":\"300\"}",
+            "{\"bthome_event_burst_ms\":900}",
+            "{\"bthome_event_adv_interval_ms\":116}"}) {
+        JsonDocument doc;
+        ASSERT_FALSE(deserializeJson(doc, json));
+        EXPECT_EQ(bthome::parse_event_settings_update(doc.as<JsonObjectConst>(), previous, candidate), nullptr);
+    }
+    for (const char* key : {"bthome_event_burst_ms", "bthome_event_adv_interval_ms"}) {
+        for (const char* value : {"true", "false", "null", "[]", "{}", "3.5", "\"\"", "\" \"",
+                "\"3junk\"", "\"+3\"", "\"1e2\"", "\"2147483648\"", "\"-2147483649\"", "4294967296", "-4294967296"}) {
+            std::string json = std::string("{\"") + key + "\":" + value + "}";
+            JsonDocument doc;
+            ASSERT_FALSE(deserializeJson(doc, json));
+            candidate = previous;
+            EXPECT_NE(bthome::parse_event_settings_update(doc.as<JsonObjectConst>(), previous, candidate), nullptr)
+                << json;
+            EXPECT_EQ(candidate.burst_ms, previous.burst_ms);
+        }
+    }
+    for (const char* json : {"{\"bthome_event_burst_ms\":299}",
+            "{\"bthome_event_adv_interval_ms\":117}", "{\"bthome_event_burst_ms\":1001}",
+            "{\"bthome_event_adv_interval_ms\":19}", "{\"bthome_event_adv_interval_ms\":301}"}) {
+        JsonDocument doc;
+        ASSERT_FALSE(deserializeJson(doc, json));
+        EXPECT_NE(bthome::parse_event_settings_update(doc.as<JsonObjectConst>(), previous, candidate), nullptr);
+    }
+}
+
+TEST_F(BleHid, SettingsApplyOnlyToNextBurstAndExpireAcrossMillisWrap) {
+    TestBle::clock_ms = UINT32_MAX - 150;
+    ASSERT_TRUE(bthome_events_send(1, bthome::press));
+    bthome_events_loop();
+    EXPECT_EQ(TestBle::advertising_power, ESP_PWR_LVL_P9);
+    EXPECT_EQ(TestBle::default_power, ESP_PWR_LVL_P9);
+    const auto power_calls = TestBle::power_calls.size();
+    EXPECT_EQ(TestBle::event_parameters.itvl_min, 160);
+    ASSERT_TRUE(bthome_events_send(10, bthome::double_press));
+    ASSERT_TRUE(bthome_events_apply_settings({900, 300}));
+    TestBle::clock_ms += 349;
+    bthome_events_loop();
+    EXPECT_EQ(TestBle::event_starts, 1u);
+    EXPECT_EQ(TestBle::advertising_power, ESP_PWR_LVL_P9);
+    ++TestBle::clock_ms;
+    bthome_events_loop();
+    EXPECT_EQ(TestBle::event_starts, 2u);
+    EXPECT_EQ(TestBle::advertising_power, ESP_PWR_LVL_P9);
+    EXPECT_EQ(TestBle::event_parameters.itvl_min, 480);
+    EXPECT_EQ(TestBle::event_parameters.itvl_max, 480);
+    EXPECT_EQ(TestBle::advertisement[29], 2);
+    TestBle::clock_ms += 899;
+    bthome_events_loop();
+    EXPECT_TRUE(event_active);
+    ++TestBle::clock_ms;
+    bthome_events_loop();
+    EXPECT_FALSE(event_active);
+    EXPECT_EQ(TestBle::advertising_power, ESP_PWR_LVL_P9);
+    EXPECT_EQ(TestBle::default_power, ESP_PWR_LVL_P9);
+    EXPECT_EQ(TestBle::power_calls.size(), power_calls);
+}
+
+TEST_F(BleHid, BootPowerSharedWithHidAndEventsCannotChangeUntilReboot) {
+    BLEDevice::initialized = false;
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+    NimBLEDevice::initialized = false;
+#endif
+    ASSERT_TRUE(ble_backend_configure_power(-6));
+    TestBle::power_calls.clear();
+    EXPECT_FALSE(ble_backend_initialized());
+    EXPECT_TRUE(TestBle::power_calls.empty());
 #if HAS_BLE_HID
+    ble_hid_init("Test", true);
+#else
+    ASSERT_TRUE(bthome_events_prepare());
+#endif
+    EXPECT_EQ(TestBle::advertising_power, ESP_PWR_LVL_N6);
+    EXPECT_EQ(TestBle::default_power, ESP_PWR_LVL_N6);
+    EXPECT_EQ(TestBle::scan_power, ESP_PWR_LVL_N6);
+    EXPECT_FALSE(ble_backend_configure_power(9));
+    EXPECT_EQ(ble_backend_tx_power_dbm(), -6);
+    const auto inits = TestBle::host_inits;
+    EXPECT_FALSE(bthome_events_apply_settings({350, 200}));
+    EXPECT_EQ(TestBle::host_inits, inits);
+    ASSERT_TRUE(bthome_events_send(1, bthome::press));
+    bthome_events_loop();
+    TestBle::clock_ms += 350;
+    bthome_events_loop();
+    EXPECT_EQ(TestBle::event_starts, 1u);
+    EXPECT_EQ(TestBle::advertising_power, ESP_PWR_LVL_N6);
+    EXPECT_EQ(TestBle::default_power, ESP_PWR_LVL_N6);
+    EXPECT_EQ(TestBle::power_calls.size(), 3u);
+}
+
+TEST_F(BleHid, FailedStopKeepsRadioOwnedUntilRecovery) {
+    ASSERT_TRUE(bthome_events_apply_settings({100, 20}));
+    ASSERT_TRUE(bthome_events_send(1, bthome::press));
+    bthome_events_loop();
+    ASSERT_TRUE(bthome_events_send(2, bthome::press));
+    TestBle::clock_ms += 100;
+    TestBle::stop_succeeds = false;
+    bthome_events_loop();
+    EXPECT_TRUE(event_active);
+    EXPECT_EQ(TestBle::advertising_power, ESP_PWR_LVL_P9);
+    EXPECT_TRUE(radio_owned);
+    EXPECT_EQ(TestBle::event_starts, 1u);
+#if HAS_BLE_HID
+    EXPECT_TRUE(advertising_paused);
+#endif
+    TestBle::stop_succeeds = true;
+    bthome_events_loop();
+    EXPECT_EQ(TestBle::event_starts, 2u);
+    ota_active = true;
+    ++ota_epoch;
+    bthome_events_loop();
+    EXPECT_FALSE(event_active);
+    EXPECT_FALSE(radio_owned);
+    EXPECT_EQ(TestBle::advertising_power, ESP_PWR_LVL_P9);
+}
+
+#if HAS_BLE_HID
+TEST_F(BleHid, FailedHidRestorationBlocksNextEventUntilRetrySucceeds) {
+    ASSERT_TRUE(bthome_events_send(1, bthome::press));
+    bthome_events_loop();
+    ASSERT_TRUE(bthome_events_send(2, bthome::press));
+    TestBle::clock_ms += 350;
+    TestBle::telemetry_start_succeeds = false;
+    bthome_events_loop();
+    EXPECT_FALSE(event_active);
+    EXPECT_TRUE(radio_owned);
+    EXPECT_EQ(TestBle::advertising_power, ESP_PWR_LVL_P9);
+    EXPECT_EQ(TestBle::event_starts, 1u);
+    TestBle::telemetry_start_succeeds = true;
+    bthome_events_loop();
+    EXPECT_TRUE(event_active);
+    EXPECT_EQ(TestBle::event_starts, 2u);
+}
+
 TEST_F(BleHid, BthomeDoesNotInterruptConnectedHidAndDefersReconnectAdvertising) {
     pair_owner();
     ASSERT_TRUE(bthome_events_send(4, bthome::long_press));

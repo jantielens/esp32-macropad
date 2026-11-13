@@ -561,12 +561,14 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/ble_telemetry.cpp
   - src/app/ble_telemetry.h
   - src/app/board_config.h
+  - src/app/bthome_event_settings.cpp
   - src/app/bthome_events.cpp
   - src/app/bthome_events.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/duty_cycle.cpp
   - src/app/mcp_tools_config.cpp
+  - src/app/portal_components.cpp
   - src/app/sensors/aht10_sensor.cpp
   - src/app/sensors/battery_adc_sensor.cpp
   - src/app/sensors/dummy_sensor.cpp
@@ -584,6 +586,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/ble_hid.cpp
   - src/app/ble_hid.h
   - src/app/board_config.h
+  - src/app/bthome_event_settings.cpp
   - src/app/bthome_events.cpp
   - src/app/bthome_events.h
   - src/app/config_manager.cpp

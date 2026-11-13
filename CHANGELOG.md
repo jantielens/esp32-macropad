@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-11-11
+ms.date: 2026-11-13
 ms.topic: reference
 ---
 
@@ -16,6 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Send Home Assistant remote-control events from button actions using BTHome
+  Bluetooth advertisements. Choose device-wide Button 1-10 and Press, Double
+  press, or Long press. Events are unencrypted and best-effort; queue admission
+  does not confirm delivery or automation execution.
+  See [BTHome button events](docs/user/integrations/home-assistant.md#send-a-bthome-button-event).
+* Configure BTHome button-event burst duration and advertising interval under
+  **Connectivity > Bluetooth**. Timing saves apply to the next burst without
+  reboot; a burst already running keeps its original timing.
+  See [BTHome publishing settings](docs/user/integrations/home-assistant.md#send-a-bthome-button-event).
 * Add the `reterminal-sticky-interactive` Macropad target with Wi-Fi,
   SSD1677/SSD2677 black-and-white rendering with partial refresh and full-refresh
   cleanup, four-level grayscale full refresh, GT911 touch, three configurable
@@ -37,6 +46,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Share one Bluetooth transmit-power setting across BTHome button events,
+  sensor telemetry, and Bluetooth keyboard/mouse/gamepad HID. Move power
+  control from Operating Mode to **Connectivity > Bluetooth**; save and reboot
+  to apply it. Hosted backends leave power under co-processor control.
+  Earlier saved sensor-power settings are not migrated; power defaults to
+  +9 dBm, so reselect a lower value after updating if needed.
+  See [Bluetooth configuration](docs/user/integrations/home-assistant.md#send-a-bthome-button-event).
+* Support per-board selection of an opt-in NimBLE-Arduino advertising backend
+  for eligible ESP32-S3 builds with PSRAM. Existing boards retain the bundled
+  backend by default; HID and other target migrations remain separate work.
+  See [BLE backend selection](docs/dev/build-and-release-process.md#ble-backend-and-broadcast-profile).
 * Organize board-exclusive display, touch, and sensor adapters under
   `src/boards/<board>/drivers/`, keeping board-wide initialization separate
   from drivers and reusable controllers and helpers shared. Apply this ownership
@@ -47,6 +67,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Persist Bluetooth power and event timing together so a failed settings write
+  cannot leave a partially saved Bluetooth configuration.
+* Retry HID advertising restoration after BTHome events before sending queued
+  events, retaining radio ownership until advertising recovery succeeds.
 * Open temporary configuration access on saved Wi-Fi after a reset or power
   cycle on headless MQTT/BLE duty-cycle sensor nodes. Deep-sleep wakes keep
   their normal duty cycle. New sensor-node configurations default to a

@@ -89,7 +89,7 @@ size_t build_payload(uint8_t *out, size_t out_cap) {
 
 } // namespace
 
-void ble_telemetry_init(const char *device_name, int8_t tx_power_dbm) {
+void ble_telemetry_init(const char *device_name) {
     if (g_initialized) return;
     const char *name = (device_name && device_name[0]) ? device_name : "esp32-telemetry";
     strlcpy(g_device_name, name, sizeof(g_device_name));
@@ -97,32 +97,8 @@ void ble_telemetry_init(const char *device_name, int8_t tx_power_dbm) {
         LOGE(TAG, "BLE stack init failed");
         return;
     }
-    esp_power_level_t power_level;
-    switch (tx_power_dbm) {
-        case -12: power_level = ESP_PWR_LVL_N12; break;
-        case -9: power_level = ESP_PWR_LVL_N9; break;
-        case -6: power_level = ESP_PWR_LVL_N6; break;
-        case -3: power_level = ESP_PWR_LVL_N3; break;
-        case 0: power_level = ESP_PWR_LVL_N0; break;
-        case 3: power_level = ESP_PWR_LVL_P3; break;
-        case 6: power_level = ESP_PWR_LVL_P6; break;
-        case 9: power_level = ESP_PWR_LVL_P9; break;
-        default:
-            LOGE(TAG, "Unsupported TX power: %d dBm", (int)tx_power_dbm);
-            return;
-    }
-#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
-    if (!NimBLEDevice::setPowerLevel(power_level, ESP_BLE_PWR_TYPE_ADV) ||
-        !NimBLEDevice::setPowerLevel(power_level, ESP_BLE_PWR_TYPE_DEFAULT)) {
-        LOGE(TAG, "Could not set BLE transmit power");
-        return;
-    }
-#else
-    BLEDevice::setPower(power_level, ESP_BLE_PWR_TYPE_ADV);
-    BLEDevice::setPower(power_level, ESP_BLE_PWR_TYPE_DEFAULT);
-#endif
     g_initialized = true;
-    LOGI(TAG, "BLE telemetry initialized as '%s' (TX %+d dBm)", g_device_name, (int)tx_power_dbm);
+    LOGI(TAG, "BLE telemetry initialized as '%s'", g_device_name);
 }
 
 void ble_telemetry_deinit() {

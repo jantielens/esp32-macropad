@@ -34,7 +34,7 @@
 // Initialize the selected BLE host without starting advertising.
 // Idempotent — safe to call multiple times. Must be called from a normal
 // (non-ISR) context after NVS.
-void ble_telemetry_init(const char *device_name, int8_t tx_power_dbm);
+void ble_telemetry_init(const char *device_name);
 
 // Stop advertising. Does NOT deinitialize the underlying BLE controller —
 // other BLE users (e.g. BLE HID) may still hold it. Safe to call when

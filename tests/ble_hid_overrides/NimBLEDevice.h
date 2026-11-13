@@ -55,7 +55,11 @@ public:
     static void init(const char*) { ++TestBle::host_inits; initialized = init_succeeds; }
     static bool isInitialized() { return initialized; }
     static NimBLEAdvertising* getAdvertising() { return &advertising; }
-    static bool setPowerLevel(esp_power_level_t, esp_ble_power_type_t) {
+    static esp_power_level_t getPowerLevel(esp_ble_power_type_t type) {
+        return esp_ble_tx_power_get(type);
+    }
+    static bool setPowerLevel(esp_power_level_t power, esp_ble_power_type_t type) {
+        test_set_power(power, type);
         return TestBle::power_succeeds;
     }
 };

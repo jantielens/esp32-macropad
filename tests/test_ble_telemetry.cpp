@@ -32,40 +32,54 @@ protected:
         TestBle::event_start_result = 0;
         TestBle::data_succeeds = true;
         TestBle::power_succeeds = true;
+        TestBle::power_read_succeeds = true;
+        TestBle::power_calls.clear();
+        TestBle::advertising_power = TestBle::default_power = ESP_PWR_LVL_N0;
         TestBle::telemetry_start_succeeds = true;
         TestBle::clock_ms = 0;
         TestBle::host_inits = 0;
+        ASSERT_TRUE(ble_backend_configure_power(9));
     }
 };
 
-TEST_F(BleTelemetry, FailedStartupAndInvalidPowerRejectAdvertising) {
+TEST_F(BleTelemetry, FailedStartupAndPowerApplicationRejectAdvertising) {
+    ASSERT_TRUE(ble_backend_configure_power(-12));
+    EXPECT_FALSE(ble_backend_configure_power(7));
     BLEDevice::init_succeeds = false;
 #if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
     NimBLEDevice::init_succeeds = false;
 #endif
-    ble_telemetry_init("Sensor", 0);
+    ble_telemetry_init("Sensor");
     ble_telemetry_set_u8(1, 50);
     EXPECT_FALSE(ble_telemetry_advertise_burst(1, 100));
     BLEDevice::init_succeeds = true;
 #if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
     NimBLEDevice::init_succeeds = true;
 #endif
-    ble_telemetry_init("Sensor", 7);
-    EXPECT_FALSE(ble_telemetry_advertise_burst(1, 100));
-#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
     TestBle::power_succeeds = false;
-    ble_telemetry_init("Sensor", 0);
+    ble_telemetry_init("Sensor");
     EXPECT_FALSE(ble_telemetry_advertise_burst(1, 100));
     TestBle::power_succeeds = true;
-#endif
-    ble_telemetry_init("Sensor", -12);
+    TestBle::power_read_succeeds = false;
+    ble_telemetry_init("Sensor");
+    EXPECT_FALSE(ble_telemetry_advertise_burst(1, 100));
+    TestBle::power_read_succeeds = true;
+    ble_telemetry_init("Sensor");
     EXPECT_TRUE(ble_telemetry_advertise_burst(1, 100));
+    EXPECT_EQ(TestBle::advertising_power, ESP_PWR_LVL_N12);
+    EXPECT_EQ(TestBle::default_power, ESP_PWR_LVL_N12);
 }
 
 TEST_F(BleTelemetry, PreservesEmbeddedZerosAndSharedHostAcrossBursts) {
-    ble_telemetry_init("Sensor", 3);
+    ASSERT_TRUE(ble_backend_configure_power(3));
+    ble_telemetry_init("Sensor");
     EXPECT_FALSE(TestBle::radio_advertising);
-    ble_telemetry_init("Sensor", 3);
+    EXPECT_EQ(TestBle::advertising_power, ESP_PWR_LVL_P3);
+    EXPECT_EQ(TestBle::default_power, ESP_PWR_LVL_P3);
+    EXPECT_EQ(TestBle::scan_power, ESP_PWR_LVL_P3);
+    EXPECT_FALSE(ble_backend_configure_power(-12));
+    EXPECT_EQ(ble_backend_tx_power_dbm(), 3);
+    ble_telemetry_init("Sensor");
     EXPECT_EQ(TestBle::host_inits, 1u);
     ASSERT_TRUE(ble_telemetry_set_s16(2, 0));
     ASSERT_TRUE(ble_telemetry_set_u16(3, 256));
@@ -77,12 +91,13 @@ TEST_F(BleTelemetry, PreservesEmbeddedZerosAndSharedHostAcrossBursts) {
     EXPECT_FALSE(TestBle::radio_advertising);
     ble_telemetry_deinit();
     EXPECT_TRUE(ble_backend_initialized());
-    ble_telemetry_init("Sensor", 3);
+    ble_telemetry_init("Sensor");
     EXPECT_EQ(TestBle::host_inits, 1u);
+    EXPECT_EQ(TestBle::power_calls.size(), 3u);
 }
 
 TEST_F(BleTelemetry, AdvertisementFailuresAreReportedAndFailedStopCanBeRetried) {
-    ble_telemetry_init("Sensor", 9);
+    ble_telemetry_init("Sensor");
     ASSERT_TRUE(ble_telemetry_set_u8(1, 50));
     TestBle::data_succeeds = false;
     EXPECT_FALSE(ble_telemetry_advertise_burst(1, 100));

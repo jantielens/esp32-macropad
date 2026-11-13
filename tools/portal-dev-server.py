@@ -32,7 +32,8 @@ PROTO_DIR = SCRIPT_DIR / "portal-prototype"
 MOCK_DIR = SCRIPT_DIR / "mock-data"
 APP_WEB_DIR = SCRIPT_DIR.parent / "src" / "app" / "web"
 EPAPER_WEB_DIR = SCRIPT_DIR.parent / "src" / "app" / "device_classes" / "epaper_frame" / "web"
-PROFILES = ("esp32-p4-lcd4b", "jc3248w535", "reterminal-e1003-frame", "crowpanel-4.2-interactive")
+PROFILES = ("esp32-p4-lcd4b", "jc3248w535", "reterminal-e1003-frame", "crowpanel-4.2-interactive",
+            "reterminal-sticky-interactive")
 SCENARIOS = ("normal", "load-error", "save-error", "invalid-bindings")
 HA_ENTITIES = {
     "sensor.living_room_temperature": {
@@ -67,6 +68,10 @@ EPAPER_PRESENTATION_DEFAULTS = {
     "epaper_vcom_mv": 0, "epaper_default_vcom_mv": 0,
     "epaper_binding_refresh_interval_ms": 1000, "epaper_min_refresh_interval_ms": 500,
     "epaper_refresh_clock_on_minute_boundary": True, "epaper_full_refresh_threshold": 10,
+}
+BTHOME_EVENT_DEFAULTS = {
+    "bthome_event_burst_ms": 350,
+    "bthome_event_adv_interval_ms": 100,
 }
 DIALOG_APPEARANCE_DEFAULTS = {
     "font": "", "font_size": 0, "text_color": "#FFFFFF",
@@ -179,6 +184,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
         selected = cookie.get("portal_mock_profile")
         profile = selected.value if selected else self.server.profile
         return profile if profile in PROFILES else self.server.profile
+
+    def _bthome_capable(self):
+        return self._profile() == "reterminal-sticky-interactive"
 
     def _fonts_available(self):
         return self._profile() in ("esp32-p4-lcd4b", "jc3248w535")
@@ -310,6 +318,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
 
         # Device API fixtures. POSTs are accepted in do_POST below.
         elif path == "/api/config":
+            if self.server.scenario == "load-error":
+                self._serve_json({"success": False, "message": "Mock configuration load failed"}, 503)
+                return
             config = copy.deepcopy(self.server.mock_config)
             config["caps"]["ha_live"] = self._profile() == "esp32-p4-lcd4b"
             if self._profile() in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
@@ -350,6 +361,20 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 config["caps"].update(ble=False, ble_hid=False, display=True, touch=True, ha_history=True)
             elif self._profile() == "jc3248w535":
                 config["caps"].update(ble=False, ble_hid=False, usb_hid=True, display=True, touch=True, ha_history=True)
+            if self._profile() == "reterminal-sticky-interactive":
+                config["caps"].update(ble=True, ble_hid=False, usb_hid=False, display=True, touch=True)
+            config["caps"]["bthome_events"] = self._bthome_capable()
+            config["caps"]["bluetooth_tx_power"] = self._bthome_capable()
+            for key, value in BTHOME_EVENT_DEFAULTS.items():
+                if self._bthome_capable():
+                    config.setdefault(key, value)
+                else:
+                    config.pop(key, None)
+            for key in ("bluetooth_tx_power_dbm", "bluetooth_active_tx_power_dbm"):
+                if self._bthome_capable():
+                    config.setdefault(key, 9)
+                else:
+                    config.pop(key, None)
             if self._profile() == "crowpanel-4.2-interactive":
                 config["caps"].update(display=True, touch=False)
                 for key, value in EPAPER_PRESENTATION_DEFAULTS.items():
@@ -632,6 +657,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
         # Fragment API — production fragments take precedence.
         elif path.startswith("/api/section/"):
             fragment = path[len("/api/section/"):]
+            if fragment == "bluetooth" and not self._bthome_capable():
+                self.send_error(404, "BTHome events unavailable")
+                return
             if fragment == "external-data" and self._profile() not in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
                 self.send_error(404, "External data unavailable")
                 return
@@ -1037,6 +1065,41 @@ class PortalHandler(SimpleHTTPRequestHandler):
         if path == "/api/config":
             try:
                 update = json.loads(body.decode("utf-8"))
+                if not isinstance(update, dict):
+                    self._serve_json({"success": False, "message": "Configuration must be an object"}, 400)
+                    return
+                if "bluetooth_tx_power_dbm" in update:
+                    power = update["bluetooth_tx_power_dbm"]
+                    if isinstance(power, str) and re.fullmatch(r"-?[0-9]{1,10}", power):
+                        power = int(power)
+                    if (not self._bthome_capable() or type(power) is not int or
+                            not -12 <= power <= 9 or power % 3 != 0):
+                        self._serve_json({"success": False, "message": "Invalid Bluetooth transmit power"}, 400)
+                        return
+                    update["bluetooth_tx_power_dbm"] = power
+                if any(key in update for key in BTHOME_EVENT_DEFAULTS):
+                    if not self._bthome_capable():
+                        self._serve_json({"success": False, "message": "BTHome events are unavailable on this firmware"}, 400)
+                        return
+                    candidate = {}
+                    for key, default in BTHOME_EVENT_DEFAULTS.items():
+                        value = update.get(key, self.server.mock_config.get(key, default))
+                        if isinstance(value, str) and re.fullmatch(r"-?[0-9]{1,10}", value):
+                            value = int(value)
+                        if type(value) is not int:
+                            self._serve_json({"success": False, "message": "BTHome event settings must be decimal integers"}, 400)
+                            return
+                        candidate[key] = value
+                    burst = candidate["bthome_event_burst_ms"]
+                    interval = candidate["bthome_event_adv_interval_ms"]
+                    if not (100 <= burst <= 1000
+                            and 20 <= interval <= 300 and burst >= 3 * interval):
+                        self._serve_json({"success": False, "message": "Invalid BTHome event timing tuple"}, 400)
+                        return
+                    update.update(candidate)
+                if self.server.scenario == "save-error":
+                    self._serve_json({"success": False, "message": "Mock configuration save failed"}, 500)
+                    return
                 if "external_data" in update:
                     sources = update.pop("external_data")
                     if not isinstance(sources, list) or len(sources) > 4:
@@ -1092,6 +1155,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             self.server.mock_config["keyboard_status"] = "disabled" if self.server.mock_config["keyboard_transport"] == "none" else "ready"
             self.server.mock_config["current_backlight_brightness"] = self.server.mock_config["backlight_brightness"]
             self.server.mock_config["current_audio_volume"] = self.server.mock_config.get("audio_volume", 70)
+            self.server.mock_config["bluetooth_active_tx_power_dbm"] = self.server.mock_config["bluetooth_tx_power_dbm"]
             self._serve_json({"success": True, "message": "Mock reboot complete"})
         elif path in (
             "/api/component/epaper-status/refresh",
@@ -1328,6 +1392,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
             if category["id"] == "connectivity" and profile in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
                 category["items"].append({"id": "external-data", "display_name": "External Data",
                                           "portal_script": "/portal-external-data.js"})
+            if category["id"] == "connectivity" and profile == "reterminal-sticky-interactive":
+                category["items"].append({"id": "bluetooth", "display_name": "Bluetooth"})
             if category["id"] == "display" and profile == "crowpanel-4.2-interactive":
                 category["items"].append({"id": "epaper-refresh", "display_name": "E-paper Presentation",
                                           "portal_script": "/portal-epaper-refresh.js"})
@@ -1344,7 +1410,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 if item["id"] == "ble":
                     item["id"] = "hid"
                     item["display_name"] = "Keyboard, Mouse & Gamepad"
-        if profile in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
+        if profile in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive", "reterminal-sticky-interactive"):
             nav["primary"] = {"fragment": "pad-editor", "label": "Pad Editor", "icon": ""}
             nav["categories"] = [category for category in nav["categories"] if category["id"] != "sensors"]
             return nav
@@ -1372,7 +1438,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             "ap_active": False, "has_mqtt": True, "has_alarm": False,
             "has_audio_amplifier_mute": self._profile() == "esp32-p4-lcd4b",
             "has_touch": True, "has_usb_hid": True, "has_ttf_fonts": self._fonts_available()}
-        if self._profile() in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
+        if self._profile() in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive", "reterminal-sticky-interactive"):
             info.update(device_class="Macropad", board=self._profile(), has_display=True,
                         has_backlight=True, has_audio=True, has_sound_player=True, has_alarm=True,
                         has_native_extensions=True, has_camera=False, has_image_fetch=True,
@@ -1392,6 +1458,11 @@ class PortalHandler(SimpleHTTPRequestHandler):
                             has_backlight=False, has_alarm=False, has_native_extensions=False,
                             has_image_fetch=False, has_image_library=False,
                             display_coord_width=400, display_coord_height=300)
+            if self._profile() == "reterminal-sticky-interactive":
+                info.update(chip_model="ESP32-S3", has_ble=True, has_ble_hid=False, has_usb_hid=False,
+                            has_audio=False, has_sound_player=False, has_backlight=False, has_alarm=False,
+                            has_native_extensions=False, has_image_fetch=False, has_image_library=False,
+                            display_coord_width=384, display_coord_height=472)
             if include_catalog:
                 info["catalog"] = self.server.pad_fixture["catalog"]
                 info["widget_catalog"] = [
@@ -1513,7 +1584,9 @@ def main():
         "duty_cycle_wake_seconds": 120,
         "ble_burst_count": 3,
         "ble_adv_interval_ms": 100,
-        "ble_tx_power_dbm": 9,
+        "bluetooth_tx_power_dbm": 9,
+        "bluetooth_active_tx_power_dbm": 9,
+        **BTHOME_EVENT_DEFAULTS,
         "caps": {"ble": True, "mqtt": True, "ble_hid": True, "usb_hid": True},
         "keyboard_transport": "none",
         "keyboard_active_transport": "none",

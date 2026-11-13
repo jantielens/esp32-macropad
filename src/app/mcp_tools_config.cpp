@@ -22,6 +22,7 @@
 // ============================================================================
 
 #include "mcp_tool_registry.h"
+#include "ble_backend.h"
 #include "mcp_tool_util.h"
 #include "web_mcp.h"
 
@@ -175,7 +176,11 @@ static bool tool_get_config(const JsonObject& args, JsonObject& result, String& 
 #if HAS_BLE
     result["ble_burst_count"]    = c->ble_burst_count;
     result["ble_adv_interval_ms"] = c->ble_adv_interval_ms;
-    result["ble_tx_power_dbm"] = c->ble_tx_power_dbm;
+#endif
+#if HAS_BLE || HAS_BLE_HID
+    if (ble_backend_power_supported()) result["bluetooth_tx_power_dbm"] = c->bluetooth_tx_power_dbm;
+    result["bthome_event_burst_ms"] = c->bthome_event.burst_ms;
+    result["bthome_event_adv_interval_ms"] = c->bthome_event.adv_interval_ms;
 #endif
 
     // Display.

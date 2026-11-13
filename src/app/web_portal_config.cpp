@@ -11,6 +11,9 @@
 #include "font_store.h"
 #endif
 #include "config_manager.h"
+#include "bthome_event_json.h"
+#include "bthome_events.h"
+#include "ble_backend.h"
 #include "wifi_manager.h"
 #include "time_service.h"
 #include "keyboard_hid.h"
@@ -211,8 +214,15 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				#if HAS_BLE
 				(*doc)["ble_burst_count"] = current_config->ble_burst_count;
 				(*doc)["ble_adv_interval_ms"] = current_config->ble_adv_interval_ms;
-				(*doc)["ble_tx_power_dbm"] = current_config->ble_tx_power_dbm;
 				#endif
+#if HAS_BLE || HAS_BLE_HID
+				if (ble_backend_power_supported()) {
+						(*doc)["bluetooth_tx_power_dbm"] = current_config->bluetooth_tx_power_dbm;
+						(*doc)["bluetooth_active_tx_power_dbm"] = ble_backend_tx_power_dbm();
+				}
+				(*doc)["bthome_event_burst_ms"] = current_config->bthome_event.burst_ms;
+				(*doc)["bthome_event_adv_interval_ms"] = current_config->bthome_event.adv_interval_ms;
+#endif
 
 				// Build capability map so the portal UI can hide controls for
 				// features that are not compiled into this firmware.
@@ -221,6 +231,12 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				caps["mqtt"] = (bool)HAS_MQTT;
 				caps["display"] = (bool)HAS_DISPLAY;
 				caps["ble_hid"] = (bool)HAS_BLE_HID;
+				caps["bthome_events"] = (bool)(HAS_BLE || HAS_BLE_HID);
+#if HAS_BLE || HAS_BLE_HID
+				caps["bluetooth_tx_power"] = ble_backend_power_supported();
+#else
+				caps["bluetooth_tx_power"] = false;
+#endif
 				caps["usb_hid"] = (bool)HAS_USB_HID;
 				caps["mcp"] = (bool)HAS_MCP;
 				caps["ha_history"] = (bool)HAS_HA_HISTORY;
@@ -464,6 +480,38 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				return;
 		}
 
+		const bool bthome_update = bthome::event_settings_update_present(doc.as<JsonObjectConst>());
+#if HAS_BLE || HAS_BLE_HID
+		const bthome::EventSettings previous_bthome_settings = current_config->bthome_event;
+		const int8_t previous_bluetooth_power = current_config->bluetooth_tx_power_dbm;
+		int32_t bluetooth_power_candidate = previous_bluetooth_power;
+		const bool bluetooth_power_update = doc.containsKey("bluetooth_tx_power_dbm");
+		bthome::EventSettings bthome_candidate = previous_bthome_settings;
+		const char* bthome_error = bthome_update ? bthome::parse_event_settings_update(
+				doc.as<JsonObjectConst>(), previous_bthome_settings, bthome_candidate) : nullptr;
+		if (!bthome_error && bluetooth_power_update &&
+				(!ble_backend_power_supported() ||
+				 !bthome::parse_event_json_integer(doc["bluetooth_tx_power_dbm"], bluetooth_power_candidate) ||
+				 !bluetooth_power_valid(bluetooth_power_candidate))) {
+				bthome_error = ble_backend_power_supported() ?
+						"Bluetooth transmit power must be -12 to +9 dBm in 3 dB steps" :
+						"Bluetooth transmit power is controlled by the hosted co-processor";
+		}
+#else
+		const char* bthome_error = (bthome_update || doc.containsKey("bluetooth_tx_power_dbm")) ?
+				"Bluetooth is unavailable on this firmware" : nullptr;
+#endif
+		if (bthome_error) {
+				StaticJsonDocument<192> response;
+				response["success"] = false;
+				response["message"] = bthome_error;
+				String response_body;
+				serializeJson(response, response_body);
+				request->send(400, "application/json", response_body);
+				portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+				return;
+		}
+
 #if HAS_EXTERNAL_DATA
 		std::unique_ptr<ExternalDataConfig, decltype(&heap_caps_free)> external_candidate(nullptr, heap_caps_free);
 		if (doc.containsKey("external_data")) {
@@ -620,31 +668,6 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 						return;
 				}
 				epaper_vcom_mv = uint16_t(magnitude);
-		}
-		#endif
-
-		#if HAS_BLE
-		int ble_tx_power_dbm = 0;
-		if (doc.containsKey("ble_tx_power_dbm")) {
-				JsonVariant value = doc["ble_tx_power_dbm"];
-				bool valid = false;
-				if (value.is<int>()) {
-						ble_tx_power_dbm = value.as<int>();
-						valid = true;
-				} else if (value.is<const char*>()) {
-						const char *text = value.as<const char*>();
-						char *end = nullptr;
-						const long parsed = strtol(text, &end, 10);
-						valid = end != text && *end == '\0' && parsed >= -12 && parsed <= 9;
-						if (valid) ble_tx_power_dbm = (int)parsed;
-				}
-				if (!valid || ble_tx_power_dbm < -12 || ble_tx_power_dbm > 9 || ble_tx_power_dbm % 3 != 0) {
-						request->send(400, "application/json", "{\"success\":false,\"message\":\"BLE TX power must be -12 to +9 dBm in 3 dB steps\"}");
-						portENTER_CRITICAL(&g_config_post_mux);
-						config_post_reset();
-						portEXIT_CRITICAL(&g_config_post_mux);
-						return;
-				}
 		}
 		#endif
 
@@ -873,9 +896,6 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 						: (uint16_t)(doc["ble_adv_interval_ms"] | 0);
 				if (v == 0) v = BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS;
 				current_config->ble_adv_interval_ms = v;
-		}
-		if (doc.containsKey("ble_tx_power_dbm")) {
-				current_config->ble_tx_power_dbm = (int8_t)ble_tx_power_dbm;
 		}
 		#endif
 
@@ -1184,10 +1204,17 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		const DialogTemplates previous_dialog_appearance = current_config->dialog_appearance;
 		current_config->dialog_appearance = dialog_candidate;
 		#endif
+#if HAS_BLE || HAS_BLE_HID
+		current_config->bthome_event = bthome_candidate;
+		current_config->bluetooth_tx_power_dbm = static_cast<int8_t>(bluetooth_power_candidate);
+#endif
 #if HAS_EXTERNAL_DATA
 		if (config_manager_save(current_config, external_candidate.get())) {
 #else
 		if (config_manager_save(current_config)) {
+#endif
+#if HAS_BLE || HAS_BLE_HID
+				if (bthome_update) bthome_events_apply_settings(bthome_candidate);
 #endif
 #if HAS_HA_LIVE
 				if (doc.containsKey("ha_url") || doc.containsKey("ha_token"))
@@ -1222,6 +1249,10 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				}
 		} else {
 				LOGE("Portal", "Config save failed");
+#if HAS_BLE || HAS_BLE_HID
+				current_config->bthome_event = previous_bthome_settings;
+				current_config->bluetooth_tx_power_dbm = previous_bluetooth_power;
+#endif
 				#if HAS_DISPLAY
 				current_config->backlight_brightness = previous_saved_brightness;
 				current_config->dialog_appearance = previous_dialog_appearance;

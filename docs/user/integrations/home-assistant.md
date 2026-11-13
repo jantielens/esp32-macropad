@@ -28,6 +28,26 @@ On BLE-capable firmware, choose **Connectivity > Send BTHome event** in a
 button's action dropdown. This sends a logical remote-control event; it does
 not call an HA service directly.
 
+Open the portal's **Connectivity > Bluetooth** section. **Bluetooth Transmit
+Power** is shared by BTHome button events, Bluetooth keyboard/mouse/gamepad
+HID, and sensor duty-cycle telemetry. It defaults to **+9 dBm**; choose -12
+to +9 dBm in 3 dBm steps. Higher power can improve reception but uses more
+energy. Choose **Save Transmit Power**, then reboot to apply it. Saving alone
+does not change the running radio. Hosted Bluetooth backends leave power
+under co-processor control and disable this selector.
+
+In **BTHome Button Event Publishing**, burst duration defaults to **350 ms**
+and accepts 100-1000 ms.
+Under **Advanced**, advertising interval defaults to **100 ms** and accepts
+20-300 ms. Duration must be at least three intervals. Longer bursts add
+reception opportunities but delay queued events; neither duration nor interval
+guarantees a packet count or delivery.
+
+Choose **Save Event Settings** to apply timing to the next event burst without
+reboot. A burst already running retains its original timing. These timing
+controls do not change sensor duty-cycle telemetry or HID. Each section saves
+only its own controls.
+
 1. Select **Button number** from **Button 1** through **Button 10**.
    Numbers are device-wide, not pad/grid positions. Reusing the same number
    and event on another pad deliberately triggers the same HA automation.

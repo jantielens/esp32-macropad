@@ -36,6 +36,7 @@
 #if HAS_BLE
 #include "ble_telemetry.h"
 #endif
+#include "ble_backend.h"
 #if HEALTH_HISTORY_ENABLED
 #include "health_history.h"
 #endif
@@ -219,7 +220,7 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 	g_normal_runtime_started = true;
 
 	#if (HAS_BLE || HAS_BLE_HID) && BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
-	bthome_events_configure(device_config.device_name);
+	bthome_events_configure(device_config.device_name, device_config.bthome_event);
 	bthome_events_prepare();
 	#endif
 
@@ -264,7 +265,7 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 	sensor_manager_init();
 
 	#if (HAS_BLE || HAS_BLE_HID) && BLE_BACKEND == BLE_BACKEND_ARDUINO_CORE
-	bthome_events_configure(device_config.device_name);
+	bthome_events_configure(device_config.device_name, device_config.bthome_event);
 	#endif
 
 	#if HAS_BLE_HID
@@ -557,10 +558,14 @@ void setup()
 	power_manager_set_current_mode(boot_mode);
 	power_manager_led_set_mode(boot_mode);
 
+	#if HAS_BLE || HAS_BLE_HID
+	ble_backend_configure_power(device_config.bluetooth_tx_power_dbm);
+	#endif
+
 	#if (HAS_BLE || HAS_BLE_HID) && BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
 	// Reserve BLE's internal RAM before WiFi and normal-runtime allocations.
 	if (boot_mode == PowerMode::AlwaysOn) {
-		bthome_events_configure(device_config.device_name);
+		bthome_events_configure(device_config.device_name, device_config.bthome_event);
 		bthome_events_prepare();
 	}
 	#endif
@@ -699,7 +704,7 @@ void setup()
 		// Initialize sensors (their update path buffers BLE telemetry values)
 		sensor_manager_init();
 
-		ble_telemetry_init(device_config.device_name, device_config.ble_tx_power_dbm);
+		ble_telemetry_init(device_config.device_name);
 
 		duty_cycle_run(&device_config);
 		return;

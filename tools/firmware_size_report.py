@@ -91,7 +91,7 @@ FEATURES = {
     "Shared HID": (
         ("*hid.cpp.o",), ("hid_fragment_html_gz",),
     ),
-    "Bluetooth stack / telemetry (HAS_BLE_HID / HAS_BLE)": (("ble_*.cpp.o", "bthome_events.cpp.o"), ()),
+    "Bluetooth stack / telemetry (HAS_BLE_HID / HAS_BLE)": (("ble_*.cpp.o", "bthome_*.cpp.o"), ()),
     "Wi-Fi / networking (shared)": (
         ("wifi*.cpp.o", "net_activity.cpp.o", "web_portal_ap.cpp.o"), ("wifi_fragment_html_gz",),
     ),

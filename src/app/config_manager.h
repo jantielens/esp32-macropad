@@ -22,6 +22,7 @@
 #include "board_config.h"
 #include "keyboard_transport.h"
 #include "external_data_config.h"
+#include "bthome_event_settings.h"
 #if HAS_CAMERA
 #include "camera_motion.h"
 #endif
@@ -51,7 +52,7 @@
 // Operating mode (always_on | duty_cycle_mqtt | duty_cycle_ble | duty_cycle_epaper_frame). Sized to fit longest value + NUL.
 #define CONFIG_OPERATING_MODE_MAX_LEN 32
 #define CONFIG_MQTT_SCOPE_MAX_LEN 20
-#define CONFIG_DEFAULT_BLE_TX_POWER_DBM 9
+#define CONFIG_DEFAULT_BLUETOOTH_TX_POWER_DBM 9
 #define CONFIG_BOOT_COLOR_INHERIT 0xFFFFFFFFUL
 #define CONFIG_BOOT_LOGO_SLOT_NONE 255
 
@@ -138,7 +139,10 @@ struct DeviceConfig {
 #if HAS_BLE
 		uint8_t ble_burst_count;                               // default BLE_TELEMETRY_DEFAULT_BURST_COUNT; advertising packets per wake
 		uint16_t ble_adv_interval_ms;                          // default BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS; ms between adv packets in a burst
-		int8_t ble_tx_power_dbm;
+#endif
+#if HAS_BLE || HAS_BLE_HID
+		int8_t bluetooth_tx_power_dbm;
+		bthome::EventSettings bthome_event;
 #endif
 
 		// MQTT scope

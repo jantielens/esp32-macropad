@@ -95,6 +95,9 @@
 #endif // HAS_MCP
 
 // --- BLE-gated components ---
+#if HAS_BLE || HAS_BLE_HID
+#include "components/bluetooth_component.cpp"
+#endif
 #if HAS_BLE_HID || HAS_USB_HID
 #include "components/hid_component.cpp"
 #endif

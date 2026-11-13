@@ -39,7 +39,10 @@ Use a receiver supporting BTHome v2, such as HA's Bluetooth integration.
 Burst Count 1-255 defaults to 3; Advertising Interval 20-10240 ms defaults to 100.
 The implementation holds the advertiser for count times interval plus a short
 margin; this is not a guaranteed exact packet count at the receiver.
-Transmit power ranges from -12 through +9 dBm.
+Set shared transmit power under **Connectivity > Bluetooth**, not Operating
+Mode. It ranges from -12 through +9 dBm (default +9). Choose **Save Transmit
+Power** and reboot to apply it; it also affects other supported Bluetooth
+features. Hosted backends leave power under co-processor control.
 More/stronger advertising trades battery for reception probability.
 
 BLE telemetry is not BLE HID keyboard pairing and needs no MQTT broker.

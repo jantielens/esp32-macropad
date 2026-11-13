@@ -3,6 +3,7 @@
 #if HAS_BLE_HID
 
 #include "config_manager.h"
+#include "ble_backend.h"
 #include "key_sequence.h"
 #include "keyboard_transport.h"
 #include "mouse_hid_state.h"
@@ -239,7 +240,9 @@ static void configure_hid_advertising() {
 }
 
 bool ble_hid_pause_advertising(bool paused) {
-    if (!hid_service_ready || advertising_paused == paused) return true;
+    if (!hid_service_ready) return true;
+    if (advertising_paused == paused)
+        return paused || connected || advertising_active || start_advertising();
     if (paused) {
         if (!BLEDevice::getAdvertising()->stop()) return false;
         advertising_paused = true;
@@ -608,8 +611,7 @@ void ble_hid_init(const char* device_name, bool force_pairing_mode) {
     keyboard_transport_device_name(ble_name_str, sizeof(ble_name_str), device_name, KeyboardTransport::Ble);
     LOGI(TAG, "Initializing BLE HID keyboard as '%s'", ble_name_str);
 
-    BLEDevice::init(ble_name_str);
-    if (!BLEDevice::getInitialized()) {
+    if (!ble_backend_prepare(ble_name_str)) {
         LOGE(TAG, "BLE stack init failed — BLE unavailable on this board");
         init_error = true;
         return;

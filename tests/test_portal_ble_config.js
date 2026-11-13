@@ -7,16 +7,19 @@ const powers = [-12, -9, -6, -3, 0, 3, 6, 9];
 const elements = {
     ble_burst_count: { value: '', disabled: false },
     ble_adv_interval_ms: { value: '', disabled: false },
-    ble_tx_power_dbm: { value: '', disabled: false }
 };
-let stored = { ble_burst_count: 3, ble_adv_interval_ms: 100, ble_tx_power_dbm: 9 };
+let stored = { ble_burst_count: 3, ble_adv_interval_ms: 100 };
 let submitted;
 let pendingReboot = false;
 let healthPollingStopped = false;
+let saveFailure = false;
 const messages = [];
 const context = {
     console,
-    window: {},
+    window: {
+        __extra_config_fields: [],
+        registerConfigFields(names) { this.__extra_config_fields.push(...names); }
+    },
     setInterval() { return 1; },
     clearInterval() {},
     stopHealthPolling() { healthPollingStopped = true; },
@@ -47,6 +50,7 @@ const context = {
         assert.strictEqual(url, '/api/config?no_reboot=1');
         assert.strictEqual(options.method, 'POST');
         submitted = JSON.parse(options.body);
+        if (saveFailure) return { ok: false, json: async () => ({ success: false, message: 'NVS write failed' }) };
         stored = Object.assign({}, stored, submitted);
         return { ok: true, json: async () => ({ success: true }) };
     }
@@ -57,57 +61,124 @@ for (const file of ['portal_config.js', 'portal_fragment_init.js']) {
 }
 
 (async function () {
-    const fragment = fs.readFileSync('src/app/web/mode.fragment.html', 'utf8');
-    const selector = fragment.match(/<select[^>]*id="ble_tx_power_dbm"[^>]*>([\s\S]*?)<\/select>/);
-    assert(selector);
-    assert.match(selector[0], /name="ble_tx_power_dbm"/);
-    const options = Array.from(selector[1].matchAll(/<option value="(-?\d+)"/g), match => Number(match[1]));
-    assert.deepStrictEqual(options, powers);
-    assert.match(selector[1], /value="9" selected/);
-
+    await context.loadConfig();
+    await context.saveFragmentConfig(true);
+    assert.deepStrictEqual(submitted, {ble_burst_count: 3, ble_adv_interval_ms: 100});
+    assert.strictEqual(pendingReboot, true);
+    messages.length = 0;
+    const powerField = 'bluetooth_tx_power_dbm';
+    const eventFields = ['bthome_event_burst_ms', 'bthome_event_adv_interval_ms'];
+    const bluetoothFields = [powerField, ...eventFields];
+    const sensorElements = {};
+    for (const name of ['ble_burst_count', 'ble_adv_interval_ms']) {
+        sensorElements[name] = elements[name];
+        delete elements[name];
+    }
+    for (const name of bluetoothFields) elements[name] = { value: '', disabled: true };
+    for (const id of ['bluetooth-power-settings', 'bthome-event-settings']) elements[id] = {disabled: true};
+    for (const id of ['bluetooth-unavailable', 'bluetooth-power-pending', 'bluetooth-power-unavailable']) elements[id] = {hidden: true};
+    const clicks = {};
+    for (const id of ['bluetooth-power-save-btn', 'bthome-save-btn']) {
+        elements[id] = {disabled: true, addEventListener(event, callback) { clicks[id] = callback; }};
+    }
+    stored = {caps: {ble: true, ble_hid: false, bthome_events: true, bluetooth_tx_power: true},
+        bluetooth_tx_power_dbm: 9, bluetooth_active_tx_power_dbm: 9,
+        bthome_event_burst_ms: 350, bthome_event_adv_interval_ms: 100};
+    context.window.init_bluetooth_fragment();
+    await context.loadConfig();
+    assert.deepStrictEqual(context.window.__extra_config_fields, bluetoothFields);
+    assert.strictEqual(elements['bluetooth-power-settings'].disabled, false);
+    assert.strictEqual(elements['bthome-event-settings'].disabled, false);
+    assert.strictEqual(elements['bluetooth-unavailable'].hidden, true);
+    assert.strictEqual(elements['bluetooth-power-pending'].hidden, true);
     for (const power of powers) {
         for (const value of [power, String(power)]) {
-            assert.strictEqual(context.validateConfig({ ble_tx_power_dbm: value }).valid, true);
+            assert.strictEqual(context.validateConfig({ bluetooth_tx_power_dbm: value }).valid, true);
         }
-        stored.ble_tx_power_dbm = power;
-        await context.loadConfig();
-        assert.strictEqual(Number(elements.ble_tx_power_dbm.value), power);
-        elements.ble_tx_power_dbm.value = String(power);
+        elements.bluetooth_tx_power_dbm.value = String(power);
+        elements.bthome_event_burst_ms.value = 'invalid unsaved timing';
         pendingReboot = false;
-        await context.saveFragmentConfig(true);
-        assert.deepStrictEqual(submitted, {
-            ble_burst_count: 3,
-            ble_adv_interval_ms: 100,
-            ble_tx_power_dbm: String(power)
-        });
-        assert.strictEqual(pendingReboot, true);
-        elements.ble_tx_power_dbm.value = '';
+        await clicks['bluetooth-power-save-btn']();
+        assert.deepStrictEqual(submitted, {bluetooth_tx_power_dbm: String(power)});
+        assert.strictEqual(pendingReboot, power !== 9);
+        assert.strictEqual(stored.bluetooth_active_tx_power_dbm, 9);
         await context.loadConfig();
-        assert.strictEqual(Number(elements.ble_tx_power_dbm.value), power);
+        assert.strictEqual(Number(elements.bluetooth_tx_power_dbm.value), power);
+        assert.strictEqual(elements['bluetooth-power-pending'].hidden, power === 9);
+        if (power === 9) assert.strictEqual(messages.pop().type, 'success');
+        else assert.deepStrictEqual(messages, []);
     }
 
-    for (const value of [-15, 12, -1, 1, 3.5, '', ' ', '3junk', 'NaN', null, false, {}, []]) {
-        assert.strictEqual(context.validateConfig({ ble_tx_power_dbm: value }).valid, false, String(value));
+    for (const value of [-15, 12, -1, 1, 3.5, '', ' ', '3junk', 'NaN', ' 3', '+3', '1e2', null, false, {}, []]) {
+        assert.strictEqual(context.validateConfig({ bluetooth_tx_power_dbm: value }).valid, false, String(value));
     }
     assert.strictEqual(context.validateConfig({}).valid, true);
     assert.deepStrictEqual(messages, []);
 
-    elements.ble_tx_power_dbm.value = '1';
+    elements.bluetooth_tx_power_dbm.value = '1';
     submitted = null;
     pendingReboot = false;
-    await context.saveFragmentConfig(true);
+    await clicks['bluetooth-power-save-btn']();
     assert.strictEqual(submitted, null);
     assert.strictEqual(pendingReboot, false);
     assert.strictEqual(messages.pop().type, 'error');
-
-    elements.ble_tx_power_dbm.disabled = true;
-    await context.saveFragmentConfig(true);
-    assert.strictEqual(submitted.ble_tx_power_dbm, undefined);
-    delete elements.ble_tx_power_dbm;
+    elements.bthome_event_burst_ms.value = '900';
+    elements.bthome_event_adv_interval_ms.value = '300';
+    pendingReboot = false;
+    await clicks['bthome-save-btn']();
+    assert.deepStrictEqual(submitted, {bthome_event_burst_ms: '900', bthome_event_adv_interval_ms: '300'});
+    assert.strictEqual(stored.bluetooth_tx_power_dbm, '9');
+    assert.strictEqual(pendingReboot, false);
+    assert.strictEqual(messages.pop().type, 'success');
+    elements.bthome_event_burst_ms.value = '';
     await context.loadConfig();
+    assert.strictEqual(Number(elements.bthome_event_burst_ms.value), 900);
+    assert.strictEqual(context.validateConfig({bthome_event_burst_ms: 899}).valid, false);
+    assert.strictEqual(context.validateConfig({bthome_event_burst_ms: 1000}).valid, true);
+    const full = {bthome_event_burst_ms: 100, bthome_event_adv_interval_ms: 20};
+    assert.strictEqual(context.validateConfig(full).valid, true);
+    for (const key of eventFields) {
+        for (const value of [null, false, true, [], {}, 3.5, '', ' ', '100junk', '+100', '1e2', '2147483648', undefined]) {
+            assert.strictEqual(context.validateConfig({...full, [key]: value}).valid, false, key + ':' + String(value));
+        }
+    }
+    for (const caps of [{ble: false, ble_hid: true, bluetooth_tx_power: true},
+        {ble: false, ble_hid: true, bluetooth_tx_power: false},
+        {ble: false, ble_hid: false, bthome_events: false}]) {
+        stored.caps = caps;
+        await context.loadConfig();
+        assert.strictEqual(elements['bthome-save-btn'].disabled, !caps.ble_hid);
+        assert.strictEqual(elements['bluetooth-power-save-btn'].disabled, !caps.bluetooth_tx_power);
+        assert.strictEqual(elements['bluetooth-power-unavailable'].hidden, !caps.ble_hid || !!caps.bluetooth_tx_power);
+        assert.strictEqual(elements['bluetooth-unavailable'].hidden, !!caps.ble_hid);
+    }
+    stored.caps = {bthome_events: true, ble: true, ble_hid: false, bluetooth_tx_power: true};
+    await context.loadConfig();
+    elements.bthome_event_burst_ms.value = '1000';
+    saveFailure = true;
+    await clicks['bthome-save-btn']();
+    assert.match(messages.pop().message, /NVS write failed/);
+    assert.strictEqual(Number(stored.bthome_event_burst_ms), 900);
+    assert.strictEqual(Number(context.window.deviceConfig.bthome_event_burst_ms), 900);
+    assert.strictEqual(pendingReboot, false);
+    elements.bluetooth_tx_power_dbm.value = '-3';
+    await clicks['bluetooth-power-save-btn']();
+    assert.match(messages.pop().message, /NVS write failed/);
+    assert.strictEqual(Number(stored.bluetooth_tx_power_dbm), 9);
+    assert.strictEqual(pendingReboot, false);
+    saveFailure = false;
+    await clicks['bluetooth-power-save-btn']();
+    messages.pop();
+    assert.strictEqual(pendingReboot, true);
+    stored.bluetooth_active_tx_power_dbm = -3; // Mock a reboot.
+    await context.loadConfig();
+    assert.strictEqual(elements['bluetooth-power-pending'].hidden, true);
+    for (const name of [...bluetoothFields, 'bthome-event-settings', 'bluetooth-power-settings',
+        'bluetooth-unavailable', 'bluetooth-power-pending', 'bluetooth-power-unavailable',
+        'bthome-save-btn', 'bluetooth-power-save-btn']) delete elements[name];
+    Object.assign(elements, sensorElements);
     await context.saveFragmentConfig(true);
-    assert.strictEqual(submitted.ble_tx_power_dbm, undefined);
-    assert.deepStrictEqual(messages, []);
+    for (const name of bluetoothFields) assert.strictEqual(submitted[name], undefined);
 
     for (const id of ['keyboard-transport-choice', 'keyboard-save-bar', 'keyboard-active-transport', 'keyboard-active-heading', 'keyboard-pending', 'keyboard-status', 'ble-content', 'usb-content']) {
         elements[id] = { style: {}, textContent: '' };
@@ -205,6 +276,11 @@ for (const file of ['portal_config.js', 'portal_fragment_init.js']) {
     assert.strictEqual(elements['keyboard-active-heading'].textContent, 'Active USB Connection');
 
     const startup = fs.readFileSync('src/app/app.ino', 'utf8');
+    const configApi = fs.readFileSync('src/app/web_portal_config.cpp', 'utf8');
+    const capabilityMapStart = configApi.indexOf('JsonObject caps =');
+    assert(capabilityMapStart >= 0);
+    assert(configApi.indexOf('caps["bluetooth_tx_power"] = ble_backend_power_supported();') > capabilityMapStart,
+        'Register Bluetooth power support in the final capability map, not a map that gets replaced');
     const logger = fs.readFileSync('src/app/log_manager.cpp', 'utf8');
     assert.match(logger, /Serial.begin\(baud\);/);
     assert.match(logger, /Serial.print\(line\);/);
@@ -220,7 +296,7 @@ for (const file of ['portal_config.js', 'portal_fragment_init.js']) {
     assert.match(usbBackend, /if \(enable_hid\) \{\s*static USBHID active_hid[\s\S]*static USBHIDKeyboard keyboard;[\s\S]*static USBHIDConsumerControl consumer;/);
     assert.match(startup, /usb_hid_init\(device_config.device_name, device_config.keyboard_transport == KeyboardTransport::Usb\);/);
     assert.match(startup, /const bool defer_wifi_init\s*=\s*boot_mode == PowerMode::DutyCycleBle\s*\|\|\s*device_class_dispatch_defer_wifi_init\(&device_config, boot_mode\);\s*if \(!defer_wifi_init\) \{\s*wifi_manager_early_init\(\);/);
-    assert.match(startup, /ble_telemetry_init\(device_config.device_name, device_config.ble_tx_power_dbm\)/);
+    assert.match(startup, /ble_backend_configure_power\(device_config.bluetooth_tx_power_dbm\)/);
     const storage = fs.readFileSync('src/app/config_manager.cpp', 'utf8');
     assert(!storage.includes('HAS_BLE_HID && HAS_USB_HID'));
     assert.match(storage, /#if HAS_BLE_HID \|\| HAS_USB_HID\s*#define KEY_KEYBOARD_TRANSPORT/);
@@ -230,10 +306,7 @@ for (const file of ['portal_config.js', 'portal_fragment_init.js']) {
     const earlyDefaults = storage.slice(loadStart, preferencesBegin);
     assert.match(earlyDefaults, /config->ble_burst_count = BLE_TELEMETRY_DEFAULT_BURST_COUNT;/);
     assert.match(earlyDefaults, /config->ble_adv_interval_ms = BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS;/);
-    assert.match(earlyDefaults, /config->ble_tx_power_dbm = CONFIG_DEFAULT_BLE_TX_POWER_DBM;/);
     assert.match(earlyDefaults, /config->keyboard_transport = keyboard_transport_default\(HAS_BLE_HID, HAS_USB_HID\);/);
-    assert.match(storage, /config->ble_tx_power_dbm = preferences.getChar\(KEY_BLE_TX_POWER_DBM, CONFIG_DEFAULT_BLE_TX_POWER_DBM\);/);
-    assert.match(storage, /putChar\(KEY_BLE_TX_POWER_DBM, config->ble_tx_power_dbm\)/);
     let sleepClick;
     elements['sleep-seconds'] = { value: '', disabled: false };
     elements['sleep-status'] = { textContent: '' };

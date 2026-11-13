@@ -30,8 +30,6 @@ static constexpr uint8_t kBthomeLogLevel = LOG_LEVEL;
 
 namespace {
 constexpr const char* kBthomeTag = "BTHome";
-constexpr uint16_t kEventIntervalMs = 100;
-constexpr uint32_t kEventBurstMs = 350;
 constexpr size_t kEventQueueSize = 4;
 struct ButtonEvent {
     uint8_t button;
@@ -45,21 +43,26 @@ portMUX_TYPE queue_mux = portMUX_INITIALIZER_UNLOCKED;
 char event_device_name[32] = {};
 bool configured = false;
 bool event_active = false;
+bool radio_owned = false;
+bthome::EventSettings pending_settings;
+bthome::EventSettings active_settings;
 uint32_t event_started_ms = 0;
 uint32_t active_ota_epoch = 0;
 uint8_t packet_id = 0;
 
-void restore_hid_advertising() {
+bool release_event_radio() {
 #if HAS_BLE_HID
-    if (!ble_hid_pause_advertising(false))
+    if (!ble_hid_pause_advertising(false)) {
         LOGE(kBthomeTag, "Could not restore HID advertising");
+        return false;
+    }
 #endif
+    radio_owned = false;
+    return true;
 }
 
-bool start_event(const ButtonEvent& event) {
-#if BLE_BACKEND == BLE_BACKEND_ARDUINO_CORE
+bool start_event(const ButtonEvent& event, const bthome::EventSettings& settings) {
     if (!ble_backend_prepare(event_device_name)) return false;
-#endif
     if (!ble_backend_initialized()) {
         LOGE(kBthomeTag, "BLE unavailable; event dropped");
         return false;
@@ -70,6 +73,7 @@ bool start_event(const ButtonEvent& event) {
         return false;
     }
 #endif
+    radio_owned = true;
     // Include all positions, even for Button 1, so HA always uses button_N.
     uint8_t advertisement[10 + 2 * bthome::button_count] = {
         0x02, 0x01, 0x06,
@@ -87,12 +91,13 @@ bool start_event(const ButtonEvent& event) {
     NimBLEAdvertising* advertiser = NimBLEDevice::getAdvertising();
     if (!advertiser) {
         LOGE(kBthomeTag, "Advertiser unavailable; event dropped");
+        release_event_radio();
         return false;
     }
     NimBLEAdvertisementData data;
     advertiser->enableScanResponse(false);
-    advertiser->setMinInterval(kEventIntervalMs * 8 / 5);
-    advertiser->setMaxInterval(kEventIntervalMs * 8 / 5);
+    advertiser->setMinInterval(settings.adv_interval_ms * 8 / 5);
+    advertiser->setMaxInterval(settings.adv_interval_ms * 8 / 5);
     started = advertiser->setConnectableMode(BLE_GAP_CONN_MODE_NON) &&
         advertiser->setDiscoverableMode(BLE_GAP_DISC_MODE_NON) &&
         data.addData(advertisement, sizeof(advertisement)) &&
@@ -105,7 +110,7 @@ bool start_event(const ButtonEvent& event) {
     ble_gap_adv_params parameters = {};
     parameters.conn_mode = BLE_GAP_CONN_MODE_NON;
     parameters.disc_mode = BLE_GAP_DISC_MODE_NON;
-    parameters.itvl_min = parameters.itvl_max = kEventIntervalMs * 8 / 5;
+    parameters.itvl_min = parameters.itvl_max = settings.adv_interval_ms * 8 / 5;
     int result = ble_hs_id_infer_auto(0, &address_type);
     if (result == 0) result = ble_gap_adv_set_data(advertisement, sizeof(advertisement));
     if (result == 0)
@@ -120,17 +125,29 @@ bool start_event(const ButtonEvent& event) {
     data.addData(reinterpret_cast<char*>(advertisement), sizeof(advertisement));
     advertiser->setAdvertisementType(ADV_TYPE_NONCONN_IND);
     advertiser->setScanResponse(false);
-    advertiser->setMinInterval(kEventIntervalMs * 8 / 5);
-    advertiser->setMaxInterval(kEventIntervalMs * 8 / 5);
+    advertiser->setMinInterval(settings.adv_interval_ms * 8 / 5);
+    advertiser->setMaxInterval(settings.adv_interval_ms * 8 / 5);
     started = advertiser->setAdvertisementData(data) && advertiser->start();
     if (!started) LOGE(kBthomeTag, "Advertising failed; event dropped");
 #endif
-    if (!started) restore_hid_advertising();
+    if (!started) release_event_radio();
     return started;
 }
 }
 
-void bthome_events_configure(const char* device_name) {
+bool bthome_events_apply_settings(const bthome::EventSettings& settings) {
+    if (!bthome::valid_event_settings(settings)) {
+        LOGE(kBthomeTag, "Invalid event settings rejected");
+        return false;
+    }
+    portENTER_CRITICAL(&queue_mux);
+    pending_settings = settings;
+    portEXIT_CRITICAL(&queue_mux);
+    return true;
+}
+
+void bthome_events_configure(const char* device_name, const bthome::EventSettings& settings) {
+    if (!bthome_events_apply_settings(settings)) return;
     strlcpy(event_device_name, device_name && device_name[0] ? device_name : "esp32-macropad",
             sizeof(event_device_name));
     const bool available =
@@ -175,7 +192,7 @@ void bthome_events_loop() {
     const uint32_t epoch = ota_activity_epoch();
     if (event_active) {
         if (!ota_active && epoch == active_ota_epoch &&
-            uint32_t(now - event_started_ms) < kEventBurstMs) return;
+            uint32_t(now - event_started_ms) < active_settings.burst_ms) return;
 #if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
         const bool stopped = NimBLEDevice::getAdvertising()->stop();
 #else
@@ -186,10 +203,11 @@ void bthome_events_loop() {
             return;
         }
         event_active = false;
-        restore_hid_advertising();
     }
+    if (radio_owned && !release_event_radio()) return;
 
     ButtonEvent pending{};
+    bthome::EventSettings settings;
     bool have_event = false;
     portENTER_CRITICAL(&queue_mux);
     if (queue_count) {
@@ -197,6 +215,7 @@ void bthome_events_loop() {
         queue_head = (queue_head + 1) % kEventQueueSize;
         --queue_count;
         have_event = true;
+        settings = pending_settings;
     }
     portEXIT_CRITICAL(&queue_mux);
     if (!have_event) return;
@@ -204,8 +223,9 @@ void bthome_events_loop() {
         LOGW(kBthomeTag, "Queued event cancelled by OTA");
         return;
     }
-    if (start_event(pending)) {
+    if (start_event(pending, settings)) {
         event_active = true;
+        active_settings = settings;
         event_started_ms = millis();
         active_ota_epoch = epoch;
         LOGI(kBthomeTag, "Advertising Button %u event 0x%02X", pending.button, pending.event);

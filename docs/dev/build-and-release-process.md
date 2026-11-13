@@ -245,6 +245,16 @@ Both `bthome_events.cpp` and `ble_telemetry.cpp` select APIs by backend;
 the built-in Arduino BLE wrapper must not be linked alongside it. Other boards
 retain their existing backend and lazy event initialization. Packet layout,
 queue admission, burst timing, and OTA cancellation remain shared.
+Bluetooth transmit power is latched from boot configuration without initializing
+the host. Shared preparation applies it once to DEFAULT, ADV, and SCAN before
+HID, event, or telemetry advertising; unset connection power inherits DEFAULT.
+Native core calls check the controller result and read-back; the external
+backend checks its setter and read-back. Hosted HCI leaves power under
+co-processor control and disables that portal control without disabling Bluetooth.
+Config saves never change radio power. Event timing saves stage a coherent
+snapshot captured at burst start; an active burst keeps its original timing.
+Failed stops or HID advertising restoration retain radio ownership and block
+the next event until recovery. Event bursts do not override or restore power.
 The bundled core backend already uses NimBLE on the tested toolchain. The
 memory benefit comes from the selected host profile and eligible PSRAM
 allocations, not a Bluedroid-to-NimBLE migration.
