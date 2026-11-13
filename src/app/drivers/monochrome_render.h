@@ -12,18 +12,31 @@ enum MonochromeConversion : uint8_t {
     MONOCHROME_CONVERSION_BLUE_NOISE,
 };
 
-struct Rgb565LuminanceTables {
-    uint16_t red[32] = {};
-    uint16_t green[64] = {};
-    uint16_t blue[32] = {};
+namespace monochrome_detail {
+template<unsigned... Values> struct LuminanceIndices {};
+template<unsigned Count, unsigned... Values>
+struct MakeLuminanceIndices : MakeLuminanceIndices<Count - 1, Count - 1, Values...> {};
+template<unsigned... Values>
+struct MakeLuminanceIndices<0, Values...> { using type = LuminanceIndices<Values...>; };
+}
 
-    constexpr Rgb565LuminanceTables() {
-        for (int i = 0; i < 32; ++i) {
-            red[i] = (i * 255 / 31) * 77;
-            blue[i] = (i * 255 / 31) * 29;
-        }
-        for (int i = 0; i < 64; ++i) green[i] = (i * 255 / 63) * 150;
-    }
+struct Rgb565LuminanceTables {
+    uint16_t red[32];
+    uint16_t green[64];
+    uint16_t blue[32];
+
+    // Parameter packs keep initialization compile-time on Inkplate's C++11 toolchain.
+    constexpr Rgb565LuminanceTables()
+        : Rgb565LuminanceTables(monochrome_detail::MakeLuminanceIndices<32>::type{},
+                               monochrome_detail::MakeLuminanceIndices<64>::type{}) {}
+
+private:
+    template<unsigned... FiveBit, unsigned... SixBit>
+    constexpr Rgb565LuminanceTables(monochrome_detail::LuminanceIndices<FiveBit...>,
+                                   monochrome_detail::LuminanceIndices<SixBit...>)
+        : red{uint16_t((FiveBit * 255 / 31) * 77)...},
+          green{uint16_t((SixBit * 255 / 63) * 150)...},
+          blue{uint16_t((FiveBit * 255 / 31) * 29)...} {}
 };
 
 inline uint8_t monochrome_rgb565_luminance(uint16_t color) {

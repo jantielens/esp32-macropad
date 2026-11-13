@@ -31,9 +31,21 @@ selects chip download mode.
 
 ## Display and firmware limits
 
-Use slow-changing monochrome layouts. Animations are disabled; physical updates
-are delayed/coalesced, with full refreshes for ghosting control. A gray-looking
-source color is not native grayscale panel support.
+Use slow-changing monochrome layouts. Animations are disabled. Changed focus,
+pad navigation, dialogs and user-triggered variable updates receive interaction
+priority once their complete frame is ready. Background changes retain configured
+cadence and coalescing; an active waveform completes first. Startup, recovery,
+manual and threshold-triggered full refreshes still flash for ghosting control.
+See [presentation settings](../../../docs/user/specialized/interactive-epaper.md).
+A gray-looking source color is not native grayscale panel support.
+
+Screenshots are unavailable while a presentation is in progress or incomplete.
+OTA/shutdown lets an activated waveform complete before releasing display
+resources. A cancelled update requires a full recovery; a BUSY timeout disables
+the driver until reboot. The driver requires active-low BUSY assertion and release
+within 15 seconds and retains the controller's full-refresh guard delays.
+Verify interaction latency, BUSY timing, all rotations and OTA recovery on your
+hardware; host tests do not establish panel speed or quality.
 
 Wi-Fi/MQTT and MCP are enabled. Audio, USB/BLE keyboard output, native
 Extensions, remote image fetching, and the image library are disabled.

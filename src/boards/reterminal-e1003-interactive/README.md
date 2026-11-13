@@ -18,9 +18,18 @@ peripherals, not free accessory connections.
 
 Firmware starts in portrait orientation with 16-level grayscale rendering.
 Black-and-white is also available. Save mode changes and reboot.
-Updates are coalesced, animations are disabled, and visible waveforms take
-time. Prefer slowly changing pads/widgets over rapid animation or live video.
-Regional grayscale quality and timing still require physical validation.
+Only completed render frames reach the panel. Focus, navigation, dialog and
+changed user-variable interactions bypass background presentation waits once
+their frame is ready. Background and manual-full requests retain cadence and
+uncapped settling; required full refreshes and active waveforms still complete.
+Updates are coalesced, animations are disabled, and visible waveforms take time.
+Prefer slowly changing pads/widgets over rapid animation or live video.
+Verify regional grayscale quality and timing on your panel.
+The screenshot baseline is unavailable during presentation and becomes valid
+only after the controller reports engine completion. Interrupted or failed
+presentations require full recovery. Verify rapid touch/navigation, full refresh
+during updates, and OTA/restart on this target; another IT8951 board's results
+do not qualify its controller firmware.
 
 The board default VCOM is **-1.40 V** (`EPAPER_DEFAULT_VCOM_MV=1400`).
 The interactive driver consumes the saved

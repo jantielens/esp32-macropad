@@ -46,6 +46,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Extend coherent, interaction-priority presentation to CrowPanel 4.2,
+  reTerminal E1003 Interactive, and Waveshare 7.8 Interactive. Present completed
+  render frames, preserve newer updates during active waveforms, and let changed
+  focus, navigation, dialogs, and user-variable interactions bypass background
+  presentation waits. Required full refreshes and controller waits remain intact.
+  See [Interactive E-Paper presentation](docs/user/specialized/interactive-epaper.md#balance-freshness-and-panel-work).
+* Keep InkplateLibrary unchanged while separating private LVGL drawing from
+  library-owned presentation buffers. Wake scheduling waits for manual full
+  refreshes and preserve background cadence, uncapped settling, and frontlight
+  behavior. Interaction priority and bounded active-refresh interruption remain
+  unsupported on Inkplate.
+  See [Inkplate display behavior](src/boards/inkplate6flick-interactive/README.md#touch-and-display-behavior).
 * Share one Bluetooth transmit-power setting across BTHome button events,
   sensor telemetry, and Bluetooth keyboard/mouse/gamepad HID. Move power
   control from Operating Mode to **Connectivity > Bluetooth**; save and reboot
@@ -67,6 +79,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Wait for IT8951 display-engine completion rather than HRDY readiness alone
+  before validating the presented frame. Keep screenshots invalid after
+  cancelled or incomplete presentations and recover with a full refresh.
+* Safely drain owned CrowPanel and IT8951 controller work during cooperative
+  shutdown, wake policy waits promptly, and release partial allocations on
+  initialization failure or restart. Keep Inkplate framebuffer bindings valid
+  across wrapper cleanup and retry full refreshes after power-on failure.
+* Keep RGB565 luminance lookup tables compile-time initialized on Inkplate's
+  C++11 toolchain without changing conversion results or table size.
 * Persist Bluetooth power and event timing together so a failed settings write
   cannot leave a partially saved Bluetooth configuration.
 * Retry HID advertising restoration after BTHome events before sending queued

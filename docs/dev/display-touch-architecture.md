@@ -416,14 +416,38 @@ and touch drivers temporarily remove those aliases around `Inkplate.h`, keeping
 its declarations unchanged. Both decoders remain available, including JPEG boot
 logos; installed library files are not patched.
 
-The driver copies the mode-specific drawing framebuffer into a PSRAM presentation
-snapshot while holding its mutex, then releases the mutex before the blocking
-waveform. That preserves writes made during the waveform for the next
+The wrapper owns a private PSRAM drawing buffer and borrows the library's
+mode-specific current framebuffer as its upload/capture snapshot. It never
+reassigns `_partial` or `DMemory4Bit`, and the library retains its previous-frame
+bookkeeping. This reverses the buffers' former ownership roles without adding an
+allocation: the wrapper still allocates 97,024 bytes in B/W or 388,096 bytes in
+grayscale. Under the framebuffer mutex it copies drawing into the library's
+buffer, then releases the mutex before the blocking waveform.
+That preserves writes made during the waveform for the next
 presentation and permits no-op detection against the last presented frame. B/W
 pixels use the boot-selected threshold, Bayer, or blue-noise conversion and can
 use `partialUpdate()`; 3-bit grayscale can
 only use full waveforms. The driver, rather than InkplateLibrary's automatic
 threshold, owns the periodic B/W full-refresh cadence.
+
+Background cadence and uncapped 150 ms settling remain unchanged. Manual-full
+requests wake a driver-owned semaphore; waits recheck at most every 20 ms,
+including the generic OTA-activity gate before library entry. If activity begins
+after power-on but before the waveform call, the wrapper powers the panel down
+and queues full recovery. This does not enable OTA on this no-OTA profile.
+Power-on failures leave capture invalid and preserve pending full recovery.
+Wrapper teardown frees only its private buffer, and reinitialization clears
+its resources without rebinding or freeing library-owned buffers.
+
+InkplateLibrary remains unmodified. Its refresh calls synchronously wait for DMA
+EOF and run their power cleanup before returning, but the DMA wait has no timeout
+or cancellation hook. `display()` returns no status; `partialUpdate()` returns a
+pixel-change count, not an error code. The wrapper retains its preflight power-on
+check and normal-return publication behavior, not an independently verified
+end-to-end refresh result. It does not opt into `coherentFrames()`,
+interaction priority or bounded cooperative active-refresh shutdown. Host
+coverage protects wrapper ownership and scheduling, not library DMA timing or
+physical completion on hardware.
 
 The Cypress controller is an event stream. `getData()` returning zero is not by
 itself a release: it can also mean that no event is pending. The touch driver
@@ -454,8 +478,10 @@ interactive drivers may ignore this generic setting. See the
 [configuration contract](interactive-epaper.md#configuration-contract).
 
 `reterminal-e1003-interactive` is an always-on IT8951 e-paper Macropad target.
-Its buffered driver keeps 4-bit drawing and presentation framebuffers in PSRAM.
-It copies a settled LVGL frame under the framebuffer mutex, then uploads and
+Its buffered driver keeps two 4-bit drawing and presentation framebuffers in
+PSRAM (2,628,288 bytes total). It opts into coherent-frame publication and
+interaction priority through `EpaperSchedule`, without another frame allocation.
+It copies a completed LVGL generation under the framebuffer mutex, then uploads and
 refreshes the presentation snapshot outside that mutex so later LVGL flushes
 remain queued. Both modes coalesce LVGL flush rectangles into one aligned IT8951
 region. B/W uses the boot-selected threshold, Bayer, or blue-noise conversion
@@ -464,9 +490,32 @@ Initial and forced presentations use full-panel GC16, as do scheduled refreshes
 in both modes. Regional grayscale quality still needs hardware validation.
 Touch uses the existing GT911 driver on the E1003's shared
 GPIO19/GPIO20 I2C lines.
-Both profiles defer uploads at row checkpoints when OTA begins. Failed or
-interrupted presentations invalidate the known panel state and retry with a
-full refresh instead of treating the unsent snapshot as an unchanged frame.
+Background and manual-full requests retain the configured cadence and uncapped
+150 ms settling; unlike Sticky and CrowPanel, continuous background changes can
+extend settling beyond 500 ms. Changed interactive generations bypass those
+discretionary waits, but not full-refresh selection or controller completion.
+Unchanged and reverted frames do not cause extra physical updates or lasting
+interaction urgency. Commits and stop requests wake the driver's binary semaphore;
+its 20 ms bounded wait also observes OTA.
+
+HRDY gates command transfers, not physical publication. The driver reads
+IT8951 `LUTAFSR` (`0x1224`) before loading an image and after display-area
+submission. A zero display-engine status confirms completion. The submitted
+display command, including all five arguments, and its waveform have one
+15-second completion deadline; stop/OTA cannot abandon an accepted submission.
+An owned image-load stream closes before cancellation returns. Upload checkpoints
+observe stop/OTA every 64 rows, and cancellation is checked before submitting a
+new waveform. Failed or cancelled work invalidates the screenshot baseline and
+queues full recovery. Newer dirty regions, interaction intent and manual-full
+requests survive older completion.
+
+Cooperative shutdown drains owned controller work before ending SPI and freeing
+buffers. Reinitialization resets resources and allocation failures release partial
+state immediately. Diagnostics correlate frame/request identity, conversion,
+eligibility, snapshot, upload, activation, engine completion and publication.
+Policy time excludes waiting before the current frame is ready or while older
+hardware work owns the controller. These host-verified contracts need separate
+physical qualification on both controller-firmware profiles.
 
 ### CrowPanel 4.2 A-Revision
 
@@ -476,6 +525,26 @@ Two 15,000-byte PSRAM buffers separate LVGL writes from
 the SPI presentation snapshot. The driver follows Elecrow's V1.2A sample
 clear/partial sequence with GC/DU waveforms, applies cadence and no-op coalescing, and stops accepting
 requests after a bounded BUSY timeout. It has no touch or backlight control.
+
+CrowPanel opts into coherent-frame publication and interaction priority using
+`EpaperSchedule`. The existing drawing/snapshot pair remains sufficient: the
+snapshot is immutable during upload and unavailable to screenshot readers until
+successful physical completion. Background cadence, 150 ms settling and the
+500 ms coalescing cap are unchanged. Commits and stop requests wake a driver-owned
+semaphore; its 20 ms bounded wait also observes OTA.
+
+Cancellation is checked before controller activation, after owned SPI transactions
+close. Once activated, the worker waits for active-LOW BUSY assertion and release
+within the existing 15-second timeout, retaining required full-refresh guard delays.
+Stop/OTA after the first clearing waveform prevents the second reset/activation;
+cancelled presentations remain invalid and require full recovery. A BUSY timeout
+marks the driver unavailable until reinitialization. Shutdown waits for this owned
+completion before deleting the task or freeing either buffer. Host coverage does
+not qualify BUSY timing, visible latency or image quality on hardware.
+Diagnostics correlate frame/request identity with conversion, snapshot, image
+upload, activation, BUSY completion and publication. Image-upload bytes/time
+exclude the full-refresh white-plane clear, which belongs to controller
+preparation; required guard delays remain included in total presentation time.
 
 CrowPanel, Inkplate 6FLICK, and IT8951 expose an optional compact presented-frame
 capture through `DisplayDriver`. Drivers copy only a completed presentation
@@ -1394,12 +1463,13 @@ This means:
 
 Direct-mode boards are unaffected — no present task is created (their `present()` is a no-op).
 
-Sticky opts into `DisplayDriver::coherentFrames()`. The production
+Sticky, CrowPanel and IT8951 opt into `DisplayDriver::coherentFrames()`. The production
 `LV_EVENT_REFR_START`/`LV_EVENT_REFR_READY` callbacks bracket all synchronous
 flush conversions, independently of diagnostics. Under the framebuffer mutex,
 the worker refuses snapshots during a render generation. It copies only a
-completed generation into the existing immutable sending buffer; drawing can
-then continue while the panel uses sending and the previous completed frame.
+completed generation into an immutable upload buffer; drawing can then continue
+while the panel uses that snapshot. Sticky separately retains its previous
+completed frame for controller preparation.
 Successful completion alone publishes the screenshot baseline.
 
 Successful focus changes, applied interaction-driven screen changes and dialog

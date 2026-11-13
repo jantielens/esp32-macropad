@@ -22,6 +22,16 @@ Animations are disabled. Use slow-changing bindings/widgets and expect visible
 refresh delays. Screen-saver behavior is frontlight-only rather than a
 conventional LCD power-down.
 
+Touch, navigation and variable-driven visual changes retain background
+presentation cadence and settling; this target does not support
+interaction-priority presentation. Full-refresh requests wake scheduling waits,
+but do not bypass those intervals. Changes made during a waveform remain queued
+for a later update.
+
+Active refreshes run through the unchanged Inkplate library and cannot be
+interrupted or given a wrapper-defined completion timeout. These limits differ
+from interaction-priority targets; keep update rates modest.
+
 ## Storage and firmware limits
 
 Wi-Fi/MQTT and one ESP32 native Extension are supported. MCP, BLE keyboard

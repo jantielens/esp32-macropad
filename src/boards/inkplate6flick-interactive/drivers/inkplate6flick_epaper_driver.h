@@ -42,6 +42,8 @@ private:
 		Inkplate* display;
 		DeviceConfig* config;
 		SemaphoreHandle_t framebufferMutex;
+		StaticSemaphore_t wakeStorage{};
+		SemaphoreHandle_t wake = nullptr;
 		int16_t currentX;
 		int16_t currentY;
 		uint16_t currentW;
@@ -62,7 +64,6 @@ private:
 		uint8_t frontlightLevel;
 		bool pendingChanges;
 		bool frontlightEnabled;
-		portMUX_TYPE fullRefreshRequestMux = portMUX_INITIALIZER_UNLOCKED;
 		bool fullRefreshRequested;
 		bool hasPresentedFrame;
 		bool initialized;
@@ -71,9 +72,7 @@ private:
 		bool usesBwMode() const;
 		uint8_t* framebuffer() const;
 		size_t framebufferBytes() const;
-		void setPresentationFramebuffer();
-		bool fullRefreshPending();
-		bool consumeFullRefreshRequest();
+		void releaseResources();
 };
 
 #endif

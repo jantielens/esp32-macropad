@@ -121,15 +121,23 @@ add_host_legacy_test(test_sticky_hardware
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/sticky_driver_test_overrides/SPI.h
 )
 
-add_host_legacy_test(test_crowpanel_epaper_driver
+foreach(diagnostics 0 1)
+  set(crowpanel_target test_crowpanel_epaper_driver)
+  if(diagnostics)
+    set(crowpanel_target test_crowpanel_epaper_driver_diagnostics)
+  endif()
+  add_host_legacy_test(${crowpanel_target}
     SOURCES test_crowpanel_epaper_driver.cpp ${PROJECT_SOURCE_DIR}/src/boards/crowpanel-4.2-interactive/drivers/display/crowpanel42_epaper_driver.cpp
-    INCLUDES ${PROJECT_SOURCE_DIR}/tests/crowpanel_driver_test_overrides ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/crowpanel_driver_test_overrides
+        ${PROJECT_SOURCE_DIR}/tests/audio_worker_overrides ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
         ${PROJECT_SOURCE_DIR}/src/boards/crowpanel-4.2-interactive ${PROJECT_SOURCE_DIR}/src
-    DEFINITIONS BOARD_HAS_OVERRIDE=1 BOARD_HAS_PSRAM=1 CONFIG_IDF_TARGET_ESP32S3=1 TEST_HEAP_CAPS_ALLOCATOR=1
+    DEFINITIONS HAS_DISPLAY_DIAGNOSTICS=${diagnostics}
+        BOARD_HAS_OVERRIDE=1 BOARD_HAS_PSRAM=1 CONFIG_IDF_TARGET_ESP32S3=1 TEST_HEAP_CAPS_ALLOCATOR=1
         LV_CONF_SKIP=1 LV_USE_OS=0 LV_USE_LOG=0 TEST_FREERTOS_MUTEX_LIFECYCLE=1
     OPTIONS -Wno-unused-parameter
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
-)
+  )
+endforeach()
 
 foreach(board waveshare-7.8-interactive reterminal-e1003-interactive)
   foreach(diagnostics 0 1)
@@ -139,7 +147,8 @@ foreach(board waveshare-7.8-interactive reterminal-e1003-interactive)
     endif()
     add_host_legacy_test(test_it8951_${board}${diagnostic_suffix}
         SOURCES test_it8951_epaper_driver.cpp ${PROJECT_SOURCE_DIR}/src/app/drivers/it8951_epaper_driver.cpp
-        INCLUDES ${PROJECT_SOURCE_DIR}/tests/it8951_driver_test_overrides ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
+        INCLUDES ${PROJECT_SOURCE_DIR}/tests/it8951_driver_test_overrides
+            ${PROJECT_SOURCE_DIR}/tests/audio_worker_overrides ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
             ${PROJECT_SOURCE_DIR}/src/boards/${board}
         DEFINITIONS HAS_DISPLAY_DIAGNOSTICS=${diagnostics} BOARD_HAS_OVERRIDE=1 BOARD_HAS_PSRAM=1 CONFIG_IDF_TARGET_ESP32S3=1
             TEST_HEAP_CAPS_ALLOCATOR=1 TEST_FREERTOS_MUTEX_LIFECYCLE=1 LV_CONF_SKIP=1 LV_USE_OS=0 LV_USE_LOG=0
@@ -148,6 +157,18 @@ foreach(board waveshare-7.8-interactive reterminal-e1003-interactive)
     )
   endforeach()
 endforeach()
+
+add_host_legacy_test(test_inkplate_epaper_driver
+    SOURCES test_inkplate_epaper_driver.cpp
+        ${PROJECT_SOURCE_DIR}/src/boards/inkplate6flick-interactive/drivers/inkplate6flick_epaper_driver.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/inkplate_driver_test_overrides
+        ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
+        ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/src/boards/inkplate6flick-interactive
+    DEFINITIONS BOARD_HAS_OVERRIDE=1 BOARD_HAS_PSRAM=1 TEST_HEAP_CAPS_ALLOCATOR=1
+        TEST_FREERTOS_MUTEX_LIFECYCLE=1 LV_CONF_SKIP=1 LV_USE_OS=0 LV_USE_LOG=0
+    OPTIONS -Wno-unused-parameter
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/freertos/portmacro.h
+)
 
 add_host_legacy_test(test_sensor_manager
     SOURCES test_sensor_manager.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp

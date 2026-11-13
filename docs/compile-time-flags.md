@@ -949,6 +949,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/drivers/it8951_epaper_driver.h
   - src/app/freetype_mono_font.cpp
   - src/app/freetype_mono_font.h
+  - src/boards/crowpanel-4.2-interactive/drivers/display/crowpanel42_epaper_driver.cpp
+  - src/boards/crowpanel-4.2-interactive/drivers/display/crowpanel42_epaper_driver.h
   - src/boards/reterminal-sticky-interactive/board_overrides.h
   - src/boards/reterminal-sticky-interactive/drivers/display/sticky_epaper/panel.cpp
   - src/boards/reterminal-sticky-interactive/drivers/display/sticky_epaper/panel.h

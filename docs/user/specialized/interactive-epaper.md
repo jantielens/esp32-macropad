@@ -42,6 +42,9 @@ request an immediate update. An active panel refresh still completes first;
 rapid visual changes
 can combine into the latest frame without dropping their actions. Other devices
 retain interval-limited presentation; see [panel notes](../hardware.md).
+Interaction priority does not bypass startup, recovery, manual full refreshes or
+the configured full-refresh threshold. Required controller waits and full-refresh
+flashing still apply.
 Refresh clock values on minute boundary rechecks visible time bindings
 between passive checks. Panel scheduling and an active refresh can delay
 the visible update.

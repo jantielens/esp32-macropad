@@ -1,6 +1,7 @@
 #pragma once
 
 #include "app/display_driver.h"
+#include "app/drivers/epaper_schedule.h"
 #include <SPI.h>
 #include <atomic>
 #include <freertos/FreeRTOS.h>
@@ -24,16 +25,28 @@ public:
     void pushColors(uint16_t* data, uint32_t len, bool swap_bytes) override;
     RenderMode renderMode() const override { return RenderMode::Buffered; }
     void present() override;
+    bool coherentFrames() const override { return true; }
+    void beginFrame() override;
+    void commitFrame(const DisplayFrame& frame) override;
+    void stopPresentation() override;
     bool requestFullRefresh() override;
     bool isAvailable() const override { return available.load(); }
     int presentationMode() const override { return 0; }
     bool getPresentedFrameInfo(PresentedFrameInfo& info) const override;
     bool copyPresentedFrame(uint8_t* pixels, size_t length) override;
+#if HAS_DISPLAY_DIAGNOSTICS
+    bool getPresentationStats(DisplayPresentationStats* out) override;
+#endif
 
 private:
     static constexpr size_t framebufferBytes = 15000;
     SPIClass spi{FSPI};
     SemaphoreHandle_t mutex = nullptr;
+    StaticSemaphore_t wakeStorage{};
+    SemaphoreHandle_t wake = nullptr;
+    EpaperSchedule schedule;
+    std::atomic<bool> stopping{false};
+    bool spiStarted = false;
     uint8_t* drawing = nullptr;
     uint8_t* snapshot = nullptr;
     std::atomic<bool> available{false};
@@ -44,10 +57,17 @@ private:
     bool pending = false, forceFull = false, hasPresented = false;
     uint32_t lastChange = 0, firstPendingChange = 0, lastRefresh = 0;
     uint16_t partialsSinceFull = 0;
+#if HAS_DISPLAY_DIAGNOSTICS
+    DisplayPresentationStats stats;
+    DisplayPresentationSample hardwareSample;
+    uint64_t hardwareCompletedUs = 0;
+    uint64_t frameConversionStart = 0, frameWaitStart = 0, framePixelsStart = 0, frameFlushesStart = 0;
+#endif
     void releaseResources();
     void send(uint8_t command, const uint8_t* data = nullptr, size_t length = 0);
     void fillRam(uint8_t command);
-    bool waitReady(const char* stage);
+    bool cancelled() const;
+    bool waitReady(const char* stage, bool activated = false);
     bool initializePanel(uint32_t resetSettleMs = 0);
     bool update(uint8_t mode);
     bool refresh(bool full);

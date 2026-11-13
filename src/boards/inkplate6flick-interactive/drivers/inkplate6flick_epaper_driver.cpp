@@ -4,6 +4,7 @@
 
 #include "app/board_config.h"
 #include "app/log_manager.h"
+#include "app/ota_activity.h"
 
 #pragma push_macro("jd_prepare")
 #pragma push_macro("jd_decomp")
@@ -15,6 +16,7 @@
 #include <esp_heap_caps.h>
 
 #include <cstring>
+#include <new>
 
 static Inkplate* s_inkplate = nullptr;
 
@@ -25,24 +27,36 @@ Inkplate* inkplate6flick_lvgl_instance() {
 Inkplate6FlickEpaperDriver::Inkplate6FlickEpaperDriver(DeviceConfig* cfg)
 		: display(nullptr), config(cfg), framebufferMutex(nullptr), currentX(0), currentY(0),
 			currentW(0), currentH(0), rotation(0), panelMode(cfg ? cfg->epaper_render_mode : EPAPER_DEFAULT_RENDER_MODE),
-				bwConversion(cfg ? cfg->epaper_bw_conversion : MONOCHROME_CONVERSION_THRESHOLD),
+				bwConversion(cfg ? cfg->epaper_bw_conversion : uint8_t(MONOCHROME_CONVERSION_THRESHOLD)),
 				bwThreshold(cfg ? cfg->epaper_bw_threshold : MONOCHROME_THRESHOLD),
 			lastRefreshMs(0), lastChangeMs(0), drawingFramebuffer(nullptr), presentedFramebuffer(nullptr), refreshCount(0), partialUpdateCount(0),
 			bwPartialUpdatesSinceFull(0), noOpSkipCount(0), backlightBrightness(0), frontlightLevel(0), pendingChanges(false),
 			frontlightEnabled(false), fullRefreshRequested(false), hasPresentedFrame(false), initialized(false) {}
 
 Inkplate6FlickEpaperDriver::~Inkplate6FlickEpaperDriver() {
+		releaseResources();
+}
+
+void Inkplate6FlickEpaperDriver::releaseResources() {
+		initialized = false;
 		if (framebufferMutex) vSemaphoreDelete(framebufferMutex);
-		if (presentedFramebuffer) heap_caps_free(presentedFramebuffer);
+		if (drawingFramebuffer) heap_caps_free(drawingFramebuffer);
+		framebufferMutex = wake = nullptr;
+		drawingFramebuffer = presentedFramebuffer = nullptr;
+		display = nullptr;
+		pendingChanges = fullRefreshRequested = hasPresentedFrame = false;
+		lastRefreshMs = lastChangeMs = refreshCount = partialUpdateCount = noOpSkipCount = 0;
+		bwPartialUpdatesSinceFull = 0;
 }
 
 void Inkplate6FlickEpaperDriver::init() {
+		releaseResources();
 		if (panelMode != EPAPER_RENDER_MODE_BW && panelMode != EPAPER_RENDER_MODE_GRAYSCALE) {
 			LOGW("Inkplate", "invalid panel mode=%u; using grayscale", panelMode);
 			panelMode = EPAPER_RENDER_MODE_GRAYSCALE;
 		}
 		const uint8_t inkplateMode = usesBwMode() ? INKPLATE_1BIT : INKPLATE_3BIT;
-		if (!s_inkplate) s_inkplate = new Inkplate(inkplateMode);
+		if (!s_inkplate) s_inkplate = new (std::nothrow) Inkplate(inkplateMode);
 		display = s_inkplate;
 		if (!display) {
 			LOGE("Inkplate", "display allocation failed");
@@ -50,23 +64,30 @@ void Inkplate6FlickEpaperDriver::init() {
 		}
 		display->begin();
 		display->selectDisplayMode(inkplateMode);
-		// The library's threshold setter blocks its next partial update, so the
-		// driver owns the cadence and leaves the library's automatic threshold off.
+		// Keep count-based cleanup in the wrapper, not the library's automatic limiter.
 		if (usesBwMode()) display->setFullUpdateThreshold(0);
 		display->clearDisplay();
 		framebufferMutex = xSemaphoreCreateMutex();
-		if (!framebufferMutex) {
+		wake = xSemaphoreCreateBinaryStatic(&wakeStorage);
+		if (!framebufferMutex || !wake) {
 			LOGE("Inkplate", "framebuffer mutex allocation failed");
+			releaseResources();
 			return;
 		}
-		drawingFramebuffer = usesBwMode() ? display->_partial : display->DMemory4Bit;
-		presentedFramebuffer = (uint8_t*)heap_caps_malloc(framebufferBytes(), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+		// Leave the library's current and previous frame bindings under its ownership.
+		presentedFramebuffer = usesBwMode() ? display->_partial : display->DMemory4Bit;
 		if (!presentedFramebuffer) {
-			LOGE("Inkplate", "presentation snapshot allocation failed");
-			vSemaphoreDelete(framebufferMutex);
-			framebufferMutex = nullptr;
+			LOGE("Inkplate", "library framebuffer is unavailable");
+			releaseResources();
 			return;
 		}
+		drawingFramebuffer = (uint8_t*)heap_caps_malloc(framebufferBytes(), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+		if (!drawingFramebuffer) {
+			LOGE("Inkplate", "drawing framebuffer allocation failed");
+			releaseResources();
+			return;
+		}
+		memcpy(drawingFramebuffer, presentedFramebuffer, framebufferBytes());
 		initialized = true;
 		LOGI("Inkplate", "6FLICK LVGL spike initialized (%dx%d, %s)", width(), height(),
 				usesBwMode() ? "1-bit B/W" : "3-bit grayscale");
@@ -174,29 +195,6 @@ size_t Inkplate6FlickEpaperDriver::framebufferBytes() const {
 		return (size_t)DISPLAY_WIDTH * DISPLAY_HEIGHT / (usesBwMode() ? 8 : 2);
 }
 
-void Inkplate6FlickEpaperDriver::setPresentationFramebuffer() {
-		if (usesBwMode()) {
-			display->_partial = presentedFramebuffer;
-		} else {
-			display->DMemory4Bit = presentedFramebuffer;
-		}
-}
-
-bool Inkplate6FlickEpaperDriver::fullRefreshPending() {
-		portENTER_CRITICAL(&fullRefreshRequestMux);
-		const bool pending = fullRefreshRequested;
-		portEXIT_CRITICAL(&fullRefreshRequestMux);
-		return pending;
-}
-
-bool Inkplate6FlickEpaperDriver::consumeFullRefreshRequest() {
-		portENTER_CRITICAL(&fullRefreshRequestMux);
-		const bool requested = fullRefreshRequested;
-		fullRefreshRequested = false;
-		portEXIT_CRITICAL(&fullRefreshRequestMux);
-		return requested;
-}
-
 void Inkplate6FlickEpaperDriver::pushColors(uint16_t* data, uint32_t, bool) {
 		if (!initialized || !display || !framebufferMutex || !data) return;
 		xSemaphoreTake(framebufferMutex, portMAX_DELAY);
@@ -215,8 +213,12 @@ void Inkplate6FlickEpaperDriver::pushColors(uint16_t* data, uint32_t, bool) {
 void Inkplate6FlickEpaperDriver::present() {
 		if (!initialized || !display || !framebufferMutex) return;
 		while (true) {
+			if (ota_activity_is_active()) {
+				LOGT("Inkplate", "refresh deferred for OTA activity");
+				return;
+			}
 			xSemaphoreTake(framebufferMutex, portMAX_DELAY);
-			if (!pendingChanges && !fullRefreshPending()) {
+			if (!pendingChanges && !fullRefreshRequested) {
 				xSemaphoreGive(framebufferMutex);
 				return;
 			}
@@ -233,11 +235,12 @@ void Inkplate6FlickEpaperDriver::present() {
 				break;
 			}
 			xSemaphoreGive(framebufferMutex);
-			const TickType_t waitTicks = pdMS_TO_TICKS(waitMs);
-			vTaskDelay(waitTicks ? waitTicks : 1);
+			const TickType_t waitTicks = pdMS_TO_TICKS(waitMs < 20 ? waitMs : 20);
+			xSemaphoreTake(wake, waitTicks ? waitTicks : 1);
 		}
 
-		const bool forceFullRefresh = consumeFullRefreshRequest();
+		const bool forceFullRefresh = fullRefreshRequested;
+		fullRefreshRequested = false;
 		if (!pendingChanges && !forceFullRefresh) {
 			xSemaphoreGive(framebufferMutex);
 			return;
@@ -258,13 +261,20 @@ void Inkplate6FlickEpaperDriver::present() {
 				bwPartialUpdatesSinceFull >= fullUpdateThreshold;
 		const bool hadPresentedFrame = hasPresentedFrame;
 		memcpy(presentedFramebuffer, framebuffer(), framebufferBytes());
-		setPresentationFramebuffer();
 		hasPresentedFrame = false;
 		pendingChanges = false;
 		xSemaphoreGive(framebufferMutex);
 
 		const uint32_t refreshStartMs = millis();
-		const bool refreshSuccess = display->einkOn();
+		bool refreshSuccess = false;
+		if (!ota_activity_is_active()) {
+				refreshSuccess = display->einkOn();
+				if (refreshSuccess && ota_activity_is_active()) {
+						display->einkOff();
+						refreshSuccess = false;
+						LOGT("Inkplate", "refresh deferred after power-on");
+				}
+		}
 		if (refreshSuccess) {
 				if (forceFullRefresh || scheduledFullRefresh) {
 						display->display();
@@ -281,13 +291,19 @@ void Inkplate6FlickEpaperDriver::present() {
 		}
 		xSemaphoreTake(framebufferMutex, portMAX_DELAY);
 		hasPresentedFrame = refreshSuccess;
-		if (!refreshSuccess) pendingChanges = true;
+		if (!refreshSuccess) {
+				pendingChanges = fullRefreshRequested = true;
+		}
 		if (refreshSuccess) lastRefreshMs = millis();
 		const uint32_t completed_ms = lastRefreshMs;
 		const uint32_t full_count = refreshCount;
 		const uint32_t partial_count = partialUpdateCount;
 		const uint32_t skipped_count = noOpSkipCount;
 		xSemaphoreGive(framebufferMutex);
+		if (!refreshSuccess) {
+				LOGW("Inkplate", "refresh incomplete before library waveform; full recovery pending");
+				return;
+		}
 		static uint32_t last_report_ms = 0;
 		if (forceFullRefresh || scheduledFullRefresh || completed_ms - last_report_ms >= 60000) {
 			LOGI("Inkplate", "Refresh: full=%lu partial=%lu skipped=%lu dur=%lums forced=%u scheduled=%u",
@@ -353,9 +369,10 @@ bool Inkplate6FlickEpaperDriver::copyPresentedFrame(uint8_t* pixels, size_t leng
 }
 
 bool Inkplate6FlickEpaperDriver::requestFullRefresh() {
-		if (!initialized || !display) return false;
-		portENTER_CRITICAL(&fullRefreshRequestMux);
+		if (!initialized || !display || !framebufferMutex) return false;
+		xSemaphoreTake(framebufferMutex, portMAX_DELAY);
 		fullRefreshRequested = true;
-		portEXIT_CRITICAL(&fullRefreshRequestMux);
+		xSemaphoreGive(framebufferMutex);
+		xSemaphoreGive(wake);
 		return true;
 }

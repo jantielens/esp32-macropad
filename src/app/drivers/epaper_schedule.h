@@ -33,13 +33,14 @@ struct EpaperSchedule {
 
     uint32_t wait(uint32_t now, bool baseline, bool full, uint32_t lastRefresh,
                   uint32_t interval, uint32_t lastChange, uint32_t firstPending,
-                  uint32_t settle) const {
+                  uint32_t settle, uint32_t settleCap = 500) const {
         if (frame.intent == DisplayIntent::Interactive) return 0;
         const uint32_t cadence = baseline && now - lastRefresh < interval
             ? interval - (now - lastRefresh) : 0;
         const uint32_t quiet = !full && now - lastChange < settle ? settle - (now - lastChange) : 0;
-        const uint32_t cap = now - firstPending < 500 ? 500 - (now - firstPending) : 0;
-        const uint32_t settling = quiet < cap ? quiet : cap;
+        const uint32_t cap = settleCap && now - firstPending < settleCap
+            ? settleCap - (now - firstPending) : 0;
+        const uint32_t settling = settleCap ? (quiet < cap ? quiet : cap) : quiet;
         return cadence > settling ? cadence : settling;
     }
 };
