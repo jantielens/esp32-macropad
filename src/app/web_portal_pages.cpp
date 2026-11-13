@@ -116,6 +116,14 @@ void handleFragment(AsyncWebServerRequest *request) {
 		request->send(response);
 }
 
+#if HAS_AUTO_SHUTDOWN
+void handlePortalPowerSavingsJS(AsyncWebServerRequest* request) {
+	if (!portal_auth_gate(request)) return;
+	request->send(begin_gzipped_asset_response(request, "application/javascript",
+		portal_power_savings_js_gz, portal_power_savings_js_gz_len, "no-cache"));
+}
+#endif
+
 #if HAS_TTF_FONTS
 void handlePortalFontsJS(AsyncWebServerRequest* request) {
 	if (!portal_auth_gate(request)) return;

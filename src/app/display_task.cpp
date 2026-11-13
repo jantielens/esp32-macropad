@@ -98,8 +98,8 @@ void DisplayManager::requestBindingRefresh() {
 		unlockIfNeeded(didLock);
 }
 
-void DisplayManager::interactionChanged(uint64_t requestedUs) {
-		if (!driver || !driver->coherentFrames()) return;
+uint32_t DisplayManager::interactionChanged(uint64_t requestedUs) {
+		if (!driver || !driver->coherentFrames()) return 0;
 		const uint64_t changedUs = esp_timer_get_time();
 		const uint32_t requestSequence = framePublisher.interactionChanged(requestedUs ? requestedUs : changedUs);
 #if HAS_DISPLAY_DIAGNOSTICS
@@ -111,6 +111,7 @@ void DisplayManager::interactionChanged(uint64_t requestedUs) {
 		(void)requestSequence;
 #endif
 		wakeRenderTask();
+		return requestSequence;
 }
 
 void DisplayManager::displayEventCallback(lv_event_t* event) {

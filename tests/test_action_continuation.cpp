@@ -80,7 +80,9 @@ TEST(failure_discards_suffix) {
     const uint32_t token = begin_with_suffix(ACTION_TYPE_SCREEN);
     ASSERT_TRUE(token != 0);
     action_continuation_mark_pending(token);
+    ASSERT_TRUE(action_continuation_is_pending(token));
     ASSERT_TRUE(action_continuation_complete(token, false));
+    ASSERT_TRUE(!action_continuation_is_pending(token));
     ASSERT_EQ(action_continuation_take(nullptr, nullptr, nullptr, 0),
               ACTION_CONTINUATION_FAILED);
 }
@@ -91,6 +93,7 @@ TEST(timeout_discards_suffix) {
     ASSERT_TRUE(token != 0);
     action_continuation_mark_pending(token);
     s_millis += ACTION_CONTINUATION_TIMEOUT_MS;
+    ASSERT_TRUE(!action_continuation_is_pending(token));
     ASSERT_EQ(action_continuation_take(nullptr, nullptr, nullptr, 0),
               ACTION_CONTINUATION_TIMED_OUT);
 }
@@ -263,7 +266,23 @@ TEST(interaction_origin_survives_pause_but_not_next_background_list) {
     ASSERT_TRUE(!g_interactive[2]);
 }
 
+TEST(reservations_block_shutdown_until_consumed) {
+    ASSERT_TRUE(!action_continuation_is_active());
+    uint32_t token = 0;
+    ASSERT_TRUE(action_continuation_begin(nullptr, 0, "Shutdown", &token));
+    ASSERT_TRUE(action_continuation_is_active());
+    ASSERT_TRUE(!action_continuation_is_pending(token));
+    action_continuation_mark_pending(token);
+    ASSERT_TRUE(action_continuation_is_pending(token));
+    ASSERT_TRUE(action_continuation_complete(token, false));
+    ASSERT_TRUE(action_continuation_is_active());
+    ASSERT_EQ(action_continuation_take(nullptr, nullptr, nullptr, 0), ACTION_CONTINUATION_FAILED);
+    ASSERT_TRUE(!action_continuation_is_active());
+    ASSERT_TRUE(!action_continuation_is_pending(token));
+}
+
 int main() {
+    RUN(reservations_block_shutdown_until_consumed);
     RUN(success_copies_saved_suffix);
     RUN(failure_discards_suffix);
     RUN(timeout_discards_suffix);

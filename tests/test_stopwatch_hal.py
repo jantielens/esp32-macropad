@@ -886,6 +886,33 @@ int main() {
             assert(address != 0x6e || reg != 0x0c);
         Wire.failureAt = -1;
     }
+    // Automatic shutdown must fail closed on live external power or an unreadable PMIC.
+    for (bool failRead : {false, true}) {
+        battery(3900, 5000, 0);
+        if (failRead) Wire.failureAt = Wire.transactions;
+        const int previousAudioStops = audioStops;
+        assert(!m5stack_stopwatch_request_shutdown(45, true));
+        assert(!shutdownToken && !otaActive && audioStops == previousAudioStops);
+        Wire.failureAt = -1;
+        battery(3900, 0, 4);
+        assert(m5stack_stopwatch_request_shutdown(45, true));
+        battery(3900, 5000, 0);
+        if (failRead) Wire.failureAt = Wire.transactions;
+        Wire.writes.clear();
+        m5stack_stopwatch_loop();
+        assert(!shutdownToken && !otaActive && failedShutdowns.back() == 45);
+        assert(audioStops == previousAudioStops);
+        for (auto [address, reg, value] : Wire.writes)
+            assert(address != 0x6e || reg != 0x0c);
+        Wire.failureAt = -1;
+    }
+    battery(3900, 0, 4);
+    assert(m5stack_stopwatch_request_shutdown(46, true));
+    m5stack_stopwatch_loop();
+    assert(shutdownCommandSent && otaActive);
+    clockMs += 500;
+    m5stack_stopwatch_loop();
+    assert(!shutdownToken && !otaActive && failedShutdowns.back() == 46);
     // Confirm the power/reset waveform rather than only its final state.
     std::vector<int> resetLatch;
     for (auto [address, reg, value] : successfulWrites)

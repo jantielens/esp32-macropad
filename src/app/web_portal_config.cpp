@@ -7,6 +7,9 @@
 #include "reboot_service.h"
 
 #include "board_config.h"
+#if HAS_AUTO_SHUTDOWN
+#include "auto_shutdown.h"
+#endif
 #if HAS_TTF_FONTS
 #include "font_store.h"
 #endif
@@ -211,6 +214,9 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["duty_cycle_wake_seconds"] = current_config->duty_cycle_wake_seconds;
 				(*doc)["mqtt_publish_interval_seconds"] = current_config->mqtt_publish_interval_seconds;
 				(*doc)["portal_idle_timeout_seconds"] = current_config->portal_idle_timeout_seconds;
+#if HAS_AUTO_SHUTDOWN
+				(*doc)["auto_shutdown_timeout_seconds"] = current_config->auto_shutdown_timeout_seconds;
+#endif
 				(*doc)["wifi_backoff_max_seconds"] = current_config->wifi_backoff_max_seconds;
 
 				#if HAS_BLE
@@ -494,6 +500,18 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		}
 		#endif
 
+#if HAS_AUTO_SHUTDOWN
+		uint32_t auto_shutdown_candidate = current_config->auto_shutdown_timeout_seconds;
+		const bool auto_shutdown_update = doc.containsKey("auto_shutdown_timeout_seconds");
+		if (auto_shutdown_update &&
+				(!parseStrictUintField(doc["auto_shutdown_timeout_seconds"], &auto_shutdown_candidate) ||
+				 auto_shutdown_candidate > UINT16_MAX)) {
+				request->send(400, "application/json",
+						"{\"success\":false,\"message\":\"Auto-shutdown timeout must be an integer from 0 to 65535 seconds\"}");
+				portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+				return;
+		}
+#endif
 		const bool bthome_update = bthome::event_settings_update_present(doc.as<JsonObjectConst>());
 #if HAS_BLE || HAS_BLE_HID
 		const bthome::EventSettings previous_bthome_settings = current_config->bthome_event;
@@ -1223,6 +1241,10 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		current_config->bthome_event = bthome_candidate;
 		current_config->bluetooth_tx_power_dbm = static_cast<int8_t>(bluetooth_power_candidate);
 #endif
+#if HAS_AUTO_SHUTDOWN
+		const uint16_t previous_auto_shutdown = current_config->auto_shutdown_timeout_seconds;
+		current_config->auto_shutdown_timeout_seconds = static_cast<uint16_t>(auto_shutdown_candidate);
+#endif
 #if HAS_EXTERNAL_DATA
 		if (config_manager_save(current_config, external_candidate.get())) {
 #else
@@ -1240,6 +1262,10 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 						ha_stats_config_changed();
 #endif
 				LOGI("Portal", "Config saved");
+#if HAS_AUTO_SHUTDOWN
+				if (auto_shutdown_update)
+						auto_shutdown_configure(current_config->auto_shutdown_timeout_seconds);
+#endif
 #if HAS_MCP
 				if (mcp_token_minted) {
 						// Return the freshly minted MCP token exactly once.
@@ -1264,6 +1290,9 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				}
 		} else {
 				LOGE("Portal", "Config save failed");
+#if HAS_AUTO_SHUTDOWN
+				current_config->auto_shutdown_timeout_seconds = previous_auto_shutdown;
+#endif
 #if HAS_BLE || HAS_BLE_HID
 				current_config->bthome_event = previous_bthome_settings;
 				current_config->bluetooth_tx_power_dbm = previous_bluetooth_power;

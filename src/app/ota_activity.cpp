@@ -46,6 +46,13 @@ bool ota_activity_is_active() {
     return g_ota_activity_active;
 }
 
+#if HAS_AUTO_SHUTDOWN
+bool ota_activity_is_busy() {
+    ActivityLock lock(ACTIVITY_MUTEX);
+    return g_ota_activity_active || g_config_writers || g_network_transition;
+}
+#endif
+
 uint32_t ota_activity_epoch() {
     ActivityLock lock(ACTIVITY_MUTEX);
     return g_ota_activity_epoch;

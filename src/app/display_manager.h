@@ -243,7 +243,7 @@ public:
 #endif
 		bool navigateButtons(const char* command);
 		// Called with the LVGL mutex held, only after an actual UI mutation.
-		void interactionChanged(uint64_t requestedUs = 0);
+		uint32_t interactionChanged(uint64_t requestedUs = 0);
 		void requestBindingRefresh();
 
 		// Active LVGL logical resolution (post driver->configureLVGL()).

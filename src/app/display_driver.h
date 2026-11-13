@@ -30,6 +30,7 @@
 #ifndef DISPLAY_DRIVER_H
 #define DISPLAY_DRIVER_H
 
+#include "board_config.h"
 #include <Arduino.h>
 #include <lvgl.h>
 #include "display_frame.h"
@@ -110,6 +111,11 @@ public:
 		virtual void beginFrame() {}
 		virtual void commitFrame(const DisplayFrame&) {}
 		virtual void stopPresentation() {}
+
+#if HAS_AUTO_SHUTDOWN
+		// Buffered drivers acknowledge only a completed physical presentation.
+		virtual bool hasPresentedInteraction(uint32_t) { return false; }
+#endif
 
 		// Queue a full physical refresh of the current framebuffer. Buffered
 		// e-paper drivers override this; other drivers report unsupported.

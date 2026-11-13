@@ -32,6 +32,12 @@ try {
         assert.equal(execFileSync('nm', ['--defined-only', object], {encoding: 'utf8'}).trim(), '',
             module + ' must emit no code or data when external data is disabled');
     }
+    const shutdownObject = path.join(nativeDirectory, 'shutdown.o');
+    execFileSync('c++', ['-std=c++17', '-c', 'src/app/auto_shutdown.cpp', '-o', shutdownObject,
+        '-DBOARD_CONFIG_H', '-DHAS_AUTO_SHUTDOWN=0', '-Itests', '-Isrc/app'],
+        {cwd: root, stdio: 'pipe'});
+    assert.equal(execFileSync('nm', ['--defined-only', shutdownObject], {encoding: 'utf8'}).trim(), '',
+        'Disabled auto-shutdown must emit no policy code or data');
 } finally {
     fs.rmSync(nativeDirectory, {recursive: true, force: true});
 }
@@ -100,6 +106,7 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
         const bytes = Buffer.from([...match[2].matchAll(/0x([0-9a-f]{2})/g)].map(value => parseInt(value[1], 16)));
         assets.set(match[1], zlib.gunzipSync(bytes).toString());
     }
+
     assert(assets.has('portal_js_gz'));
     assert.equal(assets.has('bluetooth_fragment_html_gz'),
         board !== 'reterminal-e1003-frame' && integrationMode !== 'bluetooth-disabled',
@@ -136,6 +143,9 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
     const ha = display && psram && integrationMode !== 'builtin-only';
     const mqtt = display && !['builtin-only', 'ha-only'].includes(integrationMode);
     const shell = assets.get('shell_html_gz');
+    assert(!shell.includes('portal_power_savings.js'));
+    assert(!assets.has('power_savings_fragment_html_gz'));
+    assert(!assets.has('portal_power_savings_js_gz'));
     assert.equal(shell.includes('id="binding-help-overlay"'), display, 'Binding dialog HTML must follow HAS_DISPLAY');
     assert.equal(js.includes('function haBindingBuilderHTML('), ha, 'HA builder JS must follow HAS_HA_LIVE');
     assert.equal(js.includes('const haButtonBuilderProvider='), ha, 'HA button source provider must follow HAS_HA_LIVE');
@@ -205,4 +215,19 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
     }
     console.log('PASS: selected, valid minified assets for ' + board +
         ' (PSRAM=' + psram + ', integrations=' + integrationMode + ')');
+}
+
+for (const board of ['reterminal-sticky-interactive', 'm5stack-stopwatch']) {
+    const selected = execFileSync('c++', ['-E', '-P', '-x', 'c++', 'src/app/web_assets.h',
+        '-Itests', '-Isrc/boards/' + board, '-DBOARD_HAS_OVERRIDE',
+        '-DCONFIG_IDF_TARGET_ESP32S3', '-DBOARD_HAS_PSRAM'],
+        {cwd: root, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024});
+    const decodeAsset = symbol => {
+        const content = selected.match(new RegExp('const uint8_t ' + symbol + '\\[\\] PROGMEM = \\{([\\s\\S]*?)\\};'))[1];
+        return zlib.gunzipSync(Buffer.from([...content.matchAll(/0x([0-9a-f]{2})/g)].map(value => parseInt(value[1], 16)))).toString();
+    };
+    assert(selected.includes('power_savings_fragment_html_gz'));
+    assert(decodeAsset('shell_html_gz').includes('src="/portal_power_savings.js'));
+    new vm.Script(decodeAsset('portal_power_savings_js_gz'));
+    console.log('PASS: gated power savings assets for ' + board);
 }

@@ -20,6 +20,9 @@
 #include "sensors/sensor_manager.h"
 #include "power_config.h"
 #include "power_manager.h"
+#if HAS_AUTO_SHUTDOWN
+#include "auto_shutdown.h"
+#endif
 #include "portal_idle.h"
 #include "wifi_manager.h"
 #include "device_class.h"
@@ -352,6 +355,9 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 	#if HAS_HA_HISTORY
 	ha_stats_end_startup();
 	#endif
+#if HAS_AUTO_SHUTDOWN
+	auto_shutdown_configure(device_config.auto_shutdown_timeout_seconds);
+#endif
 }
 
 bool app_continue_offline_from_setup() {
@@ -913,7 +919,9 @@ void loop()
 	device_telemetry_mark_main_loop(DEVICE_RUNTIME_PHASE_MAIN_BUTTONS);
 	hw_buttons_loop();
 
-
+#if HAS_AUTO_SHUTDOWN
+	auto_shutdown_loop();
+#endif
 
 	unsigned long current_ms = millis();
 

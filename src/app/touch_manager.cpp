@@ -7,6 +7,9 @@
 #include "device_dialog.h"
 #endif
 #include "log_manager.h"
+#if HAS_AUTO_SHUTDOWN
+#include "auto_shutdown.h"
+#endif
 
 #include <atomic>
 
@@ -144,6 +147,9 @@ void TouchManager::readCallback(lv_indev_t* indev, lv_indev_data_t* data) {
 		const uint32_t now = millis();
 		const TouchSnapshot physical = manager->driver->readSnapshot();
 		const TouchSnapshot snapshot = g_touch_snapshot_filter.update(physical, now);
+#if HAS_AUTO_SHUTDOWN
+		if (snapshot.count) auto_shutdown_notify_activity();
+#endif
 		portENTER_CRITICAL(&g_physical_touch_mux);
 		g_cached_physical.status = snapshot.status;
 		g_cached_physical.pressed = snapshot.count != 0;

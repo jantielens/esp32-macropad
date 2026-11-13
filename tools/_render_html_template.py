@@ -49,7 +49,8 @@ def render(input_path: Path, web_dir: Path,
            project_name: str, project_display_name: str,
            firmware_version: str, has_ble_hid: bool = True,
            has_binding_help: bool = True,
-           widget_flags: set[str] | None = None) -> str:
+           widget_flags: set[str] | None = None,
+           has_auto_shutdown: bool = False) -> str:
     html = input_path.read_text()
 
     if "{{WIDGET_OPTIONS}}" in html or "{{WIDGET_EDITORS}}" in html:
@@ -65,6 +66,9 @@ def render(input_path: Path, web_dir: Path,
         template = "" if disabled else load_template(web_dir, filename)
         html = html.replace("{{" + key + "}}", template)
 
+    html = html.replace("{{POWER_SAVINGS_SCRIPT}}",
+                        '<script src="/portal_power_savings.js?v={{FIRMWARE_VERSION}}"></script>'
+                        if has_auto_shutdown else "")
     html = html.replace("{{PROJECT_NAME}}", project_name)
     html = html.replace("{{PROJECT_DISPLAY_NAME}}", project_display_name)
     html = html.replace("{{FIRMWARE_VERSION}}", firmware_version)
@@ -87,13 +91,15 @@ def main() -> int:
     p.add_argument("--without-ble-hid", action="store_true")
     p.add_argument("--without-binding-help", action="store_true")
     p.add_argument("--widget-flags", nargs="*", default=None)
+    p.add_argument("--with-auto-shutdown", action="store_true")
     args = p.parse_args()
 
     sys.stdout.write(render(args.input, args.web_dir,
                             args.project_name, args.project_display_name,
                             args.firmware_version, not args.without_ble_hid,
                             not args.without_binding_help,
-                            None if args.widget_flags is None else set(args.widget_flags)))
+                            None if args.widget_flags is None else set(args.widget_flags),
+                            args.with_auto_shutdown))
     return 0
 
 

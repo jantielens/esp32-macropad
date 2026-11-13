@@ -61,6 +61,46 @@ async function testFetchConcurrency() {
 
 async function main() {
     await testFetchConcurrency();
+    const listeners = new Map();
+    const activityRequests = [];
+    const savedConfigs = [];
+    let activityClock = 0;
+    let inputValid = true;
+    let saveClick;
+    const powerContext = {
+        window: { registerConfigFields: fields => assert.strictEqual(fields[0], 'auto_shutdown_timeout_seconds') },
+        document: {
+            addEventListener: (name, listener) => listeners.set(name, listener),
+            getElementById: id => id === 'power-savings-save-btn'
+                ? { addEventListener: (_, listener) => { saveClick = listener; } }
+                : { checkValidity: () => inputValid }
+        },
+        performance: { now: () => activityClock },
+        fetch: async (url, options) => { activityRequests.push({url, method: options.method}); return {ok: true}; },
+        loadConfig() {},
+        saveFragmentConfig: (reboot, fields) => savedConfigs.push({reboot, field: fields[0]}),
+        showMessage() {},
+        console
+    };
+    vm.createContext(powerContext);
+    vm.runInContext(fs.readFileSync('src/app/web/portal_power_savings.js', 'utf8'), powerContext);
+    assert.strictEqual(activityRequests.length, 0, 'loading an idle portal must not keep the device awake');
+    listeners.get('input')({isTrusted: false});
+    assert.strictEqual(activityRequests.length, 0, 'programmatic field updates are not user activity');
+    listeners.get('keydown')({isTrusted: true});
+    listeners.get('pointerdown')({isTrusted: true});
+    assert.strictEqual(activityRequests.length, 1, 'bursty input should share one activity request');
+    activityClock = 250;
+    listeners.get('wheel')({isTrusted: true});
+    assert.strictEqual(activityRequests.length, 2, 'continued interaction must renew activity');
+    assert.deepStrictEqual(activityRequests[0], {url: '/api/component/power-savings/activity', method: 'POST'});
+    powerContext.window.init_power_savings_fragment();
+    inputValid = false;
+    saveClick();
+    assert.strictEqual(savedConfigs.length, 0, 'invalid values must not be submitted');
+    inputValid = true;
+    saveClick();
+    assert.deepStrictEqual(savedConfigs, [{reboot: false, field: 'auto_shutdown_timeout_seconds'}]);
     for (const outcome of ['success', 'empty', 'error', 'font-error', 'timeout', 'font-timeout', 'no-font-api']) {
         let stylesheet;
         let timeoutCallback;

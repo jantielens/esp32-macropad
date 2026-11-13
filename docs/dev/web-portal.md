@@ -926,6 +926,7 @@ every component in that custom section to the same category ID.
   for saved Offline configuration. Image-frame firmware retains its specialized
   mode ownership and rejects Offline. Saving the mode requires reboot; manual
   network commands never rewrite it.
+- **Power Savings** (`HAS_AUTO_SHUTDOWN`): Battery-only inactivity shutdown with one timeout field. Its fragment and standalone script are excluded from disabled builds. The enabled shell loads the script globally so deliberate interaction in any portal section counts without adding another combined-bundle variant flag.
 - **BLE Advertising**: Sensor burst count and advertising interval
   selection (only shown in Duty-Cycle BLE mode when firmware enables BLE).
   Defaults are three repeats and 100 ms. Shared transmit power lives under
@@ -1316,8 +1317,9 @@ not every authentication failure, redirect, or early error response is instrumen
 |--------|------|-------------|
 | `POST` | `/api/reboot` | Reboots without saving configuration. |
 | `POST` | `/api/sleep?seconds=N` | Requests one timed deep sleep, without saving configuration or changing the stored mode or cadence. |
+| `POST` | `/api/component/power-savings/activity` | Authenticated user-activity notification; `204`, available only with `HAS_AUTO_SHUTDOWN`. |
 
-Both routes use portal authentication. Sleep requires an ASCII decimal integer
+These routes use portal authentication. Sleep requires an ASCII decimal integer
 from 1 to 65535 seconds. It returns `400` for a missing or invalid duration,
 `409` when an update, configuration upload/write, or network transition prevents
 sleep, and `503` when main-loop dispatch cannot confirm admission.
@@ -1335,6 +1337,24 @@ saved Wake Interval and is not a configuration field. It does not implicitly
 save, show a reboot dialog, or start reconnection polling; success stops this
 tab's health polling. See the
 [user workflow](../user/device/updates-and-recovery.md#put-the-device-to-sleep-after-configuration).
+
+With `HAS_AUTO_SHUTDOWN`, `GET /api/config` exposes
+`auto_shutdown_timeout_seconds`, and `POST /api/config?no_reboot=1` saves and
+applies it live. Accept an integer or decimal integer string from 0 to 65535;
+0 disables the policy. Unsupported firmware omits the field, navigation,
+fragment, activity route, and script. `set_config` exposes the same live setting
+through MCP when available.
+
+The policy uses fresh shared battery external-power readings and runs only in
+Always-On or Offline mode. Physical input, authenticated mutation requests, MCP
+tool calls, and trusted portal events reset it; ordinary GET polling does not.
+OTA/configuration-write ownership and action continuations defer admission.
+Upload handlers rely on the shared authenticated-request activity reset, not
+upload-lifetime reservations. Shutdown can interrupt a stalled upload or file
+write after inactivity expires; uploads are not guaranteed to finish.
+Board shutdown drivers recheck physical external power before removing power,
+and the Sticky driver waits for active e-paper presentation to drain.
+E-Paper Frame firmware cannot enable this policy.
 
 ### Pad Configuration
 

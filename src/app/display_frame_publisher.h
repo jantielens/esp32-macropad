@@ -20,7 +20,8 @@ public:
 
     uint32_t interactionChanged(uint64_t now) {
         interaction.intent = DisplayIntent::Interactive;
-        interaction.request_sequence = ++requestSequence;
+        if (++requestSequence == 0) ++requestSequence;
+        interaction.request_sequence = requestSequence;
         interaction.requested_us = now;
         return interaction.request_sequence;
     }

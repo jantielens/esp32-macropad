@@ -49,6 +49,13 @@ you intend to use on your revision before relying on battery-powered operation.
 
 ## Board actions
 
+Optional battery inactivity shutdown is available under **Device > Power
+Savings**, but defaults to **0 (disabled)** so existing timing sessions are not
+interrupted. Enable it by setting a timeout in seconds. Running timers do not
+block shutdown and are not restored when the device starts again. See
+[automatic shutdown](../../../docs/user/device/display-and-sleep.md#save-battery-power-with-automatic-shutdown).
+Use the normal power button to restart.
+
 Configure yellow/blue tap and hold actions in the portal. The **M5Stack
 StopWatch** action group adds:
 

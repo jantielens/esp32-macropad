@@ -283,6 +283,11 @@ class PortalHandler(SimpleHTTPRequestHandler):
             self._serve_production_styles()
         elif path == "/portal.js":
             self._serve_production_bundle()
+        elif path == "/portal_power_savings.js":
+            if self._profile() == "reterminal-sticky-interactive":
+                self._serve_file(APP_WEB_DIR / "portal_power_savings.js")
+            else:
+                self._serve_json({"error": "Power savings is unavailable"}, 404)
         elif path == "/epaper_init.js":
             self._serve_file(EPAPER_WEB_DIR / "epaper_init.js")
         elif path == "/portal-logs.js":
@@ -322,6 +327,10 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 self._serve_json({"success": False, "message": "Mock configuration load failed"}, 503)
                 return
             config = copy.deepcopy(self.server.mock_config)
+            if self._profile() == "reterminal-sticky-interactive":
+                config["auto_shutdown_timeout_seconds"] = config.get("auto_shutdown_timeout_seconds", 300)
+            else:
+                config.pop("auto_shutdown_timeout_seconds", None)
             config["caps"]["ha_live"] = self._profile() == "esp32-p4-lcd4b"
             if self._profile() in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
                 config.setdefault("external_data", [])
@@ -659,6 +668,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
             fragment = path[len("/api/section/"):]
             if fragment == "bluetooth" and not self._bthome_capable():
                 self.send_error(404, "BTHome events unavailable")
+                return
+            if fragment == "power-savings" and self._profile() != "reterminal-sticky-interactive":
+                self._serve_json({"error": "Power savings is unavailable"}, 404)
                 return
             if fragment == "external-data" and self._profile() not in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
                 self.send_error(404, "External data unavailable")
@@ -1062,12 +1074,28 @@ class PortalHandler(SimpleHTTPRequestHandler):
             self._serve_json({"success": True})
             return
 
+        if path == "/api/component/power-savings/activity":
+            if self._profile() != "reterminal-sticky-interactive":
+                self._serve_json({"error": "Power savings is unavailable"}, 404)
+                return
+            self._serve_bytes(b"", "application/json", 204)
+            return
+
         if path == "/api/config":
             try:
                 update = json.loads(body.decode("utf-8"))
                 if not isinstance(update, dict):
                     self._serve_json({"success": False, "message": "Configuration must be an object"}, 400)
                     return
+                if "auto_shutdown_timeout_seconds" in update:
+                    seconds = update["auto_shutdown_timeout_seconds"]
+                    if isinstance(seconds, str) and re.fullmatch(r"[0-9]+", seconds):
+                        seconds = int(seconds)
+                    if (self._profile() != "reterminal-sticky-interactive" or
+                            type(seconds) is not int or not 0 <= seconds <= 65535):
+                        self._serve_json({"success": False, "message": "Invalid auto-shutdown timeout"}, 400)
+                        return
+                    update["auto_shutdown_timeout_seconds"] = seconds
                 if "bluetooth_tx_power_dbm" in update:
                     power = update["bluetooth_tx_power_dbm"]
                     if isinstance(power, str) and re.fullmatch(r"-?[0-9]{1,10}", power):
@@ -1306,6 +1334,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
             "{{REBOOT_OVERLAY}}": (APP_WEB_DIR / "_reboot_overlay.html").read_text(encoding="utf-8"),
             "{{BINDING_HELP}}": (APP_WEB_DIR / "_binding_help.html").read_text(encoding="utf-8")
                 if profile in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive") else "",
+            "{{POWER_SAVINGS_SCRIPT}}":
+                '<script src="/portal_power_savings.js?v=dev-mock"></script>'
+                if profile == "reterminal-sticky-interactive" else "",
         }
         for marker, value in replacements.items():
             shell = shell.replace(marker, value)
@@ -1328,6 +1359,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
             flags.add("HAS_HA_LIVE")
         if self._profile() == "crowpanel-4.2-interactive":
             flags = {"HAS_DISPLAY", "HAS_MQTT"}
+        if self._profile() == "reterminal-sticky-interactive":
+            flags = {"HAS_DISPLAY", "HAS_MQTT", "HAS_AUTO_SHUTDOWN"}
         if "HAS_DISPLAY" in flags:
             flags.add("HAS_FACE_WIDGET")
         if self._profile() == "jc3248w535":
@@ -1404,6 +1437,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
                     {"id": "fonts", "display_name": "Fonts", "portal_script": "/portal_fonts.js"},
                 ])
             if category["id"] == "device":
+                if profile == "reterminal-sticky-interactive":
+                    category["items"].append({"id": "power-savings", "display_name": "Power Savings"})
                 category["items"].append({"id": "timezone", "display_name": "Timezone"})
                 category["items"].append({"id": "logs", "display_name": "Logs", "portal_script": "/portal-logs.js"})
             for item in category["items"]:

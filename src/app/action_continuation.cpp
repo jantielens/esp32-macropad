@@ -154,6 +154,30 @@ bool action_continuation_is_full() {
     return full;
 }
 
+#if HAS_AUTO_SHUTDOWN
+bool action_continuation_is_active() {
+    ACTION_CONTINUATION_LOCK();
+    bool active = false;
+    for (const auto& continuation : s_continuations) {
+        if (continuation.active) {
+            active = true;
+            break;
+        }
+    }
+    ACTION_CONTINUATION_UNLOCK();
+    return active;
+}
+
+bool action_continuation_is_pending(uint32_t token) {
+    ACTION_CONTINUATION_LOCK();
+    const ActionContinuation* continuation = find_by_token(token);
+    const bool pending = continuation && continuation->pending && !continuation->completed &&
+        (!continuation->timeout_ms || int32_t(millis() - continuation->deadline_ms) < 0);
+    ACTION_CONTINUATION_UNLOCK();
+    return pending;
+}
+#endif
+
 bool action_continuation_schedule_success(uint32_t token, uint32_t duration_ms) {
     ACTION_CONTINUATION_LOCK();
     ActionContinuation* continuation = find_by_token(token);

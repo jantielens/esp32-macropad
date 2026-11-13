@@ -392,6 +392,7 @@ The [device power API](docs/dev/web-portal.md#device-power-control) includes:
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/sleep?seconds=N` | One-shot deep sleep for 1 to 65535 seconds, using portal authentication; does not save or change operating mode. |
+| `POST` | `/api/component/power-savings/activity` | Authenticated user-activity notification on firmware with battery inactivity shutdown. |
 
 ### Running Tests
 

@@ -27,6 +27,9 @@ void StickyEpaperDriver::releaseResources() {
     drawing = sending = presented = nullptr;
     pending = forceFull = baselineValid = false;
     partialsSinceFull = 0;
+#if HAS_AUTO_SHUTDOWN
+    presentedRequestSequence = 0;
+#endif
 }
 
 void StickyEpaperDriver::init() {
@@ -166,6 +169,17 @@ void StickyEpaperDriver::commitFrame(const DisplayFrame& frame) {
     if (!mutex) return;
     xSemaphoreTake(mutex, portMAX_DELAY);
     schedule.commit(frame);
+#if HAS_AUTO_SHUTDOWN
+    if (frame.request_sequence && !schedule.changed) {
+        if (baselineValid && !pending && !forceFull) {
+            presentedRequestSequence = frame.request_sequence;
+        } else {
+            schedule.frame.intent = frame.intent;
+            schedule.frame.request_sequence = frame.request_sequence;
+            schedule.frame.requested_us = frame.requested_us;
+        }
+    }
+#endif
 #if HAS_DISPLAY_DIAGNOSTICS
     const uint64_t conversion = stats.conversion_us - frameConversionStart;
     const uint64_t wait = stats.framebuffer_wait_us - frameWaitStart;
@@ -187,7 +201,32 @@ void StickyEpaperDriver::stopPresentation() {
     if (wake) xSemaphoreGive(wake);
 }
 
+#if HAS_AUTO_SHUTDOWN
+namespace {
+std::atomic<uint32_t> activePresentations{0};
+}
+
+bool sticky_display_is_busy() {
+    return activePresentations.load() != 0;
+}
+
+bool StickyEpaperDriver::hasPresentedInteraction(uint32_t request_sequence) {
+    if (!mutex || !request_sequence) return false;
+    xSemaphoreTake(mutex, portMAX_DELAY);
+    const bool presented = baselineValid && presentedRequestSequence &&
+        int32_t(presentedRequestSequence - request_sequence) >= 0;
+    xSemaphoreGive(mutex);
+    return presented;
+}
+#endif
+
 void StickyEpaperDriver::present() {
+#if HAS_AUTO_SHUTDOWN
+    struct PresentationGuard {
+        PresentationGuard() { ++activePresentations; }
+        ~PresentationGuard() { --activePresentations; }
+    } guard;
+#endif
     if (!drawing) return;
     for (;;) {
         if (ota_activity_is_active() || stopping.load()) return;
@@ -209,6 +248,10 @@ void StickyEpaperDriver::present() {
         const uint64_t compareStart = esp_timer_get_time();
 #endif
         if (!forceFull && baselineValid && memcmp(drawing, presented, frameBytes) == 0) {
+#if HAS_AUTO_SHUTDOWN
+            if (schedule.frame.request_sequence)
+                presentedRequestSequence = schedule.frame.request_sequence;
+#endif
             pending = false;
             schedule.consume();
 #if HAS_DISPLAY_DIAGNOSTICS
@@ -234,6 +277,9 @@ void StickyEpaperDriver::present() {
         sample.width = 800;
         sample.height = 480;
 #endif
+#if HAS_AUTO_SHUTDOWN
+        const DisplayFrame presentingFrame = schedule.frame;
+#endif
         memcpy(sending, drawing, frameBytes);
 #if HAS_DISPLAY_DIAGNOSTICS
         sample.copy_us = esp_timer_get_time() - copyStart;
@@ -251,12 +297,23 @@ void StickyEpaperDriver::present() {
         if (result == sticky_epaper::Result::Success) {
             memcpy(presented, sending, frameBytes);
             baselineValid = true;
+#if HAS_AUTO_SHUTDOWN
+            if (presentingFrame.request_sequence)
+                presentedRequestSequence = presentingFrame.request_sequence;
+#endif
             lastRefresh = millis();
             partialsSinceFull = full ? 0 : partialsSinceFull < UINT16_MAX ? partialsSinceFull + 1 : UINT16_MAX;
             available.store(true);
         } else {
             pending = true;
             forceFull = true;
+#if HAS_AUTO_SHUTDOWN
+            if (presentingFrame.request_sequence && !schedule.frame.request_sequence) {
+                schedule.frame.intent = presentingFrame.intent;
+                schedule.frame.request_sequence = presentingFrame.request_sequence;
+                schedule.frame.requested_us = presentingFrame.requested_us;
+            }
+#endif
             if (result == sticky_epaper::Result::Error) {
                 LOGE("Sticky", "Presentation failed; next request will retry a full refresh");
             }

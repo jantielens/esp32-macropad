@@ -316,6 +316,23 @@ struct HwButtonDef {
 #define CONFIG_DEFAULT_PORTAL_IDLE_SECONDS 120
 #endif
 
+// Board supports battery-aware automatic hardware shutdown.
+#ifndef HAS_AUTO_SHUTDOWN
+#define HAS_AUTO_SHUTDOWN false
+#endif
+
+// Battery inactivity timeout in seconds; 0 disables automatic shutdown.
+#ifndef AUTO_SHUTDOWN_DEFAULT_SECONDS
+#define AUTO_SHUTDOWN_DEFAULT_SECONDS 300
+#endif
+
+#if HAS_AUTO_SHUTDOWN && IS_EPAPER_FRAME
+#error "Automatic hardware shutdown is unavailable on E-Paper Frame devices"
+#endif
+#if HAS_AUTO_SHUTDOWN && !defined(BOARD_AUTO_SHUTDOWN_REQUEST)
+#error "Automatic shutdown requires a board shutdown implementation"
+#endif
+
 // Enable BTHome v2 BLE telemetry advertising (transport for headless/battery boards).
 // Independent of HAS_BLE_HID; both can be enabled on the same board but mainly intended
 // for boards without a display (e.g. ESP32-C3 sensor nodes).
@@ -781,6 +798,10 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 // Enable shared battery telemetry, bindings, and metadata for boards with a battery provider.
 #ifndef HAS_BATTERY_INFO
 #define HAS_BATTERY_INFO false
+#endif
+
+#if HAS_AUTO_SHUTDOWN && !HAS_BATTERY_INFO
+#error "HAS_AUTO_SHUTDOWN requires HAS_BATTERY_INFO"
 #endif
 
 // Enable an ADC-connected LiPo battery monitor sensor adapter.

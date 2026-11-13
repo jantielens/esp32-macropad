@@ -42,6 +42,11 @@ bool action_continuation_complete(uint32_t token, bool success);
 // Reports whether every continuation slot is currently reserved.
 bool action_continuation_is_full();
 
+#if HAS_AUTO_SHUTDOWN
+bool action_continuation_is_active();
+bool action_continuation_is_pending(uint32_t token);
+#endif
+
 // Arrange successful completion after duration_ms. Used by the built-in delay
 // action; dispatch still resumes only from the normal owner task.
 bool action_continuation_schedule_success(uint32_t token, uint32_t duration_ms);

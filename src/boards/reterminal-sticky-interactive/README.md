@@ -93,6 +93,12 @@ device validation.
 
 ### Turn off the device
 
+Battery-powered operation defaults to automatic shutdown after **300 seconds**
+without user activity. Configure it under **Device > Power Savings**; enter
+`0` to disable. External power suspends it. See
+[automatic shutdown](../../../docs/user/device/display-and-sleep.md#save-battery-power-with-automatic-shutdown)
+for activity, save behavior, and timer limitations.
+
 The board-local **reTerminal Sticky > Shutdown** action (`shutdown`) requests
 hardware power-off, not deep sleep. Assign it to a pad button or a physical
 button hold through the existing action editor; default assignments stay empty.

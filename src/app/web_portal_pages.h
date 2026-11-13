@@ -16,6 +16,9 @@ void handleFirmware(AsyncWebServerRequest *request);
 // the entire portal JS in a single HTTP response and a single gzip member.
 void handlePortalJS(AsyncWebServerRequest *request);
 void handlePortalAllCSS(AsyncWebServerRequest *request);
+#if HAS_AUTO_SHUTDOWN
+void handlePortalPowerSavingsJS(AsyncWebServerRequest *request);
+#endif
 #if HAS_TTF_FONTS
 void handlePortalFontsJS(AsyncWebServerRequest *request);
 #endif

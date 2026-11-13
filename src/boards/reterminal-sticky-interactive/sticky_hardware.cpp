@@ -98,6 +98,9 @@ void sticky_hardware_loop() {
             shutdown_failed(token, "AI/OK button is still held", false);
         return;
     }
+#if HAS_AUTO_SHUTDOWN
+    if (sticky_display_is_busy()) return;
+#endif
 #if HAS_AUDIO
     audio_stop();
 #endif

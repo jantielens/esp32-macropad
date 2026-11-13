@@ -62,6 +62,9 @@
 #define KEY_DC_WAKE        "dc_wake_s"
 #define KEY_MQTT_PUB       "mqtt_pub_s"
 #define KEY_PORTAL_IDLE    "portal_idle"
+#if HAS_AUTO_SHUTDOWN
+#define KEY_AUTO_SHUTDOWN "auto_shutdown"
+#endif
 #define KEY_WIFI_BACKOFF_MAX "wifi_bomax"
 #define KEY_MQTT_SCOPE     "mqtt_scope"
 #define KEY_BACKLIGHT_BRIGHTNESS "bl_bright"
@@ -423,6 +426,9 @@ bool config_manager_load(DeviceConfig *config) {
 				config->duty_cycle_wake_seconds = 120;
 				config->mqtt_publish_interval_seconds = 120;
 				config->portal_idle_timeout_seconds = CONFIG_DEFAULT_PORTAL_IDLE_SECONDS;
+#if HAS_AUTO_SHUTDOWN
+				config->auto_shutdown_timeout_seconds = AUTO_SHUTDOWN_DEFAULT_SECONDS;
+#endif
 				config->wifi_backoff_max_seconds = 900;
 
 				strlcpy(config->mqtt_publish_scope, "sensors_only", CONFIG_MQTT_SCOPE_MAX_LEN);
@@ -546,6 +552,9 @@ bool config_manager_load(DeviceConfig *config) {
 		config->duty_cycle_wake_seconds = preferences.getUShort(KEY_DC_WAKE, 120);
 		config->mqtt_publish_interval_seconds = preferences.getUShort(KEY_MQTT_PUB, 120);
 		config->portal_idle_timeout_seconds = preferences.getUShort(KEY_PORTAL_IDLE, CONFIG_DEFAULT_PORTAL_IDLE_SECONDS);
+#if HAS_AUTO_SHUTDOWN
+		config->auto_shutdown_timeout_seconds = preferences.getUShort(KEY_AUTO_SHUTDOWN, AUTO_SHUTDOWN_DEFAULT_SECONDS);
+#endif
 		config->wifi_backoff_max_seconds = preferences.getUShort(KEY_WIFI_BACKOFF_MAX, 900);
 
 		preferences.getString(KEY_MQTT_SCOPE, config->mqtt_publish_scope, CONFIG_MQTT_SCOPE_MAX_LEN);
@@ -827,6 +836,13 @@ static bool save_config_locked(const DeviceConfig *config) {
 		preferences.putUShort(KEY_DC_WAKE, config->duty_cycle_wake_seconds);
 		preferences.putUShort(KEY_MQTT_PUB, config->mqtt_publish_interval_seconds);
 		preferences.putUShort(KEY_PORTAL_IDLE, config->portal_idle_timeout_seconds);
+#if HAS_AUTO_SHUTDOWN
+		if (preferences.putUShort(KEY_AUTO_SHUTDOWN, config->auto_shutdown_timeout_seconds) != sizeof(uint16_t)) {
+				LOGE("Config", "Failed to persist auto-shutdown timeout");
+				preferences.end();
+				return false;
+		}
+#endif
 		preferences.putUShort(KEY_WIFI_BACKOFF_MAX, config->wifi_backoff_max_seconds);
 
 		preferences.putString(KEY_MQTT_SCOPE, config->mqtt_publish_scope);
@@ -1254,6 +1270,9 @@ LOGI("Config", "Power: mode=%s dc_wake=%us idle=%us backoff_max=%us",
 		);
 
 		LOGI("Config", "MQTT scope: %s", config->mqtt_publish_scope);
+#if HAS_AUTO_SHUTDOWN
+		LOGI("Config", "Battery auto-shutdown: %us (0 disables)", unsigned(config->auto_shutdown_timeout_seconds));
+#endif
 #if HAS_BLE || HAS_BLE_HID
 		LOGI("Config", "Bluetooth power: %+d dBm (applied at boot)", int(config->bluetooth_tx_power_dbm));
 		LOGI("Config", "BTHome events: burst=%ums interval=%ums",

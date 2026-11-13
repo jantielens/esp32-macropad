@@ -135,6 +135,9 @@ struct DeviceConfig {
 		uint16_t duty_cycle_wake_seconds;                      // default 120; deep-sleep duration in any duty-cycle mode (0 = wake immediately)
 		uint16_t mqtt_publish_interval_seconds;                // default 120; periodic MQTT publish cadence in Always-On (0 = disabled)
 		uint16_t portal_idle_timeout_seconds;                  // default 120; auto-sleep timeout in Config/AP mode
+#if HAS_AUTO_SHUTDOWN
+		uint16_t auto_shutdown_timeout_seconds;
+#endif
 		uint16_t wifi_backoff_max_seconds;                     // default 900; max exponential backoff in duty_cycle_mqtt
 #if HAS_BLE
 		uint8_t ble_burst_count;                               // default BLE_TELEMETRY_DEFAULT_BURST_COUNT; advertising packets per wake

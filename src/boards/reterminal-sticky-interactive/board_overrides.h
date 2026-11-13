@@ -5,6 +5,9 @@
 #define BOARD_SENSOR_SOURCE "drivers/sticky_sensors.cpp"
 #define BOARD_ACTION_SOURCE "sticky_actions.cpp"
 #define BOARD_HARDWARE_LOOP sticky_hardware_loop
+#define HAS_AUTO_SHUTDOWN true
+// Reuse the board's checked hardware power-off request.
+#define BOARD_AUTO_SHUTDOWN_REQUEST(token) sticky_request_shutdown(token)
 // Reserve one extra registry entry for the board-local shutdown action.
 #define ACTION_TYPE_REGISTRY_MAX_TYPES 28
 // Optional power-latch hook called before the rest of application setup.

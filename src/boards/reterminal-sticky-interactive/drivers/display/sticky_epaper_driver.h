@@ -29,6 +29,9 @@ public:
     void beginFrame() override;
     void commitFrame(const DisplayFrame& frame) override;
     void stopPresentation() override;
+#if HAS_AUTO_SHUTDOWN
+    bool hasPresentedInteraction(uint32_t request_sequence) override;
+#endif
     bool requestFullRefresh() override;
     bool isAvailable() const override { return available.load(); }
     int presentationMode() const override { return grayscale ? 1 : 0; }
@@ -57,6 +60,9 @@ private:
     bool pending = false, forceFull = false, baselineValid = false;
     uint32_t lastChange = 0, firstPending = 0, lastRefresh = 0;
     uint16_t partialsSinceFull = 0;
+#if HAS_AUTO_SHUTDOWN
+    uint32_t presentedRequestSequence = 0;
+#endif
 #if HAS_DISPLAY_DIAGNOSTICS
     DisplayPresentationStats stats;
     uint64_t frameConversionStart = 0, frameWaitStart = 0, framePixelsStart = 0, frameFlushesStart = 0;

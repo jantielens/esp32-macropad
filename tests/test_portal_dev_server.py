@@ -89,6 +89,33 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertNotIn("pad-slider-preview", fragment)
         self.assertNotIn('id="binding-help-overlay"', fragment)
 
+    def test_power_savings_capability_and_round_trip(self):
+        profile = "reterminal-sticky-interactive"
+        self.server.mock_config.pop("auto_shutdown_timeout_seconds", None)
+        self.assertEqual(self.request("/api/config", profile=profile)[1]["auto_shutdown_timeout_seconds"], 300)
+        for value in ("0", "65535"):
+            status, result = self.request("/api/config?no_reboot=1", "POST",
+                                          {"auto_shutdown_timeout_seconds": value}, profile=profile)
+            self.assertEqual(status, 200)
+            self.assertTrue(result["success"])
+            self.assertEqual(self.request("/api/config", profile=profile)[1]["auto_shutdown_timeout_seconds"], int(value))
+        for value in (-1, 65536, 1.5, True, "", "300s"):
+            self.assertEqual(self.request("/api/config", "POST",
+                                         {"auto_shutdown_timeout_seconds": value}, profile=profile)[0], 400)
+        self.assertNotIn("auto_shutdown_timeout_seconds", self.request("/api/config")[1])
+        for selected, enabled in ((profile, True), ("reterminal-e1003-frame", False)):
+            nav = self.request("/api/portal/nav", profile=selected)[1]
+            entries = [item["id"] for category in nav["categories"] for item in category["items"]]
+            self.assertEqual("power-savings" in entries, enabled)
+            shell = self.request("/?profile=" + selected, profile=selected, raw=True)[1]
+            self.assertEqual('src="/portal_power_savings.js' in shell, enabled)
+            expected = 200 if enabled else 404
+            self.assertEqual(self.request("/portal_power_savings.js", profile=selected, raw=True)[0], expected)
+            self.assertEqual(self.request("/api/section/power-savings", profile=selected, raw=True)[0], expected)
+            self.assertEqual(self.request("/api/component/power-savings/activity", "POST",
+                                          profile=selected, raw=True)[0], 204 if enabled else 404)
+        self.server.mock_config.pop("auto_shutdown_timeout_seconds", None)
+
     def test_bthome_capability_validation_save_reload_and_failure(self):
         profile = "reterminal-sticky-interactive"
         status, config = self.request("/api/config", profile=profile)

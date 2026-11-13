@@ -8,6 +8,7 @@
 #include <algorithm>
 
 #include "log_manager.h"
+#include "../src/app/display_driver.h"
 
 void log_write(LogLevel, const char*, const char*, ...) {}
 bool log_diagnostics_enabled(const char*) { return false; }
@@ -29,6 +30,31 @@ static int touch = 1;
 int* touchManager = &touch;
 uint8_t touch_manager_contact_capacity() { return touchManager ? 1 : 0; }
 void touch_manager_cancel_physical_input() {}
+static bool panelAwake = true;
+bool screen_saver_manager_input_ready() { return panelAwake; }
+volatile bool g_displayFlushBusy = false;
+static unsigned notificationFlushes = 0;
+class NotificationDisplayDriver : public DisplayDriver {
+public:
+    bool coherent = false;
+    uint32_t presented = 0;
+    void init() override {}
+    void setRotation(uint8_t) override {}
+    int width() override { return 466; }
+    int height() override { return 466; }
+    void setBacklight(bool) override {}
+    void setBacklightBrightness(uint8_t) override {}
+    uint8_t getBacklightBrightness() override { return 100; }
+    bool hasBacklightControl() override { return false; }
+    void applyDisplayFixes() override {}
+    void startWrite() override {}
+    void endWrite() override {}
+    void setAddrWindow(int16_t, int16_t, uint16_t, uint16_t) override {}
+    void pushColors(uint16_t*, uint32_t, bool) override {}
+    bool coherentFrames() const override { return coherent; }
+    bool hasPresentedInteraction(uint32_t request) override { return request && presented >= request; }
+};
+static NotificationDisplayDriver notificationDriver;
 class DisplayManager {
 public:
     int back_requests = 0;
@@ -38,7 +64,11 @@ public:
     void lock() {}
     void unlock() {}
     unsigned interaction_changes = 0;
-    void interactionChanged(uint64_t = 0) { ++interaction_changes; }
+    uint32_t interactionChanged(uint64_t = 0) {
+        ++interaction_changes;
+        return notificationDriver.coherent ? interaction_changes : 0;
+    }
+    DisplayDriver* getDriver() { return &notificationDriver; }
 };
 static DisplayManager manager;
 DisplayManager* displayManager = &manager;
@@ -673,13 +703,51 @@ static void dialog_pattern_checks(lv_display_t* display) {
     assert(action_continuation_take(nullptr, &count, nullptr, 0) == ACTION_CONTINUATION_SUCCESS && count == 0);
 }
 
+static void shutdown_notification_checks() {
+    lv_obj_t* screen = lv_obj_create(nullptr);
+    lv_screen_load(screen);
+    uint32_t generation = 0;
+    const unsigned flushes = notificationFlushes;
+    assert(device_dialog_notify("Powered off automatically", 0, &generation));
+    assert(generation && find_label(lv_layer_top(), "Powered off automatically"));
+    panelAwake = false;
+    assert(device_dialog_notification_state(generation) == DEVICE_NOTIFICATION_PENDING);
+    assert(notificationFlushes == flushes);
+    panelAwake = true;
+    assert(device_dialog_notification_state(generation) == DEVICE_NOTIFICATION_PRESENTED);
+    assert(notificationFlushes > flushes);
+    device_dialog_dismiss_notification(generation);
+    assert(!device_dialog_active());
+
+    notificationDriver.coherent = true;
+    assert(device_dialog_notify("Powered off automatically", 0, &generation));
+    assert(device_dialog_notification_state(generation) == DEVICE_NOTIFICATION_PENDING);
+    notificationDriver.presented = manager.interaction_changes;
+    assert(device_dialog_notification_state(generation) == DEVICE_NOTIFICATION_PRESENTED);
+    uint32_t failedGeneration = generation;
+    fail_allocation = true;
+    assert(!device_dialog_notify("Unavailable", 0, &failedGeneration));
+    assert(!failedGeneration);
+    assert(device_dialog_notification_state(generation) == DEVICE_NOTIFICATION_PRESENTED);
+    assert(device_dialog_notify("Replacement", 0));
+    assert(device_dialog_notification_state(generation) == DEVICE_NOTIFICATION_MISSING);
+    device_dialog_dismiss_notification(generation);
+    assert(device_dialog_active() && find_label(lv_layer_top(), "Replacement"));
+    device_dialog_dismiss_notification();
+    notificationDriver.coherent = false;
+    lv_obj_delete(screen);
+}
+
 int main() {
     lv_init();
     lv_display_t* display = lv_display_create(466, 466);
     assert(display);
     lv_display_set_color_format(display, LV_COLOR_FORMAT_ARGB8888);
     lv_display_set_buffers(display, pixels, nullptr, sizeof(pixels), LV_DISPLAY_RENDER_MODE_FULL);
-    lv_display_set_flush_cb(display, [](lv_display_t* target, const lv_area_t*, uint8_t*) { lv_display_flush_ready(target); });
+    lv_display_set_flush_cb(display, [](lv_display_t* target, const lv_area_t*, uint8_t*) {
+        ++notificationFlushes;
+        lv_display_flush_ready(target);
+    });
     device_typography_init("missing-on-bitmap-board", 30);
     const uint16_t medium = pad_font_pixel_size(pad_get_scale_info().font_medium);
     assert(pad_typography_font(pad_get_scale_info().font_small) == pad_nearest_bitmap_font(pad_font_pixel_size(pad_get_scale_info().font_small) * 30, medium));
@@ -717,6 +785,7 @@ int main() {
     }
     device_dialog_set_templates(DialogTemplates{});
     dialog_lifecycle_checks();
+    shutdown_notification_checks();
     dialog_test_endpoint_checks();
     dialog_pattern_checks(display);
     wifi_setup_checks(display);

@@ -6,6 +6,9 @@
 #include "action_list.h"
 #include "hw_button_config.h"
 #include "log_manager.h"
+#if HAS_AUTO_SHUTDOWN
+#include "auto_shutdown.h"
+#endif
 #if HAS_DISPLAY
 #include "device_dialog.h"
 #endif
@@ -127,6 +130,10 @@ void hw_buttons_loop() {
     for (uint8_t i = 0; i < NUM_HW_BUTTONS; i++) {
         const bool active = button_pressed(i);
         BtnRuntime& rt = s_rt[i];
+#if HAS_AUTO_SHUTDOWN
+        if (active && rt.state != BtnState::Idle && rt.state != BtnState::Debounce)
+            auto_shutdown_notify_activity();
+#endif
         switch (rt.state) {
             case BtnState::Idle:
                 if (active) {

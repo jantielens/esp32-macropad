@@ -103,7 +103,7 @@ bool binding_template_resolve(const char* value, char* output, size_t size) {
 }
 bool binding_template_has_bindings(const char* value) { return value && strchr(value, '['); }
 bool device_dialog_active() { return false; }
-bool device_dialog_notify(const char*, uint32_t) { return true; }
+bool device_dialog_notify(const char*, uint32_t, uint32_t*) { return true; }
 uint32_t swipe_actions_last_swipe_time() { return 0; }
 bool icon_store_lookup(const char*, IconRef* ref) {
     if (!g_selector_icon) return false;

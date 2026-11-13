@@ -18,6 +18,9 @@
 #include "web_portal_state.h"
 #include "net_activity.h"
 #include "reboot_service.h"
+#if HAS_AUTO_SHUTDOWN
+#include "auto_shutdown.h"
+#endif
 
 #include "version.h"
 
@@ -586,6 +589,9 @@ static void mcp_method_tools_call(AsyncWebServerRequest* request, JsonVariantCon
     JsonObject toolResult = resultDoc->to<JsonObject>();
     String err;
 
+#if HAS_AUTO_SHUTDOWN
+    auto_shutdown_notify_activity();
+#endif
     bool ok = tool->handler(args, toolResult, err);
 
     if (!ok) {

@@ -16,8 +16,10 @@ static void check(bool condition, const char* message) {
 int main() {
     const uint32_t initial_epoch = ota_activity_epoch();
     check(!ota_activity_is_active(), "initially inactive");
+    check(!ota_activity_is_busy(), "no operation blocks shutdown initially");
     check(ota_activity_try_begin(), "first acquisition succeeds");
     check(ota_activity_is_active(), "active after acquisition");
+    check(ota_activity_is_busy(), "OTA blocks automatic shutdown");
     check(ota_activity_epoch() == initial_epoch + 1, "successful begin increments epoch");
     check(!ota_activity_try_begin(), "second acquisition fails");
     check(ota_activity_epoch() == initial_epoch + 1, "failed begin preserves epoch");
@@ -40,14 +42,18 @@ int main() {
 
     check(ota_activity_try_begin_config_write(), "config update admitted");
     check(ota_activity_try_begin_config_write(), "nested config save admitted");
+    check(ota_activity_is_busy(), "existing config writes block automatic shutdown");
     check(!ota_activity_try_begin(), "config update excludes OTA");
     check(!ota_activity_try_begin_network_transition(), "config update excludes teardown");
     ota_activity_finish_config_write();
     check(!ota_activity_try_begin_network_transition(), "outer update still excludes teardown");
+    check(ota_activity_is_busy(), "nested save completion leaves the outer config write protected");
     ota_activity_finish_config_write();
+    check(!ota_activity_is_busy(), "config write completion restores shutdown eligibility");
 
     check(ota_activity_try_begin_network_transition(), "idle network transition admitted");
     check(!ota_activity_is_active(), "transition does not masquerade as OTA");
+    check(ota_activity_is_busy(), "network transitions block automatic shutdown");
     check(!ota_activity_try_begin(), "transition excludes new OTA");
     check(!ota_activity_try_begin_config_write(), "transition excludes new config writes");
     check(!ota_activity_try_begin_network_transition(), "transition has one owner");

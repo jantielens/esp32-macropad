@@ -160,6 +160,21 @@ ready/power-off cleanup, yielding without pausing OTA transport or another task.
 If SSD2677 drive cleanup fails, the driver cuts the display rail, allows 100 ms off, and
 restores it with 100 ms settling before the next full-refresh retry.
 
+With `HAS_AUTO_SHUTDOWN`, the board's shutdown request reserves OTA activity,
+and an active-presentation counter keeps the power latch on until `present()`
+has returned, including refresh cancellation and panel cleanup. Automatic
+shutdown also drains the current LVGL frame under its existing display lock.
+Before taking that shutdown reservation, the inactivity policy wakes display
+sleep and shows a non-expiring **Powered off automatically** notification.
+The dialog's generation identifies the owned notice; its interaction request
+sequence is acknowledged only after a successful physical presentation, or
+when the same pixels are already on the panel. Failed refreshes retain the
+request through retry. The policy reserves a continuation while polling without
+blocking the Arduino loop and proceeds without the notice after 60 seconds.
+The hardware shutdown retains its own continuation watchdog. New activity, power
+changes, or competing OTA/configuration work cancel preparation. Failed
+shutdown clears only the policy's own notification, not a replacement dialog.
+
 GT911 uses Wire1 SDA3/SCL2 at 400 kHz after touch power has settled for 250 ms.
 Wire0 remains on SDA1/SCL0 for later sensor adapters. The board-gated
 `TOUCH_GT911_CONFIG_ORIENTATION` option reads the GT911 resolution without

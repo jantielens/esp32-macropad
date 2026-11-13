@@ -105,6 +105,10 @@ FEATURES = {
         ("firmware_fragment_html_gz",),
     ),
     "Timers / time": (("timer*.cpp.o", "time_service.cpp.o"), ("timers_fragment_html_gz",)),
+    "Auto-shutdown (HAS_AUTO_SHUTDOWN)": (
+        ("auto_shutdown.cpp.o",),
+        ("power_savings_fragment_html_gz", "portal_power_savings_js_gz"),
+    ),
     "Sensors / power": (("sensors.cpp.o", "battery_info.cpp.o", "power*.cpp.o", "hw_button*.cpp.o", "duty_cycle.cpp.o", "board_hardware.cpp.o"), ()),
     "Configuration": (("config*.cpp.o",), ()),
     "Device classes": (("device_class*.cpp.o", "class_branding.cpp.o"), ()),

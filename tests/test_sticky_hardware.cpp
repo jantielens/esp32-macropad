@@ -3,6 +3,10 @@
 #include "drivers/gt911_touch_driver.h"
 #include "../src/app/presented_frame.h"
 #include "../src/app/action_registry.h"
+#include "../src/app/action_continuation.h"
+#include "../src/app/auto_shutdown.h"
+#include "../src/app/device_dialog.h"
+#include "../src/app/power_manager.h"
 #include <SPI.h>
 #include <driver/gpio.h>
 #include <cstdio>
@@ -42,6 +46,60 @@ static uint32_t clockMs = 0;
 static bool otaActive = false;
 static bool configWriteActive = false;
 static bool transitionActive = false;
+static bool displayBusy = false, actionBusy = false;
+static bool screenReady = true, notificationAvailable = true;
+static uint32_t notificationGeneration = 0, visibleNotification = 0, pendingDeadline = 0;
+static DeviceNotificationState notificationState = DEVICE_NOTIFICATION_PRESENTED;
+static unsigned notifications = 0, dismissals = 0, wakeRequests = 0;
+static uint32_t automaticRequests = 0;
+static bool activityDuringBegin = false, activityDuringNotification = false;
+static PowerMode runtimeMode = PowerMode::AlwaysOn;
+bool sticky_display_is_busy() { return displayBusy; }
+bool ota_activity_is_busy() { return otaActive || configWriteActive || transitionActive; }
+PowerMode power_manager_get_current_mode() { return runtimeMode; }
+void display_manager_lock_if_needed(bool* did_lock) { *did_lock = false; }
+void display_manager_unlock_if_needed(bool) {}
+bool action_continuation_is_active() { return actionBusy; }
+bool action_continuation_is_pending(uint32_t) {
+    return actionBusy && int32_t(clockMs - pendingDeadline) < 0;
+}
+void screen_saver_manager_wake() { ++wakeRequests; }
+bool screen_saver_manager_input_ready() { return screenReady; }
+bool device_dialog_notify(const char* message, uint32_t duration, uint32_t* generation) {
+    CHECK(std::string(message) == "Powered off automatically" && duration == 0);
+    if (!notificationAvailable) return false;
+    ++notifications;
+    *generation = visibleNotification = ++notificationGeneration;
+    return true;
+}
+DeviceNotificationState device_dialog_notification_state(uint32_t generation) {
+    if (activityDuringNotification) {
+        ++clockMs;
+        auto_shutdown_notify_activity();
+    }
+    return generation == visibleNotification ? notificationState : DEVICE_NOTIFICATION_MISSING;
+}
+void device_dialog_dismiss_notification(uint32_t generation) {
+    if (generation == visibleNotification) {
+        ++dismissals;
+        visibleNotification = 0;
+    }
+}
+bool action_continuation_begin(const ButtonAction*, uint8_t, const char*, uint32_t* token,
+                              ActionContinuationOwner, bool) {
+    *token = 100 + ++automaticRequests;
+    actionBusy = true;
+    if (activityDuringBegin) {
+        ++clockMs;
+        auto_shutdown_notify_activity();
+    }
+    return true;
+}
+void action_continuation_mark_pending(uint32_t) {
+    actionBusy = true;
+    pendingDeadline = clockMs + ACTION_CONTINUATION_TIMEOUT_MS;
+}
+void action_continuation_release(uint32_t) { actionBusy = false; }
 static bool aiButtonHeld = false;
 static int audioStops = 0;
 static std::vector<uint32_t> failedShutdowns;
@@ -99,6 +157,7 @@ void ota_activity_finish() { CHECK(otaActive); otaActive = false; }
 bool action_continuation_complete(uint32_t token, bool success) {
     CHECK(!success);
     failedShutdowns.push_back(token);
+    if (token >= 100) actionBusy = false;
     return true;
 }
 void audio_stop() { ++audioStops; }
@@ -468,6 +527,256 @@ int main() {
         failPin = -1;
         CHECK(sticky_early_power_init());
     }
+    const auto setPower = [&](float external) {
+        if (!std::isfinite(external)) {
+            clockMs += 10000;
+        } else {
+            externalPower = int(external);
+            clockMs += 2000;
+            sensor_manager_loop();
+        }
+    };
+    setPower(0);
+    auto_shutdown_configure(0);
+    auto_shutdown_loop();
+    clockMs += 10000;
+    auto_shutdown_loop();
+    CHECK(automaticRequests == 0);
+    auto_shutdown_configure(1);
+    setPower(NAN);
+    auto_shutdown_loop();
+    clockMs += 2000;
+    auto_shutdown_loop();
+    CHECK(automaticRequests == 0);
+    setPower(0);
+    auto_shutdown_loop();
+    clockMs += 999;
+    auto_shutdown_loop();
+    CHECK(automaticRequests == 0);
+    auto_shutdown_notify_activity();
+    clockMs += 999;
+    auto_shutdown_loop();
+    CHECK(automaticRequests == 0);
+    ++clockMs;
+    for (bool* busy : {&otaActive, &configWriteActive, &transitionActive, &actionBusy}) {
+        *busy = true;
+        auto_shutdown_loop();
+        CHECK(automaticRequests == 0);
+        *busy = false;
+    }
+    auto_shutdown_loop();
+    auto_shutdown_loop();
+    CHECK(automaticRequests == 1 && otaActive && actionBusy);
+    displayBusy = true;
+    outputs.clear();
+    BOARD_HARDWARE_LOOP();
+    CHECK(outputs.empty() && powerLatched);
+    displayBusy = false;
+    BOARD_HARDWARE_LOOP();
+    CHECK(!powerLatched);
+    clockMs += 500;
+    BOARD_HARDWARE_LOOP();
+    CHECK(!otaActive && !actionBusy && powerLatched);
+    auto_shutdown_loop();
+    CHECK(automaticRequests == 1);
+    clockMs += 500;
+    auto_shutdown_loop();
+    auto_shutdown_loop();
+    CHECK(automaticRequests == 2);
+    // Fresh GPIO power detection must override a cached battery-only reading.
+    externalPower = 1;
+    BOARD_HARDWARE_LOOP();
+    CHECK(!otaActive && powerLatched);
+    setPower(1);
+    auto_shutdown_loop();
+    clockMs += 5000;
+    auto_shutdown_loop();
+    CHECK(automaticRequests == 2);
+    externalPower = 0;
+    setPower(0);
+    auto_shutdown_loop();
+    for (PowerMode mode : {PowerMode::Config, PowerMode::Ap, PowerMode::DutyCycleEpaperFrame}) {
+        runtimeMode = mode;
+        clockMs += 2000;
+        auto_shutdown_loop();
+        CHECK(automaticRequests == 2);
+    }
+    runtimeMode = PowerMode::Offline;
+    clockMs = UINT32_MAX - 2500;
+    setPower(0);
+    auto_shutdown_configure(1);
+    auto_shutdown_loop();
+    clockMs += 999;
+    auto_shutdown_loop();
+    CHECK(automaticRequests == 2);
+    ++clockMs;
+    auto_shutdown_loop();
+    auto_shutdown_loop();
+    CHECK(automaticRequests == 3);
+    externalPower = 1;
+    BOARD_HARDWARE_LOOP();
+    CHECK(!otaActive && !actionBusy);
+    setPower(0);
+    auto_shutdown_configure(UINT16_MAX);
+    auto_shutdown_loop();
+    clockMs += UINT16_MAX * 1000U - 2001;
+    setPower(0);
+    auto_shutdown_loop();
+    CHECK(automaticRequests == 3);
+    ++clockMs;
+    auto_shutdown_loop();
+    auto_shutdown_loop();
+    CHECK(automaticRequests == 4);
+    externalPower = 1;
+    BOARD_HARDWARE_LOOP();
+    CHECK(!otaActive && !actionBusy);
+    auto_shutdown_loop();
+    CHECK(!visibleNotification);
+
+    setPower(0);
+    auto_shutdown_configure(1);
+    auto_shutdown_loop();
+    clockMs += 1000;
+    screenReady = false;
+    const unsigned noticesBeforeWake = notifications;
+    auto_shutdown_loop();
+    CHECK(wakeRequests > 0 && actionBusy && !otaActive);
+    auto_shutdown_loop();
+    CHECK(notifications == noticesBeforeWake && !otaActive);
+    screenReady = true;
+    notificationState = DEVICE_NOTIFICATION_PENDING;
+    outputs.clear();
+    auto_shutdown_loop();
+    const uint32_t pendingNotice = visibleNotification;
+    CHECK(pendingNotice && actionBusy && !otaActive && outputs.empty());
+    clockMs += 10;
+    auto_shutdown_loop();
+    CHECK(!otaActive && outputs.empty());
+    notificationState = DEVICE_NOTIFICATION_PRESENTED;
+    auto_shutdown_loop();
+    CHECK(otaActive && powerLatched && outputs.empty());
+    BOARD_HARDWARE_LOOP();
+    CHECK(!powerLatched);
+    clockMs += 500;
+    BOARD_HARDWARE_LOOP();
+    auto_shutdown_loop();
+    CHECK(powerLatched && !visibleNotification && !actionBusy && dismissals > 0);
+
+    setPower(0);
+    auto_shutdown_configure(1);
+    auto_shutdown_loop();
+    clockMs += 1000;
+    auto_shutdown_loop();
+    notificationState = DEVICE_NOTIFICATION_PENDING;
+    auto_shutdown_loop();
+    CHECK(visibleNotification && !otaActive);
+    ++clockMs;
+    auto_shutdown_notify_activity();
+    auto_shutdown_loop();
+    CHECK(!visibleNotification && !actionBusy && !otaActive);
+
+    setPower(0);
+    auto_shutdown_configure(1);
+    auto_shutdown_loop();
+    clockMs += 1000;
+    auto_shutdown_loop();
+    notificationAvailable = false;
+    auto_shutdown_loop();
+    CHECK(!visibleNotification && actionBusy && !otaActive && powerLatched);
+    clockMs += ACTION_CONTINUATION_TIMEOUT_MS - 2001;
+    setPower(0);
+    auto_shutdown_loop();
+    CHECK(!otaActive && powerLatched);
+    ++clockMs;
+    auto_shutdown_loop();
+    CHECK(otaActive && actionBusy && !visibleNotification);
+    externalPower = 1;
+    BOARD_HARDWARE_LOOP();
+    auto_shutdown_loop();
+    CHECK(!otaActive && !actionBusy && powerLatched);
+    notificationAvailable = true;
+
+    setPower(0);
+    auto_shutdown_configure(1);
+    auto_shutdown_loop();
+    clockMs += 1000;
+    auto_shutdown_loop();
+    auto_shutdown_loop();
+    CHECK(visibleNotification && !otaActive);
+    const uint32_t replacement = ++visibleNotification;
+    auto_shutdown_loop();
+    CHECK(visibleNotification == replacement && !actionBusy && !otaActive);
+    visibleNotification = 0;
+
+    setPower(0);
+    auto_shutdown_configure(1);
+    auto_shutdown_loop();
+    clockMs += 1000;
+    auto_shutdown_loop();
+    auto_shutdown_loop();
+    CHECK(visibleNotification && !otaActive);
+    clockMs += ACTION_CONTINUATION_TIMEOUT_MS - 2000;
+    setPower(0);
+    auto_shutdown_loop();
+    CHECK(visibleNotification && actionBusy && otaActive);
+    externalPower = 1;
+    BOARD_HARDWARE_LOOP();
+    auto_shutdown_loop();
+    CHECK(!visibleNotification && !actionBusy && !otaActive && powerLatched);
+
+    setPower(0);
+    auto_shutdown_configure(1);
+    auto_shutdown_loop();
+    clockMs += 1000;
+    activityDuringBegin = true;
+    auto_shutdown_loop();
+    activityDuringBegin = false;
+    CHECK(actionBusy && !otaActive);
+    auto_shutdown_loop();
+    CHECK(!actionBusy && !otaActive && !visibleNotification);
+
+    clockMs += 1000;
+    auto_shutdown_loop();
+    CHECK(actionBusy && !otaActive);
+    auto_shutdown_configure(0);
+    auto_shutdown_loop();
+    CHECK(!actionBusy && !otaActive && !visibleNotification);
+
+    setPower(0);
+    auto_shutdown_configure(1);
+    auto_shutdown_loop();
+    clockMs += 1000;
+    notificationState = DEVICE_NOTIFICATION_PRESENTED;
+    auto_shutdown_loop();
+    activityDuringNotification = true;
+    auto_shutdown_loop();
+    activityDuringNotification = false;
+    CHECK(!actionBusy && !otaActive && !visibleNotification);
+
+    setPower(0);
+    auto_shutdown_configure(1);
+    auto_shutdown_loop();
+    clockMs += 1000;
+    notificationState = DEVICE_NOTIFICATION_PENDING;
+    auto_shutdown_loop();
+    auto_shutdown_loop();
+    clockMs += ACTION_CONTINUATION_TIMEOUT_MS - 2000;
+    setPower(0);
+    otaActive = true;
+    auto_shutdown_loop();
+    CHECK(!actionBusy && otaActive && !visibleNotification);
+    otaActive = false;
+
+    setPower(0);
+    auto_shutdown_configure(1);
+    auto_shutdown_loop();
+    clockMs += 1000;
+    auto_shutdown_loop();
+    auto_shutdown_loop();
+    clockMs += ACTION_CONTINUATION_TIMEOUT_MS - 2000;
+    setPower(1);
+    auto_shutdown_loop();
+    CHECK(!actionBusy && !otaActive && !visibleNotification && powerLatched);
     std::printf("Sticky board/touch checks: %d failures\n", failures);
     return failures ? 1 : 0;
 }

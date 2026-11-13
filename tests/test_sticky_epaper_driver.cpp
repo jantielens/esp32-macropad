@@ -1,4 +1,5 @@
 #include "../src/app/board_config.h"
+#include "boards/reterminal-sticky-interactive/sticky_hardware.h"
 #include "boards/reterminal-sticky-interactive/drivers/display/sticky_epaper_driver.h"
 #include "config_manager.h"
 #include "presented_frame.h"
@@ -301,10 +302,14 @@ static void coherentLvglFrame() {
         lv_display_flush_ready(d);
     });
     lv_obj_set_style_bg_color(lv_screen_active(), lv_color_black(), 0);
-    fixture.publisher.interactionChanged(uint64_t(clockMs) * 1000);
+    const uint32_t initialRequest = fixture.publisher.interactionChanged(uint64_t(clockMs) * 1000);
     lv_refr_now(display);
     CHECK(fixture.flushes > 1);
+    CHECK(!fixture.driver.hasPresentedInteraction(initialRequest));
+    streamHook = [&] { CHECK(!fixture.driver.hasPresentedInteraction(initialRequest)); };
     fixture.driver.present();
+    streamHook = nullptr;
+    CHECK(fixture.driver.hasPresentedInteraction(initialRequest));
     CHECK(modes().size() == 1);
     CHECK(snapshotPixel(fixture.driver, 0, 0) == 0 && snapshotPixel(fixture.driver, 799, 479) == 0);
 
@@ -315,18 +320,21 @@ static void coherentLvglFrame() {
     CHECK(!fixture.publisher.renderIfNeeded(fixture.driver, display, false));
     lv_timer_handler();
     CHECK(fixture.flushes == initialFlushes);
-    fixture.publisher.interactionChanged(uint64_t(clockMs) * 1000);
+    const uint32_t changedRequest = fixture.publisher.interactionChanged(uint64_t(clockMs) * 1000);
     CHECK(!fixture.publisher.renderIfNeeded(fixture.driver, display, true));
     CHECK(fixture.flushes == initialFlushes);
     CHECK(fixture.publisher.renderIfNeeded(fixture.driver, display, false));
     CHECK(fixture.flushes > initialFlushes);
     CHECK(!fixture.publisher.needsPromptRender());
+    CHECK(!fixture.driver.hasPresentedInteraction(changedRequest));
     fixture.driver.present();
+    CHECK(fixture.driver.hasPresentedInteraction(changedRequest));
     CHECK(snapshotPixel(fixture.driver, 799, 479) == 1);
     const unsigned noOpFlushes = fixture.flushes;
-    fixture.publisher.interactionChanged(uint64_t(clockMs) * 1000);
+    const uint32_t unchangedRequest = fixture.publisher.interactionChanged(uint64_t(clockMs) * 1000);
     CHECK(fixture.publisher.renderIfNeeded(fixture.driver, display, false));
     CHECK(!fixture.publisher.needsPromptRender() && fixture.flushes == noOpFlushes);
+    CHECK(fixture.driver.hasPresentedInteraction(unchangedRequest));
     // Completion must wake pending manual work even if this refresh converts no pixels.
     const unsigned commits = fixture.commits;
     fixture.requestDuringStart = true;
@@ -735,13 +743,16 @@ static void preparationCaching() {
         update(2, 0xff, true);
         streamHook = [] { ota = true; };
         pixel(driver, 3, 0, 0, DisplayIntent::Interactive);
+        const uint32_t interruptedRequest = sequence;
         driver.present();
+        CHECK(!driver.hasPresentedInteraction(interruptedRequest));
         DisplayDriver::PresentedFrameInfo info;
         CHECK(!driver.getPresentedFrameInfo(info) && !refreshInFlight());
         streamHook = nullptr;
         ota = false;
         driver.present();
         CHECK(snapshotPixel(driver, 3, 0) == 0 && modes().back() == 0xf7);
+        CHECK(driver.hasPresentedInteraction(interruptedRequest));
         update(4, 0xff, false);
         update(5, 0xff, true);
         CHECK(driver.requestFullRefresh());
@@ -931,11 +942,13 @@ static void refreshCompletion() {
                 refreshDelayMs = 7;
                 refreshDurationMs = 40;
                 activationHook = [&] {
+                    CHECK(sticky_display_is_busy());
                     if (stop) driver.stopPresentation();
                     else ota = true;
                 };
                 pixel(driver, 0, 0, 0, DisplayIntent::Interactive);
                 driver.present();
+                CHECK(!sticky_display_is_busy());
                 CHECK(clockMs - refreshAt >= 47);
                 DisplayDriver::PresentedFrameInfo info;
                 CHECK(!driver.getPresentedFrameInfo(info) && !drivePowered && pins[15] == HIGH);

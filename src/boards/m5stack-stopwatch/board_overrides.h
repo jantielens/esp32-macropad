@@ -10,6 +10,10 @@
 #define BOARD_HARDWARE_HEADER "stopwatch_hardware.h"
 // Board-owned deferred shutdown and motor safety deadlines.
 #define BOARD_HARDWARE_LOOP m5stack_stopwatch_loop
+#define HAS_AUTO_SHUTDOWN true
+#define AUTO_SHUTDOWN_DEFAULT_SECONDS 0
+// Automatic shutdown rechecks external power before removing the supply.
+#define BOARD_AUTO_SHUTDOWN_REQUEST(token) m5stack_stopwatch_request_shutdown(token, true)
 // Board-owned codec rail and amplifier controls for the selected audio driver.
 #define BOARD_AUDIO_CONTROL_FACTORY stopwatch_audio_control
 // Board-local sensor provider compiled and registered by the sensor aggregator.

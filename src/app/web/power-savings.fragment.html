@@ -1,0 +1,14 @@
+<div class="section-header">
+  <h2><span class="portal-icon" aria-hidden="true">battery_saver</span>Power Savings</h2>
+  <p>Automatically turn off the device when it is unused on battery power.</p>
+</div>
+<div class="card mb-3">
+  <div class="card-body">
+    <label class="form-label" for="auto_shutdown_timeout_seconds">Auto-shutdown after inactivity (seconds)</label>
+    <input type="number" class="form-control" id="auto_shutdown_timeout_seconds" name="auto_shutdown_timeout_seconds" min="0" max="65535" step="1" required>
+    <div class="form-text">Applies on battery power only. 0 disables auto-shutdown.</div>
+  </div>
+</div>
+<div class="save-bar">
+  <button type="button" class="btn btn-primary btn-sm" id="power-savings-save-btn">Save Power Savings</button>
+</div>

@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add battery-only inactivity shutdown under **Device > Power Savings**.
+  reTerminal Sticky defaults to 300 seconds; M5Stack StopWatch defaults to
+  disabled. Set `0` to disable; timers and alarms do not block shutdown.
+  Try to display **Powered off automatically** before power-off; e-paper
+  retains the notice when displayed. E-Paper Frame scheduling is unchanged.
+  See [automatic shutdown](docs/user/device/display-and-sleep.md#save-battery-power-with-automatic-shutdown).
+
 * Send Home Assistant remote-control events from button actions using BTHome
   Bluetooth advertisements. Choose device-wide Button 1-10 and Press, Double
   press, or Long press. Events are unencrypted and best-effort; queue admission

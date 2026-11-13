@@ -1,6 +1,11 @@
 #pragma once
 
 #include <stdint.h>
+#include "board_config.h"
+
+#if HAS_AUTO_SHUTDOWN
+bool ota_activity_is_busy();
+#endif
 
 // Shared ownership gate for firmware updates. Exactly one OTA path may hold
 // the activity at a time; background workers use the query as a cooperative
