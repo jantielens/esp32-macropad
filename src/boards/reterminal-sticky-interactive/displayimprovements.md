@@ -1,14 +1,21 @@
-# Display Improvements for ReTerminal Sticky Interactive
+---
+title: Display Improvements for reTerminal Sticky Interactive
+description: Controller protocol safeguards and scoped performance opportunities for the Sticky display.
+---
 
 ## Findings first
 
-**No confirmed controller-protocol bug emerged from this audit.** There are software overheads worth addressing, but no evidence justifies shortening BUSY waits, changing waveform parameters, or removing recovery safeguards.
+Refresh completion now distinguishes an idle BUSY level from a completed
+waveform. The board-local wait observes assertion and deassertion for either
+controller polarity, rather than accepting an idle sample immediately after
+activation. This correctness change does not shorten panel waveforms or establish
+a hardware-validated speedup.
 
 | Priority | Finding | Evidence and qualification |
 |---|---|---|
-| **Medium — hardware-gated opportunity** | **Every presentation repeats controller preparation.** | `Panel::refresh` always calls `initialize()`: SSD1677 has 10/10 ms reset delays; SSD2677 has 20/50 ms reset delays, followed by waveform preparation. Seeed’s Arduino implementation also reinitializes for partial updates. However, its **ESP-IDF SSD1677 implementation caches preparation between consecutive same-mode partials**. That is a credible optimization for SSD1677—not proof that initialization can safely be skipped on either controller indiscriminately. |
+| Hardware-validation pending | Both controllers conservatively reuse compatible preparation | SSD1677 permits only consecutive successful B&W partials. SSD2677 requires the same render mode, full/partial intent and freshly selected waveform; latching and checked power-off remain. Retained-state quality still requires controller-specific validation. |
 | **Low — straightforward software opportunity** | **Default-orientation screenshots unnecessarily reconstruct an already correctly packed frame.** | `copyPresentedFrame` clears the destination, processes every pixel, and yields every 16 rows while holding the driver mutex. At rotation 0, the existing presented buffer already has the required output layout. A direct copy can preserve identical output while shortening screenshot-related blocking. This does not accelerate the physical waveform. |
-| **Low — profile before optimizing** | **Controller streaming repeatedly unpacks and repacks individual pixels.** | `Panel::stream` traverses the whole visible frame for every plane. SSD1677 traverses it twice. It also introduces 30 explicit task delays per stream. Byte-oriented packing and bounded transfer batching are plausible improvements, but neither their actual cost nor achievable savings has been measured. **Do not simply delete the yields.** |
+| Hardware-validation pending | Byte-oriented packing now uses bounded multi-row transfers | The panel-owned 800-byte buffer holds eight SSD1677 rows or four SSD2677 rows. Each presentation uses 120 payload transactions. A cumulative 4 ms upload work budget replaces fixed row-count sleeps; cancellation remains independent of yielding. Physical cursor continuity, fairness and stage-level gains still require measurement. |
 
 The absence of geometric dirty transfers is **not itself a bug**: Seeed’s own dashboard deliberately sends full comparison frames for B&W partial refresh.
 
@@ -31,7 +38,10 @@ The principal evidence was:
 - Pinned [SSD1677 implementation](https://github.com/Seeed-Studio/Seeed_GFX2/blob/0e8bac1188cb915d5ea26ea16d538aed13b3cf48/src/driver/epaper/Driver_SSD1677.cpp), [SSD2677 implementation](https://github.com/Seeed-Studio/Seeed_GFX2/blob/0e8bac1188cb915d5ea26ea16d538aed13b3cf48/src/driver/epaper/Driver_SSD2677.cpp), and [panel update orchestration](https://github.com/Seeed-Studio/Seeed_GFX2/blob/0e8bac1188cb915d5ea26ea16d538aed13b3cf48/src/panel/Panel_EPaper.cpp#L725-L877).
 - Official [dashboard archive](https://files.seeedstudio.com/wiki/reterminal_sticky/res/Sticky_dashboard_demo.zip) and [peripheral archive](https://files.seeedstudio.com/wiki/reterminal_sticky/res/Sticky_peripheral_demo.zip), including their actual display, panel, SPI, and SSD1677 sources.
 
-No refresh-duration measurements were found in the principal guides reviewed. Consequently, this assessment makes **no measured speedup claim**.
+No refresh-duration measurements were found in the principal vendor guides
+reviewed. Repository SSD1677 smoke captures show upload and preparation savings,
+with user-reported normal visual operation. These are limited smoke comparisons,
+not controlled whole-plan A/B results or complete hardware qualification.
 
 ## Vendor comparison
 
@@ -42,13 +52,13 @@ Archive references below identify paths inside the linked official ZIP.
 | Use B&W differential partial refresh for small interactive changes; periodically clean fully | [Refresh guide](https://www.seeedstudio.com/sticky/docs/en/device-guide/esp-refresh/); both controllers through their respective implementations | **Implemented.** `Selection` uses partial B&W after a valid full baseline, with configured cleanup and manual full refresh | Repeated partials still accumulate ghosting | Retain |
 | Keep Gray4 on its dedicated full-refresh path | [Arduino basics](https://www.seeedstudio.com/sticky/docs/en/device-guide/arduino-basics/); both controllers | **Implemented.** Gray4 always selects full refresh; `controller paths` use the appropriate encoding and waveform | Slower updates are not solved by substituting a monochrome waveform | Retain; grayscale partial remains outside scope |
 | Refresh only when meaningful content changes | [Refresh guide](https://www.seeedstudio.com/sticky/docs/en/device-guide/esp-refresh/): RTC update only after time/validity changes | **Implemented, more generally.** Changed-pixel detection plus `presented-frame comparison` suppress physical no-ops | Conversion can still occur before the final comparison | Retain; optimize packing rather than weakening comparison |
-| Cache controller preparation while refresh mode remains unchanged | Dashboard ZIP, `epaper_panel.c:917–961`; **SSD1677 B&W partial** | **Not implemented.** `Initialization` repeats each presentation | Requires trustworthy prepared-state invalidation; official Arduino paths also reset each time | Best controller-side A/B candidate, SSD1677 only initially |
+| Cache controller preparation while refresh mode remains unchanged | Dashboard ZIP, `epaper_panel.c:917–961`; SSD1677 B&W partial | Experimental SSD1677-only reuse between completed compatible partials | Invalidate on transitions, reset, power loss and incomplete work; official Arduino paths also reset each time | Measure preparation savings and unchanged-region integrity; do not generalize to SSD2677 |
 | Use controller RAM windows for regional transfers | [SSD1677 windowed write](https://github.com/Seeed-Studio/Seeed_GFX2/blob/0e8bac1188cb915d5ea26ea16d538aed13b3cf48/src/driver/epaper/Driver_SSD1677.cpp#L284-L323); Arduino `refreshPartial(x,y,w,h)` | **Not implemented geometrically.** All streams cover 800×480 | Official dashboard instead deliberately sends full previous/current planes; smaller RAM writes do not establish safe whole-panel behavior | Defer behind preparation/packing work and dedicated quality testing |
 | Encode SSD2677 partial updates as whole-frame old/new transition pairs | [SSD2677 partial implementation](https://github.com/Seeed-Studio/Seeed_GFX2/blob/0e8bac1188cb915d5ea26ea16d538aed13b3cf48/src/driver/epaper/Driver_SSD2677.cpp#L456-L510) | **Implemented.** `Packing` combines previous/current bits | Regional public API does **not** imply regional SSD2677 SPI traffic | Retain full comparison transfer |
-| Use 10 MHz writes, 4 MHz reads, SPI mode 0 | [Sticky board configuration](https://github.com/Seeed-Studio/Seeed_GFX2/blob/0e8bac1188cb915d5ea26ea16d538aed13b3cf48/src/board/configs/reTerminal_ePaper_Board_Configs.h#L14-L17); IDF dashboard also writes at 10 MHz | **Implemented exactly.** `SPI settings` | No official evidence here for a higher safe panel clock | Do not raise the clock without hardware qualification |
-| Transfer in bulk/chunks rather than application-level byte transactions | Dashboard ZIP, `epaper_panel.c:454–500`: 1,024-byte DMA staging; Arduino [bus implementation](https://github.com/Seeed-Studio/Seeed_GFX2/blob/0e8bac1188cb915d5ea26ea16d538aed13b3cf48/src/bus/Bus_SPI.cpp#L101-L160) loops over bytes | **Partially implemented—and already better than importing the Arduino bus loop.** `Streaming` calls `writeBytes()` for each 100/200-byte row | More transactions than the IDF implementation; larger staging costs memory and complicates cancellation | Profile bounded multi-row batches; no framework import |
+| Use 10 MHz writes, 4 MHz reads, SPI mode 0 | [Sticky board configuration](https://github.com/Seeed-Studio/Seeed_GFX2/blob/0e8bac1188cb915d5ea26ea16d538aed13b3cf48/src/board/configs/reTerminal_ePaper_Board_Configs.h#L14-L17); [FreeInk Sticky profile](https://github.com/Free-Ink/freeink-sdk/blob/e637713a533ea7583ba73fa2052967c21cf0335d/libs/hardware/BoardConfig/include/BoardConfig.h#L1639) provides 20 MHz adoption precedent | Board-local writes now use 20 MHz; reads remain 4 MHz, MSB-first, mode 0 | Higher write speed is experimental, not physically qualified by upstream precedent or host tests | Validate commands, detection and image integrity on each panel variant; retain the 10 MHz build for rollback |
+| Transfer in bulk/chunks rather than application-level byte transactions | Dashboard ZIP, `epaper_panel.c:454–500`: 1,024-byte DMA staging; Arduino [bus implementation](https://github.com/Seeed-Studio/Seeed_GFX2/blob/0e8bac1188cb915d5ea26ea16d538aed13b3cf48/src/bus/Bus_SPI.cpp#L101-L160) loops over bytes | 800-byte panel-owned batches with per-row cancellation and budgeted sleeps | Hardware cursor continuity and fairness still require qualification | Retain bounded bulk writes; no framework import |
 | Select temperature-appropriate SSD2677 waveforms | [Full/partial/Gray4 selectors](https://github.com/Seeed-Studio/Seeed_GFX2/blob/0e8bac1188cb915d5ea26ea16d538aed13b3cf48/src/driver/epaper/Driver_SSD2677.cpp#L53-L123) | **Implemented.** `Local selector` preserves the buckets and warns on the 25°C fallback | Fallback is not a real temperature measurement; quality and cold behavior remain unverified | Preserve parameters; validate temperature handling physically |
-| Wait for BUSY completion; IDF can sleep on an interrupt/semaphore | Dashboard ZIP, `epaper_panel.c:514–596` | **Alternative implemented:** `bounded cooperative polling`, nominally every 2 ms | Interrupt waiting can reduce polling work, not waveform duration; adds lifecycle complexity | Low priority |
+| Wait for BUSY completion; IDF can sleep on an interrupt/semaphore | Dashboard ZIP, `epaper_panel.c:514–596` | Refresh-only polling observes assertion, then completion; ordinary command waits remain ready-level waits | The initial 20 ms assertion window and polling resolution still require physical validation; interrupts remain out of scope | Preserve completion safeguards |
 | Sleep between standalone Arduino updates | [Arduino panel orchestration](https://github.com/Seeed-Studio/Seeed_GFX2/blob/0e8bac1188cb915d5ea26ea16d538aed13b3cf48/src/panel/Panel_EPaper.cpp#L725-L877) | **Intentionally avoided.** Interactive driver does not deep-sleep the panel after each update; SSD2677 drive power-off remains explicit | Sleep adds wake/preparation costs and invalidates retained state | Keep the interactive policy |
 | Separate “fast refresh” API | [Driver capability default](https://github.com/Seeed-Studio/Seeed_GFX2/blob/0e8bac1188cb915d5ea26ea16d538aed13b3cf48/src/core/Driver.h#L60), forwarded by Sticky auto-driver | Both Sticky controller implementations report no separate fast-refresh capability | Other products’ fast modes/register recipes are not Sticky evidence | Do not transplant them |
 
@@ -112,7 +122,35 @@ The mutex is released during slow panel operations. This is the correct ownershi
 
 Full refresh is selected for grayscale, first presentation, recovery, manual cleanup, or the configured partial-count threshold. Otherwise B&W uses partial refresh.
 
-Every presentation then initializes the controller and transfers the **entire visible frame**:
+Every presentation transfers the entire visible frame. SSD1677 skips base
+preparation only when
+the preceding presentation was a successful B&W partial and the next is also
+a B&W partial. A successful full refresh does not seed this cache.
+
+The presentation task owns one prepared-state flag. It is cleared before risky
+work and set again only after successful physical completion of an eligible
+update and, for SSD2677, checked cleanup. Begin/end, reset, power restoration/cut,
+mode transitions, errors and
+deferrals invalidate it. Reuse retains the pre-upload ready check; it cannot
+write through an unexpectedly active BUSY level.
+
+SSD2677 adds a render-mode, full/partial-intent and waveform-code compatibility
+key. Temperature is sampled once per presentation, restoring the initialized
+`0xE0=0x10` selection before `0x40` instead of reading with the retained waveform
+bank. Bucket boundaries, waveform values, invalid-reading 25 C fallback and
+warning behavior remain unchanged. Compatible updates skip reset/static setup;
+changed or invalid keys initialize before latching. Every update still selects
+the waveform bank (`0xE0=0x12`), latches OTP, waits ready, settles for 10 ms,
+uploads the complete frame and performs checked power-on/refresh/power-off.
+Neither drive power nor temperature measurements are cached. Restoring the
+pinned initialization's pre-read selection is conservative software behavior,
+not proof of retained-state temperature correctness on hardware.
+
+Both SSD1677 planes explicitly restore the full X/Y window and start counters
+before their RAM-write command. The partial border (`0x80`) and update mode
+(`0xff`) remain programmed on every partial; full/grayscale preparation restores
+their existing border and temperature behavior. Plane order, encoding and
+full-frame payloads are unchanged:
 
 | Controller/mode | Transfer |
 |---|---|
@@ -122,7 +160,36 @@ Every presentation then initializes the controller and transfers the **entire vi
 | SSD2677 B&W partial | 96,000-byte old/new transition frame |
 | SSD2677 Gray4 | 96,000-byte 2-bpp frame |
 
-At the configured 10 MHz, 96,000 payload bytes alone require **76.8 ms of ideal wire time**. This is arithmetic, **not measured transfer latency or a predicted speedup**; transaction overhead, packing, scheduling and controller activity add to it.
+At the configured 20 MHz write clock, 96,000 payload bytes alone require
+**38.4 ms of ideal wire time**, compared with 76.8 ms at the earlier 10 MHz
+clock. This is arithmetic, not measured upload latency or a claim that total
+presentation time halves. Packing, transaction overhead, scheduling and the
+unchanged waveform add to it. Reads remain at 4 MHz, including controller
+probing and temperature sampling.
+
+The clock change is one board-local write setting, independent of batching and
+preparation caching. There is no automatic speed fallback: the write-only image
+path cannot reliably detect visual corruption. Keep the preserved 10 MHz
+firmware for a manual A/B comparison or rollback.
+
+Byte-oriented packing is unchanged. Consecutive rows fill an 800-byte
+panel-owned buffer, avoiding another allocation or a presentation-task stack
+array. The RAM-write command is issued once per plane; each batch releases CS
+and ends its transaction before any wait or return. A final remainder is
+submitted if present, without splitting rows or changing plane order.
+
+This reduces payload transactions from 960 to 120 for SSD1677 and from 480 to
+120 for SSD2677. Command transactions are additional. Full visible-frame
+payloads remain 48,000 bytes per SSD1677 plane or 96,000 bytes per SSD2677 frame.
+Cancellation is checked between rows and immediately before submission; an
+unfinished batch is discarded without activating an incomplete frame.
+
+The upload shares one elapsed-work budget across both SSD1677 planes. After
+4 ms, checked between bounded batches, it sleeps one RTOS tick with no SPI
+transaction held and resets the budget. Packing and SPI time remain separate
+diagnostics; `packed_bytes` counts packed rows, while `bytes` counts only
+submitted payload. Cancelled uploads retain their measured duration and yield
+time rather than reporting a successful full transfer.
 
 ### 5. Waveform completion and recovery
 
@@ -131,9 +198,28 @@ At the configured 10 MHz, 96,000 payload bytes alone require **76.8 ms of ideal 
 - SSD1677: active-high BUSY; `0xF7` full, `0xFF` partial, `0xD7` Gray4.
 - SSD2677: active-low BUSY; temperature-selected waveform, power-on, refresh, then checked power-off.
 
-Waits are bounded to 15 seconds **per wait**, not necessarily per entire presentation.
+Each refresh has one wrap-safe 15-second deadline starting around activation.
+Polling initially sleeps one RTOS tick and switches to nominal 2 ms sleeps after
+observing BUSY. An entirely unobserved assertion within the initial 20 ms window
+is an explicit error, not confirmed completion. The 20 ms window is an
+experimental starting point; missed short pulses require narrower hardware
+investigation, not success-shaped fallback.
 
-OTA checks occur during scheduling, preparation/waits and row streaming. Once SSD2677 drive ownership has begun, `cleanup` completes bounded power-off or cuts the rail on failure. These operations must not be bypassed for speed.
+Ordinary command-ready waits do not require a visible BUSY pulse. Both
+controllers allow one RTOS tick for command propagation, including SSD1677
+software reset and SSD2677 power-on, waveform latch and checked power-off.
+Without this allowance, a faster upload could consume delayed reset BUSY as
+refresh completion. The timeout remains 15 seconds per wait, so the entire
+presentation may take longer than one refresh deadline.
+
+OTA checks occur during scheduling, preparation/waits and row streaming.
+Cancellation after activation is remembered while the waveform drains to
+completion or its deadline. SSD1677 checks readiness before resetting on a
+retry, so a timed-out active waveform cannot be reset by the next presentation.
+Once SSD2677 drive ownership has begun, cleanup drains owned command work,
+performs checked power-off, or cuts the rail on failure. Cancellation during
+cleanup also leaves the snapshot invalid and requires full recovery. These
+operations must not be bypassed for speed.
 
 Only successful completion publishes `sending` as `presented`. Failure/cancellation invalidates the baseline and requires a full retry on a subsequent presentation request.
 
@@ -159,7 +245,7 @@ This correctly avoids exposing an unsent or interrupted frame as the displayed i
 - Our `initialization` preserves that geometry.
 - Official code still sends **480 visible image rows**. Do not “correct” it to 680 transferred rows, or reduce the controller resolution to 480 to seek a speedup.
 - Official partial support patches a CPU-side window but sends the complete old/new transition frame.
-- The inspected implementation supplies no equivalent regional-transfer sequence or cached-init precedent.
+- The inspected implementation supplies no equivalent regional-transfer sequence or same-key cached-init precedent. Our waveform-keyed preparation reuse is an experiment, not hardware qualification from that source.
 - No applicable `0x49` or `0x90` shortcut was found in the inspected Sticky controller implementations.
 
 ## Prioritized improvements
@@ -168,11 +254,10 @@ This correctly avoids exposing an unsent or interrupted frame as the displayed i
 
 **1. Byte-oriented controller packing**
 
-- **Affected code:** `Panel::stream`.
-- **Benefit mechanism:** reduce repeated coordinate calculations, bit extraction and per-pixel packing without changing bytes sent or waveform selection.
-- **Smallest reuse:** the MIT SSD2677 byte-expansion approach; similarly small byte/bitplane transformations for other paths.
-- **Risks:** native-X mirroring, bit order, old/new transition encoding and grayscale inversion.
-- **Validation:** extend the existing driver test with byte-equivalent representative patterns, transitions and rotations. Preserve OTA checkpoints and cooperative scheduling. Measure packing separately before claiming benefit.
+Implemented before the batching change. Existing reference-wire fixtures cover
+native orientation, bit order, old/new transition encoding, grayscale planes,
+rotation, clipping and padded source stride. Batching reuses these transforms
+without changing payload concatenation or waveforms.
 
 **2. Rotation-0 screenshot copy fast path**
 
@@ -186,21 +271,32 @@ This correctly avoids exposing an unsent or interrupted frame as the displayed i
 
 **3. Cache preparation for consecutive SSD1677 B&W partials**
 
-This is the most worthwhile controller-side experiment.
+Implemented as a board-local prepared-state flag, not a second framebuffer
+baseline. Only the second and later consecutive successful B&W partials reuse
+preparation. Every plane explicitly restores its full window and counters.
 
-- Keep it board-local.
-- Initially restrict it to consecutive successful SSD1677 B&W partials.
-- Invalidate prepared state on reset, power loss, failure, cancellation and mode changes.
-- Retain full cleanup and recovery paths.
-- Do not assume SSD2677 supports the same optimization.
+The existing host double models addressed RAM placement and deliberately leaves
+nonzero counters and a narrowed window after a plane transfer. Reference-image
+checks therefore detect shifted or clipped uploads, not only equal concatenated
+bytes. Tests cover full/partial chains, manual and periodic cleanup, grayscale,
+controller re-selection, lifecycle, cancelled packing/activation and failures.
+Incomplete work invalidates reuse, and the presentation driver still retries
+fully.
 
-Measure preparation savings separately and verify unchanged-region integrity over repeated partials.
+Limited SSD1677 smoke captures show median preparation reductions of about
+24-25 ms, within the 20-40 ms target. Controlled comparisons and extended
+unchanged-region integrity and ghosting checks remain outstanding; do not
+attribute batching gains to preparation reuse.
 
 **4. Bounded multi-row SPI batches**
 
-Use the existing bulk-write path, not a new graphics framework.
-
-Potential benefit is reduced transaction/staging overhead—not less waveform time. Preserve cancellation granularity, watchdog fairness, CS semantics and safe transaction release. Avoid allocating another full controller framebuffer merely to batch writes.
+Implemented through the existing bulk-write path with an 800-byte member
+buffer and time-budgeted one-tick sleeps. Host tests verify 120 complete payload
+transactions, cancellation with a partially packed or unsubmitted batch, and
+balanced transactions on existing failure paths. Simulated wire time checks
+bounded scheduling across both SSD1677 planes; it is not an ESP32 performance
+measurement. Larger bursts still require hardware cursor and image-quality
+validation.
 
 **5. Cadence tuning, only after measurement**
 
@@ -212,7 +308,7 @@ The completion-based 500 ms interval can dominate perceived response after a pre
 - SSD1677 window narrowing before validating the conservative full-comparison behavior.
 - Grayscale partial refresh.
 - LUT, PLL, forced-temperature or undocumented-register tuning.
-- Higher SPI clocks without panel qualification.
+- Increasing writes beyond 20 MHz or treating 20 MHz as qualified without panel testing.
 - Removing BUSY checks, power-off cleanup, OTA cancellation or periodic full cleanup.
 - Importing Seeed_GFX2 or the dashboard framework wholesale.
 - Adopting sleep-first page/update policy for this interactive Macropad.
@@ -252,12 +348,31 @@ The `existing acceptance plan` remains outstanding; host doubles cannot establis
 Executed successfully:
 
 ```text
-cmake --build build/host-tests --parallel 2 --target test_sticky_epaper_driver
-ctest --test-dir build/host-tests --output-on-failure -R '^test_sticky_epaper_driver$'
+cmake --build build/host-tests --parallel 2 --target test_sticky_epaper_driver test_sticky_epaper_driver_diagnostics
+ctest --test-dir build/host-tests --output-on-failure -R '^test_sticky_epaper_driver(_diagnostics)?$'
 ```
 
-The existing test passed. No source changes, flashing, firmware builds, commits or pushes were performed.
+Both host profiles pass. The SPI double records the settings used by actual
+read/write operations and transaction completion, covering 20 MHz writes,
+4 MHz reads, MSB-first mode 0, and release before waits or cancellation exits.
+Existing wire-equivalence tests retain both controllers' B/W and Gray4 payloads.
+SSD2677 cache coverage checks fresh reads and bank restoration, skipped reset
+and static setup only on compatible keys, bucket boundaries and invalid-read
+fallback, full/partial and full/Gray4 transitions (including shared `0xf1`
+codes), latch settling, complete payloads and checked drive cleanup. Setup,
+temperature, latch, upload, waveform and cleanup cancellation invalidate reuse;
+failed power transitions cut the rail and the presentation driver retries fully.
+Host results do not establish physical clock accuracy or image quality.
 
-**Conclusion:** We already apply Seeed’s main applicable optimizations: B&W differential partial waveforms, previous/current comparison data, no-op suppression, cleanup refreshes, temperature-specific SSD2677 selection, vendor SPI clocks, and separate asynchronous presentation. We also avoid the Arduino examples’ sleep-after-each-update policy.
+**Conclusion:** B&W differential partial waveforms, previous/current comparison
+data, no-op suppression, cleanup refreshes, temperature-specific SSD2677
+selection and separate asynchronous presentation remain unchanged. Writes now
+use the experimental 20 MHz setting while reads retain the vendor 4 MHz clock.
+The interactive profile still avoids sleep after every update.
 
-The best next steps are **byte-oriented packing**, the **rotation-0 screenshot copy**, and a **hardware-gated SSD1677 preparation-cache experiment**. There is no evidence-backed reason to change waveform values or SSD2677 scan geometry.
+Bounded multi-row transfers, conservative SSD1677 partial preparation reuse and
+SSD2677 waveform-aware preparation caching are implemented; extended physical
+acceptance remains outstanding. SSD2677's expected 70-100 ms eligible preparation
+saving is a target, not a hardware measurement. Screenshot-copy work
+remains deferred. There is no evidence-backed reason to change waveform values
+or SSD2677 scan geometry.

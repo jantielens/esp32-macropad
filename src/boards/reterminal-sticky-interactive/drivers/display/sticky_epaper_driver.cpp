@@ -286,10 +286,11 @@ void StickyEpaperDriver::present() {
             static_cast<unsigned long>(sample.upload_us), static_cast<unsigned long long>(sample.trigger_us),
             static_cast<unsigned long long>(sample.waveform_done_us), static_cast<unsigned long long>(sample.published_us),
             sample.success);
-        LOGD("Sticky", "frame=%lu pack=%lu spi=%lu yield=%lu bytes=%lu",
+        LOGD("Sticky", "frame=%lu pack=%lu spi=%lu yield=%lu bytes=%lu packed_bytes=%lu",
             static_cast<unsigned long>(sample.frame_sequence),
             static_cast<unsigned long>(panel.timing.pack_us), static_cast<unsigned long>(panel.timing.spi_us),
-            static_cast<unsigned long>(panel.timing.yield_us), static_cast<unsigned long>(sample.uploaded_bytes));
+            static_cast<unsigned long>(panel.timing.yield_us), static_cast<unsigned long>(sample.uploaded_bytes),
+            static_cast<unsigned long>(panel.timing.packed_bytes));
 #endif
         if (result != sticky_epaper::Result::Success) return;
     }

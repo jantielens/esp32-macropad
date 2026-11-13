@@ -16,7 +16,10 @@ bool Panel::cancelled() const {
 namespace {
 constexpr int panelWidth = 800, panelHeight = 480;
 constexpr uint32_t busyTimeoutMs = 15000;
-const SPISettings writeSettings(10000000, MSBFIRST, SPI_MODE0);
+constexpr uint32_t refreshAssertionMs = 20;
+constexpr uint32_t uploadWorkBudgetMs = 4;
+constexpr uint8_t temperatureBank = 0x10, waveformBank = 0x12;
+const SPISettings writeSettings(20000000, MSBFIRST, SPI_MODE0);
 const SPISettings readSettings(4000000, MSBFIRST, SPI_MODE0);
 
 uint8_t reverseBits(uint8_t value) {
@@ -58,28 +61,59 @@ uint8_t Panel::read() {
 }
 
 void Panel::reset(uint32_t lowMs, uint32_t highMs) {
+    prepared = false;
     digitalWrite(EPAPER_RESET_PIN, LOW);
     delay(lowMs);
     digitalWrite(EPAPER_RESET_PIN, HIGH);
     if (highMs) delay(highMs);
 }
 
-Result Panel::waitReady(const char* stage, bool deferForOta) {
+Result Panel::waitReady(const char* stage, bool deferImmediately) {
     const int active = controller == Controller::SSD2677 ? LOW : HIGH;
     const uint32_t start = millis();
+    bool deferred = cancelled();
+    // Command BUSY can trail SPI completion; a visible pulse is optional.
+    vTaskDelay(1);
     while (digitalRead(EPAPER_BUSY_PIN) == active) {
-        if (deferForOta && cancelled()) return Result::Deferred;
+        deferred = deferred || cancelled();
+        if (deferImmediately && deferred) return Result::Deferred;
         if (millis() - start >= busyTimeoutMs) {
             LOGE("Sticky", "BUSY timeout at %s (active=%d)", stage, active);
             return Result::Error;
         }
         vTaskDelay(pdMS_TO_TICKS(2) ? pdMS_TO_TICKS(2) : 1);
     }
-    return deferForOta && cancelled() ? Result::Deferred : Result::Success;
+    return deferred || cancelled() ? Result::Deferred : Result::Success;
+}
+
+Result Panel::waitRefresh(uint32_t activatedAt) {
+    const int active = controller == Controller::SSD2677 ? LOW : HIGH;
+    bool sawBusy = false;
+    bool deferred = false;
+    for (;;) {
+        deferred = deferred || cancelled();
+        const uint32_t elapsed = millis() - activatedAt;
+        if (elapsed >= busyTimeoutMs) {
+            LOGE("Sticky", "Refresh BUSY timeout (active=%d)", active);
+            return Result::Error;
+        }
+        if (digitalRead(EPAPER_BUSY_PIN) == active) {
+            sawBusy = true;
+        } else if (sawBusy) {
+            return deferred ? Result::Deferred : Result::Success;
+        } else if (elapsed >= refreshAssertionMs) {
+            LOGE("Sticky", "Refresh BUSY assertion not observed within %lums (active=%d)",
+                 static_cast<unsigned long>(refreshAssertionMs), active);
+            return Result::Error;
+        }
+        // Cancellation cannot abandon an activated waveform or restart its deadline.
+        vTaskDelay(sawBusy ? (pdMS_TO_TICKS(2) ? pdMS_TO_TICKS(2) : 1) : 1);
+    }
 }
 
 void Panel::restorePower() {
     if (!powerCut) return;
+    prepared = false;
     digitalWrite(EPAPER_POWER_PIN, HIGH);
     delay(100);
     powerCut = false;
@@ -87,13 +121,19 @@ void Panel::restorePower() {
 
 Result Panel::finishRefresh(Result result) {
     // Close only the owned drive session during OTA; never start another refresh.
-    if (result != Result::Error &&
-        waitReady("SSD2677 before power off", false) == Result::Success) {
-        const uint8_t zero = 0;
-        command(0x02, &zero, 1);
-        if (waitReady("SSD2677 power off", false) == Result::Success) return result;
+    if (result != Result::Error) {
+        const Result ready = waitReady("SSD2677 before power off", false);
+        if (ready != Result::Error) {
+            const uint8_t zero = 0;
+            command(0x02, &zero, 1);
+            const Result cleanup = waitReady("SSD2677 power off", false);
+            if (cleanup != Result::Error)
+                return result == Result::Deferred || ready == Result::Deferred ||
+                    cleanup == Result::Deferred || cancelled() ? Result::Deferred : Result::Success;
+        }
     }
     digitalWrite(EPAPER_POWER_PIN, LOW);
+    prepared = false;
     powerCut = true;
     LOGE("Sticky", "Panel drive cleanup failed; power cut until the next full-refresh retry");
     delay(100);
@@ -124,6 +164,7 @@ bool Panel::detectByBusy() {
 }
 
 bool Panel::begin() {
+    prepared = false;
     pinMode(EPAPER_POWER_PIN, OUTPUT);
     restorePower();
     pinMode(EPAPER_CS_PIN, OUTPUT);
@@ -157,6 +198,7 @@ bool Panel::begin() {
 }
 
 void Panel::end() {
+    prepared = false;
     if (started) spi.end();
     started = false;
     controller = Controller::Unknown;
@@ -164,6 +206,11 @@ void Panel::end() {
 
 Result Panel::initialize(bool grayscale) {
     if (cancelled()) return Result::Deferred;
+    if (controller == Controller::SSD1677) {
+        const Result result = waitReady("SSD1677 before reset", false);
+        if (result != Result::Success) return result;
+        if (cancelled()) return Result::Deferred;
+    }
     restorePower();
     if (controller == Controller::SSD1677) {
         reset(10, 10);
@@ -174,18 +221,14 @@ Result Panel::initialize(bool grayscale) {
         const uint8_t output[] = {0xdf, 0x01, 0x02};
         const uint8_t entry = 0x03, temperature = 0x80;
         const uint8_t border = grayscale ? 0x00 : 0x05;
-        const uint8_t xRange[] = {0, 0, 0x1f, 0x03}, yRange[] = {0, 0, 0xdf, 0x01};
-        const uint8_t zero[] = {0, 0}, grayTemperature[] = {0x67, 0};
+        const uint8_t grayTemperature[] = {0x67, 0};
         command(0x0c, booster, sizeof(booster));
         command(0x3c, &border, 1);
         command(0x01, output, sizeof(output));
         command(0x11, &entry, 1);
-        command(0x44, xRange, sizeof(xRange));
-        command(0x45, yRange, sizeof(yRange));
         command(0x18, &temperature, 1);
         if (grayscale) command(0x1a, grayTemperature, sizeof(grayTemperature));
-        command(0x4e, zero, sizeof(zero));
-        command(0x4f, zero, sizeof(zero));
+        addressFrame();
     } else {
         reset(20, 50);
         Result result = waitReady("SSD2677 reset");
@@ -193,7 +236,7 @@ Result Panel::initialize(bool grayscale) {
         const uint8_t panel[] = {0x2f, 0x0e}, booster[] = {0x0f, 0x8b, 0x93, 0xc1};
         const uint8_t timing[] = {0x76, 0x76, 0x76, 0x5a, 0x9d, 0x8a, 0x76, 0x62};
         const uint8_t resolution[] = {0x03, 0x20, 0x02, 0xa8}, zero[] = {0, 0, 0, 0};
-        const uint8_t e7 = 0xc1, pll = 0x08, border = 0x77, e0 = 0x10, e9 = 1;
+        const uint8_t e7 = 0xc1, pll = 0x08, border = 0x77, e9 = 1;
         command(0x00, panel, sizeof(panel));
         result = waitReady("SSD2677 PSR");
         if (result != Result::Success) return result;
@@ -203,14 +246,16 @@ Result Panel::initialize(bool grayscale) {
         command(0x50, &border, 1);
         command(0x62, timing, sizeof(timing));
         command(0x61, resolution, sizeof(resolution));
-        command(0xe0, &e0, 1);
+        command(0xe0, &temperatureBank, 1);
         command(0x65, zero, sizeof(zero));
         command(0xe9, &e9, 1);
     }
     return waitReady("controller setup");
 }
 
-Result Panel::latchWaveform(bool grayscale, bool full) {
+Result Panel::selectWaveform(bool grayscale, bool full, uint8_t& waveform) {
+    // Match initialized pre-read state, not the bank retained by the last latch.
+    command(0xe0, &temperatureBank, 1);
     command(0x40);
     Result result = waitReady("temperature");
     if (result != Result::Success) return result;
@@ -222,25 +267,42 @@ Result Panel::latchWaveform(bool grayscale, bool full) {
         }
         temperature = 25;
     }
-    const uint8_t bank = 0x12;
-    const uint8_t waveform = grayscale ? (temperature <= 15 ? 0xf1 : 0xfa) :
+    waveform = grayscale ? (temperature <= 15 ? 0xf1 : 0xfa) :
         full ? (temperature <= 10 ? 0xe8 : temperature <= 20 ? 0xeb : temperature <= 30 ? 0xee : 0xf1) :
                (temperature <= 10 ? 0x08 : temperature <= 20 ? 0x0f : temperature <= 30 ? 0x19 : 0x23);
-    command(0xe0, &bank, 1);
+    return Result::Success;
+}
+
+Result Panel::latchWaveform(uint8_t waveform) {
+    if (cancelled()) return Result::Deferred;
+    command(0xe0, &waveformBank, 1);
     command(0xe6, &waveform, 1);
     command(0xa5);
-    result = waitReady("waveform latch");
+    const Result result = waitReady("waveform latch");
     if (result == Result::Success) delay(10);
     return result;
 }
 
+void Panel::addressFrame() {
+    const uint8_t xRange[] = {0, 0, 0x1f, 0x03}, yRange[] = {0, 0, 0xdf, 0x01}, zero[] = {0, 0};
+    command(0x44, xRange, sizeof(xRange));
+    command(0x45, yRange, sizeof(yRange));
+    command(0x4e, zero, sizeof(zero));
+    command(0x4f, zero, sizeof(zero));
+}
+
 Result Panel::stream(uint8_t code, const uint8_t* current, const uint8_t* previous,
                      bool grayscale, bool full, bool highPlane) {
+    if (cancelled()) return Result::Deferred;
+    if (controller == Controller::SSD1677) addressFrame();
+    if (cancelled()) return Result::Deferred;
     command(code);
-    uint8_t row[panelWidth / 4];
+    const bool twoBits = controller == Controller::SSD2677;
+    const size_t rowBytes = panelWidth / (twoBits ? 4 : 8);
+    size_t buffered = 0;
     for (int y = 0; y < panelHeight; ++y) {
         if (cancelled()) return Result::Deferred;
-        const bool twoBits = controller == Controller::SSD2677;
+        uint8_t* row = streamBuffer + buffered;
 #if HAS_DISPLAY_DIAGNOSTICS
         const uint64_t packStart = esp_timer_get_time();
 #endif
@@ -283,21 +345,26 @@ Result Panel::stream(uint8_t code, const uint8_t* current, const uint8_t* previo
             }
         }
 #if HAS_DISPLAY_DIAGNOSTICS
+        timing.pack_us += esp_timer_get_time() - packStart;
+        timing.packed_bytes += rowBytes;
+#endif
+        buffered += rowBytes;
+        if (buffered < sizeof(streamBuffer) && y + 1 < panelHeight) continue;
+        if (cancelled()) return Result::Deferred;
+#if HAS_DISPLAY_DIAGNOSTICS
         const uint64_t spiStart = esp_timer_get_time();
-        timing.pack_us += spiStart - packStart;
 #endif
         spi.beginTransaction(writeSettings);
         digitalWrite(EPAPER_CS_PIN, LOW);
-        spi.writeBytes(row, panelWidth / (twoBits ? 4 : 8));
-#if HAS_DISPLAY_DIAGNOSTICS
-        timing.uploaded_bytes += panelWidth / (twoBits ? 4 : 8);
-#endif
+        spi.writeBytes(streamBuffer, buffered);
         digitalWrite(EPAPER_CS_PIN, HIGH);
         spi.endTransaction();
 #if HAS_DISPLAY_DIAGNOSTICS
+        timing.uploaded_bytes += buffered;
         timing.spi_us += esp_timer_get_time() - spiStart;
 #endif
-        if ((y & 15) == 15) {
+        buffered = 0;
+        if (millis() - uploadWorkStart >= uploadWorkBudgetMs) {
 #if HAS_DISPLAY_DIAGNOSTICS
             const uint64_t yieldStart = esp_timer_get_time();
 #endif
@@ -305,9 +372,10 @@ Result Panel::stream(uint8_t code, const uint8_t* current, const uint8_t* previo
 #if HAS_DISPLAY_DIAGNOSTICS
             timing.yield_us += esp_timer_get_time() - yieldStart;
 #endif
+            uploadWorkStart = millis();
         }
     }
-    return Result::Success;
+    return cancelled() ? Result::Deferred : Result::Success;
 }
 
 Result Panel::refresh(const uint8_t* current, const uint8_t* previous, bool grayscale, bool full) {
@@ -315,7 +383,12 @@ Result Panel::refresh(const uint8_t* current, const uint8_t* previous, bool gray
     timing = {};
     const uint64_t preparationStart = esp_timer_get_time();
 #endif
-    Result result = initialize(grayscale);
+    const bool partial = controller == Controller::SSD1677 && !grayscale && !full;
+    const bool reusePreparation = prepared && (partial || controller == Controller::SSD2677);
+    // Incomplete work cannot republish preparation, even if the old key matches.
+    prepared = false;
+    if (cancelled()) return Result::Deferred;
+    Result result = reusePreparation ? waitReady("cached preparation", false) : initialize(grayscale);
     if (result != Result::Success) return result;
     if (controller == Controller::SSD1677) {
         if (!full && !grayscale) {
@@ -326,6 +399,8 @@ Result Panel::refresh(const uint8_t* current, const uint8_t* previous, bool gray
         timing.preparation_us = esp_timer_get_time() - preparationStart;
         const uint64_t uploadStart = esp_timer_get_time();
 #endif
+        // Share the work budget across both planes, including their boundary.
+        uploadWorkStart = millis();
         if (grayscale) {
             result = stream(0x24, current, previous, true, true);
             if (result == Result::Success) result = stream(0x26, current, previous, true, true, true);
@@ -333,29 +408,40 @@ Result Panel::refresh(const uint8_t* current, const uint8_t* previous, bool gray
             result = stream(0x26, previous, previous, false, true);
             if (result == Result::Success) result = stream(0x24, current, previous, false, true);
         }
-        if (result != Result::Success) return result;
-        if (cancelled()) return Result::Deferred;
 #if HAS_DISPLAY_DIAGNOSTICS
         timing.upload_us = esp_timer_get_time() - uploadStart;
 #endif
+        if (result != Result::Success) return result;
+        if (cancelled()) return Result::Deferred;
         const uint8_t mode = grayscale ? 0xd7 : full ? 0xf7 : 0xff;
         command(0x22, &mode, 1);
+        if (cancelled()) return Result::Deferred;
 #if HAS_DISPLAY_DIAGNOSTICS
         timing.trigger_us = esp_timer_get_time();
 #endif
+        const uint32_t activatedAt = millis();
         command(0x20);
-        result = waitReady("SSD1677 refresh");
+        result = waitRefresh(activatedAt);
 #if HAS_DISPLAY_DIAGNOSTICS
         timing.waveform_done_us = esp_timer_get_time();
 #endif
+        prepared = partial && result == Result::Success;
         return result;
     }
-    result = latchWaveform(grayscale, full);
+    uint8_t waveform = 0;
+    result = selectWaveform(grayscale, full, waveform);
+    if (result == Result::Success && reusePreparation &&
+        (preparedKey.grayscale != grayscale || preparedKey.full != full || preparedKey.waveform != waveform))
+        result = initialize(grayscale);
+    if (result == Result::Success) result = latchWaveform(waveform);
 #if HAS_DISPLAY_DIAGNOSTICS
     timing.preparation_us = esp_timer_get_time() - preparationStart;
     const uint64_t uploadStart = esp_timer_get_time();
 #endif
-    if (result == Result::Success) result = stream(0x10, current, previous, grayscale, full);
+    if (result == Result::Success) {
+        uploadWorkStart = millis();
+        result = stream(0x10, current, previous, grayscale, full);
+    }
 #if HAS_DISPLAY_DIAGNOSTICS
     timing.upload_us = esp_timer_get_time() - uploadStart;
 #endif
@@ -368,12 +454,18 @@ Result Panel::refresh(const uint8_t* current, const uint8_t* previous, bool gray
 #if HAS_DISPLAY_DIAGNOSTICS
         timing.trigger_us = esp_timer_get_time();
 #endif
+        const uint32_t activatedAt = millis();
         command(0x12, &zero, 1);
-        result = waitReady("SSD2677 refresh");
+        result = waitRefresh(activatedAt);
 #if HAS_DISPLAY_DIAGNOSTICS
         timing.waveform_done_us = esp_timer_get_time();
 #endif
     }
-    return finishRefresh(result);
+    result = finishRefresh(result);
+    if (result == Result::Success) {
+        preparedKey = {grayscale, full, waveform};
+        prepared = true;
+    }
+    return result;
 }
 }

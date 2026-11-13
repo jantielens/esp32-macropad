@@ -25,6 +25,7 @@ public:
         uint32_t pack_us = 0;
         uint32_t spi_us = 0;
         uint32_t yield_us = 0;
+        uint32_t packed_bytes = 0;
         uint32_t uploaded_bytes = 0;
         uint64_t trigger_us = 0;
         uint64_t waveform_done_us = 0;
@@ -38,17 +39,28 @@ private:
     bool started = false;
     bool powerCut = false;
     bool temperatureWarning = false;
+    bool prepared = false;
+    struct PreparationKey {
+        bool grayscale = false;
+        bool full = false;
+        uint8_t waveform = 0;
+    } preparedKey;
+    uint8_t streamBuffer[800];
+    uint32_t uploadWorkStart = 0;
     const std::atomic<bool>* stopFlag = nullptr;
     bool cancelled() const;
     void command(uint8_t code, const uint8_t* data = nullptr, size_t length = 0);
     uint8_t read();
     void reset(uint32_t lowMs, uint32_t highMs);
-    Result waitReady(const char* stage, bool deferForOta = true);
+    Result waitReady(const char* stage, bool deferImmediately = true);
+    Result waitRefresh(uint32_t activatedAt);
     void restorePower();
     Result finishRefresh(Result result);
     bool detectByBusy();
     Result initialize(bool grayscale);
-    Result latchWaveform(bool grayscale, bool full);
+    void addressFrame();
+    Result selectWaveform(bool grayscale, bool full, uint8_t& waveform);
+    Result latchWaveform(uint8_t waveform);
     Result stream(uint8_t code, const uint8_t* current, const uint8_t* previous,
                   bool grayscale, bool full, bool highPlane = false);
 };

@@ -9,11 +9,11 @@ the Seeed reTerminal Sticky: ESP32-S3, 32 MB flash, 8 MB OPI PSRAM, a 3.97-inch
 not the sleep-first E-Paper Frame.
 
 > [!WARNING]
-> This target has no physical hardware acceptance yet. The implementation uses
-> the published Rev 01 schematic (2026-06-05) and vendor sources as its baseline,
-> not a verified shipping unit. Battery startup, power retention, both panel
-> variants, touch orientation, buzzer output, sensors, Wi-Fi, and OTA still
-> require device testing.
+> Complete hardware acceptance remains outstanding. The implementation follows
+> the published Rev 01 schematic (2026-06-05) and vendor sources. SSD1677 display
+> operation has received limited device testing; SSD2677 remains physically
+> unverified. Battery startup, power retention, touch orientation, buzzer output,
+> sensors, Wi-Fi, and OTA still require qualification.
 
 ## Display and controls
 
@@ -29,10 +29,40 @@ Focus, navigation, dialog changes and user-triggered variable updates use
 interaction-priority presentation:
 they request a prompt coherent frame and bypass background settling/cadence.
 An active waveform, required full cleanup and recovery still complete normally.
-This does not shorten controller preparation or the physical waveform; latency
+Interaction priority does not shorten the physical waveform; latency
 and repeated-partial image quality still need physical measurement on each
 controller variant. Runtime controller probing, including BUSY fallback, remains
 enabled.
+
+SSD1677 experimentally reuses controller preparation only between consecutive
+successful B&W partial updates. The first partial after a full refresh still
+prepares normally. Full cleanup, grayscale, reset, power loss and interrupted
+updates invalidate reuse; each image plane still transfers the complete frame.
+Repeated-partial image integrity and ghosting with retained preparation require
+device validation. Keep a known-good firmware build for rollback.
+
+SSD2677 experimentally reuses preparation between successful updates with the
+same render mode, full/partial intent and temperature-selected waveform.
+Temperature is read afresh every time; waveform latching, its settle delay,
+full-frame transfer and checked drive power-off remain unchanged. A key change
+or interrupted update requires reset/setup. Retained-state temperature reads,
+image quality and preparation savings remain unverified on SSD2677 hardware.
+
+Physical refresh completion requires an observed BUSY assertion and release.
+Missing assertion or a timeout leaves the displayed-frame snapshot unavailable
+and requires a full-refresh retry. OTA or stop requests during an active
+waveform wait for bounded draining and required drive cleanup rather than
+publishing an incomplete image. These safeguards still need device validation
+for both controller variants.
+
+Display writes use an experimental 20 MHz SPI clock; reads remain at 4 MHz.
+Image integrity at the higher clock still requires validation on each panel
+variant. If corruption appears, restore the preserved 10 MHz firmware; there
+is no automatic visual-error detection or speed fallback.
+
+Uploads use bounded batches and cooperative sleeps to reduce transfer overhead,
+not panel waveform duration. Image integrity and touch responsiveness with the
+larger bursts still need validation on each controller variant.
 
 Keep the buttons at the top for the default landscape orientation.
 Touch reads the controller's configured resolution without rewriting it.

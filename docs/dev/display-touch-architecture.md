@@ -111,9 +111,31 @@ preserved. RGB565 luminance uses the same 256-byte compile-time channel table
 as IT8951, with unchanged rounding and logical-coordinate dithering.
 Controller packing reverses mono bytes/bits, spreads SSD2677 old/new bits,
 and extracts Gray4 levels/planes without per-pixel framebuffer lookups.
-Transfers still use the existing 100/200-byte row buffer, row cancellation
-checkpoints and one-tick yield every 16 rows. SPI clocks, CS boundaries,
-controller initialization, waveform selection and payload sizes are unchanged.
+Transfers pack rows into an 800-byte panel-owned buffer, with cancellation
+checks per row and before submission. A cumulative 4 ms upload work budget
+triggers one-tick sleeps between bounded batches, after releasing CS and ending
+the transaction. The budget spans both SSD1677 planes. Writes use experimental
+20 MHz SPI, while reads remain at 4 MHz, MSB-first, mode 0. Waveforms and
+full-frame payload sizes are unchanged.
+
+SSD1677 reuses base preparation only between consecutive successful B&W
+partials. The presentation task owns the cache flag, clears it before risky
+work and republishes it only after physical completion. Full/grayscale,
+lifecycle, reset, rail changes and incomplete work invalidate it. Each plane
+explicitly restores the full RAM window and X/Y counters; partial border and
+update mode are still programmed every time. Cached uploads retain the ready
+check.
+
+SSD2677 uses the same validity flag with a render-mode, full/partial-intent and
+waveform-code key. Each presentation explicitly restores the initialized
+`0xE0=0x10` selection before a fresh temperature read, preserving the existing
+buckets and 25 C fallback. A changed or invalid key resets and initializes
+before latching; compatible updates skip only reset/static setup. Every update
+retains the `0xE0=0x12` waveform latch, checked BUSY wait, 10 ms settle,
+full-frame transfer and checked power-off. Only successful physical completion
+and cleanup validate the key. Temperature/latch/setup errors and cancellation
+invalidate it. Retained-state temperature behavior and image quality still
+require SSD2677 hardware validation; normal power-off policy is unchanged.
 
 SSD1677 receives full previous/current mono planes, or two Gray4 bitplanes.
 SSD2677 receives a full 2-bpp mono/gray frame or full-frame old/new transition
@@ -128,11 +150,14 @@ Availability reflects successful initialization, not the last presentation resul
 so a transient timeout does not block the manual full-refresh recovery path.
 
 BUSY waits are bounded to 15 seconds per operation and yield to FreeRTOS.
+Refresh completion observes assertion followed by release; a missing assertion
+within the experimental 20 ms window is an error. Ordinary command-ready waits
+allow one propagation tick without requiring a visible pulse.
 OTA is checked before work, while settling/waiting, and between transferred
 rows. Cancellation closes the driver's own SPI transaction and defers further
 rendering. An already-started SSD2677 drive session still finishes its bounded
 ready/power-off cleanup, yielding without pausing OTA transport or another task.
-If BUSY times out, the driver cuts the display rail, allows 100 ms off, and
+If SSD2677 drive cleanup fails, the driver cuts the display rail, allows 100 ms off, and
 restores it with 100 ms settling before the next full-refresh retry.
 
 GT911 uses Wire1 SDA3/SCL2 at 400 kHz after touch power has settled for 250 ms.
