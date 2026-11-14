@@ -102,11 +102,12 @@ does not add silence to the clip. The microphone level meter is unavailable
 while recording or paused.
 
 Open **Audio > Voice clips** to play, seek, download, or delete saved WAV files
-in your browser. The portal does not use your browser's microphone. Clips use
+in your browser. Clips are grouped by date; recordings made before the device
+clock is set appear under **Unknown date**. Delete requires confirmation.
+The portal does not use your browser's microphone. Clips use
 the device input's native 16-bit PCM format and stay on its selected storage
 backend. Free space limits recording time; the device saves captured audio when
-it reaches the storage reserve. The displayed free space is approximate. Keep
-private recordings and downloads protected.
+it reaches the storage reserve. Keep private recordings and downloads protected.
 
 Use `[recorder:state]`, `[recorder:duration_s]`, `[recorder:last_clip]`, and
 `[recorder:error]` on pads to show recording status and the latest result.

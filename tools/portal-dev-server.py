@@ -115,10 +115,19 @@ def reset_pad_fixtures(server, scenario="normal"):
     server.mock_icon_source_counter = 1
     server.mock_boot_actions = []
     server.mock_boot_logo_slots = {}
-    samples = b"\0\0" * 1600
+    samples = b"\0\0" * (16000 * 3)
     wav = struct.pack("<4sI4s4sIHHIIHH4sI", b"RIFF", 36 + len(samples), b"WAVE",
                       b"fmt ", 16, 1, 1, 16000, 32000, 2, 16, b"data", len(samples)) + samples
-    server.mock_voice_clips = {"0000000100000002": wav}
+    server.mock_voice_clips = {
+        "0000000100000002": wav,
+        "0000000100000003": wav,
+        "0000000100000004": wav,
+    }
+    server.mock_voice_clip_times = {
+        "0000000100000002": MOCK_NOW_EPOCH,
+        "0000000100000003": MOCK_NOW_EPOCH - 3600,
+        "0000000100000004": MOCK_NOW_EPOCH - 86400,
+    }
     server.mock_recipe_catalog = json.loads((SCRIPT_DIR.parent / "docs/samples/recipe-catalog.json").read_text(encoding="utf-8"))
     server.mock_alarms = {"lateness_minutes": 360, "1": {"enabled": False, "hour": 7, "minute": 0, "weekdays": 62,
                                "snooze_minutes": 9, "auto_dismiss_minutes": 30,
@@ -687,7 +696,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
                                   "free_bytes": 3 * 1024 * 1024})
             elif path.endswith("/list"):
                 self._serve_json({"entries": [
-                    {"id": clip_id, "size_bytes": len(data), "duration_ms": (len(data) - 44) // 32,
+                    {"id": clip_id, "created_at": self.server.mock_voice_clip_times[clip_id],
+                     "size_bytes": len(data), "duration_ms": (len(data) - 44) // 32,
                      "sample_rate": 16000, "channels": 1}
                     for clip_id, data in self.server.mock_voice_clips.items()]})
             elif path.endswith("/file"):
@@ -1296,6 +1306,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 self._serve_json({"message": "Clip not found"}, 404)
             else:
                 del self.server.mock_voice_clips[clip_id]
+                del self.server.mock_voice_clip_times[clip_id]
                 self._serve_json({"success": True})
             return
         if parsed.path == "/api/mqtt/inspect":

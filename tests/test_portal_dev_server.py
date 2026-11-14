@@ -135,6 +135,7 @@ class PortalDevServerTest(unittest.TestCase):
 
         listing = self.request(base + "list", profile=profile)[1]
         self.assertEqual(listing["entries"][0]["id"], clip_id)
+        self.assertEqual(listing["entries"][0]["created_at"], PORTAL.MOCK_NOW_EPOCH)
         url = self.base + base + "file?id=" + clip_id
         cookie = {"Cookie": "portal_mock_profile=" + profile}
         with urlopen(Request(url, headers=cookie)) as response:
@@ -155,7 +156,7 @@ class PortalDevServerTest(unittest.TestCase):
             self.assertEqual(response.code, 416)
             self.assertEqual(response.headers["Content-Range"], f"bytes */{len(data)}")
         self.assertEqual(self.request(base + "delete?id=" + clip_id, "DELETE", profile=profile)[0], 200)
-        self.assertEqual(self.request(base + "list", profile=profile)[1]["entries"], [])
+        self.assertNotIn(clip_id, [entry["id"] for entry in self.request(base + "list", profile=profile)[1]["entries"]])
         self.assertEqual(self.request(base + "file?id=" + clip_id, profile=profile)[0], 404)
 
     def test_bthome_capability_validation_save_reload_and_failure(self):
