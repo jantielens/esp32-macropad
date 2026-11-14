@@ -26,7 +26,9 @@ class RemoteLogRuntimeTests(unittest.TestCase):
 '''
                 subprocess.run(["c++", "-E", "-x", "c++", "-DBOARD_HAS_OVERRIDE",
                                 "-DBOARD_HAS_PSRAM", "-I", str(ROOT / "src/app"),
-                                "-I", str(ROOT / "src/boards" / board), "-"],
+                                "-I", str(ROOT / "src/boards" / board)]
+                               + (["-DCONFIG_IDF_TARGET_ESP32S3=1"] if board.startswith("reterminal-sticky-interactive") else [])
+                               + ["-"],
                                input=source, text=True, stdout=subprocess.DEVNULL, check=True)
 
     def test_feature_exclusion(self):

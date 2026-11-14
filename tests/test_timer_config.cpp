@@ -6,6 +6,7 @@
 #include <thread>
 #include <freertos/semphr.h>
 
+#include "action_dispatch.h"
 #include "action_parse.h"
 #include "action_registry.h"
 #include "timer_config.h"
@@ -19,6 +20,8 @@ size_t storage_test_write_limit = SIZE_MAX;
 FakeLittleFS LittleFS;
 
 void storage_publish_usage(bool) {}
+ActionDispatchContext action_dispatch_context() { return {}; }
+void display_manager_request_binding_refresh() {}
 
 static std::string normalized_json() {
     JsonDocument doc;

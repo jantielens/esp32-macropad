@@ -25,6 +25,7 @@ harness = r'''
 #include "fill_pattern.h"
 #include "esp_heap_caps.h"
 #include "psram_json_allocator.h"
+#include "storage.h"
 #include <ArduinoJson.h>
 #include <algorithm>
 #include <atomic>
@@ -124,8 +125,8 @@ struct TestStorage {
         return true;
     }
 } Storage;
-static bool storage_mount() { return true; }
-static void storage_publish_usage(bool) {}
+bool storage_mount() { return true; }
+void storage_publish_usage(bool) {}
 static std::atomic<bool> g_ready{true};
 static void icon_store_preload_pad(uint8_t) {}
 enum IconKind : uint8_t { ICON_KIND_COLOR = 0, ICON_KIND_MONO = 1 };

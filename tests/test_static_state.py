@@ -35,6 +35,7 @@ PRELUDE = r'''
 #include "psram_json_allocator.h"
 #include "LittleFS.h"
 #define Storage LittleFS
+#include "storage.h"
 template <typename... Args> void state_test_log(Args...) {}
 #define LOGI(...) state_test_log(__VA_ARGS__)
 #define LOGD(...) state_test_log(__VA_ARGS__)

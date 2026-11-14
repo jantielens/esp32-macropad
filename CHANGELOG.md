@@ -14,30 +14,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.48.0] - 2026-11-14
+
+reTerminal Sticky joins the supported boards in this release. It is also the
+first consumer of several new shared-firmware capabilities, including local
+voice clips, hardware RTC support, and guarded SD writes during shutdown.
+These capabilities are reusable on compatible boards, not Sticky-only features;
+availability depends on the installed firmware and hardware.
+
+> [!IMPORTANT]
+> Review the migration guidance under Changed before updating existing pads
+> or integrations. Wi-Fi command and binding names, battery bindings, and
+> saved Bluetooth transmit-power settings need attention.
+
 ### Added
 
+* Add Seeed reTerminal Sticky as a new board with the
+  `reterminal-sticky-interactive` Macropad target. Support SSD1677/SSD2677
+  black-and-white partial refresh and full-refresh cleanup, four-level
+  grayscale full refresh, GT911 touch, three configurable physical buttons,
+  Up startup recovery, and a hardware **Shutdown** action. Integrate buzzer
+  feedback and alerts, the onboard microphone, SHT40 temperature and humidity,
+  BQ27220 battery readings, and external-power detection with shared firmware.
+  Hardware acceptance remains incomplete; SSD2677 is physically unverified.
+  See [Sticky hardware and limits](src/boards/reterminal-sticky-interactive/README.md).
+* Add the `reterminal-sticky-interactive-sd` board variant with microSD-primary
+  storage for pads, icons, voice clips, and other persistent files. NVS settings
+  remain in flash. A readable FAT32 card is required at boot, with no internal
+  storage fallback or automatic formatting. Back up files before switching
+  variants; installation does not migrate them.
+  See [Sticky SD storage](src/boards/reterminal-sticky-interactive-sd/README.md).
 * Add compile-time-gated local voice clips to shared firmware, with
   reTerminal Sticky as the first enabled board. Record using **Voice clip**
-  actions, show recorder status on pads, and play, download, or delete saved
-  WAV files through the portal. Other compatible boards can opt in; firmware
-  without the feature excludes its recorder and portal assets.
+  Start, Pause, Resume, Save, and Discard actions, and show recorder status on
+  pads. Play, seek, download, or delete saved WAV files through the portal,
+  grouped by recording date with **Unknown date** for clips made before clock
+  synchronization. Other compatible boards can opt in; firmware without the
+  feature excludes its recorder and portal assets.
   See [voice clips](docs/user/media/audio.md#record-and-manage-voice-clips).
-* Add battery-only inactivity shutdown under **Device > Power Savings**.
-  reTerminal Sticky defaults to 300 seconds; M5Stack StopWatch defaults to
-  disabled. Set `0` to disable; timers and alarms do not block shutdown.
-  Try to display **Powered off automatically** before power-off; e-paper
-  retains the notice when displayed. E-Paper Frame scheduling is unchanged.
+* Add board-independent battery telemetry and `[battery:...]` bindings to
+  shared firmware. Expose supported voltage, percentage, signed current and
+  power, discharge power, status, external-power detection, and runtime
+  estimates through bindings, MQTT, and Home Assistant. Unsupported or stale
+  measurements use unavailable fallbacks rather than invented zeroes.
+  reTerminal Sticky supplies gauge readings; other battery providers expose
+  only what their hardware can measure.
+  See [battery information](docs/user/pads/data-sources.md#show-battery-information).
+* Add shared battery-only inactivity shutdown under **Device > Power Savings**
+  on boards with hardware power-off support. reTerminal Sticky defaults to
+  300 seconds; M5Stack StopWatch defaults to disabled. Set `0` to disable;
+  timers and alarms do not block shutdown. Try to display **Powered off
+  automatically** before power-off; e-paper retains the notice when displayed.
+  A shared SD filesystem mutation guard prevents controlled shutdown during
+  guarded writes, with Sticky SD as its first consumer. Unfinished voice
+  recordings are discarded; unexpected power loss can still damage storage.
+  E-Paper Frame scheduling is unchanged.
   See [automatic shutdown](docs/user/device/display-and-sleep.md#save-battery-power-with-automatic-shutdown).
-
-* Send Home Assistant remote-control events from button actions using BTHome
-  Bluetooth advertisements. Choose device-wide Button 1-10 and Press, Double
-  press, or Long press. Events are unencrypted and best-effort; queue admission
-  does not confirm delivery or automation execution.
+* Add shared BTHome button-event actions for Home Assistant remote control
+  through Bluetooth advertisements. Choose device-wide Button 1-10 and Press,
+  Double press, or Long press. Configure burst duration and advertising interval
+  under **Connectivity > Bluetooth**; timing saves apply to the next burst
+  without reboot. Coordinate events with HID advertising on supported backends.
+  Events are unencrypted and best-effort; queue admission does not confirm
+  delivery or automation execution.
   See [BTHome button events](docs/user/integrations/home-assistant.md#send-a-bthome-button-event).
-* Configure BTHome button-event burst duration and advertising interval under
-  **Connectivity > Bluetooth**. Timing saves apply to the next burst without
-  reboot; a burst already running keeps its original timing.
-  See [BTHome publishing settings](docs/user/integrations/home-assistant.md#send-a-bthome-button-event).
 * Add opt-in **Offline** operation to shared firmware across supported
   interactive devices. Boot without Wi-Fi initialization or connection
   attempts while keeping local controls and supported Bluetooth/BTHome actions
@@ -58,17 +98,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   network or AP access while preserving Bluetooth. An action-enabled AP keeps
   the current pad and exposes the full portal; restart/recovery APs remain
   restricted. Choose AP or offline fallback when saved Wi-Fi fails at normal
-  boot, and optionally protect either AP purpose with an AP password.
+  boot, and optionally protect either AP purpose with an AP password. Manual
+  connections use the boot path's strongest matching AP selection, with
+  background scanning and the association timeout starting after preparation.
+  SDK fallback and coprocessor-managed selection remain where applicable.
   These controls are shared-firmware features on supported devices.
   See [network actions and access](docs/user/device/network-and-access.md#enable-network-access-from-an-action).
-* Add the `reterminal-sticky-interactive` Macropad target with Wi-Fi,
-  SSD1677/SSD2677 black-and-white rendering with partial refresh and full-refresh
-  cleanup, four-level grayscale full refresh, GT911 touch, three configurable
-  physical buttons, and Up startup recovery. Support buzzer feedback and alert
-  tones, SHT40 temperature and humidity, read-only BQ27220 battery percentage
-  and voltage, and external-power detection through the existing sensor
-  integrations.
-  See [Sticky hardware and limits](src/boards/reterminal-sticky-interactive/README.md).
+* Add coherent, interaction-priority e-paper presentation to shared display
+  paths used by reTerminal Sticky, CrowPanel 4.2, reTerminal E1003 Interactive,
+  and Waveshare 7.8 Interactive. Present completed render frames, preserve
+  newer updates during active waveforms, and let changed focus, navigation,
+  dialogs, and user-variable interactions bypass background presentation waits.
+  User-triggered variable changes resolve pad bindings promptly. Required full
+  refreshes and controller waits remain intact; Inkplate does not support
+  interaction priority.
+  See [Interactive E-Paper presentation](docs/user/specialized/interactive-epaper.md#balance-freshness-and-panel-work).
+* Add per-board selection of an opt-in NimBLE-Arduino advertising backend
+  for eligible ESP32-S3 builds with PSRAM. reTerminal Sticky is the first
+  consumer of its broadcast profile, without scanning, connections, or HID.
+  Existing boards retain the bundled backend by default.
+  See [BLE backend selection](docs/dev/build-and-release-process.md#ble-backend-and-broadcast-profile).
 * End a maintenance session with **Device > Operating Mode > Sleep now**.
   Choose a one-shot sleep duration without changing the saved mode or Wake
   Interval. Sleep is refused during updates or configuration writes.
@@ -82,26 +131,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-* Use the boot connection's strongest matching AP selection for manual
-  **Connect to Wi-Fi** actions, with scanning in a background worker and the
-  association timeout starting after preparation. Keep SDK fallback and
-  coprocessor-managed AP selection where applicable. Replace the saved
-  `wifi_reconnect` command with `wifi_connect` without an alias; update existing
-  actions that use the old command.
+* Move battery label bindings from `[sensor:battery_...]` to the shared
+  `[battery:...]` scheme without aliases. For example, replace
+  `[sensor:battery_voltage]` with `[battery:voltage]` and
+  `[sensor:battery_percentage]` with `[battery:percentage]`.
+  M5Stack StopWatch no longer publishes `battery_charging`; update integrations
+  to use `battery_status` and `external_power_present`, which distinguish
+  charging from external supply detection. Existing voltage, percentage, and
+  current API/MQTT field names remain unchanged where supported.
+  See [battery information](docs/user/pads/data-sources.md#show-battery-information).
+* Replace the saved `wifi_reconnect` command with `wifi_connect` without an
+  alias; update existing actions that use the old command.
   See [network actions](docs/user/device/network-and-access.md#enable-network-access-from-an-action).
 * Consolidate shared Wi-Fi health bindings around `wifi_state`, covering radio
   off, startup, connection, recovery, AP, shutdown, and shutdown failure.
   `wifi_ssid` and `wifi_ip` describe the active network or AP; supporting details
   use consistent `wifi_` names. Remove the old `wifi_status`, `ap_active`,
   `ap_ssid`, `ap_ip`, `rssi`, `ip`, and `hostname` health keys without aliases;
-  update affected bindings. HTTP telemetry field names are unchanged.
+  update affected bindings. Cache network details on connection transitions
+  and every two seconds to reduce repeated string allocations. Saved hostname
+  changes appear in bindings after reboot. HTTP telemetry field names are
+  unchanged.
   See [Wi-Fi status bindings](docs/user/device/network-and-access.md#enable-network-access-from-an-action).
-* Extend coherent, interaction-priority presentation to CrowPanel 4.2,
-  reTerminal E1003 Interactive, and Waveshare 7.8 Interactive. Present completed
-  render frames, preserve newer updates during active waveforms, and let changed
-  focus, navigation, dialogs, and user-variable interactions bypass background
-  presentation waits. Required full refreshes and controller waits remain intact.
-  See [Interactive E-Paper presentation](docs/user/specialized/interactive-epaper.md#balance-freshness-and-panel-work).
 * Keep InkplateLibrary unchanged while separating private LVGL drawing from
   library-owned presentation buffers. Wake scheduling waits for manual full
   refreshes and preserve background cadence, uncapped settling, and frontlight
@@ -115,10 +166,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Earlier saved sensor-power settings are not migrated; power defaults to
   +9 dBm, so reselect a lower value after updating if needed.
   See [Bluetooth configuration](docs/user/integrations/home-assistant.md#send-a-bthome-button-event).
-* Support per-board selection of an opt-in NimBLE-Arduino advertising backend
-  for eligible ESP32-S3 builds with PSRAM. Existing boards retain the bundled
-  backend by default; HID and other target migrations remain separate work.
-  See [BLE backend selection](docs/dev/build-and-release-process.md#ble-backend-and-broadcast-profile).
 * Organize board-exclusive display, touch, and sensor adapters under
   `src/boards/<board>/drivers/`, keeping board-wide initialization separate
   from drivers and reusable controllers and helpers shared. Apply this ownership
@@ -129,17 +176,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-* Add a shared SD filesystem mutation guard for boards with automatic
-  shutdown, with Sticky SD as the first consumer. Controlled shutdown waits
-  for guarded writes; unfinished voice recordings are discarded. Unexpected
-  power loss can still damage the filesystem.
-  See [Sticky SD storage](src/boards/reterminal-sticky-interactive-sd/README.md).
-* Prevent a shared-firmware Offline startup crash by initializing the portal's
-  software TCP/IP stack before its listener, without enabling the Wi-Fi radio.
-* Reduce repeated Wi-Fi snapshot string allocations by refreshing network
-  details on connection transitions and every two seconds. Cache the snapshot
-  hostname before portal tasks start to avoid racing configuration writes;
-  saved name changes appear in the binding after reboot.
 * Wait for IT8951 display-engine completion rather than HRDY readiness alone
   before validating the presented frame. Keep screenshots invalid after
   cancelled or incomplete presentations and recover with a full refresh.
@@ -149,10 +185,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   across wrapper cleanup and retry full refreshes after power-on failure.
 * Keep RGB565 luminance lookup tables compile-time initialized on Inkplate's
   C++11 toolchain without changing conversion results or table size.
-* Persist Bluetooth power and event timing together so a failed settings write
-  cannot leave a partially saved Bluetooth configuration.
-* Retry HID advertising restoration after BTHome events before sending queued
-  events, retaining radio ownership until advertising recovery succeeds.
 * Open temporary configuration access on saved Wi-Fi after a reset or power
   cycle on headless MQTT/BLE duty-cycle sensor nodes. Deep-sleep wakes keep
   their normal duty cycle. New sensor-node configurations default to a
