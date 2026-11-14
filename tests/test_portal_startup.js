@@ -2,6 +2,58 @@ const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
 
+async function testFirmwareUploadResponses() {
+    for (const outcome of ['success', 'rejected', 'disconnect']) {
+        const nodes = new Map();
+        const timers = [];
+        let request;
+        let reconnects = 0;
+        class FakeRequest {
+            constructor() {
+                request = this;
+                this.handlers = {};
+                this.upload = { addEventListener: (name, handler) => { this.progress = handler; } };
+            }
+            addEventListener(name, handler) { this.handlers[name] = handler; }
+            open() {}
+            send() {}
+        }
+        const context = {
+            selectedFile: { name: 'firmware.bin' },
+            document: { getElementById(id) {
+                if (!nodes.has(id)) nodes.set(id, { style: {}, disabled: false });
+                return nodes.get(id);
+            } },
+            window: { location: { origin: 'http://device' } },
+            XMLHttpRequest: FakeRequest,
+            FormData: class { append() {} },
+            API_UPDATE: '/api/update',
+            showRebootDialog() {},
+            startReconnection() { ++reconnects; },
+            setTimeout(callback) { timers.push(callback); },
+            console
+        };
+        vm.createContext(context);
+        vm.runInContext(fs.readFileSync('src/app/web/portal_firmware.js', 'utf8'), context);
+        await context.uploadFirmware();
+        request.progress({ lengthComputable: true, loaded: 98, total: 100 });
+        if (outcome === 'disconnect') {
+            request.handlers.error();
+        } else {
+            request.status = outcome === 'success' ? 200 : 409;
+            request.response = { message: 'Stopping voice recording; retry update' };
+            request.handlers.load();
+        }
+        if (outcome === 'rejected') {
+            assert.match(nodes.get('reboot-message').textContent, /retry update/);
+            assert.strictEqual(nodes.get('upload-btn').disabled, false);
+            assert.strictEqual(nodes.get('firmware-file').disabled, false);
+        }
+        timers.forEach(callback => callback());
+        assert.strictEqual(reconnects, outcome === 'rejected' ? 0 : 1);
+    }
+}
+
 async function testFetchConcurrency() {
     const requests = [];
     const context = { document: { getElementById: () => null }, window: {
@@ -60,6 +112,7 @@ async function testFetchConcurrency() {
 }
 
 async function main() {
+    await testFirmwareUploadResponses();
     await testFetchConcurrency();
     const listeners = new Map();
     const activityRequests = [];

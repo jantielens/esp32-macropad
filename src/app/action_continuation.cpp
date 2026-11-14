@@ -131,7 +131,9 @@ bool action_continuation_set_timeout(uint32_t token, uint32_t timeout_ms) {
 bool action_continuation_complete(uint32_t token, bool success) {
     ACTION_CONTINUATION_LOCK();
     ActionContinuation* continuation = find_by_token(token);
-    if (!continuation || continuation->completed) {
+    if (!continuation || continuation->completed ||
+        (continuation->pending && continuation->timeout_ms &&
+         int32_t(millis() - continuation->deadline_ms) >= 0)) {
         ACTION_CONTINUATION_UNLOCK();
         return false;
     }

@@ -5,6 +5,9 @@
 #include "i2c_bus.h"
 #include "log_manager.h"
 #include "ota_activity.h"
+#if HAS_VOICE_CLIPS
+#include "voice_clips.h"
+#endif
 #include <Arduino.h>
 #include <Wire.h>
 #include <driver/gpio.h>
@@ -21,6 +24,11 @@ uint32_t shutdownStartedAt = 0;
 uint32_t shutdownSentAt = 0;
 constexpr uint32_t kButtonReleaseTimeoutMs = 5000;
 constexpr uint32_t kPowerOffTimeoutMs = 500;
+#if HAS_VOICE_CLIPS
+bool recorderWaitStarted = false;
+uint32_t recorderWaitAt = 0;
+constexpr uint32_t kRecorderStopTimeoutMs = 5000;
+#endif
 
 esp_err_t output(int pin, int level) {
     const auto gpio = static_cast<gpio_num_t>(pin);
@@ -47,6 +55,9 @@ void shutdown_failed(uint32_t token, const char* reason, bool restoreLatch) {
     LOGE("Sticky", "Shutdown failed: %s", reason);
     shutdownStarted = false;
     shutdownSent = false;
+#if HAS_VOICE_CLIPS
+    recorderWaitStarted = false;
+#endif
     shutdownToken.store(0);
     ota_activity_finish();
     if (!action_continuation_complete(token, false))
@@ -98,6 +109,22 @@ void sticky_hardware_loop() {
             shutdown_failed(token, "AI/OK button is still held", false);
         return;
     }
+#if HAS_VOICE_CLIPS
+    const VoiceClipCancelStatus recorder = voice_clips_cancel();
+    if (recorder == VoiceClipCancelStatus::Error) {
+        shutdown_failed(token, "voice recorder could not stop safely", false);
+        return;
+    }
+    if (recorder == VoiceClipCancelStatus::Pending) {
+        if (!recorderWaitStarted) {
+            recorderWaitStarted = true;
+            recorderWaitAt = now;
+        } else if (static_cast<uint32_t>(now - recorderWaitAt) >= kRecorderStopTimeoutMs) {
+            shutdown_failed(token, "voice recorder shutdown timed out", false);
+        }
+        return;
+    }
+#endif
 #if HAS_AUTO_SHUTDOWN
     if (sticky_display_is_busy()) return;
 #endif

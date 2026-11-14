@@ -10,6 +10,9 @@
 #include "reboot_service.h"
 #include "psram_json_allocator.h"
 #include "web_portal_json.h"
+#if HAS_VOICE_CLIPS
+#include "voice_clips.h"
+#endif
 
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
@@ -91,6 +94,26 @@ static void firmware_update_task(void *pv) {
 		firmware_update_set_progress(0, firmware_update_total);
 		strlcpy(firmware_update_state, "downloading", sizeof(firmware_update_state));
 		firmware_update_error[0] = '\0';
+
+#if HAS_VOICE_CLIPS
+		const uint32_t recorder_started_ms = millis();
+		VoiceClipCancelStatus recorder = voice_clips_cancel();
+		while (recorder == VoiceClipCancelStatus::Pending &&
+			   (uint32_t)(millis() - recorder_started_ms) < 5000) {
+				delay(10);
+				recorder = voice_clips_cancel();
+		}
+		if (recorder != VoiceClipCancelStatus::Ready) {
+				strlcpy(firmware_update_state, "error", sizeof(firmware_update_state));
+				strlcpy(firmware_update_error, "Voice recorder did not stop safely",
+						sizeof(firmware_update_error));
+				LOGE("OTA", "Voice recorder did not stop safely");
+				firmware_update_in_progress = false;
+				ota_activity_finish();
+				vTaskDelete(nullptr);
+				return;
+		}
+#endif
 
 		const char *url = firmware_update_download_url;
 
@@ -385,6 +408,7 @@ void handlePostFirmwareUpdate(AsyncWebServerRequest *request, uint8_t *data, siz
 
 		if (WiFi.status() != WL_CONNECTED) {
 				request->send(409, "application/json", "{\"success\":false,\"message\":\"WiFi not connected\"}");
+				ota_activity_finish();
 				portENTER_CRITICAL(&g_fw_post_mux);
 				firmware_post_reset();
 				portEXIT_CRITICAL(&g_fw_post_mux);

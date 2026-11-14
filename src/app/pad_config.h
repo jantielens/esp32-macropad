@@ -187,6 +187,9 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_DISPLAY_REFRESH "display_refresh"
 #define ACTION_TYPE_BUTTON_NAVIGATION "button_nav"
 #define ACTION_TYPE_SET_VAR "set_var"
+#if HAS_VOICE_CLIPS
+#define ACTION_TYPE_VOICE_CLIP "voice_clip"
+#endif
 
 #define ACTION_DELAY_MAX_DURATION_MS 55000U
 
@@ -313,6 +316,11 @@ struct SetVariablePayload {
     char var_name[33];
     char var_value[192];
 };
+#if HAS_VOICE_CLIPS
+struct VoiceClipPayload {
+    char command[8];
+};
+#endif
 static_assert(sizeof(SetVariablePayload) <= 256,
               "Set variable payload must remain within the shared action payload budget");
 
@@ -356,6 +364,9 @@ union ActionPayload {
     DisplayRefreshPayload display_refresh; // type == ACTION_TYPE_DISPLAY_REFRESH
     ButtonNavigationPayload button_navigation;
     SetVariablePayload set_var;
+#if HAS_VOICE_CLIPS
+    VoiceClipPayload voice_clip;
+#endif
     uint8_t           device_class[ACTION_PAYLOAD_DEVICE_CLASS_BYTES];
                                     // opaque; owned by a registered ActionTypeDef
     // back, ble_pair, and "" (none) carry no payload data — only the type tag.

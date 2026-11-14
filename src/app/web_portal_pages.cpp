@@ -159,6 +159,14 @@ void handlePortalAlarmsJS(AsyncWebServerRequest *request) {
 }
 #endif
 
+#if HAS_VOICE_CLIPS
+void handlePortalVoiceClipsJS(AsyncWebServerRequest *request) {
+	if (!portal_auth_gate(request)) return;
+	request->send(begin_gzipped_asset_response(request, "application/javascript",
+		portal_voice_clips_js_gz, portal_voice_clips_js_gz_len, "no-store"));
+}
+#endif
+
 // ---- Legacy page handlers (redirect to shell with hash) ----
 void handleRoot(AsyncWebServerRequest *request) {
 		if (!portal_auth_gate(request)) return;

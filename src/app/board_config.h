@@ -490,13 +490,14 @@ struct HwButtonDef {
 #define HAS_AUDIO_INPUT false
 #endif
 
+// Enable local voice clip recording and management.
+#ifndef HAS_VOICE_CLIPS
+#define HAS_VOICE_CLIPS false
+#endif
+
 // Enable ES7210 microphone ADC initialization on the shared I2S transport.
 #ifndef HAS_ES7210_MIC
 #define HAS_ES7210_MIC false
-#endif
-
-#if HAS_AUDIO_INPUT && !HAS_AUDIO
-#error "HAS_AUDIO_INPUT requires HAS_AUDIO."
 #endif
 
 // NS4150B power amplifier enable pin.
@@ -602,8 +603,28 @@ struct HwButtonDef {
 #define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_ES8311
 #endif
 
-#if HAS_AUDIO_INPUT && AUDIO_OUTPUT_DRIVER != AUDIO_OUTPUT_DRIVER_ES8311
-#error "HAS_AUDIO_INPUT requires an audio output driver with a microphone input path."
+// Audio input selection is independent of the output driver.
+#define AUDIO_INPUT_DRIVER_ES8311 0
+#define AUDIO_INPUT_DRIVER_STICKY_PDM 1
+
+// Select the audio input HAL backend.
+#ifndef AUDIO_INPUT_DRIVER
+#define AUDIO_INPUT_DRIVER AUDIO_INPUT_DRIVER_ES8311
+#endif
+
+#if HAS_AUDIO_INPUT && AUDIO_INPUT_DRIVER == AUDIO_INPUT_DRIVER_ES8311 && \
+    (!HAS_AUDIO || AUDIO_OUTPUT_DRIVER != AUDIO_OUTPUT_DRIVER_ES8311)
+#error "ES8311 audio input requires the ES8311 audio output driver."
+#endif
+
+#if HAS_AUDIO_INPUT && AUDIO_INPUT_DRIVER != AUDIO_INPUT_DRIVER_ES8311 && \
+    AUDIO_INPUT_DRIVER != AUDIO_INPUT_DRIVER_STICKY_PDM
+#error "Unknown audio input driver."
+#endif
+
+#if HAS_AUDIO_INPUT && AUDIO_INPUT_DRIVER == AUDIO_INPUT_DRIVER_STICKY_PDM && \
+    !defined(CONFIG_IDF_TARGET_ESP32S3)
+#error "Sticky PDM audio input requires ESP32-S3."
 #endif
 
 // ============================================================================
@@ -721,6 +742,14 @@ struct HwButtonDef {
 // ============================================================================
 #ifndef HAS_BUTTON
 #define HAS_BUTTON false
+#endif
+
+#if HAS_VOICE_CLIPS && IS_VOICE_ASSISTANT
+#error "HAS_VOICE_CLIPS and IS_VOICE_ASSISTANT cannot be enabled together."
+#endif
+
+#if HAS_VOICE_CLIPS && (!HAS_AUDIO_INPUT || !HAS_FILESYSTEM || !(HAS_DISPLAY || HAS_BUTTON))
+#error "HAS_VOICE_CLIPS requires audio input, persistent storage, and an action host."
 #endif
 
 // GPIO pin for the optional user button (active level defined below).

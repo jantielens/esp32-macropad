@@ -526,6 +526,8 @@ int main(int argc, char** argv) {
     }
 #endif
     expect(scheme_is_registered("ext") == bool(HAS_EXTERNAL_DATA), "external data registration matches gate");
+    expect(scheme_is_registered("recorder") == bool(HAS_VOICE_CLIPS),
+           "voice recorder registration matches gate");
     expect(scheme_is_registered("pad") == bool(HAS_DISPLAY),
            "named bindings are registered whenever display is enabled");
     expect(scheme_is_registered("ha") == bool(HAS_HA_LIVE), "HA registration matches gate");

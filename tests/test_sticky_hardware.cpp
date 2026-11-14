@@ -7,6 +7,11 @@
 #include "../src/app/auto_shutdown.h"
 #include "../src/app/device_dialog.h"
 #include "../src/app/power_manager.h"
+#if HAS_VOICE_CLIPS
+#include "../src/app/voice_clips.h"
+static VoiceClipCancelStatus recorderStatus = VoiceClipCancelStatus::Ready;
+VoiceClipCancelStatus voice_clips_cancel() { return recorderStatus; }
+#endif
 #include <SPI.h>
 #include <driver/gpio.h>
 #include <cstdio>
@@ -197,8 +202,9 @@ static void contact(uint16_t x, uint16_t y) {
 int main() {
     static_assert(HAS_DISPLAY && HAS_TOUCH && HAS_LVGL_EPAPER && HAS_EPAPER_GRAYSCALE);
     static_assert(!IS_EPAPER_FRAME && HAS_MCP && HAS_MQTT && HAS_FILESYSTEM);
-    static_assert(HAS_AUDIO && !HAS_SOUND_PLAYER && !HAS_AUDIO_INPUT && !HAS_SD_CARD && !USE_SD_STORAGE);
+    static_assert(HAS_AUDIO && !HAS_SOUND_PLAYER && HAS_AUDIO_INPUT && !HAS_SD_CARD && !USE_SD_STORAGE);
     static_assert(AUDIO_OUTPUT_DRIVER == AUDIO_OUTPUT_DRIVER_STICKY_PWM);
+    static_assert(AUDIO_INPUT_DRIVER == AUDIO_INPUT_DRIVER_STICKY_PDM);
     static_assert(HAS_BLE && !HAS_BLE_HID && !HAS_USB_HID && !HAS_NATIVE_EXTENSIONS);
     static_assert(!HAS_SENSOR_BATTERY_ADC && !HAS_SENSOR_DUMMY && !HAS_SENSOR_BME280 && !HAS_SENSOR_AHT10);
     static_assert(!HAS_IMAGE_LIBRARY && !HAS_IMAGE_FETCH && HAS_CONFIG_MODE_BUTTON && BUTTON_PIN == 5);
@@ -527,6 +533,30 @@ int main() {
         failPin = -1;
         CHECK(sticky_early_power_init());
     }
+#if HAS_VOICE_CLIPS
+    outputs.clear();
+    recorderStatus = VoiceClipCancelStatus::Pending;
+    CHECK(requestShutdown(50) == ACTION_PENDING);
+    BOARD_HARDWARE_LOOP();
+    CHECK(otaActive && outputs.empty() && powerLatched);
+    clockMs += 5000;
+    BOARD_HARDWARE_LOOP();
+    CHECK(!otaActive && outputs.empty() && powerLatched && failedShutdowns.back() == 50);
+    recorderStatus = VoiceClipCancelStatus::Error;
+    CHECK(requestShutdown(51) == ACTION_PENDING);
+    BOARD_HARDWARE_LOOP();
+    CHECK(!otaActive && outputs.empty() && powerLatched && failedShutdowns.back() == 51);
+    recorderStatus = VoiceClipCancelStatus::Pending;
+    CHECK(requestShutdown(52) == ACTION_PENDING);
+    BOARD_HARDWARE_LOOP();
+    CHECK(otaActive && outputs.empty() && powerLatched);
+    recorderStatus = VoiceClipCancelStatus::Ready;
+    BOARD_HARDWARE_LOOP();
+    CHECK(otaActive && !powerLatched);
+    clockMs += 500;
+    BOARD_HARDWARE_LOOP();
+    CHECK(!otaActive && powerLatched && failedShutdowns.back() == 52);
+#endif
     const auto setPower = [&](float external) {
         if (!std::isfinite(external)) {
             clockMs += 10000;

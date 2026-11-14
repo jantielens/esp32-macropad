@@ -36,7 +36,8 @@ void action_continuation_mark_pending(uint32_t token);
 bool action_continuation_set_timeout(uint32_t token, uint32_t timeout_ms);
 
 // Thread-safe completion hook for asynchronous workers. It records the result;
-// the saved suffix resumes later on its originating dispatch task.
+// the saved suffix resumes later on its originating dispatch task. Returns
+// false if the reservation is already complete, released, or past its deadline.
 bool action_continuation_complete(uint32_t token, bool success);
 
 // Reports whether every continuation slot is currently reserved.

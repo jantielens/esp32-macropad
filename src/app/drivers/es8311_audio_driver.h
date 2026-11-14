@@ -5,12 +5,16 @@
 #include "audio_output_driver.h"
 #include "driver/i2s_types.h"
 
-#if HAS_AUDIO_INPUT
+#if HAS_AUDIO_INPUT && AUDIO_INPUT_DRIVER == AUDIO_INPUT_DRIVER_ES8311
 #include "audio_input_driver.h"
+#if HAS_VOICE_CLIPS
+#include <freertos/FreeRTOS.h>
+#include <esp_attr.h>
+#endif
 #endif
 
 class ES8311AudioDriver final : public AudioOutputDriver
-#if HAS_AUDIO_INPUT
+#if HAS_AUDIO_INPUT && AUDIO_INPUT_DRIVER == AUDIO_INPUT_DRIVER_ES8311
     , public AudioInputDriver
 #endif
 {
@@ -23,11 +27,13 @@ public:
     bool supportsMute() const override { return control.mute != nullptr; }
     bool isAvailable() const override;
     bool end() override { return cleanup(); }
-#if HAS_AUDIO_INPUT
+#if HAS_AUDIO_INPUT && AUDIO_INPUT_DRIVER == AUDIO_INPUT_DRIVER_ES8311
     bool inputAvailable() const override;
     bool captureStart() override;
-    size_t readFrames(int16_t* frames, size_t frame_count, uint32_t timeout_ms) override;
-    void captureStop() override;
+    AudioInputReadResult readFrames(int16_t* frames, size_t frame_count,
+                                    uint32_t timeout_ms) override;
+    AudioInputReadStatus captureStatus() override;
+    bool captureStop() override;
     AudioInputFormat inputFormat() const override;
 #endif
 
@@ -38,10 +44,16 @@ private:
     AudioBoardControl control;
     i2s_chan_handle_t tx_handle = NULL;
     bool tx_running = false;
-#if HAS_AUDIO_INPUT
+#if HAS_AUDIO_INPUT && AUDIO_INPUT_DRIVER == AUDIO_INPUT_DRIVER_ES8311
     i2s_chan_handle_t rx_handle = NULL;
     uint32_t sample_rate = 0;
     bool capture_active = false;
+    bool capture_failed = false;
+#if HAS_VOICE_CLIPS
+    static bool IRAM_ATTR onRxOverrun(i2s_chan_handle_t, i2s_event_data_t*, void*);
+    portMUX_TYPE rx_mux = portMUX_INITIALIZER_UNLOCKED;
+    bool rx_overrun = false;
+#endif
 #endif
 };
 

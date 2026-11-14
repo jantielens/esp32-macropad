@@ -36,6 +36,7 @@ struct DisplayFrame;
 #define HAS_BLE false
 #define HAS_ES7210_MIC false
 #define HAS_AUDIO_INPUT false
+#define HAS_VOICE_CLIPS false
 #define HAS_SOUND_PLAYER true
 #define HAS_MUSIC_ANALYSIS false
 #define HAS_AUDIO true
@@ -95,6 +96,25 @@ using i2s_mclk_multiple_t = int;
 using esp_err_t = int;
 using gpio_num_t = int;
 using i2s_chan_handle_t = int*;
+#if HAS_VOICE_CLIPS
+using portMUX_TYPE = int;
+#define portMUX_INITIALIZER_UNLOCKED 0
+#define portENTER_CRITICAL(mux) ((void)(mux))
+#define portEXIT_CRITICAL(mux) ((void)(mux))
+#define portENTER_CRITICAL_ISR(mux) ((void)(mux))
+#define portEXIT_CRITICAL_ISR(mux) ((void)(mux))
+struct i2s_event_data_t {};
+using rx_callback_t = bool (*)(i2s_chan_handle_t, i2s_event_data_t*, void*);
+struct i2s_event_callbacks_t { rx_callback_t on_recv_q_ovf = nullptr; };
+static rx_callback_t overrunCallback = nullptr;
+static void* overrunContext = nullptr;
+static esp_err_t i2s_channel_register_event_callback(i2s_chan_handle_t,
+        const i2s_event_callbacks_t* callbacks, void* context) {
+    overrunCallback = callbacks->on_recv_q_ovf;
+    overrunContext = context;
+    return 0;
+}
+#endif
 #define ESP_OK 0
 #define ESP_ERR_TIMEOUT 2
 #define I2S_NUM_0 0
@@ -124,6 +144,7 @@ struct i2s_std_config_t {
 static int channel = 0, receiveChannel = 0, liveChannels = 0;
 static bool channelFails = false, channelWriteFails = false;
 static bool channelInitFails = false, channelEnableFails = false, channelReadFails = false;
+static bool channelReadError = false, channelDisableRxFails = false;
 static bool channelWriteShort = false, testingPcm = false, txEnabled = false;
 static bool testingEs8388 = false;
 static size_t channelWriteLimit = size_t(-1);
@@ -154,6 +175,7 @@ static esp_err_t i2s_channel_enable(i2s_chan_handle_t handle) {
 }
 static esp_err_t i2s_channel_disable(i2s_chan_handle_t handle) {
     audioEvents.push_back(handle == &channel ? "disableTX" : "disableRX");
+    if (handle == &receiveChannel && channelDisableRxFails) return 1;
     if (handle == &channel) txEnabled = false;
     return ESP_OK;
 }
@@ -161,6 +183,7 @@ static esp_err_t i2s_del_channel(i2s_chan_handle_t) {
     audioEvents.push_back("delete"); --liveChannels; return ESP_OK;
 }
 static esp_err_t i2s_channel_read(i2s_chan_handle_t, void* frames, size_t count, size_t* read, int) {
+    if (channelReadError) return 3;
     if (channelReadFails) return ESP_ERR_TIMEOUT;
     memset(frames, 0, count); *read = count; return ESP_OK;
 }
@@ -485,6 +508,7 @@ static void clear_failures() {
     queueFailureAt = -1; queueCreates = 0;
     semaphoreFails = taskFails = channelFails = channelWriteFails = false;
     channelInitFails = channelEnableFails = channelReadFails = channelWriteShort = false;
+    channelReadError = channelDisableRxFails = false;
     Wire.failCodecVolume = false;
 }
 int main() {
@@ -540,12 +564,28 @@ int main() {
         const size_t events = audioEvents.size();
         assert(input->captureStart() && audioEvents.size() == events);
         int16_t frames[64] = {};
-        assert(input->readFrames(frames, 32, 5) == 32);
+        const auto read = input->readFrames(frames, 32, 5);
+        assert(read.frames == 32 && read.status == AudioInputReadStatus::Ok);
         channelReadFails = true;
-        assert(input->readFrames(frames, 32, 5) == 0);
+        const auto timeout = input->readFrames(frames, 32, 5);
+        assert(timeout.frames == 0 && timeout.status == AudioInputReadStatus::Timeout);
         channelReadFails = false;
-        input->captureStop();
+        channelReadError = true;
+        assert(input->readFrames(frames, 32, 5).status == AudioInputReadStatus::Error);
+        assert(input->captureStatus() == AudioInputReadStatus::Error);
+        channelReadError = false;
+#if HAS_VOICE_CLIPS
+        assert(overrunCallback);
+        assert(!overrunCallback(&receiveChannel, nullptr, overrunContext));
+        assert(input->captureStatus() == AudioInputReadStatus::Overrun);
+        assert(input->readFrames(frames, 32, 5).status == AudioInputReadStatus::Overrun);
+#endif
+        channelDisableRxFails = true;
+        assert(!input->captureStop());
+        channelDisableRxFails = false;
+        assert(input->captureStop());
         assert(input->captureStart());
+        assert(input->captureStatus() == AudioInputReadStatus::Ok);
 #endif
         audioEvents.clear(); audio_init_abort(); audio_initialized = false;
         assert(liveChannels == 0 && liveQueues == 0 && !output_driver->isAvailable());
@@ -1605,11 +1645,14 @@ int main() {
         result = subprocess.run([str(executable)])
         assert result.returncode == (1 if unlocked else 0)
     print("PASS: screensaver brightness holds display lock; unlocked regression rejected", flush=True)
-    for profile in ("es8311-gpio", "es8311-microphone", "pcm510xa-gpio", "es8388-gpio"):
+    for profile in ("es8311-gpio", "es8311-microphone", "es8311-voice-clips",
+                    "pcm510xa-gpio", "es8388-gpio"):
         prelude = PRELUDE
-        if profile == "es8311-microphone":
+        if profile in ("es8311-microphone", "es8311-voice-clips"):
             prelude = prelude.replace("#define HAS_AUDIO_INPUT false", "#define HAS_AUDIO_INPUT true")
             prelude = prelude.replace("#define HAS_ES7210_MIC false", "#define HAS_ES7210_MIC true")
+        if profile == "es8311-voice-clips":
+            prelude = prelude.replace("#define HAS_VOICE_CLIPS false", "#define HAS_VOICE_CLIPS true")
         pcm = profile == "pcm510xa-gpio"
         if pcm:
             prelude = prelude.replace("#define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_ES8311",

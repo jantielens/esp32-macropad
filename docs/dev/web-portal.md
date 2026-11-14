@@ -3422,6 +3422,27 @@ root (`/`) cannot be deleted. Returns `404` for a missing path and
 uses this endpoint for individual images, a dated camera-roll folder, and the
 latest snapshot copy.
 
+### Voice Clips API
+
+The `voice-clips` component and its fragment and script require
+`HAS_VOICE_CLIPS`. The normal portal authentication applies.
+
+* `GET /api/component/voice-clips/list` returns cached indexed clip metadata.
+* `GET /api/component/voice-clips/status` returns recorder state, error,
+  duration, backend, and cached total/free capacity.
+* `GET /api/component/voice-clips/file?id=<id>` streams an indexed WAV.
+  Add `download=1` for an attachment. A single closed, open-ended, or suffix
+  byte range returns `206` with `Content-Range`; an invalid or unsatisfiable
+  range returns `416`. Responses advertise `Accept-Ranges: bytes`.
+* `DELETE /api/component/voice-clips/delete?id=<id>` removes an indexed clip.
+  An active reader returns `409`; missing clips return `404`.
+
+IDs are 16 lowercase hexadecimal characters. Generic Storage and MCP access
+can browse the directory and read its files. Generic Storage deletion does not
+coordinate with the recorder or update its index. Manual firmware upload and
+factory reset return a retryable `409` while recorder cancellation is pending,
+or `503` if it cannot stop safely.
+
 ---
 
 ### MCP Server API

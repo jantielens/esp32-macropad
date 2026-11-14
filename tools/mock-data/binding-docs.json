@@ -3911,6 +3911,118 @@
       }
     },
     {
+      "name": "recorder",
+      "min_params": 1,
+      "max_params": 1,
+      "widget_max_params": 1,
+      "format_param": -1,
+      "validation_mode": 0,
+      "free_form": false,
+      "keys": [
+        "state",
+        "duration_s",
+        "last_clip",
+        "error"
+      ],
+      "category": "Device",
+      "summary": "Local voice clip recorder status.",
+      "params": [
+        {
+          "name": "key",
+          "desc": "Recorder snapshot key, see below.",
+          "required": true
+        }
+      ],
+      "key_docs": [
+        {
+          "key": "state",
+          "desc": "Current recording state"
+        },
+        {
+          "key": "duration_s",
+          "desc": "Captured duration in seconds, excluding pauses"
+        },
+        {
+          "key": "last_clip",
+          "desc": "ID of the last successfully saved clip"
+        },
+        {
+          "key": "error",
+          "desc": "Most recent recorder error"
+        }
+      ],
+      "examples": [
+        {
+          "code": "[recorder:state]",
+          "desc": "Show the recorder state."
+        },
+        {
+          "code": "[recorder:duration_s]",
+          "desc": "Show the captured duration."
+        }
+      ],
+      "authoring": {
+        "keys": [
+          {
+            "key": "state",
+            "kind": "text",
+            "unit": "",
+            "example_value": "idle",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "duration_s",
+            "kind": "integer",
+            "unit": "s",
+            "example_value": "0",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "last_clip",
+            "kind": "text",
+            "unit": "",
+            "example_value": "0000000100000002",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "error",
+            "kind": "text",
+            "unit": "",
+            "example_value": "No audio captured",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          }
+        ]
+      }
+    },
+    {
       "name": "list",
       "min_params": 1,
       "max_params": 1,

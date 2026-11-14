@@ -12,7 +12,11 @@
 #ifndef ACTION_TYPE_REGISTRY_MAX_TYPES
 #define ACTION_TYPE_REGISTRY_MAX_TYPES 27
 #endif
-static constexpr int MAX_ACTION_TYPES = ACTION_TYPE_REGISTRY_MAX_TYPES;
+static constexpr int MAX_ACTION_TYPES = ACTION_TYPE_REGISTRY_MAX_TYPES
+#if HAS_VOICE_CLIPS
+    + 1
+#endif
+    ;
 static const ActionTypeDef* s_types[MAX_ACTION_TYPES] = {};
 static int s_count = 0;
 

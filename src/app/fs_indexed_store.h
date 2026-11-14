@@ -11,7 +11,7 @@
 // Shared between fs_indexed_store.cpp and web_portal_fs_store.cpp.
 #define FS_STORE_PATCH_MAX_BYTES 1024
 
-// FsIndexedStore — manifest-indexed JSON document collection on LittleFS.
+// FsIndexedStore — manifest-indexed collection on the selected Storage backend.
 //
 // Maintains a _index.json manifest alongside data files so that list
 // operations read a single file rather than iterating every document.
@@ -71,6 +71,14 @@ struct FsIndexedStoreRootField {
     };
 };
 
+enum class FsIndexedStoreReadResult {
+    Valid,
+    Invalid,
+    IoError,
+};
+
+using FsIndexedStoreMetadataReader = FsIndexedStoreReadResult (*)(const char* path, JsonObject metadata);
+
 class FsIndexedStore {
 public:
     // base_path:        LittleFS directory, e.g. "/storage/sessions" (no trailing slash).
@@ -89,11 +97,13 @@ public:
                    const char* const* index_fields,
                    size_t num_index_fields,
                    const FsIndexedStoreRootField* root_fields = nullptr,
-                   size_t num_root_fields = 0);
+                   size_t num_root_fields = 0,
+                   const char* payload_extension = ".json",
+                   FsIndexedStoreMetadataReader metadata_reader = nullptr);
     ~FsIndexedStore() = default;
 
-    // Call once after LittleFS.begin(). Creates the base directory if missing.
-    // Manifest loading is deferred to the first list(), get(), exists(), or count() call.
+    // Call after Storage is mounted. Creates the base directory if missing.
+    // Binary stores load their catalog here; JSON stores load it on first use.
     bool begin();
 
     // Write a new document to disk and append its entry to the manifest.
@@ -112,7 +122,7 @@ public:
     bool exists(const char* id);
 
     // Delete the data file and remove the entry from the manifest.
-    // Returns false if the entry was not found or the manifest write failed.
+    // Returns false if the entry was not found or persistence failed.
     bool remove(const char* id);
 
     // Update metadata fields in both the manifest entry and the data file.
@@ -128,11 +138,12 @@ public:
     // manifest write failed.
     bool patch_entry(const char* id, const JsonObject& fields);
 
-    // Return the manifest JSON as a string (fast — serves from RAM cache).
+    // Return the manifest JSON as a string (fast — serves from RAM cache), or
+    // an empty string on load or rebuild failure.
     // Triggers a rebuild if the manifest has not yet been loaded.
     String list();
 
-    // Return the number of entries in the manifest.
+    // Return the number of entries, or -1 on load or rebuild failure.
     int count();
 
     // Return the LittleFS filesystem path for a data file given its id.
@@ -161,7 +172,10 @@ public:
     // Use when the caller writes the data file directly (e.g. via streaming serialization)
     // and only needs the manifest entry to be created.
     // created_at must be provided by the caller; it is NOT auto-generated.
-    // Returns false if the manifest write fails.
+    // Call begin() before writing a new binary payload so a missing index
+    // rebuild cannot register that payload before this call.
+    // Non-JSON stores allow created_at=0 to represent an unavailable clock.
+    // Returns false if validation or the manifest write fails.
     bool register_pre_written(const char* id, uint32_t created_at, const JsonObject& index_meta);
 
     // Delete all data files and reset the manifest to an empty state.
@@ -170,21 +184,24 @@ public:
     bool clear_all();
 
 private:
-    void _ensure_loaded();
-    void _rebuild_manifest();
+    bool _ensure_loaded();
+    bool _rebuild_manifest();
     bool _write_manifest();
     bool _atomic_write(const char* path, const String& content);
     bool _atomic_write_from_doc(const char* path, JsonDocument& doc);
-    void _sort_entries();
+    bool _sort_entries();
     void _inject_missing_root_fields();  // injects defaults for root fields absent from manifest
     void _data_path(const char* id, char* out, size_t out_len) const;
     void _manifest_path(char* out, size_t out_len) const;
+    void _invalidate();
 
     const char*        _base_path;
     const char* const* _index_fields;
     size_t             _num_index_fields;
     const FsIndexedStoreRootField* _root_fields;
     size_t             _num_root_fields;
+    const char*        _payload_extension;
+    FsIndexedStoreMetadataReader _metadata_reader;
     SemaphoreHandle_t  _mutex;
 
     // In-memory state — protected by _mutex.
@@ -194,4 +211,5 @@ private:
     BasicJsonDocument<PsramJsonAllocator>* _manifest_doc;
     String        _manifest_cache;
     bool          _loaded;
+    bool          _needs_rebuild;
 };

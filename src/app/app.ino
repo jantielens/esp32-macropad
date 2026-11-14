@@ -102,6 +102,10 @@
 #include "audio_input.h"
 #endif
 
+#if HAS_VOICE_CLIPS
+#include "voice_clips.h"
+#endif
+
 #include "i2c_bus.h"
 #include "board_hardware.h"
 #ifdef BOARD_HARDWARE_LOOP
@@ -688,9 +692,9 @@ void setup()
 	#if HAS_AUDIO
 	audio_set_amplifier_policy(device_config.audio_idle_mute, device_config.audio_wake_delay_ms);
 	audio_init(device_config.audio_volume);
+	#endif
 	#if HAS_AUDIO_INPUT
 	audio_input_meter_init();
-	#endif
 	#endif
 
 	// Let registered device classes hook in before any network / display init.
@@ -733,6 +737,10 @@ void setup()
 			return;
 		}
 	}
+
+	#if HAS_VOICE_CLIPS
+	if (!voice_clips_init()) LOGE("Main", "Voice clips initialization failed");
+	#endif
 
 	bool enter_setup_ap = (boot_mode == PowerMode::Ap);
 	if (enter_setup_ap) {
@@ -924,6 +932,11 @@ void loop()
 	hw_buttons_loop();
 
 #if HAS_AUTO_SHUTDOWN
+	#if HAS_VOICE_CLIPS
+	VoiceClipSnapshot voice_snapshot;
+	voice_clips_snapshot(&voice_snapshot);
+	if (voice_snapshot.session_active) auto_shutdown_notify_activity();
+	#endif
 	auto_shutdown_loop();
 #endif
 

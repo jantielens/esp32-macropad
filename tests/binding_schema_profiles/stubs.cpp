@@ -3,6 +3,11 @@
 #include <WiFi.h>
 #include "audio.h"
 #include "audio_input.h"
+#if HAS_VOICE_CLIPS
+#include "voice_clips.h"
+void voice_clips_snapshot(VoiceClipSnapshot* out) { *out = {}; }
+const char* voice_clips_state_name(VoiceClipState) { return "idle"; }
+#endif
 #include "device_classes/voice_assistant/voice.h"
 #include "music_analysis.h"
 #include "net_activity.h"

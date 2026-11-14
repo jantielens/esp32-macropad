@@ -1,7 +1,7 @@
 #include <cstring>
 #include <gtest/gtest.h>
 
-#include "device_classes/voice_assistant/voice_wav.h"
+#include "voice_wav.h"
 
 static uint16_t read_u16_le(const uint8_t* data) {
     return (uint16_t)data[0] | ((uint16_t)data[1] << 8);
@@ -27,4 +27,36 @@ TEST(VoiceWav, BuildsPcmHeader) {
     EXPECT_EQ(read_u16_le(header + 34), 16);
     EXPECT_EQ(std::memcmp(header + 36, "data", 4), 0);
     EXPECT_EQ(read_u32_le(header + 40), 960000u);
+}
+
+TEST(VoiceWav, ValidatesNativeFormatsAndFileSize) {
+    uint8_t header[VOICE_WAV_HEADER_BYTES];
+    VoiceWavInfo info = {};
+    voice_wav_build_header(header, 192000, 48000, 2, 16);
+    ASSERT_TRUE(voice_wav_read_header(header, sizeof(header), 192044, &info));
+    EXPECT_EQ(info.sample_rate, 48000u);
+    EXPECT_EQ(info.channels, 2);
+    EXPECT_EQ(info.block_align, 4);
+    EXPECT_EQ(info.data_bytes, 192000u);
+    EXPECT_FALSE(voice_wav_read_header(header, sizeof(header), 192043, &info));
+    EXPECT_FALSE(voice_wav_read_header(header, sizeof(header) - 1, 192044, &info));
+
+    voice_wav_build_header(header, 32000, 16000, 1, 16);
+    ASSERT_TRUE(voice_wav_read_header(header, sizeof(header), 32044, &info));
+    EXPECT_EQ(info.sample_rate, 16000u);
+    EXPECT_EQ(info.channels, 1);
+}
+
+TEST(VoiceWav, RejectsInvalidAndIncompletePcm) {
+    uint8_t header[VOICE_WAV_HEADER_BYTES];
+    VoiceWavInfo info = {};
+    voice_wav_build_header(header, 3, 16000, 1, 16);
+    EXPECT_FALSE(voice_wav_read_header(header, sizeof(header), 47, &info));
+    voice_wav_build_header(header, 0, 16000, 1, 16);
+    EXPECT_FALSE(voice_wav_read_header(header, sizeof(header), 44, &info));
+    voice_wav_build_header(header, 32000, 16000, 1, 16);
+    header[29] = 0;
+    EXPECT_FALSE(voice_wav_read_header(header, sizeof(header), 32044, &info));
+    header[0] = 'X';
+    EXPECT_FALSE(voice_wav_read_header(header, sizeof(header), 32044, &info));
 }

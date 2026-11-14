@@ -118,6 +118,18 @@ class CiReportTest(unittest.TestCase):
 
 
 class FirmwareSizeReportTest(unittest.TestCase):
+    def test_voice_clip_code_and_assets_are_attributed_to_feature(self):
+        text = """Linker script and memory map
+.flash.text 0x40000000 0x100
+ .text.range 0x40000000 0x20 /build/sketch/voice_clip_range.cpp.o
+.flash.rodata 0x40200000 0x100
+ .rodata.voice_clips_fragment_html_gz 0x40200000 0x30 /build/sketch/web_portal_pages.cpp.o
+ .rodata.portal_voice_clips_js_gz 0x40200030 0x40 /build/sketch/web_portal_pages.cpp.o
+"""
+        totals = report.summarize(report.parse_map(text))
+        self.assertEqual(totals["Voice clips (HAS_VOICE_CLIPS)"]["code"], 32)
+        self.assertEqual(totals["Voice clips (HAS_VOICE_CLIPS)"]["assets"], 112)
+
     def test_retained_sections_only_and_no_double_counting(self):
         text = """
 Discarded input sections

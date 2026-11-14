@@ -87,9 +87,14 @@ No button powers down or sleeps the device by default.
 The GPIO48 buzzer supports tone alerts and button feedback through the existing
 [audio controls](../../../docs/user/media/audio.md). It plays one pitch at a
 time: an active alert takes priority and overlapping feedback is discarded.
-Volume changes PWM duty, not a calibrated loudness. MP3, Music, microphone,
-and amplifier controls are unavailable. Physical sound and volume still need
-device validation.
+Volume changes PWM duty, not a calibrated loudness. MP3, Music, and amplifier
+controls are unavailable. Physical sound and volume still need device validation.
+
+The onboard microphone supports
+[microphone level bindings](../../../docs/user/pads/data-sources.md#read-local-sensors-and-health)
+and [local voice clips](../../../docs/user/media/audio.md#record-and-manage-voice-clips).
+Recording uses 16 kHz mono PCM in internal flash; audio quality and practical
+recording duration depend on the environment and available storage.
 
 ### Turn off the device
 
@@ -153,7 +158,7 @@ a retained e-paper image or queued event does not prove readiness or delivery.
 Offline boot, AP/station switching with BLE, recovery, temporary RAM reclamation,
 and interaction latency during connection attempts remain user hardware checks.
 
-SD, microphone, IMU, BLE HID, USB HID,
+SD, IMU, BLE HID, USB HID,
 native Extensions, remote image fetching, and the image library are disabled.
 There is no custom charging policy, gauge calibration, low-battery shutdown,
 or battery-runtime guarantee.
@@ -232,14 +237,14 @@ These are configured onboard signals, not free accessory pins.
 | Charger enable baseline          | 39, low                      |
 | External-power input             | 9                            |
 | Deferred SD CS / enable / detect | 8 high / 10 low / 11 unused   |
-| Deferred microphone enable      | 38, low                      |
+| Microphone clock / data / enable | 19 / 20 / 38                 |
 | Buzzer                           | 48, PWM tone output          |
 
 The early application hook asserts the power latch before logging and other
 startup work. It cannot guarantee retention before the application starts.
 Normal board initialization deselects and powers off SD before display SPI
-access, powers off the microphone, initializes the sensor bus once under the
-existing Wire0 lock, and allows touch/display rails to settle.
+access, powers off the microphone until capture, initializes the sensor bus once
+under the existing Wire0 lock, and allows touch/display rails to settle.
 Touch alone initializes Wire1; the sensors share the board-owned Wire0 bus.
 GPIO9 denotes external power, not proven battery-charging status.
 

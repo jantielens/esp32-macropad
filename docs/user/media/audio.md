@@ -1,6 +1,6 @@
 ---
-title: Feedback, sound alerts, and Music
-description: Set output volume, write tone patterns, manage MP3 files, and understand playback priorities.
+title: Audio and voice clips
+description: Configure audio feedback, manage sounds and music, and record local voice clips.
 ---
 
 Audio provides button feedback, alerts, and Music playback, with microphone
@@ -91,6 +91,29 @@ and Stop. Save the pad and test it on the device.
 Next/Previous change the selected track without forcing playback.
 After interruption, Music restarts the selected track from the beginning if
 its desired state is still Playing; it is not sample-accurate resume.
+
+## Record and manage voice clips
+
+On supported firmware, add **Voice clip** actions to buttons or other action
+hosts. Use **Start**, **Pause**, **Resume**, **Save**, and **Discard** to
+control one local recording. Save completes before subsequent actions run;
+failed commands stop the remaining actions. Pause retains the microphone and
+does not add silence to the clip. The microphone level meter is unavailable
+while recording or paused.
+
+Open **Audio > Voice clips** to play, seek, download, or delete saved WAV files
+in your browser. The portal does not use your browser's microphone. Clips use
+the device input's native 16-bit PCM format and stay on its selected storage
+backend. Free space limits recording time; the device saves captured audio when
+it reaches the storage reserve. The displayed free space is approximate. Keep
+private recordings and downloads protected.
+
+Use `[recorder:state]`, `[recorder:duration_s]`, `[recorder:last_clip]`, and
+`[recorder:error]` on pads to show recording status and the latest result.
+Starting a new recording clears the previous result. A reboot, firmware update,
+factory reset, or device shutdown discards an unfinished recording. If a
+manual update or reset reports that recording is stopping, retry the operation.
+If microphone cleanup fails, retry **Start** after the issue clears.
 
 ## Understand sound priority
 

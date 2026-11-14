@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add compile-time-gated local voice clips to shared firmware, with
+  reTerminal Sticky as the first enabled board. Record using **Voice clip**
+  actions, show recorder status on pads, and play, download, or delete saved
+  WAV files through the portal. Other compatible boards can opt in; firmware
+  without the feature excludes its recorder and portal assets.
+  See [voice clips](docs/user/media/audio.md#record-and-manage-voice-clips).
 * Add battery-only inactivity shutdown under **Device > Power Savings**.
   reTerminal Sticky defaults to 300 seconds; M5Stack StopWatch defaults to
   disabled. Set `0` to disable; timers and alarms do not block shutdown.

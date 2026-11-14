@@ -48,12 +48,16 @@
 #define HAS_IMAGE_LIBRARY false
 #define HAS_AUDIO true
 #define HAS_SOUND_PLAYER false
-#define HAS_AUDIO_INPUT false
+#define HAS_AUDIO_INPUT true
+#ifndef HAS_VOICE_CLIPS
+#define HAS_VOICE_CLIPS true
+#endif
 #define HAS_SD_CARD false
 #define USE_SD_STORAGE false
 #define HAS_SENSOR_BATTERY_ADC false
 #define HAS_BATTERY_INFO true
 #define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_STICKY_PWM
+#define AUDIO_INPUT_DRIVER AUDIO_INPUT_DRIVER_STICKY_PDM
 
 // Driver Selection (HAL)
 #define DISPLAY_DRIVER DISPLAY_DRIVER_STICKY_EPAPER

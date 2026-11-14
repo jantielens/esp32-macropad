@@ -1,0 +1,10 @@
+#ifndef BOARD_CONFIG_H
+#define BOARD_CONFIG_H
+
+#define HAS_DISPLAY 0
+#define HAS_VOICE_CLIPS 1
+#define HAS_FILESYSTEM 1
+#define USE_SD_STORAGE 0
+#define IS_VOICE_ASSISTANT 0
+
+#endif

@@ -323,7 +323,6 @@ static bool tool_read_storage_file(const JsonObject& args, JsonObject& result, S
     if (!storage_browser_path_is_safe(path)) {
         return cfg_fail(result, err, CFG_ERR_PARAMS, "invalid storage path");
     }
-
     File file = Storage.open(path, "r");
     if (!file || file.isDirectory()) {
         if (file) file.close();

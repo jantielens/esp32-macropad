@@ -5,6 +5,9 @@
 #include "portal_idle.h"
 #include "ota_activity.h"
 #include "reboot_service.h"
+#if HAS_VOICE_CLIPS
+#include "voice_clips.h"
+#endif
 
 #include "board_config.h"
 #if HAS_AUTO_SHUTDOWN
@@ -1327,6 +1330,18 @@ void handleDeleteConfig(AsyncWebServerRequest *request) {
 				request->send(409, "application/json", "{\"success\":false,\"message\":\"Device busy\"}");
 				return;
 		}
+
+#if HAS_VOICE_CLIPS
+		const VoiceClipCancelStatus recorder = voice_clips_cancel();
+		if (recorder != VoiceClipCancelStatus::Ready) {
+				request->send(recorder == VoiceClipCancelStatus::Pending ? 409 : 503,
+						"application/json", recorder == VoiceClipCancelStatus::Pending
+						? "{\"success\":false,\"message\":\"Stopping voice recording; retry reset\"}"
+						: "{\"success\":false,\"message\":\"Voice recorder could not stop safely\"}");
+				ota_activity_finish_config_write();
+				return;
+		}
+#endif
 
 		// Send the success response FIRST so the client receives it before the
 		// long blocking wipe (NVS erase + LittleFS.format() / SD rmrf, several

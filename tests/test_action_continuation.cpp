@@ -98,6 +98,17 @@ TEST(timeout_discards_suffix) {
               ACTION_CONTINUATION_TIMED_OUT);
 }
 
+TEST(late_completion_cannot_override_timeout) {
+    s_millis = 100;
+    const uint32_t token = begin_with_suffix(ACTION_TYPE_NOTIFY);
+    ASSERT_TRUE(token != 0);
+    action_continuation_mark_pending(token);
+    s_millis += ACTION_CONTINUATION_TIMEOUT_MS;
+    ASSERT_TRUE(!action_continuation_complete(token, true));
+    ASSERT_EQ(action_continuation_take(nullptr, nullptr, nullptr, 0),
+              ACTION_CONTINUATION_TIMED_OUT);
+}
+
 TEST(scheduled_success_waits_for_due_time) {
     s_millis = 100;
     const uint32_t token = begin_with_suffix(ACTION_TYPE_MQTT);
@@ -286,6 +297,7 @@ int main() {
     RUN(success_copies_saved_suffix);
     RUN(failure_discards_suffix);
     RUN(timeout_discards_suffix);
+    RUN(late_completion_cannot_override_timeout);
     RUN(scheduled_success_waits_for_due_time);
     RUN(completed_suffix_stays_with_originating_owner);
     RUN(pool_accepts_capacity_and_rejects_overflow);

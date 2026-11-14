@@ -33,6 +33,7 @@ Only the selected driver implementations are compiled via the sketch-root transl
 - `src/app/display_drivers.cpp`
 - `src/app/touch_drivers.cpp`
 - `src/app/audio_output_drivers.cpp`
+- `src/app/audio_input_drivers.cpp` (for independently selected input drivers)
 - `src/app/rtc_drivers.cpp`
 - `src/app/device_classes/epaper_frame/epaper_frame_drivers.cpp` (included by
   the sketch-root device-class compilation unit)
