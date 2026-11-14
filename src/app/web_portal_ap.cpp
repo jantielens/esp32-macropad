@@ -2,7 +2,6 @@
 
 #include "board_config.h"
 #include "log_manager.h"
-#include "project_branding.h"
 #include "class_branding.h"
 #include "config_manager.h"
 #include "wifi_manager.h"
