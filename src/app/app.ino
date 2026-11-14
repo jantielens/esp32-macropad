@@ -488,10 +488,11 @@ void setup()
 	#endif
 	#endif
 
-	#if HAS_TOUCH || HAS_CAMERA || HAS_AUDIO || defined(BOARD_HARDWARE_SOURCE)
+	#if HAS_TOUCH || HAS_CAMERA || HAS_AUDIO || HAS_RTC || defined(BOARD_HARDWARE_SOURCE)
 	i2c_bus_init();
 	#endif
-	if (!board_hardware_init()) {
+	const bool board_ready = board_hardware_init();
+	if (!board_ready) {
 		LOGE("Board", "Hardware initialization failed; dependent peripherals unavailable");
 	}
 
@@ -513,6 +514,9 @@ void setup()
 	config_loaded = config_manager_load(&device_config);
 	if (!device_config.timezone[0]) strlcpy(device_config.timezone, "UTC0", sizeof(device_config.timezone));
 	time_service_set_timezone(device_config.timezone);
+	#if HAS_RTC
+	if (board_ready) time_service_init_rtc();
+	#endif
 	if (!config_loaded) {
 		String default_name = config_manager_get_default_device_name();
 		strlcpy(device_config.device_name, default_name.c_str(), CONFIG_DEVICE_NAME_MAX_LEN);

@@ -104,7 +104,7 @@ FEATURES = {
         ("ota*.cpp.o", "web_portal_ota*.cpp.o", "web_portal_firmware.cpp.o"),
         ("firmware_fragment_html_gz",),
     ),
-    "Timers / time": (("timer*.cpp.o", "time_service.cpp.o"), ("timers_fragment_html_gz",)),
+    "Timers / time": (("timer*.cpp.o", "time_service.cpp.o", "rtc_drivers.cpp.o"), ("timers_fragment_html_gz",)),
     "Auto-shutdown (HAS_AUTO_SHUTDOWN)": (
         ("auto_shutdown.cpp.o",),
         ("power_savings_fragment_html_gz", "portal_power_savings_js_gz"),
@@ -163,6 +163,7 @@ LIBRARIES = {
     ),
 }
 FLAG_SUBSYSTEMS = {
+    "HAS_RTC": "Timers / time",
     "HAS_BATTERY_INFO": "Sensors / power",
     "HAS_FACE_WIDGET": "Widgets (HAS_DISPLAY)",
     "HAS_DISPLAY_DIAGNOSTICS": "Display / touch (HAS_DISPLAY / HAS_TOUCH)",

@@ -153,10 +153,38 @@ a retained e-paper image or queued event does not prove readiness or delivery.
 Offline boot, AP/station switching with BLE, recovery, temporary RAM reclamation,
 and interaction latency during connection attempts remain user hardware checks.
 
-SD, microphone, IMU, RTC, BLE HID, USB HID,
+SD, microphone, IMU, BLE HID, USB HID,
 native Extensions, remote image fetching, and the image library are disabled.
 There is no custom charging policy, gauge calibration, low-battery shutdown,
 or battery-runtime guarantee.
+
+## Offline clock
+
+The onboard PCF8563 RTC is enabled at I2C address `0x51`, sharing Wire0
+with the environmental sensor and battery gauge. Connect to Wi-Fi with
+internet access once and wait for time synchronization before relying on
+offline clock labels or alarms. NTP updates the RTC automatically; there
+is no separate setting to save or manual clock-setting control.
+See [device time](../../../docs/user/device/time.md#time-without-wi-fi).
+
+At boot, valid RTC time restores the system clock without starting Wi-Fi.
+An unset clock, a voltage-loss indication, an invalid calendar, or an I2C
+failure leaves time unavailable until network synchronization succeeds.
+Logs distinguish RTC restoration, NTP synchronization, and RTC write failures.
+An `RTC updated` log confirms that synchronized time reached the hardware
+clock. Writes wait during OTA or hardware power-off activity; clock readiness
+alone does not confirm a completed RTC write.
+If an RTC write fails, the running system clock stays usable, but retention
+of the corrected time is not confirmed.
+
+The Rev 01 schematic supplies the RTC through D21/D22 from the main 3.3 V
+rail or a dedicated always-on `RTC_3V3` regulator (U4) powered by `VSYS`.
+That supply is separate from the main power latch, so time survives
+hardware Shutdown while the battery can supply the RTC. Offline reboot
+restoration and clock advancement during hardware Shutdown have been
+user-verified on one unit. A disconnected or
+fully depleted battery cannot guarantee retained time; reconnect Wi-Fi to
+synchronize again. The RTC can drift during extended offline use.
 
 ## Environmental and battery readings
 
@@ -199,7 +227,7 @@ These are configured onboard signals, not free accessory pins.
 | Display enable                   | 47, active high              |
 | GT911 SDA / SCL (Wire1, 400 kHz)  | 3 / 2                        |
 | GT911 INT / reset / enable       | 21 / 41 / 42                 |
-| Sensor SDA / SCL (Wire0, 400 kHz) | 1 / 0                        |
+| Sensor/RTC SDA / SCL (Wire0, 400 kHz) | 1 / 0                     |
 | Power hold / power lock          | 45 / 46, high in that order   |
 | Charger enable baseline          | 39, low                      |
 | External-power input             | 9                            |

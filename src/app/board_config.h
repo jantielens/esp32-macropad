@@ -150,6 +150,31 @@ struct HwButtonDef {
 #define HAS_MQTT true
 #endif
 
+// Restore and retain UTC using a board-selected hardware real-time clock.
+#ifndef HAS_RTC
+#define HAS_RTC false
+#endif
+
+#define RTC_DRIVER_NONE 0
+#define RTC_DRIVER_PCF8563 1
+
+// Hardware real-time clock implementation; boards must select one when enabled.
+#ifndef RTC_DRIVER
+#define RTC_DRIVER RTC_DRIVER_NONE
+#endif
+
+// PCF8563 address on the board-initialized, mutex-protected Wire0 bus.
+#ifndef RTC_I2C_ADDR
+#define RTC_I2C_ADDR 0x51
+#endif
+
+#if HAS_RTC && RTC_DRIVER == RTC_DRIVER_NONE
+#error "HAS_RTC requires a selected RTC_DRIVER."
+#endif
+#if !HAS_RTC && RTC_DRIVER != RTC_DRIVER_NONE
+#error "RTC_DRIVER requires HAS_RTC."
+#endif
+
 // Include the persistent weekly or one-shot alarm on pad-capable display builds.
 #ifndef ALARM_ENABLED
 #define ALARM_ENABLED HAS_DISPLAY
@@ -219,6 +244,10 @@ struct HwButtonDef {
 // Select the sleep-first E-Paper Frame product class.
 #ifndef IS_EPAPER_FRAME
 #define IS_EPAPER_FRAME false
+#endif
+
+#if HAS_RTC && IS_EPAPER_FRAME
+#error "HAS_RTC is not supported by IS_EPAPER_FRAME; RTC updates must be flushed before deep sleep."
 #endif
 
 // Interactive LVGL e-paper requires both an e-paper panel and the display stack.

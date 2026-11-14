@@ -28,6 +28,9 @@
 #define HAS_BACKLIGHT false
 #define HAS_REMOTE_LOG true
 #define HAS_MQTT true
+#define HAS_RTC true
+#define RTC_DRIVER RTC_DRIVER_PCF8563
+#define RTC_I2C_ADDR 0x51
 #define HAS_MCP true
 #define HAS_FILESYSTEM true
 #define HAS_BLE true

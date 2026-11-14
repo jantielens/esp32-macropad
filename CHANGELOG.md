@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-11-13
+ms.date: 2026-11-14
 ms.topic: reference
 ---
 
@@ -38,6 +38,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   available. Always-On remains the default; existing devices keep their normal
   behavior unless Offline is selected.
   See [Offline boot](docs/user/device/network-and-access.md#boot-offline).
+* Add compile-time-gated hardware real-time clock (RTC) support, with
+  reTerminal Sticky as the first consumer using its onboard PCF8563.
+  Restore valid time at boot without Wi-Fi for clock labels and alarms,
+  and update the RTC after successful NTP synchronization. Retain time
+  across reboot and hardware Shutdown while the RTC remains powered.
+  Boards without enabled RTC support retain their NTP-only behavior.
+  See [offline time](docs/user/device/time.md#time-without-wi-fi) and
+  [Sticky RTC support](src/boards/reterminal-sticky-interactive/README.md#offline-clock).
 * Control network access without reboot using **Connect to Wi-Fi**,
   **Disconnect from Wi-Fi**, **Enable AP**, **Disable AP**, and **Turn off Wi-Fi**
   device commands, also available through MCP. Turn off Wi-Fi stops either

@@ -54,6 +54,21 @@ int main() {\n''' + "\n".join(output) + "\n}"
     assert len(actual) == len(expected)
 print("PASS: LCD and e-paper board appearance defaults match portal fixtures")
 
+for rtc, frame in ((1, 0), (0, 1), (1, 1)):
+    result = subprocess.run(
+        ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+         "-x", "c++", "-", "-I", str(root),
+         f"-DHAS_RTC={rtc}", "-DRTC_DRIVER=" + ("RTC_DRIVER_PCF8563" if rtc else "RTC_DRIVER_NONE"),
+         f"-DIS_EPAPER_FRAME={frame}", "-DHAS_EPAPER_PANEL=1", f"-DHAS_DISPLAY={1 - frame}"],
+        input='#include "src/app/board_config.h"\n', text=True, capture_output=True,
+    )
+    if rtc and frame:
+        assert result.returncode != 0, "Sleep-first RTC support must be rejected until writes are flushed"
+        assert "HAS_RTC is not supported by IS_EPAPER_FRAME" in result.stderr, result.stderr
+    else:
+        assert result.returncode == 0, result.stderr
+print("PASS: RTC supports interactive firmware and rejects the unintegrated sleep-first lifecycle")
+
 subprocess.run(
     ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
      "-x", "c++", "-", "-I", str(root),

@@ -206,6 +206,7 @@ Cross Reference Table
             "/build/sketch/objs.a(pad_binding.cpp.o)": "Bindings / expressions",
             "/build/sketch/objs.a(battery_binding.cpp.o)": "Bindings / expressions",
             "/build/sketch/objs.a(battery_info.cpp.o)": "Sensors / power",
+            "/build/sketch/objs.a(rtc_drivers.cpp.o)": "Timers / time",
             "/build/sketch/objs.a(pad_config.cpp.o)": "Pads / screens (HAS_DISPLAY)",
             "/build/sketch/objs.a(font_store.cpp.o)": "Fonts (HAS_TTF_FONTS)",
             "/build/sketch/objs.a(native_extension.cpp.o)": "Native extensions (HAS_NATIVE_EXTENSIONS)",

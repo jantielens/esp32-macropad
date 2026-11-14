@@ -16,6 +16,11 @@ extern "C" {
 #include <WiFi.h>
 #include <esp_sntp.h>
 #include "log_manager.h"
+#if HAS_RTC
+#include "rtc_driver.h"
+#include "ota_activity.h"
+#include <sys/time.h>
+#endif
 #endif
 
 static const TimezoneEntry timezones[] = {
@@ -68,7 +73,12 @@ static std::mutex timezone_mutex;
 static char device_timezone[64] = "UTC0";
 static char timezone_environment[sizeof(device_timezone) + 3] = "TZ=UTC0";
 static std::atomic<uint32_t> timezone_generation{0};
-static std::atomic<bool> synchronized{false};
+static std::atomic<bool> clock_ready{false};
+#if defined(ARDUINO) && HAS_RTC
+static std::atomic<bool> rtc_update_pending{false};
+static RtcDriver* rtc_driver = nullptr;
+static bool rtc_available = false;
+#endif
 
 void time_service_get_timezone(char* output, size_t capacity) {
     std::lock_guard<std::mutex> lock(timezone_mutex);
@@ -187,7 +197,31 @@ bool time_service_set_timezone(const char* timezone) {
 }
 
 uint32_t time_service_generation() { return timezone_generation.load(); }
-bool time_service_ready() { return synchronized.load() && time(nullptr) >= 1704067200; }
+bool time_service_ready() { return clock_ready.load() && time(nullptr) >= 1704067200; }
+
+#if defined(ARDUINO) && HAS_RTC
+void time_service_init_rtc() {
+    rtc_driver = rtc_driver_create();
+    rtc_available = rtc_driver && rtc_driver->begin();
+    if (!rtc_available) {
+        LOGE("Time", "RTC initialization failed; waiting for NTP");
+        return;
+    }
+    time_t epoch = 0;
+    const RtcReadResult result = rtc_driver->readUtc(epoch);
+    if (result != RtcReadResult::Valid || epoch < 1704067200) {
+        LOGW("Time", "RTC time unavailable (result=%u); waiting for NTP", unsigned(result));
+        return;
+    }
+    const struct timeval value = {epoch, 0};
+    if (settimeofday(&value, nullptr) != 0) {
+        LOGE("Time", "Failed to restore RTC system time");
+        return;
+    }
+    clock_ready.store(true);
+    LOGI("Time", "RTC restored: epoch=%lld", static_cast<long long>(epoch));
+}
+#endif
 
 void time_service_start_ntp(void (*observer)(struct timeval*)) {
 #if defined(ARDUINO)
@@ -197,7 +231,10 @@ void time_service_start_ntp(void (*observer)(struct timeval*)) {
     if (started && !observer) return;
     sync_observer.store(observer);
     esp_sntp_set_time_sync_notification_cb([](struct timeval* value) {
-        synchronized.store(true);
+        clock_ready.store(true);
+#if HAS_RTC
+        rtc_update_pending.store(true);
+#endif
         LOGI("Time", "NTP synchronized: epoch=%lld", static_cast<long long>(value ? value->tv_sec : time(nullptr)));
         if (auto callback = sync_observer.load()) callback(value);
     });
@@ -211,6 +248,17 @@ void time_service_start_ntp(void (*observer)(struct timeval*)) {
 }
 
 void time_service_loop() {
+#if defined(ARDUINO) && HAS_RTC
+    if (rtc_driver && !ota_activity_is_active() && rtc_update_pending.exchange(false)) {
+        if (!rtc_available) rtc_available = rtc_driver->begin();
+        // Use the current clock, not the callback timestamp, after any OTA delay.
+        const time_t epoch = time(nullptr);
+        if (!rtc_available || !time_service_ready() || !rtc_driver->writeUtc(epoch))
+            LOGE("Time", "RTC update failed; retention not confirmed");
+        else
+            LOGI("Time", "RTC updated: epoch=%lld", static_cast<long long>(epoch));
+    }
+#endif
 #if defined(ARDUINO) && !IS_EPAPER_FRAME
     if (WiFi.status() == WL_CONNECTED) time_service_start_ntp();
 #endif

@@ -287,6 +287,22 @@ add_host_legacy_test(test_alarm_calendar SOURCES test_alarm_calendar.cpp
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
     OPTIONS -pthread)
 
+foreach(rtc_enabled 0 1)
+    set(rtc_target test_rtc_time_service_${rtc_enabled})
+    add_host_legacy_test(${rtc_target}
+        SOURCES test_rtc_time_service.cpp ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp
+            ${PROJECT_SOURCE_DIR}/src/app/rtc_drivers.cpp
+        INCLUDES ${PROJECT_SOURCE_DIR}/tests/rtc_test_overrides
+            ${PROJECT_SOURCE_DIR}/tests/sticky_driver_test_overrides
+            ${PROJECT_SOURCE_DIR}/tests/binding_schema_profiles
+        DEFINITIONS ARDUINO=1 HAS_RTC=${rtc_enabled} RTC_DRIVER=${rtc_enabled}
+        PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+    )
+endforeach()
+foreach(rtc_case invalid old io set-failure)
+    add_test(NAME test_rtc_time_service_${rtc_case} COMMAND test_rtc_time_service_1 ${rtc_case})
+endforeach()
+
 add_host_gtest(test_mousepad test_mousepad.cpp)
 add_host_legacy_test(test_remote_log SOURCES test_remote_log.cpp)
 add_host_gtest(test_gamepad test_gamepad.cpp)

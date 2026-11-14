@@ -22,6 +22,7 @@ public:
     unsigned transactions = 0;
     std::array<uint8_t, 65536> registers{};
     uint16_t reg = 0;
+    uint16_t startReg = 0;
     unsigned writes = 0;
     bool begin(int dataPin, int clockPin, uint32_t hz) {
         ++begins; sda = dataPin; scl = clockPin; frequency = hz;
@@ -33,6 +34,15 @@ public:
     }
     size_t write(uint8_t value) {
         if (bus == 0 && failByteWrite) return 0;
+        if (bus == 0 && address == 0x51) {
+            if (writes == 0) startReg = reg = value;
+            else {
+                if (reg == failedByteRegister) return 0;
+                registers[reg++] = value;
+            }
+            ++writes;
+            return 1;
+        }
         if (bus == 0) {
             if (address != 0x55 || writes != 0 ||
                 (value != 0x08 && value != 0x2c && value != 0x0a && value != 0x0c &&
@@ -47,10 +57,14 @@ public:
         return 1;
     }
     uint8_t endTransmission(bool stop = true) {
+        if (bus == 0 && address == 0x51)
+            return failWrite || startReg == nackRegister ? 4 : 0;
         if (bus == 0 && writes == 1 && stop) sticky_test_invalid_gauge_transaction = true;
         return failWrite || (bus == 0 && reg == nackRegister) ? 4 : 0;
     }
     size_t requestFrom(uint8_t target, uint8_t length) {
+        if (bus == 0 && target == 0x51)
+            return failRead ? 0 : (reg == shortRegister ? length - 1 : length);
         if (bus == 0 && (target != 0x55 || length != 2)) sticky_test_invalid_gauge_transaction = true;
         return failRead ? 0 : (bus == 0 && reg == shortRegister ? 1 : length);
     }

@@ -112,6 +112,7 @@ get_capability_label() {
     extensions) echo "Extensions" ;;
     sd_card) echo "SD card" ;;
     mqtt) echo "MQTT / HA" ;;
+    rtc) echo "RTC" ;;
   esac
 }
 
@@ -128,6 +129,7 @@ get_capability_tooltip() {
     extensions) echo "Runs installable native visual extensions." ;;
     sd_card) echo "Stores files and media on a microSD card." ;;
     mqtt) echo "Connects to MQTT and Home Assistant for telemetry and control." ;;
+    rtc) echo "Restores time from a hardware clock at boot for offline operation after initial synchronization." ;;
   esac
 }
 

@@ -64,6 +64,11 @@ offline**, this mode skips Wi-Fi initialization and connection attempts entirely
 The normal pad, touch, physical buttons, and supported Bluetooth actions remain
 available. It is not deep sleep and does not promise battery runtime.
 
+Clock labels and alarms need valid time. Firmware with an enabled RTC can
+restore it during Offline boot after an initial network synchronization;
+without RTC support, this boot needs network synchronization first.
+See [time without Wi-Fi](time.md#time-without-wi-fi).
+
 Before rebooting, configure a local pad or physical-button **Device command >
 Enable AP** action so you can reopen the portal. Use the existing physical
 recovery procedure if no such action is available. Configure initial actions

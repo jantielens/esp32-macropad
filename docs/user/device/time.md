@@ -1,11 +1,12 @@
 ---
 title: Device time and timezone
-description: Select local time rules, verify NTP synchronization, and understand their effect on alarms and bindings.
+description: Select local time rules, synchronize the clock, and retain offline time on RTC-enabled firmware.
 ---
 
 The device clock supplies timestamps and time-based features such as clock
 labels and alarms. Network synchronization establishes the time; timezone
-settings determine the local time those features use.
+settings determine the local time those features use. Firmware with an enabled
+hardware real-time clock (RTC) can restore time at boot without Wi-Fi.
 
 ## Set local time
 
@@ -42,10 +43,29 @@ Wait for **Synchronized** after the device joins a network with working DNS
 and access to its NTP time service. If it remains waiting, check Wi-Fi,
 gateway/DNS, and network restrictions before configuring time-dependent tasks.
 
-Alarms require an NTP synchronization during the current boot. After that
-sync, losing Wi-Fi does not immediately stop the running clock. Reboot starts
-a new readiness check. [Camera-roll snapshots](../media/camera.md#save-and-manage-snapshots)
+Alarms require valid time, established by NTP or restored from an enabled RTC.
+Losing Wi-Fi does not immediately stop the running clock. Reboot starts a new
+readiness check. [Camera-roll snapshots](../media/camera.md#save-and-manage-snapshots)
 also require valid time to form dated folders.
+
+## Time without Wi-Fi
+
+On RTC-enabled firmware, connect to a network with internet access once and
+wait for synchronization. The device automatically writes UTC to the hardware
+clock. Later reboots, including [Offline boot](network-and-access.md#boot-offline),
+restore valid RTC time without Wi-Fi; clock labels and alarms can work locally.
+The configured timezone and daylight-saving rules still apply. **Synchronized**
+in the Timezone portal indicates available time, including RTC-restored time.
+
+RTC retention depends on its power supply; check your board's hardware guide
+for Shutdown and battery limitations. An unset, invalid, or unreadable RTC
+leaves time unavailable until NTP succeeds. If power is lost to the RTC,
+connect to the internet again to establish time. Extended offline operation
+can accumulate clock drift, so reconnect periodically when accuracy matters.
+There is no manual time-setting control.
+
+Without an enabled RTC, each reboot still requires NTP synchronization.
+Saving a timezone does not establish time or retain the clock across reboot.
 
 ## Time on a pad
 
