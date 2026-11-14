@@ -22,7 +22,7 @@
  *   A function receives the submitted config and returns true when a reboot
  *   is needed; the pending-reboot banner appears after a successful save.
  */
-async function saveFragmentConfig(requiresReboot, fieldNames) {
+async function saveFragmentConfig(requiresReboot, fieldNames, validateFields) {
     // Build config from DOM elements that exist in the current fragment
     var config = {};
     var fields = [
@@ -91,6 +91,7 @@ async function saveFragmentConfig(requiresReboot, fieldNames) {
 
     // Validate
     var validation = validateConfig(config);
+    if (validation.valid && validateFields) validation = validateFields(config);
     if (!validation.valid) {
         showMessage(validation.message, 'error');
         return;
@@ -118,18 +119,12 @@ async function saveFragmentConfig(requiresReboot, fieldNames) {
             if (config.operating_mode !== undefined && window.deviceConfig) {
                 window.deviceConfig.operating_mode = config.operating_mode;
             }
-            if (window.deviceConfig) {
-                ['bluetooth_tx_power_dbm', 'bthome_event_burst_ms', 'bthome_event_adv_interval_ms'].forEach(function (name) {
-                    if (config[name] !== undefined) window.deviceConfig[name] = Number(config[name]);
-                });
-            }
             if (window.deviceConfig && (config.ha_url !== undefined || config.ha_token !== undefined)) {
                 if (config.ha_url !== undefined) window.deviceConfig.ha_url = config.ha_url;
                 if (config.ha_token && config.ha_token.trim()) window.deviceConfig.ha_token_set = true;
                 if (typeof bindingToolsRefresh === 'function') bindingToolsRefresh();
             }
             var needsReboot = typeof requiresReboot === 'function' ? requiresReboot(config) : requiresReboot;
-            if (config.bluetooth_tx_power_dbm !== undefined) updateBluetoothSettings();
             if (config.display_rotation !== undefined && window.deviceConfig) {
                 window.deviceConfig.display_rotation = Number(config.display_rotation);
             }
@@ -163,19 +158,6 @@ function initConfigFragment(saveBtnId, requiresReboot, fieldNames) {
     var btn = document.getElementById(saveBtnId);
     if (btn) btn.addEventListener('click', function () { return saveFragmentConfig(requiresReboot, fieldNames); });
 }
-
-window.init_bluetooth_fragment = function () {
-    const eventFields = ['bthome_event_burst_ms', 'bthome_event_adv_interval_ms'];
-    if (!window.__bluetooth_config_fields_registered) {
-        window.registerConfigFields(['bluetooth_tx_power_dbm'].concat(eventFields));
-        window.__bluetooth_config_fields_registered = true;
-    }
-    initConfigFragment('bluetooth-power-save-btn', function (config) {
-        return Number(config.bluetooth_tx_power_dbm) !== Number(window.deviceConfig.bluetooth_active_tx_power_dbm);
-    }, ['bluetooth_tx_power_dbm']);
-    const btn = document.getElementById('bthome-save-btn');
-    if (btn) btn.addEventListener('click', function () { return saveFragmentConfig(false, eventFields); });
-};
 
 // ============================================================================
 // Welcome

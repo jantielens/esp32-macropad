@@ -1138,7 +1138,7 @@ asset_feature_flag() {
             echo "HAS_CAMERA && (HAS_DISPLAY || HAS_BUTTON)" ;;
         hid)
             echo "HAS_BLE_HID || HAS_USB_HID" ;;
-        bluetooth)
+        bluetooth|portal_bluetooth)
             echo "HAS_BLE || HAS_BLE_HID" ;;
         volume|feedback)
             echo "HAS_AUDIO" ;;

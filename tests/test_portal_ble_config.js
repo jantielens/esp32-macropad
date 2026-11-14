@@ -63,7 +63,7 @@ const context = {
     }
 };
 vm.createContext(context);
-for (const file of ['portal_config.js', 'portal_fragment_init.js']) {
+for (const file of ['portal_config.js', 'portal_fragment_init.js', 'portal_bluetooth.js']) {
     vm.runInContext(fs.readFileSync('src/app/web/' + file, 'utf8'), context);
 }
 
@@ -159,8 +159,7 @@ for (const file of ['portal_config.js', 'portal_fragment_init.js']) {
     stored = {caps: {ble: true, ble_hid: false, bthome_events: true, bluetooth_tx_power: true},
         bluetooth_tx_power_dbm: 9, bluetooth_active_tx_power_dbm: 9,
         bthome_event_burst_ms: 350, bthome_event_adv_interval_ms: 100};
-    context.window.init_bluetooth_fragment();
-    await context.loadConfig();
+    await context.window.init_bluetooth_fragment();
     assert.deepStrictEqual(context.window.__extra_config_fields, bluetoothFields);
     assert.strictEqual(elements['bluetooth-power-settings'].disabled, false);
     assert.strictEqual(elements['bthome-event-settings'].disabled, false);
@@ -168,7 +167,7 @@ for (const file of ['portal_config.js', 'portal_fragment_init.js']) {
     assert.strictEqual(elements['bluetooth-power-pending'].hidden, true);
     for (const power of powers) {
         for (const value of [power, String(power)]) {
-            assert.strictEqual(context.validateConfig({ bluetooth_tx_power_dbm: value }).valid, true);
+            assert.strictEqual(context.validateBluetoothConfig({ bluetooth_tx_power_dbm: value }).valid, true);
         }
         elements.bluetooth_tx_power_dbm.value = String(power);
         elements.bthome_event_burst_ms.value = 'invalid unsaved timing';
@@ -177,7 +176,7 @@ for (const file of ['portal_config.js', 'portal_fragment_init.js']) {
         assert.deepStrictEqual(submitted, {bluetooth_tx_power_dbm: String(power)});
         assert.strictEqual(pendingReboot, power !== 9);
         assert.strictEqual(stored.bluetooth_active_tx_power_dbm, 9);
-        await context.loadConfig();
+        await context.loadBluetoothConfig();
         assert.strictEqual(Number(elements.bluetooth_tx_power_dbm.value), power);
         assert.strictEqual(elements['bluetooth-power-pending'].hidden, power === 9);
         if (power === 9) assert.strictEqual(messages.pop().type, 'success');
@@ -185,7 +184,7 @@ for (const file of ['portal_config.js', 'portal_fragment_init.js']) {
     }
 
     for (const value of [-15, 12, -1, 1, 3.5, '', ' ', '3junk', 'NaN', ' 3', '+3', '1e2', null, false, {}, []]) {
-        assert.strictEqual(context.validateConfig({ bluetooth_tx_power_dbm: value }).valid, false, String(value));
+        assert.strictEqual(context.validateBluetoothConfig({ bluetooth_tx_power_dbm: value }).valid, false, String(value));
     }
     assert.strictEqual(context.validateConfig({}).valid, true);
     assert.deepStrictEqual(messages, []);
@@ -206,29 +205,29 @@ for (const file of ['portal_config.js', 'portal_fragment_init.js']) {
     assert.strictEqual(pendingReboot, false);
     assert.strictEqual(messages.pop().type, 'success');
     elements.bthome_event_burst_ms.value = '';
-    await context.loadConfig();
+    await context.loadBluetoothConfig();
     assert.strictEqual(Number(elements.bthome_event_burst_ms.value), 900);
-    assert.strictEqual(context.validateConfig({bthome_event_burst_ms: 899}).valid, false);
-    assert.strictEqual(context.validateConfig({bthome_event_burst_ms: 1000}).valid, true);
+    assert.strictEqual(context.validateBluetoothConfig({bthome_event_burst_ms: 899}).valid, false);
+    assert.strictEqual(context.validateBluetoothConfig({bthome_event_burst_ms: 1000}).valid, true);
     const full = {bthome_event_burst_ms: 100, bthome_event_adv_interval_ms: 20};
-    assert.strictEqual(context.validateConfig(full).valid, true);
+    assert.strictEqual(context.validateBluetoothConfig(full).valid, true);
     for (const key of eventFields) {
         for (const value of [null, false, true, [], {}, 3.5, '', ' ', '100junk', '+100', '1e2', '2147483648', undefined]) {
-            assert.strictEqual(context.validateConfig({...full, [key]: value}).valid, false, key + ':' + String(value));
+            assert.strictEqual(context.validateBluetoothConfig({...full, [key]: value}).valid, false, key + ':' + String(value));
         }
     }
     for (const caps of [{ble: false, ble_hid: true, bluetooth_tx_power: true},
         {ble: false, ble_hid: true, bluetooth_tx_power: false},
         {ble: false, ble_hid: false, bthome_events: false}]) {
         stored.caps = caps;
-        await context.loadConfig();
+        await context.loadBluetoothConfig();
         assert.strictEqual(elements['bthome-save-btn'].disabled, !caps.ble_hid);
         assert.strictEqual(elements['bluetooth-power-save-btn'].disabled, !caps.bluetooth_tx_power);
         assert.strictEqual(elements['bluetooth-power-unavailable'].hidden, !caps.ble_hid || !!caps.bluetooth_tx_power);
         assert.strictEqual(elements['bluetooth-unavailable'].hidden, !!caps.ble_hid);
     }
     stored.caps = {bthome_events: true, ble: true, ble_hid: false, bluetooth_tx_power: true};
-    await context.loadConfig();
+    await context.loadBluetoothConfig();
     elements.bthome_event_burst_ms.value = '1000';
     saveFailure = true;
     await clicks['bthome-save-btn']();
@@ -246,7 +245,7 @@ for (const file of ['portal_config.js', 'portal_fragment_init.js']) {
     messages.pop();
     assert.strictEqual(pendingReboot, true);
     stored.bluetooth_active_tx_power_dbm = -3; // Mock a reboot.
-    await context.loadConfig();
+    await context.loadBluetoothConfig();
     assert.strictEqual(elements['bluetooth-power-pending'].hidden, true);
     for (const name of [...bluetoothFields, 'bthome-event-settings', 'bluetooth-power-settings',
         'bluetooth-unavailable', 'bluetooth-power-pending', 'bluetooth-power-unavailable',

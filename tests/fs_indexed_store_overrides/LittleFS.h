@@ -64,6 +64,7 @@ public:
     std::string short_read_path;
     bool fail_rename = false;
     void (*rename_hook)(const char*, const char*) = nullptr;
+    void (*remove_hook)(const char*) = nullptr;
     void (*usage_hook)() = nullptr;
     void (*write_hook)(const char*, size_t) = nullptr;
     bool short_write = false;
@@ -80,6 +81,7 @@ public:
     bool mkdir(const char* path) { directories.insert(path); return true; }
     bool rmdir(const String& path) { return directories.erase(path.c_str()) != 0; }
     bool remove(const char* path) {
+        if (remove_hook) remove_hook(path);
         return path != fail_remove_path && files.erase(path) != 0;
     }
     bool remove(const String& path) { return remove(path.c_str()); }

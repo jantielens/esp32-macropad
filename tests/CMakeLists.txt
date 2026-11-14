@@ -1121,6 +1121,10 @@ add_host_legacy_test(test_meter_mag SOURCES test_meter_mag.cpp INCLUDES ${PROJEC
 add_host_legacy_test(test_print_log SOURCES test_print_log.cpp ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/print_log_overrides ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer ${HOST_ARDUINOJSON_DIR} DEFINITIONS IS_DARKROOM_TIMER=1 HAS_FILESYSTEM=1 LIBRARIES m pthread)
 add_host_legacy_test(test_mcp_result_strings SOURCES test_mcp_result_strings.cpp INCLUDES ${HOST_ARDUINOJSON_DIR})
 add_host_legacy_test(test_mcp_device_identity SOURCES test_mcp_device_identity.cpp ${PROJECT_SOURCE_DIR}/src/app/mcp_device_identity.cpp INCLUDES ${HOST_ARDUINOJSON_DIR} DEFINITIONS HAS_MCP=1 HAS_EXTERNAL_DATA=1 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
+add_host_legacy_test(test_json_integer SOURCES test_json_integer.cpp
+    INCLUDES ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS HAS_BLE=0 HAS_BLE_HID=0 HAS_AUTO_SHUTDOWN=1 HAS_MCP=1
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_fs_health_littlefs SOURCES test_fs_health.cpp ${PROJECT_SOURCE_DIR}/src/app/fs_health.cpp DEFINITIONS USE_SD_STORAGE=0 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_fs_health_sdmmc SOURCES test_fs_health.cpp ${PROJECT_SOURCE_DIR}/src/app/fs_health.cpp DEFINITIONS USE_SD_STORAGE=1 HAS_SD_CARD=1 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_fs_health_sd_spi SOURCES test_fs_health.cpp ${PROJECT_SOURCE_DIR}/src/app/fs_health.cpp DEFINITIONS USE_SD_STORAGE=1 HAS_SD_CARD=1 SD_STORAGE_SPI=1 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
@@ -1318,22 +1322,34 @@ set(FS_INDEXED_STORE_TEST_SOURCES
     ${PROJECT_SOURCE_DIR}/src/app/voice_wav.cpp
     ${PROJECT_SOURCE_DIR}/src/app/voice_wav_store.cpp
 )
-add_host_legacy_test(test_voice_clips
+foreach(storage_profile IN ITEMS flash sd)
+    set(voice_clips_target test_voice_clips)
+    set(voice_clips_storage_definitions USE_SD_STORAGE=0)
+    set(voice_clips_activity_source)
+    if(storage_profile STREQUAL "sd")
+        set(voice_clips_target test_voice_clips_sd)
+        set(voice_clips_storage_definitions USE_SD_STORAGE=1 HAS_AUTO_SHUTDOWN=1 OTA_ACTIVITY_HOST_TEST)
+        set(voice_clips_activity_source ${PROJECT_SOURCE_DIR}/src/app/ota_activity.cpp)
+    endif()
+add_host_legacy_test(${voice_clips_target}
     SOURCES test_voice_clips.cpp
         ${PROJECT_SOURCE_DIR}/src/app/voice_clips.cpp
         ${PROJECT_SOURCE_DIR}/src/app/storage_browser.cpp
         ${PROJECT_SOURCE_DIR}/src/app/fs_indexed_store.cpp
         ${PROJECT_SOURCE_DIR}/src/app/voice_wav.cpp
         ${PROJECT_SOURCE_DIR}/src/app/voice_wav_store.cpp
+        ${voice_clips_activity_source}
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/audio_input_overrides
         ${PROJECT_SOURCE_DIR}/tests/fs_indexed_store_overrides
         ${PROJECT_SOURCE_DIR}/tests/shutter_session_overrides ${HOST_ARDUINOJSON_DIR}
-    DEFINITIONS HAS_VOICE_CLIPS=1 HAS_STORAGE_BROWSER=1 HAS_AUDIO_INPUT=1 HAS_FILESYSTEM=1 USE_SD_STORAGE=0
+    DEFINITIONS HAS_VOICE_CLIPS=1 HAS_STORAGE_BROWSER=1 HAS_AUDIO_INPUT=1 HAS_FILESYSTEM=1
+        ${voice_clips_storage_definitions}
         ARDUINOJSON_ENABLE_ARDUINO_STRING=1
     OPTIONS -Wno-deprecated-declarations -pthread
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/shutter_session_overrides/Arduino.h
         ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
 )
+endforeach()
 add_test(NAME test_voice_clips_no_psram COMMAND test_voice_clips --no-psram)
 add_host_legacy_test(test_voice_clip_range
     SOURCES test_voice_clip_range.cpp ${PROJECT_SOURCE_DIR}/src/app/voice_clip_range.cpp

@@ -631,6 +631,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sensors/battery_adc_sensor.cpp
   - src/app/sensors/dummy_sensor.cpp
   - src/app/web_portal_config.cpp
+  - src/app/web_portal_pages.cpp
+  - src/app/web_portal_pages.h
+  - src/app/web_portal_routes.cpp
   - src/boards/m5stack-stopwatch/stopwatch_battery_sensor.cpp
 - **HAS_BLE_HID**
   - src/app/actions/ble_pair_action.cpp
@@ -663,6 +666,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_ble.cpp
   - src/app/web_portal_ble.h
   - src/app/web_portal_config.cpp
+  - src/app/web_portal_pages.cpp
+  - src/app/web_portal_pages.h
   - src/app/web_portal_routes.cpp
   - src/app/widgets/gamepad_button_widget.cpp
   - src/app/widgets/gamepad_joystick_widget.cpp

@@ -526,7 +526,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				doc.as<JsonObjectConst>(), previous_bthome_settings, bthome_candidate) : nullptr;
 		if (!bthome_error && bluetooth_power_update &&
 				(!ble_backend_power_supported() ||
-				 !bthome::parse_event_json_integer(doc["bluetooth_tx_power_dbm"], bluetooth_power_candidate) ||
+				 !parse_json_integer(doc["bluetooth_tx_power_dbm"], bluetooth_power_candidate) ||
 				 !bluetooth_power_valid(bluetooth_power_candidate))) {
 				bthome_error = ble_backend_power_supported() ?
 						"Bluetooth transmit power must be -12 to +9 dBm in 3 dB steps" :

@@ -21,7 +21,6 @@ inline bool valid_event_settings(const EventSettings& settings) {
         settings.burst_ms >= 3u * settings.adv_interval_ms;
 }
 
-bool parse_event_integer(const char* text, int32_t& value);
 BluetoothSettings load_bluetooth_settings(Preferences& preferences, int8_t default_tx_power_dbm);
 bool save_bluetooth_settings(Preferences& preferences, const BluetoothSettings& settings);
 }

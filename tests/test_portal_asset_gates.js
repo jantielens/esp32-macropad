@@ -121,6 +121,8 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
     assert.equal(assets.has('bluetooth_fragment_html_gz'),
         board !== 'reterminal-e1003-frame' && integrationMode !== 'bluetooth-disabled',
         'Bluetooth fragment must follow HAS_BLE || HAS_BLE_HID independently of display and HID transport');
+    assert.equal(assets.has('portal_bluetooth_js_gz'), assets.has('bluetooth_fragment_html_gz'),
+        'Bluetooth script and fragment must share their feature gate');
     if (!epaperProfile) {
         assert(!assets.has('epaper_refresh_fragment_html_gz'));
         assert(!assets.has('portal_epaper_refresh_js_gz'));
@@ -133,6 +135,10 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
         if (name.endsWith('_js_gz')) new vm.Script(text, {filename: board + '/' + name});
     }
     const js = assets.get('portal_js_gz');
+    for (const name of ['init_bluetooth_fragment', 'bluetooth_tx_power_dbm', 'bthome_event_burst_ms']) {
+        assert(!js.includes(name), 'Bluetooth component code leaked into the shared bundle: ' + name);
+        if (assets.has('portal_bluetooth_js_gz')) assert(assets.get('portal_bluetooth_js_gz').includes(name));
+    }
     assert(js.includes('function uploadFirmware('), 'HTML upload callback was removed');
     assert(js.includes('function saveFragmentConfig('), 'Fragment save callback was removed');
     const display = board === 'esp32-p4-lcd4b';
@@ -240,6 +246,8 @@ for (const board of ['reterminal-sticky-interactive', 'm5stack-stopwatch']) {
     const voiceClips = board === 'reterminal-sticky-interactive';
     assert.equal(selected.includes('voice_clips_fragment_html_gz'), voiceClips);
     assert.equal(selected.includes('portal_voice_clips_js_gz'), voiceClips);
+    assert.equal(selected.includes('portal_bluetooth_js_gz'), selected.includes('bluetooth_fragment_html_gz'));
+    if (selected.includes('portal_bluetooth_js_gz')) new vm.Script(decodeAsset('portal_bluetooth_js_gz'));
     if (voiceClips) new vm.Script(decodeAsset('portal_voice_clips_js_gz'));
     assert(decodeAsset('shell_html_gz').includes('src="/portal_power_savings.js'));
     new vm.Script(decodeAsset('portal_power_savings_js_gz'));

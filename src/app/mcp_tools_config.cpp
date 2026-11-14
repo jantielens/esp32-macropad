@@ -33,7 +33,7 @@
 #include "config_manager.h"
 #if HAS_AUTO_SHUTDOWN
 #include "auto_shutdown.h"
-#include "bthome_event_json.h"
+#include "json_integer.h"
 #endif
 #if HAS_EXTERNAL_DATA
 #include "external_data.h"
@@ -901,7 +901,7 @@ static bool tool_set_config(const JsonObject& args, JsonObject& result, String& 
 #if HAS_AUTO_SHUTDOWN
     if (args.containsKey("auto_shutdown_timeout_seconds")) {
         int32_t seconds = 0;
-        if (!bthome::parse_event_json_integer(args["auto_shutdown_timeout_seconds"], seconds) ||
+        if (!parse_json_integer(args["auto_shutdown_timeout_seconds"], seconds) ||
             seconds < 0 || seconds > UINT16_MAX) {
             heap_caps_free(q);
             return cfg_fail(result, err, CFG_ERR_PARAMS, "Auto-shutdown timeout must be an integer from 0 to 65535 seconds");

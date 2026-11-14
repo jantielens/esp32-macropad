@@ -15,6 +15,9 @@
 #include <thread>
 
 FakeIndexedStorage LittleFS;
+#if USE_SD_STORAGE
+FakeIndexedStorage& SD_MMC = LittleFS;
+#endif
 
 namespace {
 std::mutex completion_mutex;
@@ -57,15 +60,29 @@ void write_hook(const char* path, size_t length) {
 
 void publication_hook(const char* from, const char*) {
     if (!strstr(from, ".wav.tmp")) return;
+#if USE_SD_STORAGE && HAS_AUTO_SHUTDOWN
+    assert(!ota_activity_try_begin());
+    assert(!ota_activity_try_begin_network_transition());
+#endif
     publication_entered = true;
     while (block_publication) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+}
+
+void publication_remove_hook(const char* path) {
+    if (!strstr(path, ".wav") || strstr(path, ".wav.tmp")) return;
+#if USE_SD_STORAGE && HAS_AUTO_SHUTDOWN
+    assert(!ota_activity_try_begin());
+    assert(!ota_activity_try_begin_network_transition());
+#endif
 }
 }
 
 bool storage_mount() { return true; }
 void fs_health_get(FSHealthStats* out) { *out = {}; }
 bool time_service_ready() { return false; }
+#if !(USE_SD_STORAGE && HAS_AUTO_SHUTDOWN)
 bool ota_activity_is_busy() { return false; }
+#endif
 uint32_t esp_random() { static uint32_t value = 0; return ++value; }
 bool action_continuation_complete(uint32_t token, bool success) {
     if (expired) return false;
@@ -286,13 +303,19 @@ int main(int argc, char**) {
     block_publication = true;
     publication_entered = false;
     LittleFS.rename_hook = publication_hook;
+    LittleFS.remove_hook = publication_remove_hook;
     assert(voice_clips_command(VoiceClipCommand::Save, 22));
     wait_until([] { return publication_entered.load(); });
     assert(voice_clips_cancel() == VoiceClipCancelStatus::Pending);
     block_publication = false;
     assert(!wait_completion(22));
     LittleFS.rename_hook = nullptr;
+    LittleFS.remove_hook = nullptr;
     assert(voice_clips_cancel() == VoiceClipCancelStatus::Ready);
+#if USE_SD_STORAGE && HAS_AUTO_SHUTDOWN
+    assert(ota_activity_try_begin());
+    ota_activity_finish();
+#endif
     assert(snapshot().state == VoiceClipState::Idle && !snapshot().last_clip[0]);
     assert(voice_clips_exists(saved.last_clip));
     for (const auto& entry : LittleFS.files)

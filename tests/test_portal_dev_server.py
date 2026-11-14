@@ -168,6 +168,10 @@ class PortalDevServerTest(unittest.TestCase):
         nav = self.request("/api/portal/nav", profile=profile)[1]
         connectivity = next(category for category in nav["categories"] if category["id"] == "connectivity")
         self.assertIn("bluetooth", {item["id"] for item in connectivity["items"]})
+        bluetooth = next(item for item in connectivity["items"] if item["id"] == "bluetooth")
+        self.assertEqual(bluetooth["portal_script"], "/portal-bluetooth.js")
+        self.assertEqual(self.request(bluetooth["portal_script"], profile=profile, raw=True)[0], 200)
+        self.assertEqual(self.request(bluetooth["portal_script"], profile="reterminal-e1003-frame", raw=True)[0], 404)
         self.assertEqual(self.request("/api/section/bluetooth", profile=profile, raw=True)[0], 200)
         update = {"bluetooth_tx_power_dbm": "-12", "bthome_event_burst_ms": "900",
                   "bthome_event_adv_interval_ms": "300"}

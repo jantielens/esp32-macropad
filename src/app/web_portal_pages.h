@@ -19,6 +19,9 @@ void handlePortalAllCSS(AsyncWebServerRequest *request);
 #if HAS_AUTO_SHUTDOWN
 void handlePortalPowerSavingsJS(AsyncWebServerRequest *request);
 #endif
+#if HAS_BLE || HAS_BLE_HID
+void handlePortalBluetoothJS(AsyncWebServerRequest *request);
+#endif
 #if HAS_TTF_FONTS
 void handlePortalFontsJS(AsyncWebServerRequest *request);
 #endif

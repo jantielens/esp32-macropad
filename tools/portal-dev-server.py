@@ -307,6 +307,11 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 self._serve_file(APP_WEB_DIR / "portal_voice_clips.js")
             else:
                 self._serve_json({"error": "Voice clips unavailable"}, 404)
+        elif path == "/portal-bluetooth.js":
+            if self._profile() == "reterminal-sticky-interactive":
+                self._serve_file(APP_WEB_DIR / "portal_bluetooth.js")
+            else:
+                self.send_error(404, "Bluetooth unavailable")
         elif path == "/epaper_init.js":
             self._serve_file(EPAPER_WEB_DIR / "epaper_init.js")
         elif path == "/portal-logs.js":
@@ -1514,7 +1519,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 category["items"].append({"id": "external-data", "display_name": "External Data",
                                           "portal_script": "/portal-external-data.js"})
             if category["id"] == "connectivity" and profile == "reterminal-sticky-interactive":
-                category["items"].append({"id": "bluetooth", "display_name": "Bluetooth"})
+                category["items"].append({"id": "bluetooth", "display_name": "Bluetooth",
+                                          "portal_script": "/portal-bluetooth.js"})
             if category["id"] == "audio" and profile == "reterminal-sticky-interactive":
                 category["items"].append({"id": "voice-clips", "display_name": "Voice clips",
                                           "portal_script": "/portal-voice-clips.js"})

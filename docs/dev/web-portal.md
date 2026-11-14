@@ -4477,6 +4477,11 @@ The camera components demonstrate this pattern: they advertise
 Their source assets remain outside `portal.js.bundle`, so non-camera builds do
 not embed or serve camera payloads.
 
+The Bluetooth component uses the same pattern with `/portal-bluetooth.js`.
+Its fragment, script, handler, and route share the `HAS_BLE || HAS_BLE_HID`
+gate. Power and event validation, fragment initialization, and saved-value
+updates stay in that script rather than the shared configuration bundle.
+
 **Module organization:**
 
 | Category | Files | Purpose |

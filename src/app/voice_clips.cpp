@@ -486,6 +486,12 @@ bool publish(Session& session, SaveTiming& timing) {
         set_error("Clip catalog unavailable", true);
         return false;
     }
+    const StorageMutationGuard publication_guard;
+    if (!publication_guard) {
+        xSemaphoreGive(g_catalog_mutex);
+        set_error("Cannot publish recording", true);
+        return false;
+    }
     bool renamed = false;
     bool registered = false;
     bool success = false;
