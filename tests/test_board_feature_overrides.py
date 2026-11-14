@@ -410,10 +410,27 @@ with tempfile.TemporaryDirectory() as directory:
         subprocess.run([executable], check=True)
 print("PASS: malloc policy startup guards")
 
+for board, sd in (("reterminal-sticky-interactive", 0), ("reterminal-sticky-interactive-sd", 1)):
+    subprocess.run(
+        ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+         "-x", "c++", "-", "-I", str(root), "-I", str(root / "src/boards" / board),
+         "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM", "-DCONFIG_IDF_TARGET_ESP32S3=1"],
+        input=f'''#include "src/app/board_config.h"
+static_assert(HAS_SD_CARD == {sd} && USE_SD_STORAGE == {sd}, "Sticky storage selection");
+static_assert(HAS_DISPLAY && HAS_TOUCH && HAS_AUDIO_INPUT && HAS_VOICE_CLIPS && HAS_RTC && HAS_BLE, "Sticky capabilities");
+static_assert(BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO, "Sticky BLE backend");
+''' + ('''static_assert(SD_STORAGE_SPI && SD_SPI_CS_PIN == 8 && SD_SPI_SCK_PIN == 13 &&
+    SD_SPI_MISO_PIN == 12 && SD_SPI_MOSI_PIN == 14 && SD_SPI_FREQUENCY_HZ == 1000000, "Sticky SD wiring");
+''' if sd else ""), text=True, check=True,
+    )
+    metadata = json.loads((root / "src/boards" / board / "metadata.json").read_text())
+    assert ("sd_card" in metadata["capabilities"]) == bool(sd)
+print("PASS: Sticky SD and flash variants")
+
 battery_boards = {
     "firebeetle2-esp32c6-aht10", "inkplate5v2-frame", "inkplate6flick-frame",
     "m5stack-stopwatch", "m5stack-tab5", "m5stack-tab5-sd",
-    "reterminal-e1003-frame", "reterminal-sticky-interactive",
+    "reterminal-e1003-frame", "reterminal-sticky-interactive", "reterminal-sticky-interactive-sd",
 }
 for override in sorted((root / "src/boards").glob("*/board_overrides.h")):
     board = override.parent.name
@@ -422,7 +439,7 @@ for override in sorted((root / "src/boards").glob("*/board_overrides.h")):
          "-x", "c++", "-", "-I", str(root), "-I", str(root / "src/app"),
          "-I", str(override.parent),
          "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM"]
-        + (["-DCONFIG_IDF_TARGET_ESP32S3=1"] if board == "reterminal-sticky-interactive" else []),
+        + (["-DCONFIG_IDF_TARGET_ESP32S3=1"] if board.startswith("reterminal-sticky-interactive") else []),
         input=f'''#include "src/app/board_config.h"
 static_assert(HAS_BATTERY_INFO == {int(board in battery_boards)}, "Battery provider gate mismatch");
 ''', text=True, check=True,

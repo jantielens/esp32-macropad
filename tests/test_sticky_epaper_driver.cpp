@@ -64,6 +64,10 @@ static bool refreshInFlight() {
         clockMs - refreshAt < refreshDelayMs + refreshDurationMs;
 }
 void digitalWrite(int pin, int value) {
+#if USE_SD_STORAGE
+    if (pin == EPAPER_CS_PIN && value == LOW)
+        CHECK(transactionOpen && transactions.back().bytes > 0);
+#endif
     if (pin == EPAPER_POWER_PIN) CHECK(powerPinConfigured);
     if (pin == EPAPER_RESET_PIN && value == LOW) CHECK(!refreshInFlight());
     if (pin == EPAPER_RESET_PIN && value == LOW) ++hardwareResets;
@@ -103,6 +107,14 @@ void sticky_test_spi_end_transaction() {
     transactionOpen = false;
 }
 uint8_t sticky_test_spi_byte(uint8_t value) {
+#if USE_SD_STORAGE
+    if (pins[15] == HIGH) {
+        CHECK(transactionOpen && value == 0xff &&
+              (transactions.back().settings.clock == 4000000u || transactions.back().settings.clock == 20000000u));
+        ++transactions.back().bytes;
+        return 0xff;
+    }
+#endif
     CHECK(transactionOpen && pins[15] == LOW);
     CHECK(transactions.back().settings.clock == (pins[16] == LOW ? 20000000u : 4000000u));
     ++transactions.back().bytes;
@@ -188,6 +200,10 @@ SemaphoreHandle_t test_freertos_create_mutex() {
 }
 void test_freertos_delete_mutex(SemaphoreHandle_t semaphore) { --liveMutexes; delete semaphore; }
 bool sticky_hardware_ready() { return boardReady; }
+#if USE_SD_STORAGE
+static SPIClass sharedSpi{HSPI};
+SPIClass& sticky_shared_spi() { return sharedSpi; }
+#endif
 bool ota_activity_is_active() {
     if (otaCheckHook) otaCheckHook();
     return ota;
@@ -195,7 +211,7 @@ bool ota_activity_is_active() {
 EpaperRefreshSettings config_manager_get_epaper_refresh_settings() { return settings; }
 
 static void reset(bool controller2677 = true, bool gray = false) {
-    CHECK(liveAllocations == 0 && liveMutexes == 0 && spiBuses == 0 && !transactionOpen);
+    CHECK(liveAllocations == 0 && liveMutexes == 0 && spiBuses == int(USE_SD_STORAGE) && !transactionOpen);
     commands.clear();
     transactions.clear();
     clockMs = 1000; resetAt = busyFrom = busyUntil = commandDelayMs = 0;
@@ -573,7 +589,7 @@ static void batchedStreaming() {
                 for (const auto& transaction : transactions) {
                     CHECK(transaction.ended);
                     if (!transaction.payloadBytes) continue;
-                    CHECK(transaction.payloadBytes == 800 && transaction.bytes == 800);
+                    CHECK(transaction.payloadBytes == 800 && transaction.bytes == 800u + USE_SD_STORAGE);
                     ++payloadTransactions;
                     payloadBytes += transaction.payloadBytes;
                 }
@@ -894,7 +910,7 @@ static void spiClockSettings() {
             for (const auto& transaction : transactions) {
                 CHECK(transaction.ended && transaction.bytes > 0);
                 if (transaction.settings.clock == 4000000) {
-                    CHECK(transaction.bytes == 1);
+                    CHECK(transaction.bytes == (USE_SD_STORAGE ? 2u : 1u));
                     ++reads;
                 } else {
                     CHECK(transaction.settings.clock == 20000000);
@@ -1053,6 +1069,9 @@ static void refreshCompletion() {
 }
 
 int main(int argc, char** argv) {
+#if USE_SD_STORAGE
+    CHECK(sharedSpi.begin(13, 12, 14, 15));
+#endif
     if (argc == 2 && !strcmp(argv[1], "--benchmark")) {
         benchmarkConversion();
         benchmarkPanelPacking();

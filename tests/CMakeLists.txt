@@ -140,6 +140,17 @@ foreach(diagnostics 0 1)
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
   )
 endforeach()
+add_host_legacy_test(test_sticky_epaper_driver_sd
+    SOURCES test_sticky_epaper_driver.cpp ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive/drivers/display/sticky_epaper_driver.cpp
+        ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive/drivers/display/sticky_epaper/panel.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/sticky_driver_test_overrides
+        ${PROJECT_SOURCE_DIR}/tests/audio_worker_overrides ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
+        ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive-sd
+    DEFINITIONS BOARD_HAS_OVERRIDE=1 BOARD_HAS_PSRAM=1 CONFIG_IDF_TARGET_ESP32S3=1 TEST_HEAP_CAPS_ALLOCATOR=1
+        LV_CONF_SKIP=1 LV_USE_OS=0 LV_USE_LOG=0 TEST_FREERTOS_MUTEX_LIFECYCLE=1
+    OPTIONS -Wno-unused-parameter
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+    LIBRARIES host_lvgl)
 foreach(voice_clips 0 1)
   set(sticky_hardware_target test_sticky_hardware)
   if(voice_clips)
@@ -156,6 +167,14 @@ foreach(voice_clips 0 1)
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/sticky_driver_test_overrides/SPI.h
 )
 endforeach()
+add_host_legacy_test(test_sticky_hardware_sd
+    SOURCES test_sticky_hardware.cpp ${PROJECT_SOURCE_DIR}/src/app/board_hardware.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/auto_shutdown.cpp ${PROJECT_SOURCE_DIR}/src/app/battery_info.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/drivers/gt911_touch_driver.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/sticky_driver_test_overrides ${HOST_ARDUINOJSON_DIR}
+        ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive-sd
+    DEFINITIONS BOARD_HAS_OVERRIDE=1 BOARD_HAS_PSRAM=1 CONFIG_IDF_TARGET_ESP32S3=1
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/sticky_driver_test_overrides/SPI.h)
 
 foreach(diagnostics 0 1)
   set(crowpanel_target test_crowpanel_epaper_driver)
@@ -1096,6 +1115,10 @@ add_host_legacy_test(test_storage_policy_sdmmc SOURCES test_storage_policy.cpp I
 add_host_legacy_test(test_sd_storage_spi SOURCES test_sd_storage_spi.cpp ${PROJECT_SOURCE_DIR}/src/app/sd_storage.cpp ${PROJECT_SOURCE_DIR}/src/app/fs_health.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/sd_storage_spi_overrides
     DEFINITIONS HAS_FILESYSTEM=1 USE_SD_STORAGE=1 HAS_SD_CARD=1 SD_STORAGE_SPI=1 SD_SPI_CS_PIN=42 SD_SPI_SCK_PIN=43 SD_SPI_MOSI_PIN=44 SD_SPI_MISO_PIN=39 SD_SPI_FREQUENCY_HZ=25000000
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h)
+add_host_legacy_test(test_sd_storage_spi_shared SOURCES test_sd_storage_spi.cpp ${PROJECT_SOURCE_DIR}/src/app/sd_storage.cpp ${PROJECT_SOURCE_DIR}/src/app/fs_health.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/sd_storage_spi_overrides
+    DEFINITIONS TEST_SHARED_SD=1 HAS_FILESYSTEM=1 USE_SD_STORAGE=1 HAS_SD_CARD=1 SD_STORAGE_SPI=1 SD_SPI_CS_PIN=42 SD_SPI_SCK_PIN=43 SD_SPI_MOSI_PIN=44 SD_SPI_MISO_PIN=39 SD_SPI_FREQUENCY_HZ=25000000
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h)
 add_host_legacy_test(test_factory_reset_storage SOURCES test_factory_reset_storage.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides OPTIONS -ffunction-sections -fdata-sections LIBRARIES -Wl,--gc-sections)
 add_host_legacy_test(test_config_level_save SOURCES test_factory_reset_storage.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides DEFINITIONS HAS_AUDIO=1 OPTIONS -ffunction-sections -fdata-sections LIBRARIES -Wl,--gc-sections)

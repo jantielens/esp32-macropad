@@ -24,10 +24,18 @@ struct SPISettings {
 void sticky_test_spi_begin_transaction(const SPISettings&);
 void sticky_test_spi_end_transaction();
 class SPIClass {
+    bool started = false;
 public:
     explicit SPIClass(int) {}
-    void begin(int clock, int miso, int mosi, int cs) { sticky_test_spi_begin(clock, miso, mosi, cs); }
-    void end() { sticky_test_spi_end(); }
+    bool begin(int clock, int miso, int mosi, int cs) {
+        if (!started) sticky_test_spi_begin(clock, miso, mosi, cs);
+        started = true;
+        return true;
+    }
+    void end() {
+        if (started) sticky_test_spi_end();
+        started = false;
+    }
     void beginTransaction(const SPISettings& settings) { sticky_test_spi_begin_transaction(settings); }
     void endTransaction() { sticky_test_spi_end_transaction(); }
     uint8_t transfer(uint8_t value) { return sticky_test_spi_byte(value); }

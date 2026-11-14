@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 391
+Total flags: 394
 
 ### Features (HAS_*)
 
@@ -252,6 +252,9 @@ Total flags: 391
 - **BOARD_HARDWARE_HEADER** default: `(no default)` — Board-local declarations used only by compilation and factory wiring.
 - **BOARD_HARDWARE_LOOP** default: `(no default)` — Board-owned deferred shutdown and motor safety deadlines.
 - **BOARD_HARDWARE_SOURCE** default: `(no default)` — Board-local shared hardware compiled through the sketch-root aggregator.
+- **BOARD_SD_MOUNT_FAILED** default: `(no default)` — Disable the card without tearing down the display bus after a failed mount.
+- **BOARD_SD_PREPARE** default: `(no default)` — Power the card and configure its shared bus before mounting.
+- **BOARD_SD_SPI** default: `(no default)` — Share the board-owned SPI instance with the display.
 - **BOARD_SENSOR_SOURCE** default: `(no default)` — Board-local sensor provider compiled and registered by the sensor aggregator.
 - **BOARD_TOUCH_PREPARE** default: `(no default)` — Board readiness prerequisite before touch reset and bus initialization.
 - **BUTTON_ACTIVE_LOW** default: `true` — Button polarity: true when pressed = LOW.
@@ -468,6 +471,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | reterminal-e1003-frame |  |  |  |  | ✅ |  |  | ? |  |  |  | ? |  |  | ✅ |  | ? | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  | ? |  | ✅ | ✅ |  |  |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |  |
 | reterminal-e1003-interactive |  |  |  |  |  |  | ✅ | ? |  |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ✅ |  | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |  |
 | reterminal-sticky-interactive | ✅ | ✅ | ✅ |  | ✅ | ✅ |  | ? |  | ✅ |  | ✅ | ✅ | ✅ |  |  | ✅ | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ✅ |  |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  | ✅ |
+| reterminal-sticky-interactive-sd | ✅ | ✅ | ✅ |  | ✅ | ✅ |  | ? |  | ✅ |  | ✅ | ✅ | ✅ |  |  | ✅ | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ✅ |  |  | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  | ✅ |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -503,6 +507,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | reterminal-e1003-frame | AUDIO_INPUT_DRIVER_ES8311 | AUDIO_OUTPUT_DRIVER_ES8311 | BLE_BACKEND_ARDUINO_CORE | CAMERA_DRIVER_NONE | — | DISPLAY_SHAPE_RECT | RTC_DRIVER_NONE | — |
 | reterminal-e1003-interactive | AUDIO_INPUT_DRIVER_ES8311 | AUDIO_OUTPUT_DRIVER_ES8311 | BLE_BACKEND_ARDUINO_CORE | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_RETERMINAL_E1003 | DISPLAY_SHAPE_RECT | RTC_DRIVER_NONE | TOUCH_DRIVER_GT911 |
 | reterminal-sticky-interactive | AUDIO_INPUT_DRIVER_STICKY_PDM | AUDIO_OUTPUT_DRIVER_STICKY_PWM | 1 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_STICKY_EPAPER | DISPLAY_SHAPE_RECT | RTC_DRIVER_PCF8563 | TOUCH_DRIVER_GT911 |
+| reterminal-sticky-interactive-sd | AUDIO_INPUT_DRIVER_STICKY_PDM | AUDIO_OUTPUT_DRIVER_STICKY_PWM | 1 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_STICKY_EPAPER | DISPLAY_SHAPE_RECT | RTC_DRIVER_PCF8563 | TOUCH_DRIVER_GT911 |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_SELECTORS -->
 
 ## Usage Map (preprocessor only, generated)
@@ -1349,6 +1354,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/coffee_scale/sensors/scale_smoothing.h
 - **HAS_SD_CARD**
   - src/app/board_config.h
+  - src/boards/reterminal-sticky-interactive/board_overrides.h
 - **HAS_SENSOR_AHT10**
   - src/app/board_config.h
   - src/app/sensors.cpp
@@ -1654,6 +1660,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **BOARD_HARDWARE_SOURCE**
   - src/app/app.ino
   - src/app/board_hardware.cpp
+- **BOARD_SD_SPI**
+  - src/app/sd_storage.cpp
 - **BOARD_SENSOR_SOURCE**
   - src/app/sensors.cpp
 - **BOARD_TOUCH_PREPARE**
@@ -2347,6 +2355,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sd_storage.h
   - src/app/storage.cpp
   - src/app/storage.h
+  - src/boards/reterminal-sticky-interactive/board_overrides.h
+  - src/boards/reterminal-sticky-interactive/drivers/display/sticky_epaper/panel.cpp
+  - src/boards/reterminal-sticky-interactive/drivers/display/sticky_epaper/panel.h
+  - src/boards/reterminal-sticky-interactive/sticky_hardware.cpp
+  - src/boards/reterminal-sticky-interactive/sticky_hardware.h
 - **WEB_PORTAL_CONFIG_BODY_TIMEOUT_MS**
   - src/app/board_config.h
 - **WEB_PORTAL_CONFIG_MAX_JSON_BYTES**

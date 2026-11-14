@@ -12,11 +12,17 @@
 #include <Wire.h>
 #include <driver/gpio.h>
 #include <atomic>
+#if USE_SD_STORAGE
+#include <SPI.h>
+#endif
 
 namespace {
 esp_err_t powerError = ESP_ERR_INVALID_STATE;
 bool ready = false;
 bool sensorBusStarted = false;
+#if USE_SD_STORAGE
+SPIClass sharedSpi{HSPI};
+#endif
 std::atomic<uint32_t> shutdownToken{0};
 bool shutdownStarted = false;
 bool shutdownSent = false;
@@ -72,6 +78,49 @@ bool sticky_early_power_init() {
 }
 
 bool sticky_hardware_ready() { return ready; }
+
+#if USE_SD_STORAGE
+SPIClass& sticky_shared_spi() { return sharedSpi; }
+
+bool sticky_prepare_sd() {
+    if (!ready) {
+        LOGE("Sticky", "SD unavailable: board initialization failed");
+        return false;
+    }
+    const int pins[] = {SD_SPI_CS_PIN, SD_SPI_SCK_PIN, SD_SPI_MISO_PIN, SD_SPI_MOSI_PIN};
+    int failedPin = -1;
+    esp_err_t result = ESP_OK;
+    sharedSpi.beginTransaction(SPISettings(SD_SPI_FREQUENCY_HZ, MSBFIRST, SPI_MODE0));
+    for (const int pin : pins) {
+        result = gpio_set_pull_mode(static_cast<gpio_num_t>(pin), GPIO_PULLUP_ONLY);
+        if (result != ESP_OK) {
+            failedPin = pin;
+            break;
+        }
+    }
+    if (result == ESP_OK) {
+        result = output(10, 1);
+        if (result != ESP_OK) failedPin = 10;
+    }
+    sharedSpi.endTransaction();
+    if (result != ESP_OK) {
+        LOGE("Sticky", "SD GPIO%d setup failed: %d", failedPin, int(result));
+        return false;
+    }
+    delay(100);
+    return true;
+}
+
+void sticky_sd_mount_failed() {
+    if (ready) sharedSpi.beginTransaction(SPISettings(SD_SPI_FREQUENCY_HZ, MSBFIRST, SPI_MODE0));
+    const esp_err_t deselectResult = output(8, 1);
+    const esp_err_t powerResult = output(10, 0);
+    if (ready) sharedSpi.endTransaction();
+    if (deselectResult != ESP_OK || powerResult != ESP_OK)
+        LOGE("Sticky", "Could not disable SD after mount failure: CS=%d power=%d",
+             int(deselectResult), int(powerResult));
+}
+#endif
 
 bool sticky_request_shutdown(uint32_t continuation_token) {
     if (!continuation_token || !ready) {
@@ -150,6 +199,13 @@ bool board_hardware_init() {
     if (!checked_output(8, 1) || !checked_output(10, 0) ||
         !checked_output(38, 0) || !checked_output(48, 0) ||
         !checked_output(39, 0) || !checked_output(EPAPER_CS_PIN, 1)) return false;
+#if USE_SD_STORAGE
+    if (!sharedSpi.begin(EPAPER_SPI_SCK_PIN, EPAPER_SPI_MISO_PIN, EPAPER_SPI_MOSI_PIN, EPAPER_CS_PIN)) {
+        sharedSpi.end();
+        LOGE("Sticky", "Shared display/SD SPI initialization failed");
+        return false;
+    }
+#endif
     const esp_err_t inputResult = gpio_set_direction(GPIO_NUM_9, GPIO_MODE_INPUT);
     if (inputResult != ESP_OK) {
         LOGE("Sticky", "External-power input configuration failed: %d", int(inputResult));

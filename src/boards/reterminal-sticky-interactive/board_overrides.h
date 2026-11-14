@@ -52,8 +52,12 @@
 #ifndef HAS_VOICE_CLIPS
 #define HAS_VOICE_CLIPS true
 #endif
+#ifndef HAS_SD_CARD
 #define HAS_SD_CARD false
+#endif
+#ifndef USE_SD_STORAGE
 #define USE_SD_STORAGE false
+#endif
 #define HAS_SENSOR_BATTERY_ADC false
 #define HAS_BATTERY_INFO true
 #define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_STICKY_PWM

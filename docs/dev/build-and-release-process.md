@@ -159,7 +159,10 @@ Build only this target with `./build.sh reterminal-sticky-interactive`.
 It reuses `partitions/partitions_ota_8mb_32MB.csv` without installer changes:
 two 8 MiB OTA application slots and internal filesystem storage, with no native
 Extension region. Logging/flashing use the CH343P UART0 bridge on GPIO43/44.
-Metadata advertises MCP/MQTT, not deferred audio, sensors, SD, or HID.
+The `reterminal-sticky-interactive-sd` variant uses the same FQBN and layout,
+with SD-primary file storage. Build it with
+`./build.sh reterminal-sticky-interactive-sd`. Both use the NimBLE broadcast
+profile; only the SD variant advertises SD storage.
 See [Sticky hardware acceptance limits](../../src/boards/reterminal-sticky-interactive/README.md).
 
 The `waveshare-7.8-interactive` target uses

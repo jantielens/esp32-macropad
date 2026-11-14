@@ -111,6 +111,7 @@ python3 tools/generate-board-driver-table.py --update-drivers-readme
 | reterminal-e1003-frame | ? | ? | ? | ?×? | ? | none |  |
 | reterminal-e1003-interactive | RETERMINAL_E1003 | IT8951 | SPI | 1872×1404 | 1 | GT911 |  |
 | reterminal-sticky-interactive | STICKY_EPAPER | SSD1677/SSD2677 | SPI | 800×480 | 0 | GT911 |  |
+| reterminal-sticky-interactive-sd | STICKY_EPAPER | SSD1677/SSD2677 | SPI | 800×480 | 0 | GT911 |  |
 | waveshare-7.8-interactive | IT8951 | IT8951 | SPI | 1872×1404 | 2 | none |  |
 
 <!-- BOARD_DRIVER_TABLE_END -->

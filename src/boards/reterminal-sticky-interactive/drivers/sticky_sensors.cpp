@@ -1,4 +1,4 @@
-#include "sticky_hardware.h"
+#include "../sticky_hardware.h"
 #include "sensors/sensor_manager.h"
 #include "i2c_bus.h"
 #include "ha_discovery.h"

@@ -1,5 +1,9 @@
 #pragma once
 
+#include "app/board_config.h"
+#if USE_SD_STORAGE
+#include "boards/reterminal-sticky-interactive/sticky_hardware.h"
+#endif
 #include <SPI.h>
 #include <atomic>
 
@@ -34,7 +38,11 @@ public:
 
 private:
     enum class Controller { Unknown, SSD1677, SSD2677 };
+#if USE_SD_STORAGE
+    SPIClass& spi = sticky_shared_spi();
+#else
     SPIClass spi{HSPI};
+#endif
     Controller controller = Controller::Unknown;
     bool started = false;
     bool powerCut = false;

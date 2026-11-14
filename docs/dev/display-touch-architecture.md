@@ -90,6 +90,13 @@ Other boards retain their startup order. `BOARD_HARDWARE_SOURCE` owns safe
 peripheral states, Wire0 initialization under `i2c_bus`, and rail settling.
 The display/touch preparation hooks refuse initialization after a board error.
 
+The SD-primary Sticky variant initializes one board-owned SPI instance before
+display startup. Display and SD transfers use its transaction lock and separate
+chip selects; panel reads and writes clock a deselected card before selecting
+the panel so the card can release MISO. SD mount failure powers down the slot
+without ending the shared bus. Panel teardown also leaves the bus running.
+This shared-bus behavior requires physical validation.
+
 Panel probing uses command 0x70, then a bounded reset BUSY-transition fallback
 for 0x00/0xff reads. Unlike the vendor's steady-level fallback, a disconnected
 or static BUSY line is not accepted as presence evidence. A failed initialization

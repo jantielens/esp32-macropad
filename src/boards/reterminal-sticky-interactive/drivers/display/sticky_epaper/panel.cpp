@@ -38,6 +38,10 @@ uint16_t spreadBits(uint8_t value) {
 
 void Panel::command(uint8_t code, const uint8_t* data, size_t length) {
     spi.beginTransaction(writeSettings);
+#if USE_SD_STORAGE
+    // Some cards release MISO only after clocks with their CS deasserted.
+    spi.transfer(0xff);
+#endif
     digitalWrite(EPAPER_DC_PIN, LOW);
     digitalWrite(EPAPER_CS_PIN, LOW);
     spi.transfer(code);
@@ -53,6 +57,9 @@ void Panel::command(uint8_t code, const uint8_t* data, size_t length) {
 
 uint8_t Panel::read() {
     spi.beginTransaction(readSettings);
+#if USE_SD_STORAGE
+    spi.transfer(0xff);
+#endif
     digitalWrite(EPAPER_CS_PIN, LOW);
     const uint8_t value = spi.transfer(0);
     digitalWrite(EPAPER_CS_PIN, HIGH);
@@ -172,7 +179,13 @@ bool Panel::begin() {
     pinMode(EPAPER_DC_PIN, OUTPUT);
     pinMode(EPAPER_RESET_PIN, OUTPUT);
     pinMode(EPAPER_BUSY_PIN, INPUT);
-    spi.begin(EPAPER_SPI_SCK_PIN, EPAPER_SPI_MISO_PIN, EPAPER_SPI_MOSI_PIN, EPAPER_CS_PIN);
+#if !USE_SD_STORAGE
+    if (!spi.begin(EPAPER_SPI_SCK_PIN, EPAPER_SPI_MISO_PIN, EPAPER_SPI_MOSI_PIN, EPAPER_CS_PIN)) {
+        spi.end();
+        LOGE("Sticky", "Display SPI initialization failed");
+        return false;
+    }
+#endif
     started = true;
     reset(20, 10);
     command(0x70);
@@ -199,7 +212,9 @@ bool Panel::begin() {
 
 void Panel::end() {
     prepared = false;
+#if !USE_SD_STORAGE
     if (started) spi.end();
+#endif
     started = false;
     controller = Controller::Unknown;
 }
@@ -355,6 +370,9 @@ Result Panel::stream(uint8_t code, const uint8_t* current, const uint8_t* previo
         const uint64_t spiStart = esp_timer_get_time();
 #endif
         spi.beginTransaction(writeSettings);
+#if USE_SD_STORAGE
+        spi.transfer(0xff);
+#endif
         digitalWrite(EPAPER_CS_PIN, LOW);
         spi.writeBytes(streamBuffer, buffered);
         digitalWrite(EPAPER_CS_PIN, HIGH);

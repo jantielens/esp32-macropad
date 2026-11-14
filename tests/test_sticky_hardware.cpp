@@ -180,6 +180,25 @@ esp_err_t gpio_set_level(gpio_num_t pin, int level) {
     return ESP_OK;
 }
 esp_err_t gpio_set_direction(gpio_num_t pin, int) { return pin == failPin ? 7 : ESP_OK; }
+#if USE_SD_STORAGE
+static std::vector<int> sdPullups;
+static bool sdBusTransaction = false;
+esp_err_t gpio_set_pull_mode(gpio_num_t pin, int mode) {
+    CHECK(sdBusTransaction && mode == GPIO_PULLUP_ONLY);
+    if (pin == failPin) return 7;
+    sdPullups.push_back(pin);
+    return ESP_OK;
+}
+void sticky_test_spi_begin(int clock, int miso, int mosi, int cs) {
+    CHECK(clock == 13 && miso == 12 && mosi == 14 && cs == 15);
+}
+void sticky_test_spi_end() { CHECK(false); }
+void sticky_test_spi_begin_transaction(const SPISettings& settings) {
+    CHECK(!sdBusTransaction && settings.clock == SD_SPI_FREQUENCY_HZ);
+    sdBusTransaction = true;
+}
+void sticky_test_spi_end_transaction() { CHECK(sdBusTransaction); sdBusTransaction = false; }
+#endif
 void i2c_bus_init() {}
 bool i2c_bus_lock(TickType_t) { if (failLock) return false; CHECK(!locked); locked = true; return true; }
 void i2c_bus_unlock() { CHECK(locked); locked = false; }
@@ -202,7 +221,8 @@ static void contact(uint16_t x, uint16_t y) {
 int main() {
     static_assert(HAS_DISPLAY && HAS_TOUCH && HAS_LVGL_EPAPER && HAS_EPAPER_GRAYSCALE);
     static_assert(!IS_EPAPER_FRAME && HAS_MCP && HAS_MQTT && HAS_FILESYSTEM);
-    static_assert(HAS_AUDIO && !HAS_SOUND_PLAYER && HAS_AUDIO_INPUT && !HAS_SD_CARD && !USE_SD_STORAGE);
+    static_assert(HAS_AUDIO && !HAS_SOUND_PLAYER && HAS_AUDIO_INPUT);
+    static_assert(HAS_SD_CARD == USE_SD_STORAGE);
     static_assert(AUDIO_OUTPUT_DRIVER == AUDIO_OUTPUT_DRIVER_STICKY_PWM);
     static_assert(AUDIO_INPUT_DRIVER == AUDIO_INPUT_DRIVER_STICKY_PDM);
     static_assert(HAS_BLE && !HAS_BLE_HID && !HAS_USB_HID && !HAS_NATIVE_EXTENSIONS);
@@ -277,6 +297,24 @@ int main() {
         if (output.first == 8 || output.first == 15) CHECK(output.second == 1);
     }
     CHECK((waits == std::vector<unsigned long>{250, 100}));
+#if USE_SD_STORAGE
+    failPin = 12;
+    CHECK(!sticky_prepare_sd());
+    CHECK(sdPullups == std::vector<int>({8, 13}));
+    CHECK(!sdBusTransaction);
+    failPin = -1;
+    sdPullups.clear();
+    CHECK(sticky_prepare_sd());
+    CHECK(sdPullups == std::vector<int>({8, 13, 12, 14}));
+    CHECK(outputs.back() == std::make_pair(10, 1));
+    CHECK(waits.back() == 100);
+    CHECK(!sdBusTransaction);
+    failPin = 8;
+    sticky_sd_mount_failed();
+    CHECK(outputs.back() == std::make_pair(10, 0));
+    CHECK(!sdBusTransaction);
+    failPin = -1;
+#endif
     Wire.failWrite = true;
     CHECK(shtTestLockHeld && sensor_manager_field_count() == 2);
     BatterySnapshot batterySnapshot;

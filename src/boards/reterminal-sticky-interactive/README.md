@@ -93,7 +93,7 @@ controls are unavailable. Physical sound and volume still need device validation
 The onboard microphone supports
 [microphone level bindings](../../../docs/user/pads/data-sources.md#read-local-sensors-and-health)
 and [local voice clips](../../../docs/user/media/audio.md#record-and-manage-voice-clips).
-Recording uses 16 kHz mono PCM in internal flash; audio quality and practical
+Recording uses 16 kHz mono PCM in the selected file storage; audio quality and practical
 recording duration depend on the environment and available storage.
 
 ### Turn off the device
@@ -132,7 +132,9 @@ timing and recovery still require physical validation on the shipping board.
 Use the existing [setup workflow](../../../docs/user/getting-started.md)
 and [update/recovery guidance](../../../docs/user/device/updates-and-recovery.md).
 Wi-Fi, the portal, MQTT, MCP, persistence, and OTA use the shared firmware
-paths. Files use internal flash, not SD. The reused 32 MB layout has two
+paths. The standard target stores files in internal flash. The
+[SD-primary variant](../reterminal-sticky-interactive-sd/README.md) stores
+files on a required microSD card instead. Both use a 32 MB layout with two
 8 MiB application slots and a 15.875 MiB internal filesystem.
 
 Serial logging and flashing use the CH343P UART0 bridge at 115200 baud on
@@ -158,7 +160,7 @@ a retained e-paper image or queued event does not prove readiness or delivery.
 Offline boot, AP/station switching with BLE, recovery, temporary RAM reclamation,
 and interaction latency during connection attempts remain user hardware checks.
 
-SD, IMU, BLE HID, USB HID,
+IMU, BLE HID, USB HID,
 native Extensions, remote image fetching, and the image library are disabled.
 There is no custom charging policy, gauge calibration, low-battery shutdown,
 or battery-runtime guarantee.
@@ -236,14 +238,15 @@ These are configured onboard signals, not free accessory pins.
 | Power hold / power lock          | 45 / 46, high in that order   |
 | Charger enable baseline          | 39, low                      |
 | External-power input             | 9                            |
-| Deferred SD CS / enable / detect | 8 high / 10 low / 11 unused   |
+| SD CS / enable / detect           | 8 / 10 / 11                  |
 | Microphone clock / data / enable | 19 / 20 / 38                 |
 | Buzzer                           | 48, PWM tone output          |
 
 The early application hook asserts the power latch before logging and other
 startup work. It cannot guarantee retention before the application starts.
 Normal board initialization deselects and powers off SD before display SPI
-access, powers off the microphone until capture, initializes the sensor bus once
+access. The SD-primary variant powers it on before mounting; card detect is
+unused. Initialization powers off the microphone until capture, initializes the sensor bus once
 under the existing Wire0 lock, and allows touch/display rails to settle.
 Touch alone initializes Wire1; the sensors share the board-owned Wire0 bus.
 GPIO9 denotes external power, not proven battery-charging status.
