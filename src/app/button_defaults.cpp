@@ -198,6 +198,8 @@ void button_defaults_typography_status(JsonObject status) {
 }
 
 bool button_defaults_save_raw(const uint8_t* json, size_t len) {
+    const StorageMutationGuard guard;
+    if (!guard) return false;
     if (!json || len == 0 || len > 4096) return false;
     BasicJsonDocument<PsramJsonAllocator> document(2048);
     if (deserializeJson(document, json, len) || !document.is<JsonObject>() ||

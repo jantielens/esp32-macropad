@@ -98,6 +98,8 @@ const SwipeConfig* swipe_config_get() {
 }
 
 bool swipe_config_save_raw(const uint8_t* json, size_t len) {
+    const StorageMutationGuard guard;
+    if (!guard) return false;
     if (!json || len == 0) return false;
 
     File f = Storage.open(SWIPE_CONFIG_PATH, "w");

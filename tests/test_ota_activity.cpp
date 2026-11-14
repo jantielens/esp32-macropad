@@ -1,4 +1,5 @@
 #include "ota_activity.h"
+#include "storage.h"
 
 #include <atomic>
 #include <cstdio>
@@ -63,6 +64,26 @@ int main() {
     check(ota_activity_try_begin(), "OTA resumes after transition");
     check(!ota_activity_try_begin_config_write(), "OTA excludes config writes");
     check(!ota_activity_try_begin_network_transition(), "OTA excludes transition");
+    ota_activity_finish();
+
+    {
+        StorageMutationGuard upload;
+        check(static_cast<bool>(upload), "storage upload admitted");
+        check(!ota_activity_try_begin(), "active storage upload blocks shutdown");
+        {
+            const StorageMutationGuard nested;
+            check(static_cast<bool>(nested), "nested storage mutation admitted");
+        }
+        upload.release();
+        check(!ota_activity_try_begin(), "transferred upload remains protected");
+        storage_mutation_finish();
+    }
+    check(ota_activity_try_begin(), "shutdown admitted after storage upload closes");
+    {
+        const StorageMutationGuard denied;
+        check(!denied, "shutdown blocks new storage mutations");
+    }
+    check(ota_activity_is_active(), "rejected mutation does not release shutdown");
     ota_activity_finish();
 
     for (unsigned attempt = 0; attempt < 100; ++attempt) {

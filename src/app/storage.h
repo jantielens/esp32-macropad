@@ -27,6 +27,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#if USE_SD_STORAGE && HAS_AUTO_SHUTDOWN
+  #include "log_manager.h"
+  #include "ota_activity.h"
+#endif
+
 #if HAS_FILESYSTEM && USE_SD_STORAGE && defined(SD_STORAGE_SPI) && SD_STORAGE_SPI
   #include <SD.h>
   #define Storage SD
@@ -37,6 +42,35 @@
   #include <LittleFS.h>
   #define Storage LittleFS
 #endif
+
+inline bool storage_mutation_begin() {
+#if USE_SD_STORAGE && HAS_AUTO_SHUTDOWN
+  if (!ota_activity_try_begin_config_write()) {
+    LOGW("Storage", "Write rejected: shutdown, update, or network transition is active");
+    return false;
+  }
+#endif
+  return true;
+}
+
+inline void storage_mutation_finish() {
+#if USE_SD_STORAGE && HAS_AUTO_SHUTDOWN
+  ota_activity_finish_config_write();
+#endif
+}
+
+class StorageMutationGuard {
+public:
+  StorageMutationGuard() : admitted_(storage_mutation_begin()) {}
+  ~StorageMutationGuard() { if (admitted_) storage_mutation_finish(); }
+  StorageMutationGuard(const StorageMutationGuard&) = delete;
+  StorageMutationGuard& operator=(const StorageMutationGuard&) = delete;
+  explicit operator bool() const { return admitted_; }
+  void release() { admitted_ = false; }
+
+private:
+  bool admitted_;
+};
 
 // Publish current filesystem usage to `fs_health_set_storage_usage()`.
 // `usedBytes()` / `totalBytes()` walk the FAT on SD cards and can be slow

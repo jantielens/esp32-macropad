@@ -96,8 +96,10 @@ fresh interval. Unknown power readings do not trigger shutdown.
 Setup and configuration recovery remain available and use their existing
 recovery sleep policy. Firmware updates, protected configuration writes, and
 pending action sequences defer automatic shutdown. Uploads are not tracked as
-keep-awake operations. Portal interaction restarts inactivity, but an upload
-can be interrupted and leave an incomplete file.
+keep-awake operations. On devices with SD-primary storage and automatic
+shutdown, protected writes defer shutdown until they finish or the upload
+disconnects. An unfinished voice recording is discarded during shutdown.
+Other uploads can be interrupted and leave an incomplete file.
 Running timers, sounding alarms, and playback do not keep the device on.
 Shutdown does not save portal drafts or
 restore a timer, screen, or reading position on the next normal startup.

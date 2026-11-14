@@ -316,7 +316,14 @@ bool font_store_available() {
 uint32_t font_store_generation() { return font_generation.load(); }
 
 static bool font_store_mount() {
-    const bool ready = storage_mount() && (Storage.exists("/fonts") || Storage.mkdir("/fonts"));
+    if (!storage_mount()) {
+        LOGW("Fonts", "Font storage mount or directory creation failed");
+        return false;
+    }
+    if (Storage.exists("/fonts")) return true;
+    const StorageMutationGuard guard;
+    if (!guard) return false;
+    const bool ready = Storage.exists("/fonts") || Storage.mkdir("/fonts");
     if (!ready) LOGW("Fonts", "Font storage mount or directory creation failed");
     return ready;
 }
@@ -338,6 +345,7 @@ static void font_abort_locked(FontUpload& upload) {
     Storage.remove(font_temp_path);
     active_upload = nullptr;
     storage_publish_usage();
+    storage_mutation_finish();
 }
 
 FontStoreResult font_store_begin(FontUpload& upload, const char* name) {
@@ -345,6 +353,8 @@ FontStoreResult font_store_begin(FontUpload& upload, const char* name) {
     if (!font_store_validate_name(name)) return FontStoreResult::Invalid;
     if (!font_store_available()) return FontStoreResult::Unavailable;
     if (active_upload) return FontStoreResult::Busy;
+    StorageMutationGuard guard;
+    if (!guard) return FontStoreResult::Busy;
     if (!font_store_mount()) return FontStoreResult::IoError;
     char path[48];
     font_store_path(name, path, sizeof(path));
@@ -355,6 +365,7 @@ FontStoreResult font_store_begin(FontUpload& upload, const char* name) {
     strcpy(upload.name, name);
     upload.received = 0;
     active_upload = &upload;
+    guard.release();
     LOGD("Fonts", "Upload '%s' started", upload.name);
     return FontStoreResult::Ok;
 }
@@ -417,6 +428,7 @@ FontStoreResult font_store_finish(FontUpload& upload, size_t expected) {
     }
     active_upload = nullptr;
     storage_publish_usage();
+    storage_mutation_finish();
     return result;
 }
 
@@ -429,6 +441,8 @@ FontStoreResult font_store_delete(const char* name) {
     std::lock_guard<std::mutex> lock(font_store_mutex);
     if (!font_store_validate_name(name)) return FontStoreResult::Invalid;
     if (!font_store_available()) return FontStoreResult::Unavailable;
+    const StorageMutationGuard guard;
+    if (!guard) return FontStoreResult::Busy;
     for (FontLoadOwner* owner = active_loads; owner; owner = owner->next) {
         if (strcmp(owner->name, name) == 0) return FontStoreResult::Busy;
     }

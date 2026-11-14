@@ -65,6 +65,8 @@ bool FsIndexedStore::begin() {
     }
 
     if (!Storage.exists(_base_path)) {
+        const StorageMutationGuard guard;
+        if (!guard) return false;
         if (!Storage.mkdir(_base_path)) {
             LOGE(TAG, "Failed to create directory %s", _base_path);
             return false;
@@ -103,6 +105,8 @@ String FsIndexedStore::data_path(const char* id) const {
 // ---------------------------------------------------------------------------
 
 bool FsIndexedStore::_atomic_write(const char* path, const String& content) {
+    const StorageMutationGuard guard;
+    if (!guard) return false;
     String tmp_path = String(path) + ".tmp";
 
     File f = Storage.open(tmp_path.c_str(), "w");
@@ -142,6 +146,8 @@ bool FsIndexedStore::_atomic_write(const char* path, const String& content) {
 // ---------------------------------------------------------------------------
 
 bool FsIndexedStore::_atomic_write_from_doc(const char* path, JsonDocument& doc) {
+    const StorageMutationGuard guard;
+    if (!guard) return false;
     String tmp_path = String(path) + ".tmp";
 
     File f = Storage.open(tmp_path.c_str(), "w");
@@ -663,6 +669,8 @@ bool FsIndexedStore::exists(const char* id) {
 
 bool FsIndexedStore::remove(const char* id) {
     if (!id || !id[0]) return false;
+    const StorageMutationGuard guard;
+    if (!guard) return false;
 
     if (xSemaphoreTake(_mutex, portMAX_DELAY) != pdTRUE) return false;
 
@@ -726,6 +734,8 @@ bool FsIndexedStore::remove(const char* id) {
 // ---------------------------------------------------------------------------
 
 bool FsIndexedStore::clear_all() {
+    const StorageMutationGuard guard;
+    if (!guard) return false;
     if (_metadata_reader) {
         LOGE(TAG, "clear_all is not supported for binary store %s", _base_path);
         return false;

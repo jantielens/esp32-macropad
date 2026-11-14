@@ -71,6 +71,8 @@ static void pad_config_path(uint8_t page, char* buf, size_t buf_len) {
 }
 
 static void recover_pad_config_file(uint8_t page) {
+    const StorageMutationGuard guard;
+    if (!guard) return;
     char path[32], temporary[40], backup[40];
     pad_config_path(page, path, sizeof(path));
     snprintf(temporary, sizeof(temporary), "%s.tmp", path);
@@ -1119,6 +1121,8 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
 
 bool pad_config_delete(uint8_t page) {
     if (page >= MAX_PADS) return false;
+    const StorageMutationGuard storage_guard;
+    if (!storage_guard) return false;
     const PadConfigMutationGuard guard;
     if (!guard) return false;
 

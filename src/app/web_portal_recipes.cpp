@@ -36,6 +36,8 @@ void catalog_upload_reset(AsyncWebServerRequest* request) {
 }
 
 bool catalog_save(const uint8_t* json, size_t length) {
+    const StorageMutationGuard guard;
+    if (!guard) return false;
     File file = Storage.open(kCatalogTemporaryPath, "w");
     if (!file) return false;
     const size_t written = file.write(json, length);

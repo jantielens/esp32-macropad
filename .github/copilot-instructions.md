@@ -36,7 +36,8 @@ Read the relevant instruction before editing, including for cross-cutting work
 that does not match a file's `applyTo` pattern:
 
 * New button actions: [action type conventions](instructions/action-types.instructions.md)
-* OTA and competing background work: [OTA activity](instructions/ota-activity.instructions.md)
+* OTA, competing background work, and persistent filesystem mutations:
+  [OTA activity](instructions/ota-activity.instructions.md)
 * Board flags and driver selection: [compile-time flags](instructions/compile-time-flags.instructions.md)
 * Display and touch: [display/touch](instructions/display-touch.instructions.md)
 * Web components, routes, and UI: [web portal](instructions/web-portal.instructions.md)

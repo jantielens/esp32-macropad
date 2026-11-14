@@ -378,6 +378,15 @@ add_host_legacy_test(test_icon_store_cleanup
     OPTIONS -Wno-deprecated-declarations
     LIBRARIES host_lvgl m
 )
+add_host_legacy_test(test_icon_store_cleanup_sd
+    SOURCES test_icon_store_cleanup.cpp ${PROJECT_SOURCE_DIR}/src/app/icon_store.cpp
+        ${HOST_LVGL_DIR}/libs/lodepng/lodepng.c
+    DEFINITIONS HAS_FILESYSTEM=1 USE_SD_STORAGE=1 HAS_AUTO_SHUTDOWN=1 HOST_LOG_CAPTURE LV_USE_LODEPNG=1 TEST_HEAP_CAPS_ALLOCATOR=1
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/font_store_overrides ${HOST_ARDUINOJSON_DIR}
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+    OPTIONS -Wno-deprecated-declarations
+    LIBRARIES host_lvgl m
+)
 add_host_legacy_test(test_image_decoder
     SOURCES test_image_decoder.cpp ${PROJECT_SOURCE_DIR}/src/app/image_decoder.cpp
         ${HOST_LVGL_DIR}/libs/lodepng/lodepng.c
@@ -388,6 +397,7 @@ add_host_legacy_test(test_image_decoder
     LIBRARIES host_lvgl m
 )
 set_tests_properties(test_icon_store_cleanup PROPERTIES TIMEOUT 15)
+set_tests_properties(test_icon_store_cleanup_sd PROPERTIES TIMEOUT 15)
 add_host_command_test(test_icon_store_cleanup_unreadable $<TARGET_FILE:test_icon_store_cleanup> --unreadable)
 set_tests_properties(test_icon_store_cleanup_unreadable PROPERTIES TIMEOUT 15)
 add_host_legacy_test(test_font_store
@@ -444,6 +454,9 @@ foreach(font_backend IN ITEMS internal sd)
         INCLUDES ${PROJECT_SOURCE_DIR}/tests/font_store_overrides
         PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
     )
+    if(font_sd)
+        target_compile_definitions(test_font_store_${font_backend} PRIVATE HAS_AUTO_SHUTDOWN=1)
+    endif()
     set_tests_properties(test_font_store_${font_backend} PROPERTIES TIMEOUT 15)
 endforeach()
 add_host_gtest(test_gamepad_widgets test_gamepad_widgets.cpp)
@@ -591,8 +604,10 @@ endforeach()
 
 add_host_legacy_test(test_ota_activity
     SOURCES test_ota_activity.cpp ${PROJECT_SOURCE_DIR}/src/app/ota_activity.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/storage_policy_overrides
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
     OPTIONS -pthread
-    DEFINITIONS OTA_ACTIVITY_HOST_TEST HAS_AUTO_SHUTDOWN=1 HAS_BATTERY_INFO=1
+    DEFINITIONS OTA_ACTIVITY_HOST_TEST HAS_AUTO_SHUTDOWN=1 HAS_BATTERY_INFO=1 USE_SD_STORAGE=1 HAS_SD_CARD=1
         BOARD_AUTO_SHUTDOWN_REQUEST=0
 )
 

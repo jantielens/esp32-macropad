@@ -23,6 +23,9 @@ bool ensure_directory() {
 				return false;
 		}
 		if (Storage.exists(kDirectory)) return true;
+		const StorageMutationGuard guard;
+		if (!guard) return false;
+		if (Storage.exists(kDirectory)) return true;
 		if (!Storage.mkdir(kDirectory)) {
 				LOGE("BootLogo", "Cannot create %s", kDirectory);
 				return false;

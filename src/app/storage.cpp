@@ -36,6 +36,8 @@ void storage_publish_usage(bool force) {
 static bool s_mounted = false;
 
 bool storage_write_verified(const char* path, const uint8_t* data, size_t length) {
+    const StorageMutationGuard guard;
+    if (!guard) return false;
     if (Storage.exists(path) && !Storage.remove(path)) return false;
     File file = Storage.open(path, "w");
     if (!file) return false;
@@ -68,6 +70,8 @@ bool storage_write_verified(const char* path, const uint8_t* data, size_t length
 }
 
 bool storage_write_atomic(const char* path, const uint8_t* data, size_t length) {
+    const StorageMutationGuard guard;
+    if (!guard) return false;
     char temporary[112], backup[112];
     if (snprintf(temporary, sizeof(temporary), "%s.tmp", path) >= (int)sizeof(temporary) ||
         snprintf(backup, sizeof(backup), "%s.bak", path) >= (int)sizeof(backup)) return false;
@@ -92,6 +96,8 @@ bool storage_write_atomic(const char* path, const uint8_t* data, size_t length) 
 
 bool storage_mount() {
     if (s_mounted) return true;
+    const StorageMutationGuard guard;
+    if (!guard) return false;
 
 #if USE_SD_STORAGE
     if (!sd_storage_is_mounted()) {

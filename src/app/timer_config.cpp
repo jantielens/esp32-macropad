@@ -246,6 +246,8 @@ static void config_to_json(const TimerConfig& config, JsonObject root) {
 }
 
 bool timer_config_save_raw(const uint8_t* json, size_t len) {
+    const StorageMutationGuard guard;
+    if (!guard) return false;
     if (!g_config_ready) return false;
     xSemaphoreTake(g_save_mutex, portMAX_DELAY);
     TimerConfig* candidate = (TimerConfig*)config_psram_alloc(

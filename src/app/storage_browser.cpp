@@ -122,6 +122,11 @@ bool storage_browser_remove(const String& path, const char*& error) {
         error = "invalid storage path";
         return false;
     }
+    const StorageMutationGuard guard;
+    if (!guard) {
+        error = "storage busy";
+        return false;
+    }
     File entry = Storage.open(path);
     if (!entry) {
         error = "file or directory not found";

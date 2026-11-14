@@ -151,6 +151,8 @@ const MqttTriggerConfig* mqtt_triggers_get(uint8_t index) {
 }
 
 bool mqtt_triggers_save_raw(const uint8_t* json, size_t len) {
+    const StorageMutationGuard guard;
+    if (!guard) return false;
     if (!json || len == 0) return false;
 
     File f = Storage.open(MQTT_TRIGGERS_PATH, "w");

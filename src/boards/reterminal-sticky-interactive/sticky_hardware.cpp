@@ -128,7 +128,7 @@ bool sticky_request_shutdown(uint32_t continuation_token) {
         return false;
     }
     if (!ota_activity_try_begin()) {
-        LOGW("Sticky", "Shutdown rejected: OTA, config write, or power transition active");
+        LOGW("Sticky", "Shutdown rejected: OTA, storage write, or power transition active");
         return false;
     }
     shutdownToken.store(continuation_token);

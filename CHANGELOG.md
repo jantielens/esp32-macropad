@@ -129,6 +129,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Add a shared SD filesystem mutation guard for boards with automatic
+  shutdown, with Sticky SD as the first consumer. Controlled shutdown waits
+  for guarded writes; unfinished voice recordings are discarded. Unexpected
+  power loss can still damage the filesystem.
+  See [Sticky SD storage](src/boards/reterminal-sticky-interactive-sd/README.md).
 * Prevent a shared-firmware Offline startup crash by initializing the portal's
   software TCP/IP stack before its listener, without enabling the Wi-Fi radio.
 * Reduce repeated Wi-Fi snapshot string allocations by refreshing network

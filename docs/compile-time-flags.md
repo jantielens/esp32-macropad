@@ -573,6 +573,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/hw_buttons.cpp
   - src/app/mcp_tools_config.cpp
   - src/app/portal_components.cpp
+  - src/app/storage.h
   - src/app/touch_manager.cpp
   - src/app/web_mcp.cpp
   - src/app/web_portal_auth.cpp
