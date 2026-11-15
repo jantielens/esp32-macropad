@@ -23,6 +23,15 @@ The frame target intentionally does not use the physical touchscreen or
 frontlight. It has no interactive pads, audio, or BLE keyboard output.
 This is a firmware distinction, not missing touch/frontlight hardware.
 
+## Frame battery telemetry
+
+Existing frame-driver battery reads also supply shared voltage and an
+approximate voltage-derived percentage. No periodic polling, current or runtime
+estimate is added. Cached readings expire after three minutes of active runtime
+and reset at deep sleep. See
+[shared battery semantics](../../../docs/user/pads/data-sources.md#show-battery-information).
+This does not add pads or new battery measurements to Interactive firmware.
+
 ## Wake, recovery, and storage
 
 WAKE is GPIO36, active low, with an external pull-up on the carrier.

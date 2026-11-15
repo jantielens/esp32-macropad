@@ -31,7 +31,7 @@ on its interface switch before powering it.
 | MISO | GPIO37 | HAT output to Feather |
 | CS | GPIO10 | Active LOW |
 | RST | GPIO38 | Active LOW reset |
-| HRDY | GPIO5 | LOW means busy, HIGH means ready |
+| HRDY | GPIO5 | Command interface: LOW busy, HIGH ready |
 
 | Other signal | Connection | Notes |
 | ------------ | ---------- | ----- |
@@ -74,11 +74,20 @@ full-panel GC16. The default cleanup threshold is 10 regional updates.
 
 Updates are coalesced and animations are disabled. Prefer slowly changing
 pads and widgets; regional updates do not guarantee flicker-free operation.
+Only completed render frames reach the panel. Navigation, focus, dialog and
+changed user-variable interactions bypass background presentation waits once
+their frame is ready. Background and manual-full requests retain cadence and
+uncapped settling; required full refreshes and active waveforms still complete.
+HRDY readiness alone does not mean the panel has finished: the screenshot
+baseline becomes valid only after the controller reports engine completion.
+Interrupted or failed presentations require full recovery.
 The single RGB565 LVGL draw buffer holds 32 display lines (119,808 bytes),
 allocated preferentially in PSRAM. At native landscape resolution, a full-screen
 render needs about 44 flushes instead of 351 with a four-line buffer.
-The physical orientation, refresh latency, grayscale ghosting, and button
-behavior still need validation with this firmware on hardware.
+Verify physical orientation, refresh latency, grayscale ghosting, and button
+behavior on your hardware.
+Check rapid configured-button navigation, a full refresh queued during updates,
+and OTA/restart. Results from another IT8951 board do not qualify this HAT.
 
 Wi-Fi/MQTT, MCP, and native Extensions are enabled. Use signed ESP32-S3
 (`-s3.ext`) packages and prefer slow-changing Extension widgets on e-paper.

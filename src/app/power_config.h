@@ -5,6 +5,7 @@
 
 enum class PowerMode {
 		AlwaysOn,
+		Offline,         // interactive runtime, Wi-Fi enabled only by explicit command
 		DutyCycle,        // duty_cycle_mqtt (wake -> WiFi -> MQTT publish -> sleep)
 		DutyCycleBle,     // duty_cycle_ble  (wake -> BLE BTHome adv burst -> sleep, no WiFi)
 		DutyCycleEpaperFrame,  // duty_cycle_epaper_frame (wake -> WiFi -> fetch image -> render -> sleep)

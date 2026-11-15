@@ -32,6 +32,18 @@
 #define BLE_GAP_EVENT_PARING_COMPLETE 2
 #define BLE_GAP_EVENT_REPEAT_PAIRING 3
 #define BLE_UUID16_INIT(value) {{value}}
+#define CONFIG_NIMBLE_ENABLED 1
+#define BLE_GAP_CONN_MODE_NON 0
+#define BLE_GAP_DISC_MODE_NON 0
+#define BLE_GAP_DISC_MODE_GEN 2
+#define BLE_HS_FOREVER (-1)
+
+struct ble_gap_adv_params {
+    uint8_t conn_mode;
+    uint8_t disc_mode;
+    uint16_t itvl_min;
+    uint16_t itvl_max;
+};
 
 struct ble_addr_t { uint8_t type; uint8_t val[6]; };
 struct ble_gap_conn_desc {
@@ -94,6 +106,37 @@ inline std::vector<std::pair<uint16_t, int>> terminations;
 inline std::vector<uint8_t> last_report;
 inline const ble_gatt_svc_def* services = nullptr;
 inline int (*gap_handler)(ble_gap_event*, void*) = nullptr;
+inline bool radio_advertising = false;
+inline bool stop_succeeds = true;
+inline int event_start_result = 0;
+inline unsigned hid_starts = 0;
+inline unsigned event_starts = 0;
+inline uint16_t appearance = 0;
+inline std::vector<uint8_t> advertisement;
+inline ble_gap_adv_params event_parameters = {};
+inline unsigned host_inits = 0;
+inline bool data_succeeds = true;
+inline bool power_succeeds = true;
+inline int advertising_power = 4;
+inline int default_power = 4;
+inline int scan_power = 4;
+inline bool power_read_succeeds = true;
+inline std::vector<std::pair<int, int>> power_calls;
+inline bool telemetry_start_succeeds = true;
+}
+
+inline int ble_hs_id_infer_auto(int, uint8_t* type) { *type = 0; return 0; }
+inline int ble_gap_adv_set_data(const uint8_t* data, size_t length) {
+    TestBle::advertisement.assign(data, data + length);
+    return 0;
+}
+inline int ble_gap_adv_start(uint8_t, const void*, int32_t, const ble_gap_adv_params* parameters,
+                            int (*)(ble_gap_event*, void*), void*) {
+    ++TestBle::event_starts;
+    TestBle::event_parameters = *parameters;
+    if (TestBle::event_start_result) return TestBle::event_start_result;
+    TestBle::radio_advertising = true;
+    return 0;
 }
 
 inline size_t strlcpy(char* out, const char* text, size_t capacity) {
@@ -183,27 +226,76 @@ class BLEUUID {
 public:
     explicit BLEUUID(uint16_t) {}
 };
+enum esp_power_level_t {
+    ESP_PWR_LVL_N12, ESP_PWR_LVL_N9, ESP_PWR_LVL_N6, ESP_PWR_LVL_N3,
+    ESP_PWR_LVL_N0, ESP_PWR_LVL_P3, ESP_PWR_LVL_P6, ESP_PWR_LVL_P9
+};
+enum esp_ble_power_type_t { ESP_BLE_PWR_TYPE_ADV, ESP_BLE_PWR_TYPE_DEFAULT, ESP_BLE_PWR_TYPE_SCAN };
+inline esp_power_level_t esp_ble_tx_power_get(esp_ble_power_type_t type) {
+    return static_cast<esp_power_level_t>(!TestBle::power_read_succeeds ? 0xFF :
+        type == ESP_BLE_PWR_TYPE_ADV ? TestBle::advertising_power :
+        type == ESP_BLE_PWR_TYPE_SCAN ? TestBle::scan_power : TestBle::default_power);
+}
+inline void test_set_power(esp_power_level_t power, esp_ble_power_type_t type) {
+    TestBle::power_calls.emplace_back(type, power);
+    if (!TestBle::power_succeeds) return;
+    (type == ESP_BLE_PWR_TYPE_ADV ? TestBle::advertising_power :
+        type == ESP_BLE_PWR_TYPE_SCAN ? TestBle::scan_power : TestBle::default_power) = power;
+}
+constexpr int ESP_OK = 0;
+inline int esp_ble_tx_power_set(esp_ble_power_type_t type, esp_power_level_t power) {
+    test_set_power(power, type);
+    return TestBle::power_succeeds ? ESP_OK : 1;
+}
+class BLEAdvertisementData {
+public:
+    std::vector<uint8_t> bytes;
+    void setFlags(uint8_t) {}
+    template<typename Text>
+    void setServiceData(BLEUUID, const Text& data) {
+        bytes.assign(data.c_str(), data.c_str() + data.length());
+    }
+    void setName(const String&) {}
+};
 class BLEAdvertising {
 public:
-    void setAppearance(uint16_t) {}
+    void reset() { TestBle::radio_advertising = false; TestBle::advertisement.clear(); TestBle::appearance = 0; }
+    bool start() {
+        ++TestBle::hid_starts;
+        if (!TestBle::telemetry_start_succeeds) return false;
+        TestBle::radio_advertising = true;
+        return true;
+    }
+    bool stop() { if (!TestBle::stop_succeeds) return false; TestBle::radio_advertising = false; return true; }
+    void setAppearance(uint16_t appearance) { TestBle::appearance = appearance; }
     void addServiceUUID(BLEUUID) {}
     void setScanResponse(bool) {}
     void setMinPreferred(uint16_t) {}
     void setMaxPreferred(uint16_t) {}
+    void setMinInterval(uint16_t interval) { TestBle::event_parameters.itvl_min = interval; }
+    void setMaxInterval(uint16_t interval) { TestBle::event_parameters.itvl_max = interval; }
+    bool setAdvertisementData(const BLEAdvertisementData& data) {
+        TestBle::advertisement = data.bytes;
+        return TestBle::data_succeeds;
+    }
+    bool setScanResponseData(const BLEAdvertisementData&) { return TestBle::data_succeeds; }
 };
 class BLEDevice {
 public:
+    inline static bool initialized = true;
+    inline static bool init_succeeds = true;
     inline static BLEServer server;
     inline static BLEAdvertising advertising;
     inline static BLESecurityCallbacks* security = nullptr;
-    static void init(const char*) {}
-    static bool getInitialized() { return true; }
+    static void init(const char*) { ++TestBle::host_inits; initialized = init_succeeds; }
+    static bool getInitialized() { return initialized; }
     static void setSecurityCallbacks(BLESecurityCallbacks* callbacks) { security = callbacks; }
     static void setCustomGapHandler(int (*handler)(ble_gap_event*, void*)) { TestBle::gap_handler = handler; }
     static BLEServer* createServer() { return &server; }
     static BLEAdvertising* getAdvertising() { return &advertising; }
     static void startAdvertising() {}
-    static void stopAdvertising() {}
+    static void stopAdvertising() { advertising.stop(); }
+    static void setPower(esp_power_level_t power, esp_ble_power_type_t type) { test_set_power(power, type); }
 };
 class BLESecurity {
 public:

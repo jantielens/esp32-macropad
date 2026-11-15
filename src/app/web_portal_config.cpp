@@ -5,12 +5,22 @@
 #include "portal_idle.h"
 #include "ota_activity.h"
 #include "reboot_service.h"
+#if HAS_VOICE_CLIPS
+#include "voice_clips.h"
+#endif
 
 #include "board_config.h"
+#if HAS_AUTO_SHUTDOWN
+#include "auto_shutdown.h"
+#endif
 #if HAS_TTF_FONTS
 #include "font_store.h"
 #endif
 #include "config_manager.h"
+#include "power_config.h"
+#include "bthome_event_json.h"
+#include "bthome_events.h"
+#include "ble_backend.h"
 #include "wifi_manager.h"
 #include "time_service.h"
 #include "keyboard_hid.h"
@@ -44,6 +54,7 @@
 
 #include <ArduinoJson.h>
 #include <WiFi.h>
+#include <strings.h>
 
 #include <esp_heap_caps.h>
 #include <errno.h>
@@ -162,7 +173,7 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				return;
 		}
 
-		// Home Wi-Fi credentials remain write-only. The setup AP password is
+		// Home Wi-Fi credentials remain write-only. The AP password is
 		// intentionally ordinary, shareable configuration.
 		std::shared_ptr<BasicJsonDocument<PsramJsonAllocator>> doc = make_psram_json_doc(HAS_DISPLAY ? 6144 : 2560);
 		if (doc && doc->capacity() > 0) {
@@ -206,13 +217,23 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["duty_cycle_wake_seconds"] = current_config->duty_cycle_wake_seconds;
 				(*doc)["mqtt_publish_interval_seconds"] = current_config->mqtt_publish_interval_seconds;
 				(*doc)["portal_idle_timeout_seconds"] = current_config->portal_idle_timeout_seconds;
+#if HAS_AUTO_SHUTDOWN
+				(*doc)["auto_shutdown_timeout_seconds"] = current_config->auto_shutdown_timeout_seconds;
+#endif
 				(*doc)["wifi_backoff_max_seconds"] = current_config->wifi_backoff_max_seconds;
 
 				#if HAS_BLE
 				(*doc)["ble_burst_count"] = current_config->ble_burst_count;
 				(*doc)["ble_adv_interval_ms"] = current_config->ble_adv_interval_ms;
-				(*doc)["ble_tx_power_dbm"] = current_config->ble_tx_power_dbm;
 				#endif
+#if HAS_BLE || HAS_BLE_HID
+				if (ble_backend_power_supported()) {
+						(*doc)["bluetooth_tx_power_dbm"] = current_config->bluetooth_tx_power_dbm;
+						(*doc)["bluetooth_active_tx_power_dbm"] = ble_backend_tx_power_dbm();
+				}
+				(*doc)["bthome_event_burst_ms"] = current_config->bthome_event.burst_ms;
+				(*doc)["bthome_event_adv_interval_ms"] = current_config->bthome_event.adv_interval_ms;
+#endif
 
 				// Build capability map so the portal UI can hide controls for
 				// features that are not compiled into this firmware.
@@ -221,6 +242,12 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				caps["mqtt"] = (bool)HAS_MQTT;
 				caps["display"] = (bool)HAS_DISPLAY;
 				caps["ble_hid"] = (bool)HAS_BLE_HID;
+				caps["bthome_events"] = (bool)(HAS_BLE || HAS_BLE_HID);
+#if HAS_BLE || HAS_BLE_HID
+				caps["bluetooth_tx_power"] = ble_backend_power_supported();
+#else
+				caps["bluetooth_tx_power"] = false;
+#endif
 				caps["usb_hid"] = (bool)HAS_USB_HID;
 				caps["mcp"] = (bool)HAS_MCP;
 				caps["ha_history"] = (bool)HAS_HA_HISTORY;
@@ -464,6 +491,62 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				return;
 		}
 
+		#if IS_EPAPER_FRAME
+		if (doc.containsKey("operating_mode") &&
+				strcasecmp(doc["operating_mode"] | "", "offline") == 0) {
+				request->send(400, "application/json",
+						"{\"success\":false,\"message\":\"Offline operating mode is unavailable on E-Paper Frame devices\"}");
+				portENTER_CRITICAL(&g_config_post_mux);
+				config_post_reset();
+				portEXIT_CRITICAL(&g_config_post_mux);
+				return;
+		}
+		#endif
+
+#if HAS_AUTO_SHUTDOWN
+		uint32_t auto_shutdown_candidate = current_config->auto_shutdown_timeout_seconds;
+		const bool auto_shutdown_update = doc.containsKey("auto_shutdown_timeout_seconds");
+		if (auto_shutdown_update &&
+				(!parseStrictUintField(doc["auto_shutdown_timeout_seconds"], &auto_shutdown_candidate) ||
+				 auto_shutdown_candidate > UINT16_MAX)) {
+				request->send(400, "application/json",
+						"{\"success\":false,\"message\":\"Auto-shutdown timeout must be an integer from 0 to 65535 seconds\"}");
+				portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+				return;
+		}
+#endif
+		const bool bthome_update = bthome::event_settings_update_present(doc.as<JsonObjectConst>());
+#if HAS_BLE || HAS_BLE_HID
+		const bthome::EventSettings previous_bthome_settings = current_config->bthome_event;
+		const int8_t previous_bluetooth_power = current_config->bluetooth_tx_power_dbm;
+		int32_t bluetooth_power_candidate = previous_bluetooth_power;
+		const bool bluetooth_power_update = doc.containsKey("bluetooth_tx_power_dbm");
+		bthome::EventSettings bthome_candidate = previous_bthome_settings;
+		const char* bthome_error = bthome_update ? bthome::parse_event_settings_update(
+				doc.as<JsonObjectConst>(), previous_bthome_settings, bthome_candidate) : nullptr;
+		if (!bthome_error && bluetooth_power_update &&
+				(!ble_backend_power_supported() ||
+				 !parse_json_integer(doc["bluetooth_tx_power_dbm"], bluetooth_power_candidate) ||
+				 !bluetooth_power_valid(bluetooth_power_candidate))) {
+				bthome_error = ble_backend_power_supported() ?
+						"Bluetooth transmit power must be -12 to +9 dBm in 3 dB steps" :
+						"Bluetooth transmit power is controlled by the hosted co-processor";
+		}
+#else
+		const char* bthome_error = (bthome_update || doc.containsKey("bluetooth_tx_power_dbm")) ?
+				"Bluetooth is unavailable on this firmware" : nullptr;
+#endif
+		if (bthome_error) {
+				StaticJsonDocument<192> response;
+				response["success"] = false;
+				response["message"] = bthome_error;
+				String response_body;
+				serializeJson(response, response_body);
+				request->send(400, "application/json", response_body);
+				portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+				return;
+		}
+
 #if HAS_EXTERNAL_DATA
 		std::unique_ptr<ExternalDataConfig, decltype(&heap_caps_free)> external_candidate(nullptr, heap_caps_free);
 		if (doc.containsKey("external_data")) {
@@ -562,12 +645,13 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		// Security hardening: never allow changing Basic Auth settings in AP/core
 		// mode AFTER initial setup. Otherwise, an attacker near the device could
 		// wait for fallback AP mode and lock out the owner. EXCEPTION: during
-		// true first-boot (no WiFi configured yet) the wizard legitimately needs
-		// to set auth, so we only enforce the guard when an SSID is already on
-		// file (i.e., this is a fallback AP session, not first-boot).
-		bool first_boot = (current_config->wifi_ssid[0] == '\0');
-		if (web_portal_is_ap_mode_active() && !first_boot && (doc.containsKey("basic_auth_enabled") || doc.containsKey("basic_auth_username") || doc.containsKey("basic_auth_password"))) {
-				request->send(403, "application/json", "{\"success\":false,\"message\":\"Basic Auth settings cannot be changed in AP mode\"}");
+		// true first-boot (no WiFi or Offline mode configured yet), the wizard
+		// legitimately needs to set auth. A saved Offline mode with no SSID
+		// still counts as configured, so its recovery session is protected.
+		bool first_boot = (current_config->wifi_ssid[0] == '\0' &&
+				power_config_parse_power_mode(current_config) != PowerMode::Offline);
+		if (web_portal_is_recovery_ap_active() && !first_boot && (doc.containsKey("basic_auth_enabled") || doc.containsKey("basic_auth_username") || doc.containsKey("basic_auth_password"))) {
+				request->send(403, "application/json", "{\"success\":false,\"message\":\"Basic Auth settings cannot be changed in recovery AP mode\"}");
 				portENTER_CRITICAL(&g_config_post_mux);
 				config_post_reset();
 				portEXIT_CRITICAL(&g_config_post_mux);
@@ -620,31 +704,6 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 						return;
 				}
 				epaper_vcom_mv = uint16_t(magnitude);
-		}
-		#endif
-
-		#if HAS_BLE
-		int ble_tx_power_dbm = 0;
-		if (doc.containsKey("ble_tx_power_dbm")) {
-				JsonVariant value = doc["ble_tx_power_dbm"];
-				bool valid = false;
-				if (value.is<int>()) {
-						ble_tx_power_dbm = value.as<int>();
-						valid = true;
-				} else if (value.is<const char*>()) {
-						const char *text = value.as<const char*>();
-						char *end = nullptr;
-						const long parsed = strtol(text, &end, 10);
-						valid = end != text && *end == '\0' && parsed >= -12 && parsed <= 9;
-						if (valid) ble_tx_power_dbm = (int)parsed;
-				}
-				if (!valid || ble_tx_power_dbm < -12 || ble_tx_power_dbm > 9 || ble_tx_power_dbm % 3 != 0) {
-						request->send(400, "application/json", "{\"success\":false,\"message\":\"BLE TX power must be -12 to +9 dBm in 3 dB steps\"}");
-						portENTER_CRITICAL(&g_config_post_mux);
-						config_post_reset();
-						portEXIT_CRITICAL(&g_config_post_mux);
-						return;
-				}
 		}
 		#endif
 
@@ -805,7 +864,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		}
 
 
-		// Operating mode (transport + duty cycle selector)
+		// Operating mode (online/offline runtime + duty cycle selector)
 		if (doc.containsKey("operating_mode")) {
 				strlcpy(current_config->operating_mode, doc["operating_mode"] | "always_on", CONFIG_OPERATING_MODE_MAX_LEN);
 		}
@@ -873,9 +932,6 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 						: (uint16_t)(doc["ble_adv_interval_ms"] | 0);
 				if (v == 0) v = BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS;
 				current_config->ble_adv_interval_ms = v;
-		}
-		if (doc.containsKey("ble_tx_power_dbm")) {
-				current_config->ble_tx_power_dbm = (int8_t)ble_tx_power_dbm;
 		}
 		#endif
 
@@ -1184,10 +1240,21 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		const DialogTemplates previous_dialog_appearance = current_config->dialog_appearance;
 		current_config->dialog_appearance = dialog_candidate;
 		#endif
+#if HAS_BLE || HAS_BLE_HID
+		current_config->bthome_event = bthome_candidate;
+		current_config->bluetooth_tx_power_dbm = static_cast<int8_t>(bluetooth_power_candidate);
+#endif
+#if HAS_AUTO_SHUTDOWN
+		const uint16_t previous_auto_shutdown = current_config->auto_shutdown_timeout_seconds;
+		current_config->auto_shutdown_timeout_seconds = static_cast<uint16_t>(auto_shutdown_candidate);
+#endif
 #if HAS_EXTERNAL_DATA
 		if (config_manager_save(current_config, external_candidate.get())) {
 #else
 		if (config_manager_save(current_config)) {
+#endif
+#if HAS_BLE || HAS_BLE_HID
+				if (bthome_update) bthome_events_apply_settings(bthome_candidate);
 #endif
 #if HAS_HA_LIVE
 				if (doc.containsKey("ha_url") || doc.containsKey("ha_token"))
@@ -1198,6 +1265,10 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 						ha_stats_config_changed();
 #endif
 				LOGI("Portal", "Config saved");
+#if HAS_AUTO_SHUTDOWN
+				if (auto_shutdown_update)
+						auto_shutdown_configure(current_config->auto_shutdown_timeout_seconds);
+#endif
 #if HAS_MCP
 				if (mcp_token_minted) {
 						// Return the freshly minted MCP token exactly once.
@@ -1222,6 +1293,13 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				}
 		} else {
 				LOGE("Portal", "Config save failed");
+#if HAS_AUTO_SHUTDOWN
+				current_config->auto_shutdown_timeout_seconds = previous_auto_shutdown;
+#endif
+#if HAS_BLE || HAS_BLE_HID
+				current_config->bthome_event = previous_bthome_settings;
+				current_config->bluetooth_tx_power_dbm = previous_bluetooth_power;
+#endif
 				#if HAS_DISPLAY
 				current_config->backlight_brightness = previous_saved_brightness;
 				current_config->dialog_appearance = previous_dialog_appearance;
@@ -1252,6 +1330,18 @@ void handleDeleteConfig(AsyncWebServerRequest *request) {
 				request->send(409, "application/json", "{\"success\":false,\"message\":\"Device busy\"}");
 				return;
 		}
+
+#if HAS_VOICE_CLIPS
+		const VoiceClipCancelStatus recorder = voice_clips_cancel();
+		if (recorder != VoiceClipCancelStatus::Ready) {
+				request->send(recorder == VoiceClipCancelStatus::Pending ? 409 : 503,
+						"application/json", recorder == VoiceClipCancelStatus::Pending
+						? "{\"success\":false,\"message\":\"Stopping voice recording; retry reset\"}"
+						: "{\"success\":false,\"message\":\"Voice recorder could not stop safely\"}");
+				ota_activity_finish_config_write();
+				return;
+		}
+#endif
 
 		// Send the success response FIRST so the client receives it before the
 		// long blocking wipe (NVS erase + LittleFS.format() / SD rmrf, several

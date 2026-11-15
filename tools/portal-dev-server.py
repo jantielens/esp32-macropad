@@ -17,6 +17,7 @@ import time
 import json
 import os
 import re
+import struct
 import sys
 import subprocess
 from _render_html_template import render
@@ -32,7 +33,8 @@ PROTO_DIR = SCRIPT_DIR / "portal-prototype"
 MOCK_DIR = SCRIPT_DIR / "mock-data"
 APP_WEB_DIR = SCRIPT_DIR.parent / "src" / "app" / "web"
 EPAPER_WEB_DIR = SCRIPT_DIR.parent / "src" / "app" / "device_classes" / "epaper_frame" / "web"
-PROFILES = ("esp32-p4-lcd4b", "jc3248w535", "reterminal-e1003-frame", "crowpanel-4.2-interactive")
+PROFILES = ("esp32-p4-lcd4b", "jc3248w535", "reterminal-e1003-frame", "crowpanel-4.2-interactive",
+            "reterminal-sticky-interactive")
 SCENARIOS = ("normal", "load-error", "save-error", "invalid-bindings")
 HA_ENTITIES = {
     "sensor.living_room_temperature": {
@@ -67,6 +69,10 @@ EPAPER_PRESENTATION_DEFAULTS = {
     "epaper_vcom_mv": 0, "epaper_default_vcom_mv": 0,
     "epaper_binding_refresh_interval_ms": 1000, "epaper_min_refresh_interval_ms": 500,
     "epaper_refresh_clock_on_minute_boundary": True, "epaper_full_refresh_threshold": 10,
+}
+BTHOME_EVENT_DEFAULTS = {
+    "bthome_event_burst_ms": 350,
+    "bthome_event_adv_interval_ms": 100,
 }
 DIALOG_APPEARANCE_DEFAULTS = {
     "font": "", "font_size": 0, "text_color": "#FFFFFF",
@@ -109,6 +115,19 @@ def reset_pad_fixtures(server, scenario="normal"):
     server.mock_icon_source_counter = 1
     server.mock_boot_actions = []
     server.mock_boot_logo_slots = {}
+    samples = b"\0\0" * (16000 * 3)
+    wav = struct.pack("<4sI4s4sIHHIIHH4sI", b"RIFF", 36 + len(samples), b"WAVE",
+                      b"fmt ", 16, 1, 1, 16000, 32000, 2, 16, b"data", len(samples)) + samples
+    server.mock_voice_clips = {
+        "0000000100000002": wav,
+        "0000000100000003": wav,
+        "0000000100000004": wav,
+    }
+    server.mock_voice_clip_times = {
+        "0000000100000002": MOCK_NOW_EPOCH,
+        "0000000100000003": MOCK_NOW_EPOCH - 3600,
+        "0000000100000004": MOCK_NOW_EPOCH - 86400,
+    }
     server.mock_recipe_catalog = json.loads((SCRIPT_DIR.parent / "docs/samples/recipe-catalog.json").read_text(encoding="utf-8"))
     server.mock_alarms = {"lateness_minutes": 360, "1": {"enabled": False, "hour": 7, "minute": 0, "weekdays": 62,
                                "snooze_minutes": 9, "auto_dismiss_minutes": 30,
@@ -179,6 +198,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
         selected = cookie.get("portal_mock_profile")
         profile = selected.value if selected else self.server.profile
         return profile if profile in PROFILES else self.server.profile
+
+    def _bthome_capable(self):
+        return self._profile() == "reterminal-sticky-interactive"
 
     def _fonts_available(self):
         return self._profile() in ("esp32-p4-lcd4b", "jc3248w535")
@@ -275,6 +297,21 @@ class PortalHandler(SimpleHTTPRequestHandler):
             self._serve_production_styles()
         elif path == "/portal.js":
             self._serve_production_bundle()
+        elif path == "/portal_power_savings.js":
+            if self._profile() == "reterminal-sticky-interactive":
+                self._serve_file(APP_WEB_DIR / "portal_power_savings.js")
+            else:
+                self._serve_json({"error": "Power savings is unavailable"}, 404)
+        elif path == "/portal-voice-clips.js":
+            if self._profile() == "reterminal-sticky-interactive":
+                self._serve_file(APP_WEB_DIR / "portal_voice_clips.js")
+            else:
+                self._serve_json({"error": "Voice clips unavailable"}, 404)
+        elif path == "/portal-bluetooth.js":
+            if self._profile() == "reterminal-sticky-interactive":
+                self._serve_file(APP_WEB_DIR / "portal_bluetooth.js")
+            else:
+                self.send_error(404, "Bluetooth unavailable")
         elif path == "/epaper_init.js":
             self._serve_file(EPAPER_WEB_DIR / "epaper_init.js")
         elif path == "/portal-logs.js":
@@ -310,7 +347,14 @@ class PortalHandler(SimpleHTTPRequestHandler):
 
         # Device API fixtures. POSTs are accepted in do_POST below.
         elif path == "/api/config":
+            if self.server.scenario == "load-error":
+                self._serve_json({"success": False, "message": "Mock configuration load failed"}, 503)
+                return
             config = copy.deepcopy(self.server.mock_config)
+            if self._profile() == "reterminal-sticky-interactive":
+                config["auto_shutdown_timeout_seconds"] = config.get("auto_shutdown_timeout_seconds", 300)
+            else:
+                config.pop("auto_shutdown_timeout_seconds", None)
             config["caps"]["ha_live"] = self._profile() == "esp32-p4-lcd4b"
             if self._profile() in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
                 config.setdefault("external_data", [])
@@ -350,6 +394,20 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 config["caps"].update(ble=False, ble_hid=False, display=True, touch=True, ha_history=True)
             elif self._profile() == "jc3248w535":
                 config["caps"].update(ble=False, ble_hid=False, usb_hid=True, display=True, touch=True, ha_history=True)
+            if self._profile() == "reterminal-sticky-interactive":
+                config["caps"].update(ble=True, ble_hid=False, usb_hid=False, display=True, touch=True)
+            config["caps"]["bthome_events"] = self._bthome_capable()
+            config["caps"]["bluetooth_tx_power"] = self._bthome_capable()
+            for key, value in BTHOME_EVENT_DEFAULTS.items():
+                if self._bthome_capable():
+                    config.setdefault(key, value)
+                else:
+                    config.pop(key, None)
+            for key in ("bluetooth_tx_power_dbm", "bluetooth_active_tx_power_dbm"):
+                if self._bthome_capable():
+                    config.setdefault(key, 9)
+                else:
+                    config.pop(key, None)
             if self._profile() == "crowpanel-4.2-interactive":
                 config["caps"].update(display=True, touch=False)
                 for key, value in EPAPER_PRESENTATION_DEFAULTS.items():
@@ -556,6 +614,10 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 self._serve_bytes(data, content_type)
         elif path == "/api/bindings":
             schema = copy.deepcopy(self.server.pad_fixture["binding_schema"])
+            if self._profile() == "reterminal-sticky-interactive":
+                schema["schemes"].append({"name": "recorder", "min_params": 1, "max_params": 1,
+                    "widget_max_params": 1, "format_param": -1, "validation_mode": 0,
+                    "free_form": False, "keys": ["state", "duration_s", "last_clip", "error"]})
             if not self._mqtt_capable():
                 schema["schemes"] = [scheme for scheme in schema["schemes"] if scheme["name"] != "mqtt"]
             if self._profile() != "esp32-p4-lcd4b":
@@ -566,7 +628,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 # Generated by: build/host-tests/tests/test_binding_schema_full --emit-json
                 docs = json.loads((MOCK_DIR / "binding-docs.json").read_text(encoding="utf-8"))
                 available = {scheme["name"] for scheme in schema["schemes"]}
-                docs["schemes"] = [s for s in docs["schemes"] if s["name"] not in ("alarm", "ha", "ext") or s["name"] in available]
+                docs["schemes"] = [s for s in docs["schemes"] if s["name"] not in ("alarm", "ha", "ext", "recorder") or s["name"] in available]
                 mqtt_scheme = next((scheme for scheme in docs["schemes"] if scheme["name"] == "mqtt"), None)
                 if mqtt_scheme:
                     if not self._mqtt_configured():
@@ -630,8 +692,65 @@ class PortalHandler(SimpleHTTPRequestHandler):
             self._serve_json(self._epaper_status())
 
         # Fragment API — production fragments take precedence.
+        elif path.startswith("/api/component/voice-clips/"):
+            if self._profile() != "reterminal-sticky-interactive":
+                self._serve_json({"error": "Voice clips unavailable"}, 404)
+            elif path.endswith("/status"):
+                self._serve_json({"state": "idle", "error": "", "duration_ms": 0,
+                                  "backend": "littlefs", "total_bytes": 4 * 1024 * 1024,
+                                  "free_bytes": 3 * 1024 * 1024})
+            elif path.endswith("/list"):
+                self._serve_json({"entries": [
+                    {"id": clip_id, "created_at": self.server.mock_voice_clip_times[clip_id],
+                     "size_bytes": len(data), "duration_ms": (len(data) - 44) // 32,
+                     "sample_rate": 16000, "channels": 1}
+                    for clip_id, data in self.server.mock_voice_clips.items()]})
+            elif path.endswith("/file"):
+                clip_id = query.get("id", [""])[0]
+                if not re.fullmatch(r"[0-9a-f]{16}", clip_id):
+                    self._serve_json({"message": "Invalid clip ID"}, 400)
+                elif clip_id not in self.server.mock_voice_clips:
+                    self._serve_json({"message": "Clip not found"}, 404)
+                else:
+                    data = self.server.mock_voice_clips[clip_id]
+                    range_header = self.headers.get("Range")
+                    headers = {"Accept-Ranges": "bytes", "X-Content-Type-Options": "nosniff"}
+                    if "download" in query:
+                        headers["Content-Disposition"] = f'attachment; filename="{clip_id}.wav"'
+                    if range_header:
+                        match = re.fullmatch(r"bytes=([0-9]*)-([0-9]*)", range_header)
+                        first, last = match.groups() if match else ("", "")
+                        valid = bool(match and (first or last) and
+                                     all(not value or int(value) <= 0xffffffffffffffff for value in (first, last)))
+                        if valid and not first:
+                            length = int(last)
+                            valid = length > 0
+                            start, end = max(0, len(data) - length), len(data) - 1
+                        elif valid:
+                            start = int(first)
+                            end = min(int(last), len(data) - 1) if last else len(data) - 1
+                            valid = start < len(data) and start <= end
+                        if not valid:
+                            headers["Content-Range"] = f"bytes */{len(data)}"
+                            self._serve_bytes(b"", "text/plain", 416, headers)
+                        else:
+                            headers["Content-Range"] = f"bytes {start}-{end}/{len(data)}"
+                            self._serve_bytes(data[start:end + 1], "audio/wav", 206, headers)
+                    else:
+                        self._serve_bytes(data, "audio/wav", 200, headers)
+            else:
+                self._serve_json({"error": "Unknown voice clips action"}, 404)
         elif path.startswith("/api/section/"):
             fragment = path[len("/api/section/"):]
+            if fragment == "voice-clips" and self._profile() != "reterminal-sticky-interactive":
+                self.send_error(404, "Voice clips unavailable")
+                return
+            if fragment == "bluetooth" and not self._bthome_capable():
+                self.send_error(404, "BTHome events unavailable")
+                return
+            if fragment == "power-savings" and self._profile() != "reterminal-sticky-interactive":
+                self._serve_json({"error": "Power savings is unavailable"}, 404)
+                return
             if fragment == "external-data" and self._profile() not in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
                 self.send_error(404, "External data unavailable")
                 return
@@ -1034,9 +1153,60 @@ class PortalHandler(SimpleHTTPRequestHandler):
             self._serve_json({"success": True})
             return
 
+        if path == "/api/component/power-savings/activity":
+            if self._profile() != "reterminal-sticky-interactive":
+                self._serve_json({"error": "Power savings is unavailable"}, 404)
+                return
+            self._serve_bytes(b"", "application/json", 204)
+            return
+
         if path == "/api/config":
             try:
                 update = json.loads(body.decode("utf-8"))
+                if not isinstance(update, dict):
+                    self._serve_json({"success": False, "message": "Configuration must be an object"}, 400)
+                    return
+                if "auto_shutdown_timeout_seconds" in update:
+                    seconds = update["auto_shutdown_timeout_seconds"]
+                    if isinstance(seconds, str) and re.fullmatch(r"[0-9]+", seconds):
+                        seconds = int(seconds)
+                    if (self._profile() != "reterminal-sticky-interactive" or
+                            type(seconds) is not int or not 0 <= seconds <= 65535):
+                        self._serve_json({"success": False, "message": "Invalid auto-shutdown timeout"}, 400)
+                        return
+                    update["auto_shutdown_timeout_seconds"] = seconds
+                if "bluetooth_tx_power_dbm" in update:
+                    power = update["bluetooth_tx_power_dbm"]
+                    if isinstance(power, str) and re.fullmatch(r"-?[0-9]{1,10}", power):
+                        power = int(power)
+                    if (not self._bthome_capable() or type(power) is not int or
+                            not -12 <= power <= 9 or power % 3 != 0):
+                        self._serve_json({"success": False, "message": "Invalid Bluetooth transmit power"}, 400)
+                        return
+                    update["bluetooth_tx_power_dbm"] = power
+                if any(key in update for key in BTHOME_EVENT_DEFAULTS):
+                    if not self._bthome_capable():
+                        self._serve_json({"success": False, "message": "BTHome events are unavailable on this firmware"}, 400)
+                        return
+                    candidate = {}
+                    for key, default in BTHOME_EVENT_DEFAULTS.items():
+                        value = update.get(key, self.server.mock_config.get(key, default))
+                        if isinstance(value, str) and re.fullmatch(r"-?[0-9]{1,10}", value):
+                            value = int(value)
+                        if type(value) is not int:
+                            self._serve_json({"success": False, "message": "BTHome event settings must be decimal integers"}, 400)
+                            return
+                        candidate[key] = value
+                    burst = candidate["bthome_event_burst_ms"]
+                    interval = candidate["bthome_event_adv_interval_ms"]
+                    if not (100 <= burst <= 1000
+                            and 20 <= interval <= 300 and burst >= 3 * interval):
+                        self._serve_json({"success": False, "message": "Invalid BTHome event timing tuple"}, 400)
+                        return
+                    update.update(candidate)
+                if self.server.scenario == "save-error":
+                    self._serve_json({"success": False, "message": "Mock configuration save failed"}, 500)
+                    return
                 if "external_data" in update:
                     sources = update.pop("external_data")
                     if not isinstance(sources, list) or len(sources) > 4:
@@ -1092,6 +1262,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             self.server.mock_config["keyboard_status"] = "disabled" if self.server.mock_config["keyboard_transport"] == "none" else "ready"
             self.server.mock_config["current_backlight_brightness"] = self.server.mock_config["backlight_brightness"]
             self.server.mock_config["current_audio_volume"] = self.server.mock_config.get("audio_volume", 70)
+            self.server.mock_config["bluetooth_active_tx_power_dbm"] = self.server.mock_config["bluetooth_tx_power_dbm"]
             self._serve_json({"success": True, "message": "Mock reboot complete"})
         elif path in (
             "/api/component/epaper-status/refresh",
@@ -1129,6 +1300,20 @@ class PortalHandler(SimpleHTTPRequestHandler):
 
     def do_DELETE(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/api/component/voice-clips/delete":
+            if self._profile() != "reterminal-sticky-interactive":
+                self._serve_json({"error": "Voice clips unavailable"}, 404)
+                return
+            clip_id = parse_qs(parsed.query).get("id", [""])[0]
+            if not re.fullmatch(r"[0-9a-f]{16}", clip_id):
+                self._serve_json({"message": "Invalid clip ID"}, 400)
+            elif clip_id not in self.server.mock_voice_clips:
+                self._serve_json({"message": "Clip not found"}, 404)
+            else:
+                del self.server.mock_voice_clips[clip_id]
+                del self.server.mock_voice_clip_times[clip_id]
+                self._serve_json({"success": True})
+            return
         if parsed.path == "/api/mqtt/inspect":
             if not self._mqtt_capable():
                 self._serve_json({"error": "MQTT inspection unavailable"}, 404)
@@ -1242,6 +1427,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
             "{{REBOOT_OVERLAY}}": (APP_WEB_DIR / "_reboot_overlay.html").read_text(encoding="utf-8"),
             "{{BINDING_HELP}}": (APP_WEB_DIR / "_binding_help.html").read_text(encoding="utf-8")
                 if profile in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive") else "",
+            "{{POWER_SAVINGS_SCRIPT}}":
+                '<script src="/portal_power_savings.js?v=dev-mock"></script>'
+                if profile == "reterminal-sticky-interactive" else "",
         }
         for marker, value in replacements.items():
             shell = shell.replace(marker, value)
@@ -1264,6 +1452,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
             flags.add("HAS_HA_LIVE")
         if self._profile() == "crowpanel-4.2-interactive":
             flags = {"HAS_DISPLAY", "HAS_MQTT"}
+        if self._profile() == "reterminal-sticky-interactive":
+            flags = {"HAS_DISPLAY", "HAS_MQTT", "HAS_AUTO_SHUTDOWN"}
         if "HAS_DISPLAY" in flags:
             flags.add("HAS_FACE_WIDGET")
         if self._profile() == "jc3248w535":
@@ -1328,6 +1518,12 @@ class PortalHandler(SimpleHTTPRequestHandler):
             if category["id"] == "connectivity" and profile in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
                 category["items"].append({"id": "external-data", "display_name": "External Data",
                                           "portal_script": "/portal-external-data.js"})
+            if category["id"] == "connectivity" and profile == "reterminal-sticky-interactive":
+                category["items"].append({"id": "bluetooth", "display_name": "Bluetooth",
+                                          "portal_script": "/portal-bluetooth.js"})
+            if category["id"] == "audio" and profile == "reterminal-sticky-interactive":
+                category["items"].append({"id": "voice-clips", "display_name": "Voice clips",
+                                          "portal_script": "/portal-voice-clips.js"})
             if category["id"] == "display" and profile == "crowpanel-4.2-interactive":
                 category["items"].append({"id": "epaper-refresh", "display_name": "E-paper Presentation",
                                           "portal_script": "/portal-epaper-refresh.js"})
@@ -1338,13 +1534,15 @@ class PortalHandler(SimpleHTTPRequestHandler):
                     {"id": "fonts", "display_name": "Fonts", "portal_script": "/portal_fonts.js"},
                 ])
             if category["id"] == "device":
+                if profile == "reterminal-sticky-interactive":
+                    category["items"].append({"id": "power-savings", "display_name": "Power Savings"})
                 category["items"].append({"id": "timezone", "display_name": "Timezone"})
                 category["items"].append({"id": "logs", "display_name": "Logs", "portal_script": "/portal-logs.js"})
             for item in category["items"]:
                 if item["id"] == "ble":
                     item["id"] = "hid"
                     item["display_name"] = "Keyboard, Mouse & Gamepad"
-        if profile in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
+        if profile in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive", "reterminal-sticky-interactive"):
             nav["primary"] = {"fragment": "pad-editor", "label": "Pad Editor", "icon": ""}
             nav["categories"] = [category for category in nav["categories"] if category["id"] != "sensors"]
             return nav
@@ -1372,7 +1570,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             "ap_active": False, "has_mqtt": True, "has_alarm": False,
             "has_audio_amplifier_mute": self._profile() == "esp32-p4-lcd4b",
             "has_touch": True, "has_usb_hid": True, "has_ttf_fonts": self._fonts_available()}
-        if self._profile() in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
+        if self._profile() in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive", "reterminal-sticky-interactive"):
             info.update(device_class="Macropad", board=self._profile(), has_display=True,
                         has_backlight=True, has_audio=True, has_sound_player=True, has_alarm=True,
                         has_native_extensions=True, has_camera=False, has_image_fetch=True,
@@ -1392,8 +1590,19 @@ class PortalHandler(SimpleHTTPRequestHandler):
                             has_backlight=False, has_alarm=False, has_native_extensions=False,
                             has_image_fetch=False, has_image_library=False,
                             display_coord_width=400, display_coord_height=300)
+            if self._profile() == "reterminal-sticky-interactive":
+                info.update(chip_model="ESP32-S3", has_ble=True, has_ble_hid=False, has_usb_hid=False,
+                            has_audio=False, has_sound_player=False, has_backlight=False, has_alarm=False,
+                            has_native_extensions=False, has_image_fetch=False, has_image_library=False,
+                            display_coord_width=384, display_coord_height=472)
             if include_catalog:
-                info["catalog"] = self.server.pad_fixture["catalog"]
+                info["catalog"] = copy.deepcopy(self.server.pad_fixture["catalog"])
+                if self._profile() == "reterminal-sticky-interactive":
+                    info["catalog"].append({"type": "voice_clip", "group": "Audio", "label": "Voice clip",
+                        "editor_fields": [{"name": "command", "label": "Command", "type": "select",
+                                           "default": "start", "options": [
+                                               {"id": command, "label": command.capitalize()}
+                                               for command in ("start", "pause", "resume", "save", "discard")]}]})
                 info["widget_catalog"] = [
                     widget for widget in self.server.pad_fixture["widget_catalog"]
                     if widget.get("type") != "slider" or info["has_touch"]
@@ -1459,11 +1668,13 @@ class PortalHandler(SimpleHTTPRequestHandler):
         config = getattr(self.server, "mock_config", {})
         return isinstance(config.get("mqtt_host"), str) and bool(config["mqtt_host"].strip())
 
-    def _serve_bytes(self, data, content_type, status=200):
+    def _serve_bytes(self, data, content_type, status=200, headers=None):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-cache")
+        for name, value in (headers or {}).items():
+            self.send_header(name, value)
         if hasattr(self, "profile_cookie"):
             self.send_header("Set-Cookie", self.profile_cookie)
         self.end_headers()
@@ -1513,7 +1724,9 @@ def main():
         "duty_cycle_wake_seconds": 120,
         "ble_burst_count": 3,
         "ble_adv_interval_ms": 100,
-        "ble_tx_power_dbm": 9,
+        "bluetooth_tx_power_dbm": 9,
+        "bluetooth_active_tx_power_dbm": 9,
+        **BTHOME_EVENT_DEFAULTS,
         "caps": {"ble": True, "mqtt": True, "ble_hid": True, "usb_hid": True},
         "keyboard_transport": "none",
         "keyboard_active_transport": "none",

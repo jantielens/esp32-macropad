@@ -1,6 +1,6 @@
 ---
 title: Choose live data sources
-description: Read MQTT fields, local sensors, health, time, and network activity without maintaining a separate key catalog.
+description: Read MQTT fields, local sensors, battery information, health, time, and network activity.
 ---
 
 Live data can come from MQTT messages, local sensors, device health, the clock,
@@ -136,8 +136,8 @@ Use `[sensor:key;format|fallback]`, for example:
 ```text
 [sensor:temperature;%.1f|N/A]
 [health:cpu;%.0f]
-[health:rssi]
-[health:ip]
+[health:wifi_rssi]
+[health:wifi_ip]
 ```
 
 Sensor keys depend on registered hardware. Boolean sensor values are 0/1.
@@ -149,6 +149,58 @@ starts sampling. Music analysis is a [separate source](../media/audio.md).
 Health describes this device, not a remote server. For structured health rows,
 use `[health:table]` or `[health:extended_table]` with the
 [Table widget](../widgets/table.md).
+
+## Show battery information
+
+Use `[battery:key;format|fallback]` for board-independent battery information.
+The same pad can run on battery-telemetry boards with different gauges or
+voltage-only monitoring. On these boards, keys remain valid even when the
+provider cannot measure them; unsupported or unavailable
+readings use your fallback, not a successful empty value or an invented zero.
+The live Binding Reference identifies which fields the board supports and
+describes its measurement source and calibration limits.
+
+Boards without battery telemetry omit the entire battery scheme from the
+Binding Reference. Battery tokens on those boards produce `ERR:unknown`, even
+with a fallback; use battery bindings only on boards that list the scheme.
+
+For battery labels, insert these in the button editor and **Save Pad**:
+
+```text
+Battery: [battery:percentage;%.0f|N/A]%
+[battery:status|Unknown]
+Battery draw: [battery:discharge_power;%.2f|N/A] W
+Remaining: [battery:time_remaining;%.0f|N/A] min
+Until full: [battery:time_to_full;%.0f|N/A] min
+```
+
+Numeric fields also work in gauges, bars and sparklines. Use the raw token,
+such as `[battery:discharge_power]`, for the widget input; format its label
+separately. Status is text, not a numeric widget source.
+
+Current is in amperes and signed power is in watts: positive means charging,
+negative means discharging. `discharge_power` is positive battery draw, or zero
+when the measured current is not discharging. On external power, neither reading
+measures total device consumption. `external_power_present` reports supply
+detection separately; it does not prove charging.
+
+Status is Charging, Discharging, Idle or Full only when hardware can establish
+it. A non-charging signal does not necessarily mean Idle, and 100% does not
+prove charge completion. Voltage-only boards cannot supply current or runtime.
+
+Runtime estimates are in minutes and come from the provider, not a calculation
+based only on percentage. `time_remaining` is available only while discharging;
+`time_to_full` only while charging. Their accuracy depends on gauge configuration,
+calibration and future load. Wi-Fi and display activity can change the estimate.
+An unavailable estimate is different from a valid zero-minute estimate.
+
+Measurements expire after three sampling intervals without a successful reading,
+excluding observed OTA sampling pauses. Status and runtime estimates clear
+immediately when invalid or inapplicable. Power clears when a partial sample
+cannot pair new voltage and current; it never multiplies unrelated cached values.
+E-Paper Frame samples follow existing wake/refresh operations, not extra polling,
+and expire after three minutes of active runtime. Reboot or deep sleep clears
+the cache. Unrelated `[sensor:...]` readings retain their own sampling behavior.
 
 ## Read time
 

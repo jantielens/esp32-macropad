@@ -56,6 +56,34 @@ async function uploadFirmware() {
     const xhr = new XMLHttpRequest();
     
     let uploadComplete = false;
+
+    function showUploadError(reason) {
+        message.textContent = 'Upload failed: ' + reason;
+        progressContainer.style.display = 'none';
+        uploadBtn.disabled = false;
+        fileInput.disabled = false;
+        setTimeout(() => { overlay.style.display = 'none'; }, 3000);
+    }
+
+    function reconnectAfterUpload() {
+        progressFill.style.width = '100%';
+        progressText.textContent = '100%';
+        message.textContent = 'Installing firmware & rebooting...';
+        setTimeout(() => {
+            progressContainer.style.display = 'none';
+            document.getElementById('reboot-spinner').style.display = 'block';
+            reconnectStatus.style.display = 'block';
+            const targetAddress = window.location.origin;
+            document.getElementById('reboot-submessage').innerHTML =
+                `Attempting automatic reconnection...<br><small style="color: #888; margin-top: 8px; display: block;">If this fails, manually navigate to: <code style="color: #667eea; font-weight: 600;">${targetAddress}</code></small>`;
+            startReconnection({
+                context: 'ota',
+                newDeviceName: null,
+                statusElement: reconnectStatus,
+                messageElement: message
+            });
+        }, 2000);
+    }
     
     xhr.upload.addEventListener('progress', (e) => {
         if (e.lengthComputable) {
@@ -63,60 +91,17 @@ async function uploadFirmware() {
             progressFill.style.width = percent + '%';
             progressText.textContent = percent + '%';
             
-            // When upload reaches 95%+, show installing message
             if (percent >= 95 && !uploadComplete) {
                 uploadComplete = true;
                 message.textContent = 'Installing firmware & rebooting...';
-                
-                // After a short delay, transition to reconnection
-                setTimeout(() => {
-                    progressContainer.style.display = 'none';
-                    document.getElementById('reboot-spinner').style.display = 'block';
-                    reconnectStatus.style.display = 'block';
-                    
-                    // Start unified reconnection
-                    const targetAddress = window.location.origin;
-                    document.getElementById('reboot-submessage').innerHTML = 
-                        `Attempting automatic reconnection...<br><small style="color: #888; margin-top: 8px; display: block;">If this fails, manually navigate to: <code style="color: #667eea; font-weight: 600;">${targetAddress}</code></small>`;
-                    
-                    startReconnection({
-                        context: 'ota',
-                        newDeviceName: null,
-                        statusElement: reconnectStatus,
-                        messageElement: message
-                    });
-                }, 2000);
             }
         }
     });
     
     xhr.addEventListener('load', () => {
         console.log('[OTA] XHR load event, status:', xhr.status);
-        // Upload complete handler - may not always fire if device reboots quickly
-        if (!uploadComplete && xhr.status === 200) {
-            uploadComplete = true;
-            progressFill.style.width = '100%';
-            progressText.textContent = '100%';
-            message.textContent = 'Installing firmware & rebooting...';
-            
-            setTimeout(() => {
-                progressContainer.style.display = 'none';
-                document.getElementById('reboot-spinner').style.display = 'block';
-                reconnectStatus.style.display = 'block';
-                
-                // Start unified reconnection
-                const targetAddress = window.location.origin;
-                document.getElementById('reboot-submessage').innerHTML = 
-                    `Attempting automatic reconnection...<br><small style="color: #888; margin-top: 8px; display: block;">If this fails, manually navigate to: <code style="color: #667eea; font-weight: 600;">${targetAddress}</code></small>`;
-                
-                startReconnection({
-                    context: 'ota',
-                    newDeviceName: null,
-                    statusElement: reconnectStatus,
-                    messageElement: message
-                });
-            }, 2000);
-        }
+        if (xhr.status === 200) reconnectAfterUpload();
+        else showUploadError((xhr.response && xhr.response.message) || 'HTTP ' + xhr.status);
     });
     
     xhr.addEventListener('error', () => {
@@ -124,21 +109,14 @@ async function uploadFirmware() {
         // Network error - if upload was near complete, assume device is rebooting
         if (uploadComplete) {
             console.log('[OTA] Upload was complete, treating error as device rebooting');
-            // Already handled in progress event
+            reconnectAfterUpload();
         } else {
             console.log('[OTA] Upload failed with network error');
-            message.textContent = 'Upload failed: Network error';
-            progressContainer.style.display = 'none';
-            uploadBtn.disabled = false;
-            fileInput.disabled = false;
-            
-            // Close dialog after 3 seconds
-            setTimeout(() => {
-                overlay.style.display = 'none';
-            }, 3000);
+            showUploadError('Network error');
         }
     });
     
     xhr.open('POST', API_UPDATE);
+    xhr.responseType = 'json';
     xhr.send(formData);
 }

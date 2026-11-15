@@ -31,11 +31,16 @@ PubSubClient@2.8
 # Home Assistant live-data WebSocket transport
 WebSockets@2.7.1
 
+# Sticky broadcast-only BLE backend
+NimBLE-Arduino@2.5.0
+
 # Sensors
 Adafruit BME280 Library
 Adafruit Unified Sensor
 Adafruit TSL2591 Library
 Adafruit AHTX0
+Sensirion I2C SHT4x@1.1.2
+Sensirion Core@0.7.3
 
 # Coffee Scale device class — load-cell ADCs
 SparkFun Qwiic Scale NAU7802 Arduino Library@1.0.6

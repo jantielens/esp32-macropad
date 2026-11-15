@@ -235,6 +235,7 @@ build_board() {
         # NOTE: Keep this allowlist tight; only export values needed by libraries.
         numeric_allowlist=(
             CONFIG_ASYNC_TCP_STACK_SIZE
+            BLE_BACKEND
 
             # TFT_eSPI pinout and SPI frequencies
             TFT_MISO
@@ -296,6 +297,8 @@ build_board() {
     # project's src/ directory as an explicit include path so version.h resolves
     # regardless of staging behavior.
     local PROJECT_INCLUDE="-I$SCRIPT_DIR/src -I$SCRIPT_DIR/src/app"
+
+    EXTRA_GLOBAL_FLAGS+=" -include $SCRIPT_DIR/src/app/ble_build_config.h"
 
     if [[ -d "$board_override_dir" ]]; then
         echo -e "${YELLOW}Config:    Using board-specific overrides from src/boards/$board_name/${NC}"

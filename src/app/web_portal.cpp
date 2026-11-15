@@ -40,6 +40,7 @@
 #include <WiFi.h>
 
 #include <esp_heap_caps.h>
+#include <esp_netif.h>
 
 // Web server on port 80 (pointer to avoid constructor issues)
 AsyncWebServer *server = nullptr;
@@ -51,11 +52,15 @@ bool web_portal_is_ap_mode_active() {
 		return web_portal_is_ap_mode();
 }
 
+bool web_portal_is_recovery_ap_active() {
+		return web_portal_is_recovery_ap();
+}
+
 DeviceConfig* web_portal_get_current_config() {
 		return current_config;
 }
 
-// ===== Basic Auth (optional; STA/full mode only) =====
+// ===== Basic Auth (optional; full portal on STA or live AP) =====
 // (Basic auth gate moved to web_portal_auth.cpp)
 
 // ===== PUBLIC API =====
@@ -63,6 +68,14 @@ DeviceConfig* web_portal_get_current_config() {
 // Initialize web portal
 void web_portal_init(DeviceConfig *config) {
 		LOGT("Portal", "Init start");
+
+		// Offline boot has not initialized lwIP through Wi-Fi, but AsyncTCP
+		// still needs its TCP/IP task and mutexes before opening a listener.
+		const esp_err_t network_init = esp_netif_init();
+		if (network_init != ESP_OK) {
+				LOGE("Portal", "TCP/IP initialization failed: %s", esp_err_to_name(network_init));
+				return;
+		}
 		
 		current_config = config;
 		LOGT("Portal", "Config ptr: %p, backlight_brightness: %d",

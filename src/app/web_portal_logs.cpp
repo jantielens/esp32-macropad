@@ -9,7 +9,7 @@
 
 bool portal_logs_full_mode_enabled() {
     const DeviceConfig* config = web_portal_get_current_config();
-    return !web_portal_is_ap_mode_active() && config;
+    return !web_portal_is_recovery_ap_active() && config;
 }
 
 namespace {

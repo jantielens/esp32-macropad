@@ -103,7 +103,7 @@ bool binding_template_resolve(const char* value, char* output, size_t size) {
 }
 bool binding_template_has_bindings(const char* value) { return value && strchr(value, '['); }
 bool device_dialog_active() { return false; }
-bool device_dialog_notify(const char*, uint32_t) { return true; }
+bool device_dialog_notify(const char*, uint32_t, uint32_t*) { return true; }
 uint32_t swipe_actions_last_swipe_time() { return 0; }
 bool icon_store_lookup(const char*, IconRef* ref) {
     if (!g_selector_icon) return false;
@@ -113,7 +113,7 @@ bool icon_store_lookup(const char*, IconRef* ref) {
 void icon_store_build_option_key(uint8_t, const char*, uint8_t, uint8_t, uint8_t, char*, size_t) {}
 
 ActionResult action_list_dispatch_result(const ButtonAction* actions, uint8_t count,
-                                         const char*, ActionContinuationOwner) {
+                                         const char*, ActionContinuationOwner, bool) {
     if (count) {
         ++g_dispatches;
         g_action_count = count;

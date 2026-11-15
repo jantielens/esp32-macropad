@@ -22,6 +22,7 @@
 // ============================================================================
 
 #include "mcp_tool_registry.h"
+#include "ble_backend.h"
 #include "mcp_tool_util.h"
 #include "web_mcp.h"
 
@@ -30,6 +31,10 @@
 #if HAS_MCP
 
 #include "config_manager.h"
+#if HAS_AUTO_SHUTDOWN
+#include "auto_shutdown.h"
+#include "json_integer.h"
+#endif
 #if HAS_EXTERNAL_DATA
 #include "external_data.h"
 #endif
@@ -171,11 +176,18 @@ static bool tool_get_config(const JsonObject& args, JsonObject& result, String& 
     result["duty_cycle_wake_seconds"]        = c->duty_cycle_wake_seconds;
     result["mqtt_publish_interval_seconds"]  = c->mqtt_publish_interval_seconds;
     result["portal_idle_timeout_seconds"]    = c->portal_idle_timeout_seconds;
+#if HAS_AUTO_SHUTDOWN
+    result["auto_shutdown_timeout_seconds"] = c->auto_shutdown_timeout_seconds;
+#endif
     result["wifi_backoff_max_seconds"]       = c->wifi_backoff_max_seconds;
 #if HAS_BLE
     result["ble_burst_count"]    = c->ble_burst_count;
     result["ble_adv_interval_ms"] = c->ble_adv_interval_ms;
-    result["ble_tx_power_dbm"] = c->ble_tx_power_dbm;
+#endif
+#if HAS_BLE || HAS_BLE_HID
+    if (ble_backend_power_supported()) result["bluetooth_tx_power_dbm"] = c->bluetooth_tx_power_dbm;
+    result["bthome_event_burst_ms"] = c->bthome_event.burst_ms;
+    result["bthome_event_adv_interval_ms"] = c->bthome_event.adv_interval_ms;
 #endif
 
     // Display.
@@ -216,6 +228,9 @@ static bool tool_get_config(const JsonObject& args, JsonObject& result, String& 
     result["writable_note"] =
         "set_config writes only a safe subset: device_name, backlight_brightness, "
         "the screen_saver_* group, mqtt_publish_interval_seconds, mqtt_publish_scope, "
+#if HAS_AUTO_SHUTDOWN
+        "auto_shutdown_timeout_seconds (0-65535 seconds; 0 disables), "
+#endif
         "audio_volume. Credentials, WiFi, operating mode, and security toggles are "
         "read-only here and must be changed in the web portal.";
     return true;
@@ -308,7 +323,6 @@ static bool tool_read_storage_file(const JsonObject& args, JsonObject& result, S
     if (!storage_browser_path_is_safe(path)) {
         return cfg_fail(result, err, CFG_ERR_PARAMS, "invalid storage path");
     }
-
     File file = Storage.open(path, "r");
     if (!file || file.isDirectory()) {
         if (file) file.close();
@@ -784,6 +798,9 @@ struct SetConfigReq {
     bool has_brightness;    uint8_t brightness;
     bool has_pub_interval;  uint16_t pub_interval;
     bool has_pub_scope;     char pub_scope[CONFIG_MQTT_SCOPE_MAX_LEN];
+#if HAS_AUTO_SHUTDOWN
+    bool has_auto_shutdown; uint16_t auto_shutdown;
+#endif
 #if HAS_AUDIO
     bool has_volume;        uint8_t volume;
 #endif
@@ -814,6 +831,10 @@ static void exec_set_config(const void* ctx, bool* ok, char* msg, size_t msg_len
     if (q->has_device_name) strlcpy(cfg->device_name, q->device_name, CONFIG_DEVICE_NAME_MAX_LEN);
     if (q->has_pub_interval) cfg->mqtt_publish_interval_seconds = q->pub_interval;
     if (q->has_pub_scope)    strlcpy(cfg->mqtt_publish_scope, q->pub_scope, CONFIG_MQTT_SCOPE_MAX_LEN);
+#if HAS_AUTO_SHUTDOWN
+    const uint16_t previous_auto_shutdown = cfg->auto_shutdown_timeout_seconds;
+    if (q->has_auto_shutdown) cfg->auto_shutdown_timeout_seconds = q->auto_shutdown;
+#endif
 #if HAS_DISPLAY
     #if !SCREENSAVER_BACKLIGHT_ONLY
     if (q->has_ss_enabled)    cfg->screen_saver_enabled = q->ss_enabled;
@@ -840,6 +861,10 @@ static void exec_set_config(const void* ctx, bool* ok, char* msg, size_t msg_len
 
     cfg->magic = CONFIG_MAGIC;
     bool saved = config_manager_save(cfg);
+#if HAS_AUTO_SHUTDOWN
+    if (!saved) cfg->auto_shutdown_timeout_seconds = previous_auto_shutdown;
+    else if (q->has_auto_shutdown) auto_shutdown_configure(q->auto_shutdown);
+#endif
     if (!saved) strlcpy(cfg->timezone, previous_timezone, sizeof(cfg->timezone));
     heap_caps_free(q);
     if (!saved) { strlcpy(msg, "save failed", msg_len); return; }
@@ -873,6 +898,19 @@ static bool tool_set_config(const JsonObject& args, JsonObject& result, String& 
         applied.add("device_name");
         reboot_note = true;  // mDNS/hostname refresh needs a reboot
     }
+#if HAS_AUTO_SHUTDOWN
+    if (args.containsKey("auto_shutdown_timeout_seconds")) {
+        int32_t seconds = 0;
+        if (!parse_json_integer(args["auto_shutdown_timeout_seconds"], seconds) ||
+            seconds < 0 || seconds > UINT16_MAX) {
+            heap_caps_free(q);
+            return cfg_fail(result, err, CFG_ERR_PARAMS, "Auto-shutdown timeout must be an integer from 0 to 65535 seconds");
+        }
+        q->has_auto_shutdown = true;
+        q->auto_shutdown = static_cast<uint16_t>(seconds);
+        applied.add("auto_shutdown_timeout_seconds");
+    }
+#endif
     if (args.containsKey("backlight_brightness")) {
         int b = args["backlight_brightness"] | -1;
         if (b < MIN_USER_BRIGHTNESS || b > 100) {
@@ -1171,12 +1209,19 @@ static const McpTool s_tool_set_config = {
     "screen_saver_wake_on_touch, screen_saver_wake_binding), mqtt_publish_interval_seconds, "
     "mqtt_publish_scope (sensors_only|diagnostics_only|all), and audio_volume (0-100). Send only the fields "
     "you want to change; unknown/omitted fields are left untouched. Returns the 'applied' list. "
+#if HAS_AUTO_SHUTDOWN
+    "auto_shutdown_timeout_seconds (0-65535; 0 disables) also applies live and can later power off "
+    "an inactive battery-powered device; timers and alarms do not keep it awake. "
+#endif
     "device_name persists immediately but its mDNS/hostname only refreshes on the next reboot "
     "(reboot_recommended=true). WiFi/MQTT/HA credentials, operating mode, and security toggles are NOT "
     "writable here (they can disconnect this session) — change those in the web portal.",
     "{\"type\":\"object\",\"properties\":{"
     "\"device_name\":{\"type\":\"string\"},"
     "\"timezone\":{\"type\":\"string\",\"maxLength\":63},"
+#if HAS_AUTO_SHUTDOWN
+    "\"auto_shutdown_timeout_seconds\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":65535},"
+#endif
     "\"backlight_brightness\":{\"type\":\"integer\",\"minimum\":" MCP_CONFIG_STRINGIFY(MIN_USER_BRIGHTNESS) ",\"maximum\":100},"
     "\"mqtt_publish_interval_seconds\":{\"type\":\"integer\",\"minimum\":0},"
     "\"mqtt_publish_scope\":{\"type\":\"string\",\"enum\":[\"sensors_only\",\"diagnostics_only\",\"all\"]},"
@@ -1275,6 +1320,9 @@ void mcp_config_capabilities(JsonObject& out) {
     snprintf(brightness_description, sizeof(brightness_description), "int %d-100 (persisted + applied live)", MIN_USER_BRIGHTNESS);
     sc["backlight_brightness"] = brightness_description;
     sc["mqtt_publish_interval_seconds"] = "int seconds (0 = disabled)";
+#if HAS_AUTO_SHUTDOWN
+    sc["auto_shutdown_timeout_seconds"] = "int 0-65535 seconds on battery (0 = disabled); persisted and applied live";
+#endif
     sc["mqtt_publish_scope"] = "sensors_only | diagnostics_only | all";
 #if HAS_AUDIO
     sc["audio_volume"] = "int 0-100";

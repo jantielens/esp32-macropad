@@ -3,7 +3,7 @@
   <p>Configure wireless network connection.</p>
 </div>
 <div id="setup-notice" class="alert alert-info" style="display:none;">
-  <strong>First-Time Setup:</strong> Enter your WiFi credentials to connect the device to your network.
+  <strong>Recovery portal:</strong> Configure WiFi for online operation. On devices that support Offline operating mode, select it to run without WiFi.
 </div>
 <section class="card mb-3" aria-labelledby="wifi-network-heading">
   <div class="card-header"><h5 class="mb-0" id="wifi-network-heading">WiFi Network</h5></div>
@@ -11,6 +11,7 @@
     <div class="mb-3">
       <label class="form-label" for="wifi_ssid">WiFi SSID</label>
       <input type="text" class="form-control" id="wifi_ssid" name="wifi_ssid">
+      <div class="form-text">Required for online operation. Optional in Offline operating mode; saved credentials are kept but not used until you choose an online mode.</div>
     </div>
     <div class="mb-3">
       <label class="form-label" for="wifi_password">WiFi Password</label>
@@ -19,22 +20,23 @@
     </div>
   </div>
 </section>
-<section class="card mb-3" aria-labelledby="wifi-setup-ap-heading">
-  <div class="card-header"><h5 class="mb-0" id="wifi-setup-ap-heading">Setup AP &amp; Fallback</h5></div>
+<section class="card mb-3" aria-labelledby="wifi-ap-heading">
+  <div class="card-header"><h5 class="mb-0" id="wifi-ap-heading">AP &amp; Fallback</h5></div>
   <div class="card-body">
-    <p>If this device cannot connect to its configured WiFi network during normal boot, it can create its own setup access point (AP). Connect to this network from your phone or computer to restore access, for example after changing your router or WiFi credentials. Set a password below to protect the setup network.</p>
-    <p>Choose <strong>Continue offline</strong> to disable this automatic AP fallback and start local features without network services instead. You can still start the setup AP using <strong>Restart into setup AP</strong> or the device's recovery procedure. First-time setup also remains available. This setting does not change runtime WiFi reconnection or duty-cycle behavior.</p>
+    <p>If this device cannot connect to its configured WiFi network during an online boot, it can create its own access point (AP). Connect from your phone or computer to restore access, for example after changing your router or WiFi credentials. The AP password below protects this recovery network.</p>
+    <p><strong>Continue offline</strong> still tries WiFi first, then starts local features without network services if the connection fails. Unlike <strong>Offline</strong> operating mode, it does not skip WiFi startup. This fallback setting does not change runtime WiFi reconnection or duty-cycle behavior.</p>
+    <p>On devices that support <strong>Offline</strong> operating mode, WiFi and automatic AP fallback are not started when that mode is selected. Use the device's recovery procedure to open the AP or Config portal and change settings. Recovery and first-time setup remain available independently of the normal operating mode.</p>
     <div class="mb-3">
       <label class="form-label" for="wifi_failure_mode">When WiFi connection fails</label>
       <select class="form-select" id="wifi_failure_mode" name="wifi_failure_mode">
-        <option value="ap">Start setup AP</option>
+        <option value="ap">Start AP</option>
         <option value="offline">Continue offline</option>
       </select>
     </div>
     <div class="mb-3">
-      <label class="form-label" for="ap_password">Setup AP password</label>
+      <label class="form-label" for="ap_password">AP password</label>
       <input type="text" class="form-control" id="ap_password" name="ap_password" maxlength="63" autocomplete="off">
-      <div class="form-text">Shown in plain text so it can be shared. Leave empty for an open AP. Use 8-63 printable ASCII characters; changes apply the next time the setup AP starts.</div>
+      <div class="form-text">Shown in plain text so it can be shared. Leave empty for an open AP. Use 8-63 printable ASCII characters; changes apply the next time the AP starts.</div>
     </div>
   </div>
 </section>

@@ -1,12 +1,12 @@
 ---
 title: Set up Home Assistant
-description: Choose independent MQTT and direct HA paths, display live entity state, and configure service actions.
+description: Choose MQTT, direct HA, or BTHome Bluetooth integration, display live state, and configure actions.
 ---
 
 Home Assistant integration works in both directions: HA can monitor or control
-the device, and device actions can call HA services. MQTT and direct HA access
-are separate connection paths, so you only need to configure the ones your
-workflow uses.
+the device, and device actions can call HA services or broadcast Bluetooth
+button events. MQTT, direct HA access, and BTHome Bluetooth are separate
+connection paths. Configure only the ones your workflow uses.
 
 ## Choose a connection path
 
@@ -17,6 +17,87 @@ Direct live bindings, service actions, and Sparkline history share HA URL/token 
 They do not require MQTT. Either path can be used independently.
 Discovery does not enable service calls, and saving an HA token does not create
 an MQTT broker.
+
+BTHome broadcasts button events over Bluetooth. It needs HA's Bluetooth and
+BTHome integrations, but no MQTT broker, HA URL/token, or BLE keyboard pairing.
+Sensor telemetry can keep using MQTT.
+
+## Send a BTHome button event
+
+On BLE-capable firmware, choose **Connectivity > Send BTHome event** in a
+button's action dropdown. This sends a logical remote-control event; it does
+not call an HA service directly.
+
+Open the portal's **Connectivity > Bluetooth** section. **Bluetooth Transmit
+Power** is shared by BTHome button events, Bluetooth keyboard/mouse/gamepad
+HID, and sensor duty-cycle telemetry. It defaults to **+9 dBm**; choose -12
+to +9 dBm in 3 dBm steps. Higher power can improve reception but uses more
+energy. Choose **Save Transmit Power**, then reboot to apply it. Saving alone
+does not change the running radio. Hosted Bluetooth backends leave power
+under co-processor control and disable this selector.
+
+In **BTHome Button Event Publishing**, burst duration defaults to **350 ms**
+and accepts 100-1000 ms.
+Under **Advanced**, advertising interval defaults to **100 ms** and accepts
+20-300 ms. Duration must be at least three intervals. Longer bursts add
+reception opportunities but delay queued events; neither duration nor interval
+guarantees a packet count or delivery.
+
+Choose **Save Event Settings** to apply timing to the next event burst without
+reboot. A burst already running retains its original timing. These timing
+controls do not change sensor duty-cycle telemetry or HID. Each section saves
+only its own controls.
+
+1. Select **Button number** from **Button 1** through **Button 10**.
+   Numbers are device-wide, not pad/grid positions. Reusing the same number
+   and event on another pad deliberately triggers the same HA automation.
+2. Select **Event**: **Press**, **Double press**, or **Long press**.
+   The configured event is sent immediately when the action runs. Selecting
+   Long press does not require physically holding the button; put the action
+   in the pad button's Long-press list if you want that gesture.
+3. Choose **Save Pad**. No reboot is required for action changes.
+4. Ensure HA has a working Bluetooth adapter or Bluetooth proxy in range.
+   Activate the action, then add the discovered **BTHome** device under
+   **Settings > Devices & services**.
+5. Activate each logical button number you intend to use so HA discovers its
+   events. Create an automation with that device as the trigger, selecting the
+   matching button number and event. HA can list additional standard events;
+   this firmware sends only the three offered above.
+6. For example, match **Button 4 / Long press**, choose a harmless action such
+   as activating a scene, save the automation, and activate the pad action again.
+
+The ten button numbers and three event types give 30 combinations. Button
+numbering stays stable regardless of which pad is active. The action works
+with keyboard transport Off, USB, or BLE. BLE keyboard advertising pauses
+briefly for each event burst; an established HID connection stays connected.
+
+Events use short, unencrypted, repeated advertisements with packet IDs for
+duplicate filtering. They are best-effort: a queued or advertised event is not
+confirmation that HA received or executed it. Nearby devices can observe or
+spoof broadcasts, so do not use them for security-sensitive operations.
+Four events can wait behind the active burst. A full queue rejects the newest
+action, logs a warning, and stops its remaining action list. OTA cancels
+pending event work; rejected or cancelled events are not retried.
+
+## Use BTHome with Offline boot
+
+On supported interactive BLE firmware, configure pad or
+[physical-button actions](../device/triggers.md#physical-buttons) to send the
+events above. Set up the matching HA automations, then select **Offline** under
+**Device > Operating Mode**, save, and reboot. The device starts local controls
+without a Wi-Fi connection attempt or automatic AP and can broadcast BTHome
+events with no MQTT broker or HA URL/token configured.
+
+HA still needs a Bluetooth adapter or proxy within range; the receiver's own
+network requirements are separate. Input feedback or event queue acceptance
+does not confirm that HA received or executed an automation. BTHome supplies
+remote-control events, not acknowledgement or the actual state of the target.
+
+Configure an **Enable AP** action before switching modes if you want direct
+portal access for maintenance. Wi-Fi and AP commands leave BTHome publishing
+available and do not change the saved boot mode. See
+[network access](../device/network-and-access.md#enable-network-access-from-an-action)
+for password, login, and recovery behavior.
 
 ## Discover the device
 

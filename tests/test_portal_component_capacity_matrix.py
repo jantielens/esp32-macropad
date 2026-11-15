@@ -42,7 +42,9 @@ def board_macros(board: str) -> dict[str, str]:
     source = '#include "board_config.h"\n'
     result = subprocess.run(
         ["g++", "-dM", "-E", "-x", "c++", "-DBOARD_HAS_OVERRIDE",
-         "-DHAS_PSRAM=1", "-I", str(overrides), "-I", str(APP), "-"],
+         "-DHAS_PSRAM=1", "-I", str(overrides), "-I", str(APP)]
+        + (["-DCONFIG_IDF_TARGET_ESP32S3=1"] if board.startswith("reterminal-sticky-interactive") else [])
+        + ["-"],
         input=source, text=True, capture_output=True,
     )
     if result.returncode:

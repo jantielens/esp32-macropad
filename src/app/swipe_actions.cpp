@@ -55,7 +55,7 @@ static void on_gesture(lv_event_t*) {
     }
 #endif
 
-    action_dispatch(*act, dir_label);
+    action_dispatch(*act, dir_label, 0, true);
 
     // Suppress further touch events from this gesture (prevents multi-fire
     // when finger is still moving after screen transition)

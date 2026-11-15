@@ -8,6 +8,9 @@
 #include "ha_discovery.h"
 #include "log_manager.h"
 #include "mqtt_manager.h"
+#if HAS_BATTERY_INFO
+#include "sensors/sensor_manager.h"
+#endif
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
@@ -121,6 +124,10 @@ bool epaper_frame_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
 		StaticJsonDocument<1280> doc;
 		doc["battery_mv"]      = outcome.battery_mv;
 		doc["battery_pct"]     = epaper_frame_battery_percent(outcome.battery_mv);
+#if HAS_BATTERY_INFO
+		JsonObject battery_state = doc.as<JsonObject>();
+		sensor_manager_append_battery_mqtt(battery_state);
+#endif
 		doc["wifi_rssi"]       = timing ? timing->wifi_rssi : (int16_t)WiFi.RSSI();
 		doc["image_crc32"]     = outcome.crc_used;
 		doc["refresh_result"]  = refresh_result_to_str(outcome.result);
@@ -165,7 +172,8 @@ bool epaper_frame_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
 						g_epaper_offline_telemetry.latest_image_key;
 		}
 
-		const bool ok = mqtt_manager.publishJson(topic, doc, true /*retained*/);
+		if (doc.overflowed()) LOGE("Epaper", "MQTT telemetry JSON capacity exceeded");
+		const bool ok = !doc.overflowed() && mqtt_manager.publishJson(topic, doc, true /*retained*/);
 		if (ok) {
 				if (g_pending_offline_ack_id != 0) {
 						const uint32_t started_ms = millis();

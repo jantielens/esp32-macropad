@@ -26,6 +26,9 @@
 // with duty_cycle_epaper_frame preselected and a "debug only" note).
 #include "components/mode_component.cpp"
 #endif
+#if HAS_AUTO_SHUTDOWN
+#include "components/power_savings_component.cpp"
+#endif
 #include "components/factory_reset_component.cpp"
 #include "components/ota_update_component.cpp"
 #include "components/manual_upload_component.cpp"
@@ -95,6 +98,9 @@
 #endif // HAS_MCP
 
 // --- BLE-gated components ---
+#if HAS_BLE || HAS_BLE_HID
+#include "components/bluetooth_component.cpp"
+#endif
 #if HAS_BLE_HID || HAS_USB_HID
 #include "components/hid_component.cpp"
 #endif
@@ -109,6 +115,10 @@
 #include "components/sounds_component.cpp"
 #include "components/music_component.cpp"
 #endif // HAS_SOUND_PLAYER
+
+#if HAS_VOICE_CLIPS
+#include "components/voice_clips_component.cpp"
+#endif
 
 #if HAS_TTF_FONTS
 #include "components/fonts_component.cpp"

@@ -487,7 +487,7 @@ static void slider_release_gesture(SliderState* state) {
     bool deleted = false;
     lv_obj_add_event_cb(button, slider_delete_guard, LV_EVENT_DELETE, &deleted);
     const ActionResult result = action_list_dispatch_result(
-        actions, state->action_count, "SliderValue", ACTION_CONTINUATION_OWNER_LVGL);
+        actions, state->action_count, "SliderValue", ACTION_CONTINUATION_OWNER_LVGL, true);
     if (deleted) return;
     lv_obj_remove_event_cb_with_user_data(button, slider_delete_guard, &deleted);
     if (result == ACTION_FAILED) {

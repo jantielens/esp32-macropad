@@ -19,6 +19,8 @@ void display_manager_lock_if_needed(bool* did_lock) {
 }
 
 void display_manager_unlock_if_needed(bool) {}
+static unsigned binding_refreshes = 0;
+void display_manager_request_binding_refresh() { ++binding_refreshes; }
 void ha_service_execute() {}
 extern "C" unsigned long millis() { return 0; }
 
@@ -74,6 +76,36 @@ int main() {
     if (action_dispatch(set_variable_action("empty_value", ""), "empty_value") != ACTION_COMPLETE ||
         runtime_variable_get("empty_value", value, sizeof(value)) != RUNTIME_VARIABLE_FOUND || value[0]) {
         std::puts("FAIL: action stores a valid empty string");
+        return 1;
+    }
+    runtime_variable_set("counter", "0");
+
+    const unsigned before_refresh = binding_refreshes;
+    if (action_list_dispatch_result(sequential, 2, "User", ACTION_CONTINUATION_OWNER_LVGL, true) != ACTION_COMPLETE ||
+        !get_equals("counter", "2") ||
+        binding_refreshes != before_refresh + (HAS_DISPLAY ? 2 : 0) ||
+        action_dispatch_context().interactive) {
+        std::puts("FAIL: user mutations notify the UI without leaking interaction origin");
+        return 1;
+    }
+    const unsigned after_refresh = binding_refreshes;
+    if (action_dispatch(set_variable_action("counter", "2"), "Unchanged", 0, true) != ACTION_COMPLETE ||
+        action_dispatch(set_variable_action("counter", "[var:missing]"), "Failed", 0, true) != ACTION_FAILED ||
+        !get_equals("counter", "2") || binding_refreshes != after_refresh) {
+        std::puts("FAIL: unchanged or failed assignments do not request immediate UI work");
+        return 1;
+    }
+    if (action_dispatch(increment, "Background") != ACTION_COMPLETE ||
+        binding_refreshes != after_refresh) {
+        std::puts("FAIL: unchanged or background writes do not request immediate UI work");
+        return 1;
+    }
+    ButtonAction partial[] = {increment, set_variable_action("counter", "[var:missing]")};
+    if (action_list_dispatch_result(partial, 2, "Partial", ACTION_CONTINUATION_OWNER_LVGL, true) != ACTION_FAILED ||
+        !get_equals("counter", "4") ||
+        binding_refreshes != after_refresh + (HAS_DISPLAY ? 1 : 0) ||
+        action_dispatch_context().interactive) {
+        std::puts("FAIL: successful mutations remain refreshable after a later action fails");
         return 1;
     }
     runtime_variable_set("counter", "0");

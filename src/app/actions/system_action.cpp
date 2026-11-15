@@ -1,7 +1,7 @@
 #include "action_registry.h"
 #include "log_manager.h"
-#if defined(ARDUINO)
 #include "wifi_manager.h"
+#if defined(ARDUINO)
 #include "power_manager.h"
 #include "main_loop_bridge.h"
 #include "reboot_service.h"
@@ -20,10 +20,10 @@ constexpr const char* kSystemActionTag = "Action";
 void restart_into_setup_ap(const void*, bool* ok, char*, size_t) {
     *ok = power_manager_request_setup_ap_restart();
     if (!*ok) {
-        LOGE(kSystemActionTag, "Setup AP restart request failed");
+        LOGE(kSystemActionTag, "AP restart request failed");
         return;
     }
-    LOGI(kSystemActionTag, "Restarting into setup AP");
+    LOGI(kSystemActionTag, "Restarting into AP");
     reboot_request(200, REBOOT_NETWORK_TRANSITION);
 }
 #endif
@@ -52,10 +52,12 @@ ActionResult dispatch_system(const ButtonAction& act, const char* label, uint32_
             return ACTION_FAILED;
         }
 #endif
-    } else if (strcmp(command, "wifi_reconnect") == 0) {
-        LOGI(kSystemActionTag, "%s system: wifi_reconnect", label);
+    } else if (wifi_network_command_from_string(command) != WifiNetworkCommand::None) {
+        LOGI(kSystemActionTag, "%s system: %s", label, command);
 #if defined(ARDUINO)
-        wifi_manager_request_reconnect();
+        if (!wifi_manager_request_network_command(wifi_network_command_from_string(command))) {
+            return ACTION_FAILED;
+        }
 #endif
     } else if (strcmp(command, "screensaver") == 0) {
 #if defined(ARDUINO) && HAS_DISPLAY
@@ -73,6 +75,7 @@ ActionResult dispatch_system(const ButtonAction& act, const char* label, uint32_
     #endif
     } else {
         LOGW(kSystemActionTag, "%s system: unknown command '%s'", label, command);
+        return ACTION_FAILED;
     }
     return ACTION_COMPLETE;
 }
@@ -82,7 +85,7 @@ const char* validate_system(const JsonObjectConst action) {
     if (!action["system_command"].is<const char*>()) return "system_command must be a string";
     const char* command = action["system_command"].as<const char*>();
     if (strcmp(command, "reboot") == 0 || strcmp(command, "reboot_ap") == 0 ||
-        strcmp(command, "wifi_reconnect") == 0) return nullptr;
+        wifi_network_command_from_string(command) != WifiNetworkCommand::None) return nullptr;
     return (strcmp(command, "screensaver") == 0 || strcmp(command, "wake_display") == 0) && HAS_DISPLAY
         ? nullptr : "unknown system command";
 }
@@ -93,8 +96,13 @@ void describe_system(JsonObject& action) {
     action["group"] = "Device"; action["label"] = "Device command";
     JsonArray commands = action.createNestedArray("commands");
     JsonObject reboot = commands.createNestedObject(); reboot["id"] = "reboot"; reboot["label"] = "Restart device";
-    JsonObject reboot_ap = commands.createNestedObject(); reboot_ap["id"] = "reboot_ap"; reboot_ap["label"] = "Restart into setup AP";
-    JsonObject reconnect = commands.createNestedObject(); reconnect["id"] = "wifi_reconnect"; reconnect["label"] = "Reconnect Wi-Fi";
+    JsonObject reboot_ap = commands.createNestedObject(); reboot_ap["id"] = "reboot_ap"; reboot_ap["label"] = "Restart into AP";
+    JsonObject connect = commands.createNestedObject(); connect["id"] = "wifi_connect"; connect["label"] = "Connect to Wi-Fi";
+    JsonObject disconnect = commands.createNestedObject(); disconnect["id"] = "wifi_disconnect"; disconnect["label"] = "Disconnect from Wi-Fi";
+    JsonObject off = commands.createNestedObject(); off["id"] = "wifi_off"; off["label"] = "Turn off Wi-Fi";
+    JsonObject ap_enable = commands.createNestedObject(); ap_enable["id"] = "ap_enable"; ap_enable["label"] = "Enable AP";
+    JsonObject ap_disable = commands.createNestedObject(); ap_disable["id"] = "ap_disable"; ap_disable["label"] = "Disable AP";
+    action["note"] = "Connect to Wi-Fi turns Wi-Fi on and tries the configured network, replacing AP. Disconnect from Wi-Fi turns Wi-Fi off but leaves an active AP unchanged. Turn off Wi-Fi stops both network and AP access; Bluetooth remains available. Commands acknowledge a request, not readiness, and do not change the saved operating mode. Enable AP keeps the current pad; Restart into AP enters recovery.";
 #if HAS_DISPLAY
     JsonObject saver = commands.createNestedObject(); saver["id"] = "screensaver"; saver["label"] = "Enable screensaver";
     JsonObject wake = commands.createNestedObject(); wake["id"] = "wake_display"; wake["label"] = "Wake display";

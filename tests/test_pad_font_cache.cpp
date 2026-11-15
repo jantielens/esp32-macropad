@@ -403,16 +403,43 @@ int main(int argument_count, char** arguments) {
     glyph_delta = freetype_mono_font_get_stats().since(glyph_before);
     CHECK(glyph_delta.hits == 2 && glyph_delta.misses == 0 && glyph_delta.miss_us == 0);
 #endif
-    lv_font_glyph_dsc_t held[16]{};
-    for (unsigned index = 0; index < 16; ++index) {
-        CHECK(lv_font_get_glyph_dsc(reference, &held[index], 'A' + index, 0));
+    std::vector<uint32_t> characters;
+    std::unordered_set<uint32_t> glyph_indices;
+    for (uint32_t character = 0x21; character <= 0x2ff && characters.size() < 97; ++character) {
+        lv_font_glyph_dsc_t glyph{};
+        if (reference->get_glyph_dsc(reference, &glyph, character, 0) &&
+            glyph.box_w && glyph.box_h && glyph_indices.insert(glyph.gid.index).second)
+            characters.push_back(character);
+    }
+    CHECK(characters.size() == 97);
+    if (characters.size() != 97) {
+        freetype_mono_font_destroy(reference);
+        lv_deinit();
+        return 1;
+    }
+    std::vector<GlyphImage> warmed_glyphs;
+    for (unsigned index = 0; index < 96; ++index)
+        warmed_glyphs.push_back(glyph_image(reference, characters[index]));
+#if HAS_DISPLAY_DIAGNOSTICS
+    glyph_before = freetype_mono_font_get_stats();
+#endif
+    for (unsigned visit = 0; visit < 2; ++visit)
+        for (unsigned index = 0; index < warmed_glyphs.size(); ++index)
+            CHECK(glyph_image(reference, characters[index]) == warmed_glyphs[index]);
+#if HAS_DISPLAY_DIAGNOSTICS
+    glyph_delta = freetype_mono_font_get_stats().since(glyph_before);
+    CHECK(glyph_delta.misses == 0 && glyph_delta.evictions == 0 && glyph_delta.failures == 0);
+#endif
+    lv_font_glyph_dsc_t held[96]{};
+    for (unsigned index = 0; index < 96; ++index) {
+        CHECK(lv_font_get_glyph_dsc(reference, &held[index], characters[index], 0));
         CHECK(lv_font_get_glyph_bitmap(&held[index], nullptr) != nullptr);
     }
     lv_font_glyph_dsc_t full{};
 #if HAS_DISPLAY_DIAGNOSTICS
     glyph_before = freetype_mono_font_get_stats();
 #endif
-    CHECK(!reference->get_glyph_dsc(reference, &full, 'Q', 0));
+    CHECK(!reference->get_glyph_dsc(reference, &full, characters[96], 0));
 #if HAS_DISPLAY_DIAGNOSTICS
     glyph_delta = freetype_mono_font_get_stats().since(glyph_before);
     CHECK(glyph_delta.misses == 1 && glyph_delta.failures == 1 && glyph_delta.evictions == 0);
@@ -422,12 +449,15 @@ int main(int argument_count, char** arguments) {
 #if HAS_DISPLAY_DIAGNOSTICS
     glyph_before = freetype_mono_font_get_stats();
 #endif
-    CHECK(!glyph_image(reference, 'Q').pixels.empty());
+    CHECK(!glyph_image(reference, characters[96]).pixels.empty());
 #if HAS_DISPLAY_DIAGNOSTICS
     glyph_delta = freetype_mono_font_get_stats().since(glyph_before);
     CHECK(glyph_delta.misses == 1 && glyph_delta.evictions == 1 && glyph_delta.failures == 0);
 #endif
-    for (unsigned index = 1; index < 16; ++index) lv_font_glyph_release_draw_data(&held[index]);
+    for (unsigned index = 1; index < 96; ++index) {
+        CHECK(glyph_image(reference, characters[index]) == warmed_glyphs[index]);
+        lv_font_glyph_release_draw_data(&held[index]);
+    }
     freetype_mono_font_destroy(reference);
     for (int budget = 0; budget < 100; ++budget) {
         allocation_budget = budget;
@@ -465,7 +495,7 @@ int main(int argument_count, char** arguments) {
         allocation_budget = -1;
         CHECK(glyph_image(font, 'W') == expected);
         CHECK(glyph_image(font, 'A').pixels.size() > 0);
-        for (unsigned character = 'B'; character <= 'Z'; ++character) glyph_image(font, character);
+        for (uint32_t character : characters) glyph_image(font, character);
         CHECK(!memcmp(saved.data(), bitmap->data, saved.size()));
         lv_font_glyph_release_draw_data(&pinned);
         freetype_mono_font_destroy(font);

@@ -11,18 +11,11 @@ uint8_t battery_adc_lipo_percentage(float voltage);
 #if HAS_SENSOR_BATTERY_ADC
 
 #include <Arduino.h>
-#include <ArduinoJson.h>
 
 class BatteryAdcSensor {
 public:
 	bool begin();
 	void update();
-	void appendJson(JsonObject &doc);
-
-#if HAS_MQTT
-	void publishHaDiscovery(class MqttManager &mqtt);
-#endif
-
 	bool available() const { return _available; }
 	bool hasValidReading() const { return _has_valid_reading; }
 	float voltage() const { return _voltage; }

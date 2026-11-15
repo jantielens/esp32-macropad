@@ -49,6 +49,13 @@ you intend to use on your revision before relying on battery-powered operation.
 
 ## Board actions
 
+Optional battery inactivity shutdown is available under **Device > Power
+Savings**, but defaults to **0 (disabled)** so existing timing sessions are not
+interrupted. Enable it by setting a timeout in seconds. Running timers do not
+block shutdown and are not restored when the device starts again. See
+[automatic shutdown](../../../docs/user/device/display-and-sleep.md#save-battery-power-with-automatic-shutdown).
+Use the normal power button to restart.
+
 Configure yellow/blue tap and hold actions in the portal. The **M5Stack
 StopWatch** action group adds:
 
@@ -63,6 +70,21 @@ StopWatch** action group adds:
 * **Shutdown:** stops audio and vibration, cancels the remaining actions, and
   powers off. It is rejected during active OTA. It does not save unsaved
   portal edits or finish uploads; save/complete those first.
+
+## Battery readings
+
+The M5PM1 supplies measured voltage and an approximate voltage-derived
+single-cell LiPo percentage through `[battery:voltage]` and
+`[battery:percentage]`. A valid charger signal supplies Charging status;
+non-charging status remains unavailable because that signal alone cannot
+distinguish Discharging, Idle or Full. Current, power and runtime estimates
+are not measured. `[battery:external_power_present]` reports whether the PMIC
+input voltage exceeds 4 V; it does not prove charging.
+
+The provider samples every two seconds. Measurements expire after six seconds
+without success, excluding observed OTA pauses; invalid status clears immediately.
+See [shared battery bindings](../../../docs/user/pads/data-sources.md#show-battery-information)
+for formatting and fallbacks. Telemetry does not change charging controls.
 
 ## Configured onboard signals
 

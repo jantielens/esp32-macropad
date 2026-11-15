@@ -163,11 +163,20 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		// Exactly one #if variant matches per build, so the browser fetches the
 		// entire portal JS in one request with one gzip member (see handlePortalJS).
 		server->on("/portal.js", HTTP_GET, handlePortalJS);
+		#if HAS_BLE || HAS_BLE_HID
+		server->on("/portal-bluetooth.js", HTTP_GET, handlePortalBluetoothJS);
+		#endif
+		#if HAS_AUTO_SHUTDOWN
+		server->on("/portal_power_savings.js", HTTP_GET, handlePortalPowerSavingsJS);
+		#endif
 		#if ALARM_ENABLED
 		server->on("/portal_alarms.js", HTTP_GET, handlePortalAlarmsJS);
 		#endif
 		#if HAS_EXTERNAL_DATA
 		server->on("/portal-external-data.js", HTTP_GET, handlePortalExternalDataJS);
+		#endif
+		#if HAS_VOICE_CLIPS
+		server->on("/portal-voice-clips.js", HTTP_GET, handlePortalVoiceClipsJS);
 		#endif
 			 #if HAS_REMOTE_LOG
 		server->on("/portal-logs.js", HTTP_GET, handlePortalLogsJS);

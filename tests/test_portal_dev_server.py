@@ -88,6 +88,123 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertIn("Data binding", fragment)
         self.assertNotIn("pad-slider-preview", fragment)
         self.assertNotIn('id="binding-help-overlay"', fragment)
+
+    def test_power_savings_capability_and_round_trip(self):
+        profile = "reterminal-sticky-interactive"
+        self.server.mock_config.pop("auto_shutdown_timeout_seconds", None)
+        self.assertEqual(self.request("/api/config", profile=profile)[1]["auto_shutdown_timeout_seconds"], 300)
+        for value in ("0", "65535"):
+            status, result = self.request("/api/config?no_reboot=1", "POST",
+                                          {"auto_shutdown_timeout_seconds": value}, profile=profile)
+            self.assertEqual(status, 200)
+            self.assertTrue(result["success"])
+            self.assertEqual(self.request("/api/config", profile=profile)[1]["auto_shutdown_timeout_seconds"], int(value))
+        for value in (-1, 65536, 1.5, True, "", "300s"):
+            self.assertEqual(self.request("/api/config", "POST",
+                                         {"auto_shutdown_timeout_seconds": value}, profile=profile)[0], 400)
+        self.assertNotIn("auto_shutdown_timeout_seconds", self.request("/api/config")[1])
+        for selected, enabled in ((profile, True), ("reterminal-e1003-frame", False)):
+            nav = self.request("/api/portal/nav", profile=selected)[1]
+            entries = [item["id"] for category in nav["categories"] for item in category["items"]]
+            self.assertEqual("power-savings" in entries, enabled)
+            shell = self.request("/?profile=" + selected, profile=selected, raw=True)[1]
+            self.assertEqual('src="/portal_power_savings.js' in shell, enabled)
+            expected = 200 if enabled else 404
+            self.assertEqual(self.request("/portal_power_savings.js", profile=selected, raw=True)[0], expected)
+            self.assertEqual(self.request("/api/section/power-savings", profile=selected, raw=True)[0], expected)
+            self.assertEqual(self.request("/api/component/power-savings/activity", "POST",
+                                          profile=selected, raw=True)[0], 204 if enabled else 404)
+        self.server.mock_config.pop("auto_shutdown_timeout_seconds", None)
+
+    def test_voice_clips_fixture_and_profile_isolation(self):
+        profile = "reterminal-sticky-interactive"
+        base = "/api/component/voice-clips/"
+        clip_id = "0000000100000002"
+        for selected, enabled in ((profile, True), ("esp32-p4-lcd4b", False)):
+            nav = self.request("/api/portal/nav", profile=selected)[1]
+            entries = {item["id"] for category in nav["categories"] for item in category["items"]}
+            self.assertEqual("voice-clips" in entries, enabled)
+            for suffix in ("", "?docs=1"):
+                schemes = self.request("/api/bindings" + suffix, profile=selected)[1]["schemes"]
+                self.assertEqual(any(scheme["name"] == "recorder" for scheme in schemes), enabled)
+            catalog = self.request("/api/info?catalog=1", profile=selected)[1]["catalog"]
+            self.assertEqual(any(action["type"] == "voice_clip" for action in catalog), enabled)
+            for path in ("/portal-voice-clips.js", "/api/section/voice-clips"):
+                self.assertEqual(self.request(path, profile=selected, raw=True)[0], 200 if enabled else 404)
+            self.assertEqual(self.request(base + "list", profile=selected)[0], 200 if enabled else 404)
+
+        listing = self.request(base + "list", profile=profile)[1]
+        self.assertEqual(listing["entries"][0]["id"], clip_id)
+        self.assertEqual(listing["entries"][0]["created_at"], PORTAL.MOCK_NOW_EPOCH)
+        url = self.base + base + "file?id=" + clip_id
+        cookie = {"Cookie": "portal_mock_profile=" + profile}
+        with urlopen(Request(url, headers=cookie)) as response:
+            data = response.read()
+            self.assertEqual(response.headers.get_content_type(), "audio/wav")
+        self.assertEqual(data[:4], b"RIFF")
+        self.assertEqual(len(data), listing["entries"][0]["size_bytes"])
+        for header, expected, content_range in (
+                ("bytes=0-9", data[:10], f"bytes 0-9/{len(data)}"),
+                ("bytes=-4", data[-4:], f"bytes {len(data)-4}-{len(data)-1}/{len(data)}")):
+            with urlopen(Request(url, headers={**cookie, "Range": header})) as response:
+                self.assertEqual(response.status, 206)
+                self.assertEqual(response.headers["Content-Range"], content_range)
+                self.assertEqual(response.read(), expected)
+        with self.assertRaises(HTTPError) as raised:
+            urlopen(Request(url, headers={**cookie, "Range": "bytes=99999-"}))
+        with raised.exception as response:
+            self.assertEqual(response.code, 416)
+            self.assertEqual(response.headers["Content-Range"], f"bytes */{len(data)}")
+        self.assertEqual(self.request(base + "delete?id=" + clip_id, "DELETE", profile=profile)[0], 200)
+        self.assertNotIn(clip_id, [entry["id"] for entry in self.request(base + "list", profile=profile)[1]["entries"]])
+        self.assertEqual(self.request(base + "file?id=" + clip_id, profile=profile)[0], 404)
+
+    def test_bthome_capability_validation_save_reload_and_failure(self):
+        profile = "reterminal-sticky-interactive"
+        status, config = self.request("/api/config", profile=profile)
+        self.assertEqual(status, 200)
+        self.assertTrue(config["caps"]["bthome_events"])
+        self.assertFalse(config["caps"]["ble_hid"])
+        nav = self.request("/api/portal/nav", profile=profile)[1]
+        connectivity = next(category for category in nav["categories"] if category["id"] == "connectivity")
+        self.assertIn("bluetooth", {item["id"] for item in connectivity["items"]})
+        bluetooth = next(item for item in connectivity["items"] if item["id"] == "bluetooth")
+        self.assertEqual(bluetooth["portal_script"], "/portal-bluetooth.js")
+        self.assertEqual(self.request(bluetooth["portal_script"], profile=profile, raw=True)[0], 200)
+        self.assertEqual(self.request(bluetooth["portal_script"], profile="reterminal-e1003-frame", raw=True)[0], 404)
+        self.assertEqual(self.request("/api/section/bluetooth", profile=profile, raw=True)[0], 200)
+        update = {"bluetooth_tx_power_dbm": "-12", "bthome_event_burst_ms": "900",
+                  "bthome_event_adv_interval_ms": "300"}
+        self.assertEqual(self.request("/api/config?no_reboot=1", "POST", update, profile=profile)[0], 200)
+        saved = self.request("/api/config", profile=profile)[1]
+        self.assertEqual(saved["bluetooth_tx_power_dbm"], -12)
+        self.assertEqual(saved["bluetooth_active_tx_power_dbm"], 9)
+        self.assertEqual(self.request("/api/reboot", "POST", {}, profile=profile)[0], 200)
+        self.assertEqual(self.request("/api/config", profile=profile)[1]["bluetooth_active_tx_power_dbm"], -12)
+        self.assertEqual(saved["bthome_event_burst_ms"], 900)
+        for update in [{"bthome_event_burst_ms": 899}, {"bthome_event_burst_ms": False},
+                       {"bthome_event_burst_ms": None}, {"bthome_event_burst_ms": "900junk"},
+                       {"bluetooth_tx_power_dbm": 4294967296}, {"bluetooth_tx_power_dbm": None},
+                       {"bluetooth_tx_power_dbm": True}, {"bluetooth_tx_power_dbm": " 3"},
+                       {"bluetooth_tx_power_dbm": 1}]:
+            self.assertEqual(self.request("/api/config", "POST", update, profile=profile)[0], 400)
+        self.assertEqual(self.request("/api/config", profile=profile)[1]["bthome_event_burst_ms"], 900)
+        self.server.scenario = "save-error"
+        self.assertEqual(self.request("/api/config", "POST", {"bthome_event_burst_ms": 1000}, profile=profile)[0], 500)
+        self.assertEqual(self.request("/api/config", profile=profile)[1]["bthome_event_burst_ms"], 900)
+        self.server.scenario = "normal"
+        for disabled in ("esp32-p4-lcd4b", "reterminal-e1003-frame"):
+            config = self.request("/api/config", profile=disabled)[1]
+            self.assertFalse(config["caps"]["bthome_events"])
+            self.assertNotIn("bthome_event_burst_ms", config)
+            nav = self.request("/api/portal/nav", profile=disabled)[1]
+            self.assertNotIn("bluetooth", {item["id"] for category in nav["categories"] for item in category["items"]})
+            self.assertEqual(self.request("/api/section/bluetooth", profile=disabled, raw=True)[0], 404)
+            self.assertNotIn("bluetooth_tx_power_dbm", config)
+            self.assertEqual(self.request("/api/config", "POST", {"bluetooth_tx_power_dbm": 3}, profile=disabled)[0], 400)
+            self.assertEqual(self.request("/api/config", "POST", {"bthome_event_burst_ms": 350}, profile=disabled)[0], 400)
+
+    def test_production_bundles_and_binding_templates(self):
         status, bundle = self.request("/portal.js", raw=True)
         self.assertEqual(status, 200)
         self.assertIn("async function padInit()", bundle)
@@ -797,9 +914,10 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(result["button"]["label_center"], "21.5 C")
         self.assertEqual(self.request("/api/pad/resolve", "POST", {"button": {"label_center": 5}})[0], 400)
         _, local = self.request("/api/pad/resolve", "POST", {
-            "bindings": ["[health:cpu]", "[health:rssi]", "[health:wifi_ssid]"],
+            "bindings": ["[health:cpu]", "[health:wifi_rssi]", "[health:wifi_ssid]", "[health:wifi_state]"],
         }, profile="jc3248w535")
-        self.assertEqual([value["value"] for value in local["resolved"]], ["23", "-55", "?"])
+        self.assertEqual([value["value"] for value in local["resolved"]],
+                         ["23", "-55", "Portal dev Wi-Fi", "CONNECTED"])
 
     def test_mqtt_inspection_fixtures_and_limits(self):
         status, waiting = self.request("/api/mqtt/inspect", "POST", {"topic": "mock/waiting"})
@@ -1040,7 +1158,7 @@ class PortalDevServerTest(unittest.TestCase):
     def test_catalog_source_parity(self):
         actions_dir = ROOT / "src/app/actions"
         manifest = (actions_dir / "action_modules.inc").read_text()
-        unavailable = {"ble_pair", "display_refresh", "camera_capture"}
+        unavailable = {"ble_pair", "display_refresh", "camera_capture", "voice_clip"}
         expected = set(re.findall(r'#include "([^"/]+)_action.cpp"', manifest)) - unavailable
         catalog = self.server.pad_fixture["catalog"]
         self.assertEqual({action["type"] for action in catalog}, expected)
@@ -1052,6 +1170,11 @@ class PortalDevServerTest(unittest.TestCase):
             else:
                 self.assertIn('action["label"] = ' + json.dumps(action["label"]), source)
             self.assertIn('action["group"] = ' + json.dumps(action["group"]), source)
+        sticky_catalog = self.request("/api/info?catalog=1", profile="reterminal-sticky-interactive")[1]["catalog"]
+        recorder = next(action for action in sticky_catalog if action["type"] == "voice_clip")
+        recorder_source = (actions_dir / "voice_clip_action.cpp").read_text()
+        self.assertIn('action["label"] = ' + json.dumps(recorder["label"]), recorder_source)
+        self.assertIn('action["group"] = ' + json.dumps(recorder["group"]), recorder_source)
         fields = ("name", "icon", "second_icon", "axis_field", "horizontal_icon", "vertical_icon", "default_axis")
         widgets = {widget["type"]: widget for widget in self.server.pad_fixture["widget_catalog"]}
         for path in (ROOT / "src/app/widgets").glob("*_widget.cpp"):

@@ -3,6 +3,7 @@
 #if HAS_BLE_HID
 
 #include "config_manager.h"
+#include "ble_backend.h"
 #include "key_sequence.h"
 #include "keyboard_transport.h"
 #include "mouse_hid_state.h"
@@ -190,6 +191,8 @@ static const ble_uuid16_t uuidReportReference = BLE_UUID16_INIT(0x2908);
 
 static volatile bool pending_pairing = false;
 static std::atomic<uint32_t> connection_epoch{1};
+static std::atomic<bool> pending_advertising{false};
+static bool advertising_paused = false;
 
 // Single-owner BLE policy state
 static const unsigned long PAIRING_TIMEOUT_MS = 60000;  // 60s pairing window
@@ -217,9 +220,39 @@ static bool pairing_window_open() {
 
 static bool start_advertising() {
     if (!hid_service_ready) return false;
-    BLEDevice::startAdvertising();
-    advertising_active = true;
+    if (advertising_paused) {
+        pending_advertising.store(true);
+        return true;
+    }
+    advertising_active = BLEDevice::getAdvertising()->start();
+    if (!advertising_active) LOGE(TAG, "HID advertising failed");
     return advertising_active;
+}
+
+static void configure_hid_advertising() {
+    BLEAdvertising* adv = BLEDevice::getAdvertising();
+    adv->reset();
+    adv->setAppearance(HID_KEYBOARD);
+    adv->addServiceUUID(BLEUUID((uint16_t)0x1812));
+    adv->setScanResponse(true);
+    adv->setMinPreferred(0x06);
+    adv->setMaxPreferred(0x12);
+}
+
+bool ble_hid_pause_advertising(bool paused) {
+    if (!hid_service_ready) return true;
+    if (advertising_paused == paused)
+        return paused || connected || advertising_active || start_advertising();
+    if (paused) {
+        if (!BLEDevice::getAdvertising()->stop()) return false;
+        advertising_paused = true;
+        advertising_active = false;
+        return true;
+    }
+    configure_hid_advertising();
+    advertising_paused = false;
+    pending_advertising.store(false);
+    return connected || start_advertising();
 }
 
 static void format_ble_addr(const uint8_t addr[6], char* out, size_t out_len) {
@@ -472,7 +505,7 @@ class HidCallbacks : public BLEServerCallbacks {
         clear_peer_metadata();
         LOGI(TAG, "Host disconnected");
         if (!hid_service_ready) return;
-        start_advertising();
+        pending_advertising.store(true);
     }
 };
 
@@ -559,6 +592,8 @@ static void clear_all_bonds() {
 }
 
 void ble_hid_init(const char* device_name, bool force_pairing_mode) {
+    advertising_paused = false;
+    pending_advertising.store(false);
     init_error = false;
     connected = false;
     peer_encrypted = false;
@@ -576,8 +611,7 @@ void ble_hid_init(const char* device_name, bool force_pairing_mode) {
     keyboard_transport_device_name(ble_name_str, sizeof(ble_name_str), device_name, KeyboardTransport::Ble);
     LOGI(TAG, "Initializing BLE HID keyboard as '%s'", ble_name_str);
 
-    BLEDevice::init(ble_name_str);
-    if (!BLEDevice::getInitialized()) {
+    if (!ble_backend_prepare(ble_name_str)) {
         LOGE(TAG, "BLE stack init failed — BLE unavailable on this board");
         init_error = true;
         return;
@@ -607,12 +641,7 @@ void ble_hid_init(const char* device_name, bool force_pairing_mode) {
     security.setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
     security.setRespEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
 
-    BLEAdvertising* adv = BLEDevice::getAdvertising();
-    adv->setAppearance(HID_KEYBOARD);
-    adv->addServiceUUID(BLEUUID((uint16_t)0x1812));
-    adv->setScanResponse(true);
-    adv->setMinPreferred(0x06);
-    adv->setMaxPreferred(0x12);
+    configure_hid_advertising();
 
     if (force_pairing_mode) {
         LOGI(TAG, "Entering BLE pairing mode");
@@ -721,6 +750,8 @@ void ble_hid_request_pairing() {
 }
 
 void ble_hid_loop() {
+    if (!advertising_paused && pending_advertising.exchange(false) && !connected)
+        start_advertising();
     if (pending_pairing) {
         pending_pairing = false;
         ble_hid_start_pairing();

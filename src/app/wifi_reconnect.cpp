@@ -45,8 +45,9 @@ WifiRecoveryAction wifi_reconnect_next_action(unsigned long outage_ms,
                                                unsigned long since_last_attempt_ms,
                                                unsigned int retry_count,
                                                bool manual_request,
-                                               const WifiRecoveryPolicy& policy) {
-if (wifi_reconnect_should_reboot(outage_ms, policy.reboot_after_ms)) {
+                                               const WifiRecoveryPolicy& policy,
+                                               bool allow_reboot) {
+if (allow_reboot && wifi_reconnect_should_reboot(outage_ms, policy.reboot_after_ms)) {
 return WifiRecoveryAction::Reboot;
 }
 if (outage_ms >= policy.reset_after_ms) {

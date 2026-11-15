@@ -2,6 +2,58 @@ const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
 
+async function testFirmwareUploadResponses() {
+    for (const outcome of ['success', 'rejected', 'disconnect']) {
+        const nodes = new Map();
+        const timers = [];
+        let request;
+        let reconnects = 0;
+        class FakeRequest {
+            constructor() {
+                request = this;
+                this.handlers = {};
+                this.upload = { addEventListener: (name, handler) => { this.progress = handler; } };
+            }
+            addEventListener(name, handler) { this.handlers[name] = handler; }
+            open() {}
+            send() {}
+        }
+        const context = {
+            selectedFile: { name: 'firmware.bin' },
+            document: { getElementById(id) {
+                if (!nodes.has(id)) nodes.set(id, { style: {}, disabled: false });
+                return nodes.get(id);
+            } },
+            window: { location: { origin: 'http://device' } },
+            XMLHttpRequest: FakeRequest,
+            FormData: class { append() {} },
+            API_UPDATE: '/api/update',
+            showRebootDialog() {},
+            startReconnection() { ++reconnects; },
+            setTimeout(callback) { timers.push(callback); },
+            console
+        };
+        vm.createContext(context);
+        vm.runInContext(fs.readFileSync('src/app/web/portal_firmware.js', 'utf8'), context);
+        await context.uploadFirmware();
+        request.progress({ lengthComputable: true, loaded: 98, total: 100 });
+        if (outcome === 'disconnect') {
+            request.handlers.error();
+        } else {
+            request.status = outcome === 'success' ? 200 : 409;
+            request.response = { message: 'Stopping voice recording; retry update' };
+            request.handlers.load();
+        }
+        if (outcome === 'rejected') {
+            assert.match(nodes.get('reboot-message').textContent, /retry update/);
+            assert.strictEqual(nodes.get('upload-btn').disabled, false);
+            assert.strictEqual(nodes.get('firmware-file').disabled, false);
+        }
+        timers.forEach(callback => callback());
+        assert.strictEqual(reconnects, outcome === 'rejected' ? 0 : 1);
+    }
+}
+
 async function testFetchConcurrency() {
     const requests = [];
     const context = { document: { getElementById: () => null }, window: {
@@ -60,7 +112,48 @@ async function testFetchConcurrency() {
 }
 
 async function main() {
+    await testFirmwareUploadResponses();
     await testFetchConcurrency();
+    const listeners = new Map();
+    const activityRequests = [];
+    const savedConfigs = [];
+    let activityClock = 0;
+    let inputValid = true;
+    let saveClick;
+    const powerContext = {
+        window: { registerConfigFields: fields => assert.strictEqual(fields[0], 'auto_shutdown_timeout_seconds') },
+        document: {
+            addEventListener: (name, listener) => listeners.set(name, listener),
+            getElementById: id => id === 'power-savings-save-btn'
+                ? { addEventListener: (_, listener) => { saveClick = listener; } }
+                : { checkValidity: () => inputValid }
+        },
+        performance: { now: () => activityClock },
+        fetch: async (url, options) => { activityRequests.push({url, method: options.method}); return {ok: true}; },
+        loadConfig() {},
+        saveFragmentConfig: (reboot, fields) => savedConfigs.push({reboot, field: fields[0]}),
+        showMessage() {},
+        console
+    };
+    vm.createContext(powerContext);
+    vm.runInContext(fs.readFileSync('src/app/web/portal_power_savings.js', 'utf8'), powerContext);
+    assert.strictEqual(activityRequests.length, 0, 'loading an idle portal must not keep the device awake');
+    listeners.get('input')({isTrusted: false});
+    assert.strictEqual(activityRequests.length, 0, 'programmatic field updates are not user activity');
+    listeners.get('keydown')({isTrusted: true});
+    listeners.get('pointerdown')({isTrusted: true});
+    assert.strictEqual(activityRequests.length, 1, 'bursty input should share one activity request');
+    activityClock = 250;
+    listeners.get('wheel')({isTrusted: true});
+    assert.strictEqual(activityRequests.length, 2, 'continued interaction must renew activity');
+    assert.deepStrictEqual(activityRequests[0], {url: '/api/component/power-savings/activity', method: 'POST'});
+    powerContext.window.init_power_savings_fragment();
+    inputValid = false;
+    saveClick();
+    assert.strictEqual(savedConfigs.length, 0, 'invalid values must not be submitted');
+    inputValid = true;
+    saveClick();
+    assert.deepStrictEqual(savedConfigs, [{reboot: false, field: 'auto_shutdown_timeout_seconds'}]);
     for (const outcome of ['success', 'empty', 'error', 'font-error', 'timeout', 'font-timeout', 'no-font-api']) {
         let stylesheet;
         let timeoutCallback;
@@ -443,6 +536,37 @@ async function main() {
     assert(soundSelect.options.some(option => option.value === 'new.mp3'));
     assert.strictEqual(soundSelect.value, 'saved.mp3');
     const navSource = fs.readFileSync('src/app/web/portal_nav.js', 'utf8');
+    const navInit = navSource.slice(navSource.indexOf('  function init()'),
+        navSource.indexOf("  if (document.readyState === 'loading')"));
+    const headerLookup = context.document.getElementById;
+    context.document.getElementById = id => {
+        if (!nodes.has(id)) nodes.set(id, {style: {}, textContent: ''});
+        return nodes.get(id);
+    };
+    for (const recovery of [false, true]) {
+        let selected;
+        const data = { ap_mode: true, recovery_ap: recovery,
+            primary: {fragment: recovery ? 'setup' : 'special-home'},
+            categories: [] };
+        const routing = {
+            window: { addEventListener() {} }, NAV_API: '/api/portal/nav',
+            itemMap: recovery ? {setup: {}} : {mode: {}, 'special-home': {}},
+            portalEnsureMaterialSymbols() {}, updateLayoutHeight() {}, buildNav() {},
+            getItemFromHash() { return 'mode'; },
+            navigateTo(id) { selected = id; },
+            fetch: async () => ({ok: true, json: async () => data})
+        };
+        vm.createContext(routing);
+        vm.runInContext(navInit + '\ninit();', routing);
+        await new Promise(resolve => setImmediate(resolve));
+        assert.strictEqual(selected, recovery ? 'setup' : 'mode',
+            'Only recovery APs override the saved hash with the setup wizard');
+        context.getDeviceInfo = async () => ({version: 'test', ap_active: true, recovery_ap: recovery});
+        await context.loadVersion();
+        assert.strictEqual(vm.runInContext('portalMode', context), recovery ? 'core' : 'full',
+            'An active live AP must not become a core portal');
+    }
+    context.document.getElementById = headerLookup;
     const assets = [];
     const assetContext = { window: {}, itemMap: {}, document: {
         createElement(tag) { return { tag, remove() {} }; },

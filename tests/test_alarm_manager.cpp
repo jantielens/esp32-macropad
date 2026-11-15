@@ -82,7 +82,9 @@ time_t time_service_alarm_candidate(time_t now, uint8_t hour, uint8_t minute, ui
 }
 void storage_publish_usage(bool) {}
 bool ota_activity_is_active() { return ota; }
-ActionResult action_dispatch(const ButtonAction& action, const char* label, uint32_t) {
+ActionDispatchContext action_dispatch_context() { return {}; }
+void display_manager_request_binding_refresh() {}
+ActionResult action_dispatch(const ButtonAction& action, const char* label, uint32_t, bool) {
     dispatched.emplace_back(std::string(label) + ":" + action.type);
     if (dispatched.size() == ota_after_dispatch) ota = true;
     return ACTION_FAILED;

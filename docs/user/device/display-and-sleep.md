@@ -16,6 +16,11 @@ To end a maintenance session with one timed deep sleep, use
 [Sleep now](updates-and-recovery.md#put-the-device-to-sleep-after-configuration)
 under **Device > Operating Mode**. This is separate from display inactivity.
 
+**Offline** operating mode keeps the interactive runtime active without starting
+Wi-Fi. It does not put the device or display into deep sleep, and supported
+Bluetooth controls remain available. See
+[Offline boot and explicit network access](network-and-access.md#boot-offline).
+
 ## Set brightness and rotation
 
 Open **Display > Brightness** and adjust the slider. It changes the current
@@ -65,6 +70,43 @@ off while it remains on. The normal inactivity sequence resumes afterward.
 Save the screen saver section after entering the binding.
 Use a **Device command > Wake display** action for a one-time wake; repeated
 movement can also use [camera motion](../media/camera.md#detect-motion).
+
+## Save battery power with automatic shutdown
+
+On supported firmware, **Device > Power Savings** turns the device off after
+inactivity while running on battery. This is hardware shutdown, not display
+sleep or light sleep.
+
+Enter **Auto-shutdown after inactivity (seconds)** from `0` to `65535`, then select
+**Save Power Savings**. Changes apply immediately without reboot. `0` disables
+automatic shutdown; the initial value depends on the board.
+
+Before turning off, the device tries to display **Powered off automatically**
+using its notification appearance. On e-paper, the notice remains visible after
+shutdown. If the notice cannot be displayed within 60 seconds, the device turns
+off without it; an e-paper screen may retain an older image.
+New activity cancels shutdown while the notice is being prepared. If shutdown
+fails, its notice is cleared.
+
+Touch, physical buttons, deliberate portal interaction, authenticated changes,
+and MCP tool calls restart the inactivity interval. MQTT traffic and background
+portal polling do not. External power suspends shutdown; removing it starts a
+fresh interval. Unknown power readings do not trigger shutdown.
+
+Setup and configuration recovery remain available and use their existing
+recovery sleep policy. Firmware updates, protected configuration writes, and
+pending action sequences defer automatic shutdown. Uploads are not tracked as
+keep-awake operations. On devices with SD-primary storage and automatic
+shutdown, protected writes defer shutdown until they finish or the upload
+disconnects. An unfinished voice recording is discarded during shutdown.
+Other uploads can be interrupted and leave an incomplete file.
+Running timers, sounding alarms, and playback do not keep the device on.
+Shutdown does not save portal drafts or
+restore a timer, screen, or reading position on the next normal startup.
+
+Use your [board's power-on controls](../hardware.md) to restart. Touch alone
+does not necessarily power on a device after hardware shutdown. E-Paper Frames
+use their separate scheduled refresh-and-sleep workflow, not this setting.
 
 ## Backlight-only and e-paper behavior
 

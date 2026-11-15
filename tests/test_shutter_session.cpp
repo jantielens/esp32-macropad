@@ -159,15 +159,20 @@ FsIndexedStore::FsIndexedStore(const char* base_path,
                                const char* const* index_fields,
                                size_t num_index_fields,
                                const FsIndexedStoreRootField* root_fields,
-                               size_t num_root_fields)
+                               size_t num_root_fields,
+                               const char* payload_extension,
+                               FsIndexedStoreMetadataReader metadata_reader)
     : _base_path(base_path),
       _index_fields(index_fields),
       _num_index_fields(num_index_fields),
       _root_fields(root_fields),
       _num_root_fields(num_root_fields),
+      _payload_extension(payload_extension),
+      _metadata_reader(metadata_reader),
       _mutex(nullptr),
       _manifest_doc(nullptr),
-      _loaded(false) {}
+      _loaded(false),
+      _needs_rebuild(false) {}
 
 bool FsIndexedStore::begin() { return true; }
 String FsIndexedStore::data_path(const char* id) const {

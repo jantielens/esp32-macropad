@@ -152,6 +152,19 @@ Conventions:
 
 ## Build System
 
+The `reterminal-sticky-interactive` target uses the existing
+`macropad` class and
+`esp32:esp32:esp32s3:FlashSize=32M,PSRAM=opi,FlashMode=qio,PartitionScheme=ota_8mb_32MB,CDCOnBoot=default`.
+Build only this target with `./build.sh reterminal-sticky-interactive`.
+It reuses `partitions/partitions_ota_8mb_32MB.csv` without installer changes:
+two 8 MiB OTA application slots and internal filesystem storage, with no native
+Extension region. Logging/flashing use the CH343P UART0 bridge on GPIO43/44.
+The `reterminal-sticky-interactive-sd` variant uses the same FQBN and layout,
+with SD-primary file storage. Build it with
+`./build.sh reterminal-sticky-interactive-sd`. Both use the NimBLE broadcast
+profile; only the SD variant advertises SD storage.
+See [Sticky hardware acceptance limits](../../src/boards/reterminal-sticky-interactive/README.md).
+
 The `waveshare-7.8-interactive` target uses
 `esp32:esp32:um_feathers3` with hardware USB CDC, enabled QSPI PSRAM, and
 the `ota_4mb_16MB_ext` OTA partition scheme. Build it with
@@ -197,6 +210,91 @@ Boards without a persistent filesystem partition or SD backend must set
 LittleFS; NVS settings and NVS-only factory reset remain available. Do not infer
 filesystem availability from the display or storage-browser feature flags.
 
+### BLE Backend and Broadcast Profile
+
+`BLE_BACKEND` selects an implementation independently of `HAS_BLE`,
+`HAS_BLE_HID`, `LVGL_FAST_MEM_IN_IRAM`, and malloc tuning. Named constants live
+in [ble_backend_selection.h](../../src/app/ble_backend_selection.h):
+`BLE_BACKEND_ARDUINO_CORE` (`0`, the default) and
+`BLE_BACKEND_NIMBLE_ARDUINO` (`1`, opt-in). Use a numeric board override so
+`build.sh` exports the same selector through its narrow library flag allowlist.
+Sticky is the sole initial NimBLE-Arduino adopter; no other board changes
+backend, capabilities, or startup policy.
+
+The external backend currently supports only ESP32-S3 with a PSRAM-enabled
+board menu and `HAS_BLE_HID=0`, verified on Arduino ESP32 3.3.12 / ESP-IDF 5.5.5.
+Invalid selectors, unsupported targets, missing PSRAM, and external-backend
+HID combinations fail compilation. Client/scanning, bonding migration, and HID
+are not implemented by this profile; the selector is not a capability gate.
+Retain the core backend for other targets/SDKs pending separate validation.
+
+`build.sh` force-includes shared
+[ble_build_config.h](../../src/app/ble_build_config.h) in application and
+library C/C++ translation units, not assembly. It is inert for the core
+backend. The external profile normalizes legacy aliases after loading SDK
+configuration, disables central and observer roles, retains broadcasting,
+and moves eligible host
+allocations to PSRAM. Controller allocations and the host task stack remain in
+internal RAM. Connection retries are disabled and host connection capacity
+is reduced to one. Peripheral-host code remains enabled because the pinned
+library's GAP/GATT initialization references it even without a server; no GATT
+server is created and both advertisers explicitly use nonconnectable mode.
+The shared [ble_backend.cpp](../../src/app/ble_backend.cpp) includes the
+Arduino core's BLE memory-retention constructor because this pinned library
+predates that mechanism. Do not edit the installed library or assume these
+macros reconfigure the precompiled controller.
+
+Both `bthome_events.cpp` and `ble_telemetry.cpp` select APIs by backend;
+the built-in Arduino BLE wrapper must not be linked alongside it. Other boards
+retain their existing backend and lazy event initialization. Packet layout,
+queue admission, burst timing, and OTA cancellation remain shared.
+Bluetooth transmit power is latched from boot configuration without initializing
+the host. Shared preparation applies it once to DEFAULT, ADV, and SCAN before
+HID, event, or telemetry advertising; unset connection power inherits DEFAULT.
+Native core calls check the controller result and read-back; the external
+backend checks its setter and read-back. Hosted HCI leaves power under
+co-processor control and disables that portal control without disabling Bluetooth.
+Config saves never change radio power. Event timing saves stage a coherent
+snapshot captured at burst start; an active burst keeps its original timing.
+Failed stops or HID advertising restoration retain radio ownership and block
+the next event until recovery. Event bursts do not override or restore power.
+The bundled core backend already uses NimBLE on the tested toolchain. The
+memory benefit comes from the selected host profile and eligible PSRAM
+allocations, not a Bluedroid-to-NimBLE migration.
+
+The external backend initializes before Wi-Fi in always-on startup, then uses
+idempotent preparation when normal runtime begins (including setup/recovery).
+Identity configuration and host preparation do not advertise. The sensor-only
+BLE duty-cycle path prepares the same selected host without starting Wi-Fi or
+the action lifecycle. Telemetry deinit stops advertising, not the shared host.
+Startup logs record internal free heap and largest block before/after BLE, plus
+remaining PSRAM. Compare the final `Mem: setup` and loaded runtime minimums
+against the same configuration without BLE, not only the firmware size report.
+
+MQTT trigger configuration and its registered-topic cache share one
+`config_psram_alloc()` block on all trigger-enabled boards. Reinitialization
+reuses that block and retains subscription history; mutex/allocation failure
+leaves the feature unavailable and is logged. Non-PSRAM boards allocate it on
+the heap rather than retaining a static topic array; this is not a universal
+1 KB heap saving. The pending bitmask and synchronization objects stay internal.
+The compact allocation-failed hook remains; temporary stack tracing is removed.
+
+To roll back a board independently, set `BLE_BACKEND` to `0` and restore its
+original `LVGL_FAST_MEM_IN_IRAM` and `MALLOC_PSRAM_THRESHOLD_BYTES` values.
+Keep the pinned dependency while any target selects it. Enabling radios or HID
+is a separate capability decision, not part of rollback.
+
+Hardware acceptance remains pending. Home Assistant receipt of a Button 1
+press was confirmed, and the subsequent
+[LVGL flash-placement change](display-touch-architecture.md#memory-usage)
+recovered 60,928 bytes of internal heap at boot. The latest capture confirms HA
+live connection and navigation without allocation failures, with MQTT disabled.
+The earlier four-hour stable run preceded the LVGL placement change and is not
+a soak of the final configuration. Verify repeated Button 1/10 events and all
+supported event types alongside live HA/MQTT, ping monitoring, display
+interaction, and OTA before declaring acceptance. Do not enable BLE HID with
+this profile.
+
 ### Firmware Size Verification
 
 Fresh before/after builds on 2026-10-09 with ESP32 Arduino core 3.3.12 measured
@@ -225,8 +323,9 @@ At the beginning of `setup()`, before subsystem initialization, firmware applies
 the preference through `heap_caps_malloc_extmem_enable()` only when PSRAM is
 compiled in and `psramFound()` confirms it is available.
 
-Ordinary allocations larger than 512 bytes prefer PSRAM, while smaller
-allocations prefer internal RAM. The allocator can fall back to the other pool.
+Ordinary allocations larger than the selected threshold prefer PSRAM; allocations
+at or below it prefer internal RAM. Sticky overrides the threshold to 128 bytes.
+The allocator can fall back to the other pool.
 Explicit capability allocations, including DMA-specific buffers, and task-stack
 policy are unchanged. The preference does not move existing allocations,
 including those made before `setup()`.

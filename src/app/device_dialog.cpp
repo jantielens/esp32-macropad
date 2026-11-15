@@ -8,6 +8,9 @@
 #include "log_manager.h"
 #include "ota_activity.h"
 #include "pad_layout.h"
+#if HAS_AUTO_SHUTDOWN
+#include "screen_saver_manager.h"
+#endif
 #if HAS_TOUCH
 #include "touch_manager.h"
 #endif
@@ -18,6 +21,7 @@
 #include <atomic>
 #include <new>
 #include <lvgl.h>
+#include <esp_timer.h>
 
 namespace {
 struct DialogBackground {
@@ -39,6 +43,10 @@ struct Dialog {
     uint32_t generation = 0;
     uint32_t deadline = 0;
     bool timed = false;
+#if HAS_AUTO_SHUTDOWN
+    uint32_t request_sequence = 0;
+    bool refreshed = false;
+#endif
     DialogSelection selection = DialogSelection::None;
     ~Dialog() {
         if (overlay) lv_obj_delete(overlay);
@@ -96,6 +104,7 @@ void finish(bool approved, const char* reason) {
     reset_input();
     const uint32_t token = previous->token;
     delete previous;
+    if (displayManager) displayManager->interactionChanged();
     if (token) {
         if (approved) action_continuation_complete(token, true);
         else action_continuation_release(token);
@@ -296,8 +305,10 @@ bool create(Dialog& dialog, const char* message, const ConfirmPayload* confirmat
 }
 
 bool show(const char* message, uint32_t duration, const ConfirmPayload* confirmation, uint32_t token,
-          const DialogAppearance* test_appearance = nullptr) {
+          const DialogAppearance* test_appearance = nullptr, uint32_t* generation = nullptr) {
+    if (generation) *generation = 0;
     if (!displayManager) return false;
+    const uint64_t requestedUs = esp_timer_get_time();
     bool locked = false;
     display_manager_lock_if_needed(&locked);
     Dialog* candidate = new (std::nothrow) Dialog;
@@ -316,6 +327,12 @@ bool show(const char* message, uint32_t duration, const ConfirmPayload* confirma
             candidate->deadline = millis() + duration;
             current = candidate;
             lv_obj_remove_flag(candidate->overlay, LV_OBJ_FLAG_HIDDEN);
+#if HAS_AUTO_SHUTDOWN
+            candidate->request_sequence = displayManager->interactionChanged(requestedUs);
+#else
+            displayManager->interactionChanged(requestedUs);
+#endif
+            if (generation) *generation = candidate->generation;
         } else {
             delete candidate;
         }
@@ -326,12 +343,13 @@ bool show(const char* message, uint32_t duration, const ConfirmPayload* confirma
 }
 }
 
-bool device_dialog_notify(const char* message, uint32_t duration_ms) {
+bool device_dialog_notify(const char* message, uint32_t duration_ms, uint32_t* generation) {
+    if (generation) *generation = 0;
     if (duration_ms && (duration_ms < 1000 || duration_ms > 300000)) {
         LOGW("Dialog", "Invalid notification duration");
         return false;
     }
-    return show(message, duration_ms, nullptr, 0);
+    return show(message, duration_ms, nullptr, 0, nullptr, generation);
 }
 
 bool device_dialog_confirm(const ConfirmPayload& content, uint32_t token) {
@@ -376,13 +394,43 @@ void device_dialog_close() {
     display_manager_unlock_if_needed(locked);
 }
 
-void device_dialog_dismiss_notification() {
+void device_dialog_dismiss_notification(uint32_t generation) {
     if (!displayManager) return;
     bool locked = false;
     display_manager_lock_if_needed(&locked);
-    if (current && !current->token) finish(false, "Notification dismissed");
+    if (current && !current->token && (!generation || current->generation == generation))
+        finish(false, "Notification dismissed");
     display_manager_unlock_if_needed(locked);
 }
+
+#if HAS_AUTO_SHUTDOWN
+DeviceNotificationState device_dialog_notification_state(uint32_t generation) {
+    if (!displayManager || !generation) return DEVICE_NOTIFICATION_MISSING;
+    bool locked = false;
+    display_manager_lock_if_needed(&locked);
+    DeviceNotificationState state = DEVICE_NOTIFICATION_MISSING;
+    if (current && !current->token && current->generation == generation) {
+        state = DEVICE_NOTIFICATION_PENDING;
+        DisplayDriver* driver = displayManager->getDriver();
+        if (driver && driver->isAvailable() && lv_screen_active() && !ota_activity_is_active() &&
+            screen_saver_manager_input_ready()) {
+            if (driver->coherentFrames()) {
+                if (driver->hasPresentedInteraction(current->request_sequence))
+                    state = DEVICE_NOTIFICATION_PRESENTED;
+            } else if (driver->renderMode() == DisplayDriver::RenderMode::Direct) {
+                // Direct panels have no buffered presentation worker to acknowledge.
+                if (!current->refreshed) {
+                    lv_refr_now(nullptr);
+                    current->refreshed = true;
+                }
+                if (!g_displayFlushBusy) state = DEVICE_NOTIFICATION_PRESENTED;
+            }
+        }
+    }
+    display_manager_unlock_if_needed(locked);
+    return state;
+}
+#endif
 
 uint32_t device_dialog_input_generation() { return input_generation.load(); }
 
@@ -414,6 +462,7 @@ bool device_dialog_navigate(const char* command) {
             current->selection = current->selection == DialogSelection::Cancel ? DialogSelection::Approve : DialogSelection::Cancel;
         lv_obj_set_style_outline_width(current->cancel, current->selection == DialogSelection::Cancel ? 3 : 0, 0);
         lv_obj_set_style_outline_width(current->approve, current->selection == DialogSelection::Approve ? 3 : 0, 0);
+        if (displayManager) displayManager->interactionChanged();
     }
     return true;
 }

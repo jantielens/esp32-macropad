@@ -15,6 +15,8 @@ void it8951_test_spi_begin(int clock, int miso, int mosi, int cs);
 void it8951_test_spi_transaction(uint32_t frequency);
 uint8_t it8951_test_spi_byte(uint8_t value);
 void it8951_test_spi_data(const uint8_t* data, size_t length);
+void it8951_test_spi_end();
+void it8951_test_spi_end_transaction();
 
 struct SPISettings {
     uint32_t frequency;
@@ -24,8 +26,9 @@ class SPIClass {
 public:
     explicit SPIClass(int) {}
     void begin(int clock, int miso, int mosi, int cs) { it8951_test_spi_begin(clock, miso, mosi, cs); }
+    void end() { it8951_test_spi_end(); }
     void beginTransaction(const SPISettings& settings) { it8951_test_spi_transaction(settings.frequency); }
-    void endTransaction() {}
+    void endTransaction() { it8951_test_spi_end_transaction(); }
     uint8_t transfer(uint8_t value) { return it8951_test_spi_byte(value); }
     uint16_t transfer16(uint16_t value) {
         const uint16_t high = transfer(value >> 8);

@@ -16,17 +16,22 @@ struct AudioInputMeterSnapshot {
 #include "audio_input_driver.h"
 
 bool audio_input_available();
+bool audio_input_capture_owned();
 
 // Reserve the microphone for the calling task. Only one task may own a capture
 // session at a time; the same owner can call this again without changing state.
 bool audio_input_start_capture();
 
-// Read up to frame_count native, interleaved PCM frames for the calling capture
-// owner. Returns the number of frames read, or zero on timeout/error/not-owner.
-size_t audio_input_read_frames(int16_t* frames, size_t frame_count, uint32_t timeout_ms);
+// Read native interleaved PCM. A timeout may include partial frames.
+AudioInputReadResult audio_input_read_frames(int16_t* frames, size_t frame_count,
+                                              uint32_t timeout_ms);
+AudioInputReadStatus audio_input_capture_status();
 
-// Release the calling task's capture session. Calls from another task are ignored.
-void audio_input_stop_capture();
+// Stop sampling without releasing the calling task's reservation.
+bool audio_input_pause_capture();
+
+// Release the calling task's capture session only after hardware stops.
+bool audio_input_stop_capture();
 
 // Return the board-native PCM format. Returns an all-zero format when unavailable.
 AudioInputFormat audio_input_format();
@@ -47,10 +52,21 @@ struct AudioInputFormat {
     uint8_t bits_per_sample;
 };
 
+enum class AudioInputReadStatus { Ok, Timeout, Error, Overrun };
+struct AudioInputReadResult {
+    size_t frames;
+    AudioInputReadStatus status;
+};
+
 inline bool audio_input_available() { return false; }
+inline bool audio_input_capture_owned() { return false; }
 inline bool audio_input_start_capture() { return false; }
-inline size_t audio_input_read_frames(int16_t*, size_t, uint32_t) { return 0; }
-inline void audio_input_stop_capture() {}
+inline AudioInputReadResult audio_input_read_frames(int16_t*, size_t, uint32_t) {
+    return {0, AudioInputReadStatus::Error};
+}
+inline AudioInputReadStatus audio_input_capture_status() { return AudioInputReadStatus::Error; }
+inline bool audio_input_pause_capture() { return false; }
+inline bool audio_input_stop_capture() { return false; }
 inline AudioInputFormat audio_input_format() { return {}; }
 inline void audio_input_meter_init() {}
 inline void audio_input_meter_request() {}

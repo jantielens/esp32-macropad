@@ -1545,6 +1545,20 @@ delete context.testHelpSchemes;
     assert(variableDocs.includes('volatile, device-global string variable'));
     assert(variableDocs.includes('Literal, case-sensitive name'));
     const catalogKeys = await catalogProvider.list('');
+    const wifiCandidates = catalogKeys.filter(candidate =>
+        candidate.sourceId.startsWith('health:wifi_'));
+    assert.strictEqual(wifiCandidates.find(candidate => candidate.sourceId === 'health:wifi_state')
+        .displayName, 'Wi-Fi state');
+    assert.strictEqual(wifiCandidates.find(candidate => candidate.sourceId === 'health:wifi_last_error')
+        .displayName, 'Last Wi-Fi error');
+    for (const candidate of wifiCandidates) {
+        assert(!/ON\/OFF|OFF|CONNECTING|CONNECTED|RECONNECTING|INTERACTIVE|RECOVERY|cleared|until|unavailable/
+            .test(candidate.displayName), 'Wi-Fi picker titles do not enumerate values or lifecycle details');
+        assert(context.validateBinding(catalogProvider.buildBinding(candidate), {}).valid);
+    }
+    assert(!catalogKeys.some(candidate => ['health:wifi_status', 'health:rssi', 'health:ip',
+        'health:hostname', 'health:ap_active', 'health:ap_ssid', 'health:ap_ip']
+        .includes(candidate.sourceId)), 'Wi-Fi picker exposes only the cleaned keys');
     assert(catalogKeys.some(candidate => candidate.reference.scheme === 'var'),
         'on-device catalog exposes var without enumerating assigned variables');
     for (const scheme of fixture.schemes) {

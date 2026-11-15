@@ -88,10 +88,10 @@ static void test_standard_contract_and_shapes() {
         {"heap_internal", "153600"},
         {"psram_free", "2097152"},
         {"psram_total", "4194304"},
-        {"wifi_connected", "ON"},
-        {"rssi", "-65"},
+        {"wifi_state", "CONNECTED"},
+        {"wifi_rssi", "-65"},
         {"uptime", "3661"},
-        {"ip", "192.168.1.22"},
+        {"wifi_ip", "192.168.1.22"},
         {"chip", "ESP32-P4"},
         {"firmware", "1.13.0"},
         {nullptr, nullptr},
@@ -130,10 +130,10 @@ static void test_threshold_and_fallback_behavior() {
         {"heap_internal", "81920"},
         {"psram_free", "0"},
         {"psram_total", "0"},
-        {"wifi_connected", "OFF"},
-        {"rssi", "-90"},
+        {"wifi_state", "OFF"},
+        {"wifi_rssi", "-90"},
         {"uptime", "5"},
-        {"ip", "0.0.0.0"},
+        {"wifi_ip", "0.0.0.0"},
         {nullptr, nullptr},
     };
     g_lookup_data = kData;
@@ -159,11 +159,27 @@ static void test_threshold_and_fallback_behavior() {
     check_eq_str(psram_row["_bg"] | "", "#12122a", "psram neutral background");
 
     JsonObjectConst wifi_row = row_by_metric(rows, "WiFi");
-    check_eq_str(cell_text(wifi_row, "value"), "Disconnected", "wifi disconnected text");
-    check_eq_str(wifi_row["_bg"] | "", "#200808", "wifi disconnected background");
+    check_eq_str(cell_text(wifi_row, "value"), "OFF", "wifi disabled text");
+    check_eq_str(wifi_row["_bg"] | "", "#12122a", "wifi disabled background");
 
     JsonObjectConst ip_row = row_at(rows, 5);
-    check_eq_str(ip_row["_bg"] | "", "#200808", "ip error background when offline");
+    check_eq_str(ip_row["_bg"] | "", "#12122a", "ip neutral background when offline");
+
+    static const KvPair kApData[] = {
+        {"cpu", "10"}, {"heap_internal", "153600"},
+        {"psram_free", "0"}, {"psram_total", "0"},
+        {"wifi_state", "AP"}, {"wifi_ip", "192.168.4.1"},
+        {"uptime", "5"}, {nullptr, nullptr},
+    };
+    g_lookup_data = kApData;
+    check_true(health_table_build(false, lookup_from_table, out, sizeof(out)), "build AP payload");
+    check_true(!deserializeJson(doc, out), "parse AP payload JSON");
+    rows = doc["rows"].as<JsonArrayConst>();
+    wifi_row = row_by_metric(rows, "WiFi");
+    check_eq_str(cell_text(wifi_row, "value"), "AP", "AP is not shown as disconnected");
+    ip_row = row_by_metric(rows, "IP");
+    check_eq_str(cell_text(ip_row, "value"), "192.168.4.1", "table uses active AP address");
+    check_eq_str(ip_row["_bg"] | "", "#0a2a0a", "AP address is available");
 }
 
 static void test_extended_adds_chip_and_fw_rows() {
@@ -174,10 +190,10 @@ static void test_extended_adds_chip_and_fw_rows() {
         {"heap_internal", "307200"},
         {"psram_free", "1048576"},
         {"psram_total", "2097152"},
-        {"wifi_connected", "ON"},
-        {"rssi", "-55"},
+        {"wifi_state", "CONNECTED"},
+        {"wifi_rssi", "-55"},
         {"uptime", "60"},
-        {"ip", "192.168.1.99"},
+        {"wifi_ip", "192.168.1.99"},
         {"chip", "ESP32-P4"},
         {"firmware", "1.13.0-dev"},
         {nullptr, nullptr},
@@ -209,10 +225,10 @@ static void test_brightness_and_volume_rows() {
         {"heap_internal", "200000"},
         {"psram_free", "1048576"},
         {"psram_total", "2097152"},
-        {"wifi_connected", "ON"},
-        {"rssi", "-60"},
+        {"wifi_state", "CONNECTED"},
+        {"wifi_rssi", "-60"},
         {"uptime", "120"},
-        {"ip", "192.168.1.10"},
+        {"wifi_ip", "192.168.1.10"},
         {"brightness", "75"},
         {"volume", "50"},
         {nullptr, nullptr},
@@ -245,10 +261,10 @@ static void test_brightness_only_no_volume() {
         {"heap_internal", "250000"},
         {"psram_free", "1048576"},
         {"psram_total", "2097152"},
-        {"wifi_connected", "ON"},
-        {"rssi", "-50"},
+        {"wifi_state", "CONNECTED"},
+        {"wifi_rssi", "-50"},
         {"uptime", "60"},
-        {"ip", "192.168.1.5"},
+        {"wifi_ip", "192.168.1.5"},
         {"brightness", "100"},
         {nullptr, nullptr},
     };

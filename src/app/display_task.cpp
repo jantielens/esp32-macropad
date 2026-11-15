@@ -40,7 +40,12 @@ DisplayTaskDispatchResult DisplayManager::dispatch(
 		uint32_t timeoutMs, bool* outOk, char* outMsg, size_t outMsgLen) {
 		return static_cast<DisplayTaskDispatchResult>(displayJobSlot().dispatch(
 				exec, cleanup, ctx, ctxLen, timeoutMs, isInLvglTask(),
-				xPortInIsrContext(), outOk, outMsg, outMsgLen));
+				xPortInIsrContext(), outOk, outMsg, outMsgLen,
+				[](void* context) { static_cast<DisplayManager*>(context)->wakeRenderTask(); }, this));
+}
+
+void DisplayManager::wakeRenderTask() {
+		if (driver && driver->coherentFrames() && lvglTaskHandle) xTaskNotifyGive(lvglTaskHandle);
 }
 
 void DisplayManager::processDisplayJob() {
@@ -73,10 +78,49 @@ bool display_manager_get_stack_watermark(uint32_t* minimum_free_bytes, uint32_t*
 // is in flight; cleared from the completion ISR.
 volatile bool g_displayFlushBusy = false;
 
+void DisplayManager::queueScreenIntent(bool interactive) {
+		pendingScreenInteractive = interactive;
+		pendingScreenRequestedUs = interactive ? esp_timer_get_time() : 0;
+		wakeRenderTask();
+}
+
+void display_manager_request_binding_refresh() {
+		if (displayManager) displayManager->requestBindingRefresh();
+}
+
+void DisplayManager::requestBindingRefresh() {
+		bool didLock = false;
+		lockIfNeeded(didLock);
+		if (driver && driver->coherentFrames()) {
+				framePublisher.requestBindingRefresh(esp_timer_get_time());
+				wakeRenderTask();
+		}
+		unlockIfNeeded(didLock);
+}
+
+uint32_t DisplayManager::interactionChanged(uint64_t requestedUs) {
+		if (!driver || !driver->coherentFrames()) return 0;
+		const uint64_t changedUs = esp_timer_get_time();
+		const uint32_t requestSequence = framePublisher.interactionChanged(requestedUs ? requestedUs : changedUs);
 #if HAS_DISPLAY_DIAGNOSTICS
+		LOGD("Display", "interaction request_seq=%lu requested=%llu changed=%llu",
+				static_cast<unsigned long>(requestSequence),
+				static_cast<unsigned long long>(requestedUs ? requestedUs : changedUs),
+				static_cast<unsigned long long>(changedUs));
+#else
+		(void)requestSequence;
+#endif
+		wakeRenderTask();
+		return requestSequence;
+}
+
 void DisplayManager::displayEventCallback(lv_event_t* event) {
 		auto* mgr = static_cast<DisplayManager*>(lv_event_get_user_data(event));
 		const lv_event_code_t code = lv_event_get_code(event);
+		const uint64_t eventUs = esp_timer_get_time();
+		if (mgr->framePublisher.event(*mgr->driver, code, eventUs) && mgr->presentSem)
+				xSemaphoreGive(mgr->presentSem);
+#if HAS_DISPLAY_DIAGNOSTICS
 		if (code == LV_EVENT_INVALIDATE_AREA) {
 			const auto* area = static_cast<const lv_area_t*>(lv_event_get_param(event));
 			if (area && area->x2 >= area->x1 && area->y2 >= area->y1) {
@@ -85,30 +129,45 @@ void DisplayManager::displayEventCallback(lv_event_t* event) {
 			}
 			return;
 		}
-		if (mgr->invalidationSource != DisplayInvalidationSource::Timer) return;
+		const bool coherent = mgr->driver->coherentFrames();
+		if (!coherent && mgr->invalidationSource != DisplayInvalidationSource::Timer) return;
 		uint64_t glyph_miss_us = 0;
 #if HAS_TTF_FONTS && HAS_FREETYPE_FONTS
 		if (code == LV_EVENT_RENDER_START || code == LV_EVENT_RENDER_READY)
 			glyph_miss_us = freetype_mono_font_get_stats().miss_us;
 #endif
-		switch (code) {
-			case LV_EVENT_REFR_START:
-				mgr->cycleRefresh.beginRefresh(esp_timer_get_time());
-				break;
-			case LV_EVENT_REFR_READY:
-				mgr->cycleRefresh.endRefresh(esp_timer_get_time());
-				break;
-			case LV_EVENT_RENDER_START:
-				mgr->cycleRefresh.beginRender(esp_timer_get_time(), mgr->cycleFlush.total_us, glyph_miss_us);
-				break;
-			case LV_EVENT_RENDER_READY:
-				mgr->cycleRefresh.endRender(esp_timer_get_time(), mgr->cycleFlush.total_us, glyph_miss_us);
-				break;
-			default:
-				break;
+		auto record = [&](DisplayRefreshTrace& trace) {
+			switch (code) {
+				case LV_EVENT_REFR_START:
+					trace.beginRefresh(eventUs);
+					break;
+				case LV_EVENT_REFR_READY:
+					trace.endRefresh(eventUs);
+					break;
+				case LV_EVENT_RENDER_START:
+					trace.beginRender(eventUs, mgr->cycleFlush.total_us, glyph_miss_us);
+					break;
+				case LV_EVENT_RENDER_READY:
+					trace.endRender(eventUs, mgr->cycleFlush.total_us, glyph_miss_us);
+					break;
+				default:
+					break;
+			}
+		};
+		if (mgr->invalidationSource == DisplayInvalidationSource::Timer) record(mgr->cycleRefresh);
+		if (coherent) {
+			if (code == LV_EVENT_REFR_START) mgr->frameRefresh = {};
+			record(mgr->frameRefresh);
+			const auto& stats = mgr->frameRefresh.stats;
+			if (code == LV_EVENT_REFR_READY && stats.render_calls)
+				LOGD("Display", "frame=%lu refresh=%lu render=%lu flush=%lu glyph=%llu",
+					static_cast<unsigned long>(mgr->framePublisher.renderingFrame().sequence),
+					static_cast<unsigned long>(stats.refresh_us), static_cast<unsigned long>(stats.render_us),
+					static_cast<unsigned long>(stats.render_flush_us),
+					static_cast<unsigned long long>(stats.render_glyph_miss_us));
 		}
-}
 #endif
+}
 
 // LVGL v9 flush callback
 void DisplayManager::flushCallback(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map) {
@@ -182,6 +241,7 @@ void DisplayManager::lvglTask(void* pvParameter) {
 #endif
 				bool updated_after_screen_switch = false;
 				if (mgr->lvglStopRequested) {
+						mgr->processDisplayJob();
 						device_dialog_close();
 						mgr->unlock();
 						mgr->lvglTaskStopped = true;
@@ -277,6 +337,8 @@ void DisplayManager::lvglTask(void* pvParameter) {
 						mgr->currentScreen = target;
 						mgr->currentScreen->show();
 						mgr->pendingScreen = nullptr;
+						if (mgr->pendingScreenInteractive) mgr->interactionChanged(mgr->pendingScreenRequestedUs);
+						mgr->pendingScreenInteractive = false;
 						if (!screen_saver_manager_is_rendering_suspended()) {
 							// Build an evicted pad before LVGL renders the newly loaded screen.
 							const uint64_t update_start_us = esp_timer_get_time();
@@ -321,9 +383,9 @@ void DisplayManager::lvglTask(void* pvParameter) {
 #endif
 				const uint64_t lv_start_us = esp_timer_get_time();
 				uint32_t delayMs = lv_timer_handler();
-				const uint32_t lv_timer_us = (uint32_t)(esp_timer_get_time() - lv_start_us);
+				uint32_t lv_timer_us = (uint32_t)(esp_timer_get_time() - lv_start_us);
 #if HAS_DISPLAY_DIAGNOSTICS
-				const uint32_t lv_timer_flush_us = mgr->cycleFlush.total_us - flush_before_timer_us;
+				uint32_t lv_timer_flush_us = mgr->cycleFlush.total_us - flush_before_timer_us;
 				mgr->invalidationSource = DisplayInvalidationSource::Other;
 #endif
 
@@ -375,6 +437,33 @@ void DisplayManager::lvglTask(void* pvParameter) {
 						mgr->currentScreen->update();
 						screen_update_us = static_cast<uint32_t>(esp_timer_get_time() - update_start_us);
 #if HAS_DISPLAY_DIAGNOSTICS
+						mgr->invalidationSource = DisplayInvalidationSource::Other;
+#endif
+				}
+
+				// Input callbacks and screen updates may invalidate after the refresh
+				// timer ran. Render only here, never recursively inside those callbacks.
+				uint64_t bindingRequestedUs = 0;
+				if (mgr->framePublisher.takeBindingRefresh(mgr->pendingScreen ||
+						screen_saver_manager_is_rendering_suspended() || ota_activity_is_active(), bindingRequestedUs)) {
+						for (uint8_t pi = 0; mgr->padScreens && mgr->currentScreen && pi < MAX_PADS; ++pi) {
+								if (mgr->padScreens[pi] != mgr->currentScreen) continue;
+								mgr->interactionChanged(bindingRequestedUs);
+								mgr->padScreens[pi]->pollLiveData(true);
+								break;
+						}
+				}
+				if (mgr->driver->coherentFrames() && mgr->framePublisher.needsPromptRender()) {
+#if HAS_DISPLAY_DIAGNOSTICS
+						mgr->invalidationSource = DisplayInvalidationSource::Timer;
+						const uint32_t flush_before_prompt_us = mgr->cycleFlush.total_us;
+#endif
+						const uint64_t prompt_start_us = esp_timer_get_time();
+						if (mgr->framePublisher.renderIfNeeded(*mgr->driver, mgr->display,
+								mgr->pendingScreen || screen_saver_manager_is_rendering_suspended() || ota_activity_is_active()))
+								lv_timer_us += static_cast<uint32_t>(esp_timer_get_time() - prompt_start_us);
+#if HAS_DISPLAY_DIAGNOSTICS
+						lv_timer_flush_us += mgr->cycleFlush.total_us - flush_before_prompt_us;
 						mgr->invalidationSource = DisplayInvalidationSource::Other;
 #endif
 				}
@@ -456,15 +545,16 @@ void DisplayManager::lvglTask(void* pvParameter) {
 
 				}
 
-				vTaskDelay(pdMS_TO_TICKS(delayMs));
+				if (mgr->driver->coherentFrames())
+						ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(delayMs));
+				else
+						vTaskDelay(pdMS_TO_TICKS(delayMs));
 		}
 }
 
 // FreeRTOS task: async QSPI panel transfer for Buffered render mode.
-// Runs concurrently with the LVGL task — present() reads the PSRAM
-// framebuffer while pushColors() may be writing to it.  The dirty-
-// row spinlock in the driver ensures no tracking data is lost; pixel-
-// level overlap is harmless (minor one-frame tear, self-correcting).
+// Opted-in coherent drivers snapshot only outside a render generation and
+// retain immutable in-flight pixels while the next generation is rendered.
 void DisplayManager::presentTask(void* pvParameter) {
 		DisplayManager* mgr = (DisplayManager*)pvParameter;
 		
@@ -473,6 +563,11 @@ void DisplayManager::presentTask(void* pvParameter) {
 		while (true) {
 				// Wait for signal from LVGL task
 				xSemaphoreTake(mgr->presentSem, portMAX_DELAY);
+				if (mgr->presentStopRequested) {
+						mgr->presentTaskStopped = true;
+						vTaskSuspend(nullptr);
+						continue;
+				}
 				if (ota_activity_is_active()) continue;
 				
 				// Time the QSPI panel transfer

@@ -9,6 +9,9 @@
 #include "net_activity.h"
 #include "ota_activity.h"
 #include "reboot_service.h"
+#if HAS_VOICE_CLIPS
+#include "voice_clips.h"
+#endif
 
 #include <Update.h>
 
@@ -57,6 +60,18 @@ void handleOTAUpload(AsyncWebServerRequest *request, String filename, size_t ind
 						request->send(409, "application/json", "{\"success\":false,\"message\":\"Update, configuration write, or network transition in progress\"}");
 						return;
 				}
+
+#if HAS_VOICE_CLIPS
+				const VoiceClipCancelStatus recorder = voice_clips_cancel();
+				if (recorder != VoiceClipCancelStatus::Ready) {
+						request->send(recorder == VoiceClipCancelStatus::Pending ? 409 : 503,
+								"application/json", recorder == VoiceClipCancelStatus::Pending
+								? "{\"success\":false,\"message\":\"Stopping voice recording; retry update\"}"
+								: "{\"success\":false,\"message\":\"Voice recorder could not stop safely\"}");
+						ota_upload_finish(request);
+						return;
+				}
+#endif
 
 						LOGI("OTA", "Update start");
 						LOGI("OTA", "File: %s", filename.c_str());

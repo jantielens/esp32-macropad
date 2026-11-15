@@ -18,6 +18,15 @@ The frame driver accepts JPEG, PNG, and BMP images and displays up to eight
 gray levels. Prepare images for the panel geometry and chosen rotation rather
 than expecting a general-purpose browser or dashboard renderer.
 
+## Battery telemetry
+
+The existing driver battery read also supplies shared battery voltage and an
+approximate voltage-derived percentage. It does not add periodic polling,
+current measurements or runtime estimates. Cached readings expire after three
+minutes of active runtime and reset at deep sleep. See
+[shared battery semantics](../../../docs/user/pads/data-sources.md#show-battery-information).
+This telemetry does not add interactive pads to Frame firmware.
+
 ## Wake and setup
 
 The carrier's WAKE button is GPIO36, active low, with an external pull-up.

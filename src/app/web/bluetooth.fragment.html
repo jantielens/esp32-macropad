@@ -1,0 +1,57 @@
+<div class="section-header">
+  <h2><span class="portal-icon" aria-hidden="true">bluetooth</span>Bluetooth</h2>
+  <p>Set shared Bluetooth transmit power and configure BTHome button-event timing.</p>
+</div>
+<p id="bluetooth-unavailable" class="text-danger small" role="status" hidden>Bluetooth is unavailable on this firmware.</p>
+<div class="card mb-3">
+  <div class="card-header"><h5 class="mb-0">Bluetooth Transmit Power</h5></div>
+  <div class="card-body">
+    <p class="text-muted small">One device-wide setting for all supported Bluetooth features: BTHome button events, keyboard/mouse/gamepad HID, and sensor duty-cycle telemetry. It does not enable any of these features. Save stores the selected power; reboot to apply it. Current radio power stays unchanged until then.</p>
+    <p class="text-warning small" id="bluetooth-power-unavailable" role="status" hidden>Transmit power cannot be configured on this backend; the hosted co-processor controls radio power. Other Bluetooth features and event timing remain available.</p>
+    <p class="text-muted small" id="bluetooth-power-pending" role="status" hidden>Transmit power change pending reboot.</p>
+    <fieldset id="bluetooth-power-settings" disabled>
+      <div class="mb-3">
+        <label class="form-label" for="bluetooth_tx_power_dbm">Transmit power</label>
+        <select class="form-select" id="bluetooth_tx_power_dbm" name="bluetooth_tx_power_dbm" aria-describedby="bluetooth-power-help">
+          <option value="-12">-12 dBm (lowest power)</option>
+          <option value="-9">-9 dBm</option>
+          <option value="-6">-6 dBm</option>
+          <option value="-3">-3 dBm</option>
+          <option value="0">0 dBm</option>
+          <option value="3">+3 dBm</option>
+          <option value="6">+6 dBm</option>
+          <option value="9" selected>+9 dBm (highest power, default)</option>
+        </select>
+        <div class="form-text" id="bluetooth-power-help">Higher power can improve range and reception but uses more energy. Lower power can save energy but may cause missed events or sensor updates and weaker HID connections.</div>
+      </div>
+      <div class="save-bar">
+        <button type="button" class="btn btn-primary btn-sm" id="bluetooth-power-save-btn" disabled>Save Transmit Power</button>
+      </div>
+    </fieldset>
+  </div>
+</div>
+<div class="card mb-3">
+  <div class="card-header"><h5 class="mb-0">BTHome Button Event Publishing</h5></div>
+  <div class="card-body">
+    <p class="text-muted small">These timing controls affect BTHome button events only, not HID or sensor telemetry. Button numbers and event types remain configured in each action. No Bluetooth pairing is required. Save applies timing to the next event burst without reboot; a burst already running keeps its original timing.</p>
+    <p class="text-muted small">Events are unencrypted and best-effort. A successful queue result does not confirm that Home Assistant received or executed the event. Do not use these events for security-sensitive operations. See the <a href="https://github.com/jantielens/esp32-macropad/blob/main/docs/user/integrations/home-assistant.md#send-a-bthome-button-event" target="_blank" rel="noopener">Home Assistant BTHome workflow</a>.</p>
+    <fieldset id="bthome-event-settings" disabled>
+      <div class="mb-3">
+        <label class="form-label" for="bthome_event_burst_ms">Burst duration (ms)</label>
+        <input class="form-control" type="number" id="bthome_event_burst_ms" name="bthome_event_burst_ms" min="100" max="1000" step="1" value="350" aria-describedby="bthome-burst-help">
+        <div class="form-text" id="bthome-burst-help">100-1000 ms; default 350 ms. Longer bursts add reception opportunities but delay queued events. Duration must be at least three advertising intervals.</div>
+      </div>
+      <details class="mb-3">
+        <summary>Advanced</summary>
+        <div class="mt-3">
+          <label class="form-label" for="bthome_event_adv_interval_ms">Advertising interval (ms)</label>
+          <input class="form-control" type="number" id="bthome_event_adv_interval_ms" name="bthome_event_adv_interval_ms" min="20" max="300" step="1" value="100" aria-describedby="bthome-interval-help">
+          <div class="form-text" id="bthome-interval-help">20-300 ms; default 100 ms. Radio scheduling means this does not guarantee a packet count or delivery.</div>
+        </div>
+      </details>
+      <div class="save-bar">
+        <button type="button" class="btn btn-primary btn-sm" id="bthome-save-btn" disabled>Save Event Settings</button>
+      </div>
+    </fieldset>
+  </div>
+</div>

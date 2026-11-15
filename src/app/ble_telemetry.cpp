@@ -2,9 +2,14 @@
 
 #if HAS_BLE
 
+#include "ble_backend.h"
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+#include <NimBLEDevice.h>
+#else
 #include <BLEDevice.h>
 #include <BLEAdvertising.h>
 #include <BLEUUID.h>
+#endif
 #include <string>
 
 // NimBLE headers (pulled in transitively by BLEDevice.h) redefine LOG_LEVEL_*
@@ -84,38 +89,28 @@ size_t build_payload(uint8_t *out, size_t out_cap) {
 
 } // namespace
 
-void ble_telemetry_init(const char *device_name, int8_t tx_power_dbm) {
+void ble_telemetry_init(const char *device_name) {
     if (g_initialized) return;
     const char *name = (device_name && device_name[0]) ? device_name : "esp32-telemetry";
     strlcpy(g_device_name, name, sizeof(g_device_name));
-    BLEDevice::init(g_device_name);
-    if (!BLEDevice::getInitialized()) {
+    if (!ble_backend_prepare(g_device_name)) {
         LOGE(TAG, "BLE stack init failed");
         return;
     }
-    esp_power_level_t power_level;
-    switch (tx_power_dbm) {
-        case -12: power_level = ESP_PWR_LVL_N12; break;
-        case -9: power_level = ESP_PWR_LVL_N9; break;
-        case -6: power_level = ESP_PWR_LVL_N6; break;
-        case -3: power_level = ESP_PWR_LVL_N3; break;
-        case 0: power_level = ESP_PWR_LVL_N0; break;
-        case 3: power_level = ESP_PWR_LVL_P3; break;
-        case 6: power_level = ESP_PWR_LVL_P6; break;
-        case 9: power_level = ESP_PWR_LVL_P9; break;
-        default:
-            LOGE(TAG, "Unsupported TX power: %d dBm", (int)tx_power_dbm);
-            return;
-    }
-    BLEDevice::setPower(power_level, ESP_BLE_PWR_TYPE_ADV);
-    BLEDevice::setPower(power_level, ESP_BLE_PWR_TYPE_DEFAULT);
     g_initialized = true;
-    LOGI(TAG, "BLE telemetry initialized as '%s' (TX %+d dBm)", g_device_name, (int)tx_power_dbm);
+    LOGI(TAG, "BLE telemetry initialized as '%s'", g_device_name);
 }
 
 void ble_telemetry_deinit() {
     if (!g_initialized) return;
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+    if (!NimBLEDevice::getAdvertising()->stop()) {
+        LOGE(TAG, "Could not stop telemetry advertising");
+        return;
+    }
+#else
     BLEDevice::stopAdvertising();
+#endif
     g_initialized = false;
 }
 
@@ -156,7 +151,11 @@ bool ble_telemetry_advertise_burst(uint8_t burst_count, uint16_t interval_ms) {
     uint8_t payload[BLE_TELEMETRY_MAX_PAYLOAD];
     const size_t payload_len = build_payload(payload, sizeof(payload));
 
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+    NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
+#else
     BLEAdvertising *adv = BLEDevice::getAdvertising();
+#endif
     if (!adv) {
         LOGE(TAG, "getAdvertising() returned null");
         return false;
@@ -167,6 +166,19 @@ bool ble_telemetry_advertise_burst(uint8_t burst_count, uint16_t interval_ms) {
     // so the device name is intentionally moved to the scan response. Without
     // this split, a long device name silently squeezes out the BTHome payload
     // and the device becomes invisible to BTHome receivers.
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+    NimBLEAdvertisementData adv_data;
+    NimBLEAdvertisementData scan_resp;
+    if (!adv->setConnectableMode(BLE_GAP_CONN_MODE_NON) ||
+        !adv->setDiscoverableMode(BLE_GAP_DISC_MODE_GEN) ||
+        !adv_data.setFlags(0x06) ||
+        !adv_data.setServiceData(NimBLEUUID((uint16_t)BTHOME_SERVICE_UUID), payload, payload_len) ||
+        !adv->setAdvertisementData(adv_data) ||
+        !scan_resp.setName(g_device_name) || !adv->setScanResponseData(scan_resp)) {
+        LOGE(TAG, "Could not configure BTHome telemetry advertisement");
+        return false;
+    }
+#else
     BLEAdvertisementData adv_data;
     adv_data.setFlags(0x06);  // LE General Discoverable | BR/EDR Not Supported
     // Arduino-ESP32 BLE API expects an Arduino String. We use concat(buf, len)
@@ -179,32 +191,49 @@ bool ble_telemetry_advertise_burst(uint8_t burst_count, uint16_t interval_ms) {
     String svc_data;
     svc_data.concat((const char *)payload, payload_len);
     adv_data.setServiceData(BLEUUID((uint16_t)BTHOME_SERVICE_UUID), svc_data);
-    adv->setAdvertisementData(adv_data);
+    if (!adv->setAdvertisementData(adv_data)) {
+        LOGE(TAG, "Could not configure BTHome telemetry advertisement");
+        return false;
+    }
 
     // Scan response carries the human-readable name for nRF Connect / phones.
     // HA's BTHome integration identifies the device by MAC, so this is purely
     // cosmetic on the receive side.
     BLEAdvertisementData scan_resp;
     scan_resp.setName(String(g_device_name));
-    adv->setScanResponseData(scan_resp);
+    if (!adv->setScanResponseData(scan_resp)) {
+        LOGE(TAG, "Could not configure BTHome telemetry scan response");
+        return false;
+    }
+#endif
 
     // Convert ms to BLE adv interval units (0.625 ms each).
     const uint16_t interval_units = (uint16_t)((interval_ms * 1000UL) / 625UL);
     adv->setMinInterval(interval_units);
     adv->setMaxInterval(interval_units);
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+    adv->enableScanResponse(true);
+#else
     adv->setScanResponse(true);
+#endif
 
     LOGI(TAG, "Advertising BTHome burst: %u packets @ %u ms (payload %u bytes, %u objects)",
          (unsigned)burst_count, (unsigned)interval_ms,
          (unsigned)payload_len, (unsigned)g_pending_count);
 
-    adv->start();
+    if (!adv->start()) {
+        LOGE(TAG, "Could not start BTHome telemetry advertisement");
+        return false;
+    }
     // Hold advertising long enough for `burst_count` packets at `interval_ms` to
     // be transmitted. Add a small grace margin so the controller actually emits
     // the last packet before we stop.
     const uint32_t hold_ms = (uint32_t)burst_count * (uint32_t)interval_ms + 50UL;
     delay(hold_ms);
-    adv->stop();
+    if (!adv->stop()) {
+        LOGE(TAG, "Could not stop BTHome telemetry advertisement");
+        return false;
+    }
 
     return true;
 }

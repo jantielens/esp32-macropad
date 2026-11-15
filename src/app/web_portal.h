@@ -11,7 +11,7 @@
  * - REST API for config management
  * - Static asset serving (HTML/CSS/JS)
  * - OTA firmware updates via web upload
- * - Core portal mode (AP) vs Full portal mode (WiFi connected)
+ * - Recovery portal (boot AP) vs Full portal (station or action-enabled AP)
  * 
  * ENDPOINTS:
  *   GET  /                   -> Portal HTML page
@@ -32,7 +32,7 @@
 
 // API Functions
 void web_portal_init(DeviceConfig *config);        // Initialize web server and DNS
-bool web_portal_start_ap(const DeviceConfig *config); // Start AP mode with the saved AP password
+bool web_portal_start_ap(const DeviceConfig *config, bool full_portal = false);
 void web_portal_stop_ap();                         // Stop AP mode
 void web_portal_handle();                          // Handle web server (call in loop)
 bool web_portal_is_ap_mode();                      // Check if in AP mode

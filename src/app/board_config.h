@@ -2,6 +2,7 @@
 #define BOARD_CONFIG_H
 
 #include <stdint.h>
+#include "ble_backend_selection.h"
 
 
 // Per-button definition supplied by boards via HW_BUTTON_DEFS (see the
@@ -43,6 +44,23 @@ struct HwButtonDef {
 #include "board_overrides.h"
 #endif
 
+// BLE implementation; existing boards retain the bundled Arduino core backend.
+#ifndef BLE_BACKEND
+#define BLE_BACKEND BLE_BACKEND_ARDUINO_CORE
+#endif
+#if BLE_BACKEND != BLE_BACKEND_ARDUINO_CORE && BLE_BACKEND != BLE_BACKEND_NIMBLE_ARDUINO
+#error "Invalid BLE_BACKEND: select BLE_BACKEND_ARDUINO_CORE or BLE_BACKEND_NIMBLE_ARDUINO"
+#endif
+
+// Keep LVGL fast paths in IRAM on S3 by default; boards may trade speed for SRAM.
+#ifndef LVGL_FAST_MEM_IN_IRAM
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#define LVGL_FAST_MEM_IN_IRAM true
+#else
+#define LVGL_FAST_MEM_IN_IRAM false
+#endif
+#endif
+
 // Repo-owned PSRAM capability alias, derived from the Arduino core's
 // BOARD_HAS_PSRAM (defined by PSRAM-enabled board menus / FQBN options). Safe
 // default of 0 so a board that does not advertise PSRAM is treated as
@@ -54,6 +72,10 @@ struct HwButtonDef {
 #  else
 #    define HAS_PSRAM 0
 #  endif
+#endif
+
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO && !HAS_PSRAM
+#error "NimBLE-Arduino broadcast profile requires HAS_PSRAM; use the core backend otherwise"
 #endif
 
 // Ordinary malloc PSRAM preference threshold; ESP32/S3 with PSRAM use 512 bytes, 0 preserves SDK policy.
@@ -128,6 +150,31 @@ struct HwButtonDef {
 #define HAS_MQTT true
 #endif
 
+// Restore and retain UTC using a board-selected hardware real-time clock.
+#ifndef HAS_RTC
+#define HAS_RTC false
+#endif
+
+#define RTC_DRIVER_NONE 0
+#define RTC_DRIVER_PCF8563 1
+
+// Hardware real-time clock implementation; boards must select one when enabled.
+#ifndef RTC_DRIVER
+#define RTC_DRIVER RTC_DRIVER_NONE
+#endif
+
+// PCF8563 address on the board-initialized, mutex-protected Wire0 bus.
+#ifndef RTC_I2C_ADDR
+#define RTC_I2C_ADDR 0x51
+#endif
+
+#if HAS_RTC && RTC_DRIVER == RTC_DRIVER_NONE
+#error "HAS_RTC requires a selected RTC_DRIVER."
+#endif
+#if !HAS_RTC && RTC_DRIVER != RTC_DRIVER_NONE
+#error "RTC_DRIVER requires HAS_RTC."
+#endif
+
 // Include the persistent weekly or one-shot alarm on pad-capable display builds.
 #ifndef ALARM_ENABLED
 #define ALARM_ENABLED HAS_DISPLAY
@@ -197,6 +244,10 @@ struct HwButtonDef {
 // Select the sleep-first E-Paper Frame product class.
 #ifndef IS_EPAPER_FRAME
 #define IS_EPAPER_FRAME false
+#endif
+
+#if HAS_RTC && IS_EPAPER_FRAME
+#error "HAS_RTC is not supported by IS_EPAPER_FRAME; RTC updates must be flushed before deep sleep."
 #endif
 
 // Interactive LVGL e-paper requires both an e-paper panel and the display stack.
@@ -294,11 +345,32 @@ struct HwButtonDef {
 #define CONFIG_DEFAULT_PORTAL_IDLE_SECONDS 120
 #endif
 
+// Board supports battery-aware automatic hardware shutdown.
+#ifndef HAS_AUTO_SHUTDOWN
+#define HAS_AUTO_SHUTDOWN false
+#endif
+
+// Battery inactivity timeout in seconds; 0 disables automatic shutdown.
+#ifndef AUTO_SHUTDOWN_DEFAULT_SECONDS
+#define AUTO_SHUTDOWN_DEFAULT_SECONDS 300
+#endif
+
+#if HAS_AUTO_SHUTDOWN && IS_EPAPER_FRAME
+#error "Automatic hardware shutdown is unavailable on E-Paper Frame devices"
+#endif
+#if HAS_AUTO_SHUTDOWN && !defined(BOARD_AUTO_SHUTDOWN_REQUEST)
+#error "Automatic shutdown requires a board shutdown implementation"
+#endif
+
 // Enable BTHome v2 BLE telemetry advertising (transport for headless/battery boards).
 // Independent of HAS_BLE_HID; both can be enabled on the same board but mainly intended
 // for boards without a display (e.g. ESP32-C3 sensor nodes).
 #ifndef HAS_BLE
 #define HAS_BLE false
+#endif
+
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO && HAS_BLE_HID
+#error "NimBLE-Arduino HID is not supported yet; disable HAS_BLE_HID or select the core backend"
 #endif
 
 // BLE telemetry advertising burst count (packets per wake in duty_cycle_ble mode).
@@ -418,13 +490,14 @@ struct HwButtonDef {
 #define HAS_AUDIO_INPUT false
 #endif
 
+// Enable local voice clip recording and management.
+#ifndef HAS_VOICE_CLIPS
+#define HAS_VOICE_CLIPS false
+#endif
+
 // Enable ES7210 microphone ADC initialization on the shared I2S transport.
 #ifndef HAS_ES7210_MIC
 #define HAS_ES7210_MIC false
-#endif
-
-#if HAS_AUDIO_INPUT && !HAS_AUDIO
-#error "HAS_AUDIO_INPUT requires HAS_AUDIO."
 #endif
 
 // NS4150B power amplifier enable pin.
@@ -523,14 +596,35 @@ struct HwButtonDef {
 #define AUDIO_OUTPUT_DRIVER_ES8311   0
 #define AUDIO_OUTPUT_DRIVER_PCM510XA 1
 #define AUDIO_OUTPUT_DRIVER_ES8388   2
+#define AUDIO_OUTPUT_DRIVER_STICKY_PWM 3
 
 // Select the audio output HAL backend (one of the AUDIO_OUTPUT_DRIVER_* constants).
 #ifndef AUDIO_OUTPUT_DRIVER
 #define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_ES8311
 #endif
 
-#if HAS_AUDIO_INPUT && AUDIO_OUTPUT_DRIVER != AUDIO_OUTPUT_DRIVER_ES8311
-#error "HAS_AUDIO_INPUT requires an audio output driver with a microphone input path."
+// Audio input selection is independent of the output driver.
+#define AUDIO_INPUT_DRIVER_ES8311 0
+#define AUDIO_INPUT_DRIVER_STICKY_PDM 1
+
+// Select the audio input HAL backend.
+#ifndef AUDIO_INPUT_DRIVER
+#define AUDIO_INPUT_DRIVER AUDIO_INPUT_DRIVER_ES8311
+#endif
+
+#if HAS_AUDIO_INPUT && AUDIO_INPUT_DRIVER == AUDIO_INPUT_DRIVER_ES8311 && \
+    (!HAS_AUDIO || AUDIO_OUTPUT_DRIVER != AUDIO_OUTPUT_DRIVER_ES8311)
+#error "ES8311 audio input requires the ES8311 audio output driver."
+#endif
+
+#if HAS_AUDIO_INPUT && AUDIO_INPUT_DRIVER != AUDIO_INPUT_DRIVER_ES8311 && \
+    AUDIO_INPUT_DRIVER != AUDIO_INPUT_DRIVER_STICKY_PDM
+#error "Unknown audio input driver."
+#endif
+
+#if HAS_AUDIO_INPUT && AUDIO_INPUT_DRIVER == AUDIO_INPUT_DRIVER_STICKY_PDM && \
+    !defined(CONFIG_IDF_TARGET_ESP32S3)
+#error "Sticky PDM audio input requires ESP32-S3."
 #endif
 
 // ============================================================================
@@ -650,6 +744,14 @@ struct HwButtonDef {
 #define HAS_BUTTON false
 #endif
 
+#if HAS_VOICE_CLIPS && IS_VOICE_ASSISTANT
+#error "HAS_VOICE_CLIPS and IS_VOICE_ASSISTANT cannot be enabled together."
+#endif
+
+#if HAS_VOICE_CLIPS && (!HAS_AUDIO_INPUT || !HAS_FILESYSTEM || !(HAS_DISPLAY || HAS_BUTTON))
+#error "HAS_VOICE_CLIPS requires audio input, persistent storage, and an action host."
+#endif
+
 // GPIO pin for the optional user button (active level defined below).
 #ifndef BUTTON_PIN
 #define BUTTON_PIN 0
@@ -751,9 +853,22 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define HAS_SENSOR_AHT10 false
 #endif
 
+// Enable shared battery telemetry, bindings, and metadata for boards with a battery provider.
+#ifndef HAS_BATTERY_INFO
+#define HAS_BATTERY_INFO false
+#endif
+
+#if HAS_AUTO_SHUTDOWN && !HAS_BATTERY_INFO
+#error "HAS_AUTO_SHUTDOWN requires HAS_BATTERY_INFO"
+#endif
+
 // Enable an ADC-connected LiPo battery monitor sensor adapter.
 #ifndef HAS_SENSOR_BATTERY_ADC
 #define HAS_SENSOR_BATTERY_ADC false
+#endif
+
+#if HAS_SENSOR_BATTERY_ADC && !HAS_BATTERY_INFO
+#error "HAS_SENSOR_BATTERY_ADC requires HAS_BATTERY_INFO"
 #endif
 
 // Enable LD2410 OUT pin presence sensor adapter.
@@ -1117,6 +1232,8 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define DISPLAY_DRIVER_ARDUINO_GFX_CO5300 14
 #define DISPLAY_DRIVER_CROWPANEL_42 15
 #define DISPLAY_DRIVER_TAB5_DSI 16
+// Buffered reTerminal Sticky SSD1677/SSD2677 e-paper backend.
+#define DISPLAY_DRIVER_STICKY_EPAPER 17
 
 // Use reTerminal E1003's controller firmware and reversed image-packing protocol.
 #ifndef IT8951_E1003_PROTOCOL
@@ -1543,6 +1660,11 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 // ESP32-P4 can use Wire (bus 0) since WiFi runs on external C6 over SDIO.
 #ifndef TOUCH_I2C_BUS
 #define TOUCH_I2C_BUS 1
+#endif
+
+// Read GT911 resolution and map a portrait configuration to the board's landscape canvas.
+#ifndef TOUCH_GT911_CONFIG_ORIENTATION
+#define TOUCH_GT911_CONFIG_ORIENTATION false
 #endif
 
 // Prefer allocating LVGL draw buffer in internal RAM before PSRAM.

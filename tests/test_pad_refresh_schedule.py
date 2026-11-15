@@ -226,6 +226,25 @@ int main() {
     assert(pad.passive == before_show + 1);
     assert(pad.colors == pad.passive && pad.numbers == pad.passive);
     assert(!context_active);
+#if HAS_LVGL_EPAPER
+    interval_ms = 1000;
+    synced = false;
+    now_ms = 2000;
+    PadScreen local;
+    local.pollLiveData();
+    const int initial = local.passive;
+    now_ms = 2010;
+    local.pollLiveData();
+    assert(local.passive == initial);
+    local.pollLiveData(true);
+    assert(local.passive == initial + 1);
+    now_ms = 2020;
+    local.pollLiveData();
+    assert(local.passive == initial + 1);
+    now_ms = 3000;
+    local.pollLiveData();
+    assert(local.passive == initial + 2);
+#endif
 }
 '''
 

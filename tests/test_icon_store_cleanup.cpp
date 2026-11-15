@@ -14,9 +14,25 @@
 
 FakeFontStorage LittleFS;
 FakeFontStorage SD_MMC;
+#if USE_SD_STORAGE
+#define LittleFS SD_MMC
+#endif
 static PadConfig* configs[MAX_PADS] = {};
 static bool present[MAX_PADS] = {};
 static bool ota_active = false;
+#if USE_SD_STORAGE && HAS_AUTO_SHUTDOWN
+static unsigned storage_writers = 0;
+static bool storage_blocked = false;
+bool ota_activity_try_begin_config_write() {
+    if (ota_active || storage_blocked) return false;
+    ++storage_writers;
+    return true;
+}
+void ota_activity_finish_config_write() {
+    assert(storage_writers);
+    --storage_writers;
+}
+#endif
 static unsigned reads = 0;
 static unsigned config_acquires = 0;
 static unsigned config_exists_checks = 0;
@@ -259,7 +275,18 @@ int main(int argc, char**) {
 
     IconSourceUpload* ready_upload = nullptr;
     assert(icon_store_source_png_begin(png_size, &ready_upload) == ICON_STORE_OK);
+#if USE_SD_STORAGE && HAS_AUTO_SHUTDOWN
+    assert(storage_writers == 1);
+#endif
     icon_store_source_png_abort(ready_upload);
+#if USE_SD_STORAGE && HAS_AUTO_SHUTDOWN
+    assert(storage_writers == 0);
+    storage_blocked = true;
+    ready_upload = nullptr;
+    assert(icon_store_source_png_begin(png_size, &ready_upload) == ICON_STORE_BUSY);
+    assert(!ready_upload && storage_writers == 0);
+    storage_blocked = false;
+#endif
     assert(icon_store_install("pad_0_main_0_0", ICON_KIND_COLOR, used_source, 1,
                               png, png_size) == ICON_STORE_OK);
     LittleFS.read_hook = []() { ++reads; };

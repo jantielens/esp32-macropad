@@ -106,11 +106,15 @@
         "psram_used",
         "psram_min",
         "psram_largest",
+        "wifi_state",
         "wifi_connected",
         "wifi_ssid",
-        "rssi",
-        "ip",
-        "hostname",
+        "wifi_ip",
+        "wifi_rssi",
+        "wifi_hostname",
+        "wifi_ap_active",
+        "wifi_ap_purpose",
+        "wifi_last_error",
         "brightness",
         "volume",
         "ble_status",
@@ -126,6 +130,7 @@
       ],
       "category": "Device",
       "summary": "Local device telemetry. Works without a network.",
+      "note": "Wi-Fi values refresh every two seconds; brief transitions may not appear.",
       "params": [
         {
           "name": "key",
@@ -265,28 +270,48 @@
           "group": "Memory"
         },
         {
+          "key": "wifi_state",
+          "desc": "Wi-Fi state",
+          "group": "WiFi"
+        },
+        {
           "key": "wifi_connected",
-          "desc": "ON/OFF WiFi connection state",
+          "desc": "Wi-Fi network connection",
           "group": "WiFi"
         },
         {
           "key": "wifi_ssid",
-          "desc": "Connected network name",
+          "desc": "Wi-Fi network name",
           "group": "WiFi"
         },
         {
-          "key": "rssi",
-          "desc": "WiFi signal strength, dBm",
+          "key": "wifi_ip",
+          "desc": "Wi-Fi IP address",
           "group": "WiFi"
         },
         {
-          "key": "ip",
-          "desc": "Device IP address",
+          "key": "wifi_rssi",
+          "desc": "Wi-Fi signal strength",
           "group": "WiFi"
         },
         {
-          "key": "hostname",
-          "desc": "Device hostname",
+          "key": "wifi_hostname",
+          "desc": "Wi-Fi hostname",
+          "group": "WiFi"
+        },
+        {
+          "key": "wifi_ap_active",
+          "desc": "Wi-Fi AP activity",
+          "group": "WiFi"
+        },
+        {
+          "key": "wifi_ap_purpose",
+          "desc": "Wi-Fi AP purpose",
+          "group": "WiFi"
+        },
+        {
+          "key": "wifi_last_error",
+          "desc": "Last Wi-Fi error",
           "group": "WiFi"
         },
         {
@@ -360,8 +385,16 @@
           "desc": "Number with a unit inside the format."
         },
         {
-          "code": "[health:wifi_ssid] ([health:rssi] dBm)",
-          "desc": "Network name and signal strength."
+          "code": "[health:wifi_ssid|off] ([health:wifi_rssi|n/a] dBm)",
+          "desc": "Active network name; signal strength is available only while connected to a network."
+        },
+        {
+          "code": "[health:wifi_state]",
+          "desc": "Overall Wi-Fi state, including AP operation; not internet or MQTT readiness."
+        },
+        {
+          "code": "[health:wifi_ip|off]",
+          "desc": "Active network or AP address with an explicit inactive fallback."
         },
         {
           "code": "[expr:[health:wifi_connected]==\"ON\"?\"#16a34a\":\"#dc2626\"]",
@@ -372,6 +405,102 @@
           "desc": "Exact single token for a Table widget."
         }
       ],
+      "reference": {
+        "title": "Wi-Fi states and details",
+        "formats": false,
+        "rows": [
+          {
+            "group": "Wi-Fi states",
+            "syntax": "OFF",
+            "desc": "Wi-Fi is disabled."
+          },
+          {
+            "group": "Wi-Fi states",
+            "syntax": "STARTING",
+            "desc": "Radio or transport initialization is underway."
+          },
+          {
+            "group": "Wi-Fi states",
+            "syntax": "CONNECTING",
+            "desc": "Connecting to the configured Wi-Fi network."
+          },
+          {
+            "group": "Wi-Fi states",
+            "syntax": "CONNECTED",
+            "desc": "Connected to a network with an IP address; not service readiness."
+          },
+          {
+            "group": "Wi-Fi states",
+            "syntax": "RECONNECTING",
+            "desc": "Recovering a lost Wi-Fi connection."
+          },
+          {
+            "group": "Wi-Fi states",
+            "syntax": "AP",
+            "desc": "The device's AP is active."
+          },
+          {
+            "group": "Wi-Fi states",
+            "syntax": "STOPPING",
+            "desc": "Wi-Fi transport shutdown is underway."
+          },
+          {
+            "group": "Wi-Fi states",
+            "syntax": "ERROR",
+            "desc": "Radio shutdown failed; Wi-Fi-off cannot be confirmed."
+          },
+          {
+            "group": "Wi-Fi details",
+            "syntax": "wifi_connected",
+            "sample": "ON / OFF",
+            "desc": "ON only while connected to a network, not while serving an AP.",
+            "unit": "",
+            "kind": "text"
+          },
+          {
+            "group": "Wi-Fi details",
+            "syntax": "wifi_ssid / wifi_ip",
+            "desc": "Name and address of the active network or AP. Unavailable otherwise; use a |fallback."
+          },
+          {
+            "group": "Wi-Fi details",
+            "syntax": "wifi_rssi",
+            "sample": "-62",
+            "desc": "Signal strength in dBm while connected to a network. Unavailable otherwise; use a |fallback.",
+            "unit": "",
+            "kind": "text"
+          },
+          {
+            "group": "Wi-Fi details",
+            "syntax": "wifi_hostname",
+            "sample": "kitchen-pad",
+            "desc": "Configured Wi-Fi hostname, including while Wi-Fi is off.",
+            "unit": "",
+            "kind": "text"
+          },
+          {
+            "group": "Wi-Fi details",
+            "syntax": "wifi_ap_active",
+            "sample": "ON / OFF",
+            "desc": "Whether the AP is active.",
+            "unit": "",
+            "kind": "text"
+          },
+          {
+            "group": "Wi-Fi details",
+            "syntax": "wifi_ap_purpose",
+            "sample": "INTERACTIVE / RECOVERY",
+            "desc": "Full-portal or restricted recovery AP. Unavailable without AP; use a |fallback.",
+            "unit": "",
+            "kind": "text"
+          },
+          {
+            "group": "Wi-Fi details",
+            "syntax": "wifi_last_error",
+            "desc": "Last network, AP, or radio failure. Empty until failure; cleared by successful connection, AP startup, or reboot."
+          }
+        ]
+      },
       "authoring": {
         "keys": [
           {
@@ -776,6 +905,19 @@
             "read_only": true
           },
           {
+            "key": "wifi_state",
+            "kind": "text",
+            "unit": "",
+            "example_value": "CONNECTED",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
             "key": "wifi_connected",
             "kind": "text",
             "unit": "",
@@ -802,7 +944,20 @@
             "read_only": true
           },
           {
-            "key": "rssi",
+            "key": "wifi_ip",
+            "kind": "text",
+            "unit": "",
+            "example_value": "192.0.2.10",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "wifi_rssi",
             "kind": "integer",
             "unit": "dBm",
             "example_value": "-62",
@@ -819,10 +974,10 @@
             "read_only": true
           },
           {
-            "key": "ip",
+            "key": "wifi_hostname",
             "kind": "text",
             "unit": "",
-            "example_value": "192.0.2.10",
+            "example_value": "kitchen-pad",
             "formats": [
               "raw"
             ],
@@ -832,10 +987,36 @@
             "read_only": true
           },
           {
-            "key": "hostname",
+            "key": "wifi_ap_active",
             "kind": "text",
             "unit": "",
-            "example_value": "kitchen-pad",
+            "example_value": "ON",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "wifi_ap_purpose",
+            "kind": "text",
+            "unit": "",
+            "example_value": "INTERACTIVE",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "wifi_last_error",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Connection timed out",
             "formats": [
               "raw"
             ],
@@ -1012,6 +1193,251 @@
       }
     },
     {
+      "name": "battery",
+      "min_params": 1,
+      "max_params": 2,
+      "widget_max_params": 1,
+      "format_param": 1,
+      "validation_mode": 0,
+      "free_form": false,
+      "keys": [
+        "voltage",
+        "percentage",
+        "current",
+        "power",
+        "discharge_power",
+        "status",
+        "external_power_present",
+        "time_remaining",
+        "time_to_full"
+      ],
+      "category": "Device",
+      "summary": "Board-independent battery telemetry; individual measurements depend on hardware.",
+      "note": "Unsupported or stale fields use the unavailable fallback, never an invented zero. Readings expire after three sampling intervals, excluding OTA pauses. Status and runtime estimates clear immediately when invalid or inapplicable. Numeric formatting uses printf; status is text. Units stay outside the token. Fixture battery provider: voltage, percentage and signed current; no status or runtime estimates.",
+      "params": [
+        {
+          "name": "key",
+          "desc": "A canonical battery field; unsupported fields remain valid bindings.",
+          "required": true
+        },
+        {
+          "name": "format",
+          "desc": "Optional numeric printf format, e.g. %.2f; status is returned as text.",
+          "required": false
+        }
+      ],
+      "key_docs": [
+        {
+          "key": "voltage",
+          "desc": "Battery pack voltage in volts.",
+          "group": "Supported on this board"
+        },
+        {
+          "key": "percentage",
+          "desc": "Battery state of charge in percent; may be voltage-estimated.",
+          "group": "Supported on this board"
+        },
+        {
+          "key": "current",
+          "desc": "Battery current in amperes; positive charging, negative discharging. See provider measurement notes.",
+          "group": "Supported on this board"
+        },
+        {
+          "key": "power",
+          "desc": "Signed battery power in watts, calculated from voltage and current in the same sample; not USB/device input power.",
+          "group": "Supported on this board"
+        },
+        {
+          "key": "discharge_power",
+          "desc": "Positive battery discharge power in watts; zero when not discharging. Not total device consumption on external power.",
+          "group": "Supported on this board"
+        },
+        {
+          "key": "status",
+          "desc": "Charging, Discharging, Idle or Full, only when the provider can establish the state.",
+          "group": "Unsupported on this board"
+        },
+        {
+          "key": "external_power_present",
+          "desc": "External supply detected: 1 or 0. Does not establish battery charging.",
+          "group": "Unsupported on this board"
+        },
+        {
+          "key": "time_remaining",
+          "desc": "Provider-estimated minutes to empty at the current load; unavailable unless discharging.",
+          "group": "Unsupported on this board"
+        },
+        {
+          "key": "time_to_full",
+          "desc": "Provider-estimated minutes to full; unavailable unless charging.",
+          "group": "Unsupported on this board"
+        }
+      ],
+      "examples": [
+        {
+          "code": "[battery:percentage;%.0f|N/A]",
+          "desc": "Battery charge percentage, when available."
+        },
+        {
+          "code": "[battery:status|Unknown]",
+          "desc": "Readable battery state without a conditional expression."
+        },
+        {
+          "code": "[battery:discharge_power;%.2f|N/A]",
+          "desc": "Positive battery draw in watts, not total device power."
+        },
+        {
+          "code": "[battery:time_remaining;%.0f|N/A]",
+          "desc": "Estimated remaining runtime in minutes while discharging."
+        }
+      ],
+      "authoring": {
+        "keys": [
+          {
+            "key": "voltage",
+            "kind": "number",
+            "unit": "V",
+            "example_value": "3.85",
+            "formats": [
+              "raw",
+              "number"
+            ],
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "percentage",
+            "kind": "number",
+            "unit": "%",
+            "example_value": "73",
+            "formats": [
+              "raw",
+              "number"
+            ],
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "current",
+            "kind": "number",
+            "unit": "A",
+            "example_value": "-0.25",
+            "formats": [
+              "raw",
+              "number"
+            ],
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "power",
+            "kind": "number",
+            "unit": "W",
+            "example_value": "-0.96",
+            "formats": [
+              "raw",
+              "number"
+            ],
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "discharge_power",
+            "kind": "number",
+            "unit": "W",
+            "example_value": "0.96",
+            "formats": [
+              "raw",
+              "number"
+            ],
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "status",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Discharging",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "external_power_present",
+            "kind": "number",
+            "unit": "",
+            "example_value": "0",
+            "formats": [
+              "raw",
+              "number"
+            ],
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "time_remaining",
+            "kind": "number",
+            "unit": "min",
+            "example_value": "120",
+            "formats": [
+              "raw",
+              "number"
+            ],
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "time_to_full",
+            "kind": "number",
+            "unit": "min",
+            "example_value": "45",
+            "formats": [
+              "raw",
+              "number"
+            ],
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          }
+        ]
+      }
+    },
+    {
       "name": "sensor",
       "min_params": 1,
       "max_params": 2,
@@ -1022,7 +1448,6 @@
       "keys": [
         "temperature",
         "humidity",
-        "battery_voltage",
         "presence"
       ],
       "category": "Device",
@@ -1048,10 +1473,6 @@
         {
           "key": "humidity",
           "desc": "Relative humidity in percent."
-        },
-        {
-          "key": "battery_voltage",
-          "desc": "Battery voltage in volts."
         },
         {
           "key": "presence",
@@ -1087,22 +1508,6 @@
             "kind": "number",
             "unit": "%",
             "example_value": "54.2",
-            "formats": [
-              "raw",
-              "number"
-            ],
-            "capabilities": [
-              "display",
-              "numeric_widget",
-              "live_sampling"
-            ],
-            "read_only": true
-          },
-          {
-            "key": "battery_voltage",
-            "kind": "number",
-            "unit": "V",
-            "example_value": "3.85",
             "formats": [
               "raw",
               "number"
@@ -1429,7 +1834,7 @@
           "desc": "Derived number with a unit."
         },
         {
-          "code": "[expr:abs([health:rssi])]",
+          "code": "[expr:abs([health:wifi_rssi])]",
           "desc": "Show the magnitude of a signed value."
         },
         {
@@ -1465,7 +1870,7 @@
             "group": "Arithmetic",
             "syntax": "-a",
             "desc": "Negate",
-            "example": "[expr:-[health:rssi]]"
+            "example": "[expr:-[health:wifi_rssi]]"
           },
           {
             "group": "Arithmetic",
@@ -1495,7 +1900,7 @@
             "group": "Functions",
             "syntax": "abs(x)",
             "desc": "Absolute value",
-            "example": "[expr:abs([health:rssi])]"
+            "example": "[expr:abs([health:wifi_rssi])]"
           },
           {
             "group": "Functions",
@@ -3494,6 +3899,118 @@
             "kind": "text",
             "unit": "",
             "example_value": "true",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "recorder",
+      "min_params": 1,
+      "max_params": 1,
+      "widget_max_params": 1,
+      "format_param": -1,
+      "validation_mode": 0,
+      "free_form": false,
+      "keys": [
+        "state",
+        "duration_s",
+        "last_clip",
+        "error"
+      ],
+      "category": "Device",
+      "summary": "Local voice clip recorder status.",
+      "params": [
+        {
+          "name": "key",
+          "desc": "Recorder snapshot key, see below.",
+          "required": true
+        }
+      ],
+      "key_docs": [
+        {
+          "key": "state",
+          "desc": "Current recording state"
+        },
+        {
+          "key": "duration_s",
+          "desc": "Captured duration in seconds, excluding pauses"
+        },
+        {
+          "key": "last_clip",
+          "desc": "ID of the last successfully saved clip"
+        },
+        {
+          "key": "error",
+          "desc": "Most recent recorder error"
+        }
+      ],
+      "examples": [
+        {
+          "code": "[recorder:state]",
+          "desc": "Show the recorder state."
+        },
+        {
+          "code": "[recorder:duration_s]",
+          "desc": "Show the captured duration."
+        }
+      ],
+      "authoring": {
+        "keys": [
+          {
+            "key": "state",
+            "kind": "text",
+            "unit": "",
+            "example_value": "idle",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "duration_s",
+            "kind": "integer",
+            "unit": "s",
+            "example_value": "0",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "last_clip",
+            "kind": "text",
+            "unit": "",
+            "example_value": "0000000100000002",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "error",
+            "kind": "text",
+            "unit": "",
+            "example_value": "No audio captured",
             "formats": [
               "raw"
             ],

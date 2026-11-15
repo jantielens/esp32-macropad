@@ -9,9 +9,8 @@ async function loadVersion() {
         const version = await getDeviceInfo();
         if (!version) return;
 
-        // portalMode is derived from /api/info ap_active flag (previously a
-        // separate /api/mode endpoint — removed to halve boot HTTP requests).
-        portalMode = version.ap_active ? 'core' : 'full';
+        // AP transport can serve either the limited recovery portal or a full live portal.
+        portalMode = (version.recovery_ap ?? version.ap_active) ? 'core' : 'full';
 
         // Health widget tuning + optional device-side history support
         healthConfigureFromDeviceInfo(deviceInfoCache);
@@ -255,7 +254,7 @@ async function loadConfig() {
         setValueIfExists('mqtt_username', config.mqtt_username);
 
         // Power settings
-        setRadioIfExists('operating_mode', config.operating_mode);
+        setRadioIfExists('operating_mode', config.operating_mode || 'always_on');
         setValueIfExists('duty_cycle_wake_seconds', config.duty_cycle_wake_seconds);
         const sleepSeconds = document.getElementById('sleep-seconds');
         if (sleepSeconds && config.duty_cycle_wake_seconds !== undefined) {
@@ -273,9 +272,6 @@ async function loadConfig() {
         }
         if (config.ble_adv_interval_ms !== undefined) {
             setValueIfExists('ble_adv_interval_ms', config.ble_adv_interval_ms);
-        }
-        if (config.ble_tx_power_dbm !== undefined) {
-            setValueIfExists('ble_tx_power_dbm', config.ble_tx_power_dbm);
         }
 
         // MQTT scope
@@ -452,8 +448,10 @@ async function loadConfig() {
  * @returns {Object} { valid: boolean, message: string }
  */
 function validateConfig(config) {
+    const operatingMode = config.operating_mode !== undefined ? config.operating_mode :
+        ((window.deviceConfig || {}).operating_mode || 'always_on');
     // Validate required fields only if they exist on this page
-    if (config.wifi_ssid !== undefined && (!config.wifi_ssid || config.wifi_ssid.trim() === '')) {
+    if (operatingMode !== 'offline' && config.wifi_ssid !== undefined && (!config.wifi_ssid || config.wifi_ssid.trim() === '')) {
         return { valid: false, message: 'WiFi SSID is required' };
     }
     
@@ -467,7 +465,7 @@ function validateConfig(config) {
     }
     if (config.ap_password !== undefined && config.ap_password !== '' &&
         !/^[\x20-\x7E]{8,63}$/.test(config.ap_password)) {
-        return { valid: false, message: 'Setup AP password must be 8-63 printable ASCII characters, or empty for an open AP' };
+        return { valid: false, message: 'AP password must be 8-63 printable ASCII characters, or empty for an open AP' };
     }
     
     // Validate fixed IP configuration only if on network page
@@ -492,16 +490,6 @@ function validateConfig(config) {
         // Only require a password if none is already set.
         if (!passwordAlreadySet && !pass) {
             return { valid: false, message: 'Basic Auth password is required the first time you enable it' };
-        }
-    }
-
-    if (config.ble_tx_power_dbm !== undefined) {
-        const value = config.ble_tx_power_dbm;
-        const power = Number(value);
-        if ((typeof value !== 'string' && typeof value !== 'number') ||
-            String(value).trim() === '' || !Number.isInteger(power) ||
-            power < -12 || power > 9 || power % 3 !== 0) {
-            return { valid: false, message: 'BLE TX power must be -12 to +9 dBm in 3 dB steps' };
         }
     }
 

@@ -3,7 +3,9 @@
 
 #include "../config_manager.h"
 #include "../display_driver.h"
+#include "epaper_schedule.h"
 
+#include <atomic>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
@@ -28,6 +30,10 @@ public:
 
 		RenderMode renderMode() const override { return RenderMode::Buffered; }
 		void present() override;
+		bool coherentFrames() const override { return true; }
+		void beginFrame() override;
+		void commitFrame(const DisplayFrame& frame) override;
+		void stopPresentation() override;
 		bool requestFullRefresh() override;
 		bool isAvailable() const override { return initialized; }
 		int presentationMode() const override { return panelMode; }
@@ -57,7 +63,10 @@ private:
 		uint8_t* drawingFramebuffer;
 		uint8_t* presentedFramebuffer;
 		SemaphoreHandle_t framebufferMutex;
-		portMUX_TYPE fullRefreshRequestMux = portMUX_INITIALIZER_UNLOCKED;
+		StaticSemaphore_t wakeStorage{};
+		SemaphoreHandle_t wake = nullptr;
+		EpaperSchedule schedule;
+		std::atomic<bool> stopping{false};
 		bool pendingChanges;
 		bool fullRefreshRequested;
 		bool hasPresentedFrame;
@@ -68,16 +77,16 @@ private:
 		uint16_t dirtyX2;
 		uint16_t dirtyY2;
 #if HAS_DISPLAY_DIAGNOSTICS
-		portMUX_TYPE perfMux = portMUX_INITIALIZER_UNLOCKED;
 		DisplayPresentationStats perf;
+		uint64_t hardwareCompletedUs = 0;
+		uint64_t frameConversionStart = 0, frameWaitStart = 0, framePixelsStart = 0, frameFlushesStart = 0;
 #endif
 
-		void writePixel(int16_t x, int16_t y, uint16_t rgb565);
+		bool writePixel(int16_t x, int16_t y, uint16_t rgb565);
 		void markDirtyRegion(int16_t x, int16_t y, uint16_t w, uint16_t h);
 		bool usesBwMode() const;
 		size_t framebufferBytes() const;
-		bool fullRefreshPending();
-		bool consumeFullRefreshRequest();
+		void releaseResources();
 };
 
 #endif // IT8951_EPAPER_DRIVER_H

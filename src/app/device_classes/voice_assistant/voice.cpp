@@ -509,8 +509,14 @@ bool capture_wav(const VoiceCaptureOptions& options, uint8_t** out_wav, size_t* 
     if (options.auto_stop) {
         voice_auto_stop_init(&auto_stop, options.silence_ms, options.speech_threshold);
     }
+    bool capture_failed = false;
     while (!stop_requested() && samples_written < kMaxSamples) {
-        const size_t frames_read = audio_input_read_frames(raw, raw_frames, kReadTimeoutMs);
+        const AudioInputReadResult read = audio_input_read_frames(raw, raw_frames, kReadTimeoutMs);
+        if (read.status == AudioInputReadStatus::Error || read.status == AudioInputReadStatus::Overrun) {
+            capture_failed = true;
+            break;
+        }
+        const size_t frames_read = read.frames;
         if (!frames_read) {
             vTaskDelay(pdMS_TO_TICKS(10));
             continue;
@@ -529,11 +535,16 @@ bool capture_wav(const VoiceCaptureOptions& options, uint8_t** out_wav, size_t* 
             }
         }
     }
-    audio_input_stop_capture();
+    if (!audio_input_stop_capture()) capture_failed = true;
     heap_caps_free(raw);
     if (cancel_requested()) {
         *was_cancelled = true;
         heap_caps_free(wav);
+        return false;
+    }
+    if (capture_failed) {
+        heap_caps_free(wav);
+        strlcpy(error, "Microphone capture failed", error_size);
         return false;
     }
     if (options.auto_stop && !auto_stop.speech_detected && !manual_stop_requested()) {

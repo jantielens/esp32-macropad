@@ -293,7 +293,7 @@ bool ES8311AudioDriver::begin(uint32_t sample_rate) {
     chan_cfg.dma_desc_num = AUDIO_DMA_DESC_NUM;
     chan_cfg.dma_frame_num = AUDIO_DMA_FRAME_NUM;
     esp_err_t err = i2s_new_channel(&chan_cfg, &tx_handle,
-#if HAS_AUDIO_INPUT
+#if HAS_AUDIO_INPUT && AUDIO_INPUT_DRIVER == AUDIO_INPUT_DRIVER_ES8311
                                     &rx_handle
 #else
                                     nullptr
@@ -314,7 +314,7 @@ bool ES8311AudioDriver::begin(uint32_t sample_rate) {
             .ws   = (gpio_num_t)AUDIO_I2S_LRCK,
             .dout = (gpio_num_t)AUDIO_I2S_DOUT,
             .din  =
-#if HAS_AUDIO_INPUT
+#if HAS_AUDIO_INPUT && AUDIO_INPUT_DRIVER == AUDIO_INPUT_DRIVER_ES8311
                 (gpio_num_t)AUDIO_I2S_DIN,
 #else
                 I2S_GPIO_UNUSED,
@@ -334,13 +334,23 @@ bool ES8311AudioDriver::begin(uint32_t sample_rate) {
         cleanup();
         return false;
     }
-#if HAS_AUDIO_INPUT
+#if HAS_AUDIO_INPUT && AUDIO_INPUT_DRIVER == AUDIO_INPUT_DRIVER_ES8311
     err = i2s_channel_init_std_mode(rx_handle, &std_cfg);
     if (err != ESP_OK) {
         LOGE(TAG, "i2s_channel_init_std_mode(RX) failed: %s", esp_err_to_name(err));
         cleanup();
         return false;
     }
+#if HAS_VOICE_CLIPS
+    i2s_event_callbacks_t callbacks = {};
+    callbacks.on_recv_q_ovf = onRxOverrun;
+    err = i2s_channel_register_event_callback(rx_handle, &callbacks, this);
+    if (err != ESP_OK) {
+        LOGE(TAG, "I2S RX callback registration failed: %s", esp_err_to_name(err));
+        cleanup();
+        return false;
+    }
+#endif
 #endif
     err = i2s_channel_enable(tx_handle);
     if (err != ESP_OK) {
@@ -365,7 +375,7 @@ bool ES8311AudioDriver::begin(uint32_t sample_rate) {
         return false;
     }
 #endif
-#if HAS_AUDIO_INPUT
+#if HAS_AUDIO_INPUT && AUDIO_INPUT_DRIVER == AUDIO_INPUT_DRIVER_ES8311
     this->sample_rate = sample_rate;
 #endif
     int16_t silence[64] = {};
@@ -416,7 +426,7 @@ bool ES8311AudioDriver::setMuted(bool muted) {
 }
 
 // The microphone shares the ES8311 transport only on input-enabled boards.
-#if HAS_AUDIO_INPUT
+#if HAS_AUDIO_INPUT && AUDIO_INPUT_DRIVER == AUDIO_INPUT_DRIVER_ES8311
 bool ES8311AudioDriver::inputAvailable() const {
     return rx_handle != nullptr && sample_rate != 0 && isAvailable();
 }
@@ -424,6 +434,12 @@ bool ES8311AudioDriver::inputAvailable() const {
 bool ES8311AudioDriver::captureStart() {
     if (!inputAvailable()) return false;
     if (capture_active) return true;
+    capture_failed = false;
+#if HAS_VOICE_CLIPS
+    portENTER_CRITICAL(&rx_mux);
+    rx_overrun = false;
+    portEXIT_CRITICAL(&rx_mux);
+#endif
     const esp_err_t err = i2s_channel_enable(rx_handle);
     if (err != ESP_OK) {
         LOGE(TAG, "I2S RX enable failed: %s", esp_err_to_name(err));
@@ -433,24 +449,54 @@ bool ES8311AudioDriver::captureStart() {
     return true;
 }
 
-size_t ES8311AudioDriver::readFrames(int16_t* frames, size_t frame_count, uint32_t timeout_ms) {
-    if (!inputAvailable() || !capture_active || !frames || frame_count == 0) return 0;
+AudioInputReadResult ES8311AudioDriver::readFrames(int16_t* frames, size_t frame_count, uint32_t timeout_ms) {
+    if (!inputAvailable() || !capture_active || !frames || frame_count == 0)
+        return {0, AudioInputReadStatus::Error};
+    if (captureStatus() != AudioInputReadStatus::Ok) return {0, captureStatus()};
     size_t bytes_read = 0;
     const size_t requested_bytes = frame_count * 2 * sizeof(int16_t);
     const esp_err_t err = i2s_channel_read(rx_handle, frames, requested_bytes, &bytes_read,
-                                           pdMS_TO_TICKS(timeout_ms));
-    if (err != ESP_OK) {
-        if (err != ESP_ERR_TIMEOUT) LOGE(TAG, "I2S read error: %s", esp_err_to_name(err));
-        return 0;
+                                           timeout_ms);
+    if ((err != ESP_OK && err != ESP_ERR_TIMEOUT) || bytes_read % (2 * sizeof(int16_t))) {
+        LOGE(TAG, "I2S read error: %s", esp_err_to_name(err));
+        capture_failed = true;
+        return {0, AudioInputReadStatus::Error};
     }
-    return bytes_read / (2 * sizeof(int16_t));
+    const AudioInputReadStatus status = captureStatus();
+    if (status != AudioInputReadStatus::Ok) return {0, status};
+    return {bytes_read / (2 * sizeof(int16_t)),
+            err == ESP_ERR_TIMEOUT ? AudioInputReadStatus::Timeout : AudioInputReadStatus::Ok};
 }
 
-void ES8311AudioDriver::captureStop() {
-    if (!rx_handle || !capture_active) return;
+AudioInputReadStatus ES8311AudioDriver::captureStatus() {
+#if HAS_VOICE_CLIPS
+    portENTER_CRITICAL(&rx_mux);
+    const bool overrun = rx_overrun;
+    portEXIT_CRITICAL(&rx_mux);
+    if (overrun) return AudioInputReadStatus::Overrun;
+#endif
+    return capture_failed ? AudioInputReadStatus::Error : AudioInputReadStatus::Ok;
+}
+
+#if HAS_VOICE_CLIPS
+bool IRAM_ATTR ES8311AudioDriver::onRxOverrun(i2s_chan_handle_t, i2s_event_data_t*, void* context) {
+    auto* self = static_cast<ES8311AudioDriver*>(context);
+    portENTER_CRITICAL_ISR(&self->rx_mux);
+    self->rx_overrun = true;
+    portEXIT_CRITICAL_ISR(&self->rx_mux);
+    return false;
+}
+#endif
+
+bool ES8311AudioDriver::captureStop() {
+    if (!rx_handle || !capture_active) return true;
     const esp_err_t err = i2s_channel_disable(rx_handle);
-    if (err != ESP_OK) LOGW(TAG, "I2S RX disable failed: %s", esp_err_to_name(err));
-    else capture_active = false;
+    if (err != ESP_OK) {
+        LOGW(TAG, "I2S RX disable failed: %s", esp_err_to_name(err));
+        return false;
+    }
+    capture_active = false;
+    return true;
 }
 
 AudioInputFormat ES8311AudioDriver::inputFormat() const {
@@ -460,7 +506,7 @@ AudioInputFormat ES8311AudioDriver::inputFormat() const {
 
 bool ES8311AudioDriver::cleanup() {
     bool ok = setMuted(true);
-#if HAS_AUDIO_INPUT
+#if HAS_AUDIO_INPUT && AUDIO_INPUT_DRIVER == AUDIO_INPUT_DRIVER_ES8311
     if (rx_handle) {
         if (capture_active && i2s_channel_disable(rx_handle) != ESP_OK) ok = false;
         if (i2s_del_channel(rx_handle) == ESP_OK) {
@@ -490,7 +536,7 @@ AudioOutputDriver* audio_output_driver_create() {
     return &driver;
 }
 
-#if HAS_AUDIO_INPUT
+#if HAS_AUDIO_INPUT && AUDIO_INPUT_DRIVER == AUDIO_INPUT_DRIVER_ES8311
 AudioInputDriver* audio_input_driver_create() {
     return static_cast<ES8311AudioDriver*>(audio_output_driver_create());
 }

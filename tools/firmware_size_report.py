@@ -29,6 +29,10 @@ FEATURES = {
         ("volume_fragment_html_gz",),
     ),
     "Audio input (HAS_AUDIO_INPUT)": (("audio_input*.cpp.o",), ()),
+    "Voice clips (HAS_VOICE_CLIPS)": (
+        ("voice_clips*.cpp.o", "voice_clip_range.cpp.o", "voice_wav_store.cpp.o"),
+        ("voice_clips_fragment_html_gz", "portal_voice_clips_js_gz"),
+    ),
     "Sound player (HAS_SOUND_PLAYER)": (
         ("sound_player*.cpp.o", "sound_store.cpp.o", "mp3_metadata.cpp.o", "web_portal_sound*.cpp.o"),
         ("sounds_fragment_html_gz",),
@@ -91,7 +95,7 @@ FEATURES = {
     "Shared HID": (
         ("*hid.cpp.o",), ("hid_fragment_html_gz",),
     ),
-    "Bluetooth stack / telemetry (HAS_BLE_HID / HAS_BLE)": (("ble_*.cpp.o",), ()),
+    "Bluetooth stack / telemetry (HAS_BLE_HID / HAS_BLE)": (("ble_*.cpp.o", "bthome_*.cpp.o"), ()),
     "Wi-Fi / networking (shared)": (
         ("wifi*.cpp.o", "net_activity.cpp.o", "web_portal_ap.cpp.o"), ("wifi_fragment_html_gz",),
     ),
@@ -104,8 +108,12 @@ FEATURES = {
         ("ota*.cpp.o", "web_portal_ota*.cpp.o", "web_portal_firmware.cpp.o"),
         ("firmware_fragment_html_gz",),
     ),
-    "Timers / time": (("timer*.cpp.o", "time_service.cpp.o"), ("timers_fragment_html_gz",)),
-    "Sensors / power": (("sensors.cpp.o", "power*.cpp.o", "hw_button*.cpp.o", "duty_cycle.cpp.o", "board_hardware.cpp.o"), ()),
+    "Timers / time": (("timer*.cpp.o", "time_service.cpp.o", "rtc_drivers.cpp.o"), ("timers_fragment_html_gz",)),
+    "Auto-shutdown (HAS_AUTO_SHUTDOWN)": (
+        ("auto_shutdown.cpp.o",),
+        ("power_savings_fragment_html_gz", "portal_power_savings_js_gz"),
+    ),
+    "Sensors / power": (("sensors.cpp.o", "battery_info.cpp.o", "power*.cpp.o", "hw_button*.cpp.o", "duty_cycle.cpp.o", "board_hardware.cpp.o"), ()),
     "Configuration": (("config*.cpp.o",), ()),
     "Device classes": (("device_class*.cpp.o", "class_branding.cpp.o"), ()),
     "Built-in image assets": (("png_assets.cpp.o",), ()),
@@ -133,7 +141,7 @@ LIBRARIES = {
         "NetworkClientSecure", "Hash", "libmbed*.a", "libesp-tls.a", "libespressif__libsodium.a",
     ),
     "MQTT (HAS_MQTT)": ("PubSubClient", "libmqtt.a"),
-    "Bluetooth stack / telemetry (HAS_BLE_HID / HAS_BLE)": ("BLE", "libbt.a"),
+    "Bluetooth stack / telemetry (HAS_BLE_HID / HAS_BLE)": ("BLE", "NimBLE-Arduino", "libbt.a"),
     "USB HID (HAS_USB_HID)": ("USB", "libarduino_tinyusb.a", "libusb.a"),
     "Shared HID": ("libesp_hid.a",),
     "Storage": (
@@ -159,6 +167,8 @@ LIBRARIES = {
     ),
 }
 FLAG_SUBSYSTEMS = {
+    "HAS_RTC": "Timers / time",
+    "HAS_BATTERY_INFO": "Sensors / power",
     "HAS_FACE_WIDGET": "Widgets (HAS_DISPLAY)",
     "HAS_DISPLAY_DIAGNOSTICS": "Display / touch (HAS_DISPLAY / HAS_TOUCH)",
     "HAS_BACKLIGHT": "Display / touch (HAS_DISPLAY / HAS_TOUCH)",

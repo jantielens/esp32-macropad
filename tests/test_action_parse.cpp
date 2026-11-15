@@ -19,7 +19,9 @@
 #include <string>
 
 static unsigned g_followup_dispatches = 0;
-ActionResult action_dispatch(const ButtonAction& action, const char* label, uint32_t token) {
+ActionDispatchContext action_dispatch_context() { return {}; }
+void display_manager_request_binding_refresh() {}
+ActionResult action_dispatch(const ButtonAction& action, const char* label, uint32_t token, bool) {
     if (!strcmp(action.type, ACTION_TYPE_HA_SERVICE))
         return action_type_find(action.type)->dispatch(action, label, token);
     ++g_followup_dispatches;
@@ -159,6 +161,39 @@ TEST(type_only) {
     navigation = parse_from_string("{\"type\":\"button_nav\",\"command\":\"unknown\"}");
     ASSERT_STR(navigation.type, "");
 #endif
+}
+
+TEST(bthome_round_trip_and_validation) {
+    const auto defaults = round_trip("{\"type\":\"bthome\"}");
+    ASSERT_EQ(defaults.payload.bthome.button, 1);
+    ASSERT_EQ(defaults.payload.bthome.event, 1);
+    for (const char* json : {
+            "{\"type\":\"bthome\",\"button\":1,\"event\":\"press\"}",
+            "{\"type\":\"bthome\",\"button\":4,\"event\":\"double_press\"}",
+            "{\"type\":\"bthome\",\"button\":10,\"event\":\"long_press\"}"}) {
+        JsonDocument original;
+        deserializeJson(original, json);
+        ASSERT_TRUE(action_validate_json(original.as<JsonObjectConst>()) == nullptr);
+        const auto action = round_trip(json);
+        JsonDocument output;
+        action_to_json(action, output.to<JsonObject>());
+        ASSERT_EQ(output["button"].as<int>(), original["button"].as<int>());
+        ASSERT_STR(output["event"].as<const char*>(), original["event"].as<const char*>());
+    }
+    for (const char* json : {
+            "{\"type\":\"bthome\",\"button\":0}",
+            "{\"type\":\"bthome\",\"button\":11}",
+            "{\"type\":\"bthome\",\"button\":1.5}",
+            "{\"type\":\"bthome\",\"button\":\"4\"}",
+            "{\"type\":\"bthome\",\"event\":\"triple_press\"}",
+            "{\"type\":\"bthome\",\"event\":1}"}) {
+        JsonDocument invalid;
+        deserializeJson(invalid, json);
+        ASSERT_TRUE(action_validate_json(invalid.as<JsonObjectConst>()) != nullptr);
+        const auto parsed = parse_from_string(json);
+        ASSERT_STR(parsed.type, "");
+    }
+    ASSERT_TRUE(!action_type_find(ACTION_TYPE_BTHOME)->display_lock_required);
 }
 
 TEST(set_var_round_trip_and_validation) {
@@ -726,9 +761,13 @@ TEST(system_action_parse) {
 }
 
 TEST(system_action_round_trip) {
-    ButtonAction act = round_trip("{\"type\":\"system\",\"system_command\":\"wifi_reconnect\"}");
-    ASSERT_STR(act.type, "system");
-    ASSERT_STR(act.payload.system.system_command, "wifi_reconnect");
+    for (const char* command : {"wifi_connect", "wifi_disconnect", "wifi_off", "ap_enable", "ap_disable"}) {
+        char json[128];
+        snprintf(json, sizeof(json), "{\"type\":\"system\",\"system_command\":\"%s\"}", command);
+        ButtonAction act = round_trip(json);
+        ASSERT_STR(act.type, "system");
+        ASSERT_STR(act.payload.system.system_command, command);
+    }
 }
 
 TEST(system_command_not_serialized_when_empty) {
@@ -887,6 +926,7 @@ TEST(registered_identifiers_survive_storage) {
 }
 
 TEST(catalog_feature_gates_and_metadata_parity) {
+    ASSERT_TRUE(!action_type_is_supported("shutdown"));
     JsonDocument portal;
     action_catalog_emit(portal.to<JsonArray>(), false);
     JsonDocument mcp;
@@ -894,6 +934,7 @@ TEST(catalog_feature_gates_and_metadata_parity) {
     unsigned alarm_count = 0;
     for (JsonObject entry : mcp.as<JsonArray>()) {
         const char* name = entry["type"];
+        ASSERT_TRUE(strcmp(name, "shutdown") != 0);
         const ActionTypeDef* type = action_type_find(name);
         ASSERT_TRUE(type != nullptr);
         ASSERT_EQ(entry["alarm_hook_allowed"].as<bool>(), type->execution == ACTION_EXECUTION_SYNC);
@@ -1075,6 +1116,7 @@ int main(int argc, char** argv) {
     RUN(action_list_filters_literal_none_for_pad_callers);
     RUN(action_list_retains_literal_none_for_existing_callers);
     RUN(type_only);
+    RUN(bthome_round_trip_and_validation);
     RUN(set_var_round_trip_and_validation);
     RUN(gamepad_round_trip_and_validation);
 

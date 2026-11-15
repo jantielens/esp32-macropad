@@ -61,10 +61,17 @@ These are onboard assignments, not free expansion pins. The battery divider
 ratio is 2:1. IT8951 manages its panel bias internally; the TPS65186 portal
 VCOM calibration used by Inkplate boards is not available.
 
+Existing frame battery reads also feed shared battery voltage and approximate
+voltage-derived percentage without additional polling. Current, charging status
+and runtime estimates are unavailable. Cached readings expire after three
+minutes of active runtime and reset at deep sleep; this does not add ordinary
+pads or alter low-battery controls. See
+[shared battery semantics](../../../docs/user/pads/data-sources.md#show-battery-information).
+
 ## References
 
 * [E-Paper Frame workflow](../../../docs/user/specialized/epaper-frame/README.md)
 * [Frame assignments](board_overrides.h)
-* [Frame driver and image validation](../../app/device_classes/epaper_frame/drivers/reterminal_e1003_driver.cpp)
+* [Frame driver and image validation](drivers/reterminal_e1003_driver.cpp)
 * [Build and partition selections](../../../config.sh)
 * [Hardware index](../../../docs/user/hardware.md)

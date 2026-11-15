@@ -23,6 +23,7 @@ uint16_t motorSteps[STOPWATCH_VIBRATION_MAX_STEPS] = {};
 uint8_t motorStepCount = 0;
 uint8_t motorStepIndex = 0;
 uint32_t shutdownToken = 0;
+bool shutdownBatteryOnly = false;
 bool shutdownCommandSent = false;
 uint32_t shutdownDeadline = 0;
 
@@ -55,6 +56,12 @@ bool read(uint8_t address, uint8_t reg, uint8_t* data, size_t length) {
         data[i] = static_cast<uint8_t>(value);
     }
     return true;
+}
+
+bool shutdown_battery_allowed() {
+    uint8_t voltage[2] = {};
+    return read(kPmic, 0x24, voltage, sizeof(voltage)) &&
+        (uint16_t(voltage[0]) | (uint16_t(voltage[1]) << 8)) <= 4000;
 }
 
 bool write(uint8_t address, uint8_t reg, uint8_t value) {
@@ -275,11 +282,13 @@ bool m5stack_stopwatch_vibrate_pattern(const uint16_t* durations, uint8_t count)
     return result;
 }
 
-bool m5stack_stopwatch_request_shutdown(uint32_t continuation_token) {
+bool m5stack_stopwatch_request_shutdown(uint32_t continuation_token, bool battery_only) {
     if (!continuation_token || !i2c_bus_lock()) return false;
-    const bool result = ready && !shutdownToken && ota_activity_try_begin();
+    const bool result = ready && !shutdownToken && (!battery_only || shutdown_battery_allowed()) &&
+        ota_activity_try_begin();
     if (result) {
         shutdownToken = continuation_token;
+        shutdownBatteryOnly = battery_only;
         shutdownCommandSent = false;
     }
     i2c_bus_unlock();
@@ -315,11 +324,12 @@ void m5stack_stopwatch_loop() {
     if (!token || (sent && !timedOut)) return;
     bool failed = timedOut;
     if (!sent) {
-#if HAS_AUDIO
-        audio_stop();
-#endif
         if (!i2c_bus_lock()) return;
-        const bool outputsOff = ready && update(expander, 0x06, 0x03, 0) &&
+        const bool batteryAllowed = !shutdownBatteryOnly || shutdown_battery_allowed();
+#if HAS_AUDIO
+        if (batteryAllowed) audio_stop();
+#endif
+        const bool outputsOff = batteryAllowed && ready && update(expander, 0x06, 0x03, 0) &&
             update(expander, 0x05, 0x04, 0);
         if (outputsOff) {
             motorRunning = false;
@@ -408,7 +418,7 @@ AudioBoardControl stopwatch_audio_control() {
     return control;
 }
 
-bool m5stack_stopwatch_battery_read(uint16_t& millivolts, bool& charging) {
+bool m5stack_stopwatch_battery_read(uint16_t& millivolts, bool& charging, bool& external_power) {
     if (!i2c_bus_lock()) return false;
     uint8_t voltages[4], gpio;
     const bool ok = ready && read(kPmic, 0x22, voltages, sizeof(voltages)) &&
@@ -416,7 +426,8 @@ bool m5stack_stopwatch_battery_read(uint16_t& millivolts, bool& charging) {
     if (ok) {
         millivolts = voltages[0] | (uint16_t(voltages[1]) << 8);
         const uint16_t vin = voltages[2] | (uint16_t(voltages[3]) << 8);
-        charging = vin > 4000 && !(gpio & 0x04);
+        external_power = vin > 4000;
+        charging = external_power && !(gpio & 0x04);
     }
     i2c_bus_unlock();
     return ok;

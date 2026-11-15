@@ -17,6 +17,24 @@ FakeFontStorage LittleFS;
 FakeFontStorage SD_MMC;
 static bool psram_ready = true;
 static bool ota_active = false;
+#if USE_SD_STORAGE && HAS_AUTO_SHUTDOWN
+static unsigned storage_writers = 0;
+bool ota_activity_try_begin_config_write() {
+    if (ota_active) return false;
+    ++storage_writers;
+    return true;
+}
+void ota_activity_finish_config_write() {
+    if (!storage_writers) std::abort();
+    --storage_writers;
+}
+bool ota_activity_try_begin() {
+    if (ota_active || storage_writers) return false;
+    ota_active = true;
+    return true;
+}
+void ota_activity_finish() { ota_active = false; }
+#endif
 static bool allocation_failure = false;
 static void (*allocation_hook)() = nullptr;
 static size_t validation_reads = 0;
@@ -199,6 +217,9 @@ int main(int argument_count, char** arguments) {
     FontUpload first;
     FontUpload second;
     if (font_store_begin(first, "test-font") != FontStoreResult::Ok) return 1;
+#if USE_SD_STORAGE && HAS_AUTO_SHUTDOWN
+    if (storage_writers != 1 || ota_activity_try_begin()) return 1;
+#endif
     if (font_store_begin(second, "second") != FontStoreResult::Busy) return 1;
     font_store_abort(second);
     const size_t upload_log_count = log_lines.size();
@@ -208,9 +229,16 @@ int main(int argument_count, char** arguments) {
     if (Storage.exists("/fonts/test-font.ttf")) return 1;
     Storage.read_hook = []() { ++validation_reads; };
     if (font_store_finish(first, sizeof(fixture)) != FontStoreResult::Ok || font_store_generation() != 1) return 1;
+#if USE_SD_STORAGE && HAS_AUTO_SHUTDOWN
+    if (storage_writers != 0) return 1;
+#endif
     Storage.read_hook = nullptr;
     if (validation_reads != (sizeof(fixture) + 4095) / 4096) return 1;
     if (log_lines.back().find("Uploaded 'test-font': 61400 bytes, generation=1") == std::string::npos) return 1;
+#if USE_SD_STORAGE && HAS_AUTO_SHUTDOWN
+    if (!ota_activity_try_begin() || font_store_begin(second, "blocked") != FontStoreResult::Busy) return 1;
+    ota_activity_finish();
+#endif
     if (font_store_begin(second, "test-font") != FontStoreResult::Duplicate) return 1;
     size_t length = 0;
     uint8_t* data = font_store_load("test-font", length);
@@ -261,6 +289,9 @@ int main(int argument_count, char** arguments) {
     Storage.short_write = false;
     if (font_store_begin(second, "partial") != FontStoreResult::Ok) return 1;
     font_store_abort(second);
+#if USE_SD_STORAGE && HAS_AUTO_SHUTDOWN
+    if (storage_writers != 0) return 1;
+#endif
     if (Storage.exists("/fonts/.upload.tmp")) return 1;
     for (unsigned failure = 0; failure < 3; ++failure) {
         if (font_store_begin(second, "failed-validation") != FontStoreResult::Ok ||
@@ -288,6 +319,9 @@ int main(int argument_count, char** arguments) {
     Storage.mounted = true;
     psram_ready = false;
     if (font_store_begin(second, "unavailable") != FontStoreResult::Unavailable) return 1;
+#if USE_SD_STORAGE && HAS_AUTO_SHUTDOWN
+    if (storage_writers != 0) return 1;
+#endif
 #endif
     std::puts("Font names and static TrueType bounds validated");
     return 0;

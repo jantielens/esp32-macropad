@@ -218,6 +218,8 @@ static bool read_snapshot(int index, AlarmDocument& document) {
 static bool persist(const AlarmDefinition& candidate, time_t handled, time_t once, time_t armed = clock_core.armed_from) {
     settings_save_failed = settings_dirty;
     if (ota_activity_is_active()) return fail("Firmware update in progress");
+    const StorageMutationGuard guard;
+    if (!guard) return fail("Storage is busy");
     if (generation == UINT64_MAX) return fail("Alarm snapshot generation exhausted");
     AlarmDocument document(ALARM_SNAPSHOT_MAX);
     document["schema"] = 3;

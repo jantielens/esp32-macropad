@@ -126,7 +126,7 @@ does not migrate partition boundaries.
 | Signal | Feather GPIO | Connection |
 |---|---|---|
 | HAT SCK / MOSI / MISO | 36 / 35 / 37 | Dedicated SPI bus |
-| HAT CS / RESET / HRDY | 10 / 38 / 5 | HRDY LOW means busy |
+| HAT CS / RESET / HRDY | 10 / 38 / 5 | HRDY LOW means the command interface is busy |
 | Button | 14 | Normally-open contact to GND, active LOW |
 | HAT 5V / GND | External 5 V / common GND | Always powered, no GPIO17 boost control |
 
@@ -149,8 +149,14 @@ Grayscale is the default; selecting B/W in the existing e-paper settings takes
 effect after reboot. B/W uses regional DU waveforms; grayscale uses regional
 GC16. Both modes perform full-panel GC16 on first presentation, explicit full
 refresh, and the configured cleanup threshold (default 10 regional updates).
-The initial cadence is a 500 ms minimum presentation interval, 150 ms settling,
-and 1000 ms passive binding interval. These are scheduling intervals, not a
+The initial background cadence is a 500 ms minimum presentation interval,
+uncapped 150 ms settling, and 1000 ms passive binding interval. Coherent,
+changed interaction frames bypass the presentation interval and settling;
+background and manual-full requests retain them. Required full refreshes and
+active waveforms still complete. The immutable upload snapshot remains
+unavailable to screenshot readers until IT8951 `LUTAFSR` reports engine
+completion; HRDY alone does not establish that completion.
+These are scheduling intervals, not a
 promise of measured panel latency. Regional grayscale ghosting and response
 time require hardware validation.
 
@@ -211,13 +217,33 @@ The monochrome adapter loads outlines with
 only 0 and 255. Existing fallback fonts and metrics corrections still apply.
 The active presentation mode participates in the font-instance cache key.
 
-Each instance owns a FreeType library and face and caches up to 16 glyphs.
+Each instance owns a FreeType library and face and caches up to 96 glyphs.
 Drawing pins bitmap buffers until LVGL releases them. FreeType allocations use
 the PSRAM-first LVGL allocator, with internal RAM fallback. Failed allocations
 invalidate the face and library; the next glyph request recreates them before
 retrying. Cached bitmap buffers remain independent and valid while pinned.
 Initial instance-creation failures use the existing cached bitmap fallback.
 OTA guards block new font resolution and glyph work while an update is active.
+
+The limit counts glyphs, not bytes. Bitmaps are allocated on demand as A8
+coverage: approximately `aligned_width * height` bytes per glyph, plus buffer
+and allocator overhead. Doubling the pixel size roughly quadruples bitmap
+memory. Different sizes/metrics create separate instances; hidden cached pads
+retain their glyphs. Explicit fonts are pad-owned, while inherited typography
+shares device-lifetime instances. Font source bytes are additional and shared
+only within their owning cache. PSRAM exhaustion can spill glyph allocations
+into scarce internal RAM; the cache has no global byte budget.
+Replacement allocates the incoming bitmap before freeing its victim, and
+FreeType also uses temporary rasterization workspaces, so peak use exceeds
+retained bitmap storage.
+
+For orientation, a host measurement of DejaVu Sans after loading 95 printable
+ASCII characters used approximately 107 KiB at 32 px, 146 KiB at 48 px,
+345 KiB at 96 px and 551 KiB at 128 px per instance, including FreeType/cache
+allocations but excluding its 759,720-byte source file. These are font-specific
+host estimates, not ESP32 peak memory or guarantees for other fonts. Sparse
+numeric labels retain fewer glyphs; large alphabets and multiple resident
+instances cost more. Monitor device PSRAM and internal RAM with the actual pads.
 
 The pinned minimal library, license notices, provenance, and heap-workspace patch
 live in `libraries/MacropadFreeType`. `build.sh` discovers this project-local
@@ -262,12 +288,19 @@ confirmed this polarity on the V1.2A unit: full waveforms took about 1.17 second
 and partial waveforms about 0.57 seconds, ending with a LOW-to-HIGH transition.
 It differs from the A-revision sample's wait condition. Debug logs report the
 raw pin level at wait entry and exit along with elapsed time.
-BUSY waits are bounded at 15 seconds. A timeout marks the display unavailable
-until reboot. The presentation loop defers new waveforms during OTA.
-Pixel changes normally settle for 150 ms before presentation, but settling is
+After activation, BUSY must assert LOW and return HIGH within the existing
+15-second timeout. A timeout marks the display unavailable until reboot.
+Stop/OTA cancels before activation or completes the owned waveform and required
+guard delays without publishing a cancelled snapshot; resumed OTA work requires
+a full recovery.
+Background pixel changes settle for 150 ms before presentation, but settling is
 capped at 500 ms from the first pending change so repeated LVGL redraws cannot
 postpone a frame indefinitely. The configured minimum refresh interval still
-applies independently; waveform time is additional.
+applies independently to background work. Committed interaction changes bypass
+both policy waits, not controller timing or required full refreshes.
+The worker snapshots only complete render generations and retains newer pixels
+and manual full requests during physical updates. See the
+[coherent presentation lifecycle](display-touch-architecture.md#crowpanel-42-a-revision).
 
 All `HAS_DISPLAY` boards provide the standard action `button_nav` with commands
 `previous`, `next`, `tap`, and `tap_hold`, labeled Previous, Next, Tap, and
@@ -339,6 +372,22 @@ automatic full-update threshold because its nonzero value suppresses the next
 partial waveform. The driver compares the mode-specific drawing and presented
 framebuffers, skipping no-op physical updates before it starts a waveform.
 
+LVGL writes into a private PSRAM drawing buffer. Presentation copies it into
+the library's original mode-specific buffer without replacing library pointers
+or previous-frame storage. Newer drawing and manual-full requests survive an
+older waveform. The per-mode wrapper allocation is unchanged. Reinitialization
+and allocation-failure cleanup free only wrapper-owned storage.
+
+Background cadence and uncapped 150 ms settling remain in effect, including
+manual full refresh. Manual requests wake policy waiting; a 20 ms bounded
+recheck also observes generic OTA activity before entering the library.
+An active library waveform is not interrupted. Inkplate does not enable the
+coherent-frame/interaction-priority path: the library's DMA EOF wait is unbounded,
+`display()` returns no refresh status, and `partialUpdate()` returns a change
+count rather than success/failure. The wrapper cannot promise bounded active
+shutdown or independently verified transfer success without library support.
+This profile still requires USB updates; the activity check does not add OTA.
+
 The frontlight is independent of panel presentation. Brightness `0` switches it
 off without changing the panel state; nonzero brightness maps to the controller's
 63-step range. This board uses `SCREENSAVER_BACKLIGHT_ONLY` and disables display
@@ -364,14 +413,23 @@ Run `./tools/install-custom-partitions.sh` after
 updating the repository, or `./setup.sh` for a fresh installation. Prefer
 slow-changing Extension widgets because frequent updates are costly on e-paper.
 
-The driver uploads the snapshot through the IT8951 and releases its framebuffer
-mutex before starting a waveform. Both modes union LVGL flush rectangles and
+The driver snapshots only completed LVGL generations and releases its framebuffer
+mutex before controller work. It reuses its existing drawing/presentation pair,
+keeping the upload immutable while newer LVGL changes accumulate.
+Changed interaction frames bypass background cadence and settling; background
+and manual-full requests retain uncapped settling. Both modes union LVGL flush rectangles and
 align the resulting native-panel region for regional uploads. B/W refreshes the
 region with DU; grayscale uses regional GC16. The initial presentation and
 forced refreshes use full-panel GC16, as do scheduled refreshes in both modes.
 The E1003 firmware requires the IT8951 VCOM write selector `0x0002`;
 selector `0x0001` only reads the configured value. Regional grayscale GC16
 requires hardware validation for visual quality and update timing.
+The driver checks `LUTAFSR` (`0x1224`) for physical engine completion rather
+than publishing on HRDY alone. Stop/OTA close owned uploads at safe checkpoints
+and wait for accepted display submissions to finish within a bounded deadline.
+Cancelled or incomplete work stays invalid and requires full recovery.
+Qualify these completion and cancellation behaviors on E1003 hardware separately
+from the standard Waveshare HAT profile.
 
 The GT911 touch controller is at `0x5D` on GPIO19/GPIO20, with GPIO2 interrupt
 and GPIO16 reset. It shares the physical I2C lines with the SHT4x and RTC, but

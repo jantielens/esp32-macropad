@@ -35,6 +35,9 @@ and shared diagnostic attachments appropriately protected.
 
 * Use [Image Library](../media/images.md) for button background images.
 * Use [Alert Sounds and Music Library](../media/audio.md) for MP3 files.
+* Use [Voice clips](../media/audio.md#record-and-manage-voice-clips) for local
+  recordings. They share the selected storage capacity and can also be opened
+  through Storage.
 * Use [Fonts](../media/fonts.md) for uploaded typefaces.
 * Use [Camera > Snapshots](../media/camera.md#save-and-manage-snapshots)
   for the latest capture and dated camera roll.

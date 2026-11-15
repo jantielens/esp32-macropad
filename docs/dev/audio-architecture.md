@@ -20,7 +20,7 @@ flowchart TD
     Storage["LittleFS sound files"] --> Player["sound_player.cpp\nMP3 decode and resampling"]
     Audio --> Driver["AudioOutputDriver"]
     Player --> Driver
-    Driver --> Hardware["ES8311, ES8388, or PCM510xA\nI2S output hardware"]
+    Driver --> Hardware["I2S output or native PWM tone hardware"]
 ```
 
 `audio_output_drivers.cpp` includes exactly one concrete driver selected by
@@ -47,7 +47,21 @@ buffer duration plus a 100 ms idle grace period before muting. Paused music is
 idle; silence gaps within an active tone pattern are not. Rapid feedback can
 reuse the enabled amplifier during the grace period. OTA entry mutes immediately.
 Codec power and I2S clocks remain active while idle, including the PCM510xA
-clock configuration. This policy applies to all output drivers.
+clock configuration. This policy applies to PCM output drivers.
+
+Native-tone drivers use the same parsed segments and audio worker but do not
+render PCM or use amplifier wake delays and DMA starvation accounting. The
+worker carries absolute monotonic deadlines across segments and uses waits of
+at most 10 ms (subject to RTOS tick resolution). Scheduler lateness skips expired
+segments rather than extending the pattern. It silences gaps and discards
+feedback while an alert is active. The Sticky board's GPIO48 LEDC
+driver scales PWM duty for volume and quieter feedback; it does not expose
+physical amplifier controls or MP3 playback. OTA, stop, errors, and reboot
+cleanup silence the output. If a silence write fails, the driver attempts LEDC
+detach and GPIO-low cleanup. The worker logs the failure, disables native
+playback until reboot, and retries failed teardown at 100 ms intervals. A
+successful detach establishes silence even if clearing duty failed; failed
+detach retains ownership for another cleanup attempt.
 
 Drivers can opt into `needsContinuousIdleOutput()`; the default is false.
 With idle amplifier muting disabled, the worker continues sending silent PCM
@@ -104,14 +118,20 @@ and makes repeated capture start/stop calls safe.
 Boards with `HAS_AUDIO_INPUT` expose a board-neutral capture API in
 `audio_input.h`. A caller reserves input with `audio_input_start_capture()`,
 reads bounded native, interleaved PCM frames, and releases it with
-`audio_input_stop_capture()`. Only one FreeRTOS task can own a capture session
-at a time. The input layer does not resample, create WAV files, retain audio,
-or make network requests.
+`audio_input_stop_capture()`. Reads report timeout, failure, and overrun
+separately. Pause stops capture while retaining the reservation; a failed stop
+retains ownership until cleanup succeeds. A later start by the same owner retries
+cleanup. Only one FreeRTOS task can own a capture session at a time. The input
+layer does not resample, create WAV files, retain audio, or make network requests.
 
 `esp32-p4-lcd4b` combines the ES8311 output codec with an ES7210 microphone ADC
 on the same 48 kHz I2S clock. The ES8311 driver owns both channels and exposes
 the existing RX channel through `AudioInputDriver`; input capture neither
 reconfigures the shared I2S transport nor interrupts playback.
+
+The reTerminal Sticky selects an independent PDM input driver on I2S0. It
+targets 16 kHz, mono, 16-bit PCM and powers the microphone only for capture.
+Its PWM buzzer remains the output driver.
 
 Pads can display these read-only microphone bindings:
 
@@ -121,7 +141,33 @@ Pads can display these read-only microphone bindings:
     after its short resolver-driven sampling lease expires.
 
 The meter task remains asleep and does not read I2S data unless one of these
-bindings is actively resolved.
+bindings is actively resolved. It yields to another capture owner and during
+firmware updates. Its task stack and sample buffer prefer PSRAM, with internal
+RAM fallback.
+
+## Local Voice Clips
+
+`HAS_VOICE_CLIPS` enables an independent local recorder and is mutually
+exclusive with `IS_VOICE_ASSISTANT`. One worker owns capture, using a PSRAM-first
+stack. Another uses an internal stack to own the unfinished file and write
+native 16-bit PCM through `Storage`.
+They exchange bounded audio batches through a PSRAM-first queue, with an internal
+RAM fallback. The storage worker publishes a finalized WAV only after indexed
+registration. The microphone remains reserved while paused. The meter yields
+to the capture owner.
+
+The recorder reserves filesystem headroom and checks capacity during capture.
+Overrun, input stall, write, and finalization failures are reported without
+publishing an unfinished clip. OTA, reboot, factory reset, and Sticky shutdown
+request cancellation and wait or defer until both workers have stopped safely.
+Boot cleanup removes stale temporary recordings. Portal readers stream indexed
+clips with bounded buffers; an active reader makes deletion return busy.
+The Sticky driver targets 16 kHz mono with 16 DMA buffers of 512 frames. The
+queue holds 16 batches of 1024 frames, or 32 KiB at this format. A device
+reported a 210 ms write and a 569 ms capacity check with the single-worker
+design. Capture can now continue while the storage worker is blocked, but flash
+cache stalls still require DMA buffering. Longer recordings, memory headroom,
+and worst-case stalls need device validation.
 
 ## Voice Assistant
 

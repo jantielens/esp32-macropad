@@ -1133,7 +1133,7 @@ async function checkBindingPreviewPlacement() {
     };
     const top = addField('pad-edit-label-top', '[ext:weather;current.temperature_2m]', true);
     const center = addField('pad-edit-label-center', '[health:cpu]', true);
-    const color = addField('pad-edit-border-color', '[health:rssi]', false);
+    const color = addField('pad-edit-border-color', '[health:wifi_rssi]', false);
     const option = addField('pad-edit-option-1-label', '[time:%H:%M:%S]', false);
     widgetType.value = 'option_selector';
     const previewContext = {
@@ -1150,7 +1150,7 @@ async function checkBindingPreviewPlacement() {
         fetch: (url, options) => {
             const body = JSON.parse(options.body);
             assert.deepStrictEqual(body.bindings, [
-                '[ext:weather;current.temperature_2m]', '[health:cpu]', '[health:rssi]', '[time:%H:%M:%S]'
+                '[ext:weather;current.temperature_2m]', '[health:cpu]', '[health:wifi_rssi]', '[time:%H:%M:%S]'
             ]);
             return Promise.resolve({ ok: true, json: () => Promise.resolve({
                 resolved: ['21.3 C', '23', '#123456', '12:34:56'].map(value => ({ value }))

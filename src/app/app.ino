@@ -20,6 +20,9 @@
 #include "sensors/sensor_manager.h"
 #include "power_config.h"
 #include "power_manager.h"
+#if HAS_AUTO_SHUTDOWN
+#include "auto_shutdown.h"
+#endif
 #include "portal_idle.h"
 #include "wifi_manager.h"
 #include "device_class.h"
@@ -36,6 +39,7 @@
 #if HAS_BLE
 #include "ble_telemetry.h"
 #endif
+#include "ble_backend.h"
 #if HEALTH_HISTORY_ENABLED
 #include "health_history.h"
 #endif
@@ -88,6 +92,7 @@
 #include "gamepad_hid.h"
 #endif
 #include "keyboard_hid.h"
+#include "bthome_events.h"
 
 #if HAS_AUDIO
 #include "audio.h"
@@ -95,6 +100,10 @@
 
 #if HAS_AUDIO_INPUT
 #include "audio_input.h"
+#endif
+
+#if HAS_VOICE_CLIPS
+#include "voice_clips.h"
 #endif
 
 #include "i2c_bus.h"
@@ -217,6 +226,11 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 	if (g_normal_runtime_started) return;
 	g_normal_runtime_started = true;
 
+	#if (HAS_BLE || HAS_BLE_HID) && BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+	bthome_events_configure(device_config.device_name, device_config.bthome_event);
+	bthome_events_prepare();
+	#endif
+
 	#if HAS_HA_HISTORY
 	ha_stats_begin_startup();
 	#endif
@@ -256,6 +270,10 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 	#endif
 
 	sensor_manager_init();
+
+	#if (HAS_BLE || HAS_BLE_HID) && BLE_BACKEND == BLE_BACKEND_ARDUINO_CORE
+	bthome_events_configure(device_config.device_name, device_config.bthome_event);
+	#endif
 
 	#if HAS_BLE_HID
 	if (keyboard_hid_transport() == KeyboardTransport::Ble) {
@@ -341,6 +359,9 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 	#if HAS_HA_HISTORY
 	ha_stats_end_startup();
 	#endif
+#if HAS_AUTO_SHUTDOWN
+	auto_shutdown_configure(device_config.auto_shutdown_timeout_seconds);
+#endif
 }
 
 bool app_continue_offline_from_setup() {
@@ -363,6 +384,10 @@ bool app_continue_offline_from_setup() {
 
 void setup()
 {
+	#ifdef BOARD_EARLY_POWER_INIT
+	const bool board_power_ready = BOARD_EARLY_POWER_INIT();
+	#endif
+
 	#if HAS_PSRAM && MALLOC_PSRAM_THRESHOLD_BYTES > 0
 	if (psramFound()) {
 		heap_caps_malloc_extmem_enable(MALLOC_PSRAM_THRESHOLD_BYTES);
@@ -386,6 +411,9 @@ void setup()
 
 	// Initialize logger (wraps Serial for web streaming)
 	log_init(115200);
+	#ifdef BOARD_EARLY_POWER_INIT
+	if (!board_power_ready) LOGE("Board", "Early power latch initialization failed");
+	#endif
 	if (power_manager_is_deep_sleep_wake()) {
 		delay(10);
 	} else {
@@ -464,10 +492,11 @@ void setup()
 	#endif
 	#endif
 
-	#if HAS_TOUCH || HAS_CAMERA || HAS_AUDIO || defined(BOARD_HARDWARE_SOURCE)
+	#if HAS_TOUCH || HAS_CAMERA || HAS_AUDIO || HAS_RTC || defined(BOARD_HARDWARE_SOURCE)
 	i2c_bus_init();
 	#endif
-	if (!board_hardware_init()) {
+	const bool board_ready = board_hardware_init();
+	if (!board_ready) {
 		LOGE("Board", "Hardware initialization failed; dependent peripherals unavailable");
 	}
 
@@ -489,11 +518,15 @@ void setup()
 	config_loaded = config_manager_load(&device_config);
 	if (!device_config.timezone[0]) strlcpy(device_config.timezone, "UTC0", sizeof(device_config.timezone));
 	time_service_set_timezone(device_config.timezone);
+	#if HAS_RTC
+	if (board_ready) time_service_init_rtc();
+	#endif
 	if (!config_loaded) {
 		String default_name = config_manager_get_default_device_name();
 		strlcpy(device_config.device_name, default_name.c_str(), CONFIG_DEVICE_NAME_MAX_LEN);
 		device_config.magic = CONFIG_MAGIC;
 	}
+	wifi_manager_init_network_snapshot(device_config);
 
 	#if HAS_USB_HID
 	usb_hid_init(device_config.device_name, device_config.keyboard_transport == KeyboardTransport::Usb);
@@ -540,10 +573,23 @@ void setup()
 	power_manager_set_current_mode(boot_mode);
 	power_manager_led_set_mode(boot_mode);
 
+	#if HAS_BLE || HAS_BLE_HID
+	ble_backend_configure_power(device_config.bluetooth_tx_power_dbm);
+	#endif
+
+	#if (HAS_BLE || HAS_BLE_HID) && BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+	// Reserve BLE's internal RAM before WiFi and normal-runtime allocations.
+	if (boot_mode == PowerMode::AlwaysOn || boot_mode == PowerMode::Offline) {
+		bthome_events_configure(device_config.device_name, device_config.bthome_event);
+		bthome_events_prepare();
+	}
+	#endif
+
 	// Start WiFi hardware after required storage is known to be available.
 	// On ESP32-P4 this kicks off the SDIO link to the C6 co-processor (~2-5 s)
 	// which can run in the background while touch, config, and pads initialize.
 	const bool defer_wifi_init =
+			boot_mode == PowerMode::Offline ||
 			boot_mode == PowerMode::DutyCycleBle ||
 			device_class_dispatch_defer_wifi_init(&device_config, boot_mode);
 	if (!defer_wifi_init) {
@@ -646,9 +692,9 @@ void setup()
 	#if HAS_AUDIO
 	audio_set_amplifier_policy(device_config.audio_idle_mute, device_config.audio_wake_delay_ms);
 	audio_init(device_config.audio_volume);
+	#endif
 	#if HAS_AUDIO_INPUT
 	audio_input_meter_init();
-	#endif
 	#endif
 
 	// Let registered device classes hook in before any network / display init.
@@ -674,7 +720,7 @@ void setup()
 		// Initialize sensors (their update path buffers BLE telemetry values)
 		sensor_manager_init();
 
-		ble_telemetry_init(device_config.device_name, device_config.ble_tx_power_dbm);
+		ble_telemetry_init(device_config.device_name);
 
 		duty_cycle_run(&device_config);
 		return;
@@ -691,6 +737,10 @@ void setup()
 			return;
 		}
 	}
+
+	#if HAS_VOICE_CLIPS
+	if (!voice_clips_init()) LOGE("Main", "Voice clips initialization failed");
+	#endif
 
 	bool enter_setup_ap = (boot_mode == PowerMode::Ap);
 	if (enter_setup_ap) {
@@ -717,6 +767,9 @@ void setup()
 			display_manager_set_splash_status("Setup network failed");
 			#endif
 		}
+	} else if (boot_mode == PowerMode::Offline) {
+		LOGI("Main", "Offline mode: starting local runtime without Wi-Fi");
+		wifi_manager_enter_offline();
 	} else {
 		LOGI("Main", "Connecting to saved Wi-Fi");
 		#if HAS_DISPLAY
@@ -834,6 +887,10 @@ void loop()
 	}
 	#endif
 
+	#if HAS_BLE || HAS_BLE_HID
+	bthome_events_loop();
+	#endif
+
 	#if HAS_BLE_HID || HAS_USB_HID
 	keyboard_hid_loop();
 	#endif
@@ -874,7 +931,14 @@ void loop()
 	device_telemetry_mark_main_loop(DEVICE_RUNTIME_PHASE_MAIN_BUTTONS);
 	hw_buttons_loop();
 
-
+#if HAS_AUTO_SHUTDOWN
+	#if HAS_VOICE_CLIPS
+	VoiceClipSnapshot voice_snapshot;
+	voice_clips_snapshot(&voice_snapshot);
+	if (voice_snapshot.session_active) auto_shutdown_notify_activity();
+	#endif
+	auto_shutdown_loop();
+#endif
 
 	unsigned long current_ms = millis();
 

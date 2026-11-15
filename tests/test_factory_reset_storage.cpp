@@ -17,14 +17,14 @@
 
 class Preferences;
 struct DeviceConfig;
-enum class PowerMode { AlwaysOn, DutyCycle, DutyCycleBle, DutyCycleEpaperFrame, Config, Ap };
+enum class PowerMode { AlwaysOn, Offline, DutyCycle, DutyCycleBle, DutyCycleEpaperFrame, Config, Ap };
 enum class MqttPublishScope { SensorsOnly };
 
 const char* device_class_get_full_name() { return "ESP32 Macropad"; }
 void device_class_dispatch_config_defaults(DeviceConfig*) {}
 void device_class_dispatch_config_load(DeviceConfig*, Preferences&) {}
 void device_class_dispatch_config_save(const DeviceConfig*, Preferences&) {}
-PowerMode power_config_parse_power_mode(const DeviceConfig*) { return PowerMode::AlwaysOn; }
+PowerMode power_config_parse_power_mode(const DeviceConfig*);
 MqttPublishScope power_config_parse_mqtt_publish_scope(const DeviceConfig*) { return MqttPublishScope::SensorsOnly; }
 const char* power_config_power_mode_to_string(PowerMode) { return "always_on"; }
 const char* power_config_mqtt_scope_to_string(MqttPublishScope) { return "sensors_only"; }
@@ -57,6 +57,27 @@ esp_err_t nvs_flash_erase() { ++s_nvs_erase_calls; return s_nvs_erase_result; }
 esp_err_t nvs_flash_init() { ++s_nvs_init_calls; return ESP_OK; }
 
 #include "config_manager.cpp"
+
+PowerMode power_config_parse_power_mode(const DeviceConfig* config) {
+    return strcmp(config->operating_mode, "offline") == 0 ? PowerMode::Offline : PowerMode::AlwaysOn;
+}
+bool time_service_timezone_valid(const char*) { return true; }
+bool wifi_ap_password_is_valid(const char* password) { return password && !password[0]; }
+
+static void test_offline_config_without_ssid() {
+    DeviceConfig config = {};
+    config.magic = CONFIG_MAGIC;
+    strcpy(config.device_name, "remote");
+    strcpy(config.wifi_failure_mode, "ap");
+    strcpy(config.operating_mode, "offline");
+    assert(config_manager_is_valid(&config));
+    strcpy(config.operating_mode, "always_on");
+    assert(!config_manager_is_valid(&config));
+    strcpy(config.wifi_ssid, "configured");
+    assert(config_manager_is_valid(&config));
+    config.magic = 0;
+    assert(!config_manager_is_valid(&config));
+}
 
 #if HAS_AUDIO
 static uint8_t current_volume = 35;
@@ -146,6 +167,7 @@ static void test_rmdir_failure_fails_reset() {
 #endif
 
 int main() {
+    test_offline_config_without_ssid();
 #if HAS_AUDIO
     test_save_current_volume();
 #endif

@@ -17,7 +17,9 @@
 #include "pad_config.h"
 #include "action_registry.h"
 
-ActionResult action_dispatch(const ButtonAction&, const char*, uint32_t) {
+ActionDispatchContext action_dispatch_context() { return {}; }
+void display_manager_request_binding_refresh() {}
+ActionResult action_dispatch(const ButtonAction&, const char*, uint32_t, bool) {
     return ACTION_COMPLETE;
 }
 

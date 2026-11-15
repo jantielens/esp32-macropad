@@ -629,6 +629,8 @@ static void log_icon_scan_timing(const char* phase, const IconScanTiming& timing
 }
 
 static bool recover_icon_directory_entry(const char* directory, IconScanTiming* timing) {
+    const StorageMutationGuard guard;
+    if (!guard) return false;
     File dir = open_icon_directory(directory, timing);
     if (!dir || !dir.isDirectory()) return false;
     String entry;
@@ -670,6 +672,8 @@ static bool recover_icon_directory_entry(const char* directory, IconScanTiming* 
 static bool write_icon_pair(const char* png_path, const char* metadata_path,
                             const uint8_t* png_data, size_t png_length,
                             const uint8_t* metadata, size_t metadata_length) {
+    const StorageMutationGuard guard;
+    if (!guard) return false;
     char png_tmp[112], metadata_tmp[112], png_backup[112], metadata_backup[112];
     if (snprintf(png_tmp, sizeof(png_tmp), "%s.tmp", png_path) >= (int)sizeof(png_tmp) ||
         snprintf(metadata_tmp, sizeof(metadata_tmp), "%s.tmp", metadata_path) >= (int)sizeof(metadata_tmp) ||
@@ -896,6 +900,8 @@ void icon_store_build_option_key(uint8_t page, const char* layer, uint8_t col, u
 }
 
 void icon_store_init() {
+    const StorageMutationGuard guard;
+    if (!guard) return;
     if (!g_cache_mutex) {
         g_cache_mutex = xSemaphoreCreateMutex();
         if (!g_cache_mutex) {
@@ -1039,6 +1045,8 @@ bool icon_store_prepare_artifact(const char* key, IconArtifactInfo* out) {
 
 static bool delete_unreferenced_source(const char* source_id, const PadIconReferences& references,
                                        IconScanTiming* timing = nullptr) {
+    const StorageMutationGuard guard;
+    if (!guard) return false;
     if (!references.readable) return false;
     const uint32_t check_start = timing ? millis() : 0;
     const bool referenced = references.uses_source(source_id);
@@ -1172,6 +1180,7 @@ void icon_store_source_png_abort(IconSourceUpload* upload) {
     upload->file.close();
     if (upload->temporary[0]) Storage.remove(upload->temporary);
     delete upload;
+    storage_mutation_finish();
 }
 
 IconStoreResult icon_store_source_png_begin(size_t total, IconSourceUpload** upload) {
@@ -1180,6 +1189,8 @@ IconStoreResult icon_store_source_png_begin(size_t total, IconSourceUpload** upl
     if (!g_ready.load()) return ICON_STORE_UNAVAILABLE;
     if (ota_activity_is_active()) return ICON_STORE_BUSY;
     if (total > ICON_MAX_PNG_SIZE) return ICON_STORE_TOO_LARGE;
+    StorageMutationGuard guard;
+    if (!guard) return ICON_STORE_BUSY;
     if (!g_file_mutex || xSemaphoreTake(g_file_mutex, 0) != pdTRUE) return ICON_STORE_BUSY;
     auto* state = new (std::nothrow) IconSourceUpload{};
     IconStoreResult result = state ? ICON_STORE_CONFLICT : ICON_STORE_UNAVAILABLE;
@@ -1199,6 +1210,7 @@ IconStoreResult icon_store_source_png_begin(size_t total, IconSourceUpload** upl
         if (result == ICON_STORE_OK) {
             state->total = total;
             *upload = state;
+            guard.release();
         } else {
             if (result == ICON_STORE_IO_ERROR) Storage.remove(state->temporary);
             state->temporary[0] = '\0';
@@ -1547,6 +1559,8 @@ static void retire_unused_icon_cache(uint8_t page, const PadConfig* const* confi
 static void cleanup_icon_files(uint8_t page, const PadIconReferences* references,
                                IconScanTiming* timing) {
     if (ota_activity_is_active()) return;
+    const StorageMutationGuard guard;
+    if (!guard) return;
     if (!g_file_mutex || xSemaphoreTake(g_file_mutex, 0) != pdTRUE) return;
     invalidate_validated_artifacts();
 
@@ -1653,6 +1667,8 @@ bool icon_store_delete_file(const char* filename) {
     key[filename_len - 4] = '\0';
     if (!icon_store_key_valid(key)) return false;
 
+    const StorageMutationGuard guard;
+    if (!guard) return false;
     if (!g_file_mutex || xSemaphoreTake(g_file_mutex, 0) != pdTRUE) return false;
     invalidate_validated_artifact(key);
     char path[64];

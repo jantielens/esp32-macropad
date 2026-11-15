@@ -2,6 +2,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <time.h>
+#include "board_config.h"
 
 struct TimezoneEntry { const char* name; const char* posix; };
 const TimezoneEntry* time_service_timezones(size_t* count);
@@ -12,6 +13,9 @@ void time_service_get_timezone(char* output, size_t capacity);
 struct timeval;
 void time_service_start_ntp(void (*observer)(struct timeval*) = nullptr);
 void time_service_loop();
+#if HAS_RTC
+void time_service_init_rtc();
+#endif
 bool time_service_ready();
 bool time_service_localtime(time_t epoch, struct tm* result);
 bool time_service_format(time_t epoch, const char* format, const char* timezone,

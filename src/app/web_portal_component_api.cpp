@@ -76,7 +76,7 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
     WebPortalTiming timing;
     if (!portal_auth_gate(request)) return;
     timing.mark("auth");
-    bool ap_mode = web_portal_is_ap_mode_active();
+    bool recovery_ap = web_portal_is_recovery_ap_active();
 
     auto doc = make_psram_json_doc(4096);
     if (!doc) {
@@ -84,7 +84,8 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
         return;
     }
 
-    if (ap_mode) (*doc)["ap_mode"] = true;
+    if (web_portal_is_ap_mode_active()) (*doc)["ap_mode"] = true;
+    (*doc)["recovery_ap"] = recovery_ap;
 
     JsonArray categories = doc->createNestedArray("categories");
 
@@ -100,10 +101,10 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
 
     // --- Primary category support ---
     // Board variants can define PORTAL_PRIMARY_CATEGORY to promote a custom
-    // category to first position in the nav.  Suppressed in AP mode (where
+    // category to first position in the nav. Suppressed in recovery AP mode (where
     // the first-boot setup wizard is the only landing target) and when the
     // primary category collides with a hardcoded category ID.
-    const bool has_primary = !ap_mode
+    const bool has_primary = !recovery_ap
         && PORTAL_PRIMARY_CATEGORY[0] != '\0'
         && !is_hardcoded_category(PORTAL_PRIMARY_CATEGORY);
 
@@ -164,7 +165,7 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
         primary_obj["category"]  = PORTAL_PRIMARY_CATEGORY;
         primary_obj["label"]     = PORTAL_PRIMARY_LABEL;
         primary_obj["icon"]      = PORTAL_PRIMARY_ICON;
-    } else if (ap_mode) {
+    } else if (recovery_ap) {
         // First-boot AP mode: route the SPA to the setup wizard on init.
         // Server-side redirects break Android/iOS captive-portal probes, so
         // landing-fragment selection happens client-side via this field.
@@ -177,15 +178,15 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
     for (uint8_t c = 0; c < kNumCategories; c++) {
         const NavCategory& cat = kNavCategories[c];
 
-        // In AP mode, only show the Device category
-        if (ap_mode && strcmp(cat.id, "device") != 0) continue;
+        // Recovery APs only show the Device category.
+        if (recovery_ap && strcmp(cat.id, "device") != 0) continue;
 
         // Collect items for this category
         //
-        // First-boot wizard ("setup" component): visible ONLY in AP mode, and
+        // First-boot wizard ("setup" component): visible ONLY in recovery AP mode, and
         // when visible it is the *only* item in the device category — the
         // wifi / device-name / network entries are suppressed so the wizard
-        // is the single hand-off path. In STA mode the wizard is hidden and
+        // is the single hand-off path. In full portals the wizard is hidden and
         // the normal entries take over.
         uint8_t item_count = 0;
         for (uint8_t i = 0; i < component_registry_count(); i++) {
@@ -198,11 +199,11 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
             if (strcmp(comp->id, "logs") == 0 && !portal_logs_full_mode_enabled()) continue;
             #endif
             bool is_setup = (strcmp(comp->id, "setup") == 0);
-            if (is_setup && !ap_mode) continue;  // hide wizard outside AP mode
-            // In AP mode the outer loop has already restricted us to the
+            if (is_setup && !recovery_ap) continue;
+            // In recovery AP mode the outer loop has already restricted us to the
             // device category, so suppressing every non-setup item here
             // leaves the wizard as the single hand-off path.
-            if (!is_setup && ap_mode) continue;
+            if (!is_setup && recovery_ap) continue;
             const char* nav_id = (comp->fragment_id && comp->fragment_id[0]) ? comp->fragment_id : comp->id;
             items[item_count++] = {nav_id, comp->display_name, comp->nav_order,
                                    comp->portal_script, comp->portal_style};

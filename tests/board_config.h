@@ -8,7 +8,13 @@
 
 #define HAS_DISPLAY true
 #define HAS_MQTT    true
+#ifndef HAS_BLE_HID
 #define HAS_BLE_HID true
+#endif
+#include "../src/app/ble_backend_selection.h"
+#ifndef BLE_BACKEND
+#define BLE_BACKEND BLE_BACKEND_ARDUINO_CORE
+#endif
 #define HAS_USB_HID false
 #define IS_SHUTTER_TESTER true
 

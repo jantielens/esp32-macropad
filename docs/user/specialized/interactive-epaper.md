@@ -30,14 +30,30 @@ Use [font guidance](../media/fonts.md) for legibility.
 ## Balance freshness and panel work
 
 Passive binding interval 100-60000 ms controls idle data checks.
-Minimum presentation interval 250-60000 ms bounds physical refresh frequency.
+Minimum presentation interval 250-60000 ms controls background presentation cadence.
+The interval is measured after the previous presentation completes.
 Higher values combine rapid changes and save panel work.
-Refresh clock values on minute boundary keeps visible time bindings current
-between passive checks.
+On devices supporting interaction-priority presentation, focus, navigation and
+dialog changes bypass background settling and this interval once their frame
+is ready. A user-triggered **Set variable** action that changes a value also
+resolves the current pad's bindings promptly, without waiting for the passive
+interval. Background actions retain passive polling; unchanged values do not
+request an immediate update. An active panel refresh still completes first;
+rapid visual changes
+can combine into the latest frame without dropping their actions. Other devices
+retain interval-limited presentation; see [panel notes](../hardware.md).
+Interaction priority does not bypass startup, recovery, manual full refreshes or
+the configured full-refresh threshold. Required controller waits and full-refresh
+flashing still apply.
+Refresh clock values on minute boundary rechecks visible time bindings
+between passive checks. Panel scheduling and an active refresh can delay
+the visible update.
 
-Full-refresh threshold 0-65535 schedules a full waveform after that many regional
-updates; 0 disables scheduled full refresh. Some grayscale implementations always
-use full-panel waveforms, so consult [panel notes](../hardware.md).
+Full-refresh threshold 0-65535 schedules a full refresh after that many successful
+partial updates. Depending on the driver, a partial update may cover a region or
+use a partial waveform across the panel. Set 0 to disable count-based cleanup,
+not startup, recovery or manual full refreshes. Modes that always use full
+refreshes ignore this threshold; consult [panel notes](../hardware.md).
 These refresh settings apply live after Save.
 
 ## Configure panel VCOM

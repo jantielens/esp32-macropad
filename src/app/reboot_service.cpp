@@ -2,6 +2,9 @@
 #include "audio.h"
 #include "log_manager.h"
 #include "ota_activity.h"
+#if HAS_VOICE_CLIPS
+#include "voice_clips.h"
+#endif
 #include <Arduino.h>
 #include <esp_system.h>
 #include <freertos/FreeRTOS.h>
@@ -15,6 +18,10 @@ static uint32_t reboot_not_before = 0;
 static bool reboot_shutdown_started = false;
 static uint32_t reboot_shutdown_at = 0;
 static constexpr uint32_t REBOOT_AUDIO_TIMEOUT_MS = 1000;
+#if HAS_VOICE_CLIPS
+static constexpr uint32_t REBOOT_RECORDER_TIMEOUT_MS = 5000;
+static bool reboot_recorder_wait_reported = false;
+#endif
 
 void reboot_request(uint32_t grace_ms, RebootOwnership ownership) {
     const uint32_t not_before = millis() + grace_ms;
@@ -46,6 +53,19 @@ void reboot_service_loop() {
         audio_request_reboot();
 #endif
     }
+
+#if HAS_VOICE_CLIPS
+    const VoiceClipCancelStatus recorder = voice_clips_cancel();
+    if (recorder != VoiceClipCancelStatus::Ready) {
+        if (!reboot_recorder_wait_reported &&
+            (recorder == VoiceClipCancelStatus::Error ||
+             (uint32_t)(millis() - reboot_shutdown_at) >= REBOOT_RECORDER_TIMEOUT_MS)) {
+            LOGE("Reboot", "Reboot deferred: voice recorder did not stop safely");
+            reboot_recorder_wait_reported = true;
+        }
+        return;
+    }
+#endif
 
 #if HAS_AUDIO
     const AudioRebootStatus status = audio_reboot_status();

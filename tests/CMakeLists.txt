@@ -65,10 +65,38 @@ function(add_host_command_test name)
     set_tests_properties(${name} PROPERTIES WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 endfunction()
 
+add_host_legacy_test(test_wifi_lifecycle
+    SOURCES test_wifi_lifecycle.cpp ${PROJECT_SOURCE_DIR}/src/app/wifi_manager.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/wifi_reconnect.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/web_portal_ap.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/ota_activity.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/wifi_lifecycle_overrides ${PROJECT_SOURCE_DIR}/src
+    DEFINITIONS OTA_ACTIVITY_HOST_TEST=1
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/wifi_lifecycle_overrides/host.h
+    LIBRARIES GTest::gtest_main
+)
+
+add_host_legacy_test(test_audio_input
+    SOURCES test_audio_input.cpp ${PROJECT_SOURCE_DIR}/src/app/audio_input.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/audio_input_overrides
+    DEFINITIONS HAS_AUDIO_INPUT=1 TEST_HEAP_CAPS_ALLOCATOR=1
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
+)
+add_test(NAME test_audio_input_no_psram COMMAND test_audio_input --no-psram)
+
+add_host_legacy_test(test_sticky_pdm
+    SOURCES test_sticky_pdm.cpp ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive/drivers/sticky_pdm.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/audio_input_overrides ${PROJECT_SOURCE_DIR}/src
+    DEFINITIONS HAS_AUDIO_INPUT=1
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
+)
+
 add_host_legacy_test(test_tab5_hardware
     SOURCES test_tab5_hardware.cpp ${PROJECT_SOURCE_DIR}/src/boards/m5stack-tab5/tab5_hardware.cpp
-        ${PROJECT_SOURCE_DIR}/src/app/drivers/st7123_touch_driver.cpp
-    INCLUDES ${PROJECT_SOURCE_DIR}/tests/tab5_overrides ${PROJECT_SOURCE_DIR}/src/boards/m5stack-tab5
+        ${PROJECT_SOURCE_DIR}/src/app/battery_info.cpp
+        ${PROJECT_SOURCE_DIR}/src/boards/m5stack-tab5/drivers/st7123_touch_driver.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/tab5_overrides ${PROJECT_SOURCE_DIR}/src/boards/m5stack-tab5 ${PROJECT_SOURCE_DIR}/src
+        "$ENV{HOME}/Arduino/libraries/ArduinoJson/src"
     DEFINITIONS BOARD_HAS_OVERRIDE BOARD_HAS_PSRAM CONFIG_IDF_TARGET_ESP32P4=1
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
 )
@@ -84,15 +112,87 @@ add_host_legacy_test(test_image_fetch
 set(HOST_ARDUINOJSON_DIR "$ENV{HOME}/Arduino/libraries/ArduinoJson/src")
 set(HOST_LVGL_DIR "$ENV{HOME}/Arduino/libraries/lvgl/src")
 
-add_host_legacy_test(test_crowpanel_epaper_driver
-    SOURCES test_crowpanel_epaper_driver.cpp ${PROJECT_SOURCE_DIR}/src/app/drivers/crowpanel42_epaper_driver.cpp
-    INCLUDES ${PROJECT_SOURCE_DIR}/tests/crowpanel_driver_test_overrides ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
-        ${PROJECT_SOURCE_DIR}/src/boards/crowpanel-4.2-interactive
+add_host_legacy_test(test_mqtt_triggers
+    SOURCES test_mqtt_triggers.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/font_store_overrides ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS MAX_MQTT_TRIGGERS=8 HAS_FILESYSTEM=1 USE_SD_STORAGE=0
+        TEST_FREERTOS_MUTEX_LIFECYCLE=1
+    LIBRARIES GTest::gtest_main
+    OPTIONS -Wno-deprecated-declarations
+)
+
+foreach(diagnostics 0 1)
+  set(sticky_target test_sticky_epaper_driver)
+  if(diagnostics)
+    set(sticky_target test_sticky_epaper_driver_diagnostics)
+  endif()
+  add_host_legacy_test(${sticky_target}
+    SOURCES test_sticky_epaper_driver.cpp ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive/drivers/display/sticky_epaper_driver.cpp
+        ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive/drivers/display/sticky_epaper/panel.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/sticky_driver_test_overrides
+        ${PROJECT_SOURCE_DIR}/tests/audio_worker_overrides ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
+        ${PROJECT_SOURCE_DIR}/src
+        ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive
+    DEFINITIONS HAS_DISPLAY_DIAGNOSTICS=${diagnostics}
+        BOARD_HAS_OVERRIDE=1 BOARD_HAS_PSRAM=1 CONFIG_IDF_TARGET_ESP32S3=1 TEST_HEAP_CAPS_ALLOCATOR=1
+        LV_CONF_SKIP=1 LV_USE_OS=0 LV_USE_LOG=0 TEST_FREERTOS_MUTEX_LIFECYCLE=1
+    OPTIONS -Wno-unused-parameter
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+  )
+endforeach()
+add_host_legacy_test(test_sticky_epaper_driver_sd
+    SOURCES test_sticky_epaper_driver.cpp ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive/drivers/display/sticky_epaper_driver.cpp
+        ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive/drivers/display/sticky_epaper/panel.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/sticky_driver_test_overrides
+        ${PROJECT_SOURCE_DIR}/tests/audio_worker_overrides ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
+        ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive-sd
     DEFINITIONS BOARD_HAS_OVERRIDE=1 BOARD_HAS_PSRAM=1 CONFIG_IDF_TARGET_ESP32S3=1 TEST_HEAP_CAPS_ALLOCATOR=1
         LV_CONF_SKIP=1 LV_USE_OS=0 LV_USE_LOG=0 TEST_FREERTOS_MUTEX_LIFECYCLE=1
     OPTIONS -Wno-unused-parameter
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+    LIBRARIES host_lvgl)
+foreach(voice_clips 0 1)
+  set(sticky_hardware_target test_sticky_hardware)
+  if(voice_clips)
+    set(sticky_hardware_target test_sticky_hardware_voice_clips)
+  endif()
+  add_host_legacy_test(${sticky_hardware_target}
+    SOURCES test_sticky_hardware.cpp ${PROJECT_SOURCE_DIR}/src/app/board_hardware.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/auto_shutdown.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/battery_info.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/drivers/gt911_touch_driver.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/sticky_driver_test_overrides ${HOST_ARDUINOJSON_DIR}
+        ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive
+    DEFINITIONS BOARD_HAS_OVERRIDE=1 BOARD_HAS_PSRAM=1 CONFIG_IDF_TARGET_ESP32S3=1 HAS_VOICE_CLIPS=${voice_clips}
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/sticky_driver_test_overrides/SPI.h
 )
+endforeach()
+add_host_legacy_test(test_sticky_hardware_sd
+    SOURCES test_sticky_hardware.cpp ${PROJECT_SOURCE_DIR}/src/app/board_hardware.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/auto_shutdown.cpp ${PROJECT_SOURCE_DIR}/src/app/battery_info.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/drivers/gt911_touch_driver.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/sticky_driver_test_overrides ${HOST_ARDUINOJSON_DIR}
+        ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive-sd
+    DEFINITIONS BOARD_HAS_OVERRIDE=1 BOARD_HAS_PSRAM=1 CONFIG_IDF_TARGET_ESP32S3=1
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/sticky_driver_test_overrides/SPI.h)
+
+foreach(diagnostics 0 1)
+  set(crowpanel_target test_crowpanel_epaper_driver)
+  if(diagnostics)
+    set(crowpanel_target test_crowpanel_epaper_driver_diagnostics)
+  endif()
+  add_host_legacy_test(${crowpanel_target}
+    SOURCES test_crowpanel_epaper_driver.cpp ${PROJECT_SOURCE_DIR}/src/boards/crowpanel-4.2-interactive/drivers/display/crowpanel42_epaper_driver.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/crowpanel_driver_test_overrides
+        ${PROJECT_SOURCE_DIR}/tests/audio_worker_overrides ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
+        ${PROJECT_SOURCE_DIR}/src/boards/crowpanel-4.2-interactive ${PROJECT_SOURCE_DIR}/src
+    DEFINITIONS HAS_DISPLAY_DIAGNOSTICS=${diagnostics}
+        BOARD_HAS_OVERRIDE=1 BOARD_HAS_PSRAM=1 CONFIG_IDF_TARGET_ESP32S3=1 TEST_HEAP_CAPS_ALLOCATOR=1
+        LV_CONF_SKIP=1 LV_USE_OS=0 LV_USE_LOG=0 TEST_FREERTOS_MUTEX_LIFECYCLE=1
+    OPTIONS -Wno-unused-parameter
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+  )
+endforeach()
 
 foreach(board waveshare-7.8-interactive reterminal-e1003-interactive)
   foreach(diagnostics 0 1)
@@ -102,7 +202,8 @@ foreach(board waveshare-7.8-interactive reterminal-e1003-interactive)
     endif()
     add_host_legacy_test(test_it8951_${board}${diagnostic_suffix}
         SOURCES test_it8951_epaper_driver.cpp ${PROJECT_SOURCE_DIR}/src/app/drivers/it8951_epaper_driver.cpp
-        INCLUDES ${PROJECT_SOURCE_DIR}/tests/it8951_driver_test_overrides ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
+        INCLUDES ${PROJECT_SOURCE_DIR}/tests/it8951_driver_test_overrides
+            ${PROJECT_SOURCE_DIR}/tests/audio_worker_overrides ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
             ${PROJECT_SOURCE_DIR}/src/boards/${board}
         DEFINITIONS HAS_DISPLAY_DIAGNOSTICS=${diagnostics} BOARD_HAS_OVERRIDE=1 BOARD_HAS_PSRAM=1 CONFIG_IDF_TARGET_ESP32S3=1
             TEST_HEAP_CAPS_ALLOCATOR=1 TEST_FREERTOS_MUTEX_LIFECYCLE=1 LV_CONF_SKIP=1 LV_USE_OS=0 LV_USE_LOG=0
@@ -112,12 +213,44 @@ foreach(board waveshare-7.8-interactive reterminal-e1003-interactive)
   endforeach()
 endforeach()
 
+add_host_legacy_test(test_inkplate_epaper_driver
+    SOURCES test_inkplate_epaper_driver.cpp
+        ${PROJECT_SOURCE_DIR}/src/boards/inkplate6flick-interactive/drivers/inkplate6flick_epaper_driver.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/inkplate_driver_test_overrides
+        ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
+        ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/src/boards/inkplate6flick-interactive
+    DEFINITIONS BOARD_HAS_OVERRIDE=1 BOARD_HAS_PSRAM=1 TEST_HEAP_CAPS_ALLOCATOR=1
+        TEST_FREERTOS_MUTEX_LIFECYCLE=1 LV_CONF_SKIP=1 LV_USE_OS=0 LV_USE_LOG=0
+    OPTIONS -Wno-unused-parameter
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/freertos/portmacro.h
+)
+
 add_host_legacy_test(test_sensor_manager
     SOURCES test_sensor_manager.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/battery_info.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS HAS_BATTERY_INFO=1
+    OPTIONS -Wno-deprecated-declarations
+)
+add_host_legacy_test(test_sensor_manager_no_battery
+    SOURCES test_sensor_manager.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/battery_info.cpp
+    INCLUDES ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS HAS_BATTERY_INFO=0
+    OPTIONS -Wno-deprecated-declarations
+)
+add_host_legacy_test(test_sensor_manager_no_battery_mqtt
+    SOURCES test_sensor_manager.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/battery_info.cpp
+    INCLUDES ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS HAS_BATTERY_INFO=0 HAS_MQTT=1
     OPTIONS -Wno-deprecated-declarations
 )
 add_host_command_test(test_sensor_manager_duty_cycle $<TARGET_FILE:test_sensor_manager> --duty-cycle)
+add_host_command_test(test_sensor_manager_battery $<TARGET_FILE:test_sensor_manager> --battery)
+add_host_command_test(test_sensor_manager_battery_adc $<TARGET_FILE:test_sensor_manager> --battery-adc)
+add_host_command_test(test_sensor_manager_battery_frame $<TARGET_FILE:test_sensor_manager> --battery-frame)
+add_host_command_test(test_sensor_manager_concurrent_init $<TARGET_FILE:test_sensor_manager> --concurrent-init)
 
 file(READ "${PROJECT_SOURCE_DIR}/src/app/web_portal_component_api.cpp" PORTAL_ROUTE_SOURCE)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
@@ -125,6 +258,36 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
 string(FIND "${PORTAL_ROUTE_SOURCE}" "static void handleComponentGetConfig(" PORTAL_ROUTE_START)
 string(SUBSTRING "${PORTAL_ROUTE_SOURCE}" ${PORTAL_ROUTE_START} -1 PORTAL_ROUTE_HANDLERS)
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/portal_route_handlers.inc" "${PORTAL_ROUTE_HANDLERS}")
+string(FIND "${PORTAL_ROUTE_SOURCE}" "struct NavCategory" PORTAL_NAV_START)
+string(FIND "${PORTAL_ROUTE_SOURCE}" "static const ComponentAction* find_action(" PORTAL_NAV_END)
+math(EXPR PORTAL_NAV_LENGTH "${PORTAL_NAV_END} - ${PORTAL_NAV_START}")
+string(SUBSTRING "${PORTAL_ROUTE_SOURCE}" ${PORTAL_NAV_START} ${PORTAL_NAV_LENGTH} PORTAL_NAV_CATEGORIES)
+string(FIND "${PORTAL_ROUTE_SOURCE}" "static bool is_hardcoded_category(" PORTAL_NAV_START)
+math(EXPR PORTAL_NAV_LENGTH "${PORTAL_ROUTE_START} - ${PORTAL_NAV_START}")
+string(SUBSTRING "${PORTAL_ROUTE_SOURCE}" ${PORTAL_NAV_START} ${PORTAL_NAV_LENGTH} PORTAL_NAV_HANDLER)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/portal_nav_handler.inc" "${PORTAL_NAV_CATEGORIES}${PORTAL_NAV_HANDLER}")
+file(READ "${PROJECT_SOURCE_DIR}/src/app/web_portal_auth.cpp" PORTAL_AUTH_SOURCE)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${PROJECT_SOURCE_DIR}/src/app/web_portal_auth.cpp")
+string(FIND "${PORTAL_AUTH_SOURCE}" "static bool portal_auth_required(" PORTAL_AUTH_START)
+string(SUBSTRING "${PORTAL_AUTH_SOURCE}" ${PORTAL_AUTH_START} -1 PORTAL_AUTH_HANDLER)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/portal_auth_handler.inc" "${PORTAL_AUTH_HANDLER}")
+file(READ "${PROJECT_SOURCE_DIR}/src/app/web_mcp.cpp" PORTAL_MCP_SOURCE)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${PROJECT_SOURCE_DIR}/src/app/web_mcp.cpp")
+string(FIND "${PORTAL_MCP_SOURCE}" "static bool mcp_token_equal_fixed(" PORTAL_MCP_START)
+string(FIND "${PORTAL_MCP_SOURCE}" "static bool mcp_control_enabled(" PORTAL_MCP_END)
+math(EXPR PORTAL_MCP_LENGTH "${PORTAL_MCP_END} - ${PORTAL_MCP_START}")
+string(SUBSTRING "${PORTAL_MCP_SOURCE}" ${PORTAL_MCP_START} ${PORTAL_MCP_LENGTH} PORTAL_MCP_GATE)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/portal_mcp_gate.inc" "${PORTAL_MCP_GATE}")
+file(READ "${PROJECT_SOURCE_DIR}/src/app/web_portal_config.cpp" PORTAL_CONFIG_SOURCE)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${PROJECT_SOURCE_DIR}/src/app/web_portal_config.cpp")
+string(FIND "${PORTAL_CONFIG_SOURCE}" "\t\t#if IS_EPAPER_FRAME" PORTAL_FRAME_START)
+string(FIND "${PORTAL_CONFIG_SOURCE}" "\t\tconst bool bthome_update =" PORTAL_FRAME_END)
+math(EXPR PORTAL_FRAME_LENGTH "${PORTAL_FRAME_END} - ${PORTAL_FRAME_START}")
+string(SUBSTRING "${PORTAL_CONFIG_SOURCE}" ${PORTAL_FRAME_START} ${PORTAL_FRAME_LENGTH} PORTAL_FRAME_GUARD)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/portal_frame_mode_guard.inc" "${PORTAL_FRAME_GUARD}")
 file(READ "${PROJECT_SOURCE_DIR}/src/app/web_portal_fs_store.cpp" PORTAL_STORE_SOURCE)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${PROJECT_SOURCE_DIR}/src/app/web_portal_fs_store.cpp")
@@ -133,7 +296,8 @@ string(FIND "${PORTAL_STORE_SOURCE}" "#endif // HAS_DISPLAY" PORTAL_STORE_END)
 math(EXPR PORTAL_STORE_LENGTH "${PORTAL_STORE_END} - ${PORTAL_STORE_START}")
 string(SUBSTRING "${PORTAL_STORE_SOURCE}" ${PORTAL_STORE_START} ${PORTAL_STORE_LENGTH} PORTAL_STORE_HANDLERS)
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/portal_store_handlers.inc" "${PORTAL_STORE_HANDLERS}")
-add_host_legacy_test(test_web_portal_path SOURCES test_web_portal_path.cpp)
+add_host_legacy_test(test_web_portal_path SOURCES test_web_portal_path.cpp
+    INCLUDES ${HOST_ARDUINOJSON_DIR} OPTIONS -Wno-deprecated-declarations)
 target_include_directories(test_web_portal_path PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 add_host_legacy_test(test_alarm_clock_core SOURCES test_alarm_clock_core.cpp)
 add_host_legacy_test(test_alarm_dispatch_lock
@@ -163,6 +327,22 @@ add_host_legacy_test(test_alarm_calendar SOURCES test_alarm_calendar.cpp
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
     OPTIONS -pthread)
 
+foreach(rtc_enabled 0 1)
+    set(rtc_target test_rtc_time_service_${rtc_enabled})
+    add_host_legacy_test(${rtc_target}
+        SOURCES test_rtc_time_service.cpp ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp
+            ${PROJECT_SOURCE_DIR}/src/app/rtc_drivers.cpp
+        INCLUDES ${PROJECT_SOURCE_DIR}/tests/rtc_test_overrides
+            ${PROJECT_SOURCE_DIR}/tests/sticky_driver_test_overrides
+            ${PROJECT_SOURCE_DIR}/tests/binding_schema_profiles
+        DEFINITIONS ARDUINO=1 HAS_RTC=${rtc_enabled} RTC_DRIVER=${rtc_enabled}
+        PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+    )
+endforeach()
+foreach(rtc_case invalid old io set-failure)
+    add_test(NAME test_rtc_time_service_${rtc_case} COMMAND test_rtc_time_service_1 ${rtc_case})
+endforeach()
+
 add_host_gtest(test_mousepad test_mousepad.cpp)
 add_host_legacy_test(test_remote_log SOURCES test_remote_log.cpp)
 add_host_gtest(test_gamepad test_gamepad.cpp)
@@ -180,6 +360,8 @@ target_compile_definitions(host_lvgl PUBLIC LV_CONF_SKIP=1 LV_USE_OS=0 LV_USE_LO
     LV_TINY_TTF_CACHE_GLYPH_CNT=16 LV_TINY_TTF_CACHE_KERNING_CNT=16
     LV_FONT_MONTSERRAT_12=1 LV_FONT_MONTSERRAT_18=1 LV_FONT_MONTSERRAT_24=1
     LV_FONT_MONTSERRAT_32=1 LV_FONT_MONTSERRAT_36=1)
+target_link_libraries(test_sticky_epaper_driver PRIVATE host_lvgl)
+target_link_libraries(test_sticky_epaper_driver_diagnostics PRIVATE host_lvgl)
 add_host_legacy_test(test_runtime_ttf_oom
     SOURCES test_runtime_ttf_oom.cpp
     LIBRARIES host_lvgl m
@@ -196,6 +378,15 @@ add_host_legacy_test(test_icon_store_cleanup
     OPTIONS -Wno-deprecated-declarations
     LIBRARIES host_lvgl m
 )
+add_host_legacy_test(test_icon_store_cleanup_sd
+    SOURCES test_icon_store_cleanup.cpp ${PROJECT_SOURCE_DIR}/src/app/icon_store.cpp
+        ${HOST_LVGL_DIR}/libs/lodepng/lodepng.c
+    DEFINITIONS HAS_FILESYSTEM=1 USE_SD_STORAGE=1 HAS_AUTO_SHUTDOWN=1 HOST_LOG_CAPTURE LV_USE_LODEPNG=1 TEST_HEAP_CAPS_ALLOCATOR=1
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/font_store_overrides ${HOST_ARDUINOJSON_DIR}
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+    OPTIONS -Wno-deprecated-declarations
+    LIBRARIES host_lvgl m
+)
 add_host_legacy_test(test_image_decoder
     SOURCES test_image_decoder.cpp ${PROJECT_SOURCE_DIR}/src/app/image_decoder.cpp
         ${HOST_LVGL_DIR}/libs/lodepng/lodepng.c
@@ -206,6 +397,7 @@ add_host_legacy_test(test_image_decoder
     LIBRARIES host_lvgl m
 )
 set_tests_properties(test_icon_store_cleanup PROPERTIES TIMEOUT 15)
+set_tests_properties(test_icon_store_cleanup_sd PROPERTIES TIMEOUT 15)
 add_host_command_test(test_icon_store_cleanup_unreadable $<TARGET_FILE:test_icon_store_cleanup> --unreadable)
 set_tests_properties(test_icon_store_cleanup_unreadable PROPERTIES TIMEOUT 15)
 add_host_legacy_test(test_font_store
@@ -262,6 +454,9 @@ foreach(font_backend IN ITEMS internal sd)
         INCLUDES ${PROJECT_SOURCE_DIR}/tests/font_store_overrides
         PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
     )
+    if(font_sd)
+        target_compile_definitions(test_font_store_${font_backend} PRIVATE HAS_AUTO_SHUTDOWN=1)
+    endif()
     set_tests_properties(test_font_store_${font_backend} PROPERTIES TIMEOUT 15)
 endforeach()
 add_host_gtest(test_gamepad_widgets test_gamepad_widgets.cpp)
@@ -409,16 +604,25 @@ endforeach()
 
 add_host_legacy_test(test_ota_activity
     SOURCES test_ota_activity.cpp ${PROJECT_SOURCE_DIR}/src/app/ota_activity.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/storage_policy_overrides
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
     OPTIONS -pthread
-    DEFINITIONS OTA_ACTIVITY_HOST_TEST
+    DEFINITIONS OTA_ACTIVITY_HOST_TEST HAS_AUTO_SHUTDOWN=1 HAS_BATTERY_INFO=1 USE_SD_STORAGE=1 HAS_SD_CARD=1
+        BOARD_AUTO_SHUTDOWN_REQUEST=0
 )
 
-add_host_legacy_test(test_reboot_service
+foreach(voice_clips 0 1)
+  set(reboot_service_target test_reboot_service)
+  if(voice_clips)
+    set(reboot_service_target test_reboot_service_voice_clips)
+  endif()
+  add_host_legacy_test(${reboot_service_target}
     SOURCES test_reboot_service.cpp ${PROJECT_SOURCE_DIR}/src/app/ota_activity.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/ota_upload_overrides ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides
-    DEFINITIONS OTA_ACTIVITY_HOST_TEST HAS_AUDIO=1
+    DEFINITIONS OTA_ACTIVITY_HOST_TEST HAS_AUDIO=1 HAS_VOICE_CLIPS=${voice_clips}
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
 )
+endforeach()
 
 add_host_legacy_test(test_pad_layout
     SOURCES test_pad_layout.cpp
@@ -447,11 +651,12 @@ add_custom_command(
 
 add_host_legacy_test(test_stopwatch_round_ui
     SOURCES test_stopwatch_round_ui.cpp ${CMAKE_CURRENT_BINARY_DIR}/png_assets.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_font_cache.cpp ${PROJECT_SOURCE_DIR}/src/app/action_continuation.cpp ${PROJECT_SOURCE_DIR}/src/app/component_registry.cpp
-    DEFINITIONS UI_SCALE_TIER=1 DISPLAY_DISABLE_ANIMATIONS=1
+    DEFINITIONS UI_SCALE_TIER=1 DISPLAY_DISABLE_ANIMATIONS=1 HAS_AUTO_SHUTDOWN=1
         BOOT_APPEARANCE_DEFAULT_FONT_SIZE=0 BOOT_APPEARANCE_DEFAULT_TEXT_RGB=0x646464
         BOOT_APPEARANCE_DEFAULT_BACKGROUND_RGB=0x000000 DISPLAY_SHAPE_ROUND=1 DISPLAY_SHAPE=1
-    OPTIONS -Wno-missing-field-initializers -Wno-deprecated-declarations
+    OPTIONS -Wno-missing-field-initializers -Wno-deprecated-declarations -Wno-unused-parameter
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/system_screen_overrides
+        ${PROJECT_SOURCE_DIR}/tests/audio_worker_overrides
         ${CMAKE_CURRENT_BINARY_DIR} ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
     LIBRARIES host_lvgl
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
@@ -664,9 +869,31 @@ add_host_command_test(check_keyboard_transport_cpp11
 
 add_host_legacy_test(test_ble_hid
     SOURCES test_ble_hid.cpp
-    INCLUDES ${PROJECT_SOURCE_DIR}/tests/ble_hid_overrides
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/ble_hid_overrides ${HOST_ARDUINOJSON_DIR}
     LIBRARIES GTest::gtest_main
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+)
+
+add_host_legacy_test(test_bthome_nimble_broadcast
+    SOURCES test_ble_hid.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/ble_hid_overrides ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS HAS_BLE=1 HAS_BLE_HID=0 BLE_BACKEND=1
+    LIBRARIES GTest::gtest_main
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+)
+
+foreach(backend 0 1)
+    add_host_legacy_test(test_ble_telemetry_${backend}
+        SOURCES test_ble_telemetry.cpp
+        INCLUDES ${PROJECT_SOURCE_DIR}/tests/ble_hid_overrides
+        DEFINITIONS HAS_BLE=1 HAS_BLE_HID=0 BLE_BACKEND=${backend}
+        LIBRARIES GTest::gtest_main
+        PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+    )
+endforeach()
+
+add_host_command_test(test_ble_build_profiles
+    bash ${PROJECT_SOURCE_DIR}/tests/test_ble_build_profiles.sh ${CMAKE_CXX_COMPILER}
 )
 
 foreach(transport IN ITEMS both usb ble none)
@@ -749,6 +976,7 @@ add_host_legacy_test(test_action_continuation
     SOURCES test_action_continuation.cpp ${PROJECT_SOURCE_DIR}/src/app/action_list.cpp ${PROJECT_SOURCE_DIR}/src/app/action_continuation.cpp stubs.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
+    DEFINITIONS HAS_AUTO_SHUTDOWN=1
 )
 add_host_legacy_test(test_action_registry_value_field
     SOURCES test_action_registry_value_field.cpp ${PROJECT_SOURCE_DIR}/src/app/action_registry.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp stubs.cpp
@@ -890,9 +1118,13 @@ add_host_legacy_test(test_epaper_frame_media_conformance SOURCES test_epaper_fra
 add_host_legacy_test(test_coffee_scale_cmd_len SOURCES test_coffee_scale_cmd_len.cpp DEFINITIONS IS_COFFEE_SCALE=true PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_expose_dry_down SOURCES test_expose_dry_down.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer DEFINITIONS IS_DARKROOM_TIMER=1 HAS_AUDIO=0 LIBRARIES m)
 add_host_legacy_test(test_meter_mag SOURCES test_meter_mag.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer DEFINITIONS IS_DARKROOM_TIMER=1 LIBRARIES m)
-add_host_legacy_test(test_print_log SOURCES test_print_log.cpp ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/print_log_overrides ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer ${HOST_ARDUINOJSON_DIR} DEFINITIONS IS_DARKROOM_TIMER=1 HAS_FILESYSTEM=1 LIBRARIES m pthread)
+add_host_legacy_test(test_print_log SOURCES test_print_log.cpp ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/print_log_overrides ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer ${HOST_ARDUINOJSON_DIR} DEFINITIONS IS_DARKROOM_TIMER=1 HAS_FILESYSTEM=1 HAS_PSRAM=1 LIBRARIES m pthread)
 add_host_legacy_test(test_mcp_result_strings SOURCES test_mcp_result_strings.cpp INCLUDES ${HOST_ARDUINOJSON_DIR})
 add_host_legacy_test(test_mcp_device_identity SOURCES test_mcp_device_identity.cpp ${PROJECT_SOURCE_DIR}/src/app/mcp_device_identity.cpp INCLUDES ${HOST_ARDUINOJSON_DIR} DEFINITIONS HAS_MCP=1 HAS_EXTERNAL_DATA=1 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
+add_host_legacy_test(test_json_integer SOURCES test_json_integer.cpp
+    INCLUDES ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS HAS_BLE=0 HAS_BLE_HID=0 HAS_AUTO_SHUTDOWN=1 HAS_MCP=1
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_fs_health_littlefs SOURCES test_fs_health.cpp ${PROJECT_SOURCE_DIR}/src/app/fs_health.cpp DEFINITIONS USE_SD_STORAGE=0 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_fs_health_sdmmc SOURCES test_fs_health.cpp ${PROJECT_SOURCE_DIR}/src/app/fs_health.cpp DEFINITIONS USE_SD_STORAGE=1 HAS_SD_CARD=1 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_fs_health_sd_spi SOURCES test_fs_health.cpp ${PROJECT_SOURCE_DIR}/src/app/fs_health.cpp DEFINITIONS USE_SD_STORAGE=1 HAS_SD_CARD=1 SD_STORAGE_SPI=1 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
@@ -902,6 +1134,10 @@ add_host_legacy_test(test_storage_policy_sdmmc SOURCES test_storage_policy.cpp I
 add_host_legacy_test(test_sd_storage_spi SOURCES test_sd_storage_spi.cpp ${PROJECT_SOURCE_DIR}/src/app/sd_storage.cpp ${PROJECT_SOURCE_DIR}/src/app/fs_health.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/sd_storage_spi_overrides
     DEFINITIONS HAS_FILESYSTEM=1 USE_SD_STORAGE=1 HAS_SD_CARD=1 SD_STORAGE_SPI=1 SD_SPI_CS_PIN=42 SD_SPI_SCK_PIN=43 SD_SPI_MOSI_PIN=44 SD_SPI_MISO_PIN=39 SD_SPI_FREQUENCY_HZ=25000000
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h)
+add_host_legacy_test(test_sd_storage_spi_shared SOURCES test_sd_storage_spi.cpp ${PROJECT_SOURCE_DIR}/src/app/sd_storage.cpp ${PROJECT_SOURCE_DIR}/src/app/fs_health.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/sd_storage_spi_overrides
+    DEFINITIONS TEST_SHARED_SD=1 HAS_FILESYSTEM=1 USE_SD_STORAGE=1 HAS_SD_CARD=1 SD_STORAGE_SPI=1 SD_SPI_CS_PIN=42 SD_SPI_SCK_PIN=43 SD_SPI_MOSI_PIN=44 SD_SPI_MISO_PIN=39 SD_SPI_FREQUENCY_HZ=25000000
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h)
 add_host_legacy_test(test_factory_reset_storage SOURCES test_factory_reset_storage.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides OPTIONS -ffunction-sections -fdata-sections LIBRARIES -Wl,--gc-sections)
 add_host_legacy_test(test_config_level_save SOURCES test_factory_reset_storage.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides DEFINITIONS HAS_AUDIO=1 OPTIONS -ffunction-sections -fdata-sections LIBRARIES -Wl,--gc-sections)
@@ -930,6 +1166,7 @@ function(add_binding_schema_profile name definition)
             ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_builtin_schemes.cpp
             ${PROJECT_SOURCE_DIR}/src/app/health_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/timer_binding.cpp
             ${PROJECT_SOURCE_DIR}/src/app/sensor_binding.cpp
+            ${PROJECT_SOURCE_DIR}/src/app/battery_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/battery_info.cpp
             ${PROJECT_SOURCE_DIR}/src/app/alarm_binding.cpp
             ${PROJECT_SOURCE_DIR}/src/app/music_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/net_binding.cpp
             ${PROJECT_SOURCE_DIR}/src/app/list_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/list_provider.cpp
@@ -953,13 +1190,13 @@ add_binding_schema_profile(baseline "")
 add_binding_schema_profile(display_only "HAS_MQTT=0;HAS_HA_LIVE=0")
 add_binding_schema_profile(alarm_disabled "ALARM_ENABLED=0")
 add_binding_schema_profile(camera BINDING_SCHEMA_PROFILE_CAMERA)
-add_binding_schema_profile(full BINDING_SCHEMA_PROFILE_FULL ${PROJECT_SOURCE_DIR}/src/app/audio_input_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/image_binding.cpp)
+add_binding_schema_profile(full "BINDING_SCHEMA_PROFILE_FULL;HAS_VOICE_CLIPS=1" ${PROJECT_SOURCE_DIR}/src/app/audio_input_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/image_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/voice_clips_binding.cpp)
 # Portal dev-server fixture for GET /api/bindings?docs=1; regenerate with
 # build/host-tests/tests/test_binding_schema_full --emit-json > tools/mock-data/binding-docs.json
 add_test(NAME test_binding_docs_fixture
     COMMAND sh -c "$<TARGET_FILE:test_binding_schema_full> --emit-json | diff -u tools/mock-data/binding-docs.json -")
 set_tests_properties(test_binding_docs_fixture PROPERTIES WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
-add_binding_schema_profile(full_no_psram "BINDING_SCHEMA_PROFILE_FULL;HAS_PSRAM=0" ${PROJECT_SOURCE_DIR}/src/app/audio_input_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/image_binding.cpp)
+add_binding_schema_profile(full_no_psram "BINDING_SCHEMA_PROFILE_FULL;HAS_PSRAM=0;HAS_VOICE_CLIPS=1" ${PROJECT_SOURCE_DIR}/src/app/audio_input_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/image_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/voice_clips_binding.cpp)
 add_binding_schema_profile(ha_only "HAS_HA_LIVE=1;HAS_MQTT=0")
 add_binding_schema_profile(voice BINDING_SCHEMA_PROFILE_VOICE ${PROJECT_SOURCE_DIR}/src/app/device_classes/voice_assistant/voice_binding.cpp)
 add_binding_schema_profile(coffee BINDING_SCHEMA_PROFILE_COFFEE ${PROJECT_SOURCE_DIR}/src/app/device_classes/coffee_scale/scale_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/coffee_scale/brew/brew_binding.cpp)
@@ -1014,7 +1251,7 @@ foreach(script
     test_portal_action_list.js test_portal_timer_binding.js test_portal_pad_dialog_transaction.js
     test_portal_pad_import.js test_portal_pad_dirty.js test_portal_recipes.js
     test_portal_ble_config.js test_portal_audio_config.js test_portal_epaper_config.js test_portal_pad_preview.js test_portal_startup.js
-    test_portal_logs.js test_portal_screensaver.js test_portal_pad_colors.js
+    test_portal_logs.js test_portal_screensaver.js test_portal_pad_colors.js test_portal_voice_clips.js
     test_portal_binding_help.js test_portal_asset_gates.js
     test_portal_extension_upload.js
 )
@@ -1073,7 +1310,75 @@ add_host_gtest(test_voice_transcription_request
 
 add_host_gtest(test_voice_wav
     test_voice_wav.cpp
-    ${PROJECT_SOURCE_DIR}/src/app/device_classes/voice_assistant/voice_wav.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/voice_wav.cpp
+)
+target_compile_definitions(test_voice_wav PRIVATE HAS_VOICE_CLIPS=1)
+target_compile_options(test_voice_wav PRIVATE
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h")
+
+set(FS_INDEXED_STORE_TEST_SOURCES
+    test_fs_indexed_store.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/fs_indexed_store.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/voice_wav.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/voice_wav_store.cpp
+)
+foreach(storage_profile IN ITEMS flash sd)
+    set(voice_clips_target test_voice_clips)
+    set(voice_clips_storage_definitions USE_SD_STORAGE=0)
+    set(voice_clips_activity_source)
+    if(storage_profile STREQUAL "sd")
+        set(voice_clips_target test_voice_clips_sd)
+        set(voice_clips_storage_definitions USE_SD_STORAGE=1 HAS_AUTO_SHUTDOWN=1 OTA_ACTIVITY_HOST_TEST)
+        set(voice_clips_activity_source ${PROJECT_SOURCE_DIR}/src/app/ota_activity.cpp)
+    endif()
+add_host_legacy_test(${voice_clips_target}
+    SOURCES test_voice_clips.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/voice_clips.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/storage_browser.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/fs_indexed_store.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/voice_wav.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/voice_wav_store.cpp
+        ${voice_clips_activity_source}
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/audio_input_overrides
+        ${PROJECT_SOURCE_DIR}/tests/fs_indexed_store_overrides
+        ${PROJECT_SOURCE_DIR}/tests/shutter_session_overrides ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS HAS_VOICE_CLIPS=1 HAS_STORAGE_BROWSER=1 HAS_AUDIO_INPUT=1 HAS_FILESYSTEM=1
+        ${voice_clips_storage_definitions}
+        ARDUINOJSON_ENABLE_ARDUINO_STRING=1
+    OPTIONS -Wno-deprecated-declarations -pthread
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/shutter_session_overrides/Arduino.h
+        ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+)
+endforeach()
+add_test(NAME test_voice_clips_no_psram COMMAND test_voice_clips --no-psram)
+add_host_legacy_test(test_voice_clip_range
+    SOURCES test_voice_clip_range.cpp ${PROJECT_SOURCE_DIR}/src/app/voice_clip_range.cpp
+    DEFINITIONS HAS_VOICE_CLIPS=1
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h
+)
+add_host_gtest(test_fs_indexed_store ${FS_INDEXED_STORE_TEST_SOURCES})
+target_include_directories(test_fs_indexed_store BEFORE PRIVATE
+    ${PROJECT_SOURCE_DIR}/tests/fs_indexed_store_overrides
+    ${PROJECT_SOURCE_DIR}/tests/shutter_session_overrides
+    ${HOST_ARDUINOJSON_DIR})
+target_compile_definitions(test_fs_indexed_store PRIVATE
+    HAS_VOICE_CLIPS=1 HAS_FILESYSTEM=1 USE_SD_STORAGE=0
+    ARDUINOJSON_ENABLE_ARDUINO_STRING=1 TEST_HEAP_CAPS_ALLOCATOR=1)
+target_compile_options(test_fs_indexed_store PRIVATE -Wno-deprecated-declarations
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/shutter_session_overrides/Arduino.h"
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h"
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/log_manager.h")
+
+add_host_legacy_test(test_fs_indexed_store_headless
+    SOURCES ${FS_INDEXED_STORE_TEST_SOURCES}
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/fs_indexed_store_overrides
+        ${PROJECT_SOURCE_DIR}/tests/shutter_session_overrides ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS ARDUINOJSON_ENABLE_ARDUINO_STRING=1 TEST_HEAP_CAPS_ALLOCATOR=1
+    OPTIONS -Wno-deprecated-declarations
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/shutter_session_overrides/Arduino.h
+        ${PROJECT_SOURCE_DIR}/tests/fs_indexed_store_overrides/board_config.h
+        ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+    LIBRARIES GTest::gtest_main
 )
 
 add_host_gtest(test_voice_tts_request

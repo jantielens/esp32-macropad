@@ -19,11 +19,11 @@ extern "C" unsigned long millis() { return s_millis; }
 #include "pad_config.h"
 #include "action_continuation.h"
 #include "action_result.h"
-ActionResult action_dispatch(const ButtonAction&, const char*, uint32_t) {
+ActionResult action_dispatch(const ButtonAction&, const char*, uint32_t, bool) {
     return ACTION_COMPLETE;
 }
 void action_list_dispatch(const ButtonAction*, uint8_t, const char*,
-                          ActionContinuationOwner) {}
+                          ActionContinuationOwner, bool) {}
 
 // ---------------------------------------------------------------------------
 // Unit under test

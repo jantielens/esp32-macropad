@@ -193,7 +193,7 @@ static const BindingParamDoc kExprParams[] = {
 static const BindingExampleDoc kExprExamples[] = {
     {"[expr:[health:cpu] > 80 ? \"High\" : \"OK\"]", "Text chosen by a condition."},
     {"[expr:([health:heap_free] / 1024);%.0f KB]", "Derived number with a unit."},
-    {"[expr:abs([health:rssi])]", "Show the magnitude of a signed value."},
+    {"[expr:abs([health:wifi_rssi])]", "Show the magnitude of a signed value."},
     {"[expr:clamp([health:cpu],0,100)]", "Keep a value within a range."},
     {"[expr:threshold([health:cpu],\"#16a34a\",50,\"#f59e0b\",80,\"#dc2626\")]", "Map a number to color zones."},
     {"[expr:[time:%ms] % 500 < 250 ? \"#dc2626\" : \"#f8fafc\"]", "Blink between two colors."},
@@ -202,12 +202,12 @@ static const BindingExampleDoc kExprExamples[] = {
 static const BindingReferenceDoc kExprReference[] = {
     {"Arithmetic", "a + b", nullptr, "Add; also - * /", "[expr:[health:heap_free] / 1024;%.0f]"},
     {"Arithmetic", "a % b", nullptr, "Remainder, useful for blinking", "[expr:[time:%ms] % 500 < 250]"},
-    {"Arithmetic", "-a", nullptr, "Negate", "[expr:-[health:rssi]]"},
+    {"Arithmetic", "-a", nullptr, "Negate", "[expr:-[health:wifi_rssi]]"},
     {"Arithmetic", "( a )", nullptr, "Grouping", "[expr:([health:cpu] + 5) * 2]"},
     {"Comparison", "a > b", nullptr, "Also < >= <=; result is 1 or 0", "[expr:[health:cpu] > 80]"},
     {"Comparison", "a == b", nullptr, "Equal on numbers or \"strings\"; also !=", "[expr:[health:wifi_connected]==\"ON\"]"},
     {"Conditional", "c ? x : y", nullptr, "Ternary; branches can be numbers or \"strings\" and can be chained", "[expr:[health:cpu] > 80 ? \"High\" : \"OK\"]"},
-    {"Functions", "abs(x)", nullptr, "Absolute value", "[expr:abs([health:rssi])]"},
+    {"Functions", "abs(x)", nullptr, "Absolute value", "[expr:abs([health:wifi_rssi])]"},
     {"Functions", "min(a, b)", nullptr, "Smaller of two numbers", "[expr:min([health:cpu],80)]"},
     {"Functions", "max(a, b)", nullptr, "Larger of two numbers", "[expr:max([health:cpu],20)]"},
     {"Functions", "clamp(x, low, high)", nullptr, "Limit a number to an inclusive range; low must not exceed high", "[expr:clamp([health:cpu],0,100)]"},

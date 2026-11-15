@@ -158,6 +158,7 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_NONE     ""
 #define ACTION_TYPE_SCREEN   "screen"
 #define ACTION_TYPE_MQTT     "mqtt"
+#define ACTION_TYPE_BTHOME   "bthome"
 #define ACTION_TYPE_BACK     "back"
 #define ACTION_TYPE_KEY      "key"
 #define ACTION_TYPE_MOUSE_BUTTON "mouse_button"
@@ -186,6 +187,9 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_DISPLAY_REFRESH "display_refresh"
 #define ACTION_TYPE_BUTTON_NAVIGATION "button_nav"
 #define ACTION_TYPE_SET_VAR "set_var"
+#if HAS_VOICE_CLIPS
+#define ACTION_TYPE_VOICE_CLIP "voice_clip"
+#endif
 
 #define ACTION_DELAY_MAX_DURATION_MS 55000U
 
@@ -218,6 +222,10 @@ struct ScreenPayload {
 struct MqttPayload {
     char mqtt_topic[CONFIG_MQTT_TOPIC_MAX_LEN];      // publish topic
     char mqtt_payload[CONFIG_MQTT_PAYLOAD_MAX_LEN];  // publish payload
+};
+struct BthomePayload {
+    uint8_t button;
+    uint8_t event;
 };
 struct KeyPayload {
     char key_sequence[CONFIG_KEY_SEQ_MAX_LEN];       // DSL key sequence
@@ -272,7 +280,7 @@ struct ConfirmPayload {
 static_assert(sizeof(NotifyPayload) <= 256 && sizeof(ConfirmPayload) <= 256,
               "Dialog payloads must fit the MQTT/key payload budget");
 struct SystemPayload {
-    char system_command[CONFIG_ACTION_TYPE_MAX_LEN];      // "reboot", "wifi_reconnect", "screensaver"
+    char system_command[CONFIG_ACTION_TYPE_MAX_LEN];      // Device command ID
 };
 struct HaServicePayload {
     char entity_id[48];   // e.g. "light.living_room" (domain = text before first '.')
@@ -308,6 +316,11 @@ struct SetVariablePayload {
     char var_name[33];
     char var_value[192];
 };
+#if HAS_VOICE_CLIPS
+struct VoiceClipPayload {
+    char command[8];
+};
+#endif
 static_assert(sizeof(SetVariablePayload) <= 256,
               "Set variable payload must remain within the shared action payload budget");
 
@@ -330,6 +343,7 @@ static_assert(sizeof(SetVariablePayload) <= 256,
 union ActionPayload {
     ScreenPayload     screen;       // type == ACTION_TYPE_SCREEN
     MqttPayload       mqtt;         // type == ACTION_TYPE_MQTT
+    BthomePayload     bthome;       // type == ACTION_TYPE_BTHOME
     KeyPayload        key;          // type == ACTION_TYPE_KEY
     MouseButtonPayload mouse_button;
     GamepadPayload    gamepad;
@@ -350,6 +364,9 @@ union ActionPayload {
     DisplayRefreshPayload display_refresh; // type == ACTION_TYPE_DISPLAY_REFRESH
     ButtonNavigationPayload button_navigation;
     SetVariablePayload set_var;
+#if HAS_VOICE_CLIPS
+    VoiceClipPayload voice_clip;
+#endif
     uint8_t           device_class[ACTION_PAYLOAD_DEVICE_CLASS_BYTES];
                                     // opaque; owned by a registered ActionTypeDef
     // back, ble_pair, and "" (none) carry no payload data — only the type tag.

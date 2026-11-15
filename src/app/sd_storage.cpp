@@ -9,6 +9,9 @@
 #include "storage.h"
 #if SD_STORAGE_SPI
 #include <SPI.h>
+#ifdef BOARD_SD_SPI
+#include "board_hardware.h"
+#endif
 #else
 #include <SD_MMC.h>
 #endif
@@ -28,13 +31,26 @@ bool sd_storage_mount() {
     if (s_mounted) return true;
 
 #if SD_STORAGE_SPI
-    if (!SPI.begin(SD_SPI_SCK_PIN, SD_SPI_MISO_PIN, SD_SPI_MOSI_PIN, SD_SPI_CS_PIN)) {
-        SPI.end();
+#ifdef BOARD_SD_SPI
+    if (!BOARD_SD_PREPARE()) {
+        BOARD_SD_MOUNT_FAILED();
+        return false;
+    }
+    SPIClass& sd_spi = BOARD_SD_SPI;
+#else
+    SPIClass& sd_spi = SPI;
+    if (!sd_spi.begin(SD_SPI_SCK_PIN, SD_SPI_MISO_PIN, SD_SPI_MOSI_PIN, SD_SPI_CS_PIN)) {
+        sd_spi.end();
         LOGE(TAG, "SPI SD bus initialization failed");
         return false;
     }
-    if (!SD.begin(SD_SPI_CS_PIN, SPI, SD_SPI_FREQUENCY_HZ, "/sdcard")) {
-        SPI.end();
+#endif
+    if (!SD.begin(SD_SPI_CS_PIN, sd_spi, SD_SPI_FREQUENCY_HZ, "/sdcard")) {
+#ifdef BOARD_SD_SPI
+        BOARD_SD_MOUNT_FAILED();
+#else
+        sd_spi.end();
+#endif
         LOGE(TAG, "SPI SD mount failed; check the card, filesystem, wiring, and power, then reboot");
         return false;
     }
@@ -68,7 +84,11 @@ bool sd_storage_mount() {
         LOGE(TAG, "SD mount reported no card; check the card, filesystem, wiring, and power, then reboot");
     #if SD_STORAGE_SPI
         SD.end();
-        SPI.end();
+    #ifdef BOARD_SD_SPI
+        BOARD_SD_MOUNT_FAILED();
+    #else
+        sd_spi.end();
+    #endif
     #endif
         return false;
     }

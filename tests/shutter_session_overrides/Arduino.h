@@ -26,6 +26,18 @@ public:
 
     const char* c_str() const { return s_.c_str(); }
     size_t length() const { return s_.length(); }
+    bool isEmpty() const { return s_.empty(); }
+    char operator[](size_t index) const { return s_[index]; }
+    int indexOf(const char* text) const {
+        const auto pos = s_.find(text);
+        return pos == std::string::npos ? -1 : static_cast<int>(pos);
+    }
+    int lastIndexOf(char c) const {
+        const auto pos = s_.rfind(c);
+        return pos == std::string::npos ? -1 : static_cast<int>(pos);
+    }
+    String substring(size_t start) const { return s_.substr(start); }
+    bool concat(const char* text) { s_ += text; return true; }
     bool endsWith(const char* suf) const {
         size_t n = strlen(suf);
         return s_.length() >= n && s_.compare(s_.length() - n, n, suf) == 0;

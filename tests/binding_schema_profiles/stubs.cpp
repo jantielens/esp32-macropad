@@ -3,6 +3,11 @@
 #include <WiFi.h>
 #include "audio.h"
 #include "audio_input.h"
+#if HAS_VOICE_CLIPS
+#include "voice_clips.h"
+void voice_clips_snapshot(VoiceClipSnapshot* out) { *out = {}; }
+const char* voice_clips_state_name(VoiceClipState) { return "idle"; }
+#endif
 #include "device_classes/voice_assistant/voice.h"
 #include "music_analysis.h"
 #include "net_activity.h"
@@ -13,6 +18,7 @@
 #include "ha_live.h"
 #include "binding_value.h"
 #include "sensors/sensor_manager.h"
+#include "wifi_manager.h"
 #if HAS_CAMERA
 #include "camera_motion.h"
 #endif
@@ -20,7 +26,12 @@
 #include <cstdio>
 #include <cstring>
 
-unsigned long millis() { return 10000; }
+unsigned long binding_test_now_ms = 10000;
+unsigned long millis() { return binding_test_now_ms; }
+WifiNetworkSnapshot binding_test_network = {};
+void wifi_manager_get_network_snapshot(WifiNetworkSnapshot* snapshot) {
+    *snapshot = binding_test_network;
+}
 
 #if HAS_EXTERNAL_DATA
 bool external_data_get_value(const char* name, const char* path, char* out, size_t size) {
@@ -66,7 +77,6 @@ static const SensorField kFixtureSensorFields[] = {
 #else
     {"temperature", "Temperature in degrees Celsius.", "\xC2\xB0" "C", "21.37"},
     {"humidity", "Relative humidity in percent.", "%", "54.2"},
-    {"battery_voltage", "Battery voltage in volts.", "V", "3.85"},
     {"presence", "Presence detected: 1 or 0.", "", "1"},
 #endif
 };
@@ -81,6 +91,17 @@ const SensorField *sensor_manager_field_at(size_t index) {
     return index < sensor_manager_field_count() ? &kFixtureSensorFields[index] : nullptr;
 }
 bool sensor_manager_get_number(const char*, double*, bool*) { return false; }
+#if HAS_BATTERY_INFO
+void sensor_manager_get_battery(BatterySnapshot &snapshot) {
+    snapshot = {};
+#if defined(BINDING_SCHEMA_PROFILE_FULL)
+    snapshot.supported = battery_supported_fields(
+        battery_field_mask(BatteryField::Voltage) | battery_field_mask(BatteryField::Percentage) |
+        battery_field_mask(BatteryField::Current));
+    snapshot.description = "Fixture battery provider: voltage, percentage and signed current; no status or runtime estimates.";
+#endif
+}
+#endif
 #if ALARM_ENABLED
 AlarmSnapshot binding_test_alarm = {true, 7, 30, ALARM_RINGING, true, false, false, false, 0};
 AlarmSnapshot alarm_snapshot() { return binding_test_alarm; }

@@ -35,6 +35,8 @@ AudioBoardControl audio_board_control_create() {
 #include "drivers/pcm510xa_audio_driver.cpp"
 #elif AUDIO_OUTPUT_DRIVER == AUDIO_OUTPUT_DRIVER_ES8388
 #include "drivers/es8388_audio_driver.cpp"
+#elif AUDIO_OUTPUT_DRIVER == AUDIO_OUTPUT_DRIVER_STICKY_PWM
+#include "boards/reterminal-sticky-interactive/drivers/sticky_buzzer.cpp"
 #else
 #error "No audio output driver selected or unknown driver type"
 #endif

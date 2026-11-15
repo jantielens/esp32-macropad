@@ -76,12 +76,15 @@ public:
                                     const void* context, size_t contextLen,
                                     uint32_t timeoutMs,
                                     bool callerIsConsumer, bool fromIsr,
-                                    bool* outOk, char* outMsg, size_t outMsgLen) {
+                                    bool* outOk, char* outMsg, size_t outMsgLen,
+                                    void (*onPublished)(void*) = nullptr,
+                                    void* publishedContext = nullptr) {
         if (callerIsConsumer || fromIsr) return DEFERRED_DISPATCH_INVALID;
 
         const DeferredDispatchResult published = publish(
             job, abandonedCleanup, context, contextLen, true, false);
         if (published != DEFERRED_DISPATCH_OK) return published;
+        if (onPublished) onPublished(publishedContext);
 
         if (xSemaphoreTake(doneSem, pdMS_TO_TICKS(timeoutMs)) == pdTRUE) {
             return collectCompleted(outOk, outMsg, outMsgLen);

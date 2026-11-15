@@ -5,7 +5,14 @@
 #include "board_hardware.h"
 #include "tab5_hardware.h"
 #include "i2c_bus.h"
-#include "drivers/st7123_touch_driver.h"
+#include "boards/m5stack-tab5/drivers/st7123_touch_driver.h"
+#include "../src/boards/m5stack-tab5/tab5_battery_sensor.cpp"
+
+static const BatteryProvider *batteryProvider = nullptr;
+bool SensorRegistry::add(const SensorCallbacks &callbacks) {
+    batteryProvider = callbacks.battery;
+    return true;
+}
 
 TwoWire Wire;
 static bool locked = false;
@@ -130,8 +137,22 @@ int main() {
     assert(std::fabs(voltage - 8.0f) < 0.001f && std::fabs(current - 0.5f) < 0.001f);
     Wire.powerRegisters[0x04] = 4096;
     assert(tab5_battery_read(voltage, current) && std::fabs(current + 0.25f) < 0.001f);
+    SensorRegistry registry;
+    board_register_sensors(registry);
+    assert(batteryProvider && batteryProvider->sample);
+    BatterySample sample;
+    batteryProvider->sample(sample);
+    assert(sample.get(BatteryField::Voltage) == 8 && sample.get(BatteryField::Current) == -0.25f);
+    assert(!isfinite(sample.get(BatteryField::Percentage)) && !isfinite(sample.get(BatteryField::Status)));
+    BatteryCache batteryCache;
+    batteryCache.configure(*batteryProvider, 5000);
+    batteryCache.update(sample);
+    assert(batteryCache.snapshot().readings.get(BatteryField::DischargePower) == 2);
     Wire.powerRegisters[0x06] = 0x000c;
     assert(!tab5_battery_read(voltage, current));
+    sample = {};
+    batteryProvider->sample(sample);
+    assert(!isfinite(sample.get(BatteryField::Voltage)) && !isfinite(sample.get(BatteryField::Current)));
     Wire.fail = true;
     assert(!tab5_battery_read(voltage, current));
     Wire.fail = false;

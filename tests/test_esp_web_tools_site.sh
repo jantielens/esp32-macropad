@@ -61,6 +61,14 @@ jq -e '.capabilities | index("extensions") != null' \
 jq -e '.builds[0].chipFamily == "ESP32-S3" and .builds[0].parts[0].offset == 0' \
     "$TMP_DIR/site/manifests/waveshare-7.8-interactive.json" >/dev/null
 grep -Fq 'Waveshare 7.8-inch Interactive E-Paper' "$TMP_DIR/site/devices/macropad.html"
+jq -e '.capabilities | index("rtc") != null' \
+    "$PROJECT_DIR/src/boards/reterminal-sticky-interactive/metadata.json" >/dev/null
+jq -e '.capabilities | index("sd_card") != null' \
+    "$PROJECT_DIR/src/boards/reterminal-sticky-interactive-sd/metadata.json" >/dev/null
+jq -e '.builds[0].chipFamily == "ESP32-S3"' \
+    "$TMP_DIR/site/manifests/reterminal-sticky-interactive-sd.json" >/dev/null
+grep -Fq 'reTerminal Sticky Interactive SD' "$TMP_DIR/site/devices/macropad.html"
+grep -Fq 'aria-label="RTC:' "$TMP_DIR/site/flash.html"
 jq -e '.builds[0].chipFamily == "ESP32-S3"' \
     "$TMP_DIR/site/manifests/m5stack-stopwatch.json" >/dev/null
 grep -q 'M5Stack StopWatch' "$TMP_DIR/site/devices/macropad.html"

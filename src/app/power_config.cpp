@@ -20,6 +20,7 @@ PowerMode power_config_parse_power_mode(const DeviceConfig *config) {
 		if (!config || strlen(config->operating_mode) == 0) return PowerMode::AlwaysOn;
 
 		if (equals_ignore_case(config->operating_mode, "always_on")) return PowerMode::AlwaysOn;
+		if (equals_ignore_case(config->operating_mode, "offline")) return PowerMode::Offline;
 		if (equals_ignore_case(config->operating_mode, "duty_cycle_mqtt")) return PowerMode::DutyCycle;
 		if (equals_ignore_case(config->operating_mode, "duty_cycle_ble")) return PowerMode::DutyCycleBle;
 			 if (equals_ignore_case(config->operating_mode, "duty_cycle_epaper_frame")) return PowerMode::DutyCycleEpaperFrame;
@@ -43,6 +44,7 @@ MqttPublishScope power_config_parse_mqtt_publish_scope(const DeviceConfig *confi
 const char *power_config_power_mode_to_string(PowerMode mode) {
 		switch (mode) {
 				case PowerMode::AlwaysOn: return "always_on";
+				case PowerMode::Offline: return "offline";
 				case PowerMode::DutyCycle: return "duty_cycle_mqtt";
 				case PowerMode::DutyCycleBle: return "duty_cycle_ble";
 							 case PowerMode::DutyCycleEpaperFrame: return "duty_cycle_epaper_frame";

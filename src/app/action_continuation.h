@@ -27,7 +27,8 @@ enum ActionContinuationOwner : uint8_t {
 // release it unless the dispatched action returns ACTION_PENDING.
 bool action_continuation_begin(const ButtonAction* remaining, uint8_t remaining_count,
                                const char* label, uint32_t* token,
-                               ActionContinuationOwner owner = ACTION_CONTINUATION_OWNER_LOOP);
+                               ActionContinuationOwner owner = ACTION_CONTINUATION_OWNER_LOOP,
+                               bool interactive = false);
 void action_continuation_release(uint32_t token);
 void action_continuation_mark_pending(uint32_t token);
 // Override only this reservation's watchdog. Zero disables it for an explicit
@@ -35,11 +36,17 @@ void action_continuation_mark_pending(uint32_t token);
 bool action_continuation_set_timeout(uint32_t token, uint32_t timeout_ms);
 
 // Thread-safe completion hook for asynchronous workers. It records the result;
-// the saved suffix resumes later on its originating dispatch task.
+// the saved suffix resumes later on its originating dispatch task. Returns
+// false if the reservation is already complete, released, or past its deadline.
 bool action_continuation_complete(uint32_t token, bool success);
 
 // Reports whether every continuation slot is currently reserved.
 bool action_continuation_is_full();
+
+#if HAS_AUTO_SHUTDOWN
+bool action_continuation_is_active();
+bool action_continuation_is_pending(uint32_t token);
+#endif
 
 // Arrange successful completion after duration_ms. Used by the built-in delay
 // action; dispatch still resumes only from the normal owner task.
@@ -51,6 +58,7 @@ bool action_continuation_schedule_success(uint32_t token, uint32_t duration_ms);
 ActionContinuationTakeResult action_continuation_take(
     ButtonAction* out_actions, uint8_t* out_count,
     char* out_label, uint8_t out_label_len,
-    ActionContinuationOwner owner = ACTION_CONTINUATION_OWNER_LOOP);
+    ActionContinuationOwner owner = ACTION_CONTINUATION_OWNER_LOOP,
+    bool* out_interactive = nullptr);
 
 #endif // HAS_DISPLAY || HAS_BUTTON

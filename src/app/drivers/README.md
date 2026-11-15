@@ -1,8 +1,27 @@
-# Drivers (Display, Touch + Audio)
+---
+title: Display, touch, audio, and RTC drivers
+description: Driver ownership, compile-time selection, and integration with board initialization.
+---
 
-This folder contains reusable **display**, **touch**, and **audio** driver implementations used by multiple boards.
+This folder contains reusable **display**, **touch**, **audio**, and **RTC** driver
+implementations. Boards select the implementations they need at compile time.
 
 We intentionally keep this folder **flat** (no `display_*/touch_*` filename prefixes and no `display/` or `touch/` subfolders) to keep includes simple and minimize churn.
+
+Board-exclusive drivers belong in `src/boards/<board>/drivers/`. Group a
+driver and its supporting files in a subdirectory when useful; keep board-wide
+initialization in the board hardware module. Board variants may share an
+existing base board's drivers. Reusable controller drivers and shared
+protocol/rendering helpers remain central, even when only one board family
+currently selects them. A board-specific filename alone does not establish
+exclusivity.
+
+The CrowPanel and Inkplate interactive adapters are board-local. The Tab5
+display and touch adapters are owned by the base Tab5 board and used by its SD
+variant. The E1003 frame implementation is board-local; the Inkplate frame
+implementation remains shared across Inkplate 5 V2 and 6FLICK. The Tab5 panel
+command license is retained with that table and with the shared ES8388 codec
+implementation.
 
 ## Where driver selection lives
 
@@ -13,6 +32,42 @@ Board selection is done at compile time in:
 Only the selected driver implementations are compiled via the sketch-root translation units:
 - `src/app/display_drivers.cpp`
 - `src/app/touch_drivers.cpp`
+- `src/app/audio_output_drivers.cpp`
+- `src/app/audio_input_drivers.cpp` (for independently selected input drivers)
+- `src/app/rtc_drivers.cpp`
+- `src/app/device_classes/epaper_frame/epaper_frame_drivers.cpp` (included by
+  the sketch-root device-class compilation unit)
+
+Board-local `.cpp` files also require the appropriate explicit sketch-root
+include. Removing a board directory does not remove its integration references.
+
+## RTC and time ownership
+
+`HAS_RTC` defaults to false. An enabled board selects `RTC_DRIVER`; the
+sketch-root RTC aggregator includes only that controller implementation.
+`RtcDriver` exposes initialization, UTC reads, and UTC writes. The selected
+instance has static lifetime and is not heap-allocated. The PCF8563 driver uses
+`RTC_I2C_ADDR` on the board-initialized Wire0 bus with the shared I2C mutex;
+it does not initialize the bus or manage board power.
+
+Call `time_service_init_rtc()` during setup after successful board initialization
+and before starting NTP. The time service restores validated RTC time to the
+system clock and treats RTC-restored time as ready. NTP callbacks only flag a
+pending write; the Arduino loop writes current system UTC after OTA or power-off
+activity ends. A failed write is logged and retried on the next NTP sync, not
+polled. Boards without RTC retain the NTP-only path.
+
+`HAS_RTC` with `IS_EPAPER_FRAME` is rejected at compile time. Enabling it
+requires an explicit checkpoint that processes pending RTC writes after NTP
+synchronization and before deep sleep, rather than relying on the normal
+Arduino loop.
+
+PCF8563 uses century=0 for 2000-2099 and rejects century=1, stopped/test modes,
+voltage-loss flags, malformed BCD, and invalid calendar dates. The time service
+also rejects dates before 2024. Writes stop the clock, transfer the calendar,
+and restart it only after success; interrupted writes leave time invalid.
+Other controllers implement the same UTC interface and their own validity
+checks. Alarm interrupts and manual time-setting controls are not implemented.
 
 ## Generated board → drivers table
 
@@ -55,6 +110,8 @@ python3 tools/generate-board-driver-table.py --update-drivers-readme
 | m5stack-tab5-sd | TAB5_DSI | ST7121/ST7123 | DSI | 720×1280 | 0 | ST7123 |  |
 | reterminal-e1003-frame | ? | ? | ? | ?×? | ? | none |  |
 | reterminal-e1003-interactive | RETERMINAL_E1003 | IT8951 | SPI | 1872×1404 | 1 | GT911 |  |
+| reterminal-sticky-interactive | STICKY_EPAPER | SSD1677/SSD2677 | SPI | 800×480 | 0 | GT911 |  |
+| reterminal-sticky-interactive-sd | STICKY_EPAPER | SSD1677/SSD2677 | SPI | 800×480 | 0 | GT911 |  |
 | waveshare-7.8-interactive | IT8951 | IT8951 | SPI | 1872×1404 | 2 | none |  |
 
 <!-- BOARD_DRIVER_TABLE_END -->

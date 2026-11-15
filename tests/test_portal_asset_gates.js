@@ -32,6 +32,20 @@ try {
         assert.equal(execFileSync('nm', ['--defined-only', object], {encoding: 'utf8'}).trim(), '',
             module + ' must emit no code or data when external data is disabled');
     }
+    for (const module of ['voice_clips.cpp', 'voice_clips_binding.cpp', 'voice_clip_range.cpp', 'voice_wav_store.cpp']) {
+        const object = path.join(nativeDirectory, 'voice-clips.o');
+        execFileSync('c++', ['-std=c++17', '-c', 'src/app/' + module, '-o', object,
+            '-DBOARD_CONFIG_H', '-DHAS_VOICE_CLIPS=0', '-Itests', '-Isrc/app'],
+            {cwd: root, stdio: 'pipe'});
+        assert.equal(execFileSync('nm', ['--defined-only', object], {encoding: 'utf8'}).trim(), '',
+            module + ' must emit no code or data when voice clips are disabled');
+    }
+    const shutdownObject = path.join(nativeDirectory, 'shutdown.o');
+    execFileSync('c++', ['-std=c++17', '-c', 'src/app/auto_shutdown.cpp', '-o', shutdownObject,
+        '-DBOARD_CONFIG_H', '-DHAS_AUTO_SHUTDOWN=0', '-Itests', '-Isrc/app'],
+        {cwd: root, stdio: 'pipe'});
+    assert.equal(execFileSync('nm', ['--defined-only', shutdownObject], {encoding: 'utf8'}).trim(), '',
+        'Disabled auto-shutdown must emit no policy code or data');
 } finally {
     fs.rmSync(nativeDirectory, {recursive: true, force: true});
 }
@@ -78,6 +92,7 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
     ['esp32-p4-lcd4b', 'ESP32P4', true],
     ['esp32-p4-lcd4b', 'ESP32P4', true, 'face-disabled'],
     ['esp32-p4-lcd4b', 'ESP32P4', true, 'external-disabled'],
+    ['esp32-p4-lcd4b', 'ESP32P4', true, 'bluetooth-disabled'],
     ['esp32-p4-lcd4b', 'ESP32P4', false],
     ['esp32-p4-lcd4b', 'ESP32P4', false, 'builtin-only'],
     ['esp32-p4-lcd4b', 'ESP32P4', true, 'ha-only'],
@@ -89,6 +104,7 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
         ...(integrationMode === 'builtin-only' ? ['-DHAS_MQTT=0', '-DHAS_HA_LIVE=0'] : []),
         ...(integrationMode === 'ha-only' ? ['-DHAS_MQTT=0', '-DHAS_HA_LIVE=1'] : []),
         ...(integrationMode === 'face-disabled' ? ['-DHAS_FACE_WIDGET=0'] : []),
+        ...(integrationMode === 'bluetooth-disabled' ? ['-DHAS_BLE=0', '-DHAS_BLE_HID=0'] : []),
         ...(integrationMode === 'external-disabled' ? ['-DHAS_EXTERNAL_DATA=0'] : [])],
         {cwd: root, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe']});
     const assets = new Map();
@@ -98,7 +114,15 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
         const bytes = Buffer.from([...match[2].matchAll(/0x([0-9a-f]{2})/g)].map(value => parseInt(value[1], 16)));
         assets.set(match[1], zlib.gunzipSync(bytes).toString());
     }
+
     assert(assets.has('portal_js_gz'));
+    assert(!assets.has('voice_clips_fragment_html_gz'));
+    assert(!assets.has('portal_voice_clips_js_gz'));
+    assert.equal(assets.has('bluetooth_fragment_html_gz'),
+        board !== 'reterminal-e1003-frame' && integrationMode !== 'bluetooth-disabled',
+        'Bluetooth fragment must follow HAS_BLE || HAS_BLE_HID independently of display and HID transport');
+    assert.equal(assets.has('portal_bluetooth_js_gz'), assets.has('bluetooth_fragment_html_gz'),
+        'Bluetooth script and fragment must share their feature gate');
     if (!epaperProfile) {
         assert(!assets.has('epaper_refresh_fragment_html_gz'));
         assert(!assets.has('portal_epaper_refresh_js_gz'));
@@ -111,6 +135,10 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
         if (name.endsWith('_js_gz')) new vm.Script(text, {filename: board + '/' + name});
     }
     const js = assets.get('portal_js_gz');
+    for (const name of ['init_bluetooth_fragment', 'bluetooth_tx_power_dbm', 'bthome_event_burst_ms']) {
+        assert(!js.includes(name), 'Bluetooth component code leaked into the shared bundle: ' + name);
+        if (assets.has('portal_bluetooth_js_gz')) assert(assets.get('portal_bluetooth_js_gz').includes(name));
+    }
     assert(js.includes('function uploadFirmware('), 'HTML upload callback was removed');
     assert(js.includes('function saveFragmentConfig('), 'Fragment save callback was removed');
     const display = board === 'esp32-p4-lcd4b';
@@ -131,6 +159,9 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
     const ha = display && psram && integrationMode !== 'builtin-only';
     const mqtt = display && !['builtin-only', 'ha-only'].includes(integrationMode);
     const shell = assets.get('shell_html_gz');
+    assert(!shell.includes('portal_power_savings.js'));
+    assert(!assets.has('power_savings_fragment_html_gz'));
+    assert(!assets.has('portal_power_savings_js_gz'));
     assert.equal(shell.includes('id="binding-help-overlay"'), display, 'Binding dialog HTML must follow HAS_DISPLAY');
     assert.equal(js.includes('function haBindingBuilderHTML('), ha, 'HA builder JS must follow HAS_HA_LIVE');
     assert.equal(js.includes('const haButtonBuilderProvider='), ha, 'HA button source provider must follow HAS_HA_LIVE');
@@ -200,4 +231,25 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
     }
     console.log('PASS: selected, valid minified assets for ' + board +
         ' (PSRAM=' + psram + ', integrations=' + integrationMode + ')');
+}
+
+for (const board of ['reterminal-sticky-interactive', 'm5stack-stopwatch']) {
+    const selected = execFileSync('c++', ['-E', '-P', '-x', 'c++', 'src/app/web_assets.h',
+        '-Itests', '-Isrc/boards/' + board, '-DBOARD_HAS_OVERRIDE',
+        '-DCONFIG_IDF_TARGET_ESP32S3', '-DBOARD_HAS_PSRAM'],
+        {cwd: root, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024});
+    const decodeAsset = symbol => {
+        const content = selected.match(new RegExp('const uint8_t ' + symbol + '\\[\\] PROGMEM = \\{([\\s\\S]*?)\\};'))[1];
+        return zlib.gunzipSync(Buffer.from([...content.matchAll(/0x([0-9a-f]{2})/g)].map(value => parseInt(value[1], 16)))).toString();
+    };
+    assert(selected.includes('power_savings_fragment_html_gz'));
+    const voiceClips = board === 'reterminal-sticky-interactive';
+    assert.equal(selected.includes('voice_clips_fragment_html_gz'), voiceClips);
+    assert.equal(selected.includes('portal_voice_clips_js_gz'), voiceClips);
+    assert.equal(selected.includes('portal_bluetooth_js_gz'), selected.includes('bluetooth_fragment_html_gz'));
+    if (selected.includes('portal_bluetooth_js_gz')) new vm.Script(decodeAsset('portal_bluetooth_js_gz'));
+    if (voiceClips) new vm.Script(decodeAsset('portal_voice_clips_js_gz'));
+    assert(decodeAsset('shell_html_gz').includes('src="/portal_power_savings.js'));
+    new vm.Script(decodeAsset('portal_power_savings_js_gz'));
+    console.log('PASS: gated power savings assets for ' + board);
 }

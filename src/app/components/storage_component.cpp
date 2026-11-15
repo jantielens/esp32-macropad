@@ -8,7 +8,6 @@
 #include "storage_browser.h"
 #include "web_portal_json.h"
 #include "web_portal_utils.h"
-
 #include <ArduinoJson.h>
 
 namespace {
@@ -36,7 +35,6 @@ void storage_file_get(AsyncWebServerRequest* request) {
         web_portal_send_json_error(request, 400, "Invalid storage path");
         return;
     }
-
     File file = Storage.open(path, "r");
     if (!file || file.isDirectory()) {
         if (file) file.close();
@@ -53,6 +51,7 @@ void storage_delete(AsyncWebServerRequest* request) {
     const char* error = nullptr;
     if (!storage_browser_remove(path, error)) {
         const int status = strcmp(error, "invalid storage path") == 0 ? 400 :
+            strcmp(error, "storage busy") == 0 ? 409 :
             strcmp(error, "file or directory not found") == 0 ? 404 : 500;
         web_portal_send_json_error(request, status, error);
         return;

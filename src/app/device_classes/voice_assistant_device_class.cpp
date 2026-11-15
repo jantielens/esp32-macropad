@@ -8,7 +8,6 @@
 #include "voice_assistant/voice_binding.h"
 #include "voice_assistant/voice_config.h"
 
-#include "voice_assistant/voice_wav.cpp"
 #include "voice_assistant/voice_auto_stop.cpp"
 #include "voice_assistant/voice_transcription_request.cpp"
 #include "voice_assistant/voice_tts_request.cpp"

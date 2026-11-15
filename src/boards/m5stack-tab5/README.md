@@ -67,10 +67,16 @@ current and battery temperature during initial testing and follow the
 [vendor power and charging guidance](https://docs.m5stack.com/en/core/Tab5).
 
 The INA226 reports battery voltage and signed current, positive when charging
-and negative when discharging. Use `[sensor:battery_voltage;%.2f|N/A]` and
-`[sensor:battery_current;%.2f|N/A]` in a button, or use the corresponding
-Home Assistant sensors with MQTT. Failed samples can retain their last valid
-values; see [local sensor readings](../../../docs/user/pads/data-sources.md#read-local-sensors-and-health).
+and negative when discharging. Use `[battery:voltage;%.2f|N/A]` and
+`[battery:current;%.2f|N/A]` in a button, or use the corresponding
+Home Assistant sensors with MQTT. Calculated signed power and positive
+discharge power use the same voltage/current sample. They do not measure total
+device power when externally powered.
+Percentage, readable charging state, external-power detection and runtime
+estimates remain unavailable; the monitor does not establish those values.
+Samples run every five seconds and expire after fifteen seconds without success,
+excluding observed OTA pauses. See
+[shared battery readings](../../../docs/user/pads/data-sources.md#show-battery-information).
 
 | Signal | GPIO or controller |
 | --- | --- |

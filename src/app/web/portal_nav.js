@@ -393,14 +393,14 @@
         navigationReady = true;
 
         // Startup fallback chain:
-        // 1. In AP mode, primary fragment wins over any hash (the wizard is
+        // 1. In recovery AP mode, primary fragment wins over any hash (the wizard is
         //    the only meaningful page; a stale #welcome from a prior session
         //    must not override it).
         // 2. Otherwise: URL hash if present and exists in visible nav
         // 3. Primary fragment if defined and exists in visible nav
         // 4. #welcome
         var itemId = null;
-        if (data.ap_mode && primary && primary.fragment && itemMap[primary.fragment]) {
+        if ((data.recovery_ap ?? data.ap_mode) && primary && primary.fragment && itemMap[primary.fragment]) {
           itemId = primary.fragment;
         }
         if (!itemId) {

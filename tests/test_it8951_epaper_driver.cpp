@@ -13,6 +13,11 @@ struct Transaction { uint32_t hz; std::vector<uint8_t> bytes; bool imageData = f
 static std::vector<Transaction> transactions;
 static uint32_t clockMs = 1000;
 static bool busy = false, ota = false, badVcom = false;
+static bool engineStuck = false, transactionOpen = false, hrdyDuringWaveform = false;
+static uint32_t engineUntil = 0, engineDuration = 0;
+static bool engineScheduled = false;
+static uint16_t registerAddress = 0, displayArguments = 0;
+static int spiBuses = 0;
 static uint16_t command = 0;
 static uint16_t expectedVcom = EPAPER_DEFAULT_VCOM_MV;
 static int allocations = 0, failAllocation = 0, liveAllocations = 0, failures = 0;
@@ -20,7 +25,10 @@ static bool failMutex = false;
 static int liveMutexes = 0;
 static int pins[49] = {};
 static std::vector<unsigned long> delays;
-static std::function<void()> waveformHook, uploadHook;
+static std::function<void()> waveformHook, uploadHook, waitHook, engineHook;
+static std::function<void(unsigned)> submissionHook;
+static std::function<void(uint16_t)> commandHook;
+static uint32_t sequence = 0;
 static EpaperRefreshSettings settings = {EPAPER_RENDER_MODE_GRAYSCALE, 1000, 500, true, 2, 0, 128};
 #define CHECK(condition) do { if (!(condition)) { std::printf("FAIL %d: %s\n", __LINE__, #condition); ++failures; } } while (0)
 
@@ -157,12 +165,25 @@ static void testPresentedPng() {
 
 extern "C" unsigned long millis() { return clockMs; }
 unsigned long micros() { return uint32_t(clockMs * 1000); }
-void delay(unsigned long ms) { clockMs += ms; delays.push_back(ms); }
-void vTaskDelay(TickType_t ticks) { clockMs += ticks; }
+int64_t esp_timer_get_time() { return uint64_t(clockMs) * 1000; }
+void delay(unsigned long ms) {
+    clockMs += ms;
+    delays.push_back(ms);
+    if (waitHook) waitHook();
+}
+void vTaskDelay(TickType_t ticks) {
+    CHECK(!transactionOpen);
+    clockMs += ticks;
+    if (waitHook) waitHook();
+}
 void yield() {}
 void pinMode(int pin, int) { CHECK(pin >= 0 && pin < 49 && pin != 17); }
 void digitalWrite(int pin, int value) { CHECK(pin >= 0 && pin < 49 && pin != 17); pins[pin] = value; }
-int digitalRead(int pin) { CHECK(pin == EPAPER_BUSY_PIN); return busy ? LOW : HIGH; }
+int digitalRead(int pin) {
+    CHECK(pin == EPAPER_BUSY_PIN);
+    return busy || (hrdyDuringWaveform && engineScheduled && int32_t(engineUntil - clockMs) > 0)
+        ? LOW : HIGH;
+}
 bool ota_activity_is_active() { return ota; }
 EpaperRefreshSettings config_manager_get_epaper_refresh_settings() { return settings; }
 SemaphoreHandle_t test_freertos_create_mutex() {
@@ -183,32 +204,65 @@ void heap_caps_free(void* data) { if (data) { --liveAllocations; std::free(data)
 void it8951_test_spi_begin(int clock, int miso, int mosi, int cs) {
     CHECK(clock == EPAPER_SPI_SCK_PIN && miso == EPAPER_SPI_MISO_PIN && mosi == EPAPER_SPI_MOSI_PIN && cs == -1);
     if (IT8951_E1003_PROTOCOL) CHECK(pins[11] == HIGH && pins[21] == HIGH);
+    ++spiBuses;
 }
-void it8951_test_spi_transaction(uint32_t hz) { transactions.push_back({hz, {}}); }
+void it8951_test_spi_end() {
+    CHECK(!transactionOpen && spiBuses == 1);
+    --spiBuses;
+}
+void it8951_test_spi_transaction(uint32_t hz) {
+    CHECK(!transactionOpen && spiBuses == 1);
+    transactionOpen = true;
+    transactions.push_back({hz, {}});
+}
+void it8951_test_spi_end_transaction() {
+    CHECK(transactionOpen && pins[EPAPER_CS_PIN] == HIGH);
+    transactionOpen = false;
+}
 static uint16_t word(const std::vector<uint8_t>& bytes, size_t offset) {
     return (uint16_t(bytes.at(offset)) << 8) | bytes.at(offset + 1);
 }
 uint8_t it8951_test_spi_byte(uint8_t value) {
-    CHECK(pins[EPAPER_CS_PIN] == LOW);
+    CHECK(transactionOpen && pins[EPAPER_CS_PIN] == LOW);
     auto& tx = transactions.back();
     tx.bytes.push_back(value);
     const size_t index = tx.bytes.size() - 1;
     if (index == 3 && word(tx.bytes, 0) == 0x6000) {
         command = word(tx.bytes, 2);
-        if (command == 0x0034 && waveformHook) waveformHook();
+        if (command == 0x0034) displayArguments = 0;
+        if (commandHook) commandHook(command);
+    }
+    if (index == 3 && word(tx.bytes, 0) == 0x0000) {
+        if (command == 0x0010) registerAddress = word(tx.bytes, 2);
+        if (command == 0x0034) {
+            ++displayArguments;
+            if (submissionHook) submissionHook(displayArguments);
+            if (displayArguments == 5) {
+                engineScheduled = true;
+                engineUntil = clockMs + engineDuration;
+                if (waveformHook) waveformHook();
+            }
+        }
     }
     if (index >= 4 && word(tx.bytes, 0) == 0x1000) {
         CHECK(tx.hz == (IT8951_E1003_PROTOCOL ? 10000000u : 1000000u));
         const uint16_t info[] = {1872, 1404, 0x1234, 0x0001};
         const size_t position = (index - 4) / 2;
-        const uint16_t result = command == 0x0039 ? (badVcom ? 1000 : expectedVcom) :
+        const bool engineActive = engineStuck ||
+            (engineScheduled && int32_t(engineUntil - clockMs) > 0);
+        if (command == 0x0010) {
+            CHECK(registerAddress == 0x1224);
+            if (index == 4 && engineHook) engineHook();
+        }
+        const uint16_t result = command == 0x0010 ? (engineActive ? 1 : 0) :
+            command == 0x0039 ? (badVcom ? 1000 : expectedVcom) :
             (position < 4 ? info[position] : 0);
         return index & 1 ? result & 0xff : result >> 8;
     }
     return 0;
 }
 void it8951_test_spi_data(const uint8_t* data, size_t length) {
-    CHECK(pins[EPAPER_CS_PIN] == LOW);
+    CHECK(transactionOpen && pins[EPAPER_CS_PIN] == LOW);
     transactions.back().imageData = true;
     auto& bytes = transactions.back().bytes;
     bytes.insert(bytes.end(), data, data + length);
@@ -228,19 +282,43 @@ static std::vector<std::vector<uint16_t>> arguments(uint16_t wanted) {
     }
     return result;
 }
-static void pixel(IT8951EpaperDriver& driver, int x, int y, uint16_t color) {
+static void flushPixel(IT8951EpaperDriver& driver, int x, int y, uint16_t color) {
     driver.setAddrWindow(x, y, 1, 1);
     driver.pushColors(&color, 1, false);
 }
+static void commit(IT8951EpaperDriver& driver, DisplayIntent intent = DisplayIntent::Background) {
+    driver.commitFrame({++sequence, sequence, intent, uint64_t(clockMs) * 1000, uint64_t(clockMs) * 1000});
+}
+static void pixel(IT8951EpaperDriver& driver, int x, int y, uint16_t color,
+                  DisplayIntent intent = DisplayIntent::Background) {
+    driver.beginFrame();
+    flushPixel(driver, x, y, color);
+    commit(driver, intent);
+}
 static void reset() {
-    CHECK(liveAllocations == 0 && liveMutexes == 0);
+    CHECK(liveAllocations == 0 && liveMutexes == 0 && spiBuses == 0 && !transactionOpen);
     transactions.clear();
     delays.clear();
     clockMs = 1000;
     busy = ota = badVcom = failMutex = false;
+    engineStuck = engineScheduled = hrdyDuringWaveform = false;
+    engineUntil = engineDuration = 0;
+    registerAddress = displayArguments = 0;
+    sequence = 0;
     allocations = failAllocation = 0;
     expectedVcom = EPAPER_DEFAULT_VCOM_MV;
-    waveformHook = uploadHook = nullptr;
+    waveformHook = uploadHook = waitHook = engineHook = nullptr;
+    submissionHook = nullptr;
+    commandHook = nullptr;
+    settings = {EPAPER_RENDER_MODE_GRAYSCALE, 1000, 500, true, 2, 0, 128};
+    test_freertos_force_wait_timeout = true;
+    test_freertos_semaphore_take_hook = [](SemaphoreHandle_t, TickType_t ticks) {
+        if (ticks && ticks != portMAX_DELAY) {
+            CHECK(!transactionOpen);
+            clockMs += ticks;
+            if (waitHook) waitHook();
+        }
+    };
 }
 
 static void paintReference(std::vector<uint8_t>& expected, const DeviceConfig& config, int rotation,
@@ -276,6 +354,7 @@ static void checkConversion(int rotation, int mode, int conversion) {
     IT8951EpaperDriver driver(&config);
     driver.init();
     driver.setRotation(rotation);
+    driver.beginFrame();
     std::vector<uint8_t> expected(1872 * 1404 / 2, 0xFF);
     auto paint = [&](int x, int y, int width, int height, int stride, uint16_t seed) {
         std::vector<uint16_t> source(stride * height, 0x07E0);
@@ -296,6 +375,7 @@ static void checkConversion(int rotation, int mode, int conversion) {
     paint(15, 16, 4, 3, 6, 0x7BE0);
     paint(16, 19, 4, 1, 4, 0);
     paint(driver.width() - 3, driver.height() - 2, 3, 2, 4, 0xFFFF);
+    commit(driver);
     driver.present();
     if (IT8951_E1003_PROTOCOL) {
         for (int row = 0; row < 1404; ++row) {
@@ -377,7 +457,300 @@ static void checkPresentedCapture(uint8_t rotation, int mode) {
     }
 }
 
+static void establishBaseline(IT8951EpaperDriver& driver) {
+    driver.init();
+    CHECK(driver.isAvailable() && driver.coherentFrames());
+    driver.setRotation(0);
+    settings.epaper_full_refresh_threshold = 0;
+    pixel(driver, 0, 0, 0);
+    driver.present();
+    CHECK(arguments(0x0034).size() == 1);
+    transactions.clear();
+}
+
+static void checkCoherentPresentation() {
+    reset();
+    IT8951EpaperDriver driver(nullptr);
+    establishBaseline(driver);
+    engineDuration = 75;
+    IT8951EpaperDriver::PresentedFrameInfo info;
+    driver.beginFrame();
+    flushPixel(driver, 1, 0, 0);
+    driver.present();
+    CHECK(transactions.empty());
+    CHECK(driver.getPresentedFrameInfo(info));
+    flushPixel(driver, 2, 0, 0);
+    commit(driver, DisplayIntent::Interactive);
+    unsigned activePolls = 0;
+    engineHook = [&] {
+        if (int32_t(engineUntil - clockMs) > 0) {
+            ++activePolls;
+            CHECK(!busy && !driver.getPresentedFrameInfo(info));
+            CHECK(liveAllocations == 2 && liveMutexes == 1);
+        }
+    };
+    uint32_t start = clockMs;
+    driver.present();
+    CHECK(clockMs - start == 76 && activePolls == 3);
+    CHECK(driver.getPresentedFrameInfo(info));
+#if HAS_DISPLAY_DIAGNOSTICS
+    DisplayPresentationStats telemetry;
+    CHECK(driver.getPresentationStats(&telemetry) && telemetry.last.success);
+    CHECK(telemetry.last.frame_sequence == sequence && telemetry.last.request_sequence == sequence);
+    CHECK(telemetry.last.coalesce_us == 0 && telemetry.last.controller_us == 75000);
+    CHECK(telemetry.last.ready_us <= telemetry.last.snapshot_us);
+    CHECK(telemetry.last.trigger_us + 75000 == telemetry.last.waveform_done_us);
+    CHECK(telemetry.last.waveform_done_us <= telemetry.last.published_us);
+#endif
+    engineHook = nullptr;
+    size_t presentations = arguments(0x0034).size();
+    pixel(driver, 2, 0, 0, DisplayIntent::Interactive);
+    driver.present();
+    CHECK(arguments(0x0034).size() == presentations);
+
+    pixel(driver, 4, 0, 0, DisplayIntent::Interactive);
+    pixel(driver, 4, 0, 0xFFFF);
+    driver.present();
+    CHECK(arguments(0x0034).size() == presentations);
+    pixel(driver, 6, 0, 0);
+    start = clockMs;
+    driver.present();
+    CHECK(clockMs - start >= EPAPER_REFRESH_SETTLE_MS);
+
+    pixel(driver, 8, 0, 0);
+    pixel(driver, 8, 0, 0, DisplayIntent::Interactive);
+    start = clockMs;
+    driver.present();
+    CHECK(clockMs - start >= settings.epaper_min_refresh_interval_ms);
+
+    pixel(driver, 10, 0, 0, DisplayIntent::Interactive);
+#if HAS_DISPLAY_DIAGNOSTICS
+    const uint32_t request = sequence;
+#endif
+    pixel(driver, 12, 0, 0);
+    start = clockMs;
+    driver.present();
+    CHECK(clockMs - start == 76);
+#if HAS_DISPLAY_DIAGNOSTICS
+    CHECK(driver.getPresentationStats(&telemetry));
+    CHECK(telemetry.last.frame_sequence == sequence && telemetry.last.request_sequence == request);
+#endif
+}
+
+static void checkUncappedSettling() {
+    for (bool manual : {false, true}) {
+        reset();
+        IT8951EpaperDriver driver(nullptr);
+        establishBaseline(driver);
+        pixel(driver, 1, 0, 0);
+        if (manual) CHECK(driver.requestFullRefresh());
+        const uint32_t start = clockMs;
+        uint32_t lastFlush = start;
+        unsigned updates = 0;
+        waitHook = [&] {
+            const uint32_t elapsed = clockMs - start;
+            if (elapsed < 1000 && clockMs - lastFlush >= 100) {
+                lastFlush = clockMs;
+                pixel(driver, 2 + updates++, 0, 0);
+            }
+        };
+        bool firstRow = true;
+        uploadHook = [&] {
+            if (firstRow) {
+                firstRow = false;
+                CHECK(clockMs - start == 1051);
+            }
+        };
+        driver.present();
+        CHECK(updates == 9 && !firstRow);
+        CHECK(arguments(0x0034).size() == 1);
+        if (manual) CHECK(arguments(0x0034).back() ==
+            std::vector<uint16_t>({0, 0, 1872, 1404, 2}));
+#if HAS_DISPLAY_DIAGNOSTICS
+        DisplayPresentationStats telemetry;
+        CHECK(driver.getPresentationStats(&telemetry) && telemetry.last.coalesce_us == 150000);
+        CHECK(telemetry.last.total_us >= 1050000);
+#endif
+    }
+}
+
+static void checkNewerRequestsSurvive() {
+    reset();
+    IT8951EpaperDriver driver(nullptr);
+    establishBaseline(driver);
+    engineDuration = 50;
+    bool queuedUpload = false, queuedWaveform = false;
+    pixel(driver, 4, 0, 0, DisplayIntent::Interactive);
+    uploadHook = [&] {
+        if (!queuedUpload) {
+            queuedUpload = true;
+            pixel(driver, 20, 0, 0, DisplayIntent::Interactive);
+            CHECK(driver.requestFullRefresh());
+        }
+    };
+    waveformHook = [&] {
+        if (!queuedWaveform) {
+            queuedWaveform = true;
+            pixel(driver, 40, 0, 0);
+        }
+    };
+    driver.present();
+    CHECK(queuedUpload && queuedWaveform && arguments(0x0034).size() == 1);
+    std::vector<uint8_t> capture(1872u * 1404 / 2);
+    CHECK(driver.copyPresentedFrame(capture.data(), capture.size()));
+    CHECK(readPresentedGray(capture, 936, 4, 0, 4) == 0);
+    CHECK(readPresentedGray(capture, 936, 20, 0, 4) == 15);
+    const uint32_t start = clockMs;
+    driver.present();
+    CHECK(clockMs - start == 1404 + 50);
+    CHECK(arguments(0x0034).size() == 2);
+    CHECK(arguments(0x0034).back() == std::vector<uint16_t>({0, 0, 1872, 1404, 2}));
+    CHECK(driver.copyPresentedFrame(capture.data(), capture.size()));
+    CHECK(readPresentedGray(capture, 936, 20, 0, 4) == 0);
+    CHECK(readPresentedGray(capture, 936, 40, 0, 4) == 0);
+}
+
+static void checkCancellation() {
+    enum class Phase { BeforeStart, Policy, Hrdy, Upload, BeforeActivation, Submission, Waveform };
+    for (bool useOta : {false, true}) {
+        for (Phase phase : {Phase::BeforeStart, Phase::Policy, Phase::Hrdy, Phase::Upload,
+                            Phase::BeforeActivation, Phase::Submission, Phase::Waveform}) {
+            reset();
+            IT8951EpaperDriver driver(nullptr);
+            establishBaseline(driver);
+            engineDuration = 75;
+            CHECK(driver.requestFullRefresh());
+            unsigned rows = 0;
+            auto cancel = [&] {
+                CHECK(liveAllocations == 2 && liveMutexes == 1 && spiBuses == 1);
+                if (useOta) ota = true;
+                else driver.stopPresentation();
+            };
+            if (phase == Phase::BeforeStart) cancel();
+            if (phase == Phase::Policy) waitHook = cancel;
+            if (phase == Phase::Hrdy) {
+                pixel(driver, 4, 0, 0, DisplayIntent::Interactive);
+                busy = true;
+                waitHook = cancel;
+            }
+            if (phase == Phase::Upload || phase == Phase::BeforeActivation) {
+                uploadHook = [&] {
+                    ++rows;
+                    if (rows == (phase == Phase::Upload ? 1u : 1404u)) cancel();
+                };
+            }
+            if (phase == Phase::Submission)
+                submissionHook = [&](unsigned argument) { if (argument == 1) cancel(); };
+            if (phase == Phase::Waveform) {
+                waveformHook = cancel;
+                engineDuration = 600;
+                hrdyDuringWaveform = true;
+            }
+            const uint32_t started = clockMs;
+            driver.present();
+            CHECK(!transactionOpen && spiBuses == 1 && liveAllocations == 2);
+            const bool activated = phase == Phase::Submission || phase == Phase::Waveform;
+            CHECK(arguments(0x0034).size() == (activated ? 1u : 0u));
+            if (activated) {
+                CHECK(displayArguments == 5 && clockMs - engineUntil == 0);
+                CHECK(clockMs - started == settings.epaper_min_refresh_interval_ms + 1404 + engineDuration);
+            }
+            if (phase == Phase::Policy) CHECK(clockMs - started <= 20);
+            if (phase == Phase::Hrdy) {
+                CHECK(clockMs - started == 1 && arguments(0x0022).empty());
+            }
+            if (phase == Phase::Upload) {
+                CHECK(rows == 64);
+                CHECK(arguments(0x0022).size() == 1);
+            }
+            if (phase == Phase::BeforeActivation) CHECK(arguments(0x0022).size() == 1);
+            IT8951EpaperDriver::PresentedFrameInfo info;
+            CHECK(driver.getPresentedFrameInfo(info) ==
+                (phase == Phase::BeforeStart || phase == Phase::Policy));
+#if HAS_DISPLAY_DIAGNOSTICS
+            DisplayPresentationStats telemetry;
+            CHECK(driver.getPresentationStats(&telemetry));
+            CHECK(telemetry.ota_deferrals == (useOta ? 1u : 0u));
+            if (activated) {
+                CHECK(!telemetry.last.success && telemetry.last.published_us == 0);
+                CHECK(telemetry.last.waveform_done_us == uint64_t(clockMs) * 1000);
+            }
+#endif
+            waveformHook = uploadHook = waitHook = nullptr;
+            submissionHook = nullptr;
+            ota = busy = false;
+            if (!useOta) {
+                CHECK(!driver.requestFullRefresh());
+                driver.init();
+                CHECK(driver.isAvailable() && liveAllocations == 2 && liveMutexes == 1);
+                pixel(driver, 20, 0, 0);
+            }
+            transactions.clear();
+            driver.present();
+            CHECK(driver.getPresentedFrameInfo(info));
+            CHECK(arguments(0x0034).back() == std::vector<uint16_t>({0, 0, 1872, 1404, 2}));
+        }
+    }
+}
+
+static void checkCompletionFailure() {
+    for (bool readFailure : {false, true}) {
+        reset();
+        IT8951EpaperDriver driver(nullptr);
+        establishBaseline(driver);
+        pixel(driver, 4, 0, 0, DisplayIntent::Interactive);
+        waveformHook = [&] {
+            if (readFailure) busy = true;
+            else engineStuck = true;
+        };
+        const uint32_t started = clockMs;
+        driver.present();
+        CHECK(clockMs - started == 15001);
+        CHECK(arguments(0x0034).size() == 1 && !transactionOpen);
+        IT8951EpaperDriver::PresentedFrameInfo info;
+        CHECK(!driver.getPresentedFrameInfo(info));
+#if HAS_DISPLAY_DIAGNOSTICS
+        DisplayPresentationStats telemetry;
+        CHECK(driver.getPresentationStats(&telemetry));
+        CHECK(telemetry.failures == 1 && !telemetry.last.success && telemetry.last.published_us == 0);
+#endif
+        busy = engineStuck = false;
+        waveformHook = nullptr;
+        driver.present();
+        CHECK(driver.getPresentedFrameInfo(info));
+        CHECK(arguments(0x0034).back() == std::vector<uint16_t>({0, 0, 1872, 1404, 2}));
+    }
+}
+
+static void checkPreSubmissionCancellation() {
+    for (bool useOta : {false, true}) {
+        reset();
+        IT8951EpaperDriver driver(nullptr);
+        establishBaseline(driver);
+        pixel(driver, 4, 0, 0, DisplayIntent::Interactive);
+        commandHook = [](uint16_t command) { if (command == 0x0022) busy = true; };
+        waitHook = [&] {
+            if (useOta) ota = true;
+            else driver.stopPresentation();
+            busy = false;
+        };
+        const uint32_t started = clockMs;
+        driver.present();
+        CHECK(clockMs - started == 2);
+        CHECK(arguments(0x0022).size() == 1 && arguments(0x0034).empty());
+        CHECK(!transactionOpen && liveAllocations == 2);
+        IT8951EpaperDriver::PresentedFrameInfo info;
+        CHECK(!driver.getPresentedFrameInfo(info));
+    }
+}
+
 int main() {
+    checkCoherentPresentation();
+    checkUncappedSettling();
+    checkNewerRequestsSurvive();
+    checkCancellation();
+    checkCompletionFailure();
+    checkPreSubmissionCancellation();
     testPresentedPng();
     for (int rotation : {0, 1, 2, 3}) {
         checkPresentedCapture(rotation, EPAPER_RENDER_MODE_BW);
@@ -504,8 +877,10 @@ int main() {
         driver.init();
         clockMs = UINT32_MAX / 1000 - 100;
         std::vector<uint16_t> data(32 * 32, 0);
+        driver.beginFrame();
         driver.setAddrWindow(0, 0, 32, 32);
         driver.pushColors(data.data(), data.size(), false);
+        commit(driver);
 #if HAS_DISPLAY_DIAGNOSTICS
         DisplayPresentationStats telemetry;
         CHECK(driver.getPresentationStats(&telemetry));
@@ -546,6 +921,7 @@ int main() {
             IT8951EpaperDriver driver(nullptr);
             driver.init();
             CHECK(!driver.isAvailable());
+            CHECK(liveAllocations == 0 && liveMutexes == 0 && spiBuses == 0);
             CHECK(!driver.requestFullRefresh());
             driver.present();
         }
@@ -564,7 +940,7 @@ int main() {
         driver.init();
         CHECK(!driver.isAvailable());
     }
-    CHECK(liveAllocations == 0 && liveMutexes == 0);
+    CHECK(liveAllocations == 0 && liveMutexes == 0 && spiBuses == 0 && !transactionOpen);
     std::printf("%s: IT8951 %s transport and presentation\n", failures ? "FAIL" : "PASS",
                 IT8951_E1003_PROTOCOL ? "E1003" : "Waveshare");
     return failures ? 1 : 0;

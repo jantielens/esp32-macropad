@@ -113,6 +113,8 @@ const HwButtonConfig* hw_button_config_get(uint8_t index) {
 }
 
 bool hw_button_config_save_raw(const uint8_t* json, size_t len) {
+    const StorageMutationGuard guard;
+    if (!guard) return false;
     if (!json || len == 0) return false;
 
     File f = Storage.open(HW_BUTTONS_PATH, "w");

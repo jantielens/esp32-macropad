@@ -133,6 +133,8 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(FIRMWARE_VERSION);
 		response->print("\",\"ap_active\":");
 		response->print(web_portal_is_ap_mode_active() ? "true" : "false");
+		response->print(",\"recovery_ap\":");
+		response->print(web_portal_is_recovery_ap_active() ? "true" : "false");
 		response->print(",\"build_date\":\"");
 		response->print(BUILD_DATE);
 		response->print("\",\"build_time\":\"");

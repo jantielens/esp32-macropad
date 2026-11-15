@@ -10,6 +10,16 @@ class String {};
 
 #define BOARD_CONFIG_H
 #define HAS_DISPLAY 1
+#ifndef HAS_VOICE_CLIPS
+#define HAS_VOICE_CLIPS 0
+#endif
+#ifndef HAS_BATTERY_INFO
+#if defined(BINDING_SCHEMA_PROFILE_FULL)
+#define HAS_BATTERY_INFO 1
+#else
+#define HAS_BATTERY_INFO 0
+#endif
+#endif
 #ifndef HAS_MQTT
 #define HAS_MQTT 1
 #endif

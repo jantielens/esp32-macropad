@@ -8,14 +8,13 @@
  * IMPLEMENTATION GUIDE FOR NEW DRIVERS:
  * =====================================
  * 
- * 1. Create driver class implementing this interface:
- *    - drivers/your_driver.h (interface)
- *    - drivers/your_driver.cpp (implementation)
+ * 1. Create a driver class implementing this interface under src/app/drivers/
+ *    for reusable drivers or src/boards/<board>/drivers/ for board-owned drivers.
  * 
  * 2. Register implementation include in src/app/display_drivers.cpp:
  *    Arduino build system only compiles .cpp files in the sketch root directory.
- *    Driver implementations under src/app/drivers/ are compiled by including the
- *    selected driver .cpp from display_drivers.cpp.
+ *    Include the selected driver .cpp from display_drivers.cpp regardless of
+ *    its directory.
  * 
  * 3. Add driver constant to board_config.h:
  *    #define DISPLAY_DRIVER_YOUR_DRIVER 3  // Next available number
@@ -31,8 +30,10 @@
 #ifndef DISPLAY_DRIVER_H
 #define DISPLAY_DRIVER_H
 
+#include "board_config.h"
 #include <Arduino.h>
 #include <lvgl.h>
+#include "display_frame.h"
 #if HAS_DISPLAY_DIAGNOSTICS
 #include "display_perf.h"
 #endif
@@ -104,6 +105,17 @@ public:
 		virtual void present() {
 				// Override in buffered drivers (e.g., Arduino_GFX canvas)
 		}
+
+		// Opt-in: synchronous flush conversion bracketed by the LVGL refresh lifecycle.
+		virtual bool coherentFrames() const { return false; }
+		virtual void beginFrame() {}
+		virtual void commitFrame(const DisplayFrame&) {}
+		virtual void stopPresentation() {}
+
+#if HAS_AUTO_SHUTDOWN
+		// Buffered drivers acknowledge only a completed physical presentation.
+		virtual bool hasPresentedInteraction(uint32_t) { return false; }
+#endif
 
 		// Queue a full physical refresh of the current framebuffer. Buffered
 		// e-paper drivers override this; other drivers report unsupported.

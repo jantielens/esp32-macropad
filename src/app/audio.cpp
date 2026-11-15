@@ -93,6 +93,8 @@ static uint32_t g_playback_generation = 0;
 static ToneAlertOverlay g_feedback = {};
 static ToneAlertOverlay g_pending_feedback = {};
 static bool g_feedback_pending = false;
+static uint32_t g_feedback_ota_epoch = 0;
+static bool g_native_alert_active = false;
 static portMUX_TYPE g_feedback_mux = portMUX_INITIALIZER_UNLOCKED;
 
 static void audio_command_dispose(AudioCommand* command) {
@@ -255,10 +257,30 @@ static void audio_task(void* param) {
     uint32_t all_stop_epoch = g_all_stop_epoch.load();
     uint8_t output_volume = 255;
     bool output_volume_overridden = false;
+    const bool native_tone = output_driver->supportsNativeTone();
+    uint32_t native_ota_epoch = native_tone ? ota_activity_epoch() : 0;
+    int64_t native_deadline_us = 0;
+    bool native_output_failed = false;
+    bool native_cleanup_pending = false;
+    auto silence_native = [&]() {
+        native_deadline_us = 0;
+        if (!native_tone || native_output_failed) return;
+        if (output_driver->setNativeTone(0, 0)) return;
+        LOGE(TAG, "Native tone silence failed; disabling output until reboot");
+        native_output_failed = true;
+        native_cleanup_pending = !output_driver->end();
+        if (native_cleanup_pending) LOGE(TAG, "Native tone shutdown failed; cleanup will retry");
+    };
 #if HAS_SOUND_PLAYER
     SoundPlayer* alert_player = nullptr;
 #endif
     auto close_alert = [&]() {
+        if (native_tone && g_playing.load()) silence_native();
+        if (native_tone) {
+            portENTER_CRITICAL(&g_feedback_mux);
+            g_native_alert_active = false;
+            portEXIT_CRITICAL(&g_feedback_mux);
+        }
 #if HAS_SOUND_PLAYER
         if (alert_player) {
             sound_player_close(alert_player);
@@ -401,17 +423,52 @@ static void audio_task(void* param) {
             vTaskDelay(pdMS_TO_TICKS(10));
             continue;
         }
+        if (native_output_failed) {
+            if (native_cleanup_pending && output_driver->end()) {
+                native_cleanup_pending = false;
+                LOGI(TAG, "Native tone shutdown completed");
+            }
+            close_alert();
+            session_guard = nullptr;
+            tone_alert_overlay_stop(&g_feedback);
+            portENTER_CRITICAL(&g_feedback_mux);
+            g_feedback_pending = false;
+            portEXIT_CRITICAL(&g_feedback_mux);
+            AudioCommand discard;
+            while (xQueueReceive(audio_queue, &discard, 0) == pdTRUE) audio_command_dispose(&discard);
+            vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
+        }
+        const uint32_t current_ota_epoch = native_tone ? ota_activity_epoch() : 0;
+        if (native_tone && current_ota_epoch != native_ota_epoch) {
+            native_ota_epoch = current_ota_epoch;
+            silence_native();
+            close_alert();
+            session_guard = nullptr;
+            tone_alert_overlay_stop(&g_feedback);
+            portENTER_CRITICAL(&g_feedback_mux);
+            if (g_feedback_ota_epoch != current_ota_epoch) g_feedback_pending = false;
+            portEXIT_CRITICAL(&g_feedback_mux);
+        }
         if (session_guard && !session_guard(session_generation)) session_guard = nullptr;
         if (g_playing.load() && active.guard && !active.guard(active.generation)) close_alert();
         if (g_alert_stop_epoch.load() != alert_stop_epoch) {
             alert_stop_epoch = g_alert_stop_epoch.load();
             close_alert();
+            if (native_tone) {
+                tone_alert_overlay_stop(&g_feedback);
+                silence_native();
+                portENTER_CRITICAL(&g_feedback_mux);
+                g_feedback_pending = false;
+                portEXIT_CRITICAL(&g_feedback_mux);
+            }
         }
         const bool stop_all = g_all_stop_epoch.load() != all_stop_epoch;
         if (stop_all) {
             all_stop_epoch = g_all_stop_epoch.load();
             close_alert();
             tone_alert_overlay_stop(&g_feedback);
+            if (native_tone) silence_native();
         }
 #if HAS_SOUND_PLAYER
         if (stop_all || (music_guard && !music_guard(music_generation))) {
@@ -422,6 +479,7 @@ static void audio_task(void* param) {
         }
 #endif
         if (ota_activity_is_active()) {
+            if (native_tone) silence_native();
             audio_output_mute_idle(true);
             close_alert();
             session_guard = nullptr;
@@ -448,18 +506,21 @@ static void audio_task(void* param) {
             vTaskDelay(pdMS_TO_TICKS(100));
             continue;
         }
-        if (!(amplifier_policy.load() & 1)) {
+        if (!native_tone && !(amplifier_policy.load() & 1)) {
             audio_output_wake(output_driver);
             if (ota_activity_is_active()) continue;
         }
-            if (!g_playing.load() && !g_feedback.active
+            if (!native_tone && !g_playing.load() && !g_feedback.active
         #if HAS_SOUND_PLAYER
                 && (!music_player || music_transport.state() != MUSIC_TRANSPORT_PLAYING || session_guard)
         #endif
             ) audio_output_mute_idle();
         portENTER_CRITICAL(&g_feedback_mux);
         if (g_feedback_pending) {
-            g_feedback = g_pending_feedback;
+            if (!native_tone || (!g_native_alert_active && g_feedback_ota_epoch == current_ota_epoch)) {
+                g_feedback = g_pending_feedback;
+                if (native_tone) native_deadline_us = 0;
+            }
             g_feedback_pending = false;
         }
         portEXIT_CRITICAL(&g_feedback_mux);
@@ -524,6 +585,14 @@ static void audio_task(void* param) {
             }
 #endif
             close_alert();
+            if (native_tone) {
+                tone_alert_overlay_stop(&g_feedback);
+                silence_native();
+                portENTER_CRITICAL(&g_feedback_mux);
+                g_feedback_pending = false;
+                g_native_alert_active = true;
+                portEXIT_CRITICAL(&g_feedback_mux);
+            }
 #if HAS_SOUND_PLAYER
             close_music();
             music_info_set(music_transport.state() == MUSIC_TRANSPORT_PLAYING ? AUDIO_MUSIC_INTERRUPTED :
@@ -556,19 +625,75 @@ static void audio_task(void* param) {
             }
 #endif
         }
+        if (native_tone && (native_output_failed || ota_activity_is_active() || ota_activity_epoch() != native_ota_epoch))
+            continue;
         const uint8_t device_volume = current_volume.load();
         const bool volume_overridden = g_playing.load() && active.volume_override != 0;
         const uint8_t requested_volume = volume_overridden ? active.volume_override : device_volume;
         if (output_volume != requested_volume) {
-            if ((output_volume_overridden || volume_overridden) && output_last_write_us != 0 &&
+            if (!native_tone && (output_volume_overridden || volume_overridden) && output_last_write_us != 0 &&
                 esp_timer_get_time() - output_last_write_us < kOutputBufferedUs) {
                 vTaskDelay(pdMS_TO_TICKS(10));
                 continue;
             }
-            if (!output_driver->setVolume(requested_volume)) LOGW(TAG, "Volume control failed");
+            if (!output_driver->setVolume(requested_volume)) {
+                LOGW(TAG, "Volume control failed");
+                if (native_tone) {
+                    silence_native();
+                    close_alert();
+                    tone_alert_overlay_stop(&g_feedback);
+                    vTaskDelay(pdMS_TO_TICKS(10));
+                    continue;
+                }
+            }
             else output_volume = requested_volume;
         }
         if (output_volume == requested_volume) output_volume_overridden = volume_overridden;
+        if (native_tone) {
+            ToneAlertOverlay* tone = g_playing.load() ? &primary_tone : &g_feedback;
+            if (!tone->active) {
+                if (native_deadline_us) silence_native();
+                vTaskDelay(pdMS_TO_TICKS(10));
+                continue;
+            }
+            const int64_t now = esp_timer_get_time();
+            bool segment_changed = !native_deadline_us;
+            // Carry deadlines forward, skipping expired segments after scheduler delays.
+            for (size_t advanced = 0; native_deadline_us && now >= native_deadline_us &&
+                 tone->active && advanced < TONE_ALERT_MAX_SEGMENTS; ++advanced) {
+                tone_alert_overlay_advance(tone, AUDIO_SAMPLE_RATE);
+                segment_changed = true;
+                if (tone->active) {
+                    native_deadline_us += (int64_t)tone->segments[tone->segment_index].frame_count *
+                        1000000 / AUDIO_SAMPLE_RATE;
+                }
+            }
+            if (!tone->active) {
+                silence_native();
+                if (g_playing.load()) close_alert();
+                continue;
+            }
+            if (!native_deadline_us) {
+                native_deadline_us = now + (int64_t)tone->segments[tone->segment_index].frame_count *
+                    1000000 / AUDIO_SAMPLE_RATE;
+            }
+            if (segment_changed && now < native_deadline_us) {
+                const ToneAlertSegment& segment = tone->segments[tone->segment_index];
+                const uint8_t gain = tone == &g_feedback ? 15 : 100;
+                if (!output_driver->setNativeTone(segment.frequency_hz, gain)) {
+                    silence_native();
+                    if (g_playing.load()) close_alert();
+                    else tone_alert_overlay_stop(tone);
+                    continue;
+                }
+            }
+            const int64_t remaining_us = native_deadline_us - esp_timer_get_time();
+            const uint32_t wait_ms = remaining_us <= 0 ? 1 :
+                remaining_us < 10000 ? (uint32_t)((remaining_us + 999) / 1000) : 10;
+            const TickType_t wait_ticks = pdMS_TO_TICKS(wait_ms);
+            vTaskDelay(wait_ticks ? wait_ticks : 1);
+            continue;
+        }
         if (g_playing.load()) {
 #if HAS_SOUND_PLAYER
             if (alert_player) {
@@ -847,9 +972,11 @@ void audio_feedback(const char* pattern) {
         }
         remaining -= feedback.segments[index].frame_count;
     }
+    const uint32_t feedback_epoch = ota_activity_epoch();
     portENTER_CRITICAL(&g_feedback_mux);
-    if (!ota_activity_is_active()) {
+    if (!ota_activity_is_active() && (!output_driver->supportsNativeTone() || !g_native_alert_active)) {
         g_pending_feedback = feedback;
+        g_feedback_ota_epoch = feedback_epoch;
         g_feedback_pending = true;
     }
     portEXIT_CRITICAL(&g_feedback_mux);
@@ -858,6 +985,11 @@ void audio_feedback(const char* pattern) {
 void audio_stop() {
     if (!audio_initialized) return;
     g_alert_stop_epoch.fetch_add(1);
+    if (output_driver->supportsNativeTone()) {
+        portENTER_CRITICAL(&g_feedback_mux);
+        g_feedback_pending = false;
+        portEXIT_CRITICAL(&g_feedback_mux);
+    }
 }
 
 void audio_stop_all() {

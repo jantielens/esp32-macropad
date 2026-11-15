@@ -22,7 +22,7 @@
  *   A function receives the submitted config and returns true when a reboot
  *   is needed; the pending-reboot banner appears after a successful save.
  */
-async function saveFragmentConfig(requiresReboot) {
+async function saveFragmentConfig(requiresReboot, fieldNames, validateFields) {
     // Build config from DOM elements that exist in the current fragment
     var config = {};
     var fields = [
@@ -32,7 +32,7 @@ async function saveFragmentConfig(requiresReboot) {
         'mqtt_host', 'mqtt_port', 'mqtt_username', 'mqtt_password',
         'operating_mode', 'duty_cycle_wake_seconds', 'mqtt_publish_interval_seconds',
         'portal_idle_timeout_seconds', 'wifi_backoff_max_seconds',
-        'ble_burst_count', 'ble_adv_interval_ms', 'ble_tx_power_dbm',
+        'ble_burst_count', 'ble_adv_interval_ms',
         'mqtt_publish_scope',
         'basic_auth_enabled', 'basic_auth_username', 'basic_auth_password',
         'mcp_enabled', 'mcp_control_enabled', 'mcp_authoring_enabled',
@@ -48,6 +48,7 @@ async function saveFragmentConfig(requiresReboot) {
     if (window.__extra_config_fields && window.__extra_config_fields.length) {
         fields = fields.concat(window.__extra_config_fields);
     }
+    if (fieldNames) fields = fieldNames;
     fields.forEach(function (name) {
         // Radio groups: pick the checked option (if any).
         var radios = document.querySelectorAll('input[type="radio"][name="' + name + '"]');
@@ -90,6 +91,7 @@ async function saveFragmentConfig(requiresReboot) {
 
     // Validate
     var validation = validateConfig(config);
+    if (validation.valid && validateFields) validation = validateFields(config);
     if (!validation.valid) {
         showMessage(validation.message, 'error');
         return;
@@ -110,10 +112,13 @@ async function saveFragmentConfig(requiresReboot) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(config)
         });
-        if (!response.ok) throw new Error('Failed to save configuration');
         var result = await response.json();
+        if (!response.ok) throw new Error(result.message || 'Failed to save configuration');
         if (result.success) {
             if (level) await loadConfig();
+            if (config.operating_mode !== undefined && window.deviceConfig) {
+                window.deviceConfig.operating_mode = config.operating_mode;
+            }
             if (window.deviceConfig && (config.ha_url !== undefined || config.ha_token !== undefined)) {
                 if (config.ha_url !== undefined) window.deviceConfig.ha_url = config.ha_url;
                 if (config.ha_token && config.ha_token.trim()) window.deviceConfig.ha_token_set = true;
@@ -135,7 +140,7 @@ async function saveFragmentConfig(requiresReboot) {
                 showMessage('Configuration saved', 'success');
             }
         } else {
-            showMessage('Failed to save configuration', 'error');
+            showMessage(result.message || 'Failed to save configuration', 'error');
         }
     } catch (error) {
         showMessage('Error saving: ' + error.message, 'error');
@@ -148,10 +153,10 @@ async function saveFragmentConfig(requiresReboot) {
  * @param {boolean|Function} requiresReboot - Whether this fragment's settings
  *   need a reboot; a function can inspect the submitted config.
  */
-function initConfigFragment(saveBtnId, requiresReboot) {
+function initConfigFragment(saveBtnId, requiresReboot, fieldNames) {
     loadConfig();
     var btn = document.getElementById(saveBtnId);
-    if (btn) btn.addEventListener('click', function () { saveFragmentConfig(requiresReboot); });
+    if (btn) btn.addEventListener('click', function () { return saveFragmentConfig(requiresReboot, fieldNames); });
 }
 
 // ============================================================================

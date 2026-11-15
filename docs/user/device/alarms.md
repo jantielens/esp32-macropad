@@ -96,8 +96,9 @@ assuming zero means a valid scheduled instant.
 
 ## Missed alarms and reboots
 
-The alarm waits for an NTP synchronization during the current boot. Once
-synchronized, Wi-Fi loss does not stop the clock. **Maximum alarm lateness**
+The alarm waits for valid time from NTP or an enabled hardware RTC restored
+at boot; see [time without Wi-Fi](time.md#time-without-wi-fi).
+Once time is available, Wi-Fi loss does not stop the clock. **Maximum alarm lateness**
 applies both after reboot and to delays while running.
 
 The default is 360 minutes; accepted values are 0-10080 whole minutes.

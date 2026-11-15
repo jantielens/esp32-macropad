@@ -83,6 +83,8 @@ const BootActionsConfig* boot_actions_get() {
 }
 
 bool boot_actions_save_raw(const uint8_t* json, size_t len) {
+    const StorageMutationGuard guard;
+    if (!guard) return false;
     if (!json || len == 0) return false;
 
     File f = Storage.open(BOOT_ACTIONS_PATH, "w");

@@ -26,7 +26,11 @@ static_assert(MAX_MQTT_TRIGGERS <= 32, "MAX_MQTT_TRIGGERS must be <= 32 (pending
 // RAM cache (PSRAM preferred, SRAM fallback). nullptr if allocation failed
 // (feature then degrades to a no-op).
 static MqttTriggerConfig* g_triggers = nullptr;
-static char g_registered_topics[MAX_MQTT_TRIGGERS][CONFIG_MQTT_TOPIC_MAX_LEN] = {};
+struct MqttTriggerStorage {
+    MqttTriggerConfig triggers[MAX_MQTT_TRIGGERS];
+    char registered_topics[MAX_MQTT_TRIGGERS][CONFIG_MQTT_TOPIC_MAX_LEN];
+};
+static char (*g_registered_topics)[CONFIG_MQTT_TOPIC_MAX_LEN] = nullptr;
 
 // Mutex guarding the g_triggers array. The save path (load_from_flash) runs on
 // the async web-server task and mutates the cache, while the MQTT message
@@ -122,11 +126,19 @@ static bool load_from_flash() {
 
 void mqtt_triggers_init() {
     if (!g_lock) g_lock = xSemaphoreCreateMutex();
-    g_triggers = (MqttTriggerConfig*)config_psram_alloc(
-        (size_t)MAX_MQTT_TRIGGERS * sizeof(MqttTriggerConfig), "mqtt_triggers");
-    if (!g_triggers) {
-        LOGE(TAG, "Failed to allocate trigger config — feature disabled");
+    if (!g_lock) {
+        LOGE(TAG, "Failed to create trigger mutex — feature disabled");
         return;
+    }
+    if (!g_triggers) {
+        auto* storage = static_cast<MqttTriggerStorage*>(
+            config_psram_alloc(sizeof(MqttTriggerStorage), "mqtt_triggers"));
+        if (!storage) {
+            LOGE(TAG, "Failed to allocate trigger config — feature disabled");
+            return;
+        }
+        g_registered_topics = storage->registered_topics;
+        g_triggers = storage->triggers;
     }
     storage_mount();  // idempotent — ensures FS is mounted on headless boards too
     load_from_flash();
@@ -139,6 +151,8 @@ const MqttTriggerConfig* mqtt_triggers_get(uint8_t index) {
 }
 
 bool mqtt_triggers_save_raw(const uint8_t* json, size_t len) {
+    const StorageMutationGuard guard;
+    if (!guard) return false;
     if (!json || len == 0) return false;
 
     File f = Storage.open(MQTT_TRIGGERS_PATH, "w");

@@ -148,6 +148,15 @@ struct DisplayRenderHistory {
 };
 
 struct DisplayPresentationSample {
+    uint32_t frame_sequence = 0;
+    uint32_t request_sequence = 0;
+    uint64_t requested_us = 0;
+    uint64_t ready_us = 0;
+    uint64_t snapshot_us = 0;
+    uint64_t eligible_us = 0;
+    uint64_t trigger_us = 0;
+    uint64_t waveform_done_us = 0;
+    uint64_t published_us = 0;
     uint32_t completed_ms = 0;
     uint32_t total_us = 0;
     uint32_t dirty_to_ready_us = 0;

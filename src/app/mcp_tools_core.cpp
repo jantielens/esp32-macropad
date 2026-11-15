@@ -48,9 +48,7 @@
 #include "pad_config.h"
 #endif
 
-#if !(HAS_DISPLAY || HAS_BUTTON)
 #include "wifi_manager.h"
-#endif
 
 // JSON-RPC error codes used by tool handlers (canonical values in
 // mcp_tool_registry.h).
@@ -614,7 +612,8 @@ static bool tool_tap_screen(const JsonObject& args, JsonObject& result, String& 
 
 // --- system_command --------------------------------------------------------
 // Board-agnostic buffer for the small set of system commands (reboot,
-// reboot_ap, wifi_reconnect, screensaver). Sized independently of pad_config.h, which is
+// reboot_ap, wifi_connect, wifi_disconnect, wifi_off, ap_enable, ap_disable, screensaver).
+// Sized independently of pad_config.h, which is
 // not compiled on action-less boards (e.g. e-paper), and kept in sync with
 // ButtonAction::payload.system.system_command (CONFIG_ACTION_TYPE_MAX_LEN = 16).
 struct SysCtx { char command[16]; };
@@ -632,12 +631,19 @@ static void exec_system_command(const void* ctx, bool* ok, char* msg, size_t msg
     if (strcmp(c->command, "reboot_ap") == 0) {
         if (!power_manager_request_setup_ap_restart()) {
             *ok = false;
-            strlcpy(msg, "setup AP restart refused or could not be persisted; check device logs", msg_len);
+            strlcpy(msg, "AP restart refused or could not be persisted; check device logs", msg_len);
             return;
         }
         mcp_request_reboot(true);
         *ok = true;
-        strlcpy(msg, "restart into setup AP scheduled", msg_len);
+        strlcpy(msg, "restart into AP scheduled", msg_len);
+        return;
+    }
+    const WifiNetworkCommand network_command = wifi_network_command_from_string(c->command);
+    if (network_command != WifiNetworkCommand::None) {
+        *ok = wifi_manager_request_network_command(network_command);
+        strlcpy(msg, *ok ? "network request accepted; not confirmation of readiness" :
+                "network request rejected; update, configuration write, or command pending", msg_len);
         return;
     }
 
@@ -652,14 +658,8 @@ static void exec_system_command(const void* ctx, bool* ok, char* msg, size_t msg
     *ok = true;
     strlcpy(msg, "dispatched", msg_len);
 #else
-    if (strcmp(c->command, "wifi_reconnect") == 0) {
-        wifi_manager_request_reconnect();
-        *ok = true;
-        strlcpy(msg, "dispatched", msg_len);
-    } else {
-        *ok = false;
-        strlcpy(msg, "command unavailable on this board", msg_len);
-    }
+    *ok = false;
+    strlcpy(msg, "command unavailable on this board", msg_len);
 #endif
 }
 
@@ -670,9 +670,9 @@ static bool tool_system_command(const JsonObject& args, JsonObject& result, Stri
     }
     if (strcmp(cmd, "reboot") != 0 &&
         strcmp(cmd, "reboot_ap") != 0 &&
-        strcmp(cmd, "wifi_reconnect") != 0 &&
+        wifi_network_command_from_string(cmd) == WifiNetworkCommand::None &&
         strcmp(cmd, "screensaver") != 0) {
-        return tool_fail(result, err, TOOL_ERR_PARAMS, "command must be reboot, reboot_ap, wifi_reconnect, or screensaver");
+        return tool_fail(result, err, TOOL_ERR_PARAMS, "command must be reboot, reboot_ap, wifi_connect, wifi_disconnect, wifi_off, ap_enable, ap_disable, or screensaver");
     }
 
     SysCtx ctx;
@@ -807,8 +807,8 @@ REGISTER_MCP_TOOL(s_tool_tap_screen);
 
 static const McpTool s_tool_system_command = {
     "system_command",
-    "Run a system command: 'reboot' (destructive — restarts the device and DROPS this connection/MCP session), 'reboot_ap' (restarts into setup AP and DROPS this connection/MCP session), 'wifi_reconnect' (re-establish the WiFi link), or 'screensaver' (trigger the display screen saver).",
-    "{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\",\"enum\":[\"reboot\",\"reboot_ap\",\"wifi_reconnect\",\"screensaver\"]}},\"required\":[\"command\"]}",
+    "Run a device command. reboot and reboot_ap restart the device and DROP this connection/MCP session; reboot_ap enters AP recovery. wifi_connect turns Wi-Fi on and tries the configured network, replacing AP; it acknowledges a request, not readiness. wifi_disconnect disconnects and turns Wi-Fi off, but leaves an active AP unchanged. wifi_off stops network and AP access and DROPS this connection; Bluetooth remains available. ap_enable and ap_disable may DROP network access; ap_enable keeps the interactive runtime. Network commands do not change the saved operating mode. screensaver triggers the display screen saver.",
+    "{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\",\"enum\":[\"reboot\",\"reboot_ap\",\"wifi_connect\",\"wifi_disconnect\",\"wifi_off\",\"ap_enable\",\"ap_disable\",\"screensaver\"]}},\"required\":[\"command\"]}",
     tool_system_command, false, true, true
 };
 REGISTER_MCP_TOOL(s_tool_system_command);

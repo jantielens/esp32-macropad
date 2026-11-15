@@ -77,9 +77,14 @@
     "[mqtt:home/living/temperature]": "21.5 C", "[mqtt:home/living/humidity]": "46",
     "[mqtt:home/living/light]": "ON", "[mqtt:home/power]": "420", "[mqtt:home/solar]": "780",
     "[mqtt:home/setpoint]": "22.0",
-    "[health:cpu]": "23", "[health:rssi]": "-55", "[health:uptime]": "3600",
+    "[health:cpu]": "23", "[health:wifi_rssi]": "-55", "[health:uptime]": "3600",
     "[health:heap_free]": "184320", "[health:wifi_connected]": "ON",
-    "[health:wifi_ssid]": "?"
+    "[health:wifi_ssid]": "Portal dev Wi-Fi", "[health:wifi_state]": "CONNECTED",
+    "[health:wifi_ip]": "192.168.1.42", "[health:wifi_hostname]": "portal-dev",
+    "[battery:voltage]": "3.85", "[battery:percentage]": "73",
+    "[battery:current]": "-0.25", "[battery:power]": "-0.9625",
+    "[battery:discharge_power]": "0.9625",
+    "[health:wifi_ap_active]": "OFF", "[health:wifi_last_error]": ""
   },
   "sounds": ["/sounds/chime.mp3", "/sounds/notification.mp3"],
   "extensions": {"slots": [{"slot": 0, "id": "word-clock", "title": "Word Clock", "version": "1.0.0", "installed": true, "enabled": true, "loaded": true, "capacity": 262144, "size": 24576}]},
@@ -87,11 +92,12 @@
   "binding_schema": {"schemes": [
     {"name": "pad", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": true},
     {"name": "var", "min_params": 1, "max_params": 1, "widget_max_params": 1, "format_param": -1, "validation_mode": 0, "free_form": true},
+    {"name": "battery", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": false, "keys": ["voltage", "percentage", "current", "power", "discharge_power", "status", "external_power_present", "time_remaining", "time_to_full"]},
     {"name": "mqtt", "min_params": 1, "max_params": 3, "widget_max_params": 2, "format_param": 2, "validation_mode": 0, "free_form": true},
     {"name": "expr", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": 1, "validation_mode": 1, "free_form": true},
     {"name": "time", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": -1, "validation_mode": 0, "free_form": true},
     {"name": "timer", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": false, "keys": ["1", "1_state", "1_mode", "1_expired", "1_target", "2", "2_state", "2_mode", "2_expired", "2_target", "3", "3_state", "3_mode", "3_expired", "3_target"]},
-    {"name": "health", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": false, "keys": ["cpu", "cpu_core_0", "cpu_core_1", "rssi", "uptime", "chip", "chip_rev", "chip_cores", "cpu_freq", "flash_size", "firmware", "board", "mac", "reset_reason", "heap_total", "heap_free", "heap_min", "heap_largest", "heap_internal_total", "heap_internal", "heap_internal_used", "psram_total", "psram_free", "psram_used", "psram_min", "psram_largest", "wifi_connected", "wifi_ssid", "ip", "hostname", "brightness", "volume", "table", "extended_table", "usb_status"]},
+    {"name": "health", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": false, "keys": ["cpu", "cpu_core_0", "cpu_core_1", "wifi_rssi", "uptime", "chip", "chip_rev", "chip_cores", "cpu_freq", "flash_size", "firmware", "board", "mac", "reset_reason", "heap_total", "heap_free", "heap_min", "heap_largest", "heap_internal_total", "heap_internal", "heap_internal_used", "psram_total", "psram_free", "psram_used", "psram_min", "psram_largest", "wifi_state", "wifi_connected", "wifi_ssid", "wifi_ip", "wifi_hostname", "wifi_ap_active", "wifi_ap_purpose", "wifi_last_error", "brightness", "volume", "table", "extended_table", "usb_status"]},
     {"name": "net", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": -1, "validation_mode": 0, "free_form": false, "keys": ["portal", "mcp", "mqtt_rx", "mqtt_tx", "mqtt", "http", "ble", "ota", "any"]},
     {"name": "list", "min_params": 1, "max_params": 1, "widget_max_params": 1, "format_param": -1, "validation_mode": 0, "free_form": false, "keys": ["pads.selected"]},
     {"name": "music", "min_params": 1, "max_params": 1, "widget_max_params": 1, "format_param": -1, "validation_mode": 0, "free_form": false, "keys": ["file", "file_name", "title", "artist", "album", "track", "index", "count", "elapsed_s", "total_s", "status"]},
@@ -104,6 +110,15 @@
     {"type": "set_var", "group": "Variables", "label": "Set variable", "template_fields": {"var_value": {"max": 191}}, "editor_fields": [{"name": "var_name", "label": "Name", "type": "text"}, {"name": "var_value", "label": "Value", "type": "text", "bindable": true}]},
     {"type": "button_navigation", "group": "Navigation", "label": "Navigate buttons", "commands": [{"id": "previous", "label": "Previous"}, {"id": "next", "label": "Next"}, {"id": "tap", "label": "Tap"}, {"id": "tap_hold", "label": "Tap & Hold"}], "fields": [{"name": "command", "description": "previous, next, tap, or tap_hold"}], "editor_fields": [{"name": "command", "label": "Command", "type": "select", "command_options": true}]},
     {"type": "mqtt", "group": "Connectivity", "label": "Publish MQTT message", "template_fields": {"topic": {"max": 127}, "payload": {"max": 127}}, "editor_fields": [{"name": "topic", "label": "Topic", "type": "text", "bindable": true, "max": 127}, {"name": "payload", "label": "Payload", "type": "text", "bindable": true, "max": 127}]},
+    {"type": "bthome", "group": "Connectivity", "label": "Send BTHome event", "alarm_hook_allowed": true, "pausable": false, "note": "Unencrypted Bluetooth broadcast; no delivery acknowledgement. Independent of MQTT. Four waiting events; rejects newest when full.", "editor_fields": [
+      {"name": "button", "label": "Button number", "type": "select", "numeric": true, "min": 1, "max": 10, "default": 1, "help": "Device-wide number. Match Button 1-10 in Home Assistant.", "options": [
+        {"id": 1, "label": "Button 1"}, {"id": 2, "label": "Button 2"}, {"id": 3, "label": "Button 3"}, {"id": 4, "label": "Button 4"}, {"id": 5, "label": "Button 5"},
+        {"id": 6, "label": "Button 6"}, {"id": 7, "label": "Button 7"}, {"id": 8, "label": "Button 8"}, {"id": 9, "label": "Button 9"}, {"id": 10, "label": "Button 10"}
+      ]},
+      {"name": "event", "label": "Event", "type": "select", "default": "press", "help": "Sends the selected event immediately over Bluetooth. Match this button number and event in your Home Assistant automation.", "options": [
+        {"id": "press", "label": "Press"}, {"id": "double_press", "label": "Double press"}, {"id": "long_press", "label": "Long press"}
+      ]}
+    ]},
     {"type": "ha_service", "group": "Connectivity", "label": "Call Home Assistant service", "template_fields": {"entity_id": {"max": 47}, "service": {"max": 63}, "data_json": {"max": 63}}},
     {"type": "notify", "group": "Display", "label": "Show notification", "template_fields": {"message": {"max": 191}}},
     {"type": "confirm", "group": "Display", "label": "Ask for confirmation", "template_fields": {"message": {"max": 191}}, "pausable": true},
@@ -118,7 +133,7 @@
     {"type": "music", "group": "Audio", "label": "Music", "commands": [{"id": "play_pause", "label": "Play/Pause"}, {"id": "next", "label": "Next track"}, {"id": "previous", "label": "Previous track"}, {"id": "stop", "label": "Stop"}], "editor_fields": [{"name": "music_command", "label": "Command", "type": "select", "command_options": true}]},
     {"type": "image_next", "group": "Image library", "label": "Next image"},
     {"type": "image_previous", "group": "Image library", "label": "Previous image"},
-    {"type": "system", "group": "Device", "label": "Device command", "commands": [{"id": "reboot", "label": "Restart device"}, {"id": "wifi_reconnect", "label": "Reconnect Wi-Fi"}, {"id": "screensaver", "label": "Enable screensaver"}, {"id": "wake_display", "label": "Wake display"}], "editor_fields": [{"name": "system_command", "label": "Command", "type": "select", "command_options": true}]},
+    {"type": "system", "group": "Device", "label": "Device command", "commands": [{"id": "reboot", "label": "Restart device"}, {"id": "reboot_ap", "label": "Restart into AP"}, {"id": "wifi_connect", "label": "Connect to Wi-Fi"}, {"id": "wifi_disconnect", "label": "Disconnect from Wi-Fi"}, {"id": "wifi_off", "label": "Turn off Wi-Fi"}, {"id": "ap_enable", "label": "Enable AP"}, {"id": "ap_disable", "label": "Disable AP"}, {"id": "screensaver", "label": "Enable screensaver"}, {"id": "wake_display", "label": "Wake display"}], "editor_fields": [{"name": "system_command", "label": "Command", "type": "select", "command_options": true}]},
     {"type": "key", "group": "Keyboard", "label": "Send keys", "template_fields": {"sequence": {"max": 255}}},
     {"type": "mouse_button", "group": "Mouse", "label": "Mouse button", "commands": [{"id": "left", "label": "Left"}, {"id": "right", "label": "Right"}, {"id": "middle", "label": "Middle"}], "editor_fields": [{"name": "button", "label": "Button", "type": "select", "default": "left", "command_options": true}]},
     {"type": "gamepad", "group": "Gamepad", "label": "Gamepad", "button_count": 16}

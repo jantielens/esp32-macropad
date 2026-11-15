@@ -49,7 +49,6 @@ static BindingResolverStatus time_binding_resolve(const char* params, char* out,
         return BINDING_RESOLVER_RESOLVED;
     }
 
-    // Check if NTP has synced (time > 2024-01-01)
     time_t now = time(nullptr);
     if (!time_service_ready()) {
         strlcpy(out, "--:--", out_len);
@@ -149,7 +148,11 @@ static const BindingSchemeDoc kTimeDoc = {
     "Time", "Wall clock and date via strftime, plus sub-second codes.",
     BINDING_DOC_LIST(kTimeParams), BINDING_DOC_NONE, BINDING_DOC_LIST(kTimeExamples),
     "Clock & date", true, BINDING_DOC_LIST(kTimeFormats),
+#if HAS_RTC
+    "Shows --:-- until valid time is restored from RTC or synced over NTP. The format cannot contain ';'.", nullptr,
+#else
     "Shows --:-- until the clock has synced over NTP. The format cannot contain ';'.", nullptr,
+#endif
 };
 static const BindingAuthoringKey kTimeAuthoringKeys[] = {
     binding_authoring_text("%H:%M", "14:05"),

@@ -1,4 +1,9 @@
 #include <cassert>
+#if HAS_VOICE_CLIPS
+#include "../src/app/voice_clips.h"
+static VoiceClipCancelStatus recorder_status = VoiceClipCancelStatus::Ready;
+VoiceClipCancelStatus voice_clips_cancel() { return recorder_status; }
+#endif
 #include "../src/app/reboot_service.cpp"
 
 #define DEVICE_TELEMETRY_H
@@ -27,6 +32,10 @@ static void reset_test() {
     reboot_not_before = 0;
     reboot_shutdown_started = false;
     reboot_shutdown_at = 0;
+#if HAS_VOICE_CLIPS
+    reboot_recorder_wait_reported = false;
+    recorder_status = VoiceClipCancelStatus::Ready;
+#endif
     clock_ms = 0;
     restarts = 0;
     audio_requests = 0;
@@ -35,6 +44,23 @@ static void reset_test() {
 }
 
 int main() {
+#if HAS_VOICE_CLIPS
+    reset_test();
+    recorder_status = VoiceClipCancelStatus::Pending;
+    audio_status = AUDIO_REBOOT_COMPLETE;
+    reboot_request(0);
+    reboot_service_loop();
+    assert(restarts == 0 && !ota_activity_try_begin());
+    clock_ms = REBOOT_RECORDER_TIMEOUT_MS;
+    reboot_service_loop();
+    assert(restarts == 0 && reboot_recorder_wait_reported);
+    recorder_status = VoiceClipCancelStatus::Error;
+    reboot_service_loop();
+    assert(restarts == 0);
+    recorder_status = VoiceClipCancelStatus::Ready;
+    reboot_service_loop();
+    assert(restarts == 1);
+#endif
     reset_test();
     assert(ota_activity_try_begin_config_write());
     reboot_request(100);
@@ -127,6 +153,20 @@ int main() {
     AsyncWebServerRequest interrupted;
     interrupted.body_length = 4;
     uint8_t bytes[4] = {};
+#if HAS_VOICE_CLIPS
+    recorder_status = VoiceClipCancelStatus::Pending;
+    AsyncWebServerRequest deferred;
+    deferred.body_length = 4;
+    handleOTAUpload(&deferred, "test.bin", 0, bytes, 2, false);
+    assert(deferred.response_code == 409 && Update.writes == 0 && !ota_activity_is_active());
+    recorder_status = VoiceClipCancelStatus::Error;
+    AsyncWebServerRequest unsafe;
+    unsafe.body_length = 4;
+    handleOTAUpload(&unsafe, "test.bin", 0, bytes, 2, false);
+    assert(unsafe.response_code == 503 && Update.writes == 0 && !ota_activity_is_active());
+    recorder_status = VoiceClipCancelStatus::Ready;
+    Update = TestFirmwareUpdate{};
+#endif
     handleOTAUpload(&interrupted, "test.bin", 0, bytes, 2, false);
     assert(ota_activity_is_active() && Update.writes == 1);
     reboot_request(0);

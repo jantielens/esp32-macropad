@@ -36,13 +36,15 @@
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_JD9165_DSI
 #include "drivers/jd9165_dsi_driver.h"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_TAB5_DSI
-#include "drivers/tab5_dsi_driver.h"
+#include "boards/m5stack-tab5/drivers/tab5_dsi_driver.h"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_INKPLATE6FLICK
-#include "drivers/inkplate6flick_epaper_driver.h"
+#include "boards/inkplate6flick-interactive/drivers/inkplate6flick_epaper_driver.h"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_IT8951
 #include "drivers/it8951_epaper_driver.h"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_CROWPANEL_42
-#include "drivers/crowpanel42_epaper_driver.h"
+#include "boards/crowpanel-4.2-interactive/drivers/display/crowpanel42_epaper_driver.h"
+#elif DISPLAY_DRIVER == DISPLAY_DRIVER_STICKY_EPAPER
+#include "boards/reterminal-sticky-interactive/drivers/display/sticky_epaper_driver.h"
 #endif
 
 #include <SPI.h>
@@ -100,6 +102,8 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 		driver = new IT8951EpaperDriver(config);
 		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_CROWPANEL_42
 		driver = new CrowPanel42EpaperDriver();
+		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_STICKY_EPAPER
+		driver = new StickyEpaperDriver();
 		#else
 		#error "No display driver selected or unknown driver type"
 		#endif
@@ -143,6 +147,7 @@ DisplayManager::~DisplayManager() {
 		// the LVGL consumer before tearing down the objects it can access.
 		displayJobSlot().beginShutdown();
 		lvglStopRequested = true;
+		wakeRenderTask();
 		if (!lvglTaskHandle) {
 			device_dialog_close();
 			lvglTaskStopped = true;
@@ -153,6 +158,12 @@ DisplayManager::~DisplayManager() {
 
 		// Stop present task first (depends on driver, must be deleted before LVGL task)
 		if (presentTaskHandle) {
+				if (driver->coherentFrames()) {
+						presentStopRequested = true;
+						driver->stopPresentation();
+						xSemaphoreGive(presentSem);
+						while (!presentTaskStopped) vTaskDelay(pdMS_TO_TICKS(1));
+				}
 				vTaskDelete(presentTaskHandle);
 				presentTaskHandle = nullptr;
 		}
@@ -370,6 +381,9 @@ void DisplayManager::initLVGL() {
 		lv_display_set_user_data(display, this);
 #if HAS_DISPLAY_DIAGNOSTICS
 		lv_display_add_event_cb(display, DisplayManager::displayEventCallback, LV_EVENT_ALL, this);
+#else
+		if (driver->coherentFrames())
+				lv_display_add_event_cb(display, DisplayManager::displayEventCallback, LV_EVENT_ALL, this);
 #endif
 		
 		// Allocate LVGL draw buffer(s).

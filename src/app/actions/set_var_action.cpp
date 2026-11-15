@@ -4,6 +4,10 @@
 
 #include "../binding_template.h"
 #include "../runtime_variables.h"
+#if HAS_DISPLAY
+#include "../action_dispatch.h"
+#include "../display_manager_lock.h"
+#endif
 #include "log_manager.h"
 
 #include <string.h>
@@ -63,6 +67,10 @@ ActionResult dispatch_set_var(const ButtonAction& act, const char* label, uint32
                                                   has_bindings ? resolved : value);
     }
 
+#if HAS_DISPLAY
+    if (result == RUNTIME_VARIABLE_STORED && action_dispatch_context().interactive)
+        display_manager_request_binding_refresh();
+#endif
     if (result == RUNTIME_VARIABLE_STORED || result == RUNTIME_VARIABLE_UNCHANGED)
         return ACTION_COMPLETE;
     LOGW("Action", "%s Set variable failed (%d)", label, static_cast<int>(result));

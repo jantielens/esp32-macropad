@@ -6,6 +6,8 @@
 #include "log_manager.h"
 #include "power_manager.h"
 #include "reboot_service.h"
+#include "ota_activity.h"
+#include "web_portal_ap.h"
 #include "version.h"
 #if HAS_DISPLAY
 #include "time_binding.h"
@@ -16,6 +18,7 @@
 #include <ESPmDNS.h>
 #include <lwip/netif.h>
 #include "ping/ping_sock.h"
+#include <freertos/task.h>
 
 // Early init state
 static bool g_early_init_done = false;
@@ -81,9 +84,22 @@ enum class WifiEventType : uint8_t { None, Disconnected, GotIp };
 // A single atomic event record preserves the latest event and disconnect reason.
 // Wi-Fi events are edge notifications; current association state remains authoritative.
 static std::atomic<uint16_t> g_wifi_event{0};
-static std::atomic<bool> g_wifi_reconnect_requested{false};
 static std::atomic<bool> g_intentional_offline{false};
 static constexpr uint32_t WIFI_MANUAL_RECONNECT_TIMEOUT_MS = 10000;
+static portMUX_TYPE g_network_mux = portMUX_INITIALIZER_UNLOCKED;
+static WifiNetworkCommand g_network_command = WifiNetworkCommand::None;
+static bool g_network_request_ready = false;
+static bool g_manual_connecting = false;
+static std::atomic<uint32_t> g_association_started_ms{0};
+static std::atomic<bool> g_radio_worker_running{false};
+static std::atomic<bool> g_radio_worker_succeeded{false};
+static std::atomic<bool> g_radio_cleanup_requested{false};
+static std::atomic<WifiNetworkState> g_radio_phase{WifiNetworkState::Off};
+static std::atomic<bool> g_radio_shutdown_failed{false};
+static TaskHandle_t g_radio_task = nullptr;
+static const DeviceConfig* g_radio_config = nullptr;
+static WifiNetworkCommand g_radio_command = WifiNetworkCommand::None;
+static WifiNetworkSnapshot g_network_snapshot = {};
 
 static std::atomic<int16_t> g_diag_rssi{0};
 static std::atomic<uint8_t> g_diag_channel{0};
@@ -162,6 +178,69 @@ RTC_DATA_ATTR static char g_cached_ssid[CONFIG_SSID_MAX_LEN] = {0};
 
 static void cache_association_diagnostics(unsigned long now);
 
+static void set_network_error(const char* reason) {
+		portENTER_CRITICAL(&g_network_mux);
+		strlcpy(g_network_snapshot.last_error, reason, sizeof(g_network_snapshot.last_error));
+		portEXIT_CRITICAL(&g_network_mux);
+}
+
+static uint32_t g_station_details_updated_ms = 0;
+static constexpr uint32_t WIFI_STATION_DETAILS_REFRESH_MS = 2000;
+
+void wifi_manager_init_network_snapshot(const DeviceConfig& config) {
+		WifiNetworkSnapshot snapshot = {};
+		static_assert(sizeof(snapshot.hostname) >= CONFIG_DEVICE_NAME_MAX_LEN, "Hostname buffer is too small");
+		config_manager_sanitize_device_name(config.device_name, snapshot.hostname, sizeof(snapshot.hostname));
+		portENTER_CRITICAL(&g_network_mux);
+		g_network_snapshot = snapshot;
+		portEXIT_CRITICAL(&g_network_mux);
+		g_station_details_updated_ms = 0;
+}
+
+static void publish_network_snapshot() {
+		WifiNetworkSnapshot snapshot;
+		wifi_manager_get_network_snapshot(&snapshot);
+		const WifiNetworkState previous_state = snapshot.state;
+		snapshot.ap_active = web_portal_is_ap_mode();
+		snapshot.recovery_ap = false;
+		if (snapshot.ap_active) {
+				snapshot.recovery_ap = web_portal_is_recovery_ap();
+				web_portal_ap_get_network_info(snapshot.ssid, sizeof(snapshot.ssid),
+						snapshot.ip, sizeof(snapshot.ip));
+		}
+		snapshot.state = g_radio_shutdown_failed.load(std::memory_order_acquire) ? WifiNetworkState::Error :
+				snapshot.ap_active ? WifiNetworkState::Ap :
+				g_manual_connecting ? WifiNetworkState::Connecting :
+				g_intentional_offline.load(std::memory_order_acquire) ? WifiNetworkState::Off :
+				WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0) ?
+						WifiNetworkState::Connected : WifiNetworkState::Reconnecting;
+		if (snapshot.state == WifiNetworkState::Connected) {
+				const uint32_t now = millis();
+				if (previous_state != WifiNetworkState::Connected ||
+								uint32_t(now - g_station_details_updated_ms) >= WIFI_STATION_DETAILS_REFRESH_MS) {
+						strlcpy(snapshot.ssid, WiFi.SSID().c_str(), sizeof(snapshot.ssid));
+						const IPAddress ip = WiFi.localIP();
+						snprintf(snapshot.ip, sizeof(snapshot.ip), "%u.%u.%u.%u",
+								unsigned(ip[0]), unsigned(ip[1]), unsigned(ip[2]), unsigned(ip[3]));
+						g_station_details_updated_ms = now;
+				}
+		} else if (!snapshot.ap_active) {
+				snapshot.ssid[0] = '\0';
+				snapshot.ip[0] = '\0';
+		}
+		portENTER_CRITICAL(&g_network_mux);
+		memcpy(snapshot.last_error, g_network_snapshot.last_error, sizeof(snapshot.last_error));
+		g_network_snapshot = snapshot;
+		portEXIT_CRITICAL(&g_network_mux);
+}
+
+void wifi_manager_get_network_snapshot(WifiNetworkSnapshot* snapshot) {
+		if (!snapshot) return;
+		portENTER_CRITICAL(&g_network_mux);
+		*snapshot = g_network_snapshot;
+		portEXIT_CRITICAL(&g_network_mux);
+}
+
 static void format_bssid(const uint8_t *bssid, char *out, size_t out_len) {
 		if (!out || out_len < 18) return;
 		if (!bssid) {
@@ -184,6 +263,7 @@ static void unpack_bssid(uint64_t packed, uint8_t bssid[6]) {
 
 static void cache_association_diagnostics(unsigned long now) {
 		if (WiFi.status() != WL_CONNECTED) return;
+		set_network_error("");
 
 		const uint8_t* bssid = WiFi.BSSID();
 		if (bssid) g_diag_bssid.store(pack_bssid(bssid), std::memory_order_release);
@@ -305,6 +385,39 @@ void wifi_manager_early_init() {
 		#endif
 }
 
+static bool configure_station(const DeviceConfig* config) {
+		#ifndef CONFIG_IDF_TARGET_ESP32P4
+		WiFi.setSleep(false);
+		#endif
+		WiFi.setAutoReconnect(true);
+		char sanitized[CONFIG_DEVICE_NAME_MAX_LEN];
+		config_manager_sanitize_device_name(config->device_name, sanitized, sizeof(sanitized));
+		if (sanitized[0]) {
+				WiFi.setHostname(sanitized);
+				esp_netif_t* netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+				if (netif) esp_netif_set_hostname(netif, sanitized);
+				LOGI("WiFi", "Hostname: %s", sanitized);
+		}
+		if (!config->fixed_ip[0]) return true;
+		IPAddress local_ip, gateway, subnet, dns1, dns2;
+		if (!local_ip.fromString(config->fixed_ip) ||
+				!subnet.fromString(config->subnet_mask) ||
+				!gateway.fromString(config->gateway)) {
+				LOGE("WiFi", "Invalid static IP configuration");
+				return false;
+		}
+		if (config->dns1[0]) dns1.fromString(config->dns1);
+		else dns1 = gateway;
+		if (config->dns2[0]) dns2.fromString(config->dns2);
+		else dns2 = IPAddress(0, 0, 0, 0);
+		if (!WiFi.config(local_ip, gateway, subnet, dns1, dns2)) {
+				LOGE("WiFi", "Static IP configuration failed");
+				return false;
+		}
+		LOGI("WiFi", "IP: %s", config->fixed_ip);
+		return true;
+}
+
 bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid, uint32_t timeout_ms) {
 		if (!config) return false;
 		const uint32_t connect_started_ms = millis();
@@ -321,6 +434,7 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid, u
 
 		if (strlen(config->wifi_ssid) == 0) {
 				LOGW("WiFi", "SSID not set");
+				set_network_error("No saved SSID");
 				return false;
 		}
 
@@ -330,6 +444,7 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid, u
 		}
 		if (WiFi.getMode() == WIFI_OFF && !WiFi.mode(WIFI_STA)) {
 				LOGE("WiFi", "Failed to enable station mode");
+				set_network_error("Station startup failed");
 				return false;
 		}
 
@@ -361,68 +476,9 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid, u
 		}
 		#endif
 
-		// ESP32-P4 ESP-Hosted: setSleep(false) is proxied over SDIO and can
-		// destabilise the hosted link during early init. Skip it on P4.
-		#ifndef CONFIG_IDF_TARGET_ESP32P4
-		WiFi.setSleep(false);
-		#endif
-		WiFi.setAutoReconnect(true);
-
-		char sanitized[CONFIG_DEVICE_NAME_MAX_LEN];
-		config_manager_sanitize_device_name(config->device_name, sanitized, CONFIG_DEVICE_NAME_MAX_LEN);
-
-		if (strlen(sanitized) > 0) {
-				WiFi.setHostname(sanitized);
-				LOGI("WiFi", "Hostname: %s", sanitized);
-
-				esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-				if (netif != NULL) {
-						esp_netif_set_hostname(netif, sanitized);
-				}
-		}
-
-		if (strlen(config->fixed_ip) > 0) {
-				LOGI("WiFi", "Fixed IP config start");
-
-				IPAddress local_ip, gateway, subnet, dns1, dns2;
-
-				if (!local_ip.fromString(config->fixed_ip)) {
-						LOGE("WiFi", "Invalid IP address");
-						LOGE("WiFi", "Connection failed");
-						return false;
-				}
-
-				if (!subnet.fromString(config->subnet_mask)) {
-						LOGE("WiFi", "Invalid subnet mask");
-						LOGE("WiFi", "Connection failed");
-						return false;
-				}
-
-				if (!gateway.fromString(config->gateway)) {
-						LOGE("WiFi", "Invalid gateway");
-						LOGE("WiFi", "Connection failed");
-						return false;
-				}
-
-				if (strlen(config->dns1) > 0) {
-						dns1.fromString(config->dns1);
-				} else {
-						dns1 = gateway;
-				}
-
-				if (strlen(config->dns2) > 0) {
-						dns2.fromString(config->dns2);
-				} else {
-						dns2 = IPAddress(0, 0, 0, 0);
-				}
-
-				if (!WiFi.config(local_ip, gateway, subnet, dns1, dns2)) {
-						LOGE("WiFi", "Configuration failed");
-						LOGE("WiFi", "Connection failed");
-						return false;
-				}
-
-				LOGI("WiFi", "IP: %s", config->fixed_ip);
+		if (!configure_station(config)) {
+				set_network_error("Invalid station settings");
+				return false;
 		}
 
 		if (allow_cached_bssid && g_cached_valid && g_cached_channel > 0) {
@@ -543,6 +599,7 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid, u
 		#endif
 
 		LOGE("WiFi", "All attempts failed");
+		set_network_error("Connection attempts failed");
 		return false;
 }
 
@@ -569,19 +626,269 @@ void wifi_manager_register_events() {
 		LOGI("WiFi", "Event handlers registered");
 }
 
-void wifi_manager_request_reconnect() {
-		g_wifi_reconnect_requested.store(true, std::memory_order_release);
-		LOGI("WiFi", "Reconnect requested");
+bool wifi_manager_network_transition_pending() {
+		portENTER_CRITICAL(&g_network_mux);
+		const bool pending = g_network_command != WifiNetworkCommand::None;
+		portEXIT_CRITICAL(&g_network_mux);
+		return pending;
+}
+
+bool wifi_manager_request_network_command(WifiNetworkCommand command) {
+		if (command == WifiNetworkCommand::None) {
+				LOGE("WiFi", "Invalid network command");
+				return false;
+		}
+		portENTER_CRITICAL(&g_network_mux);
+		if (g_network_command != WifiNetworkCommand::None) {
+				const bool duplicate = g_network_command == command;
+				portEXIT_CRITICAL(&g_network_mux);
+				if (!duplicate) LOGW("WiFi", "Network command rejected: another command is pending");
+				return duplicate;
+		}
+		if (!ota_activity_try_begin_network_transition()) {
+				portEXIT_CRITICAL(&g_network_mux);
+				LOGW("WiFi", "Network command rejected: update or configuration write is active");
+				return false;
+		}
+		g_network_command = command;
+		g_network_request_ready = true;
+		portEXIT_CRITICAL(&g_network_mux);
+		LOGI("WiFi", "Network command admitted (%u)", unsigned(command));
+		return true;
 }
 
 void wifi_manager_enter_offline() {
 		g_intentional_offline.store(true, std::memory_order_release);
-		g_wifi_reconnect_requested.store(false, std::memory_order_release);
+		WiFi.setAutoReconnect(false);
 		g_wifi_event.store(0, std::memory_order_release);
 		set_mdns_hostname("");
+		if (g_mdns_started) {
+				MDNS.end();
+				g_mdns_started = false;
+		}
 		WiFi.disconnect(true);
-		WiFi.mode(WIFI_OFF);
+		const bool stopped = WiFi.mode(WIFI_OFF);
+		g_radio_shutdown_failed.store(!stopped, std::memory_order_release);
+		if (!stopped) {
+				set_network_error("Wi-Fi shutdown failed");
+				LOGE("WiFi", "Failed to disable Wi-Fi radio");
+		}
+		g_diag_associated.store(false, std::memory_order_release);
+		publish_network_snapshot();
 		LOGI("WiFi", "Radio disabled by intentional offline mode");
+}
+
+static void finish_network_command() {
+		publish_network_snapshot();
+		portENTER_CRITICAL(&g_network_mux);
+		ota_activity_finish_network_transition();
+		g_network_command = WifiNetworkCommand::None;
+		portEXIT_CRITICAL(&g_network_mux);
+}
+
+static void radio_start_task(void*) {
+		bool ok = true;
+		const bool ap_active = web_portal_is_ap_mode();
+		const WifiNetworkCommand command = g_radio_command;
+		if ((command == WifiNetworkCommand::Disconnect && ap_active) ||
+				(command == WifiNetworkCommand::DisableAp && !ap_active)) {
+				// Commands for an inactive transport never change the other one.
+		} else {
+				g_radio_shutdown_failed.store(false, std::memory_order_release);
+				g_intentional_offline.store(true, std::memory_order_release);
+				WiFi.setAutoReconnect(false);
+				if (ap_active) web_portal_stop_ap();
+				set_mdns_hostname("");
+				if (g_mdns_started) {
+						MDNS.end();
+						g_mdns_started = false;
+				}
+				WiFi.disconnect(false);
+				if (!WiFi.mode(WIFI_OFF)) {
+						set_network_error("Wi-Fi shutdown failed");
+						g_radio_shutdown_failed.store(true, std::memory_order_release);
+						LOGE("WiFi", "Network transition could not disable radio");
+						ok = false;
+				}
+				g_wifi_event.store(0, std::memory_order_release);
+				g_diag_associated.store(false, std::memory_order_release);
+				if (ok && command == WifiNetworkCommand::Connect) {
+						if (!g_radio_config->wifi_ssid[0]) {
+								set_network_error("No saved SSID");
+								ok = false;
+						} else {
+								WiFi.persistent(false);
+								ok = WiFi.mode(WIFI_STA) && configure_station(g_radio_config);
+								if (ok) {
+										wifi_manager_register_events();
+										#ifndef CONFIG_IDF_TARGET_ESP32P4
+										uint8_t best_bssid[6];
+										int best_channel = 0;
+										if (select_strongest_ap(g_radio_config->wifi_ssid, best_bssid,
+														&best_channel, nullptr)) {
+												ok = WiFi.begin(g_radio_config->wifi_ssid,
+														g_radio_config->wifi_password, best_channel,
+														best_bssid) != WL_CONNECT_FAILED;
+										} else
+										#endif
+										{
+												ok = WiFi.begin(g_radio_config->wifi_ssid,
+														g_radio_config->wifi_password) != WL_CONNECT_FAILED;
+										}
+										if (ok) g_association_started_ms.store(millis(), std::memory_order_release);
+								}
+								if (!ok) set_network_error("Station startup failed");
+						}
+				} else if (ok && command == WifiNetworkCommand::EnableAp) {
+						WiFi.persistent(false);
+						ok = web_portal_start_ap(g_radio_config, true);
+						if (!ok) set_network_error("AP startup failed");
+						else set_network_error("");
+				}
+				if (!ok) {
+						g_radio_phase.store(WifiNetworkState::Stopping, std::memory_order_release);
+						WiFi.setAutoReconnect(false);
+						web_portal_stop_ap();
+						const bool stopped = WiFi.mode(WIFI_OFF);
+						g_radio_shutdown_failed.store(!stopped, std::memory_order_release);
+						if (!stopped) {
+								set_network_error("Wi-Fi shutdown failed");
+								LOGE("WiFi", "Failed to disable radio after startup failure");
+						}
+						LOGE("WiFi", "Network command failed (%u)", unsigned(command));
+				}
+				g_radio_phase.store(ok && command == WifiNetworkCommand::Connect ?
+						WifiNetworkState::Connecting : WifiNetworkState::Off, std::memory_order_release);
+		}
+		g_radio_worker_succeeded.store(ok, std::memory_order_release);
+		g_radio_worker_running.store(false, std::memory_order_release);
+		if (ok && command == WifiNetworkCommand::Connect) {
+				// Keep the same task for timeout teardown, so cleanup cannot need
+				// another allocation when Wi-Fi has consumed internal memory.
+				ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+				if (g_radio_cleanup_requested.load(std::memory_order_acquire)) {
+						WiFi.setAutoReconnect(false);
+						WiFi.disconnect(false);
+						ok = WiFi.mode(WIFI_OFF);
+						g_radio_shutdown_failed.store(!ok, std::memory_order_release);
+						if (!ok) {
+								set_network_error("Wi-Fi shutdown failed");
+								LOGE("WiFi", "Failed to disable radio after connection timeout");
+						}
+						g_wifi_event.store(0, std::memory_order_release);
+						g_diag_associated.store(false, std::memory_order_release);
+				}
+				g_radio_worker_succeeded.store(ok, std::memory_order_release);
+				g_radio_worker_running.store(false, std::memory_order_release);
+		}
+		vTaskDelete(nullptr);
+}
+
+static bool start_radio_task(const DeviceConfig* config, WifiNetworkCommand command) {
+		g_radio_config = config;
+		g_radio_command = command;
+		g_radio_worker_running.store(true, std::memory_order_release);
+		g_radio_worker_succeeded.store(false, std::memory_order_release);
+		g_radio_cleanup_requested.store(false, std::memory_order_release);
+		g_radio_phase.store(command == WifiNetworkCommand::Connect || command == WifiNetworkCommand::EnableAp ?
+				WifiNetworkState::Starting : WifiNetworkState::Stopping, std::memory_order_release);
+		// ESP-IDF dynamic tasks use internal stacks, as does the OTA worker.
+		if (xTaskCreatePinnedToCore(radio_start_task, "wifi_start", 6144,
+						nullptr, 1, &g_radio_task, 0) == pdPASS) return true;
+		g_radio_worker_running.store(false, std::memory_order_release);
+		LOGE("WiFi", "Could not allocate temporary radio startup task");
+		return false;
+}
+
+static void release_radio_task(bool cleanup) {
+		g_radio_cleanup_requested.store(cleanup, std::memory_order_release);
+		g_radio_phase.store(cleanup ? WifiNetworkState::Stopping : WifiNetworkState::Connected,
+				std::memory_order_release);
+		g_radio_worker_running.store(true, std::memory_order_release);
+		xTaskNotifyGive(g_radio_task);
+}
+
+static bool process_network_command(const DeviceConfig* config) {
+		WifiNetworkCommand command;
+		bool start;
+		portENTER_CRITICAL(&g_network_mux);
+		command = g_network_command;
+		start = g_network_request_ready;
+		g_network_request_ready = false;
+		portEXIT_CRITICAL(&g_network_mux);
+		if (command == WifiNetworkCommand::None) return false;
+		if (start) {
+				if ((command == WifiNetworkCommand::Connect && !web_portal_is_ap_mode() &&
+								!g_intentional_offline.load(std::memory_order_acquire) &&
+								WiFi.status() == WL_CONNECTED) ||
+						(command == WifiNetworkCommand::EnableAp && web_portal_is_ap_mode()) ||
+						(command == WifiNetworkCommand::Disconnect &&
+								g_intentional_offline.load(std::memory_order_acquire) &&
+								!g_radio_shutdown_failed.load(std::memory_order_acquire)) ||
+						(command == WifiNetworkCommand::TurnOff && !web_portal_is_ap_mode() &&
+								g_intentional_offline.load(std::memory_order_acquire) &&
+								!g_radio_shutdown_failed.load(std::memory_order_acquire)) ||
+						(command == WifiNetworkCommand::DisableAp && !web_portal_is_ap_mode())) {
+						finish_network_command();
+						return true;
+				}
+				g_manual_connecting = command == WifiNetworkCommand::Connect;
+				if (!start_radio_task(config, command)) {
+						g_manual_connecting = false;
+						set_network_error("Radio startup allocation failed");
+						finish_network_command();
+						return true;
+				}
+				portENTER_CRITICAL(&g_network_mux);
+				g_network_snapshot.state = g_radio_phase.load(std::memory_order_acquire);
+				g_network_snapshot.ap_active = false;
+				g_network_snapshot.recovery_ap = false;
+				g_network_snapshot.ssid[0] = '\0';
+				g_network_snapshot.ip[0] = '\0';
+				portEXIT_CRITICAL(&g_network_mux);
+				return true;
+		}
+		if (g_radio_worker_running.load(std::memory_order_acquire)) {
+				portENTER_CRITICAL(&g_network_mux);
+				g_network_snapshot.state = g_radio_phase.load(std::memory_order_acquire);
+				portEXIT_CRITICAL(&g_network_mux);
+				return true;
+		}
+		if (!g_radio_worker_succeeded.load(std::memory_order_acquire)) {
+				g_manual_connecting = false;
+				finish_network_command();
+				return true;
+		}
+		if (!g_manual_connecting) {
+				finish_network_command();
+				return true;
+		}
+		publish_network_snapshot();
+		if (WiFi.status() == WL_CONNECTED) {
+				g_manual_connecting = false;
+				g_intentional_offline.store(false, std::memory_order_release);
+				g_wifi_state = WifiState::Connected;
+				g_wifi_event.store(0, std::memory_order_release);
+				g_tier2_attempt = 0;
+				g_diag_retry_count.store(0, std::memory_order_release);
+				cache_association_diagnostics(millis());
+				set_network_error("");
+				power_manager_note_wifi_success();
+				wifi_manager_start_mdns(config);
+				device_telemetry_cache_rssi();
+				#if HAS_DISPLAY
+				time_binding_start_ntp();
+				#endif
+				LOGI("WiFi", "Manual connection succeeded");
+				release_radio_task(false);
+		} else if (uint32_t(millis() - g_association_started_ms.load(std::memory_order_acquire)) >=
+						WIFI_MANUAL_RECONNECT_TIMEOUT_MS) {
+				set_network_error("Connection timed out");
+				LOGE("WiFi", "Manual connection timed out");
+				g_manual_connecting = false;
+				release_radio_task(true);
+		}
+		return true;
 }
 
 // --- State machine helpers ---
@@ -604,6 +911,7 @@ static void recover_from_outage(const DeviceConfig *config, unsigned long now,
 		g_wifi_event.store(0, std::memory_order_release);
 		g_diag_last_recovery_duration_ms.store(outage_duration, std::memory_order_release);
 		cache_association_diagnostics(now);
+		set_network_error("");
 
 		power_manager_note_wifi_success();
 		wifi_manager_start_mdns(config);
@@ -664,39 +972,11 @@ void wifi_manager_start_mdns(const DeviceConfig *config) {
 
 void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool is_ap_mode) {
 		if (!config) return;
-		if (is_ap_mode) {
-				g_wifi_reconnect_requested.store(false, std::memory_order_release);
-				return;
-		}
+		if (process_network_command(config)) return;
+		publish_network_snapshot();
+		if (is_ap_mode) return;
 		if (g_intentional_offline.load(std::memory_order_acquire)) {
-				if (!g_wifi_reconnect_requested.exchange(false, std::memory_order_acquire)) {
-						g_wifi_event.store(0, std::memory_order_release);
-						return;
-				}
-				if (!config_loaded || config->wifi_ssid[0] == '\0') {
-						LOGE("WiFi", "Manual reconnect failed: no saved SSID");
-						wifi_manager_enter_offline();
-						return;
-				}
-				LOGI("WiFi", "Manual reconnect attempt started");
-				const bool connected = wifi_manager_connect(
-						config, false, WIFI_MANUAL_RECONNECT_TIMEOUT_MS);
-				if (!connected) {
-						LOGE("WiFi", "Manual reconnect failed; radio remains off");
-						wifi_manager_enter_offline();
-						return;
-				}
-				g_intentional_offline.store(false, std::memory_order_release);
-				g_wifi_state = WifiState::Connected;
 				g_wifi_event.store(0, std::memory_order_release);
-				wifi_manager_register_events();
-				power_manager_note_wifi_success();
-				wifi_manager_start_mdns(config);
-				device_telemetry_cache_rssi();
-				#if HAS_DISPLAY
-				time_binding_start_ntp();
-				#endif
-				LOGI("WiFi", "Manual reconnect succeeded");
 				return;
 		}
 		if (!config_loaded) return;
@@ -709,19 +989,8 @@ void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool 
 		const WifiEventType event_type = (WifiEventType)(event_record >> 8);
 		const uint8_t disconnect_reason = (uint8_t)event_record;
 
-		// --- Handle explicit reconnect request ---
-		if (g_wifi_reconnect_requested.exchange(false, std::memory_order_acquire)) {
-				LOGI("WiFi", "Processing reconnect request");
-				WiFi.disconnect(false);
-				enter_outage(now);
-				WiFi.begin(config->wifi_ssid, config->wifi_password);
-				g_last_retry_ms = now;
-				g_tier2_attempt = 1;
-				g_diag_retry_count.store(g_tier2_attempt, std::memory_order_release);
-				return;
-		}
 		// --- Handle reconnection event (takes priority over disconnect) ---
-		if (event_type == WifiEventType::GotIp) {
+		if (event_type == WifiEventType::GotIp && WiFi.status() == WL_CONNECTED) {
 				if (g_wifi_state != WifiState::Connected) {
 						recover_from_outage(config, now,
 								g_wifi_state == WifiState::Tier1Wait   ? "Tier 1" :
@@ -731,10 +1000,14 @@ void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool 
 		}
 
 		// --- Handle disconnect event while connected ---
-		if (event_type == WifiEventType::Disconnected && g_wifi_state == WifiState::Connected) {
+		if (event_type == WifiEventType::Disconnected && g_wifi_state == WifiState::Connected &&
+				WiFi.status() != WL_CONNECTED) {
 				g_diag_disconnect_reason.store(disconnect_reason, std::memory_order_release);
 				g_diag_has_disconnect_reason.store(true, std::memory_order_release);
 				LOGW("WiFi", "Disconnected (reason %u)", (unsigned)disconnect_reason);
+				char reason[48];
+				snprintf(reason, sizeof(reason), "Disconnected (reason %u)", unsigned(disconnect_reason));
+				set_network_error(reason);
 				enter_outage(now);
 				return;
 		}
@@ -745,6 +1018,7 @@ void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool 
 
 				if (g_wifi_state == WifiState::Connected && WiFi.status() != WL_CONNECTED) {
 						LOGW("WiFi", "Watchdog safety net: WiFi.status() not connected");
+						set_network_error("Connection lost");
 						enter_outage(now);
 						return;
 				}
@@ -799,18 +1073,21 @@ void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool 
 
 		if (g_wifi_state == WifiState::Tier3Off) {
 				if (now - g_state_entry_ms >= 1000) {
+						if (!ota_activity_try_begin_network_transition()) return;
 						LOGI("WiFi", "Tier 3: re-initializing WiFi stack");
 						WiFi.mode(WIFI_STA);
 						WiFi.begin(config->wifi_ssid, config->wifi_password);
 						g_wifi_state = WifiState::Tier3Reinit;
 						g_state_entry_ms = now;
+						ota_activity_finish_network_transition();
 				}
 				return;
 		}
 
 		const unsigned long since_last_retry = g_last_retry_ms == 0 ? ~0UL : now - g_last_retry_ms;
 		const WifiRecoveryAction recovery_action = wifi_reconnect_next_action(
-				total_outage, since_last_retry, g_tier2_attempt, false, WIFI_RECOVERY_POLICY);
+				total_outage, since_last_retry, g_tier2_attempt, false, WIFI_RECOVERY_POLICY,
+				power_manager_get_current_mode() != PowerMode::Offline);
 		if (recovery_action == WifiRecoveryAction::Reboot) {
 				static bool reboot_requested = false;
 				if (!reboot_requested) {
@@ -823,6 +1100,7 @@ void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool 
 		if (recovery_action == WifiRecoveryAction::None) return;
 
 		if (recovery_action == WifiRecoveryAction::Begin) {
+				if (!ota_activity_try_begin_network_transition()) return;
 				const unsigned long backoff = wifi_reconnect_next_backoff(
 						g_tier2_attempt, WIFI_TIER2_BACKOFF_BASE_MS, WIFI_TIER2_BACKOFF_MAX_MS);
 				LOGI("WiFi", "Active retry #%u (backoff %lus)", g_tier2_attempt + 1, backoff / 1000);
@@ -832,11 +1110,13 @@ void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool 
 				g_tier2_attempt++;
 				g_diag_retry_count.store(g_tier2_attempt, std::memory_order_release);
 				g_wifi_state = WifiState::Tier2Retry;
+				ota_activity_finish_network_transition();
 				return;
 		}
 
 		// --- Tier 3: hardware-specific reset after bounded active retries ---
 		if (recovery_action == WifiRecoveryAction::ResetRadio || g_wifi_state == WifiState::Tier3Reset) {
+				if (!ota_activity_try_begin_network_transition()) return;
 				#ifdef CONFIG_IDF_TARGET_ESP32P4
 				// P4-safe path: skip WIFI_OFF toggle (SDIO stability).
 				LOGW("WiFi", "Tier 3: P4 safe reset (disconnect + begin)");
@@ -857,6 +1137,7 @@ void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool 
 				g_wifi_state = WifiState::Tier3Off;
 				g_state_entry_ms = now;
 				#endif
+				ota_activity_finish_network_transition();
 				return;
 		}
 

@@ -70,6 +70,7 @@ const FIXTURE_CATALOG = [
     { type: 'back', group: 'Navigation', label: 'Navigate back' },
     { type: 'mqtt', group: 'Connectivity', label: 'Publish MQTT message' },
     { type: 'ha_service', group: 'Connectivity', label: 'Call Home Assistant service' },
+    ...productionCatalogs.portal.filter(entry => entry.type === 'bthome'),
     { type: 'gamepad', group: 'Gamepad', label: 'Gamepad', button_count: 16 },
     {
         type: 'mouse_button', group: 'Mouse', label: 'Mouse button',
@@ -93,11 +94,7 @@ const FIXTURE_CATALOG = [
             { name: 'brightness_value', label: 'Value (%)', type: 'text', bindable: true }
         ]
     },
-    {
-        type: 'system', group: 'Device', label: 'Device command',
-        commands: [{ id: 'reboot', label: 'Restart device' }, { id: 'wifi_reconnect', label: 'Reconnect Wi-Fi' }],
-        editor_fields: [{ name: 'system_command', label: 'Command', type: 'select', command_options: true }]
-    },
+    ...productionCatalogs.portal.filter(entry => entry.type === 'system'),
     {
         type: 'music', group: 'Audio', label: 'Music',
         commands: [{ id: 'play_pause', label: 'Play/Pause' }, { id: 'next', label: 'Next track' }],
@@ -259,10 +256,13 @@ const brightnessAction = context.actionEditorBuild(prefix);
 assert.strictEqual(brightnessAction.type, 'brightness');
 assert.strictEqual(brightnessAction.brightness_mode, 'adjust');
 assert.strictEqual(brightnessAction.brightness_value, '-10');
-context.actionEditorLoad(prefix, { type: 'system', system_command: 'wifi_reconnect' });
+context.actionEditorLoad(prefix, { type: 'system', system_command: 'wifi_connect' });
 const systemAction = context.actionEditorBuild(prefix);
 assert.strictEqual(systemAction.type, 'system');
-assert.strictEqual(systemAction.system_command, 'wifi_reconnect');
+assert.strictEqual(systemAction.system_command, 'wifi_connect');
+assert(editorHtml.includes('Turn off Wi-Fi'));
+context.actionEditorLoad(prefix, { type: 'system', system_command: 'wifi_off' });
+assert.strictEqual(context.actionEditorBuild(prefix).system_command, 'wifi_off');
 context.actionEditorLoad(prefix, { type: 'music', music_command: 'next' });
 const musicAction = context.actionEditorBuild(prefix);
 assert.strictEqual(musicAction.type, 'music');
@@ -278,6 +278,20 @@ assert(!commandEl.innerHTML.includes('toggle_lock'));
 context.actionEditorLoad(prefix, { type: 'shutter', shutter_command: 'sess_start' });
 assert.strictEqual(familyEl.value, 'session');
 assert(document.getElementById(prefix + '-shutter-command').innerHTML.includes('sess_start'));
+
+const bthomeCatalog = productionCatalogs.portal.find(entry => entry.type === 'bthome');
+assert(bthomeCatalog, 'BLE-capable firmware exposes the BTHome action');
+const bthomeFields = context.actionEditorGenericFields('bthome');
+assert.strictEqual(bthomeFields[0].options.length, 10);
+assert.strictEqual(bthomeFields[1].type, 'select');
+assert.deepStrictEqual(bthomeFields[1].options.map(option => option.id),
+    ['press', 'double_press', 'long_press']);
+context.actionEditorLoad(prefix, {type: 'bthome'});
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(prefix))),
+    {type: 'bthome', button: 1, event: 'press'});
+context.actionEditorLoad(prefix, {type: 'bthome', button: 10, event: 'long_press'});
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(prefix))),
+    {type: 'bthome', button: 10, event: 'long_press'});
 
 // Delay uses a bounded numeric duration and persists the flat JSON contract.
 context.actionEditorLoad(prefix, { type: 'delay', duration_ms: 2500 });
@@ -305,7 +319,7 @@ const resetFields = ['-ha-entity', '-ha-service', '-ha-data', '-generic-volume-v
     return input;
 });
 const resetCommand = document.getElementById(resetPrefix + '-generic-system-system_command');
-resetCommand.options = [{ value: 'reboot', defaultSelected: false }, { value: 'wifi_reconnect', defaultSelected: false }];
+resetCommand.options = [{ value: 'reboot', defaultSelected: false }, { value: 'wifi_connect', defaultSelected: false }];
 Object.defineProperty(resetCommand, 'selectedIndex', { set(index) { this.value = this.options[index].value; } });
 const resetCheckbox = new Element('INPUT');
 resetCheckbox.defaultValue = 'on';
@@ -330,7 +344,7 @@ assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(reset
 context.actionEditorLoad(resetPrefix, {type:'volume', volume_mode:'set', volume_value:'73'});
 document.getElementById(resetPrefix + '-timer-set-sec').value = '123';
 document.getElementById(resetPrefix + '-timer-adjust-sec').value = '-45';
-resetCommand.value = 'wifi_reconnect';
+resetCommand.value = 'wifi_connect';
 context.actionEditorLoad(resetPrefix, {type:'mqtt', topic:'new/button', payload:'fresh'});
 document.getElementById(resetPrefix + '-type').value = 'volume';
 context.actionEditorTypeChanged(resetPrefix);

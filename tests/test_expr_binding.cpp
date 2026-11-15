@@ -460,8 +460,8 @@ static void test_auto_quoting_multi_word() {
 static void test_auto_quoting_special_chars() {
     printf("--- Auto-quoting: special characters in values ---\n");
     // Hyphenated names (hostnames, UUIDs, etc.)
-    g_health_values["hostname"] = "macropad-123";
-    check("[expr:[health:hostname]==\"macropad-123\"?\"yes\":\"no\"]",
+    g_health_values["wifi_hostname"] = "macropad-123";
+    check("[expr:[health:wifi_hostname]==\"macropad-123\"?\"yes\":\"no\"]",
           "yes", "hyphenated hostname eq");
 
     // Value with dots (version strings, IPs)
@@ -581,8 +581,8 @@ static void test_auto_quoting_mixed_numeric_and_text() {
 static void test_auto_quoting_hyphen_not_subtraction() {
     printf("--- Auto-quoting: hyphenated values don't trigger subtraction ---\n");
     // "macropad-123" must be treated as one string, not "macropad" minus 123
-    g_health_values["hostname"] = "macropad-123";
-    check("[expr:[health:hostname]]", "macropad-123", "hyphenated passthrough");
+    g_health_values["wifi_hostname"] = "macropad-123";
+    check("[expr:[health:wifi_hostname]]", "macropad-123", "hyphenated passthrough");
 
     // Even without spaces around the operator, the binding value must stay intact
     g_mqtt_values["device/info;name"] = "esp32-s3-n16r8";

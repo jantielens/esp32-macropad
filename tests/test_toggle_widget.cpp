@@ -10,7 +10,7 @@ static ActionResult dispatch_result;
 static std::function<void()> during_dispatch;
 static const char* thermostat_value = "10";
 
-ActionResult action_list_dispatch_result(const ButtonAction* actions, uint8_t count, const char*, ActionContinuationOwner) {
+ActionResult action_list_dispatch_result(const ButtonAction* actions, uint8_t count, const char*, ActionContinuationOwner, bool) {
     if (count) { ++dispatches; dispatched = actions[0].payload.ha_service.data_json; }
     if (during_dispatch) during_dispatch();
     return dispatch_result;

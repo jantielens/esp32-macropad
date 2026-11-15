@@ -45,18 +45,18 @@
   <div class="card-body">
     <label class="form-label" for="epaper_binding_refresh_interval_ms">Passive binding interval (ms)</label>
     <input class="form-control" type="number" min="100" max="60000" id="epaper_binding_refresh_interval_ms" name="epaper_binding_refresh_interval_ms">
-    <div class="form-text">How often idle data bindings are checked. Higher values reduce panel updates.</div>
+    <div class="form-text">How often idle data bindings are checked. Higher values reduce background checks and can reduce panel updates. On supporting devices, user-triggered local-variable changes refresh bindings without this wait.</div>
     <label class="form-label mt-3" for="epaper_min_refresh_interval_ms">Minimum presentation interval (ms)</label>
     <input class="form-control" type="number" min="250" max="60000" id="epaper_min_refresh_interval_ms" name="epaper_min_refresh_interval_ms">
-    <div class="form-text">The shortest delay between physical panel updates. Higher values combine rapid changes into one update.</div>
+    <div class="form-text">Delay after a completed presentation before another background update can start. Higher values combine rapid changes and reduce panel work. Devices supporting interaction priority can bypass this delay for navigation, dialogs and changed local-variable actions; active panel work still finishes first. Other devices apply this interval to interactive updates too.</div>
     <label class="form-label mt-3" for="epaper_full_refresh_threshold">Full-refresh threshold</label>
     <input class="form-control" type="number" min="0" max="65535" id="epaper_full_refresh_threshold" name="epaper_full_refresh_threshold">
-    <div class="form-text">Run a full waveform after this many regional updates. Set 0 to disable scheduled full refreshes. Inkplate grayscale always refreshes the full panel.</div>
+    <div class="form-text">Run a full refresh after this many successful partial updates. Depending on the driver, a partial update may cover a region or use a partial waveform across the panel. Set 0 to disable count-based cleanup, not startup, recovery or manual full refreshes. Modes that always use full refreshes ignore this threshold.</div>
 
     <div class="form-check mt-3">
       <input class="form-check-input" type="checkbox" id="epaper_refresh_clock_on_minute_boundary" name="epaper_refresh_clock_on_minute_boundary">
       <label class="form-check-label" for="epaper_refresh_clock_on_minute_boundary">Refresh clock values on minute boundary</label>
-      <div class="form-text">Updates visible time bindings when the minute changes, even between passive binding checks.</div>
+      <div class="form-text">Rechecks visible time bindings when the minute changes, even between passive binding checks. Panel scheduling and an active refresh can delay the visible update.</div>
     </div>
   </div>
 </section>

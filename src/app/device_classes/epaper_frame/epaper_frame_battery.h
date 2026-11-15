@@ -1,4 +1,5 @@
-#pragma once
+#ifndef EPAPER_FRAME_BATTERY_H
+#define EPAPER_FRAME_BATTERY_H
 
 #include <stdint.h>
 
@@ -16,3 +17,5 @@ inline uint8_t epaper_frame_battery_percent(uint16_t mv) {
 		// Round to nearest 5%.
 		return (uint8_t)(((pct + 2u) / 5u) * 5u);
 }
+
+#endif

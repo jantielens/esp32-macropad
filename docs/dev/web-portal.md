@@ -304,6 +304,8 @@ rejection policy or increase any buffer capacity.
 - WiFi credentials not configured
 - Configuration reset
 - WiFi connection failed
+- A live Enable AP action requests direct device access; this uses Full Mode
+  rather than the restricted recovery wizard below.
 
 **Access:**
 - SSID: `ESP32-XXXXXX` (where XXXXXX is chip ID)
@@ -311,19 +313,29 @@ rejection policy or increase any buffer capacity.
 - Captive portal auto-redirects to configuration page
 
 **Features:**
-- One-page setup wizard (`setup` component, fragment `setup.fragment.html`) that handles WiFi SSID + password (required), friendly name, optional portal basic auth, and optional static IP. The wizard is the only Device-category nav item visible in AP mode and is selected automatically via the `ap_mode` + `primary.fragment` fields on `/api/portal/nav`.
+- One-page setup wizard (`setup` component, fragment `setup.fragment.html`) that handles WiFi SSID + password (required), friendly name, optional portal basic auth, and optional static IP. The wizard is the only Device-category nav item visible in recovery AP mode and is selected automatically via the `recovery_ap` + `primary.fragment` fields on `/api/portal/nav`.
 - WiFi SSID and password setup
 - Device name configuration
 - Fixed IP settings (optional)
+
+Boot-time provisioning, fallback, and Restart into AP retain this restricted
+portal. The AP owner's purpose distinguishes recovery from an action-enabled
+AP; the Wi-Fi transport alone does not determine portal navigation or login.
+Device info reports `ap_active`; navigation's `ap_mode` remains a transport
+indicator. Both expose `recovery_ap` for access policy and setup routing.
 
 ### Full Mode (WiFi Connected)
 
 **When it runs:**
 - Device successfully connected to WiFi network
+- An interactive device explicitly enabled its AP through `ap_enable`
 
 **Access:**
 - Device IP address (displayed in serial monitor)
 - mDNS hostname: `http://<device-name>.local`
+- For an action-enabled AP, join its network and use `http://192.168.4.1`.
+  It retains the existing AP password (empty permits an open AP) and the normal
+  configured Basic Authentication policy.
 
 **Features:**
 - All Core Mode features
@@ -908,11 +920,18 @@ every component in that custom section to the same category ID.
 
 **Sections:**
 - **⚡ Operating Mode**: Mode selection, duty-cycle wake interval, Wi-Fi backoff cap, and the recovery-portal auto-sleep. MQTT publish interval and payload scope live on the Network page in the MQTT card.
-- **BLE Advertising**: Burst count, advertising interval, and transmit power
+  `operating_mode` accepts `offline` on interactive firmware; Always-On remains
+  the default. Offline skips early Wi-Fi initialization and connection/fallback
+  routing but preserves normal runtime and supported BLE. Empty SSID is valid
+  for saved Offline configuration. Image-frame firmware retains its specialized
+  mode ownership and rejects Offline. Saving the mode requires reboot; manual
+  network commands never rewrite it.
+- **Power Savings** (`HAS_AUTO_SHUTDOWN`): Battery-only inactivity shutdown with one timeout field. Its fragment and standalone script are excluded from disabled builds. The enabled shell loads the script globally so deliberate interaction in any portal section counts without adding another combined-bundle variant flag.
+- **BLE Advertising**: Sensor burst count and advertising interval
   selection (only shown in Duty-Cycle BLE mode when firmware enables BLE).
-  Defaults are three repeats, 100 ms, and +9 dBm. Normal BLE wakes skip early
-  Wi-Fi initialization; config/recovery modes retain it. Saving marks a reboot
-  pending, and the next boot applies the selected power.
+  Defaults are three repeats and 100 ms. Shared transmit power lives under
+  Connectivity > Bluetooth. Normal BLE wakes skip early Wi-Fi initialization;
+  config/recovery modes retain it.
 - **Sensor & Display settings**: Thresholds, brightness, on-demand screen preview,
   and screen saver configuration. Interactive display builds expose screen
   rotation as a separate Rotation component under Display; changes take effect
@@ -1298,8 +1317,9 @@ not every authentication failure, redirect, or early error response is instrumen
 |--------|------|-------------|
 | `POST` | `/api/reboot` | Reboots without saving configuration. |
 | `POST` | `/api/sleep?seconds=N` | Requests one timed deep sleep, without saving configuration or changing the stored mode or cadence. |
+| `POST` | `/api/component/power-savings/activity` | Authenticated user-activity notification; `204`, available only with `HAS_AUTO_SHUTDOWN`. |
 
-Both routes use portal authentication. Sleep requires an ASCII decimal integer
+These routes use portal authentication. Sleep requires an ASCII decimal integer
 from 1 to 65535 seconds. It returns `400` for a missing or invalid duration,
 `409` when an update, configuration upload/write, or network transition prevents
 sleep, and `503` when main-loop dispatch cannot confirm admission.
@@ -1317,6 +1337,24 @@ saved Wake Interval and is not a configuration field. It does not implicitly
 save, show a reboot dialog, or start reconnection polling; success stops this
 tab's health polling. See the
 [user workflow](../user/device/updates-and-recovery.md#put-the-device-to-sleep-after-configuration).
+
+With `HAS_AUTO_SHUTDOWN`, `GET /api/config` exposes
+`auto_shutdown_timeout_seconds`, and `POST /api/config?no_reboot=1` saves and
+applies it live. Accept an integer or decimal integer string from 0 to 65535;
+0 disables the policy. Unsupported firmware omits the field, navigation,
+fragment, activity route, and script. `set_config` exposes the same live setting
+through MCP when available.
+
+The policy uses fresh shared battery external-power readings and runs only in
+Always-On or Offline mode. Physical input, authenticated mutation requests, MCP
+tool calls, and trusted portal events reset it; ordinary GET polling does not.
+OTA/configuration-write ownership and action continuations defer admission.
+Upload handlers rely on the shared authenticated-request activity reset, not
+upload-lifetime reservations. Shutdown can interrupt a stalled upload or file
+write after inactivity expires; uploads are not guaranteed to finish.
+Board shutdown drivers recheck physical external power before removing power,
+and the Sticky driver waits for active e-paper presentation to drain.
+E-Paper Frame firmware cannot enable this policy.
 
 ### Pad Configuration
 
@@ -1569,6 +1607,19 @@ last-good values until reboot; fields with no successful sample are unavailable.
 Boolean bindings resolve as `0` or `1`, while API/MQTT retain JSON booleans.
 See the [sensor registration contract](sensors.md#sampling-contract).
 
+Battery providers use the separate `[battery:key;format]` scheme, compiled only
+with `HAS_BATTERY_INFO`. Its canonical keys validate on battery-enabled builds;
+unsupported or unavailable
+measurements use fallbacks. Key-doc groups identify board support, and provider
+notes explain measurement/averaging and calibration limits. Text status and
+numeric values carry explicit authoring types. Battery readings share the sensor
+manager's scheduling and lock, but use a typed cache with bounded freshness
+rather than generic sensors' indefinite last-good retention.
+Disabled builds omit battery metadata from the portal and MCP reference and
+resolve battery tokens as `ERR:unknown`, even with a fallback. The portal uses
+generic binding assets; there are no separate battery assets to include.
+See the [shared battery contract](sensors.md#shared-battery-contract).
+
 `GET /api/bindings?docs=1` adds the user-facing reference that each scheme
 registers next to its resolver (`BindingSchemeDoc`): `category`, `summary`,
 `params` (`name`, `desc`, `required`, optional `default`), `key_docs` (`key`,
@@ -1755,6 +1806,68 @@ Returns comprehensive device information.
 - Add `?catalog=1` to request the optional `catalog` array. The bare `/api/info` response omits it to keep startup and polling responses small.
 - The catalog is generated by enumerating registered `ActionTypeDef` descriptors. An action module's `describe()` callback supplies its portal and MCP presentation metadata and documented fields; `available()` controls support and `validate()` defines authoring validation.
 - Each catalog entry contains `type`, `group`, and `label`. Multi-command entries also contain `commands`, an array of `{id, label}` objects; device-class entries may additionally contain `command_families`.
+- `bthome` is available with `HAS_BLE || HAS_BLE_HID`, independently of MQTT
+  and keyboard transport. **Connectivity > Send BTHome event** uses flat JSON
+  `{"type":"bthome","button":4,"event":"long_press"}`. `button` is a literal
+  integer from 1 to 10 (default 1); `event` is `press` (default),
+  `double_press`, or `long_press`. Both selectors use registry-authored generic
+  editor metadata shared with MCP. The main-loop-owned `bthome_events.cpp`
+  sends unencrypted BTHome v2 advertisements with all ten button positions,
+  a per-activation packet ID, and device-wide configurable bursts (defaults:
+  350 ms at 100 ms intervals, +9 dBm). It
+  initializes the core BLE backend lazily; the opt-in NimBLE-Arduino
+  [broadcast profile](build-and-release-process.md#ble-backend-and-broadcast-profile) prepares the host
+  before Wi-Fi in Always-On and Offline modes (or when normal runtime starts after setup).
+  The core backend pauses/restores HID advertising without disconnecting
+  its host, and uses nonconnectable NimBLE GAP advertising even when GATT
+  connection slots are full. Its four-entry waiting FIFO rejects newest on
+  overflow; queue admission is synchronous, not remote completion. OTA activity
+  and epoch changes cancel pending work.
+- Device commands `wifi_connect`, `wifi_disconnect`, `wifi_off`, `ap_enable`, and `ap_disable`
+  are registered by `system_action.cpp` and exposed through MCP's
+  `system_command`. They replace `wifi_reconnect` without an alias. Admission
+  holds the existing network-transition guard, excluding OTA/config writes;
+  duplicates are no-ops and conflicts fail without cancelling the current work.
+  The main-loop Wi-Fi owner starts one transient FreeRTOS worker for radio
+  transitions, using a 6 KiB internal stack because initialization can touch
+  flash/NVS. A manual Connect retains that worker until association completes or
+  times out, permitting teardown without another allocation. The main loop owns
+  readiness and the ten-second association deadline, which starts after radio
+  initialization, scanning, and `WiFi.begin()`. The worker reuses the boot
+  strongest-AP selector and directed BSSID/channel connection, falling back to
+  SDK selection if scanning cannot select an AP. ESP32-P4 retains coprocessor
+  selection without a directed scan. There is no synchronous scan or blocking
+  association wait on the main loop.
+  Worker resources are released after task deletion; normal online boot still
+  uses its optimized early initialization and strongest-AP selection.
+  Offline uses normal automatic recovery without outage reboot.
+  Portal initialization explicitly initializes the software TCP/IP stack before
+  opening the AsyncTCP listener, including on Wi-Fi-free Offline boots. This
+  creates software networking resources but does not enable the Wi-Fi radio;
+  those resources remain available for later Connect or Enable AP commands.
+  Live AP operation neither replaces the pad nor changes power/portal-idle mode.
+  `wifi_off` shuts down either station or AP access, including captive DNS and
+  mDNS, suppresses reconnection, and leaves BLE and the saved operating mode
+  unchanged. The transport-specific Disconnect and Disable AP commands remain.
+  Health bindings consume a bounded synchronized network snapshot at their
+  existing two-second cadence. The network owner refreshes station SSID/IP on
+  connection transitions and every two seconds, formatting IPv4 without
+  temporary strings; lifecycle states still update on each loop. The snapshot
+  hostname is initialized from boot configuration before portal tasks start
+  and remains unchanged until reboot, avoiding reads of mutable configuration
+  during polling. `health:wifi_state` covers OFF, STARTING,
+  CONNECTING, CONNECTED, RECONNECTING, AP, STOPPING, and ERROR. ERROR means radio
+  shutdown failed, not an ordinary connection failure followed by successful
+  shutdown. `wifi_ssid` and `wifi_ip` expose the active network or AP, while
+  `wifi_rssi` is available only for a network connection. `wifi_hostname` is the
+  configured hostname; `wifi_ap_active` and `wifi_ap_purpose` expose AP activity
+  and INTERACTIVE/RECOVERY purpose. `wifi_last_error` retains network, AP, and
+  radio failures until successful connection, AP startup, or reboot.
+  Unavailable details return the standard binding fallback. Retired keys
+  `wifi_status`, `ap_active`, `ap_ssid`, `ap_ip`, `rssi`, `ip`, and `hostname`
+  have no health-binding aliases; HTTP telemetry field names are unchanged.
+  AP passwords are not included. Builder titles stay short; value semantics
+  live in the generated reference's Wi-Fi states and details section.
 - Actions declare named text fields through `ActionTypeDef::fields` and
   `action_visit_field()`. Flags independently enable live bindings, event tokens,
   and binding-overflow rejection. Event-capable fields are projected as
@@ -2049,6 +2162,13 @@ not report a PSRAM largest-block value on those boards.
   `null` when not connected
 - `*_min_window` / `*_max_window`: sampled continuously by firmware and returned as a multi-client-safe snapshot (captures short-lived dips/spikes)
 - `sensors`: object containing optional sensor values (empty object when no sensors are available)
+  and supported battery readings. Battery numeric values expire after three
+  sampling intervals without success, excluding observed OTA pauses.
+  `battery_status` is text; `external_power_present` is a JSON boolean.
+  Invalid/inapplicable status and runtime estimates become `null` immediately.
+  Unsupported battery fields are omitted. See the
+  [shared battery contract](sensors.md#shared-battery-contract) for units and
+  provider-specific sampling.
 - `runtime`: last checkpoints from the Arduino main loop and LVGL task, plus
   display-lock ownership and wait state. A growing `*_age_ms` identifies the
   task or lock wait that stopped making progress. `lvgl_extension` identifies
@@ -2356,7 +2476,10 @@ timezone and alarm session.
   "wifi_backoff_max_seconds": 900,
   "ble_burst_count": 3,
   "ble_adv_interval_ms": 100,
-  "ble_tx_power_dbm": 9,
+  "bluetooth_tx_power_dbm": 9,
+  "bluetooth_active_tx_power_dbm": 9,
+  "bthome_event_burst_ms": 350,
+  "bthome_event_adv_interval_ms": 100,
   "mqtt_publish_scope": "sensors_only",
 
   "basic_auth_enabled": false,
@@ -2444,9 +2567,20 @@ timezone and alarm session.
   Assistant credentials. The e-paper service endpoint follows the same
   write-only pattern with `epaper_service_token_set`.
 - `ha_url` is the Home Assistant base URL used by the **Home Assistant Service** button action. `ha_token` (the long-lived access token) is never returned by `GET /api/config`.
-- `ble_burst_count`, `ble_adv_interval_ms`, and `ble_tx_power_dbm` are present
-  only when `HAS_BLE` is enabled. TX power is a signed dBm value, not an ESP-IDF
-  enum index. It is stored in NVS and also exposed by MCP `get_config`.
+- `ble_burst_count` and `ble_adv_interval_ms` are present only when `HAS_BLE`
+  is enabled. These timings remain sensor-only, stored in NVS and also
+  exposed by MCP `get_config`.
+- `bluetooth_tx_power_dbm` is the shared saved power in signed dBm, exposed
+  by the API and MCP `get_config` on supported backends. The API also returns
+  `bluetooth_active_tx_power_dbm`, the boot-latched selection, so pending-reboot
+  feedback survives fragment reloads. `caps.bluetooth_tx_power` reports support;
+  hosted HCI omits the power fields and shows a co-processor-control notice.
+- `bthome_event_burst_ms` and
+  `bthome_event_adv_interval_ms` are present with `HAS_BLE || HAS_BLE_HID`,
+  also exposed by MCP `get_config`. `caps.bthome_events` reports this
+  capability independently of keyboard transport. The `bluetooth` nav component
+  registers under Connectivity and serves `bluetooth.fragment.html` through
+  the normal section API; the component and HTML asset share that gate.
 - MCP fields (`mcp_enabled`, `mcp_control_enabled`, `mcp_token_set`) are present when `HAS_MCP` is enabled. The MCP bearer token itself is never returned — only `mcp_token_set` (boolean) indicates whether one has been generated. A `caps.mcp` flag in the capability map reflects the build flag so the portal can hide the MCP card when compiled out.
 
 Keyboard builds expose `keyboard_transport` (saved preference),
@@ -2520,7 +2654,7 @@ boards, native USB/OTG serves HID and the USB-UART connector serves flashing and
 diagnostics; see the [user connector guide](../web-portal-guide.md#keyboard).
 Off skips BLE keyboard initialization,
 rejects key actions, and reports `keyboard_status: "disabled"`. Independent BLE
-telemetry remains unaffected. Ending HID reports cannot remove its descriptors,
+telemetry and BTHome button events remain available. Ending HID reports cannot remove its descriptors,
 so this change also requires reboot. Windows may retain disconnected entries.
 USB is compiled for `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`,
 `jc4880p433-sd`, `jc3248w535`, `jc3636w518`, `jc3636w518-sd`, and `esp32-p4-lcd4b`.
@@ -2780,11 +2914,34 @@ Save new configuration. Device reboots after successful save.
   after OTA, not to every sound. Zero skips the wait and can clip short tones.
   Forced muting for OTA and hardware failures is unaffected. The buffer-drain
   and 100 ms idle grace timing remain internal.
-- `ble_tx_power_dbm` accepts an integer or integer string: `-12`, `-9`, `-6`,
+- `bluetooth_tx_power_dbm` accepts an integer or decimal integer string:
+  `-12`, `-9`, `-6`,
   `-3`, `0`, `3`, `6`, or `9`. Unsupported values return HTTP 400 before any
   configuration fields are updated. Omission leaves the setting unchanged.
-  It takes effect at BLE initialization after reboot. Use `?no_reboot=1` to
-  save without immediately restarting, as the portal does.
+  It defaults to +9 and takes effect at shared BLE initialization after reboot.
+  Power applies to BTHome button events, HID, and sensor telemetry, not just
+  advertising. Hosted-HCI power writes return HTTP 400. Use `?no_reboot=1`
+  to save without immediately restarting, as the portal does.
+- BTHome event settings accept integer JSON values or decimal integer strings.
+  Burst duration
+  accepts 100-1000 ms (default 350); interval accepts 20-300 ms (default 100).
+  The merged duration must be at least three intervals. Partial updates retain
+  omitted fields; booleans, null, fractions, junk, overflow, unsupported
+  capabilities, or an invalid merged tuple return HTTP 400 before mutation.
+  Shared power and event timing persist together as one five-byte NVS value
+  (`bt_settings`), so a failed write cannot persist timing without power.
+  Missing records use +9 dBm and 350/100 ms; corrupt records log a warning
+  and reset all three values to those defaults. This greenfield format does
+  not import the earlier separate power or timing keys.
+  Failed Bluetooth writes preserve the prior persisted Bluetooth record,
+  event config, and runtime snapshot.
+  Successful saves stage a coherent snapshot for the main task without
+  initializing BLE. Each queued event captures the latest snapshot at burst
+  start; an active burst keeps its original timing. Each Bluetooth card saves
+  only its own fields with `?no_reboot=1`. Event timing includes the collapsed
+  Advanced interval and requires no reboot; power saves mark reboot pending
+  when the saved choice differs from the boot-latched value. Event bursts do
+  not override radio power. Sensor timing and HID transport are unchanged.
 - Write-only credentials use the same preservation rule: an empty string keeps
   the existing value, while a non-empty value replaces it. `POST /api/config`
   cannot clear a stored credential.
@@ -3264,6 +3421,27 @@ root (`/`) cannot be deleted. Returns `404` for a missing path and
 `{"success":true}` after a successful deletion. The Camera **Snapshots** view
 uses this endpoint for individual images, a dated camera-roll folder, and the
 latest snapshot copy.
+
+### Voice Clips API
+
+The `voice-clips` component and its fragment and script require
+`HAS_VOICE_CLIPS`. The normal portal authentication applies.
+
+* `GET /api/component/voice-clips/list` returns cached indexed clip metadata.
+* `GET /api/component/voice-clips/status` returns recorder state, error,
+  duration, backend, and cached total/free capacity.
+* `GET /api/component/voice-clips/file?id=<id>` streams an indexed WAV.
+  Add `download=1` for an attachment. A single closed, open-ended, or suffix
+  byte range returns `206` with `Content-Range`; an invalid or unsatisfiable
+  range returns `416`. Responses advertise `Accept-Ranges: bytes`.
+* `DELETE /api/component/voice-clips/delete?id=<id>` removes an indexed clip.
+  An active reader returns `409`; missing clips return `404`.
+
+IDs are 16 lowercase hexadecimal characters. Generic Storage and MCP access
+can browse the directory and read its files. Generic Storage deletion does not
+coordinate with the recorder or update its index. Manual firmware upload and
+factory reset return a retryable `409` while recorder cancellation is pending,
+or `503` if it cannot stop safely.
 
 ---
 
@@ -4299,6 +4477,11 @@ The camera components demonstrate this pattern: they advertise
 Their source assets remain outside `portal.js.bundle`, so non-camera builds do
 not embed or serve camera payloads.
 
+The Bluetooth component uses the same pattern with `/portal-bluetooth.js`.
+Its fragment, script, handler, and route share the `HAS_BLE || HAS_BLE_HID`
+gate. Power and event validation, fragment initialization, and saved-value
+updates stay in that script rather than the shared configuration bundle.
+
 **Module organization:**
 
 | Category | Files | Purpose |
@@ -4435,7 +4618,7 @@ If WiFi fails to connect after firmware update or reboot:
 Headless sensor builds (`!HAS_DISPLAY && !IS_EPAPER_FRAME`) configured for
 `duty_cycle_mqtt` or `duty_cycle_ble` temporarily select `PowerMode::Config`
 on any reset other than `ESP_RST_DEEPSLEEP`. They connect to saved Wi-Fi,
-falling back to the setup AP if needed, without modifying `operating_mode`.
+falling back to the recovery AP if needed, without modifying `operating_mode`.
 Explicit Config/AP entry requests take precedence. Always-on and device-class
 duty-cycle modes retain their existing boot behavior.
 
@@ -4449,11 +4632,11 @@ wake. Other recovery entries retain their existing sleep duration, equal to
 the portal timeout.
 
 If `POWERON_CONFIG_BURST_ENABLED` is enabled, two qualifying power-on boots
-force the setup AP. The first arms an NVS marker, which expires after about
+force the recovery AP. The first arms an NVS marker, which expires after about
 ten seconds of uptime or is cleared before intentional sleep. A second
 `ESP_RST_POWERON` while armed consumes the marker and requests the AP.
 Non-power-on resets clear the marker. This remains a fallback when a direct
-setup AP entry is needed; it does not change the saved operating mode.
+recovery AP entry is needed; it does not change the saved operating mode.
 
 ## Security Considerations
 

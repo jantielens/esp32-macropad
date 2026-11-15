@@ -48,6 +48,9 @@ With [MQTT configured](../../integrations/mqtt.md), retained
 `<base>/epaper/state` represents the latest delivered summary.
 It can be older than the physical image after offline cached wakes.
 Offline-cycle counts describe the last report interval, not lifetime totals.
+Battery-capable Frames also report `battery_voltage` in volts and
+`battery_percentage` when available; unavailable or stale readings are null.
+The existing `battery_mv` and `battery_pct` fields remain available.
 
 `<base>/epaper/wake` carries non-retained per-wake events when delivery is possible.
 A small RTC journal queues up to 16 records and replays oldest first at the next

@@ -15,6 +15,7 @@
 #include "time_service.h"
 #include "ota_activity.h"
 #include "wifi_manager.h"
+#include "ble_backend.h"
 #if HAS_EXTERNAL_DATA
 #include "external_data.h"
 #endif
@@ -61,6 +62,9 @@
 #define KEY_DC_WAKE        "dc_wake_s"
 #define KEY_MQTT_PUB       "mqtt_pub_s"
 #define KEY_PORTAL_IDLE    "portal_idle"
+#if HAS_AUTO_SHUTDOWN
+#define KEY_AUTO_SHUTDOWN "auto_shutdown"
+#endif
 #define KEY_WIFI_BACKOFF_MAX "wifi_bomax"
 #define KEY_MQTT_SCOPE     "mqtt_scope"
 #define KEY_BACKLIGHT_BRIGHTNESS "bl_bright"
@@ -95,7 +99,6 @@
 #if HAS_BLE
 #define KEY_BLE_BURST_COUNT     "ble_brst"
 #define KEY_BLE_ADV_INTERVAL_MS "ble_adv"
-#define KEY_BLE_TX_POWER_DBM    "ble_tx_dbm"
 #endif
 
 // Web portal Basic Auth
@@ -372,8 +375,11 @@ bool config_manager_load(DeviceConfig *config) {
 		#if HAS_BLE
 		config->ble_burst_count = BLE_TELEMETRY_DEFAULT_BURST_COUNT;
 		config->ble_adv_interval_ms = BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS;
-		config->ble_tx_power_dbm = CONFIG_DEFAULT_BLE_TX_POWER_DBM;
 		#endif
+#if HAS_BLE || HAS_BLE_HID
+		config->bluetooth_tx_power_dbm = CONFIG_DEFAULT_BLUETOOTH_TX_POWER_DBM;
+		config->bthome_event = {};
+#endif
 
 #if HAS_DISPLAY
 		config->boot_appearance_font_size = BOOT_APPEARANCE_DEFAULT_FONT_SIZE;
@@ -420,6 +426,9 @@ bool config_manager_load(DeviceConfig *config) {
 				config->duty_cycle_wake_seconds = 120;
 				config->mqtt_publish_interval_seconds = 120;
 				config->portal_idle_timeout_seconds = CONFIG_DEFAULT_PORTAL_IDLE_SECONDS;
+#if HAS_AUTO_SHUTDOWN
+				config->auto_shutdown_timeout_seconds = AUTO_SHUTDOWN_DEFAULT_SECONDS;
+#endif
 				config->wifi_backoff_max_seconds = 900;
 
 				strlcpy(config->mqtt_publish_scope, "sensors_only", CONFIG_MQTT_SCOPE_MAX_LEN);
@@ -543,6 +552,9 @@ bool config_manager_load(DeviceConfig *config) {
 		config->duty_cycle_wake_seconds = preferences.getUShort(KEY_DC_WAKE, 120);
 		config->mqtt_publish_interval_seconds = preferences.getUShort(KEY_MQTT_PUB, 120);
 		config->portal_idle_timeout_seconds = preferences.getUShort(KEY_PORTAL_IDLE, CONFIG_DEFAULT_PORTAL_IDLE_SECONDS);
+#if HAS_AUTO_SHUTDOWN
+		config->auto_shutdown_timeout_seconds = preferences.getUShort(KEY_AUTO_SHUTDOWN, AUTO_SHUTDOWN_DEFAULT_SECONDS);
+#endif
 		config->wifi_backoff_max_seconds = preferences.getUShort(KEY_WIFI_BACKOFF_MAX, 900);
 
 		preferences.getString(KEY_MQTT_SCOPE, config->mqtt_publish_scope, CONFIG_MQTT_SCOPE_MAX_LEN);
@@ -553,8 +565,12 @@ bool config_manager_load(DeviceConfig *config) {
 		#if HAS_BLE
 		config->ble_burst_count = preferences.getUChar(KEY_BLE_BURST_COUNT, BLE_TELEMETRY_DEFAULT_BURST_COUNT);
 		config->ble_adv_interval_ms = preferences.getUShort(KEY_BLE_ADV_INTERVAL_MS, BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS);
-		config->ble_tx_power_dbm = preferences.getChar(KEY_BLE_TX_POWER_DBM, CONFIG_DEFAULT_BLE_TX_POWER_DBM);
 		#endif
+#if HAS_BLE || HAS_BLE_HID
+		const auto bluetooth = bthome::load_bluetooth_settings(preferences, CONFIG_DEFAULT_BLUETOOTH_TX_POWER_DBM);
+		config->bluetooth_tx_power_dbm = bluetooth.tx_power_dbm;
+		config->bthome_event = bluetooth.events;
+#endif
 		
 		// Load display settings
 		config->backlight_brightness = preferences.getUChar(KEY_BACKLIGHT_BRIGHTNESS, 100);
@@ -820,6 +836,13 @@ static bool save_config_locked(const DeviceConfig *config) {
 		preferences.putUShort(KEY_DC_WAKE, config->duty_cycle_wake_seconds);
 		preferences.putUShort(KEY_MQTT_PUB, config->mqtt_publish_interval_seconds);
 		preferences.putUShort(KEY_PORTAL_IDLE, config->portal_idle_timeout_seconds);
+#if HAS_AUTO_SHUTDOWN
+		if (preferences.putUShort(KEY_AUTO_SHUTDOWN, config->auto_shutdown_timeout_seconds) != sizeof(uint16_t)) {
+				LOGE("Config", "Failed to persist auto-shutdown timeout");
+				preferences.end();
+				return false;
+		}
+#endif
 		preferences.putUShort(KEY_WIFI_BACKOFF_MAX, config->wifi_backoff_max_seconds);
 
 		preferences.putString(KEY_MQTT_SCOPE, config->mqtt_publish_scope);
@@ -827,7 +850,6 @@ static bool save_config_locked(const DeviceConfig *config) {
 		#if HAS_BLE
 		preferences.putUChar(KEY_BLE_BURST_COUNT, config->ble_burst_count);
 		preferences.putUShort(KEY_BLE_ADV_INTERVAL_MS, config->ble_adv_interval_ms);
-		preferences.putChar(KEY_BLE_TX_POWER_DBM, config->ble_tx_power_dbm);
 		#endif
 
 		// Save display settings
@@ -944,6 +966,13 @@ static bool save_config_locked(const DeviceConfig *config) {
 #if HAS_EXTERNAL_DATA
 		if (preferences.putBytes(KEY_EXTERNAL_DATA, &external, sizeof(external)) != sizeof(external)) {
 				LOGE("Config", "Failed to persist external data sources");
+				preferences.end();
+				return false;
+		}
+#endif
+#if HAS_BLE || HAS_BLE_HID
+		if (!bthome::save_bluetooth_settings(preferences, {config->bluetooth_tx_power_dbm, config->bthome_event})) {
+				LOGE("Config", "Failed to persist Bluetooth settings");
 				preferences.end();
 				return false;
 		}
@@ -1160,9 +1189,14 @@ bool config_manager_is_valid(const DeviceConfig *config) {
 		if (strcmp(config->wifi_failure_mode, "ap") != 0 &&
 				strcmp(config->wifi_failure_mode, "offline") != 0) return false;
 		if (!wifi_ap_password_is_valid(config->ap_password)) return false;
+#if HAS_BLE || HAS_BLE_HID
+		if (!bthome::valid_event_settings(config->bthome_event)) return false;
+		if (!bluetooth_power_valid(config->bluetooth_tx_power_dbm)) return false;
+#endif
 
 		const PowerMode mode = power_config_parse_power_mode(config);
-		const bool needs_wifi = (mode != PowerMode::DutyCycle && mode != PowerMode::DutyCycleBle);
+		const bool needs_wifi = (mode != PowerMode::Offline &&
+				mode != PowerMode::DutyCycle && mode != PowerMode::DutyCycleBle);
 
 		if (needs_wifi && strlen(config->wifi_ssid) == 0) return false;
 
@@ -1236,12 +1270,19 @@ LOGI("Config", "Power: mode=%s dc_wake=%us idle=%us backoff_max=%us",
 		);
 
 		LOGI("Config", "MQTT scope: %s", config->mqtt_publish_scope);
+#if HAS_AUTO_SHUTDOWN
+		LOGI("Config", "Battery auto-shutdown: %us (0 disables)", unsigned(config->auto_shutdown_timeout_seconds));
+#endif
+#if HAS_BLE || HAS_BLE_HID
+		LOGI("Config", "Bluetooth power: %+d dBm (applied at boot)", int(config->bluetooth_tx_power_dbm));
+		LOGI("Config", "BTHome events: burst=%ums interval=%ums",
+			unsigned(config->bthome_event.burst_ms), unsigned(config->bthome_event.adv_interval_ms));
+#endif
 
 #if HAS_BLE
-		LOGI("Config", "BLE telemetry: burst=%u interval=%ums TX=%+d dBm",
+		LOGI("Config", "BLE telemetry: burst=%u interval=%ums",
 			(unsigned)config->ble_burst_count,
-			(unsigned)config->ble_adv_interval_ms,
-			(int)config->ble_tx_power_dbm);
+			(unsigned)config->ble_adv_interval_ms);
 #endif
 
 #if HAS_MQTT

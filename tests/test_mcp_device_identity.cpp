@@ -58,7 +58,7 @@ static void test_decisions() {
           decide(false, false, false, "set_external_data_source", nullptr, ACTUAL, ACTUAL) == MCP_IDENTITY_ALLOW,
           "external source configuration requires a matching assertion");
     CHECK(decide(false, true, false, "system_command", "reboot", nullptr, ACTUAL) == MCP_IDENTITY_REJECT_MISSING &&
-          decide(false, true, false, "system_command", "wifi_reconnect", nullptr, ACTUAL) == MCP_IDENTITY_REJECT_MISSING &&
+          decide(false, true, false, "system_command", "wifi_connect", nullptr, ACTUAL) == MCP_IDENTITY_REJECT_MISSING &&
           decide(false, true, false, "system_command", "screensaver", nullptr, ACTUAL) == MCP_IDENTITY_REJECT_MISSING,
           "all system commands require assertion");
     CHECK(decide(false, false, false, "scale_control", "tare", nullptr, ACTUAL) == MCP_IDENTITY_REJECT_MISSING &&

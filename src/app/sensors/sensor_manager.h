@@ -4,6 +4,9 @@
 #include "board_config.h"
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#if HAS_BATTERY_INFO
+#include "../battery_info.h"
+#endif
 
 #if HAS_MQTT
 class MqttManager;
@@ -27,6 +30,9 @@ struct SensorCallbacks {
 	bool include_in_mqtt = true;
 	const SensorField *fields;
 	size_t field_count;
+#if HAS_BATTERY_INFO
+	const BatteryProvider *battery = nullptr;
+#endif
 #if HAS_MQTT
 	void (*publish_ha)(MqttManager &mqtt);
 #endif
@@ -49,6 +55,12 @@ void sensor_manager_loop();
 
 void sensor_manager_sample_once();
 bool sensor_manager_get_number(const char *key, double *value, bool *is_bool = nullptr);
+#if HAS_BATTERY_INFO
+void sensor_manager_get_battery(BatterySnapshot &snapshot);
+// For event-driven battery providers whose owning driver already samples.
+void sensor_manager_record_battery(const BatterySample &sample);
+void sensor_manager_append_battery_mqtt(JsonObject &doc);
+#endif
 size_t sensor_manager_field_count();
 const SensorField *sensor_manager_field_at(size_t index);
 

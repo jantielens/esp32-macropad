@@ -72,6 +72,128 @@ graph TD
 
 ## Display Driver HAL
 
+### reTerminal Sticky Interactive
+
+`DISPLAY_DRIVER_STICKY_EPAPER` selects a buffered 800 x 480 SSD1677/SSD2677
+driver, compiled through `display_drivers.cpp`. Its board-specific implementation
+lives under `src/boards/reterminal-sticky-interactive/drivers/display/`, rather than the
+shared driver collection. The driver-scoped protocol subset in its
+`sticky_epaper/` subdirectory adapts Seeed_GFX2 revision
+`0e8bac1188cb915d5ea26ea16d538aed13b3cf48` (MIT; retained license alongside
+the adapted code). It does not import the vendor graphics framework or demo
+application. Hardware acceptance is pending for both controllers.
+
+The optional `BOARD_EARLY_POWER_INIT` hook runs first in `setup()` only for
+boards that declare it. Sticky asserts GPIO45 hold before GPIO46 lock using
+checked GPIO operations; errors are reported once logging is available.
+Other boards retain their startup order. `BOARD_HARDWARE_SOURCE` owns safe
+peripheral states, Wire0 initialization under `i2c_bus`, and rail settling.
+The display/touch preparation hooks refuse initialization after a board error.
+
+The SD-primary Sticky variant initializes one board-owned SPI instance before
+display startup. Display and SD transfers use its transaction lock and separate
+chip selects; panel reads and writes clock a deselected card before selecting
+the panel so the card can release MISO. SD mount failure powers down the slot
+without ending the shared bus. Panel teardown also leaves the bus running.
+This shared-bus behavior requires physical validation.
+
+Panel probing uses command 0x70, then a bounded reset BUSY-transition fallback
+for 0x00/0xff reads. Unlike the vendor's steady-level fallback, a disconnected
+or static BUSY line is not accepted as presence evidence. A failed initialization
+may retry the other controller only after a matching BUSY transition.
+Unwired/invalid SSD2677 temperature reads produce a warning and use the vendor's
+25 C waveform baseline, not a sensor measurement.
+
+LVGL flushes update only the drawing buffer. Presentation owns a separate
+in-flight buffer and a last-completed buffer/baseline. All three are checked
+PSRAM allocations: 144,000 bytes total in B&W or 576,000 bytes in grayscale.
+B&W uses 1-bpp snapshots; grayscale stores four levels as 4-bpp values
+0/5/10/15, preserving the shared snapshot ABI. Software rotation and clipping
+precede controller packing. The vendor's net native-X mirror is applied once
+for mono and not for grayscale; on-glass orientation remains an acceptance gate.
+
+Conversion traverses packed native bytes, merging each byte once rather than
+repeatedly touching rotated pixels in PSRAM. Clipped edge bits/nibbles are
+preserved. RGB565 luminance uses the same 256-byte compile-time channel table
+as IT8951, with unchanged rounding and logical-coordinate dithering.
+Controller packing reverses mono bytes/bits, spreads SSD2677 old/new bits,
+and extracts Gray4 levels/planes without per-pixel framebuffer lookups.
+Transfers pack rows into an 800-byte panel-owned buffer, with cancellation
+checks per row and before submission. A cumulative 4 ms upload work budget
+triggers one-tick sleeps between bounded batches, after releasing CS and ending
+the transaction. The budget spans both SSD1677 planes. Writes use experimental
+20 MHz SPI, while reads remain at 4 MHz, MSB-first, mode 0. Waveforms and
+full-frame payload sizes are unchanged.
+
+SSD1677 reuses base preparation only between consecutive successful B&W
+partials. The presentation task owns the cache flag, clears it before risky
+work and republishes it only after physical completion. Full/grayscale,
+lifecycle, reset, rail changes and incomplete work invalidate it. Each plane
+explicitly restores the full RAM window and X/Y counters; partial border and
+update mode are still programmed every time. Cached uploads retain the ready
+check.
+
+SSD2677 uses the same validity flag with a render-mode, full/partial-intent and
+waveform-code key. Each presentation explicitly restores the initialized
+`0xE0=0x10` selection before a fresh temperature read, preserving the existing
+buckets and 25 C fallback. A changed or invalid key resets and initializes
+before latching; compatible updates skip only reset/static setup. Every update
+retains the `0xE0=0x12` waveform latch, checked BUSY wait, 10 ms settle,
+full-frame transfer and checked power-off. Only successful physical completion
+and cleanup validate the key. Temperature/latch/setup errors and cancellation
+invalidate it. Retained-state temperature behavior and image quality still
+require SSD2677 hardware validation; normal power-off policy is unchanged.
+
+SSD1677 receives full previous/current mono planes, or two Gray4 bitplanes.
+SSD2677 receives a full 2-bpp mono/gray frame or full-frame old/new transition
+pairs for partial waveforms, with 800 x 680 internal scan geometry and
+800 x 480 visible pixels. Grayscale always refreshes fully. Background updates
+retain configured cadence and settling. Committed interaction frames bypass
+these software waits, but not hardware BUSY, required power transitions,
+recovery or periodic/manual full cleanup.
+Unchanged content causes no physical update. Failed/interrupted presentations
+invalidate the baseline and retry full on the next presentation request.
+Availability reflects successful initialization, not the last presentation result,
+so a transient timeout does not block the manual full-refresh recovery path.
+
+BUSY waits are bounded to 15 seconds per operation and yield to FreeRTOS.
+Refresh completion observes assertion followed by release; a missing assertion
+within the experimental 20 ms window is an error. Ordinary command-ready waits
+allow one propagation tick without requiring a visible pulse.
+OTA is checked before work, while settling/waiting, and between transferred
+rows. Cancellation closes the driver's own SPI transaction and defers further
+rendering. An already-started SSD2677 drive session still finishes its bounded
+ready/power-off cleanup, yielding without pausing OTA transport or another task.
+If SSD2677 drive cleanup fails, the driver cuts the display rail, allows 100 ms off, and
+restores it with 100 ms settling before the next full-refresh retry.
+
+With `HAS_AUTO_SHUTDOWN`, the board's shutdown request reserves OTA activity,
+and an active-presentation counter keeps the power latch on until `present()`
+has returned, including refresh cancellation and panel cleanup. Automatic
+shutdown also drains the current LVGL frame under its existing display lock.
+Before taking that shutdown reservation, the inactivity policy wakes display
+sleep and shows a non-expiring **Powered off automatically** notification.
+The dialog's generation identifies the owned notice; its interaction request
+sequence is acknowledged only after a successful physical presentation, or
+when the same pixels are already on the panel. Failed refreshes retain the
+request through retry. The policy reserves a continuation while polling without
+blocking the Arduino loop and proceeds without the notice after 60 seconds.
+The hardware shutdown retains its own continuation watchdog. New activity, power
+changes, or competing OTA/configuration work cancel preparation. Failed
+shutdown clears only the policy's own notification, not a replacement dialog.
+
+GT911 uses Wire1 SDA3/SCL2 at 400 kHz after touch power has settled for 250 ms.
+Wire0 remains on SDA1/SCL0 for later sensor adapters. The board-gated
+`TOUCH_GT911_CONFIG_ORIENTATION` option reads the GT911 resolution without
+programming it: native landscape passes through; portrait swaps X/Y without
+inversion before existing calibration/user rotation. This aligns Sticky's
+touch coordinates with the display at every user rotation.
+Unreadable/unsupported configuration
+or out-of-range coordinates report an error rather than synthesizing input.
+A fully read frame with invalid coordinates is acknowledged before discarding
+it, allowing the controller to deliver a subsequent release or valid contact.
+Existing boards leave this option disabled and retain their original mapping.
+
 ### StopWatch AMOLED Bring-Up
 
 `m5stack-stopwatch` uses a CO5300 adapter over the existing Arduino_GFX QSPI
@@ -293,7 +415,9 @@ shared I2C. Version 1 selects ST7121 DSI timing and version 3 selects ST7123;
 unknown versions leave the display and touch unavailable. The older
 ILI9881C/GT911 hardware is not supported. The DSI driver uses the existing
 PSRAM framebuffer and asynchronous rendering path; panel command payloads
-remain in flash. The ST touch driver reads bounded 7-byte contact records and
+remain in flash. The display and touch adapters and licensed panel command
+table live in `src/boards/m5stack-tab5/drivers/`, shared with the SD variant;
+the MIPI DSI base remains central. The ST touch driver reads bounded 7-byte contact records and
 reports I2C errors distinctly from releases. It reads up to 10 controller records
 and reports up to the configured contact capacity. Display and touch have been
 observed on Tab5; the SD variant remains unverified.
@@ -301,7 +425,8 @@ observed on Tab5; the SD variant remains unverified.
 ### Inkplate 6 Flick LVGL
 
 `inkplate6flick-interactive` is an experimental always-on e-paper target. Its Inkplate
-driver is buffered: LVGL flushes update a framebuffer, then a presentation task
+display and touch adapters live in `src/boards/inkplate6flick-interactive/drivers/`.
+The display driver is buffered: LVGL flushes update a framebuffer, then a presentation task
 coalesces changes before a physical waveform. B/W mode uses partial updates with
 periodic full refreshes; grayscale uses full waveforms. The Cypress touch driver
 continues polling while a presentation is pending. This target uses a no-OTA
@@ -313,14 +438,38 @@ and touch drivers temporarily remove those aliases around `Inkplate.h`, keeping
 its declarations unchanged. Both decoders remain available, including JPEG boot
 logos; installed library files are not patched.
 
-The driver copies the mode-specific drawing framebuffer into a PSRAM presentation
-snapshot while holding its mutex, then releases the mutex before the blocking
-waveform. That preserves writes made during the waveform for the next
+The wrapper owns a private PSRAM drawing buffer and borrows the library's
+mode-specific current framebuffer as its upload/capture snapshot. It never
+reassigns `_partial` or `DMemory4Bit`, and the library retains its previous-frame
+bookkeeping. This reverses the buffers' former ownership roles without adding an
+allocation: the wrapper still allocates 97,024 bytes in B/W or 388,096 bytes in
+grayscale. Under the framebuffer mutex it copies drawing into the library's
+buffer, then releases the mutex before the blocking waveform.
+That preserves writes made during the waveform for the next
 presentation and permits no-op detection against the last presented frame. B/W
 pixels use the boot-selected threshold, Bayer, or blue-noise conversion and can
 use `partialUpdate()`; 3-bit grayscale can
 only use full waveforms. The driver, rather than InkplateLibrary's automatic
 threshold, owns the periodic B/W full-refresh cadence.
+
+Background cadence and uncapped 150 ms settling remain unchanged. Manual-full
+requests wake a driver-owned semaphore; waits recheck at most every 20 ms,
+including the generic OTA-activity gate before library entry. If activity begins
+after power-on but before the waveform call, the wrapper powers the panel down
+and queues full recovery. This does not enable OTA on this no-OTA profile.
+Power-on failures leave capture invalid and preserve pending full recovery.
+Wrapper teardown frees only its private buffer, and reinitialization clears
+its resources without rebinding or freeing library-owned buffers.
+
+InkplateLibrary remains unmodified. Its refresh calls synchronously wait for DMA
+EOF and run their power cleanup before returning, but the DMA wait has no timeout
+or cancellation hook. `display()` returns no status; `partialUpdate()` returns a
+pixel-change count, not an error code. The wrapper retains its preflight power-on
+check and normal-return publication behavior, not an independently verified
+end-to-end refresh result. It does not opt into `coherentFrames()`,
+interaction priority or bounded cooperative active-refresh shutdown. Host
+coverage protects wrapper ownership and scheduling, not library DMA timing or
+physical completion on hardware.
 
 The Cypress controller is an event stream. `getData()` returning zero is not by
 itself a release: it can also mean that no event is pending. The touch driver
@@ -351,8 +500,10 @@ interactive drivers may ignore this generic setting. See the
 [configuration contract](interactive-epaper.md#configuration-contract).
 
 `reterminal-e1003-interactive` is an always-on IT8951 e-paper Macropad target.
-Its buffered driver keeps 4-bit drawing and presentation framebuffers in PSRAM.
-It copies a settled LVGL frame under the framebuffer mutex, then uploads and
+Its buffered driver keeps two 4-bit drawing and presentation framebuffers in
+PSRAM (2,628,288 bytes total). It opts into coherent-frame publication and
+interaction priority through `EpaperSchedule`, without another frame allocation.
+It copies a completed LVGL generation under the framebuffer mutex, then uploads and
 refreshes the presentation snapshot outside that mutex so later LVGL flushes
 remain queued. Both modes coalesce LVGL flush rectangles into one aligned IT8951
 region. B/W uses the boot-selected threshold, Bayer, or blue-noise conversion
@@ -361,17 +512,61 @@ Initial and forced presentations use full-panel GC16, as do scheduled refreshes
 in both modes. Regional grayscale quality still needs hardware validation.
 Touch uses the existing GT911 driver on the E1003's shared
 GPIO19/GPIO20 I2C lines.
-Both profiles defer uploads at row checkpoints when OTA begins. Failed or
-interrupted presentations invalidate the known panel state and retry with a
-full refresh instead of treating the unsent snapshot as an unchanged frame.
+Background and manual-full requests retain the configured cadence and uncapped
+150 ms settling; unlike Sticky and CrowPanel, continuous background changes can
+extend settling beyond 500 ms. Changed interactive generations bypass those
+discretionary waits, but not full-refresh selection or controller completion.
+Unchanged and reverted frames do not cause extra physical updates or lasting
+interaction urgency. Commits and stop requests wake the driver's binary semaphore;
+its 20 ms bounded wait also observes OTA.
+
+HRDY gates command transfers, not physical publication. The driver reads
+IT8951 `LUTAFSR` (`0x1224`) before loading an image and after display-area
+submission. A zero display-engine status confirms completion. The submitted
+display command, including all five arguments, and its waveform have one
+15-second completion deadline; stop/OTA cannot abandon an accepted submission.
+An owned image-load stream closes before cancellation returns. Upload checkpoints
+observe stop/OTA every 64 rows, and cancellation is checked before submitting a
+new waveform. Failed or cancelled work invalidates the screenshot baseline and
+queues full recovery. Newer dirty regions, interaction intent and manual-full
+requests survive older completion.
+
+Cooperative shutdown drains owned controller work before ending SPI and freeing
+buffers. Reinitialization resets resources and allocation failures release partial
+state immediately. Diagnostics correlate frame/request identity, conversion,
+eligibility, snapshot, upload, activation, engine completion and publication.
+Policy time excludes waiting before the current frame is ready or while older
+hardware work owns the controller. These host-verified contracts need separate
+physical qualification on both controller-firmware profiles.
 
 ### CrowPanel 4.2 A-Revision
 
 `crowpanel-4.2-interactive` selects `DISPLAY_DRIVER_CROWPANEL_42`, a buffered
-400 x 300 B/W driver. Two 15,000-byte PSRAM buffers separate LVGL writes from
+400 x 300 B/W driver in `src/boards/crowpanel-4.2-interactive/drivers/display/`.
+Two 15,000-byte PSRAM buffers separate LVGL writes from
 the SPI presentation snapshot. The driver follows Elecrow's V1.2A sample
 clear/partial sequence with GC/DU waveforms, applies cadence and no-op coalescing, and stops accepting
 requests after a bounded BUSY timeout. It has no touch or backlight control.
+
+CrowPanel opts into coherent-frame publication and interaction priority using
+`EpaperSchedule`. The existing drawing/snapshot pair remains sufficient: the
+snapshot is immutable during upload and unavailable to screenshot readers until
+successful physical completion. Background cadence, 150 ms settling and the
+500 ms coalescing cap are unchanged. Commits and stop requests wake a driver-owned
+semaphore; its 20 ms bounded wait also observes OTA.
+
+Cancellation is checked before controller activation, after owned SPI transactions
+close. Once activated, the worker waits for active-LOW BUSY assertion and release
+within the existing 15-second timeout, retaining required full-refresh guard delays.
+Stop/OTA after the first clearing waveform prevents the second reset/activation;
+cancelled presentations remain invalid and require full recovery. A BUSY timeout
+marks the driver unavailable until reinitialization. Shutdown waits for this owned
+completion before deleting the task or freeing either buffer. Host coverage does
+not qualify BUSY timing, visible latency or image quality on hardware.
+Diagnostics correlate frame/request identity with conversion, snapshot, image
+upload, activation, BUSY completion and publication. Image-upload bytes/time
+exclude the full-refresh white-plane clear, which belongs to controller
+preparation; required guard delays remain included in total presentation time.
 
 CrowPanel, Inkplate 6FLICK, and IT8951 expose an optional compact presented-frame
 capture through `DisplayDriver`. Drivers copy only a completed presentation
@@ -472,7 +667,9 @@ public:
 
 ### Arduino Build System Note (Driver Compilation Units)
 
-Arduino only compiles `.cpp` files in the sketch root directory. Driver implementations under `src/app/drivers/` are compiled by including the selected driver `.cpp` from dedicated translation units:
+Arduino only compiles `.cpp` files in the sketch root directory. Shared and
+board-local drivers are compiled by including the selected `.cpp` from
+dedicated translation units:
 
 - `src/app/display_drivers.cpp`
 - `src/app/touch_drivers.cpp`
@@ -1288,6 +1485,65 @@ This means:
 
 Direct-mode boards are unaffected — no present task is created (their `present()` is a no-op).
 
+Sticky, CrowPanel and IT8951 opt into `DisplayDriver::coherentFrames()`. The production
+`LV_EVENT_REFR_START`/`LV_EVENT_REFR_READY` callbacks bracket all synchronous
+flush conversions, independently of diagnostics. Under the framebuffer mutex,
+the worker refuses snapshots during a render generation. It copies only a
+completed generation into an immutable upload buffer; drawing can then continue
+while the panel uses that snapshot. Sticky separately retains its previous
+completed frame for controller preparation.
+Successful completion alone publishes the screenshot baseline.
+
+Successful focus changes, applied interaction-driven screen changes and dialog
+mutations carry request/frame sequences. No-change generations consume intent,
+and pending newer work survives older hardware completion. Background policy
+waits use a driver-owned binary semaphore, rechecking state after commits and
+manual requests; a bounded 20 ms timeout also observes OTA. Shutdown wakes those
+waits, cancels at the panel's existing safe checkpoints, and waits for owned
+power cleanup before deleting the worker.
+
+On this opted-in path, deferred-slot publication and queued screen work notify
+the LVGL task. Notifications survive the unlock-to-sleep race. At the outer
+task boundary, after input timers and screen updates, pending interaction
+invalidations use `lv_refr_now()` without changing the normal refresh period.
+Pending screen switches defer that prompt pass until the new screen is applied.
+Sleep/OTA rendering gates, initial bindings, tap/hold semantics and suppressed
+tap flashes remain unchanged. Other drivers, including dedicated frame-device
+and LCD paths, retain their previous scheduling.
+
+Changed `set_var` actions from user input queue a coalesced binding refresh.
+Dispatch carries an explicit interaction flag, defaulting to background;
+pending action-list continuations preserve it without changing their execution
+order. The variable store remains independent of the display. Under the existing
+display lock, the action requests work only after a successful changed write.
+At the same safe outer task boundary, the manager resolves the current pad
+through `pollLiveData(true)`, then uses the existing interaction/coherent-frame
+path. Sleep, OTA and pending screen switches defer this work. Non-pad screens
+consume the request without creating future urgency. Unchanged/failed writes,
+automated actions and non-opted-in drivers retain their previous behavior.
+No-change render generations consume intent without a physical presentation;
+the passive polling period and panel waveform remain unchanged.
+
+With `HAS_DISPLAY_DIAGNOSTICS`, bounded per-interaction/presentation debug logs
+carry request/frame sequences and microsecond timestamps for UI-owner entry,
+mutation, committed readiness, hardware eligibility, snapshot, waveform trigger,
+BUSY completion and successful publication. Preparation and packing/upload are
+separate durations. `eligible = max(ready, preceding hardware completion)` splits
+time behind an in-flight update from subsequent policy/wakeup time. UI-owner
+entry is not raw physical-input recognition; correlate input logs/analyzer/video
+when measuring input-to-visible latency. BUSY completion is not visible onset.
+The existing aggregate `present_us` is not SPI transfer time.
+
+Sticky also logs per-frame conversion and framebuffer-lock wait, and separates
+upload into packing, SPI transaction and deliberate-yield durations. SPI timing
+includes transaction/GPIO/software overhead, not only wire time. The correlated
+`Display` record reports refresh, render, flush and glyph-miss time; render
+includes flush and glyph work, so these fields are not additive. Subtract flush
+from render to distinguish LVGL drawing from synchronous conversion, and use
+the glyph field to identify font-cache misses. Frames without rendering do not
+emit this render record. These diagnostics do not establish physical speedups
+or visible-onset latency without a new device capture.
+
 ### Thread Safety
 
 All display operations from outside the rendering task must be protected:
@@ -1541,7 +1797,9 @@ public:
 
 ### Step 1: Create Driver Class
 
-Create `src/app/drivers/my_driver.h` and `.cpp`:
+For a reusable driver, create `src/app/drivers/my_driver.h` and `.cpp` as in
+this example. Put a board-exclusive driver under that board's `drivers/`
+directory instead.
 
 ```cpp
 #include "../display_driver.h"
@@ -1665,7 +1923,9 @@ To add a new display driver implementation (`src/app/drivers/my_driver.cpp`), in
 
 ### Step 1: Create Touch Driver Class
 
-Create `src/app/drivers/my_touch_driver.h` and `.cpp`:
+For a reusable driver, create `src/app/drivers/my_touch_driver.h` and `.cpp` as
+in this example. Put a board-exclusive driver under that board's `drivers/`
+directory instead.
 
 ```cpp
 #include "../touch_driver.h"
@@ -2015,6 +2275,27 @@ Each board compiles with its own display driver and settings.
 - **Per screen:** ~200-500 bytes (depends on widget count)
 - **Total:** ~50-60 KB for display subsystem
 
+`LVGL_FAST_MEM_IN_IRAM` maps to `LV_ATTRIBUTE_FAST_MEM` in `lv_conf.h`.
+It defaults to true on ESP32-S3 and false on other target families;
+`reterminal-sticky-interactive` explicitly selects false for cached flash.
+Sticky trades possible rendering overhead for more shared SRAM available to the
+internal heap alongside Wi-Fi and BLE. Other S3 boards retain IRAM placement;
+other chip families retain their existing flash placement. The selector is
+independent of BLE backend, capabilities, and PSRAM allocation policy. It does
+not move task stacks, DMA buffers, or ISR code. Compare linked IRAM size, device
+internal/DMA heap, navigation rendering times, and OTA behavior before considering
+the Sticky experiment validated.
+
+A Sticky A/B build with Arduino core 3.3.12 reduced `.iram0.text` from 167,179
+to 106,455 bytes and the shared-SRAM `.dram0.dummy` reservation from 152,064
+to 91,136 bytes. Static data/BSS sizes were unchanged. Device boot logs confirmed
+the corresponding 60,928-byte internal-heap gain: 182,000 to 242,928 bytes free.
+The latest setup completed with 97,484 bytes free internally, a 79,952-byte
+minimum through setup, and a 55,284-byte largest internal block.
+Navigation and HA live data worked in the supplied capture without allocation
+failures. These observations do not establish sustained rendering performance,
+MQTT-enabled load, OTA safety, or a completed soak of the final configuration.
+
 Alarm configuration and session actions, timer instances, MQTT binding scratch,
 device-level button defaults, and the pad-list cache
 use `config_psram_alloc()`. Each block is allocated once when its subsystem
@@ -2151,8 +2432,13 @@ Monochrome FreeType cache diagnostics count hits, misses, successful evictions,
 and failed misses across font instances. Only miss handling is timed, using
 wrap-safe microsecond intervals; cache hits have no timestamp calls. Miss work
 includes loading/hinting, rasterization, expanded bitmap creation, and replacement,
-not all font callback or text blending work. The cache remains 16 glyphs per
-font instance. Counts and time are retained cumulatively and per active cycle,
+not all font callback or text blending work. The cache holds up to 96 glyphs per
+font instance, avoiding the former 16-glyph residency cliff for ordinary Latin
+text. This count is not a byte budget: glyph bitmaps use A8 storage and grow
+roughly with pixel size squared. See the
+[font memory estimates](interactive-epaper.md#monochrome-uploaded-fonts)
+for resident-instance and PSRAM considerations.
+Counts and time are retained cumulatively and per active cycle,
 with `render_glyph_miss_us` isolating miss work inside render events. Glyph
 activity in non-flushing cycles is included in cumulative totals. Updates and
 snapshot collection use existing LVGL ownership; the health API only reads the
@@ -2177,9 +2463,9 @@ the label-refresh timestamp, avoiding a duplicate label refresh when widget
 `update()` and `tick()` run in the same poll. No geometry cache, additional
 allocation, or reduction in data polling is required.
 
-IT8951 RGB565 conversion uses a 256-byte compile-time table of weighted channel
+IT8951 and Sticky RGB565 conversion share a 256-byte compile-time table of weighted channel
 contributions, preserving the original channel expansion and luminance rounding.
-For in-bounds flush rectangles at rotations 0 and 2, it converts pairs of pixels
+For in-bounds flush rectangles at rotations 0 and 2, IT8951 converts pairs of pixels
 into complete packed framebuffer bytes. Only unpaired boundary pixels require
 read-modify-write operations, preserving neighboring nibbles. Dithering still
 uses logical pixel coordinates; quarter-turn rotations and clipped rectangles
@@ -2199,7 +2485,8 @@ visibility, widget-value updates, widget ticks, and image-frame handoff. Zero
 retains every-cycle passive resolution. The `jc1060p470c-sd` target uses 100 ms;
 other LCD targets retain their defaults. Initial/rebuilt pads, pad navigation,
 clock synchronization, and configured minute boundaries refresh passive values
-immediately. Interactive e-paper retains its existing all-content coalescing.
+immediately. Interactive e-paper passive binding polling retains its existing
+all-content coalescing.
 
 Gauge captions reuse their current resolved text to skip unchanged placement.
 Fonts and gauge geometry are fixed when the widget is created; configuration
@@ -2232,6 +2519,9 @@ Key settings in `src/app/lv_conf.h`:
 ```
 
 ## File Organization
+
+The diagram shows shared driver examples. Board-owned implementations also
+live under `src/boards/<board>/drivers/` and use the same compilation units.
 
 ```mermaid
 graph LR

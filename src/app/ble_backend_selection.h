@@ -1,0 +1,4 @@
+#pragma once
+
+#define BLE_BACKEND_ARDUINO_CORE 0
+#define BLE_BACKEND_NIMBLE_ARDUINO 1

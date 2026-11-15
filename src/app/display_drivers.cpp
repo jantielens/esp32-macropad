@@ -29,13 +29,16 @@
 #include "drivers/jd9165_dsi_driver.cpp"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_TAB5_DSI
 #include "drivers/mipi_dsi_driver.cpp"
-#include "drivers/tab5_dsi_driver.cpp"
+#include "boards/m5stack-tab5/drivers/tab5_dsi_driver.cpp"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_INKPLATE6FLICK
-#include "drivers/inkplate6flick_epaper_driver.cpp"
+#include "boards/inkplate6flick-interactive/drivers/inkplate6flick_epaper_driver.cpp"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_IT8951
 #include "drivers/it8951_epaper_driver.cpp"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_CROWPANEL_42
-#include "drivers/crowpanel42_epaper_driver.cpp"
+#include "boards/crowpanel-4.2-interactive/drivers/display/crowpanel42_epaper_driver.cpp"
+#elif DISPLAY_DRIVER == DISPLAY_DRIVER_STICKY_EPAPER
+#include "boards/reterminal-sticky-interactive/drivers/display/sticky_epaper/panel.cpp"
+#include "boards/reterminal-sticky-interactive/drivers/display/sticky_epaper_driver.cpp"
 #else
 #error "No display driver selected or unknown driver type"
 #endif

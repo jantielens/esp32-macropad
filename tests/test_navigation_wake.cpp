@@ -52,6 +52,7 @@ public:
     size_t screenCount = 3;
     Screen* currentScreen = &firstPad;
     Screen* pendingScreen = nullptr;
+    bool pendingScreenInteractive = false;
     Screen* screenHistory[8] = {};
     size_t screenHistoryCount = 0;
     bool skipHistoryPush = false;
@@ -64,6 +65,14 @@ public:
     char pendingSplashStatus[96] = {};
     bool pendingSplashStatusSet = false;
     unsigned locks = 0;
+    unsigned interactions = 0;
+    void interactionChanged(uint64_t = 0) { ++interactions; }
+    unsigned render_wakes = 0;
+    void wakeRenderTask() { ++render_wakes; }
+    void queueScreenIntent(bool interactive) {
+        pendingScreenInteractive = interactive;
+        wakeRenderTask();
+    }
     unsigned acquisitions = 0;
     bool release_other_owner_on_wait = false;
     void lock() {
@@ -114,6 +123,7 @@ int main() {
         assert(!manager.navigateButtons("next"));
         manager.lvglTaskHandle = current_task;
         assert(!manager.navigateButtons(nullptr));
+        assert(manager.interactions == 0 && manager.render_wakes == 0);
         asleep = true;
         assert(manager.navigateButtons("tap"));
         assert(manager.firstPad.navigation_calls == 0);
@@ -128,6 +138,7 @@ int main() {
         confirmation_open = false;
         manager.pendingScreen = &manager.secondPad;
         assert(!manager.navigateButtons("next"));
+        assert(manager.interactions == 0);
         manager.pendingScreen = nullptr;
         assert(manager.navigateButtons("next"));
         assert(manager.firstPad.navigation_calls == 1);
@@ -197,6 +208,7 @@ int main() {
         DisplayManager manager;
         assert(manager.showScreen("pad_1"));
         assert(wake_requests == 0);
+        assert(manager.render_wakes == 1 && !manager.pendingScreenInteractive);
         assert(!manager.showScreen("missing", true));
         assert(!manager.showScreen(nullptr, true));
         assert(!manager.goBack(true));
@@ -207,6 +219,7 @@ int main() {
         assert(manager.showScreen("pad_1", true));
         assert(wake_requests == 1);
         assert(manager.pendingScreen == &manager.secondPad);
+        assert(manager.pendingScreenInteractive && manager.render_wakes == 2);
         assert(!manager.showTransientScreen("pad_2"));
         assert(manager.pendingScreen == &manager.secondPad);
         assert(manager.locks == 0);

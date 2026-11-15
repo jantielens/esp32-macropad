@@ -34,10 +34,12 @@ portMUX_TYPE g_boot_logo_upload_mux = portMUX_INITIALIZER_UNLOCKED;
 bool g_boot_logo_upload_active = false;
 
 bool claim_upload() {
+		if (!storage_mutation_begin()) return false;
 		portENTER_CRITICAL(&g_boot_logo_upload_mux);
 		const bool claimed = !g_boot_logo_upload_active;
 		if (claimed) g_boot_logo_upload_active = true;
 		portEXIT_CRITICAL(&g_boot_logo_upload_mux);
+		if (!claimed) storage_mutation_finish();
 		return claimed;
 }
 
@@ -45,6 +47,7 @@ void release_upload() {
 		portENTER_CRITICAL(&g_boot_logo_upload_mux);
 		g_boot_logo_upload_active = false;
 		portEXIT_CRITICAL(&g_boot_logo_upload_mux);
+		storage_mutation_finish();
 }
 
 void reset_upload(AsyncWebServerRequest* request, bool abort) {

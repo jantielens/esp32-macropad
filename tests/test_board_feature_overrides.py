@@ -54,6 +54,103 @@ int main() {\n''' + "\n".join(output) + "\n}"
     assert len(actual) == len(expected)
 print("PASS: LCD and e-paper board appearance defaults match portal fixtures")
 
+for rtc, frame in ((1, 0), (0, 1), (1, 1)):
+    result = subprocess.run(
+        ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+         "-x", "c++", "-", "-I", str(root),
+         f"-DHAS_RTC={rtc}", "-DRTC_DRIVER=" + ("RTC_DRIVER_PCF8563" if rtc else "RTC_DRIVER_NONE"),
+         f"-DIS_EPAPER_FRAME={frame}", "-DHAS_EPAPER_PANEL=1", f"-DHAS_DISPLAY={1 - frame}"],
+        input='#include "src/app/board_config.h"\n', text=True, capture_output=True,
+    )
+    if rtc and frame:
+        assert result.returncode != 0, "Sleep-first RTC support must be rejected until writes are flushed"
+        assert "HAS_RTC is not supported by IS_EPAPER_FRAME" in result.stderr, result.stderr
+    else:
+        assert result.returncode == 0, result.stderr
+print("PASS: RTC supports interactive firmware and rejects the unintegrated sleep-first lifecycle")
+
+for overrides, expected_error in (
+    ({}, None),
+    ({"HAS_VOICE_CLIPS": 1}, None),
+    ({"HAS_VOICE_CLIPS": 1, "IS_VOICE_ASSISTANT": 1}, "cannot be enabled together"),
+    ({"HAS_VOICE_CLIPS": 1, "HAS_AUDIO_INPUT": 0}, "requires audio input"),
+    ({"HAS_VOICE_CLIPS": 1, "HAS_FILESYSTEM": 0}, "requires audio input"),
+    ({"HAS_VOICE_CLIPS": 1, "HAS_DISPLAY": 0, "HAS_BUTTON": 0}, "requires audio input"),
+):
+    flags = {
+        "IS_VOICE_ASSISTANT": 0, "HAS_AUDIO": 1,
+        "HAS_AUDIO_INPUT": 1, "HAS_FILESYSTEM": 1, "HAS_DISPLAY": 1,
+        "HAS_BUTTON": 0, "HAS_PSRAM": 1, "HAS_MQTT": 1,
+    }
+    flags.update(overrides)
+    source = '#include "src/app/board_config.h"\n'
+    if "HAS_VOICE_CLIPS" not in overrides:
+        source += 'static_assert(!HAS_VOICE_CLIPS, "Voice clips must be disabled by default");\n'
+    result = subprocess.run(
+        ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+         "-x", "c++", "-", "-I", str(root)]
+        + [f"-D{name}={value}" for name, value in flags.items()],
+        input=source, text=True, capture_output=True,
+    )
+    if expected_error:
+        assert result.returncode != 0 and expected_error in result.stderr, result.stderr
+    else:
+        assert result.returncode == 0, result.stderr
+print("PASS: Voice clips feature prerequisites and Voice Assistant exclusion")
+
+for defines, expected_error in (
+    (["-DHAS_AUDIO_INPUT=1", "-DHAS_AUDIO=1"], None),
+    (["-DHAS_AUDIO_INPUT=1", "-DHAS_AUDIO=0"], "ES8311 audio input requires"),
+    (["-DHAS_AUDIO_INPUT=1", "-DHAS_AUDIO=1",
+      "-DAUDIO_OUTPUT_DRIVER=AUDIO_OUTPUT_DRIVER_STICKY_PWM"], "ES8311 audio input requires"),
+    (["-DHAS_AUDIO_INPUT=1", "-DHAS_AUDIO=0",
+      "-DAUDIO_INPUT_DRIVER=AUDIO_INPUT_DRIVER_STICKY_PDM",
+      "-DCONFIG_IDF_TARGET_ESP32S3=1"], None),
+    (["-DHAS_AUDIO_INPUT=1", "-DAUDIO_INPUT_DRIVER=99"], "Unknown audio input driver"),
+    (["-DHAS_AUDIO_INPUT=1", "-DAUDIO_INPUT_DRIVER=AUDIO_INPUT_DRIVER_STICKY_PDM"],
+     "Sticky PDM audio input requires ESP32-S3"),
+):
+    result = subprocess.run(
+        ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+         "-x", "c++", "-", "-I", str(root)] + defines,
+        input='#include "src/app/board_config.h"\n', text=True, capture_output=True,
+    )
+    if expected_error:
+        assert result.returncode != 0 and expected_error in result.stderr, result.stderr
+    else:
+        assert result.returncode == 0, result.stderr
+print("PASS: audio input selection and prerequisites")
+
+with tempfile.TemporaryDirectory() as directory:
+    for input_enabled in (0, 1):
+        obj = pathlib.Path(directory) / "audio_input_drivers.o"
+        subprocess.run(
+            ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+             f"-DHAS_AUDIO_INPUT={input_enabled}", "-DHAS_AUDIO=1",
+             "-c", str(root / "src/app/audio_input_drivers.cpp"), "-o", str(obj)],
+            check=True,
+        )
+        symbols = subprocess.check_output(["nm", "-C", "--defined-only", str(obj)], text=True)
+        assert "StickyPdmInput" not in symbols and "audio_input_driver_create" not in symbols, symbols
+print("PASS: Sticky input driver excluded from disabled and ES8311 profiles")
+
+with tempfile.TemporaryDirectory() as directory:
+    for assistant, clips in ((0, 0), (1, 0), (0, 1)):
+        obj = pathlib.Path(directory) / "voice_wav.o"
+        subprocess.run(
+            ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+             "-include", str(root / "tests/board_config.h"),
+             f"-DIS_VOICE_ASSISTANT={assistant}", f"-DHAS_VOICE_CLIPS={clips}",
+             "-c", str(root / "src/app/voice_wav.cpp"), "-o", str(obj)],
+            check=True,
+        )
+        symbols = subprocess.check_output(["nm", "-C", "--defined-only", str(obj)], text=True)
+        assert ("voice_wav_build_header" in symbols) == bool(assistant or clips), symbols
+        assert ("voice_wav_read_header" in symbols) == bool(clips), symbols
+        if not (assistant or clips):
+            assert not symbols.strip(), symbols
+print("PASS: WAV code is excluded from unsupported profiles")
+
 subprocess.run(
     ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
      "-x", "c++", "-", "-I", str(root),
@@ -312,3 +409,39 @@ with tempfile.TemporaryDirectory() as directory:
         )
         subprocess.run([executable], check=True)
 print("PASS: malloc policy startup guards")
+
+for board, sd in (("reterminal-sticky-interactive", 0), ("reterminal-sticky-interactive-sd", 1)):
+    subprocess.run(
+        ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+         "-x", "c++", "-", "-I", str(root), "-I", str(root / "src/boards" / board),
+         "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM", "-DCONFIG_IDF_TARGET_ESP32S3=1"],
+        input=f'''#include "src/app/board_config.h"
+static_assert(HAS_SD_CARD == {sd} && USE_SD_STORAGE == {sd}, "Sticky storage selection");
+static_assert(HAS_DISPLAY && HAS_TOUCH && HAS_AUDIO_INPUT && HAS_VOICE_CLIPS && HAS_RTC && HAS_BLE, "Sticky capabilities");
+static_assert(BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO, "Sticky BLE backend");
+''' + ('''static_assert(SD_STORAGE_SPI && SD_SPI_CS_PIN == 8 && SD_SPI_SCK_PIN == 13 &&
+    SD_SPI_MISO_PIN == 12 && SD_SPI_MOSI_PIN == 14 && SD_SPI_FREQUENCY_HZ == 1000000, "Sticky SD wiring");
+''' if sd else ""), text=True, check=True,
+    )
+    metadata = json.loads((root / "src/boards" / board / "metadata.json").read_text())
+    assert ("sd_card" in metadata["capabilities"]) == bool(sd)
+print("PASS: Sticky SD and flash variants")
+
+battery_boards = {
+    "firebeetle2-esp32c6-aht10", "inkplate5v2-frame", "inkplate6flick-frame",
+    "m5stack-stopwatch", "m5stack-tab5", "m5stack-tab5-sd",
+    "reterminal-e1003-frame", "reterminal-sticky-interactive", "reterminal-sticky-interactive-sd",
+}
+for override in sorted((root / "src/boards").glob("*/board_overrides.h")):
+    board = override.parent.name
+    subprocess.run(
+        ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+         "-x", "c++", "-", "-I", str(root), "-I", str(root / "src/app"),
+         "-I", str(override.parent),
+         "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM"]
+        + (["-DCONFIG_IDF_TARGET_ESP32S3=1"] if board.startswith("reterminal-sticky-interactive") else []),
+        input=f'''#include "src/app/board_config.h"
+static_assert(HAS_BATTERY_INFO == {int(board in battery_boards)}, "Battery provider gate mismatch");
+''', text=True, check=True,
+    )
+print("PASS: battery info enabled only on existing provider boards and inherited variants")

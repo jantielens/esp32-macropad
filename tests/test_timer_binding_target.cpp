@@ -16,7 +16,7 @@ extern "C" unsigned long millis() {
 }
 
 void action_list_dispatch(const ButtonAction*, uint8_t, const char*,
-                          ActionContinuationOwner) {}
+                          ActionContinuationOwner, bool) {}
 
 static void check_resolves(const char* token, const char* expected) {
     char output[64];

@@ -54,7 +54,8 @@ bool remove_directory_tree(const String& path) {
 
 bool storage_browser_path_is_safe(const String& path) {
     return path.length() > 0 && path.length() <= STORAGE_BROWSER_PATH_MAX_LEN &&
-           path[0] == '/' && path.indexOf("//") < 0 && path.indexOf("..") < 0;
+           path[0] == '/' && path.indexOf("//") < 0 && path.indexOf("..") < 0 &&
+           path.indexOf("/./") < 0 && !path.endsWith("/.");
 }
 
 const char* storage_browser_file_content_type(const String& path) {
@@ -85,7 +86,6 @@ bool storage_browser_list(const String& path, JsonObject result, const char*& er
         error = "invalid storage path";
         return false;
     }
-
     File directory = Storage.open(path);
     if (!directory || !directory.isDirectory()) {
         error = "directory not found";
@@ -122,7 +122,11 @@ bool storage_browser_remove(const String& path, const char*& error) {
         error = "invalid storage path";
         return false;
     }
-
+    const StorageMutationGuard guard;
+    if (!guard) {
+        error = "storage busy";
+        return false;
+    }
     File entry = Storage.open(path);
     if (!entry) {
         error = "file or directory not found";

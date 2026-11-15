@@ -32,6 +32,7 @@
 // --- E-paper device class ---------------------------------------------------
 #define HAS_EPAPER_PANEL true
 #define IS_EPAPER_FRAME true
+#define HAS_BATTERY_INFO true
 
 // Inkplate carrier exposes a GT911-tied "wake" button on GPIO36 (input-only,
 // no internal pullup; external pullup is on the board). Wired for ext1

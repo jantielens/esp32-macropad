@@ -873,6 +873,15 @@ for html_file in "${HTML_FILES[@]}"; do
     gzipped=$(gzip_to_c_array "$minified")
     HTML_GZIP_CONTENTS["$filename"]="$gzipped"
     if [[ "$filename" == "shell" ]]; then
+        for binding_variant in with_bindings without_bindings; do
+            binding_args=()
+            [[ "$binding_variant" == "without_bindings" ]] && binding_args+=(--without-binding-help)
+            with_auto_shutdown=$(python3 "$SCRIPT_DIR/_render_html_template.py" \
+                --web-dir "$WEB_DIR" --input "$html_file" \
+                --project-name "$PROJECT_NAME" --project-display-name "$PROJECT_DISPLAY_NAME" \
+                --firmware-version "$FIRMWARE_VERSION" --with-auto-shutdown "${binding_args[@]}")
+            HTML_GZIP_CONTENTS["${filename}_auto_shutdown_${binding_variant}"]=$(gzip_to_c_array "$with_auto_shutdown")
+        done
         without_bindings=$(python3 "$SCRIPT_DIR/_render_html_template.py" \
             --web-dir "$WEB_DIR" \
             --input "$html_file" \
@@ -1129,12 +1138,16 @@ asset_feature_flag() {
             echo "HAS_CAMERA && (HAS_DISPLAY || HAS_BUTTON)" ;;
         hid)
             echo "HAS_BLE_HID || HAS_USB_HID" ;;
+        bluetooth|portal_bluetooth)
+            echo "HAS_BLE || HAS_BLE_HID" ;;
         volume|feedback)
             echo "HAS_AUDIO" ;;
         camera|camera_snapshots|portal_camera|portal_camera_snapshots)
             echo "HAS_CAMERA" ;;
         sounds|music)
             echo "HAS_SOUND_PLAYER" ;;
+        voice_clips|portal_voice_clips)
+            echo "HAS_VOICE_CLIPS" ;;
         fonts|portal_fonts)
             echo "HAS_TTF_FONTS" ;;
         storage)
@@ -1147,6 +1160,8 @@ asset_feature_flag() {
             echo "HAS_EPAPER_PANEL" ;;
         epaper_refresh|portal_epaper_refresh)
             echo "HAS_LVGL_EPAPER" ;;
+        power_savings|portal_power_savings)
+            echo "HAS_AUTO_SHUTDOWN" ;;
         shutter|shutter_tests|shutter_sessions|shutter_session_actions)
             echo "IS_SHUTTER_TESTER" ;;
         scale|brews|brew_templates|portal_action_editor_scale|portal_brews|portal_brews_charts|portal_brews_init|portal_brews_templates)
@@ -1163,7 +1178,17 @@ asset_feature_flag() {
 # Generate HTML sections (gzipped)
 for filename in "${!HTML_CONTENTS[@]}"; do
     if [[ "$filename" == "shell" ]]; then
-        echo "#if HAS_DISPLAY" >> "$OUTPUT_FILE"
+        cat >> "$OUTPUT_FILE" << EOF
+#if HAS_AUTO_SHUTDOWN && HAS_DISPLAY
+const uint8_t shell_html_gz[] PROGMEM = {
+${HTML_GZIP_CONTENTS[shell_auto_shutdown_with_bindings]}
+};
+#elif HAS_AUTO_SHUTDOWN
+const uint8_t shell_html_gz[] PROGMEM = {
+${HTML_GZIP_CONTENTS[shell_auto_shutdown_without_bindings]}
+};
+#elif HAS_DISPLAY
+EOF
     fi
     cat >> "$OUTPUT_FILE" << EOF
 // HTML content from src/app/web/${filename}.html (gzipped)
@@ -1178,7 +1203,7 @@ EOF
 const uint8_t ${filename}_html_gz[] PROGMEM = {
 ${HTML_GZIP_CONTENTS[${filename}_without_bindings]}
 };
-#endif // HAS_DISPLAY
+#endif // shell feature selection
 
 EOF
     fi

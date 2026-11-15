@@ -5,6 +5,7 @@
 #include "display_manager_lock.h"
 #include "config_manager.h"
 #include "display_driver.h"
+#include "display_frame_publisher.h"
 #include "display_perf.h"
 #include "deferred_dispatch_slot.h"
 #include "screens/screen.h"
@@ -22,6 +23,7 @@
 #endif
 
 #include <lvgl.h>
+#include <atomic>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
@@ -83,8 +85,8 @@ private:
 		TaskHandle_t lvglTaskHandle;
 		RtosTaskPsramAlloc lvglTaskAlloc;  // PSRAM stack allocation (if used)
 		SemaphoreHandle_t lvglMutex;
-		volatile bool lvglStopRequested;
-		volatile bool lvglTaskStopped;
+		std::atomic<bool> lvglStopRequested;
+		std::atomic<bool> lvglTaskStopped;
 		
 		// Async present task (Buffered render mode only).
 		// Decouples the slow panel transfer from the LVGL timer loop
@@ -104,6 +106,9 @@ private:
 		Screen* transientResumeScreen;
 		bool transientScreenActive;
 		Screen* pendingHistoryScreen = nullptr;
+		bool pendingScreenInteractive = false;
+		uint64_t pendingScreenRequestedUs = 0;
+		void queueScreenIntent(bool interactive);
 		void prepareNavigationWake();
 
 		// Defer small LVGL UI updates (like splash status) to the LVGL task.
@@ -153,9 +158,10 @@ private:
 		
 		// LVGL flush callback (static, accesses instance via user_data)
 		static void flushCallback(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map);
-#if HAS_DISPLAY_DIAGNOSTICS
 		static void displayEventCallback(lv_event_t* event);
-#endif
+		DisplayFramePublisher framePublisher;
+		std::atomic<bool> presentStopRequested{false};
+		std::atomic<bool> presentTaskStopped{false};
 
 		// Buffered render-mode drivers (e.g., Arduino_GFX canvas) need an explicit
 		// present() step, but only after LVGL has actually rendered something.
@@ -163,6 +169,7 @@ private:
 #if HAS_DISPLAY_DIAGNOSTICS
 		DisplayFlushStats cycleFlush;
 		DisplayRefreshTrace cycleRefresh;
+		DisplayRefreshTrace frameRefresh;
 		DisplayInvalidationSource invalidationSource = DisplayInvalidationSource::Other;
 #endif
 
@@ -170,6 +177,7 @@ private:
 		static void lvglTask(void* pvParameter);
 		static DeferredDispatchSlot<DISPLAY_TASK_DISPATCH_CTX_BYTES>& displayJobSlot();
 		void processDisplayJob();
+		void wakeRenderTask();
 		
 		// FreeRTOS task for async panel transfer (Buffered render mode only)
 		static void presentTask(void* pvParameter);
@@ -234,6 +242,9 @@ public:
 		bool getPresentationStats(DisplayPresentationStats* out);
 #endif
 		bool navigateButtons(const char* command);
+		// Called with the LVGL mutex held, only after an actual UI mutation.
+		uint32_t interactionChanged(uint64_t requestedUs = 0);
+		void requestBindingRefresh();
 
 		// Active LVGL logical resolution (post driver->configureLVGL()).
 		// Prefer using these instead of calling LVGL APIs from non-LVGL tasks.

@@ -2,6 +2,9 @@
 
 #include "../board_config.h"
 #include "../log_manager.h"
+#ifdef BOARD_TOUCH_PREPARE
+#include "../board_hardware.h"
+#endif
 
 // When touch shares Wire bus 0 with other peripherals (e.g. ES8311 audio
 // codec), guard I2C transactions with the shared bus mutex.
@@ -23,6 +26,15 @@ GT911_TouchDriver::GT911_TouchDriver()
 			calXMin(0), calXMax(0), calYMin(0), calYMax(0) {}
 
 void GT911_TouchDriver::init() {
+		#if TOUCH_GT911_CONFIG_ORIENTATION
+		configured = false;
+		#endif
+		#ifdef BOARD_TOUCH_PREPARE
+		if (!BOARD_TOUCH_PREPARE()) {
+				LOGE("GT911", "Touch unavailable: board initialization failed");
+				return;
+		}
+		#endif
 		LOGT("GT911", "Initializing touch on %s (SDA=%d, SCL=%d, ADDR=0x%02X)",
 				GT911_WIRE_NAME, TOUCH_I2C_SDA, TOUCH_I2C_SCL, TOUCH_I2C_ADDR);
 
@@ -60,7 +72,15 @@ void GT911_TouchDriver::init() {
 
 		// Initialize I2C bus.
 		// Bus selection (Wire/Wire1) determined at compile time via GT911_WIRE.
+		#if TOUCH_GT911_CONFIG_ORIENTATION
+		if (!busStarted) busStarted = GT911_WIRE.begin(TOUCH_I2C_SDA, TOUCH_I2C_SCL, 400000);
+		if (!busStarted) {
+				LOGE("GT911", "Touch I2C initialization failed");
+				return;
+		}
+		#else
 		GT911_WIRE.begin(TOUCH_I2C_SDA, TOUCH_I2C_SCL, 400000);
+		#endif
 
 		// Probe the controller to verify communication
 		GT911_WIRE.beginTransmission(addr);
@@ -92,11 +112,31 @@ void GT911_TouchDriver::init() {
 				return;
 		}
 
+		#if TOUCH_GT911_CONFIG_ORIENTATION
+		uint8_t resolution[4] = {};
+		const bool resolutionRead = readBlock(0x8146, resolution, sizeof(resolution));
+		rawWidth = resolution[0] | (uint16_t(resolution[1]) << 8);
+		rawHeight = resolution[2] | (uint16_t(resolution[3]) << 8);
+		configured = resolutionRead &&
+				((rawWidth == DISPLAY_WIDTH && rawHeight == DISPLAY_HEIGHT) ||
+				 (rawWidth == DISPLAY_HEIGHT && rawHeight == DISPLAY_WIDTH));
+		if (!configured) {
+				LOGE("GT911", "Unsupported or unreadable configuration: %ux%u; touch unavailable",
+						 rawWidth, rawHeight);
+				return;
+		}
+		LOGI("GT911", "Reported resolution %ux%u; portrait mapping=%u (verify corners on hardware)",
+				 rawWidth, rawHeight, unsigned(rawWidth == DISPLAY_HEIGHT));
+		#endif
+
 	LOGI("GT911", "Touch initialized on %s (%dx%d, addr=0x%02X)",
 			GT911_WIRE_NAME, DISPLAY_WIDTH, DISPLAY_HEIGHT, addr);
 }
 
 TouchReadStatus GT911_TouchDriver::gt911Read() {
+		#if TOUCH_GT911_CONFIG_ORIENTATION
+		if (!configured) return TouchReadStatus::Error;
+		#endif
 		uint8_t touches = 0;
 		uint16_t previous_ids = 0;
 		uint16_t ids = 0;
@@ -111,6 +151,9 @@ TouchReadStatus GT911_TouchDriver::gt911Read() {
 						return TouchReadStatus::Error;
 				TouchSnapshot next;
 				next.count = touches;
+				#if TOUCH_GT911_CONFIG_ORIENTATION
+				bool coordinatesValid = true;
+				#endif
 				for (uint8_t index = 0; index < lastSnapshot.count; ++index)
 						previous_ids |= touch_contact_id_mask(lastSnapshot.contacts[index].id);
 				for (uint8_t index = 0; index < touches; ++index) {
@@ -122,8 +165,16 @@ TouchReadStatus GT911_TouchDriver::gt911Read() {
 						next.contacts[index].id = id;
 						next.contacts[index].horizontal = record[1] | (record[2] << 8);
 						next.contacts[index].vertical = record[3] | (record[4] << 8);
+						#if TOUCH_GT911_CONFIG_ORIENTATION
+						coordinatesValid = coordinatesValid &&
+								next.contacts[index].horizontal < rawWidth &&
+								next.contacts[index].vertical < rawHeight;
+						#endif
 				}
 				if (!writeReg(GT911_POINT_INFO, 0)) return TouchReadStatus::Error;
+				#if TOUCH_GT911_CONFIG_ORIENTATION
+				if (!coordinatesValid) return TouchReadStatus::Error;
+				#endif
 				lastSnapshot = next;
 				transformPending = true;
 				return TouchReadStatus::Fresh;
@@ -175,6 +226,14 @@ TouchSnapshot GT911_TouchDriver::readSnapshot() {
 }
 
 void GT911_TouchDriver::transform(uint16_t& tx, uint16_t& ty) const {
+
+		#if TOUCH_GT911_CONFIG_ORIENTATION
+		if (rawWidth == DISPLAY_HEIGHT && rawHeight == DISPLAY_WIDTH) {
+				const uint16_t portraitX = tx;
+				tx = ty;
+				ty = portraitX;
+		}
+		#endif
 
 		// Apply calibration if configured
 		if (calibrationEnabled && calXMax > calXMin && calYMax > calYMin) {

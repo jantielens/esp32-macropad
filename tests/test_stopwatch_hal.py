@@ -12,7 +12,10 @@ def production(path):
     return re.sub(r"^\s*#include[^\n]*", "", (ROOT / path).read_text(), flags=re.M)
 
 
-PRELUDE = r'''
+PRELUDE = (
+    '#define BOARD_CONFIG_H\n#define HAS_BATTERY_INFO true\n'
+    f'#include "{ROOT / "src/app/battery_info.cpp"}"\n'
+) + r'''
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -27,11 +30,13 @@ PRELUDE = r'''
 #include <tuple>
 #include <vector>
 using std::min;
+struct DisplayFrame;
 #define HAS_SENSOR_BATTERY_ADC false
 #define HAS_MQTT false
 #define HAS_BLE false
 #define HAS_ES7210_MIC false
 #define HAS_AUDIO_INPUT false
+#define HAS_VOICE_CLIPS false
 #define HAS_SOUND_PLAYER true
 #define HAS_MUSIC_ANALYSIS false
 #define HAS_AUDIO true
@@ -91,6 +96,25 @@ using i2s_mclk_multiple_t = int;
 using esp_err_t = int;
 using gpio_num_t = int;
 using i2s_chan_handle_t = int*;
+#if HAS_VOICE_CLIPS
+using portMUX_TYPE = int;
+#define portMUX_INITIALIZER_UNLOCKED 0
+#define portENTER_CRITICAL(mux) ((void)(mux))
+#define portEXIT_CRITICAL(mux) ((void)(mux))
+#define portENTER_CRITICAL_ISR(mux) ((void)(mux))
+#define portEXIT_CRITICAL_ISR(mux) ((void)(mux))
+struct i2s_event_data_t {};
+using rx_callback_t = bool (*)(i2s_chan_handle_t, i2s_event_data_t*, void*);
+struct i2s_event_callbacks_t { rx_callback_t on_recv_q_ovf = nullptr; };
+static rx_callback_t overrunCallback = nullptr;
+static void* overrunContext = nullptr;
+static esp_err_t i2s_channel_register_event_callback(i2s_chan_handle_t,
+        const i2s_event_callbacks_t* callbacks, void* context) {
+    overrunCallback = callbacks->on_recv_q_ovf;
+    overrunContext = context;
+    return 0;
+}
+#endif
 #define ESP_OK 0
 #define ESP_ERR_TIMEOUT 2
 #define I2S_NUM_0 0
@@ -120,6 +144,7 @@ struct i2s_std_config_t {
 static int channel = 0, receiveChannel = 0, liveChannels = 0;
 static bool channelFails = false, channelWriteFails = false;
 static bool channelInitFails = false, channelEnableFails = false, channelReadFails = false;
+static bool channelReadError = false, channelDisableRxFails = false;
 static bool channelWriteShort = false, testingPcm = false, txEnabled = false;
 static bool testingEs8388 = false;
 static size_t channelWriteLimit = size_t(-1);
@@ -150,6 +175,7 @@ static esp_err_t i2s_channel_enable(i2s_chan_handle_t handle) {
 }
 static esp_err_t i2s_channel_disable(i2s_chan_handle_t handle) {
     audioEvents.push_back(handle == &channel ? "disableTX" : "disableRX");
+    if (handle == &receiveChannel && channelDisableRxFails) return 1;
     if (handle == &channel) txEnabled = false;
     return ESP_OK;
 }
@@ -157,6 +183,7 @@ static esp_err_t i2s_del_channel(i2s_chan_handle_t) {
     audioEvents.push_back("delete"); --liveChannels; return ESP_OK;
 }
 static esp_err_t i2s_channel_read(i2s_chan_handle_t, void* frames, size_t count, size_t* read, int) {
+    if (channelReadError) return 3;
     if (channelReadFails) return ESP_ERR_TIMEOUT;
     memset(frames, 0, count); *read = count; return ESP_OK;
 }
@@ -394,6 +421,7 @@ struct SensorCallbacks {
     void (*sample)(JsonObject&) = nullptr;
     const SensorField* fields = nullptr;
     size_t field_count = 0;
+    const BatteryProvider* battery = nullptr;
 };
 class SensorRegistry {
 public:
@@ -480,6 +508,7 @@ static void clear_failures() {
     queueFailureAt = -1; queueCreates = 0;
     semaphoreFails = taskFails = channelFails = channelWriteFails = false;
     channelInitFails = channelEnableFails = channelReadFails = channelWriteShort = false;
+    channelReadError = channelDisableRxFails = false;
     Wire.failCodecVolume = false;
 }
 int main() {
@@ -535,12 +564,28 @@ int main() {
         const size_t events = audioEvents.size();
         assert(input->captureStart() && audioEvents.size() == events);
         int16_t frames[64] = {};
-        assert(input->readFrames(frames, 32, 5) == 32);
+        const auto read = input->readFrames(frames, 32, 5);
+        assert(read.frames == 32 && read.status == AudioInputReadStatus::Ok);
         channelReadFails = true;
-        assert(input->readFrames(frames, 32, 5) == 0);
+        const auto timeout = input->readFrames(frames, 32, 5);
+        assert(timeout.frames == 0 && timeout.status == AudioInputReadStatus::Timeout);
         channelReadFails = false;
-        input->captureStop();
+        channelReadError = true;
+        assert(input->readFrames(frames, 32, 5).status == AudioInputReadStatus::Error);
+        assert(input->captureStatus() == AudioInputReadStatus::Error);
+        channelReadError = false;
+#if HAS_VOICE_CLIPS
+        assert(overrunCallback);
+        assert(!overrunCallback(&receiveChannel, nullptr, overrunContext));
+        assert(input->captureStatus() == AudioInputReadStatus::Overrun);
+        assert(input->readFrames(frames, 32, 5).status == AudioInputReadStatus::Overrun);
+#endif
+        channelDisableRxFails = true;
+        assert(!input->captureStop());
+        channelDisableRxFails = false;
+        assert(input->captureStop());
         assert(input->captureStart());
+        assert(input->captureStatus() == AudioInputReadStatus::Ok);
 #endif
         audioEvents.clear(); audio_init_abort(); audio_initialized = false;
         assert(liveChannels == 0 && liveQueues == 0 && !output_driver->isAvailable());
@@ -881,6 +926,33 @@ int main() {
             assert(address != 0x6e || reg != 0x0c);
         Wire.failureAt = -1;
     }
+    // Automatic shutdown must fail closed on live external power or an unreadable PMIC.
+    for (bool failRead : {false, true}) {
+        battery(3900, 5000, 0);
+        if (failRead) Wire.failureAt = Wire.transactions;
+        const int previousAudioStops = audioStops;
+        assert(!m5stack_stopwatch_request_shutdown(45, true));
+        assert(!shutdownToken && !otaActive && audioStops == previousAudioStops);
+        Wire.failureAt = -1;
+        battery(3900, 0, 4);
+        assert(m5stack_stopwatch_request_shutdown(45, true));
+        battery(3900, 5000, 0);
+        if (failRead) Wire.failureAt = Wire.transactions;
+        Wire.writes.clear();
+        m5stack_stopwatch_loop();
+        assert(!shutdownToken && !otaActive && failedShutdowns.back() == 45);
+        assert(audioStops == previousAudioStops);
+        for (auto [address, reg, value] : Wire.writes)
+            assert(address != 0x6e || reg != 0x0c);
+        Wire.failureAt = -1;
+    }
+    battery(3900, 0, 4);
+    assert(m5stack_stopwatch_request_shutdown(46, true));
+    m5stack_stopwatch_loop();
+    assert(shutdownCommandSent && otaActive);
+    clockMs += 500;
+    m5stack_stopwatch_loop();
+    assert(!shutdownToken && !otaActive && failedShutdowns.back() == 46);
     // Confirm the power/reset waveform rather than only its final state.
     std::vector<int> resetLatch;
     for (auto [address, reg, value] : successfulWrites)
@@ -1017,29 +1089,40 @@ int main() {
     assert(!m5stack_stopwatch_ready());
     assert(!m5stack_stopwatch_audio_power(true));
     assert(!m5stack_stopwatch_set_charging_mode(StopWatchChargingMode::High));
-    assert(!m5stack_stopwatch_battery_read(millivolts, charging));
+    bool externalPower = false;
+    assert(!m5stack_stopwatch_battery_read(millivolts, charging, externalPower));
     assert(Wire.transactions == beforeLock && lockDepth == 0);
     lockFails = false;
     battery(3897, 5000, 0);
-    assert(m5stack_stopwatch_battery_read(millivolts, charging) && millivolts == 3897 && charging);
+    assert(m5stack_stopwatch_battery_read(millivolts, charging, externalPower) && millivolts == 3897 && charging && externalPower);
     battery(3897, 5000, 4);
-    assert(m5stack_stopwatch_battery_read(millivolts, charging) && !charging);
+    assert(m5stack_stopwatch_battery_read(millivolts, charging, externalPower) && !charging && externalPower);
     battery(3897, 3999, 0);
-    assert(m5stack_stopwatch_battery_read(millivolts, charging) && !charging);
+    assert(m5stack_stopwatch_battery_read(millivolts, charging, externalPower) && !charging && !externalPower);
     Wire.shortRead = true;
-    assert(!m5stack_stopwatch_battery_read(millivolts, charging));
+    assert(!m5stack_stopwatch_battery_read(millivolts, charging, externalPower));
     Wire.shortRead = false;
 
     SensorRegistry registry;
     board_register_sensors(registry);
-    assert(registry.callbacks.sample && registry.callbacks.field_count == 3);
-    JsonObject doc;
+    assert(registry.callbacks.battery && registry.callbacks.battery->sample);
+    BatterySample sample;
     battery(4200, 5000, 0);
-    registry.callbacks.sample(doc);
-    assert(doc["battery_percentage"].value == 100 && doc["battery_charging"].value == 1);
+    registry.callbacks.battery->sample(sample);
+    assert(sample.get(BatteryField::Percentage) == 100 &&
+           sample.get(BatteryField::Status) == static_cast<float>(BatteryStatus::Charging) &&
+           sample.get(BatteryField::ExternalPowerPresent) == 1);
+    sample = {};
+    battery(3897, 5000, 4);
+    registry.callbacks.battery->sample(sample);
+    assert(sample.get(BatteryField::Voltage) > 3.89f && !isfinite(sample.get(BatteryField::Status)));
     battery(2000, 5000, 0);
-    registry.callbacks.sample(doc);
-    assert(doc["battery_voltage"].null && doc["battery_percentage"].null && doc["battery_charging"].null);
+    sample = {};
+    registry.callbacks.battery->sample(sample);
+    assert(!isfinite(sample.get(BatteryField::Voltage)) &&
+           !isfinite(sample.get(BatteryField::Percentage)) &&
+           !isfinite(sample.get(BatteryField::Status)));
+    assert(sample.get(BatteryField::ExternalPowerPresent) == 1);
 
     Wire_CST820B_TouchDriver driver(board_cst820b_config());
     driver.init();
@@ -1562,11 +1645,14 @@ int main() {
         result = subprocess.run([str(executable)])
         assert result.returncode == (1 if unlocked else 0)
     print("PASS: screensaver brightness holds display lock; unlocked regression rejected", flush=True)
-    for profile in ("es8311-gpio", "es8311-microphone", "pcm510xa-gpio", "es8388-gpio"):
+    for profile in ("es8311-gpio", "es8311-microphone", "es8311-voice-clips",
+                    "pcm510xa-gpio", "es8388-gpio"):
         prelude = PRELUDE
-        if profile == "es8311-microphone":
+        if profile in ("es8311-microphone", "es8311-voice-clips"):
             prelude = prelude.replace("#define HAS_AUDIO_INPUT false", "#define HAS_AUDIO_INPUT true")
             prelude = prelude.replace("#define HAS_ES7210_MIC false", "#define HAS_ES7210_MIC true")
+        if profile == "es8311-voice-clips":
+            prelude = prelude.replace("#define HAS_VOICE_CLIPS false", "#define HAS_VOICE_CLIPS true")
         pcm = profile == "pcm510xa-gpio"
         if pcm:
             prelude = prelude.replace("#define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_ES8311",

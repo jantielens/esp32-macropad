@@ -53,6 +53,7 @@ Arduino does not auto-compile `.cpp` files in subdirectories. The project uses s
 
 - `display_drivers.cpp` — includes the one display driver `.cpp` selected by `DISPLAY_DRIVER`
 - `touch_drivers.cpp` — includes the one touch driver `.cpp` selected by `TOUCH_DRIVER`
+- `audio_output_drivers.cpp` — includes the output driver selected by `AUDIO_OUTPUT_DRIVER`
 - `widgets.cpp` — includes all widget `.cpp` files
 - `screens.cpp` — includes all screen `.cpp` files
 - `custom_fonts.cpp` — includes all generated font `.c` files
@@ -62,6 +63,14 @@ not a manager file. For a widget, add one entry to
 `src/app/widgets/manifest.json`; `build.sh` generates the guarded includes in
 ignored `src/app/widget_modules.h`, consumed by `widgets.cpp`. Keep local
 registration in the implementation; do not maintain another widget include list.
+
+Place implementations exclusive to a board or board family under
+`src/boards/<board>/drivers/`, grouping supporting files together when needed.
+Keep board-wide initialization in its board hardware module and reusable
+controller drivers and shared helpers in the shared collection. Preserve the
+existing HAL and explicit sketch-root includes; board-local placement does not
+automatically register or remove a driver. See
+[driver ownership and selection](../../src/app/drivers/README.md).
 
 ## Adding a New Feature Flag
 
