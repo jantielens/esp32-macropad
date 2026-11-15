@@ -1,7 +1,7 @@
 #include "fs_indexed_store.h"
 #include "board_config.h"
 
-#if HAS_DISPLAY || HAS_VOICE_CLIPS
+#if HAS_DISPLAY || HAS_VOICE_NOTES
 
 #include "log_manager.h"
 #include "psram_json_allocator.h"
@@ -931,6 +931,29 @@ String FsIndexedStore::list() {
     return result;
 }
 
+bool FsIndexedStore::copy_manifest(JsonDocument& output) {
+    if (xSemaphoreTake(_mutex, portMAX_DELAY) != pdTRUE) return false;
+    const bool copied = _ensure_loaded() && output.set(*_manifest_doc) && !output.overflowed();
+    xSemaphoreGive(_mutex);
+    if (!copied) LOGE(TAG, "Cannot copy manifest for %s", _base_path);
+    return copied;
+}
+
+bool FsIndexedStore::copy_entry(const char* id, JsonObject output) {
+    if (!id || output.isNull() || xSemaphoreTake(_mutex, portMAX_DELAY) != pdTRUE) return false;
+    bool copied = false;
+    if (_ensure_loaded()) {
+        for (JsonObjectConst entry : (*_manifest_doc)["entries"].as<JsonArrayConst>()) {
+            if (strcmp(entry["id"] | "", id) == 0) {
+                copied = output.set(entry);
+                break;
+            }
+        }
+    }
+    xSemaphoreGive(_mutex);
+    return copied;
+}
+
 // ---------------------------------------------------------------------------
 // count()
 // ---------------------------------------------------------------------------
@@ -1075,4 +1098,4 @@ uint32_t FsIndexedStore::allocate_id(const char* field_name, const char* prefix,
     return id;
 }
 
-#endif // HAS_DISPLAY || HAS_VOICE_CLIPS
+#endif // HAS_DISPLAY || HAS_VOICE_NOTES

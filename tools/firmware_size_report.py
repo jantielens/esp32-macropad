@@ -29,9 +29,9 @@ FEATURES = {
         ("volume_fragment_html_gz",),
     ),
     "Audio input (HAS_AUDIO_INPUT)": (("audio_input*.cpp.o",), ()),
-    "Voice clips (HAS_VOICE_CLIPS)": (
-        ("voice_clips*.cpp.o", "voice_clip_range.cpp.o", "voice_wav_store.cpp.o"),
-        ("voice_clips_fragment_html_gz", "portal_voice_clips_js_gz"),
+    "Voice Notes (HAS_VOICE_NOTES)": (
+        ("voice_notes*.cpp.o", "voice_note_range.cpp.o", "voice_notes_metadata.cpp.o"),
+        ("voice_notes_fragment_html_gz", "voice_notes_settings_fragment_html_gz", "portal_voice_notes_js_gz"),
     ),
     "Sound player (HAS_SOUND_PLAYER)": (
         ("sound_player*.cpp.o", "sound_store.cpp.o", "mp3_metadata.cpp.o", "web_portal_sound*.cpp.o"),

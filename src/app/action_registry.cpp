@@ -13,7 +13,7 @@
 #define ACTION_TYPE_REGISTRY_MAX_TYPES 27
 #endif
 static constexpr int MAX_ACTION_TYPES = ACTION_TYPE_REGISTRY_MAX_TYPES
-#if HAS_VOICE_CLIPS
+#if HAS_VOICE_NOTES
     + 1
 #endif
     ;

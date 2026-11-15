@@ -1,5 +1,5 @@
 #include "board_config.h"
-#if IS_VOICE_ASSISTANT || HAS_VOICE_CLIPS
+#if IS_VOICE_ASSISTANT || HAS_VOICE_NOTES
 
 #include "voice_wav.h"
 #include <string.h>
@@ -17,7 +17,7 @@ void write_u32_le(uint8_t* out, uint32_t value) {
     out[3] = (uint8_t)(value >> 24);
 }
 
-#if HAS_VOICE_CLIPS
+#if HAS_VOICE_NOTES
 uint16_t read_u16_le(const uint8_t* data) {
     return (uint16_t)data[0] | ((uint16_t)data[1] << 8);
 }
@@ -47,7 +47,7 @@ void voice_wav_build_header(uint8_t* out, uint32_t data_bytes, uint32_t sample_r
     write_u32_le(out + 40, data_bytes);
 }
 
-#if HAS_VOICE_CLIPS
+#if HAS_VOICE_NOTES
 bool voice_wav_read_header(const uint8_t* header, size_t header_size, uint64_t file_size,
                            VoiceWavInfo* info) {
     if (!header || !info || header_size < VOICE_WAV_HEADER_BYTES ||
@@ -77,4 +77,4 @@ bool voice_wav_read_header(const uint8_t* header, size_t header_size, uint64_t f
 }
 #endif
 
-#endif // IS_VOICE_ASSISTANT || HAS_VOICE_CLIPS
+#endif // IS_VOICE_ASSISTANT || HAS_VOICE_NOTES

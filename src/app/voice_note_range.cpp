@@ -1,6 +1,6 @@
-#include "voice_clip_range.h"
+#include "voice_note_range.h"
 
-#if HAS_VOICE_CLIPS
+#if HAS_VOICE_NOTES
 #include <string.h>
 
 namespace {
@@ -16,7 +16,7 @@ bool number(const char*& p, uint64_t& value) {
 }
 }
 
-bool voice_clip_parse_range(const char* header, uint64_t size,
+bool voice_note_parse_range(const char* header, uint64_t size,
                             uint64_t* start, uint64_t* end) {
     if (!header || !start || !end || !size || strncmp(header, "bytes=", 6)) return false;
     const char* p = header + 6;

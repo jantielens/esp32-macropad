@@ -2,7 +2,7 @@
 #include "board_config.h"
 
 #include "audio_input_binding.h"
-#include "voice_clips_binding.h"
+#include "voice_notes_binding.h"
 #if HAS_BATTERY_INFO
 #include "battery_binding.h"
 #endif
@@ -57,8 +57,8 @@ void binding_builtin_schemes_init() {
 #if HAS_AUDIO_INPUT && HAS_DISPLAY
     audio_input_binding_init();
 #endif
-#if HAS_VOICE_CLIPS && HAS_DISPLAY
-    voice_clips_binding_init();
+#if HAS_VOICE_NOTES && HAS_DISPLAY
+    voice_notes_binding_init();
 #endif
     list_binding_init();
     net_binding_init();

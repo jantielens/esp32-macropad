@@ -10,8 +10,8 @@
 #include "reboot_service.h"
 #include "psram_json_allocator.h"
 #include "web_portal_json.h"
-#if HAS_VOICE_CLIPS
-#include "voice_clips.h"
+#if HAS_VOICE_NOTES
+#include "voice_notes.h"
 #endif
 
 #include <ArduinoJson.h>
@@ -95,15 +95,15 @@ static void firmware_update_task(void *pv) {
 		strlcpy(firmware_update_state, "downloading", sizeof(firmware_update_state));
 		firmware_update_error[0] = '\0';
 
-#if HAS_VOICE_CLIPS
+#if HAS_VOICE_NOTES
 		const uint32_t recorder_started_ms = millis();
-		VoiceClipCancelStatus recorder = voice_clips_cancel();
-		while (recorder == VoiceClipCancelStatus::Pending &&
+		VoiceNoteCancelStatus recorder = voice_notes_cancel();
+		while (recorder == VoiceNoteCancelStatus::Pending &&
 			   (uint32_t)(millis() - recorder_started_ms) < 5000) {
 				delay(10);
-				recorder = voice_clips_cancel();
+				recorder = voice_notes_cancel();
 		}
-		if (recorder != VoiceClipCancelStatus::Ready) {
+		if (recorder != VoiceNoteCancelStatus::Ready) {
 				strlcpy(firmware_update_state, "error", sizeof(firmware_update_state));
 				strlcpy(firmware_update_error, "Voice recorder did not stop safely",
 						sizeof(firmware_update_error));

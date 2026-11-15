@@ -35,6 +35,9 @@ static const NavCategory kNavCategories[] = {
     {"actions",      "Actions",      "\xe2\x9a\xa1"},               // ⚡
     {"alarm",        "Alarm",        "\xe2\x8f\xb0"},
     {"connectivity", "Connectivity", "\xf0\x9f\x93\xa1"},           // 📡
+#if HAS_VOICE_NOTES
+    {"voice-notes",  "Voice Notes",  "voice"},
+#endif
     {"audio",        "Audio",        "\xf0\x9f\x94\x8a"},           // 🔊
     {"sensors",      "Sensors",      "\xf0\x9f\x93\x8a"},           // 📊
     {"firmware",     "Firmware",     "\xf0\x9f\x92\xbe"},           // 💾

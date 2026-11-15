@@ -28,7 +28,7 @@ window.registerConfigFields = function (names) {
 };
 
 let portalMaterialSymbolsPromise = null;
-function portalCategoryIcon(category) {
+function portalCategoryIcon(category, alias) {
     const icons = {
         device: 'settings', display: 'display_settings', camera: 'photo_camera',
         pads: 'grid_view', actions: 'bolt', alarm: 'alarm', connectivity: 'hub',
@@ -36,7 +36,7 @@ function portalCategoryIcon(category) {
         coffee: 'coffee', darkroom: 'dark_mode', voice: 'record_voice_over',
         epaper_frame: 'image', 'epaper-frame': 'image'
     };
-    return '<span class="portal-icon" aria-hidden="true">' + (icons[category] || 'settings') + '</span>';
+    return '<span class="portal-icon" aria-hidden="true">' + (icons[alias] || icons[category] || 'settings') + '</span>';
 }
 
 function portalEnsureMaterialSymbols() {

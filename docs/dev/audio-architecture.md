@@ -145,9 +145,9 @@ bindings is actively resolved. It yields to another capture owner and during
 firmware updates. Its task stack and sample buffer prefer PSRAM, with internal
 RAM fallback.
 
-## Local Voice Clips
+## Local Voice Notes
 
-`HAS_VOICE_CLIPS` enables an independent local recorder and is mutually
+`HAS_VOICE_NOTES` enables an independent local recorder and is mutually
 exclusive with `IS_VOICE_ASSISTANT`. One worker owns capture, using a PSRAM-first
 stack. Another uses an internal stack to own the unfinished file and write
 native 16-bit PCM through `Storage`.
@@ -158,16 +158,28 @@ to the capture owner.
 
 The recorder reserves filesystem headroom and checks capacity during capture.
 Overrun, input stall, write, and finalization failures are reported without
-publishing an unfinished clip. OTA, reboot, factory reset, and Sticky shutdown
+publishing an unfinished note. OTA, reboot, factory reset, and Sticky shutdown
 request cancellation and wait or defer until both workers have stopped safely.
 Boot cleanup removes stale temporary recordings. Portal readers stream indexed
-clips with bounded buffers; an active reader makes deletion return busy.
+notes with bounded buffers; an active reader makes deletion return busy.
 The Sticky driver targets 16 kHz mono with 16 DMA buffers of 512 frames. The
 queue holds 16 batches of 1024 frames, or 32 KiB at this format. A device
 reported a 210 ms write and a 569 ms capacity check with the single-worker
 design. Capture can now continue while the storage worker is blocked, but flash
 cache stalls still require DMA buffering. Longer recordings, memory headroom,
 and worst-case stalls need device validation.
+
+Voice Notes transcription has its own single-job worker and settings; it does
+not use the Voice Assistant. The worker holds a WAV reader lease while streaming
+the recording to the configured Azure deployment over verified TLS. Transcript
+JSON is stored separately through atomic replacement, leaving the WAV and any
+previous transcript intact on failure. Recording and OTA checkpoints abandon
+processing when they take priority. The worker uses an internal RAM stack for
+storage access and PSRAM for job and transcript buffers.
+Catalog and details responses use strict PSRAM-backed documents and stream JSON
+without intermediate catalog strings. Details copies only the requested index
+entry. The one-shot transcription connection is closed before response parsing
+and the TCP close-settling delay.
 
 ## Voice Assistant
 

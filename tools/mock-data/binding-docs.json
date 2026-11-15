@@ -3911,7 +3911,7 @@
       }
     },
     {
-      "name": "recorder",
+      "name": "voice_note",
       "min_params": 1,
       "max_params": 1,
       "widget_max_params": 1,
@@ -3919,13 +3919,17 @@
       "validation_mode": 0,
       "free_form": false,
       "keys": [
-        "state",
-        "duration_s",
-        "last_clip",
-        "error"
+        "recording.state",
+        "recording.duration_s",
+        "recording.scenario",
+        "recording.error",
+        "last_saved.id",
+        "transcription.state",
+        "transcription.note_id",
+        "transcription.error"
       ],
       "category": "Device",
-      "summary": "Local voice clip recorder status.",
+      "summary": "Local voice note recorder status.",
       "params": [
         {
           "name": "key",
@@ -3935,36 +3939,52 @@
       ],
       "key_docs": [
         {
-          "key": "state",
+          "key": "recording.state",
           "desc": "Current recording state"
         },
         {
-          "key": "duration_s",
+          "key": "recording.duration_s",
           "desc": "Captured duration in seconds, excluding pauses"
         },
         {
-          "key": "last_clip",
-          "desc": "ID of the last successfully saved clip"
+          "key": "recording.scenario",
+          "desc": "Active recording scenario"
         },
         {
-          "key": "error",
+          "key": "recording.error",
           "desc": "Most recent recorder error"
+        },
+        {
+          "key": "last_saved.id",
+          "desc": "ID of the last successfully saved note since boot"
+        },
+        {
+          "key": "transcription.state",
+          "desc": "Current transcription state"
+        },
+        {
+          "key": "transcription.note_id",
+          "desc": "Note ID of the latest transcription attempt"
+        },
+        {
+          "key": "transcription.error",
+          "desc": "Most recent transcription error"
         }
       ],
       "examples": [
         {
-          "code": "[recorder:state]",
+          "code": "[voice_note:recording.state]",
           "desc": "Show the recorder state."
         },
         {
-          "code": "[recorder:duration_s]",
+          "code": "[voice_note:recording.duration_s]",
           "desc": "Show the captured duration."
         }
       ],
       "authoring": {
         "keys": [
           {
-            "key": "state",
+            "key": "recording.state",
             "kind": "text",
             "unit": "",
             "example_value": "idle",
@@ -3977,7 +3997,7 @@
             "read_only": true
           },
           {
-            "key": "duration_s",
+            "key": "recording.duration_s",
             "kind": "integer",
             "unit": "s",
             "example_value": "0",
@@ -3994,7 +4014,33 @@
             "read_only": true
           },
           {
-            "key": "last_clip",
+            "key": "recording.scenario",
+            "kind": "text",
+            "unit": "",
+            "example_value": "general",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "recording.error",
+            "kind": "text",
+            "unit": "",
+            "example_value": "No audio captured",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "last_saved.id",
             "kind": "text",
             "unit": "",
             "example_value": "0000000100000002",
@@ -4007,10 +4053,36 @@
             "read_only": true
           },
           {
-            "key": "error",
+            "key": "transcription.state",
             "kind": "text",
             "unit": "",
-            "example_value": "No audio captured",
+            "example_value": "idle",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "transcription.note_id",
+            "kind": "text",
+            "unit": "",
+            "example_value": "0000000100000002",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "transcription.error",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Transcription request failed",
             "formats": [
               "raw"
             ],

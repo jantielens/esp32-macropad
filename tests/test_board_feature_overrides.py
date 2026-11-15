@@ -71,11 +71,11 @@ print("PASS: RTC supports interactive firmware and rejects the unintegrated slee
 
 for overrides, expected_error in (
     ({}, None),
-    ({"HAS_VOICE_CLIPS": 1}, None),
-    ({"HAS_VOICE_CLIPS": 1, "IS_VOICE_ASSISTANT": 1}, "cannot be enabled together"),
-    ({"HAS_VOICE_CLIPS": 1, "HAS_AUDIO_INPUT": 0}, "requires audio input"),
-    ({"HAS_VOICE_CLIPS": 1, "HAS_FILESYSTEM": 0}, "requires audio input"),
-    ({"HAS_VOICE_CLIPS": 1, "HAS_DISPLAY": 0, "HAS_BUTTON": 0}, "requires audio input"),
+    ({"HAS_VOICE_NOTES": 1}, None),
+    ({"HAS_VOICE_NOTES": 1, "IS_VOICE_ASSISTANT": 1}, "cannot be enabled together"),
+    ({"HAS_VOICE_NOTES": 1, "HAS_AUDIO_INPUT": 0}, "requires audio input"),
+    ({"HAS_VOICE_NOTES": 1, "HAS_FILESYSTEM": 0}, "requires audio input"),
+    ({"HAS_VOICE_NOTES": 1, "HAS_DISPLAY": 0, "HAS_BUTTON": 0}, "requires audio input"),
 ):
     flags = {
         "IS_VOICE_ASSISTANT": 0, "HAS_AUDIO": 1,
@@ -84,8 +84,8 @@ for overrides, expected_error in (
     }
     flags.update(overrides)
     source = '#include "src/app/board_config.h"\n'
-    if "HAS_VOICE_CLIPS" not in overrides:
-        source += 'static_assert(!HAS_VOICE_CLIPS, "Voice clips must be disabled by default");\n'
+    if "HAS_VOICE_NOTES" not in overrides:
+        source += 'static_assert(!HAS_VOICE_NOTES, "Voice clips must be disabled by default");\n'
     result = subprocess.run(
         ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
          "-x", "c++", "-", "-I", str(root)]
@@ -140,7 +140,7 @@ with tempfile.TemporaryDirectory() as directory:
         subprocess.run(
             ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
              "-include", str(root / "tests/board_config.h"),
-             f"-DIS_VOICE_ASSISTANT={assistant}", f"-DHAS_VOICE_CLIPS={clips}",
+             f"-DIS_VOICE_ASSISTANT={assistant}", f"-DHAS_VOICE_NOTES={clips}",
              "-c", str(root / "src/app/voice_wav.cpp"), "-o", str(obj)],
             check=True,
         )
@@ -417,7 +417,7 @@ for board, sd in (("reterminal-sticky-interactive", 0), ("reterminal-sticky-inte
          "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM", "-DCONFIG_IDF_TARGET_ESP32S3=1"],
         input=f'''#include "src/app/board_config.h"
 static_assert(HAS_SD_CARD == {sd} && USE_SD_STORAGE == {sd}, "Sticky storage selection");
-static_assert(HAS_DISPLAY && HAS_TOUCH && HAS_AUDIO_INPUT && HAS_VOICE_CLIPS && HAS_RTC && HAS_BLE, "Sticky capabilities");
+static_assert(HAS_DISPLAY && HAS_TOUCH && HAS_AUDIO_INPUT && HAS_VOICE_NOTES && HAS_RTC && HAS_BLE, "Sticky capabilities");
 static_assert(BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO, "Sticky BLE backend");
 ''' + ('''static_assert(SD_STORAGE_SPI && SD_SPI_CS_PIN == 8 && SD_SPI_SCK_PIN == 13 &&
     SD_SPI_MISO_PIN == 12 && SD_SPI_MOSI_PIN == 14 && SD_SPI_FREQUENCY_HZ == 1000000, "Sticky SD wiring");

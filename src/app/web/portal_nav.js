@@ -97,7 +97,7 @@
       header.className = 'nav-category-header';
       header.setAttribute('data-category', cat.id);
       header.innerHTML =
-        portalCategoryIcon(cat.id) +
+        portalCategoryIcon(cat.id, cat.icon) +
         '<span class="nav-category-label">' + escapeHtml(cat.display_name) + '</span>' +
         '<span class="nav-category-chevron"></span>';
 

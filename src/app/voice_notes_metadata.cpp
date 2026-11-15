@@ -1,12 +1,12 @@
 #include "board_config.h"
 
-#if HAS_VOICE_CLIPS
+#if HAS_VOICE_NOTES
 
-#include "voice_wav_store.h"
+#include "voice_notes_metadata.h"
 #include "storage.h"
 #include "voice_wav.h"
 
-FsIndexedStoreReadResult voice_wav_store_read_metadata(const char* path, JsonObject metadata) {
+FsIndexedStoreReadResult voice_notes_metadata_read_metadata(const char* path, JsonObject metadata) {
     File file = Storage.open(path, "r");
     if (!file) return FsIndexedStoreReadResult::IoError;
 
@@ -33,4 +33,4 @@ FsIndexedStoreReadResult voice_wav_store_read_metadata(const char* path, JsonObj
     return FsIndexedStoreReadResult::Valid;
 }
 
-#endif // HAS_VOICE_CLIPS
+#endif // HAS_VOICE_NOTES

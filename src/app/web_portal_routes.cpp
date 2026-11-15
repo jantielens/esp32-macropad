@@ -175,8 +175,8 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		#if HAS_EXTERNAL_DATA
 		server->on("/portal-external-data.js", HTTP_GET, handlePortalExternalDataJS);
 		#endif
-		#if HAS_VOICE_CLIPS
-		server->on("/portal-voice-clips.js", HTTP_GET, handlePortalVoiceClipsJS);
+		#if HAS_VOICE_NOTES
+		server->on("/portal-voice-notes.js", HTTP_GET, handlePortalVoiceNotesJS);
 		#endif
 			 #if HAS_REMOTE_LOG
 		server->on("/portal-logs.js", HTTP_GET, handlePortalLogsJS);

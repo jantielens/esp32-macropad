@@ -37,6 +37,6 @@
 #if HAS_CAMERA
 #include "camera_capture_action.cpp"
 #endif
-#if HAS_VOICE_CLIPS
-#include "voice_clip_action.cpp"
+#if HAS_VOICE_NOTES
+#include "voice_note_action.cpp"
 #endif

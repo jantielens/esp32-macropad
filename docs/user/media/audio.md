@@ -1,6 +1,6 @@
 ---
-title: Audio and voice clips
-description: Configure audio feedback, manage sounds and music, and record local voice clips.
+title: Audio and Voice Notes
+description: Configure audio feedback, manage sounds and music, and record local voice notes.
 ---
 
 Audio provides button feedback, alerts, and Music playback, with microphone
@@ -92,26 +92,46 @@ Next/Previous change the selected track without forcing playback.
 After interruption, Music restarts the selected track from the beginning if
 its desired state is still Playing; it is not sample-accurate resume.
 
-## Record and manage voice clips
+## Record and manage voice notes
 
-On supported firmware, add **Voice clip** actions to buttons or other action
-hosts. Use **Start**, **Pause**, **Resume**, **Save**, and **Discard** to
+On supported firmware, add **Voice note** actions to buttons or other action
+hosts. Use **Start recording**, **Pause recording**, **Resume recording**,
+**Save recording**, and **Discard recording** to
 control one local recording. Save completes before subsequent actions run;
 failed commands stop the remaining actions. Pause retains the microphone and
-does not add silence to the clip. The microphone level meter is unavailable
+does not add silence to the recording. The microphone level meter is unavailable
 while recording or paused.
 
-Open **Audio > Voice clips** to play, seek, download, or delete saved WAV files
-in your browser. Clips are grouped by date; recordings made before the device
-clock is set appear under **Unknown date**. Delete requires confirmation.
-The portal does not use your browser's microphone. Clips use
-the device input's native 16-bit PCM format and stay on its selected storage
-backend. Free space limits recording time; the device saves captured audio when
-it reaches the storage reserve. Keep private recordings and downloads protected.
+Open **Voice Notes > Notes** to play, seek, download, or delete saved WAV files.
+Notes are grouped by date; recordings made before the device clock is set appear
+under **Unknown date**. Delete requires confirmation. The portal does not use
+your browser's microphone. Recordings use the device input's native 16-bit PCM
+format and stay on its selected storage backend. Free space limits recording
+time; the device saves captured audio when it reaches the storage reserve.
 
-Use `[recorder:state]`, `[recorder:duration_s]`, `[recorder:last_clip]`, and
-`[recorder:error]` on pads to show recording status and the latest result.
-Starting a new recording clears the previous result. A reboot, firmware update,
+To transcribe a note, open **Voice Notes > Settings** and enter the Azure
+resource's HTTPS endpoint, API key, and transcription deployment name. Use the
+resource root, such as `https://<resource>.openai.azure.com/`, without an
+`/openai/` path, operation path, or query. Enter the deployment name separately.
+Select **Save**; a reboot is not required.
+Leave the key blank on later saves to keep the stored key.
+
+In **Notes**, select **Transcribe**. Open **View details** to play the note and
+read its transcript. Transcription sends the
+recording to the configured Azure service. Keep your recordings, downloads, and
+credentials protected. A failed attempt leaves the WAV and any previous
+transcript intact; correct the issue and retry. A new successful attempt replaces
+the previous transcript. Recording takes priority over transcription.
+Access and deployment errors direct you to check Voice Notes Settings. Upload
+limit errors require a smaller recording; rate or quota errors require checking
+the Azure quota or retrying later.
+
+Use `[voice_note:recording.state]`, `[voice_note:recording.duration_s]`,
+`[voice_note:last_saved.id]`, and `[voice_note:recording.error]` on pads to
+show recording status and the latest result. Transcription status is available
+through `[voice_note:transcription.state]`, `[voice_note:transcription.note_id]`,
+and `[voice_note:transcription.error]`.
+The latest saved ID remains available until the device restarts. A reboot, firmware update,
 factory reset, or device shutdown discards an unfinished recording. If a
 manual update or reset reports that recording is stopping, retry the operation.
 If microphone cleanup fails, retry **Start** after the issue clears.

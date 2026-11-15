@@ -102,8 +102,9 @@
 #include "audio_input.h"
 #endif
 
-#if HAS_VOICE_CLIPS
-#include "voice_clips.h"
+#if HAS_VOICE_NOTES
+#include "voice_notes.h"
+#include "voice_notes_transcription.h"
 #endif
 
 #include "i2c_bus.h"
@@ -516,6 +517,10 @@ void setup()
 	// samples its panel mode during initialization and never changes it live.
 	config_manager_init();
 	config_loaded = config_manager_load(&device_config);
+	#if HAS_VOICE_NOTES
+	if (!voice_notes_transcription_configure(device_config.voice_notes_transcription))
+		LOGE("Main", "Voice Notes transcription configuration unavailable");
+	#endif
 	if (!device_config.timezone[0]) strlcpy(device_config.timezone, "UTC0", sizeof(device_config.timezone));
 	time_service_set_timezone(device_config.timezone);
 	#if HAS_RTC
@@ -738,8 +743,8 @@ void setup()
 		}
 	}
 
-	#if HAS_VOICE_CLIPS
-	if (!voice_clips_init()) LOGE("Main", "Voice clips initialization failed");
+	#if HAS_VOICE_NOTES
+	if (!voice_notes_init()) LOGE("Main", "Voice Notes initialization failed");
 	#endif
 
 	bool enter_setup_ap = (boot_mode == PowerMode::Ap);
@@ -932,9 +937,9 @@ void loop()
 	hw_buttons_loop();
 
 #if HAS_AUTO_SHUTDOWN
-	#if HAS_VOICE_CLIPS
-	VoiceClipSnapshot voice_snapshot;
-	voice_clips_snapshot(&voice_snapshot);
+	#if HAS_VOICE_NOTES
+	VoiceNoteSnapshot voice_snapshot;
+	voice_notes_snapshot(&voice_snapshot);
 	if (voice_snapshot.session_active) auto_shutdown_notify_activity();
 	#endif
 	auto_shutdown_loop();

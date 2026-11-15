@@ -55,6 +55,8 @@ class PortalDevServerTest(unittest.TestCase):
         PORTAL.reset_pad_fixtures(self.server)
         self.server.mock_fonts = {}
         self.server.mock_config.pop("external_data", None)
+        for key in ("voice_notes_base_url", "voice_notes_api_key", "voice_notes_model"):
+            self.server.mock_config.pop(key, None)
 
     def request(self, path, method="GET", body=None, profile="esp32-p4-lcd4b", raw=False,
                 content_type="application/json"):
@@ -116,26 +118,46 @@ class PortalDevServerTest(unittest.TestCase):
                                           profile=selected, raw=True)[0], 204 if enabled else 404)
         self.server.mock_config.pop("auto_shutdown_timeout_seconds", None)
 
-    def test_voice_clips_fixture_and_profile_isolation(self):
+    def test_voice_notes_fixture_and_profile_isolation(self):
         profile = "reterminal-sticky-interactive"
-        base = "/api/component/voice-clips/"
+        base = "/api/component/voice-notes/"
         clip_id = "0000000100000002"
         for selected, enabled in ((profile, True), ("esp32-p4-lcd4b", False)):
             nav = self.request("/api/portal/nav", profile=selected)[1]
             entries = {item["id"] for category in nav["categories"] for item in category["items"]}
-            self.assertEqual("voice-clips" in entries, enabled)
+            self.assertEqual("voice-notes" in entries, enabled)
             for suffix in ("", "?docs=1"):
                 schemes = self.request("/api/bindings" + suffix, profile=selected)[1]["schemes"]
-                self.assertEqual(any(scheme["name"] == "recorder" for scheme in schemes), enabled)
+                self.assertEqual(any(scheme["name"] == "voice_note" for scheme in schemes), enabled)
             catalog = self.request("/api/info?catalog=1", profile=selected)[1]["catalog"]
-            self.assertEqual(any(action["type"] == "voice_clip" for action in catalog), enabled)
-            for path in ("/portal-voice-clips.js", "/api/section/voice-clips"):
+            self.assertEqual(any(action["type"] == "voice_note" for action in catalog), enabled)
+            for path in ("/portal-voice-notes.js", "/api/section/voice-notes",
+                         "/api/section/voice-notes-settings"):
                 self.assertEqual(self.request(path, profile=selected, raw=True)[0], 200 if enabled else 404)
             self.assertEqual(self.request(base + "list", profile=selected)[0], 200 if enabled else 404)
 
         listing = self.request(base + "list", profile=profile)[1]
         self.assertEqual(listing["entries"][0]["id"], clip_id)
         self.assertEqual(listing["entries"][0]["created_at"], PORTAL.MOCK_NOW_EPOCH)
+        self.assertFalse(listing["entries"][0]["has_transcript"])
+        self.assertIsNone(self.request(base + "detail?id=" + clip_id, profile=profile)[1]["transcript"])
+        self.assertEqual(self.request(base + "transcribe?id=" + clip_id, "POST", profile=profile)[0], 400)
+        settings = {"voice_notes_base_url": "https://example.test", "voice_notes_model": "deployment",
+                    "voice_notes_api_key": "test-key"}
+        self.assertEqual(self.request("/api/config?no_reboot=1", "POST", settings, profile=profile)[0], 200)
+        saved = self.request("/api/config", profile=profile)[1]
+        self.assertEqual(saved["voice_notes_base_url"], "https://example.test/")
+        self.assertEqual(saved["voice_notes_api_key"], "")
+        self.assertTrue(saved["voice_notes_api_key_set"])
+        self.assertEqual(self.request("/api/config?no_reboot=1", "POST",
+                                     {"voice_notes_api_key": ""}, profile=profile)[0], 200)
+        self.assertTrue(self.request("/api/config", profile=profile)[1]["voice_notes_api_key_set"])
+        self.assertEqual(self.request(base + "transcribe?id=" + clip_id, "POST", profile=profile)[0], 202)
+        self.assertEqual(self.request(base + "transcribe?id=" + clip_id, "POST", profile=profile)[0], 409)
+        self.server.mock_voice_transcription_started -= 2
+        self.assertEqual(self.request(base + "status", profile=profile)[1]["transcription"]["state"], "ready")
+        self.assertTrue(self.request(base + "list", profile=profile)[1]["entries"][0]["has_transcript"])
+        self.assertTrue(self.request(base + "detail?id=" + clip_id, profile=profile)[1]["transcript"]["text"])
         url = self.base + base + "file?id=" + clip_id
         cookie = {"Cookie": "portal_mock_profile=" + profile}
         with urlopen(Request(url, headers=cookie)) as response:
@@ -1158,7 +1180,7 @@ class PortalDevServerTest(unittest.TestCase):
     def test_catalog_source_parity(self):
         actions_dir = ROOT / "src/app/actions"
         manifest = (actions_dir / "action_modules.inc").read_text()
-        unavailable = {"ble_pair", "display_refresh", "camera_capture", "voice_clip"}
+        unavailable = {"ble_pair", "display_refresh", "camera_capture", "voice_note"}
         expected = set(re.findall(r'#include "([^"/]+)_action.cpp"', manifest)) - unavailable
         catalog = self.server.pad_fixture["catalog"]
         self.assertEqual({action["type"] for action in catalog}, expected)
@@ -1171,8 +1193,8 @@ class PortalDevServerTest(unittest.TestCase):
                 self.assertIn('action["label"] = ' + json.dumps(action["label"]), source)
             self.assertIn('action["group"] = ' + json.dumps(action["group"]), source)
         sticky_catalog = self.request("/api/info?catalog=1", profile="reterminal-sticky-interactive")[1]["catalog"]
-        recorder = next(action for action in sticky_catalog if action["type"] == "voice_clip")
-        recorder_source = (actions_dir / "voice_clip_action.cpp").read_text()
+        recorder = next(action for action in sticky_catalog if action["type"] == "voice_note")
+        recorder_source = (actions_dir / "voice_note_action.cpp").read_text()
         self.assertIn('action["label"] = ' + json.dumps(recorder["label"]), recorder_source)
         self.assertIn('action["group"] = ' + json.dumps(recorder["group"]), recorder_source)
         fields = ("name", "icon", "second_icon", "axis_field", "horizontal_icon", "vertical_icon", "default_axis")

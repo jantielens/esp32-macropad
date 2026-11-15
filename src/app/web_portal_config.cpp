@@ -5,8 +5,11 @@
 #include "portal_idle.h"
 #include "ota_activity.h"
 #include "reboot_service.h"
-#if HAS_VOICE_CLIPS
-#include "voice_clips.h"
+#if HAS_VOICE_NOTES
+#include "voice_notes.h"
+#include "voice_notes_transcription.h"
+#include <esp_heap_caps.h>
+#include <memory>
 #endif
 
 #include "board_config.h"
@@ -208,6 +211,12 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["ha_url"] = current_config->ha_url;
 				(*doc)["ha_token"] = "";
 				(*doc)["ha_token_set"] = (strlen(current_config->ha_token) > 0);
+#if HAS_VOICE_NOTES
+				(*doc)["voice_notes_base_url"] = current_config->voice_notes_transcription.base_url;
+				(*doc)["voice_notes_api_key"] = "";
+				(*doc)["voice_notes_api_key_set"] = current_config->voice_notes_transcription.api_key[0] != '\0';
+				(*doc)["voice_notes_model"] = current_config->voice_notes_transcription.model;
+#endif
 
 #if HAS_EXTERNAL_DATA
 				external_data_write_status((*doc)["external_data"].to<JsonArray>(), current_config->external_data);
@@ -490,6 +499,51 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				portEXIT_CRITICAL(&g_config_post_mux);
 				return;
 		}
+
+#if HAS_VOICE_NOTES
+		struct VoiceNotesConfigUpdate {
+				VoiceNotesTranscriptionConfig previous;
+				VoiceNotesTranscriptionConfig candidate;
+		};
+		const bool voice_notes_update = doc.containsKey("voice_notes_base_url") ||
+				doc.containsKey("voice_notes_api_key") || doc.containsKey("voice_notes_model");
+		std::unique_ptr<VoiceNotesConfigUpdate, decltype(&free)> voice_notes_candidate(nullptr, &free);
+		if (voice_notes_update) {
+				voice_notes_candidate.reset(static_cast<VoiceNotesConfigUpdate*>(
+						heap_caps_malloc(sizeof(VoiceNotesConfigUpdate), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)));
+				if (!voice_notes_candidate) {
+						request->send(503, "application/json", "{\"success\":false,\"message\":\"Voice Notes settings memory unavailable\"}");
+						portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+						return;
+				}
+				voice_notes_candidate->previous = current_config->voice_notes_transcription;
+				voice_notes_candidate->candidate = voice_notes_candidate->previous;
+				auto& candidate = voice_notes_candidate->candidate;
+				bool valid = true;
+				if (doc.containsKey("voice_notes_base_url")) {
+						const char* value = doc["voice_notes_base_url"].is<const char*>()
+								? doc["voice_notes_base_url"].as<const char*>() : nullptr;
+						valid = value && voice_notes_normalize_endpoint(value, candidate.base_url, sizeof(candidate.base_url));
+				}
+				if (doc.containsKey("voice_notes_model")) {
+						const char* value = doc["voice_notes_model"].is<const char*>()
+								? doc["voice_notes_model"].as<const char*>() : nullptr;
+						if (!value || strlen(value) >= sizeof(candidate.model) || strpbrk(value, "\r\n")) valid = false;
+						else strlcpy(candidate.model, value, sizeof(candidate.model));
+				}
+				if (doc.containsKey("voice_notes_api_key")) {
+						const char* value = doc["voice_notes_api_key"].is<const char*>()
+								? doc["voice_notes_api_key"].as<const char*>() : nullptr;
+						if (!value || strlen(value) >= sizeof(candidate.api_key) || strpbrk(value, "\r\n")) valid = false;
+						else if (value[0]) strlcpy(candidate.api_key, value, sizeof(candidate.api_key));
+				}
+				if (!valid) {
+						request->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid Voice Notes settings\"}");
+						portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+						return;
+				}
+		}
+#endif
 
 		#if IS_EPAPER_FRAME
 		if (doc.containsKey("operating_mode") &&
@@ -1248,10 +1302,21 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		const uint16_t previous_auto_shutdown = current_config->auto_shutdown_timeout_seconds;
 		current_config->auto_shutdown_timeout_seconds = static_cast<uint16_t>(auto_shutdown_candidate);
 #endif
+#if HAS_VOICE_NOTES
+		if (voice_notes_update) current_config->voice_notes_transcription = voice_notes_candidate->candidate;
+#endif
 #if HAS_EXTERNAL_DATA
 		if (config_manager_save(current_config, external_candidate.get())) {
 #else
 		if (config_manager_save(current_config)) {
+#endif
+#if HAS_VOICE_NOTES
+				if (voice_notes_update && !voice_notes_transcription_configure(current_config->voice_notes_transcription)) {
+						LOGE("Portal", "Voice Notes settings persisted but could not be applied");
+						request->send(503, "application/json", "{\"success\":false,\"message\":\"Settings saved but Voice Notes is unavailable\"}");
+						portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+						return;
+				}
 #endif
 #if HAS_BLE || HAS_BLE_HID
 				if (bthome_update) bthome_events_apply_settings(bthome_candidate);
@@ -1293,6 +1358,9 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				}
 		} else {
 				LOGE("Portal", "Config save failed");
+#if HAS_VOICE_NOTES
+				if (voice_notes_update) current_config->voice_notes_transcription = voice_notes_candidate->previous;
+#endif
 #if HAS_AUTO_SHUTDOWN
 				current_config->auto_shutdown_timeout_seconds = previous_auto_shutdown;
 #endif
@@ -1331,11 +1399,11 @@ void handleDeleteConfig(AsyncWebServerRequest *request) {
 				return;
 		}
 
-#if HAS_VOICE_CLIPS
-		const VoiceClipCancelStatus recorder = voice_clips_cancel();
-		if (recorder != VoiceClipCancelStatus::Ready) {
-				request->send(recorder == VoiceClipCancelStatus::Pending ? 409 : 503,
-						"application/json", recorder == VoiceClipCancelStatus::Pending
+#if HAS_VOICE_NOTES
+		const VoiceNoteCancelStatus recorder = voice_notes_cancel();
+		if (recorder != VoiceNoteCancelStatus::Ready) {
+				request->send(recorder == VoiceNoteCancelStatus::Pending ? 409 : 503,
+						"application/json", recorder == VoiceNoteCancelStatus::Pending
 						? "{\"success\":false,\"message\":\"Stopping voice recording; retry reset\"}"
 						: "{\"success\":false,\"message\":\"Voice recorder could not stop safely\"}");
 				ota_activity_finish_config_write();

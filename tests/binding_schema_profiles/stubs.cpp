@@ -3,10 +3,13 @@
 #include <WiFi.h>
 #include "audio.h"
 #include "audio_input.h"
-#if HAS_VOICE_CLIPS
-#include "voice_clips.h"
-void voice_clips_snapshot(VoiceClipSnapshot* out) { *out = {}; }
-const char* voice_clips_state_name(VoiceClipState) { return "idle"; }
+#if HAS_VOICE_NOTES
+#include "voice_notes.h"
+#include "voice_notes_transcription.h"
+void voice_notes_snapshot(VoiceNoteSnapshot* out) { *out = {}; }
+const char* voice_notes_state_name(VoiceNoteState) { return "idle"; }
+void voice_notes_transcription_snapshot(VoiceNotesTranscriptionSnapshot* out) { *out = {}; }
+const char* voice_notes_transcription_state_name(VoiceNotesTranscriptionState) { return "idle"; }
 #endif
 #include "device_classes/voice_assistant/voice.h"
 #include "music_analysis.h"

@@ -1,9 +1,9 @@
 #include "board_config.h"
 
-#if HAS_VOICE_CLIPS
+#if HAS_VOICE_NOTES
 
-#include "voice_clips.h"
-#include "voice_clips_file.h"
+#include "voice_notes.h"
+#include "voice_notes_file.h"
 #include "action_continuation.h"
 #include "audio_input.h"
 #include "fs_indexed_store.h"
@@ -13,7 +13,7 @@
 #include "storage.h"
 #include "time_service.h"
 #include "voice_wav.h"
-#include "voice_wav_store.h"
+#include "voice_notes_metadata.h"
 
 #include <esp_heap_caps.h>
 #include <esp_system.h>
@@ -25,8 +25,8 @@
 #include <time.h>
 
 namespace {
-constexpr char TAG[] = "VoiceClips";
-constexpr char kDirectory[] = "/storage/voice-clips";
+constexpr char TAG[] = "VoiceNotes";
+constexpr char kDirectory[] = "/storage/voice-notes";
 constexpr uint32_t kFramesPerRead = 1024;
 constexpr uint32_t kQueueSlots = 16;
 constexpr uint32_t kReadTimeoutMs = 100;
@@ -36,15 +36,15 @@ constexpr uint64_t kBaseReserve = 65536;
 constexpr size_t kPathSize = 96;
 const char* const kIndexFields[] = {"size_bytes", "duration_ms", "sample_rate", "channels"};
 FsIndexedStore g_store(kDirectory, kIndexFields, 4, nullptr, 0, ".wav",
-                       voice_wav_store_read_metadata);
+                       voice_notes_metadata_read_metadata);
 SemaphoreHandle_t g_catalog_mutex = nullptr;
 TaskHandle_t g_worker = nullptr;
 TaskHandle_t g_capture_worker = nullptr;
 RtosTaskInternalAlloc g_worker_allocation = {};
 RtosTaskPsramAlloc g_capture_allocation = {};
 portMUX_TYPE g_mux = portMUX_INITIALIZER_UNLOCKED;
-VoiceClipSnapshot g_snapshot = {};
-VoiceClipCommand g_command = VoiceClipCommand::Start;
+VoiceNoteSnapshot g_snapshot = {};
+VoiceNoteCommand g_command = VoiceNoteCommand::Start;
 uint32_t g_token = 0;
 uint64_t g_command_queued_us = 0;
 bool g_command_pending = false;
@@ -189,11 +189,11 @@ void set_error(const char* error, bool terminal) {
     LOGE(TAG, "%s", error);
     portENTER_CRITICAL(&g_mux);
     strlcpy(g_snapshot.error, error, sizeof(g_snapshot.error));
-    if (terminal) g_snapshot.state = VoiceClipState::Error;
+    if (terminal) g_snapshot.state = VoiceNoteState::Error;
     portEXIT_CRITICAL(&g_mux);
 }
 
-void set_state(VoiceClipState state) {
+void set_state(VoiceNoteState state) {
     portENTER_CRITICAL(&g_mux);
     g_snapshot.state = state;
     portEXIT_CRITICAL(&g_mux);
@@ -209,6 +209,7 @@ bool complete(uint32_t token, bool success, bool finishing = false) {
     }
     if (finishing) {
         g_snapshot.session_active = g_cleanup_blocked;
+        if (!g_cleanup_blocked) g_snapshot.scenario[0] = '\0';
         g_cancel_requested = false;
         g_terminating = false;
     }
@@ -289,7 +290,7 @@ bool create_session(Session& session) {
     }
     const String catalog = g_store.list();
     if (catalog.isEmpty()) {
-        set_error("Clip catalog unavailable", true);
+        set_error("Note catalog unavailable", true);
         return false;
     }
     session.reserve = kBaseReserve + 2 * catalog.length();
@@ -312,7 +313,7 @@ bool create_session(Session& session) {
     }
     if (!unique) {
         session.temporary[0] = '\0';
-        set_error("Cannot allocate a unique clip ID", true);
+        set_error("Cannot allocate a unique note ID", true);
         return false;
     }
     session.file = Storage.open(session.temporary, "w+");
@@ -475,7 +476,7 @@ bool publish(Session& session, SaveTiming& timing) {
     timing.mark(timing.close_us);
     StaticJsonDocument<512> metadata;
     JsonObject object = metadata.to<JsonObject>();
-    const FsIndexedStoreReadResult validation = voice_wav_store_read_metadata(session.temporary, object);
+    const FsIndexedStoreReadResult validation = voice_notes_metadata_read_metadata(session.temporary, object);
     timing.mark(timing.verify_us);
     if (validation != FsIndexedStoreReadResult::Valid) {
         set_error("Cannot validate finalized WAV", true);
@@ -483,7 +484,7 @@ bool publish(Session& session, SaveTiming& timing) {
     }
     if (cancelled()) return false;
     if (xSemaphoreTake(g_catalog_mutex, portMAX_DELAY) != pdTRUE) {
-        set_error("Clip catalog unavailable", true);
+        set_error("Note catalog unavailable", true);
         return false;
     }
     const StorageMutationGuard publication_guard;
@@ -513,7 +514,7 @@ bool publish(Session& session, SaveTiming& timing) {
     timing.mark(timing.index_us);
     if (!success && renamed) {
         const bool removed = registered ? g_store.remove(session.id) : Storage.remove(session.completed);
-        if (!removed) LOGE(TAG, "Cannot remove unpublished clip");
+        if (!removed) LOGE(TAG, "Cannot remove unpublished note");
     }
     xSemaphoreGive(g_catalog_mutex);
     if (!success && !cancelled()) set_error("Cannot publish recording", true);
@@ -532,7 +533,7 @@ void finish_session(Session& session, uint32_t token, bool succeeded, bool disca
     portENTER_CRITICAL(&g_mux);
     const bool interrupted = g_cancel_requested;
     if (cleaned && (succeeded || discarded)) {
-        g_snapshot.state = VoiceClipState::Idle;
+        g_snapshot.state = VoiceNoteState::Idle;
         g_snapshot.error[0] = '\0';
     }
     portEXIT_CRITICAL(&g_mux);
@@ -546,71 +547,71 @@ void worker(void*) {
         portENTER_CRITICAL(&g_mux);
         const bool cancel = g_cancel_requested;
         const bool pending = g_command_pending;
-        const VoiceClipCommand command = g_command;
+        const VoiceNoteCommand command = g_command;
         const uint32_t token = g_token;
         const uint64_t queued_us = g_command_queued_us;
         if (pending) {
             g_command_pending = false;
             g_token = 0;
         }
-        const VoiceClipState state = g_snapshot.state;
+        const VoiceNoteState state = g_snapshot.state;
         const bool cleanup_blocked = g_cleanup_blocked;
         portEXIT_CRITICAL(&g_mux);
 
         if (cancel) {
-            set_state(VoiceClipState::Discarding);
+            set_state(VoiceNoteState::Discarding);
             finish_session(session, token, false, true);
             continue;
         }
         if (pending) {
-            if (command == VoiceClipCommand::Start) {
+            if (command == VoiceNoteCommand::Start) {
                 if (cleanup_blocked && !cleanup(session)) {
                     set_error("Recording cleanup failed", true);
                     finish_session(session, token, false, cancelled());
                 } else if (cancelled() || !create_session(session) || cancelled()) {
                     finish_session(session, token, false, cancelled());
                 } else {
-                    set_state(VoiceClipState::Recording);
+                    set_state(VoiceNoteState::Recording);
                     if (!complete(token, true)) {
                         const bool interrupted = cancelled();
                         if (!interrupted) set_error("Start action expired", true);
                         finish_session(session, 0, false, interrupted);
                     }
                 }
-            } else if (command == VoiceClipCommand::Pause) {
+            } else if (command == VoiceNoteCommand::Pause) {
                 if (!stop_sampling(session, false)) finish_session(session, token, false, false);
                 else {
                     const QueueResult drained = drain_queue(session);
                     if (drained == QueueResult::Error) finish_session(session, token, false, cancelled());
                     else if (cancelled()) finish_session(session, token, false, true);
                     else if (drained == QueueResult::Limit) {
-                        set_state(VoiceClipState::Saving);
+                        set_state(VoiceNoteState::Saving);
                         SaveTiming timing(0);
                         const bool saved = publish(session, timing);
                         finish_session(session, token, saved, cancelled());
                         timing.report(session.data_bytes, saved);
                     } else {
-                        set_state(VoiceClipState::Paused);
+                        set_state(VoiceNoteState::Paused);
                         if (!complete(token, true)) {
                             if (cancelled()) finish_session(session, 0, false, true);
                             else set_error("Pause action expired", false);
                         }
                     }
                 }
-            } else if (command == VoiceClipCommand::Resume) {
+            } else if (command == VoiceNoteCommand::Resume) {
                 if (!capture_command(session, CaptureCommand::Start)) {
                     set_error("Microphone resume failed", true);
                     finish_session(session, token, false, false);
                 } else if (cancelled()) {
                     finish_session(session, token, false, true);
                 } else {
-                    set_state(VoiceClipState::Recording);
+                    set_state(VoiceNoteState::Recording);
                     if (!complete(token, true)) {
                         if (cancelled()) finish_session(session, 0, false, true);
                         else set_error("Resume action expired", false);
                     }
                 }
-            } else if (command == VoiceClipCommand::Save) {
+            } else if (command == VoiceNoteCommand::Save) {
                 SaveTiming timing(queued_us);
                 const bool saved = publish(session, timing);
                 finish_session(session, token, saved, cancelled());
@@ -620,7 +621,7 @@ void worker(void*) {
             }
             continue;
         }
-        if (state != VoiceClipState::Recording) {
+        if (state != VoiceNoteState::Recording) {
             ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
             continue;
         }
@@ -628,7 +629,7 @@ void worker(void*) {
         if (result == QueueResult::Empty) {
             ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         } else if (result == QueueResult::Limit) {
-            set_state(VoiceClipState::Saving);
+            set_state(VoiceNoteState::Saving);
             LOGI(TAG, "Recording reached storage or WAV size limit");
             SaveTiming timing(0);
             const bool saved = publish(session, timing);
@@ -644,7 +645,7 @@ void worker(void*) {
 }
 }
 
-bool voice_clips_init() {
+bool voice_notes_init() {
     if (g_initialized) return true;
     if (!storage_mount() || (!Storage.exists("/storage") && !Storage.mkdir("/storage")) ||
         !g_store.begin()) {
@@ -669,7 +670,7 @@ bool voice_clips_init() {
     directory.close();
     g_catalog_mutex = xSemaphoreCreateMutex();
     if (!g_catalog_mutex) {
-        set_error("Clip catalog mutex allocation failed", true);
+        set_error("Note catalog mutex allocation failed", true);
         return false;
     }
     bool capture_created = rtos_create_task_psram_stack(
@@ -687,7 +688,7 @@ bool voice_clips_init() {
         return false;
     }
     LOGI(TAG, "Capture task stack=%s", capture_stack_in_psram ? "PSRAM" : "internal");
-    if (!rtos_create_task_internal_stack(worker, "VoiceClips", 8192, nullptr, 2,
+    if (!rtos_create_task_internal_stack(worker, "VoiceNotes", 8192, nullptr, 2,
                                          &g_worker, &g_worker_allocation)) {
         vTaskDelete(g_capture_worker);
         heap_caps_free(g_capture_allocation.stack);
@@ -702,32 +703,34 @@ bool voice_clips_init() {
     return true;
 }
 
-bool voice_clips_command(VoiceClipCommand command, uint32_t token) {
+bool voice_notes_command(VoiceNoteCommand command, uint32_t token) {
     if (!g_initialized || !token) return false;
-    const uint64_t queued_us = command == VoiceClipCommand::Save ? (uint64_t)esp_timer_get_time() : 0;
+    const uint64_t queued_us = command == VoiceNoteCommand::Save ? (uint64_t)esp_timer_get_time() : 0;
     portENTER_CRITICAL(&g_mux);
-    const VoiceClipState state = g_snapshot.state;
+    const VoiceNoteState state = g_snapshot.state;
     const bool valid = !g_command_busy && !g_terminating && !g_cancel_requested &&
-        ((command == VoiceClipCommand::Start && (!g_snapshot.session_active || g_cleanup_blocked) &&
-          (state == VoiceClipState::Idle || state == VoiceClipState::Error)) ||
+        ((command == VoiceNoteCommand::Start && (!g_snapshot.session_active || g_cleanup_blocked) &&
+          (state == VoiceNoteState::Idle || state == VoiceNoteState::Error)) ||
          (!g_cleanup_blocked &&
-          ((command == VoiceClipCommand::Pause && state == VoiceClipState::Recording) ||
-           (command == VoiceClipCommand::Resume && state == VoiceClipState::Paused) ||
-           ((command == VoiceClipCommand::Save || command == VoiceClipCommand::Discard) &&
-            (state == VoiceClipState::Recording || state == VoiceClipState::Paused)))));
+          ((command == VoiceNoteCommand::Pause && state == VoiceNoteState::Recording) ||
+           (command == VoiceNoteCommand::Resume && state == VoiceNoteState::Paused) ||
+           ((command == VoiceNoteCommand::Save || command == VoiceNoteCommand::Discard) &&
+            (state == VoiceNoteState::Recording || state == VoiceNoteState::Paused)))));
     if (!valid || ota_activity_is_busy()) {
         strlcpy(g_snapshot.error, "Recorder command unavailable", sizeof(g_snapshot.error));
         portEXIT_CRITICAL(&g_mux);
         return false;
     }
-    if (command == VoiceClipCommand::Start) {
-        g_snapshot = {};
-        g_snapshot.state = VoiceClipState::Starting;
+    if (command == VoiceNoteCommand::Start) {
+        g_snapshot.state = VoiceNoteState::Starting;
+        g_snapshot.duration_ms = 0;
+        g_snapshot.error[0] = '\0';
+        strlcpy(g_snapshot.scenario, "general", sizeof(g_snapshot.scenario));
         g_snapshot.session_active = true;
     } else {
         g_snapshot.error[0] = '\0';
-        if (command == VoiceClipCommand::Save) g_snapshot.state = VoiceClipState::Saving;
-        if (command == VoiceClipCommand::Discard) g_snapshot.state = VoiceClipState::Discarding;
+        if (command == VoiceNoteCommand::Save) g_snapshot.state = VoiceNoteState::Saving;
+        if (command == VoiceNoteCommand::Discard) g_snapshot.state = VoiceNoteState::Discarding;
     }
     g_command = command;
     g_command_queued_us = queued_us;
@@ -739,76 +742,105 @@ bool voice_clips_command(VoiceClipCommand command, uint32_t token) {
     return true;
 }
 
-void voice_clips_snapshot(VoiceClipSnapshot* out) {
+void voice_notes_snapshot(VoiceNoteSnapshot* out) {
     if (!out) return;
     portENTER_CRITICAL(&g_mux);
     *out = g_snapshot;
     portEXIT_CRITICAL(&g_mux);
 }
 
-const char* voice_clips_state_name(VoiceClipState state) {
+const char* voice_notes_state_name(VoiceNoteState state) {
     switch (state) {
-        case VoiceClipState::Idle: return "idle";
-        case VoiceClipState::Starting: return "starting";
-        case VoiceClipState::Recording: return "recording";
-        case VoiceClipState::Paused: return "paused";
-        case VoiceClipState::Saving: return "saving";
-        case VoiceClipState::Discarding: return "discarding";
-        case VoiceClipState::Error: return "error";
+        case VoiceNoteState::Idle: return "idle";
+        case VoiceNoteState::Starting: return "starting";
+        case VoiceNoteState::Recording: return "recording";
+        case VoiceNoteState::Paused: return "paused";
+        case VoiceNoteState::Saving: return "saving";
+        case VoiceNoteState::Discarding: return "discarding";
+        case VoiceNoteState::Error: return "error";
     }
     return "error";
 }
 
-VoiceClipCancelStatus voice_clips_cancel() {
-    if (!g_initialized) return VoiceClipCancelStatus::Ready;
+VoiceNoteCancelStatus voice_notes_cancel() {
+    if (!g_initialized) return VoiceNoteCancelStatus::Ready;
     portENTER_CRITICAL(&g_mux);
     if (!g_snapshot.session_active) {
         portEXIT_CRITICAL(&g_mux);
-        return VoiceClipCancelStatus::Ready;
+        return VoiceNoteCancelStatus::Ready;
     }
     g_cancel_requested = true;
     portEXIT_CRITICAL(&g_mux);
     xTaskNotifyGive(g_worker);
-    return VoiceClipCancelStatus::Pending;
+    return VoiceNoteCancelStatus::Pending;
 }
 
-String voice_clips_list() {
-    if (!g_initialized || xSemaphoreTake(g_catalog_mutex, portMAX_DELAY) != pdTRUE) return "";
-    String result = g_store.list();
+bool voice_notes_list(JsonDocument& output) {
+    if (!g_initialized || xSemaphoreTake(g_catalog_mutex, portMAX_DELAY) != pdTRUE) return false;
+    bool valid = g_store.copy_manifest(output);
+    JsonArray entries = output["entries"].as<JsonArray>();
+    valid = valid && !entries.isNull();
+    if (valid) {
+        for (JsonObject entry : entries) {
+            const char* id = entry["id"];
+            if (!id) { valid = false; break; }
+            char path[kPathSize];
+            snprintf(path, sizeof(path), "%s/%s.json", kDirectory, id);
+            bool exists = Storage.exists(path);
+            if (!exists) {
+                snprintf(path, sizeof(path), "%s/%s.json.bak", kDirectory, id);
+                exists = Storage.exists(path);
+            }
+            entry["has_transcript"] = exists;
+        }
+    }
+    valid = valid && !output.overflowed();
+    if (!valid) {
+        output.clear();
+        LOGE(TAG, "Cannot build note catalog");
+    }
     xSemaphoreGive(g_catalog_mutex);
-    return result;
+    return valid;
 }
-bool voice_clips_exists(const char* id) {
+
+bool voice_notes_read_metadata(const char* id, JsonObject output) {
+    if (!g_initialized || xSemaphoreTake(g_catalog_mutex, portMAX_DELAY) != pdTRUE) return false;
+    const bool copied = g_store.copy_entry(id, output);
+    xSemaphoreGive(g_catalog_mutex);
+    if (!copied) LOGE(TAG, "Cannot read note metadata");
+    return copied;
+}
+bool voice_notes_exists(const char* id) {
     if (!g_initialized || !id || xSemaphoreTake(g_catalog_mutex, portMAX_DELAY) != pdTRUE) return false;
     const bool result = g_store.exists(id);
     xSemaphoreGive(g_catalog_mutex);
     return result;
 }
-VoiceClipFileStatus voice_clips_open(const char* id, File* file) {
+VoiceNoteFileStatus voice_notes_open(const char* id, File* file) {
     if (!g_initialized || !id || !file ||
-        xSemaphoreTake(g_catalog_mutex, portMAX_DELAY) != pdTRUE) return VoiceClipFileStatus::Error;
-    VoiceClipFileStatus result = VoiceClipFileStatus::NotFound;
+        xSemaphoreTake(g_catalog_mutex, portMAX_DELAY) != pdTRUE) return VoiceNoteFileStatus::Error;
+    VoiceNoteFileStatus result = VoiceNoteFileStatus::NotFound;
     if (g_store.exists(id)) {
         char* slot = nullptr;
         for (auto& reader_id : g_reader_ids) {
             if (!reader_id[0]) { slot = reader_id; break; }
         }
-        if (!slot) result = VoiceClipFileStatus::Busy;
+        if (!slot) result = VoiceNoteFileStatus::Busy;
         else {
             *file = Storage.open(g_store.data_path(id).c_str(), "r");
             if (*file) {
                 strlcpy(slot, id, sizeof(g_reader_ids[0]));
-                result = VoiceClipFileStatus::Ready;
-            } else result = VoiceClipFileStatus::Error;
+                result = VoiceNoteFileStatus::Ready;
+            } else result = VoiceNoteFileStatus::Error;
         }
     }
     xSemaphoreGive(g_catalog_mutex);
     return result;
 }
 
-void voice_clips_close(File* file, const char* id) {
+void voice_notes_close(File* file, const char* id) {
     if (!file || !id || xSemaphoreTake(g_catalog_mutex, portMAX_DELAY) != pdTRUE) {
-        LOGE(TAG, "Cannot release clip reader");
+        LOGE(TAG, "Cannot release note reader");
         return;
     }
     file->close();
@@ -818,19 +850,91 @@ void voice_clips_close(File* file, const char* id) {
     xSemaphoreGive(g_catalog_mutex);
 }
 
-VoiceClipFileStatus voice_clips_remove(const char* id) {
-    if (!g_initialized || !id || xSemaphoreTake(g_catalog_mutex, portMAX_DELAY) != pdTRUE)
-        return VoiceClipFileStatus::Error;
-    VoiceClipFileStatus result = VoiceClipFileStatus::NotFound;
+bool voice_notes_has_transcript(const char* id) {
+    if (!g_initialized || !id || xSemaphoreTake(g_catalog_mutex, portMAX_DELAY) != pdTRUE) return false;
+    char path[kPathSize];
+    bool result = false;
     if (g_store.exists(id)) {
-        bool busy = false;
-        for (const auto& reader_id : g_reader_ids) busy |= strcmp(reader_id, id) == 0;
-        if (busy) result = VoiceClipFileStatus::Busy;
-        else result = g_store.remove(id) ? VoiceClipFileStatus::Ready : VoiceClipFileStatus::Error;
+        snprintf(path, sizeof(path), "%s/%s.json", kDirectory, id);
+        result = Storage.exists(path);
+        if (!result) {
+            snprintf(path, sizeof(path), "%s/%s.json.bak", kDirectory, id);
+            result = Storage.exists(path);
+        }
     }
     xSemaphoreGive(g_catalog_mutex);
     return result;
 }
-String voice_clips_path(const char* id) { return g_store.data_path(id); }
 
-#endif // HAS_VOICE_CLIPS
+VoiceNoteFileStatus voice_notes_open_transcript(const char* id, File* file) {
+    if (!g_initialized || !id || !file ||
+        xSemaphoreTake(g_catalog_mutex, portMAX_DELAY) != pdTRUE) return VoiceNoteFileStatus::Error;
+    VoiceNoteFileStatus result = VoiceNoteFileStatus::NotFound;
+    if (g_store.exists(id)) {
+        char path[kPathSize];
+        snprintf(path, sizeof(path), "%s/%s.json", kDirectory, id);
+        if (!Storage.exists(path)) snprintf(path, sizeof(path), "%s/%s.json.bak", kDirectory, id);
+        if (Storage.exists(path)) {
+            *file = Storage.open(path, "r");
+            result = *file ? VoiceNoteFileStatus::Ready : VoiceNoteFileStatus::Error;
+        }
+    }
+    xSemaphoreGive(g_catalog_mutex);
+    return result;
+}
+
+bool voice_notes_write_transcript(const char* id, const uint8_t* json, size_t length) {
+    if (!g_initialized || !id || !json || !length ||
+        xSemaphoreTake(g_catalog_mutex, portMAX_DELAY) != pdTRUE) return false;
+    bool leased = false;
+    for (const auto& reader_id : g_reader_ids) leased |= strcmp(reader_id, id) == 0;
+    const bool exists = leased && g_store.exists(id);
+    xSemaphoreGive(g_catalog_mutex);
+    if (!exists) return false;
+    const StorageMutationGuard guard;
+    if (!guard) return false;
+    char path[kPathSize], backup[kPathSize];
+    snprintf(path, sizeof(path), "%s/%s.json", kDirectory, id);
+    snprintf(backup, sizeof(backup), "%s/%s.json.bak", kDirectory, id);
+    if (!Storage.exists(path) && Storage.exists(backup) && !Storage.rename(backup, path)) {
+        LOGE(TAG, "Cannot restore transcript backup for %s", id);
+        return false;
+    }
+    if (!storage_write_atomic(path, json, length)) {
+        LOGE(TAG, "Cannot save transcript for %s", id);
+        return false;
+    }
+    return true;
+}
+
+VoiceNoteFileStatus voice_notes_remove(const char* id) {
+    if (!g_initialized || !id || xSemaphoreTake(g_catalog_mutex, portMAX_DELAY) != pdTRUE)
+        return VoiceNoteFileStatus::Error;
+    VoiceNoteFileStatus result = VoiceNoteFileStatus::NotFound;
+    if (g_store.exists(id)) {
+        bool busy = false;
+        for (const auto& reader_id : g_reader_ids) busy |= strcmp(reader_id, id) == 0;
+        if (busy) result = VoiceNoteFileStatus::Busy;
+        else {
+            const StorageMutationGuard guard;
+            bool removed = bool(guard);
+            char path[kPathSize];
+            for (const char* suffix : {".json", ".json.bak", ".json.tmp"}) {
+                if (!removed) break;
+                snprintf(path, sizeof(path), "%s/%s%s", kDirectory, id, suffix);
+                if (Storage.exists(path) && !Storage.remove(path)) {
+                    LOGE(TAG, "Cannot remove transcript for %s", id);
+                    removed = false;
+                    break;
+                }
+            }
+            if (removed) removed = g_store.remove(id);
+            result = removed ? VoiceNoteFileStatus::Ready : VoiceNoteFileStatus::Error;
+        }
+    }
+    xSemaphoreGive(g_catalog_mutex);
+    return result;
+}
+String voice_notes_path(const char* id) { return g_store.data_path(id); }
+
+#endif // HAS_VOICE_NOTES

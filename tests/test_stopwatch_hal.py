@@ -36,7 +36,7 @@ struct DisplayFrame;
 #define HAS_BLE false
 #define HAS_ES7210_MIC false
 #define HAS_AUDIO_INPUT false
-#define HAS_VOICE_CLIPS false
+#define HAS_VOICE_NOTES false
 #define HAS_SOUND_PLAYER true
 #define HAS_MUSIC_ANALYSIS false
 #define HAS_AUDIO true
@@ -96,7 +96,7 @@ using i2s_mclk_multiple_t = int;
 using esp_err_t = int;
 using gpio_num_t = int;
 using i2s_chan_handle_t = int*;
-#if HAS_VOICE_CLIPS
+#if HAS_VOICE_NOTES
 using portMUX_TYPE = int;
 #define portMUX_INITIALIZER_UNLOCKED 0
 #define portENTER_CRITICAL(mux) ((void)(mux))
@@ -574,7 +574,7 @@ int main() {
         assert(input->readFrames(frames, 32, 5).status == AudioInputReadStatus::Error);
         assert(input->captureStatus() == AudioInputReadStatus::Error);
         channelReadError = false;
-#if HAS_VOICE_CLIPS
+#if HAS_VOICE_NOTES
         assert(overrunCallback);
         assert(!overrunCallback(&receiveChannel, nullptr, overrunContext));
         assert(input->captureStatus() == AudioInputReadStatus::Overrun);
@@ -1645,14 +1645,14 @@ int main() {
         result = subprocess.run([str(executable)])
         assert result.returncode == (1 if unlocked else 0)
     print("PASS: screensaver brightness holds display lock; unlocked regression rejected", flush=True)
-    for profile in ("es8311-gpio", "es8311-microphone", "es8311-voice-clips",
+    for profile in ("es8311-gpio", "es8311-microphone", "es8311-voice-notes",
                     "pcm510xa-gpio", "es8388-gpio"):
         prelude = PRELUDE
-        if profile in ("es8311-microphone", "es8311-voice-clips"):
+        if profile in ("es8311-microphone", "es8311-voice-notes"):
             prelude = prelude.replace("#define HAS_AUDIO_INPUT false", "#define HAS_AUDIO_INPUT true")
             prelude = prelude.replace("#define HAS_ES7210_MIC false", "#define HAS_ES7210_MIC true")
-        if profile == "es8311-voice-clips":
-            prelude = prelude.replace("#define HAS_VOICE_CLIPS false", "#define HAS_VOICE_CLIPS true")
+        if profile == "es8311-voice-notes":
+            prelude = prelude.replace("#define HAS_VOICE_NOTES false", "#define HAS_VOICE_NOTES true")
         pcm = profile == "pcm510xa-gpio"
         if pcm:
             prelude = prelude.replace("#define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_ES8311",

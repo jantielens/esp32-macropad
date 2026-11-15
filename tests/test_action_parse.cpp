@@ -16,7 +16,12 @@
 #include "action_registry.h"
 #include "action_catalog.h"
 #include "action_validate.h"
+#include "voice_notes.h"
 #include <string>
+
+#if HAS_VOICE_NOTES
+bool voice_notes_command(VoiceNoteCommand, uint32_t) { return true; }
+#endif
 
 static unsigned g_followup_dispatches = 0;
 ActionDispatchContext action_dispatch_context() { return {}; }
@@ -161,6 +166,43 @@ TEST(type_only) {
     navigation = parse_from_string("{\"type\":\"button_nav\",\"command\":\"unknown\"}");
     ASSERT_STR(navigation.type, "");
 #endif
+}
+
+TEST(voice_note_action_contract) {
+#if HAS_VOICE_NOTES
+    ASSERT_TRUE(action_type_find("voice_note") != nullptr);
+    for (const char* json : {
+            R"({"type":"voice_note","command":"start"})",
+            R"({"type":"voice_note","command":"start","scenario":"general"})",
+            R"({"type":"voice_note","command":"pause"})",
+            R"({"type":"voice_note","command":"resume"})",
+            R"({"type":"voice_note","command":"save"})",
+            R"({"type":"voice_note","command":"discard"})"}) {
+        JsonDocument doc;
+        ASSERT_TRUE(deserializeJson(doc, json) == DeserializationError::Ok);
+        ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>()) == nullptr);
+        ButtonAction action = round_trip(json);
+        ASSERT_STR(action.type, "voice_note");
+        if (!strcmp(action.payload.voice_note.command, "start"))
+            ASSERT_STR(action.payload.voice_note.scenario, "general");
+    }
+    for (const char* json : {
+            R"({"type":"voice_note","command":"start","scenario":"meeting"})",
+            R"({"type":"voice_note","command":"start","scenario":null})",
+            R"({"type":"voice_note","command":"save","scenario":"general"})",
+            R"({"type":"voice_note","command":"toggle"})"}) {
+        JsonDocument doc;
+        ASSERT_TRUE(deserializeJson(doc, json) == DeserializationError::Ok);
+        ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>()) != nullptr);
+        ASSERT_STR(parse_from_string(json).type, "");
+    }
+#else
+    ASSERT_TRUE(action_type_find("voice_note") == nullptr);
+    JsonDocument doc;
+    ASSERT_TRUE(deserializeJson(doc, R"({"type":"voice_note","command":"start"})") == DeserializationError::Ok);
+    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>()) != nullptr);
+#endif
+    ASSERT_TRUE(action_type_find("voice_clip") == nullptr);
 }
 
 TEST(bthome_round_trip_and_validation) {
@@ -1116,6 +1158,7 @@ int main(int argc, char** argv) {
     RUN(action_list_filters_literal_none_for_pad_callers);
     RUN(action_list_retains_literal_none_for_existing_callers);
     RUN(type_only);
+    RUN(voice_note_action_contract);
     RUN(bthome_round_trip_and_validation);
     RUN(set_var_round_trip_and_validation);
     RUN(gamepad_round_trip_and_validation);

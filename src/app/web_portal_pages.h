@@ -34,8 +34,8 @@ void handlePortalLogsJS(AsyncWebServerRequest *request);
 #if HAS_EXTERNAL_DATA
 void handlePortalExternalDataJS(AsyncWebServerRequest *request);
 #endif
-#if HAS_VOICE_CLIPS
-void handlePortalVoiceClipsJS(AsyncWebServerRequest *request);
+#if HAS_VOICE_NOTES
+void handlePortalVoiceNotesJS(AsyncWebServerRequest *request);
 #endif
 #if HAS_CAMERA
 void handlePortalCameraJS(AsyncWebServerRequest *request);

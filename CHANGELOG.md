@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-11-14
+ms.date: 2026-11-15
 ms.topic: reference
 ---
 
@@ -13,6 +13,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Added
+
+* Add on-device Voice Notes transcription through a configured Azure
+  transcription deployment. Start transcription manually from **Voice Notes >
+  Notes**, view the saved transcript alongside playback in **View details**,
+  and configure the endpoint, deployment, and API key under **Voice Notes >
+  Settings** without rebooting. Recording remains local and works offline;
+  transcription sends the selected recording to Azure and requires Wi-Fi.
+  Failed attempts preserve the recording and any previous transcript.
+  See [Voice Notes](docs/user/media/audio.md#record-and-manage-voice-notes).
+* Add recording and transcription status through `[voice_note:...]` bindings,
+  including a latest-saved note ID that remains available until restart.
+  Keep transcription buffers and portal catalog/details documents in PSRAM,
+  and exclude Voice Notes code, settings, actions, bindings, routes, and assets
+  from firmware that does not enable the feature.
+
+### Changed
+
+* Replace Voice Clips with **Voice Notes**, including the `voice_note` action,
+  `[voice_note:...]` bindings, `/api/component/voice-notes/...` endpoints,
+  `HAS_VOICE_NOTES`, and the `/storage/voice-notes/` directory. This is a
+  breaking replacement: existing `voice_clip` actions, `[recorder:...]`
+  bindings, old endpoints, and recording folders are not migrated. Update
+  pads and integrations and download recordings you want to keep before
+  updating; old recordings do not appear in the new Notes list.
 
 ## [1.48.0] - 2026-11-14
 

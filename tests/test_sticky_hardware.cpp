@@ -7,10 +7,10 @@
 #include "../src/app/auto_shutdown.h"
 #include "../src/app/device_dialog.h"
 #include "../src/app/power_manager.h"
-#if HAS_VOICE_CLIPS
-#include "../src/app/voice_clips.h"
-static VoiceClipCancelStatus recorderStatus = VoiceClipCancelStatus::Ready;
-VoiceClipCancelStatus voice_clips_cancel() { return recorderStatus; }
+#if HAS_VOICE_NOTES
+#include "../src/app/voice_notes.h"
+static VoiceNoteCancelStatus recorderStatus = VoiceNoteCancelStatus::Ready;
+VoiceNoteCancelStatus voice_notes_cancel() { return recorderStatus; }
 #endif
 #include <SPI.h>
 #include <driver/gpio.h>
@@ -571,24 +571,24 @@ int main() {
         failPin = -1;
         CHECK(sticky_early_power_init());
     }
-#if HAS_VOICE_CLIPS
+#if HAS_VOICE_NOTES
     outputs.clear();
-    recorderStatus = VoiceClipCancelStatus::Pending;
+    recorderStatus = VoiceNoteCancelStatus::Pending;
     CHECK(requestShutdown(50) == ACTION_PENDING);
     BOARD_HARDWARE_LOOP();
     CHECK(otaActive && outputs.empty() && powerLatched);
     clockMs += 5000;
     BOARD_HARDWARE_LOOP();
     CHECK(!otaActive && outputs.empty() && powerLatched && failedShutdowns.back() == 50);
-    recorderStatus = VoiceClipCancelStatus::Error;
+    recorderStatus = VoiceNoteCancelStatus::Error;
     CHECK(requestShutdown(51) == ACTION_PENDING);
     BOARD_HARDWARE_LOOP();
     CHECK(!otaActive && outputs.empty() && powerLatched && failedShutdowns.back() == 51);
-    recorderStatus = VoiceClipCancelStatus::Pending;
+    recorderStatus = VoiceNoteCancelStatus::Pending;
     CHECK(requestShutdown(52) == ACTION_PENDING);
     BOARD_HARDWARE_LOOP();
     CHECK(otaActive && outputs.empty() && powerLatched);
-    recorderStatus = VoiceClipCancelStatus::Ready;
+    recorderStatus = VoiceNoteCancelStatus::Ready;
     BOARD_HARDWARE_LOOP();
     CHECK(otaActive && !powerLatched);
     clockMs += 500;

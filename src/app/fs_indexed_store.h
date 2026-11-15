@@ -143,6 +143,10 @@ public:
     // Triggers a rebuild if the manifest has not yet been loaded.
     String list();
 
+    // Copy cached index data into a caller-owned document without String copies.
+    bool copy_manifest(JsonDocument& output);
+    bool copy_entry(const char* id, JsonObject output);
+
     // Return the number of entries, or -1 on load or rebuild failure.
     int count();
 

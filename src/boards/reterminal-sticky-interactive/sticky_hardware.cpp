@@ -5,8 +5,8 @@
 #include "i2c_bus.h"
 #include "log_manager.h"
 #include "ota_activity.h"
-#if HAS_VOICE_CLIPS
-#include "voice_clips.h"
+#if HAS_VOICE_NOTES
+#include "voice_notes.h"
 #endif
 #include <Arduino.h>
 #include <Wire.h>
@@ -30,7 +30,7 @@ uint32_t shutdownStartedAt = 0;
 uint32_t shutdownSentAt = 0;
 constexpr uint32_t kButtonReleaseTimeoutMs = 5000;
 constexpr uint32_t kPowerOffTimeoutMs = 500;
-#if HAS_VOICE_CLIPS
+#if HAS_VOICE_NOTES
 bool recorderWaitStarted = false;
 uint32_t recorderWaitAt = 0;
 constexpr uint32_t kRecorderStopTimeoutMs = 5000;
@@ -61,7 +61,7 @@ void shutdown_failed(uint32_t token, const char* reason, bool restoreLatch) {
     LOGE("Sticky", "Shutdown failed: %s", reason);
     shutdownStarted = false;
     shutdownSent = false;
-#if HAS_VOICE_CLIPS
+#if HAS_VOICE_NOTES
     recorderWaitStarted = false;
 #endif
     shutdownToken.store(0);
@@ -158,13 +158,13 @@ void sticky_hardware_loop() {
             shutdown_failed(token, "AI/OK button is still held", false);
         return;
     }
-#if HAS_VOICE_CLIPS
-    const VoiceClipCancelStatus recorder = voice_clips_cancel();
-    if (recorder == VoiceClipCancelStatus::Error) {
+#if HAS_VOICE_NOTES
+    const VoiceNoteCancelStatus recorder = voice_notes_cancel();
+    if (recorder == VoiceNoteCancelStatus::Error) {
         shutdown_failed(token, "voice recorder could not stop safely", false);
         return;
     }
-    if (recorder == VoiceClipCancelStatus::Pending) {
+    if (recorder == VoiceNoteCancelStatus::Pending) {
         if (!recorderWaitStarted) {
             recorderWaitStarted = true;
             recorderWaitAt = now;

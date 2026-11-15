@@ -75,7 +75,7 @@ Total flags: 394
 - **HAS_TOUCH** default: `false` — Enable touch input support.
 - **HAS_TTF_FONTS** default: `(HAS_DISPLAY && HAS_FILESYSTEM && HAS_PSRAM)` — Uploaded static TrueType fonts require LVGL, persistent storage, and PSRAM.
 - **HAS_USB_HID** default: `false` — Enable native USB HID keyboard, consumer-control, mouse, and gamepad output.
-- **HAS_VOICE_CLIPS** default: `false` — Enable local voice clip recording and management.
+- **HAS_VOICE_NOTES** default: `false` — Enable local Voice Notes recording and management.
 
 ### Selectors (*_DRIVER)
 
@@ -441,7 +441,7 @@ Total flags: 394
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_AUDIO | HAS_AUDIO_INPUT | HAS_AUTO_SHUTDOWN | HAS_BACKLIGHT | HAS_BATTERY_INFO | HAS_BLE | HAS_BLE_HID | HAS_BOOT_LOGO | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CAMERA | HAS_CONFIG_MODE_BUTTON | HAS_DISPLAY | HAS_DISPLAY_DIAGNOSTICS | HAS_EPAPER_FRAME_WAKE_BUTTON | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_GRAYSCALE | HAS_EPAPER_PANEL | HAS_EPAPER_VCOM | HAS_ES7210_MIC | HAS_EXTERNAL_DATA | HAS_FACE_WIDGET | HAS_FILESYSTEM | HAS_FREETYPE_FONTS | HAS_HA_HISTORY | HAS_HA_LIVE | HAS_IMAGE_FETCH | HAS_IMAGE_LIBRARY | HAS_LVGL_EPAPER | HAS_MCP | HAS_MQTT | HAS_MUSIC_ANALYSIS | HAS_NATIVE_EXTENSIONS | HAS_REMOTE_LOG | HAS_RTC | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_AHT10 | HAS_SENSOR_BATTERY_ADC | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_STORAGE_BROWSER | HAS_TOUCH | HAS_TTF_FONTS | HAS_USB_HID | HAS_VOICE_CLIPS |
+| board-name | HAS_AUDIO | HAS_AUDIO_INPUT | HAS_AUTO_SHUTDOWN | HAS_BACKLIGHT | HAS_BATTERY_INFO | HAS_BLE | HAS_BLE_HID | HAS_BOOT_LOGO | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CAMERA | HAS_CONFIG_MODE_BUTTON | HAS_DISPLAY | HAS_DISPLAY_DIAGNOSTICS | HAS_EPAPER_FRAME_WAKE_BUTTON | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_GRAYSCALE | HAS_EPAPER_PANEL | HAS_EPAPER_VCOM | HAS_ES7210_MIC | HAS_EXTERNAL_DATA | HAS_FACE_WIDGET | HAS_FILESYSTEM | HAS_FREETYPE_FONTS | HAS_HA_HISTORY | HAS_HA_LIVE | HAS_IMAGE_FETCH | HAS_IMAGE_LIBRARY | HAS_LVGL_EPAPER | HAS_MCP | HAS_MQTT | HAS_MUSIC_ANALYSIS | HAS_NATIVE_EXTENSIONS | HAS_REMOTE_LOG | HAS_RTC | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_AHT10 | HAS_SENSOR_BATTERY_ADC | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_STORAGE_BROWSER | HAS_TOUCH | HAS_TTF_FONTS | HAS_USB_HID | HAS_VOICE_NOTES |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | waveshare-7.8-interactive |  |  |  |  |  |  |  | ? | ✅ | ✅ |  | ? | ✅ |  |  |  | ? | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ✅ |  | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |  |
 | crowpanel-4.2-interactive |  |  |  |  |  |  |  | ? |  | ✅ |  | ? | ✅ |  |  |  |  | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ✅ |  |  | ✅ |  | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |  |
@@ -960,8 +960,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/var_binding.cpp
   - src/app/visual_alert.cpp
   - src/app/visual_alert.h
-  - src/app/voice_clips_binding.cpp
-  - src/app/voice_clips_binding.h
+  - src/app/voice_notes_binding.cpp
+  - src/app/voice_notes_binding.h
   - src/app/web_mcp.cpp
   - src/app/web_portal.cpp
   - src/app/web_portal_config.cpp
@@ -1513,27 +1513,34 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/boards/esp32-p4-lcd4b/board_overrides.h
   - src/boards/jc1060p470c/board_overrides.h
   - src/boards/jc4880p433/board_overrides.h
-- **HAS_VOICE_CLIPS**
+- **HAS_VOICE_NOTES**
   - src/app/action_registry.cpp
-  - src/app/actions/voice_clip_action.cpp
+  - src/app/actions/voice_note_action.cpp
   - src/app/app.ino
   - src/app/binding_builtin_schemes.cpp
   - src/app/board_config.h
+  - src/app/config_manager.cpp
+  - src/app/config_manager.h
   - src/app/drivers/es8311_audio_driver.cpp
   - src/app/drivers/es8311_audio_driver.h
   - src/app/fs_indexed_store.cpp
   - src/app/pad_config.h
   - src/app/portal_components.cpp
   - src/app/reboot_service.cpp
-  - src/app/voice_clip_range.cpp
-  - src/app/voice_clip_range.h
-  - src/app/voice_clips.cpp
-  - src/app/voice_clips.h
-  - src/app/voice_clips_binding.cpp
-  - src/app/voice_clips_binding.h
-  - src/app/voice_clips_file.h
+  - src/app/voice_note_range.cpp
+  - src/app/voice_note_range.h
+  - src/app/voice_notes.cpp
+  - src/app/voice_notes.h
+  - src/app/voice_notes_binding.cpp
+  - src/app/voice_notes_binding.h
+  - src/app/voice_notes_file.h
+  - src/app/voice_notes_metadata.cpp
+  - src/app/voice_notes_transcription.cpp
+  - src/app/voice_notes_transcription.h
+  - src/app/voice_notes_transcription_request.cpp
+  - src/app/voice_notes_transcription_request.h
   - src/app/voice_wav.cpp
-  - src/app/voice_wav_store.cpp
+  - src/app/web_portal_component_api.cpp
   - src/app/web_portal_config.cpp
   - src/app/web_portal_firmware.cpp
   - src/app/web_portal_ota.cpp
@@ -2188,7 +2195,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **SD_STORAGE_SPI**
   - src/app/board_config.h
-  - src/app/components/voice_clips_component.cpp
+  - src/app/components/voice_notes_component.cpp
   - src/app/fs_health.cpp
   - src/app/sd_storage.cpp
   - src/app/storage.h
@@ -2351,7 +2358,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **USE_SD_STORAGE**
   - src/app/app.ino
   - src/app/board_config.h
-  - src/app/components/voice_clips_component.cpp
+  - src/app/components/voice_notes_component.cpp
   - src/app/config_manager.cpp
   - src/app/display_manager.cpp
   - src/app/font_store.cpp

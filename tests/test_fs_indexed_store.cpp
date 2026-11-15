@@ -3,7 +3,8 @@
 
 #include "fs_indexed_store.h"
 #include "voice_wav.h"
-#include "voice_wav_store.h"
+#include "voice_notes_metadata.h"
+#include "bounded_psram_json_allocator.h"
 
 FakeIndexedStorage LittleFS;
 
@@ -41,7 +42,7 @@ protected:
 };
 
 TEST_F(IndexedStoreTest, RegistersAndReloadsWavWithoutReadingPayloadForList) {
-    FsIndexedStore store("/clips", kFields, 4, nullptr, 0, ".wav", voice_wav_store_read_metadata);
+    FsIndexedStore store("/clips", kFields, 4, nullptr, 0, ".wav", voice_notes_metadata_read_metadata);
     ASSERT_TRUE(store.begin());
     ASSERT_EQ(store.count(), 0);
     add_wav("/clips/first.wav");
@@ -51,7 +52,7 @@ TEST_F(IndexedStoreTest, RegistersAndReloadsWavWithoutReadingPayloadForList) {
     ASSERT_FALSE(store.register_pre_written("first", 0, metadata.as<JsonObject>()));
     const unsigned reads = LittleFS.opens["/clips/first.wav"];
 
-    FsIndexedStore reloaded("/clips", kFields, 4, nullptr, 0, ".wav", voice_wav_store_read_metadata);
+    FsIndexedStore reloaded("/clips", kFields, 4, nullptr, 0, ".wav", voice_notes_metadata_read_metadata);
     ASSERT_TRUE(reloaded.begin());
     DynamicJsonDocument manifest(4096);
     ASSERT_EQ(deserializeJson(manifest, reloaded.list()), DeserializationError::Ok);
@@ -69,7 +70,7 @@ TEST_F(IndexedStoreTest, RegistersAndReloadsWavWithoutReadingPayloadForList) {
 }
 
 TEST_F(IndexedStoreTest, RebuildsOnlyValidCompletedWavs) {
-    FsIndexedStore store("/clips", kFields, 4, nullptr, 0, ".wav", voice_wav_store_read_metadata);
+    FsIndexedStore store("/clips", kFields, 4, nullptr, 0, ".wav", voice_notes_metadata_read_metadata);
     LittleFS.mkdir("/clips");
     add_wav("/clips/valid.wav", 400, 48000, 2);
     add_wav("/clips/named.tmp.wav");
@@ -88,9 +89,37 @@ TEST_F(IndexedStoreTest, RebuildsOnlyValidCompletedWavs) {
     EXPECT_FALSE(store.exists("pending"));
 }
 
+TEST_F(IndexedStoreTest, CopiesCachedMetadataWithoutPayloadReadsAndReportsAllocationFailure) {
+    FsIndexedStore store("/clips", kFields, 4, nullptr, 0, ".wav", voice_notes_metadata_read_metadata);
+    ASSERT_TRUE(store.begin());
+    add_wav("/clips/first.wav");
+    StaticJsonDocument<128> metadata;
+    ASSERT_TRUE(store.register_pre_written("first", 10, metadata.as<JsonObject>()));
+    const unsigned reads = LittleFS.opens["/clips/first.wav"];
+
+    JsonDocument manifest;
+    ASSERT_TRUE(store.copy_manifest(manifest));
+    ASSERT_EQ(manifest["entries"].size(), 1u);
+    JsonDocument entry;
+    ASSERT_TRUE(store.copy_entry("first", entry.to<JsonObject>()));
+    EXPECT_EQ(entry["id"].as<std::string>(), "first");
+    EXPECT_EQ(entry["created_at"].as<uint32_t>(), 10u);
+    EXPECT_FALSE(entry.containsKey("entries"));
+    EXPECT_FALSE(store.copy_entry("missing", entry.as<JsonObject>()));
+    EXPECT_EQ(LittleFS.opens["/clips/first.wav"], reads);
+
+    BoundedPsramJsonAllocator allocator(0);
+    JsonDocument exhausted(&allocator);
+    EXPECT_FALSE(store.copy_manifest(exhausted));
+    EXPECT_TRUE(store.exists("first"));
+    ASSERT_TRUE(store.remove("first"));
+    EXPECT_EQ(entry["id"].as<std::string>(), "first");
+    EXPECT_EQ(manifest["entries"][0]["id"].as<std::string>(), "first");
+}
+
 TEST_F(IndexedStoreTest, SortsAndRebuildsEntriesWithPsram) {
     have_psram = true;
-    FsIndexedStore store("/clips", kFields, 4, nullptr, 0, ".wav", voice_wav_store_read_metadata);
+    FsIndexedStore store("/clips", kFields, 4, nullptr, 0, ".wav", voice_notes_metadata_read_metadata);
     ASSERT_TRUE(store.begin());
     StaticJsonDocument<128> metadata;
     add_wav("/clips/older.wav");
@@ -104,7 +133,7 @@ TEST_F(IndexedStoreTest, SortsAndRebuildsEntriesWithPsram) {
     EXPECT_GT(psram_allocations, 0u);
 
     ASSERT_TRUE(LittleFS.remove("/clips/_index.json"));
-    FsIndexedStore reloaded("/clips", kFields, 4, nullptr, 0, ".wav", voice_wav_store_read_metadata);
+    FsIndexedStore reloaded("/clips", kFields, 4, nullptr, 0, ".wav", voice_notes_metadata_read_metadata);
     ASSERT_TRUE(reloaded.begin());
     EXPECT_EQ(reloaded.count(), 2);
     EXPECT_TRUE(reloaded.exists("older"));
@@ -112,7 +141,7 @@ TEST_F(IndexedStoreTest, SortsAndRebuildsEntriesWithPsram) {
 }
 
 TEST_F(IndexedStoreTest, ReportsIoAndDeletionFailuresWithoutLosingEntry) {
-    FsIndexedStore store("/clips", kFields, 4, nullptr, 0, ".wav", voice_wav_store_read_metadata);
+    FsIndexedStore store("/clips", kFields, 4, nullptr, 0, ".wav", voice_notes_metadata_read_metadata);
     LittleFS.mkdir("/clips");
     add_wav("/clips/first.wav");
     LittleFS.short_read_path = "/clips/first.wav";
@@ -131,7 +160,7 @@ TEST_F(IndexedStoreTest, ReportsIoAndDeletionFailuresWithoutLosingEntry) {
 }
 
 TEST_F(IndexedStoreTest, RejectsInvalidPayloadAndManifestWriteFailure) {
-    FsIndexedStore store("/clips", kFields, 4, nullptr, 0, ".wav", voice_wav_store_read_metadata);
+    FsIndexedStore store("/clips", kFields, 4, nullptr, 0, ".wav", voice_notes_metadata_read_metadata);
     ASSERT_TRUE(store.begin());
     ASSERT_EQ(store.count(), 0);
     StaticJsonDocument<128> metadata;
@@ -151,7 +180,7 @@ TEST_F(IndexedStoreTest, RejectsInvalidPayloadAndManifestWriteFailure) {
 }
 
 TEST_F(IndexedStoreTest, ReportsRebuildAllocationFailureAndCanRetry) {
-    FsIndexedStore store("/clips", kFields, 4, nullptr, 0, ".wav", voice_wav_store_read_metadata);
+    FsIndexedStore store("/clips", kFields, 4, nullptr, 0, ".wav", voice_notes_metadata_read_metadata);
     LittleFS.mkdir("/clips");
     add_wav("/clips/first.wav");
     fail_allocation = true;

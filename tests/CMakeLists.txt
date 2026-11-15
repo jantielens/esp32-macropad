@@ -151,10 +151,10 @@ add_host_legacy_test(test_sticky_epaper_driver_sd
     OPTIONS -Wno-unused-parameter
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
     LIBRARIES host_lvgl)
-foreach(voice_clips 0 1)
+foreach(voice_notes 0 1)
   set(sticky_hardware_target test_sticky_hardware)
-  if(voice_clips)
-    set(sticky_hardware_target test_sticky_hardware_voice_clips)
+  if(voice_notes)
+    set(sticky_hardware_target test_sticky_hardware_voice_notes)
   endif()
   add_host_legacy_test(${sticky_hardware_target}
     SOURCES test_sticky_hardware.cpp ${PROJECT_SOURCE_DIR}/src/app/board_hardware.cpp
@@ -163,7 +163,7 @@ foreach(voice_clips 0 1)
         ${PROJECT_SOURCE_DIR}/src/app/drivers/gt911_touch_driver.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/sticky_driver_test_overrides ${HOST_ARDUINOJSON_DIR}
         ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive
-    DEFINITIONS BOARD_HAS_OVERRIDE=1 BOARD_HAS_PSRAM=1 CONFIG_IDF_TARGET_ESP32S3=1 HAS_VOICE_CLIPS=${voice_clips}
+    DEFINITIONS BOARD_HAS_OVERRIDE=1 BOARD_HAS_PSRAM=1 CONFIG_IDF_TARGET_ESP32S3=1 HAS_VOICE_NOTES=${voice_notes}
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/sticky_driver_test_overrides/SPI.h
 )
 endforeach()
@@ -611,15 +611,15 @@ add_host_legacy_test(test_ota_activity
         BOARD_AUTO_SHUTDOWN_REQUEST=0
 )
 
-foreach(voice_clips 0 1)
+foreach(voice_notes 0 1)
   set(reboot_service_target test_reboot_service)
-  if(voice_clips)
-    set(reboot_service_target test_reboot_service_voice_clips)
+  if(voice_notes)
+    set(reboot_service_target test_reboot_service_voice_notes)
   endif()
   add_host_legacy_test(${reboot_service_target}
     SOURCES test_reboot_service.cpp ${PROJECT_SOURCE_DIR}/src/app/ota_activity.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/ota_upload_overrides ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides
-    DEFINITIONS OTA_ACTIVITY_HOST_TEST HAS_AUDIO=1 HAS_VOICE_CLIPS=${voice_clips}
+    DEFINITIONS OTA_ACTIVITY_HOST_TEST HAS_AUDIO=1 HAS_VOICE_NOTES=${voice_notes}
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
 )
 endforeach()
@@ -934,6 +934,13 @@ add_host_legacy_test(test_action_parse
     OPTIONS -Wno-deprecated-declarations
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
 )
+add_host_legacy_test(test_action_parse_voice_notes
+    SOURCES test_action_parse.cpp ${ACTION_TEST_SOURCES} ${PROJECT_SOURCE_DIR}/src/app/action_catalog.cpp
+    INCLUDES ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS ALARM_ENABLED=1 HAS_AUDIO=1 HAS_SOUND_PLAYER=1 HAS_TOUCH=1 HAS_VOICE_NOTES=1
+    OPTIONS -Wno-deprecated-declarations
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
+)
 add_host_legacy_test(test_action_parse_alarm_disabled
     SOURCES test_action_parse.cpp ${ACTION_TEST_SOURCES} ${PROJECT_SOURCE_DIR}/src/app/action_catalog.cpp
         ${PROJECT_SOURCE_DIR}/src/app/alarm_manager.cpp
@@ -1190,13 +1197,13 @@ add_binding_schema_profile(baseline "")
 add_binding_schema_profile(display_only "HAS_MQTT=0;HAS_HA_LIVE=0")
 add_binding_schema_profile(alarm_disabled "ALARM_ENABLED=0")
 add_binding_schema_profile(camera BINDING_SCHEMA_PROFILE_CAMERA)
-add_binding_schema_profile(full "BINDING_SCHEMA_PROFILE_FULL;HAS_VOICE_CLIPS=1" ${PROJECT_SOURCE_DIR}/src/app/audio_input_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/image_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/voice_clips_binding.cpp)
+add_binding_schema_profile(full "BINDING_SCHEMA_PROFILE_FULL;HAS_VOICE_NOTES=1" ${PROJECT_SOURCE_DIR}/src/app/audio_input_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/image_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/voice_notes_binding.cpp)
 # Portal dev-server fixture for GET /api/bindings?docs=1; regenerate with
 # build/host-tests/tests/test_binding_schema_full --emit-json > tools/mock-data/binding-docs.json
 add_test(NAME test_binding_docs_fixture
     COMMAND sh -c "$<TARGET_FILE:test_binding_schema_full> --emit-json | diff -u tools/mock-data/binding-docs.json -")
 set_tests_properties(test_binding_docs_fixture PROPERTIES WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
-add_binding_schema_profile(full_no_psram "BINDING_SCHEMA_PROFILE_FULL;HAS_PSRAM=0;HAS_VOICE_CLIPS=1" ${PROJECT_SOURCE_DIR}/src/app/audio_input_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/image_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/voice_clips_binding.cpp)
+add_binding_schema_profile(full_no_psram "BINDING_SCHEMA_PROFILE_FULL;HAS_PSRAM=0;HAS_VOICE_NOTES=1" ${PROJECT_SOURCE_DIR}/src/app/audio_input_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/image_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/voice_notes_binding.cpp)
 add_binding_schema_profile(ha_only "HAS_HA_LIVE=1;HAS_MQTT=0")
 add_binding_schema_profile(voice BINDING_SCHEMA_PROFILE_VOICE ${PROJECT_SOURCE_DIR}/src/app/device_classes/voice_assistant/voice_binding.cpp)
 add_binding_schema_profile(coffee BINDING_SCHEMA_PROFILE_COFFEE ${PROJECT_SOURCE_DIR}/src/app/device_classes/coffee_scale/scale_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/coffee_scale/brew/brew_binding.cpp)
@@ -1251,7 +1258,7 @@ foreach(script
     test_portal_action_list.js test_portal_timer_binding.js test_portal_pad_dialog_transaction.js
     test_portal_pad_import.js test_portal_pad_dirty.js test_portal_recipes.js
     test_portal_ble_config.js test_portal_audio_config.js test_portal_epaper_config.js test_portal_pad_preview.js test_portal_startup.js
-    test_portal_logs.js test_portal_screensaver.js test_portal_pad_colors.js test_portal_voice_clips.js
+    test_portal_logs.js test_portal_screensaver.js test_portal_pad_colors.js test_portal_voice_notes.js
     test_portal_binding_help.js test_portal_asset_gates.js
     test_portal_extension_upload.js
 )
@@ -1312,7 +1319,7 @@ add_host_gtest(test_voice_wav
     test_voice_wav.cpp
     ${PROJECT_SOURCE_DIR}/src/app/voice_wav.cpp
 )
-target_compile_definitions(test_voice_wav PRIVATE HAS_VOICE_CLIPS=1)
+target_compile_definitions(test_voice_wav PRIVATE HAS_VOICE_NOTES=1)
 target_compile_options(test_voice_wav PRIVATE
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h")
 
@@ -1320,40 +1327,42 @@ set(FS_INDEXED_STORE_TEST_SOURCES
     test_fs_indexed_store.cpp
     ${PROJECT_SOURCE_DIR}/src/app/fs_indexed_store.cpp
     ${PROJECT_SOURCE_DIR}/src/app/voice_wav.cpp
-    ${PROJECT_SOURCE_DIR}/src/app/voice_wav_store.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/voice_notes_metadata.cpp
 )
 foreach(storage_profile IN ITEMS flash sd)
-    set(voice_clips_target test_voice_clips)
-    set(voice_clips_storage_definitions USE_SD_STORAGE=0)
-    set(voice_clips_activity_source)
+    set(voice_notes_target test_voice_notes)
+    set(voice_notes_storage_definitions USE_SD_STORAGE=0)
+    set(voice_notes_activity_source)
     if(storage_profile STREQUAL "sd")
-        set(voice_clips_target test_voice_clips_sd)
-        set(voice_clips_storage_definitions USE_SD_STORAGE=1 HAS_AUTO_SHUTDOWN=1 OTA_ACTIVITY_HOST_TEST)
-        set(voice_clips_activity_source ${PROJECT_SOURCE_DIR}/src/app/ota_activity.cpp)
+        set(voice_notes_target test_voice_notes_sd)
+        set(voice_notes_storage_definitions USE_SD_STORAGE=1 HAS_AUTO_SHUTDOWN=1 OTA_ACTIVITY_HOST_TEST)
+        set(voice_notes_activity_source ${PROJECT_SOURCE_DIR}/src/app/ota_activity.cpp)
     endif()
-add_host_legacy_test(${voice_clips_target}
-    SOURCES test_voice_clips.cpp
-        ${PROJECT_SOURCE_DIR}/src/app/voice_clips.cpp
+add_host_legacy_test(${voice_notes_target}
+    SOURCES test_voice_notes.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/voice_notes.cpp
         ${PROJECT_SOURCE_DIR}/src/app/storage_browser.cpp
         ${PROJECT_SOURCE_DIR}/src/app/fs_indexed_store.cpp
         ${PROJECT_SOURCE_DIR}/src/app/voice_wav.cpp
-        ${PROJECT_SOURCE_DIR}/src/app/voice_wav_store.cpp
-        ${voice_clips_activity_source}
+        ${PROJECT_SOURCE_DIR}/src/app/voice_notes_metadata.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/voice_notes_transcription.cpp
+        ${voice_notes_activity_source}
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/audio_input_overrides
         ${PROJECT_SOURCE_DIR}/tests/fs_indexed_store_overrides
         ${PROJECT_SOURCE_DIR}/tests/shutter_session_overrides ${HOST_ARDUINOJSON_DIR}
-    DEFINITIONS HAS_VOICE_CLIPS=1 HAS_STORAGE_BROWSER=1 HAS_AUDIO_INPUT=1 HAS_FILESYSTEM=1
-        ${voice_clips_storage_definitions}
+        ${PROJECT_SOURCE_DIR}/tests/binding_schema_profiles
+    DEFINITIONS HAS_VOICE_NOTES=1 HAS_STORAGE_BROWSER=1 HAS_AUDIO_INPUT=1 HAS_FILESYSTEM=1
+        ${voice_notes_storage_definitions}
         ARDUINOJSON_ENABLE_ARDUINO_STRING=1
     OPTIONS -Wno-deprecated-declarations -pthread
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/shutter_session_overrides/Arduino.h
         ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
 )
 endforeach()
-add_test(NAME test_voice_clips_no_psram COMMAND test_voice_clips --no-psram)
-add_host_legacy_test(test_voice_clip_range
-    SOURCES test_voice_clip_range.cpp ${PROJECT_SOURCE_DIR}/src/app/voice_clip_range.cpp
-    DEFINITIONS HAS_VOICE_CLIPS=1
+add_test(NAME test_voice_notes_no_psram COMMAND test_voice_notes --no-psram)
+add_host_legacy_test(test_voice_note_range
+    SOURCES test_voice_note_range.cpp ${PROJECT_SOURCE_DIR}/src/app/voice_note_range.cpp
+    DEFINITIONS HAS_VOICE_NOTES=1
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h
 )
 add_host_gtest(test_fs_indexed_store ${FS_INDEXED_STORE_TEST_SOURCES})
@@ -1362,7 +1371,7 @@ target_include_directories(test_fs_indexed_store BEFORE PRIVATE
     ${PROJECT_SOURCE_DIR}/tests/shutter_session_overrides
     ${HOST_ARDUINOJSON_DIR})
 target_compile_definitions(test_fs_indexed_store PRIVATE
-    HAS_VOICE_CLIPS=1 HAS_FILESYSTEM=1 USE_SD_STORAGE=0
+    HAS_VOICE_NOTES=1 HAS_FILESYSTEM=1 USE_SD_STORAGE=0
     ARDUINOJSON_ENABLE_ARDUINO_STRING=1 TEST_HEAP_CAPS_ALLOCATOR=1)
 target_compile_options(test_fs_indexed_store PRIVATE -Wno-deprecated-declarations
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/shutter_session_overrides/Arduino.h"

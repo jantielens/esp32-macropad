@@ -1,0 +1,24 @@
+<div class="section-header">
+  <h2><span class="portal-icon" aria-hidden="true">settings</span>Voice Notes Settings</h2>
+</div>
+<section class="card mb-3" aria-labelledby="voice-notes-service-heading">
+  <div class="card-header"><h3 class="mb-0" id="voice-notes-service-heading">Transcription Service</h3></div>
+  <div class="card-body">
+  <p class="text-muted small">Configure Azure to convert saved voice notes to text. Transcription sends recordings to Azure; recording and playback work without it.</p>
+  <div class="mb-3">
+    <label class="form-label" for="voice_notes_base_url">Azure resource endpoint</label>
+    <input class="form-control" type="url" id="voice_notes_base_url" name="voice_notes_base_url" maxlength="511" placeholder="https://resource.openai.azure.com/">
+    <div class="form-text">Use the HTTPS resource root, for example https://&lt;resource&gt;.openai.azure.com/. Do not include /openai/ or an operation path or query. Enter the deployment name separately below.</div>
+  </div>
+  <div class="mb-3">
+    <label class="form-label" for="voice_notes_model">Deployment name</label>
+    <input class="form-control" type="text" id="voice_notes_model" name="voice_notes_model" maxlength="127">
+  </div>
+  <div class="mb-3">
+    <label class="form-label" for="voice_notes_api_key">API key</label>
+    <input class="form-control" type="password" id="voice_notes_api_key" name="voice_notes_api_key" maxlength="255" autocomplete="new-password">
+    <div class="form-text" id="voice-notes-key-status">Leave blank to keep the saved key.</div>
+  </div>
+  <button type="button" class="btn btn-primary" id="voice-notes-settings-save">Save</button>
+  </div>
+</section>

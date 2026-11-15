@@ -16,6 +16,9 @@
 #include "ota_activity.h"
 #include "wifi_manager.h"
 #include "ble_backend.h"
+#if HAS_VOICE_NOTES
+#include "config_psram.h"
+#endif
 #if HAS_EXTERNAL_DATA
 #include "external_data.h"
 #endif
@@ -40,6 +43,11 @@
 // Preferences keys
 #if HAS_EXTERNAL_DATA
 #define KEY_EXTERNAL_DATA  "external_data"
+#endif
+#if HAS_VOICE_NOTES
+#define KEY_VN_BASE_URL "vn_base_url"
+#define KEY_VN_API_KEY "vn_api_key"
+#define KEY_VN_MODEL "vn_model"
 #endif
 #define KEY_WIFI_SSID      "wifi_ssid"
 #define KEY_WIFI_PASS      "wifi_pass"
@@ -499,6 +507,14 @@ bool config_manager_load(DeviceConfig *config) {
 		}
 		
 		// Load WiFi settings
+#if HAS_VOICE_NOTES
+		preferences.getString(KEY_VN_BASE_URL, config->voice_notes_transcription.base_url,
+				sizeof(config->voice_notes_transcription.base_url));
+		preferences.getString(KEY_VN_API_KEY, config->voice_notes_transcription.api_key,
+				sizeof(config->voice_notes_transcription.api_key));
+		preferences.getString(KEY_VN_MODEL, config->voice_notes_transcription.model,
+				sizeof(config->voice_notes_transcription.model));
+#endif
 #if HAS_EXTERNAL_DATA
 		if (preferences.isKey(KEY_EXTERNAL_DATA)) {
 				if (preferences.getBytesLength(KEY_EXTERNAL_DATA) != sizeof(config->external_data) ||
@@ -779,6 +795,33 @@ static bool save_config_locked(const DeviceConfig *config) {
 				LOGE("Config", "Save failed: could not open NVS namespace");
 				return false;
 		}
+#if HAS_VOICE_NOTES
+		{
+				const auto& vn = config->voice_notes_transcription;
+				char* verify = static_cast<char*>(config_psram_alloc(sizeof(vn.base_url), "voice_notes_nvs"));
+				if (!verify) {
+						preferences.end();
+						return false;
+				}
+				const char* keys[] = {KEY_VN_BASE_URL, KEY_VN_API_KEY, KEY_VN_MODEL};
+				const char* values[] = {vn.base_url, vn.api_key, vn.model};
+				bool saved = true;
+				for (size_t i = 0; i < 3; ++i) {
+						preferences.putString(keys[i], values[i]);
+						if (!preferences.getString(keys[i], verify, sizeof(vn.base_url)) ||
+								strcmp(verify, values[i]) != 0) {
+								saved = false;
+								break;
+						}
+				}
+				free(verify);
+				if (!saved) {
+						LOGE("Config", "Failed to persist Voice Notes settings");
+						preferences.end();
+						return false;
+				}
+		}
+#endif
 #if HAS_DISPLAY
 		{
 				BasicJsonDocument<PsramJsonAllocator> dialog_doc(4096);
