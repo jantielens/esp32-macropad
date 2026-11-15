@@ -42,6 +42,7 @@ namespace {
 int8_t boot_tx_power_dbm = 9;
 bool power_applied = false;
 
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO || !defined(ARDUINO) || SOC_BLE_SUPPORTED
 bool power_level(int8_t dbm, int& level) {
     switch (dbm) {
         case -12: level = ESP_PWR_LVL_N12; break;
@@ -56,8 +57,10 @@ bool power_level(int8_t dbm, int& level) {
     }
     return true;
 }
+#endif
 
 bool apply_power() {
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO || !defined(ARDUINO) || SOC_BLE_SUPPORTED
     int level;
     if (!power_level(boot_tx_power_dbm, level)) return false;
     const auto power = static_cast<esp_power_level_t>(level);
@@ -68,18 +71,17 @@ bool apply_power() {
 #elif !defined(ARDUINO) || SOC_BLE_SUPPORTED
         // Core's void wrapper cannot report a failed controller operation.
         if (esp_ble_tx_power_set(type, power) != ESP_OK || esp_ble_tx_power_get(type) != power) {
-#else
-        LOGE("BLE", "Transmit power is unavailable on hosted HCI");
-        return false;
 #endif
-#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO || !defined(ARDUINO) || SOC_BLE_SUPPORTED
             LOGE("BLE", "Could not apply Bluetooth transmit power (type=%d)", int(type));
             return false;
         }
-#endif
     }
     LOGI("BLE", "Bluetooth transmit power: %+d dBm", int(boot_tx_power_dbm));
     return true;
+#else
+    LOGE("BLE", "Transmit power is unavailable on hosted HCI");
+    return false;
+#endif
 }
 }
 
