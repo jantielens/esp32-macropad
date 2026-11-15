@@ -67,10 +67,14 @@ public:
     void (*remove_hook)(const char*) = nullptr;
     void (*usage_hook)() = nullptr;
     void (*write_hook)(const char*, size_t) = nullptr;
+    void (*exists_hook)(const char*) = nullptr;
     bool short_write = false;
     uint64_t capacity = 1024 * 1024;
 
-    bool exists(const char* path) const { return files.count(path) || directories.count(path); }
+    bool exists(const char* path) const {
+        if (exists_hook) exists_hook(path);
+        return files.count(path) || directories.count(path);
+    }
     uint64_t totalBytes() const { return capacity; }
     uint64_t usedBytes() const {
         if (usage_hook) usage_hook();

@@ -318,7 +318,7 @@ struct SetVariablePayload {
 };
 #if HAS_VOICE_NOTES
 struct VoiceNotePayload {
-    char command[8];
+    char command[16];
     char scenario[8];
 };
 #endif

@@ -94,6 +94,10 @@ void voice_notes_status_get(AsyncWebServerRequest* request) {
     processing["note_id"] = transcription.note_id;
     processing["error"] = transcription.error;
     (*doc)["transcription_configured"] = voice_notes_transcription_configured();
+    VoiceNotesProcessingSnapshot coordinator{};
+    voice_notes_processing_snapshot(&coordinator);
+    (*doc)["processing"]["state"] = voice_notes_processing_state_name(coordinator.state);
+    (*doc)["processing"]["reason"] = voice_notes_processing_reason_name(coordinator.reason);
 #if USE_SD_STORAGE && defined(SD_STORAGE_SPI) && SD_STORAGE_SPI
     (*doc)["backend"] = "sd_spi";
 #elif USE_SD_STORAGE
@@ -161,6 +165,7 @@ void voice_notes_transcribe_post(AsyncWebServerRequest* request) {
             case VoiceNotesTranscriptionStart::NotConfigured: web_portal_send_json_error(request, 400, "Transcription is not configured"); return;
             case VoiceNotesTranscriptionStart::Busy: web_portal_send_json_error(request, 409, "Device is busy"); return;
             case VoiceNotesTranscriptionStart::Offline: web_portal_send_json_error(request, 503, "Wi-Fi disconnected"); return;
+            case VoiceNotesTranscriptionStart::Cooldown: web_portal_send_json_error(request, 429, "Rate limited; retry later"); return;
             default: web_portal_send_json_error(request, 503, "Transcription unavailable"); return;
         }
     }

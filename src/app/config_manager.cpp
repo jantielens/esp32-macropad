@@ -17,7 +17,7 @@
 #include "wifi_manager.h"
 #include "ble_backend.h"
 #if HAS_VOICE_NOTES
-#include "config_psram.h"
+#include <esp_heap_caps.h>
 #endif
 #if HAS_EXTERNAL_DATA
 #include "external_data.h"
@@ -48,6 +48,7 @@
 #define KEY_VN_BASE_URL "vn_base_url"
 #define KEY_VN_API_KEY "vn_api_key"
 #define KEY_VN_MODEL "vn_model"
+#define KEY_VN_AUTO_TX "vn_auto_tx"
 #endif
 #define KEY_WIFI_SSID      "wifi_ssid"
 #define KEY_WIFI_PASS      "wifi_pass"
@@ -376,6 +377,9 @@ bool config_manager_load(DeviceConfig *config) {
 
 		strlcpy(config->wifi_failure_mode, "ap", sizeof(config->wifi_failure_mode));
 		config->ap_password[0] = '\0';
+#if HAS_VOICE_NOTES
+		config->voice_notes_transcription.auto_transcribe = false;
+#endif
 #if HAS_EXTERNAL_DATA
 		config->external_data = {};
 #endif
@@ -514,6 +518,7 @@ bool config_manager_load(DeviceConfig *config) {
 				sizeof(config->voice_notes_transcription.api_key));
 		preferences.getString(KEY_VN_MODEL, config->voice_notes_transcription.model,
 				sizeof(config->voice_notes_transcription.model));
+		config->voice_notes_transcription.auto_transcribe = preferences.getBool(KEY_VN_AUTO_TX, false);
 #endif
 #if HAS_EXTERNAL_DATA
 		if (preferences.isKey(KEY_EXTERNAL_DATA)) {
@@ -798,8 +803,9 @@ static bool save_config_locked(const DeviceConfig *config) {
 #if HAS_VOICE_NOTES
 		{
 				const auto& vn = config->voice_notes_transcription;
-				char* verify = static_cast<char*>(config_psram_alloc(sizeof(vn.base_url), "voice_notes_nvs"));
+				char* verify = static_cast<char*>(heap_caps_malloc(sizeof(vn.base_url), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
 				if (!verify) {
+						LOGE("Config", "Voice Notes settings verification memory unavailable");
 						preferences.end();
 						return false;
 				}
@@ -813,6 +819,9 @@ static bool save_config_locked(const DeviceConfig *config) {
 								saved = false;
 								break;
 						}
+						if (preferences.putBool(KEY_VN_AUTO_TX, vn.auto_transcribe) != sizeof(uint8_t) ||
+								preferences.getBool(KEY_VN_AUTO_TX, !vn.auto_transcribe) != vn.auto_transcribe)
+								saved = false;
 				}
 				free(verify);
 				if (!saved) {

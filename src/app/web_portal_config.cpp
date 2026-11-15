@@ -10,6 +10,7 @@
 #include "voice_notes_transcription.h"
 #include <esp_heap_caps.h>
 #include <memory>
+#include <new>
 #endif
 
 #include "board_config.h"
@@ -216,6 +217,7 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["voice_notes_api_key"] = "";
 				(*doc)["voice_notes_api_key_set"] = current_config->voice_notes_transcription.api_key[0] != '\0';
 				(*doc)["voice_notes_model"] = current_config->voice_notes_transcription.model;
+				(*doc)["voice_notes_auto_transcribe"] = current_config->voice_notes_transcription.auto_transcribe;
 #endif
 
 #if HAS_EXTERNAL_DATA
@@ -506,7 +508,8 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				VoiceNotesTranscriptionConfig candidate;
 		};
 		const bool voice_notes_update = doc.containsKey("voice_notes_base_url") ||
-				doc.containsKey("voice_notes_api_key") || doc.containsKey("voice_notes_model");
+				doc.containsKey("voice_notes_api_key") || doc.containsKey("voice_notes_model") ||
+				doc.containsKey("voice_notes_auto_transcribe");
 		std::unique_ptr<VoiceNotesConfigUpdate, decltype(&free)> voice_notes_candidate(nullptr, &free);
 		if (voice_notes_update) {
 				voice_notes_candidate.reset(static_cast<VoiceNotesConfigUpdate*>(
@@ -516,14 +519,20 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 						portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
 						return;
 				}
+				new (voice_notes_candidate.get()) VoiceNotesConfigUpdate{};
 				voice_notes_candidate->previous = current_config->voice_notes_transcription;
 				voice_notes_candidate->candidate = voice_notes_candidate->previous;
 				auto& candidate = voice_notes_candidate->candidate;
 				bool valid = true;
+				if (doc.containsKey("voice_notes_auto_transcribe")) {
+						if (!doc["voice_notes_auto_transcribe"].is<bool>()) valid = false;
+						else candidate.auto_transcribe = doc["voice_notes_auto_transcribe"].as<bool>();
+				}
 				if (doc.containsKey("voice_notes_base_url")) {
 						const char* value = doc["voice_notes_base_url"].is<const char*>()
 								? doc["voice_notes_base_url"].as<const char*>() : nullptr;
-						valid = value && voice_notes_normalize_endpoint(value, candidate.base_url, sizeof(candidate.base_url));
+						if (!value || !voice_notes_normalize_endpoint(value, candidate.base_url, sizeof(candidate.base_url)))
+								valid = false;
 				}
 				if (doc.containsKey("voice_notes_model")) {
 						const char* value = doc["voice_notes_model"].is<const char*>()

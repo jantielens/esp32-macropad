@@ -3430,11 +3430,15 @@ The `voice-notes` component and its fragment and script require
 * `GET /api/component/voice-notes/list` returns indexed note metadata and
   `has_transcript`, without transcript text.
 * `GET /api/component/voice-notes/status` returns recording and transcription
-  snapshots, setup status, backend, and cached total/free capacity.
+  snapshots, setup status, backend, cached total/free capacity, and a
+  `processing` object. Its `state` is `idle`, `waiting`, `running`, or
+  `blocked`; its `reason` is `none`, `offline`, `recording`, `update`,
+  `retry`, or `configuration`.
 * `GET /api/component/voice-notes/detail?id=<id>` returns note metadata and its
   saved transcript, or `null` when no transcript exists.
 * `POST /api/component/voice-notes/transcribe?id=<id>` accepts one background
   transcription with HTTP `202`. Poll status for completion or failure.
+  An active service rate-limit cooldown returns `429`.
 * `GET /api/component/voice-notes/file?id=<id>` streams an indexed WAV.
   Add `download=1` for an attachment. A single closed, open-ended, or suffix
   byte range returns `206` with `Content-Range`; an invalid or unsatisfiable
@@ -3449,10 +3453,11 @@ factory reset return a retryable `409` while recorder cancellation is pending,
 or `503` if it cannot stop safely.
 
 Feature-gated `/api/config` fields are `voice_notes_base_url`,
-`voice_notes_model`, and the write-only `voice_notes_api_key`. GET returns an
+`voice_notes_model`, `voice_notes_auto_transcribe` (a boolean), and the
+write-only `voice_notes_api_key`. GET returns an
 empty key plus `voice_notes_api_key_set`; an omitted or empty key preserves the
-saved secret. Endpoint and deployment changes apply to future attempts without
-rebooting.
+saved secret. Settings changes apply without rebooting; automatic processing
+includes existing notes without transcripts.
 
 ---
 

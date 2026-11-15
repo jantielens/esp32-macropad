@@ -13,6 +13,7 @@
 #include <WiFi.h>
 #include <esp_heap_caps.h>
 #include <LittleFS.h>
+#include <esp_timer.h>
 #include <atomic>
 #include <cassert>
 #include <chrono>
@@ -56,6 +57,18 @@ bool fail_transcript_write = false;
 std::atomic<bool> block_transcription{false};
 std::atomic<bool> transcription_entered{false};
 std::atomic<bool> fail_transcription{false};
+std::atomic<bool> wifi_connected{true};
+std::mutex request_mutex;
+std::vector<std::string> request_ids;
+std::string failed_note;
+VoiceNotesRequestOutcome simulated_outcome = VoiceNotesRequestOutcome::NoteFailure;
+uint64_t simulated_cooldown = 0;
+
+void interrupt_candidate_scan(const char* path) {
+    if (!strstr(path, ".json")) return;
+    LittleFS.exists_hook = nullptr;
+    assert(voice_notes_command(VoiceNoteCommand::Start, 2040));
+}
 
 void usage_hook() {
     if (!block_capacity) return;
@@ -97,16 +110,29 @@ bool storage_write_atomic(const char* path, const uint8_t* bytes, size_t length)
 void fs_health_get(FSHealthStats* out) { *out = {}; }
 bool time_service_ready() { return false; }
 HostWiFi WiFi;
-int HostWiFi::status() const { return WL_CONNECTED; }
+int HostWiFi::status() const { return wifi_connected ? WL_CONNECTED : 0; }
 size_t heap_caps_get_free_size(uint32_t) { return 8 * 1024 * 1024; }
 #if !(USE_SD_STORAGE && HAS_AUTO_SHUTDOWN)
 bool ota_activity_is_busy() { return false; }
 uint32_t ota_activity_epoch() { return 0; }
 #endif
-bool voice_notes_transcription_request(const VoiceNotesTranscriptionConfig&, File&, uint32_t,
+bool voice_notes_transcription_request(const VoiceNotesTranscriptionConfig&, File& recording, uint32_t, uint64_t,
                                        VoiceNotesRequestResult& result) {
+    bool simulate_failure = false;
+    {
+        std::lock_guard<std::mutex> lock(request_mutex);
+        const std::string id(recording.name(), 16);
+        request_ids.push_back(id);
+        simulate_failure = id == failed_note;
+        if (simulate_failure) {
+            result.outcome = simulated_outcome;
+            result.cooldown_ms = simulated_cooldown;
+            result.error = "Simulated failure";
+        }
+    }
     transcription_entered = true;
     while (block_transcription) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    if (simulate_failure) return false;
     if (fail_transcription) { result.error = "Request failed"; return false; }
     const char text[] = "host transcript";
     result.text = static_cast<char*>(heap_caps_malloc(sizeof(text), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
@@ -288,6 +314,7 @@ int main(int argc, char**) {
         strlcpy(config.api_key, "key", sizeof(config.api_key));
         strlcpy(config.model, "original", sizeof(config.model));
         assert(voice_notes_transcription_configure(config));
+        assert(voice_notes_processing_init());
         block_transcription = true;
         assert(voice_notes_transcription_start(saved.last_clip) == VoiceNotesTranscriptionStart::Accepted);
         wait_until([] { return transcription_entered.load(); });
@@ -323,6 +350,19 @@ int main(int argc, char**) {
         assert(LittleFS.files.at(sidecar.c_str()) == previous);
         assert(LittleFS.files.at(path.c_str()) == original_wav);
         fail_transcription = false;
+        fail_transcript_write = true;
+        accepted = false;
+        wait_until([&] {
+            if (!accepted)
+                accepted = voice_notes_transcription_start(saved.last_clip) == VoiceNotesTranscriptionStart::Accepted;
+            return accepted;
+        });
+        wait_until([&] {
+            voice_notes_transcription_snapshot(&processing);
+            return processing.state == VoiceNotesTranscriptionState::Error;
+        });
+        fail_transcript_write = false;
+        assert(LittleFS.files.at(sidecar.c_str()) == previous);
         transcription_entered = false;
         block_transcription = true;
         accepted = false;
@@ -334,14 +374,14 @@ int main(int argc, char**) {
         wait_until([] { return transcription_entered.load(); });
         assert(voice_notes_command(VoiceNoteCommand::Start, 1001));
         assert(wait_completion(1001));
+        assert(voice_notes_command(VoiceNoteCommand::Discard, 1002));
+        assert(wait_completion(1002));
         block_transcription = false;
         wait_until([&] {
             voice_notes_transcription_snapshot(&processing);
             return processing.state == VoiceNotesTranscriptionState::Error;
         });
         assert(LittleFS.files.at(sidecar.c_str()) == previous);
-        assert(voice_notes_command(VoiceNoteCommand::Discard, 1002));
-        assert(wait_completion(1002));
 #if USE_SD_STORAGE && HAS_AUTO_SHUTDOWN
         transcription_entered = false;
         block_transcription = true;
@@ -603,6 +643,260 @@ int main(int argc, char**) {
     assert(voice_notes_remove(buffered.last_clip) == VoiceNoteFileStatus::Ready);
     assert(!LittleFS.exists(buffered_sidecar.c_str()));
     assert(!LittleFS.exists(buffered_path.c_str()));
+
+    if (!no_psram) {
+        assert(voice_notes_remove(snapshot().last_clip) == VoiceNoteFileStatus::Ready);
+        LittleFS.capacity = 10 * 1024 * 1024;
+        std::vector<std::string> pass_ids;
+        for (uint32_t token = 2000; token < 2006; token += 2) {
+            assert(voice_notes_command(VoiceNoteCommand::Start, token));
+            assert(wait_completion(token));
+            const unsigned before = reads;
+            wait_until([=] { return reads.load() > before; });
+            assert(voice_notes_command(VoiceNoteCommand::Save, token + 1));
+            assert(wait_completion(token + 1));
+            pass_ids.emplace_back(snapshot().last_clip);
+        }
+        VoiceNoteCursor candidate = {};
+        assert(voice_notes_next_candidate({}, &candidate) == VoiceNoteCandidate::Found);
+        assert(voice_notes_command(VoiceNoteCommand::Start, 2038));
+        assert(wait_completion(2038));
+        assert(voice_notes_next_candidate({}, &candidate) == VoiceNoteCandidate::Interrupted);
+        assert(voice_notes_command(VoiceNoteCommand::Discard, 2039));
+        assert(wait_completion(2039));
+#if USE_SD_STORAGE && HAS_AUTO_SHUTDOWN
+        assert(ota_activity_try_begin());
+        assert(voice_notes_next_candidate({}, &candidate) == VoiceNoteCandidate::Interrupted);
+        ota_activity_finish();
+#endif
+        LittleFS.exists_hook = interrupt_candidate_scan;
+        assert(voice_notes_next_candidate({}, &candidate) == VoiceNoteCandidate::Interrupted);
+        assert(wait_completion(2040));
+        assert(voice_notes_command(VoiceNoteCommand::Discard, 2041));
+        assert(wait_completion(2041));
+        assert(voice_notes_next_candidate({}, &candidate) == VoiceNoteCandidate::Found);
+        {
+            std::lock_guard<std::mutex> lock(request_mutex);
+            request_ids.clear();
+            failed_note = pass_ids[1];
+            simulated_outcome = VoiceNotesRequestOutcome::SharedFailure;
+        }
+        wifi_connected = false;
+        assert(voice_notes_processing_start() == VoiceNotesTranscriptionStart::Offline);
+        wifi_connected = true;
+        assert(voice_notes_processing_start() == VoiceNotesTranscriptionStart::Accepted);
+        wait_until([&] {
+            std::lock_guard<std::mutex> lock(request_mutex);
+            return request_ids.size() == 2;
+        });
+        wait_until([] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return state.state == VoiceNotesProcessingState::Idle;
+        });
+        {
+            std::lock_guard<std::mutex> lock(request_mutex);
+            assert((request_ids == std::vector<std::string>{pass_ids[0], pass_ids[1]}));
+        }
+        assert(voice_notes_has_transcript(pass_ids[0].c_str()));
+        assert(!voice_notes_has_transcript(pass_ids[1].c_str()));
+        assert(!voice_notes_has_transcript(pass_ids[2].c_str()));
+        {
+            std::lock_guard<std::mutex> lock(request_mutex);
+            request_ids.clear();
+            simulated_outcome = VoiceNotesRequestOutcome::NoteFailure;
+        }
+        assert(voice_notes_processing_start() == VoiceNotesTranscriptionStart::Accepted);
+        wait_until([&] {
+            std::lock_guard<std::mutex> lock(request_mutex);
+            return request_ids.size() == 2;
+        });
+        wait_until([] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return state.state == VoiceNotesProcessingState::Idle;
+        });
+        {
+            std::lock_guard<std::mutex> lock(request_mutex);
+            assert((request_ids == std::vector<std::string>{pass_ids[1], pass_ids[2]}));
+        }
+        assert(!voice_notes_has_transcript(pass_ids[1].c_str()));
+        assert(voice_notes_has_transcript(pass_ids[2].c_str()));
+        {
+            std::lock_guard<std::mutex> lock(request_mutex);
+            failed_note.clear();
+            request_ids.clear();
+        }
+        assert(voice_notes_processing_start() == VoiceNotesTranscriptionStart::Accepted);
+        wait_until([&] { return voice_notes_has_transcript(pass_ids[1].c_str()); });
+        wait_until([] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return state.state == VoiceNotesProcessingState::Idle;
+        });
+        {
+            std::lock_guard<std::mutex> lock(request_mutex);
+            assert(request_ids.size() == 1 && request_ids[0] == pass_ids[1]);
+        }
+        for (const auto& id : pass_ids) assert(voice_notes_remove(id.c_str()) == VoiceNoteFileStatus::Ready);
+
+        assert(voice_notes_command(VoiceNoteCommand::Start, 2010));
+        assert(wait_completion(2010));
+        const unsigned before = reads;
+        wait_until([=] { return reads.load() > before; });
+        assert(voice_notes_command(VoiceNoteCommand::Save, 2011));
+        assert(wait_completion(2011));
+        const std::string automatic_id = snapshot().last_clip;
+        {
+            std::lock_guard<std::mutex> lock(request_mutex);
+            request_ids.clear();
+            failed_note = automatic_id;
+            simulated_outcome = VoiceNotesRequestOutcome::SetupFailure;
+        }
+        wifi_connected = false;
+        VoiceNotesTranscriptionConfig automatic{};
+        strlcpy(automatic.base_url, "https://example.test/", sizeof(automatic.base_url));
+        strlcpy(automatic.api_key, "key", sizeof(automatic.api_key));
+        strlcpy(automatic.model, "updated", sizeof(automatic.model));
+        automatic.auto_transcribe = true;
+        assert(voice_notes_transcription_configure(automatic));
+        wait_until([] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return state.state == VoiceNotesProcessingState::Waiting &&
+                   state.reason == VoiceNotesProcessingReason::Offline;
+        });
+        wifi_connected = true;
+        wait_until([] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return state.state == VoiceNotesProcessingState::Blocked;
+        });
+        automatic.auto_transcribe = false;
+        assert(voice_notes_transcription_configure(automatic));
+        automatic.auto_transcribe = true;
+        assert(voice_notes_transcription_configure(automatic));
+        wait_until([] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return state.state == VoiceNotesProcessingState::Blocked;
+        });
+        {
+            std::lock_guard<std::mutex> lock(request_mutex);
+            simulated_outcome = VoiceNotesRequestOutcome::RateLimited;
+            simulated_cooldown = 60000;
+        }
+        strlcpy(automatic.model, "changed", sizeof(automatic.model));
+        assert(voice_notes_transcription_configure(automatic));
+        wait_until([] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return state.state == VoiceNotesProcessingState::Waiting &&
+                   state.reason == VoiceNotesProcessingReason::Retry;
+        });
+        assert(voice_notes_processing_start() == VoiceNotesTranscriptionStart::Cooldown);
+        automatic.auto_transcribe = false;
+        assert(voice_notes_transcription_configure(automatic));
+        wait_until([] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return state.state == VoiceNotesProcessingState::Idle;
+        });
+        assert(voice_notes_processing_start() == VoiceNotesTranscriptionStart::Cooldown);
+        audio_test_time_offset_us += 61000000;
+        {
+            std::lock_guard<std::mutex> lock(request_mutex);
+            failed_note.clear();
+        }
+        assert(voice_notes_processing_start() == VoiceNotesTranscriptionStart::Accepted);
+        wait_until([&] { return voice_notes_has_transcript(automatic_id.c_str()); });
+        wait_until([] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return state.state == VoiceNotesProcessingState::Idle;
+        });
+        assert(voice_notes_remove(automatic_id.c_str()) == VoiceNoteFileStatus::Ready);
+
+        std::vector<std::string> disabled_ids;
+        for (uint32_t token = 2020; token < 2024; token += 2) {
+            assert(voice_notes_command(VoiceNoteCommand::Start, token));
+            assert(wait_completion(token));
+            const unsigned captured = reads;
+            wait_until([=] { return reads.load() > captured; });
+            assert(voice_notes_command(VoiceNoteCommand::Save, token + 1));
+            assert(wait_completion(token + 1));
+            disabled_ids.emplace_back(snapshot().last_clip);
+        }
+        {
+            std::lock_guard<std::mutex> lock(request_mutex);
+            request_ids.clear();
+        }
+        transcription_entered = false;
+        block_transcription = true;
+        automatic.auto_transcribe = true;
+        assert(voice_notes_transcription_configure(automatic));
+        wait_until([] { return transcription_entered.load(); });
+        automatic.auto_transcribe = false;
+        assert(voice_notes_transcription_configure(automatic));
+        block_transcription = false;
+        wait_until([&] { return voice_notes_has_transcript(disabled_ids[0].c_str()); });
+        wait_until([] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return state.state == VoiceNotesProcessingState::Idle;
+        });
+        assert(!voice_notes_has_transcript(disabled_ids[1].c_str()));
+        {
+            std::lock_guard<std::mutex> lock(request_mutex);
+            assert(request_ids.size() == 1 && request_ids[0] == disabled_ids[0]);
+        }
+        for (const auto& id : disabled_ids) assert(voice_notes_remove(id.c_str()) == VoiceNoteFileStatus::Ready);
+
+        assert(voice_notes_command(VoiceNoteCommand::Start, 2030));
+        assert(wait_completion(2030));
+        const unsigned retry_capture = reads;
+        wait_until([=] { return reads.load() > retry_capture; });
+        assert(voice_notes_command(VoiceNoteCommand::Save, 2031));
+        assert(wait_completion(2031));
+        const std::string retry_id = snapshot().last_clip;
+        {
+            std::lock_guard<std::mutex> lock(request_mutex);
+            failed_note = retry_id;
+            simulated_outcome = VoiceNotesRequestOutcome::NoteFailure;
+            request_ids.clear();
+        }
+        automatic.auto_transcribe = true;
+        assert(voice_notes_transcription_configure(automatic));
+        auto requests = [] {
+            std::lock_guard<std::mutex> lock(request_mutex);
+            return request_ids.size();
+        };
+        auto waiting_for_retry = [] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return state.state == VoiceNotesProcessingState::Waiting &&
+                   state.reason == VoiceNotesProcessingReason::Retry;
+        };
+        wait_until([&] { return requests() == 1 && waiting_for_retry(); });
+        audio_test_time_offset_us += 27000000;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+        assert(requests() == 1);
+        audio_test_time_offset_us += 4000000;
+        wait_until([&] { return requests() == 2 && waiting_for_retry(); });
+        audio_test_time_offset_us += 57000000;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+        assert(requests() == 2);
+        audio_test_time_offset_us += 4000000;
+        wait_until([&] { return requests() == 3 && waiting_for_retry(); });
+        automatic.auto_transcribe = false;
+        assert(voice_notes_transcription_configure(automatic));
+        wait_until([] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return state.state == VoiceNotesProcessingState::Idle;
+        });
+        assert(voice_notes_remove(retry_id.c_str()) == VoiceNoteFileStatus::Ready);
+    }
 
     audio_test_stopping = true;
     xTaskNotifyGive(&audio_test_worker_handle);

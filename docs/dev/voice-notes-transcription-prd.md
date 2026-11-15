@@ -10,6 +10,12 @@ Approved product scope and handoff contract. The
 specifies the engineering choices and verification gates. Approval of these
 documents does not itself authorize firmware implementation.
 
+The follow-up [background processing PRD](voice-notes-background-processing-prd.md)
+defines automatic scheduling, retries, recording-first interruption, and a
+non-durable device trigger. Its explicitly identified scope supersedes the
+corresponding MVE exclusions below; this PRD retains the original increment's
+contract.
+
 The minimum viable experience (MVE) adds manually initiated transcription to
 saved voice notes. It establishes a useful, independently testable operation
 before adding summarization or automatic background orchestration.

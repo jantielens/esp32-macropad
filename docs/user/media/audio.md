@@ -116,6 +116,17 @@ resource root, such as `https://<resource>.openai.azure.com/`, without an
 Select **Save**; a reboot is not required.
 Leave the key blank on later saves to keep the stored key.
 
+Enable **Automatically transcribe saved notes** to include existing and future
+notes without transcripts. Automatic processing waits for Wi-Fi and other
+required resources; it does not connect Wi-Fi or keep the device awake. It
+retries unsuccessful passes later and honors service rate limits. Correct
+access or deployment settings if processing is blocked.
+
+Alternatively, add a **Voice note > Start transcription** action to start a
+best-effort pass without enabling automation. An offline or busy press schedules
+nothing; press it again when the device is ready. This action starts processing
+and does not wait for transcripts to finish.
+
 In **Notes**, select **Transcribe**. Open **View details** to play the note and
 read its transcript. Transcription sends the
 recording to the configured Azure service. Keep your recordings, downloads, and
@@ -131,6 +142,8 @@ Use `[voice_note:recording.state]`, `[voice_note:recording.duration_s]`,
 show recording status and the latest result. Transcription status is available
 through `[voice_note:transcription.state]`, `[voice_note:transcription.note_id]`,
 and `[voice_note:transcription.error]`.
+Use `[voice_note:processing.state]` to show whether background processing is
+idle, waiting, running, or blocked.
 The latest saved ID remains available until the device restarts. A reboot, firmware update,
 factory reset, or device shutdown discards an unfinished recording. If a
 manual update or reset reports that recording is stopping, retry the operation.

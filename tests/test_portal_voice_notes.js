@@ -44,6 +44,7 @@ class Element {
 
 const elements = {
     'voice-notes-status': new Element('div'),
+    'voice-notes-processing-status': new Element('div'),
     'voice-notes-list': new Element('div'),
     'voice-notes-refresh': new Element('button'),
     'voice-notes-catalog': new Element('div'),
@@ -54,7 +55,13 @@ const elements = {
     'voice-notes-detail-actions': new Element('div'),
     'voice-notes-detail-transcript': new Element('div'),
     'voice-notes-back': new Element('button'),
-    'voice-notes-setup': new Element('div')
+    'voice-notes-setup': new Element('div'),
+    'voice-notes-settings-save': new Element('button'),
+    'voice-notes-key-status': new Element('div'),
+    'voice_notes_base_url': new Element('input'),
+    'voice_notes_model': new Element('input'),
+    'voice_notes_api_key': new Element('input'),
+    'voice_notes_auto_transcribe': new Element('input')
 };
 const entries = [
     { id: '0000000100000002', created_at: 1791370589, duration_ms: 65000, has_transcript: true },
@@ -66,30 +73,70 @@ let releaseInitialStatus;
 const initialStatus = new Promise(resolve => { releaseInitialStatus = resolve; });
 let firstStatus = true;
 let failStatus = false;
+let failList = false;
+let listGate = null;
+let listRequests = 0;
+let detailRequests = 0;
+let detailById = false;
+let registered = [];
+let config = { voice_notes_base_url: 'https://example.test/', voice_notes_model: 'deployment',
+    voice_notes_api_key_set: true, voice_notes_auto_transcribe: true };
+let savedConfig;
+let leave;
+elements.voice_notes_auto_transcribe.type = 'checkbox';
+elements.voice_notes_api_key.value = '';
 const context = {
     document: {
         createElement(tag) { return new Element(tag); },
-        getElementById(id) { return elements[id]; }
+        getElementById(id) { return elements[id]; },
+        querySelector() { return null; },
+        querySelectorAll() {
+            return [...elements['voice-notes-list'].querySelectorAll('audio'),
+                ...elements['voice-notes-detail-player'].querySelectorAll('audio')];
+        }
     },
-    window: { confirm() { return false; }, addEventListener() {}, removeEventListener() {} },
+    window: {
+        confirm() { return false; },
+        __extra_config_fields: registered,
+        registerConfigFields(fields) { registered.push(...fields); },
+        addEventListener(name, callback) { if (name === 'portal-fragment-leave') leave = callback; },
+        removeEventListener() {}
+    },
+    API_CONFIG: '/api/config',
+    showMessage() {},
+    console,
     AbortController,
     setTimeout(callback) { nextPoll = callback; return 1; },
     clearTimeout() {},
-    fetch(url) {
+    fetch(url, options) {
+        if (url.endsWith('list')) listRequests++;
+        if (url.startsWith('/api/config')) {
+            if (options && options.method === 'POST') {
+                savedConfig = JSON.parse(options.body);
+                config = { ...config, ...savedConfig };
+            }
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ ...config }) });
+        }
         if (url.endsWith('status') && failStatus) return Promise.reject(new Error('Status unavailable'));
+        if (url.endsWith('list') && failList) return Promise.reject(new Error('List unavailable'));
+        if (url.endsWith('list') && listGate) return listGate;
         if (url.endsWith('status') && firstStatus) {
             firstStatus = false;
             return initialStatus.then(() => ({ ok: true, json: () => Promise.resolve(currentState) }));
         }
+        if (url.includes('detail?')) detailRequests++;
+        const detailEntry = entries.find(entry => url.includes(entry.id)) || entries[0];
         return Promise.resolve({
             ok: true,
-            json: () => Promise.resolve(url.endsWith('list') ? { entries } :
-                url.includes('detail?') ? { note: entries[0], transcript: { text: '<script>not markup</script>' } } :
+            json: () => Promise.resolve(url.endsWith('list') ? { entries: entries.map(entry => ({ ...entry })) } :
+                url.includes('detail?') ? { note: { ...detailEntry }, transcript:
+                    !detailById || detailEntry.has_transcript ? { text: '<script>not markup</script>' } : null } :
                 currentState)
         });
     }
 };
 vm.createContext(context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_config.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_voice_notes.js', 'utf8'), context);
 
 (async function () {
@@ -202,7 +249,118 @@ vm.runInContext(fs.readFileSync('src/app/web/portal_voice_notes.js', 'utf8'), co
     assert.strictEqual(elements['voice-notes-setup'].hidden, false);
     assert(list.querySelectorAll('button')
         .filter(button => button.textContent === 'Transcribe').every(button => button.disabled));
-    console.log('PASS: voice note playback, seeking, and errors');
+
+    context.window.init_voice_notes_settings_fragment();
+    await new Promise(resolve => setImmediate(resolve));
+    assert(registered.includes('voice_notes_auto_transcribe'));
+    assert.strictEqual(elements.voice_notes_auto_transcribe.checked, true);
+    elements.voice_notes_auto_transcribe.checked = false;
+    elements['voice-notes-settings-save'].emit('click');
+    await new Promise(resolve => setImmediate(resolve));
+    assert.strictEqual(savedConfig.voice_notes_auto_transcribe, false);
+    assert.strictEqual(savedConfig.voice_notes_api_key, '');
+    config.voice_notes_auto_transcribe = true;
+    context.window.init_voice_notes_settings_fragment();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.strictEqual(elements.voice_notes_auto_transcribe.checked, true);
+
+    entries.forEach(entry => { entry.has_transcript = false; });
+    detailById = true;
+    currentState = { transcription_configured: true, processing: { state: 'idle', reason: 'none' },
+        transcription: { state: 'idle', note_id: '', error: '' } };
+    await context.window.init_voice_notes_fragment();
+    for (const [reason, text] of [
+        ['offline', 'Waiting for Wi-Fi'], ['recording', 'Waiting for recording to finish'],
+        ['update', 'Waiting for device update or storage availability'], ['retry', 'Retrying later'],
+        ['configuration', 'Check transcription settings'], ['none', 'Waiting to transcribe']
+    ]) {
+        currentState.processing = { state: reason === 'configuration' ? 'blocked' : 'waiting', reason };
+        nextPoll();
+        await new Promise(resolve => setImmediate(resolve));
+        assert.strictEqual(elements['voice-notes-processing-status'].textContent, text);
+        assert.strictEqual(elements['voice-notes-processing-status'].hidden, false);
+    }
+    assert.strictEqual(elements['voice-notes-setup'].hidden, true);
+    const newAudios = list.querySelectorAll('audio');
+    const newIndicators = list.querySelectorAll('span').filter(node => node.getAttribute('aria-label') === 'Transcript available');
+    const detailButtons = list.querySelectorAll('button').filter(button => button.textContent === 'View details');
+    detailButtons[1].emit('click');
+    await new Promise(resolve => setImmediate(resolve));
+    const newDetailAudio = elements['voice-notes-detail-player'].querySelector('audio');
+    await newDetailAudio.play();
+    assert.strictEqual(elements['voice-notes-detail-transcript'].textContent, 'No transcript yet.');
+    currentState.processing = { state: 'running', reason: 'none' };
+    currentState.transcription = { state: 'transcribing', note_id: entries[0].id, error: '' };
+    nextPoll();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.strictEqual(elements['voice-notes-processing-status'].hidden, true);
+    entries[0].has_transcript = true;
+    nextPoll();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepStrictEqual(newIndicators.map(node => node.hidden), [false, true]);
+    entries[1].has_transcript = true;
+    currentState.processing = { state: 'idle', reason: 'none' };
+    currentState.transcription = { state: 'ready', note_id: entries[0].id, error: '' };
+    const priorDetails = detailRequests;
+    nextPoll();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepStrictEqual(newIndicators.map(node => node.hidden), [false, false]);
+    assert.strictEqual(detailRequests, priorDetails + 1);
+    assert.strictEqual(elements['voice-notes-detail-transcript'].textContent, '<script>not markup</script>');
+    assert.strictEqual(elements['voice-notes-detail-player'].querySelector('audio'), newDetailAudio);
+    assert.strictEqual(newDetailAudio.paused, false);
+    assert.strictEqual(list.querySelectorAll('audio')[0], newAudios[0]);
+    const idleListRequests = listRequests;
+    nextPoll();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.strictEqual(listRequests, idleListRequests);
+    assert.strictEqual(detailRequests, priorDetails + 1);
+    currentState.transcription = { state: 'error', note_id: entries[0].id, error: 'Connection failed' };
+    nextPoll();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.strictEqual(listRequests, idleListRequests + 1);
+    nextPoll();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.strictEqual(listRequests, idleListRequests + 1);
+
+    currentState.processing = { state: 'running', reason: 'none' };
+    failList = true;
+    nextPoll();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.strictEqual(elements['voice-notes-status'].textContent, 'List unavailable');
+    currentState.processing = { state: 'idle', reason: 'none' };
+    failList = false;
+    nextPoll();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.strictEqual(elements['voice-notes-status'].hidden, true);
+    currentState.processing = { state: 'running', reason: 'none' };
+    let releaseList;
+    listGate = new Promise(resolve => { releaseList = resolve; });
+    nextPoll();
+    await new Promise(resolve => setImmediate(resolve));
+    leave();
+    releaseList({ ok: true, json: () => Promise.resolve({ entries: [] }) });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.strictEqual(newDetailAudio.paused, true);
+    assert.strictEqual(newDetailAudio.getAttribute('src'), null);
+    assert.deepStrictEqual(newIndicators.map(node => node.hidden), [false, false]);
+
+    listGate = null;
+    entries.forEach(entry => { entry.has_transcript = false; });
+    currentState = { transcription_configured: true, processing: { state: 'idle', reason: 'none' },
+        transcription: { state: 'idle', note_id: '', error: '' } };
+    await context.window.init_voice_notes_fragment();
+    const missedPassAudio = list.querySelectorAll('audio')[0];
+    entries.forEach(entry => { entry.has_transcript = true; });
+    currentState.transcription = { state: 'ready', note_id: entries[1].id, error: '' };
+    nextPoll();
+    await new Promise(resolve => setImmediate(resolve));
+    const missedPassIndicators = list.querySelectorAll('span')
+        .filter(node => node.getAttribute('aria-label') === 'Transcript available');
+    assert.deepStrictEqual(missedPassIndicators.map(node => node.hidden), [false, false]);
+    assert.strictEqual(list.querySelectorAll('audio')[0], missedPassAudio);
+    leave();
+    console.log('PASS: Voice Notes settings, guidance, reconciliation, playback, and errors');
 })().catch(error => {
     console.error(error);
     process.exitCode = 1;

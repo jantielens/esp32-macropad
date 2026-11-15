@@ -55,7 +55,7 @@ class PortalDevServerTest(unittest.TestCase):
         PORTAL.reset_pad_fixtures(self.server)
         self.server.mock_fonts = {}
         self.server.mock_config.pop("external_data", None)
-        for key in ("voice_notes_base_url", "voice_notes_api_key", "voice_notes_model"):
+        for key in ("voice_notes_base_url", "voice_notes_api_key", "voice_notes_model", "voice_notes_auto_transcribe"):
             self.server.mock_config.pop(key, None)
 
     def request(self, path, method="GET", body=None, profile="esp32-p4-lcd4b", raw=False,
@@ -117,6 +117,54 @@ class PortalDevServerTest(unittest.TestCase):
             self.assertEqual(self.request("/api/component/power-savings/activity", "POST",
                                           profile=selected, raw=True)[0], 204 if enabled else 404)
         self.server.mock_config.pop("auto_shutdown_timeout_seconds", None)
+
+    def test_voice_notes_automatic_processing_fixture(self):
+        profile = "reterminal-sticky-interactive"
+        base = "/api/component/voice-notes/"
+        config_path = "/api/config?no_reboot=1"
+        field = "voice_notes_auto_transcribe"
+        self.assertNotIn(field, self.request("/api/config")[1])
+        self.assertIs(self.request("/api/config", profile=profile)[1][field], False)
+        self.assertEqual(self.request(config_path, "POST", {field: True}, profile=profile)[0], 200)
+        self.assertIs(self.request("/api/config", profile=profile)[1][field], True)
+        for invalid in ("true", 1, None):
+            self.assertEqual(self.request(config_path, "POST", {field: invalid}, profile=profile)[0], 400)
+            self.assertIs(self.request("/api/config", profile=profile)[1][field], True)
+        status = self.request(base + "status", profile=profile)[1]
+        self.assertEqual(status["processing"], {"state": "blocked", "reason": "configuration"})
+        settings = {"voice_notes_base_url": "https://example.test", "voice_notes_model": "deployment",
+                    "voice_notes_api_key": "test-key"}
+        self.assertEqual(self.request(config_path, "POST", settings, profile=profile)[0], 200)
+        self.assertIs(self.request("/api/config", profile=profile)[1][field], True)
+        for attribute, value, reason in (
+                ("mock_voice_recording", True, "recording"),
+                ("mock_voice_resource_available", False, "update"),
+                ("mock_voice_online", False, "offline"),
+                ("mock_voice_retry", True, "retry")):
+            original = getattr(self.server, attribute)
+            setattr(self.server, attribute, value)
+            self.assertEqual(self.request(base + "status", profile=profile)[1]["processing"],
+                             {"state": "waiting", "reason": reason})
+            if reason == "offline":
+                self.assertEqual(self.request(base + "transcribe?id=0000000100000002", "POST",
+                                              profile=profile)[0], 503)
+            setattr(self.server, attribute, original)
+        self.server.mock_voice_cooldown = True
+        self.assertEqual(self.request(base + "transcribe?id=0000000100000002", "POST", profile=profile)[0], 429)
+        self.server.mock_voice_cooldown = False
+        # Each status poll completes the preceding operation and starts the next oldest note.
+        seen = []
+        for _ in range(4):
+            result = self.request(base + "status", profile=profile)[1]
+            seen.append((result["processing"]["state"], result["transcription"]["note_id"]))
+        self.assertEqual(seen, [("running", "0000000100000004"), ("running", "0000000100000003"),
+                                ("running", "0000000100000002"), ("idle", "0000000100000002")])
+        self.assertTrue(all(entry["has_transcript"] for entry in self.request(base + "list", profile=profile)[1]["entries"]))
+        self.assertEqual(self.request(config_path, "POST", {field: False, "voice_notes_api_key": ""},
+                                      profile=profile)[0], 200)
+        saved = self.request("/api/config", profile=profile)[1]
+        self.assertIs(saved[field], False)
+        self.assertTrue(saved["voice_notes_api_key_set"])
 
     def test_voice_notes_fixture_and_profile_isolation(self):
         profile = "reterminal-sticky-interactive"

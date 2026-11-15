@@ -10,7 +10,7 @@
 
 namespace {
 const char* const kKeys[] = {"recording.state", "recording.duration_s", "recording.scenario", "recording.error",
-    "last_saved.id", "transcription.state", "transcription.note_id", "transcription.error"};
+    "last_saved.id", "transcription.state", "transcription.note_id", "transcription.error", "processing.state"};
 const BindingParamDoc kParams[] = {{"key", "Recorder snapshot key, see below."}};
 const BindingKeyDoc kKeyDocs[] = {
     {"recording.state", "Current recording state", nullptr},
@@ -21,10 +21,12 @@ const BindingKeyDoc kKeyDocs[] = {
     {"transcription.state", "Current transcription state", nullptr},
     {"transcription.note_id", "Note ID of the latest transcription attempt", nullptr},
     {"transcription.error", "Most recent transcription error", nullptr},
+    {"processing.state", "Background processing state", nullptr},
 };
 const BindingExampleDoc kExamples[] = {
     {"[voice_note:recording.state]", "Show the recorder state."},
     {"[voice_note:recording.duration_s]", "Show the captured duration."},
+    {"[voice_note:processing.state]", "Show background processing state."},
 };
 const BindingSchemeDoc kRecorderDoc = {
     "Device", "Local voice note recorder status.",
@@ -40,6 +42,7 @@ const BindingAuthoringKey kAuthoringKeys[] = {
     binding_authoring_text("transcription.state", "idle"),
     binding_authoring_text("transcription.note_id", "0000000100000002"),
     binding_authoring_text("transcription.error", "Transcription request failed"),
+    binding_authoring_text("processing.state", "idle"),
 };
 const BindingAuthoringSpec kAuthoring = {BINDING_DOC_LIST(kAuthoringKeys)};
 
@@ -49,7 +52,11 @@ BindingResolverStatus resolve(const char* key, char* out, size_t size) {
     if (!key || !out || !size) return BINDING_RESOLVER_UNAVAILABLE;
     VoiceNoteSnapshot snapshot = {};
     voice_notes_snapshot(&snapshot);
-    if (strncmp(key, "transcription.", 14) == 0) {
+    if (strcmp(key, "processing.state") == 0) {
+        VoiceNotesProcessingSnapshot processing = {};
+        voice_notes_processing_snapshot(&processing);
+        strlcpy(out, voice_notes_processing_state_name(processing.state), size);
+    } else if (strncmp(key, "transcription.", 14) == 0) {
         VoiceNotesTranscriptionSnapshot transcription = {};
         voice_notes_transcription_snapshot(&transcription);
         if (strcmp(key, "transcription.state") == 0)

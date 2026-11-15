@@ -745,6 +745,7 @@ void setup()
 
 	#if HAS_VOICE_NOTES
 	if (!voice_notes_init()) LOGE("Main", "Voice Notes initialization failed");
+	else if (!voice_notes_processing_init()) LOGE("Main", "Voice Notes processing initialization failed");
 	#endif
 
 	bool enter_setup_ap = (boot_mode == PowerMode::Ap);

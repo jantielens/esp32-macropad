@@ -24,6 +24,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   transcription sends the selected recording to Azure and requires Wi-Fi.
   Failed attempts preserve the recording and any previous transcript.
   See [Voice Notes](docs/user/media/audio.md#record-and-manage-voice-notes).
+* Add optional automatic Voice Notes transcription under **Voice Notes >
+  Settings**, disabled by default. Process existing and new notes without
+  transcripts one at a time when Wi-Fi is available, with automatic retries
+  and service rate-limit cooldowns. Recording takes priority over background
+  work; unfinished transcription can be retried after reconnecting or restarting
+  while automation is enabled. Processing does not connect Wi-Fi or keep the
+  device awake.
+* Add a **Voice note > Start transcription** action for a best-effort processing
+  pass without enabling automation. Offline or busy presses schedule nothing.
+  Show background processing status in the portal and through
+  `[voice_note:processing.state]` (`idle`, `waiting`, `running`, or `blocked`).
 * Add recording and transcription status through `[voice_note:...]` bindings,
   including a latest-saved note ID that remains available until restart.
   Keep transcription buffers and portal catalog/details documents in PSRAM,

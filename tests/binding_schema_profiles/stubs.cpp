@@ -10,6 +10,8 @@ void voice_notes_snapshot(VoiceNoteSnapshot* out) { *out = {}; }
 const char* voice_notes_state_name(VoiceNoteState) { return "idle"; }
 void voice_notes_transcription_snapshot(VoiceNotesTranscriptionSnapshot* out) { *out = {}; }
 const char* voice_notes_transcription_state_name(VoiceNotesTranscriptionState) { return "idle"; }
+void voice_notes_processing_snapshot(VoiceNotesProcessingSnapshot* out) { *out = {}; }
+const char* voice_notes_processing_state_name(VoiceNotesProcessingState) { return "idle"; }
 #endif
 #include "device_classes/voice_assistant/voice.h"
 #include "music_analysis.h"

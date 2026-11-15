@@ -14,6 +14,7 @@
 #include "time_service.h"
 #include "voice_wav.h"
 #include "voice_notes_metadata.h"
+#include "bounded_psram_json_allocator.h"
 
 #include <esp_heap_caps.h>
 #include <esp_system.h>
@@ -727,6 +728,7 @@ bool voice_notes_command(VoiceNoteCommand command, uint32_t token) {
         g_snapshot.error[0] = '\0';
         strlcpy(g_snapshot.scenario, "general", sizeof(g_snapshot.scenario));
         g_snapshot.session_active = true;
+        ++g_snapshot.recording_generation;
     } else {
         g_snapshot.error[0] = '\0';
         if (command == VoiceNoteCommand::Save) g_snapshot.state = VoiceNoteState::Saving;
@@ -815,6 +817,67 @@ bool voice_notes_exists(const char* id) {
     const bool result = g_store.exists(id);
     xSemaphoreGive(g_catalog_mutex);
     return result;
+}
+VoiceNoteCandidate voice_notes_next_candidate(const VoiceNoteCursor& after, VoiceNoteCursor* next) {
+    if (!next || !g_initialized) return VoiceNoteCandidate::Error;
+    VoiceNoteSnapshot recorder = {};
+    voice_notes_snapshot(&recorder);
+    const uint32_t epoch = ota_activity_epoch();
+    const auto interrupted = [&]() {
+        VoiceNoteSnapshot current = {};
+        voice_notes_snapshot(&current);
+        return current.session_active || current.recording_generation != recorder.recording_generation ||
+               ota_activity_is_busy() || ota_activity_epoch() != epoch;
+    };
+    if (interrupted()) return VoiceNoteCandidate::Interrupted;
+    if (xSemaphoreTake(g_catalog_mutex, portMAX_DELAY) != pdTRUE)
+        return VoiceNoteCandidate::Error;
+    if (interrupted()) {
+        xSemaphoreGive(g_catalog_mutex);
+        return VoiceNoteCandidate::Interrupted;
+    }
+    BoundedPsramJsonAllocator allocator(heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    JsonDocument manifest(&allocator);
+    const bool copied = g_store.copy_manifest(manifest);
+    JsonArrayConst entries = manifest["entries"].as<JsonArrayConst>();
+    bool found = false;
+    VoiceNoteCursor best = {};
+    if (copied && !entries.isNull()) {
+        for (JsonObjectConst entry : entries) {
+            if (interrupted()) {
+                xSemaphoreGive(g_catalog_mutex);
+                return VoiceNoteCandidate::Interrupted;
+            }
+            const char* id = entry["id"];
+            if (!id || strlen(id) != 16) {
+                xSemaphoreGive(g_catalog_mutex);
+                LOGE(TAG, "Invalid note catalog entry");
+                return VoiceNoteCandidate::Error;
+            }
+            const uint32_t created = entry["created_at"] | 0U;
+            if (created < after.created_at ||
+                (created == after.created_at && strcmp(id, after.id) <= 0)) continue;
+            if (found && (created > best.created_at ||
+                (created == best.created_at && strcmp(id, best.id) >= 0))) continue;
+            char path[kPathSize];
+            snprintf(path, sizeof(path), "%s/%s.json", kDirectory, id);
+            if (Storage.exists(path)) continue;
+            snprintf(path, sizeof(path), "%s/%s.json.bak", kDirectory, id);
+            if (Storage.exists(path)) continue;
+            best.created_at = created;
+            strlcpy(best.id, id, sizeof(best.id));
+            found = true;
+        }
+    }
+    xSemaphoreGive(g_catalog_mutex);
+    if (interrupted()) return VoiceNoteCandidate::Interrupted;
+    if (!copied || entries.isNull() || manifest.overflowed()) {
+        LOGE(TAG, "Cannot select note from catalog");
+        return VoiceNoteCandidate::Error;
+    }
+    if (!found) return VoiceNoteCandidate::None;
+    *next = best;
+    return VoiceNoteCandidate::Found;
 }
 VoiceNoteFileStatus voice_notes_open(const char* id, File* file) {
     if (!g_initialized || !id || !file ||
