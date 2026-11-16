@@ -1359,7 +1359,7 @@ add_host_legacy_test(${voice_notes_target}
         ${PROJECT_SOURCE_DIR}/tests/fs_indexed_store_overrides
         ${PROJECT_SOURCE_DIR}/tests/shutter_session_overrides ${HOST_ARDUINOJSON_DIR}
         ${PROJECT_SOURCE_DIR}/tests/binding_schema_profiles
-    DEFINITIONS HAS_VOICE_NOTES=1 HAS_STORAGE_BROWSER=1 HAS_AUDIO_INPUT=1 HAS_FILESYSTEM=1
+    DEFINITIONS HAS_VOICE_NOTES=1 HAS_STORAGE_BROWSER=1 HAS_AUDIO_INPUT=1 HAS_FILESYSTEM=1 HOST_LOG_CAPTURE
         ${voice_notes_storage_definitions}
         ARDUINOJSON_ENABLE_ARDUINO_STRING=1
     OPTIONS -Wno-deprecated-declarations -pthread

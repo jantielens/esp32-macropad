@@ -19,6 +19,8 @@
 #include <cassert>
 #include <chrono>
 #include <condition_variable>
+#include <cstdarg>
+#include <cstdio>
 #include <map>
 #include <mutex>
 #include <thread>
@@ -29,6 +31,17 @@ FakeIndexedStorage& SD_MMC = LittleFS;
 #endif
 
 namespace {
+std::mutex log_mutex;
+std::vector<std::string> note_logs;
+
+size_t matching_logs(const std::string& first, const std::string& second = "") {
+    std::lock_guard<std::mutex> lock(log_mutex);
+    size_t count = 0;
+    for (const auto& message : note_logs)
+        count += message.find(first) != std::string::npos && message.find(second) != std::string::npos;
+    return count;
+}
+
 std::mutex completion_mutex;
 std::condition_variable completion_cv;
 std::map<uint32_t, bool> completions;
@@ -112,6 +125,20 @@ void publication_remove_hook(const char* path) {
     assert(!ota_activity_try_begin_network_transition());
 #endif
 }
+}
+
+void log_noop(const char* module, const char* format, ...) {
+    if (strcmp(module, "VoiceNotes") != 0) return;
+    char message[512];
+    va_list arguments;
+    va_start(arguments, format);
+    const int length = vsnprintf(message, sizeof(message), format, arguments);
+    va_end(arguments);
+    assert(length >= 0 && length <= 191);
+    assert(!strstr(message, "host transcript") && !strstr(message, "Host title") &&
+           !strstr(message, "Host summary.") && !strstr(message, "example.test"));
+    std::lock_guard<std::mutex> lock(log_mutex);
+    note_logs.emplace_back(message);
 }
 
 bool storage_mount() { return true; }
@@ -274,6 +301,10 @@ int main(int argc, char**) {
     assert(saved.state == VoiceNoteState::Idle && !owned && saved.last_clip[0]);
     assert(!saved.scenario[0]);
     assert(voice_notes_exists(saved.last_clip));
+    wait_until([&] { return matching_logs("Recording saved", saved.last_clip) == 1; });
+    assert(matching_logs("Recording started", saved.last_clip) == 1);
+    assert(matching_logs("Recording paused", saved.last_clip) == 1);
+    assert(matching_logs("Recording resumed", saved.last_clip) == 1);
     JsonDocument catalog;
     assert(voice_notes_list(catalog));
     assert(!catalog["entries"][0]["has_transcript"].as<bool>());
@@ -469,6 +500,8 @@ int main(int argc, char**) {
             return processing.state == VoiceNotesTranscriptionState::Error;
         });
         fail_transcript_write = false;
+        assert(matching_logs(std::string("note=") + saved.last_clip,
+                             "result=resource_failure http=200") > 0);
         assert(LittleFS.files.at(sidecar.c_str()) == previous);
         transcription_entered = false;
         block_transcription = true;
@@ -559,6 +592,8 @@ int main(int argc, char**) {
     assert(voice_notes_exists(saved.last_clip));
 
     no_audio = true;
+    const size_t saved_logs_before_failure = matching_logs("Recording saved");
+    const size_t failed_saves_before = matching_logs("Recording not published");
     assert(voice_notes_command(VoiceNoteCommand::Start, 9));
     assert(wait_completion(9));
     assert(voice_notes_command(VoiceNoteCommand::Save, 10));
@@ -566,6 +601,8 @@ int main(int argc, char**) {
     assert(snapshot().state == VoiceNoteState::Error && !owned);
     assert(strcmp(snapshot().error, "No audio captured") == 0);
     assert(strcmp(snapshot().last_clip, saved.last_clip) == 0);
+    wait_until([&] { return matching_logs("Recording not published") == failed_saves_before + 1; });
+    assert(matching_logs("Recording saved") == saved_logs_before_failure);
     no_audio = false;
 
     assert(voice_notes_command(VoiceNoteCommand::Start, 11));
@@ -1133,6 +1170,7 @@ int main(int argc, char**) {
         strlcpy(automatic.transcription.api_key, "key", sizeof(automatic.transcription.api_key));
         strlcpy(automatic.transcription.deployment, "updated", sizeof(automatic.transcription.deployment));
         automatic.auto_process = true;
+        const size_t offline_logs_before = matching_logs("state=waiting", "reason=offline");
         assert(voice_notes_processing_configure(automatic));
         wait_until([] {
             VoiceNotesProcessingSnapshot state{};
@@ -1140,6 +1178,11 @@ int main(int argc, char**) {
             return state.state == VoiceNotesProcessingState::Waiting &&
                    state.reason == VoiceNotesProcessingReason::Offline;
         });
+        wait_until([&] {
+            return matching_logs("state=waiting", "reason=offline") == offline_logs_before + 1;
+        });
+        std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+        assert(matching_logs("state=waiting", "reason=offline") == offline_logs_before + 1);
         wifi_connected = true;
         wait_until([] {
             VoiceNotesProcessingSnapshot state{};

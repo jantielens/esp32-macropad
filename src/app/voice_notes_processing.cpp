@@ -51,6 +51,7 @@ struct PassService {
     bool setup = false;
     bool limited = false;
     uint64_t cooldown = 0;
+    unsigned saved = 0;
 };
 
 SemaphoreHandle_t g_mutex = nullptr;
@@ -104,6 +105,40 @@ bool valid_id(const char* id) {
         if (!((id[i] >= '0' && id[i] <= '9') || (id[i] >= 'a' && id[i] <= 'f'))) return false;
     return true;
 }
+const char* work_name(Work work) {
+    switch (work) {
+        case Work::Automatic: return "automatic";
+        case Work::Manual: return "manual";
+        case Work::Single: return "single";
+        case Work::Retranscribe: return "retranscribe";
+        case Work::Regenerate: return "regenerate";
+        case Work::None: return "none";
+    }
+    return "none";
+}
+const char* outcome_name(VoiceNotesRequestOutcome outcome) {
+    switch (outcome) {
+        case VoiceNotesRequestOutcome::Success: return "saved";
+        case VoiceNotesRequestOutcome::Interrupted: return "interrupted";
+        case VoiceNotesRequestOutcome::Skip: return "skipped";
+        case VoiceNotesRequestOutcome::SetupFailure: return "configuration";
+        case VoiceNotesRequestOutcome::RateLimited: return "rate_limited";
+        case VoiceNotesRequestOutcome::ResourceFailure: return "resource_failure";
+        case VoiceNotesRequestOutcome::NoteFailure: return "note_failure";
+        case VoiceNotesRequestOutcome::SharedFailure: return "service_failure";
+    }
+    return "unknown";
+}
+void log_result(const char* service, const Job& job, VoiceNotesRequestOutcome outcome,
+                int status, uint32_t started, const char* error) {
+    const auto level = outcome == VoiceNotesRequestOutcome::Success ||
+                       outcome == VoiceNotesRequestOutcome::Interrupted
+        ? LOG_LEVEL_INFO : outcome == VoiceNotesRequestOutcome::ResourceFailure
+        ? LOG_LEVEL_ERROR : LOG_LEVEL_WARN;
+    LOG_AT(level, TAG, "%s note=%s result=%s http=%d elapsed_ms=%lu reason=%.64s",
+              service, job.id, outcome_name(outcome), status,
+              static_cast<unsigned long>(millis() - started), error ? error : "none");
+}
 bool nonblank(JsonVariantConst value) {
     if (!value.is<const char*>()) return false;
     JsonString text = value.as<JsonString>();
@@ -138,16 +173,12 @@ void set_tx_state(VoiceNotesTranscriptionState state, const char* error = nullpt
     g_transcription.state = state;
     strlcpy(g_transcription.error, error ? error : "", sizeof(g_transcription.error));
     xSemaphoreGive(g_mutex);
-    LOGI(TAG, "Transcription stage=%s", voice_notes_transcription_state_name(state));
-    if (error) LOGE(TAG, "Transcription failed: %s", error);
 }
 void set_enrichment_state(VoiceNotesEnrichmentState state, const char* error = nullptr) {
     xSemaphoreTake(g_mutex, portMAX_DELAY);
     g_enrichment.state = state;
     strlcpy(g_enrichment.error, error ? error : "", sizeof(g_enrichment.error));
     xSemaphoreGive(g_mutex);
-    LOGI(TAG, "Enrichment stage=%s", voice_notes_enrichment_state_name(state));
-    if (error) LOGE(TAG, "Enrichment failed: %s", error);
 }
 
 void pause_processing() {
@@ -192,12 +223,16 @@ VoiceNotesRequestOutcome transcribe(Job& job, bool replace, uint64_t& cooldown) 
         outcome = VoiceNotesRequestOutcome::SharedFailure;
     } else {
         const VoiceNoteFileStatus status = voice_notes_open(job.id, &recording);
-        if (status == VoiceNoteFileStatus::NotFound) return VoiceNotesRequestOutcome::Skip;
+        if (status == VoiceNoteFileStatus::NotFound) {
+            LOGD(TAG, "Transcription skipped note=%s reason=removed", job.id);
+            return VoiceNotesRequestOutcome::Skip;
+        }
         if (status != VoiceNoteFileStatus::Ready) error = "Recording unavailable";
         else {
             opened = true;
             if (!replace && voice_notes_has_artifact(job.id, VoiceNoteArtifact::Transcript)) {
                 voice_notes_close(&recording, job.id);
+                LOGD(TAG, "Transcription skipped note=%s reason=already_saved", job.id);
                 return VoiceNotesRequestOutcome::Skip;
             }
             uint8_t header[VOICE_WAV_HEADER_BYTES];
@@ -219,6 +254,7 @@ VoiceNotesRequestOutcome transcribe(Job& job, bool replace, uint64_t& cooldown) 
                     outcome = VoiceNotesRequestOutcome::Interrupted;
                 } else {
                     set_tx_state(VoiceNotesTranscriptionState::Saving);
+                    LOGI(TAG, "Transcript saving note=%s http=%d", job.id, response.status);
                     BoundedPsramJsonAllocator allocator(heap_caps_get_free_size(kPsramCaps));
                     JsonDocument document(&allocator);
                     JsonObject transcript = document["transcript"].to<JsonObject>();
@@ -237,8 +273,7 @@ VoiceNotesRequestOutcome transcribe(Job& job, bool replace, uint64_t& cooldown) 
     }
     if (response.text) heap_caps_free(response.text);
     if (opened) voice_notes_close(&recording, job.id);
-    LOGI(TAG, "Transcription note=%s status=%d elapsed_ms=%lu", job.id, response.status,
-         static_cast<unsigned long>(millis() - started));
+    log_result("Transcription", job, outcome, response.status, started, error);
     set_tx_state(error ? VoiceNotesTranscriptionState::Error : VoiceNotesTranscriptionState::Ready, error);
     return outcome;
 }
@@ -259,12 +294,16 @@ VoiceNotesRequestOutcome enrich(Job& job, bool replace, uint64_t& cooldown) {
         outcome = VoiceNotesRequestOutcome::SharedFailure;
     } else {
         const VoiceNoteFileStatus status = voice_notes_open(job.id, &recording);
-        if (status == VoiceNoteFileStatus::NotFound) return VoiceNotesRequestOutcome::Skip;
+        if (status == VoiceNoteFileStatus::NotFound) {
+            LOGD(TAG, "Enrichment skipped note=%s reason=removed", job.id);
+            return VoiceNotesRequestOutcome::Skip;
+        }
         if (status != VoiceNoteFileStatus::Ready) error = "Recording unavailable";
         else {
             opened = true;
             if (!replace && voice_notes_has_artifact(job.id, VoiceNoteArtifact::Enrichment)) {
                 voice_notes_close(&recording, job.id);
+                LOGD(TAG, "Enrichment skipped note=%s reason=already_saved", job.id);
                 return VoiceNotesRequestOutcome::Skip;
             }
             File transcript_file;
@@ -300,6 +339,7 @@ VoiceNotesRequestOutcome enrich(Job& job, bool replace, uint64_t& cooldown) {
                 }
                 if (!error && outcome == VoiceNotesRequestOutcome::Success) {
                     set_enrichment_state(VoiceNotesEnrichmentState::Saving);
+                    LOGI(TAG, "Enrichment saving note=%s http=%d", job.id, response.status);
                     JsonDocument document(&allocator);
                     JsonObject saved = document["enrichment"].to<JsonObject>();
                     saved["title"] = content["title"];
@@ -319,8 +359,7 @@ VoiceNotesRequestOutcome enrich(Job& job, bool replace, uint64_t& cooldown) {
         }
     }
     if (opened) voice_notes_close(&recording, job.id);
-    LOGI(TAG, "Enrichment note=%s status=%d elapsed_ms=%lu", job.id, response.status,
-         static_cast<unsigned long>(millis() - started));
+    log_result("Enrichment", job, outcome, response.status, started, error);
     set_enrichment_state(error ? VoiceNotesEnrichmentState::Error : VoiceNotesEnrichmentState::Ready, error);
     return outcome;
 }
@@ -332,6 +371,7 @@ void update_processing() {
     const bool online = WiFi.status() == WL_CONNECTED;
     const uint64_t now = now_ms();
     xSemaphoreTake(g_mutex, portMAX_DELAY);
+    const VoiceNotesProcessingSnapshot previous = g_processing;
     if (g_work != Work::None) {
         g_processing.state = VoiceNotesProcessingState::Running;
         g_processing.reason = VoiceNotesProcessingReason::None;
@@ -359,7 +399,20 @@ void update_processing() {
             }
         }
     }
+    const VoiceNotesProcessingSnapshot current = g_processing;
     xSemaphoreGive(g_mutex);
+    if ((previous.state != current.state || previous.reason != current.reason ||
+         previous.service != current.service) &&
+        (current.state == VoiceNotesProcessingState::Blocked ||
+         (current.state == VoiceNotesProcessingState::Waiting &&
+          current.reason != VoiceNotesProcessingReason::None))) {
+        const auto level = current.state == VoiceNotesProcessingState::Blocked
+            ? LOG_LEVEL_WARN : LOG_LEVEL_INFO;
+        LOG_AT(level, TAG, "Processing state=%s reason=%s service=%s",
+                  voice_notes_processing_state_name(current.state),
+                  voice_notes_processing_reason_name(current.reason),
+                  voice_notes_processing_service_name(current.service));
+    }
 }
 
 void finish_service(Retry& retry, const PassService& pass, bool completed) {
@@ -373,6 +426,22 @@ void finish_service(Retry& retry, const PassService& pass, bool completed) {
         }
     } else if (completed && pass.attempted && pass.succeeded) {
         reset_retry(retry);
+    }
+}
+
+void log_retry(const char* service, const Retry& retry, const PassService& pass) {
+    if (!pass.failed) return;
+    if (retry.setup_blocked) {
+        LOGW(TAG, "Processing blocked service=%s reason=configuration; update service settings", service);
+    } else if (retry.failures >= 4) {
+        LOGW(TAG, "Processing blocked service=%s reason=retries_exhausted failures=%u", service, retry.failures);
+    } else {
+        const uint64_t until = retry.retry_until > retry.cooldown_until
+            ? retry.retry_until : retry.cooldown_until;
+        const uint64_t now = now_ms();
+        LOGW(TAG, "Retry scheduled service=%s retry=%u/3 delay_ms=%llu rate_limited=%u",
+             service, retry.failures, static_cast<unsigned long long>(until > now ? until - now : 0),
+             unsigned(pass.limited));
     }
 }
 
@@ -449,13 +518,18 @@ void worker(void*) {
             continue;
         }
 
+        LOGI(TAG, "Processing started mode=%s", work_name(work));
         PassService pass[2] = {};
         VoiceNoteCursor cursor = {};
         bool completed = false;
         bool first = true;
+        const char* stop_reason = "completed";
         for (;;) {
-            if (!voice_notes_transcription_checkpoint(job->ota_epoch, job->recording_generation)) break;
-            if (WiFi.status() != WL_CONNECTED) break;
+            if (!voice_notes_transcription_checkpoint(job->ota_epoch, job->recording_generation)) {
+                stop_reason = "recording_or_update";
+                break;
+            }
+            if (WiFi.status() != WL_CONNECTED) { stop_reason = "offline"; break; }
             xSemaphoreTake(g_mutex, portMAX_DELAY);
             const bool enabled = g_config && g_config->auto_process;
             if (!first && g_config) job->config = *g_config;
@@ -471,16 +545,20 @@ void worker(void*) {
                                 now >= g_retry[1].retry_until));
             g_processing.service = VoiceNotesProcessingService::None;
             xSemaphoreGive(g_mutex);
-            if (automatic && !enabled) break;
+            if (automatic && !enabled) { stop_reason = "automatic_disabled"; break; }
             if (work == Work::Retranscribe) llm = false;
             if (work == Work::Regenerate) tx = false;
-            if (!tx && !llm) break;
+            if (!tx && !llm) { stop_reason = "services_unavailable"; break; }
             if (work == Work::Automatic || work == Work::Manual) {
                 VoiceNoteCursor next = {};
                 const VoiceNoteCandidate selection = voice_notes_next_candidate(cursor, &next, tx, llm);
-                if (selection == VoiceNoteCandidate::Interrupted) break;
+                if (selection == VoiceNoteCandidate::Interrupted) {
+                    stop_reason = "recording_or_update";
+                    break;
+                }
                 if (selection == VoiceNoteCandidate::Error) {
                     pass[0].failed = pass[1].failed = true;
+                    stop_reason = "catalog_error";
                     break;
                 }
                 if (selection == VoiceNoteCandidate::None) { completed = true; break; }
@@ -497,8 +575,12 @@ void worker(void*) {
                 const VoiceNotesRequestOutcome result = transcribe(*job, work == Work::Retranscribe, cooldown);
                 PassService& state = pass[0];
                 if (result != VoiceNotesRequestOutcome::Skip) state.attempted = true;
-                if (result == VoiceNotesRequestOutcome::Success) { state.succeeded = true; has_tx = true; }
-                else if (result == VoiceNotesRequestOutcome::Interrupted) stop = true;
+                if (result == VoiceNotesRequestOutcome::Success) {
+                    state.succeeded = true; ++state.saved; has_tx = true;
+                }
+                else if (result == VoiceNotesRequestOutcome::Interrupted) {
+                    stop_reason = "recording_or_update"; stop = true;
+                }
                 else if (result != VoiceNotesRequestOutcome::Skip) {
                     state.failed = true;
                     if (result == VoiceNotesRequestOutcome::SetupFailure) { state.setup = state.unavailable = true; }
@@ -507,15 +589,21 @@ void worker(void*) {
                         state.cooldown = cooldown;
                     } else if (result == VoiceNotesRequestOutcome::ResourceFailure) {
                         pass[1].failed = true;
+                        stop_reason = "resource_failure";
                         stop = true;
-                    } else if (result != VoiceNotesRequestOutcome::NoteFailure) stop = true;
+                    } else if (result != VoiceNotesRequestOutcome::NoteFailure) {
+                        stop_reason = outcome_name(result); stop = true;
+                    }
                 }
                 if (!has_tx) llm = false;
                 if (!stop && result != VoiceNotesRequestOutcome::Skip) pause_processing();
             }
             if (!stop && has_tx && llm && (!has_llm || work == Work::Regenerate) &&
                 work != Work::Retranscribe) {
-                if (!voice_notes_transcription_checkpoint(job->ota_epoch, job->recording_generation)) break;
+                if (!voice_notes_transcription_checkpoint(job->ota_epoch, job->recording_generation)) {
+                    stop_reason = "recording_or_update";
+                    break;
+                }
                 xSemaphoreTake(g_mutex, portMAX_DELAY);
                 const bool still_enabled = work != Work::Automatic || (g_config && g_config->auto_process);
                 if (g_config) job->config = *g_config;
@@ -524,15 +612,17 @@ void worker(void*) {
                     (work != Work::Automatic || (!g_retry[1].setup_blocked && g_retry[1].failures < 4 &&
                                                 now_ms() >= g_retry[1].retry_until));
                 xSemaphoreGive(g_mutex);
-                if (!still_enabled) break;
+                if (!still_enabled) { stop_reason = "automatic_disabled"; break; }
                 if (llm_ready) {
                     set_active(Service::Enrichment, job->id);
                     uint64_t cooldown = 0;
                     const VoiceNotesRequestOutcome result = enrich(*job, work == Work::Regenerate, cooldown);
                     PassService& state = pass[1];
                     if (result != VoiceNotesRequestOutcome::Skip) state.attempted = true;
-                    if (result == VoiceNotesRequestOutcome::Success) state.succeeded = true;
-                    else if (result == VoiceNotesRequestOutcome::Interrupted) stop = true;
+                    if (result == VoiceNotesRequestOutcome::Success) { state.succeeded = true; ++state.saved; }
+                    else if (result == VoiceNotesRequestOutcome::Interrupted) {
+                        stop_reason = "recording_or_update"; stop = true;
+                    }
                     else if (result != VoiceNotesRequestOutcome::Skip) {
                         state.failed = true;
                         if (result == VoiceNotesRequestOutcome::SetupFailure) state.setup = state.unavailable = true;
@@ -541,8 +631,11 @@ void worker(void*) {
                             state.cooldown = cooldown;
                         } else if (result == VoiceNotesRequestOutcome::ResourceFailure) {
                             pass[0].failed = true;
+                            stop_reason = "resource_failure";
                             stop = true;
-                        } else if (result != VoiceNotesRequestOutcome::NoteFailure) stop = true;
+                        } else if (result != VoiceNotesRequestOutcome::NoteFailure) {
+                            stop_reason = outcome_name(result); stop = true;
+                        }
                     }
                     if (!stop && result != VoiceNotesRequestOutcome::Skip) pause_processing();
                 }
@@ -568,11 +661,17 @@ void worker(void*) {
         xSemaphoreTake(g_mutex, portMAX_DELAY);
         finish_service(g_retry[0], pass[0], completed);
         finish_service(g_retry[1], pass[1], completed);
+        const Retry retries[] = {g_retry[0], g_retry[1]};
         g_job = nullptr;
         g_work = Work::None;
         g_refresh = true;
         g_processing.service = VoiceNotesProcessingService::None;
         xSemaphoreGive(g_mutex);
+        log_retry("transcription", retries[0], pass[0]);
+        log_retry("enrichment", retries[1], pass[1]);
+        LOGI(TAG, "Processing ended mode=%s reason=%s transcribed=%u enriched=%u failed=%u",
+             work_name(work), stop_reason, pass[0].saved, pass[1].saved,
+             unsigned(pass[0].failed || pass[1].failed));
         heap_caps_free(job);
     }
 }

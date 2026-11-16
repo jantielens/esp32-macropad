@@ -169,7 +169,6 @@ private:
 #if HAS_DISPLAY_DIAGNOSTICS
 		DisplayFlushStats cycleFlush;
 		DisplayRefreshTrace cycleRefresh;
-		DisplayRefreshTrace frameRefresh;
 		DisplayInvalidationSource invalidationSource = DisplayInvalidationSource::Other;
 #endif
 

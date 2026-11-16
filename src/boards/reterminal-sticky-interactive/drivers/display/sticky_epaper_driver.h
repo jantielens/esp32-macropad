@@ -65,7 +65,6 @@ private:
 #endif
 #if HAS_DISPLAY_DIAGNOSTICS
     DisplayPresentationStats stats;
-    uint64_t frameConversionStart = 0, frameWaitStart = 0, framePixelsStart = 0, frameFlushesStart = 0;
     uint64_t hardwareCompletedUs = 0;
 #endif
     void releaseResources();

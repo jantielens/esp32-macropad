@@ -354,34 +354,29 @@ bool stop_sampling(Session& session, bool release) {
 
 enum class QueueResult : uint8_t { Empty, Written, Limit, Error };
 
+uint64_t duration_ms(const Session& session) {
+    return session.format.sample_rate && session.format.channels
+        ? uint64_t(session.data_bytes / (session.format.channels * sizeof(int16_t))) * 1000 /
+          session.format.sample_rate : 0;
+}
+
 struct SaveTiming {
     uint64_t requested_us;
-    uint64_t last_us;
-    uint64_t queued_us = 0, stop_us = 0, drain_us = 0, header_us = 0;
-    uint64_t flush_us = 0, close_us = 0, verify_us = 0, rename_us = 0, index_us = 0;
 
-    explicit SaveTiming(uint64_t requested) {
-        last_us = (uint64_t)esp_timer_get_time();
-        requested_us = requested ? requested : last_us;
-        queued_us = last_us - requested_us;
-    }
+    explicit SaveTiming(uint64_t requested)
+        : requested_us(requested ? requested : (uint64_t)esp_timer_get_time()) {}
 
-    void mark(uint64_t& elapsed) {
+    void report(const Session& session, bool published, bool cleaned) {
         const uint64_t now = (uint64_t)esp_timer_get_time();
-        elapsed = now - last_us;
-        last_us = now;
-    }
-
-    void report(uint32_t bytes, bool published) {
-        const uint64_t now = (uint64_t)esp_timer_get_time();
-        LOGI(TAG, "Save ms: bytes=%lu queued=%llu stop=%llu drain=%llu header=%llu flush=%llu close=%llu verify=%llu rename=%llu index=%llu cleanup=%llu total=%llu published=%u",
-             (unsigned long)bytes, (unsigned long long)(queued_us / 1000),
-             (unsigned long long)(stop_us / 1000), (unsigned long long)(drain_us / 1000),
-             (unsigned long long)(header_us / 1000), (unsigned long long)(flush_us / 1000),
-             (unsigned long long)(close_us / 1000), (unsigned long long)(verify_us / 1000),
-             (unsigned long long)(rename_us / 1000), (unsigned long long)(index_us / 1000),
-             (unsigned long long)((now - last_us) / 1000),
-             (unsigned long long)((now - requested_us) / 1000), (unsigned)published);
+        if (published) {
+            LOGI(TAG, "Recording saved note=%s duration_ms=%llu bytes=%lu elapsed_ms=%llu cleanup=%s",
+                 session.id, (unsigned long long)duration_ms(session), (unsigned long)session.data_bytes,
+                 (unsigned long long)((now - requested_us) / 1000), cleaned ? "ok" : "failed");
+        } else {
+            LOGW(TAG, "Recording not published note=%s bytes=%lu elapsed_ms=%llu cleanup=%s",
+                 session.id, (unsigned long)session.data_bytes,
+                 (unsigned long long)((now - requested_us) / 1000), cleaned ? "ok" : "failed");
+        }
     }
 };
 
@@ -441,7 +436,7 @@ QueueResult drain_queue(Session& session) {
         const QueueResult result = write_queued(session);
         if (result == QueueResult::Empty || result == QueueResult::Error) return result;
         if (result == QueueResult::Limit) {
-            LOGI(TAG, "Recording reached storage or WAV size limit");
+            LOGW(TAG, "Recording limit reached note=%s; saving captured audio", session.id);
             portENTER_CRITICAL(&g_mux);
             g_capture.count = 0;
             portEXIT_CRITICAL(&g_mux);
@@ -450,12 +445,11 @@ QueueResult drain_queue(Session& session) {
     }
 }
 
-bool publish(Session& session, SaveTiming& timing) {
+bool publish(Session& session) {
+    LOGI(TAG, "Save started note=%s bytes=%lu", session.id, (unsigned long)session.data_bytes);
     const bool stopped = stop_sampling(session, false);
-    timing.mark(timing.stop_us);
     if (!stopped) return false;
     const QueueResult drained = drain_queue(session);
-    timing.mark(timing.drain_us);
     if (drained == QueueResult::Error) return false;
     if (!session.data_bytes) {
         set_error("No audio captured", true);
@@ -467,19 +461,15 @@ bool publish(Session& session, SaveTiming& timing) {
                            session.format.channels, 16);
     const bool header_written = session.file.seek(0) &&
                                 session.file.write(header, sizeof(header)) == sizeof(header);
-    timing.mark(timing.header_us);
     if (!header_written) {
         set_error("Cannot finalize WAV header", true);
         return false;
     }
     session.file.flush();
-    timing.mark(timing.flush_us);
     session.file.close();
-    timing.mark(timing.close_us);
     StaticJsonDocument<512> metadata;
     JsonObject object = metadata.to<JsonObject>();
     const FsIndexedStoreReadResult validation = voice_notes_metadata_read_metadata(session.temporary, object);
-    timing.mark(timing.verify_us);
     if (validation != FsIndexedStoreReadResult::Valid) {
         set_error("Cannot validate finalized WAV", true);
         return false;
@@ -500,7 +490,6 @@ bool publish(Session& session, SaveTiming& timing) {
     bool success = false;
     if (!cancelled() && !Storage.exists(session.completed))
         renamed = Storage.rename(session.temporary, session.completed);
-    timing.mark(timing.rename_us);
     if (renamed && !cancelled()) {
         const uint32_t created = time_service_ready() ? static_cast<uint32_t>(time(nullptr)) : 0;
         registered = g_store.register_pre_written(session.id, created, object);
@@ -513,7 +502,6 @@ bool publish(Session& session, SaveTiming& timing) {
         }
         portEXIT_CRITICAL(&g_mux);
     }
-    timing.mark(timing.index_us);
     if (!success && renamed) {
         const bool removed = registered ? g_store.remove(session.id) : Storage.remove(session.completed);
         if (!removed) LOGE(TAG, "Cannot remove unpublished note");
@@ -523,7 +511,7 @@ bool publish(Session& session, SaveTiming& timing) {
     return success;
 }
 
-void finish_session(Session& session, uint32_t token, bool succeeded, bool discarded) {
+bool finish_session(Session& session, uint32_t token, bool succeeded, bool discarded) {
     portENTER_CRITICAL(&g_mux);
     g_terminating = true;
     const uint32_t queued_token = g_command_pending ? g_token : 0;
@@ -541,6 +529,9 @@ void finish_session(Session& session, uint32_t token, bool succeeded, bool disca
     portEXIT_CRITICAL(&g_mux);
     complete(token, succeeded && cleaned && !interrupted, !queued_token);
     if (queued_token) complete(queued_token, false, true);
+    if (discarded && !succeeded && session.id[0])
+        LOGI(TAG, "Recording cancelled note=%s cleanup=%s", session.id, cleaned ? "ok" : "failed");
+    return cleaned;
 }
 
 void worker(void*) {
@@ -578,6 +569,9 @@ void worker(void*) {
                         const bool interrupted = cancelled();
                         if (!interrupted) set_error("Start action expired", true);
                         finish_session(session, 0, false, interrupted);
+                    } else {
+                        LOGI(TAG, "Recording started note=%s rate=%lu channels=%u", session.id,
+                             (unsigned long)session.format.sample_rate, unsigned(session.format.channels));
                     }
                 }
             } else if (command == VoiceNoteCommand::Pause) {
@@ -589,14 +583,17 @@ void worker(void*) {
                     else if (drained == QueueResult::Limit) {
                         set_state(VoiceNoteState::Saving);
                         SaveTiming timing(0);
-                        const bool saved = publish(session, timing);
-                        finish_session(session, token, saved, cancelled());
-                        timing.report(session.data_bytes, saved);
+                        const bool saved = publish(session);
+                        const bool cleaned = finish_session(session, token, saved, cancelled());
+                        timing.report(session, saved, cleaned);
                     } else {
                         set_state(VoiceNoteState::Paused);
                         if (!complete(token, true)) {
                             if (cancelled()) finish_session(session, 0, false, true);
                             else set_error("Pause action expired", false);
+                        } else {
+                            LOGI(TAG, "Recording paused note=%s duration_ms=%llu",
+                                 session.id, (unsigned long long)duration_ms(session));
                         }
                     }
                 }
@@ -611,15 +608,19 @@ void worker(void*) {
                     if (!complete(token, true)) {
                         if (cancelled()) finish_session(session, 0, false, true);
                         else set_error("Resume action expired", false);
+                    } else {
+                        LOGI(TAG, "Recording resumed note=%s duration_ms=%llu",
+                             session.id, (unsigned long long)duration_ms(session));
                     }
                 }
             } else if (command == VoiceNoteCommand::Save) {
                 SaveTiming timing(queued_us);
-                const bool saved = publish(session, timing);
-                finish_session(session, token, saved, cancelled());
-                timing.report(session.data_bytes, saved);
+                const bool saved = publish(session);
+                const bool cleaned = finish_session(session, token, saved, cancelled());
+                timing.report(session, saved, cleaned);
             } else {
-                finish_session(session, token, true, true);
+                if (finish_session(session, token, true, true))
+                    LOGI(TAG, "Recording discarded note=%s", session.id);
             }
             continue;
         }
@@ -632,13 +633,13 @@ void worker(void*) {
             ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         } else if (result == QueueResult::Limit) {
             set_state(VoiceNoteState::Saving);
-            LOGI(TAG, "Recording reached storage or WAV size limit");
+            LOGW(TAG, "Recording limit reached note=%s; saving captured audio", session.id);
             SaveTiming timing(0);
-            const bool saved = publish(session, timing);
-            finish_session(session, 0, saved, cancelled());
-            timing.report(session.data_bytes, saved);
+            const bool saved = publish(session);
+            const bool cleaned = finish_session(session, 0, saved, cancelled());
+            timing.report(session, saved, cleaned);
         } else if (result == QueueResult::Error) {
-            LOGE(TAG, "Capture timing: max write=%llums capacity=%llums",
+            LOGE(TAG, "Capture failed note=%s max_write_ms=%llu capacity_ms=%llu", session.id,
                  (unsigned long long)(session.max_write_us / 1000),
                  (unsigned long long)(session.max_capacity_us / 1000));
             finish_session(session, 0, false, false);
