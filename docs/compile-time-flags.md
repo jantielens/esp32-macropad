@@ -532,6 +532,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/ha_discovery.cpp
   - src/app/health_binding.cpp
   - src/app/hw_buttons.cpp
+  - src/app/list_source_health.cpp
   - src/app/mcp_tools_config.cpp
   - src/app/mqtt_audio.cpp
   - src/app/mqtt_audio.h
@@ -820,6 +821,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/gamepad_action.cpp
   - src/app/actions/ha_service_action.cpp
   - src/app/actions/key_action.cpp
+  - src/app/actions/list_navigation_action.cpp
   - src/app/actions/mouse_button_action.cpp
   - src/app/actions/mqtt_action.cpp
   - src/app/actions/music_action.cpp
@@ -839,6 +841,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/binding_builtin_schemes.cpp
   - src/app/binding_sources.cpp
   - src/app/binding_sources.h
+  - src/app/binding_value.cpp
   - src/app/board_config.h
   - src/app/boot_actions.cpp
   - src/app/boot_actions.h
@@ -864,11 +867,12 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/darkroom_timer/shelly_actions.cpp
   - src/app/device_classes/darkroom_timer/test_strip_actions.cpp
   - src/app/device_classes/darkroom_timer/web_portal_prints.cpp
+  - src/app/device_classes/shutter_tester/list_source_shutter_tests.cpp
   - src/app/device_classes/shutter_tester/shutter_actions.cpp
   - src/app/device_classes/shutter_tester/shutter_align_binding.cpp
   - src/app/device_classes/shutter_tester/shutter_align_binding.h
   - src/app/device_classes/shutter_tester/shutter_binding.cpp
-  - src/app/device_classes/shutter_tester/web/list_provider_shutter_tests.cpp
+  - src/app/device_classes/shutter_tester/shutter_test_scripts.cpp
   - src/app/device_classes/shutter_tester/widgets/waveform_widget.cpp
   - src/app/device_classes/shutter_tester_device_class.cpp
   - src/app/device_dialog.cpp
@@ -889,16 +893,24 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/ha_service.cpp
   - src/app/ha_service.h
   - src/app/health_binding.cpp
-  - src/app/health_table_builder.cpp
   - src/app/hw_buttons.cpp
   - src/app/icon_store.cpp
   - src/app/icon_store.h
+  - src/app/item_binding.cpp
+  - src/app/item_binding.h
+  - src/app/item_binding_scheme.cpp
+  - src/app/item_binding_scheme.h
   - src/app/keyboard_hid.cpp
   - src/app/label_style.cpp
-  - src/app/list_binding.cpp
-  - src/app/list_provider.cpp
-  - src/app/list_provider.h
-  - src/app/list_provider_pads.cpp
+  - src/app/list_source.cpp
+  - src/app/list_source.h
+  - src/app/list_source_health.cpp
+  - src/app/list_source_health.h
+  - src/app/list_source_pads.cpp
+  - src/app/list_source_pads.h
+  - src/app/list_source_service.cpp
+  - src/app/list_source_voice_notes.cpp
+  - src/app/list_source_voice_notes.h
   - src/app/lv_conf.h
   - src/app/lvgl_heap.cpp
   - src/app/mcp_press_button.cpp
@@ -924,6 +936,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/pad_block.cpp
   - src/app/pad_block.h
   - src/app/pad_config.cpp
+  - src/app/pad_config.h
+  - src/app/pad_config_list.cpp
   - src/app/pad_font_cache.cpp
   - src/app/pad_resolve_request.cpp
   - src/app/pad_resolve_request.h
@@ -983,7 +997,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/gamepad_button_widget.cpp
   - src/app/widgets/gamepad_joystick_widget.cpp
   - src/app/widgets/gauge_widget.cpp
+  - src/app/widgets/list_config.cpp
+  - src/app/widgets/list_config.h
   - src/app/widgets/list_widget.cpp
+  - src/app/widgets/list_widget.h
   - src/app/widgets/mousepad_widget.cpp
   - src/app/widgets/numericrocker_widget.cpp
   - src/app/widgets/option_selector_config.cpp
@@ -1170,6 +1187,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_pages.cpp
   - src/app/web_portal_pages.h
   - src/app/web_portal_routes.cpp
+  - src/app/widgets/list_config.cpp
+  - src/app/widgets/list_widget.cpp
 - **HAS_MCP**
   - src/app/binding_value.cpp
   - src/app/binding_value.h
@@ -1461,6 +1480,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_screenshot.h
   - src/app/widgets/gamepad_button_widget.cpp
   - src/app/widgets/gamepad_joystick_widget.cpp
+  - src/app/widgets/list_widget.cpp
   - src/app/widgets/mousepad_widget.cpp
   - src/app/widgets/scrollpad_widget.cpp
   - src/app/widgets/slider_widget.cpp
@@ -1524,6 +1544,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/drivers/es8311_audio_driver.cpp
   - src/app/drivers/es8311_audio_driver.h
   - src/app/fs_indexed_store.cpp
+  - src/app/list_source_voice_notes.cpp
+  - src/app/list_source_voice_notes.h
   - src/app/pad_config.h
   - src/app/portal_components.cpp
   - src/app/reboot_service.cpp
@@ -1978,6 +2000,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_class_registry.cpp
   - src/app/device_classes.cpp
   - src/app/device_classes/shutter_tester/components/shutter_session_actions_component.cpp
+  - src/app/device_classes/shutter_tester/list_source_shutter_tests.cpp
   - src/app/device_classes/shutter_tester/mcp/mcp_tools_shutter.cpp
   - src/app/device_classes/shutter_tester/shutter_actions.cpp
   - src/app/device_classes/shutter_tester/shutter_adc.cpp
@@ -1999,7 +2022,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/shutter_tester/shutter_session_actions.h
   - src/app/device_classes/shutter_tester/shutter_test_scripts.cpp
   - src/app/device_classes/shutter_tester/shutter_test_scripts.h
-  - src/app/device_classes/shutter_tester/web/list_provider_shutter_tests.cpp
   - src/app/device_classes/shutter_tester/web/portal_shutter_sessions.cpp
   - src/app/device_classes/shutter_tester/web/portal_shutter_tests.cpp
   - src/app/device_classes/shutter_tester/widgets/waveform_widget.cpp

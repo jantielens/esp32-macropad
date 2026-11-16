@@ -154,7 +154,6 @@ uint8_t display_manager_get_backlight_brightness() { return 0; }
 void display_manager_set_backlight_brightness(uint8_t) {}
 lv_obj_t* lv_screen_active() { return nullptr; }
 void lv_obj_invalidate(lv_obj_t*) {}
-bool health_table_build(bool, HealthTableLookupFn, char*, size_t) { return false; }
 
 #if HAS_AUDIO
 uint8_t audio_get_volume() { return 0; }
@@ -328,3 +327,10 @@ bool mqtt_sub_store_get(const char*, char* buf, size_t buf_len, bool* changed, b
 void mqtt_sub_store_collect_topic(void*, const char*) {}
 void mqtt_sub_store_ensure_binding_subscribed(const char*) {}
 uint32_t net_activity_age_mqtt_ms() { return NET_ACTIVITY_NEVER; }
+#include "../../src/app/item_binding_scheme.h"
+
+#if HAS_DISPLAY && HAS_PSRAM
+BindingResolverStatus item_binding_resolve(const char*, char*, size_t) {
+    return BINDING_RESOLVER_UNAVAILABLE;
+}
+#endif

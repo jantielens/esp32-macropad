@@ -34,6 +34,7 @@ const document = {
         return elements.get(id);
     }
 };
+document.getElementById('pad-edit-list-source').querySelectorAll = () => [];
 
 const originalButton = { col: 1, row: 2, label_center: 'Keep me' };
 const originalButtons = [originalButton];
@@ -42,9 +43,11 @@ const context = {
     TextEncoder,
     document,
     MAX_ACTIONS: 3,
-    padState: { editCol: 1, editRow: 2, selectedLayer: 'main', buttons: originalButtons },
+    deviceInfoCache: null,
+    padState: { editCol: 1, editRow: 2, selectedLayer: 'main', buttons: originalButtons,
+        mainButtons: originalButtons, overlayButtons: [], templateButtons: [] },
     padLabelFromInput() { return ''; },
-    padGetBindableColor() { return ''; },
+    padGetBindableColor(id) { return document.getElementById(id).value.trim(); },
     padGetEffectiveDefault() { return ''; },
     padContentLayouts() { return []; },
     padContentFitWarning() {},
@@ -69,6 +72,39 @@ vm.runInContext(fs.readFileSync('src/app/web/portal_widget_toggle.js', 'utf8'), 
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_numericrocker.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_inputs.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_list.js', 'utf8'), context);
+{
+    const editor = context.padWidgetEditor('list');
+    editor.fields.forEach(field => {
+        const fallback = typeof field.default === 'function' ? field.default() : field.default;
+        if (field.kind === 'checkbox') document.getElementById(field.id).checked = fallback;
+        else document.getElementById(field.id).value = String(fallback);
+    });
+    document.getElementById('pad-edit-list-selected-background').value = '#000000';
+    document.getElementById('pad-edit-list-selected-border-width').value = '0';
+    document.getElementById('pad-edit-list-selected-top-color').value = '#ffffff';
+    document.getElementById('pad-edit-list-indicator-track').value = '#ffffff';
+    document.getElementById('pad-edit-list-indicator-color').value = '#000000';
+    const draft = {};
+    context.padWidgetEditorBuild(draft, editor);
+    assert.strictEqual(draft.widget_list_label_top, '[item:title|Untitled]');
+    assert.strictEqual(draft.widget_list_allow_selection, true);
+    assert.strictEqual(draft.widget_list_selected_bg_color, '#000000');
+    assert.strictEqual(draft.widget_list_selected_border_width, 0);
+    assert.strictEqual(draft.widget_list_selected_top_color, '#ffffff');
+    assert.strictEqual(draft.widget_list_indicator_track_color, '#ffffff');
+    assert.strictEqual(draft.widget_list_indicator_color, '#000000');
+    assert.strictEqual(draft.widget_list_border_width, undefined);
+    assert.strictEqual(draft.widget_list_bg_color, undefined);
+    assert.strictEqual(draft.widget_list_visible_items, 0);
+    document.getElementById('pad-edit-list-visible-items').value = '5';
+    const explicitDraft = {};
+    context.padWidgetEditorBuild(explicitDraft, editor);
+    assert.strictEqual(explicitDraft.widget_list_visible_items, 5);
+    document.getElementById('pad-edit-list-background').value = '[item:color|#FFFFFF]';
+    const bindingDraft = {};
+    context.padWidgetEditorBuild(bindingDraft, editor);
+    assert.strictEqual(bindingDraft.widget_list_bg_color, '[item:color|#FFFFFF]');
+}
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_camera.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_dialog.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_workspace.js', 'utf8'), context);
@@ -167,12 +203,101 @@ context.PAD_FIRMWARE_DEFAULTS = { widget_indicator_color: '#FFFFFF', widget_seri
 context.padSetBindableColor = function(id, value, fallback) { document.getElementById(id).value = value || fallback; };
 context.padWidgetEditorsLoad({ widget_type: 'table', widget_table_scrollable: false });
 assert.strictEqual(document.getElementById('pad-edit-table-scrollable').value, 'false');
+context.padWidgetEditorsLoad({ widget_type: 'list', widget_list_style_top: 'font_size:24',
+    widget_list_selected_bg_color: '[item:color|#FFFFFF]' });
+assert.strictEqual(document.getElementById('pad-edit-list-top-style-wrap').style.display, 'flex');
+assert.strictEqual(document.getElementById('pad-edit-list-bottom-style-wrap').style.display, 'none');
+assert.strictEqual(document.getElementById('pad-edit-list-top-style-toggle').attributes['aria-expanded'], 'true');
+assert.strictEqual(document.getElementById('pad-edit-list-selected-background').value, '[item:color|#FFFFFF]');
+context.padWidgetEditorsLoad({ widget_type: 'list' });
+assert.strictEqual(document.getElementById('pad-edit-list-top-style-wrap').style.display, 'none');
+assert.strictEqual(document.getElementById('pad-edit-list-allow-selection').checked, true);
+context.padWidgetEditorsLoad({ widget_type: 'list', widget_list_allow_selection: false });
+assert.strictEqual(document.getElementById('pad-edit-list-allow-selection').checked, false);
+const navigationList = {};
+context.padWidgetEditorBuild(navigationList, context.padWidgetEditor('list'));
+assert.strictEqual(navigationList.widget_list_allow_selection, false);
+context.padWidgetEditorsLoad({ widget_type: 'list' });
+assert.strictEqual(document.getElementById('pad-edit-list-allow-selection').checked, true);
+{
+    const savedSetColor = context.padSetBindableColor;
+    const savedGetColor = context.padGetBindableColor;
+    const savedDefault = context.padGetEffectiveDefault;
+    const defaults = { bg_color: '#123456', border_color: '#234567', fg_color: '#345678', border_width: '1' };
+    const swatches = new Map();
+    const labels = new Map();
+    document.createElement = () => new Element('');
+    document.querySelector = selector => {
+        if (!labels.has(selector)) labels.set(selector, {
+            textContent: 'Color',
+            appendChild(child) { elements.set(child.id, child); }
+        });
+        return labels.get(selector);
+    };
+    const select = document.getElementById('pad-edit-list-source');
+    select.replaceChildren = () => {};
+    select.appendChild = () => {};
+    const editor = context.padWidgetEditor('list');
+    editor.fields.filter(field => field.kind === 'color').forEach(field => {
+        const input = document.getElementById(field.id);
+        const swatch = new Element(field.id + '-swatch');
+        swatch.classList.add = name => swatch.classList.toggle(name, true);
+        swatches.set(field.id, swatch);
+        input.closest = selector => selector === 'details'
+            ? { querySelector: () => ({ textContent: 'Appearance' }) }
+            : { querySelector: () => swatch };
+    });
+    context.bindingSplitParams = bindingContext.bindingSplitParams;
+    context.padColorNormalizeLiteral = value => /^#[0-9a-f]{6}$/i.test(value || '') ? value : null;
+    context.padColorValue = value => value || '';
+    context.padGetEffectiveDefault = key => defaults[key] || '';
+    context.padGetBindableColor = id => document.getElementById(id).value.trim();
+    context.padRefreshBindableColor = input => {
+        const swatch = swatches.get(input.id);
+        const value = input.value.trim() || input.dataset.colorFallback || '';
+        swatch.style.background = value.startsWith('#') ? value : '';
+        swatch.classList.toggle('bc-binding', !!value && !value.startsWith('#'));
+    };
+    context.padInitBindableColor = () => {};
+    context.padSetBindableColor = (id, value, fallback) => {
+        const input = document.getElementById(id);
+        input.value = value || fallback || '';
+        (input.listeners.input || []).forEach(listener => listener());
+    };
+    editor.init();
+    context.padWidgetEditorsLoad({ widget_type: 'list' });
+    const get = name => document.getElementById('pad-edit-list-' + name);
+    assert.strictEqual(get('background').value, '');
+    assert.strictEqual(get('background').dataset.colorFallback, '#123456');
+    assert.strictEqual(get('selected-border-color').dataset.colorFallback, '#234567');
+    assert.strictEqual(get('background-reset').style.display, 'none');
+    context.padSetBindableColor('pad-edit-list-background', '[item:color|#FFFFFF]');
+    assert.strictEqual(get('selected-background').dataset.colorFallback, '[item:color|#FFFFFF]');
+    assert.strictEqual(get('background-reset').style.display, 'inline');
+    context.padSetBindableColor('pad-edit-list-background', '');
+    assert.strictEqual(get('selected-background').dataset.colorFallback, '#123456');
+    get('top-style').value = 'color:[expr:1;"#123456";"#abcdef"];font_size:24';
+    get('top-style').listeners.input.forEach(listener => listener());
+    assert.strictEqual(get('selected-top-color').dataset.colorFallback, '[expr:1;"#123456";"#abcdef"]');
+    defaults.border_width = '0';
+    context.padSetBindableColor('pad-edit-list-border-color', '');
+    assert.strictEqual(get('selected-border-color').dataset.colorFallback, '#345678');
+    defaults.border_width = '[var:width]';
+    context.padSetBindableColor('pad-edit-list-selected-border-color', '');
+    assert.strictEqual(get('selected-border-color').dataset.colorFallback, '');
+    assert.strictEqual(swatches.get('pad-edit-list-selected-border-color').classList.contains('bc-binding'), true);
+    context.padSetBindableColor = savedSetColor;
+    context.padGetBindableColor = savedGetColor;
+    context.padGetEffectiveDefault = savedDefault;
+    delete document.createElement;
+    delete document.querySelector;
+}
 document.getElementById('pad-edit-widget-type').value = 'table';
 document.getElementById('pad-edit-table-scrollable').value = 'false';
-document.getElementById('pad-edit-table-data-binding').value = ' [health:table] ';
+document.getElementById('pad-edit-table-data-binding').value = ' [mqtt:devices/table;.] ';
 document.getElementById('pad-edit-table-style').value = ' font_size:14 ';
 context.padWorkspaceEdit();
-assert.strictEqual(context.padState.buttons[0].widget_data_binding, '[health:table]');
+assert.strictEqual(context.padState.buttons[0].widget_data_binding, '[mqtt:devices/table;.]');
 assert.strictEqual(context.padState.buttons[0].widget_table_style, 'font_size:14');
 assert.strictEqual(context.padState.buttons[0].widget_table_scrollable, false);
 document.getElementById('pad-edit-table-data-binding').value = '';

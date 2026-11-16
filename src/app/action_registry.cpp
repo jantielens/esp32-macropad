@@ -16,6 +16,9 @@ static constexpr int MAX_ACTION_TYPES = ACTION_TYPE_REGISTRY_MAX_TYPES
 #if HAS_VOICE_NOTES
     + 1
 #endif
+#if HAS_DISPLAY && HAS_PSRAM
+    + 1
+#endif
     ;
 static const ActionTypeDef* s_types[MAX_ACTION_TYPES] = {};
 static int s_count = 0;
@@ -43,6 +46,11 @@ const ActionTypeDef* action_type_at(uint8_t index) {
 bool action_type_is_supported(const char* type_name) {
     const ActionTypeDef* type = action_type_find(type_name);
     return type && (!type->available || type->available());
+}
+
+bool action_type_ends_item_context(const ActionTypeDef* type, const ButtonAction& action) {
+    return !type || type->execution != ACTION_EXECUTION_SYNC ||
+        (type->ends_item_context && type->ends_item_context(action));
 }
 
 const char* action_type_validate(const ActionTypeDef* type, JsonObjectConst action) {

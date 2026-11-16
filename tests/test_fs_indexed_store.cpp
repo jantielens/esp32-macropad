@@ -117,6 +117,34 @@ TEST_F(IndexedStoreTest, CopiesCachedMetadataWithoutPayloadReadsAndReportsAlloca
     EXPECT_EQ(manifest["entries"][0]["id"].as<std::string>(), "first");
 }
 
+TEST_F(IndexedStoreTest, CopiesOnlyMostRecentEntriesWithStableTimestampTies) {
+    FsIndexedStore store("/clips", kFields, 4, nullptr, 0, ".wav", voice_notes_metadata_read_metadata);
+    ASSERT_TRUE(store.begin());
+    StaticJsonDocument<128> metadata;
+    for (const auto& entry : {std::pair<const char*, uint32_t>{"a", 0}, {"b", 0},
+                              {"c", 10}, {"d", 20}, {"e", 20}}) {
+        std::string path = std::string("/clips/") + entry.first + ".wav";
+        add_wav(path.c_str());
+        ASSERT_TRUE(store.register_pre_written(entry.first, entry.second, metadata.as<JsonObject>()));
+    }
+    const unsigned reads = LittleFS.opens["/clips/c.wav"];
+    BoundedPsramJsonAllocator allocator(8192);
+    JsonDocument selected(&allocator);
+    ASSERT_TRUE(store.copy_recent(selected, 3));
+    ASSERT_EQ(selected.size(), 3u);
+    EXPECT_STREQ(selected[0]["id"], "e");
+    EXPECT_STREQ(selected[1]["id"], "d");
+    EXPECT_STREQ(selected[2]["id"], "c");
+    EXPECT_EQ(LittleFS.opens["/clips/c.wav"], reads);
+    ASSERT_TRUE(store.copy_recent(selected, 5));
+    EXPECT_STREQ(selected[3]["id"], "b");
+    EXPECT_STREQ(selected[4]["id"], "a");
+    fail_allocation = true;
+    EXPECT_FALSE(store.copy_recent(selected, 3));
+    fail_allocation = false;
+    EXPECT_FALSE(store.copy_recent(selected, FS_STORE_RECENT_MAX_ENTRIES + 1));
+}
+
 TEST_F(IndexedStoreTest, SortsAndRebuildsEntriesWithPsram) {
     have_psram = true;
     FsIndexedStore store("/clips", kFields, 4, nullptr, 0, ".wav", voice_notes_metadata_read_metadata);

@@ -124,9 +124,7 @@
         "ble_bonded",
         "ble_encrypted",
         "ble_peer_addr",
-        "ble_peer_id_addr",
-        "table",
-        "extended_table"
+        "ble_peer_id_addr"
       ],
       "category": "Device",
       "summary": "Local device telemetry. Works without a network.",
@@ -363,16 +361,6 @@
           "key": "ble_peer_id_addr",
           "desc": "Connected peer identity address",
           "group": "USB & BLE"
-        },
-        {
-          "key": "table",
-          "desc": "Device summary table for the Table widget",
-          "group": "Tables"
-        },
-        {
-          "key": "extended_table",
-          "desc": "Extended device table for the Table widget",
-          "group": "Tables"
         }
       ],
       "examples": [
@@ -399,10 +387,6 @@
         {
           "code": "[expr:[health:wifi_connected]==\"ON\"?\"#16a34a\":\"#dc2626\"]",
           "desc": "Green or red color for WiFi state."
-        },
-        {
-          "code": "[health:table]",
-          "desc": "Exact single token for a Table widget."
         }
       ],
       "reference": {
@@ -1155,32 +1139,6 @@
             "kind": "text",
             "unit": "",
             "example_value": "02:00:00:65:43:21",
-            "formats": [
-              "raw"
-            ],
-            "capabilities": [
-              "display"
-            ],
-            "read_only": true
-          },
-          {
-            "key": "table",
-            "kind": "text",
-            "unit": "",
-            "example_value": "[{\"label\":\"CPU\",\"value\":\"42\",\"unit\":\"%\"}]",
-            "formats": [
-              "raw"
-            ],
-            "capabilities": [
-              "display"
-            ],
-            "read_only": true
-          },
-          {
-            "key": "extended_table",
-            "kind": "text",
-            "unit": "",
-            "example_value": "[{\"label\":\"Free heap\",\"value\":\"245760\",\"unit\":\"B\"}]",
             "formats": [
               "raw"
             ],
@@ -4215,45 +4173,43 @@
       }
     },
     {
-      "name": "list",
+      "name": "item",
       "min_params": 1,
       "max_params": 1,
       "widget_max_params": 1,
       "format_param": -1,
       "validation_mode": 0,
-      "free_form": false,
-      "keys": [
-        "fixture.selected"
-      ],
+      "free_form": true,
+      "first_param_pattern": "^[A-Za-z0-9_]{1,32}$",
       "category": "Data",
-      "summary": "The item selected in a List widget, per list provider.",
-      "note": "Available providers are listed under Keys.",
+      "summary": "Read a field of the current List item.",
+      "note": "Available only while rendering a List row or immediately activating it.",
       "params": [
         {
-          "name": "key",
-          "desc": "provider.selected for a List widget provider.",
+          "name": "field",
+          "desc": "Field defined by the List's collection source.",
           "required": true
         }
       ],
       "key_docs": [
         {
-          "key": "*.selected",
-          "desc": "Item id last selected in a List widget for that provider"
+          "key": "*",
+          "desc": "A field of the current List item."
         }
       ],
       "examples": [
         {
-          "code": "[list:pads.selected|none]",
-          "desc": "Selected pad with a fallback before any selection."
+          "code": "[item:id]",
+          "desc": "The activated or rendered item's stable ID."
         }
       ],
       "authoring": {
         "keys": [
           {
-            "key": "fixture.selected",
+            "key": "*",
             "kind": "text",
             "unit": "",
-            "example_value": "selected-item",
+            "example_value": "item",
             "formats": [
               "raw"
             ],

@@ -9,8 +9,6 @@
 #include "runtime_variables.h"
 #include "var_binding.h"
 #include "pad_binding.h"
-#include "list_binding.h"
-#include "list_provider.h"
 #include "time_binding.h"
 #include "alarm_manager.h"
 #include "psram_json_allocator.h"
@@ -37,14 +35,6 @@ extern WifiNetworkSnapshot binding_test_network;
 #endif
 
 static int g_failures = 0;
-
-static uint8_t fixture_provider_items(ListItem*, uint8_t) { return 0; }
-
-static const ListProvider kFixtureProvider = {
-    "fixture",
-    "Fixture provider",
-    fixture_provider_items,
-};
 
 static void expect(bool condition, const char* label) {
     if (!condition) {
@@ -79,9 +69,11 @@ static void expect_structural_resolvers_are_invoked() {
     expect(binding_template_resolve_registered("time", 4, "%ums", resolved, sizeof(resolved))
                != BINDING_RESOLVER_UNKNOWN,
            "time resolver accepts a free-form format");
-    expect(binding_template_resolve_registered("list", 4, "fixture.selected", resolved, sizeof(resolved))
+#if HAS_DISPLAY && HAS_PSRAM
+    expect(binding_template_resolve_registered("item", 4, "id", resolved, sizeof(resolved))
                != BINDING_RESOLVER_UNKNOWN,
-           "list resolver accepts a fixture provider selection");
+           "item resolver accepts a structural field");
+#endif
 #if IS_SHUTTER_TESTER
     expect(binding_template_resolve_registered("shutter", 7, "available", resolved, sizeof(resolved))
                != BINDING_RESOLVER_UNKNOWN,
@@ -490,8 +482,6 @@ static void expect_static_authoring_complete() {
 void binding_schema_dump_json();
 
 int main(int argc, char** argv) {
-    list_provider_register(&kFixtureProvider);
-    list_binding_set_selected("fixture", "selected-item");
     binding_builtin_schemes_init();
 #if IS_VOICE_ASSISTANT
     voice_binding_init();
@@ -516,6 +506,10 @@ int main(int argc, char** argv) {
     }
 
     expect(binding_template_scheme_count() > 0, "production profile registered binding schemes");
+    expect(binding_template_validate_params("health", 6, "table") != nullptr,
+           "removed health Table binding is rejected");
+    expect(binding_template_validate_params("health", 6, "extended_table") != nullptr,
+           "removed extended health Table binding is rejected");
     expect(scheme_is_registered("mqtt") == bool(HAS_MQTT), "MQTT registration matches gate");
     expect(scheme_is_registered("battery") == bool(HAS_BATTERY_INFO), "battery registration matches gate");
 #if !HAS_BATTERY_INFO

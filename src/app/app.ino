@@ -59,7 +59,10 @@
 #include "sound_store.h"
 #include "boot_actions.h"
 #include "pad_block.h"
-#include "list_provider.h"
+#include "list_source.h"
+#include "list_source_health.h"
+#include "list_source_pads.h"
+#include "list_source_voice_notes.h"
 #include "time_binding.h"
 #include "timer_config.h"
 #include "pad_config.h"
@@ -243,6 +246,13 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 	#if HAS_DISPLAY
 	set_boot_splash_status("Preparing device...");
 	screen_saver_manager_init(&device_config);
+	#if HAS_PSRAM
+	if (!list_source_health_init()) LOGE("ListSource", "Cannot register health source");
+	if (!list_source_pads_init()) LOGE("ListSource", "Cannot register pad source");
+	#if HAS_VOICE_NOTES
+	list_source_voice_notes_init();
+	#endif
+	#endif
 	pad_config_init();
 	#if HAS_NATIVE_EXTENSIONS
 	native_extension_init();
@@ -254,7 +264,6 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 	}
 	boot_actions_init();
 	pad_block_init();
-	list_provider_pads_init();
 	icon_store_init();
 	set_boot_splash_status("Loading icons...");
 	icon_store_preload_pad_pages();
@@ -870,6 +879,10 @@ void loop()
 	#if HAS_DISPLAY || HAS_BUTTON
 	device_telemetry_mark_main_loop(DEVICE_RUNTIME_PHASE_MAIN_ACTION_DISPATCH);
 	action_dispatch_loop();
+	#endif
+
+	#if HAS_DISPLAY && HAS_PSRAM
+	list_source_loop();
 	#endif
 
 	#if HAS_CAMERA

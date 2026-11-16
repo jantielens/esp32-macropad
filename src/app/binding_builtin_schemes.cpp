@@ -12,7 +12,9 @@
 #include "health_binding.h"
 #include "sensor_binding.h"
 #include "image_binding.h"
-#include "list_binding.h"
+#if HAS_DISPLAY && HAS_PSRAM
+#include "item_binding_scheme.h"
+#endif
 #include "music_binding.h"
 #include "mqtt_binding.h"
 #include "ha_binding.h"
@@ -60,7 +62,9 @@ void binding_builtin_schemes_init() {
 #if HAS_VOICE_NOTES && HAS_DISPLAY
     voice_notes_binding_init();
 #endif
-    list_binding_init();
+#if HAS_DISPLAY && HAS_PSRAM
+    item_binding_init();
+#endif
     net_binding_init();
 #if HAS_DISPLAY || HAS_BUTTON
     var_binding_init();

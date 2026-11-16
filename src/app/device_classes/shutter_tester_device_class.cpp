@@ -30,9 +30,9 @@
 #include "display_manager.h"
 #endif
 
-// Forward declarations for list providers registered late in setup. Defined
-// in their respective .cpp files (aggregated below).
-void list_provider_shutter_tests_init();
+#if HAS_DISPLAY && HAS_PSRAM
+void list_source_shutter_tests_init();
+#endif
 
 // ---------------------------------------------------------------------------
 // Setup hook: bring up shutter sensors, measurement, and session state once
@@ -44,10 +44,9 @@ static void on_setup_late_hook(DeviceConfig *config, PowerMode /*current_mode*/)
 		display_manager_set_splash_status("Initializing sensors...");
 #endif
 
-		// List provider registration is order-independent as long as it lands
-		// before any [list:shutter_tests.selected] binding resolves, which only
-		// happens during pad rendering after this hook returns.
-		list_provider_shutter_tests_init();
+#if HAS_DISPLAY && HAS_PSRAM
+		list_source_shutter_tests_init();
+#endif
 
 		shutter_capture_init(shutter_config.preset_id);
 		shutter_measure_init();
@@ -177,8 +176,8 @@ void shutter_tester_device_class_register() {
 #include "shutter_tester/shutter_align_binding.cpp"
 #include "shutter_tester/shutter_actions.cpp"
 
-// Web portal endpoints and list providers
-#include "shutter_tester/web/list_provider_shutter_tests.cpp"
+// List source
+#include "shutter_tester/list_source_shutter_tests.cpp"
 // NOTE: shutter_config.cpp is aggregated from portal_components.cpp per
 // project convention (see portal_components.cpp IS_SHUTTER_TESTER block).
 

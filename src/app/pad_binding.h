@@ -42,6 +42,10 @@ void pad_binding_set_bindings(const PadBinding* bindings, uint8_t count);
 // Read the active binding context so a temporary resolver can restore it.
 void pad_binding_get_bindings(const PadBinding** bindings, uint8_t* count);
 
+// Find an alias in an explicit binding array without using the live pad context.
+const char* pad_binding_find_template(const PadBinding* bindings, uint8_t count,
+                                      const char* name, size_t name_len);
+
 // Expand all [pad:name] tokens in a template string to their underlying
 // binding templates (text substitution, NOT value resolution).
 // Used by data_stream_rebuild() to pre-expand before storing in streams.

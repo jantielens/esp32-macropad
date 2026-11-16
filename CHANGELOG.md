@@ -16,6 +16,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add a configuration-driven List widget for display devices with PSRAM.
+  Show up to 20 items with two styled labels, item-bound colors, tap and
+  long-press actions, optional persistent selection, and scrolling or paged
+  viewports. Lists share source data but keep independent interaction state.
+  Use **Navigate List** actions for previous/next page controls.
+  See [List configuration](docs/user/widgets/list.md).
+* Add typed List sources for recent Voice Notes (`[voice_note:recent_notes]`),
+  saved pads (`[pad:pads]`), and shutter test definitions (`[shutter:tests]`).
+  Bind row content and supported action fields with `[item:field]`; capture
+  `[item:id]` using **Set variable** before navigation or a pause.
+* Add `[health:metrics]` as a shared, demand-loaded List source with raw values,
+  units, and optional severity. List labels and styles control presentation.
 * Add on-device Voice Notes transcription through a configured Azure
   transcription deployment. Select **Process note** under **Voice Notes >
   Notes**, view the saved transcript alongside playback in **View details**,
@@ -55,6 +67,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Replace the legacy provider/filter List implementation and `[list:...]`
+  selection bindings. Existing List configurations are not migrated; choose
+  a typed source, configure row labels and actions, and assign a unique List
+  ID within each pad. Remove `[health:table]` and `[health:extended_table]`;
+  existing health Table buttons must be reconfigured as Lists.
+* Share template composition rules between pad loading and contextual
+  validation, and use declared action-field identities instead of parser
+  probing. Reuse streamed template documents during pad saves to reduce
+  repeated parsing and temporary allocations. Clarify unsupported List
+  label-style properties in the editor.
 * Replace transcription-only Voice Notes settings with separate transcription
   and LLM endpoint, deployment, and API key settings. Replace the `voice_note`
   command `transcribe` with `process` and the POST `transcribe` endpoint with
@@ -74,6 +96,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Use the shared PSRAM-first LVGL allocator for List visuals, retaining
+  internal-RAM fallback when PSRAM allocation fails. Batch List row geometry
+  updates before recalculating the scrolling layout and position indicator.
 * Clear a previous note's summary when opening another note, show active
   enrichment progress and failures without masking them behind older
   transcription errors, and report unreadable saved enrichment instead of

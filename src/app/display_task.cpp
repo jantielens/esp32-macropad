@@ -79,6 +79,9 @@ bool display_manager_get_stack_watermark(uint32_t* minimum_free_bytes, uint32_t*
 volatile bool g_displayFlushBusy = false;
 
 void DisplayManager::queueScreenIntent(bool interactive) {
+#if HAS_PSRAM
+		++screenIntentGeneration;
+#endif
 		pendingScreenInteractive = interactive;
 		pendingScreenRequestedUs = interactive ? esp_timer_get_time() : 0;
 		wakeRenderTask();

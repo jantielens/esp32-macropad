@@ -137,10 +137,6 @@ void lv_obj_invalidate(lv_obj_t* object);
 uint8_t display_manager_get_backlight_brightness();
 void display_manager_set_backlight_brightness(uint8_t brightness);
 
-#define HEALTH_TABLE_BUILDER_H
-typedef bool (*HealthTableLookupFn)(const char* key, char* out, size_t out_len);
-bool health_table_build(bool extended, HealthTableLookupFn lookup, char* out, size_t out_len);
-
 #define CONFIG_MANAGER_H
 struct DeviceConfig {
     bool ble_enabled;

@@ -30,6 +30,13 @@ constexpr unsigned widget_default_rgb(const char* color) {
 #include <lvgl.h>
 #include <stdint.h>
 
+struct WidgetPressFeedback {
+    lv_event_code_t event;
+    lv_obj_t* object;
+    uint32_t background;
+    bool has_background;
+};
+
 inline lv_area_t widget_content_bounds(lv_obj_t* object) {
     if (!object) return {0, 0, -1, -1};
     const int width = lv_obj_get_width(object), height = lv_obj_get_height(object);

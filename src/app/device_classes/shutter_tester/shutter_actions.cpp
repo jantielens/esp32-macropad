@@ -34,7 +34,7 @@ static void shutter_serialize(const ButtonAction& act, JsonObject obj) {
 }
 
 // The `value` field is the single bindable/numeric field: user-templated for
-// commands like guide_start ([list:shutter_tests.selected]) and sess_start
+// commands like guide_start ([item:id]) and sess_start
 // (camera id from a list). Expose it so shared code drives binding resolution
 // + {step} substitution. `command` is structural and never bindable.
 static bool shutter_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {

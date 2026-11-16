@@ -446,13 +446,13 @@ async function main() {
     screenBinding.parentElement = actionGroup;
     screenBinding.focus = () => { actionFocused = true; };
     context.showMessage = (message, type) => actionMessages.push({ message, type });
-    screenEditor.load('test', { target: '[list:pads.selected]' });
+    screenEditor.load('test', { target: '[var:selected_pad]' });
     assert.strictEqual(screenSelect.value, '__binding__');
     assert.strictEqual(screenBindingGroup.style.display, '');
-    assert.strictEqual(screenEditor.build('test', 'screen').target, '[list:pads.selected]');
+    assert.strictEqual(screenEditor.build('test', 'screen').target, '[var:selected_pad]');
     context.actionEditorPopulateScreens(['test'], screens);
-    assert.strictEqual(screenEditor.build('test', 'screen').target, '[list:pads.selected]');
-    screenBinding.value = '[list:pads.selected';
+    assert.strictEqual(screenEditor.build('test', 'screen').target, '[var:selected_pad]');
+    screenBinding.value = '[var:selected_pad';
     assert.throws(() => screenEditor.build('test', 'screen'), error => error.fieldIds[0] === screenBinding.id);
     screenBinding.value = 'pad_1';
     assert.throws(() => screenEditor.build('test', 'screen'), /binding/);
@@ -475,14 +475,14 @@ async function main() {
     screenEditor.load('test', { target: 'pad_2' });
     screenSelect.setAttribute('data-pending-value', 'pad_2');
     screenSelect.value = '__binding__';
-    screenBinding.value = '[list:pads.selected]';
+    screenBinding.value = '[var:selected_pad]';
     context.actionEditorScreenTargetChanged('test');
     context.actionEditorPopulateScreens(['test'], screens);
-    assert.strictEqual(screenEditor.build('test', 'screen').target, '[list:pads.selected]', 'catalog loading must not overwrite a newer mode');
+    assert.strictEqual(screenEditor.build('test', 'screen').target, '[var:selected_pad]', 'catalog loading must not overwrite a newer mode');
     const screenLookup = context.document.getElementById;
     context.document.getElementById = id => id === 'pad-edit-action-0-type' ? { value: 'screen' } :
         screenLookup(id.replace(/^pad-edit-action-0/, 'test'));
-    screenBinding.value = '[list:pads.selected';
+    screenBinding.value = '[var:selected_pad';
     assert.strictEqual(context.bindingValidateDialog().valid, false);
     screenSelect.value = 'pad_1';
     context.actionEditorScreenTargetChanged('test');
@@ -516,7 +516,7 @@ async function main() {
         assert.strictEqual(actionMessages[0].type, 'error');
         assert.strictEqual(actionWrites.length, 0, save + ' must not write invalid actions');
     }
-    screenBinding.value = '[list:pads.selected]';
+    screenBinding.value = '[var:selected_pad]';
     await context.saveBootActions();
     assert.strictEqual(actionWrites.length, 1);
     assert.strictEqual(actionWrites[0].payload.actions[0].target, screenBinding.value);

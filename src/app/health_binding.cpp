@@ -6,7 +6,6 @@
 #include "binding_template.h"
 #include "device_telemetry.h"
 #include "display_manager.h"
-#include "health_table_builder.h"
 #include "log_manager.h"
 #include "wifi_manager.h"
 
@@ -137,9 +136,7 @@ static bool health_key_requires_memory_snapshot(const char* key) {
 #if TELEMETRY_ALLOW_PSRAM_POOL_WALK
            strcmp(key, "psram_largest") == 0 ||
 #endif
-           strcmp(key, "psram_used") == 0 ||
-           strcmp(key, "table") == 0 ||
-           strcmp(key, "extended_table") == 0;
+           strcmp(key, "psram_used") == 0;
 }
 
 // ============================================================================
@@ -423,12 +420,6 @@ static BindingResolverStatus health_binding_resolve(const char* params, char* ou
         refresh_memory_if_stale();
     }
 
-    if (strcmp(key, "table") == 0 || strcmp(key, "extended_table") == 0) {
-        bool extended = (strcmp(key, "extended_table") == 0);
-        return health_table_build(extended, lookup_value, out, out_len)
-               ? BINDING_RESOLVER_RESOLVED : BINDING_RESOLVER_UNAVAILABLE;
-    }
-
     char raw[64];
     if (!lookup_value(key, raw, sizeof(raw))) {
         return BINDING_RESOLVER_UNAVAILABLE;
@@ -518,8 +509,6 @@ static const BindingKeyDoc HEALTH_KEYS[] = {
     {"ble_peer_addr",       "Connected peer Bluetooth address", "USB & BLE"},
     {"ble_peer_id_addr",    "Connected peer identity address", "USB & BLE"},
 #endif
-    {"table",               "Device summary table for the Table widget", "Tables"},
-    {"extended_table",      "Extended device table for the Table widget", "Tables"},
 };
 
 static const BindingParamDoc kHealthParams[] = {
@@ -534,7 +523,6 @@ static const BindingExampleDoc kHealthExamples[] = {
     {"[health:wifi_state]", "Overall Wi-Fi state, including AP operation; not internet or MQTT readiness."},
     {"[health:wifi_ip|off]", "Active network or AP address with an explicit inactive fallback."},
     {"[expr:[health:wifi_connected]==\"ON\"?\"#16a34a\":\"#dc2626\"]", "Green or red color for WiFi state."},
-    {"[health:table]", "Exact single token for a Table widget."},
 };
 
 static const BindingReferenceDoc kHealthWifiReference[] = {
@@ -618,8 +606,6 @@ static const BindingAuthoringKey kHealthAuthoringKeys[] = {
     binding_authoring_text("ble_peer_addr", "02:00:00:65:43:21"),
     binding_authoring_text("ble_peer_id_addr", "02:00:00:65:43:21"),
 #endif
-    binding_authoring_text("table", "[{\"label\":\"CPU\",\"value\":\"42\",\"unit\":\"%\"}]"),
-    binding_authoring_text("extended_table", "[{\"label\":\"Free heap\",\"value\":\"245760\",\"unit\":\"B\"}]"),
 };
 static const BindingAuthoringSpec kHealthAuthoring = {
     kHealthAuthoringKeys,

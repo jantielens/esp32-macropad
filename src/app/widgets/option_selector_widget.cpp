@@ -165,7 +165,7 @@ void layout(State* state) {
 
 void feedback(State* state, uint8_t index, lv_event_code_t event) {
     const SlotState& slot = state->slots[index];
-    OptionSelectorFeedback message{
+    WidgetPressFeedback message{
         event, slot.hit,
         slot.background_visible ? slot.background : state->group_color,
         slot.background_visible || state->config->group_background

@@ -7,10 +7,14 @@
 #include "binding_template.h"
 #include "action_registry.h"
 #include "pad_validate.h"
+#include "pad_composition.h"
 #include "widgets/widget_registry.h"
 #include "../src/app/actions/dialog_action.h"
 
 static int g_failures = 0;
+static bool g_contextual_list = false;
+static bool g_context_called = false;
+static bool g_context_received_template = false;
 
 #define CHECK(condition) do { \
     if (!(condition)) { \
@@ -28,6 +32,18 @@ const WidgetType* widget_find(const char* type_name) {
     static WidgetType test_widget = {};
     static WidgetType sparkline_widget = {};
     static WidgetType rocker_widget = {};
+    static WidgetType list_widget = {};
+    if (type_name && std::strcmp(type_name, "list") == 0) {
+        list_widget.name = "list";
+        list_widget.validatePadContext = g_contextual_list
+            ? +[](JsonObjectConst, const PadComposedContext& context) -> const char* {
+                g_context_called = true;
+                g_context_received_template = context.button_count == 1;
+                return nullptr;
+            } : nullptr;
+        list_widget.collectionBinding = g_contextual_list;
+        return &list_widget;
+    }
     if (type_name && (std::strcmp(type_name, "rocker") == 0 || std::strcmp(type_name, "numericrocker") == 0)) {
         rocker_widget.name = type_name;
         return &rocker_widget;
@@ -43,6 +59,9 @@ const WidgetType* widget_find(const char* type_name) {
     }
     return nullptr;
 }
+
+uint8_t widget_count() { return 1; }
+const WidgetType* widget_at(uint8_t index) { return index == 0 ? widget_find("list") : nullptr; }
 
 bool binding_template_scheme_known(const char* scheme, size_t name_len) {
     return !(name_len == 7 && std::strncmp(scheme, "unknown", name_len) == 0);
@@ -111,6 +130,29 @@ static JsonObject make_button(JsonDocument& doc) {
 
 int main() {
     std::printf("=== pad confirmation validation tests ===\n");
+
+    {
+        JsonDocument doc;
+        JsonObject button = make_button(doc);
+        button["widget_type"] = "list";
+        button["widget_data_binding"] = "[unknown:collection]";
+        g_contextual_list = false;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        g_contextual_list = true;
+        g_context_called = false;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        CHECK(g_context_called);
+        doc["template_pad"] = 1;
+        g_context_called = false;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        CHECK(!g_context_called);
+        JsonDocument inherited;
+        inherited.to<JsonObject>();
+        CHECK(pad_validate(doc.as<JsonObjectConst>(), false, nullptr,
+                           inherited.as<JsonObjectConst>()) == nullptr);
+        CHECK(g_context_called && g_context_received_template);
+        g_contextual_list = false;
+    }
 
     for (const char* layer : {"buttons", "overlay_buttons"}) {
         JsonDocument doc;

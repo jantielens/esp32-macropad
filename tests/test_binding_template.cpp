@@ -85,6 +85,17 @@ static void test_single_token_shape_rejection() {
     bool matched = binding_template_resolve_single_token("Value: [big:any]", out, sizeof(out));
     check_true(!matched, "non-exact token rejected");
     check_eq(out, "", "output cleared for non-match");
+
+    BindingTokenView token = {};
+    check_true(binding_template_single_token("[voice_note:recent_notes]", &token),
+               "token view accepts exact token");
+    check_true(std::string(token.scheme, token.scheme_len) == "voice_note" &&
+               std::string(token.params, token.params_len) == "recent_notes",
+               "token view exposes exact scheme and parameter spans");
+    check_true(!binding_template_single_token("[big:any]suffix", &token),
+               "token view rejects suffix");
+    check_true(!binding_template_single_token("prefix[big:any]", &token),
+               "token view rejects prefix");
 }
 
 static void test_single_token_fallback() {

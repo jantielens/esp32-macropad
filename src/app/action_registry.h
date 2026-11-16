@@ -26,6 +26,8 @@ enum ActionFieldFlags : uint8_t {
     ACTION_FIELD_EVENT = 2,
     ACTION_FIELD_REJECT_OVERFLOW = 4
 };
+// name is the persisted JSON key, not the C++ payload member name. Shared
+// authoring validation and catalog metadata use this identity directly.
 typedef bool (*ActionFieldVisitor)(const char* name, char* field, size_t capacity,
                                    uint8_t flags, void* context);
 typedef bool (*ActionFields)(ButtonAction&, ActionFieldVisitor, void*);
@@ -57,13 +59,15 @@ struct ActionTypeDef {
         ActionExecutionClass execution = ACTION_EXECUTION_UNKNOWN,
             bool display_lock_required = true,
             bool resolve_bindings_before_dispatch = true,
-            bool dispatch_lock_always = false)
+            bool dispatch_lock_always = false,
+            bool (*ends_item_context)(const ButtonAction&) = nullptr)
         : type_name(type_name), parse(parse), serialize(serialize), dispatch(dispatch),
           fields(fields), describe(describe), available(available),
                     validate(validate), execution(execution),
                     display_lock_required(display_lock_required),
                     resolve_bindings_before_dispatch(resolve_bindings_before_dispatch),
-                    dispatch_lock_always(dispatch_lock_always) {}
+                    dispatch_lock_always(dispatch_lock_always),
+                    ends_item_context(ends_item_context) {}
 
     const char* type_name;                                                  // matches ButtonAction::type
     void (*parse)(const JsonObject& a, ButtonAction& act);                  // flat JSON -> payload arm
@@ -81,6 +85,7 @@ struct ActionTypeDef {
     bool display_lock_required;
     bool resolve_bindings_before_dispatch;
     bool dispatch_lock_always;
+    bool (*ends_item_context)(const ButtonAction&);
 };
 
 void action_type_register(const ActionTypeDef* type);
@@ -94,6 +99,9 @@ const ActionTypeDef* action_type_at(uint8_t index);
 // Returns true only when a registered type is available in this build. Use
 // this shared decision for authoring validation and catalog discovery.
 bool action_type_is_supported(const char* type_name);
+
+// Unknown or pausable actions end the item context conservatively.
+bool action_type_ends_item_context(const ActionTypeDef* type, const ButtonAction& action);
 
 // Invoke an action type's optional authoring validator. nullptr means valid.
 const char* action_type_validate(const ActionTypeDef* type, JsonObjectConst action);

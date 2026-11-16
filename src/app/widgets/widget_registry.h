@@ -14,6 +14,7 @@ typedef struct _lv_obj_t lv_obj_t;
 struct PadRect;
 struct UIScaleInfo;
 class PadFontCache;
+struct PadComposedContext;
 
 #ifndef WIDGET_STATE_MAX_BYTES
 #define WIDGET_STATE_MAX_BYTES 256
@@ -80,6 +81,10 @@ struct WidgetType {
     void (*visitResources)(const uint8_t* data, WidgetResourceVisitor visitor,
                            void* context);
     const char* (*validateActions)(JsonObjectConst button, JsonArrayConst actions);
+    // Pad-owned composition supplies the same inherited buttons and bindings
+    // used by runtime loading. The callback must not perform storage I/O.
+    const char* (*validatePadContext)(JsonObjectConst pad, const PadComposedContext& context) = nullptr;
+    bool collectionBinding = false;
 };
 
 inline bool widget_owns_input(const WidgetType* type) {

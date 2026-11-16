@@ -1,4 +1,5 @@
 #include "binding_value.h"
+#include "binding_value_json.h"
 
 #include "psram_json_allocator.h"
 #include <ArduinoJson.h>
@@ -84,6 +85,38 @@ bool binding_value_extract_json(const char* payload, const char* path, char* out
     return true;
 }
 
+#if HAS_EXTERNAL_DATA || (HAS_DISPLAY && HAS_PSRAM)
+bool binding_value_scalar_json(JsonVariantConst value, char* out, size_t out_len) {
+    if (!out || !out_len) return false;
+    out[0] = '\0';
+    if (value.isNull()) return false;
+    if (value.is<const char*>()) return copy_value(value.as<const char*>(), out, out_len);
+    if (value.is<JsonObjectConst>() || value.is<JsonArrayConst>()) return false;
+    if (value.is<bool>()) return copy_value(value.as<bool>() ? "true" : "false", out, out_len);
+    if (value.is<int64_t>()) {
+        const int length = snprintf(out, out_len, "%lld", static_cast<long long>(value.as<int64_t>()));
+        return length >= 0 && static_cast<size_t>(length) < out_len;
+    }
+    if (value.is<uint64_t>()) {
+        const int length = snprintf(out, out_len, "%llu", static_cast<unsigned long long>(value.as<uint64_t>()));
+        return length >= 0 && static_cast<size_t>(length) < out_len;
+    }
+    const double number = value.as<double>();
+    const bool fits_float = static_cast<double>(static_cast<float>(number)) == number;
+    const int first_precision = fits_float ? 6 : 15;
+    const int last_precision = fits_float ? std::numeric_limits<float>::max_digits10
+                                          : std::numeric_limits<double>::max_digits10;
+    for (int precision = first_precision; precision <= last_precision; ++precision) {
+        const int length = snprintf(out, out_len, "%.*g", precision, number);
+        if (length < 0 || static_cast<size_t>(length) >= out_len) return false;
+        const double parsed = strtod(out, nullptr);
+        if ((fits_float && static_cast<float>(parsed) == static_cast<float>(number)) ||
+            (!fits_float && parsed == number)) return true;
+    }
+    return false;
+}
+#endif
+
 #if HAS_EXTERNAL_DATA
 static JsonVariantConst select_json_path(JsonVariantConst value, const char* path) {
     if (!path) return JsonVariantConst();
@@ -120,34 +153,11 @@ bool binding_value_select_json(JsonVariantConst value, const char* path,
     if (!path || !out || !out_len) return false;
     out[0] = '\0';
     value = select_json_path(value, path);
-    if (value.isNull()) return false;
-    if (value.is<const char*>()) return copy_value(value.as<const char*>(), out, out_len);
     if (value.is<JsonObjectConst>() || value.is<JsonArrayConst>()) {
         if (measureJson(value) >= out_len) return false;
         return serializeJson(value, out, out_len) < out_len;
     }
-    if (value.is<bool>()) return copy_value(value.as<bool>() ? "true" : "false", out, out_len);
-    if (value.is<int64_t>()) {
-        const int length = snprintf(out, out_len, "%lld", static_cast<long long>(value.as<int64_t>()));
-        return length >= 0 && static_cast<size_t>(length) < out_len;
-    }
-    if (value.is<uint64_t>()) {
-        const int length = snprintf(out, out_len, "%llu", static_cast<unsigned long long>(value.as<uint64_t>()));
-        return length >= 0 && static_cast<size_t>(length) < out_len;
-    }
-    const double number = value.as<double>();
-    const bool fits_float = static_cast<double>(static_cast<float>(number)) == number;
-    const int first_precision = fits_float ? 6 : 15;
-    const int last_precision = fits_float ? std::numeric_limits<float>::max_digits10
-                                          : std::numeric_limits<double>::max_digits10;
-    for (int precision = first_precision; precision <= last_precision; ++precision) {
-        const int length = snprintf(out, out_len, "%.*g", precision, number);
-        if (length < 0 || static_cast<size_t>(length) >= out_len) return false;
-        const double parsed = strtod(out, nullptr);
-        if ((fits_float && static_cast<float>(parsed) == static_cast<float>(number)) ||
-            (!fits_float && parsed == number)) return true;
-    }
-    return false;
+    return binding_value_scalar_json(value, out, out_len);
 }
 
 #if HAS_MCP

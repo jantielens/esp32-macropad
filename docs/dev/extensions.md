@@ -314,7 +314,7 @@ Call `host->binding->resolve(extension_context, instance_id, template, out,
 out_size)` from `create`, event callbacks, or `tick` to resolve the current
 value of any existing binding template. The resolver uses the widget instance's
 own pad context, so `[pad:name]` works as well as `[mqtt:...]`,
-`[health:...]`, `[time:...]`, `[expr:...]`, `[timer:...]`, `[list:...]`, and
+`[health:...]`, `[time:...]`, `[expr:...]`, `[timer:...]`, `[var:...]`, and
 `[net:...]`.
 
 Resolution is on demand, not a one-time substitution. Resolve in `tick` at an

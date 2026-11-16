@@ -47,8 +47,8 @@ void pad_binding_get_bindings(const PadBinding** bindings, uint8_t* count) {
 // ============================================================================
 
 // Look up a named binding in a bindings array. Returns the template string or NULL.
-static const char* find_binding(const PadBinding* bindings, uint8_t count,
-                                const char* name, size_t name_len) {
+const char* pad_binding_find_template(const PadBinding* bindings, uint8_t count,
+                                      const char* name, size_t name_len) {
     if (!bindings) return nullptr;
     for (uint8_t i = 0; i < count; i++) {
         if (strlen(bindings[i].name) == name_len &&
@@ -92,7 +92,7 @@ static BindingResolverStatus pad_binding_resolve(const char* params, char* out, 
     const char* fmt = split_name_format(params, &name_len);
 
     // Look up the binding
-    const char* tmpl = find_binding(g_bindings, g_binding_count, params, name_len);
+    const char* tmpl = pad_binding_find_template(g_bindings, g_binding_count, params, name_len);
     if (!tmpl) {
         strlcpy(out, "ERR:not_found", out_len);  // debug only — engine overwrites with "---"
         return BINDING_RESOLVER_UNAVAILABLE;
@@ -130,7 +130,7 @@ static void pad_binding_collect(const char* params, void* user_data) {
     size_t name_len = 0;
     split_name_format(params, &name_len);
 
-    const char* tmpl = find_binding(g_bindings, g_binding_count, params, name_len);
+    const char* tmpl = pad_binding_find_template(g_bindings, g_binding_count, params, name_len);
     if (!tmpl || !tmpl[0]) return;
 
     // Guard against recursive [pad:] in underlying template
@@ -211,7 +211,7 @@ bool pad_binding_expand_bindings(const PadBinding* bindings, uint8_t count,
         if (semi) name_len = (size_t)(semi - params_start);
 
         // Look up binding
-        const char* binding_tmpl = find_binding(bindings, count, params_start, name_len);
+        const char* binding_tmpl = pad_binding_find_template(bindings, count, params_start, name_len);
         if (binding_tmpl && !strstr(binding_tmpl, "[pad:")) {
             // If there's a format suffix, we can't simply substitute the template —
             // the format applies to the resolved value, not the template text.

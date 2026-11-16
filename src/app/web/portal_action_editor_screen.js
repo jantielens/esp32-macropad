@@ -60,7 +60,7 @@ _actionEditorExtensions.push({
         h += '<select class="form-select form-select-sm" id="' + prefix + '-target" oninput="actionEditorScreenTargetChanged(\'' + prefix + '\')" onchange="actionEditorScreenTargetChanged(\'' + prefix + '\')"><option value="">(none)</option><option value="__binding__">Binding value</option></select>';
         h += '</div><div class="form-group" id="' + prefix + '-target-binding-group" style="display:none;">';
         h += '<label class="form-label" for="' + prefix + '-target-binding">Binding value <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-        h += '<input type="text" class="form-control form-control-sm binding-mono" id="' + prefix + '-target-binding" placeholder="[list:pads.selected]">';
+        h += '<input type="text" class="form-control form-control-sm binding-mono" id="' + prefix + '-target-binding" placeholder="[var:selected_pad]">';
         h += '</div></div>';
         return h;
     },

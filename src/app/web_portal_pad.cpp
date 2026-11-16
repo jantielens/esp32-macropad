@@ -6,7 +6,6 @@
 #include "button_defaults.h"
 #include "display_manager.h"
 #include "icon_store.h"
-#include "list_provider.h"
 #include "log_manager.h"
 #include "pad_block.h"
 #include "pad_config.h"
@@ -63,17 +62,7 @@ static int parse_page_param(AsyncWebServerRequest *request) {
     return page;
 }
 
-// Validate a pad JSON body before saving. Delegates to the shared pad_validate
-// (single source of truth, identical to the MCP write/validate tools) so the
-// portal rejects the same invalid pads MCP does — binding tokens, widget
-// fields, colors, action arrays, length caps, and the one-level [pad:] rule.
-// tolerate_offgrid=true preserves the portal's feature of keeping buttons that
-// fall outside a shrunken grid (they are hidden and reappear when it grows).
-// Returns error message or nullptr on success.
-static const char* validate_pad_json(const uint8_t* json, size_t len) {
-    BasicJsonDocument<PsramJsonAllocator> doc(len * 2 + 512);
-    DeserializationError err = deserializeJson(doc, json, len);
-    if (err) return "Invalid JSON";
+static PadValidationGeometry current_pad_validation_geometry() {
     const PadLayoutSettings& layout = button_defaults_get()->layout;
     const PadValidationGeometry geometry = {
         (uint16_t)(displayManager ? displayManager->getActiveWidth() : DISPLAY_WIDTH),
@@ -83,7 +72,7 @@ static const char* validate_pad_json(const uint8_t* json, size_t len) {
         layout.inset_top_px, layout.inset_bottom_px,
         layout.pixel_shift_distance_px,
     };
-    return pad_validate(doc.as<JsonObjectConst>(), /*tolerate_offgrid=*/true, &geometry);
+    return geometry;
 }
 
 static uint8_t* allocate_pad_json_buffer(size_t len) {
@@ -350,19 +339,10 @@ void handlePostPadConfig(AsyncWebServerRequest *request, uint8_t *data, size_t l
     LOGI(TAG, "Pad %u save prepared at %lu ms", g_pad_post.page,
          (unsigned long)(millis() - save_started_ms));
 
-    const char* err = validate_pad_json(prepared_json, prepared_len);
-    if (err) {
-        LOGW(TAG, "Validation failed for page %u: %s", g_pad_post.page, err);
-        web_portal_send_json_error(request, 400, err);
-        heap_caps_free(prepared_json);
-        pad_post_reset();
-        return;
-    }
-    LOGI(TAG, "Pad %u save validated at %lu ms", g_pad_post.page,
-         (unsigned long)(millis() - save_started_ms));
-
+    const PadValidationGeometry geometry = current_pad_validation_geometry();
     const char* save_error = nullptr;
-    if (!pad_config_save_raw(g_pad_post.page, prepared_json, prepared_len, &save_error)) {
+    if (!pad_config_save_raw(g_pad_post.page, prepared_json, prepared_len, &save_error, &geometry)) {
+        LOGW(TAG, "Pad %u save failed: %s", g_pad_post.page, save_error ? save_error : "storage failure");
         web_portal_send_json_error(request, save_error ? 400 : 500,
                                    save_error ? save_error : "Failed to save config");
         heap_caps_free(prepared_json);
@@ -379,13 +359,6 @@ void handlePostPadConfig(AsyncWebServerRequest *request, uint8_t *data, size_t l
     LOGI(TAG, "Page %u config saved", saved_page);
     // Icons are already cached by icon_store_install() from the individual
     // icon uploads that the browser performs before POSTing the config.
-#if HAS_DISPLAY
-    // Refresh the built-in 'pads' list provider so newly added/renamed pads
-    // appear in list widgets without a reboot.
-    list_provider_pads_update(saved_page, true);
-    LOGI(TAG, "Pad %u list updated at %lu ms", saved_page,
-         (unsigned long)(millis() - save_started_ms));
-#endif
 #if HAS_MQTT
     mqtt_sub_store_subscribe_all();
     LOGI(TAG, "Pad %u subscriptions updated at %lu ms", saved_page,
@@ -411,9 +384,6 @@ void handleDeletePadConfig(AsyncWebServerRequest *request) {
         return;
     }
 
-#if HAS_DISPLAY
-    list_provider_pads_update((uint8_t)page, false);
-#endif
 #if HAS_MQTT
     mqtt_sub_store_subscribe_all();
 #endif

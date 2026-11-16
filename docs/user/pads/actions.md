@@ -59,9 +59,10 @@ can interrupt UI/work; do not sequence them as though they were a save barrier.
 ## Navigate between screens
 
 **Navigate to screen** offers currently available screens. Choose **Binding
-value** for a dynamic target such as `[list:pads.selected]`.
+value** for a dynamic target such as `[item:id]` in a List item action.
 The result must be a valid screen ID within 31 UTF-8 bytes.
-A List selection target only resolves with the appropriate selection context.
+An item target only resolves during immediate List item activation; capture it
+in a variable before a pause or later navigation.
 
 Successful Navigate to screen/back/pad sequence wakes the display and resets
 inactivity without disabling the screensaver. Failed navigation does not wake it.

@@ -33,7 +33,7 @@ static void scale_serialize(const ButtonAction& act, JsonObject obj) {
     if (p.value[0])   obj["scale_value"]   = p.value;
 }
 
-// `value` is the single bindable/numeric field: bindable (e.g. a [list:...]
+// `value` is the single bindable/numeric field: bindable (e.g. an [item:...]
 // preset) and the numeric rocker {step} target for cal_weight. Expose it so
 // shared code drives binding resolution + {step} substitution. `command` is
 // structural and never bindable.

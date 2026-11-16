@@ -73,7 +73,7 @@ FEATURES = {
     ),
     "Native extensions (HAS_NATIVE_EXTENSIONS)": (("native_extension*.cpp.o",), ()),
     "Bindings / expressions": (
-        ("*binding*.cpp.o", "expr_eval.cpp.o", "data_stream.cpp.o", "list_provider*.cpp.o"), (),
+        ("*binding*.cpp.o", "expr_eval.cpp.o", "data_stream.cpp.o", "list_source*.cpp.o"), (),
     ),
     "Actions": (
         ("action*.cpp.o", "boot_actions.cpp.o", "swipe_actions.cpp.o", "key_sequence*.cpp.o"),

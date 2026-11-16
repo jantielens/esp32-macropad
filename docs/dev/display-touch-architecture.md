@@ -1218,7 +1218,7 @@ content remain subject to button clipping.
 The table widget consumes a structured JSON payload, not plain formatted text.
 
 **Binding constraints:**
-- Use an exact single-token data binding template such as `[health:table]` or `[health:extended_table]`
+- Use an exact single-token data binding template such as `[mqtt:devices/table;.]`
 - Do not add static prefix or suffix text around the token
 - Do not add a format parameter in the binding token
 
@@ -1250,10 +1250,17 @@ Contract semantics:
 - a cell may be a primitive value or an object with `text`, `bg`, and `color`
 - if `columns` is absent, the widget derives columns from the first non-meta row keys
 
-Current built-in sources:
-- `health:table` returns the standard status table schema
-- `health:extended_table` returns the standard schema plus extra static device rows
-- both payloads are built in `health_table_builder.cpp` and routed from `health_binding.cpp`
+Local device health uses the typed `[health:metrics]` List source instead.
+Its main-loop adapter reads telemetry only while demanded and publishes shared
+strict-PSRAM snapshots at approximately two-second intervals. Items contain raw
+values, units, and optional severity, not Table payloads or colors. The generic
+List reuses row objects when ordered item IDs are unchanged and only updates
+changed text/styles; an identical snapshot does not cancel a press.
+
+List-owned configurations, snapshots, row bookkeeping, and text caches use
+PSRAM-only storage. List visuals use the shared LVGL allocator, which prefers
+PSRAM and falls back to internal RAM on allocation failure. Row geometry is
+updated as a batch before recalculating the scrolling layout and indicator.
 
 ## Rendering System
 
@@ -2713,7 +2720,7 @@ setter: LVGL applies layout changes lazily, so immediate getters can return the
 previous zone and cause cumulative drift. Repeated flashes cancel the pending
 timer and restore this fixed rectangle before choosing a new zone. Teardown
 deletes the timer before deleting the owning objects. List rows remain generic
-objects with background-aware pressed recoloring and 30/80 ms transitions.
+objects and use configured selected-row styling rather than these press transitions.
 
 ### Mousepad And Scrollpad Touch Ownership
 

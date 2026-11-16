@@ -1793,6 +1793,11 @@ class PortalHandler(SimpleHTTPRequestHandler):
                     widget for widget in self.server.pad_fixture["widget_catalog"]
                     if widget.get("type") != "slider" or info["has_touch"]
                 ]
+                info["list_sources"] = [
+                    source for source in self.server.pad_fixture["list_sources"]
+                    if source["token"] != "[voice_note:recent_notes]"
+                    or self._profile() == "reterminal-sticky-interactive"
+                ]
         return info
 
     def _health(self):

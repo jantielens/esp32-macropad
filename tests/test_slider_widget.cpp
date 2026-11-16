@@ -963,7 +963,7 @@ protected:
         lv_obj_set_size(button, 200, 80);
         lv_obj_add_event_cb(lv_screen_active(), [](lv_event_t* event) {
             auto* self = static_cast<OptionSelectorNativeWidget*>(lv_event_get_user_data(event));
-            const auto* feedback = static_cast<const OptionSelectorFeedback*>(lv_event_get_param(event));
+            const auto* feedback = static_cast<const WidgetPressFeedback*>(lv_event_get_param(event));
             self->feedback_events.push_back(feedback->event);
         }, LV_EVENT_VALUE_CHANGED, this);
         g_selector_config = {};

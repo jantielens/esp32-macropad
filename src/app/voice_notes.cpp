@@ -22,6 +22,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>
+#include <atomic>
 #include <ctype.h>
 #include <string.h>
 #include <time.h>
@@ -39,6 +40,7 @@ constexpr size_t kPathSize = 96;
 const char* const kIndexFields[] = {"size_bytes", "duration_ms", "sample_rate", "channels"};
 FsIndexedStore g_store(kDirectory, kIndexFields, 4, nullptr, 0, ".wav",
                        voice_notes_metadata_read_metadata);
+std::atomic<uint32_t> g_catalog_revision{0};
 SemaphoreHandle_t g_catalog_mutex = nullptr;
 TaskHandle_t g_worker = nullptr;
 TaskHandle_t g_capture_worker = nullptr;
@@ -506,6 +508,7 @@ bool publish(Session& session) {
         const bool removed = registered ? g_store.remove(session.id) : Storage.remove(session.completed);
         if (!removed) LOGE(TAG, "Cannot remove unpublished note");
     }
+    if (renamed) g_catalog_revision.fetch_add(1, std::memory_order_release);
     xSemaphoreGive(g_catalog_mutex);
     if (!success && !cancelled()) set_error("Cannot publish recording", true);
     return success;
@@ -790,6 +793,46 @@ static bool artifact_path_if_present(const char* id, VoiceNoteArtifact artifact,
     return Storage.exists(path);
 }
 
+static bool populate_artifact_metadata(JsonObject entry, size_t allocation_limit) {
+    const char* id = entry["id"];
+    if (!id) return false;
+    char path[kPathSize];
+    entry["has_transcript"] = artifact_path_if_present(id, VoiceNoteArtifact::Transcript, path, sizeof(path));
+    const bool has_enrichment = artifact_path_if_present(id, VoiceNoteArtifact::Enrichment, path, sizeof(path));
+    entry["has_enrichment"] = has_enrichment;
+    entry["title"] = nullptr;
+    entry["enrichment_error"] = "";
+    if (!has_enrichment) return true;
+    File file = Storage.open(path, "r");
+    if (!file) {
+        entry["enrichment_error"] = "Saved title and summary unavailable";
+        return true;
+    }
+    BoundedPsramJsonAllocator allocator(allocation_limit);
+    JsonDocument filter(&allocator), saved(&allocator);
+    filter["enrichment"]["title"] = true;
+    if (filter.overflowed()) {
+        file.close();
+        return false;
+    }
+    const DeserializationError error = deserializeJson(saved, file, DeserializationOption::Filter(filter));
+    file.close();
+    if (error == DeserializationError::NoMemory || saved.overflowed()) return false;
+    JsonString title = saved["enrichment"]["title"].as<JsonString>();
+    bool nonblank = false;
+    if (title.c_str() && strlen(title.c_str()) == title.size()) {
+        for (size_t i = 0; i < title.size(); ++i) {
+            if (!isspace(static_cast<unsigned char>(title.c_str()[i]))) {
+                nonblank = true;
+                break;
+            }
+        }
+    }
+    if (error || !nonblank) entry["enrichment_error"] = "Saved title and summary are invalid";
+    else entry["title"] = JsonString(title.c_str(), title.size(), JsonString::Copied);
+    return true;
+}
+
 bool voice_notes_list(JsonDocument& output) {
     if (!g_initialized || xSemaphoreTake(g_catalog_mutex, portMAX_DELAY) != pdTRUE) return false;
     bool valid = g_store.copy_manifest(output);
@@ -797,48 +840,9 @@ bool voice_notes_list(JsonDocument& output) {
     valid = valid && !entries.isNull();
     if (valid) {
         for (JsonObject entry : entries) {
-            const char* id = entry["id"];
-            if (!id) { valid = false; break; }
-            char path[kPathSize];
-            entry["has_transcript"] =
-                artifact_path_if_present(id, VoiceNoteArtifact::Transcript, path, sizeof(path));
-            const bool has_enrichment =
-                artifact_path_if_present(id, VoiceNoteArtifact::Enrichment, path, sizeof(path));
-            entry["has_enrichment"] = has_enrichment;
-            entry["title"] = nullptr;
-            entry["enrichment_error"] = "";
-            if (has_enrichment) {
-                File file = Storage.open(path, "r");
-                if (!file) {
-                    entry["enrichment_error"] = "Saved title and summary unavailable";
-                    continue;
-                }
-                BoundedPsramJsonAllocator allocator(heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-                JsonDocument filter(&allocator), saved(&allocator);
-                filter["enrichment"]["title"] = true;
-                if (filter.overflowed()) {
-                    file.close();
-                    valid = false;
-                    break;
-                }
-                const DeserializationError error = deserializeJson(saved, file, DeserializationOption::Filter(filter));
-                file.close();
-                if (error == DeserializationError::NoMemory || saved.overflowed()) {
-                    valid = false;
-                    break;
-                }
-                JsonString title = saved["enrichment"]["title"].as<JsonString>();
-                bool nonblank = false;
-                if (title.c_str() && strlen(title.c_str()) == title.size()) {
-                    for (size_t i = 0; i < title.size(); ++i) {
-                        if (!isspace(static_cast<unsigned char>(title.c_str()[i]))) {
-                            nonblank = true;
-                            break;
-                        }
-                    }
-                }
-                if (error || !nonblank) entry["enrichment_error"] = "Saved title and summary are invalid";
-                else entry["title"] = JsonString(title.c_str(), title.size(), JsonString::Copied);
+            if (!populate_artifact_metadata(entry, heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT))) {
+                valid = false;
+                break;
             }
         }
     }
@@ -849,6 +853,52 @@ bool voice_notes_list(JsonDocument& output) {
     }
     xSemaphoreGive(g_catalog_mutex);
     return valid;
+}
+
+uint32_t voice_notes_catalog_revision() {
+    return g_catalog_revision.load(std::memory_order_acquire);
+}
+
+VoiceNoteRecentResult voice_notes_select_recent(JsonDocument& output, size_t limit) {
+    VoiceNoteSnapshot before = {};
+    voice_notes_snapshot(&before);
+    if (before.session_active) return VoiceNoteRecentResult::Deferred;
+    if (!g_initialized || xSemaphoreTake(g_catalog_mutex, portMAX_DELAY) != pdTRUE)
+        return VoiceNoteRecentResult::Error;
+    VoiceNoteSnapshot current = {};
+    voice_notes_snapshot(&current);
+    const bool interrupted = current.session_active ||
+        current.recording_generation != before.recording_generation;
+    const bool copied = !interrupted && g_store.copy_recent(output, limit);
+    xSemaphoreGive(g_catalog_mutex);
+    if (interrupted) return VoiceNoteRecentResult::Deferred;
+    if (!copied) {
+        LOGE(TAG, "Cannot select recent notes");
+        return VoiceNoteRecentResult::Error;
+    }
+    return VoiceNoteRecentResult::Ready;
+}
+
+VoiceNoteRecentResult voice_notes_enrich_recent(JsonObject entry) {
+    VoiceNoteSnapshot before = {};
+    voice_notes_snapshot(&before);
+    if (before.session_active) return VoiceNoteRecentResult::Deferred;
+    if (!g_initialized || entry.isNull() || xSemaphoreTake(g_catalog_mutex, portMAX_DELAY) != pdTRUE)
+        return VoiceNoteRecentResult::Error;
+    VoiceNoteSnapshot current = {};
+    voice_notes_snapshot(&current);
+    const bool interrupted = current.session_active ||
+        current.recording_generation != before.recording_generation;
+    const char* id = entry["id"];
+    const bool valid = !interrupted && id && g_store.exists(id) &&
+        populate_artifact_metadata(entry, 32 * 1024);
+    xSemaphoreGive(g_catalog_mutex);
+    if (interrupted) return VoiceNoteRecentResult::Deferred;
+    if (!valid) {
+        LOGE(TAG, "Cannot read recent note metadata");
+        return VoiceNoteRecentResult::Error;
+    }
+    return VoiceNoteRecentResult::Ready;
 }
 
 bool voice_notes_read_metadata(const char* id, JsonObject output) {
@@ -1005,10 +1055,13 @@ bool voice_notes_write_artifact(const char* id, VoiceNoteArtifact artifact,
     snprintf(path, sizeof(path), "%s/%s%s", kDirectory, id, artifact_suffix(artifact));
     snprintf(backup, sizeof(backup), "%s/%s%s.bak", kDirectory, id, artifact_suffix(artifact));
     if (!Storage.exists(path) && Storage.exists(backup) && !Storage.rename(backup, path)) {
+        g_catalog_revision.fetch_add(1, std::memory_order_release);
         LOGE(TAG, "Cannot restore note artifact backup for %s", id);
         return false;
     }
-    if (!storage_write_atomic(path, json, length)) {
+    const bool written = storage_write_atomic(path, json, length);
+    g_catalog_revision.fetch_add(1, std::memory_order_release);
+    if (!written) {
         LOGE(TAG, "Cannot save note artifact for %s", id);
         return false;
     }
@@ -1038,6 +1091,7 @@ VoiceNoteFileStatus voice_notes_remove(const char* id) {
                 }
             }
             if (removed) removed = g_store.remove(id);
+            if (guard) g_catalog_revision.fetch_add(1, std::memory_order_release);
             result = removed ? VoiceNoteFileStatus::Ready : VoiceNoteFileStatus::Error;
         }
     }

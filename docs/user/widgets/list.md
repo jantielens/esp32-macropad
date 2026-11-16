@@ -1,62 +1,124 @@
 ---
-title: List items and selection actions
-description: Choose a provider, resolve its selected item, and apply the complete include/exclude filter language.
+title: Browse and activate List items
+description: Configure a List source, row labels, item actions, and separate navigation controls.
 ---
 
-A List displays selectable items supplied by a device feature, such as saved
-pads or instrument test definitions. Selecting an item makes its ID available
-to configured actions, so one control can operate on several choices.
+A List displays a bounded collection on a pad. Each row can show two labels
+and run actions for its item. Lists sharing a source share its data, while
+each List keeps its own focus and viewport.
 
-## Choose a provider and action
+## Configure a List
 
-Select List in Button Content. Data Binding is a provider ID, not an MQTT
-token. For a pad chooser, use `pads`.
-Set its tap action to Navigate to screen, Target Screen **Binding value**:
+1. In the pad editor, choose **List** for a button's content.
+2. Keep the generated **List ID**, or enter another ID unique on the pad.
+   IDs contain 1-32 ASCII letters, digits, underscores, or hyphens.
+3. Choose a **Source**. The available fields appear below it.
+4. Configure the top and optional bottom label. For recent notes, try
+   `[item:title|Untitled]` and `[item:created_at|Unknown]`. Use **Aa** beside
+   a label to override its style and **?** for the style reference.
+5. Add item tap or long-press actions and choose **Save Pad**.
+
+The source is one collection token, not a scalar binding or a filter. The
+available sources depend on the device:
+
+* `[pad:pads]`: saved pads in numeric order, with `id` and `title`
+* `[voice_note:recent_notes]`: up to 20 recent notes, newest first; optional
+  titles and creation times may be unavailable
+* `[shutter:tests]`: guided test definitions, with `id`, optional `title`,
+  `shots_per_speed`, and `speed_count`
+* `[health:metrics]`: local device health; see [Display device health](#display-device-health)
+
+The default top label is `[item:title|Untitled]`. When a title is unavailable,
+the label shows `Untitled`. In labels, unknown or missing item fields use the
+specified fallback, or `---` when no fallback is provided. Check the source's
+available fields if you see an unexpected fallback. Labels and row colors accept
+normal bindings as well as item fields. Styles use the existing label style syntax;
+List labels support `font`, `font_size`, `font_metrics`, `align`, and `color`.
+Position offsets (`x`, `y`) and `font_upscale` are ignored. Labels always use
+single-line ellipsis (`mode:dot`); other modes are rejected. Only `color`
+accepts bindings. Under **Item layout**, **Visible items** defaults to **0 (Auto)**.
+Auto fits as many rows as the List height allows using the label fonts, reserving
+space for the bottom label when its template is configured. Rows target a
+minimum height of 44 px, with at least 8 px of vertical breathing room per side
+when space permits. Capacity stays independent of item count and resolved text.
+Set **1-20** to choose an explicit count instead. Both modes distribute remaining
+height across rows. A List too short for one comfortable row still shows one;
+content that does not fit is clipped.
+
+Row background and border defaults come from device-wide button defaults.
+You can override the background and border for all rows, and separately set
+the selected row's background, border, and label colors under **Item appearance**
+and **Selected item appearance**. Selected colors inherit the normal row colors except
+the border, which uses the button border
+color, or foreground color when the default button border has zero width.
+The selected border defaults to twice the button default width, at least 2 px.
+
+## Navigate and activate
+
+Tap a row to select it and run its tap actions. A long press selects the row
+and runs its long-press actions. Swipe within a scrolling List, or add
+**Navigate List** actions targeting the List ID for **Previous page** and
+**Next page**. Paging does not change selection, even when the selected item
+is off-screen. A List starts with no selection; hiding it clears selection.
+Choose **Paged** for a non-animated viewport on slow displays, or leave
+**Viewport** at the board default. Item selection requires touch.
+
+**Allow selection** under **Selected item appearance** is on by default.
+Turn it off for a navigation List: rows still run their tap and long-press
+actions, but do not retain a selected appearance.
+
+Selecting a row uses the configured button feedback sounds even without item
+actions. Rows with selection or actions use button press highlighting when
+animations are enabled. Actions that provide their own audio suppress the
+default feedback sound. Rows without selection or actions give no feedback.
+Scrolling cancels the press feedback; paging does not flash the List.
+
+When items extend beyond the viewport, a position indicator appears to the
+right. Its opaque track and indicator colors default to the device-wide button
+background and foreground; override them under **Position indicator** if needed.
+These colors accept scalar bindings, but not item bindings.
+
+An item binding is available only while its row renders or its immediate
+actions run. If an action references an unknown or missing field without a
+fallback, the action fails and the remaining actions do not run. Provide a
+fallback when appropriate. Before a delay, confirmation, or navigation, use
+**Set variable** to capture `[item:id]`. Later actions can read that value as `[var:name]`.
+For example, a pad chooser can navigate directly to `[item:id]` in the
+item's Navigate to screen action. See [runtime variables](../pads/actions.md#set-a-runtime-variable).
+
+Loading, empty, and source-error states appear in the List.
+Lists require a display and PSRAM. Existing
+provider/filter Lists and `[list:...selected]` bindings must be reconfigured;
+they are not migrated automatically.
+
+## Display device health
+
+Choose **Device health** as the Source. Set the top label to `[item:title]`
+and the bottom label to `[item:value|Unavailable] [item:unit]`. Turn off
+**Allow selection** for a read-only display, leave item actions empty, and
+choose how many items should fit on screen.
+
+The source supplies raw numbers or text, not formatted labels or colors.
+Memory values are bytes, uptime is seconds, and unavailable values are absent.
+The optional `severity` field is `normal`, `warning`, `critical`, or `unknown`
+for assessed metrics; informational rows have no severity.
+An unknown assessment is not a healthy reading.
+
+Use the existing label expressions to format numbers or map severity to
+your preferred colors. For example, a bottom-label style can include:
 
 ```text
-[list:pads.selected]
+color:[expr:[item:severity|unknown]=="critical"?"#dc2626":"#808080"]
 ```
 
-Save Pad, enter it on the device, and tap an item.
-The item supplies an ID, not just its visible label.
-Tap/hold dispatches the corresponding button action list once; parent button
-handlers do not run a second time. Without actions, selection has no external
-effect.
+This example highlights critical values in red and leaves other values gray.
+These are example colors, not source defaults. On monochrome displays, show
+`[item:severity|]` as text instead of relying on color.
 
-Providers refresh on screen entry. Source not found means the provider is
-unavailable in this firmware; No items means it returned an empty list.
-Use the live Binding reference for installed providers.
-
-## Filter items
-
-Filter is plain comma-separated text, not a binding template:
-
-| Rule         | Match                                           |
-| ------------ | ----------------------------------------------- |
-| Empty or `*` | Everything                                      |
-| `pad_3`      | Exact ID or label, case-insensitive             |
-| `pad_*`      | Glob; `*` means any sequence, `?` one character |
-| `*Home*`     | ID/label containing Home                        |
-| `#5`         | Original provider index 5, zero-based           |
-| `#0-3`       | Inclusive original indices 0 through 3          |
-| `!rule`      | Exclude any matching rule                       |
-
-An item needs any positive match and no exclusion match.
-With only exclusions, items start included.
-Use `#0,#2,#4` for separate indices, not a comma-list after one `#`.
-Examples: `pad_*,!pad_5`, `*Home*,*Office*`, or `!pad_0`.
-Filtering does not renumber the original indices.
-
-## Use the selected value carefully
-
-`[list:provider.selected]` is the last selection for that provider.
-Before selection it is unavailable. Selection state is shared per provider,
-not private to every widget using that provider.
-A selection-triggered action has the intended current value; do not assume a
-boot/MQTT event selects a list item for you.
-
-Specialized providers include brew templates and
-[shutter test scripts](../specialized/shutter-tester/sessions.md).
-Their IDs belong in the action's appropriate value field.
+Health snapshots refresh about every two seconds while a health List is
+visible; display updates still follow the device's binding and e-paper cadence.
+Multiple health Lists share the same data. The old `[health:table]` and
+`[health:extended_table]` bindings are no longer supported. Reconfigure those
+buttons as Lists; saved pads are not rewritten automatically.
 
 [Widget chooser](README.md) | [User guides](../README.md)

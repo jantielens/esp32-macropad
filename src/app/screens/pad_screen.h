@@ -280,6 +280,9 @@ public:
     bool buttonIsOverlay(const ButtonTile* tile) const { return isOverlayButton(tile); }
 #if HAS_DISPLAY
     bool navigateButtons(const char* command);
+#if HAS_PSRAM
+    bool navigateList(const char* target, const char* command);
+#endif
 #endif
 };
 

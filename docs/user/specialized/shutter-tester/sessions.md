@@ -41,8 +41,10 @@ whole file; inspect the parsed list after Save.
 At most 16 scripts and 32 speed entries per script are retained.
 Keep IDs within 16 bytes, names within 63, and speed text within 15.
 Repeated IDs replace earlier definitions.
-A List using provider `shutter_tests` can start `guide_start` with
-`[list:shutter_tests.selected]` from that List's action.
+A [List](../../widgets/list.md) using `[shutter:tests]` can start
+`guide_start` with `[item:id]` in its item action. The List source rejects
+duplicate or oversized IDs and excess scripts rather than publishing a
+partial collection.
 
 ## Verify saving
 

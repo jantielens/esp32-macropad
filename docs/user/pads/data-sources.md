@@ -146,9 +146,9 @@ proof of a fresh sample. `[audio:input.rms]`, `input.peak`, and `input.active`
 report microphone level/activity on capable firmware; visible binding demand
 starts sampling. Music analysis is a [separate source](../media/audio.md).
 
-Health describes this device, not a remote server. For structured health rows,
-use `[health:table]` or `[health:extended_table]` with the
-[Table widget](../widgets/table.md).
+Health describes this device, not a remote server. To browse local health
+metrics, use `[health:metrics]` as a
+[List source](../widgets/list.md#display-device-health).
 
 ## Show battery information
 

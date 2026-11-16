@@ -24,6 +24,7 @@ bool visit_screen_fields(ButtonAction& act, ActionFieldVisitor visitor, void* co
 bool screen_available() { return HAS_DISPLAY; }
 const char* validate_screen(const JsonObjectConst action) { return action.containsKey("target") && !action["target"].is<const char*>() ? "screen target must be a string" : nullptr; }
 void describe_screen(JsonObject& action) { action["group"] = "Navigation"; action["label"] = "Navigate to screen"; JsonArray fields = action.createNestedArray("fields"); JsonObject target = fields.createNestedObject(); target["name"] = "target"; target["description"] = "screen id to navigate to"; }
-DEFINE_AND_REGISTER_ACTION_TYPE(kScreenActionType, ACTION_TYPE_SCREEN, parse_screen, serialize_screen, dispatch_screen, visit_screen_fields, describe_screen, screen_available, validate_screen, ACTION_EXECUTION_SYNC);
+DEFINE_AND_REGISTER_ACTION_TYPE(kScreenActionType, ACTION_TYPE_SCREEN, parse_screen, serialize_screen, dispatch_screen, visit_screen_fields, describe_screen, screen_available, validate_screen, ACTION_EXECUTION_SYNC, true, true, false,
+    [](const ButtonAction&) { return true; });
 } // namespace
 #endif // HAS_DISPLAY || HAS_BUTTON

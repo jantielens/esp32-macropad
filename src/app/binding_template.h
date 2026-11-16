@@ -289,23 +289,36 @@ BindingResolverStatus binding_template_resolve_status(const char* templ, char* o
                                                       size_t out_len);
 
 // Resolve a template only when it is exactly one binding token with no
-// surrounding static text, e.g. "[health:table]".
+// surrounding static text, e.g. "[mqtt:devices/table;.]".
 // This bypasses the small internal token scratch buffer used by the generic
 // resolver and forwards out_len directly to the scheme resolver.
 // Returns true when templ matched the exact single-token shape. Output is
 // always populated with either resolved content, a fallback, or an error.
 bool binding_template_resolve_single_token(const char* templ, char* out, size_t out_len);
 
+struct BindingTokenView {
+    const char* scheme;
+    size_t scheme_len;
+    const char* params;
+    size_t params_len;
+};
+
+// Inspect one complete token without resolving it. The view borrows templ.
+bool binding_template_single_token(const char* templ, BindingTokenView* token);
+
 // Scan a template string and call the collector for each binding token.
 // Used by mqtt_sub_store to discover topics to subscribe.
 void binding_template_collect_topics(const char* templ, void* user_data);
 
 // Visit tokens (including expression children) without invoking transport-owned
-// collectors. Runs on the binding/LVGL task like resolution.
+// collectors. The scan has no shared state; callbacks must be thread-safe.
 typedef void (*binding_token_visitor_fn)(const char* scheme, size_t scheme_len,
                                          const char* params, void* context);
 void binding_template_visit_tokens(const char* templ, binding_token_visitor_fn visitor,
                                    void* context);
+// Returns false if a parameter or nesting depth exceeds the scan limits.
+bool binding_template_visit_tokens_checked(const char* templ, binding_token_visitor_fn visitor,
+                                           void* context);
 
 #ifdef __cplusplus
 }

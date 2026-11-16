@@ -6,6 +6,12 @@
 #include <cstddef>
 #include <cstdint>
 
+#if LIST_TEST_BUTTON_DEFAULTS
+#include "button_defaults.h"
+ButtonDefaults list_test_defaults{};
+const ButtonDefaults* button_defaults_get() { return &list_test_defaults; }
+#endif
+
 #if ALARM_ENABLED
 bool __attribute__((weak)) alarm_command_submit(const char*, uint8_t, int, uint8_t) { return false; }
 void __attribute__((weak)) alarm_command_report_error(const char*) {}

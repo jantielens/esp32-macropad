@@ -108,6 +108,9 @@ private:
 		Screen* pendingHistoryScreen = nullptr;
 		bool pendingScreenInteractive = false;
 		uint64_t pendingScreenRequestedUs = 0;
+#if HAS_PSRAM
+		uint32_t screenIntentGeneration = 0;
+#endif
 		void queueScreenIntent(bool interactive);
 		void prepareNavigationWake();
 
@@ -209,6 +212,11 @@ public:
 
 		// Queue the next eligible pad relative to the queued or current screen.
 		bool cyclePad(int8_t direction, bool wrap, uint32_t excludedMask, bool wake = false);
+
+#if HAS_PSRAM
+		bool captureListNavigation(uint32_t* generation);
+		bool navigateList(const char* target, const char* command, uint32_t generation);
+#endif
 		
 		// Get current screen ID (returns nullptr if splash or no screen)
 		const char* getCurrentScreenId();

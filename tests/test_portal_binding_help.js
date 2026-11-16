@@ -66,20 +66,20 @@ assert.ok(!context.bindingHelpKeyMatches('*.selected', 'a.b.selected'));
 assert.strictEqual(context.bindingHelpDisplayKey('seg_time:#'), 'seg_time:N');
 
 assert.strictEqual(context.bindingHelpKeyToken(scheme('timer'), '#_state'), '[timer:1_state]');
-assert.strictEqual(context.bindingHelpKeyToken(scheme('list'), '*.selected'), '[list:fixture.selected]');
+assert.strictEqual(context.bindingHelpKeyToken(scheme('item'), '*'), '[item:id]');
 assert.strictEqual(context.bindingHelpKeyToken(scheme('health'), 'cpu'), '[health:cpu]');
 assert.strictEqual(context.bindingHelpSignature(scheme('mqtt')), '[mqtt:topic;path?;format?]');
 
 const categories = context.bindingHelpCategories(fixture.schemes).map(entry => entry[0]);
 assert.strictEqual(JSON.stringify(categories.slice(0, 4)), '["Data","Device","Time","Logic"]');
 
-// Key names outrank description matches: "ble" finds ble_* keys before "table".
+// Health search still finds scalar BLE keys after removing the Table bindings.
 const results = context.bindingHelpSearch(fixture.schemes, 'ble');
 const health = results.find(group => group.title === 'health');
 assert.ok(health, 'health has ble matches');
 assert.match(health.hits[0].doc.key, /^ble_/);
-assert.ok(health.hits.findIndex(hit => hit.doc && hit.doc.key === 'table') >
-          health.hits.findIndex(hit => hit.doc && hit.doc.key === 'ble_status'));
+assert.ok(!scheme('health').keys.includes('table'));
+assert.ok(!scheme('health').keys.includes('extended_table'));
 assert.ok(context.bindingHelpSearch(fixture.schemes, '%V').some(group => group.title === 'Format strings'));
 assert.ok(context.bindingHelpSearch(fixture.schemes, 'threshold').some(group => group.title === 'expr'));
 assert.strictEqual(context.bindingHelpSearch(fixture.schemes, 'zzzz-no-match').length, 0);
@@ -1567,9 +1567,9 @@ delete context.testHelpSchemes;
                 scheme.name + ' format presets');
             continue;
         }
-        if (scheme.name === 'var') {
-            assert.ok(catalogKeys.some(candidate => candidate.reference.scheme === 'var' &&
-                candidate.reference.params[0] === 'id'), 'var exposes a dynamic-name placeholder');
+        if (scheme.name === 'var' || scheme.name === 'item') {
+            assert.ok(catalogKeys.some(candidate => candidate.reference.scheme === scheme.name &&
+                candidate.reference.params[0] === 'id'), scheme.name + ' exposes a dynamic-name placeholder');
             continue;
         }
         for (const key of scheme.free_form ? [''] : scheme.keys) {

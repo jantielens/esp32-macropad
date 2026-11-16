@@ -290,6 +290,8 @@ int main(int argc, char**) {
     assert(voice_notes_command(VoiceNoteCommand::Pause, 2));
     assert(wait_completion(2));
     assert(snapshot().state == VoiceNoteState::Paused && owned);
+    JsonDocument recent_while_recording;
+    assert(voice_notes_select_recent(recent_while_recording, 20) == VoiceNoteRecentResult::Deferred);
     const uint64_t paused_duration = snapshot().duration_ms;
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
     assert(snapshot().duration_ms == paused_duration);
@@ -301,6 +303,8 @@ int main(int argc, char**) {
     assert(saved.state == VoiceNoteState::Idle && !owned && saved.last_clip[0]);
     assert(!saved.scenario[0]);
     assert(voice_notes_exists(saved.last_clip));
+    const uint32_t saved_revision = voice_notes_catalog_revision();
+    assert(saved_revision != 0);
     wait_until([&] { return matching_logs("Recording saved", saved.last_clip) == 1; });
     assert(matching_logs("Recording started", saved.last_clip) == 1);
     assert(matching_logs("Recording paused", saved.last_clip) == 1);
@@ -344,6 +348,7 @@ int main(int argc, char**) {
     assert(voice_notes_open(saved.last_clip, &other) == VoiceNoteFileStatus::Ready);
     assert(voice_notes_write_artifact(saved.last_clip, VoiceNoteArtifact::Transcript,
         reinterpret_cast<const uint8_t*>(first_transcript), strlen(first_transcript)));
+    assert(voice_notes_catalog_revision() != saved_revision);
     assert(voice_notes_has_artifact(saved.last_clip, VoiceNoteArtifact::Transcript));
     catalog.clear();
     assert(voice_notes_list(catalog));
@@ -383,6 +388,15 @@ int main(int argc, char**) {
         assert(catalog["entries"][0]["has_enrichment"].as<bool>());
         assert(strcmp(catalog["entries"][0]["title"], "First title") == 0);
         assert(strcmp(catalog["entries"][0]["enrichment_error"], "") == 0);
+        BoundedPsramJsonAllocator recent_allocator(32768);
+        JsonDocument recent(&recent_allocator);
+        assert(voice_notes_select_recent(recent, 20) == VoiceNoteRecentResult::Ready);
+        assert(recent.size() == 1);
+        JsonObject selected = recent[0];
+        assert(voice_notes_enrich_recent(selected) == VoiceNoteRecentResult::Ready);
+        assert(strcmp(selected["id"], saved.last_clip) == 0);
+        assert(strcmp(selected["title"], "First title") == 0);
+        assert(selected["has_transcript"].as<bool>() && selected["has_enrichment"].as<bool>());
     }
     const String enrichment_path = String("/storage/voice-notes/") + saved.last_clip + ".enrichment.json";
     const String enrichment_backup = enrichment_path + ".bak";

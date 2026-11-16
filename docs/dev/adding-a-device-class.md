@@ -60,7 +60,7 @@ flag form `IS_FOO`, enum `FOO`):
 | 8 | `src/app/device_classes/foo/` | All feature code lives here | device_classes/shutter_tester/ |
 
 The next sections cover each touchpoint in detail, plus optional touchpoints
-(portal components, web routes, widgets, action types, list providers).
+(portal components, web routes, widgets, action types, List sources).
 
 ## 1. Register the Class Identity
 
@@ -222,7 +222,7 @@ fill in only what you need.
 | Hook | When called | Typical use |
 |---|---|---|
 | `on_setup_early` | After config load, before WiFi/portal | One-shot hardware init that the rest of setup depends on |
-| `on_setup_late` | After WiFi/AP/portal | Sensor/measurement init, binding/list-provider registration |
+| `on_setup_late` | After WiFi/AP/portal | Sensor/measurement init, binding/List source registration |
 | `on_normal_runtime` | Once in shared normal startup, including live Continue offline | Runtime workers that must not start while setup AP is active |
 | `on_loop` | Every `loop()` iteration | Drain queues, process captured data (must not block) |
 | `run_duty_cycle` | When `owned_mode` matches boot mode | Owns the entire duty cycle for the mode |
@@ -417,7 +417,7 @@ does not move `sizeof(ActionPayload)`. If your payload exceeds 96 B, prefer
 raising it in `board_overrides.h` of the boards that ship the class rather
 than raising the default — that would cost every board.
 
-### 4.6 Bindings, List Providers, Pad Blocks
+### 4.6 Bindings, List Sources, Pad Blocks
 
 These all use registration-based APIs called from `on_setup_late`:
 
@@ -425,8 +425,11 @@ These all use registration-based APIs called from `on_setup_late`:
   collector, spec)` from the class's binding init function, then invoke that
   function from the class's `on_setup_late` hook. Device-class schemes remain
   with their owner and are not added to `binding_builtin_schemes.cpp`.
-- **List provider**: `list_provider_register(...)` exposes a `[list:foo.selected]`
-  data source.
+- **List source**: register a `ListSourceDescriptor` with `list_source_register`.
+  Its token, fields, revision, incremental loader, and cleanup callbacks define
+  a bounded collection. Prefer a string `title` field for the default row label;
+  it may be optional if an item has no title. See the shutter test source for
+  an implementation.
 - **Pad block**: `pad_block_register(...)` adds pre-configured button groups
   to the pad editor.
 

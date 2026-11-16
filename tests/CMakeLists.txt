@@ -816,13 +816,6 @@ add_host_legacy_test(test_music_binding
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
 )
 
-add_host_legacy_test(test_health_table_builder
-    SOURCES test_health_table_builder.cpp ${PROJECT_SOURCE_DIR}/src/app/health_table_builder.cpp stubs.cpp
-    INCLUDES ${HOST_ARDUINOJSON_DIR}
-    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
-    LIBRARIES m
-)
-
 add_host_legacy_test(test_pad_binding
     SOURCES test_pad_binding.cpp
         ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp
@@ -934,6 +927,12 @@ add_host_legacy_test(test_action_parse
     OPTIONS -Wno-deprecated-declarations
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
 )
+add_host_gtest(test_list_navigation_action test_list_navigation_action.cpp)
+target_include_directories(test_list_navigation_action PRIVATE ${HOST_ARDUINOJSON_DIR})
+target_compile_options(test_list_navigation_action PRIVATE -Wno-deprecated-declarations
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/Arduino.h"
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h"
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/log_manager.h")
 add_host_legacy_test(test_action_parse_voice_notes
     SOURCES test_action_parse.cpp ${ACTION_TEST_SOURCES} ${PROJECT_SOURCE_DIR}/src/app/action_catalog.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
@@ -978,6 +977,15 @@ add_host_legacy_test(test_runtime_variable_actions_${runtime_profile}
         ${PROJECT_SOURCE_DIR}/tests/runtime_variable_action_overrides/${runtime_profile}_board_config.h
     LIBRARIES pthread m
 )
+if(runtime_profile STREQUAL "display")
+    target_sources(test_runtime_variable_actions_${runtime_profile} PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/app/list_source.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/item_binding.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/item_binding_scheme.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/pad_binding.cpp)
+    target_include_directories(test_runtime_variable_actions_${runtime_profile} BEFORE PRIVATE
+        ${PROJECT_SOURCE_DIR}/tests/list_source_overrides)
+endif()
 endforeach()
 add_host_legacy_test(test_action_continuation
     SOURCES test_action_continuation.cpp ${PROJECT_SOURCE_DIR}/src/app/action_list.cpp ${PROJECT_SOURCE_DIR}/src/app/action_continuation.cpp stubs.cpp
@@ -1118,7 +1126,73 @@ add_host_legacy_test(test_shutter_session_actions
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
 )
 
-add_host_legacy_test(test_list_provider SOURCES test_list_provider.cpp ${PROJECT_SOURCE_DIR}/src/app/list_provider.cpp ${PROJECT_SOURCE_DIR}/src/app/list_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp stubs.cpp PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
+set(LIST_SOURCE_TEST_SOURCES test_list_source.cpp stubs.cpp ${PROJECT_SOURCE_DIR}/src/app/list_source.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/list_source_service.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/list_source_voice_notes.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/widgets/list_config.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/lvgl_heap.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/item_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/item_binding_scheme.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp ${PROJECT_SOURCE_DIR}/src/app/expr_binding.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/expr_eval.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_binding.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/action_parse.cpp ${PROJECT_SOURCE_DIR}/src/app/action_registry.cpp)
+add_host_legacy_test(test_list_source
+    SOURCES ${LIST_SOURCE_TEST_SOURCES}
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/list_source_overrides ${HOST_ARDUINOJSON_DIR} ${HOST_LVGL_DIR}
+    DEFINITIONS HAS_VOICE_NOTES=1 LV_CONF_SKIP=1 LIST_TEST_BUTTON_DEFAULTS=1
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
+        ${PROJECT_SOURCE_DIR}/tests/Arduino.h
+    OPTIONS -Wno-deprecated-declarations
+    LIBRARIES GTest::gtest_main m pthread)
+add_host_legacy_test(test_list_source_health
+    SOURCES ${LIST_SOURCE_TEST_SOURCES} ${PROJECT_SOURCE_DIR}/src/app/list_source_health.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/list_source_overrides ${HOST_ARDUINOJSON_DIR} ${HOST_LVGL_DIR}
+        ${PROJECT_SOURCE_DIR}/src
+    DEFINITIONS HAS_VOICE_NOTES=1 HAS_AUDIO=1 TEST_LIST_SOURCE_HEALTH=1 LV_CONF_SKIP=1 LIST_TEST_BUTTON_DEFAULTS=1
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
+        ${PROJECT_SOURCE_DIR}/tests/Arduino.h
+        ${PROJECT_SOURCE_DIR}/tests/list_source_overrides/health_platform.h
+    OPTIONS -Wno-deprecated-declarations
+    LIBRARIES GTest::gtest_main m pthread)
+set(LIST_WIDGET_TEST_SOURCES ${LIST_SOURCE_TEST_SOURCES})
+list(REMOVE_ITEM LIST_WIDGET_TEST_SOURCES test_list_source.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/list_source_voice_notes.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/lvgl_heap.cpp)
+add_host_gtest(test_list_widget test_list_widget.cpp ${LIST_WIDGET_TEST_SOURCES}
+    ${PROJECT_SOURCE_DIR}/src/app/label_style.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_font_cache.cpp)
+target_include_directories(test_list_widget PRIVATE ${HOST_ARDUINOJSON_DIR} ${HOST_LVGL_DIR})
+target_compile_definitions(test_list_widget PRIVATE LIST_TEST_BUTTON_DEFAULTS=1)
+target_compile_options(test_list_widget PRIVATE -Wno-deprecated-declarations
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/Arduino.h"
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h"
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/log_manager.h")
+target_link_libraries(test_list_widget PRIVATE host_lvgl m)
+add_host_legacy_test(test_list_source_pads
+    SOURCES ${LIST_SOURCE_TEST_SOURCES} ${PROJECT_SOURCE_DIR}/src/app/list_source_pads.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/pad_config_list.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/list_source_overrides
+        ${PROJECT_SOURCE_DIR}/tests/fs_indexed_store_overrides
+        ${PROJECT_SOURCE_DIR}/tests/shutter_session_overrides ${HOST_ARDUINOJSON_DIR} ${HOST_LVGL_DIR}
+    DEFINITIONS HAS_VOICE_NOTES=1 TEST_LIST_SOURCE_PADS=1 HAS_FILESYSTEM=1 USE_SD_STORAGE=0 LIST_TEST_BUTTON_DEFAULTS=1
+        ARDUINOJSON_ENABLE_ARDUINO_STRING=1 LV_CONF_SKIP=1
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
+        ${PROJECT_SOURCE_DIR}/tests/shutter_session_overrides/Arduino.h
+    OPTIONS -Wno-deprecated-declarations
+    LIBRARIES GTest::gtest_main m pthread)
+add_host_legacy_test(test_list_source_shutter
+    SOURCES test_list_source_shutter.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/list_source.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/list_source_service.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester/shutter_test_scripts.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester/list_source_shutter_tests.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/list_source_overrides
+        ${PROJECT_SOURCE_DIR}/tests/fs_indexed_store_overrides
+        ${PROJECT_SOURCE_DIR}/tests/shutter_session_overrides ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS HAS_FILESYSTEM=1 USE_SD_STORAGE=0 ARDUINOJSON_ENABLE_ARDUINO_STRING=1
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
+        ${PROJECT_SOURCE_DIR}/tests/shutter_session_overrides/Arduino.h
+    OPTIONS -Wno-deprecated-declarations
+    LIBRARIES GTest::gtest_main)
 add_host_legacy_test(test_net_activity SOURCES test_net_activity.cpp ${PROJECT_SOURCE_DIR}/src/app/net_activity.cpp)
 add_host_legacy_test(test_epaper_frame_battery SOURCES test_epaper_frame_battery.cpp)
 add_host_legacy_test(test_epaper_frame_media_conformance SOURCES test_epaper_frame_media_conformance.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper_frame/epaper_frame_media_validation.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper_frame/epaper_frame_transport_crc32.cpp LIBRARIES z)
@@ -1170,13 +1244,12 @@ target_link_libraries(test_pad_binding PRIVATE binding_schema_values)
 function(add_binding_schema_profile name definition)
     add_host_legacy_test(test_binding_schema_${name}
         SOURCES test_binding_schema_production.cpp binding_schema_profiles/stubs.cpp
-            ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_builtin_schemes.cpp
+            ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_builtin_schemes.cpp ${PROJECT_SOURCE_DIR}/src/app/item_binding_scheme.cpp
             ${PROJECT_SOURCE_DIR}/src/app/health_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/timer_binding.cpp
             ${PROJECT_SOURCE_DIR}/src/app/sensor_binding.cpp
             ${PROJECT_SOURCE_DIR}/src/app/battery_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/battery_info.cpp
             ${PROJECT_SOURCE_DIR}/src/app/alarm_binding.cpp
             ${PROJECT_SOURCE_DIR}/src/app/music_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/net_binding.cpp
-            ${PROJECT_SOURCE_DIR}/src/app/list_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/list_provider.cpp
             ${PROJECT_SOURCE_DIR}/src/app/expr_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_binding.cpp
             ${PROJECT_SOURCE_DIR}/src/app/camera_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/expr_eval.cpp
             ${PROJECT_SOURCE_DIR}/src/app/time_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp

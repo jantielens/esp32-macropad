@@ -2048,7 +2048,7 @@ body {
   color: var(--portal-text-muted); cursor: pointer; user-select: none;
 }
 .reset-hint:hover { color: var(--portal-primary); }
-.option-color-reset { background: none; border: 0; padding: 0; }
+.option-color-reset, .list-color-reset { background: none; border: 0; padding: 0; }
 
 /* Pad bindings list */
 #pad-bindings-list { display: grid; gap: 10px; }

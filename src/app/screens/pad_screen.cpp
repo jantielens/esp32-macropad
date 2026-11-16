@@ -5,6 +5,9 @@
 #include "../pad_config.h"
 #include "../fill_style_runtime.h"
 #include "../swipe_actions.h"
+#if HAS_PSRAM
+#include "../widgets/list_widget.h"
+#endif
 #include "../pad_layout.h"
 #include "../timer_engine.h"
 #include "../time_binding.h"
@@ -235,6 +238,11 @@ void PadScreen::show() {
 #endif
     for (uint8_t i = 0; i < tileCount; i++) {
         if (tiles[i].widget_type && tiles[i].widget_type->onShow) {
+#if HAS_PSRAM
+            if (!strcmp(tiles[i].widget_type->name, "list") &&
+                (!tiles[i].obj || lv_obj_has_flag(tiles[i].obj, LV_OBJ_FLAG_HIDDEN) ||
+                 lv_obj_has_state(tiles[i].obj, LV_STATE_DISABLED))) continue;
+#endif
             tiles[i].widget_type->onShow(&tiles[i].widget_state);
         }
     }
@@ -333,6 +341,15 @@ void PadScreen::update() {
     // Resolve the first frame before LVGL renders it. Slow-refresh displays
     // should never spend a full waveform showing placeholder binding values.
     pollLiveData(true);
+#if HAS_PSRAM
+    for (uint8_t i = 0; i < tileCount; ++i) {
+        ButtonTile& tile = tiles[i];
+        if (tile.widget_type && !strcmp(tile.widget_type->name, "list") &&
+            tile.obj && !lv_obj_has_flag(tile.obj, LV_OBJ_FLAG_HIDDEN) &&
+            !lv_obj_has_state(tile.obj, LV_STATE_DISABLED))
+            tile.widget_type->onShow(&tile.widget_state);
+    }
+#endif
     refreshNavigationFocus();
 }
 

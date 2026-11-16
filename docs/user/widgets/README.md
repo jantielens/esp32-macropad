@@ -19,7 +19,7 @@ collapsing a section does not disable it.
 * [Slider](slider.md) for touch-based numeric value setting
 * [Option selector](option-selector.md) for choosing one of several named values
 * [Rocker and Numeric Rocker](rockers.md) for adjustments
-* [List](list.md) for provider items and selection actions
+* [List](list.md) for browsing collection items and running item actions
 * [Toggle switch](#toggle-switch) for local state or a reported on/off category
 
 ## Visualize

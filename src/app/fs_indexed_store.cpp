@@ -954,6 +954,62 @@ bool FsIndexedStore::copy_entry(const char* id, JsonObject output) {
     return copied;
 }
 
+bool FsIndexedStore::copy_recent(JsonDocument& output, size_t limit) {
+    output.clear();
+    if (!limit || limit > FS_STORE_RECENT_MAX_ENTRIES) {
+        LOGE(TAG, "Invalid recent selection limit for %s", _base_path);
+        return false;
+    }
+    auto* selected = static_cast<JsonObjectConst*>(
+        heap_caps_malloc(limit * sizeof(JsonObjectConst), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (!selected) {
+        LOGE(TAG, "Cannot allocate recent selection for %s", _base_path);
+        return false;
+    }
+    for (size_t i = 0; i < limit; ++i) new (&selected[i]) JsonObjectConst();
+    bool ok = xSemaphoreTake(_mutex, portMAX_DELAY) == pdTRUE;
+    if (ok) {
+        ok = _ensure_loaded();
+        size_t count = 0;
+        if (ok) {
+            for (JsonObjectConst entry : (*_manifest_doc)["entries"].as<JsonArrayConst>()) {
+                const char* id = entry["id"];
+                if (!id || !id[0]) { ok = false; break; }
+                const uint32_t timestamp = entry["created_at"] | 0U;
+                size_t position = 0;
+                while (position < count) {
+                    const uint32_t other_timestamp = selected[position]["created_at"] | 0U;
+                    const char* other_id = selected[position]["id"];
+                    if (timestamp > other_timestamp ||
+                        (timestamp == other_timestamp && strcmp(id, other_id) > 0)) break;
+                    ++position;
+                }
+                if (position == limit) continue;
+                const size_t new_count = count < limit ? count + 1 : count;
+                for (size_t i = new_count - 1; i > position; --i) selected[i] = selected[i - 1];
+                selected[position] = entry;
+                count = new_count;
+            }
+        }
+        output.clear();
+        JsonArray array = output.to<JsonArray>();
+        if (ok) {
+            for (size_t i = 0; i < count; ++i) {
+                if (!array.add(selected[i])) { ok = false; break; }
+            }
+        }
+        ok = ok && !output.overflowed();
+        xSemaphoreGive(_mutex);
+    }
+    for (size_t i = 0; i < limit; ++i) selected[i].~JsonObjectConst();
+    heap_caps_free(selected);
+    if (!ok) {
+        output.clear();
+        LOGE(TAG, "Cannot select recent entries for %s", _base_path);
+    }
+    return ok;
+}
+
 // ---------------------------------------------------------------------------
 // count()
 // ---------------------------------------------------------------------------

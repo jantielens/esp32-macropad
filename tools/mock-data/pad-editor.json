@@ -53,7 +53,7 @@
         {"col": 1, "row": 1, "widget_type": "numericrocker", "label_center": "[mqtt:home/setpoint]", "widget_numericrocker_small_step": 0.5, "widget_numericrocker_action": {"type": "mqtt", "topic": "home/setpoint/adjust", "payload": "{step}"}},
         {"col": 2, "row": 1, "widget_type": "bar_chart", "label_top": "Energy"},
         {"col": 0, "row": 2, "widget_type": "table", "label_top": "Sensors"},
-        {"col": 1, "row": 2, "widget_type": "list", "label_top": "Playlist"},
+        {"col": 1, "row": 2, "widget_type": "list", "widget_list_id": "pads", "widget_data_binding": "[pad:pads]"},
         {"col": 2, "row": 2, "widget_type": "external", "extension_id": "word-clock", "extension_config": "{\"color\":\"white\"}", "extension_tick_interval_ms": 1000}
       ]
     },
@@ -97,9 +97,9 @@
     {"name": "expr", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": 1, "validation_mode": 1, "free_form": true},
     {"name": "time", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": -1, "validation_mode": 0, "free_form": true},
     {"name": "timer", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": false, "keys": ["1", "1_state", "1_mode", "1_expired", "1_target", "2", "2_state", "2_mode", "2_expired", "2_target", "3", "3_state", "3_mode", "3_expired", "3_target"]},
-    {"name": "health", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": false, "keys": ["cpu", "cpu_core_0", "cpu_core_1", "wifi_rssi", "uptime", "chip", "chip_rev", "chip_cores", "cpu_freq", "flash_size", "firmware", "board", "mac", "reset_reason", "heap_total", "heap_free", "heap_min", "heap_largest", "heap_internal_total", "heap_internal", "heap_internal_used", "psram_total", "psram_free", "psram_used", "psram_min", "psram_largest", "wifi_state", "wifi_connected", "wifi_ssid", "wifi_ip", "wifi_hostname", "wifi_ap_active", "wifi_ap_purpose", "wifi_last_error", "brightness", "volume", "table", "extended_table", "usb_status"]},
+    {"name": "health", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": false, "keys": ["cpu", "cpu_core_0", "cpu_core_1", "wifi_rssi", "uptime", "chip", "chip_rev", "chip_cores", "cpu_freq", "flash_size", "firmware", "board", "mac", "reset_reason", "heap_total", "heap_free", "heap_min", "heap_largest", "heap_internal_total", "heap_internal", "heap_internal_used", "psram_total", "psram_free", "psram_used", "psram_min", "psram_largest", "wifi_state", "wifi_connected", "wifi_ssid", "wifi_ip", "wifi_hostname", "wifi_ap_active", "wifi_ap_purpose", "wifi_last_error", "brightness", "volume", "usb_status"]},
     {"name": "net", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": -1, "validation_mode": 0, "free_form": false, "keys": ["portal", "mcp", "mqtt_rx", "mqtt_tx", "mqtt", "http", "ble", "ota", "any"]},
-    {"name": "list", "min_params": 1, "max_params": 1, "widget_max_params": 1, "format_param": -1, "validation_mode": 0, "free_form": false, "keys": ["pads.selected"]},
+    {"name": "item", "min_params": 1, "max_params": 1, "widget_max_params": 1, "format_param": -1, "validation_mode": 0, "free_form": true},
     {"name": "music", "min_params": 1, "max_params": 1, "widget_max_params": 1, "format_param": -1, "validation_mode": 0, "free_form": false, "keys": ["file", "file_name", "title", "artist", "album", "track", "index", "count", "elapsed_s", "total_s", "status"]},
     {"name": "image", "min_params": 1, "max_params": 1, "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": false, "keys": ["current", "error"]}
   ]},
@@ -109,6 +109,7 @@
     {"type": "cycle_pad", "group": "Navigation", "label": "Navigate pad sequence"},
     {"type": "set_var", "group": "Variables", "label": "Set variable", "template_fields": {"var_value": {"max": 191}}, "editor_fields": [{"name": "var_name", "label": "Name", "type": "text"}, {"name": "var_value", "label": "Value", "type": "text", "bindable": true}]},
     {"type": "button_navigation", "group": "Navigation", "label": "Navigate buttons", "commands": [{"id": "previous", "label": "Previous"}, {"id": "next", "label": "Next"}, {"id": "tap", "label": "Tap"}, {"id": "tap_hold", "label": "Tap & Hold"}], "fields": [{"name": "command", "description": "previous, next, tap, or tap_hold"}], "editor_fields": [{"name": "command", "label": "Command", "type": "select", "command_options": true}]},
+    {"type": "list_nav", "group": "Navigation", "label": "Navigate List", "commands": [{"id": "previous_page", "label": "Previous page"}, {"id": "next_page", "label": "Next page"}], "editor_fields": [{"name": "target", "label": "List ID", "type": "text"}, {"name": "command", "label": "Command", "type": "select", "command_options": true}]},
     {"type": "mqtt", "group": "Connectivity", "label": "Publish MQTT message", "template_fields": {"topic": {"max": 127}, "payload": {"max": 127}}, "editor_fields": [{"name": "topic", "label": "Topic", "type": "text", "bindable": true, "max": 127}, {"name": "payload", "label": "Payload", "type": "text", "bindable": true, "max": 127}]},
     {"type": "bthome", "group": "Connectivity", "label": "Send BTHome event", "alarm_hook_allowed": true, "pausable": false, "note": "Unencrypted Bluetooth broadcast; no delivery acknowledgement. Independent of MQTT. Four waiting events; rejects newest when full.", "editor_fields": [
       {"name": "button", "label": "Button number", "type": "select", "numeric": true, "min": 1, "max": 10, "default": 1, "help": "Device-wide number. Match Button 1-10 in Home Assistant.", "options": [
@@ -137,6 +138,11 @@
     {"type": "key", "group": "Keyboard", "label": "Send keys", "template_fields": {"sequence": {"max": 255}}},
     {"type": "mouse_button", "group": "Mouse", "label": "Mouse button", "commands": [{"id": "left", "label": "Left"}, {"id": "right", "label": "Right"}, {"id": "middle", "label": "Middle"}], "editor_fields": [{"name": "button", "label": "Button", "type": "select", "default": "left", "command_options": true}]},
     {"type": "gamepad", "group": "Gamepad", "label": "Gamepad", "button_count": 16}
+  ],
+  "list_sources": [
+    {"token": "[health:metrics]", "title": "Device health", "fields": [{"name": "id", "description": "Stable telemetry key", "type": "string", "optional": false}, {"name": "title", "description": "Metric name", "type": "string", "optional": false}, {"name": "value", "description": "Raw number or text; absent when unavailable", "type": "scalar", "optional": true}, {"name": "unit", "description": "Unit of the raw value, or empty for text", "type": "string", "optional": false}, {"name": "severity", "description": "normal, warning, critical, or unknown; absent for informational rows", "type": "string", "optional": true}]},
+    {"token": "[pad:pads]", "title": "Pads", "fields": [{"name": "id", "description": "Stable pad ID", "type": "string", "optional": false}, {"name": "title", "description": "Pad number and optional name", "type": "string", "optional": false}]},
+    {"token": "[voice_note:recent_notes]", "title": "Recent voice notes", "fields": [{"name": "id", "description": "Stable note ID", "type": "string", "optional": false}, {"name": "title", "description": "Saved title when available", "type": "string", "optional": true}, {"name": "created_at", "description": "Creation timestamp when available", "type": "number", "optional": true}, {"name": "duration_ms", "description": "Recording duration in milliseconds", "type": "number", "optional": false}, {"name": "has_transcript", "description": "Whether a transcript exists", "type": "boolean", "optional": false}, {"name": "has_enrichment", "description": "Whether title and summary data exists", "type": "boolean", "optional": false}]}
   ],
   "widget_catalog": [
     {"type": "face", "name": "Face", "icon": "face"},

@@ -171,6 +171,66 @@ TEST(type_only) {
 #endif
 }
 
+TEST(item_context_boundaries) {
+    for (const char* json : {
+            "{\"type\":\"back\"}",
+            "{\"type\":\"screen\",\"target\":\"info\"}",
+            "{\"type\":\"cycle_pad\"}",
+            "{\"type\":\"system\",\"system_command\":\"reboot\"}",
+            "{\"type\":\"system\",\"system_command\":\"screensaver\"}",
+            "{\"type\":\"confirm\",\"message\":\"Continue?\"}"}) {
+        ButtonAction action = parse_from_string(json);
+        const ActionTypeDef* type = action_type_find(action.type);
+        ASSERT_TRUE(type != nullptr);
+        ASSERT_TRUE(action_type_ends_item_context(type, action));
+    }
+    ButtonAction action = parse_from_string("{\"type\":\"system\",\"system_command\":\"wifi_disconnect\"}");
+    ASSERT_TRUE(!action_type_ends_item_context(action_type_find(action.type), action));
+    ASSERT_TRUE(action_type_ends_item_context(nullptr, action));
+#if HAS_DISPLAY
+    for (const char* command : {"previous", "next", "tap", "tap_hold"}) {
+        StaticJsonDocument<256> doc;
+        doc["type"] = "button_nav";
+        doc["command"] = command;
+        action_parse(doc.as<JsonObject>(), action);
+        const bool activates = strcmp(command, "tap") == 0 || strcmp(command, "tap_hold") == 0;
+        ASSERT_EQ(action_type_ends_item_context(action_type_find(action.type), action), activates);
+    }
+#endif
+#if HAS_DISPLAY && HAS_PSRAM
+    for (const char* command : {"previous_page", "next_page"}) {
+        JsonDocument doc;
+        doc["type"] = "list_nav";
+        doc["target"] = "recent-notes_1";
+        doc["command"] = command;
+        ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>()) == nullptr);
+        action_parse(doc.as<JsonObject>(), action);
+        ASSERT_STR(action.payload.list_navigation.target, "recent-notes_1");
+        ASSERT_STR(action.payload.list_navigation.command, command);
+        ASSERT_TRUE(!action_type_ends_item_context(action_type_find(action.type), action));
+    }
+#endif
+}
+
+TEST(list_navigation_contract) {
+#if HAS_DISPLAY && HAS_PSRAM
+    ButtonAction action = round_trip(R"({"type":"list_nav","target":"notes","command":"previous_page"})");
+    ASSERT_STR(action.type, ACTION_TYPE_LIST_NAVIGATION);
+    ASSERT_STR(action.payload.list_navigation.target, "notes");
+    ASSERT_STR(action.payload.list_navigation.command, "previous_page");
+    for (const char* json : {
+            R"({"type":"list_nav","target":"","command":"next_page"})",
+            R"({"type":"list_nav","target":"bad id","command":"next_page"})",
+            R"({"type":"list_nav","target":"123456789012345678901234567890123","command":"next_page"})",
+            R"({"type":"list_nav","target":"notes","command":"activate"})"}) {
+        JsonDocument doc;
+        ASSERT_TRUE(deserializeJson(doc, json) == DeserializationError::Ok);
+        ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>()) != nullptr);
+        ASSERT_STR(parse_from_string(json).type, "");
+    }
+#endif
+}
+
 TEST(voice_note_action_contract) {
 #if HAS_VOICE_NOTES
     ASSERT_TRUE(action_type_find("voice_note") != nullptr);
@@ -980,6 +1040,34 @@ TEST(registered_identifiers_survive_storage) {
     }
 }
 
+TEST(field_metadata_identifies_persisted_binding_values) {
+    const char* samples[] = {
+        R"({"type":"mqtt","topic":"[item:id]","payload":"[item:title]"})",
+        R"({"type":"screen","target":"[item:id]"})",
+        R"({"type":"set_var","var_name":"chosen","var_value":"[item:id]"})",
+        R"({"type":"volume","volume_value":"[item:value]"})",
+        R"({"type":"sound_alert","sound_alert_kind":"tone","sound_alert_pattern":"[item:pattern]"})",
+    };
+    for (const char* json : samples) {
+        JsonDocument input;
+        ASSERT_TRUE(!deserializeJson(input, json));
+        ButtonAction action = {};
+        action_parse(input.as<JsonObject>(), action);
+        const ActionTypeDef* type = action_type_find(action.type);
+        ASSERT_TRUE(type != nullptr);
+        struct Context { JsonObjectConst input; unsigned fields; } context{input.as<JsonObjectConst>(), 0};
+        const auto check = [](const char* name, char* field, size_t, uint8_t flags, void* opaque) {
+            if (!(flags & ACTION_FIELD_BINDING)) return true;
+            auto& context = *static_cast<Context*>(opaque);
+            ++context.fields;
+            const char* persisted = context.input[name];
+            return persisted && !strcmp(persisted, field);
+        };
+        ASSERT_TRUE(action_type_visit_fields(type, action, check, &context));
+        ASSERT_TRUE(context.fields > 0);
+    }
+}
+
 TEST(catalog_feature_gates_and_metadata_parity) {
     ASSERT_TRUE(!action_type_is_supported("shutdown"));
     JsonDocument portal;
@@ -1162,6 +1250,7 @@ int main(int argc, char** argv) {
 
     printf("--- Empty / minimal ---\n");
     RUN(registered_identifiers_survive_storage);
+    RUN(field_metadata_identifies_persisted_binding_values);
     RUN(catalog_feature_gates_and_metadata_parity);
     RUN(slider_value_action_validation);
     RUN(option_id_action_validation);
@@ -1171,6 +1260,8 @@ int main(int argc, char** argv) {
     RUN(action_list_filters_literal_none_for_pad_callers);
     RUN(action_list_retains_literal_none_for_existing_callers);
     RUN(type_only);
+    RUN(item_context_boundaries);
+    RUN(list_navigation_contract);
     RUN(voice_note_action_contract);
     RUN(bthome_round_trip_and_validation);
     RUN(set_var_round_trip_and_validation);

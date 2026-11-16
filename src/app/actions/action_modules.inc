@@ -14,6 +14,9 @@
 #include "ble_pair_action.cpp"
 #include "cycle_pad_action.cpp"
 #include "button_navigation_action.cpp"
+#if HAS_DISPLAY && HAS_PSRAM
+#include "list_navigation_action.cpp"
+#endif
 #include "mqtt_action.cpp"
 #include "bthome_action.cpp"
 #include "ha_service_action.cpp"

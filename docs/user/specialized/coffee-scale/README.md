@@ -40,8 +40,9 @@ Do not leave a pour unattended while waiting for automatic completion.
 Use supported Brew actions from pads or physical controls.
 Live `[brew:...]` values include selected brew, stage, time, target/captured
 weights, and flow; consult the device Binding reference.
-A List with provider `brew_definitions` can select a template through its
-selected ID. Configure the action on that List, not an assumed boot selection.
+To choose a template from a pad, add a Brew action and select it under
+**Set Template** in the **Command** menu. Changing the template resets an
+active brew, so finish and verify its record first.
 
 ## Review and preserve records
 

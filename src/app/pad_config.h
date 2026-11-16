@@ -186,6 +186,7 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_IMAGE_PREVIOUS "image_previous"
 #define ACTION_TYPE_DISPLAY_REFRESH "display_refresh"
 #define ACTION_TYPE_BUTTON_NAVIGATION "button_nav"
+#define ACTION_TYPE_LIST_NAVIGATION "list_nav"
 #define ACTION_TYPE_SET_VAR "set_var"
 #if HAS_VOICE_NOTES
 #define ACTION_TYPE_VOICE_NOTE "voice_note"
@@ -312,6 +313,10 @@ struct DisplayRefreshPayload {
 struct ButtonNavigationPayload {
     char command[9];
 };
+struct ListNavigationPayload {
+    char target[33];
+    char command[14];
+};
 struct SetVariablePayload {
     char var_name[33];
     char var_value[192];
@@ -364,6 +369,7 @@ union ActionPayload {
     CameraCapturePayload camera_capture; // type == ACTION_TYPE_CAMERA_CAPTURE
     DisplayRefreshPayload display_refresh; // type == ACTION_TYPE_DISPLAY_REFRESH
     ButtonNavigationPayload button_navigation;
+    ListNavigationPayload list_navigation;
     SetVariablePayload set_var;
 #if HAS_VOICE_NOTES
     VoiceNotePayload voice_note;
@@ -647,14 +653,19 @@ bool pad_config_get_data_stream_snapshot(uint8_t page,
                                          PadDataStreamSnapshot* out);
 
 // Save raw JSON bytes to LittleFS. Preserves all fields including future/unknown ones.
+struct PadValidationGeometry;
 bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
-                         const char** error = nullptr);
+                         const char** error = nullptr,
+                         const PadValidationGeometry* geometry = nullptr);
 
 // Delete page config file from LittleFS.
 bool pad_config_delete(uint8_t page);
 
 // Check if page config file exists on LittleFS.
 bool pad_config_exists(uint8_t page);
+
+// Format the persistent path for a pad.
+void pad_config_path(uint8_t page, char* out, size_t out_len);
 
 // Read raw JSON from LittleFS. Caller must free() the returned buffer.
 // Returns NULL on failure. *out_len is set to the file size.
@@ -677,6 +688,13 @@ void pad_config_rebuild_all_caches();
 // Generation counter — incremented on every save/delete. PadScreen uses this
 // to detect config changes and rebuild tiles.
 uint32_t pad_config_get_generation();
+
+#if HAS_DISPLAY && HAS_PSRAM
+enum class PadListReadResult : uint8_t { Missing, Present, Error };
+// Main-loop/internal-stack only. Copies a bounded name; errors are static strings.
+PadListReadResult pad_config_list_read(uint8_t page, char* name, size_t name_size,
+                                       const char** error);
+#endif
 
 // Atomic snapshot of configured pads with at least one post-template button or
 // an effective full-screen pad action.

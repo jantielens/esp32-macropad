@@ -38,6 +38,9 @@
 #endif
 #include "version.h"
 #include "touch_manager.h"
+#if HAS_DISPLAY && HAS_PSRAM
+#include "list_source.h"
+#endif
 
 #include <ArduinoJson.h>
 #include <WiFi.h>
@@ -298,6 +301,22 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 
 		#if HAS_DISPLAY
 				if (request->hasParam("catalog")) {
+#if HAS_PSRAM
+						auto list_doc = make_psram_json_doc(4096);
+						if (!list_doc || !list_doc->capacity()) {
+								delete response;
+								web_portal_send_json_error(request, 503, "List source catalog unavailable", &timing);
+								return;
+						}
+						JsonArray sources = list_doc->to<JsonArray>();
+						list_source_emit_metadata(sources);
+						response->print(",\"list_sources\":");
+						if (list_doc->overflowed() || !write_json_buffered(sources, *response)) {
+								delete response;
+								web_portal_send_json_error(request, 503, "List source catalog unavailable", &timing);
+								return;
+						}
+#endif
 						auto widget_doc = make_psram_json_doc(4096);
 						response->print(",\"widget_catalog\":");
 						if (widget_doc && widget_doc->capacity() > 0) {

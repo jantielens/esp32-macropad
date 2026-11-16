@@ -11,6 +11,7 @@
 #if HAS_DISPLAY
 
 #include "pad_config.h"
+#include "pad_composition.h"
 #include "display_geometry.h"
 #include "pad_track_layout.h"
 #include "psram_json_allocator.h"
@@ -24,6 +25,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
+#include <new>
 
 uint32_t pad_icon_render_key(JsonObjectConst pad, JsonObjectConst button) {
     uint32_t hash = 2166136261u;
@@ -439,6 +441,8 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
     // provider / timer id) in any string field (labels, widget bindings...).
     for (JsonPairConst kv : b) {
         if (strcmp(kv.key().c_str(), "extension_config") == 0) continue;
+        if (wtype && wtype->collectionBinding &&
+            strcmp(kv.key().c_str(), "widget_data_binding") == 0) continue;
         if (kv.value().is<const char*>()) {
             const char* he = action_validate_binding_tokens(kv.value().as<const char*>());
             if (he) return he;
@@ -475,9 +479,33 @@ static const char* validate_button_layer(JsonArrayConst buttons, int cols, int r
     return nullptr;
 }
 
+bool pad_validation_needs_context() {
+    for (uint8_t index = 0; index < widget_count(); ++index) {
+        const WidgetType* type = widget_at(index);
+        if (type && type->validatePadContext) return true;
+    }
+    return false;
+}
+
+const char* pad_validate_context(JsonObjectConst pad, JsonObjectConst template_pad) {
+    if (!pad_validation_needs_context()) return nullptr;
+    PsramJsonAllocator allocator;
+    void* memory = allocator.allocate(sizeof(PadComposedContext));
+    if (!memory) return "pad contextual validation allocation failed";
+    auto* context = new (memory) PadComposedContext;
+    const char* error = pad_compose_context(pad, template_pad, *context);
+    for (uint8_t index = 0; !error && index < widget_count(); ++index) {
+        const WidgetType* type = widget_at(index);
+        if (type && type->validatePadContext) error = type->validatePadContext(pad, *context);
+    }
+    context->~PadComposedContext();
+    allocator.deallocate(context);
+    return error;
+}
+
 // Validate a complete pad JSON (grid + buttons + collisions). nullptr = ok.
 const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid,
-                         const PadValidationGeometry* geometry) {
+                         const PadValidationGeometry* geometry, JsonObjectConst template_pad) {
     const char* shadow = pad["button_shadow"] | "";
     if (shadow[0] && strcmp(shadow, "enabled") != 0 && strcmp(shadow, "disabled") != 0)
         return "bad button_shadow";
@@ -556,6 +584,12 @@ const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid,
     if (button_error) return button_error;
     button_error = validate_button_layer(overlays, cols, rows, tolerate_offgrid);
     if (button_error) return button_error;
+    if (pad_validation_needs_context()) {
+        if ((pad["template_pad"] | -1) >= 0 && template_pad.isNull())
+            return "template pad is required for contextual validation";
+        const char* error = pad_validate_context(pad, template_pad);
+        if (error) return error;
+    }
     return nullptr;
 }
 

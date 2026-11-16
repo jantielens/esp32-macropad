@@ -38,7 +38,7 @@ static void brew_serialize(const ButtonAction& act, JsonObject obj) {
 }
 
 // `value` is the single bindable field (e.g. set_template using
-// [list:brew_presets.selected]). Expose it so shared code drives binding
+// [item:id]). Expose it so shared code drives binding
 // resolution + {step} substitution. `command` is structural, never bindable.
 static bool brew_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {
     BrewPayload& p = brew_payload(act);

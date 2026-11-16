@@ -40,7 +40,9 @@
 #include "binding_template.h"
 #include "binding_schema.h"
 #include "action_catalog.h"
-#include "list_provider.h"
+#if HAS_PSRAM
+#include "list_source.h"
+#endif
 #include "pad_block.h"
 #if HAS_MQTT
 #include "mqtt_sub_store.h"
@@ -203,12 +205,10 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     JsonArray binding_schemes = bindings.createNestedArray("schemes");
     binding_schema_emit(&binding_schemes, true);
 
-    // Complementary enumerations referenced by the binding detail above.
-    JsonArray lp = result.createNestedArray("list_providers");
-    for (uint8_t i = 0; i < list_provider_count(); ++i) {
-        const ListProvider* p = list_provider_at(i);
-        if (p && p->id) lp.add(p->id);
-    }
+#if HAS_PSRAM
+    JsonArray sources = result.createNestedArray("list_sources");
+    list_source_emit_metadata(sources);
+#endif
 
     JsonObject fmt = result.createNestedObject("formats");
     fmt["color"] = "#RRGGBB";
@@ -289,7 +289,7 @@ static void exec_pad_save(const void* ctx, bool* ok, char* msg, size_t msg_len) 
 // Serialize `doc` into a PSRAM buffer and defer the save. Validates first.
 static bool commit_pad(uint8_t page, JsonDocument& doc, JsonObject& result, String& err) {
     const PadValidationGeometry geometry = current_pad_validation_geometry();
-    const char* verr = pad_validate(doc.as<JsonObjectConst>(), false, &geometry);
+    const char* verr = pad_validate_with_template(doc.as<JsonObjectConst>(), page, false, &geometry);
     if (verr) return pad_fail(result, err, PAD_ERR_PARAMS, verr);
 
     size_t need = measureJson(doc) + 1;
@@ -364,7 +364,7 @@ static bool tool_validate_pad(const JsonObject& args, JsonObject& result, String
     JsonObjectConst pad = args["pad"];
     if (pad.isNull()) return pad_fail(result, err, PAD_ERR_PARAMS, "missing pad object");
     const PadValidationGeometry geometry = current_pad_validation_geometry();
-    const char* verr = pad_validate(pad, false, &geometry);
+    const char* verr = pad_validate_with_template(pad, -1, false, &geometry);
     if (verr) { result["valid"] = false; result["error"] = verr; return true; }
     result["valid"] = true;
     result["binding_validation"] = "Syntax and supported key checks passed; live resolution, source availability, and external JSON paths were not verified.";

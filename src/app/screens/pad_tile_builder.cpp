@@ -19,6 +19,7 @@ static bool button_overlay_uses_fade(const char* widget_type) {
         (strcmp(widget_type, "rocker") == 0 ||
          strcmp(widget_type, "numericrocker") == 0 ||
          strcmp(widget_type, "gamepad_button") == 0 ||
+         strcmp(widget_type, "list") == 0 ||
          strcmp(widget_type, "option_selector") == 0);
 }
 
@@ -470,6 +471,12 @@ void PadScreen::buildTiles() {
                             static_cast<lv_event_code_t>(LV_EVENT_ALL | LV_EVENT_PREPROCESS), &tile);
                     }
                     wt->createUI(widget_parent, &tile.widget_cfg, &bcfg, &r, &scale, &tile.widget_state);
+#if HAS_PSRAM
+                    if (strcmp(wt->name, "list") == 0) {
+                        lv_obj_clear_flag(widget_parent, LV_OBJ_FLAG_GESTURE_BUBBLE);
+                        list_widget_attach(&tile.widget_state, PadScreen::onPress, &tile);
+                    }
+#endif
                     if (strcmp(wt->name, "option_selector") == 0)
                         option_selector_attach(&tile.widget_state, tile.actions, tile.action_count,
                                                pageIndex, i >= cfg->main_button_count, bcfg.col, bcfg.row,
@@ -703,6 +710,7 @@ void PadScreen::buildTiles() {
             }
         }
         if (strcmp(tile.widget_cfg.type, "slider") == 0 ||
+            strcmp(tile.widget_cfg.type, "list") == 0 ||
             strcmp(tile.widget_cfg.type, "option_selector") == 0) {
             lv_obj_add_event_cb(obj, onWidgetPressFeedback, LV_EVENT_VALUE_CHANGED, &tiles[i]);
         }

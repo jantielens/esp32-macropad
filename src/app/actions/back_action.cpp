@@ -30,7 +30,8 @@ void describe_back(JsonObject& action) {
     action["label"] = "Navigate back";
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(kBackActionType, ACTION_TYPE_BACK, nullptr, nullptr, dispatch_back, nullptr, describe_back, nullptr, nullptr, ACTION_EXECUTION_SYNC);
+DEFINE_AND_REGISTER_ACTION_TYPE(kBackActionType, ACTION_TYPE_BACK, nullptr, nullptr, dispatch_back, nullptr, describe_back, nullptr, nullptr, ACTION_EXECUTION_SYNC, true, true, false,
+    [](const ButtonAction&) { return true; });
 
 } // namespace
 

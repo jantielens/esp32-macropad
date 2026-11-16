@@ -1248,11 +1248,13 @@ class PortalDevServerTest(unittest.TestCase):
         actions_dir = ROOT / "src/app/actions"
         manifest = (actions_dir / "action_modules.inc").read_text()
         unavailable = {"ble_pair", "display_refresh", "camera_capture", "voice_note"}
-        expected = set(re.findall(r'#include "([^"/]+)_action.cpp"', manifest)) - unavailable
+        action_files = {"list_nav": "list_navigation"}
+        expected = {next((key for key, value in action_files.items() if value == name), name)
+                    for name in re.findall(r'#include "([^"/]+)_action.cpp"', manifest)} - unavailable
         catalog = self.server.pad_fixture["catalog"]
         self.assertEqual({action["type"] for action in catalog}, expected)
         for action in catalog:
-            source = (actions_dir / (action["type"] + "_action.cpp")).read_text()
+            source = (actions_dir / (action_files.get(action["type"], action["type"]) + "_action.cpp")).read_text()
             if action["type"] in {"notify", "confirm"}:
                 source += (actions_dir / "dialog_action.h").read_text()
                 self.assertIn(json.dumps(action["label"]), source)
@@ -1267,13 +1269,17 @@ class PortalDevServerTest(unittest.TestCase):
         fields = ("name", "icon", "second_icon", "axis_field", "horizontal_icon", "vertical_icon", "default_axis")
         widgets = {widget["type"]: widget for widget in self.server.pad_fixture["widget_catalog"]}
         for path in (ROOT / "src/app/widgets").glob("*_widget.cpp"):
-            match = re.search(r'static const WidgetPreview (\w+)_preview = \{([^}]+)\};', path.read_text())
+            source = path.read_text()
+            match = re.search(r'static const WidgetPreview (\w+)_preview = \{([^}]+)\};', source)
+            if path.name == "list_widget.cpp":
+                match = re.search(r'const WidgetPreview (preview)\{([^}]+)\};', source)
             if not match or match[1] == "camera_preview":
                 continue
             values = json.loads("[" + match[2].replace("nullptr", "null") + "]")
-            expected = {"type": match[1]}
+            widget_type = "list" if path.name == "list_widget.cpp" else match[1]
+            expected = {"type": widget_type}
             expected.update({field: value for field, value in zip(fields, values) if value is not None})
-            self.assertEqual(widgets.pop(match[1]), expected)
+            self.assertEqual(widgets.pop(widget_type), expected)
         self.assertEqual(widgets, {})
 
     def test_slider_catalog_requires_touch(self):
@@ -1294,7 +1300,8 @@ class PortalDevServerTest(unittest.TestCase):
         schema = self.server.pad_fixture["binding_schema"]["schemes"]
         fields = ("min_params", "max_params", "widget_max_params", "format_param", "validation_mode", "free_form")
         for scheme in schema:
-            source = (ROOT / "src/app" / (scheme["name"] + "_binding.cpp")).read_text()
+            filename = "item_binding_scheme.cpp" if scheme["name"] == "item" else scheme["name"] + "_binding.cpp"
+            source = (ROOT / "src/app" / filename).read_text()
             match = re.search(r'binding_template_register\("' + scheme["name"] + r'"[^{}]+\{([^}]+)\}', source)
             self.assertIsNotNone(match)
             parts = match[1].split(",")[:6]

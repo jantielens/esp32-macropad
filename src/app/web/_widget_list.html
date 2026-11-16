@@ -1,16 +1,124 @@
-                <!-- List Widget Settings (conditional, shown only for list widget type) -->
-                <details class="editor-group" id="pad-edit-list-section" style="display:none;" open>
-                    <summary>Provider &amp; Filter</summary>
-                    <div class="editor-group-body">
-                        <div class="form-group">
-                            <label for="pad-edit-list-provider-id">Data Provider</label>
-                            <input type="text" id="pad-edit-list-provider-id" maxlength="63" placeholder="e.g. pads">
-                            <small>The registered provider ID, not an MQTT topic. Items run the button's tap and long-press actions. Use <code>[list:provider_id.selected]</code> in action fields to reference the selected item's ID.</small>
-                        </div>
-                        <div class="form-group">
-                            <label for="pad-edit-list-filter">Filter</label>
-                            <input type="text" id="pad-edit-list-filter" maxlength="191" placeholder="e.g. #0-3 or pad_*,!pad_5">
-                            <small>Optional. Comma-separated rules to include/exclude items. <code>*</code>/<code>?</code> = glob, <code>#N</code>/<code>#N-M</code> = index, <code>!</code> = exclude.</small>
-                        </div>
-                    </div>
-                </details>
+<div id="pad-edit-list-section" style="display:none;">
+    <details class="editor-group" open>
+        <summary>List</summary>
+        <div class="editor-group-body">
+            <div class="form-group">
+                <label for="pad-edit-list-id">List ID</label>
+                <input id="pad-edit-list-id" type="text" maxlength="32" pattern="[A-Za-z0-9_\-]+" required>
+                <small>Unique within the pad. Use this ID in List navigation actions.</small>
+            </div>
+            <div class="form-group">
+                <label for="pad-edit-list-source">Source</label>
+                <select id="pad-edit-list-source" required></select>
+                <small id="pad-edit-list-fields"></small>
+            </div>
+            <div class="form-group">
+                <label for="pad-edit-list-top">Top row label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                <div class="binding-input-wrap">
+                    <input id="pad-edit-list-top" class="binding-mono" type="text" maxlength="191">
+                    <button type="button" class="style-toggle-btn" id="pad-edit-list-top-style-toggle" aria-label="Top row label style override" aria-controls="pad-edit-list-top-style-wrap" aria-expanded="false" title="Label style override">Aa</button>
+                </div>
+                <div id="pad-edit-list-top-style-wrap" class="label-style-wrap" style="display:none;">
+                    <input id="pad-edit-list-top-style" class="label-style-input" type="text" maxlength="127" aria-label="Top row label style" placeholder="font_size:24;align:left">
+                    <button type="button" class="binding-help-btn" onclick="showStyleHelp()" aria-label="Label style reference" title="Style reference">?</button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="pad-edit-list-bottom">Bottom row label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                <div class="binding-input-wrap">
+                    <input id="pad-edit-list-bottom" class="binding-mono" type="text" maxlength="191">
+                    <button type="button" class="style-toggle-btn" id="pad-edit-list-bottom-style-toggle" aria-label="Bottom row label style override" aria-controls="pad-edit-list-bottom-style-wrap" aria-expanded="false" title="Label style override">Aa</button>
+                </div>
+                <div id="pad-edit-list-bottom-style-wrap" class="label-style-wrap" style="display:none;">
+                    <input id="pad-edit-list-bottom-style" class="label-style-input" type="text" maxlength="127" aria-label="Bottom row label style" placeholder="font_size:16;align:left">
+                    <button type="button" class="binding-help-btn" onclick="showStyleHelp()" aria-label="Label style reference" title="Style reference">?</button>
+                </div>
+            </div>
+            <small>Use [item:field|fallback] in row labels.</small>
+            <small>Row label styles support font, font_size, font_metrics, align, and color. Position offsets (x, y) and font_upscale are ignored. Labels always use single-line ellipsis (mode:dot); bindings are supported only in color.</small>
+        </div>
+    </details>
+    <details class="editor-group">
+        <summary>Item layout</summary>
+        <div class="editor-group-body">
+            <div class="widget-row">
+                <div class="form-group"><label for="pad-edit-list-visible-items">Visible items</label><input id="pad-edit-list-visible-items" type="number" min="0" max="20" step="1" aria-describedby="pad-edit-list-visible-items-help"><small id="pad-edit-list-visible-items-help">0 = Auto; otherwise, number of visible items. Auto fits rows using label fonts; item height adjusts to fill the List.</small></div>
+                <div class="form-group"><label for="pad-edit-list-padding">Padding (px)</label><input id="pad-edit-list-padding" type="number" min="0" max="32" step="1" aria-describedby="pad-edit-list-padding-help"><small id="pad-edit-list-padding-help">Horizontal space between labels and item borders.</small></div>
+                <div class="form-group"><label for="pad-edit-list-spacing">Spacing (px)</label><input id="pad-edit-list-spacing" type="number" min="0" max="32" step="1" aria-describedby="pad-edit-list-spacing-help"><small id="pad-edit-list-spacing-help">Vertical gap between items.</small></div>
+                <div class="form-group"><label for="pad-edit-list-radius">Corner radius (px)</label><input id="pad-edit-list-radius" type="number" min="0" max="64" step="1"></div>
+            </div>
+            <div class="form-group">
+                <label for="pad-edit-list-viewport">Viewport</label>
+                <select id="pad-edit-list-viewport" aria-describedby="pad-edit-list-viewport-help"><option value="">Board default</option><option value="scroll">Scroll</option><option value="paged">Paged</option></select>
+                <small id="pad-edit-list-viewport-help">Scroll lets you swipe through items; Paged shows one page at a time without scrolling. Board default is Paged on interactive e-paper and Scroll otherwise.</small>
+            </div>
+        </div>
+    </details>
+    <details class="editor-group">
+        <summary>Item appearance</summary>
+        <div class="editor-group-body">
+            <div class="widget-row">
+                <div class="form-group">
+                    <label for="pad-edit-list-background">Background <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                    <div class="bindable-color"><div class="bc-swatch"></div><input id="pad-edit-list-background" class="bc-input" type="text" maxlength="191" placeholder="Button default"></div>
+                </div>
+                <div class="form-group">
+                    <label for="pad-edit-list-border-color">Border color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                    <div class="bindable-color"><div class="bc-swatch"></div><input id="pad-edit-list-border-color" class="bc-input" type="text" maxlength="191" placeholder="Button default"></div>
+                </div>
+            </div>
+            <div class="form-group"><label for="pad-edit-list-border-width">Border width (px)</label><input id="pad-edit-list-border-width" type="number" min="0" max="32" step="1" placeholder="Button default"></div>
+            <small>Colors can use item or scalar bindings. Empty values use the device-wide button defaults.</small>
+        </div>
+    </details>
+    <details class="editor-group">
+        <summary>Selected item appearance</summary>
+        <div class="editor-group-body">
+            <div class="form-group">
+                <label class="checkbox-label"><input id="pad-edit-list-allow-selection" type="checkbox" checked aria-describedby="pad-edit-list-allow-selection-help"> Allow selection</label>
+                <small id="pad-edit-list-allow-selection-help">Keep the activated item selected. Turn off for navigation Lists; item actions and press feedback still work.</small>
+            </div>
+            <div class="widget-row">
+                <div class="form-group">
+                    <label for="pad-edit-list-selected-background">Background <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                    <div class="bindable-color"><div class="bc-swatch"></div><input id="pad-edit-list-selected-background" class="bc-input" type="text" maxlength="191" placeholder="Row background"></div>
+                </div>
+                <div class="form-group">
+                    <label for="pad-edit-list-selected-border-color">Border color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                    <div class="bindable-color"><div class="bc-swatch"></div><input id="pad-edit-list-selected-border-color" class="bc-input" type="text" maxlength="191" placeholder="Automatic"></div>
+                </div>
+            </div>
+            <div class="form-group"><label for="pad-edit-list-selected-border-width">Border width (px)</label><input id="pad-edit-list-selected-border-width" type="number" min="0" max="32" step="1" placeholder="Automatic"></div>
+            <div class="widget-row">
+                <div class="form-group">
+                    <label for="pad-edit-list-selected-top-color">Top label color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                    <div class="bindable-color"><div class="bc-swatch"></div><input id="pad-edit-list-selected-top-color" class="bc-input" type="text" maxlength="191" placeholder="Top label color"></div>
+                </div>
+                <div class="form-group">
+                    <label for="pad-edit-list-selected-bottom-color">Bottom label color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                    <div class="bindable-color"><div class="bc-swatch"></div><input id="pad-edit-list-selected-bottom-color" class="bc-input" type="text" maxlength="191" placeholder="Bottom label color"></div>
+                </div>
+            </div>
+            <small>Colors can use item or scalar bindings. Empty values inherit the row colors; the border uses an automatic default based on button defaults.</small>
+        </div>
+    </details>
+    <details class="editor-group">
+        <summary>Position indicator</summary>
+        <div class="editor-group-body">
+            <div class="widget-row">
+                <div class="form-group">
+                    <label for="pad-edit-list-indicator-track">Track color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                    <div class="bindable-color"><div class="bc-swatch"></div><input id="pad-edit-list-indicator-track" class="bc-input" type="text" maxlength="191" placeholder="Button background"></div>
+                </div>
+                <div class="form-group">
+                    <label for="pad-edit-list-indicator-color">Indicator color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                    <div class="bindable-color"><div class="bc-swatch"></div><input id="pad-edit-list-indicator-color" class="bc-input" type="text" maxlength="191" placeholder="Button foreground"></div>
+                </div>
+            </div>
+            <small>Shown when items extend beyond the viewport. Colors accept scalar bindings, not item bindings.</small>
+        </div>
+    </details>
+</div>
+<div id="pad-edit-list-action-note" class="form-group" style="display:none;">
+    <small>Use <code>[item:field|fallback]</code> in supported action fields to reference the activated item. To use its ID after navigation or a pause, first save <code>[item:id]</code> in a variable.</small>
+</div>

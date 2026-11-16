@@ -66,10 +66,6 @@ static constexpr int SH_ERR_INTERNAL = MCP_RPC_ERR_INTERNAL;
 
 static constexpr uint32_t SH_CONTROL_TIMEOUT_MS = 3000;
 
-// Defined in list_provider_shutter_tests.cpp (same device class) — refreshes the
-// cached [list:shutter_tests] provider after the test file changes.
-void list_provider_shutter_tests_refresh();
-
 // ----------------------------------------------------------------------------
 // Tunable knobs — waveform tool payload size vs. fidelity.
 // Min-per-bucket decimation preserves the downward exposure dip (the signal of
@@ -85,7 +81,7 @@ void list_provider_shutter_tests_refresh();
 // Safety limit for the guided-test script file written by set_shutter_tests
 // (mirrors the 8 KB cap in the portal PUT /api/shutter/tests handler).
 #ifndef MCP_SHUTTER_TESTS_MAX_BYTES
-#define MCP_SHUTTER_TESTS_MAX_BYTES 8192
+#define MCP_SHUTTER_TESTS_MAX_BYTES SHUTTER_TEST_FILE_MAX_BYTES
 #endif
 
 static bool sh_fail(JsonObject& result, String& err, int code, const char* msg) {
@@ -540,16 +536,11 @@ static bool tool_set_shutter_tests(const JsonObject& args, JsonObject& result, S
     size_t len = strlen(content);
     if (len > MCP_SHUTTER_TESTS_MAX_BYTES) return sh_fail(result, err, SH_ERR_PARAMS, "content too large");
 
-    File f = Storage.open(SHUTTER_TEST_FILE_PATH, "w");
-    if (!f) return sh_fail(result, err, SH_ERR_INTERNAL, "cannot open test file");
-    size_t written = (len > 0) ? f.write((const uint8_t*)content, len) : 0;
-    f.close();
-    if (written != len) return sh_fail(result, err, SH_ERR_INTERNAL, "write failed");
-
-    list_provider_shutter_tests_refresh();
-    LOGI(TAG, "Guided test definitions saved via MCP (%u bytes)", (unsigned)written);
+    const bool saved = shutter_test_scripts_write(reinterpret_cast<const uint8_t*>(content), len);
+    if (!saved) return sh_fail(result, err, SH_ERR_INTERNAL, "write failed");
+    LOGI(TAG, "Guided test definitions saved via MCP (%u bytes)", (unsigned)len);
     result["status"]        = "saved";
-    result["bytes_written"] = (uint32_t)written;
+    result["bytes_written"] = (uint32_t)len;
     return true;
 }
 

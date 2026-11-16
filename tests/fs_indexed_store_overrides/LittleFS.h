@@ -29,6 +29,17 @@ public:
     size_t readBytes(char* data, size_t length) {
         return read(reinterpret_cast<uint8_t*>(data), length);
     }
+    size_t position() const { return position_; }
+    int available() const { return valid_ && position_ < size() ? static_cast<int>(size() - position_) : 0; }
+    size_t readBytesUntil(char terminator, char* data, size_t length) {
+        size_t count = 0;
+        while (count < length) {
+            const int byte = read();
+            if (byte < 0 || byte == terminator) break;
+            data[count++] = static_cast<char>(byte);
+        }
+        return count;
+    }
     size_t write(uint8_t byte) { return write(&byte, 1); }
     size_t write(const uint8_t* data, size_t length);
     bool seek(size_t position) {

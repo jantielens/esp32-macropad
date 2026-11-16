@@ -355,37 +355,38 @@ BindingResolverStatus binding_template_resolve_status(const char* templ, char* o
     return status;
 }
 
+bool binding_template_single_token(const char* templ, BindingTokenView* token) {
+    if (!templ || !token) return false;
+    const char *token_start, *token_end;
+    BindingTokenView result;
+    if (!find_next_token(templ, &token_start, &result.scheme, &result.scheme_len,
+                         &result.params, &result.params_len, &token_end) ||
+        token_start != templ || *token_end != '\0') return false;
+    *token = result;
+    return true;
+}
+
 bool binding_template_resolve_single_token(const char* templ, char* out, size_t out_len) {
-    if (!templ || !out || out_len == 0) {
-        if (out && out_len > 0) out[0] = '\0';
-        return false;
-    }
-
-    const char *token_start, *scheme, *params, *token_end;
-    size_t scheme_len, params_len;
-    if (!find_next_token(templ, &token_start, &scheme, &scheme_len,
-                         &params, &params_len, &token_end)) {
-        out[0] = '\0';
-        return false;
-    }
-    if (token_start != templ || *token_end != '\0') {
+    if (!out || out_len == 0) return false;
+    BindingTokenView token;
+    if (!binding_template_single_token(templ, &token)) {
         out[0] = '\0';
         return false;
     }
 
-    const SchemeEntry* entry = find_scheme(scheme, scheme_len);
+    const SchemeEntry* entry = find_scheme(token.scheme, token.scheme_len);
     if (!entry || !entry->resolver) {
         strlcpy(out, "ERR:unknown", out_len);
         return true;
     }
 
     char params_buf[BINDING_TEMPLATE_MAX_LEN];
-    size_t plen = params_len < sizeof(params_buf) - 1 ? params_len : sizeof(params_buf) - 1;
-    memcpy(params_buf, params, plen);
+    size_t plen = token.params_len < sizeof(params_buf) - 1 ? token.params_len : sizeof(params_buf) - 1;
+    memcpy(params_buf, token.params, plen);
     params_buf[plen] = '\0';
 
     char* fallback = split_pipe_fallback(params_buf);
-    if (binding_template_resolve_registered(scheme, scheme_len, params_buf, out, out_len) ==
+    if (binding_template_resolve_registered(token.scheme, token.scheme_len, params_buf, out, out_len) ==
         BINDING_RESOLVER_RESOLVED) {
         return true;
     }
@@ -422,27 +423,37 @@ void binding_template_collect_topics(const char* templ, void* user_data) {
     }
 }
 
-static void visit_tokens(const char* templ, binding_token_visitor_fn visitor,
-                          void* context, unsigned depth) {
-    if (!templ || !visitor || depth >= 8) return;
+static bool visit_tokens(const char* templ, binding_token_visitor_fn visitor,
+                         void* context, unsigned depth) {
+    if (!templ || !visitor) return false;
     const char* p = templ;
+    bool complete = true;
     while (*p) {
         const char *start, *scheme, *params, *end;
         size_t scheme_len, params_len;
         if (!find_next_token(p, &start, &scheme, &scheme_len, &params, &params_len, &end)) break;
+        if (depth >= 8) return false;
         char buffer[BINDING_TEMPLATE_MAX_LEN];
         if (params_len < sizeof(buffer)) {
             memcpy(buffer, params, params_len);
             buffer[params_len] = '\0';
             split_pipe_fallback(buffer);
             visitor(scheme, scheme_len, buffer, context);
-            visit_tokens(buffer, visitor, context, depth + 1);
+            if (!visit_tokens(buffer, visitor, context, depth + 1)) complete = false;
+        } else {
+            complete = false;
         }
         p = end;
     }
+    return complete;
 }
 
 void binding_template_visit_tokens(const char* templ, binding_token_visitor_fn visitor,
                                    void* context) {
     visit_tokens(templ, visitor, context, 0);
+}
+
+bool binding_template_visit_tokens_checked(const char* templ, binding_token_visitor_fn visitor,
+                                           void* context) {
+    return visit_tokens(templ, visitor, context, 0);
 }

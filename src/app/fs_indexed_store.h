@@ -10,6 +10,7 @@
 // Maximum PATCH body size accepted (metadata fields only).
 // Shared between fs_indexed_store.cpp and web_portal_fs_store.cpp.
 #define FS_STORE_PATCH_MAX_BYTES 1024
+#define FS_STORE_RECENT_MAX_ENTRIES 20
 
 // FsIndexedStore — manifest-indexed collection on the selected Storage backend.
 //
@@ -146,6 +147,9 @@ public:
     // Copy cached index data into a caller-owned document without String copies.
     bool copy_manifest(JsonDocument& output);
     bool copy_entry(const char* id, JsonObject output);
+    // Copies at most limit entries into an array, ordered by created_at and ID
+    // descending. Selection scratch is allocated strictly in PSRAM.
+    bool copy_recent(JsonDocument& output, size_t limit);
 
     // Return the number of entries, or -1 on load or rebuild failure.
     int count();

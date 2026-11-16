@@ -79,6 +79,10 @@ void describe_button_navigation(JsonObject& action) {
 DEFINE_AND_REGISTER_ACTION_TYPE(kButtonNavigationActionType, ACTION_TYPE_BUTTON_NAVIGATION,
     parse_button_navigation, serialize_button_navigation, dispatch_button_navigation, nullptr,
     describe_button_navigation, nullptr, validate_button_navigation,
-    ACTION_EXECUTION_SYNC, false);
+    ACTION_EXECUTION_SYNC, false, true, false,
+    [](const ButtonAction& action) {
+        const char* command = action.payload.button_navigation.command;
+        return strcmp(command, "tap") == 0 || strcmp(command, "tap_hold") == 0;
+    });
 }
 #endif
