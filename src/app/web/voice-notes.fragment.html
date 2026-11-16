@@ -1,7 +1,7 @@
 <div class="section-header d-flex flex-wrap align-items-center justify-content-between gap-3">
   <div>
     <h2><span class="portal-icon" aria-hidden="true">record_voice_over</span>Voice Notes</h2>
-    <p class="mb-0">Play recordings and read transcripts.</p>
+    <p class="mb-0">Play recordings and read transcripts and summaries.</p>
   </div>
   <div class="d-flex flex-wrap gap-2">
     <button type="button" class="btn btn-outline-secondary text-body" id="voice-notes-back" hidden>Back to Notes</button>
@@ -21,6 +21,10 @@
         <div id="voice-notes-detail-player"></div>
         <div id="voice-notes-detail-actions"></div>
       </div>
+    </section>
+    <section class="card mb-3" id="voice-notes-summary-section" aria-labelledby="voice-notes-summary-title" hidden>
+      <div class="card-header"><h3 class="mb-0" id="voice-notes-summary-title">Summary</h3></div>
+      <div class="card-body" id="voice-notes-detail-summary" style="white-space: pre-wrap; overflow-wrap: anywhere"></div>
     </section>
     <section class="card mb-3" aria-labelledby="voice-notes-transcript-title">
       <div class="card-header"><h3 class="mb-0" id="voice-notes-transcript-title">Transcript</h3></div>

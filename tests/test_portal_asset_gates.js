@@ -33,7 +33,8 @@ try {
             module + ' must emit no code or data when external data is disabled');
     }
     for (const module of ['voice_notes.cpp', 'voice_notes_binding.cpp', 'voice_note_range.cpp', 'voice_notes_metadata.cpp',
-        'voice_notes_transcription.cpp', 'voice_notes_transcription_request.cpp']) {
+        'voice_notes_processing.cpp', 'voice_notes_transcription_request.cpp',
+        'voice_notes_enrichment.cpp', 'voice_notes_enrichment_request.cpp']) {
         const object = path.join(nativeDirectory, 'voice-notes.o');
         execFileSync('c++', ['-std=c++17', '-c', 'src/app/' + module, '-o', object,
             '-DBOARD_CONFIG_H', '-DHAS_VOICE_NOTES=0', '-Itests', '-Isrc/app'],

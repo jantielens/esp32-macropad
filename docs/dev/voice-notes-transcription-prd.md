@@ -16,6 +16,10 @@ non-durable device trigger. Its explicitly identified scope supersedes the
 corresponding MVE exclusions below; this PRD retains the original increment's
 contract.
 
+The subsequent [enrichment PRD](voice-notes-enrichment-prd.md) defines title and
+summary generation from saved transcripts and extends processing controls.
+Its identified scope supersedes the corresponding exclusions below.
+
 The minimum viable experience (MVE) adds manually initiated transcription to
 saved voice notes. It establishes a useful, independently testable operation
 before adding summarization or automatic background orchestration.

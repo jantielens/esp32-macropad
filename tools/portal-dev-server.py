@@ -129,8 +129,11 @@ def reset_pad_fixtures(server, scenario="normal"):
         "0000000100000004": MOCK_NOW_EPOCH - 86400,
     }
     server.mock_voice_transcripts = {}
+    server.mock_voice_enrichments = {}
     server.mock_voice_transcription = {"state": "idle", "note_id": "", "error": ""}
+    server.mock_voice_enrichment = {"state": "idle", "note_id": "", "error": ""}
     server.mock_voice_transcription_started = 0
+    server.mock_voice_chain = False
     server.mock_voice_automatic_active = False
     server.mock_voice_online = True
     server.mock_voice_recording = False
@@ -362,15 +365,16 @@ class PortalHandler(SimpleHTTPRequestHandler):
             config = copy.deepcopy(self.server.mock_config)
             if self._profile() == "reterminal-sticky-interactive":
                 config["auto_shutdown_timeout_seconds"] = config.get("auto_shutdown_timeout_seconds", 300)
-                config.setdefault("voice_notes_base_url", "")
-                config.setdefault("voice_notes_model", "")
-                config.setdefault("voice_notes_auto_transcribe", False)
-                config["voice_notes_api_key_set"] = bool(config.get("voice_notes_api_key"))
-                config["voice_notes_api_key"] = ""
+                config.setdefault("voice_notes_auto_process", False)
+                for service in ("transcription", "llm"):
+                    prefix = f"voice_notes_{service}_"
+                    config.setdefault(prefix + "endpoint", "")
+                    config.setdefault(prefix + "deployment", "")
+                    config[prefix + "api_key_set"] = bool(config.get(prefix + "api_key"))
+                    config[prefix + "api_key"] = ""
             else:
                 config.pop("auto_shutdown_timeout_seconds", None)
-                for key in ("voice_notes_base_url", "voice_notes_model", "voice_notes_api_key",
-                            "voice_notes_auto_transcribe"):
+                for key in [key for key in config if key.startswith("voice_notes_")]:
                     config.pop(key, None)
             config["caps"]["ha_live"] = self._profile() == "esp32-p4-lcd4b"
             if self._profile() in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
@@ -720,20 +724,43 @@ class PortalHandler(SimpleHTTPRequestHandler):
                     if job["note_id"] in self.server.mock_voice_notes:
                         self.server.mock_voice_transcripts[job["note_id"]] = {
                             "text": "A sample transcript for local development.",
-                            "model": self.server.mock_config.get("voice_notes_model", ""), "created_at": MOCK_NOW_EPOCH}
+                            "model": self.server.mock_config.get("voice_notes_transcription_deployment", ""), "created_at": MOCK_NOW_EPOCH}
                     job["state"] = "ready"
+                    if (self.server.mock_voice_chain and
+                            all(self.server.mock_config.get("voice_notes_llm_" + key)
+                                for key in ("endpoint", "deployment", "api_key")) and
+                            job["note_id"] not in self.server.mock_voice_enrichments and
+                            not self.server.mock_voice_recording):
+                        self.server.mock_voice_enrichment = {
+                            "state": "preparing", "note_id": job["note_id"], "error": ""}
+                        self.server.mock_voice_transcription_started = time.monotonic()
+                    self.server.mock_voice_chain = False
                     self.server.mock_voice_automatic_active = False
                 config = self.server.mock_config
-                configured = all(config.get(key) for key in
-                                 ("voice_notes_base_url", "voice_notes_model", "voice_notes_api_key"))
-                pending = sorted((self.server.mock_voice_note_times[note_id], note_id)
+                configured = all(config.get("voice_notes_transcription_" + key)
+                                 for key in ("endpoint", "deployment", "api_key"))
+                llm_configured = all(config.get("voice_notes_llm_" + key)
+                                     for key in ("endpoint", "deployment", "api_key"))
+                enrichment = self.server.mock_voice_enrichment
+                if enrichment["state"] == "preparing" and time.monotonic() - self.server.mock_voice_transcription_started >= 1:
+                    note_id = enrichment["note_id"]
+                    if note_id in self.server.mock_voice_notes:
+                        self.server.mock_voice_enrichments[note_id] = {
+                            "title": "Sample voice note", "summary": "A sample summary for local development.",
+                            "model": config.get("voice_notes_llm_deployment", ""), "created_at": MOCK_NOW_EPOCH}
+                    enrichment["state"] = "ready"
+                pending = sorted((self.server.mock_voice_note_times[note_id], note_id,
+                                  "transcription" if note_id not in self.server.mock_voice_transcripts else "enrichment")
                                  for note_id in self.server.mock_voice_notes
-                                 if note_id not in self.server.mock_voice_transcripts)
-                processing = {"state": "idle", "reason": "none"}
-                if job["state"] == "preparing":
+                                 if note_id not in self.server.mock_voice_transcripts or
+                                 (llm_configured and note_id not in self.server.mock_voice_enrichments))
+                processing = {"state": "idle", "reason": "none", "service": "none"}
+                if job["state"] == "preparing" or enrichment["state"] == "preparing":
                     processing["state"] = "running"
-                elif config.get("voice_notes_auto_transcribe", False) and pending:
-                    if not configured:
+                    processing["service"] = "transcription" if job["state"] == "preparing" else "enrichment"
+                elif config.get("voice_notes_auto_process", False) and pending:
+                    pending_service = pending[0][2]
+                    if pending_service == "transcription" and not configured:
                         processing = {"state": "blocked", "reason": "configuration"}
                     elif self.server.mock_voice_recording:
                         processing = {"state": "waiting", "reason": "recording"}
@@ -744,13 +771,21 @@ class PortalHandler(SimpleHTTPRequestHandler):
                     elif self.server.mock_voice_retry or self.server.mock_voice_cooldown:
                         processing = {"state": "waiting", "reason": "retry"}
                     else:
-                        job = {"state": "preparing", "note_id": pending[0][1], "error": ""}
-                        self.server.mock_voice_transcription = job
-                        self.server.mock_voice_automatic_active = True
+                        if pending_service == "transcription":
+                            job = {"state": "preparing", "note_id": pending[0][1], "error": ""}
+                            self.server.mock_voice_transcription = job
+                            self.server.mock_voice_automatic_active = True
+                            self.server.mock_voice_chain = bool(llm_configured)
+                        else:
+                            enrichment = {"state": "preparing", "note_id": pending[0][1], "error": ""}
+                            self.server.mock_voice_enrichment = enrichment
+                            self.server.mock_voice_transcription_started = time.monotonic()
                         processing["state"] = "running"
-                self._serve_json({"recording": {"state": "idle", "duration_ms": 0, "scenario": None, "error": ""},
-                                  "last_saved": {"id": ""}, "transcription": job,
+                processing.setdefault("service", "transcription" if processing["state"] != "idle" else "none")
+                self._serve_json({"recording": {"state": "idle", "session_active": self.server.mock_voice_recording, "duration_ms": 0, "scenario": None, "error": ""},
+                                  "last_saved": {"id": ""}, "transcription": {**job, "retry_status": ""},
                                   "processing": processing, "transcription_configured": bool(configured),
+                                  "enrichment": {**enrichment, "retry_status": ""}, "enrichment_configured": bool(llm_configured),
                                   "backend": "littlefs", "total_bytes": 4 * 1024 * 1024,
                                   "free_bytes": 3 * 1024 * 1024})
             elif path.endswith("/list"):
@@ -758,7 +793,10 @@ class PortalHandler(SimpleHTTPRequestHandler):
                     {"id": clip_id, "created_at": self.server.mock_voice_note_times[clip_id],
                      "size_bytes": len(data), "duration_ms": (len(data) - 44) // 32,
                      "sample_rate": 16000, "channels": 1,
-                     "has_transcript": clip_id in self.server.mock_voice_transcripts}
+                     "has_transcript": clip_id in self.server.mock_voice_transcripts,
+                     "has_enrichment": clip_id in self.server.mock_voice_enrichments,
+                     "title": self.server.mock_voice_enrichments.get(clip_id, {}).get("title"),
+                     "enrichment_error": ""}
                     for clip_id, data in self.server.mock_voice_notes.items()]})
             elif path.endswith("/detail"):
                 clip_id = query.get("id", [""])[0]
@@ -771,7 +809,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
                     self._serve_json({"note": {"id": clip_id, "created_at": self.server.mock_voice_note_times[clip_id],
                         "size_bytes": len(data), "duration_ms": (len(data) - 44) // 32,
                         "sample_rate": 16000, "channels": 1},
-                        "transcript": self.server.mock_voice_transcripts.get(clip_id)})
+                        "transcript": self.server.mock_voice_transcripts.get(clip_id),
+                        "enrichment": self.server.mock_voice_enrichments.get(clip_id), "enrichment_error": ""})
             elif path.endswith("/file"):
                 clip_id = query.get("id", [""])[0]
                 if not re.fullmatch(r"[0-9a-f]{16}", clip_id):
@@ -854,7 +893,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length) if length else b""
 
-        if path == "/api/component/voice-notes/transcribe":
+        if path in ("/api/component/voice-notes/process", "/api/component/voice-notes/retranscribe",
+                    "/api/component/voice-notes/regenerate"):
             if self._profile() != "reterminal-sticky-interactive":
                 self._serve_json({"message": "Voice Notes unavailable"}, 404)
                 return
@@ -864,20 +904,34 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 self._serve_json({"message": "Invalid note ID"}, 400)
             elif clip_id not in self.server.mock_voice_notes:
                 self._serve_json({"message": "Note not found"}, 404)
-            elif self.server.mock_voice_transcription["state"] == "preparing":
+            elif (self.server.mock_voice_transcription["state"] == "preparing" or
+                  self.server.mock_voice_enrichment["state"] == "preparing"):
                 self._serve_json({"message": "Device is busy"}, 409)
+            elif path.endswith("/retranscribe") and clip_id not in self.server.mock_voice_transcripts:
+                self._serve_json({"message": "Required saved result is missing"}, 409)
+            elif path.endswith("/regenerate") and (clip_id not in self.server.mock_voice_transcripts or
+                                                    clip_id not in self.server.mock_voice_enrichments):
+                self._serve_json({"message": "Required saved result is missing"}, 409)
+            elif path.endswith("/process") and clip_id in self.server.mock_voice_transcripts and clip_id in self.server.mock_voice_enrichments:
+                self._serve_json({"success": True, "note_id": clip_id, "state": "unchanged"})
             elif self.server.mock_voice_cooldown:
                 self._serve_json({"message": "Rate limited. Please try again later."}, 429)
-            elif not all(config.get(key) for key in ("voice_notes_base_url", "voice_notes_model", "voice_notes_api_key")):
-                self._serve_json({"message": "Transcription is not configured"}, 400)
+            elif not all(config.get("voice_notes_" + ("llm_" if path.endswith("/regenerate") or
+                    (path.endswith("/process") and clip_id in self.server.mock_voice_transcripts) else "transcription_") + key)
+                    for key in ("endpoint", "deployment", "api_key")):
+                self._serve_json({"message": "Processing service is not configured"}, 400)
             elif self.server.mock_voice_recording or not self.server.mock_voice_resource_available:
                 self._serve_json({"message": "Device is busy"}, 409)
             elif not self.server.mock_voice_online:
                 self._serve_json({"message": "Wi-Fi disconnected"}, 503)
             else:
-                self.server.mock_voice_transcription = {"state": "preparing", "note_id": clip_id, "error": ""}
+                if path.endswith("/regenerate") or (path.endswith("/process") and clip_id in self.server.mock_voice_transcripts):
+                    self.server.mock_voice_enrichment = {"state": "preparing", "note_id": clip_id, "error": ""}
+                else:
+                    self.server.mock_voice_transcription = {"state": "preparing", "note_id": clip_id, "error": ""}
+                    self.server.mock_voice_chain = path.endswith("/process")
                 self.server.mock_voice_transcription_started = time.monotonic()
-                self._serve_json({"success": True, "note_id": clip_id, "state": "preparing"}, 202)
+                self._serve_json({"success": True, "note_id": clip_id, "state": "accepted"}, 202)
             return
 
         if path == "/api/mqtt/inspect":
@@ -1259,8 +1313,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 if not isinstance(update, dict):
                     self._serve_json({"success": False, "message": "Configuration must be an object"}, 400)
                     return
-                voice_keys = ("voice_notes_base_url", "voice_notes_api_key", "voice_notes_model")
-                auto_key = "voice_notes_auto_transcribe"
+                voice_keys = tuple("voice_notes_" + service + "_" + field for service in ("transcription", "llm")
+                                   for field in ("endpoint", "api_key", "deployment"))
+                auto_key = "voice_notes_auto_process"
                 if auto_key in update:
                     if self._profile() != "reterminal-sticky-interactive":
                         update.pop(auto_key)
@@ -1272,23 +1327,27 @@ class PortalHandler(SimpleHTTPRequestHandler):
                         for key in voice_keys:
                             update.pop(key, None)
                     else:
-                        for key, limit in zip(voice_keys, (512, 256, 128)):
+                        for key, limit in zip(voice_keys, (512, 256, 128) * 2):
                             if key in update and (not isinstance(update[key], str) or
                                     len(update[key].encode("utf-8")) >= limit or
-                                    (key != "voice_notes_base_url" and any(c in update[key] for c in "\r\n"))):
+                                    "\0" in update[key] or
+                                    (not key.endswith("_endpoint") and any(c in update[key] for c in "\r\n"))):
                                 self._serve_json({"success": False, "message": "Invalid Voice Notes settings"}, 400)
                                 return
-                        endpoint = update.get("voice_notes_base_url", "")
-                        if endpoint:
-                            parts = urlparse(endpoint)
-                            if (parts.scheme != "https" or not parts.netloc or parts.path not in ("", "/") or
-                                    parts.username or parts.password or parts.query or parts.fragment or
-                                    any(c.isspace() for c in endpoint)):
-                                self._serve_json({"success": False, "message": "Invalid Voice Notes settings"}, 400)
-                                return
-                            update["voice_notes_base_url"] = endpoint.rstrip("/") + "/"
-                        if not update.get("voice_notes_api_key"):
-                            update.pop("voice_notes_api_key", None)
+                        for service in ("transcription", "llm"):
+                            endpoint_key = f"voice_notes_{service}_endpoint"
+                            key_key = f"voice_notes_{service}_api_key"
+                            endpoint = update.get(endpoint_key, "")
+                            if endpoint:
+                                parts = urlparse(endpoint)
+                                if (parts.scheme != "https" or not parts.netloc or parts.path not in ("", "/") or
+                                        parts.username or parts.password or parts.query or parts.fragment or
+                                        any(c.isspace() for c in endpoint)):
+                                    self._serve_json({"success": False, "message": "Invalid Voice Notes settings"}, 400)
+                                    return
+                                update[endpoint_key] = endpoint.rstrip("/") + "/"
+                            if not update.get(key_key):
+                                update.pop(key_key, None)
                 if "auto_shutdown_timeout_seconds" in update:
                     seconds = update["auto_shutdown_timeout_seconds"]
                     if isinstance(seconds, str) and re.fullmatch(r"[0-9]+", seconds):
@@ -1436,6 +1495,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 del self.server.mock_voice_notes[clip_id]
                 del self.server.mock_voice_note_times[clip_id]
                 self.server.mock_voice_transcripts.pop(clip_id, None)
+                self.server.mock_voice_enrichments.pop(clip_id, None)
                 self._serve_json({"success": True})
             return
         if parsed.path == "/api/mqtt/inspect":

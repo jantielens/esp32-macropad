@@ -1,6 +1,6 @@
 #include "action_registry.h"
 #include "voice_notes.h"
-#include "voice_notes_transcription.h"
+#include "voice_notes_processing.h"
 #include "log_manager.h"
 
 #if HAS_VOICE_NOTES
@@ -22,16 +22,18 @@ bool valid_scenario(JsonObjectConst json, VoiceNoteCommand command) {
            strcmp(json["scenario"].as<const char*>(), "general") == 0;
 }
 
-const char* start_rejection(VoiceNotesTranscriptionStart result) {
+const char* start_rejection(VoiceNotesProcessingStart result) {
     switch (result) {
-        case VoiceNotesTranscriptionStart::NotConfigured: return "transcription settings incomplete";
-        case VoiceNotesTranscriptionStart::Busy: return "device busy";
-        case VoiceNotesTranscriptionStart::Offline: return "Wi-Fi disconnected";
-        case VoiceNotesTranscriptionStart::Cooldown: return "service cooldown";
-        case VoiceNotesTranscriptionStart::Unavailable: return "processing resources unavailable";
-        case VoiceNotesTranscriptionStart::InvalidId: return "invalid note ID";
-        case VoiceNotesTranscriptionStart::NotFound: return "note not found";
-        case VoiceNotesTranscriptionStart::Accepted: return "accepted";
+        case VoiceNotesProcessingStart::NotConfigured: return "processing settings incomplete";
+        case VoiceNotesProcessingStart::Busy: return "device busy";
+        case VoiceNotesProcessingStart::Offline: return "Wi-Fi disconnected";
+        case VoiceNotesProcessingStart::Cooldown: return "service cooldown";
+        case VoiceNotesProcessingStart::Unavailable: return "processing resources unavailable";
+        case VoiceNotesProcessingStart::InvalidId: return "invalid note ID";
+        case VoiceNotesProcessingStart::NotFound: return "note not found";
+        case VoiceNotesProcessingStart::MissingResult: return "saved result missing";
+        case VoiceNotesProcessingStart::Unchanged: return "nothing to process";
+        case VoiceNotesProcessingStart::Accepted: return "accepted";
     }
     return "unknown rejection";
 }
@@ -39,8 +41,8 @@ const char* start_rejection(VoiceNotesTranscriptionStart result) {
 void parse_voice_note(const JsonObject& json, ButtonAction& action) {
     const char* text = json["command"] | "";
     VoiceNoteCommand command;
-    const bool transcribe = strcmp(text, "transcribe") == 0;
-    if (transcribe) {
+    const bool process = strcmp(text, "process") == 0;
+    if (process) {
         for (JsonPair field : json) {
             const char* name = field.key().c_str();
             if (strcmp(name, "type") != 0 && strcmp(name, "command") != 0) {
@@ -49,13 +51,13 @@ void parse_voice_note(const JsonObject& json, ButtonAction& action) {
             }
         }
     }
-    if ((!transcribe && (!parse_command(text, command) || !valid_scenario(json, command))) ||
-        (transcribe && json.containsKey("scenario"))) {
+    if ((!process && (!parse_command(text, command) || !valid_scenario(json, command))) ||
+        (process && json.containsKey("scenario"))) {
         memset(&action, 0, sizeof(action));
         return;
     }
     strlcpy(action.payload.voice_note.command, text, sizeof(action.payload.voice_note.command));
-    if (!transcribe && command == VoiceNoteCommand::Start)
+    if (!process && command == VoiceNoteCommand::Start)
         strlcpy(action.payload.voice_note.scenario, "general", sizeof(action.payload.voice_note.scenario));
 }
 
@@ -66,10 +68,10 @@ void serialize_voice_note(const ButtonAction& action, JsonObject json) {
 }
 
 ActionResult dispatch_voice_note(const ButtonAction& action, const char* label, uint32_t token) {
-    if (strcmp(action.payload.voice_note.command, "transcribe") == 0) {
-        const VoiceNotesTranscriptionStart result = voice_notes_processing_start();
-        if (result == VoiceNotesTranscriptionStart::Accepted) return ACTION_COMPLETE;
-        LOGW("Action", "%s transcription request rejected: %s", label, start_rejection(result));
+    if (strcmp(action.payload.voice_note.command, "process") == 0) {
+        const VoiceNotesProcessingStart result = voice_notes_processing_start();
+        if (result == VoiceNotesProcessingStart::Accepted) return ACTION_COMPLETE;
+        LOGW("Action", "%s processing request rejected: %s", label, start_rejection(result));
         return ACTION_FAILED;
     }
     VoiceNoteCommand command;
@@ -89,11 +91,11 @@ const char* validate_voice_note(JsonObjectConst json) {
     }
     VoiceNoteCommand command;
     if (json["command"].is<const char*>() &&
-        strcmp(json["command"].as<const char*>(), "transcribe") == 0)
-        return json.containsKey("scenario") ? "voice_note transcribe does not accept scenario" : nullptr;
+        strcmp(json["command"].as<const char*>(), "process") == 0)
+        return json.containsKey("scenario") ? "voice_note process does not accept scenario" : nullptr;
     if (!json["command"].is<const char*>() ||
         !parse_command(json["command"].as<const char*>(), command))
-        return "voice_note command must be start, pause, resume, save, discard, or transcribe";
+        return "voice_note command must be start, pause, resume, save, discard, or process";
     if (!valid_scenario(json, command))
         return "voice_note scenario must be general and is only allowed on start";
     return nullptr;
@@ -105,7 +107,7 @@ void describe_voice_note(JsonObject& action) {
     JsonArray fields = action.createNestedArray("fields");
     JsonObject field = fields.createNestedObject();
     field["name"] = "command";
-    field["description"] = "start, pause, resume, save, discard, or transcribe";
+    field["description"] = "start, pause, resume, save, discard, or process";
     field = fields.createNestedObject();
     field["name"] = "scenario";
     field["description"] = "Optional on start; general is the only supported scenario";
@@ -116,8 +118,8 @@ void describe_voice_note(JsonObject& action) {
     select["type"] = "select";
     select["default"] = "start";
     JsonArray options = select.createNestedArray("options");
-    const char* const ids[] = {"start", "pause", "resume", "save", "discard", "transcribe"};
-    const char* const labels[] = {"Start recording", "Pause recording", "Resume recording", "Save recording", "Discard recording", "Start transcription"};
+    const char* const ids[] = {"start", "pause", "resume", "save", "discard", "process"};
+    const char* const labels[] = {"Start recording", "Pause recording", "Resume recording", "Save recording", "Discard recording", "Start processing"};
     for (size_t i = 0; i < sizeof(ids) / sizeof(ids[0]); ++i) {
         JsonObject option = options.createNestedObject();
         option["id"] = ids[i];

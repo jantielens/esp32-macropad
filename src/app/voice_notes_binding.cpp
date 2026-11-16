@@ -4,13 +4,15 @@
 #include "binding_template.h"
 #include "log_manager.h"
 #include "voice_notes.h"
-#include "voice_notes_transcription.h"
+#include "voice_notes_processing.h"
 #include <stdio.h>
 #include <string.h>
 
 namespace {
 const char* const kKeys[] = {"recording.state", "recording.duration_s", "recording.scenario", "recording.error",
-    "last_saved.id", "transcription.state", "transcription.note_id", "transcription.error", "processing.state"};
+    "last_saved.id", "transcription.state", "transcription.note_id", "transcription.error",
+    "enrichment.state", "enrichment.note_id", "enrichment.error", "processing.state",
+    "transcription.retry_status", "enrichment.retry_status"};
 const BindingParamDoc kParams[] = {{"key", "Recorder snapshot key, see below."}};
 const BindingKeyDoc kKeyDocs[] = {
     {"recording.state", "Current recording state", nullptr},
@@ -21,12 +23,19 @@ const BindingKeyDoc kKeyDocs[] = {
     {"transcription.state", "Current transcription state", nullptr},
     {"transcription.note_id", "Note ID of the latest transcription attempt", nullptr},
     {"transcription.error", "Most recent transcription error", nullptr},
+    {"transcription.retry_status", "Service retry cycle: empty, Retry 1/2/3 of 3, or Retries halted; not per-note", nullptr},
+    {"enrichment.state", "Current title and summary generation state", nullptr},
+    {"enrichment.note_id", "Note ID of the latest enrichment attempt", nullptr},
+    {"enrichment.error", "Most recent enrichment error", nullptr},
+    {"enrichment.retry_status", "Service retry cycle: empty, Retry 1/2/3 of 3, or Retries halted; not per-note", nullptr},
     {"processing.state", "Background processing state", nullptr},
 };
 const BindingExampleDoc kExamples[] = {
     {"[voice_note:recording.state]", "Show the recorder state."},
     {"[voice_note:recording.duration_s]", "Show the captured duration."},
     {"[voice_note:processing.state]", "Show background processing state."},
+    {"[voice_note:enrichment.state]", "Show title and summary generation state."},
+    {"[voice_note:transcription.retry_status]", "Show the transcription service retry cycle."},
 };
 const BindingSchemeDoc kRecorderDoc = {
     "Device", "Local voice note recorder status.",
@@ -42,6 +51,11 @@ const BindingAuthoringKey kAuthoringKeys[] = {
     binding_authoring_text("transcription.state", "idle"),
     binding_authoring_text("transcription.note_id", "0000000100000002"),
     binding_authoring_text("transcription.error", "Transcription request failed"),
+    binding_authoring_text("transcription.retry_status", "Retry 1 of 3"),
+    binding_authoring_text("enrichment.state", "idle"),
+    binding_authoring_text("enrichment.note_id", "0000000100000002"),
+    binding_authoring_text("enrichment.error", "Enrichment request failed"),
+    binding_authoring_text("enrichment.retry_status", "Retries halted"),
     binding_authoring_text("processing.state", "idle"),
 };
 const BindingAuthoringSpec kAuthoring = {BINDING_DOC_LIST(kAuthoringKeys)};
@@ -56,11 +70,27 @@ BindingResolverStatus resolve(const char* key, char* out, size_t size) {
         VoiceNotesProcessingSnapshot processing = {};
         voice_notes_processing_snapshot(&processing);
         strlcpy(out, voice_notes_processing_state_name(processing.state), size);
+    } else if (strncmp(key, "enrichment.", 11) == 0) {
+        VoiceNotesEnrichmentSnapshot enrichment = {};
+        voice_notes_enrichment_snapshot(&enrichment);
+        if (strcmp(key, "enrichment.state") == 0)
+            strlcpy(out, voice_notes_enrichment_state_name(enrichment.state), size);
+        else if (strcmp(key, "enrichment.retry_status") == 0)
+            strlcpy(out, enrichment.retry_status, size);
+        else if (strcmp(key, "enrichment.note_id") == 0) {
+            if (!enrichment.note_id[0]) return BINDING_RESOLVER_UNAVAILABLE;
+            strlcpy(out, enrichment.note_id, size);
+        } else if (strcmp(key, "enrichment.error") == 0) {
+            if (!enrichment.error[0]) return BINDING_RESOLVER_UNAVAILABLE;
+            strlcpy(out, enrichment.error, size);
+        } else return BINDING_RESOLVER_UNKNOWN;
     } else if (strncmp(key, "transcription.", 14) == 0) {
         VoiceNotesTranscriptionSnapshot transcription = {};
         voice_notes_transcription_snapshot(&transcription);
         if (strcmp(key, "transcription.state") == 0)
             strlcpy(out, voice_notes_transcription_state_name(transcription.state), size);
+        else if (strcmp(key, "transcription.retry_status") == 0)
+            strlcpy(out, transcription.retry_status, size);
         else if (strcmp(key, "transcription.note_id") == 0) {
             if (!transcription.note_id[0]) return BINDING_RESOLVER_UNAVAILABLE;
             strlcpy(out, transcription.note_id, size);

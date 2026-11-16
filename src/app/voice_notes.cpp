@@ -22,6 +22,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>
+#include <ctype.h>
 #include <string.h>
 #include <time.h>
 
@@ -777,6 +778,17 @@ VoiceNoteCancelStatus voice_notes_cancel() {
     return VoiceNoteCancelStatus::Pending;
 }
 
+static const char* artifact_suffix(VoiceNoteArtifact artifact) {
+    return artifact == VoiceNoteArtifact::Transcript ? ".json" : ".enrichment.json";
+}
+
+static bool artifact_path_if_present(const char* id, VoiceNoteArtifact artifact, char* path, size_t size) {
+    snprintf(path, size, "%s/%s%s", kDirectory, id, artifact_suffix(artifact));
+    if (Storage.exists(path)) return true;
+    snprintf(path, size, "%s/%s%s.bak", kDirectory, id, artifact_suffix(artifact));
+    return Storage.exists(path);
+}
+
 bool voice_notes_list(JsonDocument& output) {
     if (!g_initialized || xSemaphoreTake(g_catalog_mutex, portMAX_DELAY) != pdTRUE) return false;
     bool valid = g_store.copy_manifest(output);
@@ -787,13 +799,46 @@ bool voice_notes_list(JsonDocument& output) {
             const char* id = entry["id"];
             if (!id) { valid = false; break; }
             char path[kPathSize];
-            snprintf(path, sizeof(path), "%s/%s.json", kDirectory, id);
-            bool exists = Storage.exists(path);
-            if (!exists) {
-                snprintf(path, sizeof(path), "%s/%s.json.bak", kDirectory, id);
-                exists = Storage.exists(path);
+            entry["has_transcript"] =
+                artifact_path_if_present(id, VoiceNoteArtifact::Transcript, path, sizeof(path));
+            const bool has_enrichment =
+                artifact_path_if_present(id, VoiceNoteArtifact::Enrichment, path, sizeof(path));
+            entry["has_enrichment"] = has_enrichment;
+            entry["title"] = nullptr;
+            entry["enrichment_error"] = "";
+            if (has_enrichment) {
+                File file = Storage.open(path, "r");
+                if (!file) {
+                    entry["enrichment_error"] = "Saved title and summary unavailable";
+                    continue;
+                }
+                BoundedPsramJsonAllocator allocator(heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+                JsonDocument filter(&allocator), saved(&allocator);
+                filter["enrichment"]["title"] = true;
+                if (filter.overflowed()) {
+                    file.close();
+                    valid = false;
+                    break;
+                }
+                const DeserializationError error = deserializeJson(saved, file, DeserializationOption::Filter(filter));
+                file.close();
+                if (error == DeserializationError::NoMemory || saved.overflowed()) {
+                    valid = false;
+                    break;
+                }
+                JsonString title = saved["enrichment"]["title"].as<JsonString>();
+                bool nonblank = false;
+                if (title.c_str() && strlen(title.c_str()) == title.size()) {
+                    for (size_t i = 0; i < title.size(); ++i) {
+                        if (!isspace(static_cast<unsigned char>(title.c_str()[i]))) {
+                            nonblank = true;
+                            break;
+                        }
+                    }
+                }
+                if (error || !nonblank) entry["enrichment_error"] = "Saved title and summary are invalid";
+                else entry["title"] = JsonString(title.c_str(), title.size(), JsonString::Copied);
             }
-            entry["has_transcript"] = exists;
         }
     }
     valid = valid && !output.overflowed();
@@ -818,7 +863,8 @@ bool voice_notes_exists(const char* id) {
     xSemaphoreGive(g_catalog_mutex);
     return result;
 }
-VoiceNoteCandidate voice_notes_next_candidate(const VoiceNoteCursor& after, VoiceNoteCursor* next) {
+VoiceNoteCandidate voice_notes_next_candidate(const VoiceNoteCursor& after, VoiceNoteCursor* next,
+                                              bool transcription, bool enrichment) {
     if (!next || !g_initialized) return VoiceNoteCandidate::Error;
     VoiceNoteSnapshot recorder = {};
     voice_notes_snapshot(&recorder);
@@ -860,10 +906,14 @@ VoiceNoteCandidate voice_notes_next_candidate(const VoiceNoteCursor& after, Voic
             if (found && (created > best.created_at ||
                 (created == best.created_at && strcmp(id, best.id) >= 0))) continue;
             char path[kPathSize];
-            snprintf(path, sizeof(path), "%s/%s.json", kDirectory, id);
-            if (Storage.exists(path)) continue;
-            snprintf(path, sizeof(path), "%s/%s.json.bak", kDirectory, id);
-            if (Storage.exists(path)) continue;
+            const bool has_transcript =
+                artifact_path_if_present(id, VoiceNoteArtifact::Transcript, path, sizeof(path));
+            if (!has_transcript) {
+                if (!transcription) continue;
+            } else {
+                if (!enrichment) continue;
+                if (artifact_path_if_present(id, VoiceNoteArtifact::Enrichment, path, sizeof(path))) continue;
+            }
             best.created_at = created;
             strlcpy(best.id, id, sizeof(best.id));
             found = true;
@@ -913,31 +963,24 @@ void voice_notes_close(File* file, const char* id) {
     xSemaphoreGive(g_catalog_mutex);
 }
 
-bool voice_notes_has_transcript(const char* id) {
+bool voice_notes_has_artifact(const char* id, VoiceNoteArtifact artifact) {
     if (!g_initialized || !id || xSemaphoreTake(g_catalog_mutex, portMAX_DELAY) != pdTRUE) return false;
     char path[kPathSize];
     bool result = false;
     if (g_store.exists(id)) {
-        snprintf(path, sizeof(path), "%s/%s.json", kDirectory, id);
-        result = Storage.exists(path);
-        if (!result) {
-            snprintf(path, sizeof(path), "%s/%s.json.bak", kDirectory, id);
-            result = Storage.exists(path);
-        }
+        result = artifact_path_if_present(id, artifact, path, sizeof(path));
     }
     xSemaphoreGive(g_catalog_mutex);
     return result;
 }
 
-VoiceNoteFileStatus voice_notes_open_transcript(const char* id, File* file) {
+VoiceNoteFileStatus voice_notes_open_artifact(const char* id, VoiceNoteArtifact artifact, File* file) {
     if (!g_initialized || !id || !file ||
         xSemaphoreTake(g_catalog_mutex, portMAX_DELAY) != pdTRUE) return VoiceNoteFileStatus::Error;
     VoiceNoteFileStatus result = VoiceNoteFileStatus::NotFound;
     if (g_store.exists(id)) {
         char path[kPathSize];
-        snprintf(path, sizeof(path), "%s/%s.json", kDirectory, id);
-        if (!Storage.exists(path)) snprintf(path, sizeof(path), "%s/%s.json.bak", kDirectory, id);
-        if (Storage.exists(path)) {
+        if (artifact_path_if_present(id, artifact, path, sizeof(path))) {
             *file = Storage.open(path, "r");
             result = *file ? VoiceNoteFileStatus::Ready : VoiceNoteFileStatus::Error;
         }
@@ -946,7 +989,8 @@ VoiceNoteFileStatus voice_notes_open_transcript(const char* id, File* file) {
     return result;
 }
 
-bool voice_notes_write_transcript(const char* id, const uint8_t* json, size_t length) {
+bool voice_notes_write_artifact(const char* id, VoiceNoteArtifact artifact,
+                                const uint8_t* json, size_t length) {
     if (!g_initialized || !id || !json || !length ||
         xSemaphoreTake(g_catalog_mutex, portMAX_DELAY) != pdTRUE) return false;
     bool leased = false;
@@ -957,14 +1001,14 @@ bool voice_notes_write_transcript(const char* id, const uint8_t* json, size_t le
     const StorageMutationGuard guard;
     if (!guard) return false;
     char path[kPathSize], backup[kPathSize];
-    snprintf(path, sizeof(path), "%s/%s.json", kDirectory, id);
-    snprintf(backup, sizeof(backup), "%s/%s.json.bak", kDirectory, id);
+    snprintf(path, sizeof(path), "%s/%s%s", kDirectory, id, artifact_suffix(artifact));
+    snprintf(backup, sizeof(backup), "%s/%s%s.bak", kDirectory, id, artifact_suffix(artifact));
     if (!Storage.exists(path) && Storage.exists(backup) && !Storage.rename(backup, path)) {
-        LOGE(TAG, "Cannot restore transcript backup for %s", id);
+        LOGE(TAG, "Cannot restore note artifact backup for %s", id);
         return false;
     }
     if (!storage_write_atomic(path, json, length)) {
-        LOGE(TAG, "Cannot save transcript for %s", id);
+        LOGE(TAG, "Cannot save note artifact for %s", id);
         return false;
     }
     return true;
@@ -982,11 +1026,12 @@ VoiceNoteFileStatus voice_notes_remove(const char* id) {
             const StorageMutationGuard guard;
             bool removed = bool(guard);
             char path[kPathSize];
-            for (const char* suffix : {".json", ".json.bak", ".json.tmp"}) {
+            for (const char* suffix : {".json", ".json.bak", ".json.tmp",
+                                       ".enrichment.json", ".enrichment.json.bak", ".enrichment.json.tmp"}) {
                 if (!removed) break;
                 snprintf(path, sizeof(path), "%s/%s%s", kDirectory, id, suffix);
                 if (Storage.exists(path) && !Storage.remove(path)) {
-                    LOGE(TAG, "Cannot remove transcript for %s", id);
+                    LOGE(TAG, "Cannot remove note artifact for %s", id);
                     removed = false;
                     break;
                 }

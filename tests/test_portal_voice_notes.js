@@ -54,14 +54,20 @@ const elements = {
     'voice-notes-detail-player': new Element('div'),
     'voice-notes-detail-actions': new Element('div'),
     'voice-notes-detail-transcript': new Element('div'),
+    'voice-notes-detail-summary': new Element('div'),
+    'voice-notes-summary-section': new Element('section'),
     'voice-notes-back': new Element('button'),
     'voice-notes-setup': new Element('div'),
     'voice-notes-settings-save': new Element('button'),
-    'voice-notes-key-status': new Element('div'),
-    'voice_notes_base_url': new Element('input'),
-    'voice_notes_model': new Element('input'),
-    'voice_notes_api_key': new Element('input'),
-    'voice_notes_auto_transcribe': new Element('input')
+    'voice-notes-transcription-key-status': new Element('div'),
+    'voice-notes-llm-key-status': new Element('div'),
+    'voice_notes_transcription_endpoint': new Element('input'),
+    'voice_notes_transcription_deployment': new Element('input'),
+    'voice_notes_transcription_api_key': new Element('input'),
+    'voice_notes_llm_endpoint': new Element('input'),
+    'voice_notes_llm_deployment': new Element('input'),
+    'voice_notes_llm_api_key': new Element('input'),
+    'voice_notes_auto_process': new Element('input')
 };
 const entries = [
     { id: '0000000100000002', created_at: 1791370589, duration_ms: 65000, has_transcript: true },
@@ -78,16 +84,19 @@ let listGate = null;
 let listRequests = 0;
 let detailRequests = 0;
 let detailById = false;
+let detailGate = null;
 let registered = [];
-let config = { voice_notes_base_url: 'https://example.test/', voice_notes_model: 'deployment',
-    voice_notes_api_key_set: true, voice_notes_auto_transcribe: true };
+let config = { voice_notes_transcription_endpoint: 'https://example.test/', voice_notes_transcription_deployment: 'deployment',
+    voice_notes_transcription_api_key_set: true, voice_notes_llm_api_key_set: true, voice_notes_auto_process: true };
 let savedConfig;
 let leave;
-elements.voice_notes_auto_transcribe.type = 'checkbox';
-elements.voice_notes_api_key.value = '';
+elements.voice_notes_auto_process.type = 'checkbox';
+elements.voice_notes_transcription_api_key.value = '';
+elements.voice_notes_llm_api_key.value = '';
 const context = {
     document: {
         createElement(tag) { return new Element(tag); },
+        createTextNode(text) { const node = new Element('#text'); node.textContent = text; return node; },
         getElementById(id) { return elements[id]; },
         querySelector() { return null; },
         querySelectorAll() {
@@ -122,16 +131,19 @@ const context = {
         if (url.endsWith('list') && listGate) return listGate;
         if (url.endsWith('status') && firstStatus) {
             firstStatus = false;
-            return initialStatus.then(() => ({ ok: true, json: () => Promise.resolve(currentState) }));
+            return initialStatus.then(() => ({ ok: true, json: () => Promise.resolve({ enrichment_configured: true, ...currentState }) }));
         }
         if (url.includes('detail?')) detailRequests++;
+        if (url.includes('detail?') && detailGate) return detailGate;
         const detailEntry = entries.find(entry => url.includes(entry.id)) || entries[0];
         return Promise.resolve({
             ok: true,
             json: () => Promise.resolve(url.endsWith('list') ? { entries: entries.map(entry => ({ ...entry })) } :
                 url.includes('detail?') ? { note: { ...detailEntry }, transcript:
-                    !detailById || detailEntry.has_transcript ? { text: '<script>not markup</script>' } : null } :
-                currentState)
+                    !detailById || detailEntry.has_transcript ? { text: '<script>not markup</script>' } : null,
+                    enrichment: detailEntry.has_enrichment ? { title: detailEntry.title, summary: detailEntry.summary } : null,
+                    enrichment_error: detailEntry.enrichment_error || '' } :
+                { enrichment_configured: true, ...currentState })
         });
     }
 };
@@ -160,9 +172,9 @@ vm.runInContext(fs.readFileSync('src/app/web/portal_voice_notes.js', 'utf8'), co
     const indicators = list.querySelectorAll('span').filter(node => node.getAttribute('aria-label') === 'Transcript available');
     assert.deepStrictEqual(indicators.map(node => node.hidden), [false, true]);
     assert(noteStatuses.every(node => node.hidden));
-    const noteActions = buttons.filter(button => ['View details', 'Transcribe', 'Transcribe again'].includes(button.textContent));
+    const noteActions = buttons.filter(button => ['View details', 'Process note'].includes(button.textContent));
     assert.deepStrictEqual(noteActions.map(button => button.textContent),
-        ['View details', 'Transcribe again', 'View details', 'Transcribe']);
+        ['View details', 'Process note', 'View details', 'Process note']);
     currentState = { transcription_configured: true,
         transcription: { state: 'transcribing', note_id: entries[1].id, error: '' } };
     nextPoll();
@@ -172,6 +184,7 @@ vm.runInContext(fs.readFileSync('src/app/web/portal_voice_notes.js', 'utf8'), co
     assert.strictEqual(noteStatuses[1].hidden, false);
     currentState = { transcription_configured: true,
         transcription: { state: 'ready', note_id: entries[1].id, error: '' } };
+    entries[1].has_transcript = true;
     nextPoll();
     await new Promise(resolve => setImmediate(resolve));
     assert.strictEqual(indicators[1].hidden, false);
@@ -240,29 +253,30 @@ vm.runInContext(fs.readFileSync('src/app/web/portal_voice_notes.js', 'utf8'), co
     assert.strictEqual(elements['voice-notes-status'].textContent, 'Status unavailable');
     assert.strictEqual(list.querySelectorAll('audio').length, 2);
     assert(list.querySelectorAll('button')
-        .filter(button => button.textContent === 'Transcribe').every(button => button.disabled));
+        .filter(button => button.textContent === 'Process note').every(button => button.disabled));
     failStatus = false;
     currentState = { transcription_configured: false, transcription: { state: 'idle', note_id: '', error: '' } };
     nextPoll();
     await new Promise(resolve => setImmediate(resolve));
     assert.strictEqual(elements['voice-notes-status'].hidden, true);
-    assert.strictEqual(elements['voice-notes-setup'].hidden, false);
-    assert(list.querySelectorAll('button')
-        .filter(button => button.textContent === 'Transcribe').every(button => button.disabled));
+    assert.strictEqual(elements['voice-notes-setup'].hidden, true);
+    assert.deepStrictEqual(list.querySelectorAll('button')
+        .filter(button => button.textContent === 'Process note').map(button => button.hidden), [false, false]);
 
     context.window.init_voice_notes_settings_fragment();
     await new Promise(resolve => setImmediate(resolve));
-    assert(registered.includes('voice_notes_auto_transcribe'));
-    assert.strictEqual(elements.voice_notes_auto_transcribe.checked, true);
-    elements.voice_notes_auto_transcribe.checked = false;
+    assert(registered.includes('voice_notes_auto_process'));
+    assert.strictEqual(elements.voice_notes_auto_process.checked, true);
+    elements.voice_notes_auto_process.checked = false;
     elements['voice-notes-settings-save'].emit('click');
     await new Promise(resolve => setImmediate(resolve));
-    assert.strictEqual(savedConfig.voice_notes_auto_transcribe, false);
-    assert.strictEqual(savedConfig.voice_notes_api_key, '');
-    config.voice_notes_auto_transcribe = true;
+    assert.strictEqual(savedConfig.voice_notes_auto_process, false);
+    assert.strictEqual(savedConfig.voice_notes_transcription_api_key, '');
+    assert.strictEqual(savedConfig.voice_notes_llm_api_key, '');
+    config.voice_notes_auto_process = true;
     context.window.init_voice_notes_settings_fragment();
     await new Promise(resolve => setImmediate(resolve));
-    assert.strictEqual(elements.voice_notes_auto_transcribe.checked, true);
+    assert.strictEqual(elements.voice_notes_auto_process.checked, true);
 
     entries.forEach(entry => { entry.has_transcript = false; });
     detailById = true;
@@ -272,9 +286,11 @@ vm.runInContext(fs.readFileSync('src/app/web/portal_voice_notes.js', 'utf8'), co
     for (const [reason, text] of [
         ['offline', 'Waiting for Wi-Fi'], ['recording', 'Waiting for recording to finish'],
         ['update', 'Waiting for device update or storage availability'], ['retry', 'Retrying later'],
-        ['configuration', 'Check transcription settings'], ['none', 'Waiting to transcribe']
+        ['retries_exhausted', 'Automatic retries paused. Save a new note or retry manually.'],
+        ['configuration', 'Check Voice Notes Settings'], ['none', 'Waiting to process']
     ]) {
-        currentState.processing = { state: reason === 'configuration' ? 'blocked' : 'waiting', reason };
+        currentState.processing = {
+            state: ['configuration', 'retries_exhausted'].includes(reason) ? 'blocked' : 'waiting', reason };
         nextPoll();
         await new Promise(resolve => setImmediate(resolve));
         assert.strictEqual(elements['voice-notes-processing-status'].textContent, text);
@@ -359,6 +375,78 @@ vm.runInContext(fs.readFileSync('src/app/web/portal_voice_notes.js', 'utf8'), co
         .filter(node => node.getAttribute('aria-label') === 'Transcript available');
     assert.deepStrictEqual(missedPassIndicators.map(node => node.hidden), [false, false]);
     assert.strictEqual(list.querySelectorAll('audio')[0], missedPassAudio);
+    list.querySelectorAll('button').find(button => button.textContent === 'View details').emit('click');
+    await new Promise(resolve => setImmediate(resolve));
+    const enrichmentAudio = elements['voice-notes-detail-player'].querySelector('audio');
+    entries[0].has_enrichment = true;
+    entries[0].title = '<title>literal</title>';
+    entries[0].summary = '<script>summary</script>';
+    currentState.enrichment = { state: 'ready', note_id: entries[0].id, error: '' };
+    nextPoll();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.strictEqual(elements['voice-notes-detail-title'].textContent, '<title>literal</title>');
+    assert.strictEqual(elements['voice-notes-detail-summary'].textContent, '<script>summary</script>');
+    assert.strictEqual(elements['voice-notes-detail-summary'].children.length, 0);
+    assert.strictEqual(elements['voice-notes-detail-player'].querySelector('audio'), enrichmentAudio);
+    assert(elements['voice-notes-detail-actions'].querySelectorAll('button')
+        .some(button => button.textContent === 'Regenerate title and summary'));
+    entries[0].summary = 'Updated summary';
+    currentState.transcription = { state: 'error', note_id: entries[0].id, error: 'Earlier transcription failure' };
+    currentState.processing = { state: 'running', reason: 'none' };
+    currentState.enrichment = { state: 'generating', note_id: entries[0].id, error: '' };
+    nextPoll();
+    await new Promise(resolve => setImmediate(resolve));
+    const generationStatus = elements['voice-notes-detail-actions'].querySelectorAll('span')
+        .find(node => node.getAttribute('role') === 'status');
+    assert.strictEqual(generationStatus.textContent, 'Generating title and summary...');
+    assert.strictEqual(elements['voice-notes-detail-summary'].textContent, '<script>summary</script>');
+    currentState.processing = { state: 'idle', reason: 'none' };
+    currentState.enrichment = { state: 'ready', note_id: entries[0].id, error: '' };
+    nextPoll();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.strictEqual(elements['voice-notes-detail-summary'].textContent, 'Updated summary');
+    assert.strictEqual(elements['voice-notes-detail-player'].querySelector('audio'), enrichmentAudio);
+    currentState.enrichment = { state: 'error', note_id: entries[0].id, error: 'Generation failed' };
+    nextPoll();
+    await new Promise(resolve => setImmediate(resolve));
+    const failedStatus = elements['voice-notes-detail-actions'].querySelectorAll('span')
+        .find(node => node.getAttribute('role') === 'status');
+    assert(failedStatus.textContent.includes('Earlier transcription failure'));
+    assert(failedStatus.textContent.includes('Title and summary generation failed: Generation failed'));
+    assert.strictEqual(elements['voice-notes-detail-summary'].textContent, 'Updated summary');
+    entries[0].title = 'No speech detected';
+    entries[0].summary = '';
+    currentState.enrichment = { state: 'ready', note_id: entries[0].id, error: '' };
+    nextPoll();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.strictEqual(elements['voice-notes-detail-title'].textContent, 'No speech detected');
+    assert.strictEqual(elements['voice-notes-detail-summary'].textContent, '');
+    assert.strictEqual(elements['voice-notes-summary-section'].hidden, true);
+    assert.strictEqual(elements['voice-notes-detail-player'].querySelector('audio'), enrichmentAudio);
+
+    let rejectDetail;
+    detailGate = new Promise((resolve, reject) => { rejectDetail = reject; });
+    list.querySelectorAll('button').filter(button => button.textContent === 'View details')[1].emit('click');
+    assert.strictEqual(elements['voice-notes-detail-transcript'].textContent, 'Loading...');
+    assert.strictEqual(elements['voice-notes-detail-summary'].textContent, '');
+    assert.strictEqual(elements['voice-notes-summary-section'].hidden, true);
+    rejectDetail(new Error('Detail unavailable'));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.strictEqual(elements['voice-notes-status'].textContent, 'Detail unavailable');
+    assert.strictEqual(elements['voice-notes-summary-section'].hidden, true);
+    detailGate = null;
+
+    entries[0].title = null;
+    entries[0].enrichment_error = 'Saved title and summary are invalid';
+    currentState = { transcription_configured: true, enrichment_configured: true,
+        processing: { state: 'idle', reason: 'none' },
+        transcription: { state: 'idle', note_id: '', error: '' },
+        enrichment: { state: 'idle', note_id: '', error: '' } };
+    await context.window.init_voice_notes_fragment();
+    assert(list.querySelectorAll('span').some(node => node.textContent === entries[0].enrichment_error));
+    assert(!list.querySelectorAll('span').some(node => node.textContent === 'Title and summary ready'));
+    assert.strictEqual(list.querySelectorAll('button')
+        .find(button => button.textContent === 'Process note').hidden, true);
     leave();
     console.log('PASS: Voice Notes settings, guidance, reconciliation, playback, and errors');
 })().catch(error => {

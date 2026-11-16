@@ -1315,6 +1315,14 @@ add_host_gtest(test_voice_transcription_request
     ${PROJECT_SOURCE_DIR}/src/app/device_classes/voice_assistant/voice_transcription_request.cpp
 )
 
+add_host_legacy_test(test_voice_notes_enrichment
+    SOURCES test_voice_notes_enrichment.cpp ${PROJECT_SOURCE_DIR}/src/app/voice_notes_enrichment.cpp
+    INCLUDES ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS HAS_VOICE_NOTES=1
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h
+    LIBRARIES GTest::gtest_main
+)
+
 add_host_gtest(test_voice_wav
     test_voice_wav.cpp
     ${PROJECT_SOURCE_DIR}/src/app/voice_wav.cpp
@@ -1345,7 +1353,7 @@ add_host_legacy_test(${voice_notes_target}
         ${PROJECT_SOURCE_DIR}/src/app/fs_indexed_store.cpp
         ${PROJECT_SOURCE_DIR}/src/app/voice_wav.cpp
         ${PROJECT_SOURCE_DIR}/src/app/voice_notes_metadata.cpp
-        ${PROJECT_SOURCE_DIR}/src/app/voice_notes_transcription.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/voice_notes_processing.cpp
         ${voice_notes_activity_source}
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/audio_input_overrides
         ${PROJECT_SOURCE_DIR}/tests/fs_indexed_store_overrides

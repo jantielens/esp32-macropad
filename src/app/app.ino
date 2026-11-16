@@ -104,7 +104,7 @@
 
 #if HAS_VOICE_NOTES
 #include "voice_notes.h"
-#include "voice_notes_transcription.h"
+#include "voice_notes_processing.h"
 #endif
 
 #include "i2c_bus.h"
@@ -518,7 +518,7 @@ void setup()
 	config_manager_init();
 	config_loaded = config_manager_load(&device_config);
 	#if HAS_VOICE_NOTES
-	if (!voice_notes_transcription_configure(device_config.voice_notes_transcription))
+	if (!voice_notes_processing_configure(device_config.voice_notes))
 		LOGE("Main", "Voice Notes transcription configuration unavailable");
 	#endif
 	if (!device_config.timezone[0]) strlcpy(device_config.timezone, "UTC0", sizeof(device_config.timezone));

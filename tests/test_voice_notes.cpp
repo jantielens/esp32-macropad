@@ -7,8 +7,9 @@
 #include "fs_indexed_store.h"
 #include "voice_wav.h"
 #include "voice_notes_metadata.h"
-#include "voice_notes_transcription.h"
+#include "voice_notes_processing.h"
 #include "voice_notes_transcription_request.h"
+#include "voice_notes_enrichment_request.h"
 #include "bounded_psram_json_allocator.h"
 #include <WiFi.h>
 #include <esp_heap_caps.h>
@@ -57,12 +58,24 @@ bool fail_transcript_write = false;
 std::atomic<bool> block_transcription{false};
 std::atomic<bool> transcription_entered{false};
 std::atomic<bool> fail_transcription{false};
+std::atomic<bool> block_enrichment{false};
+std::atomic<bool> enrichment_entered{false};
+std::atomic<bool> fail_enrichment{false};
+std::atomic<unsigned> enrichment_requests{0};
+VoiceNotesRequestOutcome simulated_enrichment_outcome = VoiceNotesRequestOutcome::NoteFailure;
+uint64_t simulated_enrichment_cooldown = 0;
 std::atomic<bool> wifi_connected{true};
+const std::thread::id test_thread = std::this_thread::get_id();
+std::atomic<bool> block_processing{false};
+std::atomic<bool> processing_blocked{false};
 std::mutex request_mutex;
 std::vector<std::string> request_ids;
 std::string failed_note;
 VoiceNotesRequestOutcome simulated_outcome = VoiceNotesRequestOutcome::NoteFailure;
 uint64_t simulated_cooldown = 0;
+const char* transcription_text = "host transcript";
+const char* enrichment_title = "Host title";
+const char* enrichment_summary = "Host summary.";
 
 void interrupt_candidate_scan(const char* path) {
     if (!strstr(path, ".json")) return;
@@ -110,13 +123,19 @@ bool storage_write_atomic(const char* path, const uint8_t* bytes, size_t length)
 void fs_health_get(FSHealthStats* out) { *out = {}; }
 bool time_service_ready() { return false; }
 HostWiFi WiFi;
-int HostWiFi::status() const { return wifi_connected ? WL_CONNECTED : 0; }
+int HostWiFi::status() const {
+    if (block_processing && std::this_thread::get_id() != test_thread) {
+        processing_blocked = true;
+        while (block_processing) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return wifi_connected ? WL_CONNECTED : 0;
+}
 size_t heap_caps_get_free_size(uint32_t) { return 8 * 1024 * 1024; }
 #if !(USE_SD_STORAGE && HAS_AUTO_SHUTDOWN)
 bool ota_activity_is_busy() { return false; }
 uint32_t ota_activity_epoch() { return 0; }
 #endif
-bool voice_notes_transcription_request(const VoiceNotesTranscriptionConfig&, File& recording, uint32_t, uint64_t,
+bool voice_notes_transcription_request(const VoiceNotesServiceConfig&, File& recording, uint32_t, uint64_t,
                                        VoiceNotesRequestResult& result) {
     bool simulate_failure = false;
     {
@@ -134,10 +153,28 @@ bool voice_notes_transcription_request(const VoiceNotesTranscriptionConfig&, Fil
     while (block_transcription) std::this_thread::sleep_for(std::chrono::milliseconds(1));
     if (simulate_failure) return false;
     if (fail_transcription) { result.error = "Request failed"; return false; }
-    const char text[] = "host transcript";
-    result.text = static_cast<char*>(heap_caps_malloc(sizeof(text), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-    memcpy(result.text, text, sizeof(text));
+    const size_t size = strlen(transcription_text) + 1;
+    result.text = static_cast<char*>(heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    memcpy(result.text, transcription_text, size);
     result.status = 200;
+    return true;
+}
+bool voice_notes_enrichment_request(const VoiceNotesServiceConfig&, const char* transcript, uint32_t, uint64_t,
+                                    JsonDocument& content, VoiceNotesRequestResult& result) {
+    assert(strcmp(transcript, transcription_text) == 0);
+    ++enrichment_requests;
+    enrichment_entered = true;
+    while (block_enrichment) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    if (fail_enrichment) {
+        result.error = "Simulated enrichment failure";
+        result.outcome = simulated_enrichment_outcome;
+        result.cooldown_ms = simulated_enrichment_cooldown;
+        return false;
+    }
+    content["title"] = enrichment_title;
+    content["summary"] = enrichment_summary;
+    result.status = 200;
+    result.outcome = VoiceNotesRequestOutcome::Success;
     return true;
 }
 uint32_t esp_random() { static uint32_t value = 0; return ++value; }
@@ -201,7 +238,7 @@ static bool wait_completion(uint32_t token) {
 
 template <typename Predicate>
 static void wait_until(Predicate predicate) {
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
     while (!predicate() && std::chrono::steady_clock::now() < deadline)
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     assert(predicate());
@@ -271,39 +308,81 @@ int main(int argc, char**) {
     const std::vector<uint8_t> original_wav = LittleFS.files.at(path.c_str());
     const char first_transcript[] = R"({"transcript":{"text":"first","model":"test","created_at":0}})";
     const char next_transcript[] = R"({"transcript":{"text":"next","model":"test","created_at":1}})";
-    assert(!voice_notes_write_transcript(saved.last_clip,
+    assert(!voice_notes_write_artifact(saved.last_clip, VoiceNoteArtifact::Transcript,
         reinterpret_cast<const uint8_t*>(first_transcript), strlen(first_transcript)));
     assert(voice_notes_open(saved.last_clip, &other) == VoiceNoteFileStatus::Ready);
-    assert(voice_notes_write_transcript(saved.last_clip,
+    assert(voice_notes_write_artifact(saved.last_clip, VoiceNoteArtifact::Transcript,
         reinterpret_cast<const uint8_t*>(first_transcript), strlen(first_transcript)));
-    assert(voice_notes_has_transcript(saved.last_clip));
+    assert(voice_notes_has_artifact(saved.last_clip, VoiceNoteArtifact::Transcript));
     catalog.clear();
     assert(voice_notes_list(catalog));
     assert(catalog["entries"][0]["has_transcript"].as<bool>());
     assert(voice_notes_remove(saved.last_clip) == VoiceNoteFileStatus::Busy);
     const String sidecar = String("/storage/voice-notes/") + saved.last_clip + ".json";
     fail_transcript_write = true;
-    assert(!voice_notes_write_transcript(saved.last_clip,
+    assert(!voice_notes_write_artifact(saved.last_clip, VoiceNoteArtifact::Transcript,
         reinterpret_cast<const uint8_t*>(next_transcript), strlen(next_transcript)));
     fail_transcript_write = false;
     assert(std::string(LittleFS.files[sidecar.c_str()].begin(), LittleFS.files[sidecar.c_str()].end()) == first_transcript);
     assert(LittleFS.files.at(path.c_str()) == original_wav);
     const String backup = sidecar + ".bak";
     assert(LittleFS.rename(sidecar.c_str(), backup.c_str()));
-    assert(voice_notes_has_transcript(saved.last_clip));
+    assert(voice_notes_has_artifact(saved.last_clip, VoiceNoteArtifact::Transcript));
     File transcript;
-    assert(voice_notes_open_transcript(saved.last_clip, &transcript) == VoiceNoteFileStatus::Ready);
+    assert(voice_notes_open_artifact(saved.last_clip, VoiceNoteArtifact::Transcript, &transcript) == VoiceNoteFileStatus::Ready);
     assert(transcript.readString() == first_transcript);
     transcript.close();
-    assert(voice_notes_write_transcript(saved.last_clip,
+    assert(voice_notes_write_artifact(saved.last_clip, VoiceNoteArtifact::Transcript,
         reinterpret_cast<const uint8_t*>(next_transcript), strlen(next_transcript)));
     assert(!LittleFS.exists(backup.c_str()));
+    if (!no_psram) {
+        VoiceNoteCursor next{};
+        assert(voice_notes_next_candidate({}, &next, false, true) == VoiceNoteCandidate::Found);
+        assert(strcmp(next.id, saved.last_clip) == 0);
+    }
+    const char enrichment[] = R"({"enrichment":{"title":"First title","summary":"First summary","model":"test","created_at":0}})";
+    assert(voice_notes_write_artifact(saved.last_clip, VoiceNoteArtifact::Enrichment,
+        reinterpret_cast<const uint8_t*>(enrichment), strlen(enrichment)));
+    assert(voice_notes_has_artifact(saved.last_clip, VoiceNoteArtifact::Enrichment));
+    if (!no_psram) {
+        VoiceNoteCursor next{};
+        assert(voice_notes_next_candidate({}, &next, false, true) == VoiceNoteCandidate::None);
+        catalog.clear();
+        assert(voice_notes_list(catalog));
+        assert(catalog["entries"][0]["has_enrichment"].as<bool>());
+        assert(strcmp(catalog["entries"][0]["title"], "First title") == 0);
+        assert(strcmp(catalog["entries"][0]["enrichment_error"], "") == 0);
+    }
+    const String enrichment_path = String("/storage/voice-notes/") + saved.last_clip + ".enrichment.json";
+    const String enrichment_backup = enrichment_path + ".bak";
+    assert(LittleFS.rename(enrichment_path.c_str(), enrichment_backup.c_str()));
+    File enrichment_file;
+    assert(voice_notes_open_artifact(saved.last_clip, VoiceNoteArtifact::Enrichment, &enrichment_file)
+        == VoiceNoteFileStatus::Ready);
+    assert(enrichment_file.readString() == enrichment);
+    enrichment_file.close();
+    fail_transcript_write = true;
+    assert(!voice_notes_write_artifact(saved.last_clip, VoiceNoteArtifact::Enrichment,
+        reinterpret_cast<const uint8_t*>(enrichment), strlen(enrichment)));
+    fail_transcript_write = false;
+    assert(LittleFS.files.at(enrichment_path.c_str()) ==
+        std::vector<uint8_t>(enrichment, enrichment + strlen(enrichment)));
+    if (!no_psram) {
+        LittleFS.files[enrichment_path.c_str()] = {'{'};
+        catalog.clear();
+        assert(voice_notes_list(catalog));
+        assert(catalog["entries"][0]["has_enrichment"].as<bool>());
+        assert(catalog["entries"][0]["title"].isNull());
+        assert(strlen(catalog["entries"][0]["enrichment_error"]) > 0);
+        LittleFS.files[enrichment_path.c_str()] =
+            std::vector<uint8_t>(enrichment, enrichment + strlen(enrichment));
+    }
     voice_notes_close(&other, saved.last_clip);
     assert(LittleFS.files.at(path.c_str()) == original_wav);
     if (!no_psram) {
-        VoiceNotesTranscriptionConfig config{};
-        assert(voice_notes_normalize_endpoint("https://example.test", config.base_url, sizeof(config.base_url)));
-        assert(strcmp(config.base_url, "https://example.test/") == 0);
+        VoiceNotesConfig config{};
+        assert(voice_notes_normalize_endpoint("https://example.test", config.transcription.endpoint, sizeof(config.transcription.endpoint)));
+        assert(strcmp(config.transcription.endpoint, "https://example.test/") == 0);
         char endpoint[512];
         assert(!voice_notes_normalize_endpoint("http://example.test", endpoint, sizeof(endpoint)));
         assert(!voice_notes_normalize_endpoint("https://example.test/path", endpoint, sizeof(endpoint)));
@@ -311,17 +390,45 @@ int main(int argc, char**) {
         assert(!voice_notes_normalize_endpoint("https://:443/", endpoint, sizeof(endpoint)));
         assert(!voice_notes_normalize_endpoint("https://example.test:abc/", endpoint, sizeof(endpoint)));
         assert(!voice_notes_normalize_endpoint("https://example.test:65536/", endpoint, sizeof(endpoint)));
-        strlcpy(config.api_key, "key", sizeof(config.api_key));
-        strlcpy(config.model, "original", sizeof(config.model));
-        assert(voice_notes_transcription_configure(config));
+        strlcpy(config.transcription.api_key, "key", sizeof(config.transcription.api_key));
+        strlcpy(config.transcription.deployment, "original", sizeof(config.transcription.deployment));
+        assert(voice_notes_processing_configure(config));
         assert(voice_notes_processing_init());
+        const auto before_early_interruption = LittleFS.files.at(sidecar.c_str());
+        for (bool recording : {false, true}) {
+            processing_blocked = false;
+            block_processing = true;
+            assert(voice_notes_processing_start(saved.last_clip, VoiceNotesProcessingMode::Retranscribe) ==
+                   VoiceNotesProcessingStart::Accepted);
+            wait_until([] { return processing_blocked.load(); });
+            if (recording) {
+                assert(voice_notes_command(VoiceNoteCommand::Start, 2070));
+                assert(wait_completion(2070));
+            } else wifi_connected = false;
+            block_processing = false;
+            wait_until([] {
+                VoiceNotesProcessingSnapshot state{};
+                voice_notes_processing_snapshot(&state);
+                return state.state == VoiceNotesProcessingState::Idle;
+            });
+            VoiceNotesTranscriptionSnapshot interrupted{};
+            voice_notes_transcription_snapshot(&interrupted);
+            assert(interrupted.state == VoiceNotesTranscriptionState::Error);
+            assert(strcmp(interrupted.note_id, saved.last_clip) == 0 && interrupted.error[0]);
+            assert(!transcription_entered);
+            assert(LittleFS.files.at(sidecar.c_str()) == before_early_interruption);
+            if (recording) {
+                assert(voice_notes_command(VoiceNoteCommand::Discard, 2071));
+                assert(wait_completion(2071));
+            } else wifi_connected = true;
+        }
         block_transcription = true;
-        assert(voice_notes_transcription_start(saved.last_clip) == VoiceNotesTranscriptionStart::Accepted);
+        assert(voice_notes_processing_start(saved.last_clip, VoiceNotesProcessingMode::Retranscribe) == VoiceNotesProcessingStart::Accepted);
         wait_until([] { return transcription_entered.load(); });
-        assert(voice_notes_transcription_start(saved.last_clip) == VoiceNotesTranscriptionStart::Busy);
+        assert(voice_notes_processing_start(saved.last_clip, VoiceNotesProcessingMode::Retranscribe) == VoiceNotesProcessingStart::Busy);
         assert(voice_notes_remove(saved.last_clip) == VoiceNoteFileStatus::Busy);
-        strlcpy(config.model, "updated", sizeof(config.model));
-        assert(voice_notes_transcription_configure(config));
+        strlcpy(config.transcription.deployment, "updated", sizeof(config.transcription.deployment));
+        assert(voice_notes_processing_configure(config));
         block_transcription = false;
         VoiceNotesTranscriptionSnapshot processing{};
         wait_until([&] {
@@ -330,7 +437,7 @@ int main(int argc, char**) {
         });
         JsonDocument persisted;
         File result_file;
-        assert(voice_notes_open_transcript(saved.last_clip, &result_file) == VoiceNoteFileStatus::Ready);
+        assert(voice_notes_open_artifact(saved.last_clip, VoiceNoteArtifact::Transcript, &result_file) == VoiceNoteFileStatus::Ready);
         assert(!deserializeJson(persisted, result_file));
         result_file.close();
         assert(strcmp(persisted["transcript"]["text"], "host transcript") == 0);
@@ -340,7 +447,7 @@ int main(int argc, char**) {
         bool accepted = false;
         wait_until([&] {
             if (!accepted)
-                accepted = voice_notes_transcription_start(saved.last_clip) == VoiceNotesTranscriptionStart::Accepted;
+                accepted = voice_notes_processing_start(saved.last_clip, VoiceNotesProcessingMode::Retranscribe) == VoiceNotesProcessingStart::Accepted;
             return accepted;
         });
         wait_until([&] {
@@ -354,7 +461,7 @@ int main(int argc, char**) {
         accepted = false;
         wait_until([&] {
             if (!accepted)
-                accepted = voice_notes_transcription_start(saved.last_clip) == VoiceNotesTranscriptionStart::Accepted;
+                accepted = voice_notes_processing_start(saved.last_clip, VoiceNotesProcessingMode::Retranscribe) == VoiceNotesProcessingStart::Accepted;
             return accepted;
         });
         wait_until([&] {
@@ -368,7 +475,7 @@ int main(int argc, char**) {
         accepted = false;
         wait_until([&] {
             if (!accepted)
-                accepted = voice_notes_transcription_start(saved.last_clip) == VoiceNotesTranscriptionStart::Accepted;
+                accepted = voice_notes_processing_start(saved.last_clip, VoiceNotesProcessingMode::Retranscribe) == VoiceNotesProcessingStart::Accepted;
             return accepted;
         });
         wait_until([] { return transcription_entered.load(); });
@@ -388,7 +495,7 @@ int main(int argc, char**) {
         accepted = false;
         wait_until([&] {
             if (!accepted)
-                accepted = voice_notes_transcription_start(saved.last_clip) == VoiceNotesTranscriptionStart::Accepted;
+                accepted = voice_notes_processing_start(saved.last_clip, VoiceNotesProcessingMode::Retranscribe) == VoiceNotesProcessingStart::Accepted;
             return accepted;
         });
         wait_until([] { return transcription_entered.load(); });
@@ -407,7 +514,7 @@ int main(int argc, char**) {
     FsIndexedStore rebuilt("/storage/voice-notes", fields, 4, nullptr, 0, ".wav",
                            voice_notes_metadata_read_metadata);
     assert(rebuilt.begin() && rebuilt.exists(saved.last_clip));
-    assert(voice_notes_has_transcript(saved.last_clip));
+    assert(voice_notes_has_artifact(saved.last_clip, VoiceNoteArtifact::Transcript));
     assert(!storage_browser_path_is_safe("/storage/./voice-notes/file.wav.tmp"));
     assert(!storage_browser_path_is_safe("/./storage/voice-notes"));
     assert(!storage_browser_path_is_safe("/storage/."));
@@ -632,8 +739,10 @@ int main(int argc, char**) {
     assert(voice_notes_exists(snapshot().last_clip));
 
     assert(voice_notes_open(buffered.last_clip, &other) == VoiceNoteFileStatus::Ready);
-    assert(voice_notes_write_transcript(buffered.last_clip,
+    assert(voice_notes_write_artifact(buffered.last_clip, VoiceNoteArtifact::Transcript,
         reinterpret_cast<const uint8_t*>(first_transcript), strlen(first_transcript)));
+    assert(voice_notes_write_artifact(buffered.last_clip, VoiceNoteArtifact::Enrichment,
+        reinterpret_cast<const uint8_t*>(enrichment), strlen(enrichment)));
     voice_notes_close(&other, buffered.last_clip);
     const String buffered_sidecar = String("/storage/voice-notes/") + buffered.last_clip + ".json";
     LittleFS.fail_remove_path = buffered_sidecar.c_str();
@@ -642,6 +751,7 @@ int main(int argc, char**) {
     LittleFS.fail_remove_path.clear();
     assert(voice_notes_remove(buffered.last_clip) == VoiceNoteFileStatus::Ready);
     assert(!LittleFS.exists(buffered_sidecar.c_str()));
+    assert(!LittleFS.exists((String("/storage/voice-notes/") + buffered.last_clip + ".enrichment.json").c_str()));
     assert(!LittleFS.exists(buffered_path.c_str()));
 
     if (!no_psram) {
@@ -682,9 +792,9 @@ int main(int argc, char**) {
             simulated_outcome = VoiceNotesRequestOutcome::SharedFailure;
         }
         wifi_connected = false;
-        assert(voice_notes_processing_start() == VoiceNotesTranscriptionStart::Offline);
+        assert(voice_notes_processing_start() == VoiceNotesProcessingStart::Offline);
         wifi_connected = true;
-        assert(voice_notes_processing_start() == VoiceNotesTranscriptionStart::Accepted);
+        assert(voice_notes_processing_start() == VoiceNotesProcessingStart::Accepted);
         wait_until([&] {
             std::lock_guard<std::mutex> lock(request_mutex);
             return request_ids.size() == 2;
@@ -698,15 +808,15 @@ int main(int argc, char**) {
             std::lock_guard<std::mutex> lock(request_mutex);
             assert((request_ids == std::vector<std::string>{pass_ids[0], pass_ids[1]}));
         }
-        assert(voice_notes_has_transcript(pass_ids[0].c_str()));
-        assert(!voice_notes_has_transcript(pass_ids[1].c_str()));
-        assert(!voice_notes_has_transcript(pass_ids[2].c_str()));
+        assert(voice_notes_has_artifact(pass_ids[0].c_str(), VoiceNoteArtifact::Transcript));
+        assert(!voice_notes_has_artifact(pass_ids[1].c_str(), VoiceNoteArtifact::Transcript));
+        assert(!voice_notes_has_artifact(pass_ids[2].c_str(), VoiceNoteArtifact::Transcript));
         {
             std::lock_guard<std::mutex> lock(request_mutex);
             request_ids.clear();
             simulated_outcome = VoiceNotesRequestOutcome::NoteFailure;
         }
-        assert(voice_notes_processing_start() == VoiceNotesTranscriptionStart::Accepted);
+        assert(voice_notes_processing_start() == VoiceNotesProcessingStart::Accepted);
         wait_until([&] {
             std::lock_guard<std::mutex> lock(request_mutex);
             return request_ids.size() == 2;
@@ -720,15 +830,15 @@ int main(int argc, char**) {
             std::lock_guard<std::mutex> lock(request_mutex);
             assert((request_ids == std::vector<std::string>{pass_ids[1], pass_ids[2]}));
         }
-        assert(!voice_notes_has_transcript(pass_ids[1].c_str()));
-        assert(voice_notes_has_transcript(pass_ids[2].c_str()));
+        assert(!voice_notes_has_artifact(pass_ids[1].c_str(), VoiceNoteArtifact::Transcript));
+        assert(voice_notes_has_artifact(pass_ids[2].c_str(), VoiceNoteArtifact::Transcript));
         {
             std::lock_guard<std::mutex> lock(request_mutex);
             failed_note.clear();
             request_ids.clear();
         }
-        assert(voice_notes_processing_start() == VoiceNotesTranscriptionStart::Accepted);
-        wait_until([&] { return voice_notes_has_transcript(pass_ids[1].c_str()); });
+        assert(voice_notes_processing_start() == VoiceNotesProcessingStart::Accepted);
+        wait_until([&] { return voice_notes_has_artifact(pass_ids[1].c_str(), VoiceNoteArtifact::Transcript); });
         wait_until([] {
             VoiceNotesProcessingSnapshot state{};
             voice_notes_processing_snapshot(&state);
@@ -739,6 +849,270 @@ int main(int argc, char**) {
             assert(request_ids.size() == 1 && request_ids[0] == pass_ids[1]);
         }
         for (const auto& id : pass_ids) assert(voice_notes_remove(id.c_str()) == VoiceNoteFileStatus::Ready);
+
+        assert(voice_notes_command(VoiceNoteCommand::Start, 2050));
+        assert(wait_completion(2050));
+        const unsigned before_enrichment_note = reads;
+        wait_until([=] { return reads.load() > before_enrichment_note; });
+        assert(voice_notes_command(VoiceNoteCommand::Save, 2051));
+        assert(wait_completion(2051));
+        const std::string enrichment_id = snapshot().last_clip;
+        VoiceNotesConfig both{};
+        strlcpy(both.transcription.endpoint, "https://example.test/", sizeof(both.transcription.endpoint));
+        strlcpy(both.transcription.api_key, "key", sizeof(both.transcription.api_key));
+        strlcpy(both.transcription.deployment, "transcription", sizeof(both.transcription.deployment));
+        strlcpy(both.llm.endpoint, "https://example.test/", sizeof(both.llm.endpoint));
+        strlcpy(both.llm.api_key, "key", sizeof(both.llm.api_key));
+        strlcpy(both.llm.deployment, "llm", sizeof(both.llm.deployment));
+        assert(voice_notes_processing_configure(both));
+        block_enrichment = true;
+        fail_enrichment = true;
+        enrichment_entered = false;
+        const auto processing_started = std::chrono::steady_clock::now();
+        assert(voice_notes_processing_start(enrichment_id.c_str(), VoiceNotesProcessingMode::Missing) ==
+               VoiceNotesProcessingStart::Accepted);
+        wait_until([&] {
+            VoiceNotesTranscriptionSnapshot transcription{};
+            voice_notes_transcription_snapshot(&transcription);
+            VoiceNotesProcessingSnapshot processing{};
+            voice_notes_processing_snapshot(&processing);
+            return strcmp(transcription.note_id, enrichment_id.c_str()) == 0 &&
+                   transcription.state == VoiceNotesTranscriptionState::Ready &&
+                   processing.state == VoiceNotesProcessingState::Running &&
+                   processing.service == VoiceNotesProcessingService::None;
+        });
+        assert(!enrichment_entered);
+        File gap_readers[4];
+        for (auto& reader : gap_readers)
+            assert(voice_notes_open(enrichment_id.c_str(), &reader) == VoiceNoteFileStatus::Ready);
+        for (auto& reader : gap_readers) voice_notes_close(&reader, enrichment_id.c_str());
+        assert(voice_notes_processing_start() == VoiceNotesProcessingStart::Busy);
+        wait_until([] { return enrichment_entered.load(); });
+        assert(std::chrono::steady_clock::now() - processing_started >= std::chrono::seconds(2));
+        assert(voice_notes_has_artifact(enrichment_id.c_str(), VoiceNoteArtifact::Transcript));
+        assert(!voice_notes_has_artifact(enrichment_id.c_str(), VoiceNoteArtifact::Enrichment));
+        assert(voice_notes_remove(enrichment_id.c_str()) == VoiceNoteFileStatus::Busy);
+        block_enrichment = false;
+        wait_until([] {
+            VoiceNotesEnrichmentSnapshot state{};
+            voice_notes_enrichment_snapshot(&state);
+            return state.state == VoiceNotesEnrichmentState::Error;
+        });
+        wait_until([] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return state.state == VoiceNotesProcessingState::Idle;
+        });
+        unsigned transcription_count;
+        {
+            std::lock_guard<std::mutex> lock(request_mutex);
+            transcription_count = request_ids.size();
+        }
+        fail_enrichment = false;
+        both.transcription = {};
+        assert(voice_notes_processing_configure(both));
+        assert(voice_notes_processing_start(enrichment_id.c_str(), VoiceNotesProcessingMode::Missing) ==
+               VoiceNotesProcessingStart::Accepted);
+        wait_until([&] { return voice_notes_has_artifact(enrichment_id.c_str(), VoiceNoteArtifact::Enrichment); });
+        wait_until([] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return state.state == VoiceNotesProcessingState::Idle;
+        });
+        {
+            std::lock_guard<std::mutex> lock(request_mutex);
+            assert(request_ids.size() == transcription_count);
+        }
+        const String generated_path = String("/storage/voice-notes/") + enrichment_id.c_str() + ".enrichment.json";
+        const auto generated = LittleFS.files.at(generated_path.c_str());
+        const unsigned before_early_enrichment = enrichment_requests;
+        processing_blocked = false;
+        block_processing = true;
+        assert(voice_notes_processing_start(enrichment_id.c_str(), VoiceNotesProcessingMode::Regenerate) ==
+               VoiceNotesProcessingStart::Accepted);
+        wait_until([] { return processing_blocked.load(); });
+        wifi_connected = false;
+        block_processing = false;
+        wait_until([] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return state.state == VoiceNotesProcessingState::Idle;
+        });
+        VoiceNotesEnrichmentSnapshot interrupted{};
+        voice_notes_enrichment_snapshot(&interrupted);
+        assert(interrupted.state == VoiceNotesEnrichmentState::Error && interrupted.error[0]);
+        assert(strcmp(interrupted.note_id, enrichment_id.c_str()) == 0);
+        assert(enrichment_requests == before_early_enrichment);
+        assert(LittleFS.files.at(generated_path.c_str()) == generated);
+        wifi_connected = true;
+        simulated_enrichment_outcome = VoiceNotesRequestOutcome::RateLimited;
+        simulated_enrichment_cooldown = 60000;
+        fail_enrichment = true;
+        assert(voice_notes_processing_start(enrichment_id.c_str(), VoiceNotesProcessingMode::Regenerate) ==
+               VoiceNotesProcessingStart::Accepted);
+        wait_until([] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return state.state == VoiceNotesProcessingState::Idle;
+        });
+        assert(voice_notes_processing_start(enrichment_id.c_str(), VoiceNotesProcessingMode::Regenerate) ==
+               VoiceNotesProcessingStart::Cooldown);
+        assert(voice_notes_command(VoiceNoteCommand::Start, 2054));
+        assert(wait_completion(2054));
+        const unsigned before_independent_note = reads;
+        wait_until([=] { return reads.load() > before_independent_note; });
+        assert(voice_notes_command(VoiceNoteCommand::Save, 2055));
+        assert(wait_completion(2055));
+        const std::string independent_id = snapshot().last_clip;
+        strlcpy(both.transcription.endpoint, "https://example.test/", sizeof(both.transcription.endpoint));
+        strlcpy(both.transcription.api_key, "key", sizeof(both.transcription.api_key));
+        strlcpy(both.transcription.deployment, "transcription", sizeof(both.transcription.deployment));
+        assert(voice_notes_processing_configure(both));
+        assert(voice_notes_processing_start(independent_id.c_str(), VoiceNotesProcessingMode::Missing) ==
+               VoiceNotesProcessingStart::Accepted);
+        wait_until([&] { return voice_notes_has_artifact(independent_id.c_str(), VoiceNoteArtifact::Transcript); });
+        wait_until([] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return state.state == VoiceNotesProcessingState::Idle;
+        });
+        assert(!voice_notes_has_artifact(independent_id.c_str(), VoiceNoteArtifact::Enrichment));
+        assert(voice_notes_processing_start(enrichment_id.c_str(), VoiceNotesProcessingMode::Regenerate) ==
+               VoiceNotesProcessingStart::Cooldown);
+        assert(voice_notes_remove(independent_id.c_str()) == VoiceNoteFileStatus::Ready);
+        audio_test_time_offset_us += 61000000;
+        simulated_enrichment_outcome = VoiceNotesRequestOutcome::NoteFailure;
+        simulated_enrichment_cooldown = 0;
+        fail_enrichment = true;
+        assert(voice_notes_processing_start(enrichment_id.c_str(), VoiceNotesProcessingMode::Regenerate) ==
+               VoiceNotesProcessingStart::Accepted);
+        wait_until([] {
+            VoiceNotesEnrichmentSnapshot state{};
+            voice_notes_enrichment_snapshot(&state);
+            return state.state == VoiceNotesEnrichmentState::Error;
+        });
+        assert(LittleFS.files.at(generated_path.c_str()) == generated);
+        wait_until([] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return state.state == VoiceNotesProcessingState::Idle;
+        });
+        fail_enrichment = false;
+        block_enrichment = true;
+        enrichment_entered = false;
+        assert(voice_notes_processing_start(enrichment_id.c_str(), VoiceNotesProcessingMode::Regenerate) ==
+               VoiceNotesProcessingStart::Accepted);
+        wait_until([] { return enrichment_entered.load(); });
+        assert(voice_notes_command(VoiceNoteCommand::Start, 2052));
+        assert(wait_completion(2052));
+        assert(voice_notes_command(VoiceNoteCommand::Discard, 2053));
+        assert(wait_completion(2053));
+        block_enrichment = false;
+        wait_until([] {
+            VoiceNotesEnrichmentSnapshot state{};
+            voice_notes_enrichment_snapshot(&state);
+            return state.state == VoiceNotesEnrichmentState::Error;
+        });
+        assert(LittleFS.files.at(generated_path.c_str()) == generated);
+        wait_until([] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return state.state == VoiceNotesProcessingState::Idle;
+        });
+        const unsigned prior_enrichment_requests = enrichment_requests;
+        assert(voice_notes_processing_start(enrichment_id.c_str(), VoiceNotesProcessingMode::Regenerate) ==
+               VoiceNotesProcessingStart::Accepted);
+        wait_until([] {
+            VoiceNotesEnrichmentSnapshot state{};
+            voice_notes_enrichment_snapshot(&state);
+            return state.state == VoiceNotesEnrichmentState::Ready;
+        });
+        assert(enrichment_requests == prior_enrichment_requests + 1);
+        wait_until([] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return state.state == VoiceNotesProcessingState::Idle;
+        });
+        assert(voice_notes_remove(enrichment_id.c_str()) == VoiceNoteFileStatus::Ready);
+
+        assert(voice_notes_command(VoiceNoteCommand::Start, 2056));
+        assert(wait_completion(2056));
+        const unsigned before_disabled_stage = reads;
+        wait_until([=] { return reads.load() > before_disabled_stage; });
+        assert(voice_notes_command(VoiceNoteCommand::Save, 2057));
+        assert(wait_completion(2057));
+        const std::string disabled_stage_id = snapshot().last_clip;
+        const unsigned before_disabled_enrichment = enrichment_requests;
+        transcription_entered = false;
+        block_transcription = true;
+        both.auto_process = true;
+        assert(voice_notes_processing_configure(both));
+        wait_until([] { return transcription_entered.load(); });
+        both.auto_process = false;
+        assert(voice_notes_processing_configure(both));
+        block_transcription = false;
+        wait_until([&] { return voice_notes_has_artifact(disabled_stage_id.c_str(), VoiceNoteArtifact::Transcript); });
+        wait_until([] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return state.state == VoiceNotesProcessingState::Idle;
+        });
+        assert(!voice_notes_has_artifact(disabled_stage_id.c_str(), VoiceNoteArtifact::Enrichment));
+        assert(enrichment_requests == before_disabled_enrichment);
+        assert(voice_notes_processing_start(disabled_stage_id.c_str(), VoiceNotesProcessingMode::Missing) ==
+               VoiceNotesProcessingStart::Accepted);
+        wait_until([&] { return voice_notes_has_artifact(disabled_stage_id.c_str(), VoiceNoteArtifact::Enrichment); });
+        wait_until([] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return state.state == VoiceNotesProcessingState::Idle;
+        });
+        assert(voice_notes_remove(disabled_stage_id.c_str()) == VoiceNoteFileStatus::Ready);
+
+        assert(voice_notes_command(VoiceNoteCommand::Start, 2072));
+        assert(wait_completion(2072));
+        const unsigned before_silent_note = reads;
+        wait_until([=] { return reads.load() > before_silent_note; });
+        assert(voice_notes_command(VoiceNoteCommand::Save, 2073));
+        assert(wait_completion(2073));
+        const std::string silent_id = snapshot().last_clip;
+        transcription_text = "No speech detected";
+        enrichment_title = "No speech detected";
+        enrichment_summary = "";
+        const unsigned before_silent_enrichment = enrichment_requests;
+        both.auto_process = true;
+        assert(voice_notes_processing_configure(both));
+        wait_until([&] { return voice_notes_has_artifact(silent_id.c_str(), VoiceNoteArtifact::Enrichment); });
+        wait_until([] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return state.state == VoiceNotesProcessingState::Idle;
+        });
+        assert(enrichment_requests == before_silent_enrichment + 1);
+        JsonDocument silent_result;
+        File silent_file;
+        assert(voice_notes_open_artifact(silent_id.c_str(), VoiceNoteArtifact::Transcript, &silent_file) ==
+               VoiceNoteFileStatus::Ready);
+        assert(!deserializeJson(silent_result, silent_file));
+        silent_file.close();
+        assert(strcmp(silent_result["transcript"]["text"], "No speech detected") == 0);
+        silent_result.clear();
+        assert(voice_notes_open_artifact(silent_id.c_str(), VoiceNoteArtifact::Enrichment, &silent_file) ==
+               VoiceNoteFileStatus::Ready);
+        assert(!deserializeJson(silent_result, silent_file));
+        silent_file.close();
+        assert(strcmp(silent_result["enrichment"]["title"], "No speech detected") == 0);
+        assert(strcmp(silent_result["enrichment"]["summary"], "") == 0);
+        VoiceNoteCursor silent_candidate{};
+        assert(voice_notes_next_candidate({}, &silent_candidate, true, true) == VoiceNoteCandidate::None);
+        assert(voice_notes_processing_start(silent_id.c_str(), VoiceNotesProcessingMode::Missing) ==
+               VoiceNotesProcessingStart::Unchanged);
+        both.auto_process = false;
+        assert(voice_notes_processing_configure(both));
+        transcription_text = "host transcript";
+        enrichment_title = "Host title";
+        enrichment_summary = "Host summary.";
+        assert(voice_notes_remove(silent_id.c_str()) == VoiceNoteFileStatus::Ready);
 
         assert(voice_notes_command(VoiceNoteCommand::Start, 2010));
         assert(wait_completion(2010));
@@ -754,12 +1128,12 @@ int main(int argc, char**) {
             simulated_outcome = VoiceNotesRequestOutcome::SetupFailure;
         }
         wifi_connected = false;
-        VoiceNotesTranscriptionConfig automatic{};
-        strlcpy(automatic.base_url, "https://example.test/", sizeof(automatic.base_url));
-        strlcpy(automatic.api_key, "key", sizeof(automatic.api_key));
-        strlcpy(automatic.model, "updated", sizeof(automatic.model));
-        automatic.auto_transcribe = true;
-        assert(voice_notes_transcription_configure(automatic));
+        VoiceNotesConfig automatic{};
+        strlcpy(automatic.transcription.endpoint, "https://example.test/", sizeof(automatic.transcription.endpoint));
+        strlcpy(automatic.transcription.api_key, "key", sizeof(automatic.transcription.api_key));
+        strlcpy(automatic.transcription.deployment, "updated", sizeof(automatic.transcription.deployment));
+        automatic.auto_process = true;
+        assert(voice_notes_processing_configure(automatic));
         wait_until([] {
             VoiceNotesProcessingSnapshot state{};
             voice_notes_processing_snapshot(&state);
@@ -772,10 +1146,10 @@ int main(int argc, char**) {
             voice_notes_processing_snapshot(&state);
             return state.state == VoiceNotesProcessingState::Blocked;
         });
-        automatic.auto_transcribe = false;
-        assert(voice_notes_transcription_configure(automatic));
-        automatic.auto_transcribe = true;
-        assert(voice_notes_transcription_configure(automatic));
+        automatic.auto_process = false;
+        assert(voice_notes_processing_configure(automatic));
+        automatic.auto_process = true;
+        assert(voice_notes_processing_configure(automatic));
         wait_until([] {
             VoiceNotesProcessingSnapshot state{};
             voice_notes_processing_snapshot(&state);
@@ -786,30 +1160,30 @@ int main(int argc, char**) {
             simulated_outcome = VoiceNotesRequestOutcome::RateLimited;
             simulated_cooldown = 60000;
         }
-        strlcpy(automatic.model, "changed", sizeof(automatic.model));
-        assert(voice_notes_transcription_configure(automatic));
+        strlcpy(automatic.transcription.deployment, "changed", sizeof(automatic.transcription.deployment));
+        assert(voice_notes_processing_configure(automatic));
         wait_until([] {
             VoiceNotesProcessingSnapshot state{};
             voice_notes_processing_snapshot(&state);
             return state.state == VoiceNotesProcessingState::Waiting &&
                    state.reason == VoiceNotesProcessingReason::Retry;
         });
-        assert(voice_notes_processing_start() == VoiceNotesTranscriptionStart::Cooldown);
-        automatic.auto_transcribe = false;
-        assert(voice_notes_transcription_configure(automatic));
+        assert(voice_notes_processing_start() == VoiceNotesProcessingStart::Cooldown);
+        automatic.auto_process = false;
+        assert(voice_notes_processing_configure(automatic));
         wait_until([] {
             VoiceNotesProcessingSnapshot state{};
             voice_notes_processing_snapshot(&state);
             return state.state == VoiceNotesProcessingState::Idle;
         });
-        assert(voice_notes_processing_start() == VoiceNotesTranscriptionStart::Cooldown);
+        assert(voice_notes_processing_start() == VoiceNotesProcessingStart::Cooldown);
         audio_test_time_offset_us += 61000000;
         {
             std::lock_guard<std::mutex> lock(request_mutex);
             failed_note.clear();
         }
-        assert(voice_notes_processing_start() == VoiceNotesTranscriptionStart::Accepted);
-        wait_until([&] { return voice_notes_has_transcript(automatic_id.c_str()); });
+        assert(voice_notes_processing_start() == VoiceNotesProcessingStart::Accepted);
+        wait_until([&] { return voice_notes_has_artifact(automatic_id.c_str(), VoiceNoteArtifact::Transcript); });
         wait_until([] {
             VoiceNotesProcessingSnapshot state{};
             voice_notes_processing_snapshot(&state);
@@ -833,19 +1207,19 @@ int main(int argc, char**) {
         }
         transcription_entered = false;
         block_transcription = true;
-        automatic.auto_transcribe = true;
-        assert(voice_notes_transcription_configure(automatic));
+        automatic.auto_process = true;
+        assert(voice_notes_processing_configure(automatic));
         wait_until([] { return transcription_entered.load(); });
-        automatic.auto_transcribe = false;
-        assert(voice_notes_transcription_configure(automatic));
+        automatic.auto_process = false;
+        assert(voice_notes_processing_configure(automatic));
         block_transcription = false;
-        wait_until([&] { return voice_notes_has_transcript(disabled_ids[0].c_str()); });
+        wait_until([&] { return voice_notes_has_artifact(disabled_ids[0].c_str(), VoiceNoteArtifact::Transcript); });
         wait_until([] {
             VoiceNotesProcessingSnapshot state{};
             voice_notes_processing_snapshot(&state);
             return state.state == VoiceNotesProcessingState::Idle;
         });
-        assert(!voice_notes_has_transcript(disabled_ids[1].c_str()));
+        assert(!voice_notes_has_artifact(disabled_ids[1].c_str(), VoiceNoteArtifact::Transcript));
         {
             std::lock_guard<std::mutex> lock(request_mutex);
             assert(request_ids.size() == 1 && request_ids[0] == disabled_ids[0]);
@@ -865,8 +1239,8 @@ int main(int argc, char**) {
             simulated_outcome = VoiceNotesRequestOutcome::NoteFailure;
             request_ids.clear();
         }
-        automatic.auto_transcribe = true;
-        assert(voice_notes_transcription_configure(automatic));
+        automatic.auto_process = true;
+        assert(voice_notes_processing_configure(automatic));
         auto requests = [] {
             std::lock_guard<std::mutex> lock(request_mutex);
             return request_ids.size();
@@ -877,24 +1251,134 @@ int main(int argc, char**) {
             return state.state == VoiceNotesProcessingState::Waiting &&
                    state.reason == VoiceNotesProcessingReason::Retry;
         };
+        auto transcription_retry_status = [] {
+            VoiceNotesTranscriptionSnapshot state{};
+            voice_notes_transcription_snapshot(&state);
+            return std::string(state.retry_status);
+        };
         wait_until([&] { return requests() == 1 && waiting_for_retry(); });
+        assert(transcription_retry_status() == "Retry 1 of 3");
         audio_test_time_offset_us += 27000000;
         std::this_thread::sleep_for(std::chrono::milliseconds(1100));
         assert(requests() == 1);
         audio_test_time_offset_us += 4000000;
         wait_until([&] { return requests() == 2 && waiting_for_retry(); });
+        assert(transcription_retry_status() == "Retry 2 of 3");
         audio_test_time_offset_us += 57000000;
         std::this_thread::sleep_for(std::chrono::milliseconds(1100));
         assert(requests() == 2);
         audio_test_time_offset_us += 4000000;
         wait_until([&] { return requests() == 3 && waiting_for_retry(); });
-        automatic.auto_transcribe = false;
-        assert(voice_notes_transcription_configure(automatic));
+        assert(transcription_retry_status() == "Retry 3 of 3");
+        audio_test_time_offset_us += 297000000;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+        assert(requests() == 3);
+        audio_test_time_offset_us += 4000000;
+        auto retries_halted = [] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return state.state == VoiceNotesProcessingState::Blocked &&
+                   state.reason == VoiceNotesProcessingReason::RetriesExhausted;
+        };
+        wait_until([&] { return requests() == 4 && retries_halted(); });
+        assert(transcription_retry_status() == "Retries halted");
+        audio_test_time_offset_us += 3600000000ULL;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+        assert(requests() == 4);
+        automatic.auto_process = false;
+        assert(voice_notes_processing_configure(automatic));
+        automatic.auto_process = true;
+        assert(voice_notes_processing_configure(automatic));
+        wait_until(retries_halted);
+        assert(requests() == 4);
+
+        assert(voice_notes_command(VoiceNoteCommand::Start, 2080));
+        assert(wait_completion(2080));
+        const unsigned new_capture = reads;
+        wait_until([=] { return reads.load() > new_capture; });
+        assert(voice_notes_command(VoiceNoteCommand::Save, 2081));
+        assert(wait_completion(2081));
+        const std::string resumed_id = snapshot().last_clip;
+        wait_until([&] { return requests() == 6 && waiting_for_retry(); });
+        assert(voice_notes_has_artifact(resumed_id.c_str(), VoiceNoteArtifact::Transcript));
+        assert(transcription_retry_status() == "Retry 1 of 3");
+        assert(voice_notes_processing_start(retry_id.c_str(), VoiceNotesProcessingMode::Missing) ==
+               VoiceNotesProcessingStart::Accepted);
+        wait_until([&] { return requests() == 7 && waiting_for_retry(); });
+        assert(transcription_retry_status() == "Retry 1 of 3");
+        strlcpy(automatic.transcription.deployment, "retry-reset", sizeof(automatic.transcription.deployment));
+        assert(voice_notes_processing_configure(automatic));
+        wait_until([&] { return requests() == 8 && waiting_for_retry(); });
+        assert(transcription_retry_status() == "Retry 1 of 3");
+        automatic.auto_process = false;
+        assert(voice_notes_processing_configure(automatic));
         wait_until([] {
             VoiceNotesProcessingSnapshot state{};
             voice_notes_processing_snapshot(&state);
             return state.state == VoiceNotesProcessingState::Idle;
         });
+        {
+            std::lock_guard<std::mutex> lock(request_mutex);
+            failed_note.clear();
+        }
+        assert(voice_notes_processing_start(retry_id.c_str(), VoiceNotesProcessingMode::Missing) ==
+               VoiceNotesProcessingStart::Accepted);
+        wait_until([&] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return voice_notes_has_artifact(retry_id.c_str(), VoiceNoteArtifact::Transcript) &&
+                   state.state == VoiceNotesProcessingState::Idle;
+        });
+        assert(transcription_retry_status().empty());
+        both.auto_process = true;
+        fail_enrichment = true;
+        simulated_enrichment_outcome = VoiceNotesRequestOutcome::NoteFailure;
+        const unsigned enrichment_before_retry = enrichment_requests;
+        assert(voice_notes_processing_configure(both));
+        auto enrichment_retry_status = [] {
+            VoiceNotesEnrichmentSnapshot state{};
+            voice_notes_enrichment_snapshot(&state);
+            return std::string(state.retry_status);
+        };
+        wait_until([&] {
+            return enrichment_requests == enrichment_before_retry + 2 && waiting_for_retry();
+        });
+        assert(enrichment_retry_status() == "Retry 1 of 3");
+        for (uint64_t delay : {31000000ULL, 61000000ULL, 301000000ULL}) {
+            const unsigned expected = enrichment_requests + 2;
+            audio_test_time_offset_us += delay;
+            wait_until([&] {
+                return enrichment_requests == expected && (waiting_for_retry() || retries_halted());
+            });
+        }
+        assert(enrichment_retry_status() == "Retries halted");
+        const unsigned halted_enrichment_requests = enrichment_requests;
+        const String resumed_transcript = String("/storage/voice-notes/") + resumed_id.c_str() + ".json";
+        assert(LittleFS.remove(resumed_transcript.c_str()));
+        audio_test_time_offset_us += 6000000;
+        wait_until([&] {
+            return voice_notes_has_artifact(resumed_id.c_str(), VoiceNoteArtifact::Transcript) &&
+                   retries_halted();
+        });
+        assert(enrichment_requests == halted_enrichment_requests);
+        assert(voice_notes_processing_start(retry_id.c_str(), VoiceNotesProcessingMode::Retranscribe) ==
+               VoiceNotesProcessingStart::Accepted);
+        wait_until(retries_halted);
+        assert(enrichment_requests == halted_enrichment_requests);
+        assert(enrichment_retry_status() == "Retries halted");
+        both.auto_process = false;
+        assert(voice_notes_processing_configure(both));
+        fail_enrichment = false;
+        assert(voice_notes_processing_start() == VoiceNotesProcessingStart::Accepted);
+        wait_until([&] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return voice_notes_has_artifact(retry_id.c_str(), VoiceNoteArtifact::Enrichment) &&
+                   voice_notes_has_artifact(resumed_id.c_str(), VoiceNoteArtifact::Enrichment) &&
+                   state.state == VoiceNotesProcessingState::Idle;
+        });
+        assert(enrichment_retry_status().empty());
+        assert(voice_notes_remove(resumed_id.c_str()) == VoiceNoteFileStatus::Ready);
         assert(voice_notes_remove(retry_id.c_str()) == VoiceNoteFileStatus::Ready);
     }
 

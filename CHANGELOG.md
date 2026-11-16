@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-11-15
+ms.date: 2026-11-16
 ms.topic: reference
 ---
 
@@ -17,32 +17,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 * Add on-device Voice Notes transcription through a configured Azure
-  transcription deployment. Start transcription manually from **Voice Notes >
+  transcription deployment. Select **Process note** under **Voice Notes >
   Notes**, view the saved transcript alongside playback in **View details**,
   and configure the endpoint, deployment, and API key under **Voice Notes >
   Settings** without rebooting. Recording remains local and works offline;
   transcription sends the selected recording to Azure and requires Wi-Fi.
   Failed attempts preserve the recording and any previous transcript.
   See [Voice Notes](docs/user/media/audio.md#record-and-manage-voice-notes).
-* Add optional automatic Voice Notes transcription under **Voice Notes >
-  Settings**, disabled by default. Process existing and new notes without
-  transcripts one at a time when Wi-Fi is available, with automatic retries
-  and service rate-limit cooldowns. Recording takes priority over background
-  work; unfinished transcription can be retried after reconnecting or restarting
-  while automation is enabled. Processing does not connect Wi-Fi or keep the
-  device awake.
-* Add a **Voice note > Start transcription** action for a best-effort processing
+* Add title and summary generation from saved Voice Notes transcripts through
+  a separately configured Azure LLM deployment supporting strict structured
+  outputs. Generate both fields in one request, show titles in the catalog,
+  and show summaries above transcripts in details. Use **More actions** to
+  transcribe again or regenerate title and summary; each replaces only its
+  selected result and preserves previous content on failure.
+* Add **Automatically process saved notes** under **Voice Notes > Settings**,
+  disabled by default. Process missing transcripts and enrichment one at a
+  time when Wi-Fi is available. Retry each failing service after 30 seconds,
+  1 minute, and 5 minutes, then halt automatic retries until a new recording
+  is saved, manual processing starts, or that service's settings change.
+  Honor provider cooldowns and allow independent services to continue.
+  Recording takes priority; two-second gaps between operations give other
+  device tasks time to run. Processing does not connect Wi-Fi or keep the
+  device awake; retry history resets on reboot.
+* Add a **Voice note > Start processing** action for a best-effort processing
   pass without enabling automation. Offline or busy presses schedule nothing.
   Show background processing status in the portal and through
   `[voice_note:processing.state]` (`idle`, `waiting`, `running`, or `blocked`).
 * Add recording and transcription status through `[voice_note:...]` bindings,
   including a latest-saved note ID that remains available until restart.
-  Keep transcription buffers and portal catalog/details documents in PSRAM,
+  Add enrichment state, note ID, and error bindings, plus
+  `[voice_note:transcription.retry_status]` and
+  `[voice_note:enrichment.retry_status]` showing **Retry 1 of 3** through
+  **Retry 3 of 3**, or **Retries halted**. Keep service buffers and portal
+  catalog/details documents in PSRAM,
   and exclude Voice Notes code, settings, actions, bindings, routes, and assets
   from firmware that does not enable the feature.
 
 ### Changed
 
+* Replace transcription-only Voice Notes settings with separate transcription
+  and LLM endpoint, deployment, and API key settings. Replace the `voice_note`
+  command `transcribe` with `process` and the POST `transcribe` endpoint with
+  `process`, `retranscribe`, and `regenerate`. Existing service settings and
+  command/endpoint names are not migrated; reconfigure Voice Notes services
+  and update affected actions and integrations.
+* Treat an empty transcription response as successful **No speech detected**
+  content. Continue through normal enrichment, allow an empty summary, and
+  avoid automatically retrying completed silent recordings.
 * Replace Voice Clips with **Voice Notes**, including the `voice_note` action,
   `[voice_note:...]` bindings, `/api/component/voice-notes/...` endpoints,
   `HAS_VOICE_NOTES`, and the `/storage/voice-notes/` directory. This is a
@@ -50,6 +71,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bindings, old endpoints, and recording folders are not migrated. Update
   pads and integrations and download recordings you want to keep before
   updating; old recordings do not appear in the new Notes list.
+
+### Fixed
+
+* Clear a previous note's summary when opening another note, show active
+  enrichment progress and failures without masking them behind older
+  transcription errors, and report unreadable saved enrichment instead of
+  labeling it ready.
+* Resolve accepted processing attempts abandoned before execution rather than
+  leaving their status permanently **Preparing**.
 
 ## [1.48.0] - 2026-11-14
 

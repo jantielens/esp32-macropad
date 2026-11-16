@@ -17,13 +17,13 @@
 #include "action_catalog.h"
 #include "action_validate.h"
 #include "voice_notes.h"
-#include "voice_notes_transcription.h"
+#include "voice_notes_processing.h"
 #include <string>
 
 #if HAS_VOICE_NOTES
 bool voice_notes_command(VoiceNoteCommand, uint32_t) { return true; }
-static VoiceNotesTranscriptionStart processing_start_result = VoiceNotesTranscriptionStart::Accepted;
-VoiceNotesTranscriptionStart voice_notes_processing_start() { return processing_start_result; }
+static VoiceNotesProcessingStart processing_start_result = VoiceNotesProcessingStart::Accepted;
+VoiceNotesProcessingStart voice_notes_processing_start() { return processing_start_result; }
 #endif
 
 static unsigned g_followup_dispatches = 0;
@@ -174,12 +174,12 @@ TEST(type_only) {
 TEST(voice_note_action_contract) {
 #if HAS_VOICE_NOTES
     ASSERT_TRUE(action_type_find("voice_note") != nullptr);
-    const ButtonAction transcribe = parse_from_string(R"({"type":"voice_note","command":"transcribe"})");
+    const ButtonAction process = parse_from_string(R"({"type":"voice_note","command":"process"})");
     const ActionTypeDef* voice_note = action_type_find("voice_note");
-    ASSERT_TRUE(voice_note->dispatch(transcribe, "test", 0) == ACTION_COMPLETE);
-    processing_start_result = VoiceNotesTranscriptionStart::Offline;
-    ASSERT_TRUE(voice_note->dispatch(transcribe, "test", 0) == ACTION_FAILED);
-    processing_start_result = VoiceNotesTranscriptionStart::Accepted;
+    ASSERT_TRUE(voice_note->dispatch(process, "test", 0) == ACTION_COMPLETE);
+    processing_start_result = VoiceNotesProcessingStart::Offline;
+    ASSERT_TRUE(voice_note->dispatch(process, "test", 0) == ACTION_FAILED);
+    processing_start_result = VoiceNotesProcessingStart::Accepted;
     for (const char* json : {
             R"({"type":"voice_note","command":"start"})",
             R"({"type":"voice_note","command":"start","scenario":"general"})",
@@ -187,7 +187,7 @@ TEST(voice_note_action_contract) {
             R"({"type":"voice_note","command":"resume"})",
             R"({"type":"voice_note","command":"save"})",
             R"({"type":"voice_note","command":"discard"})",
-            R"({"type":"voice_note","command":"transcribe"})"}) {
+            R"({"type":"voice_note","command":"process"})"}) {
         JsonDocument doc;
         ASSERT_TRUE(deserializeJson(doc, json) == DeserializationError::Ok);
         ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>()) == nullptr);
@@ -200,8 +200,9 @@ TEST(voice_note_action_contract) {
             R"({"type":"voice_note","command":"start","scenario":"meeting"})",
             R"({"type":"voice_note","command":"start","scenario":null})",
             R"({"type":"voice_note","command":"save","scenario":"general"})",
-            R"({"type":"voice_note","command":"transcribe","scenario":"general"})",
-            R"({"type":"voice_note","command":"transcribe","id":"123"})",
+            R"({"type":"voice_note","command":"process","scenario":"general"})",
+            R"({"type":"voice_note","command":"process","id":"123"})",
+            R"({"type":"voice_note","command":"transcribe"})",
             R"({"type":"voice_note","command":"toggle"})"}) {
         JsonDocument doc;
         ASSERT_TRUE(deserializeJson(doc, json) == DeserializationError::Ok);

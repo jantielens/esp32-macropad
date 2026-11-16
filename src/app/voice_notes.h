@@ -37,6 +37,7 @@ VoiceNoteCancelStatus voice_notes_cancel();
 bool voice_notes_list(JsonDocument& output);
 bool voice_notes_read_metadata(const char* id, JsonObject output);
 bool voice_notes_exists(const char* id);
-VoiceNoteCandidate voice_notes_next_candidate(const VoiceNoteCursor& after, VoiceNoteCursor* next);
+VoiceNoteCandidate voice_notes_next_candidate(const VoiceNoteCursor& after, VoiceNoteCursor* next,
+                                              bool transcription = true, bool enrichment = false);
 String voice_notes_path(const char* id);
 #endif

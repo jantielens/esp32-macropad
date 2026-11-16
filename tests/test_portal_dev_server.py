@@ -55,7 +55,7 @@ class PortalDevServerTest(unittest.TestCase):
         PORTAL.reset_pad_fixtures(self.server)
         self.server.mock_fonts = {}
         self.server.mock_config.pop("external_data", None)
-        for key in ("voice_notes_base_url", "voice_notes_api_key", "voice_notes_model", "voice_notes_auto_transcribe"):
+        for key in [key for key in self.server.mock_config if key.startswith("voice_notes_")]:
             self.server.mock_config.pop(key, None)
 
     def request(self, path, method="GET", body=None, profile="esp32-p4-lcd4b", raw=False,
@@ -122,7 +122,7 @@ class PortalDevServerTest(unittest.TestCase):
         profile = "reterminal-sticky-interactive"
         base = "/api/component/voice-notes/"
         config_path = "/api/config?no_reboot=1"
-        field = "voice_notes_auto_transcribe"
+        field = "voice_notes_auto_process"
         self.assertNotIn(field, self.request("/api/config")[1])
         self.assertIs(self.request("/api/config", profile=profile)[1][field], False)
         self.assertEqual(self.request(config_path, "POST", {field: True}, profile=profile)[0], 200)
@@ -131,9 +131,11 @@ class PortalDevServerTest(unittest.TestCase):
             self.assertEqual(self.request(config_path, "POST", {field: invalid}, profile=profile)[0], 400)
             self.assertIs(self.request("/api/config", profile=profile)[1][field], True)
         status = self.request(base + "status", profile=profile)[1]
-        self.assertEqual(status["processing"], {"state": "blocked", "reason": "configuration"})
-        settings = {"voice_notes_base_url": "https://example.test", "voice_notes_model": "deployment",
-                    "voice_notes_api_key": "test-key"}
+        self.assertEqual(status["processing"], {"state": "blocked", "reason": "configuration", "service": "transcription"})
+        self.assertEqual(status["transcription"]["retry_status"], "")
+        self.assertEqual(status["enrichment"]["retry_status"], "")
+        settings = {"voice_notes_transcription_endpoint": "https://example.test", "voice_notes_transcription_deployment": "deployment",
+                    "voice_notes_transcription_api_key": "test-key"}
         self.assertEqual(self.request(config_path, "POST", settings, profile=profile)[0], 200)
         self.assertIs(self.request("/api/config", profile=profile)[1][field], True)
         for attribute, value, reason in (
@@ -144,13 +146,13 @@ class PortalDevServerTest(unittest.TestCase):
             original = getattr(self.server, attribute)
             setattr(self.server, attribute, value)
             self.assertEqual(self.request(base + "status", profile=profile)[1]["processing"],
-                             {"state": "waiting", "reason": reason})
+                             {"state": "waiting", "reason": reason, "service": "transcription"})
             if reason == "offline":
-                self.assertEqual(self.request(base + "transcribe?id=0000000100000002", "POST",
+                self.assertEqual(self.request(base + "process?id=0000000100000002", "POST",
                                               profile=profile)[0], 503)
             setattr(self.server, attribute, original)
         self.server.mock_voice_cooldown = True
-        self.assertEqual(self.request(base + "transcribe?id=0000000100000002", "POST", profile=profile)[0], 429)
+        self.assertEqual(self.request(base + "process?id=0000000100000002", "POST", profile=profile)[0], 429)
         self.server.mock_voice_cooldown = False
         # Each status poll completes the preceding operation and starts the next oldest note.
         seen = []
@@ -160,11 +162,11 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(seen, [("running", "0000000100000004"), ("running", "0000000100000003"),
                                 ("running", "0000000100000002"), ("idle", "0000000100000002")])
         self.assertTrue(all(entry["has_transcript"] for entry in self.request(base + "list", profile=profile)[1]["entries"]))
-        self.assertEqual(self.request(config_path, "POST", {field: False, "voice_notes_api_key": ""},
+        self.assertEqual(self.request(config_path, "POST", {field: False, "voice_notes_transcription_api_key": ""},
                                       profile=profile)[0], 200)
         saved = self.request("/api/config", profile=profile)[1]
         self.assertIs(saved[field], False)
-        self.assertTrue(saved["voice_notes_api_key_set"])
+        self.assertTrue(saved["voice_notes_transcription_api_key_set"])
 
     def test_voice_notes_fixture_and_profile_isolation(self):
         profile = "reterminal-sticky-interactive"
@@ -189,23 +191,40 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(listing["entries"][0]["created_at"], PORTAL.MOCK_NOW_EPOCH)
         self.assertFalse(listing["entries"][0]["has_transcript"])
         self.assertIsNone(self.request(base + "detail?id=" + clip_id, profile=profile)[1]["transcript"])
-        self.assertEqual(self.request(base + "transcribe?id=" + clip_id, "POST", profile=profile)[0], 400)
-        settings = {"voice_notes_base_url": "https://example.test", "voice_notes_model": "deployment",
-                    "voice_notes_api_key": "test-key"}
+        self.assertEqual(self.request(base + "process?id=" + clip_id, "POST", profile=profile)[0], 400)
+        settings = {"voice_notes_transcription_endpoint": "https://example.test", "voice_notes_transcription_deployment": "deployment",
+                    "voice_notes_transcription_api_key": "test-key"}
         self.assertEqual(self.request("/api/config?no_reboot=1", "POST", settings, profile=profile)[0], 200)
         saved = self.request("/api/config", profile=profile)[1]
-        self.assertEqual(saved["voice_notes_base_url"], "https://example.test/")
-        self.assertEqual(saved["voice_notes_api_key"], "")
-        self.assertTrue(saved["voice_notes_api_key_set"])
+        self.assertEqual(saved["voice_notes_transcription_endpoint"], "https://example.test/")
+        self.assertEqual(saved["voice_notes_transcription_api_key"], "")
+        self.assertTrue(saved["voice_notes_transcription_api_key_set"])
         self.assertEqual(self.request("/api/config?no_reboot=1", "POST",
-                                     {"voice_notes_api_key": ""}, profile=profile)[0], 200)
-        self.assertTrue(self.request("/api/config", profile=profile)[1]["voice_notes_api_key_set"])
-        self.assertEqual(self.request(base + "transcribe?id=" + clip_id, "POST", profile=profile)[0], 202)
-        self.assertEqual(self.request(base + "transcribe?id=" + clip_id, "POST", profile=profile)[0], 409)
+                                     {"voice_notes_transcription_api_key": ""}, profile=profile)[0], 200)
+        self.assertTrue(self.request("/api/config", profile=profile)[1]["voice_notes_transcription_api_key_set"])
+        self.assertEqual(self.request(base + "process?id=" + clip_id, "POST", profile=profile)[0], 202)
+        self.assertEqual(self.request(base + "process?id=" + clip_id, "POST", profile=profile)[0], 409)
         self.server.mock_voice_transcription_started -= 2
         self.assertEqual(self.request(base + "status", profile=profile)[1]["transcription"]["state"], "ready")
         self.assertTrue(self.request(base + "list", profile=profile)[1]["entries"][0]["has_transcript"])
         self.assertTrue(self.request(base + "detail?id=" + clip_id, profile=profile)[1]["transcript"]["text"])
+        llm = {"voice_notes_llm_endpoint": "https://llm.example.test", "voice_notes_llm_deployment": "llm",
+               "voice_notes_llm_api_key": "llm-test-key"}
+        self.assertEqual(self.request("/api/config?no_reboot=1", "POST", llm, profile=profile)[0], 200)
+        self.assertEqual(self.request("/api/config?no_reboot=1", "POST",
+                                     {"voice_notes_llm_api_key": ""}, profile=profile)[0], 200)
+        saved = self.request("/api/config", profile=profile)[1]
+        self.assertTrue(saved["voice_notes_llm_api_key_set"])
+        self.assertTrue(saved["voice_notes_transcription_api_key_set"])
+        self.assertEqual(self.request(base + "process?id=" + clip_id, "POST", profile=profile)[0], 202)
+        self.server.mock_voice_transcription_started -= 2
+        self.assertEqual(self.request(base + "status", profile=profile)[1]["enrichment"]["state"], "ready")
+        detail = self.request(base + "detail?id=" + clip_id, profile=profile)[1]
+        self.assertEqual(detail["enrichment"]["title"], "Sample voice note")
+        self.assertEqual(self.request(base + "process?id=" + clip_id, "POST", profile=profile)[1]["state"], "unchanged")
+        self.assertEqual(self.request(base + "regenerate?id=" + clip_id, "POST", profile=profile)[0], 202)
+        self.server.mock_voice_transcription_started -= 2
+        self.request(base + "status", profile=profile)
         url = self.base + base + "file?id=" + clip_id
         cookie = {"Cookie": "portal_mock_profile=" + profile}
         with urlopen(Request(url, headers=cookie)) as response:

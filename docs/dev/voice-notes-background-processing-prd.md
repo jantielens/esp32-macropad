@@ -12,6 +12,12 @@ performed separately by the product owner after implementation.
 The [implementation handoff](voice-notes-background-processing-implementation-plan.md)
 fixes coding-agent contracts, implementation phases, and focused validation.
 
+The follow-up [enrichment PRD](voice-notes-enrichment-prd.md) defines combined
+title and summary generation, broader automatic/manual processing, and
+service-scoped failure handling. Its identified scope supersedes this
+increment's transcription-only contracts and separate future title/summary
+operation direction; it does not itself authorize implementation.
+
 The [transcription PRD](voice-notes-transcription-prd.md) and its
 [implementation handoff](voice-notes-transcription-implementation-plan.md)
 define the existing transcription operation. This increment replaces their

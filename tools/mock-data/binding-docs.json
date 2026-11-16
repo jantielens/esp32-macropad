@@ -3927,7 +3927,12 @@
         "transcription.state",
         "transcription.note_id",
         "transcription.error",
-        "processing.state"
+        "enrichment.state",
+        "enrichment.note_id",
+        "enrichment.error",
+        "processing.state",
+        "transcription.retry_status",
+        "enrichment.retry_status"
       ],
       "category": "Device",
       "summary": "Local voice note recorder status.",
@@ -3972,6 +3977,26 @@
           "desc": "Most recent transcription error"
         },
         {
+          "key": "transcription.retry_status",
+          "desc": "Service retry cycle: empty, Retry 1/2/3 of 3, or Retries halted; not per-note"
+        },
+        {
+          "key": "enrichment.state",
+          "desc": "Current title and summary generation state"
+        },
+        {
+          "key": "enrichment.note_id",
+          "desc": "Note ID of the latest enrichment attempt"
+        },
+        {
+          "key": "enrichment.error",
+          "desc": "Most recent enrichment error"
+        },
+        {
+          "key": "enrichment.retry_status",
+          "desc": "Service retry cycle: empty, Retry 1/2/3 of 3, or Retries halted; not per-note"
+        },
+        {
           "key": "processing.state",
           "desc": "Background processing state"
         }
@@ -3988,6 +4013,14 @@
         {
           "code": "[voice_note:processing.state]",
           "desc": "Show background processing state."
+        },
+        {
+          "code": "[voice_note:enrichment.state]",
+          "desc": "Show title and summary generation state."
+        },
+        {
+          "code": "[voice_note:transcription.retry_status]",
+          "desc": "Show the transcription service retry cycle."
         }
       ],
       "authoring": {
@@ -4101,10 +4134,75 @@
             "read_only": true
           },
           {
+            "key": "enrichment.state",
+            "kind": "text",
+            "unit": "",
+            "example_value": "idle",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "enrichment.note_id",
+            "kind": "text",
+            "unit": "",
+            "example_value": "0000000100000002",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "enrichment.error",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Enrichment request failed",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
             "key": "processing.state",
             "kind": "text",
             "unit": "",
             "example_value": "idle",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "transcription.retry_status",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Retry 1 of 3",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "enrichment.retry_status",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Retries halted",
             "formats": [
               "raw"
             ],

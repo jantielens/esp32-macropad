@@ -24,7 +24,7 @@
 #include "external_data_config.h"
 #include "bthome_event_settings.h"
 #if HAS_VOICE_NOTES
-#include "voice_notes_transcription.h"
+#include "voice_notes_processing.h"
 #endif
 #if HAS_CAMERA
 #include "camera_motion.h"
@@ -101,7 +101,7 @@ struct EpaperRefreshSettings {
 
 struct DeviceConfig {
 #if HAS_VOICE_NOTES
-		VoiceNotesTranscriptionConfig voice_notes_transcription;
+		VoiceNotesConfig voice_notes;
 #endif
 #if HAS_EXTERNAL_DATA
 		ExternalDataConfig external_data;

@@ -109,39 +109,59 @@ your browser's microphone. Recordings use the device input's native 16-bit PCM
 format and stay on its selected storage backend. Free space limits recording
 time; the device saves captured audio when it reaches the storage reserve.
 
-To transcribe a note, open **Voice Notes > Settings** and enter the Azure
-resource's HTTPS endpoint, API key, and transcription deployment name. Use the
-resource root, such as `https://<resource>.openai.azure.com/`, without an
-`/openai/` path, operation path, or query. Enter the deployment name separately.
-Select **Save**; a reboot is not required.
-Leave the key blank on later saves to keep the stored key.
+To process notes, open **Voice Notes > Settings**. Configure the Transcription
+Service with an Azure resource endpoint, deployment name, and API key. To
+generate titles and summaries from saved transcripts, also configure the LLM
+Service with a deployment that supports strict structured outputs. For each
+service use the HTTPS resource root, such as
+`https://<resource>.openai.azure.com/`, without an `/openai/` path, project URL,
+or query. Select **Save**; a reboot is not required. Leave either key blank on
+later saves to keep its stored value.
 
-Enable **Automatically transcribe saved notes** to include existing and future
-notes without transcripts. Automatic processing waits for Wi-Fi and other
+Enable **Automatically process saved notes** to include existing and future
+notes with missing results. Automatic processing waits for Wi-Fi and other
 required resources; it does not connect Wi-Fi or keep the device awake. It
-retries unsuccessful passes later and honors service rate limits. Correct
-access or deployment settings if processing is blocked.
+retries each failing service after 30 seconds, 1 minute, and 5 minutes, then
+pauses automatic retries. Save another recording or start processing manually
+to begin a fresh cycle. Changing that service's settings also resets its cycle.
+Provider cooldowns remain in effect; new recordings do not clear access or
+configuration errors. Correct service settings if processing is blocked.
 
-Alternatively, add a **Voice note > Start transcription** action to start a
+Alternatively, add a **Voice note > Start processing** action to start a
 best-effort pass without enabling automation. An offline or busy press schedules
 nothing; press it again when the device is ready. This action starts processing
-and does not wait for transcripts to finish.
+and does not wait for results to finish.
 
-In **Notes**, select **Transcribe**. Open **View details** to play the note and
-read its transcript. Transcription sends the
-recording to the configured Azure service. Keep your recordings, downloads, and
-credentials protected. A failed attempt leaves the WAV and any previous
-transcript intact; correct the issue and retry. A new successful attempt replaces
-the previous transcript. Recording takes priority over transcription.
+Processing pauses for two seconds after each operation before continuing,
+giving other device tasks time to run. The overall pass still shows as running.
+
+In **Notes**, select **Process note**. Open **View details** to play the note and
+read its summary and transcript. Transcription sends the recording to Azure;
+title and summary generation sends the saved transcript. Keep recordings,
+downloads, and credentials protected. A failed attempt leaves saved results
+intact. Use **More actions** in details to replace a transcript or regenerate a
+title and summary. These actions may incur service charges; retranscribing does
+not update an existing title or summary. Recording takes priority over processing.
 Access and deployment errors direct you to check Voice Notes Settings. Upload
 limit errors require a smaller recording; rate or quota errors require checking
 the Azure quota or retrying later.
+
+An empty transcription response is saved successfully as **No speech detected**.
+Enrichment follows the normal flow and may produce an empty summary. Completed
+results are not automatically retried; use **Transcribe again** to try again.
 
 Use `[voice_note:recording.state]`, `[voice_note:recording.duration_s]`,
 `[voice_note:last_saved.id]`, and `[voice_note:recording.error]` on pads to
 show recording status and the latest result. Transcription status is available
 through `[voice_note:transcription.state]`, `[voice_note:transcription.note_id]`,
 and `[voice_note:transcription.error]`.
+Use `[voice_note:enrichment.state]`, `[voice_note:enrichment.note_id]`, and
+`[voice_note:enrichment.error]` for title and summary generation.
+Use `[voice_note:transcription.retry_status]` and
+`[voice_note:enrichment.retry_status]` for each service's retry cycle: empty
+before retries, **Retry 1 of 3**, **Retry 2 of 3**, **Retry 3 of 3**, or
+**Retries halted**. These describe the service, not an individual note.
+Retry history resets on reboot.
 Use `[voice_note:processing.state]` to show whether background processing is
 idle, waiting, running, or blocked.
 The latest saved ID remains available until the device restarts. A reboot, firmware update,

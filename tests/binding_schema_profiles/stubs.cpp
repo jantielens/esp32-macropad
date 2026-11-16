@@ -5,11 +5,13 @@
 #include "audio_input.h"
 #if HAS_VOICE_NOTES
 #include "voice_notes.h"
-#include "voice_notes_transcription.h"
+#include "voice_notes_processing.h"
 void voice_notes_snapshot(VoiceNoteSnapshot* out) { *out = {}; }
 const char* voice_notes_state_name(VoiceNoteState) { return "idle"; }
 void voice_notes_transcription_snapshot(VoiceNotesTranscriptionSnapshot* out) { *out = {}; }
 const char* voice_notes_transcription_state_name(VoiceNotesTranscriptionState) { return "idle"; }
+void voice_notes_enrichment_snapshot(VoiceNotesEnrichmentSnapshot* out) { *out = {}; }
+const char* voice_notes_enrichment_state_name(VoiceNotesEnrichmentState) { return "idle"; }
 void voice_notes_processing_snapshot(VoiceNotesProcessingSnapshot* out) { *out = {}; }
 const char* voice_notes_processing_state_name(VoiceNotesProcessingState) { return "idle"; }
 #endif

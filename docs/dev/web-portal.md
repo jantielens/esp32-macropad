@@ -3427,24 +3427,32 @@ latest snapshot copy.
 The `voice-notes` component and its fragment and script require
 `HAS_VOICE_NOTES`. The normal portal authentication applies.
 
-* `GET /api/component/voice-notes/list` returns indexed note metadata and
-  `has_transcript`, without transcript text.
-* `GET /api/component/voice-notes/status` returns recording and transcription
+* `GET /api/component/voice-notes/list` returns indexed note metadata,
+  `has_transcript`, `has_enrichment`, `title`, and `enrichment_error`, without
+  transcript or summary text.
+* `GET /api/component/voice-notes/status` returns recording and service attempt
   snapshots, setup status, backend, cached total/free capacity, and a
   `processing` object. Its `state` is `idle`, `waiting`, `running`, or
   `blocked`; its `reason` is `none`, `offline`, `recording`, `update`,
-  `retry`, or `configuration`.
+  `retry`, `configuration`, or `retries_exhausted`; `service` identifies the
+  affected service. Transcription and enrichment snapshots include
+  `retry_status`: empty, `Retry 1 of 3`, `Retry 2 of 3`, `Retry 3 of 3`, or
+  `Retries halted`. These describe per-service cycles, not per-note attempts.
 * `GET /api/component/voice-notes/detail?id=<id>` returns note metadata and its
-  saved transcript, or `null` when no transcript exists.
-* `POST /api/component/voice-notes/transcribe?id=<id>` accepts one background
-  transcription with HTTP `202`. Poll status for completion or failure.
-  An active service rate-limit cooldown returns `429`.
+  saved transcript and enrichment, or `null` for missing results. An
+  `enrichment_error` reports an unreadable saved enrichment.
+  An enrichment summary may be an empty string; the title remains nonblank.
+* `POST /api/component/voice-notes/process?id=<id>` accepts missing work with
+  HTTP `202`, or returns `200` with `unchanged` if both results exist.
+  `retranscribe` replaces only a transcript and `regenerate` replaces only a
+  title and summary. Poll status for completion or failure; an applicable
+  service cooldown returns `429`.
 * `GET /api/component/voice-notes/file?id=<id>` streams an indexed WAV.
   Add `download=1` for an attachment. A single closed, open-ended, or suffix
   byte range returns `206` with `Content-Range`; an invalid or unsatisfiable
   range returns `416`. Responses advertise `Accept-Ranges: bytes`.
 * `DELETE /api/component/voice-notes/delete?id=<id>` removes the recording and
-  its transcript. An active reader returns `409`; missing notes return `404`.
+  its results. An active reader returns `409`; missing notes return `404`.
 
 IDs are 16 lowercase hexadecimal characters. Generic Storage and MCP access
 can browse the directory and read its files. Generic Storage deletion does not
@@ -3452,12 +3460,25 @@ coordinate with the recorder or update its index. Manual firmware upload and
 factory reset return a retryable `409` while recorder cancellation is pending,
 or `503` if it cannot stop safely.
 
-Feature-gated `/api/config` fields are `voice_notes_base_url`,
-`voice_notes_model`, `voice_notes_auto_transcribe` (a boolean), and the
-write-only `voice_notes_api_key`. GET returns an
-empty key plus `voice_notes_api_key_set`; an omitted or empty key preserves the
-saved secret. Settings changes apply without rebooting; automatic processing
-includes existing notes without transcripts.
+Feature-gated `/api/config` fields are `voice_notes_auto_process` and, for each
+of `transcription` and `llm`, `voice_notes_<service>_endpoint`,
+`voice_notes_<service>_deployment`, and write-only
+`voice_notes_<service>_api_key`. GET returns empty keys and separate
+`voice_notes_<service>_api_key_set` indicators. An omitted or empty key preserves
+that service's saved secret. Settings changes apply without rebooting; automatic
+processing includes existing notes with missing results.
+
+Automatic failures allow three retries after 30 seconds, 1 minute, and 5
+minutes, then pause the affected service. A newly saved recording resets both
+ordinary retry budgets; accepted manual processing resets requested runnable
+services; changed service settings reset that service. None bypass provider
+cooldowns. New recordings do not clear setup blocks. Reboot resets in-memory
+retry history. Independent eligible services can continue while another is
+paused.
+
+An owned pass remains `running` during the fixed two-second gap after an
+operation; `processing.service` is `none` while the worker waits. Completed
+service attempt snapshots retain their terminal state during the gap.
 
 ---
 

@@ -2,10 +2,11 @@
   'use strict';
   var base = '/api/component/voice-notes/';
   var playbackError = 'Could not play this recording. Try again.';
-  var generation = 0, timer = null, selected = null, latest = null, rows = [], lastReady = '', lastStatusError = '';
+  var generation = 0, timer = null, selected = null, latest = null, rows = [], lastStatusError = '';
   var reconcileNeeded = false, lastAttempt = '', detailRefresh = null, selectionVersion = 0;
   if (typeof window.registerConfigFields === 'function')
-    window.registerConfigFields(['voice_notes_base_url', 'voice_notes_model', 'voice_notes_auto_transcribe']);
+    window.registerConfigFields(['voice_notes_transcription_endpoint', 'voice_notes_transcription_deployment',
+      'voice_notes_llm_endpoint', 'voice_notes_llm_deployment', 'voice_notes_auto_process']);
 
   function status(text) {
     var node = document.getElementById('voice-notes-status');
@@ -160,7 +161,9 @@
     if (!latest) return;
     var setup = document.getElementById('voice-notes-setup');
     var coordinator = latest.processing || {};
-    if (setup) setup.hidden = latest.transcription_configured !== false && coordinator.reason !== 'configuration';
+    if (setup) setup.hidden = !(latest.transcription_configured === false &&
+      rows.some(function (row) { return !row.entry.has_transcript; })) &&
+      !(coordinator.reason === 'configuration' && coordinator.service === 'transcription');
     var guidance = document.getElementById('voice-notes-processing-status');
     if (guidance) {
       var reasons = {
@@ -168,39 +171,62 @@
         recording: 'Waiting for recording to finish',
         update: 'Waiting for device update or storage availability',
         retry: 'Retrying later',
-        configuration: 'Check transcription settings',
-        none: 'Waiting to transcribe'
+        retries_exhausted: 'Automatic retries paused. Save a new note or retry manually.',
+        configuration: coordinator.service === 'transcription' ? 'Check transcription settings' :
+          coordinator.service === 'enrichment' ? 'Check LLM settings' : 'Check Voice Notes Settings',
+        none: 'Waiting to process'
       };
       guidance.textContent = (coordinator.state === 'waiting' || coordinator.state === 'blocked')
         ? (reasons[coordinator.reason] || '') : '';
       guidance.hidden = !guidance.textContent;
     }
-    var processing = latest.transcription || {};
-    var busy = ['preparing', 'transcribing', 'saving'].indexOf(processing.state) !== -1;
+    var processing = latest.transcription || {}, enrichment = latest.enrichment || {};
+    var busy = coordinator.state === 'running' || (latest.recording && latest.recording.session_active);
     rows.forEach(function (row) {
       var matches = processing.note_id === row.entry.id;
-      if (matches && processing.state === 'ready') row.entry.has_transcript = true;
+      var matchesEnrichment = enrichment.note_id === row.entry.id;
       if (row.transcriptIndicator) row.transcriptIndicator.hidden = !row.entry.has_transcript;
-      if (row.durableStatus) row.durableStatus.textContent = row.entry.has_transcript ? 'Transcript ready' : 'Not transcribed';
-      row.transcribe.disabled = busy || coordinator.state === 'running' || latest.transcription_configured === false;
-      row.transcribe.textContent = matches && processing.state === 'error' ? 'Retry transcription' :
-        (row.entry.has_transcript ? 'Transcribe again' : 'Transcribe');
-      if (matches && busy) {
+      if (row.durableStatus) row.durableStatus.textContent = row.entry.enrichment_error ||
+        (row.entry.has_enrichment ? 'Title and summary ready' :
+          row.entry.has_transcript ? 'Transcript ready' : 'Not transcribed');
+      var canProcess = (!row.entry.has_transcript && latest.transcription_configured) ||
+        (row.entry.has_transcript && !row.entry.has_enrichment && latest.enrichment_configured);
+      row.transcribe.hidden = !canProcess;
+      row.transcribe.disabled = !!busy;
+      row.transcribe.textContent = ((matches && !row.entry.has_transcript && processing.state === 'error') ||
+        (matchesEnrichment && !row.entry.has_enrichment && enrichment.state === 'error'))
+        ? 'Retry processing' : 'Process note';
+      if (row.replaceTranscript) {
+        row.replaceTranscript.hidden = !latest.transcription_configured;
+        row.replaceTranscript.disabled = !!busy;
+      }
+      if (row.replaceEnrichment) {
+        row.replaceEnrichment.hidden = !latest.enrichment_configured;
+        row.replaceEnrichment.disabled = !!busy;
+      }
+      if (row.disclosure) row.disclosure.hidden =
+        (!row.replaceTranscript || row.replaceTranscript.hidden) &&
+        (!row.replaceEnrichment || row.replaceEnrichment.hidden);
+      if (matches && ['preparing', 'transcribing', 'saving'].indexOf(processing.state) !== -1) {
         row.state.textContent = { preparing: 'Preparing...', transcribing: 'Transcribing...', saving: 'Saving transcript...' }[processing.state];
-      } else if (matches && processing.state === 'error') {
-        row.state.textContent = 'Transcription failed: ' + (processing.error || 'Please try again.') +
-          (row.entry.has_transcript ? ' Previous transcript saved.' : '');
+      } else if (matchesEnrichment && ['preparing', 'generating', 'saving'].indexOf(enrichment.state) !== -1) {
+        row.state.textContent = { preparing: 'Preparing...', generating: 'Generating title and summary...', saving: 'Saving title and summary...' }[enrichment.state];
+      } else if ((matches && processing.state === 'error') ||
+          (matchesEnrichment && enrichment.state === 'error')) {
+        var errors = [];
+        if (matches && processing.state === 'error')
+          errors.push('Transcription failed: ' + (processing.error || 'Please try again.') +
+            (row.entry.has_transcript ? ' Previous transcript saved.' : ''));
+        if (matchesEnrichment && enrichment.state === 'error')
+          errors.push('Title and summary generation failed: ' + (enrichment.error || 'Please try again.'));
+        row.state.textContent = errors.join(' ');
+      } else if (row.entry.has_transcript && !row.entry.has_enrichment && !latest.enrichment_configured) {
+        row.state.textContent = 'Set up the LLM service in Voice Notes Settings for titles and summaries.';
       } else {
         row.state.textContent = '';
       }
-      row.state.hidden = !(matches && (busy || processing.state === 'error'));
+      row.state.hidden = !row.state.textContent;
     });
-    if (selected && rows.some(function (row) { return row.detail && row.entry.id === selected; }) &&
-        processing.note_id === selected && processing.state === 'ready' && lastReady !== selected) {
-      lastReady = selected;
-      refreshDetail(selected);
-    }
-    if (processing.state !== 'ready') lastReady = '';
   }
 
   function refreshDetail(id) {
@@ -221,8 +247,16 @@
       rows.forEach(function (row) {
         var entry = entries.get(row.entry.id);
         if (!entry) return;
-        if (row.detail && entry.has_transcript && !row.entry.has_transcript) refreshSelected = true;
+        if (row.detail && (entry.has_transcript !== row.entry.has_transcript ||
+            entry.has_enrichment !== row.entry.has_enrichment || entry.title !== row.entry.title ||
+            entry.enrichment_error !== row.entry.enrichment_error)) refreshSelected = true;
         row.entry.has_transcript = !!entry.has_transcript;
+        row.entry.has_enrichment = !!entry.has_enrichment;
+        row.entry.title = entry.title;
+        row.entry.enrichment_error = entry.enrichment_error;
+        if (row.title) row.title.textContent = entry.title || row.fallbackTitle;
+        if (row.metadata) row.metadata.textContent =
+          (entry.title ? ' · ' + row.fallbackTitle : '') + row.metadataSuffix;
       });
       updateStatus();
       if (refreshSelected && selected) refreshDetail(selected);
@@ -241,10 +275,15 @@
       lastStatusError = '';
       updateStatus();
       if (value.processing && value.processing.state === 'running') reconcileNeeded = true;
-      var attempt = value.transcription || {};
-      var attemptKey = JSON.stringify([attempt.note_id, attempt.state, attempt.error]);
-      if (['ready', 'error'].indexOf(attempt.state) !== -1 && attemptKey !== lastAttempt)
+      var attempt = value.transcription || {}, enrichment = value.enrichment || {};
+      var attemptKey = JSON.stringify([attempt.note_id, attempt.state, attempt.error,
+        enrichment.note_id, enrichment.state, enrichment.error]);
+      if ((['ready', 'error'].indexOf(attempt.state) !== -1 ||
+          ['ready', 'error'].indexOf(enrichment.state) !== -1) && attemptKey !== lastAttempt) {
         reconcileNeeded = true;
+        if (selected && ((attempt.note_id === selected && attempt.state === 'ready') ||
+            (enrichment.note_id === selected && enrichment.state === 'ready'))) refreshDetail(selected);
+      }
       lastAttempt = attemptKey;
       if (reconcileNeeded) return reconcile(token, controller.signal);
     }).catch(function (error) {
@@ -258,12 +297,13 @@
     });
   }
 
-  function startTranscription(entry) {
-    return fetch(base + 'transcribe?id=' + encodeURIComponent(entry.id), { method: 'POST' })
-      .then(json).then(function () {
+  function startProcessing(entry, operation) {
+    return fetch(base + operation + '?id=' + encodeURIComponent(entry.id), { method: 'POST' })
+      .then(json).then(function (result) {
         latest = latest || {};
         lastAttempt = '';
-        latest.transcription = { state: 'preparing', note_id: entry.id, error: '' };
+        if (result.state === 'unchanged') reconcileNeeded = true;
+        else latest.processing = { state: 'running' };
         updateStatus();
       }).catch(function (error) { status(error.message); });
   }
@@ -274,9 +314,9 @@
     var transcribe = document.createElement('button');
     transcribe.type = 'button';
     transcribe.className = 'btn btn-outline-primary';
-    transcribe.textContent = 'Transcribe';
+    transcribe.textContent = 'Process note';
     transcribe.disabled = true;
-    transcribe.addEventListener('click', function () { startTranscription(entry); });
+    transcribe.addEventListener('click', function () { startProcessing(entry, 'process'); });
     var state = document.createElement('span');
     state.className = 'text-muted small';
     state.setAttribute('role', 'status');
@@ -308,6 +348,8 @@
       document.getElementById('voice-notes-back').hidden = false;
       document.getElementById('voice-notes-detail-title').textContent = 'Voice note';
       document.getElementById('voice-notes-detail-meta').textContent = '';
+      document.getElementById('voice-notes-summary-section').hidden = true;
+      document.getElementById('voice-notes-detail-summary').textContent = '';
       document.getElementById('voice-notes-detail-transcript').textContent = 'Loading...';
       document.getElementById('voice-notes-detail-player').querySelectorAll('audio').forEach(releaseAudio);
       document.getElementById('voice-notes-detail-player').textContent = '';
@@ -318,28 +360,59 @@
       if (token !== generation || version !== selectionVersion || selected !== id) return;
       var note = result.note, date = clipDate(note);
       document.getElementById('voice-notes-detail-title').textContent =
-        'Voice note — ' + (date ? date.toLocaleString() : 'Time unavailable');
+        (result.enrichment && result.enrichment.title) || (date ? date.toLocaleString() : 'Time unavailable');
       document.getElementById('voice-notes-detail-meta').textContent =
-        duration(note.duration_ms) + ' · ' + (Number(note.size_bytes) || 0).toLocaleString() + ' bytes';
+        (date ? date.toLocaleString() : 'Time unavailable') + ' · ' + duration(note.duration_ms) + ' · ' + (Number(note.size_bytes) || 0).toLocaleString() + ' bytes';
+      var summary = document.getElementById('voice-notes-detail-summary');
+      document.getElementById('voice-notes-summary-section').hidden =
+        !(result.enrichment && result.enrichment.summary) && !result.enrichment_error;
+      summary.textContent = result.enrichment ? result.enrichment.summary : (result.enrichment_error || '');
       var transcript = document.getElementById('voice-notes-detail-transcript');
       transcript.textContent = result.transcript ? result.transcript.text : 'No transcript yet.';
       if (!switchPanel) {
         rows.forEach(function (row) {
           if (row.entry.id === id) row.entry.has_transcript = !!result.transcript;
+          if (row.entry.id === id) row.entry.has_enrichment = !!result.enrichment || !!result.enrichment_error;
         });
-        updateStatus();
-        return;
+      } else {
+        var player = document.getElementById('voice-notes-detail-player');
+        player.querySelectorAll('audio').forEach(releaseAudio);
+        player.textContent = '';
+        player.appendChild(createPlayer(note, date ? date.toLocaleString() : 'Time unavailable', player));
       }
-      var player = document.getElementById('voice-notes-detail-player');
-      player.querySelectorAll('audio').forEach(releaseAudio);
-      player.textContent = '';
-      player.appendChild(createPlayer(note, date ? date.toLocaleString() : 'Time unavailable', player));
       var actions = document.getElementById('voice-notes-detail-actions');
       actions.textContent = '';
       rows = rows.filter(function (row) { return !row.detail; });
       note.has_transcript = !!result.transcript;
+      note.has_enrichment = !!result.enrichment || !!result.enrichment_error;
       actions.appendChild(transcriptionControls(note, false));
       rows[rows.length - 1].detail = true;
+      if (note.has_transcript || note.has_enrichment) {
+        var disclosure = document.createElement('details'), heading = document.createElement('summary');
+        heading.textContent = 'More actions';
+        disclosure.appendChild(heading);
+        var explanation = document.createElement('p');
+        explanation.textContent = 'These actions replace only the selected result and may incur service charges. Transcribing again does not update an existing title or summary.';
+        disclosure.appendChild(explanation);
+        if (note.has_transcript) {
+          var again = document.createElement('button');
+          again.type = 'button'; again.className = 'btn btn-outline-secondary';
+          again.textContent = 'Transcribe again';
+          again.addEventListener('click', function () { startProcessing(note, 'retranscribe'); });
+          disclosure.appendChild(again);
+          rows[rows.length - 1].replaceTranscript = again;
+        }
+        if (note.has_transcript && note.has_enrichment) {
+          var regenerate = document.createElement('button');
+          regenerate.type = 'button'; regenerate.className = 'btn btn-outline-secondary';
+          regenerate.textContent = 'Regenerate title and summary';
+          regenerate.addEventListener('click', function () { startProcessing(note, 'regenerate'); });
+          disclosure.appendChild(regenerate);
+          rows[rows.length - 1].replaceEnrichment = regenerate;
+        }
+        actions.appendChild(disclosure);
+        rows[rows.length - 1].disclosure = disclosure;
+      }
       updateStatus();
     }).catch(function (error) {
       if (token === generation && version === selectionVersion && selected === id) status(error.message);
@@ -389,8 +462,14 @@
           var label = document.createElement('div');
           label.className = 'fw-semibold mb-2';
           var time = date ? date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : 'Time unavailable';
-          label.textContent = time + ' · ' + duration(entry.duration_ms) + ' · ' +
+          var title = document.createElement('span');
+          title.textContent = entry.title || time;
+          label.appendChild(title);
+          var metadata = document.createElement('span');
+          var metadataSuffix = ' · ' + duration(entry.duration_ms) + ' · ' +
             (Number(entry.size_bytes) || 0).toLocaleString() + ' bytes';
+          metadata.textContent = (entry.title ? ' · ' + time : '') + metadataSuffix;
+          label.appendChild(metadata);
           var clipLabel = dayLabel + ', ' + label.textContent;
           var transcriptIndicator = document.createElement('span');
           transcriptIndicator.className = 'ms-2 text-muted';
@@ -437,6 +516,10 @@
           body.appendChild(label);
           body.appendChild(player);
           body.appendChild(transcriptionControls(entry, true, transcriptIndicator, durableStatus));
+          rows[rows.length - 1].title = title;
+          rows[rows.length - 1].fallbackTitle = time;
+          rows[rows.length - 1].metadata = metadata;
+          rows[rows.length - 1].metadataSuffix = metadataSuffix;
           row.appendChild(body);
           group.appendChild(row);
         });
@@ -449,7 +532,6 @@
     selected = null;
     rows = [];
     latest = null;
-    lastReady = '';
     lastStatusError = '';
     reconcileNeeded = false;
     lastAttempt = '';
@@ -488,27 +570,35 @@
   window.init_voice_notes_settings_fragment = function () {
     loadConfig();
     var button = document.getElementById('voice-notes-settings-save');
-    var key = document.getElementById('voice_notes_api_key');
-    var indicator = document.getElementById('voice-notes-key-status');
+    var services = ['transcription', 'llm'];
     function showKeyStatus(config) {
-      indicator.textContent = config.voice_notes_api_key_set
-        ? 'An API key is saved. Leave blank to keep it.' : 'No API key is saved.';
+      services.forEach(function (service) {
+        document.getElementById('voice-notes-' + service + '-key-status').textContent =
+          config['voice_notes_' + service + '_api_key_set']
+            ? 'An API key is saved. Leave blank to keep it.' : 'No API key is saved.';
+      });
     }
     fetch('/api/config').then(json).then(showKeyStatus).catch(function (error) {
-      indicator.textContent = 'Could not read key status: ' + error.message;
+      services.forEach(function (service) {
+        document.getElementById('voice-notes-' + service + '-key-status').textContent =
+          'Could not read key status: ' + error.message;
+      });
     });
     button.addEventListener('click', function () {
-      var config = {
-        voice_notes_base_url: document.getElementById('voice_notes_base_url').value,
-        voice_notes_model: document.getElementById('voice_notes_model').value,
-        voice_notes_api_key: key.value,
-        voice_notes_auto_transcribe: document.getElementById('voice_notes_auto_transcribe').checked
-      };
+      var config = { voice_notes_auto_process: document.getElementById('voice_notes_auto_process').checked };
+      services.forEach(function (service) {
+        ['endpoint', 'deployment', 'api_key'].forEach(function (field) {
+          var name = 'voice_notes_' + service + '_' + field;
+          config[name] = document.getElementById(name).value;
+        });
+      });
       button.disabled = true;
       fetch('/api/config?no_reboot=1', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config)
       }).then(json).then(function () {
-        key.value = '';
+        services.forEach(function (service) {
+          document.getElementById('voice_notes_' + service + '_api_key').value = '';
+        });
         showMessage('Configuration saved', 'success');
         return fetch('/api/config').then(json).then(showKeyStatus);
       }).catch(function (error) { showMessage('Error saving: ' + error.message, 'error'); })

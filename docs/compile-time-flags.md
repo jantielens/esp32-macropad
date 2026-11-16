@@ -1533,12 +1533,17 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/voice_notes.h
   - src/app/voice_notes_binding.cpp
   - src/app/voice_notes_binding.h
+  - src/app/voice_notes_enrichment.cpp
+  - src/app/voice_notes_enrichment.h
+  - src/app/voice_notes_enrichment_request.cpp
+  - src/app/voice_notes_enrichment_request.h
   - src/app/voice_notes_file.h
   - src/app/voice_notes_metadata.cpp
-  - src/app/voice_notes_transcription.cpp
-  - src/app/voice_notes_transcription.h
+  - src/app/voice_notes_processing.cpp
+  - src/app/voice_notes_processing.h
   - src/app/voice_notes_transcription_request.cpp
   - src/app/voice_notes_transcription_request.h
+  - src/app/voice_notes_transport.h
   - src/app/voice_wav.cpp
   - src/app/web_portal_component_api.cpp
   - src/app/web_portal_config.cpp

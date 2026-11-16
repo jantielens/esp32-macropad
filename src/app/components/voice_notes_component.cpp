@@ -2,7 +2,7 @@
 #include "voice_notes.h"
 #include "voice_notes_file.h"
 #include "voice_note_range.h"
-#include "voice_notes_transcription.h"
+#include "voice_notes_processing.h"
 #include "bounded_psram_json_allocator.h"
 #include "fs_health.h"
 #include "web_portal_json.h"
@@ -11,9 +11,20 @@
 #include <ArduinoJson.h>
 #include <memory>
 #include <new>
+#include <ctype.h>
 #include <esp_heap_caps.h>
 
 namespace {
+bool voice_note_valid_string(JsonVariantConst value, bool nonblank) {
+    if (!value.is<const char*>()) return false;
+    const JsonString text = value.as<JsonString>();
+    if (!text.c_str() || strlen(text.c_str()) != text.size()) return false;
+    if (!nonblank) return true;
+    for (size_t i = 0; i < text.size(); ++i)
+        if (!isspace(static_cast<unsigned char>(text.c_str()[i]))) return true;
+    return false;
+}
+
 bool voice_note_id_valid(const String& id) {
     if (id.length() != 16) return false;
     for (size_t i = 0; i < id.length(); ++i) {
@@ -82,6 +93,7 @@ void voice_notes_status_get(AsyncWebServerRequest* request) {
     voice_notes_snapshot(&snapshot);
     JsonObject recording = (*doc)["recording"].to<JsonObject>();
     recording["state"] = voice_notes_state_name(snapshot.state);
+    recording["session_active"] = snapshot.session_active;
     recording["error"] = snapshot.error;
     recording["duration_ms"] = snapshot.duration_ms;
     if (snapshot.session_active) recording["scenario"] = snapshot.scenario;
@@ -93,11 +105,20 @@ void voice_notes_status_get(AsyncWebServerRequest* request) {
     processing["state"] = voice_notes_transcription_state_name(transcription.state);
     processing["note_id"] = transcription.note_id;
     processing["error"] = transcription.error;
+    processing["retry_status"] = transcription.retry_status;
     (*doc)["transcription_configured"] = voice_notes_transcription_configured();
+    VoiceNotesEnrichmentSnapshot enrichment{};
+    voice_notes_enrichment_snapshot(&enrichment);
+    (*doc)["enrichment"]["state"] = voice_notes_enrichment_state_name(enrichment.state);
+    (*doc)["enrichment"]["note_id"] = enrichment.note_id;
+    (*doc)["enrichment"]["error"] = enrichment.error;
+    (*doc)["enrichment"]["retry_status"] = enrichment.retry_status;
+    (*doc)["enrichment_configured"] = voice_notes_enrichment_configured();
     VoiceNotesProcessingSnapshot coordinator{};
     voice_notes_processing_snapshot(&coordinator);
     (*doc)["processing"]["state"] = voice_notes_processing_state_name(coordinator.state);
     (*doc)["processing"]["reason"] = voice_notes_processing_reason_name(coordinator.reason);
+    (*doc)["processing"]["service"] = voice_notes_processing_service_name(coordinator.service);
 #if USE_SD_STORAGE && defined(SD_STORAGE_SPI) && SD_STORAGE_SPI
     (*doc)["backend"] = "sd_spi";
 #elif USE_SD_STORAGE
@@ -130,7 +151,7 @@ void voice_notes_detail_get(AsyncWebServerRequest* request) {
         return;
     }
     File transcript;
-    const VoiceNoteFileStatus status = voice_notes_open_transcript(id.c_str(), &transcript);
+    const VoiceNoteFileStatus status = voice_notes_open_artifact(id.c_str(), VoiceNoteArtifact::Transcript, &transcript);
     if (status == VoiceNoteFileStatus::Ready) {
         JsonDocument saved(&detail->allocator);
         const DeserializationError error = deserializeJson(saved, transcript);
@@ -151,27 +172,58 @@ void voice_notes_detail_get(AsyncWebServerRequest* request) {
         voice_note_file_error(request, status);
         return;
     }
+    detail->document["enrichment"] = nullptr;
+    detail->document["enrichment_error"] = "";
+    File enrichment;
+    const VoiceNoteFileStatus enrichment_status =
+        voice_notes_open_artifact(id.c_str(), VoiceNoteArtifact::Enrichment, &enrichment);
+    if (enrichment_status == VoiceNoteFileStatus::Ready) {
+        JsonDocument saved(&detail->allocator);
+        const DeserializationError error = deserializeJson(saved, enrichment);
+        enrichment.close();
+        JsonObjectConst value = saved["enrichment"].as<JsonObjectConst>();
+        if (error == DeserializationError::NoMemory || saved.overflowed()) {
+            voice_notes_close(&recording, id.c_str());
+            web_portal_send_json_error(request, 503, "Voice Notes response memory unavailable");
+            return;
+        }
+        if (error || value.isNull() || !voice_note_valid_string(value["title"], true) ||
+            !voice_note_valid_string(value["summary"], false) || !value["model"].is<const char*>() ||
+            !value["created_at"].is<uint32_t>()) {
+            detail->document["enrichment_error"] = "Saved title and summary are invalid";
+        } else {
+            detail->document["enrichment"].set(value);
+        }
+    } else if (enrichment_status != VoiceNoteFileStatus::NotFound) {
+        detail->document["enrichment_error"] = "Saved title and summary are unavailable";
+    }
     voice_notes_close(&recording, id.c_str());
     voice_notes_send_json(request, detail);
 }
 
-void voice_notes_transcribe_post(AsyncWebServerRequest* request) {
+void voice_notes_process_post(AsyncWebServerRequest* request, VoiceNotesProcessingMode mode) {
     const String id = request->hasParam("id") ? request->getParam("id")->value() : "";
-    const VoiceNotesTranscriptionStart result = voice_notes_transcription_start(id.c_str());
-    if (result != VoiceNotesTranscriptionStart::Accepted) {
+    const VoiceNotesProcessingStart result = voice_notes_processing_start(id.c_str(), mode);
+    if (result != VoiceNotesProcessingStart::Accepted && result != VoiceNotesProcessingStart::Unchanged) {
         switch (result) {
-            case VoiceNotesTranscriptionStart::InvalidId: web_portal_send_json_error(request, 400, "Invalid note ID"); return;
-            case VoiceNotesTranscriptionStart::NotFound: web_portal_send_json_error(request, 404, "Note not found"); return;
-            case VoiceNotesTranscriptionStart::NotConfigured: web_portal_send_json_error(request, 400, "Transcription is not configured"); return;
-            case VoiceNotesTranscriptionStart::Busy: web_portal_send_json_error(request, 409, "Device is busy"); return;
-            case VoiceNotesTranscriptionStart::Offline: web_portal_send_json_error(request, 503, "Wi-Fi disconnected"); return;
-            case VoiceNotesTranscriptionStart::Cooldown: web_portal_send_json_error(request, 429, "Rate limited; retry later"); return;
-            default: web_portal_send_json_error(request, 503, "Transcription unavailable"); return;
+            case VoiceNotesProcessingStart::InvalidId: web_portal_send_json_error(request, 400, "Invalid note ID"); return;
+            case VoiceNotesProcessingStart::NotFound: web_portal_send_json_error(request, 404, "Note not found"); return;
+            case VoiceNotesProcessingStart::NotConfigured: web_portal_send_json_error(request, 400, "Processing service is not configured"); return;
+            case VoiceNotesProcessingStart::MissingResult: web_portal_send_json_error(request, 409, "Required saved result is missing"); return;
+            case VoiceNotesProcessingStart::Busy: web_portal_send_json_error(request, 409, "Device is busy"); return;
+            case VoiceNotesProcessingStart::Offline: web_portal_send_json_error(request, 503, "Wi-Fi disconnected"); return;
+            case VoiceNotesProcessingStart::Cooldown: web_portal_send_json_error(request, 429, "Rate limited; retry later"); return;
+            default: web_portal_send_json_error(request, 503, "Processing unavailable"); return;
         }
     }
-    request->send(202, "application/json",
-        String("{\"success\":true,\"note_id\":\"") + id + "\",\"state\":\"preparing\"}");
+    const bool unchanged = result == VoiceNotesProcessingStart::Unchanged;
+    request->send(unchanged ? 200 : 202, "application/json",
+        String("{\"success\":true,\"note_id\":\"") + id +
+        "\",\"state\":\"" + (unchanged ? "unchanged" : "accepted") + "\"}");
 }
+void voice_notes_process(AsyncWebServerRequest* request) { voice_notes_process_post(request, VoiceNotesProcessingMode::Missing); }
+void voice_notes_retranscribe(AsyncWebServerRequest* request) { voice_notes_process_post(request, VoiceNotesProcessingMode::Retranscribe); }
+void voice_notes_regenerate(AsyncWebServerRequest* request) { voice_notes_process_post(request, VoiceNotesProcessingMode::Regenerate); }
 
 struct VoiceNoteStream {
     File file;
@@ -249,7 +301,9 @@ const ComponentAction voice_notes_actions[] = {
     {"list", HTTP_GET, voice_notes_list_get, nullptr},
     {"status", HTTP_GET, voice_notes_status_get, nullptr},
     {"detail", HTTP_GET, voice_notes_detail_get, nullptr},
-    {"transcribe", HTTP_POST, voice_notes_transcribe_post, nullptr},
+    {"process", HTTP_POST, voice_notes_process, nullptr},
+    {"retranscribe", HTTP_POST, voice_notes_retranscribe, nullptr},
+    {"regenerate", HTTP_POST, voice_notes_regenerate, nullptr},
     {"file", HTTP_GET, voice_notes_file_get, nullptr},
     {"delete", HTTP_DELETE, voice_notes_delete, nullptr},
 };

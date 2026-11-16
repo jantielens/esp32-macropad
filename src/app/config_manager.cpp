@@ -45,10 +45,13 @@
 #define KEY_EXTERNAL_DATA  "external_data"
 #endif
 #if HAS_VOICE_NOTES
-#define KEY_VN_BASE_URL "vn_base_url"
-#define KEY_VN_API_KEY "vn_api_key"
-#define KEY_VN_MODEL "vn_model"
-#define KEY_VN_AUTO_TX "vn_auto_tx"
+#define KEY_VN_TX_URL "vn_tx_url"
+#define KEY_VN_TX_KEY "vn_tx_key"
+#define KEY_VN_TX_DEPLOY "vn_tx_deploy"
+#define KEY_VN_LLM_URL "vn_llm_url"
+#define KEY_VN_LLM_KEY "vn_llm_key"
+#define KEY_VN_LLM_DEPLOY "vn_llm_deploy"
+#define KEY_VN_AUTO_PROCESS "vn_auto_proc"
 #endif
 #define KEY_WIFI_SSID      "wifi_ssid"
 #define KEY_WIFI_PASS      "wifi_pass"
@@ -378,7 +381,7 @@ bool config_manager_load(DeviceConfig *config) {
 		strlcpy(config->wifi_failure_mode, "ap", sizeof(config->wifi_failure_mode));
 		config->ap_password[0] = '\0';
 #if HAS_VOICE_NOTES
-		config->voice_notes_transcription.auto_transcribe = false;
+		config->voice_notes = {};
 #endif
 #if HAS_EXTERNAL_DATA
 		config->external_data = {};
@@ -512,13 +515,19 @@ bool config_manager_load(DeviceConfig *config) {
 		
 		// Load WiFi settings
 #if HAS_VOICE_NOTES
-		preferences.getString(KEY_VN_BASE_URL, config->voice_notes_transcription.base_url,
-				sizeof(config->voice_notes_transcription.base_url));
-		preferences.getString(KEY_VN_API_KEY, config->voice_notes_transcription.api_key,
-				sizeof(config->voice_notes_transcription.api_key));
-		preferences.getString(KEY_VN_MODEL, config->voice_notes_transcription.model,
-				sizeof(config->voice_notes_transcription.model));
-		config->voice_notes_transcription.auto_transcribe = preferences.getBool(KEY_VN_AUTO_TX, false);
+		preferences.getString(KEY_VN_TX_URL, config->voice_notes.transcription.endpoint,
+				sizeof(config->voice_notes.transcription.endpoint));
+		preferences.getString(KEY_VN_TX_KEY, config->voice_notes.transcription.api_key,
+				sizeof(config->voice_notes.transcription.api_key));
+		preferences.getString(KEY_VN_TX_DEPLOY, config->voice_notes.transcription.deployment,
+				sizeof(config->voice_notes.transcription.deployment));
+		preferences.getString(KEY_VN_LLM_URL, config->voice_notes.llm.endpoint,
+				sizeof(config->voice_notes.llm.endpoint));
+		preferences.getString(KEY_VN_LLM_KEY, config->voice_notes.llm.api_key,
+				sizeof(config->voice_notes.llm.api_key));
+		preferences.getString(KEY_VN_LLM_DEPLOY, config->voice_notes.llm.deployment,
+				sizeof(config->voice_notes.llm.deployment));
+		config->voice_notes.auto_process = preferences.getBool(KEY_VN_AUTO_PROCESS, false);
 #endif
 #if HAS_EXTERNAL_DATA
 		if (preferences.isKey(KEY_EXTERNAL_DATA)) {
@@ -802,27 +811,29 @@ static bool save_config_locked(const DeviceConfig *config) {
 		}
 #if HAS_VOICE_NOTES
 		{
-				const auto& vn = config->voice_notes_transcription;
-				char* verify = static_cast<char*>(heap_caps_malloc(sizeof(vn.base_url), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+				const auto& vn = config->voice_notes;
+				char* verify = static_cast<char*>(heap_caps_malloc(sizeof(vn.transcription.endpoint), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
 				if (!verify) {
 						LOGE("Config", "Voice Notes settings verification memory unavailable");
 						preferences.end();
 						return false;
 				}
-				const char* keys[] = {KEY_VN_BASE_URL, KEY_VN_API_KEY, KEY_VN_MODEL};
-				const char* values[] = {vn.base_url, vn.api_key, vn.model};
+				const char* keys[] = {KEY_VN_TX_URL, KEY_VN_TX_KEY, KEY_VN_TX_DEPLOY,
+						KEY_VN_LLM_URL, KEY_VN_LLM_KEY, KEY_VN_LLM_DEPLOY};
+				const char* values[] = {vn.transcription.endpoint, vn.transcription.api_key,
+						vn.transcription.deployment, vn.llm.endpoint, vn.llm.api_key, vn.llm.deployment};
 				bool saved = true;
-				for (size_t i = 0; i < 3; ++i) {
+				for (size_t i = 0; i < 6; ++i) {
 						preferences.putString(keys[i], values[i]);
-						if (!preferences.getString(keys[i], verify, sizeof(vn.base_url)) ||
+						if (!preferences.getString(keys[i], verify, sizeof(vn.transcription.endpoint)) ||
 								strcmp(verify, values[i]) != 0) {
 								saved = false;
 								break;
 						}
-						if (preferences.putBool(KEY_VN_AUTO_TX, vn.auto_transcribe) != sizeof(uint8_t) ||
-								preferences.getBool(KEY_VN_AUTO_TX, !vn.auto_transcribe) != vn.auto_transcribe)
-								saved = false;
 				}
+				if (preferences.putBool(KEY_VN_AUTO_PROCESS, vn.auto_process) != sizeof(uint8_t) ||
+						preferences.getBool(KEY_VN_AUTO_PROCESS, !vn.auto_process) != vn.auto_process)
+						saved = false;
 				free(verify);
 				if (!saved) {
 						LOGE("Config", "Failed to persist Voice Notes settings");

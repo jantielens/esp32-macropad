@@ -7,10 +7,11 @@
 #include "reboot_service.h"
 #if HAS_VOICE_NOTES
 #include "voice_notes.h"
-#include "voice_notes_transcription.h"
+#include "voice_notes_processing.h"
 #include <esp_heap_caps.h>
 #include <memory>
 #include <new>
+#include <utility>
 #endif
 
 #include "board_config.h"
@@ -213,11 +214,15 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["ha_token"] = "";
 				(*doc)["ha_token_set"] = (strlen(current_config->ha_token) > 0);
 #if HAS_VOICE_NOTES
-				(*doc)["voice_notes_base_url"] = current_config->voice_notes_transcription.base_url;
-				(*doc)["voice_notes_api_key"] = "";
-				(*doc)["voice_notes_api_key_set"] = current_config->voice_notes_transcription.api_key[0] != '\0';
-				(*doc)["voice_notes_model"] = current_config->voice_notes_transcription.model;
-				(*doc)["voice_notes_auto_transcribe"] = current_config->voice_notes_transcription.auto_transcribe;
+				(*doc)["voice_notes_transcription_endpoint"] = current_config->voice_notes.transcription.endpoint;
+				(*doc)["voice_notes_transcription_api_key"] = "";
+				(*doc)["voice_notes_transcription_api_key_set"] = current_config->voice_notes.transcription.api_key[0] != '\0';
+				(*doc)["voice_notes_transcription_deployment"] = current_config->voice_notes.transcription.deployment;
+				(*doc)["voice_notes_llm_endpoint"] = current_config->voice_notes.llm.endpoint;
+				(*doc)["voice_notes_llm_api_key"] = "";
+				(*doc)["voice_notes_llm_api_key_set"] = current_config->voice_notes.llm.api_key[0] != '\0';
+				(*doc)["voice_notes_llm_deployment"] = current_config->voice_notes.llm.deployment;
+				(*doc)["voice_notes_auto_process"] = current_config->voice_notes.auto_process;
 #endif
 
 #if HAS_EXTERNAL_DATA
@@ -504,12 +509,13 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 
 #if HAS_VOICE_NOTES
 		struct VoiceNotesConfigUpdate {
-				VoiceNotesTranscriptionConfig previous;
-				VoiceNotesTranscriptionConfig candidate;
+				VoiceNotesConfig previous;
+				VoiceNotesConfig candidate;
 		};
-		const bool voice_notes_update = doc.containsKey("voice_notes_base_url") ||
-				doc.containsKey("voice_notes_api_key") || doc.containsKey("voice_notes_model") ||
-				doc.containsKey("voice_notes_auto_transcribe");
+		const bool voice_notes_update = doc.containsKey("voice_notes_transcription_endpoint") ||
+				doc.containsKey("voice_notes_transcription_api_key") || doc.containsKey("voice_notes_transcription_deployment") ||
+				doc.containsKey("voice_notes_llm_endpoint") || doc.containsKey("voice_notes_llm_api_key") ||
+				doc.containsKey("voice_notes_llm_deployment") || doc.containsKey("voice_notes_auto_process");
 		std::unique_ptr<VoiceNotesConfigUpdate, decltype(&free)> voice_notes_candidate(nullptr, &free);
 		if (voice_notes_update) {
 				voice_notes_candidate.reset(static_cast<VoiceNotesConfigUpdate*>(
@@ -520,32 +526,39 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 						return;
 				}
 				new (voice_notes_candidate.get()) VoiceNotesConfigUpdate{};
-				voice_notes_candidate->previous = current_config->voice_notes_transcription;
+				voice_notes_candidate->previous = current_config->voice_notes;
 				voice_notes_candidate->candidate = voice_notes_candidate->previous;
 				auto& candidate = voice_notes_candidate->candidate;
 				bool valid = true;
-				if (doc.containsKey("voice_notes_auto_transcribe")) {
-						if (!doc["voice_notes_auto_transcribe"].is<bool>()) valid = false;
-						else candidate.auto_transcribe = doc["voice_notes_auto_transcribe"].as<bool>();
+				if (doc.containsKey("voice_notes_auto_process")) {
+						if (!doc["voice_notes_auto_process"].is<bool>()) valid = false;
+						else candidate.auto_process = doc["voice_notes_auto_process"].as<bool>();
 				}
-				if (doc.containsKey("voice_notes_base_url")) {
-						const char* value = doc["voice_notes_base_url"].is<const char*>()
-								? doc["voice_notes_base_url"].as<const char*>() : nullptr;
-						if (!value || !voice_notes_normalize_endpoint(value, candidate.base_url, sizeof(candidate.base_url)))
-								valid = false;
-				}
-				if (doc.containsKey("voice_notes_model")) {
-						const char* value = doc["voice_notes_model"].is<const char*>()
-								? doc["voice_notes_model"].as<const char*>() : nullptr;
-						if (!value || strlen(value) >= sizeof(candidate.model) || strpbrk(value, "\r\n")) valid = false;
-						else strlcpy(candidate.model, value, sizeof(candidate.model));
-				}
-				if (doc.containsKey("voice_notes_api_key")) {
-						const char* value = doc["voice_notes_api_key"].is<const char*>()
-								? doc["voice_notes_api_key"].as<const char*>() : nullptr;
-						if (!value || strlen(value) >= sizeof(candidate.api_key) || strpbrk(value, "\r\n")) valid = false;
-						else if (value[0]) strlcpy(candidate.api_key, value, sizeof(candidate.api_key));
-				}
+				auto update_service = [&](VoiceNotesServiceConfig& service, const char* endpoint,
+						const char* deployment, const char* key) {
+						if (doc.containsKey(endpoint)) {
+								JsonString value = doc[endpoint].as<JsonString>();
+								if (!doc[endpoint].is<const char*>() || !value.c_str() ||
+										strlen(value.c_str()) != value.size() ||
+										!voice_notes_normalize_endpoint(value.c_str(), service.endpoint, sizeof(service.endpoint)))
+										valid = false;
+						}
+						for (const auto& field : {std::pair<const char*, bool>{deployment, false},
+								 std::pair<const char*, bool>{key, true}}) {
+								if (!doc.containsKey(field.first)) continue;
+								JsonString value = doc[field.first].as<JsonString>();
+								char* target = field.second ? service.api_key : service.deployment;
+								const size_t size = field.second ? sizeof(service.api_key) : sizeof(service.deployment);
+								if (!doc[field.first].is<const char*>() || !value.c_str() ||
+										strlen(value.c_str()) != value.size() || value.size() >= size ||
+										strpbrk(value.c_str(), "\r\n")) valid = false;
+								else if (!field.second || value.size()) strlcpy(target, value.c_str(), size);
+						}
+				};
+				update_service(candidate.transcription, "voice_notes_transcription_endpoint",
+						"voice_notes_transcription_deployment", "voice_notes_transcription_api_key");
+				update_service(candidate.llm, "voice_notes_llm_endpoint",
+						"voice_notes_llm_deployment", "voice_notes_llm_api_key");
 				if (!valid) {
 						request->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid Voice Notes settings\"}");
 						portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
@@ -1312,7 +1325,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		current_config->auto_shutdown_timeout_seconds = static_cast<uint16_t>(auto_shutdown_candidate);
 #endif
 #if HAS_VOICE_NOTES
-		if (voice_notes_update) current_config->voice_notes_transcription = voice_notes_candidate->candidate;
+		if (voice_notes_update) current_config->voice_notes = voice_notes_candidate->candidate;
 #endif
 #if HAS_EXTERNAL_DATA
 		if (config_manager_save(current_config, external_candidate.get())) {
@@ -1320,7 +1333,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		if (config_manager_save(current_config)) {
 #endif
 #if HAS_VOICE_NOTES
-				if (voice_notes_update && !voice_notes_transcription_configure(current_config->voice_notes_transcription)) {
+				if (voice_notes_update && !voice_notes_processing_configure(current_config->voice_notes)) {
 						LOGE("Portal", "Voice Notes settings persisted but could not be applied");
 						request->send(503, "application/json", "{\"success\":false,\"message\":\"Settings saved but Voice Notes is unavailable\"}");
 						portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
@@ -1368,7 +1381,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		} else {
 				LOGE("Portal", "Config save failed");
 #if HAS_VOICE_NOTES
-				if (voice_notes_update) current_config->voice_notes_transcription = voice_notes_candidate->previous;
+				if (voice_notes_update) current_config->voice_notes = voice_notes_candidate->previous;
 #endif
 #if HAS_AUTO_SHUTDOWN
 				current_config->auto_shutdown_timeout_seconds = previous_auto_shutdown;
