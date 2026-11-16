@@ -282,6 +282,8 @@ bool binding_template_has_bindings(const char* label);
 bool binding_template_resolve(const char* templ, char* out, size_t out_len);
 // Dialog/action safety path: reject resolver failures and truncated output.
 bool binding_template_resolve_checked(const char* templ, char* out, size_t out_len);
+// True while resolving a checked action or dialog parameter, including aliases.
+bool binding_template_checked_resolution_active();
 
 // Resolve all tokens and report the aggregate resolver outcome. Output uses the
 // same fallback rules as binding_template_resolve().

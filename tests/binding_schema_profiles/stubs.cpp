@@ -1,4 +1,5 @@
 #include "platform_stubs.h"
+#include <cstring>
 
 #include <WiFi.h>
 #include "audio.h"
@@ -6,6 +7,14 @@
 #if HAS_VOICE_NOTES
 #include "voice_notes.h"
 #include "voice_notes_processing.h"
+#if HAS_PSRAM
+#include "voice_notes_loaded.h"
+BindingResolverStatus voice_notes_loaded_resolve(const char* key, char* out, size_t size) {
+    if (strcmp(key, "status") != 0) return BINDING_RESOLVER_UNAVAILABLE;
+    strlcpy(out, "idle", size);
+    return BINDING_RESOLVER_RESOLVED;
+}
+#endif
 void voice_notes_snapshot(VoiceNoteSnapshot* out) { *out = {}; }
 const char* voice_notes_state_name(VoiceNoteState) { return "idle"; }
 void voice_notes_transcription_snapshot(VoiceNotesTranscriptionSnapshot* out) { *out = {}; }

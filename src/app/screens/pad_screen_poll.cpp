@@ -37,7 +37,7 @@ static void poll_remote_image_source(ButtonTile& tile) {
 // MQTT Label Binding Polling
 // ============================================================================
 
-void PadScreen::pollMqttBindings(bool refreshPassive) {
+void PadScreen::pollMqttBindings(bool refreshPassive, bool force) {
 #if HAS_DISPLAY
     char resolved[BINDING_TEMPLATE_MAX_LEN];
     for (uint16_t i = 0; refreshPassive && i < bindingCount; i++) {
@@ -47,7 +47,7 @@ void PadScreen::pollMqttBindings(bool refreshPassive) {
         binding_template_resolve(rb.templ, resolved, sizeof(resolved));
 
         // Only update LVGL label if text changed
-        if (strcmp(resolved, rb.last) == 0) continue;
+        if (!force && strcmp(resolved, rb.last) == 0) continue;
         strlcpy(rb.last, resolved, sizeof(rb.last));
         ButtonTile& tile = tiles[rb.tileIndex];
         pad_set_content_label_text(tile.content_layout, rb.labelIndex, resolved);
@@ -113,7 +113,7 @@ void PadScreen::pollMqttBindings(bool refreshPassive) {
             }
 
             // Only update widget if any resolved value changed
-            if (strcmp(widget_combined, tile.widget_last) != 0) {
+            if (force || strcmp(widget_combined, tile.widget_last) != 0) {
                 strlcpy(tile.widget_last, widget_combined, sizeof(tile.widget_last));
                 lv_obj_t* widget_parent = tile.content_layout.widget_region
                     ? tile.content_layout.widget_region : tile.obj;

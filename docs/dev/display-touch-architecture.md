@@ -13,6 +13,7 @@ This document describes the display and touch subsystem architecture, design pat
 - [Touch Driver HAL](#touch-driver-hal)
 - [Screen Management](#screen-management)
 - [Rendering System](#rendering-system)
+  - [Explicitly Loaded Provider Data](#explicitly-loaded-provider-data)
 - [Adding New Display Drivers](#adding-new-display-drivers)
 - [Adding New Touch Drivers](#adding-new-touch-drivers)
 - [Adding New Screens](#adding-new-screens)
@@ -1531,6 +1532,15 @@ automated actions and non-opted-in drivers retain their previous behavior.
 No-change render generations consume intent without a physical presentation;
 the passive polling period and panel waveform remain unchanged.
 
+Explicit Voice Notes loads use the
+[loaded-data provider pattern](#explicitly-loaded-provider-data) and request a
+binding refresh when their shared snapshot changes state. Cached pads force a
+binding poll on show before the next paint, including labels and widgets whose
+new value is empty. A widget may
+retain or animate from its previous value, and history-based widgets retain
+shared stream samples; this poll does not clear widget-owned state. Snapshot
+loading and storage reads stay on the main loop, outside the display lock.
+
 With `HAS_DISPLAY_DIAGNOSTICS`, bounded per-interaction/presentation debug logs
 carry request/frame sequences and microsecond timestamps for UI-owner entry,
 mutation, committed readiness, hardware eligibility, snapshot, waveform trigger,
@@ -1578,6 +1588,49 @@ DisplayManager uses a deferred pattern for screen navigation (`showScreen()`, `g
 5. Screens switch within 1 frame (~10ms), imperceptible to users
 
 Direct LVGL operations still require manual locking.
+
+### Explicitly Loaded Provider Data
+
+Use an explicit load action when several bindings need a shared record without
+performing I/O in the display task. The
+[`LoadedDataSnapshot` and `LoadedDataSlot` API](../../src/app/loaded_data.h)
+provides PSRAM-backed storage, request identities and snapshot lifetime management
+on `HAS_DISPLAY && HAS_PSRAM` builds. Each provider owns its schema, storage access,
+amount of data and loading policy; keep that knowledge out of widgets.
+
+To add another provider, follow the
+[Voice Notes adapter](../../src/app/voice_notes_loaded.cpp) and its
+[load action](../../src/app/actions/voice_note_load_action.cpp):
+
+1. Validate the ID and call `begin()` under `LoadedDataLock`, saving the returned
+   request identity with the provider's pending work. This hides the previous
+   snapshot immediately, even for a repeated ID. The action returns
+   `ACTION_COMPLETE` when accepted, not when loading finishes; reject invalid
+   requests with `ACTION_FAILED`.
+2. Build a private snapshot on the Arduino main loop, outside the display lock.
+   Keep bulk text, JSON, jobs and read buffers in strict PSRAM. Reuse storage
+   leases and OTA/recording checkpoints as appropriate. Check allocation,
+   document overflow and I/O failures before publication; the slot does not
+   validate provider data.
+3. Use a short `LoadedDataLock` scope to `publish()` or `fail()` the saved request.
+   Obsolete requests cannot replace newer state. Successful publication consumes
+   the producer's reference; on rejection, the producer still owns and must
+   release it. Never mutate a published snapshot. Error strings are borrowed,
+   so keep their storage valid until the next `begin()`. Request a binding refresh
+   after accepting a request or publishing a state change.
+4. In binding callbacks, `acquire()` under the lock, then read the immutable
+   snapshot and `release()` the retained reference. JSON views and string pointers
+   must not outlive that reference. Callbacks read cached data only. Keep scalar
+   previews bounded and reject overflow in checked action resolution rather than
+   enlarging binding or runtime-variable buffers to carry full text.
+5. On the main loop, call `take_unused()` under the lock and release each returned
+   retired reference after unlocking. Keep slots alive until reboot; slot
+   destruction does not reclaim snapshots.
+
+Voice Notes retains the loaded data until another load or reboot, including
+after source edits or deletion. Its full text remains available in the snapshot;
+ordinary bindings expose previews, not a long-text reader. See the
+[user workflow](../user/media/audio.md#show-a-loaded-voice-note-on-a-pad).
 
 ## Touch Driver HAL
 

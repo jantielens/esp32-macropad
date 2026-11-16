@@ -82,6 +82,14 @@ static BindingResolverStatus mock_health_resolve(const char* params, char* out, 
     return BINDING_RESOLVER_RESOLVED;
 }
 
+static BindingResolverStatus mock_loaded_resolve(const char* params, char* out, size_t out_len) {
+    const std::string value = strcmp(params, "long") == 0 ? std::string(220, 'x') : "[item:id]";
+    if (binding_template_checked_resolution_active() && value.size() >= out_len)
+        return BINDING_RESOLVER_UNAVAILABLE;
+    snprintf(out, out_len, "%s", value.c_str());
+    return BINDING_RESOLVER_RESOLVED;
+}
+
 static void mock_health_collect(const char* params, void* user_data) {
     (void)params; (void)user_data;
 }
@@ -186,6 +194,27 @@ static PadConfig make_page(std::initializer_list<std::pair<const char*, const ch
     }
     page.binding_count = i;
     return page;
+}
+
+static void test_checked_loaded_alias() {
+    auto page = make_page({{"short", "[loaded:short]"}, {"long", "[loaded:long]"}});
+    pad_binding_set_page(&page);
+    char out[256];
+    if (!binding_template_resolve_checked("[pad:short]", out, sizeof(out)) ||
+        strcmp(out, "[item:id]") != 0) {
+        printf("  FAIL [checked alias preserves literal binding-like text]\n");
+        ++g_fail;
+    } else ++g_pass;
+    if (binding_template_resolve_checked("[pad:long]", out, sizeof(out))) {
+        printf("  FAIL [checked alias rejects oversized source]\n");
+        ++g_fail;
+    } else ++g_pass;
+    if (!binding_template_resolve_checked("[pad:long|fallback]", out, sizeof(out)) ||
+        strcmp(out, "fallback") != 0) {
+        printf("  FAIL [checked alias uses explicit fallback]\n");
+        ++g_fail;
+    } else ++g_pass;
+    pad_binding_set_page(nullptr);
 }
 
 // Direct string compare (for pad_resolve outputs, which are not re-resolved).
@@ -594,10 +623,12 @@ int main() {
     binding_template_register("mqtt",   mock_mqtt_resolve,   mock_mqtt_collect, free_form);
     binding_template_register("health", mock_health_resolve, mock_health_collect, free_form);
     binding_template_register("expr",   expr_test_resolve,   expr_test_collect, expression);
+    binding_template_register("loaded", mock_loaded_resolve, nullptr, free_form);
     pad_binding_init();  // registers "pad" scheme
 
     // Resolution tests
     test_basic_resolution();
+    test_checked_loaded_alias();
     test_format_override();
     test_with_static_text();
     test_inside_expr();

@@ -15,6 +15,9 @@
 static constexpr int MAX_ACTION_TYPES = ACTION_TYPE_REGISTRY_MAX_TYPES
 #if HAS_VOICE_NOTES
     + 1
+#if HAS_DISPLAY && HAS_PSRAM
+    + 1
+#endif
 #endif
 #if HAS_DISPLAY && HAS_PSRAM
     + 1

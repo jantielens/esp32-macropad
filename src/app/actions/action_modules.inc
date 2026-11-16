@@ -42,4 +42,7 @@
 #endif
 #if HAS_VOICE_NOTES
 #include "voice_note_action.cpp"
+#if HAS_DISPLAY && HAS_PSRAM
+#include "voice_note_load_action.cpp"
+#endif
 #endif

@@ -99,12 +99,6 @@ bool service_changed(const VoiceNotesServiceConfig& a, const VoiceNotesServiceCo
     return strcmp(a.endpoint, b.endpoint) || strcmp(a.api_key, b.api_key) ||
            strcmp(a.deployment, b.deployment);
 }
-bool valid_id(const char* id) {
-    if (!id || strlen(id) != 16) return false;
-    for (size_t i = 0; i < 16; ++i)
-        if (!((id[i] >= '0' && id[i] <= '9') || (id[i] >= 'a' && id[i] <= 'f'))) return false;
-    return true;
-}
 const char* work_name(Work work) {
     switch (work) {
         case Work::Automatic: return "automatic";
@@ -861,7 +855,7 @@ VoiceNotesProcessingStart voice_notes_processing_start() {
     return admit(nullptr, Work::Manual, true, true);
 }
 VoiceNotesProcessingStart voice_notes_processing_start(const char* id, VoiceNotesProcessingMode mode) {
-    if (!valid_id(id)) return VoiceNotesProcessingStart::InvalidId;
+    if (!voice_notes_id_valid(id)) return VoiceNotesProcessingStart::InvalidId;
     if (!voice_notes_exists(id)) return VoiceNotesProcessingStart::NotFound;
     const bool tx = voice_notes_has_artifact(id, VoiceNoteArtifact::Transcript);
     const bool llm = voice_notes_has_artifact(id, VoiceNoteArtifact::Enrichment);

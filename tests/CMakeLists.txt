@@ -978,7 +978,9 @@ add_host_legacy_test(test_runtime_variable_actions_${runtime_profile}
     LIBRARIES pthread m
 )
 if(runtime_profile STREQUAL "display")
+    target_compile_definitions(test_runtime_variable_actions_${runtime_profile} PRIVATE HAS_VOICE_NOTES=1)
     target_sources(test_runtime_variable_actions_${runtime_profile} PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/app/actions/voice_note_load_action.cpp
         ${PROJECT_SOURCE_DIR}/src/app/list_source.cpp
         ${PROJECT_SOURCE_DIR}/src/app/item_binding.cpp
         ${PROJECT_SOURCE_DIR}/src/app/item_binding_scheme.cpp
@@ -1396,6 +1398,15 @@ add_host_legacy_test(test_voice_notes_enrichment
     LIBRARIES GTest::gtest_main
 )
 
+add_host_legacy_test(test_loaded_data
+    SOURCES test_loaded_data.cpp ${PROJECT_SOURCE_DIR}/src/app/loaded_data.cpp
+    INCLUDES ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS TEST_HEAP_CAPS_ALLOCATOR=1
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h
+        ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+    OPTIONS -Wno-deprecated-declarations
+)
+
 add_host_gtest(test_voice_wav
     test_voice_wav.cpp
     ${PROJECT_SOURCE_DIR}/src/app/voice_wav.cpp
@@ -1422,6 +1433,10 @@ foreach(storage_profile IN ITEMS flash sd)
 add_host_legacy_test(${voice_notes_target}
     SOURCES test_voice_notes.cpp
         ${PROJECT_SOURCE_DIR}/src/app/voice_notes.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/voice_notes_loaded.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/loaded_data.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp
         ${PROJECT_SOURCE_DIR}/src/app/storage_browser.cpp
         ${PROJECT_SOURCE_DIR}/src/app/fs_indexed_store.cpp
         ${PROJECT_SOURCE_DIR}/src/app/voice_wav.cpp

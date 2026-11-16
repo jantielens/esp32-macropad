@@ -108,6 +108,9 @@
 #if HAS_VOICE_NOTES
 #include "voice_notes.h"
 #include "voice_notes_processing.h"
+#if HAS_DISPLAY && HAS_PSRAM
+#include "voice_notes_loaded.h"
+#endif
 #endif
 
 #include "i2c_bus.h"
@@ -883,6 +886,9 @@ void loop()
 
 	#if HAS_DISPLAY && HAS_PSRAM
 	list_source_loop();
+	#if HAS_VOICE_NOTES
+	voice_notes_loaded_loop();
+	#endif
 	#endif
 
 	#if HAS_CAMERA

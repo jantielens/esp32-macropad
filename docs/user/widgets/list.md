@@ -85,6 +85,9 @@ fallback when appropriate. Before a delay, confirmation, or navigation, use
 **Set variable** to capture `[item:id]`. Later actions can read that value as `[var:name]`.
 For example, a pad chooser can navigate directly to `[item:id]` in the
 item's Navigate to screen action. See [runtime variables](../pads/actions.md#set-a-runtime-variable).
+For a Voice Notes detail pad, use **Load voice note** with `[item:id]` before
+navigation instead. The action captures the ID without a variable; see
+[loaded note details](../media/audio.md#show-a-loaded-voice-note-on-a-pad).
 
 Loading, empty, and source-error states appear in the List.
 Lists require a display and PSRAM. Existing

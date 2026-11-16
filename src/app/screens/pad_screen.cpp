@@ -246,6 +246,7 @@ void PadScreen::show() {
             tiles[i].widget_type->onShow(&tiles[i].widget_state);
         }
     }
+    if (screen && tilesBuilt) pollLiveData(true);
 }
 
 void PadScreen::hide() {
@@ -394,7 +395,7 @@ void PadScreen::pollLiveData(bool force) {
     pad_binding_set_bindings(pageBindings, pageBindingCount);
 #endif
     pollBtnStateBindings();   // Visibility/interactivity first
-    pollMqttBindings(refreshPassive);
+    pollMqttBindings(refreshPassive, force);
     if (refreshPassive) {
         pollColorBindings();
         pollNumberBindings();

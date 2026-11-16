@@ -3890,10 +3890,20 @@
         "enrichment.error",
         "processing.state",
         "transcription.retry_status",
-        "enrichment.retry_status"
+        "enrichment.retry_status",
+        "loaded.status",
+        "loaded.error",
+        "loaded.id",
+        "loaded.title",
+        "loaded.summary",
+        "loaded.transcript",
+        "loaded.created_at",
+        "loaded.duration_ms",
+        "loaded.has_transcript",
+        "loaded.has_enrichment"
       ],
       "category": "Device",
-      "summary": "Local voice note recorder status.",
+      "summary": "Local voice note recorder status and explicitly loaded note data.",
       "params": [
         {
           "name": "key",
@@ -3957,6 +3967,46 @@
         {
           "key": "processing.state",
           "desc": "Background processing state"
+        },
+        {
+          "key": "loaded.status",
+          "desc": "Explicitly loaded note: idle, loading, ready, or error"
+        },
+        {
+          "key": "loaded.error",
+          "desc": "Most recent load failure"
+        },
+        {
+          "key": "loaded.id",
+          "desc": "ID of the loaded note"
+        },
+        {
+          "key": "loaded.title",
+          "desc": "Full saved title, displayed as a short preview"
+        },
+        {
+          "key": "loaded.summary",
+          "desc": "Full saved summary, displayed as a short preview"
+        },
+        {
+          "key": "loaded.transcript",
+          "desc": "Full saved transcript, displayed as a short preview"
+        },
+        {
+          "key": "loaded.created_at",
+          "desc": "Note creation timestamp when known"
+        },
+        {
+          "key": "loaded.duration_ms",
+          "desc": "Note duration in milliseconds"
+        },
+        {
+          "key": "loaded.has_transcript",
+          "desc": "Whether the loaded note has a transcript"
+        },
+        {
+          "key": "loaded.has_enrichment",
+          "desc": "Whether the loaded note has title and summary data"
         }
       ],
       "examples": [
@@ -3979,6 +4029,18 @@
         {
           "code": "[voice_note:transcription.retry_status]",
           "desc": "Show the transcription service retry cycle."
+        },
+        {
+          "code": "[voice_note:loaded.status]",
+          "desc": "Show the explicit load state."
+        },
+        {
+          "code": "[voice_note:loaded.title|Untitled]",
+          "desc": "Show a preview of the loaded note title."
+        },
+        {
+          "code": "[voice_note:loaded.transcript|No transcript]",
+          "desc": "Show a preview of the loaded transcript."
         }
       ],
       "authoring": {
@@ -4161,6 +4223,144 @@
             "kind": "text",
             "unit": "",
             "example_value": "Retries halted",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "loaded.status",
+            "kind": "text",
+            "unit": "",
+            "example_value": "ready",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "loaded.error",
+            "kind": "text",
+            "unit": "",
+            "example_value": "note not found",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "loaded.id",
+            "kind": "text",
+            "unit": "",
+            "example_value": "0000000100000002",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "loaded.title",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Meeting notes",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "loaded.summary",
+            "kind": "text",
+            "unit": "",
+            "example_value": "A short summary",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "loaded.transcript",
+            "kind": "text",
+            "unit": "",
+            "example_value": "A recorded conversation",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "loaded.created_at",
+            "kind": "integer",
+            "unit": "s",
+            "example_value": "1700000000",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "loaded.duration_ms",
+            "kind": "integer",
+            "unit": "ms",
+            "example_value": "12500",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "loaded.has_transcript",
+            "kind": "text",
+            "unit": "",
+            "example_value": "true",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "loaded.has_enrichment",
+            "kind": "text",
+            "unit": "",
+            "example_value": "true",
             "formats": [
               "raw"
             ],

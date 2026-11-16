@@ -78,6 +78,7 @@ public:
     void (*remove_hook)(const char*) = nullptr;
     void (*usage_hook)() = nullptr;
     void (*write_hook)(const char*, size_t) = nullptr;
+    void (*read_hook)(const char*, size_t) = nullptr;
     void (*exists_hook)(const char*) = nullptr;
     bool short_write = false;
     uint64_t capacity = 1024 * 1024;
@@ -133,6 +134,7 @@ inline File::File(FakeIndexedStorage* storage, const std::string& path, bool dir
 inline size_t File::size() const { return valid_ ? storage_->files[path_].size() : 0; }
 inline size_t File::read(uint8_t* data, size_t length) {
     if (!valid_ || directory_) return 0;
+    if (storage_->read_hook) storage_->read_hook(path_.c_str(), length);
     const auto& bytes = storage_->files[path_];
     if (position_ >= bytes.size()) return 0;
     length = std::min(length, bytes.size() - position_);

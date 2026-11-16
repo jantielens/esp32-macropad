@@ -190,6 +190,9 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_SET_VAR "set_var"
 #if HAS_VOICE_NOTES
 #define ACTION_TYPE_VOICE_NOTE "voice_note"
+#if HAS_DISPLAY && HAS_PSRAM
+#define ACTION_TYPE_VOICE_NOTE_LOAD "voice_note_load"
+#endif
 #endif
 
 #define ACTION_DELAY_MAX_DURATION_MS 55000U
@@ -326,6 +329,11 @@ struct VoiceNotePayload {
     char command[16];
     char scenario[8];
 };
+#if HAS_DISPLAY && HAS_PSRAM
+struct VoiceNoteLoadPayload {
+    char id[CONFIG_BINDABLE_SHORT_LEN];
+};
+#endif
 #endif
 static_assert(sizeof(SetVariablePayload) <= 256,
               "Set variable payload must remain within the shared action payload budget");
@@ -373,6 +381,9 @@ union ActionPayload {
     SetVariablePayload set_var;
 #if HAS_VOICE_NOTES
     VoiceNotePayload voice_note;
+#if HAS_DISPLAY && HAS_PSRAM
+    VoiceNoteLoadPayload voice_note_load;
+#endif
 #endif
     uint8_t           device_class[ACTION_PAYLOAD_DEVICE_CLASS_BYTES];
                                     // opaque; owned by a registered ActionTypeDef

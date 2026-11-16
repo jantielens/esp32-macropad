@@ -64,6 +64,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   catalog/details documents in PSRAM,
   and exclude Voice Notes code, settings, actions, bindings, routes, and assets
   from firmware that does not enable the feature.
+* Add **Load voice note** for configurable on-device detail pads on display
+  devices with PSRAM. Pass `[item:id]` from a List, then navigate without
+  waiting for storage I/O. Use `[voice_note:loaded.summary]` and related bindings
+  for saved metadata, title, summary and transcript previews, with loading/error
+  status. Reusable loaded-data snapshots keep full saved text in PSRAM while
+  scalar bindings expose bounded previews. Loaded data remains unchanged until
+  another load or reboot, including after source edits or deletion.
+  See [loaded Voice Notes](docs/user/media/audio.md#show-a-loaded-voice-note-on-a-pad).
 
 ### Changed
 

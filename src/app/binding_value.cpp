@@ -115,6 +115,21 @@ bool binding_value_scalar_json(JsonVariantConst value, char* out, size_t out_len
     }
     return false;
 }
+
+bool binding_value_scalar_json_preview(JsonVariantConst value, char* out, size_t out_len) {
+    if (!out || !out_len) return false;
+    if (!value.is<const char*>()) return binding_value_scalar_json(value, out, out_len);
+    const JsonString text = value.as<JsonString>();
+    size_t length = text.size();
+    if (length >= out_len) {
+        length = out_len - 1;
+        while (length && (static_cast<unsigned char>(text.c_str()[length]) & 0xc0) == 0x80) --length;
+    }
+    if (memchr(text.c_str(), '\0', length)) return false;
+    memcpy(out, text.c_str(), length);
+    out[length] = '\0';
+    return true;
+}
 #endif
 
 #if HAS_EXTERNAL_DATA

@@ -9,6 +9,8 @@
 #include "voice_notes_metadata.h"
 #include "voice_notes_processing.h"
 #include "voice_notes_transcription_request.h"
+#include "voice_notes_loaded.h"
+#include "loaded_data.h"
 #include "voice_notes_enrichment_request.h"
 #include "bounded_psram_json_allocator.h"
 #include <WiFi.h>
@@ -32,6 +34,7 @@ FakeIndexedStorage& SD_MMC = LittleFS;
 
 namespace {
 std::mutex log_mutex;
+std::recursive_mutex display_mutex;
 std::vector<std::string> note_logs;
 
 size_t matching_logs(const std::string& first, const std::string& second = "") {
@@ -89,6 +92,21 @@ uint64_t simulated_cooldown = 0;
 const char* transcription_text = "host transcript";
 const char* enrichment_title = "Host title";
 const char* enrichment_summary = "Host summary.";
+char interrupted_load_id[17] = {};
+
+void replace_load_during_read(const char* path, size_t) {
+    if (!strstr(path, ".json")) return;
+    LittleFS.read_hook = nullptr;
+    assert(voice_notes_load_request(interrupted_load_id));
+}
+
+#if USE_SD_STORAGE && HAS_AUTO_SHUTDOWN
+void begin_ota_during_read(const char* path, size_t) {
+    if (!strstr(path, ".json")) return;
+    LittleFS.read_hook = nullptr;
+    assert(ota_activity_try_begin());
+}
+#endif
 
 void interrupt_candidate_scan(const char* path) {
     if (!strstr(path, ".json")) return;
@@ -126,6 +144,15 @@ void publication_remove_hook(const char* path) {
 #endif
 }
 }
+
+void display_manager_lock_if_needed(bool* locked) {
+    display_mutex.lock();
+    *locked = true;
+}
+void display_manager_unlock_if_needed(bool locked) {
+    if (locked) display_mutex.unlock();
+}
+void display_manager_request_binding_refresh() {}
 
 void log_noop(const char* module, const char* format, ...) {
     if (strcmp(module, "VoiceNotes") != 0) return;
@@ -277,6 +304,25 @@ static VoiceNoteSnapshot snapshot() {
     return value;
 }
 
+static void loaded_expect(const char* key, const char* expected) {
+    char out[128] = {};
+    assert(voice_notes_loaded_resolve(key, out, sizeof(out)) == BINDING_RESOLVER_RESOLVED);
+    if (strcmp(out, expected)) {
+        char error[128] = {};
+        voice_notes_loaded_resolve("error", error, sizeof(error));
+        fprintf(stderr, "loaded %s: expected %s, got %s (%s)\n", key, expected, out, error);
+    }
+    assert(strcmp(out, expected) == 0);
+}
+
+static void finish_loaded() {
+    for (unsigned i = 0; i < 8; ++i) voice_notes_loaded_loop();
+}
+
+static BindingResolverStatus resolve_loaded_test(const char* key, char* out, size_t size) {
+    return voice_notes_loaded_resolve(key, out, size);
+}
+
 int main(int argc, char**) {
     no_psram = argc > 1;
     LittleFS.usage_hook = usage_hook;
@@ -329,6 +375,19 @@ int main(int argc, char**) {
     assert(info.sample_rate == 16000 && info.channels == 1 && info.data_bytes > 0);
     assert(info.data_bytes % 2048 == 0);
     assert(saved.duration_ms == static_cast<uint64_t>(info.data_bytes / 2) * 1000 / 16000);
+    if (!no_psram) {
+        const BindingSchemeSpec spec = {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, true};
+        assert(binding_template_register("loaded", resolve_loaded_test, nullptr, spec));
+        loaded_expect("status", "idle");
+        assert(!voice_notes_load_request("invalid"));
+        assert(voice_notes_load_request(saved.last_clip));
+        loaded_expect("status", "loading");
+        finish_loaded();
+        loaded_expect("status", "ready");
+        loaded_expect("id", saved.last_clip);
+        loaded_expect("has_transcript", "false");
+        loaded_expect("has_enrichment", "false");
+    }
     for (size_t offset = VOICE_WAV_HEADER_BYTES; offset < file.size(); offset += 2) {
         const unsigned sample = file[offset] | (unsigned(file[offset + 1]) << 8);
         assert(sample == ((offset - VOICE_WAV_HEADER_BYTES) / 2) % 1024);
@@ -425,6 +484,93 @@ int main(int argc, char**) {
     voice_notes_close(&other, saved.last_clip);
     assert(LittleFS.files.at(path.c_str()) == original_wav);
     if (!no_psram) {
+        const std::string text = std::string(2048, 'x') + "\xe2\x82\xac[item:id]";
+        JsonDocument full_artifact;
+        full_artifact["transcript"]["text"] = text;
+        full_artifact["transcript"]["model"] = "test";
+        full_artifact["transcript"]["created_at"] = 1;
+        std::string json;
+        serializeJson(full_artifact, json);
+        LittleFS.files[sidecar.c_str()] = std::vector<uint8_t>(json.begin(), json.end());
+        assert(voice_notes_load_request(saved.last_clip));
+        voice_notes_loaded_loop();
+        memcpy(interrupted_load_id, saved.last_clip, sizeof(interrupted_load_id));
+        LittleFS.read_hook = replace_load_during_read;
+        voice_notes_loaded_loop();
+        assert(!LittleFS.read_hook);
+        loaded_expect("status", "loading");
+        finish_loaded();
+        loaded_expect("status", "ready");
+        loaded_expect("title", "First title");
+        loaded_expect("summary", "First summary");
+        loaded_expect("has_transcript", "true");
+        LoadedDataSnapshot* loaded = voice_notes_loaded_acquire();
+        assert(loaded);
+        const JsonString stored = loaded->data()["transcript"]["transcript"]["text"].as<JsonString>();
+        assert(stored.size() == text.size() && memcmp(stored.c_str(), text.data(), text.size()) == 0);
+        loaded->release();
+        char checked[192];
+        assert(!binding_template_resolve_checked("[loaded:transcript]", checked, sizeof(checked)));
+        assert(binding_template_resolve_checked("[loaded:transcript|fallback]", checked, sizeof(checked)));
+        assert(strcmp(checked, "fallback") == 0);
+#if USE_SD_STORAGE && HAS_AUTO_SHUTDOWN
+        assert(voice_notes_load_request(saved.last_clip));
+        voice_notes_loaded_loop();
+        LittleFS.read_hook = begin_ota_during_read;
+        voice_notes_loaded_loop();
+        assert(!LittleFS.read_hook);
+        loaded_expect("status", "loading");
+        ota_activity_finish();
+        finish_loaded();
+        loaded_expect("status", "ready");
+#endif
+        LittleFS.files[sidecar.c_str()] =
+            std::vector<uint8_t>(next_transcript, next_transcript + strlen(next_transcript));
+        loaded = voice_notes_loaded_acquire();
+        assert(loaded && loaded->data()["transcript"]["transcript"]["text"].as<JsonString>().size() == text.size());
+        loaded->release();
+        assert(voice_notes_load_request(saved.last_clip));
+        voice_notes_loaded_loop();
+        assert(voice_notes_command(VoiceNoteCommand::Start, 1900));
+        assert(wait_completion(1900));
+        voice_notes_loaded_loop();
+        loaded_expect("status", "loading");
+        assert(voice_notes_command(VoiceNoteCommand::Discard, 1901));
+        assert(wait_completion(1901));
+        finish_loaded();
+        loaded_expect("transcript", "next");
+        assert(binding_template_resolve_checked("[loaded:transcript]", checked, sizeof(checked)));
+        assert(strcmp(checked, "next") == 0);
+#if USE_SD_STORAGE && HAS_AUTO_SHUTDOWN
+        assert(voice_notes_load_request(saved.last_clip));
+        voice_notes_loaded_loop();
+        assert(ota_activity_try_begin());
+        voice_notes_loaded_loop();
+        loaded_expect("status", "loading");
+        ota_activity_finish();
+        finish_loaded();
+        loaded_expect("status", "ready");
+#endif
+        LittleFS.fail_open_path = sidecar.c_str();
+        assert(voice_notes_load_request(saved.last_clip));
+        finish_loaded();
+        loaded_expect("status", "error");
+        loaded_expect("error", "saved artifact unavailable");
+        LittleFS.fail_open_path.clear();
+        LittleFS.files[sidecar.c_str()] = {'{'};
+        assert(voice_notes_load_request(saved.last_clip));
+        finish_loaded();
+        loaded_expect("status", "error");
+        loaded_expect("error", "saved artifact invalid or unreadable");
+        LittleFS.files[sidecar.c_str()] =
+            std::vector<uint8_t>(next_transcript, next_transcript + strlen(next_transcript));
+        assert(voice_notes_load_request("0000000000000000"));
+        finish_loaded();
+        loaded_expect("status", "error");
+        loaded_expect("error", "note not found");
+        assert(voice_notes_load_request(saved.last_clip));
+        finish_loaded();
+        loaded_expect("status", "ready");
         VoiceNotesConfig config{};
         assert(voice_notes_normalize_endpoint("https://example.test", config.transcription.endpoint, sizeof(config.transcription.endpoint)));
         assert(strcmp(config.transcription.endpoint, "https://example.test/") == 0);
@@ -795,12 +941,22 @@ int main(int argc, char**) {
     assert(voice_notes_write_artifact(buffered.last_clip, VoiceNoteArtifact::Enrichment,
         reinterpret_cast<const uint8_t*>(enrichment), strlen(enrichment)));
     voice_notes_close(&other, buffered.last_clip);
+    if (!no_psram) {
+        assert(voice_notes_load_request(buffered.last_clip));
+        finish_loaded();
+        loaded_expect("status", "ready");
+        loaded_expect("id", buffered.last_clip);
+    }
     const String buffered_sidecar = String("/storage/voice-notes/") + buffered.last_clip + ".json";
     LittleFS.fail_remove_path = buffered_sidecar.c_str();
     assert(voice_notes_remove(buffered.last_clip) == VoiceNoteFileStatus::Error);
     assert(voice_notes_exists(buffered.last_clip));
     LittleFS.fail_remove_path.clear();
     assert(voice_notes_remove(buffered.last_clip) == VoiceNoteFileStatus::Ready);
+    if (!no_psram) {
+        loaded_expect("id", buffered.last_clip);
+        loaded_expect("title", "First title");
+    }
     assert(!LittleFS.exists(buffered_sidecar.c_str()));
     assert(!LittleFS.exists((String("/storage/voice-notes/") + buffered.last_clip + ".enrichment.json").c_str()));
     assert(!LittleFS.exists(buffered_path.c_str()));

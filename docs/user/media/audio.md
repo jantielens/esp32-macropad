@@ -169,6 +169,40 @@ factory reset, or device shutdown discards an unfinished recording. If a
 manual update or reset reports that recording is stopping, retry the operation.
 If microphone cleanup fails, retry **Start** after the issue clears.
 
+## Show a loaded voice note on a pad
+
+On display firmware with PSRAM, you can open a note from a List and show
+its saved details on another pad:
+
+1. Configure a [List](../widgets/list.md) with the recent Voice Notes source.
+2. Add **Load voice note** as the first item action and set **Note ID** to
+   `[item:id]`. Add **Navigate to screen** as the next action and choose the
+   detail pad.
+3. Add labels or widgets on the detail pad using, for example,
+   `[voice_note:loaded.status]`, `[voice_note:loaded.title|Untitled]`,
+   `[voice_note:loaded.summary|No summary]`, and
+   `[voice_note:loaded.transcript|No transcript]`. Save both pads.
+4. Activate a List item. Navigation starts immediately while the note loads.
+   The status is `loading`, then `ready` or `error`; use
+   `[voice_note:loaded.error|]` to show a failure.
+
+The loaded ID, creation time, duration, and transcript/enrichment availability
+are also available in the Binding Reference. Missing optional results use the
+configured fallback. A rejected ID stops the action list; later read errors
+appear in the loaded status instead.
+
+Use labels for details that must not show a previous note. Some widgets retain
+their last value while a binding is unavailable or animate from that value;
+historical charts can also include samples from previous notes. Check the loaded
+status and ID before relying on widget values.
+
+One loaded note is shared by all pads. Its saved title, summary, and transcript
+remain unchanged until another Load or reboot, even if the source note is
+edited or deleted. Labels show short UTF-8-safe previews, not a scrolling
+reader. Checked action fields reject values that do not fit rather than using
+a truncated prefix. Loading defers while recording or a firmware update needs
+the device.
+
 ## Understand sound priority
 
 Scheduled alarm audio has priority over ordinary alerts, then Music.

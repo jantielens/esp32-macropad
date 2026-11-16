@@ -5,6 +5,9 @@
 #include "log_manager.h"
 #include "voice_notes.h"
 #include "voice_notes_processing.h"
+#if HAS_PSRAM
+#include "voice_notes_loaded.h"
+#endif
 #include <stdio.h>
 #include <string.h>
 
@@ -12,7 +15,13 @@ namespace {
 const char* const kKeys[] = {"recording.state", "recording.duration_s", "recording.scenario", "recording.error",
     "last_saved.id", "transcription.state", "transcription.note_id", "transcription.error",
     "enrichment.state", "enrichment.note_id", "enrichment.error", "processing.state",
-    "transcription.retry_status", "enrichment.retry_status"};
+    "transcription.retry_status", "enrichment.retry_status"
+#if HAS_PSRAM
+    , "loaded.status", "loaded.error", "loaded.id", "loaded.title", "loaded.summary",
+    "loaded.transcript", "loaded.created_at", "loaded.duration_ms", "loaded.has_transcript",
+    "loaded.has_enrichment"
+#endif
+};
 const BindingParamDoc kParams[] = {{"key", "Recorder snapshot key, see below."}};
 const BindingKeyDoc kKeyDocs[] = {
     {"recording.state", "Current recording state", nullptr},
@@ -29,6 +38,18 @@ const BindingKeyDoc kKeyDocs[] = {
     {"enrichment.error", "Most recent enrichment error", nullptr},
     {"enrichment.retry_status", "Service retry cycle: empty, Retry 1/2/3 of 3, or Retries halted; not per-note", nullptr},
     {"processing.state", "Background processing state", nullptr},
+#if HAS_PSRAM
+    {"loaded.status", "Explicitly loaded note: idle, loading, ready, or error", nullptr},
+    {"loaded.error", "Most recent load failure", nullptr},
+    {"loaded.id", "ID of the loaded note", nullptr},
+    {"loaded.title", "Full saved title, displayed as a short preview", nullptr},
+    {"loaded.summary", "Full saved summary, displayed as a short preview", nullptr},
+    {"loaded.transcript", "Full saved transcript, displayed as a short preview", nullptr},
+    {"loaded.created_at", "Note creation timestamp when known", nullptr},
+    {"loaded.duration_ms", "Note duration in milliseconds", nullptr},
+    {"loaded.has_transcript", "Whether the loaded note has a transcript", nullptr},
+    {"loaded.has_enrichment", "Whether the loaded note has title and summary data", nullptr},
+#endif
 };
 const BindingExampleDoc kExamples[] = {
     {"[voice_note:recording.state]", "Show the recorder state."},
@@ -36,9 +57,18 @@ const BindingExampleDoc kExamples[] = {
     {"[voice_note:processing.state]", "Show background processing state."},
     {"[voice_note:enrichment.state]", "Show title and summary generation state."},
     {"[voice_note:transcription.retry_status]", "Show the transcription service retry cycle."},
+#if HAS_PSRAM
+    {"[voice_note:loaded.status]", "Show the explicit load state."},
+    {"[voice_note:loaded.title|Untitled]", "Show a preview of the loaded note title."},
+    {"[voice_note:loaded.transcript|No transcript]", "Show a preview of the loaded transcript."},
+#endif
 };
 const BindingSchemeDoc kRecorderDoc = {
+#if HAS_PSRAM
+    "Device", "Local voice note recorder status and explicitly loaded note data.",
+#else
     "Device", "Local voice note recorder status.",
+#endif
     BINDING_DOC_LIST(kParams), BINDING_DOC_LIST(kKeyDocs), BINDING_DOC_LIST(kExamples),
     nullptr, false, BINDING_DOC_NONE, nullptr, nullptr,
 };
@@ -57,6 +87,18 @@ const BindingAuthoringKey kAuthoringKeys[] = {
     binding_authoring_text("enrichment.error", "Enrichment request failed"),
     binding_authoring_text("enrichment.retry_status", "Retries halted"),
     binding_authoring_text("processing.state", "idle"),
+#if HAS_PSRAM
+    binding_authoring_text("loaded.status", "ready"),
+    binding_authoring_text("loaded.error", "note not found"),
+    binding_authoring_text("loaded.id", "0000000100000002"),
+    binding_authoring_text("loaded.title", "Meeting notes"),
+    binding_authoring_text("loaded.summary", "A short summary"),
+    binding_authoring_text("loaded.transcript", "A recorded conversation"),
+    binding_authoring_integer("loaded.created_at", "s", "1700000000"),
+    binding_authoring_integer("loaded.duration_ms", "ms", "12500"),
+    binding_authoring_text("loaded.has_transcript", "true"),
+    binding_authoring_text("loaded.has_enrichment", "true"),
+#endif
 };
 const BindingAuthoringSpec kAuthoring = {BINDING_DOC_LIST(kAuthoringKeys)};
 
@@ -64,6 +106,13 @@ uint8_t key_count() { return sizeof(kKeys) / sizeof(kKeys[0]); }
 const char* key_at(uint8_t index) { return index < key_count() ? kKeys[index] : nullptr; }
 BindingResolverStatus resolve(const char* key, char* out, size_t size) {
     if (!key || !out || !size) return BINDING_RESOLVER_UNAVAILABLE;
+#if HAS_PSRAM
+    if (strncmp(key, "loaded.", 7) == 0) {
+        bool known = false;
+        for (const char* candidate : kKeys) known |= strcmp(candidate, key) == 0;
+        return known ? voice_notes_loaded_resolve(key + 7, out, size) : BINDING_RESOLVER_UNKNOWN;
+    }
+#endif
     VoiceNoteSnapshot snapshot = {};
     voice_notes_snapshot(&snapshot);
     if (strcmp(key, "processing.state") == 0) {

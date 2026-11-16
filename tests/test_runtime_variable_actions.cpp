@@ -47,6 +47,12 @@ bool psramFound() { return true; }
 
 static bool boundary_received_item = false;
 static bool nested_item_hidden = false;
+static bool accept_load = true;
+static char requested_note[64] = {};
+bool voice_notes_load_request(const char* id) {
+    strlcpy(requested_note, id, sizeof(requested_note));
+    return accept_load;
+}
 
 static bool boundary_fields(ButtonAction& action, ActionFieldVisitor visitor, void* context) {
     return action_visit_field(visitor, context, "target", action.payload.screen.screen_id);
@@ -188,6 +194,35 @@ int main() {
             snapshot->release();
             std::puts("FAIL: synchronous dispatch with item scope");
             return 1;
+        }
+        {
+            ButtonAction load = {};
+            strlcpy(load.type, ACTION_TYPE_VOICE_NOTE_LOAD, sizeof(load.type));
+            strlcpy(load.payload.voice_note_load.id, "[item:id]", sizeof(load.payload.voice_note_load.id));
+            const ButtonAction actions[] = {load, set_variable_action("after_load", "navigated")};
+            ItemBindingScope scope(snapshot, 0);
+            if (action_list_dispatch_result(actions, 2, "load") != ACTION_COMPLETE ||
+                std::strcmp(requested_note, "item-1") != 0 || !get_equals("after_load", "navigated")) {
+                snapshot->release();
+                std::puts("FAIL: accepted item load captures the ID and continues immediately");
+                return 1;
+            }
+        }
+        {
+            runtime_variable_set("after_load", "before");
+            ButtonAction load = {};
+            strlcpy(load.type, ACTION_TYPE_VOICE_NOTE_LOAD, sizeof(load.type));
+            strlcpy(load.payload.voice_note_load.id, "[item:id]", sizeof(load.payload.voice_note_load.id));
+            const ButtonAction actions[] = {load, set_variable_action("after_load", "navigated")};
+            ItemBindingScope scope(snapshot, 0);
+            accept_load = false;
+            const ActionResult result = action_list_dispatch_result(actions, 2, "load");
+            accept_load = true;
+            if (result != ACTION_FAILED || !get_equals("after_load", "before")) {
+                snapshot->release();
+                std::puts("FAIL: rejected item load stops the action list");
+                return 1;
+            }
         }
         binding_template_resolve("[item:id|none]", item_value, sizeof(item_value));
         if (std::strcmp(item_value, "item-1") != 0) {

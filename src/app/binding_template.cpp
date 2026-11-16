@@ -221,6 +221,16 @@ bool binding_template_has_bindings(const char* label) {
 static bool checked_resolution_active = false;
 static bool checked_resolution_complete = true;
 
+bool binding_template_checked_resolution_active() {
+    return checked_resolution_active;
+}
+
+static size_t utf8_copy_length(const char* text, size_t length, size_t space) {
+    if (length <= space) return length;
+    while (space && (static_cast<unsigned char>(text[space]) & 0xc0) == 0x80) --space;
+    return space;
+}
+
 static bool resolve_template(const char* templ, char* out, size_t out_len,
                              BindingResolverStatus* status, bool* complete = nullptr) {
     if (complete) *complete = false;
@@ -249,7 +259,7 @@ static bool resolve_template(const char* templ, char* out, size_t out_len,
             // No more tokens — copy remaining static text
             size_t remain = strlen(p);
             size_t space = out_len - 1 - written;
-            size_t copy = remain < space ? remain : space;
+            size_t copy = utf8_copy_length(p, remain, space);
             if (copy != remain) fits = false;
             memcpy(out + written, p, copy);
             written += copy;
@@ -261,10 +271,13 @@ static bool resolve_template(const char* templ, char* out, size_t out_len,
         size_t prefix_len = (size_t)(token_start - p);
         if (prefix_len > 0) {
             size_t space = out_len - 1 - written;
-            size_t copy = prefix_len < space ? prefix_len : space;
-            if (copy != prefix_len) fits = false;
+            size_t copy = utf8_copy_length(p, prefix_len, space);
             memcpy(out + written, p, copy);
             written += copy;
+            if (copy != prefix_len) {
+                fits = false;
+                break;
+            }
         }
 
         // Resolve the token
@@ -289,13 +302,14 @@ static bool resolve_template(const char* templ, char* out, size_t out_len,
             char* fallback = split_pipe_fallback(params_buf);
 
             char resolved[BINDING_TEMPLATE_MAX_LEN + 1];
+            const bool previous_complete = checked_resolution_complete;
             BindingResolverStatus resolved_status = binding_template_resolve_registered(
                 scheme, scheme_len, params_buf, resolved, checked_resolution_active ? sizeof(resolved) : 128);
             if (resolved_status == BINDING_RESOLVER_RESOLVED) {
                 any_resolved = true;
                 size_t rlen = strlen(resolved);
                 size_t space = out_len - 1 - written;
-                size_t copy = rlen < space ? rlen : space;
+                size_t copy = utf8_copy_length(resolved, rlen, space);
                 if (copy != rlen || (checked_resolution_active && rlen == sizeof(resolved) - 1)) fits = false;
                 memcpy(out + written, resolved, copy);
                 written += copy;
@@ -303,6 +317,7 @@ static bool resolve_template(const char* templ, char* out, size_t out_len,
                 if (fallback) {
                     // A supplied fallback fulfills the token even when its source
                     // is unavailable; checked callers may safely use that value.
+                    checked_resolution_complete = previous_complete;
                 } else if (resolved_status == BINDING_RESOLVER_UNKNOWN) {
                     outcome = BINDING_RESOLVER_UNKNOWN;
                 } else if (outcome == BINDING_RESOLVER_RESOLVED) {
@@ -312,7 +327,7 @@ static bool resolve_template(const char* templ, char* out, size_t out_len,
                 const char* ph = fallback ? fallback : "---";
                 size_t phlen = strlen(ph);
                 size_t space = out_len - 1 - written;
-                size_t copy = phlen < space ? phlen : space;
+                size_t copy = utf8_copy_length(ph, phlen, space);
                 if (copy != phlen) fits = false;
                 memcpy(out + written, ph, copy);
                 written += copy;

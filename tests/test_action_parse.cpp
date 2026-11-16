@@ -24,6 +24,9 @@
 bool voice_notes_command(VoiceNoteCommand, uint32_t) { return true; }
 static VoiceNotesProcessingStart processing_start_result = VoiceNotesProcessingStart::Accepted;
 VoiceNotesProcessingStart voice_notes_processing_start() { return processing_start_result; }
+#if HAS_DISPLAY && HAS_PSRAM
+bool voice_notes_load_request(const char*) { return true; }
+#endif
 #endif
 
 static unsigned g_followup_dispatches = 0;
@@ -276,6 +279,21 @@ TEST(voice_note_action_contract) {
     ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>()) != nullptr);
 #endif
     ASSERT_TRUE(action_type_find("voice_clip") == nullptr);
+}
+
+TEST(voice_note_load_contract) {
+#if HAS_VOICE_NOTES && HAS_DISPLAY && HAS_PSRAM
+    ButtonAction action = round_trip(R"({"type":"voice_note_load","id":"[item:id]"})");
+    ASSERT_STR(action.type, ACTION_TYPE_VOICE_NOTE_LOAD);
+    ASSERT_STR(action.payload.voice_note_load.id, "[item:id]");
+    const ActionTypeDef* def = action_type_find(ACTION_TYPE_VOICE_NOTE_LOAD);
+    ASSERT_TRUE(def && def->execution == ACTION_EXECUTION_SYNC);
+    StaticJsonDocument<256> invalid;
+    ASSERT_TRUE(!deserializeJson(invalid, R"({"type":"voice_note_load","id":""})"));
+    ASSERT_TRUE(action_type_validate(def, invalid.as<JsonObjectConst>()) != nullptr);
+#else
+    ASSERT_TRUE(action_type_find("voice_note_load") == nullptr);
+#endif
 }
 
 TEST(bthome_round_trip_and_validation) {
@@ -1263,6 +1281,7 @@ int main(int argc, char** argv) {
     RUN(item_context_boundaries);
     RUN(list_navigation_contract);
     RUN(voice_note_action_contract);
+    RUN(voice_note_load_contract);
     RUN(bthome_round_trip_and_validation);
     RUN(set_var_round_trip_and_validation);
     RUN(gamepad_round_trip_and_validation);

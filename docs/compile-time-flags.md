@@ -834,6 +834,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/system_action.cpp
   - src/app/actions/timer_action.cpp
   - src/app/actions/visual_alert_action.cpp
+  - src/app/actions/voice_note_load_action.cpp
   - src/app/actions/volume_action.cpp
   - src/app/app.ino
   - src/app/audio_input_binding.cpp
@@ -911,6 +912,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/list_source_service.cpp
   - src/app/list_source_voice_notes.cpp
   - src/app/list_source_voice_notes.h
+  - src/app/loaded_data.cpp
+  - src/app/loaded_data.h
   - src/app/lv_conf.h
   - src/app/lvgl_heap.cpp
   - src/app/mcp_press_button.cpp
@@ -976,6 +979,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/visual_alert.h
   - src/app/voice_notes_binding.cpp
   - src/app/voice_notes_binding.h
+  - src/app/voice_notes_loaded.cpp
+  - src/app/voice_notes_loaded.h
   - src/app/web_mcp.cpp
   - src/app/web_portal.cpp
   - src/app/web_portal_config.cpp
@@ -1536,6 +1541,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HAS_VOICE_NOTES**
   - src/app/action_registry.cpp
   - src/app/actions/voice_note_action.cpp
+  - src/app/actions/voice_note_load_action.cpp
   - src/app/app.ino
   - src/app/binding_builtin_schemes.cpp
   - src/app/board_config.h
@@ -1560,6 +1566,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/voice_notes_enrichment_request.cpp
   - src/app/voice_notes_enrichment_request.h
   - src/app/voice_notes_file.h
+  - src/app/voice_notes_loaded.cpp
+  - src/app/voice_notes_loaded.h
   - src/app/voice_notes_metadata.cpp
   - src/app/voice_notes_processing.cpp
   - src/app/voice_notes_processing.h

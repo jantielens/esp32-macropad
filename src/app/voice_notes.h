@@ -6,6 +6,14 @@
 #include <stdint.h>
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <string.h>
+
+inline bool voice_notes_id_valid(const char* id) {
+    if (!id || strlen(id) != 16) return false;
+    for (size_t i = 0; i < 16; ++i)
+        if (!((id[i] >= '0' && id[i] <= '9') || (id[i] >= 'a' && id[i] <= 'f'))) return false;
+    return true;
+}
 
 enum class VoiceNoteState : uint8_t {
     Idle, Starting, Recording, Paused, Saving, Discarding, Error

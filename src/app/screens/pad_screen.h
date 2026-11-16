@@ -229,7 +229,7 @@ private:
     // Build/destroy tile LVGL objects from config
     void buildTiles();
     void clearTiles();
-    void pollMqttBindings(bool refreshPassive);
+    void pollMqttBindings(bool refreshPassive, bool force);
     void pollColorBindings();
     void pollNumberBindings();
     void pollBtnStateBindings();
