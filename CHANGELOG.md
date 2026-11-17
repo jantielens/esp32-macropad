@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add the `esp32-p4-lcd4b-sd` board variant with SD-primary storage.
+  A readable FAT32 card is required at boot; existing files are not migrated
+  from internal flash. See [LCD4B SD storage](src/boards/esp32-p4-lcd4b-sd/README.md).
 * Create an editable Welcome pad during initial setup on pad-capable displays.
   Three centered, tap-free buttons show setup guidance and live portal URLs,
   using device-default colors and a 5-column layout shaped for round displays.
@@ -48,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Settings** without rebooting. Recording remains local and works offline;
   transcription sends the selected recording to Azure and requires Wi-Fi.
   Failed attempts preserve the recording and any previous transcript.
-  See [Voice Notes](docs/user/media/audio.md#record-and-manage-voice-notes).
+  See [Voice Notes](docs/user/media/voice-notes.md#record-and-manage-voice-notes).
 * Add title and summary generation from saved Voice Notes transcripts through
   a separately configured Azure LLM deployment supporting strict structured
   outputs. Generate both fields in one request, show titles in the catalog,
@@ -86,10 +89,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   note ID or binding and clears matching loaded details after successful
   deletion. Loaded data otherwise remains unchanged until another load or
   reboot, including after source edits or portal deletion.
-  See [loaded Voice Notes](docs/user/media/audio.md#show-a-loaded-voice-note-on-a-pad).
+  See [loaded Voice Notes](docs/user/media/voice-notes.md#show-a-loaded-voice-note-on-a-pad).
 
 ### Changed
 
+* Require SD-primary storage for Voice Notes. The flash-backed LCD4B and
+  reTerminal Sticky targets no longer include Voice Notes; use their SD variants
+  instead. Back up recordings before switching because files are not migrated.
 * Open the first available portal section when selecting a sidebar category.
   Use the chevron to browse another category without leaving the current
   section; selecting a section closes the other categories.
