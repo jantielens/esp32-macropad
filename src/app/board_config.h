@@ -490,7 +490,7 @@ struct HwButtonDef {
 #define HAS_AUDIO_INPUT false
 #endif
 
-// Enable local Voice Notes recording and management.
+// Enable local Voice Notes recording and management with SD-primary storage.
 #ifndef HAS_VOICE_NOTES
 #define HAS_VOICE_NOTES false
 #endif
@@ -746,6 +746,10 @@ struct HwButtonDef {
 
 #if HAS_VOICE_NOTES && IS_VOICE_ASSISTANT
 #error "HAS_VOICE_NOTES and IS_VOICE_ASSISTANT cannot be enabled together."
+#endif
+
+#if HAS_VOICE_NOTES && !USE_SD_STORAGE
+#error "HAS_VOICE_NOTES requires SD-primary storage."
 #endif
 
 #if HAS_VOICE_NOTES && (!HAS_AUDIO_INPUT || !HAS_FILESYSTEM || !(HAS_DISPLAY || HAS_BUTTON))

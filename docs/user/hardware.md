@@ -29,6 +29,7 @@ complete circuit schematic. Verify the board revision before wiring accessories.
 | Guition JC1060P470C                       | [`jc1060p470c`](../../src/boards/jc1060p470c/README.md)               |
 | JC1060P470C with primary SD storage       | [`jc1060p470c-sd`](../../src/boards/jc1060p470c-sd/README.md)         |
 | Waveshare ESP32-P4-WIFI6-Touch-LCD-4B     | [`esp32-p4-lcd4b`](../../src/boards/esp32-p4-lcd4b/README.md)         |
+| LCD4B with primary SD storage             | [`esp32-p4-lcd4b-sd`](../../src/boards/esp32-p4-lcd4b-sd/README.md)   |
 | M5Stack StopWatch, round AMOLED           | [`m5stack-stopwatch`](../../src/boards/m5stack-stopwatch/README.md)   |
 | M5Stack Tab5, ST7121 or ST7123           | [`m5stack-tab5`](../../src/boards/m5stack-tab5/README.md)             |
 | M5Stack Tab5 with primary SD storage     | [`m5stack-tab5-sd`](../../src/boards/m5stack-tab5-sd/README.md)       |

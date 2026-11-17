@@ -147,9 +147,9 @@ RAM fallback.
 
 ## Local Voice Notes
 
-`HAS_VOICE_NOTES` enables an independent local recorder and is mutually
-exclusive with `IS_VOICE_ASSISTANT`. One worker owns capture, using a PSRAM-first
-stack. Another uses an internal stack to own the unfinished file and write
+`HAS_VOICE_NOTES` enables an independent local recorder, requires SD-primary
+storage, and is mutually exclusive with `IS_VOICE_ASSISTANT`. One worker owns
+capture, using a PSRAM-first stack. Another uses an internal stack to own the unfinished file and write
 native 16-bit PCM through `Storage`.
 They exchange bounded audio batches through a PSRAM-first queue, with an internal
 RAM fallback. The storage worker publishes a finalized WAV only after indexed

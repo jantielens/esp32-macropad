@@ -119,7 +119,7 @@ class PortalDevServerTest(unittest.TestCase):
         self.server.mock_config.pop("auto_shutdown_timeout_seconds", None)
 
     def test_voice_notes_automatic_processing_fixture(self):
-        profile = "reterminal-sticky-interactive"
+        profile = "reterminal-sticky-interactive-sd"
         base = "/api/component/voice-notes/"
         config_path = "/api/config?no_reboot=1"
         field = "voice_notes_auto_process"
@@ -169,10 +169,12 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertTrue(saved["voice_notes_transcription_api_key_set"])
 
     def test_voice_notes_fixture_and_profile_isolation(self):
-        profile = "reterminal-sticky-interactive"
+        profile = "reterminal-sticky-interactive-sd"
         base = "/api/component/voice-notes/"
         clip_id = "0000000100000002"
-        for selected, enabled in ((profile, True), ("esp32-p4-lcd4b", True), ("jc3248w535", False)):
+        for selected, enabled in ((profile, True), ("esp32-p4-lcd4b-sd", True),
+                                  ("reterminal-sticky-interactive", False), ("esp32-p4-lcd4b", False),
+                                  ("jc3248w535", False)):
             nav = self.request("/api/portal/nav", profile=selected)[1]
             entries = {item["id"] for category in nav["categories"] for item in category["items"]}
             self.assertEqual("voice-notes" in entries, enabled)
@@ -193,11 +195,14 @@ class PortalDevServerTest(unittest.TestCase):
             self.assertEqual(self.request(base + "list", profile=selected)[0], 200 if enabled else 404)
             config = self.request("/api/config", profile=selected)[1]
             self.assertEqual("voice_notes_auto_process" in config, enabled)
+            if enabled:
+                status = self.request(base + "status", profile=selected)[1]
+                self.assertEqual(status["backend"], "sd_spi" if selected == profile else "sdmmc")
         self.assertEqual(self.request("/api/config?no_reboot=1", "POST",
-                                      {"voice_notes_auto_process": True}, profile="esp32-p4-lcd4b")[0], 200)
-        self.assertIs(self.request("/api/config", profile="esp32-p4-lcd4b")[1]["voice_notes_auto_process"], True)
+                                      {"voice_notes_auto_process": True}, profile="esp32-p4-lcd4b-sd")[0], 200)
+        self.assertIs(self.request("/api/config", profile="esp32-p4-lcd4b-sd")[1]["voice_notes_auto_process"], True)
         self.assertEqual(self.request("/api/config?no_reboot=1", "POST",
-                                      {"voice_notes_auto_process": False}, profile="esp32-p4-lcd4b")[0], 200)
+                                      {"voice_notes_auto_process": False}, profile="esp32-p4-lcd4b-sd")[0], 200)
 
         listing = self.request(base + "list", profile=profile)[1]
         self.assertEqual(listing["entries"][0]["id"], clip_id)

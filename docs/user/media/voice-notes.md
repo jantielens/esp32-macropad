@@ -3,16 +3,20 @@ title: Record and browse Voice Notes
 description: Record local voice notes, process them, and build pads to browse saved notes.
 ---
 
-Voice Notes records audio from the device microphone and stores WAV files on the
-selected storage backend. You can manage recordings in the portal or build pads
+Voice Notes records audio from the device microphone and stores WAV files on
+the SD-primary storage. You can manage recordings in the portal or build pads
 to record, browse recent notes, and display saved details. Transcription and
 title and summary generation are optional cloud services; recording itself does
 not require them.
 
-Voice Notes requires supported firmware and microphone input. The List and
-loaded-note workflow also requires a display and PSRAM. Controls appear only
-when the installed firmware supports them. Check the
-[hardware reference](../hardware.md) for connections.
+Voice Notes requires supported firmware with microphone input and SD-primary
+storage. An SD slot alone is not enough: install a supported SD-primary
+firmware variant and insert a readable card. The List and loaded-note workflow
+also requires a display and PSRAM. Controls appear only when the installed
+firmware supports them. Check the [hardware reference](../hardware.md) for
+connections and storage requirements.
+Back up existing recordings before changing variants; switching storage does
+not transfer them automatically.
 
 ## Record and manage voice notes
 

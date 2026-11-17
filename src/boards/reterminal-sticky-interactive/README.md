@@ -91,10 +91,9 @@ Volume changes PWM duty, not a calibrated loudness. MP3, Music, and amplifier
 controls are unavailable. Physical sound and volume still need device validation.
 
 The onboard microphone supports
-[microphone level bindings](../../../docs/user/pads/data-sources.md#read-local-sensors-and-health)
-and [local voice notes](../../../docs/user/media/voice-notes.md#record-and-manage-voice-notes).
-Recording uses 16 kHz mono PCM in the selected file storage; audio quality and practical
-recording duration depend on the environment and available storage.
+[microphone level bindings](../../../docs/user/pads/data-sources.md#read-local-sensors-and-health).
+Local Voice Notes requires the
+[SD-primary variant](../reterminal-sticky-interactive-sd/README.md).
 
 ### Turn off the device
 

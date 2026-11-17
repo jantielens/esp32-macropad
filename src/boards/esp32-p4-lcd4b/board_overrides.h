@@ -126,9 +126,6 @@
 // ============================================================================
 #define HAS_AUDIO true
 #define HAS_AUDIO_INPUT true
-#ifndef HAS_VOICE_NOTES
-#define HAS_VOICE_NOTES true
-#endif
 #define HAS_ES7210_MIC true
 #define HAS_MUSIC_ANALYSIS true
 #define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_ES8311

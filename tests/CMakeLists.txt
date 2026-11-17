@@ -153,8 +153,10 @@ add_host_legacy_test(test_sticky_epaper_driver_sd
     LIBRARIES host_lvgl)
 foreach(voice_notes 0 1)
   set(sticky_hardware_target test_sticky_hardware)
+  set(sticky_hardware_board reterminal-sticky-interactive)
   if(voice_notes)
     set(sticky_hardware_target test_sticky_hardware_voice_notes)
+    set(sticky_hardware_board reterminal-sticky-interactive-sd)
   endif()
   add_host_legacy_test(${sticky_hardware_target}
     SOURCES test_sticky_hardware.cpp ${PROJECT_SOURCE_DIR}/src/app/board_hardware.cpp
@@ -162,7 +164,7 @@ foreach(voice_notes 0 1)
         ${PROJECT_SOURCE_DIR}/src/app/battery_info.cpp
         ${PROJECT_SOURCE_DIR}/src/app/drivers/gt911_touch_driver.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/sticky_driver_test_overrides ${HOST_ARDUINOJSON_DIR}
-        ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive
+        ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/src/boards/${sticky_hardware_board}
     DEFINITIONS BOARD_HAS_OVERRIDE=1 BOARD_HAS_PSRAM=1 CONFIG_IDF_TARGET_ESP32S3=1 HAS_VOICE_NOTES=${voice_notes}
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/sticky_driver_test_overrides/SPI.h
 )

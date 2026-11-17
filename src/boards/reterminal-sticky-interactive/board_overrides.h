@@ -47,9 +47,6 @@
 #define HAS_AUDIO true
 #define HAS_SOUND_PLAYER false
 #define HAS_AUDIO_INPUT true
-#ifndef HAS_VOICE_NOTES
-#define HAS_VOICE_NOTES true
-#endif
 #ifndef HAS_SD_CARD
 #define HAS_SD_CARD false
 #endif

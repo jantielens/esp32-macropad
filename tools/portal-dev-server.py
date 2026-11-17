@@ -33,8 +33,12 @@ PROTO_DIR = SCRIPT_DIR / "portal-prototype"
 MOCK_DIR = SCRIPT_DIR / "mock-data"
 APP_WEB_DIR = SCRIPT_DIR.parent / "src" / "app" / "web"
 EPAPER_WEB_DIR = SCRIPT_DIR.parent / "src" / "app" / "device_classes" / "epaper_frame" / "web"
+SD_PROFILE_BASES = {
+    "esp32-p4-lcd4b-sd": "esp32-p4-lcd4b",
+    "reterminal-sticky-interactive-sd": "reterminal-sticky-interactive",
+}
 PROFILES = ("esp32-p4-lcd4b", "jc3248w535", "reterminal-e1003-frame", "crowpanel-4.2-interactive",
-            "reterminal-sticky-interactive")
+            "reterminal-sticky-interactive", *SD_PROFILE_BASES)
 SCENARIOS = ("normal", "load-error", "save-error", "invalid-bindings")
 HA_ENTITIES = {
     "sensor.living_room_temperature": {
@@ -205,17 +209,21 @@ CONTENT_TYPES = {
 class PortalHandler(SimpleHTTPRequestHandler):
     """Route portal assets and emulate the device API locally."""
 
-    def _profile(self):
+    def _selected_profile(self):
         cookie = SimpleCookie(self.headers.get("Cookie", ""))
         selected = cookie.get("portal_mock_profile")
         profile = selected.value if selected else self.server.profile
         return profile if profile in PROFILES else self.server.profile
 
+    def _profile(self):
+        profile = self._selected_profile()
+        return SD_PROFILE_BASES.get(profile, profile)
+
     def _bthome_capable(self):
         return self._profile() == "reterminal-sticky-interactive"
 
     def _voice_notes_capable(self):
-        return self._profile() in ("esp32-p4-lcd4b", "reterminal-sticky-interactive")
+        return self._selected_profile() in SD_PROFILE_BASES
 
     def _fonts_available(self):
         return self._profile() in ("esp32-p4-lcd4b", "jc3248w535")
@@ -792,7 +800,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
                                   "last_saved": {"id": ""}, "transcription": {**job, "retry_status": ""},
                                   "processing": processing, "transcription_configured": bool(configured),
                                   "enrichment": {**enrichment, "retry_status": ""}, "enrichment_configured": bool(llm_configured),
-                                  "backend": "littlefs", "total_bytes": 4 * 1024 * 1024,
+                                  "backend": "sd_spi" if self._profile() == "reterminal-sticky-interactive" else "sdmmc",
+                                  "total_bytes": 4 * 1024 * 1024,
                                   "free_bytes": 3 * 1024 * 1024})
             elif path.endswith("/list"):
                 self._serve_json({"entries": [
@@ -1609,6 +1618,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             self._serve_json({"error": "Unknown mock profile"}, 400)
             return
         self.profile_cookie = "portal_mock_profile=" + profile + "; Path=/; SameSite=Lax"
+        profile = SD_PROFILE_BASES.get(profile, profile)
         shell = (APP_WEB_DIR / "shell.html").read_text(encoding="utf-8")
         replacements = {
             "{{PROJECT_DISPLAY_NAME}}": "ESP32 Macropad (Local Mock)",
@@ -1763,7 +1773,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             "has_audio_amplifier_mute": self._profile() == "esp32-p4-lcd4b",
             "has_touch": True, "has_usb_hid": True, "has_ttf_fonts": self._fonts_available()}
         if self._profile() in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive", "reterminal-sticky-interactive"):
-            info.update(device_class="Macropad", board=self._profile(), has_display=True,
+            info.update(device_class="Macropad", board=self._selected_profile(), has_display=True,
                         has_backlight=True, has_audio=True, has_sound_player=True, has_alarm=True,
                         has_native_extensions=True, has_camera=False, has_image_fetch=True,
                         has_image_library=True, has_ble=False, has_ble_hid=False,
@@ -1980,7 +1990,8 @@ def main():
     }
     print(f"Portal dev server running at http://localhost:{args.port}")
     print(f"Serving production assets from: {APP_WEB_DIR}")
-    fragment = "screensaver" if args.profile == "jc3248w535" else "pad-editor" if args.profile == "esp32-p4-lcd4b" else "epaper-image"
+    base_profile = SD_PROFILE_BASES.get(args.profile, args.profile)
+    fragment = "screensaver" if base_profile == "jc3248w535" else "pad-editor" if base_profile == "esp32-p4-lcd4b" else "epaper-image"
     print(f"Example: http://localhost:{args.port}/?profile={args.profile}&fragment={fragment}")
     print("Press Ctrl+C to stop.\n")
 

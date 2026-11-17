@@ -73,6 +73,7 @@ for overrides, expected_error in (
     ({}, None),
     ({"HAS_VOICE_NOTES": 1}, None),
     ({"HAS_VOICE_NOTES": 1, "IS_VOICE_ASSISTANT": 1}, "cannot be enabled together"),
+    ({"HAS_VOICE_NOTES": 1, "USE_SD_STORAGE": 0}, "requires SD-primary storage"),
     ({"HAS_VOICE_NOTES": 1, "HAS_AUDIO_INPUT": 0}, "requires audio input"),
     ({"HAS_VOICE_NOTES": 1, "HAS_FILESYSTEM": 0}, "requires audio input"),
     ({"HAS_VOICE_NOTES": 1, "HAS_DISPLAY": 0, "HAS_BUTTON": 0}, "requires audio input"),
@@ -81,6 +82,7 @@ for overrides, expected_error in (
         "IS_VOICE_ASSISTANT": 0, "HAS_AUDIO": 1,
         "HAS_AUDIO_INPUT": 1, "HAS_FILESYSTEM": 1, "HAS_DISPLAY": 1,
         "HAS_BUTTON": 0, "HAS_PSRAM": 1, "HAS_MQTT": 1,
+        "HAS_SD_CARD": 1, "USE_SD_STORAGE": 1,
     }
     flags.update(overrides)
     source = '#include "src/app/board_config.h"\n'
@@ -98,12 +100,18 @@ for overrides, expected_error in (
         assert result.returncode == 0, result.stderr
 print("PASS: Voice clips feature prerequisites and Voice Assistant exclusion")
 
-for board, expected in (("esp32-p4-lcd4b", 1), ("esp32-p4-lcd4b-voice", 0)):
+for board, expected, sd in (("esp32-p4-lcd4b", 0, 0), ("esp32-p4-lcd4b-sd", 1, 1),
+                            ("esp32-p4-lcd4b-voice", 0, 0)):
     subprocess.run(
         ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
          "-x", "c++", "-", "-I", str(root), "-I", str(root / "src/boards" / board),
          "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM", "-DCONFIG_IDF_TARGET_ESP32P4=1"],
-        input=f'#include "src/app/board_config.h"\nstatic_assert(HAS_VOICE_NOTES == {expected}, "Voice Notes profile");\n',
+        input=f'''#include "src/app/board_config.h"
+static_assert(HAS_VOICE_NOTES == {expected}, "Voice Notes profile");
+static_assert(HAS_SD_CARD == {sd} && USE_SD_STORAGE == {sd}, "LCD4B storage selection");
+''' + ('''static_assert(SDMMC_BUS_WIDTH == 4 && SDMMC_POWER_PIN == 45 &&
+              SDMMC_POWER_ACTIVE_LOW && SDMMC_LDO_CHANNEL == 4, "LCD4B SD wiring");
+''' if sd else ""),
         text=True, check=True,
     )
 print("PASS: LCD4B Voice Notes and Voice Assistant profiles")
@@ -427,7 +435,8 @@ for board, sd in (("reterminal-sticky-interactive", 0), ("reterminal-sticky-inte
          "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM", "-DCONFIG_IDF_TARGET_ESP32S3=1"],
         input=f'''#include "src/app/board_config.h"
 static_assert(HAS_SD_CARD == {sd} && USE_SD_STORAGE == {sd}, "Sticky storage selection");
-static_assert(HAS_DISPLAY && HAS_TOUCH && HAS_AUDIO_INPUT && HAS_VOICE_NOTES && HAS_RTC && HAS_BLE, "Sticky capabilities");
+static_assert(HAS_VOICE_NOTES == {sd}, "Sticky Voice Notes selection");
+static_assert(HAS_DISPLAY && HAS_TOUCH && HAS_AUDIO_INPUT && HAS_RTC && HAS_BLE, "Sticky capabilities");
 static_assert(BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO, "Sticky BLE backend");
 ''' + ('''static_assert(SD_STORAGE_SPI && SD_SPI_CS_PIN == 8 && SD_SPI_SCK_PIN == 13 &&
     SD_SPI_MISO_PIN == 12 && SD_SPI_MOSI_PIN == 14 && SD_SPI_FREQUENCY_HZ == 1000000, "Sticky SD wiring");
@@ -452,6 +461,7 @@ for override in sorted((root / "src/boards").glob("*/board_overrides.h")):
         + (["-DCONFIG_IDF_TARGET_ESP32S3=1"] if board.startswith("reterminal-sticky-interactive") else []),
         input=f'''#include "src/app/board_config.h"
 static_assert(HAS_BATTERY_INFO == {int(board in battery_boards)}, "Battery provider gate mismatch");
+static_assert(!HAS_VOICE_NOTES || USE_SD_STORAGE, "Voice Notes requires SD-primary storage");
 ''', text=True, check=True,
     )
 print("PASS: battery info enabled only on existing provider boards and inherited variants")
