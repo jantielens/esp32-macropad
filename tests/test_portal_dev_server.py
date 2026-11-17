@@ -180,7 +180,8 @@ class PortalDevServerTest(unittest.TestCase):
                 schemes = self.request("/api/bindings" + suffix, profile=selected)[1]["schemes"]
                 self.assertEqual(any(scheme["name"] == "voice_note" for scheme in schemes), enabled)
             catalog = self.request("/api/info?catalog=1", profile=selected)[1]["catalog"]
-            self.assertEqual(any(action["type"] == "voice_note" for action in catalog), enabled)
+            for action_type in ("vnote_record", "vnote_process", "vnote_load", "vnote_delete"):
+                self.assertEqual(any(action["type"] == action_type for action in catalog), enabled)
             sources = self.request("/api/info?catalog=1", profile=selected)[1]["list_sources"]
             self.assertEqual(any(source["token"] == "[voice_note:recent_notes]" for source in sources), enabled)
             for path in ("/portal-voice-notes.js", "/api/section/voice-notes",
@@ -1256,8 +1257,11 @@ class PortalDevServerTest(unittest.TestCase):
     def test_catalog_source_parity(self):
         actions_dir = ROOT / "src/app/actions"
         manifest = (actions_dir / "action_modules.inc").read_text()
-        unavailable = {"ble_pair", "display_refresh", "camera_capture", "voice_note"}
-        action_files = {"list_nav": "list_navigation"}
+        voice_actions = {"vnote_record", "vnote_process", "vnote_load", "vnote_delete"}
+        unavailable = {"ble_pair", "display_refresh", "camera_capture"} | voice_actions
+        action_files = {"list_nav": "list_navigation",
+                        **{"vnote_" + command: "voice_note_" + command
+                           for command in ("record", "process", "load", "delete")}}
         expected = {next((key for key, value in action_files.items() if value == name), name)
                     for name in re.findall(r'#include "([^"/]+)_action.cpp"', manifest)} - unavailable
         catalog = self.server.pad_fixture["catalog"]
@@ -1271,10 +1275,12 @@ class PortalDevServerTest(unittest.TestCase):
                 self.assertIn('action["label"] = ' + json.dumps(action["label"]), source)
             self.assertIn('action["group"] = ' + json.dumps(action["group"]), source)
         sticky_catalog = self.request("/api/info?catalog=1", profile="reterminal-sticky-interactive")[1]["catalog"]
-        recorder = next(action for action in sticky_catalog if action["type"] == "voice_note")
-        recorder_source = (actions_dir / "voice_note_action.cpp").read_text()
-        self.assertIn('action["label"] = ' + json.dumps(recorder["label"]), recorder_source)
-        self.assertIn('action["group"] = ' + json.dumps(recorder["group"]), recorder_source)
+        for action in sticky_catalog:
+            if action["type"] not in voice_actions:
+                continue
+            source = (actions_dir / (action_files[action["type"]] + "_action.cpp")).read_text()
+            self.assertIn('action["label"] = ' + json.dumps(action["label"]), source)
+            self.assertIn('action["group"] = ' + json.dumps(action["group"]), source)
         fields = ("name", "icon", "second_icon", "axis_field", "horizontal_icon", "vertical_icon", "default_axis")
         widgets = {widget["type"]: widget for widget in self.server.pad_fixture["widget_catalog"]}
         for path in (ROOT / "src/app/widgets").glob("*_widget.cpp"):

@@ -94,10 +94,16 @@ its desired state is still Playing; it is not sample-accurate resume.
 
 ## Record and manage voice notes
 
-On supported firmware, add **Voice note** actions to buttons or other action
-hosts. Use **Start recording**, **Pause recording**, **Resume recording**,
-**Save recording**, and **Discard recording** to
-control one local recording. Save completes before subsequent actions run;
+On supported firmware, choose **Voice notes > Recording** when adding an action
+to a button or another action host. The default command, **Toggle recording
+(start/save)**, starts a new recording when idle. Press the same button again
+to stop and save it. Toggle also saves a paused recording.
+
+Use **Start recording**, **Pause recording**, **Resume recording**,
+**Stop and save recording**, or **Discard recording** for separate controls.
+Commands are rejected while the recorder is starting, saving, or discarding;
+wait for the transition to finish before pressing again.
+Save completes before subsequent actions run;
 failed commands stop the remaining actions. Pause retains the microphone and
 does not add silence to the recording. The microphone level meter is unavailable
 while recording or paused.
@@ -127,7 +133,7 @@ to begin a fresh cycle. Changing that service's settings also resets its cycle.
 Provider cooldowns remain in effect; new recordings do not clear access or
 configuration errors. Correct service settings if processing is blocked.
 
-Alternatively, add a **Voice note > Start processing** action to start a
+Alternatively, add a **Voice notes > Process saved notes** action to start a
 best-effort pass without enabling automation. An offline or busy press schedules
 nothing; press it again when the device is ready. This action starts processing
 and does not wait for results to finish.
@@ -175,7 +181,7 @@ On display firmware with PSRAM, you can open a note from a List and show
 its saved details on another pad:
 
 1. Configure a [List](../widgets/list.md) with the recent Voice Notes source.
-2. Add **Load voice note** as the first item action and set **Note ID** to
+2. Add **Voice notes > Load saved note** as the first item action and set **Note ID** to
    `[item:id]`. Add **Navigate to screen** as the next action and choose the
    detail pad.
 3. Add labels or widgets on the detail pad using, for example,
@@ -191,11 +197,11 @@ are also available in the Binding Reference. Missing optional results use the
 configured fallback. A rejected ID stops the action list; later read errors
 appear in the loaded status instead.
 
-To delete a saved note from a List, add **Delete voice note** and set **Note ID**
+To delete a saved note from a List, add **Voice notes > Delete saved note** and set **Note ID**
 to `[item:id]`. Deletion is permanent and also removes the note's transcript
 and enrichment. The action waits for deletion to finish; if the note is busy
 or deletion fails, later actions do not run. To ask for confirmation, capture
-`[item:id]` with **Set variable**, then add **Confirm** and **Delete voice note**
+`[item:id]` with **Set variable**, then add **Confirm** and **Delete saved note**
 using `[var:name]`. The List refreshes after deletion.
 
 When the action deletes the loaded note, its details clear and loaded status
@@ -208,7 +214,7 @@ historical charts can also include samples from previous notes. Check the loaded
 status and ID before relying on widget values.
 
 One loaded note is shared by all pads. Its saved title, summary, and transcript
-remain unchanged until another Load, a matching **Delete voice note** action,
+remain unchanged until another Load, a matching **Delete saved note** action,
 or reboot, even if the source note is edited or deleted through the portal.
 Labels show short UTF-8-safe previews, not a scrolling reader. Checked action
 fields reject values that do not fit rather than using a truncated prefix.

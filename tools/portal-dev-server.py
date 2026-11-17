@@ -1789,11 +1789,29 @@ class PortalHandler(SimpleHTTPRequestHandler):
             if include_catalog:
                 info["catalog"] = copy.deepcopy(self.server.pad_fixture["catalog"])
                 if self._voice_notes_capable():
-                    info["catalog"].append({"type": "voice_note", "group": "Audio", "label": "Voice note",
+                    commands = [
+                        {"id": "toggle", "label": "Toggle recording (start/save)"},
+                        {"id": "start", "label": "Start recording"},
+                        {"id": "pause", "label": "Pause recording"},
+                        {"id": "resume", "label": "Resume recording"},
+                        {"id": "save", "label": "Stop and save recording"},
+                        {"id": "discard", "label": "Discard recording"},
+                    ]
+                    info["catalog"].append({"type": "vnote_record", "group": "Voice notes", "label": "Recording",
+                        "alarm_hook_allowed": False, "pausable": True,
+                        "command_field": "command", "commands": commands,
                         "editor_fields": [{"name": "command", "label": "Command", "type": "select",
-                                           "default": "start", "options": [
-                                               {"id": command, "label": command.capitalize()}
-                                               for command in ("start", "pause", "resume", "save", "discard")]}]})
+                                           "default": "toggle", "command_options": True}]})
+                    info["catalog"].append({"type": "vnote_process", "group": "Voice notes",
+                        "label": "Process saved notes", "alarm_hook_allowed": True, "pausable": False})
+                    for action_type, label, pausable in (
+                            ("vnote_load", "Load saved note", False),
+                            ("vnote_delete", "Delete saved note", True)):
+                        info["catalog"].append({"type": action_type, "group": "Voice notes", "label": label,
+                            "alarm_hook_allowed": not pausable, "pausable": pausable,
+                            "template_fields": {"id": {"max": 63}},
+                            "editor_fields": [{"name": "id", "label": "Note ID", "type": "text",
+                                               "bindable": True}]})
                 info["widget_catalog"] = [
                     widget for widget in self.server.pad_fixture["widget_catalog"]
                     if widget.get("type") != "slider" or info["has_touch"]

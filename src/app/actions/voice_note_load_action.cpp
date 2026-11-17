@@ -10,12 +10,12 @@ namespace {
 const char* validate_load(JsonObjectConst action) {
     for (JsonPairConst field : action) {
         const char* name = field.key().c_str();
-        if (strcmp(name, "type") && strcmp(name, "id")) return "voice_note_load accepts only id";
+        if (strcmp(name, "type") && strcmp(name, "id")) return "vnote_load accepts only id";
     }
-    if (!action["id"].is<const char*>()) return "voice_note_load id must be a string";
+    if (!action["id"].is<const char*>()) return "vnote_load id must be a string";
     const JsonString id = action["id"].as<JsonString>();
     if (!id.c_str() || !id.size() || id.size() >= sizeof(VoiceNoteLoadPayload::id) ||
-        memchr(id.c_str(), '\0', id.size())) return "voice_note_load id is empty or too long";
+        memchr(id.c_str(), '\0', id.size())) return "vnote_load id is empty or too long";
     return nullptr;
 }
 
@@ -40,8 +40,8 @@ bool fields_load(ButtonAction& action, ActionFieldVisitor visitor, void* context
 }
 
 void describe_load(JsonObject& action) {
-    action["group"] = "Audio";
-    action["label"] = "Load voice note";
+    action["group"] = "Voice notes";
+    action["label"] = "Load saved note";
     action["note"] = "Loads one shared snapshot in the background. Use [item:id] for a List item.";
     JsonArray field_docs = action["fields"].to<JsonArray>();
     JsonObject field = field_docs.add<JsonObject>();

@@ -20,12 +20,12 @@ struct VoiceNoteDeleteJob {
 const char* validate_voice_note_delete(JsonObjectConst action) {
     for (JsonPairConst field : action) {
         const char* name = field.key().c_str();
-        if (strcmp(name, "type") && strcmp(name, "id")) return "voice_note_del accepts only id";
+        if (strcmp(name, "type") && strcmp(name, "id")) return "vnote_delete accepts only id";
     }
-    if (!action["id"].is<const char*>()) return "voice_note_del id must be a string";
+    if (!action["id"].is<const char*>()) return "vnote_delete id must be a string";
     const JsonString id = action["id"].as<JsonString>();
     if (!id.c_str() || !id.size() || id.size() >= sizeof(VoiceNoteDeletePayload::id) ||
-        memchr(id.c_str(), '\0', id.size())) return "voice_note_del id is empty or too long";
+        memchr(id.c_str(), '\0', id.size())) return "vnote_delete id is empty or too long";
     return nullptr;
 }
 
@@ -72,8 +72,8 @@ bool fields_voice_note_delete(ButtonAction& action, ActionFieldVisitor visitor, 
 }
 
 void describe_voice_note_delete(JsonObject& action) {
-    action["group"] = "Audio";
-    action["label"] = "Delete voice note";
+    action["group"] = "Voice notes";
+    action["label"] = "Delete saved note";
     action["note"] = "Permanently deletes a saved note. Use [item:id] for a List item.";
     JsonArray fields = action["fields"].to<JsonArray>();
     JsonObject field = fields.add<JsonObject>();

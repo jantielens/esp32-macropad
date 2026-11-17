@@ -24,7 +24,14 @@
 
 #if HAS_VOICE_NOTES
 #include "voice_notes_file.h"
-bool voice_notes_command(VoiceNoteCommand, uint32_t) { return true; }
+static VoiceNoteCommand record_command = VoiceNoteCommand::Start;
+static uint32_t record_token = 0;
+static bool record_accepted = true;
+bool voice_notes_command(VoiceNoteCommand command, uint32_t token) {
+    record_command = command;
+    record_token = token;
+    return record_accepted;
+}
 static VoiceNotesProcessingStart processing_start_result = VoiceNotesProcessingStart::Accepted;
 VoiceNotesProcessingStart voice_notes_processing_start() { return processing_start_result; }
 static LoopBridgeExec delete_exec = nullptr;
@@ -265,63 +272,92 @@ TEST(list_navigation_contract) {
 
 TEST(voice_note_action_contract) {
 #if HAS_VOICE_NOTES
-    ASSERT_TRUE(action_type_find("voice_note") != nullptr);
-    const ButtonAction process = parse_from_string(R"({"type":"voice_note","command":"process"})");
-    const ActionTypeDef* voice_note = action_type_find("voice_note");
-    ASSERT_TRUE(voice_note->dispatch(process, "test", 0) == ACTION_COMPLETE);
-    processing_start_result = VoiceNotesProcessingStart::Offline;
-    ASSERT_TRUE(voice_note->dispatch(process, "test", 0) == ACTION_FAILED);
-    processing_start_result = VoiceNotesProcessingStart::Accepted;
+    const ActionTypeDef* voice_note = action_type_find(ACTION_TYPE_VOICE_NOTE_RECORD);
+    ASSERT_TRUE(voice_note && voice_note->execution == ACTION_EXECUTION_PAUSABLE);
     for (const char* json : {
-            R"({"type":"voice_note","command":"start"})",
-            R"({"type":"voice_note","command":"start","scenario":"general"})",
-            R"({"type":"voice_note","command":"pause"})",
-            R"({"type":"voice_note","command":"resume"})",
-            R"({"type":"voice_note","command":"save"})",
-            R"({"type":"voice_note","command":"discard"})",
-            R"({"type":"voice_note","command":"process"})"}) {
+            R"({"type":"vnote_record","command":"toggle"})",
+            R"({"type":"vnote_record","command":"start"})",
+            R"({"type":"vnote_record","command":"pause"})",
+            R"({"type":"vnote_record","command":"resume"})",
+            R"({"type":"vnote_record","command":"save"})",
+            R"({"type":"vnote_record","command":"discard"})"}) {
         JsonDocument doc;
         ASSERT_TRUE(deserializeJson(doc, json) == DeserializationError::Ok);
         ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>()) == nullptr);
         ButtonAction action = round_trip(json);
-        ASSERT_STR(action.type, "voice_note");
-        if (!strcmp(action.payload.voice_note.command, "start"))
-            ASSERT_STR(action.payload.voice_note.scenario, "general");
+        ASSERT_STR(action.type, ACTION_TYPE_VOICE_NOTE_RECORD);
+        ASSERT_STR(action.payload.voice_note_record.command, doc["command"].as<const char*>());
+        JsonDocument serialized;
+        action_to_json(action, serialized.to<JsonObject>());
+        ASSERT_EQ(serialized.size(), 2);
     }
+    const ButtonAction toggle = round_trip(R"({"type":"vnote_record","command":"toggle"})");
+    ASSERT_TRUE(voice_note->dispatch(toggle, "test", 73) == ACTION_PENDING);
+    ASSERT_TRUE(record_command == VoiceNoteCommand::Toggle && record_token == 73);
+    ASSERT_TRUE(voice_note->dispatch(toggle, "test", 0) == ACTION_FAILED);
+    record_accepted = false;
+    ASSERT_TRUE(voice_note->dispatch(toggle, "test", 74) == ACTION_FAILED);
+    record_accepted = true;
     for (const char* json : {
-            R"({"type":"voice_note","command":"start","scenario":"meeting"})",
-            R"({"type":"voice_note","command":"start","scenario":null})",
-            R"({"type":"voice_note","command":"save","scenario":"general"})",
-            R"({"type":"voice_note","command":"process","scenario":"general"})",
-            R"({"type":"voice_note","command":"process","id":"123"})",
-            R"({"type":"voice_note","command":"transcribe"})",
-            R"({"type":"voice_note","command":"toggle"})"}) {
+            R"({"type":"vnote_record","command":"start","scenario":"general"})",
+            R"({"type":"vnote_record","command":"toggle","id":"123"})",
+            R"({"type":"vnote_record","command":"process"})",
+            R"({"type":"vnote_record","command":null})",
+            R"({"type":"vnote_record"})"}) {
         JsonDocument doc;
         ASSERT_TRUE(deserializeJson(doc, json) == DeserializationError::Ok);
         ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>()) != nullptr);
         ASSERT_STR(parse_from_string(json).type, "");
     }
 #else
-    ASSERT_TRUE(action_type_find("voice_note") == nullptr);
+    ASSERT_TRUE(action_type_find("vnote_record") == nullptr);
     JsonDocument doc;
-    ASSERT_TRUE(deserializeJson(doc, R"({"type":"voice_note","command":"start"})") == DeserializationError::Ok);
+    ASSERT_TRUE(deserializeJson(doc, R"({"type":"vnote_record","command":"start"})") == DeserializationError::Ok);
     ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>()) != nullptr);
 #endif
-    ASSERT_TRUE(action_type_find("voice_clip") == nullptr);
+    ASSERT_TRUE(action_type_find("voice_note") == nullptr);
+    ASSERT_TRUE(action_type_find("voice_note_del") == nullptr);
+}
+
+TEST(voice_note_process_contract) {
+#if HAS_VOICE_NOTES
+    const ButtonAction process = round_trip(R"({"type":"vnote_process"})");
+    ASSERT_STR(process.type, ACTION_TYPE_VOICE_NOTE_PROCESS);
+    const ActionTypeDef* def = action_type_find(ACTION_TYPE_VOICE_NOTE_PROCESS);
+    ASSERT_TRUE(def && def->execution == ACTION_EXECUTION_SYNC);
+    JsonDocument serialized;
+    action_to_json(process, serialized.to<JsonObject>());
+    ASSERT_EQ(serialized.size(), 1);
+    ASSERT_TRUE(def->dispatch(process, "test", 0) == ACTION_COMPLETE);
+    processing_start_result = VoiceNotesProcessingStart::Offline;
+    ASSERT_TRUE(def->dispatch(process, "test", 0) == ACTION_FAILED);
+    processing_start_result = VoiceNotesProcessingStart::Accepted;
+    for (const char* json : {
+            R"({"type":"vnote_process","command":"process"})",
+            R"({"type":"vnote_process","scenario":"general"})",
+            R"({"type":"vnote_process","id":"0123456789abcdef"})"}) {
+        JsonDocument doc;
+        ASSERT_TRUE(!deserializeJson(doc, json));
+        ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>()) != nullptr);
+        ASSERT_STR(parse_from_string(json).type, "");
+    }
+#else
+    ASSERT_TRUE(action_type_find("vnote_process") == nullptr);
+#endif
 }
 
 TEST(voice_note_load_contract) {
 #if HAS_VOICE_NOTES && HAS_DISPLAY && HAS_PSRAM
-    ButtonAction action = round_trip(R"({"type":"voice_note_load","id":"[item:id]"})");
+    ButtonAction action = round_trip(R"({"type":"vnote_load","id":"[item:id]"})");
     ASSERT_STR(action.type, ACTION_TYPE_VOICE_NOTE_LOAD);
     ASSERT_STR(action.payload.voice_note_load.id, "[item:id]");
     const ActionTypeDef* def = action_type_find(ACTION_TYPE_VOICE_NOTE_LOAD);
     ASSERT_TRUE(def && def->execution == ACTION_EXECUTION_SYNC);
     StaticJsonDocument<256> invalid;
-    ASSERT_TRUE(!deserializeJson(invalid, R"({"type":"voice_note_load","id":""})"));
+    ASSERT_TRUE(!deserializeJson(invalid, R"({"type":"vnote_load","id":""})"));
     ASSERT_TRUE(action_type_validate(def, invalid.as<JsonObjectConst>()) != nullptr);
 #else
-    ASSERT_TRUE(action_type_find("voice_note_load") == nullptr);
+    ASSERT_TRUE(action_type_find("vnote_load") == nullptr);
 #endif
 }
 
@@ -329,23 +365,23 @@ TEST(voice_note_delete_contract) {
 #if HAS_VOICE_NOTES
     const ActionTypeDef* def = action_type_find(ACTION_TYPE_VOICE_NOTE_DELETE);
     ASSERT_TRUE(def && def->execution == ACTION_EXECUTION_PAUSABLE);
-    ButtonAction bound = round_trip(R"({"type":"voice_note_del","id":"[item:id]"})");
+    ButtonAction bound = round_trip(R"({"type":"vnote_delete","id":"[item:id]"})");
     ASSERT_STR(bound.type, ACTION_TYPE_VOICE_NOTE_DELETE);
     ASSERT_STR(bound.payload.voice_note_delete.id, "[item:id]");
     ASSERT_TRUE(action_type_has_binding(def, bound));
     for (const char* json : {
-            R"({"type":"voice_note_del"})",
-            R"({"type":"voice_note_del","id":""})",
-            R"({"type":"voice_note_del","id":42})",
-            R"({"type":"voice_note_del","id":"abc","extra":true})",
-            R"({"type":"voice_note_del","id":"abc\u0000def"})"}) {
+            R"({"type":"vnote_delete"})",
+            R"({"type":"vnote_delete","id":""})",
+            R"({"type":"vnote_delete","id":42})",
+            R"({"type":"vnote_delete","id":"abc","extra":true})",
+            R"({"type":"vnote_delete","id":"abc\u0000def"})"}) {
         JsonDocument doc;
         ASSERT_TRUE(!deserializeJson(doc, json));
         ASSERT_TRUE(action_type_validate(def, doc.as<JsonObjectConst>()) != nullptr);
     }
 
     ButtonAction actions[2] = {};
-    actions[0] = round_trip(R"({"type":"voice_note_del","id":"0123456789abcdef"})");
+    actions[0] = round_trip(R"({"type":"vnote_delete","id":"0123456789abcdef"})");
     strlcpy(actions[1].type, ACTION_TYPE_BACK, sizeof(actions[1].type));
     delete_exec = nullptr;
     deleted_id[0] = '\0';
@@ -381,7 +417,7 @@ TEST(voice_note_delete_contract) {
     ASSERT_TRUE(action_list_dispatch_result(actions, 2, "delete") == ACTION_FAILED);
     ASSERT_EQ(g_followup_dispatches, 1);
 #else
-    ASSERT_TRUE(action_type_find("voice_note_del") == nullptr);
+    ASSERT_TRUE(action_type_find("vnote_delete") == nullptr);
 #endif
 }
 
@@ -1370,6 +1406,7 @@ int main(int argc, char** argv) {
     RUN(item_context_boundaries);
     RUN(list_navigation_contract);
     RUN(voice_note_action_contract);
+    RUN(voice_note_process_contract);
     RUN(voice_note_load_contract);
     RUN(voice_note_delete_contract);
     RUN(bthome_round_trip_and_validation);

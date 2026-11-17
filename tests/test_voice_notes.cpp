@@ -330,7 +330,13 @@ int main(int argc, char**) {
     LittleFS.write_hook = write_hook;
     assert(voice_notes_init());
     assert(capture_psram_stack == !no_psram && capture_internal_stack == no_psram);
-    assert(voice_notes_command(VoiceNoteCommand::Start, 1));
+    block_start = true;
+    assert(!voice_notes_command(VoiceNoteCommand::Toggle, 0));
+    assert(voice_notes_command(VoiceNoteCommand::Toggle, 1));
+    wait_until([] { return start_entered.load(); });
+    assert(snapshot().state == VoiceNoteState::Starting);
+    assert(!voice_notes_command(VoiceNoteCommand::Toggle, 9000));
+    block_start = false;
     assert(wait_completion(1));
     assert(strcmp(snapshot().scenario, "general") == 0);
     wait_until([] { return reads.load() > 0; });
@@ -344,7 +350,7 @@ int main(int argc, char**) {
     assert(snapshot().duration_ms == paused_duration);
     assert(voice_notes_command(VoiceNoteCommand::Resume, 3));
     assert(wait_completion(3));
-    assert(voice_notes_command(VoiceNoteCommand::Save, 4));
+    assert(voice_notes_command(VoiceNoteCommand::Toggle, 4));
     assert(wait_completion(4));
     VoiceNoteSnapshot saved = snapshot();
     assert(saved.state == VoiceNoteState::Idle && !owned && saved.last_clip[0]);
@@ -754,6 +760,7 @@ int main(int argc, char**) {
     start_entered = false;
     assert(voice_notes_command(VoiceNoteCommand::Start, 5));
     wait_until([] { return start_entered.load(); });
+    assert(!voice_notes_command(VoiceNoteCommand::Toggle, 9001));
     assert(strcmp(snapshot().last_clip, saved.last_clip) == 0);
     assert(voice_notes_cancel() == VoiceNoteCancelStatus::Pending);
     assert(!voice_notes_command(VoiceNoteCommand::Pause, 6));
@@ -769,7 +776,7 @@ int main(int argc, char**) {
     assert(voice_notes_command(VoiceNoteCommand::Start, 7));
     wait_until([] { return snapshot().state == VoiceNoteState::Error && !snapshot().session_active; });
     expired = false;
-    assert(voice_notes_command(VoiceNoteCommand::Start, 8));
+    assert(voice_notes_command(VoiceNoteCommand::Toggle, 8));
     assert(wait_completion(8));
     force_overrun = true;
     wait_until([] { return snapshot().state == VoiceNoteState::Error && !snapshot().session_active; });
@@ -781,7 +788,7 @@ int main(int argc, char**) {
     const size_t failed_saves_before = matching_logs("Recording not published");
     assert(voice_notes_command(VoiceNoteCommand::Start, 9));
     assert(wait_completion(9));
-    assert(voice_notes_command(VoiceNoteCommand::Save, 10));
+    assert(voice_notes_command(VoiceNoteCommand::Toggle, 10));
     assert(!wait_completion(10));
     assert(snapshot().state == VoiceNoteState::Error && !owned);
     assert(strcmp(snapshot().error, "No audio captured") == 0);
@@ -850,6 +857,8 @@ int main(int argc, char**) {
     LittleFS.remove_hook = publication_remove_hook;
     assert(voice_notes_command(VoiceNoteCommand::Save, 22));
     wait_until([] { return publication_entered.load(); });
+    assert(snapshot().state == VoiceNoteState::Saving);
+    assert(!voice_notes_command(VoiceNoteCommand::Toggle, 9002));
     assert(voice_notes_cancel() == VoiceNoteCancelStatus::Pending);
     block_publication = false;
     assert(!wait_completion(22));
@@ -880,7 +889,7 @@ int main(int argc, char**) {
     assert(voice_notes_command(VoiceNoteCommand::Pause, 24));
     assert(wait_completion(24));
     const unsigned buffered_frames = reads - before_buffered;
-    assert(voice_notes_command(VoiceNoteCommand::Save, 25));
+    assert(voice_notes_command(VoiceNoteCommand::Toggle, 25));
     assert(wait_completion(25));
     const VoiceNoteSnapshot buffered = snapshot();
     assert(strcmp(buffered.last_clip, saved.last_clip) != 0);
@@ -932,7 +941,13 @@ int main(int argc, char**) {
     assert(voice_notes_command(VoiceNoteCommand::Start, 43));
     assert(wait_completion(43));
     fail_stop = true;
+    stop_entered = false;
+    block_stop = true;
     assert(voice_notes_command(VoiceNoteCommand::Discard, 44));
+    wait_until([] { return stop_entered.load(); });
+    assert(snapshot().state == VoiceNoteState::Discarding);
+    assert(!voice_notes_command(VoiceNoteCommand::Toggle, 9003));
+    block_stop = false;
     assert(!wait_completion(44));
     fail_stop = false;
     stop_entered = false;

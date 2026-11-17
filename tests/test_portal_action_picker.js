@@ -14,6 +14,8 @@ const path = require('path');
 const {execFileSync} = require('child_process');
 const catalogBinary = process.env.ACTION_CATALOG_BINARY || path.resolve('build/host-tests/tests/test_action_parse');
 const productionCatalogs = JSON.parse(execFileSync(catalogBinary, ['--catalog'], {encoding:'utf8'}));
+const voiceCatalogs = JSON.parse(execFileSync(path.join(path.dirname(catalogBinary), 'test_action_parse_voice_notes'),
+    ['--catalog'], {encoding:'utf8'}));
 assert.deepStrictEqual(productionCatalogs.portal, productionCatalogs.mcp.map(entry => {
     const metadata = {...entry};
     delete metadata.fields;
@@ -95,6 +97,7 @@ const FIXTURE_CATALOG = [
         ]
     },
     ...productionCatalogs.portal.filter(entry => entry.type === 'system'),
+    ...voiceCatalogs.portal.filter(entry => entry.group === 'Voice notes'),
     {
         type: 'music', group: 'Audio', label: 'Music',
         commands: [{ id: 'play_pause', label: 'Play/Pause' }, { id: 'next', label: 'Next track' }],
@@ -238,6 +241,29 @@ assert(editorHtml.includes('picker-generic-brightness-brightness_value'));
 assert(editorHtml.includes('picker-generic-system-system_command'));
 assert(editorHtml.includes('picker-generic-music-music_command'));
 assert(editorHtml.includes('picker-generic-mouse_button-button'));
+assert(optionsHtml.includes('<optgroup label="Voice notes">'));
+assert(!optionsHtml.includes('<option value="voice_note">'));
+assert(!optionsHtml.includes('<option value="voice_note_del">'));
+const recordCommands = context.actionEditorCommandOptionsHTML('vnote_record');
+assert(recordCommands.includes('<option value="toggle">Toggle recording (start/save)</option>'));
+assert(recordCommands.includes('<option value="save">Stop and save recording</option>'));
+assert(!recordCommands.includes('process'));
+context.actionEditorLoad(prefix, { type: 'vnote_record' });
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(prefix))),
+    { type: 'vnote_record', command: 'toggle' });
+for (const command of ['toggle', 'start', 'pause', 'resume', 'save', 'discard']) {
+    const action = { type: 'vnote_record', command };
+    context.actionEditorLoad(prefix, action);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(prefix))), action);
+}
+context.actionEditorLoad(prefix, { type: 'vnote_process' });
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(prefix))),
+    { type: 'vnote_process' });
+for (const type of ['vnote_load', 'vnote_delete']) {
+    const action = { type, id: '[item:id]' };
+    context.actionEditorLoad(prefix, action);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(prefix))), action);
+}
 for (const button of ['left', 'right', 'middle', undefined]) {
     context.actionEditorLoad(prefix, { type: 'mouse_button', button: button });
     const mouseAction = context.actionEditorBuild(prefix);

@@ -52,7 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Recording takes priority; two-second gaps between operations give other
   device tasks time to run. Processing does not connect Wi-Fi or keep the
   device awake; retry history resets on reboot.
-* Add a **Voice note > Start processing** action for a best-effort processing
+* Add a **Voice notes > Process saved notes** action for a best-effort processing
   pass without enabling automation. Offline or busy presses schedule nothing.
   Show background processing status in the portal and through
   `[voice_note:processing.state]` (`idle`, `waiting`, `running`, or `blocked`).
@@ -65,12 +65,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   catalog/details documents in PSRAM,
   and exclude Voice Notes code, settings, actions, bindings, routes, and assets
   from firmware that does not enable the feature.
-* Add **Load voice note** for configurable on-device detail pads on display
+* Add **Load saved note** for configurable on-device detail pads on display
   devices with PSRAM. Pass `[item:id]` from a List, then navigate without
   waiting for storage I/O. Use `[voice_note:loaded.summary]` and related bindings
   for saved metadata, title, summary and transcript previews, with loading/error
   status. Reusable loaded-data snapshots keep full saved text in PSRAM while
-  scalar bindings expose bounded previews. **Delete voice note** accepts a
+  scalar bindings expose bounded previews. **Delete saved note** accepts a
   note ID or binding and clears matching loaded details after successful
   deletion. Loaded data otherwise remains unchanged until another load or
   reboot, including after source edits or portal deletion.
@@ -78,6 +78,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Group Voice Notes actions under **Voice notes**: Recording
+  (`vnote_record`), Process saved notes (`vnote_process`),
+  Load saved note (`vnote_load`), and Delete saved note
+  (`vnote_delete`). Recording defaults to **Toggle recording
+  (start/save)**, which starts when idle or saves an active or paused recording.
+  Replace the old `voice_note`, `voice_note_load`, and `voice_note_del` action types and remove the
+  action-level `scenario` field without migration. Recreate affected actions.
 * Replace the legacy provider/filter List implementation and `[list:...]`
   selection bindings. Existing List configurations are not migrated; choose
   a typed source, configure row labels and actions, and assign a unique List
@@ -89,15 +96,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   repeated parsing and temporary allocations. Clarify unsupported List
   label-style properties in the editor.
 * Replace transcription-only Voice Notes settings with separate transcription
-  and LLM endpoint, deployment, and API key settings. Replace the `voice_note`
-  command `transcribe` with `process` and the POST `transcribe` endpoint with
+  and LLM endpoint, deployment, and API key settings. Use **Process saved notes**
+  for background processing and replace the POST `transcribe` endpoint with
   `process`, `retranscribe`, and `regenerate`. Existing service settings and
   command/endpoint names are not migrated; reconfigure Voice Notes services
   and update affected actions and integrations.
 * Treat an empty transcription response as successful **No speech detected**
   content. Continue through normal enrichment, allow an empty summary, and
   avoid automatically retrying completed silent recordings.
-* Replace Voice Clips with **Voice Notes**, including the `voice_note` action,
+* Replace Voice Clips with **Voice Notes**, including dedicated Voice Notes actions,
   `[voice_note:...]` bindings, `/api/component/voice-notes/...` endpoints,
   `HAS_VOICE_NOTES`, and the `/storage/voice-notes/` directory. This is a
   breaking replacement: existing `voice_clip` actions, `[recorder:...]`

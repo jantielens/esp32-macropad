@@ -18,7 +18,7 @@ inline bool voice_notes_id_valid(const char* id) {
 enum class VoiceNoteState : uint8_t {
     Idle, Starting, Recording, Paused, Saving, Discarding, Error
 };
-enum class VoiceNoteCommand : uint8_t { Start, Pause, Resume, Save, Discard };
+enum class VoiceNoteCommand : uint8_t { Toggle, Start, Pause, Resume, Save, Discard };
 enum class VoiceNoteCancelStatus : uint8_t { Ready, Pending, Error };
 
 struct VoiceNoteSnapshot {

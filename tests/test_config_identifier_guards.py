@@ -91,7 +91,7 @@ REGISTER_WIDGET_SCHEMA_VALIDATED_LIFECYCLE(test, nullptr, false, nullptr);
 
     def test_persisted_action_name(self):
         for mcp in (0, 1):
-            for name in ("a" * 14, "a" * 15, "a" * 16, "gamepad_joystick"):
+            for name in ("a" * 14, "a" * 15, "a" * 16, "vnote_process"):
                 with self.subTest(mcp=mcp, name=name):
                     result = self.compile(
                         '#include "action_registry.h"\n'

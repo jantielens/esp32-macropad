@@ -41,7 +41,8 @@
 #include "camera_capture_action.cpp"
 #endif
 #if HAS_VOICE_NOTES
-#include "voice_note_action.cpp"
+#include "voice_note_record_action.cpp"
+#include "voice_note_process_action.cpp"
 #include "voice_note_delete_action.cpp"
 #if HAS_DISPLAY && HAS_PSRAM
 #include "voice_note_load_action.cpp"

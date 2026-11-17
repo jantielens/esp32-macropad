@@ -18,7 +18,7 @@ Touch-owning [widgets](../widgets/README.md) can replace these interaction rules
 The dropdown groups supported actions by category. Use its current fields/help
 instead of assuming another firmware's action catalog applies.
 An action that queues network work is not proof its external effect completed.
-**Load voice note** also returns after accepting a request, so a following
+**Load saved note** also returns after accepting a request, so a following
 navigation action does not wait for storage. See
 [loaded note details](../media/audio.md#show-a-loaded-voice-note-on-a-pad).
 

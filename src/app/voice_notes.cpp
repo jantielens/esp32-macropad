@@ -711,9 +711,13 @@ bool voice_notes_init() {
 
 bool voice_notes_command(VoiceNoteCommand command, uint32_t token) {
     if (!g_initialized || !token) return false;
-    const uint64_t queued_us = command == VoiceNoteCommand::Save ? (uint64_t)esp_timer_get_time() : 0;
+    const uint64_t queued_us = (command == VoiceNoteCommand::Save || command == VoiceNoteCommand::Toggle)
+        ? (uint64_t)esp_timer_get_time() : 0;
     portENTER_CRITICAL(&g_mux);
     const VoiceNoteState state = g_snapshot.state;
+    if (command == VoiceNoteCommand::Toggle)
+        command = (state == VoiceNoteState::Recording || state == VoiceNoteState::Paused)
+            ? VoiceNoteCommand::Save : VoiceNoteCommand::Start;
     const bool valid = !g_command_busy && !g_terminating && !g_cancel_requested &&
         ((command == VoiceNoteCommand::Start && (!g_snapshot.session_active || g_cleanup_blocked) &&
           (state == VoiceNoteState::Idle || state == VoiceNoteState::Error)) ||
