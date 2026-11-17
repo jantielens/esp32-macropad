@@ -118,6 +118,17 @@ class PortalDevServerTest(unittest.TestCase):
                                           profile=selected, raw=True)[0], 204 if enabled else 404)
         self.server.mock_config.pop("auto_shutdown_timeout_seconds", None)
 
+    def test_live_microphone_shell_asset(self):
+        for profile, enabled in (("esp32-p4-lcd4b", True), ("reterminal-sticky-interactive-sd", True),
+                                 ("reterminal-e1003-frame", False)):
+            shell = self.request("/?profile=" + profile, profile=profile, raw=True)[1]
+            script = 'src="/portal-live-microphone.js'
+            self.assertEqual(script in shell, enabled)
+            if enabled:
+                self.assertLess(shell.index(script), shell.index('src="/portal.js'))
+            self.assertEqual(self.request("/portal-live-microphone.js", profile=profile, raw=True)[0],
+                             200 if enabled else 404)
+
     def test_voice_notes_automatic_processing_fixture(self):
         profile = "reterminal-sticky-interactive-sd"
         base = "/api/component/voice-notes/"

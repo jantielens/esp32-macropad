@@ -65,6 +65,24 @@ release the slot. Callers receive the response only after downloading completes.
 This reduces overlapping transfers but does not guarantee DMA-memory headroom.
 Native script, stylesheet, and image requests bypass the queue, as do other
 tabs and clients. The limiter is not a device-wide admission control.
+When enabled, Live Microphone loads its gated script before the shared portal
+bundle and captures the native fetch for its ongoing stream. The stream bypasses
+the queue, and the feature limits capture to one listener.
+
+### Live Microphone API
+
+`GET /api/component/live-microphone/stream` requires the `X-Live-Microphone`
+request header, follows portal authentication, and is unavailable in recovery
+mode. It is included when `HAS_MICROPHONE_STREAMING` is enabled. A single
+listener receives an `application/octet-stream` response. The first
+12 bytes contain `LM`, protocol version `1`, status (`1` streaming, `2` busy
+or unable to start, `3` unavailable), a little-endian 32-bit sample rate, channel count, sample
+width in bits, and two reserved bytes. The rest is interleaved little-endian
+signed 16-bit PCM. The stream ends on disconnect, capture failure, or OTA.
+Audio and HTTP Basic Auth are unencrypted on the device's HTTP portal.
+The session allocates one second of native PCM, capture scratch, and the send
+buffer in PSRAM. Its capture worker also uses a PSRAM stack; a failed PSRAM
+allocation rejects the session rather than consuming internal RAM.
 
 ### Remote Logs
 

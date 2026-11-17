@@ -29,6 +29,10 @@ FEATURES = {
         ("volume_fragment_html_gz",),
     ),
     "Audio input (HAS_AUDIO_INPUT)": (("audio_input*.cpp.o",), ()),
+    "Live microphone (HAS_MICROPHONE_STREAMING)": (
+        ("web_portal_live_microphone.cpp.o",),
+        ("live_microphone_fragment_html_gz", "portal_live_microphone_js_gz"),
+    ),
     "Voice Notes (HAS_VOICE_NOTES)": (
         ("voice_notes*.cpp.o", "voice_note_range.cpp.o", "voice_notes_metadata.cpp.o"),
         ("voice_notes_fragment_html_gz", "voice_notes_settings_fragment_html_gz", "portal_voice_notes_js_gz"),

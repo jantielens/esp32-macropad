@@ -95,6 +95,7 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
     ['esp32-p4-lcd4b', 'ESP32P4', true, 'face-disabled'],
     ['esp32-p4-lcd4b', 'ESP32P4', true, 'external-disabled'],
     ['esp32-p4-lcd4b', 'ESP32P4', true, 'bluetooth-disabled'],
+    ['esp32-p4-lcd4b', 'ESP32P4', true, 'microphone-disabled'],
     ['esp32-p4-lcd4b', 'ESP32P4', false],
     ['esp32-p4-lcd4b', 'ESP32P4', false, 'builtin-only'],
     ['esp32-p4-lcd4b', 'ESP32P4', true, 'ha-only'],
@@ -107,6 +108,7 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
         ...(integrationMode === 'ha-only' ? ['-DHAS_MQTT=0', '-DHAS_HA_LIVE=1'] : []),
         ...(integrationMode === 'face-disabled' ? ['-DHAS_FACE_WIDGET=0'] : []),
         ...(integrationMode === 'bluetooth-disabled' ? ['-DHAS_BLE=0', '-DHAS_BLE_HID=0'] : []),
+        ...(integrationMode === 'microphone-disabled' ? ['-DHAS_MICROPHONE_STREAMING=0'] : []),
         ...(integrationMode === 'external-disabled' ? ['-DHAS_EXTERNAL_DATA=0'] : [])],
         {cwd: root, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe']});
     const assets = new Map();
@@ -118,7 +120,7 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
     }
 
     assert(assets.has('portal_js_gz'));
-    const voiceNotes = board === 'esp32-p4-lcd4b';
+    const voiceNotes = false;
     assert.equal(assets.has('voice_notes_fragment_html_gz'), voiceNotes);
     assert.equal(assets.has('voice_notes_settings_fragment_html_gz'), voiceNotes);
     assert.equal(assets.has('portal_voice_notes_js_gz'), voiceNotes);
@@ -139,6 +141,10 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
         if (name.endsWith('_js_gz')) new vm.Script(text, {filename: board + '/' + name});
     }
     const js = assets.get('portal_js_gz');
+    const microphone = board === 'esp32-p4-lcd4b' && integrationMode !== 'microphone-disabled';
+    assert.equal(assets.has('live_microphone_fragment_html_gz'), microphone);
+    assert.equal(assets.has('portal_live_microphone_js_gz'), microphone);
+    assert(!js.includes('portalStreamFetch'), 'Microphone fetch hook leaked into the shared bundle');
     for (const name of ['init_bluetooth_fragment', 'bluetooth_tx_power_dbm', 'bthome_event_burst_ms']) {
         assert(!js.includes(name), 'Bluetooth component code leaked into the shared bundle: ' + name);
         if (assets.has('portal_bluetooth_js_gz')) assert(assets.get('portal_bluetooth_js_gz').includes(name));
@@ -163,6 +169,8 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
     const ha = display && psram && integrationMode !== 'builtin-only';
     const mqtt = display && !['builtin-only', 'ha-only'].includes(integrationMode);
     const shell = assets.get('shell_html_gz');
+    assert.equal(shell.includes('src="/portal-live-microphone.js'), microphone);
+    if (microphone) assert(shell.indexOf('src="/portal-live-microphone.js') < shell.indexOf('src="/portal.js'));
     assert(!shell.includes('portal_power_savings.js'));
     assert(!assets.has('power_savings_fragment_html_gz'));
     assert(!assets.has('portal_power_savings_js_gz'));
@@ -237,7 +245,7 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
         ' (PSRAM=' + psram + ', integrations=' + integrationMode + ')');
 }
 
-for (const board of ['reterminal-sticky-interactive', 'm5stack-stopwatch']) {
+for (const board of ['reterminal-sticky-interactive', 'reterminal-sticky-interactive-sd', 'm5stack-stopwatch']) {
     const selected = execFileSync('c++', ['-E', '-P', '-x', 'c++', 'src/app/web_assets.h',
         '-Itests', '-Isrc/boards/' + board, '-DBOARD_HAS_OVERRIDE',
         '-DCONFIG_IDF_TARGET_ESP32S3', '-DBOARD_HAS_PSRAM'],
@@ -247,7 +255,7 @@ for (const board of ['reterminal-sticky-interactive', 'm5stack-stopwatch']) {
         return zlib.gunzipSync(Buffer.from([...content.matchAll(/0x([0-9a-f]{2})/g)].map(value => parseInt(value[1], 16)))).toString();
     };
     assert(selected.includes('power_savings_fragment_html_gz'));
-    const voiceClips = board === 'reterminal-sticky-interactive';
+    const voiceClips = board === 'reterminal-sticky-interactive-sd';
     assert.equal(selected.includes('voice_notes_fragment_html_gz'), voiceClips);
     assert.equal(selected.includes('voice_notes_settings_fragment_html_gz'), voiceClips);
     assert.equal(selected.includes('portal_voice_notes_js_gz'), voiceClips);
@@ -255,6 +263,31 @@ for (const board of ['reterminal-sticky-interactive', 'm5stack-stopwatch']) {
     if (selected.includes('portal_bluetooth_js_gz')) new vm.Script(decodeAsset('portal_bluetooth_js_gz'));
     if (voiceClips) new vm.Script(decodeAsset('portal_voice_notes_js_gz'));
     assert(decodeAsset('shell_html_gz').includes('src="/portal_power_savings.js'));
+    const microphone = board !== 'm5stack-stopwatch';
+    const shell = decodeAsset('shell_html_gz');
+    assert.equal(selected.includes('portal_live_microphone_js_gz'), microphone);
+    assert.equal(selected.includes('live_microphone_fragment_html_gz'), microphone);
+    assert.equal(shell.includes('src="/portal-live-microphone.js'), microphone);
+    if (microphone) assert(shell.indexOf('src="/portal-live-microphone.js') < shell.indexOf('src="/portal.js'));
     new vm.Script(decodeAsset('portal_power_savings_js_gz'));
     console.log('PASS: gated power savings assets for ' + board);
+}
+
+for (const shutdown of [0, 1]) {
+    for (const display of [0, 1]) {
+        for (const microphone of [0, 1]) {
+            const selected = execFileSync('c++', ['-E', '-P', '-x', 'c++', 'src/app/web_assets.h',
+                '-Itests', '-DBOARD_CONFIG_H', '-DHAS_AUTO_SHUTDOWN=' + shutdown,
+                '-DHAS_DISPLAY=' + display, '-DHAS_MICROPHONE_STREAMING=' + microphone],
+                {cwd: root, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024});
+            const shells = [...selected.matchAll(/const uint8_t shell_html_gz\[\] PROGMEM = \{([\s\S]*?)\};/g)];
+            assert.equal(shells.length, 1, 'Each shell feature combination must select exactly one asset');
+            const bytes = Buffer.from([...shells[0][1].matchAll(/0x([0-9a-f]{2})/g)].map(value => parseInt(value[1], 16)));
+            const shell = zlib.gunzipSync(bytes).toString();
+            assert.equal(shell.includes('src="/portal_power_savings.js'), !!shutdown);
+            assert.equal(shell.includes('id="binding-help-overlay"'), !!display);
+            assert.equal(shell.includes('src="/portal-live-microphone.js'), !!microphone);
+            if (microphone) assert(shell.indexOf('src="/portal-live-microphone.js') < shell.indexOf('src="/portal.js'));
+        }
+    }
 }

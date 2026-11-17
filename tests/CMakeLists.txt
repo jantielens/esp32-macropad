@@ -95,6 +95,13 @@ add_host_legacy_test(test_audio_input
 )
 add_test(NAME test_audio_input_no_psram COMMAND test_audio_input --no-psram)
 
+add_host_legacy_test(test_live_microphone
+    SOURCES test_live_microphone.cpp ${PROJECT_SOURCE_DIR}/src/app/web_portal_live_microphone.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/live_microphone_overrides ${PROJECT_SOURCE_DIR}/tests/audio_input_overrides
+    DEFINITIONS HAS_AUDIO_INPUT=1 HAS_MICROPHONE_STREAMING=1 TEST_HEAP_CAPS_ALLOCATOR=1
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
+)
+
 add_host_legacy_test(test_sticky_pdm
     SOURCES test_sticky_pdm.cpp ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive/drivers/sticky_pdm.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/audio_input_overrides ${PROJECT_SOURCE_DIR}/src
@@ -1362,7 +1369,7 @@ foreach(script
     test_portal_action_list.js test_portal_timer_binding.js test_portal_pad_dialog_transaction.js
     test_portal_pad_import.js test_portal_pad_dirty.js test_portal_recipes.js
     test_portal_ble_config.js test_portal_audio_config.js test_portal_epaper_config.js test_portal_pad_preview.js test_portal_startup.js
-    test_portal_logs.js test_portal_screensaver.js test_portal_pad_colors.js test_portal_voice_notes.js
+    test_portal_logs.js test_portal_screensaver.js test_portal_pad_colors.js test_portal_voice_notes.js test_portal_live_microphone.js
     test_portal_binding_help.js test_portal_asset_gates.js
     test_portal_extension_upload.js
 )

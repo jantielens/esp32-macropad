@@ -490,6 +490,15 @@ struct HwButtonDef {
 #define HAS_AUDIO_INPUT false
 #endif
 
+// Enable live microphone listening in the web portal.
+#ifndef HAS_MICROPHONE_STREAMING
+#define HAS_MICROPHONE_STREAMING HAS_AUDIO_INPUT
+#endif
+
+#if HAS_MICROPHONE_STREAMING && !HAS_AUDIO_INPUT
+#error "HAS_MICROPHONE_STREAMING requires HAS_AUDIO_INPUT."
+#endif
+
 // Enable local Voice Notes recording and management with SD-primary storage.
 #ifndef HAS_VOICE_NOTES
 #define HAS_VOICE_NOTES false

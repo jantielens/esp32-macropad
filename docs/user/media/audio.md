@@ -8,10 +8,26 @@ audio resources, so playback
 priority matters when more than one feature requests sound.
 
 To record and browse microphone input, see [Voice Notes](voice-notes.md).
+To hear live microphone input without saving a recording, use Live Microphone.
 
 Audio controls appear only when supported by the installed firmware.
 Speaker output, MP3 playback, microphone input, and music analysis are distinct
 capabilities. Check the [hardware reference](../hardware.md) for connections.
+
+## Listen to the microphone
+
+On microphone-capable firmware, open **Audio > Live Microphone** in a desktop
+Chrome browser and select **Start listening**. Select **Stop** or leave the
+section to end the stream. Only one browser can listen at a time. If another
+feature is using the microphone, stop that feature before trying again.
+
+The browser shows when listening is active; the device does not show a
+listening indicator. Audio is not saved by this feature and travels unencrypted.
+Use a trusted local network and enable portal authentication when needed.
+Live Microphone requires available PSRAM and reports an error if it cannot
+allocate the stream buffers or capture task.
+A lost connection ends capture when the device detects the disconnect, which
+may take longer than closing the browser normally.
 
 ## Set volume and amplifier behavior
 

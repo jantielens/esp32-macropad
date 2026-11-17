@@ -175,6 +175,14 @@ void handlePortalVoiceNotesJS(AsyncWebServerRequest *request) {
 }
 #endif
 
+#if HAS_MICROPHONE_STREAMING
+void handlePortalLiveMicrophoneJS(AsyncWebServerRequest *request) {
+	if (!portal_auth_gate(request)) return;
+	request->send(begin_gzipped_asset_response(request, "application/javascript",
+		portal_live_microphone_js_gz, portal_live_microphone_js_gz_len, "no-store"));
+}
+#endif
+
 // ---- Legacy page handlers (redirect to shell with hash) ----
 void handleRoot(AsyncWebServerRequest *request) {
 		if (!portal_auth_gate(request)) return;

@@ -325,6 +325,11 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 self._serve_file(APP_WEB_DIR / "portal_power_savings.js")
             else:
                 self._serve_json({"error": "Power savings is unavailable"}, 404)
+        elif path == "/portal-live-microphone.js":
+            if self._profile() in ("esp32-p4-lcd4b", "reterminal-sticky-interactive"):
+                self._serve_file(APP_WEB_DIR / "portal_live_microphone.js")
+            else:
+                self._serve_json({"error": "Live Microphone is unavailable"}, 404)
         elif path == "/portal-voice-notes.js":
             if self._voice_notes_capable():
                 self._serve_file(APP_WEB_DIR / "portal_voice_notes.js")
@@ -1630,6 +1635,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
             "{{POWER_SAVINGS_SCRIPT}}":
                 '<script src="/portal_power_savings.js?v=dev-mock"></script>'
                 if profile == "reterminal-sticky-interactive" else "",
+            "{{LIVE_MICROPHONE_SCRIPT}}":
+                '<script src="/portal-live-microphone.js?v=dev-mock"></script>'
+                if profile in ("esp32-p4-lcd4b", "reterminal-sticky-interactive") else "",
         }
         for marker, value in replacements.items():
             shell = shell.replace(marker, value)

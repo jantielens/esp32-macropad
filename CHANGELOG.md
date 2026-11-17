@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add **Audio > Live Microphone** to listen to supported devices in a desktop
+  Chrome browser. One listener can stream at a time; capture uses PSRAM and
+  stops on disconnect or firmware update. Audio is not saved or encrypted, and
+  listening is indicated in the browser only. Use a trusted network and enable
+  portal authentication when needed. See [Live Microphone](docs/user/media/audio.md#listen-to-the-microphone).
 * Add `datetime()` and `duration()` expression functions for formatting Unix
   timestamps and durations. Choose a timezone and date format or a compact
   duration format, and use numeric expressions with literal unit labels for

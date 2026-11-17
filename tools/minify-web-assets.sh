@@ -873,23 +873,21 @@ for html_file in "${HTML_FILES[@]}"; do
     gzipped=$(gzip_to_c_array "$minified")
     HTML_GZIP_CONTENTS["$filename"]="$gzipped"
     if [[ "$filename" == "shell" ]]; then
-        for binding_variant in with_bindings without_bindings; do
-            binding_args=()
-            [[ "$binding_variant" == "without_bindings" ]] && binding_args+=(--without-binding-help)
-            with_auto_shutdown=$(python3 "$SCRIPT_DIR/_render_html_template.py" \
-                --web-dir "$WEB_DIR" --input "$html_file" \
-                --project-name "$PROJECT_NAME" --project-display-name "$PROJECT_DISPLAY_NAME" \
-                --firmware-version "$FIRMWARE_VERSION" --with-auto-shutdown "${binding_args[@]}")
-            HTML_GZIP_CONTENTS["${filename}_auto_shutdown_${binding_variant}"]=$(gzip_to_c_array "$with_auto_shutdown")
+        for shutdown in 0 1; do
+            for display in 0 1; do
+                for microphone in 0 1; do
+                    shell_args=()
+                    [[ "$shutdown" == 1 ]] && shell_args+=(--with-auto-shutdown)
+                    [[ "$display" == 0 ]] && shell_args+=(--without-binding-help)
+                    [[ "$microphone" == 1 ]] && shell_args+=(--with-microphone-streaming)
+                    shell_variant=$(python3 "$SCRIPT_DIR/_render_html_template.py" \
+                        --web-dir "$WEB_DIR" --input "$html_file" \
+                        --project-name "$PROJECT_NAME" --project-display-name "$PROJECT_DISPLAY_NAME" \
+                        --firmware-version "$FIRMWARE_VERSION" "${shell_args[@]}")
+                    HTML_GZIP_CONTENTS["shell_${shutdown}_${display}_${microphone}"]=$(gzip_to_c_array "$shell_variant")
+                done
+            done
         done
-        without_bindings=$(python3 "$SCRIPT_DIR/_render_html_template.py" \
-            --web-dir "$WEB_DIR" \
-            --input "$html_file" \
-            --project-name "$PROJECT_NAME" \
-            --project-display-name "$PROJECT_DISPLAY_NAME" \
-            --firmware-version "$FIRMWARE_VERSION" \
-            --without-binding-help)
-        HTML_GZIP_CONTENTS["${filename}_without_bindings"]=$(gzip_to_c_array "$without_bindings")
     fi
     gzipped_size=$(echo -n "$minified" | gzip -9 -c | wc -c)
     
@@ -1148,6 +1146,8 @@ asset_feature_flag() {
             echo "HAS_SOUND_PLAYER" ;;
         voice_notes|voice_notes_settings|portal_voice_notes)
             echo "HAS_VOICE_NOTES" ;;
+        live_microphone|portal_live_microphone)
+            echo "HAS_MICROPHONE_STREAMING" ;;
         fonts|portal_fonts)
             echo "HAS_TTF_FONTS" ;;
         storage)
@@ -1178,17 +1178,22 @@ asset_feature_flag() {
 # Generate HTML sections (gzipped)
 for filename in "${!HTML_CONTENTS[@]}"; do
     if [[ "$filename" == "shell" ]]; then
-        cat >> "$OUTPUT_FILE" << EOF
-#if HAS_AUTO_SHUTDOWN && HAS_DISPLAY
+        directive="#if"
+        for shutdown in 0 1; do
+            for display in 0 1; do
+                for microphone in 0 1; do
+                    cat >> "$OUTPUT_FILE" << EOF
+$directive (HAS_AUTO_SHUTDOWN == $shutdown) && (HAS_DISPLAY == $display) && (HAS_MICROPHONE_STREAMING == $microphone)
 const uint8_t shell_html_gz[] PROGMEM = {
-${HTML_GZIP_CONTENTS[shell_auto_shutdown_with_bindings]}
+${HTML_GZIP_CONTENTS[shell_${shutdown}_${display}_${microphone}]}
 };
-#elif HAS_AUTO_SHUTDOWN
-const uint8_t shell_html_gz[] PROGMEM = {
-${HTML_GZIP_CONTENTS[shell_auto_shutdown_without_bindings]}
-};
-#elif HAS_DISPLAY
 EOF
+                    directive="#elif"
+                done
+            done
+        done
+        echo '#endif // shell feature selection' >> "$OUTPUT_FILE"
+        continue
     fi
     cat >> "$OUTPUT_FILE" << EOF
 // HTML content from src/app/web/${filename}.html (gzipped)
@@ -1197,16 +1202,6 @@ ${HTML_GZIP_CONTENTS[$filename]}
 };
 
 EOF
-    if [[ "$filename" == "shell" ]]; then
-        cat >> "$OUTPUT_FILE" << EOF
-#else
-const uint8_t ${filename}_html_gz[] PROGMEM = {
-${HTML_GZIP_CONTENTS[${filename}_without_bindings]}
-};
-#endif // shell feature selection
-
-EOF
-    fi
 done
 
 # Generate fragment HTML sections (gzipped)

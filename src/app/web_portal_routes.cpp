@@ -178,6 +178,9 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		#if HAS_VOICE_NOTES
 		server->on("/portal-voice-notes.js", HTTP_GET, handlePortalVoiceNotesJS);
 		#endif
+		#if HAS_MICROPHONE_STREAMING
+		server->on("/portal-live-microphone.js", HTTP_GET, handlePortalLiveMicrophoneJS);
+		#endif
 			 #if HAS_REMOTE_LOG
 		server->on("/portal-logs.js", HTTP_GET, handlePortalLogsJS);
 		#endif

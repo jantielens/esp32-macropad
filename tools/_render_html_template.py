@@ -50,7 +50,8 @@ def render(input_path: Path, web_dir: Path,
            firmware_version: str, has_ble_hid: bool = True,
            has_binding_help: bool = True,
            widget_flags: set[str] | None = None,
-           has_auto_shutdown: bool = False) -> str:
+           has_auto_shutdown: bool = False,
+           has_microphone_streaming: bool = False) -> str:
     html = input_path.read_text()
 
     if "{{WIDGET_OPTIONS}}" in html or "{{WIDGET_EDITORS}}" in html:
@@ -69,6 +70,9 @@ def render(input_path: Path, web_dir: Path,
     html = html.replace("{{POWER_SAVINGS_SCRIPT}}",
                         '<script src="/portal_power_savings.js?v={{FIRMWARE_VERSION}}"></script>'
                         if has_auto_shutdown else "")
+    html = html.replace("{{LIVE_MICROPHONE_SCRIPT}}",
+                        '<script src="/portal-live-microphone.js?v={{FIRMWARE_VERSION}}"></script>'
+                        if has_microphone_streaming else "")
     html = html.replace("{{PROJECT_NAME}}", project_name)
     html = html.replace("{{PROJECT_DISPLAY_NAME}}", project_display_name)
     html = html.replace("{{FIRMWARE_VERSION}}", firmware_version)
@@ -92,6 +96,7 @@ def main() -> int:
     p.add_argument("--without-binding-help", action="store_true")
     p.add_argument("--widget-flags", nargs="*", default=None)
     p.add_argument("--with-auto-shutdown", action="store_true")
+    p.add_argument("--with-microphone-streaming", action="store_true")
     args = p.parse_args()
 
     sys.stdout.write(render(args.input, args.web_dir,
@@ -99,7 +104,7 @@ def main() -> int:
                             args.firmware_version, not args.without_ble_hid,
                             not args.without_binding_help,
                             None if args.widget_flags is None else set(args.widget_flags),
-                            args.with_auto_shutdown))
+                            args.with_auto_shutdown, args.with_microphone_streaming))
     return 0
 
 

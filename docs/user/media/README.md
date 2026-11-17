@@ -11,7 +11,7 @@ Choose the corresponding task below for its capabilities and management tools.
 
 * [Upload images, configure a slideshow, or display a remote feed](images.md)
 * [Install a font and choose device or label typography](fonts.md)
-* [Set volume, feedback, alert sounds, and Music controls](audio.md)
+* [Listen to the microphone or configure sounds and Music](audio.md)
 * [Record, process, and browse Voice Notes](voice-notes.md)
 * [Configure an attached camera, snapshots, and motion sensing](camera.md)
 * [Install a trusted native Extension and place it in a button](extensions.md)
