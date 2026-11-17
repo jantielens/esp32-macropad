@@ -117,6 +117,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Preserve specific binding syntax errors in the widget editor. List item-context
+  errors identify the List and field, with action positions and guidance for
+  bindings used after a pause or navigation.
 * Use the shared PSRAM-first LVGL allocator for List visuals, retaining
   internal-RAM fallback when PSRAM allocation fails. Batch List row geometry
   updates before recalculating the scrolling layout and position indicator.

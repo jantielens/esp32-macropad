@@ -7,6 +7,7 @@
 #include "../pad_composition.h"
 #include <esp_heap_caps.h>
 #include <atomic>
+#include <memory>
 #include <new>
 #include <stdio.h>
 #include <string.h>
@@ -70,6 +71,16 @@ void copy_field(JsonObjectConst button, const char* name, char* target, size_t s
                 const char* fallback = "") {
     strlcpy(target, button[name] | fallback, size);
 }
+
+const char* field_error(JsonObjectConst button, const char* field, const char* error) {
+    static thread_local std::unique_ptr<char[]> message;
+    constexpr size_t capacity = 640;
+    if (!message) message.reset(new (std::nothrow) char[capacity]);
+    if (!message) return "List validation failed; out of memory while formatting error details";
+    snprintf(message.get(), capacity, "List '%.32s', field '%s': %s",
+             button["widget_list_id"] | "", field, error);
+    return message.get();
+}
 }
 
 const char* list_validate_config(JsonObjectConst button, const PadBinding* bindings,
@@ -94,7 +105,7 @@ const char* list_validate_config(JsonObjectConst button, const PadBinding* bindi
         if (!valid_string(button, field, CONFIG_LABEL_MAX_LEN)) return "List row text or color is too long or not a string";
         if (button.containsKey(field)) {
             const char* error = item_binding_validate(button[field].as<const char*>(), source, bindings, binding_count);
-            if (error) return error;
+            if (error) return field_error(button, field, error);
         }
     }
     for (const char* field : {"widget_list_bg_color", "widget_list_border_color",
@@ -109,14 +120,17 @@ const char* list_validate_config(JsonObjectConst button, const PadBinding* bindi
     }
     for (const char* field : {"widget_list_indicator_track_color", "widget_list_indicator_color"}) {
         const char* error = item_binding_validate(button[field] | "", nullptr, bindings, binding_count);
-        if (error) return error;
+        if (error) return field_error(button, field,
+            !strcmp(error, "item binding is unavailable in this context")
+                ? "position indicator colors have no item context; use a scalar binding instead"
+                : error);
     }
     for (const char* field : {"widget_list_style_top", "widget_list_style_bottom"}) {
         if (!valid_string(button, field, CONFIG_LABEL_STYLE_MAX_LEN)) return "List style is too long or not a string";
         const char* style = button[field] | "";
-        if (!valid_style(style)) return "List styles allow only dot mode and static non-color properties";
+        if (!valid_style(style)) return field_error(button, field, "List styles allow only dot mode and static non-color properties");
         const char* error = item_binding_validate(style, source, bindings, binding_count);
-        if (error) return error;
+        if (error) return field_error(button, field, error);
     }
     struct Range { const char* field; unsigned min; unsigned max; };
     const Range ranges[] = {{"widget_list_visible_items", 0, LIST_SOURCE_MAX_ITEMS},
@@ -153,7 +167,7 @@ const char* list_validate_actions(JsonObjectConst button, const PadBinding* bind
         if (!button[field].is<JsonArrayConst>()) return "List actions must be an array";
         const char* error = item_binding_validate_actions(button[field].as<JsonArrayConst>(),
                                                           source, bindings, binding_count);
-        if (error) return error;
+        if (error) return list_config_impl::field_error(button, field, error);
     }
     return nullptr;
 }
@@ -205,7 +219,10 @@ const char* validate_context_button(JsonObjectConst button, const PadBinding* bi
         if (is_list && (row_field(name) || !strcmp(name, "widget_data_binding") ||
                         !strcmp(name, "actions") || !strcmp(name, "lp_actions"))) continue;
         const char* error = validate_without_item(pair.value(), bindings, count);
-        if (error) return error;
+        if (error) {
+            if (is_list) return field_error(button, name, error);
+            return error;
+        }
     }
     return nullptr;
 }

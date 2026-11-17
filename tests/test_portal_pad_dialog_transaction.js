@@ -96,6 +96,19 @@ vm.runInContext(fs.readFileSync('src/app/web/portal_widget_list.js', 'utf8'), co
     assert.strictEqual(draft.widget_list_border_width, undefined);
     assert.strictEqual(draft.widget_list_bg_color, undefined);
     assert.strictEqual(draft.widget_list_visible_items, 0);
+    bindingContext.bindingRegisterSchema(JSON.parse(fs.readFileSync('tools/mock-data/pad-editor.json', 'utf8')).binding_schema.schemes);
+    context.validateBinding = bindingContext.validateBinding;
+    context.bindingValidateInput = (input, options) => bindingContext.validateBinding(input.value, options).valid;
+    const topLabel = document.getElementById('pad-edit-list-top');
+    topLabel.value = '[item:title;extra]';
+    assert.throws(() => context.padWidgetEditorBuild({}, editor), error =>
+        /Too many parameters/.test(error.message) && error.fieldIds[0] === topLabel.id);
+    topLabel.value = '[item:title';
+    assert.throws(() => context.padWidgetEditorBuild({}, editor), /missing.*closing bracket/);
+    topLabel.value = '[item:missing|Untitled]';
+    context.padWidgetEditorBuild({}, editor);
+    topLabel.value = draft.widget_list_label_top;
+    delete context.bindingValidateInput;
     document.getElementById('pad-edit-list-visible-items').value = '5';
     const explicitDraft = {};
     context.padWidgetEditorBuild(explicitDraft, editor);

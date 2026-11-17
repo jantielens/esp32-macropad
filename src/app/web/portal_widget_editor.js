@@ -81,7 +81,7 @@ function padWidgetValidateField(input, field) {
         error = 'Enter a number or binding';
     }
     if (field.binding && typeof bindingValidateInput === 'function' && !bindingValidateInput(input, field.binding)) {
-        error = 'Invalid binding';
+        error = validateBinding(input.value, field.binding).errors[0].message;
     }
     if (error) {
         const label = document.querySelector && document.querySelector('label[for="' + input.id + '"]');

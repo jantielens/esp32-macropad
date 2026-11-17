@@ -421,7 +421,8 @@ TEST_F(ListSourceTest, ActionValidationUsesDeclaredKeysEvenWhenParsingNormalizes
     EXPECT_EQ(item_binding_validate_actions(input.as<JsonArrayConst>(), &source, nullptr, 0), nullptr);
     EXPECT_NE(item_binding_validate_actions(input.as<JsonArrayConst>(), nullptr, nullptr, 0), nullptr);
     action["structural"] = "[item:id]";
-    EXPECT_NE(item_binding_validate_actions(input.as<JsonArrayConst>(), &source, nullptr, 0), nullptr);
+    EXPECT_STREQ(item_binding_validate_actions(input.as<JsonArrayConst>(), &source, nullptr, 0),
+                 "action 1 (list_normalized), field 'structural': this field does not support item bindings");
     EXPECT_STREQ(action["target"], "[item:id]");
 }
 
@@ -528,9 +529,11 @@ TEST_F(ListSourceTest, ListConfigChecksSourceRowsGeometryAndOwnership) {
     EXPECT_NE(list_validate_config(doc.as<JsonObjectConst>(), aliases, 1), nullptr);
     doc["widget_list_visible_items"] = 3;
     doc["widget_list_indicator_color"] = "[item:title]";
-    EXPECT_NE(list_validate_config(doc.as<JsonObjectConst>(), aliases, 1), nullptr);
+    EXPECT_STREQ(list_validate_config(doc.as<JsonObjectConst>(), aliases, 1),
+                 "List 'notes_1', field 'widget_list_indicator_color': position indicator colors have no item context; use a scalar binding instead");
     doc["widget_list_indicator_color"] = "[pad:name]";
-    EXPECT_NE(list_validate_config(doc.as<JsonObjectConst>(), aliases, 1), nullptr);
+    EXPECT_STREQ(list_validate_config(doc.as<JsonObjectConst>(), aliases, 1),
+                 "List 'notes_1', field 'widget_list_indicator_color': position indicator colors have no item context; use a scalar binding instead");
     doc["widget_list_indicator_color"] = "#000000";
     doc["widget_list_indicator_track_color"] = "[var:background]";
     EXPECT_EQ(list_validate_config(doc.as<JsonObjectConst>(), aliases, 1), nullptr);
@@ -568,7 +571,8 @@ TEST_F(ListSourceTest, ListConfigChecksSourceRowsGeometryAndOwnership) {
     JsonObject next = tap.add<JsonObject>();
     next["type"] = "list_test_sync";
     next["target"] = "[pad:name]";
-    EXPECT_NE(list_validate_actions(doc.as<JsonObjectConst>(), aliases, 1), nullptr);
+    EXPECT_STREQ(list_validate_actions(doc.as<JsonObjectConst>(), aliases, 1),
+                 "List 'notes_1', field 'actions': action 2 (list_test_sync), field 'target': item context ended at action 1 (pause, confirmation, or navigation); capture the item in a variable first");
     next["target"] = "static";
     JsonArray hold = doc["lp_actions"].to<JsonArray>();
     JsonObject hold_boundary = hold.add<JsonObject>();
@@ -577,7 +581,8 @@ TEST_F(ListSourceTest, ListConfigChecksSourceRowsGeometryAndOwnership) {
     hold_boundary["unused"] = "~0~";
     EXPECT_EQ(list_validate_actions(doc.as<JsonObjectConst>(), aliases, 1), nullptr);
     hold_boundary["type"] = "list_test_late";
-    EXPECT_NE(list_validate_actions(doc.as<JsonObjectConst>(), aliases, 1), nullptr);
+    EXPECT_STREQ(list_validate_actions(doc.as<JsonObjectConst>(), aliases, 1),
+                 "List 'notes_1', field 'lp_actions': action 1 (list_test_late), field 'target': this action ends item context before resolving bindings; capture the item in a variable first");
     hold_boundary["type"] = "list_test_pause";
     JsonObject hold_later = hold.add<JsonObject>();
     hold_later["type"] = "list_test_sync";

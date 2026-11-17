@@ -10,6 +10,8 @@
 #include "execution_context.h"
 #include "log_manager.h"
 #include "pad_binding.h"
+#include <memory>
+#include <new>
 #include <stdio.h>
 #include <string.h>
 
@@ -71,7 +73,10 @@ const char* item_binding_validate(const char* templ, const ListSourceDescriptor*
 const char* item_binding_validate_actions(JsonArrayConst actions, const ListSourceDescriptor* source,
                                           const PadBinding* bindings, uint8_t binding_count) {
     bool item_available = source != nullptr;
+    size_t action_index = 0;
+    size_t boundary_index = 0;
     for (JsonObjectConst action : actions) {
+        ++action_index;
         BoundedPsramJsonAllocator allocator(LIST_SOURCE_DOCUMENT_BYTES);
         JsonDocument copy(&allocator);
         if (!copy.set(action) || copy.overflowed()) return "action validation allocation failed";
@@ -93,9 +98,35 @@ const char* item_binding_validate_actions(JsonArrayConst actions, const ListSour
                 ? source : nullptr;
             const char* error = item_binding_validate(pair.value().as<const char*>(), allowed,
                                                        bindings, binding_count);
-            if (error) return error;
+            if (error) {
+                static thread_local std::unique_ptr<char[]> action_error;
+                constexpr size_t error_capacity = 384;
+                if (!action_error) action_error.reset(new (std::nothrow) char[error_capacity]);
+                if (!action_error) return "item action validation failed; out of memory while formatting error details";
+                const char* reason = error;
+                char boundary_reason[128];
+                if (!strcmp(error, "item binding is unavailable in this context")) {
+                    if (source && !item_available) {
+                        snprintf(boundary_reason, sizeof(boundary_reason),
+                                 "item context ended at action %u (pause, confirmation, or navigation); capture the item in a variable first",
+                                 static_cast<unsigned>(boundary_index));
+                        reason = boundary_reason;
+                    } else if (!check.bindable) {
+                        reason = "this field does not support item bindings";
+                    } else if (source && !resolves_in_context) {
+                        reason = "this action ends item context before resolving bindings; capture the item in a variable first";
+                    }
+                }
+                snprintf(action_error.get(), error_capacity, "action %u (%s), field '%s': %s",
+                         static_cast<unsigned>(action_index), action["type"] | "",
+                         pair.key().c_str(), reason);
+                return action_error.get();
+            }
         }
-        if (ends_context) item_available = false;
+        if (ends_context) {
+            if (item_available) boundary_index = action_index;
+            item_available = false;
+        }
     }
     return nullptr;
 }

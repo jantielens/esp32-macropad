@@ -111,6 +111,13 @@ For a Voice Notes detail pad, use **Load saved note** with `[item:id]` before
 navigation instead. The action captures the ID without a variable; see
 the [recording, list, and detail pad walkthrough](../media/voice-notes.md#build-recording-list-and-detail-pads).
 
+If saving fails, binding syntax errors appear beside the field and in the editor
+error message. Item-context errors checked by the device identify the List ID
+and field; action errors also identify the tap or long-press action array and
+the action's one-based position. For position indicator colors, replace item
+bindings with scalar bindings. For actions after a context-ending action,
+capture the item in a variable before that action.
+
 Loading, empty, and source-error states appear in the List.
 Lists require a display and PSRAM. Existing
 provider/filter Lists and `[list:...selected]` bindings must be reconfigured;
