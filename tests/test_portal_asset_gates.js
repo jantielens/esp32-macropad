@@ -118,9 +118,10 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
     }
 
     assert(assets.has('portal_js_gz'));
-    assert(!assets.has('voice_notes_fragment_html_gz'));
-    assert(!assets.has('voice_notes_settings_fragment_html_gz'));
-    assert(!assets.has('portal_voice_notes_js_gz'));
+    const voiceNotes = board === 'esp32-p4-lcd4b';
+    assert.equal(assets.has('voice_notes_fragment_html_gz'), voiceNotes);
+    assert.equal(assets.has('voice_notes_settings_fragment_html_gz'), voiceNotes);
+    assert.equal(assets.has('portal_voice_notes_js_gz'), voiceNotes);
     assert.equal(assets.has('bluetooth_fragment_html_gz'),
         board !== 'reterminal-e1003-frame' && integrationMode !== 'bluetooth-disabled',
         'Bluetooth fragment must follow HAS_BLE || HAS_BLE_HID independently of display and HID transport');

@@ -68,6 +68,7 @@ struct State {
     ListSourceSnapshot* snapshot;
     Row* rows;
     const lv_font_t* fonts[2];
+    const lv_font_t* navigation_font;
     LabelStyle styles[2];
     char color_binding[2][CONFIG_LABEL_STYLE_MAX_LEN];
     char error_message[128];
@@ -81,9 +82,11 @@ struct State {
     int32_t height;
     int32_t spacing;
     uint8_t count;
+    uint8_t row_count;
     uint8_t focus;
     uint8_t page;
     uint8_t capacity;
+    uint8_t slots;
     uint8_t pressed;
     bool held;
     bool press_feedback;
@@ -91,6 +94,7 @@ struct State {
     bool have_revision;
     bool layout_dirty;
     bool layout_ok;
+    bool navigation_shown;
     lv_point_t press_point;
 };
 
@@ -105,7 +109,8 @@ void set(WidgetState* runtime, State* state) {
 }
 
 void feedback(State* state, uint8_t index, lv_event_code_t event) {
-    WidgetPressFeedback message{event, state->rows[index].object, state->rows[index].background, true};
+    WidgetPressFeedback message{event, state->rows[index].object, state->rows[index].background, true,
+                                index >= state->count};
     lv_obj_send_event(state->tile->obj, LV_EVENT_VALUE_CHANGED, &message);
 }
 
@@ -128,12 +133,14 @@ void clear_rows(State* state) {
 #endif
     cancel(state);
     if (state->rows) {
-        for (uint8_t i = 0; i < state->count; ++i)
+        for (uint8_t i = 0; i < state->row_count; ++i)
             if (state->rows[i].object) lv_obj_delete(state->rows[i].object);
         heap_caps_free(state->rows);
         state->rows = nullptr;
     }
     state->count = 0;
+    state->row_count = 0;
+    state->navigation_shown = false;
     state->layout_dirty = true;
     if (state->indicator) {
         lv_obj_add_flag(state->indicator, LV_OBJ_FLAG_HIDDEN);
@@ -252,31 +259,39 @@ void refresh_rows(State* state) {
         state->indicator_color = indicator;
         lv_obj_set_style_bg_color(state->indicator, lv_color_hex(indicator), LV_PART_INDICATOR);
     }
-    for (uint8_t i = 0; i < state->count; ++i) {
+    for (uint8_t i = 0; i < state->row_count; ++i) {
         Row& row = state->rows[i];
-        ItemBindingScope item(state->snapshot, i);
-        const bool selected = cfg.allow_selection && i == state->focus;
+        const bool navigation = i >= state->count;
+        if (navigation && !state->navigation_shown) continue;
+        ItemBindingScope item(navigation ? nullptr : state->snapshot, i);
+        const bool selected = !navigation && cfg.allow_selection && i == state->focus;
+        const lv_font_t* top_font = navigation ? state->navigation_font : state->fonts[0];
         const float default_value = resolve_number(cfg.default_border_width, 0);
-        const float width_value = resolve_number(cfg.border_width, 0);
+        const float width_value = navigation ? lv_obj_get_style_border_width(state->parent, LV_PART_MAIN) :
+            resolve_number(cfg.border_width, 0);
         const int default_width = !isfinite(default_value) || default_value < 0 ? 0 :
             (default_value > 32 ? 32 : static_cast<int>(default_value));
         const int width = !isfinite(width_value) || width_value < 0 ? 0 :
             (width_value > 32 ? 32 : static_cast<int>(width_value));
-        int selected_width = !cfg.allow_selection ? width : cfg.selected_border_width >= 0 ? cfg.selected_border_width :
+        int selected_width = navigation || !cfg.allow_selection ? width : cfg.selected_border_width >= 0 ? cfg.selected_border_width :
             (default_width > 1 ? default_width * 2 : 2);
         if (selected_width > 64) selected_width = 64;
         const int applied_width = selected ? selected_width : width;
         const int inset = cfg.padding + (width > selected_width ? width : selected_width);
         const int32_t text_width = state->width > 2 * inset ? state->width - 2 * inset : 1;
-        text(row.top, row.top_text, cfg.label_top, state->fonts[0], text_width);
-        text(row.bottom, row.bottom_text, cfg.label_bottom, state->fonts[1], text_width);
-        uint32_t bg = resolve_color(cfg.background, widget_default_rgb(DEFAULT_BUTTON_BG_COLOR));
+        if (!navigation) {
+            text(row.top, row.top_text, cfg.label_top, top_font, text_width);
+            text(row.bottom, row.bottom_text, cfg.label_bottom, state->fonts[1], text_width);
+        }
+        uint32_t bg = navigation ? lv_color_to_u32(lv_obj_get_style_bg_color(state->parent, LV_PART_MAIN)) & 0xffffff :
+            resolve_color(cfg.background, widget_default_rgb(DEFAULT_BUTTON_BG_COLOR));
         if (selected) bg = resolve_color(cfg.selected_background, bg);
         if (row.background != bg) {
             row.background = bg;
             lv_obj_set_style_bg_color(row.object, lv_color_hex(bg), 0);
         }
-        uint32_t border = resolve_color(cfg.border_color, widget_default_rgb(DEFAULT_BUTTON_BORDER_COLOR));
+        uint32_t border = navigation ? lv_color_to_u32(lv_obj_get_style_border_color(state->parent, LV_PART_MAIN)) & 0xffffff :
+            resolve_color(cfg.border_color, widget_default_rgb(DEFAULT_BUTTON_BORDER_COLOR));
         if (selected) {
             const uint32_t default_color = resolve_color(default_width > 0 ? cfg.default_border_color :
                 cfg.default_foreground, widget_default_rgb(default_width > 0 ? DEFAULT_BUTTON_BORDER_COLOR :
@@ -292,9 +307,10 @@ void refresh_rows(State* state) {
             lv_obj_set_style_border_width(row.object, applied_width, 0);
         }
         for (int j = 0; j < 2; ++j) {
-            const uint32_t fallback = lv_color_to_u32(pad_resolve_label_color(
-                state->styles[j], lv_obj_get_style_text_color(state->parent, LV_PART_MAIN))) & 0xffffff;
-            uint32_t color = resolve_color(state->color_binding[j], fallback);
+            const lv_color_t foreground = lv_obj_get_style_text_color(state->parent, LV_PART_MAIN);
+            const uint32_t fallback = lv_color_to_u32(navigation ? foreground :
+                pad_resolve_label_color(state->styles[j], foreground)) & 0xffffff;
+            uint32_t color = navigation ? fallback : resolve_color(state->color_binding[j], fallback);
             if (selected) color = resolve_color(j ? cfg.selected_bottom_color : cfg.selected_top_color, color);
             uint32_t& last = j ? row.bottom_color : row.top_color;
             if (last != color) {
@@ -302,7 +318,7 @@ void refresh_rows(State* state) {
                 lv_obj_set_style_text_color(j ? row.bottom : row.top, lv_color_hex(color), 0);
             }
         }
-        const int32_t top_height = lv_font_get_line_height(state->fonts[0]);
+        const int32_t top_height = lv_font_get_line_height(top_font);
         const int32_t bottom_height = lv_font_get_line_height(state->fonts[1]);
         const bool bottom = row.bottom_text[0] != '\0';
         const int32_t group = top_height + (bottom ? bottom_height : 0);
@@ -335,21 +351,30 @@ void position_rows(State* state) {
     const uint8_t pages = (state->count + state->capacity - 1) / state->capacity;
     if (pages && state->page >= pages) state->page = pages - 1;
     bool changed = false;
-    for (uint8_t i = 0; i < state->count; ++i) {
+    for (uint8_t i = 0; i < state->row_count; ++i) {
         Row& row = state->rows[i];
-        const bool shown = cfg.viewport == ListViewport::Scroll ||
-                           i / state->capacity == state->page;
+        const bool navigation = i >= state->count;
+        const bool shown = navigation ? state->navigation_shown :
+            cfg.viewport == ListViewport::Scroll || i / state->capacity == state->page;
         if (shown != row.shown) {
             changed = true;
             row.shown = shown;
             if (shown) lv_obj_clear_flag(row.object, LV_OBJ_FLAG_HIDDEN);
             else lv_obj_add_flag(row.object, LV_OBJ_FLAG_HIDDEN);
         }
-        const uint8_t slot = cfg.viewport == ListViewport::Paged ? i % state->capacity : i;
-        const int32_t position = (slot / state->capacity) * (state->height + state->spacing) +
-            ((slot % state->capacity) * (state->height + state->spacing)) / state->capacity;
-        const int32_t next = ((slot % state->capacity + 1) * (state->height + state->spacing)) / state->capacity;
-        const int32_t row_height = next - ((slot % state->capacity) * (state->height + state->spacing)) / state->capacity
+        if (navigation) {
+            const bool disabled = i == state->count ? state->page == 0 : state->page + 1 >= pages;
+            if (disabled != lv_obj_has_state(row.object, LV_STATE_DISABLED)) {
+                if (disabled) lv_obj_add_state(row.object, LV_STATE_DISABLED);
+                else lv_obj_remove_state(row.object, LV_STATE_DISABLED);
+            }
+        }
+        const uint8_t slot = navigation ? (i == state->count ? 0 : state->slots - 1) :
+            cfg.viewport == ListViewport::Paged ? i % state->capacity + (state->navigation_shown ? 1 : 0) : i;
+        const int32_t position = (slot / state->slots) * (state->height + state->spacing) +
+            ((slot % state->slots) * (state->height + state->spacing)) / state->slots;
+        const int32_t next = ((slot % state->slots + 1) * (state->height + state->spacing)) / state->slots;
+        const int32_t row_height = next - ((slot % state->slots) * (state->height + state->spacing)) / state->slots
                                    - state->spacing;
         if (row.position != position) {
             changed = true;
@@ -370,6 +395,7 @@ void position_rows(State* state) {
 void layout(State* state) {
     if (!state->layout_dirty) return;
     state->layout_dirty = false;
+    cancel(state);
     lv_obj_update_layout(state->parent);
     state->width = lv_obj_get_content_width(state->parent);
     state->height = lv_obj_get_content_height(state->parent);
@@ -386,10 +412,23 @@ void layout(State* state) {
         if (capacity < 1) capacity = 1;
         if (capacity > static_cast<int32_t>(LIST_SOURCE_MAX_ITEMS)) capacity = LIST_SOURCE_MAX_ITEMS;
     }
-    state->capacity = capacity < state->height ? capacity : state->height;
+    const bool navigation = cfg.show_navigation && cfg.viewport == ListViewport::Paged;
+    if (navigation && state->count > capacity && capacity < 3) capacity = 3;
+    state->slots = capacity < state->height ? capacity : state->height;
+    state->navigation_shown = navigation && state->count > state->slots;
+    if (state->navigation_shown && state->slots < 3) {
+        cancel(state);
+        state->layout_ok = false;
+        lv_obj_add_flag(state->container, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(state->indicator, LV_OBJ_FLAG_HIDDEN);
+        LOGW("List", "List is too short for navigation");
+        message(state, "List needs room for navigation");
+        return;
+    }
+    state->capacity = state->slots - (state->navigation_shown ? 2 : 0);
     state->spacing = cfg.spacing;
-    if (state->capacity > 1 && state->spacing > (state->height - state->capacity) / (state->capacity - 1))
-        state->spacing = (state->height - state->capacity) / (state->capacity - 1);
+    if (state->slots > 1 && state->spacing > (state->height - state->slots) / (state->slots - 1))
+        state->spacing = (state->height - state->slots) / (state->slots - 1);
     if (state->count > state->capacity && state->width > 1) {
         const int32_t gutter = state->width - 1 < indicator_width + indicator_gap
             ? state->width - 1 : indicator_width + indicator_gap;
@@ -462,11 +501,13 @@ void event(lv_event_t* e) {
     if (!state || !state->rows) return;
     lv_obj_t* target = static_cast<lv_obj_t*>(lv_event_get_target(e));
     uint8_t index = none;
-    for (uint8_t i = 0; i < state->count; ++i)
+    for (uint8_t i = 0; i < state->row_count; ++i)
         if (state->rows[i].object == target) { index = i; break; }
     if (index == none) return;
     const lv_event_code_t code = lv_event_get_code(e);
     lv_event_stop_bubbling(e);
+    const bool navigation = index >= state->count;
+    if (navigation && (!state->navigation_shown || lv_obj_has_state(target, LV_STATE_DISABLED))) return;
     if (code == LV_EVENT_PRESSED) {
         lv_indev_t* input = lv_event_get_indev(e);
         if (!input || !state->visible || !state->layout_ok) return;
@@ -474,7 +515,7 @@ void event(lv_event_t* e) {
         state->press_revision = state->revision;
         state->held = false;
         lv_indev_get_point(input, &state->press_point);
-        if (state->config->allow_selection || state->tile->action_count || state->tile->lp_action_count) {
+        if (navigation || state->config->allow_selection || state->tile->action_count || state->tile->lp_action_count) {
             state->press_feedback = true;
             feedback(state, index, LV_EVENT_PRESSED);
         }
@@ -501,6 +542,15 @@ void event(lv_event_t* e) {
             cancel(state);
             return;
         }
+        if (navigation) {
+            if (code == LV_EVENT_LONG_PRESSED) return;
+            end_feedback(state, LV_EVENT_RELEASED);
+            state->pressed = none;
+            feedback(state, index, LV_EVENT_CLICKED);
+            list_widget_command(&state->tile->widget_state,
+                                index == state->count ? "previous_page" : "next_page");
+            return;
+        }
         if (state->config->allow_selection) state->focus = index;
         position_rows(state);
         refresh_rows(state);
@@ -519,7 +569,9 @@ void event(lv_event_t* e) {
 bool build_rows(State* state, ListSourceSnapshot* snapshot) {
     const size_t count = snapshot->items().size();
     if (!count) { snapshot->release(); message(state, "No items"); return true; }
-    Row* rows = static_cast<Row*>(heap_caps_calloc(count, sizeof(Row), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    const size_t row_count = count +
+        (state->config->show_navigation && state->config->viewport == ListViewport::Paged ? 2 : 0);
+    Row* rows = static_cast<Row*>(heap_caps_calloc(row_count, sizeof(Row), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
     if (!rows) {
         snapshot->release();
         LOGE("List", "Cannot allocate rows in PSRAM");
@@ -529,8 +581,10 @@ bool build_rows(State* state, ListSourceSnapshot* snapshot) {
     state->snapshot = snapshot;
     state->rows = rows;
     state->count = static_cast<uint8_t>(count);
-    for (uint8_t i = 0; i < state->count; ++i) {
+    state->row_count = static_cast<uint8_t>(row_count);
+    for (uint8_t i = 0; i < state->row_count; ++i) {
         Row& row = rows[i];
+        const bool navigation = i >= state->count;
         row.background = row.border_color = row.top_color = row.bottom_color = UINT32_MAX;
         row.text_y = row.width = row.height = row.position = row.border_width = INT32_MIN;
         row.label_x = row.label_width = INT32_MIN;
@@ -548,6 +602,7 @@ bool build_rows(State* state, ListSourceSnapshot* snapshot) {
         lv_obj_set_style_bg_opa(row.object, LV_OPA_COVER, 0);
         lv_obj_set_style_radius(row.object, state->config->radius, 0);
         lv_obj_set_style_border_opa(row.object, LV_OPA_COVER, 0);
+        if (navigation) lv_obj_set_style_opa(row.object, LV_OPA_50, LV_STATE_DISABLED);
         lv_obj_clear_flag(row.object, static_cast<lv_obj_flag_t>(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_GESTURE_BUBBLE));
         lv_obj_add_flag(row.object, LV_OBJ_FLAG_CLICKABLE);
         if (state->guard)
@@ -558,11 +613,16 @@ bool build_rows(State* state, ListSourceSnapshot* snapshot) {
             lv_obj_t* label = j ? row.bottom : row.top;
             lv_obj_remove_style_all(label);
             lv_obj_clear_flag(label, static_cast<lv_obj_flag_t>(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_GESTURE_BUBBLE));
-            lv_obj_set_style_text_font(label, state->fonts[j], 0);
-            lv_obj_set_style_text_align(label, pad_resolve_align(state->styles[j]), 0);
-            lv_obj_set_height(label, lv_font_get_line_height(state->fonts[j]));
+            const lv_font_t* font = navigation ? state->navigation_font : state->fonts[j];
+            lv_obj_set_style_text_font(label, font, 0);
+            lv_obj_set_style_text_align(label, navigation ? LV_TEXT_ALIGN_CENTER : pad_resolve_align(state->styles[j]), 0);
+            lv_obj_set_height(label, lv_font_get_line_height(font));
             lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
             lv_label_set_text_static(label, j ? row.bottom_text : row.top_text);
+        }
+        if (navigation) {
+            strlcpy(row.top_text, i == state->count ? LV_SYMBOL_UP : LV_SYMBOL_DOWN, sizeof(row.top_text));
+            lv_label_set_text_static(row.top, row.top_text);
         }
     }
     message(state, nullptr);
@@ -638,6 +698,7 @@ void create(lv_obj_t* parent, const WidgetConfig* widget, const ScreenButtonConf
     label_style_parse(state->config->style_bottom, &state->styles[1], state->color_binding[1], sizeof(state->color_binding[1]));
     state->fonts[0] = pad_resolve_font(state->styles[0], scale->font_small, runtime->font_owner);
     state->fonts[1] = pad_resolve_font(state->styles[1], scale->font_small, runtime->font_owner);
+    state->navigation_font = scale->font_small;
     state->container = lv_obj_create(parent);
     if (!state->container) { LOGE("List", "Cannot allocate List container"); return; }
     lv_obj_remove_style_all(state->container);
@@ -796,7 +857,7 @@ void describe(JsonObject& out) {
         field["maximum"] = spec.maximum;
         field["default"] = spec.value;
         field["description"] = !strcmp(spec.name, "widget_list_visible_items")
-            ? "Visible item count; 0 automatically fits rows using label fonts, with a 44 px minimum and 8 px vertical padding per side."
+            ? "Row slots; paged navigation reserves two when items overflow. Use 0 for Auto or at least 3 with navigation enabled. Auto fits label fonts with a 44 px target minimum."
             : "Static whole pixels.";
     }
     for (const char* name : {"widget_list_border_width", "widget_list_selected_border_width"}) {
@@ -812,6 +873,11 @@ void describe(JsonObject& out) {
     selection["type"] = "boolean";
     selection["default"] = true;
     selection["description"] = "Keep the activated item selected; disabling this preserves item actions and transient feedback.";
+    JsonObject navigation = fields.createNestedObject();
+    navigation["name"] = "widget_list_show_navigation";
+    navigation["type"] = "boolean";
+    navigation["default"] = true;
+    navigation["description"] = "Paged only: reserve top/bottom row slots for previous/next-page chevrons when items overflow. Controls use button appearance and default tap audio, never item actions.";
     JsonObject viewport = fields.createNestedObject();
     viewport["name"] = "widget_list_viewport";
     viewport["type"] = "string";
@@ -876,7 +942,7 @@ void list_widget_attach(WidgetState* runtime, lv_event_cb_t guard, void* context
     if (!state) return;
     state->guard = guard;
     state->guard_context = context;
-    for (uint8_t i = 0; guard && i < state->count; ++i)
+    for (uint8_t i = 0; guard && i < state->row_count; ++i)
         lv_obj_add_event_cb(state->rows[i].object, guard,
             static_cast<lv_event_code_t>(LV_EVENT_ALL | LV_EVENT_PREPROCESS), context);
 }

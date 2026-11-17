@@ -441,8 +441,10 @@ TEST_F(ListSourceTest, ListConfigChecksSourceRowsGeometryAndOwnership) {
     ASSERT_NE(list_config(defaults), nullptr);
     EXPECT_STREQ(list_config(defaults)->label_top, "[item:title|Untitled]");
     EXPECT_TRUE(list_config(defaults)->allow_selection);
+    EXPECT_TRUE(list_config(defaults)->show_navigation);
     list_release_config(defaults);
     doc["widget_list_allow_selection"] = false;
+    doc["widget_list_show_navigation"] = false;
     doc["widget_list_label_top"] = "[item:title|Untitled]";
     doc["widget_list_style_top"] = "font_size:20;mode:dot;color:[item:id]";
     doc["widget_list_indicator_track_color"] = "[var:background]";
@@ -464,6 +466,7 @@ TEST_F(ListSourceTest, ListConfigChecksSourceRowsGeometryAndOwnership) {
     EXPECT_EQ(config->source, &source);
     EXPECT_EQ(config->visible_items, 0);
     EXPECT_FALSE(config->allow_selection);
+    EXPECT_FALSE(config->show_navigation);
     EXPECT_STREQ(config->label_top, "[item:title|Untitled]");
     EXPECT_STREQ(config->indicator_track_color, "[var:background]");
     EXPECT_STREQ(config->indicator_color, "[var:foreground]");
@@ -475,6 +478,25 @@ TEST_F(ListSourceTest, ListConfigChecksSourceRowsGeometryAndOwnership) {
     EXPECT_EQ(visited, 16u);
     list_release_config(copy);
     EXPECT_EQ(list_config(copy), nullptr);
+
+    doc["widget_list_show_navigation"] = "true";
+    EXPECT_NE(list_validate_config(doc.as<JsonObjectConst>()), nullptr);
+    doc["widget_list_show_navigation"] = true;
+    doc["widget_list_viewport"] = "paged";
+    for (unsigned slots : {1U, 2U}) {
+        doc["widget_list_visible_items"] = slots;
+        EXPECT_NE(list_validate_config(doc.as<JsonObjectConst>()), nullptr);
+    }
+    doc["widget_list_show_navigation"] = false;
+    EXPECT_EQ(list_validate_config(doc.as<JsonObjectConst>()), nullptr);
+    doc["widget_list_show_navigation"] = true;
+    doc["widget_list_viewport"] = "scroll";
+    EXPECT_EQ(list_validate_config(doc.as<JsonObjectConst>()), nullptr);
+    doc["widget_list_visible_items"] = 3;
+    doc["widget_list_viewport"] = "paged";
+    EXPECT_EQ(list_validate_config(doc.as<JsonObjectConst>()), nullptr);
+    doc["widget_list_visible_items"] = 0;
+    EXPECT_EQ(list_validate_config(doc.as<JsonObjectConst>()), nullptr);
 
     doc["widget_list_allow_selection"] = "false";
     EXPECT_NE(list_validate_config(doc.as<JsonObjectConst>()), nullptr);

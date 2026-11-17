@@ -36,11 +36,14 @@ ActionResult action_list_dispatch_result(const ButtonAction*, uint8_t count, con
 namespace {
 uint32_t revision = 1;
 bool omit_second = false;
+unsigned item_count = 3;
 const char* first_title = "first";
 uint32_t source_revision() { return revision; }
 ListSourceLoadStep load(void**, ListSourceSnapshot* snapshot, const char** error) {
     JsonDocument item;
-    for (const char* id : {"first", "second", "third"}) {
+    unsigned index = 0;
+    for (const char* id : {"first", "second", "third", "fourth", "fifth", "sixth"}) {
+        if (index++ >= item_count) break;
         if (omit_second && !strcmp(id, "second")) continue;
         item["id"] = id;
         if (!strcmp(id, "third")) item.remove("title");
@@ -83,6 +86,7 @@ protected:
         last_feedback = activation_feedback = LV_EVENT_ALL;
         destroy_on_dispatch = nullptr;
         omit_second = false;
+        item_count = 3;
         first_title = "first";
         list_test_defaults = {};
         display = lv_display_create(320, 240);
@@ -110,6 +114,7 @@ protected:
         json["widget_list_id"] = "notes";
         json["widget_list_viewport"] = "paged";
         json["widget_list_visible_items"] = 2;
+        json["widget_list_show_navigation"] = false;
         json["widget_list_bg_color"] = "#ffffff";
         json["widget_list_border_width"] = 1;
         json["widget_list_border_color"] = "#000000";
@@ -171,6 +176,7 @@ protected:
         list_source_loop();
         json["widget_data_binding"] = source.token;
         json["widget_list_id"] = "notes";
+        if (!json.containsKey("widget_list_show_navigation")) json["widget_list_show_navigation"] = false;
         ASSERT_TRUE(list_parse_config(json, config.data));
         list_widget_impl::create(button, &config, nullptr, nullptr, &pad_get_scale_info(), &tile.widget_state);
         list_widget_impl::show(&tile.widget_state);
@@ -183,7 +189,120 @@ protected:
         list_widget_impl::tick(button, &config, &tile.widget_state);
         lv_obj_update_layout(button);
     }
+    void use_navigation(unsigned slots = 5) {
+        item_count = 6;
+        ++revision;
+        JsonDocument json;
+        json["widget_list_viewport"] = "paged";
+        json["widget_list_visible_items"] = slots;
+        json["widget_list_show_navigation"] = true;
+        reconfigure(json.as<JsonObject>());
+    }
 };
+
+TEST_F(ListWidget, NavigationReservesSlotsAndPreservesItemActionsAndSelection) {
+    use_navigation();
+    auto* state = list_widget_impl::get(&tile.widget_state);
+    ASSERT_TRUE(state->navigation_shown);
+    ASSERT_EQ(state->capacity, 3);
+    const unsigned up = state->count, down = up + 1;
+    lv_obj_update_layout(button);
+    EXPECT_STREQ(lv_label_get_text(lv_obj_get_child(row(up), 0)), LV_SYMBOL_UP);
+    EXPECT_STREQ(lv_label_get_text(lv_obj_get_child(row(down), 0)), LV_SYMBOL_DOWN);
+    EXPECT_LT(lv_obj_get_y(row(up)), lv_obj_get_y(row(0)));
+    EXPECT_GT(lv_obj_get_y(row(down)), lv_obj_get_y(row(2)));
+    EXPECT_TRUE(lv_obj_has_state(row(up), LV_STATE_DISABLED));
+    tap(up);
+    EXPECT_TRUE(feedback_events.empty());
+
+    tap(0);
+    ASSERT_EQ(activated_id, "first");
+    const auto selected = state->focus;
+    feedback_events.clear();
+    const int32_t down_y = lv_obj_get_y(row(down));
+    tap(down);
+    EXPECT_EQ(state->page, 1);
+    EXPECT_EQ(state->focus, selected);
+    EXPECT_EQ(activations, 1u);
+    ASSERT_EQ(feedback_events.size(), 3u);
+    EXPECT_EQ(feedback_events[0].event, LV_EVENT_PRESSED);
+    EXPECT_EQ(feedback_events[1].event, LV_EVENT_RELEASED);
+    EXPECT_EQ(feedback_events[2].event, LV_EVENT_CLICKED);
+    EXPECT_TRUE(feedback_events[2].use_default_tap_audio);
+    EXPECT_TRUE(lv_obj_has_flag(row(0), LV_OBJ_FLAG_HIDDEN));
+    EXPECT_FALSE(lv_obj_has_flag(row(3), LV_OBJ_FLAG_HIDDEN));
+    EXPECT_TRUE(lv_obj_has_state(row(down), LV_STATE_DISABLED));
+    EXPECT_EQ(lv_obj_get_y(row(down)), down_y);
+    feedback_events.clear();
+    tap(down);
+    EXPECT_TRUE(feedback_events.empty());
+    EXPECT_EQ(state->page, 1);
+
+    tap(up, true);
+    EXPECT_EQ(state->page, 0);
+    EXPECT_EQ(activations, 1u);
+    ASSERT_EQ(feedback_events.size(), 3u);
+    EXPECT_EQ(feedback_events.back().event, LV_EVENT_CLICKED);
+    EXPECT_TRUE(feedback_events.back().use_default_tap_audio);
+    tap(1);
+    EXPECT_EQ(activated_id, "second");
+    EXPECT_FALSE(feedback_events.back().use_default_tap_audio);
+}
+
+TEST_F(ListWidget, NavigationCancelsStalePressAndReleasesSlotsWhenItemsFit) {
+    use_navigation();
+    auto* state = list_widget_impl::get(&tile.widget_state);
+    const unsigned down = state->count + 1;
+    press(down);
+    lv_obj_send_event(row(down), LV_EVENT_PRESS_LOST, input);
+    pressed = false;
+    lv_indev_read(input);
+    EXPECT_EQ(state->page, 0);
+    EXPECT_EQ(feedback_events.back().event, LV_EVENT_PRESS_LOST);
+    feedback_events.clear();
+
+    press(down);
+    first_title = "changed";
+    ++revision;
+    list_source_loop();
+    list_widget_impl::tick(button, &config, &tile.widget_state);
+    pressed = false;
+    lv_indev_read(input);
+    EXPECT_EQ(state->page, 0);
+    EXPECT_EQ(feedback_events.back().event, LV_EVENT_PRESS_LOST);
+
+    EXPECT_TRUE(list_widget_command(&tile.widget_state, "next_page"));
+    EXPECT_EQ(state->page, 1);
+    omit_second = true;
+    ++revision;
+    list_source_loop();
+    list_widget_impl::tick(button, &config, &tile.widget_state);
+    EXPECT_EQ(state->count, 5);
+    EXPECT_FALSE(state->navigation_shown);
+    EXPECT_EQ(state->capacity, 5);
+    EXPECT_EQ(state->page, 0);
+    EXPECT_TRUE(lv_obj_has_flag(row(state->count), LV_OBJ_FLAG_HIDDEN));
+    EXPECT_TRUE(lv_obj_has_flag(row(state->count + 1), LV_OBJ_FLAG_HIDDEN));
+    EXPECT_FALSE(lv_obj_has_flag(row(4), LV_OBJ_FLAG_HIDDEN));
+    EXPECT_EQ(activations, 0u);
+}
+
+TEST_F(ListWidget, AutoNavigationKeepsAnItemSlotAndRecoversAfterTinyLayout) {
+    use_navigation(0);
+    auto* state = list_widget_impl::get(&tile.widget_state);
+    EXPECT_TRUE(state->navigation_shown);
+    EXPECT_GE(state->slots, 3);
+    EXPECT_GE(state->capacity, 1);
+    resize_and_tick(1);
+    EXPECT_FALSE(state->layout_ok);
+    EXPECT_FALSE(list_widget_command(&tile.widget_state, "next_page"));
+    EXPECT_FALSE(lv_obj_has_flag(state->message, LV_OBJ_FLAG_HIDDEN));
+    resize_and_tick(300);
+    EXPECT_TRUE(state->layout_ok);
+    EXPECT_FALSE(state->navigation_shown);
+    EXPECT_EQ(state->capacity, 6);
+    EXPECT_TRUE(lv_obj_has_flag(state->message, LV_OBJ_FLAG_HIDDEN));
+}
 
 TEST_F(ListWidget, TapAndHoldSendRowFeedbackBeforeDispatch) {
     lv_obj_t* first = row(0);

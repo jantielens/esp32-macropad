@@ -42,7 +42,7 @@
         <summary>Item layout</summary>
         <div class="editor-group-body">
             <div class="widget-row">
-                <div class="form-group"><label for="pad-edit-list-visible-items">Visible items</label><input id="pad-edit-list-visible-items" type="number" min="0" max="20" step="1" aria-describedby="pad-edit-list-visible-items-help"><small id="pad-edit-list-visible-items-help">0 = Auto; otherwise, number of visible items. Auto fits rows using label fonts; item height adjusts to fill the List.</small></div>
+                <div class="form-group"><label for="pad-edit-list-visible-items">Visible items</label><input id="pad-edit-list-visible-items" type="number" min="0" max="20" step="1" aria-describedby="pad-edit-list-visible-items-help"><small id="pad-edit-list-visible-items-help">0 = Auto; otherwise, number of row slots. Paged navigation uses two slots when items overflow (5 slots = 3 items + 2 controls). Auto fits rows using label fonts; item height adjusts to fill the List.</small></div>
                 <div class="form-group"><label for="pad-edit-list-padding">Padding (px)</label><input id="pad-edit-list-padding" type="number" min="0" max="32" step="1" aria-describedby="pad-edit-list-padding-help"><small id="pad-edit-list-padding-help">Horizontal space between labels and item borders.</small></div>
                 <div class="form-group"><label for="pad-edit-list-spacing">Spacing (px)</label><input id="pad-edit-list-spacing" type="number" min="0" max="32" step="1" aria-describedby="pad-edit-list-spacing-help"><small id="pad-edit-list-spacing-help">Vertical gap between items.</small></div>
                 <div class="form-group"><label for="pad-edit-list-radius">Corner radius (px)</label><input id="pad-edit-list-radius" type="number" min="0" max="64" step="1"></div>
@@ -51,6 +51,10 @@
                 <label for="pad-edit-list-viewport">Viewport</label>
                 <select id="pad-edit-list-viewport" aria-describedby="pad-edit-list-viewport-help"><option value="">Board default</option><option value="scroll">Scroll</option><option value="paged">Paged</option></select>
                 <small id="pad-edit-list-viewport-help">Scroll lets you swipe through items; Paged shows one page at a time without scrolling. Board default is Paged on interactive e-paper and Scroll otherwise.</small>
+            </div>
+            <div class="form-group">
+                <label class="checkbox-label"><input id="pad-edit-list-show-navigation" type="checkbox" checked aria-describedby="pad-edit-list-show-navigation-help"> Show navigation buttons</label>
+                <small id="pad-edit-list-show-navigation-help">Paged only. Up/down chevrons move one page; hidden when all items fit. Use Auto or at least 3 row slots. Turn off to use external navigation actions only.</small>
             </div>
         </div>
     </details>

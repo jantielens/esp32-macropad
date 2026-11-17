@@ -87,12 +87,26 @@ subsystem verification requirements. Reuse their existing checks where possible.
 
 ## Build Verification
 
-Start with focused tests, lint, or compilation for the changed subsystem.
+Firmware builds are expensive. Start with focused tests, lint, or compilation
+for the changed subsystem; editing firmware code alone does not require a full
+firmware build. For trivial, localized changes adequately covered by focused
+checks and without build-sensitive impact, skip the firmware build and report
+the checks used instead.
+
 Run a firmware build when firmware or native extension ABI changes, or when
-board-dependent or cross-module risk warrants it. Do not run a firmware build
-for documentation, instructions, or extension-only changes that do not alter
-the firmware ABI; build the extension for extension-only changes. If unsure
+compile-time gates, driver integration, board-dependent behavior, or cross-module
+risk cannot be adequately verified by focused checks. Do not run a firmware
+build for documentation, instructions, or extension-only changes that do not
+alter the firmware ABI; build the extension for extension-only changes. If unsure
 whether a firmware build is needed, ask the user before running one.
+
+Batch related implementation and review fixes, run focused checks during
+iteration, and perform any warranted firmware build once at the end of the
+batch rather than after each edit. Rebuild only after build-relevant changes
+invalidate that result or to verify a build failure fix. Checker and review
+agents should reuse applicable build evidence for the same code and board,
+not launch duplicate builds independently. Do not defer a build needed to
+diagnose a blocking compilation or integration problem.
 
 When a firmware build is warranted:
 

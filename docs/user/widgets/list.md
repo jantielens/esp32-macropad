@@ -1,6 +1,6 @@
 ---
 title: Browse and activate List items
-description: Configure a List source, row labels, item actions, and separate navigation controls.
+description: Configure a List source, row labels, item actions, and built-in or external navigation controls.
 ---
 
 A List displays a bounded collection on a pad. Each row can show two labels
@@ -41,9 +41,14 @@ Auto fits as many rows as the List height allows using the label fonts, reservin
 space for the bottom label when its template is configured. Rows target a
 minimum height of 44 px, with at least 8 px of vertical breathing room per side
 when space permits. Capacity stays independent of item count and resolved text.
-Set **1-20** to choose an explicit count instead. Both modes distribute remaining
-height across rows. A List too short for one comfortable row still shows one;
-content that does not fit is clipped.
+Set **1-20** to choose an explicit row-slot count instead. Both modes distribute
+remaining height across rows. Paged navigation reserves two slots when items
+overflow, so five slots show three items plus the two controls. With navigation
+enabled, explicit Paged counts must be at least three. Auto reserves at least
+three slots when paging is needed, even if rows must be shorter than the target
+minimum. A List too short for one comfortable row still clips its content;
+if there is not even room for three one-pixel navigation slots, it shows
+`List needs room for navigation` until resized.
 
 Row background and border defaults come from device-wide button defaults.
 You can override the background and border for all rows, and separately set
@@ -56,12 +61,26 @@ The selected border defaults to twice the button default width, at least 2 px.
 ## Navigate and activate
 
 Tap a row to select it and run its tap actions. A long press selects the row
-and runs its long-press actions. Swipe within a scrolling List, or add
-**Navigate List** actions targeting the List ID for **Previous page** and
-**Next page**. Paging does not change selection, even when the selected item
-is off-screen. A List starts with no selection; hiding it clears selection.
+and runs its long-press actions. Swipe within a scrolling List.
 Choose **Paged** for a non-animated viewport on slow displays, or leave
 **Viewport** at the board default. Item selection requires touch.
+
+**Show navigation buttons** under **Item layout** is on by default and applies
+only to Paged viewports. When items overflow, an up chevron occupies the first
+row slot and a down chevron occupies the last. Tap them to move one page.
+The controls stay in place while paging; up is disabled on the first page and
+down on the last. Both disappear when all items fit without paging, returning
+their slots to items. The controls inherit the containing button's colors and
+border, and the List's corner radius. They use the default button tap sound,
+respecting disabled audio, independently of any item sound actions.
+Disabled controls stay silent. Holding a control still moves only one page
+on release; it does not run item long-press actions.
+
+Turn off **Show navigation buttons** to use all row slots for items and
+external controls only. You can also use **Navigate List** actions targeting
+the List ID for **Previous page** and **Next page** with built-in controls enabled.
+Paging never selects an item or runs its actions, even when the selected item
+is off-screen. A List starts with no selection; hiding it clears selection.
 
 **Allow selection** under **Selected item appearance** is on by default.
 Turn it off for a navigation List: rows still run their tap and long-press
@@ -71,7 +90,9 @@ Selecting a row uses the configured button feedback sounds even without item
 actions. Rows with selection or actions use button press highlighting when
 animations are enabled. Actions that provide their own audio suppress the
 default feedback sound. Rows without selection or actions give no feedback.
-Scrolling cancels the press feedback; paging does not flash the List.
+Scrolling cancels the press feedback. Built-in navigation highlights only its
+pressed control when animations are enabled; external paging does not flash
+the List.
 
 When items extend beyond the viewport, a position indicator appears to the
 right. Its opaque track and indicator colors default to the device-wide button

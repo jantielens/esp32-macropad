@@ -71,6 +71,9 @@ firmware contract or native behavior also changes.
 
 ## Build And Tests
 
+* Firmware builds are expensive. Batch related changes and review fixes before
+  a warranted build; do not rebuild after every trivial edit. Prefer focused
+  checks and reuse applicable build evidence, including across checker agents.
 * `./build.sh <board>` builds one board; bare `./build.sh` builds all boards
   and must run only when explicitly requested.
 * `cmake -S . -B build/host-tests`, then

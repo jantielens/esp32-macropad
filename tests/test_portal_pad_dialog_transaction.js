@@ -104,6 +104,24 @@ vm.runInContext(fs.readFileSync('src/app/web/portal_widget_list.js', 'utf8'), co
     const bindingDraft = {};
     context.padWidgetEditorBuild(bindingDraft, editor);
     assert.strictEqual(bindingDraft.widget_list_bg_color, '[item:color|#FFFFFF]');
+    document.getElementById('pad-edit-list-viewport').value = 'paged';
+    document.getElementById('pad-edit-list-visible-items').value = '2';
+    assert.throws(() => context.padWidgetEditorBuild({}, editor), /at least 3/);
+    document.getElementById('pad-edit-list-show-navigation').checked = false;
+    const externalNavigation = {};
+    context.padWidgetEditorBuild(externalNavigation, editor);
+    assert.strictEqual(externalNavigation.widget_list_show_navigation, false);
+    document.getElementById('pad-edit-list-show-navigation').checked = true;
+    document.getElementById('pad-edit-list-viewport').value = 'scroll';
+    const scrollNavigation = {};
+    context.padWidgetEditorBuild(scrollNavigation, editor);
+    assert.strictEqual(scrollNavigation.widget_list_visible_items, 2);
+    document.getElementById('pad-edit-list-viewport').value = 'paged';
+    document.getElementById('pad-edit-list-visible-items').value = '0';
+    const autoNavigation = {};
+    context.padWidgetEditorBuild(autoNavigation, editor);
+    assert.strictEqual(autoNavigation.widget_list_show_navigation, true);
+    document.getElementById('pad-edit-list-viewport').value = '';
 }
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_camera.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_dialog.js', 'utf8'), context);

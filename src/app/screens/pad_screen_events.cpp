@@ -388,7 +388,7 @@ void PadScreen::onWidgetPressFeedback(lv_event_t* event) {
         const bool hold = feedback->event == LV_EVENT_LONG_PRESSED;
         const ButtonAction* actions = hold ? tile->lp_actions : tile->actions;
         const uint8_t count = hold ? tile->lp_action_count : tile->action_count;
-        if (activated && !has_audio_action(actions, count)) {
+        if (activated && (feedback->use_default_tap_audio || !has_audio_action(actions, count))) {
             const char* pattern = hold ? device_config.lp_beep : device_config.tap_beep;
             if (pattern[0] && strcmp(pattern, "none") != 0) audio_feedback(pattern);
         }

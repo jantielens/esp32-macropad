@@ -97,10 +97,19 @@
             { id: prefix + 'spacing', key: 'widget_list_spacing', kind: 'number', default: 4 },
             { id: prefix + 'radius', key: 'widget_list_radius', kind: 'number', default: 8 },
             { id: prefix + 'viewport', key: 'widget_list_viewport', kind: 'text', default: '' },
+            { id: prefix + 'show-navigation', key: 'widget_list_show_navigation', kind: 'checkbox', default: true },
             color('indicator-track', 'widget_list_indicator_track_color'),
             color('indicator-color', 'widget_list_indicator_color')
         ],
         actions: { tap: true, longPress: true, labels: () => ['Item tap actions', 'Item long-press actions'] },
+        build(config) {
+            if (config.widget_list_viewport === 'paged' && config.widget_list_show_navigation &&
+                config.widget_list_visible_items > 0 && config.widget_list_visible_items < 3) {
+                throw Object.assign(new Error('Paged List navigation requires at least 3 visible row slots, or Auto'), {
+                    fieldIds: [prefix + 'visible-items', prefix + 'show-navigation']
+                });
+            }
+        },
         load(config) {
             const select = document.getElementById(prefix + 'source');
             select.querySelectorAll('[data-unavailable]').forEach(option => option.remove());

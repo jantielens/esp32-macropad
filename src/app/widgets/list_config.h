@@ -47,6 +47,7 @@ struct ListConfig {
     uint8_t radius;
     ListViewport viewport;
     bool allow_selection;
+    bool show_navigation;
 };
 
 // Validate with composed pad bindings before parsing; ordinary scalar binding

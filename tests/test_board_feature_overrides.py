@@ -98,6 +98,16 @@ for overrides, expected_error in (
         assert result.returncode == 0, result.stderr
 print("PASS: Voice clips feature prerequisites and Voice Assistant exclusion")
 
+for board, expected in (("esp32-p4-lcd4b", 1), ("esp32-p4-lcd4b-voice", 0)):
+    subprocess.run(
+        ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+         "-x", "c++", "-", "-I", str(root), "-I", str(root / "src/boards" / board),
+         "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM", "-DCONFIG_IDF_TARGET_ESP32P4=1"],
+        input=f'#include "src/app/board_config.h"\nstatic_assert(HAS_VOICE_NOTES == {expected}, "Voice Notes profile");\n',
+        text=True, check=True,
+    )
+print("PASS: LCD4B Voice Notes and Voice Assistant profiles")
+
 for defines, expected_error in (
     (["-DHAS_AUDIO_INPUT=1", "-DHAS_AUDIO=1"], None),
     (["-DHAS_AUDIO_INPUT=1", "-DHAS_AUDIO=0"], "ES8311 audio input requires"),

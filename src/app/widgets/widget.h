@@ -35,6 +35,7 @@ struct WidgetPressFeedback {
     lv_obj_t* object;
     uint32_t background;
     bool has_background;
+    bool use_default_tap_audio = false;
 };
 
 inline lv_area_t widget_content_bounds(lv_obj_t* object) {

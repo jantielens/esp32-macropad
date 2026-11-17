@@ -136,6 +136,12 @@ const char* list_validate_config(JsonObjectConst button, const PadBinding* bindi
     const char* viewport = button["widget_list_viewport"] | default_viewport;
     if (strcmp(viewport, "scroll") && strcmp(viewport, "paged"))
         return "List viewport must be scroll or paged";
+    if (button.containsKey("widget_list_show_navigation") && !button["widget_list_show_navigation"].is<bool>())
+        return "List show navigation must be a boolean";
+    const unsigned visible_items = button["widget_list_visible_items"] | 0U;
+    if (!strcmp(viewport, "paged") && (button["widget_list_show_navigation"] | true) &&
+        visible_items && visible_items < 3)
+        return "Paged List navigation requires at least 3 visible row slots, or Auto";
     return nullptr;
 }
 
@@ -303,6 +309,7 @@ bool list_parse_config(const JsonObject& button, uint8_t* data) {
     config.viewport = !strcmp(button["widget_list_viewport"] | default_viewport, "paged")
         ? ListViewport::Paged : ListViewport::Scroll;
     config.allow_selection = button["widget_list_allow_selection"] | true;
+    config.show_navigation = button["widget_list_show_navigation"] | true;
     memcpy(data, &owner, sizeof(owner));
     return true;
 }

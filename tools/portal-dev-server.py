@@ -214,6 +214,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
     def _bthome_capable(self):
         return self._profile() == "reterminal-sticky-interactive"
 
+    def _voice_notes_capable(self):
+        return self._profile() in ("esp32-p4-lcd4b", "reterminal-sticky-interactive")
+
     def _fonts_available(self):
         return self._profile() in ("esp32-p4-lcd4b", "jc3248w535")
 
@@ -315,7 +318,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             else:
                 self._serve_json({"error": "Power savings is unavailable"}, 404)
         elif path == "/portal-voice-notes.js":
-            if self._profile() == "reterminal-sticky-interactive":
+            if self._voice_notes_capable():
                 self._serve_file(APP_WEB_DIR / "portal_voice_notes.js")
             else:
                 self._serve_json({"error": "Voice notes unavailable"}, 404)
@@ -365,6 +368,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
             config = copy.deepcopy(self.server.mock_config)
             if self._profile() == "reterminal-sticky-interactive":
                 config["auto_shutdown_timeout_seconds"] = config.get("auto_shutdown_timeout_seconds", 300)
+            else:
+                config.pop("auto_shutdown_timeout_seconds", None)
+            if self._voice_notes_capable():
                 config.setdefault("voice_notes_auto_process", False)
                 for service in ("transcription", "llm"):
                     prefix = f"voice_notes_{service}_"
@@ -373,7 +379,6 @@ class PortalHandler(SimpleHTTPRequestHandler):
                     config[prefix + "api_key_set"] = bool(config.get(prefix + "api_key"))
                     config[prefix + "api_key"] = ""
             else:
-                config.pop("auto_shutdown_timeout_seconds", None)
                 for key in [key for key in config if key.startswith("voice_notes_")]:
                     config.pop(key, None)
             config["caps"]["ha_live"] = self._profile() == "esp32-p4-lcd4b"
@@ -635,7 +640,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 self._serve_bytes(data, content_type)
         elif path == "/api/bindings":
             schema = copy.deepcopy(self.server.pad_fixture["binding_schema"])
-            if self._profile() == "reterminal-sticky-interactive":
+            if self._voice_notes_capable():
                 schema["schemes"].append({"name": "voice_note", "min_params": 1, "max_params": 1,
                     "widget_max_params": 1, "format_param": -1, "validation_mode": 0,
                     "free_form": False, "keys": ["recording.state", "recording.duration_s",
@@ -715,7 +720,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
 
         # Fragment API — production fragments take precedence.
         elif path.startswith("/api/component/voice-notes/"):
-            if self._profile() != "reterminal-sticky-interactive":
+            if not self._voice_notes_capable():
                 self._serve_json({"error": "Voice notes unavailable"}, 404)
             elif path.endswith("/status"):
                 job = self.server.mock_voice_transcription
@@ -848,7 +853,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 self._serve_json({"error": "Unknown voice notes action"}, 404)
         elif path.startswith("/api/section/"):
             fragment = path[len("/api/section/"):]
-            if fragment in ("voice-notes", "voice-notes-settings") and self._profile() != "reterminal-sticky-interactive":
+            if fragment in ("voice-notes", "voice-notes-settings") and not self._voice_notes_capable():
                 self.send_error(404, "Voice notes unavailable")
                 return
             if fragment == "bluetooth" and not self._bthome_capable():
@@ -895,7 +900,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
 
         if path in ("/api/component/voice-notes/process", "/api/component/voice-notes/retranscribe",
                     "/api/component/voice-notes/regenerate"):
-            if self._profile() != "reterminal-sticky-interactive":
+            if not self._voice_notes_capable():
                 self._serve_json({"message": "Voice Notes unavailable"}, 404)
                 return
             clip_id = query.get("id", [""])[0]
@@ -1317,13 +1322,13 @@ class PortalHandler(SimpleHTTPRequestHandler):
                                    for field in ("endpoint", "api_key", "deployment"))
                 auto_key = "voice_notes_auto_process"
                 if auto_key in update:
-                    if self._profile() != "reterminal-sticky-interactive":
+                    if not self._voice_notes_capable():
                         update.pop(auto_key)
                     elif type(update[auto_key]) is not bool:
                         self._serve_json({"success": False, "message": "Invalid Voice Notes settings"}, 400)
                         return
                 if any(key in update for key in voice_keys):
-                    if self._profile() != "reterminal-sticky-interactive":
+                    if not self._voice_notes_capable():
                         for key in voice_keys:
                             update.pop(key, None)
                     else:
@@ -1483,7 +1488,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
     def do_DELETE(self):
         parsed = urlparse(self.path)
         if parsed.path == "/api/component/voice-notes/delete":
-            if self._profile() != "reterminal-sticky-interactive":
+            if not self._voice_notes_capable():
                 self._serve_json({"error": "Voice notes unavailable"}, 404)
                 return
             clip_id = parse_qs(parsed.query).get("id", [""])[0]
@@ -1723,7 +1728,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 if item["id"] == "ble":
                     item["id"] = "hid"
                     item["display_name"] = "Keyboard, Mouse & Gamepad"
-        if profile == "reterminal-sticky-interactive":
+        if self._voice_notes_capable():
             audio_index = next(index for index, category in enumerate(nav["categories"]) if category["id"] == "audio")
             nav["categories"].insert(audio_index, {"id": "voice-notes", "display_name": "Voice Notes", "icon": "voice",
                 "items": [{"id": "voice-notes", "display_name": "Notes", "portal_script": "/portal-voice-notes.js"},
@@ -1783,7 +1788,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                             display_coord_width=384, display_coord_height=472)
             if include_catalog:
                 info["catalog"] = copy.deepcopy(self.server.pad_fixture["catalog"])
-                if self._profile() == "reterminal-sticky-interactive":
+                if self._voice_notes_capable():
                     info["catalog"].append({"type": "voice_note", "group": "Audio", "label": "Voice note",
                         "editor_fields": [{"name": "command", "label": "Command", "type": "select",
                                            "default": "start", "options": [
@@ -1796,7 +1801,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 info["list_sources"] = [
                     source for source in self.server.pad_fixture["list_sources"]
                     if source["token"] != "[voice_note:recent_notes]"
-                    or self._profile() == "reterminal-sticky-interactive"
+                    or self._voice_notes_capable()
                 ]
         return info
 

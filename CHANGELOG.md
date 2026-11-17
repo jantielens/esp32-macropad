@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-11-16
+ms.date: 2026-11-17
 ms.topic: reference
 ---
 
@@ -20,7 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Show up to 20 items with two styled labels, item-bound colors, tap and
   long-press actions, optional persistent selection, and scrolling or paged
   viewports. Lists share source data but keep independent interaction state.
-  Use **Navigate List** actions for previous/next page controls.
+  Paged viewports include optional up/down controls with normal tap feedback;
+  external **Navigate List** actions remain available.
   See [List configuration](docs/user/widgets/list.md).
 * Add typed List sources for recent Voice Notes (`[voice_note:recent_notes]`),
   saved pads (`[pad:pads]`), and shutter test definitions (`[shutter:tests]`).
