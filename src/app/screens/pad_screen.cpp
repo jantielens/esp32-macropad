@@ -239,7 +239,8 @@ void PadScreen::show() {
     for (uint8_t i = 0; i < tileCount; i++) {
         if (tiles[i].widget_type && tiles[i].widget_type->onShow) {
 #if HAS_PSRAM
-            if (!strcmp(tiles[i].widget_type->name, "list") &&
+            if ((!strcmp(tiles[i].widget_type->name, "list") ||
+                 !strcmp(tiles[i].widget_type->name, "text_reader")) &&
                 (!tiles[i].obj || lv_obj_has_flag(tiles[i].obj, LV_OBJ_FLAG_HIDDEN) ||
                  lv_obj_has_state(tiles[i].obj, LV_STATE_DISABLED))) continue;
 #endif
@@ -338,6 +339,18 @@ void PadScreen::update() {
     // pad's show(), and (b) live config rebuilds that add or remove a
     // device-class binding while the pad is visible.
     reconcilePadHold("pad_screen");
+
+#if HAS_PSRAM
+    // Readers resolve their initial text in the first poll; hidden/disabled
+    // bindings deactivate them before that poll reaches the widget tick.
+    for (uint8_t i = 0; i < tileCount; ++i) {
+        ButtonTile& tile = tiles[i];
+        if (tile.widget_type && !strcmp(tile.widget_type->name, "text_reader") &&
+            tile.obj && !lv_obj_has_flag(tile.obj, LV_OBJ_FLAG_HIDDEN) &&
+            !lv_obj_has_state(tile.obj, LV_STATE_DISABLED))
+            tile.widget_type->onShow(&tile.widget_state);
+    }
+#endif
 
     // Resolve the first frame before LVGL renders it. Slow-refresh displays
     // should never spend a full waveform showing placeholder binding values.

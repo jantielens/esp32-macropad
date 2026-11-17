@@ -22,6 +22,12 @@ const char* const kKeys[] = {"recording.state", "recording.duration_s", "recordi
     "loaded.has_enrichment"
 #endif
 };
+#if HAS_PSRAM
+BindingResolverStatus acquire_text(const char* key, BindingTextView* out) {
+    if (strncmp(key, "loaded.", 7)) return BINDING_RESOLVER_UNKNOWN;
+    return voice_notes_loaded_acquire_text(key + 7, out);
+}
+#endif
 const BindingParamDoc kParams[] = {{"key", "Recorder snapshot key, see below."}};
 const BindingKeyDoc kKeyDocs[] = {
     {"recording.state", "Current recording state", nullptr},
@@ -42,9 +48,9 @@ const BindingKeyDoc kKeyDocs[] = {
     {"loaded.status", "Explicitly loaded note: idle, loading, ready, or error", nullptr},
     {"loaded.error", "Most recent load failure", nullptr},
     {"loaded.id", "ID of the loaded note", nullptr},
-    {"loaded.title", "Full saved title, displayed as a short preview", nullptr},
-    {"loaded.summary", "Full saved summary, displayed as a short preview", nullptr},
-    {"loaded.transcript", "Full saved transcript, displayed as a short preview", nullptr},
+    {"loaded.title", "Saved title: short scalar preview, or full text in a Text reader", nullptr},
+    {"loaded.summary", "Saved summary: short scalar preview, or full text in a Text reader", nullptr},
+    {"loaded.transcript", "Saved transcript: short scalar preview, or full text in a Text reader", nullptr},
     {"loaded.created_at", "Note creation timestamp when known", nullptr},
     {"loaded.duration_ms", "Note duration in milliseconds", nullptr},
     {"loaded.has_transcript", "Whether the loaded note has a transcript", nullptr},
@@ -171,7 +177,13 @@ BindingResolverStatus resolve(const char* key, char* out, size_t size) {
 void voice_notes_binding_init() {
     if (!binding_template_register("voice_note", resolve, nullptr,
         {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, false,
-         key_count, key_at, &kRecorderDoc, &kAuthoring})) {
+         key_count, key_at, &kRecorderDoc, &kAuthoring, nullptr,
+#if HAS_PSRAM
+         acquire_text
+#else
+         nullptr
+#endif
+        })) {
         LOGE("RecorderBind", "Failed to register recorder binding scheme");
     }
 }

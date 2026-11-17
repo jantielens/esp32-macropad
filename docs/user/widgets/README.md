@@ -29,6 +29,7 @@ collapsing a section does not disable it.
 * [Gauge](gauge.md) for rings, signed balance, needle, and targets
 * [Sparkline](sparkline.md) for sampled history
 * [Table](table.md) for structured rows
+* [Text reader](#text-reader) for manually scrolling or paging through text
 * [Camera Preview](../media/camera.md#put-a-preview-on-a-pad) for an attached camera
 * [Extension](../media/extensions.md) for installed native content
 * [Shutter Waveform](../specialized/shutter-tester/display.md) for optical captures
@@ -39,6 +40,54 @@ Full-screen tap actions take precedence over widgets; touch-owning widgets
 can suppress ordinary tap/hold/swipe behavior.
 All widgets use the shared [labels and icon layout](../pads/appearance.md#arrange-button-content).
 Touch widgets keep their own input behavior.
+
+## Text reader
+
+A Text reader shows wrapped text inside a button, with manual scrolling or
+non-animated paging for longer content. It requires a display and PSRAM and
+works with literal text and supported bindings.
+
+1. In **Pads > Pad Editor**, select a button and choose **Text reader** in
+   **Content**.
+2. Enter **Text** as literal text or a binding. The configuration accepts up to
+   191 bytes; ordinary bindings retain their normal short-value limits.
+3. Optionally enter a **Text style**, such as `font_size:18;align:left`.
+   Font, size, metrics, alignment, and color follow
+   [label style syntax](../pads/appearance.md#use-label-style-syntax).
+   Only color accepts bindings. Text always wraps; offsets, marquee modes,
+   and bitmap upscaling are not supported.
+4. Choose **Scroll** for vertical touch scrolling, or **Paged** for whole-line,
+   non-animated page turns. **Board default** uses Paged on e-paper and Scroll
+   on other displays.
+5. In Paged mode, tap the upper text half for the previous page or the lower
+   half for the next page. Vertical swipes also turn pages. **Show navigation
+   buttons** adds optional up/down controls when text overflows. They are
+   disabled at the beginning/end and disappear when all text fits. Half-surface
+   taps and swipes work with or without these controls. There are no external
+   navigation actions.
+6. Under **Position indicator**, optionally set **Track color** and
+   **Indicator color** as hex colors or scalar bindings. Empty values use the
+   device button background and foreground defaults. The thin, non-interactive
+   indicator shows your position and the visible fraction of the text in both
+   viewport modes, and disappears when all text fits.
+7. Select **Save Pad**. No reboot is needed. Inspect the result on the device;
+   the editor grid shows a widget symbol, not a document preview.
+
+Give the widget enough space for its text and optional controls. If it shows
+`Reader needs more height`, enlarge the button, reduce the font size, or hide
+navigation controls. Existing button labels and icons remain available around
+the widget through the shared content layout.
+
+The reader owns touch input and does not run button tap or hold actions.
+Use separate buttons for playback or navigation. New content resets the reading
+position; unchanged content preserves it. Leaving the pad releases the text and
+resets the reader. Scrolling and paging are manual.
+
+Some sources provide full text rather than a short scalar preview. Use their
+binding token alone, with an optional pipe fallback. Adding prefix/suffix text
+or wrapping the token in an expression uses the normal short scalar path
+instead. See [loaded Voice Notes](../media/voice-notes.md#configure-the-detail-pad)
+for one example of a full-text source.
 
 ## Face
 

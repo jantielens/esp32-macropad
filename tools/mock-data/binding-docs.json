@@ -3982,15 +3982,15 @@
         },
         {
           "key": "loaded.title",
-          "desc": "Full saved title, displayed as a short preview"
+          "desc": "Saved title: short scalar preview, or full text in a Text reader"
         },
         {
           "key": "loaded.summary",
-          "desc": "Full saved summary, displayed as a short preview"
+          "desc": "Saved summary: short scalar preview, or full text in a Text reader"
         },
         {
           "key": "loaded.transcript",
-          "desc": "Full saved transcript, displayed as a short preview"
+          "desc": "Saved transcript: short scalar preview, or full text in a Text reader"
         },
         {
           "key": "loaded.created_at",

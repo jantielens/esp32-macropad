@@ -353,4 +353,23 @@ LoadedDataSnapshot* voice_notes_loaded_acquire() {
     LoadedDataLock lock;
     return slot.acquire();
 }
+
+BindingResolverStatus voice_notes_loaded_acquire_text(const char* key, BindingTextView* out) {
+    if (strcmp(key, "transcript") && strcmp(key, "summary") && strcmp(key, "title"))
+        return BINDING_RESOLVER_UNKNOWN;
+    LoadedDataSnapshot* snapshot = voice_notes_loaded_acquire();
+    if (!snapshot) return BINDING_RESOLVER_UNAVAILABLE;
+    JsonVariantConst data = snapshot->data();
+    JsonVariantConst value = !strcmp(key, "transcript")
+        ? data["transcript"]["transcript"]["text"]
+        : data["enrichment"]["enrichment"][!strcmp(key, "title") ? "title" : "summary"];
+    if (!value.is<const char*>()) {
+        snapshot->release();
+        return BINDING_RESOLVER_UNAVAILABLE;
+    }
+    out->text = value.as<const char*>();
+    out->owner = snapshot;
+    out->release = [](void* owner) { static_cast<LoadedDataSnapshot*>(owner)->release(); };
+    return BINDING_RESOLVER_RESOLVED;
+}
 #endif

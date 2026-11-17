@@ -379,7 +379,8 @@ void PadScreen::onWidgetPressFeedback(lv_event_t* event) {
     if (!tile) return;
 #if HAS_TOUCH
     const bool list = strcmp(tile->widget_cfg.type, "list") == 0;
-    if (list || strcmp(tile->widget_cfg.type, "option_selector") == 0) {
+    if (list || strcmp(tile->widget_cfg.type, "text_reader") == 0 ||
+        strcmp(tile->widget_cfg.type, "option_selector") == 0) {
         const auto* feedback = static_cast<const WidgetPressFeedback*>(lv_event_get_param(event));
         if (!feedback) return;
         const bool activated = feedback->event == LV_EVENT_CLICKED ||

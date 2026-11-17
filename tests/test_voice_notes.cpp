@@ -515,6 +515,10 @@ int main(int argc, char**) {
         assert(loaded);
         const JsonString stored = loaded->data()["transcript"]["transcript"]["text"].as<JsonString>();
         assert(stored.size() == text.size() && memcmp(stored.c_str(), text.data(), text.size()) == 0);
+        BindingTextView full_text;
+        assert(voice_notes_loaded_acquire_text("transcript", &full_text) == BINDING_RESOLVER_RESOLVED);
+        assert(full_text.owner == loaded && full_text.text == stored.c_str() && full_text.release);
+        assert(voice_notes_loaded_acquire_text("status", nullptr) == BINDING_RESOLVER_UNKNOWN);
         const unsigned before_clear = loaded_refreshes;
         voice_notes_loaded_clear_if_matches("ffffffffffffffff");
         loaded_expect("status", "ready");
@@ -526,9 +530,13 @@ int main(int argc, char**) {
         assert(binding_template_resolve_checked("[loaded:title|]", cleared_value, sizeof(cleared_value)));
         assert(!cleared_value[0]);
         assert(loaded_refreshes == before_clear + 1);
+        BindingTextView unavailable;
+        assert(voice_notes_loaded_acquire_text("transcript", &unavailable) == BINDING_RESOLVER_UNAVAILABLE);
         finish_loaded();
         assert(stored.size() == text.size() && memcmp(stored.c_str(), text.data(), text.size()) == 0);
         loaded->release();
+        assert(strlen(full_text.text) == text.size() && !strcmp(full_text.text, text.c_str()));
+        full_text.release(full_text.owner);
         assert(voice_notes_load_request(saved.last_clip));
         voice_notes_loaded_loop();
         voice_notes_loaded_clear_if_matches(saved.last_clip);

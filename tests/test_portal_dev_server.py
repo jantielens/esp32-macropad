@@ -179,6 +179,9 @@ class PortalDevServerTest(unittest.TestCase):
             for suffix in ("", "?docs=1"):
                 schemes = self.request("/api/bindings" + suffix, profile=selected)[1]["schemes"]
                 self.assertEqual(any(scheme["name"] == "voice_note" for scheme in schemes), enabled)
+                if enabled:
+                    voice = next(scheme for scheme in schemes if scheme["name"] == "voice_note")
+                    self.assertTrue({"loaded.transcript", "loaded.summary", "loaded.title"} <= set(voice["keys"]))
             catalog = self.request("/api/info?catalog=1", profile=selected)[1]["catalog"]
             for action_type in ("vnote_record", "vnote_process", "vnote_load", "vnote_delete"):
                 self.assertEqual(any(action["type"] == action_type for action in catalog), enabled)

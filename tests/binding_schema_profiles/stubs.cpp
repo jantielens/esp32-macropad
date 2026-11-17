@@ -14,6 +14,9 @@ BindingResolverStatus voice_notes_loaded_resolve(const char* key, char* out, siz
     strlcpy(out, "idle", size);
     return BINDING_RESOLVER_RESOLVED;
 }
+BindingResolverStatus voice_notes_loaded_acquire_text(const char*, BindingTextView*) {
+    return BINDING_RESOLVER_UNAVAILABLE;
+}
 #endif
 void voice_notes_snapshot(VoiceNoteSnapshot* out) { *out = {}; }
 const char* voice_notes_state_name(VoiceNoteState) { return "idle"; }

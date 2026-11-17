@@ -410,6 +410,21 @@ bool binding_template_resolve_single_token(const char* templ, char* out, size_t 
     return true;
 }
 
+BindingResolverStatus binding_template_acquire_text(const char* templ, BindingTextView* out) {
+    if (!out) return BINDING_RESOLVER_UNKNOWN;
+    *out = {};
+    BindingTokenView token;
+    if (!binding_template_single_token(templ, &token) ||
+        token.params_len >= BINDING_TEMPLATE_MAX_LEN) return BINDING_RESOLVER_UNKNOWN;
+    const SchemeEntry* entry = find_scheme(token.scheme, token.scheme_len);
+    if (!entry || !entry->spec.acquire_text) return BINDING_RESOLVER_UNKNOWN;
+    char params[BINDING_TEMPLATE_MAX_LEN];
+    memcpy(params, token.params, token.params_len);
+    params[token.params_len] = '\0';
+    split_pipe_fallback(params);
+    return entry->spec.acquire_text(params, out);
+}
+
 void binding_template_collect_topics(const char* templ, void* user_data) {
     if (!templ) return;
 

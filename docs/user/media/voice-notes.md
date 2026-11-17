@@ -93,7 +93,7 @@ use **Transcribe again** to try again.
 This example uses three saved pads. The recording pad starts and saves audio
 and shows background activity. The List pad shows recent saved notes. Tapping
 a row loads that note into a shared snapshot and opens the detail pad, where
-labels display previews of the saved results.
+labels display previews and a Text reader displays the complete saved text.
 
 Use **Pads > Pad Editor** to create and save pads named, for example,
 **Recording**, **Notes**, and **Note detail**. Give the List and detail pads
@@ -144,11 +144,13 @@ for row layout, paging, and item actions.
 
 ### Configure the detail pad
 
-1. On **Note detail**, add buttons with labels for
-   `[voice_note:loaded.status]`, `[voice_note:loaded.title|Untitled]`,
-   `[voice_note:loaded.summary|No summary]`, and
-   `[voice_note:loaded.transcript|No transcript]`. Use separate buttons if
-   needed to give the previews room.
+1. On **Note detail**, add labels for `[voice_note:loaded.status]` and
+   `[voice_note:loaded.title|Untitled]`. Add a button with **Text reader** content
+   and set **Text** to exactly `[voice_note:loaded.transcript|No transcript]`
+   to read the complete transcript. Use a second reader with
+   `[voice_note:loaded.summary|No summary]` for the full summary, if needed.
+   Configure scrolling or paging using the
+   [Text reader guide](../widgets/README.md#text-reader).
 2. Add a label for `[voice_note:loaded.error|]` and a **Navigate back** button.
    Select **Save Pad**.
 3. Show **Recording** on the device. Tap the record button, speak, and tap it
@@ -157,8 +159,8 @@ for row layout, paging, and item actions.
 
 The Load action captures the row's ID before navigation; `[item:id]` is only
 available during the row's immediate action. Missing titles, summaries, or
-transcripts use the configured fallbacks. For full playback, seeking, and
-reading, use **Voice Notes > Notes > View details** in the portal.
+transcripts use the configured fallbacks. For playback, seeking, and reading
+in the portal, use **Voice Notes > Notes > View details**.
 
 ## Show a loaded voice note on a pad
 
@@ -176,8 +178,10 @@ status and ID before relying on widget values.
 One loaded note is shared by all pads. Its saved title, summary, and transcript
 remain unchanged until another Load, a matching **Delete saved note** action,
 or reboot, even if the source note is edited or deleted through the portal.
-Labels show short UTF-8-safe previews, not a scrolling reader. Checked action
-fields reject values that do not fit rather than using a truncated prefix.
+Labels show short UTF-8-safe previews; use a
+[Text reader](../widgets/README.md#text-reader) for complete text on the device.
+Checked action fields reject values that do not fit rather than using a
+truncated prefix.
 
 ## Delete a note from a List
 

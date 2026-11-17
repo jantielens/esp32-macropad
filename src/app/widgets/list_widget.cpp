@@ -21,9 +21,6 @@
 namespace list_widget_impl {
 
 constexpr uint8_t none = UINT8_MAX;
-constexpr int32_t indicator_width = 4;
-constexpr int32_t indicator_gap = 2;
-constexpr int32_t indicator_range = 10000;
 constexpr int32_t auto_min_row_height = 44;
 constexpr int32_t auto_vertical_padding = 8;
 
@@ -190,21 +187,7 @@ void update_indicator(State* state) {
         total = start + state->height + (remaining > 0 ? remaining : 0);
         end = start + state->height;
     }
-    if (total <= 0) return;
-    int32_t lower = indicator_range - end * indicator_range / total;
-    int32_t upper = indicator_range - start * indicator_range / total;
-    const int32_t minimum = state->height > 1
-        ? (2 * indicator_range + state->height - 1) / state->height : indicator_range;
-    if (upper - lower < minimum) {
-        lower = upper - minimum;
-        if (lower < 0) { lower = 0; upper = minimum; }
-    }
-    // Range endpoints clamp to one another, so move the lower endpoint first
-    // when the new upper endpoint lies below it.
-    if (upper < lv_bar_get_start_value(state->indicator))
-        lv_bar_set_start_value(state->indicator, lower, LV_ANIM_OFF);
-    lv_bar_set_value(state->indicator, upper, LV_ANIM_OFF);
-    lv_bar_set_start_value(state->indicator, lower, LV_ANIM_OFF);
+    widget_update_position_indicator(state->indicator, start, end, total, state->height);
 }
 
 void scroll_changed(lv_event_t* event) {
@@ -430,9 +413,9 @@ void layout(State* state) {
     if (state->slots > 1 && state->spacing > (state->height - state->slots) / (state->slots - 1))
         state->spacing = (state->height - state->slots) / (state->slots - 1);
     if (state->count > state->capacity && state->width > 1) {
-        const int32_t gutter = state->width - 1 < indicator_width + indicator_gap
-            ? state->width - 1 : indicator_width + indicator_gap;
-        const int32_t bar_width = gutter < indicator_width ? gutter : indicator_width;
+        const int32_t gutter = state->width - 1 < widget_indicator_width + widget_indicator_gap
+            ? state->width - 1 : widget_indicator_width + widget_indicator_gap;
+        const int32_t bar_width = gutter < widget_indicator_width ? gutter : widget_indicator_width;
         state->width -= gutter;
         lv_obj_set_pos(state->indicator, state->width + gutter - bar_width, 0);
         lv_obj_set_size(state->indicator, bar_width, state->height);
@@ -719,20 +702,12 @@ void create(lv_obj_t* parent, const WidgetConfig* widget, const ScreenButtonConf
     lv_obj_set_style_text_font(state->message, pad_typography_font(scale->font_small), 0);
     lv_obj_set_style_text_align(state->message, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_long_mode(state->message, LV_LABEL_LONG_CLIP);
-    state->indicator = lv_bar_create(parent);
+    state->indicator = widget_create_position_indicator(parent);
     if (!state->indicator) {
         LOGE("List", "Cannot allocate List position indicator");
         message(state, "List allocation error");
         return;
     }
-    lv_obj_remove_style_all(state->indicator);
-    lv_obj_clear_flag(state->indicator, static_cast<lv_obj_flag_t>(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
-    lv_obj_set_style_bg_opa(state->indicator, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(state->indicator, LV_OPA_COVER, LV_PART_INDICATOR);
-    lv_bar_set_orientation(state->indicator, LV_BAR_ORIENTATION_VERTICAL);
-    lv_bar_set_mode(state->indicator, LV_BAR_MODE_RANGE);
-    lv_bar_set_range(state->indicator, 0, indicator_range);
-    lv_obj_add_flag(state->indicator, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_event_cb(parent, mark_layout, LV_EVENT_SIZE_CHANGED, state);
     state->layout_dirty = true;
     message(state, "Loading");

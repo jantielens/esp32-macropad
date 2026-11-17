@@ -12,4 +12,5 @@ void voice_notes_loaded_loop();
 // The caller owns the returned reference and must release it.
 LoadedDataSnapshot* voice_notes_loaded_acquire();
 BindingResolverStatus voice_notes_loaded_resolve(const char* key, char* out, size_t size);
+BindingResolverStatus voice_notes_loaded_acquire_text(const char* key, BindingTextView* out);
 #endif

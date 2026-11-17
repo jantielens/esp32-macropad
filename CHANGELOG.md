@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add a generic Text reader widget for display devices with PSRAM, independent
+  of Voice Notes. Read wrapped text with vertical touch scrolling or whole-line,
+  non-animated paging, half-surface page taps, optional up/down controls, and a
+  List-style position indicator with bindable track/thumb colors. Exact loaded Voice Note
+  text bindings display full transcripts, summaries, and titles without copying
+  them into ordinary label buffers. See the
+  [Text reader guide](docs/user/widgets/README.md#text-reader).
 * Add a configuration-driven List widget for display devices with PSRAM.
   Show up to 20 items with two styled labels, item-bound colors, tap and
   long-press actions, optional persistent selection, and scrolling or paged

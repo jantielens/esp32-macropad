@@ -45,6 +45,15 @@ enum BindingResolverStatus : uint8_t {
 typedef BindingResolverStatus (*binding_resolver_fn)(const char* params, char* out,
                                                       size_t out_len);
 
+// Immutable full text, borrowed until release(owner). Consumers must release
+// each successful acquisition, even when it matches their current view.
+struct BindingTextView {
+    const char* text = nullptr;
+    void* owner = nullptr;
+    void (*release)(void*) = nullptr;
+};
+typedef BindingResolverStatus (*binding_text_resolver_fn)(const char* params, BindingTextView* out);
+
 // ----------------------------------------------------------------------------
 // Topic collector callback
 // ----------------------------------------------------------------------------
@@ -222,6 +231,7 @@ struct BindingSchemeSpec {
     const BindingSchemeDoc* doc;
     const BindingAuthoringSpec* authoring;
     binding_first_param_validator_fn validate_first_param;
+    binding_text_resolver_fn acquire_text;
 
     constexpr BindingSchemeSpec(uint8_t minimum_params = 0, uint8_t maximum_params = 0,
                                 uint8_t widget_params = 0, int8_t format_index = 0,
@@ -231,12 +241,17 @@ struct BindingSchemeSpec {
                                 binding_key_at_fn key_at_index = nullptr,
                                                                 const BindingSchemeDoc* documentation = nullptr,
                                                                 const BindingAuthoringSpec* authoring_spec = nullptr,
-                                                                binding_first_param_validator_fn first_parameter_validator = nullptr)
+                                                                binding_first_param_validator_fn first_parameter_validator = nullptr,
+                                binding_text_resolver_fn text_resolver = nullptr)
         : min_params(minimum_params), max_params(maximum_params), widget_max_params(widget_params),
           format_param(format_index), validation_mode(validation), free_form(is_free_form),
                     key_count(count_keys), key_at(key_at_index), doc(documentation), authoring(authoring_spec),
-          validate_first_param(first_parameter_validator) {}
+          validate_first_param(first_parameter_validator), acquire_text(text_resolver) {}
 };
+
+// Exact single tokens only; unsupported schemes/keys return UNKNOWN so callers
+// can use ordinary scalar resolution, including its normal pipe fallback.
+BindingResolverStatus binding_template_acquire_text(const char* templ, BindingTextView* out);
 
 // Register a scheme resolver and its complete metadata contract. The metadata
 // is consumed by firmware validation, the portal API, and MCP capabilities.

@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <vector>
 #include "widgets/list_widget.cpp"
+#include "widgets/text_reader_widget.cpp"
 #include "item_binding_scheme.h"
 
 void widget_register(const WidgetType*) {}
@@ -674,4 +675,379 @@ TEST_F(ListWidget, PositionColorsDefaultToDeviceButtonsNotRowOverrides) {
     EXPECT_EQ(lv_color_to_u32(lv_obj_get_style_bg_color(row(0), LV_PART_MAIN)) & 0xffffff, 0u);
     EXPECT_EQ(lv_color_to_u32(lv_obj_get_style_bg_color(state->indicator, LV_PART_MAIN)) & 0xffffff, 0xeeeeeeu);
     EXPECT_EQ(lv_color_to_u32(lv_obj_get_style_bg_color(state->indicator, LV_PART_INDICATOR)) & 0xffffff, 0x123456u);
+}
+
+namespace {
+std::string reader_text;
+unsigned reader_references = 0;
+bool reader_available = true;
+BindingResolverStatus reader_scalar(const char*, char* out, size_t size) {
+    if (!reader_available) return BINDING_RESOLVER_UNAVAILABLE;
+    strlcpy(out, reader_text.c_str(), size);
+    return BINDING_RESOLVER_RESOLVED;
+}
+BindingResolverStatus reader_acquire(const char* key, BindingTextView* out) {
+    if (strcmp(key, "text")) return BINDING_RESOLVER_UNKNOWN;
+    if (!reader_available) return BINDING_RESOLVER_UNAVAILABLE;
+    ++reader_references;
+    *out = {reader_text.c_str(), &reader_text, [](void*) { --reader_references; }};
+    return BINDING_RESOLVER_RESOLVED;
+}
+}
+
+class TextReader : public testing::Test {
+protected:
+    lv_display_t* display = nullptr;
+    lv_indev_t* input = nullptr;
+    lv_obj_t* parent = nullptr;
+    WidgetState runtime{};
+    WidgetConfig config{};
+    lv_point_t point{};
+    std::vector<WidgetPressFeedback> feedback_events;
+
+    void SetUp() override {
+        if (!lv_is_initialized()) lv_init();
+        static bool registered = false;
+        if (!registered) {
+            pad_binding_init();
+            BindingSchemeSpec spec{1, 1, 1, -1, BINDING_VALIDATION_STANDARD, true};
+            spec.acquire_text = reader_acquire;
+            ASSERT_TRUE(binding_template_register("reader_test", reader_scalar, nullptr, spec));
+            registered = true;
+        }
+        reader_available = true;
+        list_test_defaults = {};
+        reader_references = 0;
+        reader_text.clear();
+        for (int i = 0; i < 80; ++i) reader_text += "A long UTF-8 line \xe2\x82\xac for reading.\n";
+        display = lv_display_create(320, 240);
+        parent = lv_obj_create(lv_screen_active());
+        lv_obj_add_event_cb(lv_obj_get_parent(parent), [](lv_event_t* event) {
+            auto* self = static_cast<TextReader*>(lv_event_get_user_data(event));
+            self->feedback_events.push_back(*static_cast<const WidgetPressFeedback*>(lv_event_get_param(event)));
+        }, LV_EVENT_VALUE_CHANGED, this);
+        lv_obj_remove_style_all(parent);
+        lv_obj_set_size(parent, 220, 180);
+        input = lv_indev_create();
+        lv_indev_set_type(input, LV_INDEV_TYPE_POINTER);
+        lv_indev_set_read_cb(input, [](lv_indev_t*, lv_indev_data_t* data) {
+            data->state = LV_INDEV_STATE_RELEASED;
+        });
+        configure();
+    }
+    void configure(bool paged = true, bool navigation = true, const char* track = "", const char* indicator = "") {
+        text_reader_impl::destroy(&runtime);
+        JsonDocument json;
+        json["widget_text_reader_viewport"] = paged ? "paged" : "scroll";
+        json["widget_text_reader_show_navigation"] = navigation;
+        json["widget_text_reader_indicator_track_color"] = track;
+        json["widget_text_reader_indicator_color"] = indicator;
+        text_reader_impl::parse(json.as<JsonObject>(), config.data);
+        strlcpy(config.data_binding[0], "[reader_test:text|Unavailable]", sizeof(config.data_binding[0]));
+        text_reader_impl::create(parent, &config, nullptr, nullptr, &pad_get_scale_info(), &runtime);
+        text_reader_impl::show(&runtime);
+        tick();
+    }
+    void tick() {
+        lv_obj_update_layout(parent);
+        text_reader_impl::tick(parent, &config, &runtime);
+        lv_obj_update_layout(parent);
+    }
+    void tap(int index) {
+        auto* state = text_reader_impl::get(&runtime);
+        lv_area_t bounds;
+        lv_obj_get_coords(state->controls[index], &bounds);
+        // The real pointer device supplies coordinates to both navigation events.
+        point = {(bounds.x1 + bounds.x2) / 2, (bounds.y1 + bounds.y2) / 2};
+        lv_indev_set_user_data(input, this);
+        lv_indev_set_read_cb(input, [](lv_indev_t* device, lv_indev_data_t* data) {
+            auto* self = static_cast<TextReader*>(lv_indev_get_user_data(device));
+            data->point = self->point;
+            data->state = LV_INDEV_STATE_RELEASED;
+        });
+        lv_indev_read(input);
+        lv_obj_send_event(state->controls[index], LV_EVENT_PRESSED, input);
+        lv_obj_send_event(state->controls[index], LV_EVENT_RELEASED, input);
+        lv_obj_update_layout(parent);
+    }
+    void TearDown() override {
+        text_reader_impl::destroy(&runtime);
+        pad_binding_set_bindings(nullptr, 0);
+        EXPECT_EQ(reader_references, 0u);
+        lv_indev_delete(input);
+        lv_display_delete(display);
+    }
+};
+
+TEST_F(TextReader, FullTextIsBorrowedAndPagesCoverWholeLinesWithoutResettingOnTick) {
+    auto* state = text_reader_impl::get(&runtime);
+    ASSERT_TRUE(state);
+    ASSERT_GT(reader_text.size(), BINDING_TEMPLATE_MAX_LEN);
+    EXPECT_EQ(lv_label_get_text(state->label), reader_text.c_str());
+    EXPECT_EQ(reader_references, 1u);
+    ASSERT_TRUE(state->navigation);
+    EXPECT_FALSE(lv_obj_has_flag(state->indicator, LV_OBJ_FLAG_HIDDEN));
+    EXPECT_EQ(lv_bar_get_value(state->indicator), 10000);
+    EXPECT_GT(lv_bar_get_start_value(state->indicator), 0);
+    EXPECT_EQ(state->page_height % lv_font_get_line_height(state->font), 0);
+    int32_t covered = 0;
+    while (state->page + 1 < state->pages) {
+        const int32_t page = state->page;
+        tap(1);
+        ASSERT_EQ(state->page, page + 1);
+        EXPECT_EQ(lv_obj_get_y(state->label), -state->page * state->page_height);
+        covered += state->page_height;
+    }
+    EXPECT_GE(covered + state->page_height, state->text_height);
+    EXPECT_EQ(lv_bar_get_start_value(state->indicator), 0);
+    EXPECT_LT(lv_bar_get_value(state->indicator), 10000);
+    EXPECT_TRUE(lv_obj_has_state(state->controls[1], LV_STATE_DISABLED));
+    const int32_t last = state->page;
+    tap(1);
+    tick();
+    EXPECT_EQ(state->page, last);
+    EXPECT_EQ(reader_references, 1u);
+    tap(0);
+    EXPECT_EQ(state->page, last - 1);
+}
+
+TEST_F(TextReader, NavigationUsesDefaultTapFeedbackOnlyForValidReleases) {
+    auto* state = text_reader_impl::get(&runtime);
+    tap(0);
+    EXPECT_TRUE(feedback_events.empty());
+
+    tap(1);
+    tap(0);
+    ASSERT_EQ(feedback_events.size(), 2u);
+    for (unsigned i = 0; i < feedback_events.size(); ++i) {
+        EXPECT_EQ(feedback_events[i].event, LV_EVENT_CLICKED);
+        EXPECT_EQ(feedback_events[i].object, state->controls[1 - i]);
+        EXPECT_TRUE(feedback_events[i].use_default_tap_audio);
+    }
+
+    feedback_events.clear();
+    lv_area_t bounds;
+    lv_obj_get_coords(state->controls[1], &bounds);
+    point = {(bounds.x1 + bounds.x2) / 2, (bounds.y1 + bounds.y2) / 2};
+    lv_indev_read(input);
+    lv_obj_send_event(state->controls[1], LV_EVENT_PRESSED, input);
+    lv_obj_send_event(state->controls[1], LV_EVENT_PRESS_LOST, input);
+    lv_obj_send_event(state->controls[1], LV_EVENT_RELEASED, input);
+    EXPECT_TRUE(feedback_events.empty());
+    EXPECT_EQ(state->page, 0);
+}
+
+TEST_F(TextReader, FirstLayoutPlacesNavigationInsidePendingParentSize) {
+    text_reader_impl::show(&runtime);
+    lv_obj_set_height(parent, 120);
+    text_reader_impl::tick(parent, &config, &runtime);
+    lv_obj_update_layout(parent);
+
+    auto* state = text_reader_impl::get(&runtime);
+    ASSERT_TRUE(state->navigation);
+    ASSERT_FALSE(lv_obj_has_flag(state->controls[1], LV_OBJ_FLAG_HIDDEN));
+    lv_area_t content, down;
+    lv_obj_get_content_coords(parent, &content);
+    lv_obj_get_coords(state->controls[1], &down);
+    EXPECT_GE(down.y1, content.y1);
+    EXPECT_LE(down.y2, content.y2);
+
+    const int32_t first_y = down.y1;
+    tick();
+    lv_obj_get_coords(state->controls[1], &down);
+    EXPECT_EQ(down.y1, first_y);
+}
+
+TEST_F(TextReader, LoadingClearsBorrowedTextAndHideReleasesIt) {
+    auto* state = text_reader_impl::get(&runtime);
+    tap(1);
+    reader_available = false;
+    tick();
+    EXPECT_EQ(reader_references, 0u);
+    EXPECT_STREQ(lv_label_get_text(state->label), "Unavailable");
+    EXPECT_EQ(state->page, 0);
+    EXPECT_FALSE(state->navigation);
+    reader_available = true;
+    tick();
+    EXPECT_EQ(reader_references, 1u);
+    text_reader_impl::hide(&runtime);
+    EXPECT_EQ(reader_references, 0u);
+    EXPECT_STREQ(lv_label_get_text(state->label), "");
+}
+
+TEST_F(TextReader, ScrollModeAndScalarBindingsRemainIndependentOfFullTextSources) {
+    configure(false);
+    auto* state = text_reader_impl::get(&runtime);
+    EXPECT_TRUE(lv_obj_has_flag(state->viewport, LV_OBJ_FLAG_SCROLLABLE));
+    EXPECT_FALSE(state->navigation);
+    lv_obj_scroll_to_y(state->viewport, 100, LV_ANIM_OFF);
+    tick();
+    EXPECT_EQ(lv_obj_get_scroll_y(state->viewport), 100);
+    strlcpy(config.data_binding[0], "literal text", sizeof(config.data_binding[0]));
+    tick();
+    EXPECT_STREQ(lv_label_get_text(state->label), "literal text");
+    EXPECT_EQ(reader_references, 0u);
+    EXPECT_EQ(lv_obj_get_scroll_y(state->viewport), 0);
+    BindingTextView view;
+    EXPECT_EQ(binding_template_acquire_text("prefix [reader_test:text]", &view), BINDING_RESOLVER_UNKNOWN);
+    EXPECT_EQ(reader_references, 0u);
+}
+
+TEST_F(TextReader, NavigationCanBeDisabledAndTooSmallViewportRecoversOnResize) {
+    configure(true, false);
+    auto* state = text_reader_impl::get(&runtime);
+    EXPECT_FALSE(state->navigation);
+    EXPECT_TRUE(lv_obj_has_flag(state->controls[0], LV_OBJ_FLAG_HIDDEN));
+    lv_obj_set_height(parent, 4);
+    tick();
+    EXPECT_FALSE(lv_obj_has_flag(state->message, LV_OBJ_FLAG_HIDDEN));
+    lv_obj_set_height(parent, 180);
+    tick();
+    EXPECT_TRUE(lv_obj_has_flag(state->message, LV_OBJ_FLAG_HIDDEN));
+    EXPECT_FALSE(lv_obj_has_flag(state->viewport, LV_OBJ_FLAG_HIDDEN));
+}
+
+TEST_F(TextReader, PagedSwipesWorkWithoutControlsAndCannotBubbleIntoPadActions) {
+    configure(true, false);
+    auto* state = text_reader_impl::get(&runtime);
+    unsigned bubbled = 0;
+    lv_obj_add_event_cb(parent, [](lv_event_t* event) {
+        ++*static_cast<unsigned*>(lv_event_get_user_data(event));
+    }, LV_EVENT_RELEASED, &bubbled);
+    lv_indev_set_user_data(input, &point);
+    lv_indev_set_read_cb(input, [](lv_indev_t* device, lv_indev_data_t* data) {
+        data->point = *static_cast<lv_point_t*>(lv_indev_get_user_data(device));
+        data->state = LV_INDEV_STATE_RELEASED;
+    });
+    const auto swipe = [&](int32_t from, int32_t to) {
+        point = {30, from};
+        lv_indev_read(input);
+        lv_obj_send_event(state->viewport, LV_EVENT_PRESSED, input);
+        point.y = to;
+        lv_indev_read(input);
+        lv_obj_send_event(state->viewport, LV_EVENT_RELEASED, input);
+        lv_obj_update_layout(parent);
+    };
+    swipe(120, 40);
+    EXPECT_EQ(state->page, 1);
+    swipe(40, 120);
+    EXPECT_EQ(state->page, 0);
+    swipe(40, 50);
+    EXPECT_EQ(state->page, 0);
+    EXPECT_EQ(bubbled, 0u);
+}
+
+TEST_F(TextReader, RejectsInertActionsAndIncompatibleLabelModes) {
+    JsonDocument json;
+    json["widget_text_reader_style"] = "mode:scroll";
+    EXPECT_NE(text_reader_impl::validate(json.as<JsonObjectConst>()), nullptr);
+    json["widget_text_reader_style"] = "font_size:18;align:left;mode:wrap";
+    EXPECT_EQ(text_reader_impl::validate(json.as<JsonObjectConst>()), nullptr);
+    json["actions"].to<JsonArray>().add<JsonObject>();
+    EXPECT_NE(text_reader_impl::validate(json.as<JsonObjectConst>()), nullptr);
+    json.remove("actions");
+    json["widget_text_reader_indicator_color"] = 42;
+    EXPECT_NE(text_reader_impl::validate(json.as<JsonObjectConst>()), nullptr);
+    json["widget_text_reader_indicator_color"] = "not a color";
+    EXPECT_NE(text_reader_impl::validate(json.as<JsonObjectConst>()), nullptr);
+    json["widget_text_reader_indicator_color"] = "[pad:indicator]";
+    EXPECT_EQ(text_reader_impl::validate(json.as<JsonObjectConst>()), nullptr);
+}
+
+TEST_F(TextReader, HalfSurfaceTapsNavigateWhileCancelledDragsAndOutsideReleasesDoNot) {
+    unsigned bubbled = 0;
+    lv_obj_add_event_cb(parent, [](lv_event_t* event) {
+        ++*static_cast<unsigned*>(lv_event_get_user_data(event));
+    }, LV_EVENT_RELEASED, &bubbled);
+    lv_indev_set_user_data(input, &point);
+    lv_indev_set_read_cb(input, [](lv_indev_t* device, lv_indev_data_t* data) {
+        data->point = *static_cast<lv_point_t*>(lv_indev_get_user_data(device));
+        data->state = LV_INDEV_STATE_RELEASED;
+    });
+    for (bool navigation : {true, false}) {
+        configure(true, navigation);
+        feedback_events.clear();
+        auto* state = text_reader_impl::get(&runtime);
+        lv_area_t bounds;
+        lv_obj_get_coords(state->viewport, &bounds);
+        const lv_point_t upper{(bounds.x1 + bounds.x2) / 2, bounds.y1 + 8};
+        const lv_point_t lower{upper.x, bounds.y2 - 8};
+        const auto send = [&](lv_point_t position, lv_event_code_t event) {
+            point = position;
+            lv_indev_read(input);
+            lv_obj_send_event(state->viewport, event, input);
+            lv_obj_update_layout(parent);
+        };
+        send(upper, LV_EVENT_PRESSED);
+        send(upper, LV_EVENT_RELEASED);
+        EXPECT_EQ(state->page, 0);
+        EXPECT_TRUE(feedback_events.empty());
+        send(lower, LV_EVENT_PRESSED);
+        send(lower, LV_EVENT_RELEASED);
+        EXPECT_EQ(state->page, 1);
+        ASSERT_EQ(feedback_events.size(), 1u);
+        send(upper, LV_EVENT_PRESSED);
+        send(upper, LV_EVENT_RELEASED);
+        EXPECT_EQ(state->page, 0);
+        ASSERT_EQ(feedback_events.size(), 2u);
+        for (const auto& feedback : feedback_events) {
+            EXPECT_EQ(feedback.event, LV_EVENT_CLICKED);
+            EXPECT_EQ(feedback.object, state->viewport);
+            EXPECT_TRUE(feedback.use_default_tap_audio);
+        }
+        send(lower, LV_EVENT_PRESSED);
+        send({lower.x + 25, lower.y}, LV_EVENT_PRESSING);
+        send(lower, LV_EVENT_RELEASED);
+        EXPECT_EQ(state->page, 0);
+        send(lower, LV_EVENT_PRESSED);
+        send(lower, LV_EVENT_PRESS_LOST);
+        send(lower, LV_EVENT_RELEASED);
+        EXPECT_EQ(state->page, 0);
+        send(lower, LV_EVENT_PRESSED);
+        send({lower.x, bounds.y2 + 1}, LV_EVENT_RELEASED);
+        EXPECT_EQ(state->page, 0);
+        send(lower, LV_EVENT_PRESSED);
+        send(upper, LV_EVENT_PRESSING);
+        send(upper, LV_EVENT_RELEASED);
+        EXPECT_EQ(state->page, 1);
+        EXPECT_EQ(feedback_events.size(), 2u);
+    }
+    EXPECT_EQ(bubbled, 0u);
+}
+
+TEST_F(TextReader, PositionIndicatorFollowsScrollingAndScalarColorsAndDisappearsWhenTextFits) {
+    strlcpy(list_test_defaults.bg_color, "#eeeeee", sizeof(list_test_defaults.bg_color));
+    strlcpy(list_test_defaults.fg_color, "#123456", sizeof(list_test_defaults.fg_color));
+    configure(false);
+    auto* state = text_reader_impl::get(&runtime);
+    EXPECT_EQ(lv_color_to_u32(lv_obj_get_style_bg_color(state->indicator, LV_PART_MAIN)) & 0xffffff, 0xeeeeeeu);
+    EXPECT_EQ(lv_color_to_u32(lv_obj_get_style_bg_color(state->indicator, LV_PART_INDICATOR)) & 0xffffff, 0x123456u);
+
+    PadBinding bindings[] = {{"track", "#112233"}, {"indicator", "#abcdef"}};
+    pad_binding_set_bindings(bindings, 2);
+    configure(false, true, "[pad:track]", "[pad:indicator]");
+    state = text_reader_impl::get(&runtime);
+    EXPECT_FALSE(lv_obj_has_flag(state->indicator, LV_OBJ_FLAG_CLICKABLE));
+    EXPECT_FALSE(lv_obj_has_flag(state->indicator, LV_OBJ_FLAG_HIDDEN));
+    EXPECT_EQ(lv_obj_get_width(state->viewport) + 6, lv_obj_get_content_width(parent));
+    EXPECT_EQ(lv_color_to_u32(lv_obj_get_style_bg_color(state->indicator, LV_PART_MAIN)) & 0xffffff, 0x112233u);
+    EXPECT_EQ(lv_color_to_u32(lv_obj_get_style_bg_color(state->indicator, LV_PART_INDICATOR)) & 0xffffff, 0xabcdefu);
+    strlcpy(bindings[1].value, "#654321", sizeof(bindings[1].value));
+    tick();
+    EXPECT_EQ(lv_color_to_u32(lv_obj_get_style_bg_color(state->indicator, LV_PART_INDICATOR)) & 0xffffff, 0x654321u);
+    EXPECT_EQ(lv_bar_get_value(state->indicator), 10000);
+    lv_obj_scroll_to_y(state->viewport, 100, LV_ANIM_OFF);
+    EXPECT_LT(lv_bar_get_value(state->indicator), 10000);
+    lv_obj_scroll_to_y(state->viewport, state->text_height - state->height, LV_ANIM_OFF);
+    EXPECT_EQ(lv_bar_get_start_value(state->indicator), 0);
+    lv_obj_scroll_to_y(state->viewport, 0, LV_ANIM_OFF);
+    EXPECT_EQ(lv_bar_get_value(state->indicator), 10000);
+    strlcpy(config.data_binding[0], "Test 123", sizeof(config.data_binding[0]));
+    tick();
+    EXPECT_TRUE(lv_obj_has_flag(state->indicator, LV_OBJ_FLAG_HIDDEN));
+    EXPECT_EQ(lv_obj_get_width(state->viewport), lv_obj_get_content_width(parent));
+    EXPECT_STREQ(lv_label_get_text(state->label), "Test 123");
+    lv_obj_set_size(parent, 1, 1);
+    tick();
+    EXPECT_TRUE(lv_obj_has_flag(state->indicator, LV_OBJ_FLAG_HIDDEN));
 }

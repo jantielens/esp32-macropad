@@ -7,6 +7,7 @@
 #include "../button_content_lvgl.h"
 #include "../fill_style_runtime.h"
 #include "../widgets/option_selector_widget.h"
+#include "../widgets/text_reader_widget.h"
 #if HAS_TOUCH
 #include "../touch_manager.h"
 #include "../widgets/slider_widget.h"
@@ -476,6 +477,8 @@ void PadScreen::buildTiles() {
                         lv_obj_clear_flag(widget_parent, LV_OBJ_FLAG_GESTURE_BUBBLE);
                         list_widget_attach(&tile.widget_state, PadScreen::onPress, &tile);
                     }
+                    if (strcmp(wt->name, "text_reader") == 0)
+                        text_reader_attach(&tile.widget_state, PadScreen::onPress, &tile);
 #endif
                     if (strcmp(wt->name, "option_selector") == 0)
                         option_selector_attach(&tile.widget_state, tile.actions, tile.action_count,
@@ -711,6 +714,7 @@ void PadScreen::buildTiles() {
         }
         if (strcmp(tile.widget_cfg.type, "slider") == 0 ||
             strcmp(tile.widget_cfg.type, "list") == 0 ||
+            strcmp(tile.widget_cfg.type, "text_reader") == 0 ||
             strcmp(tile.widget_cfg.type, "option_selector") == 0) {
             lv_obj_add_event_cb(obj, onWidgetPressFeedback, LV_EVENT_VALUE_CHANGED, &tiles[i]);
         }

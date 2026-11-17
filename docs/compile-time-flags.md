@@ -1017,6 +1017,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/slider_widget.cpp
   - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/table_widget.cpp
+  - src/app/widgets/text_reader_widget.cpp
+  - src/app/widgets/text_reader_widget.h
   - src/app/widgets/toggle_widget.cpp
   - src/app/widgets/toggle_widget.h
   - src/app/widgets/widget.cpp
@@ -1194,6 +1196,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_routes.cpp
   - src/app/widgets/list_config.cpp
   - src/app/widgets/list_widget.cpp
+  - src/app/widgets/text_reader_widget.cpp
 - **HAS_MCP**
   - src/app/binding_value.cpp
   - src/app/binding_value.h
@@ -1250,6 +1253,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/slider_widget.cpp
   - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/table_widget.cpp
+  - src/app/widgets/text_reader_widget.cpp
   - src/app/widgets/toggle_widget.cpp
   - src/app/widgets/widget.cpp
   - src/app/widgets/widget.h
@@ -1489,6 +1493,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/mousepad_widget.cpp
   - src/app/widgets/scrollpad_widget.cpp
   - src/app/widgets/slider_widget.cpp
+  - src/app/widgets/text_reader_widget.cpp
 - **HAS_TTF_FONTS**
   - src/app/board_config.h
   - src/app/display_manager.cpp

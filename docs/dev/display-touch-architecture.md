@@ -1628,8 +1628,31 @@ To add another provider, follow the
 
 Voice Notes retains the loaded data until another load or reboot, including
 after source edits or deletion. Its full text remains available in the snapshot;
-ordinary bindings expose previews, not a long-text reader. See the
+ordinary bindings expose previews. See the
 [user workflow](../user/media/voice-notes.md#show-a-loaded-voice-note-on-a-pad).
+
+The generic `text_reader` widget is gated by display and PSRAM, independently
+of Voice Notes. A scheme can supply `BindingSchemeSpec::acquire_text` to return
+an immutable `BindingTextView` for an exact single-token source. A successful
+acquisition carries a retained owner and release callback; the reader detaches
+LVGL's static text pointer before releasing it. Unsupported sources and mixed
+templates use ordinary bounded scalar resolution, including pipe fallbacks.
+The Voice Notes adapter supplies full loaded title, summary, and transcript
+strings without copying them or reading files from the LVGL task.
+
+Reader state uses strict PSRAM; it adds no task, display buffer, or global
+binding-buffer enlargement. LVGL objects still use the existing PSRAM-first
+allocator with internal-RAM fallback. Layout measures text only when content or
+viewport size changes. Paged rendering clips a borrowed wrapped label to a
+whole-line viewport and moves it in page-height steps. Upper/lower text-half
+taps, optional controls, and vertical swipes never dispatch containing-button
+actions; drag, cancelled, and outside-release input cannot become a tap.
+The reader and List share the non-animated range-bar position indicator,
+including the minimum thumb size and narrow right gutter. Reader indicator
+colors accept scalar bindings and inherit device button defaults when empty.
+Scroll events move the indicator in Scroll mode; Paged mode updates it on page
+or layout changes. No external reader navigation action is registered. Hiding
+the reader releases its retained source.
 
 ## Touch Driver HAL
 
