@@ -35,7 +35,13 @@ BatterySample::BatterySample() {
 }
 
 void BatterySample::set(BatteryField field, float value) {
+    invalidated &= ~battery_field_mask(field);
     values[static_cast<size_t>(field)] = valid(field, value) ? value : NAN;
+}
+
+void BatterySample::invalidate(BatteryField field) {
+    values[static_cast<size_t>(field)] = NAN;
+    invalidated |= battery_field_mask(field);
 }
 
 const BatteryFieldInfo &battery_field_info(BatteryField field) {
@@ -77,12 +83,18 @@ void BatteryCache::tick(uint32_t now, bool paused) {
 }
 
 void BatteryCache::update(BatterySample sample) {
+    for (size_t index = 0; index < BATTERY_FIELD_COUNT; ++index) {
+        const BatteryField field = static_cast<BatteryField>(index);
+        if (sample.invalidated & battery_field_mask(field))
+            cached_.readings.set(field, NAN);
+    }
     const float voltage = sample.get(BatteryField::Voltage);
     const float current = sample.get(BatteryField::Current);
     sample.set(BatteryField::Power, voltage * current);
     const float power = sample.get(BatteryField::Power);
     sample.set(BatteryField::DischargePower, isfinite(power) ? fmaxf(0, -power) : NAN);
-    if (!isfinite(power) && (isfinite(voltage) || isfinite(current))) {
+    const uint32_t powerInputs = battery_field_mask(BatteryField::Voltage) | battery_field_mask(BatteryField::Current);
+    if (!isfinite(power) && (isfinite(voltage) || isfinite(current) || (sample.invalidated & powerInputs))) {
         cached_.readings.set(BatteryField::Power, NAN);
         cached_.readings.set(BatteryField::DischargePower, NAN);
     }

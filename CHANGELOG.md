@@ -150,6 +150,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Correct reTerminal Sticky battery current and power for the stock gauge
+  profile. Current and power are unavailable if the profile cannot be
+  confirmed; voltage, percentage, and runtime estimates are unchanged.
 * Fill Sparkline areas toward zero instead of the chart bottom, including
   negative values and zero crossings. Clip off-screen zero baselines to the
   chart edge without changing the scale.

@@ -21,8 +21,10 @@ constexpr uint32_t battery_field_mask(BatteryField field) {
 
 struct BatterySample {
     float values[BATTERY_FIELD_COUNT];
+    uint32_t invalidated = 0;
     BatterySample();
     void set(BatteryField field, float value);
+    void invalidate(BatteryField field);
     void set_status(BatteryStatus status) { set(BatteryField::Status, static_cast<float>(status)); }
     float get(BatteryField field) const { return values[static_cast<size_t>(field)]; }
 };

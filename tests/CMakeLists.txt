@@ -240,21 +240,21 @@ add_host_legacy_test(test_inkplate_epaper_driver
 
 add_host_legacy_test(test_sensor_manager
     SOURCES test_sensor_manager.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp
-        ${PROJECT_SOURCE_DIR}/src/app/battery_info.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/battery_info.cpp ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
     DEFINITIONS HAS_BATTERY_INFO=1
     OPTIONS -Wno-deprecated-declarations
 )
 add_host_legacy_test(test_sensor_manager_no_battery
     SOURCES test_sensor_manager.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp
-        ${PROJECT_SOURCE_DIR}/src/app/battery_info.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/battery_info.cpp ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
     DEFINITIONS HAS_BATTERY_INFO=0
     OPTIONS -Wno-deprecated-declarations
 )
 add_host_legacy_test(test_sensor_manager_no_battery_mqtt
     SOURCES test_sensor_manager.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp
-        ${PROJECT_SOURCE_DIR}/src/app/battery_info.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/battery_info.cpp ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
     DEFINITIONS HAS_BATTERY_INFO=0 HAS_MQTT=1
     OPTIONS -Wno-deprecated-declarations

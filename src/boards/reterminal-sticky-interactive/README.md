@@ -217,10 +217,13 @@ See [shared battery semantics](../../../docs/user/pads/data-sources.md#show-batt
 
 Current comes from `Current()`, updated by the gauge every second; it is not a
 peak measurement or `AverageCurrent()`. Power is calculated from that sample's
-voltage and current, not total USB/device input power. Shipping current
-calibration and capacity configuration remain unverified, so current, power
-and runtime estimates require comparison with external measurements.
-No gauge configuration or calibration is written.
+voltage and current, not total USB/device input power. For the stock gauge
+profile, identified by a raw `DesignCapacity()` of 7500, current is divided
+by 10 as recommended by [Seeed's battery example](https://github.com/Seeed-Projects/sticky-esp-idf-peripherals/blob/main/main/demo_battery.cpp).
+Current and power are unavailable when the
+profile differs or cannot be read. The profile check does not verify
+calibration; compare current, power and runtime estimates with external
+measurements. No gauge configuration or calibration is written.
 
 ## Occupied onboard connections
 

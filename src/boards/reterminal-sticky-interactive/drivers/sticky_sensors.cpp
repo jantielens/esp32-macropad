@@ -17,6 +17,9 @@ constexpr uint8_t kStatus = 0x0a;
 constexpr uint8_t kCurrent = 0x0c;
 constexpr uint8_t kTimeToEmpty = 0x16;
 constexpr uint8_t kTimeToFull = 0x18;
+constexpr uint8_t kDesignCapacity = 0x3c;
+constexpr uint16_t kStockDesignCapacity = 7500;
+constexpr float kStockCurrentScale = 10.0f;
 #endif
 constexpr uint32_t kLogIntervalMs = 60000;
 SensirionI2cSht4x sht;
@@ -38,7 +41,7 @@ struct FailureLog {
 
 FailureLog shtFailure;
 #if HAS_BATTERY_INFO
-FailureLog voltageFailure, chargeFailure, currentFailure, statusFailure, runtimeFailure;
+FailureLog voltageFailure, chargeFailure, currentFailure, statusFailure, runtimeFailure, profileFailure;
 #endif
 
 void sht_init() {
@@ -76,9 +79,9 @@ bool gauge_word(uint8_t command, uint16_t &value) {
 }
 
 void gauge_sample(BatterySample &sample) {
-    uint16_t voltage = 0, charge = 0, current = 0, status = 0, timeEmpty = 0xffff, timeFull = 0xffff;
+    uint16_t voltage = 0, charge = 0, current = 0, status = 0, timeEmpty = 0xffff, timeFull = 0xffff, designCapacity = 0;
     bool voltageRead = false, chargeRead = false, currentRead = false, statusRead = false;
-    bool emptyRead = false, fullRead = false;
+    bool emptyRead = false, fullRead = false, designRead = false;
     const bool ready = sticky_hardware_ready();
     if (ready && i2c_bus_lock()) {
         voltageRead = gauge_word(kVoltage, voltage);
@@ -87,20 +90,24 @@ void gauge_sample(BatterySample &sample) {
         statusRead = gauge_word(kStatus, status);
         emptyRead = gauge_word(kTimeToEmpty, timeEmpty);
         fullRead = gauge_word(kTimeToFull, timeFull);
+        designRead = gauge_word(kDesignCapacity, designCapacity);
         i2c_bus_unlock();
     }
     const bool voltageValid = voltageRead && voltage >= 2000 && voltage <= 5000;
     const bool chargeValid = chargeRead && charge <= 100;
+    const bool stockProfile = designRead && designCapacity == kStockDesignCapacity;
     voltageFailure.update(!voltageValid, "BQ27220 voltage read invalid or failed (check Wire0 and 0x55)");
     chargeFailure.update(!chargeValid, "BQ27220 charge read invalid or failed (check Wire0 and 0x55)");
     currentFailure.update(!currentRead, "BQ27220 current read failed");
     statusFailure.update(!statusRead, "BQ27220 status read failed");
     runtimeFailure.update(!emptyRead || !fullRead, "BQ27220 runtime read failed");
+    profileFailure.update(!stockProfile, "BQ27220 stock profile unavailable or mismatched; current and power unavailable");
     if (voltageValid) sample.set(BatteryField::Voltage, voltage / 1000.0f);
     if (chargeValid) sample.set(BatteryField::Percentage, charge);
     // Decode two's complement without unsigned-to-signed overflow.
     const int32_t signedCurrent = current & 0x8000 ? int32_t(current) - 65536 : current;
-    if (currentRead) sample.set(BatteryField::Current, signedCurrent / 1000.0f);
+    if (!stockProfile) sample.invalidate(BatteryField::Current);
+    else if (currentRead) sample.set(BatteryField::Current, signedCurrent / (1000.0f * kStockCurrentScale));
     if (ready) sample.set(BatteryField::ExternalPowerPresent, digitalRead(9) == HIGH ? 1 : 0);
     if (statusRead && (status & 0x0008)) {
         if (status & 0x0001) sample.set_status(BatteryStatus::Discharging);
@@ -141,7 +148,7 @@ void board_register_sensors(SensorRegistry &registry) {
 
 #if HAS_BATTERY_INFO
     static const BatteryProvider battery = {
-        "BQ27220: Current() is sampled current updated every second, not peak or averaged current. Power uses the same voltage/current sample. Runtime uses native TimeToEmpty/TimeToFull estimates. Shipping current calibration and capacity configuration are unverified; readings require hardware validation. No gauge settings are written.",
+        "BQ27220: Current() is sampled current updated every second, not peak or averaged current. Current is divided by 10 when DesignCapacity() matches the stock 7500 profile; otherwise current and power are unavailable. This check does not verify calibration. Power uses the same voltage/current sample. Runtime uses native TimeToEmpty/TimeToFull estimates. Readings require hardware validation. No gauge settings are written.",
         battery_field_mask(BatteryField::Voltage) | battery_field_mask(BatteryField::Percentage) |
             battery_field_mask(BatteryField::Current) | battery_field_mask(BatteryField::Status) |
             battery_field_mask(BatteryField::ExternalPowerPresent) |
