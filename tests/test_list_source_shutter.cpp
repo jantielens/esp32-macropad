@@ -38,6 +38,7 @@ void heap_caps_free(void* memory) {
 }
 
 void display_manager_lock_if_needed(bool* locked) { *locked = false; }
+void display_manager_request_binding_refresh() {}
 void display_manager_unlock_if_needed(bool) {}
 bool ota_activity_is_active() { return false; }
 bool shutter_measure_is_valid_speed(const char* speed) {

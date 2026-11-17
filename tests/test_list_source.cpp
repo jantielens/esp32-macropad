@@ -30,7 +30,10 @@ size_t live_allocations = 0;
 size_t non_psram_allocations = 0;
 std::recursive_mutex display_mutex;
 bool ota_active = false;
+unsigned binding_refreshes = 0;
 }
+
+void display_manager_request_binding_refresh() { ++binding_refreshes; }
 
 void display_manager_lock_if_needed(bool* locked) {
     display_mutex.lock();
@@ -75,6 +78,7 @@ protected:
     void SetUp() override {
         fail_allocations = false;
         non_psram_allocations = 0;
+        binding_refreshes = 0;
         ASSERT_EQ(live_allocations, 0u);
     }
     void TearDown() override {
@@ -931,9 +935,12 @@ namespace {
                 ota_active = true;
                 list_source_loop();
                 EXPECT_EQ(service_steps, 0u);
+                EXPECT_EQ(binding_refreshes, 0u);
                 ota_active = false;
                 list_source_loop();
+                EXPECT_EQ(binding_refreshes, 0u);
                 list_source_loop();
+                EXPECT_EQ(binding_refreshes, 1u);
                 ASSERT_EQ(list_source_read(first, &old, nullptr, nullptr), ListSourceState::Ready);
                 ASSERT_NE(old, nullptr);
                 EXPECT_STREQ(old->items()[0]["id"], "1");
@@ -961,6 +968,7 @@ namespace {
                 ASSERT_EQ(list_source_read(first, &current, nullptr, nullptr), ListSourceState::Ready);
                 EXPECT_STREQ(current->items()[0]["id"], "4");
                 current->release();
+                EXPECT_EQ(binding_refreshes, 1u);
 
                 service_revision = 5;
                 service_fail = true;
@@ -969,6 +977,7 @@ namespace {
                 EXPECT_EQ(list_source_read(first, &current, nullptr, &error), ListSourceState::Error);
                 EXPECT_EQ(current, nullptr);
                 EXPECT_STREQ(error, "test source failure");
+                EXPECT_EQ(binding_refreshes, 1u);
                 const unsigned after_failure = service_steps;
                 list_source_loop();
                 EXPECT_EQ(service_steps, after_failure);
@@ -981,6 +990,19 @@ namespace {
                 list_source_loop();
                 list_source_release(first);
                 list_source_release(second);
+                list_source_loop();
+                EXPECT_EQ(binding_refreshes, 1u);
+
+                first = list_source_acquire(&source);
+                ASSERT_NE(first, nullptr);
+                service_fail = true;
+                list_source_loop();
+                EXPECT_EQ(list_source_read(first, nullptr, nullptr, &error), ListSourceState::Error);
+                EXPECT_EQ(binding_refreshes, 2u);
+                list_source_loop();
+                EXPECT_EQ(binding_refreshes, 2u);
+                service_fail = false;
+                list_source_release(first);
                 list_source_loop();
             }
 

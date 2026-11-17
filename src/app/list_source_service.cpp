@@ -68,10 +68,12 @@ void finish_job() {
 
 void publish_failure(const char* error) {
     if (!error) error = "source load failed";
+    bool initial_load = false;
     {
         DisplayLock lock;
         if (!job_is_current()) return;
         ListSourceHandle* handle = job.handle;
+        initial_load = handle->state == ListSourceState::Loading;
         if (handle->current) {
             handle->retired = handle->current;
             handle->current = nullptr;
@@ -81,6 +83,7 @@ void publish_failure(const char* error) {
         ++handle->version;
     }
     LOGE("ListSource", "%s: %s", job.handle->source->token, error);
+    if (initial_load) display_manager_request_binding_refresh();
 }
 }
 
@@ -227,12 +230,14 @@ void list_source_loop() {
         finish_job();
         return;
     }
+    bool initial_load = false;
     if (result == ListSourceLoadStep::Complete) {
         error = job.snapshot->seal();
         if (!error) {
             DisplayLock lock;
             if (job_is_current()) {
                 ListSourceHandle* handle = job.handle;
+                initial_load = handle->state == ListSourceState::Loading;
                 handle->retired = handle->current;
                 handle->current = job.snapshot;
                 job.snapshot = nullptr;
@@ -246,6 +251,7 @@ void list_source_loop() {
     }
     if (error) publish_failure(error);
     finish_job();
+    if (initial_load) display_manager_request_binding_refresh();
 }
 
 #endif

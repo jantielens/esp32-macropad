@@ -1540,6 +1540,12 @@ retain or animate from its previous value, and history-based widgets retain
 shared stream samples; this poll does not clear widget-owned state. Snapshot
 loading and storage reads stay on the main loop, outside the display lock.
 
+List sources also request a coalesced binding refresh when an initial load
+publishes ready data or an error. This lets the widget consume the result without
+waiting for the next passive e-paper polling boundary. Subsequent source updates
+retain passive polling. The notification adds no presentation delay: a loading
+message already presented on the panel still requires a later refresh for rows.
+
 With `HAS_DISPLAY_DIAGNOSTICS`, bounded per-interaction/presentation debug logs
 carry request/frame sequences and microsecond timestamps for UI-owner entry,
 mutation, committed readiness, hardware eligibility, snapshot, waveform trigger,

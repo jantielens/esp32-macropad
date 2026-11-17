@@ -6,6 +6,7 @@
 
 void widget_register(const WidgetType*) {}
 void display_manager_lock_if_needed(bool* locked) { *locked = false; }
+void display_manager_request_binding_refresh() {}
 void display_manager_unlock_if_needed(bool) {}
 bool ota_activity_is_active() { return false; }
 extern "C" unsigned long millis() { return 0; }
