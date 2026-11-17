@@ -360,6 +360,33 @@ static void expect_health_authoring_contract() {
     expect(binding_template_resolve_registered("health", 6, "wifi_rssi;%ld dBm", value, sizeof(value)) ==
                BINDING_RESOLVER_RESOLVED && std::strcmp(value, "-55 dBm") == 0,
            "connected signal retains numeric formatting");
+    const char* welcome_url =
+        "[expr:[health:wifi_connected]==\"ON\"?[health:wifi_hostname;http://%s.local/|Hostname unavailable]:\"Connect to Wi-Fi\"]";
+    const char* welcome_intro =
+        "[expr:[health:wifi_connected]==\"ON\"?\"Make this display yours.\nOpen in your browser:\":\"Make this display yours.\"]";
+    const char* welcome_ip_heading =
+        "[expr:[health:wifi_connected]==\"ON\"?\"Or open:\":\"Portal addresses will\"]";
+    const char* welcome_ip =
+        "[expr:[health:wifi_connected]==\"ON\"?[health:wifi_ip;http://%s/|Address unavailable]:\"appear once connected.\"]";
+    binding_template_resolve(welcome_intro, value, sizeof(value));
+    expect(std::strcmp(value, "Make this display yours.\nOpen in your browser:") == 0,
+           "welcome introduces the portal addresses while connected");
+    binding_template_resolve(welcome_ip_heading, value, sizeof(value));
+    expect(std::strcmp(value, "Or open:") == 0,
+           "welcome introduces the alternative address while connected");
+    binding_template_resolve(welcome_url, value, sizeof(value));
+    expect(std::strcmp(value, "http://desk-device.local/") == 0,
+           "welcome friendly URL resolves through a conditional binding");
+    std::strcpy(binding_test_network.hostname, "123");
+    std::strcpy(binding_test_network.ip, "192.0.2.11");
+    binding_test_now_ms += 2000;
+    binding_template_resolve(welcome_url, value, sizeof(value));
+    expect(std::strcmp(value, "http://123.local/") == 0,
+           "numeric hostname is safely formatted as URL text");
+    binding_template_resolve(welcome_ip, value, sizeof(value));
+    expect(std::strcmp(value, "http://192.0.2.11/") == 0,
+           "welcome IP URL reflects network changes");
+    std::strcpy(binding_test_network.hostname, "desk-device");
     static const struct { WifiNetworkState state; const char* text; } states[] = {
         {WifiNetworkState::Off, "OFF"}, {WifiNetworkState::Starting, "STARTING"},
         {WifiNetworkState::Connecting, "CONNECTING"}, {WifiNetworkState::Connected, "CONNECTED"},
@@ -375,6 +402,18 @@ static void expect_health_authoring_contract() {
     }
     binding_test_network.state = WifiNetworkState::Off;
     binding_test_now_ms += 2000;
+    binding_template_resolve(welcome_url, value, sizeof(value));
+    expect(std::strcmp(value, "Connect to Wi-Fi") == 0,
+           "welcome hides the friendly URL while offline");
+    binding_template_resolve(welcome_intro, value, sizeof(value));
+    expect(std::strcmp(value, "Make this display yours.") == 0,
+           "welcome omits browser instructions while offline");
+    binding_template_resolve(welcome_ip_heading, value, sizeof(value));
+    expect(std::strcmp(value, "Portal addresses will") == 0,
+           "welcome explains the missing addresses while offline");
+    binding_template_resolve(welcome_ip, value, sizeof(value));
+    expect(std::strcmp(value, "appear once connected.") == 0,
+           "welcome explains when addresses become available");
     expect(binding_template_resolve_registered("health", 6, "wifi_hostname", value, sizeof(value)) ==
                BINDING_RESOLVER_RESOLVED && std::strcmp(value, "desk-device") == 0,
            "configured hostname remains available while off");

@@ -1027,6 +1027,17 @@ add_host_legacy_test(test_camera_capture_action
 )
 add_host_legacy_test(test_pad_cycle SOURCES test_pad_cycle.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_cycle.cpp PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_pad_config_dynamic_layout SOURCES test_pad_config_dynamic_layout.cpp PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
+
+foreach(sd 0 1)
+  add_host_legacy_test(test_welcome_pad_${sd}
+    SOURCES test_welcome_pad.cpp ${PROJECT_SOURCE_DIR}/src/app/welcome_pad.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/font_store_overrides ${HOST_ARDUINOJSON_DIR} ${HOST_LVGL_DIR}
+    DEFINITIONS HAS_FILESYSTEM=1 USE_SD_STORAGE=${sd} HAS_AUTO_SHUTDOWN=${sd} PROGMEM=
+        MAX_GRID_COLS=5 MAX_GRID_ROWS=5
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
+        ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+  )
+endforeach()
 add_host_gtest(test_option_selector_config test_option_selector_config.cpp
     ${PROJECT_SOURCE_DIR}/src/app/widgets/option_selector_config.cpp)
 target_include_directories(test_option_selector_config PRIVATE ${HOST_ARDUINOJSON_DIR})

@@ -72,6 +72,7 @@
 #include "visual_alert.h"
 #include "swipe_config.h"
 #include "button_defaults.h"
+#include "welcome_pad.h"
 #endif
 
 #if HAS_IMAGE_FETCH
@@ -578,6 +579,12 @@ void setup()
 
 	// Load best-effort once the splash and required storage are ready.
 	load_boot_logo();
+
+	#if HAS_DISPLAY && HAS_FILESYSTEM && !IS_EPAPER_FRAME
+	if (!welcome_pad_provision(config_loaded)) {
+		LOGW("Main", "Welcome pad provisioning incomplete; continuing setup");
+	}
+	#endif
 
 	const bool force_config_mode_burst = power_manager_should_force_config_mode();
 	if (force_config_mode_burst) {

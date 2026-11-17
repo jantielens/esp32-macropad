@@ -995,6 +995,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_routes.cpp
   - src/app/web_portal_screenshot.cpp
   - src/app/web_portal_screenshot.h
+  - src/app/welcome_pad.cpp
+  - src/app/welcome_pad.h
   - src/app/widgets.cpp
   - src/app/widgets/bar_chart_widget.cpp
   - src/app/widgets/camera_preview_widget.cpp
@@ -1093,11 +1095,14 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/widgets/face_widget.cpp
 - **HAS_FILESYSTEM**
+  - src/app/app.ino
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/storage.cpp
   - src/app/storage.h
   - src/app/web_portal_utils.cpp
+  - src/app/welcome_pad.cpp
+  - src/app/welcome_pad.h
 - **HAS_FREETYPE_FONTS**
   - src/app/board_config.h
   - src/app/display_task.cpp
@@ -2007,6 +2012,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sensors.cpp
   - src/app/time_service.cpp
   - src/app/web_portal_config.cpp
+  - src/app/welcome_pad.cpp
+  - src/app/welcome_pad.h
   - src/boards/reterminal-e1003-frame/drivers/reterminal_e1003_driver.cpp
 - **IS_SHUTTER_TESTER**
   - src/app/board_config.h

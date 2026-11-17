@@ -4,6 +4,7 @@
 #if HAS_DISPLAY
 
 #include "binding_template.h"
+#include "binding_value.h"
 #include "device_telemetry.h"
 #include "display_manager.h"
 #include "log_manager.h"
@@ -426,14 +427,7 @@ static BindingResolverStatus health_binding_resolve(const char* params, char* ou
     }
 
     if (fmt[0]) {
-        // Best-effort printf format: try int first, fall back to string
-        char* end = nullptr;
-        long lval = strtol(raw, &end, 10);
-        if (end && *end == '\0') {
-            snprintf(out, out_len, fmt, lval);
-        } else {
-            snprintf(out, out_len, fmt, raw);
-        }
+        binding_value_format(raw, fmt, out, out_len);
     } else {
         strlcpy(out, raw, out_len);
     }

@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Create an editable Welcome pad during initial setup on pad-capable displays.
+  Three centered, tap-free buttons show setup guidance and live portal URLs,
+  using device-default colors and a 5-column layout shaped for round displays.
+  Preserve existing configurations
+  and do not recreate the pad after deletion.
 * Add a generic Text reader widget for display devices with PSRAM, independent
   of Voice Notes. Read wrapped text with vertical touch scrolling or whole-line,
   non-animated paging, half-surface page taps, optional up/down controls, and a
