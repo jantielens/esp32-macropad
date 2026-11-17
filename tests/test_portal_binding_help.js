@@ -554,6 +554,12 @@ delete context.testHelpSchemes;
     assert.strictEqual(expressionGenerate('[health:cpu] + "value"', {}).valid, true);
     assert.strictEqual(expressionGenerate('abs(value)', {}).valid, false);
     assert.strictEqual(expressionGenerate('min(1, 2)', {}).valid, true);
+    assert.strictEqual(expressionGenerate('datetime(1700000000, "%Y-%m-%d")', {}).valid, true);
+    assert.strictEqual(expressionGenerate('duration(65000, "ms", "mm:ss")', {}).valid, true);
+    assert.strictEqual(context.expressionBuilderSnippet('datetime(epoch, format, timezone)').text,
+        'datetime(value)');
+    assert.strictEqual(context.expressionBuilderSnippet('duration(value, unit, format)').text,
+        'duration(value, "ms")');
     const tooLong = expressionGenerate('"' + 'é'.repeat(100) + '"', {});
     assert.strictEqual(tooLong.valid, false);
     assert.strictEqual(tooLong.bytes, new TextEncoder().encode(tooLong.binding).length);
@@ -1910,11 +1916,6 @@ delete context.testHelpSchemes;
     assert.strictEqual(duration.capabilities.numericWidget, true);
     assert.deepStrictEqual(Array.from(duration.formatModes), ['raw'],
         'Duration syntax must not be advertised as printf formatting');
-    const formattedDuration = catalogButtons.prepare(catalogReference('timer', '1', 'mm:ss'));
-    assert.strictEqual(formattedDuration.sample, '4:05');
-    assert.strictEqual(formattedDuration.valueKind, 'text');
-    assert.strictEqual(formattedDuration.unit, '');
-    assert.strictEqual(formattedDuration.capabilities.numericWidget, false);
     const activityAge = catalogButtons.prepare(catalogReference('net', 'mqtt_rx', 'age'));
     assert.strictEqual(activityAge.sample, '125');
     assert.strictEqual(activityAge.valueKind, 'integer');

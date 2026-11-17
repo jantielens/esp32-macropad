@@ -222,7 +222,7 @@ BrewPhase brew_get_phase() { return BREW_ACTIVE; }
 uint8_t brew_get_stage_count() { return 1; }
 uint8_t brew_get_stage_index() { return 0; }
 const BrewStage* brew_get_stage(uint8_t index) { return index == 0 ? &kFixtureStage : nullptr; }
-int brew_format_timer(const char*, char* out, size_t out_len) { return std::snprintf(out, out_len, "00:12"); }
+int brew_format_timer(char* out, size_t out_len) { return std::snprintf(out, out_len, "00:12"); }
 uint8_t brew_template_count() { return 1; }
 const BrewTemplate* brew_template_get(uint8_t index) {
     static const BrewTemplate fixture = {
@@ -315,13 +315,14 @@ CameraMotionSettings camera_motion_get_settings() {
             .presence_hold_seconds = 60, .keep_display_awake = false};
 }
 CameraMotionThresholds camera_motion_get_thresholds(uint8_t) { return {}; }
-CameraMotionStatus camera_motion_get_status() { return {}; }
+CameraMotionStatus binding_test_camera{};
+CameraMotionStatus camera_motion_get_status() { return binding_test_camera; }
 #endif
 uint32_t timer_get_target_seconds(uint8_t) { return 0; }
 TimerState timer_get_state(uint8_t) { return TIMER_STOPPED; }
 TimerMode timer_get_mode(uint8_t) { return TIMER_MODE_UP; }
 bool timer_is_expired(uint8_t) { return false; }
-int timer_format(uint8_t, const char*, char* out, size_t out_len) {
+int timer_format(uint8_t, char* out, size_t out_len) {
     if (out_len) std::snprintf(out, out_len, "0");
     return 1;
 }

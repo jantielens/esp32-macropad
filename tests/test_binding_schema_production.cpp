@@ -10,9 +10,13 @@
 #include "var_binding.h"
 #include "pad_binding.h"
 #include "time_binding.h"
+#include "time_service.h"
 #include "alarm_manager.h"
 #include "psram_json_allocator.h"
 #include "wifi_manager.h"
+#if HAS_CAMERA
+#include "camera_motion.h"
+#endif
 
 extern unsigned long binding_test_now_ms;
 extern WifiNetworkSnapshot binding_test_network;
@@ -544,7 +548,44 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    {
+        char value[128];
+        expect(time_service_set_timezone("UTC"), "set device timezone");
+        binding_template_resolve("[expr:datetime(0)]", value, sizeof(value));
+        expect(!std::strcmp(value, "1970-01-01 00:00"), "epoch zero uses device timezone");
+        binding_template_resolve("[expr:datetime(1719835200,\"%H:%M\",\"Europe/Amsterdam\")]", value, sizeof(value));
+        expect(!std::strcmp(value, "14:00"), "datetime applies daylight saving");
+        binding_template_resolve("[expr:datetime(1704110400,\"%H:%M\",\"Europe/Amsterdam\")]", value, sizeof(value));
+        expect(!std::strcmp(value, "13:00"), "datetime applies winter timezone");
+        binding_template_resolve("[expr:datetime(0,\"%H:%M:%S.%ms\",\"UTC\")]", value, sizeof(value));
+        expect(!std::strcmp(value, "00:00:00.000"), "timestamp subsecond formats");
+        binding_template_resolve("[expr:datetime(1.5)|invalid]", value, sizeof(value));
+        expect(!std::strcmp(value, "invalid"), "fractional epoch uses fallback");
+        binding_template_resolve("[expr:datetime(0,\"%H:%M\",\"Not/AZone\")|invalid]", value, sizeof(value));
+        expect(!std::strcmp(value, "invalid"), "invalid timezone uses fallback");
+#if HAS_PSRAM
+        binding_template_resolve("[expr:datetime([item:created_at])|missing]", value, sizeof(value));
+        expect(!std::strcmp(value, "missing"), "unavailable nested timestamp uses fallback");
+#endif
+        binding_template_resolve("[expr:duration(65000,\"ms\")]", value, sizeof(value));
+        expect(!std::strcmp(value, "1:05"), "duration expression resolves");
+    }
+
     expect(binding_template_scheme_count() > 0, "production profile registered binding schemes");
+#if HAS_CAMERA
+    {
+        extern CameraMotionStatus binding_test_camera;
+        char value[64] = {};
+        binding_test_camera = {};
+        binding_template_resolve("[camera:last_motion_at|missing]", value, sizeof(value));
+        expect(!std::strcmp(value, "missing"), "missing camera timestamp uses fallback");
+        binding_test_camera.has_last_motion = true;
+        binding_test_camera.last_motion_epoch = 1704110400;
+        binding_template_resolve("[camera:last_motion_at]", value, sizeof(value));
+        expect(!std::strcmp(value, "1704110400"), "camera timestamp resolves as Unix seconds");
+        binding_test_camera = {};
+    }
+#endif
     expect(binding_template_validate_params("health", 6, "table") != nullptr,
            "removed health Table binding is rejected");
     expect(binding_template_validate_params("health", 6, "extended_table") != nullptr,
@@ -737,6 +778,7 @@ int main(int argc, char** argv) {
     alarm_expect("1_day_0", "OFF");
     alarm_expect("1_day_1", "ON");
     alarm_expect("1_minutes", "450");
+    alarm_expect("1_next_at", "1704094200");
     alarm_expect("1_next_seconds", "60");
     alarm_expect("1_next_available", "ON");
     alarm_expect("1_next_ring_seconds", "0");
@@ -751,6 +793,11 @@ int main(int argc, char** argv) {
     alarm_expect("1_save_state", "saved");
     alarm_expect("1_snooze_seconds", "");
     binding_test_alarm = {false, 0, 5, ALARM_SNOOZED, false, false, false, false, 0};
+    {
+        char missing[32] = {};
+        binding_template_resolve("[alarm:1_next_at|missing]", missing, sizeof(missing));
+        expect(!std::strcmp(missing, "missing"), "missing alarm timestamp uses fallback");
+    }
     binding_test_alarm.snooze_remaining = 539;
     binding_test_alarm.next_ring_seconds = 539;
     alarm_expect("1_snooze_seconds", "539");

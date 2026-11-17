@@ -384,7 +384,7 @@ bool timer_is_overtime(uint8_t id) {
     return overtime;
 }
 
-int timer_format(uint8_t id, const char* fmt, char* out, size_t out_len) {
+int timer_format(uint8_t id, char* out, size_t out_len) {
     if (!out || out_len == 0) return 0;
     if (!s_timer_ready || !valid_id(id)) return snprintf(out, out_len, "0.0");
     timer_lock();
@@ -398,26 +398,9 @@ int timer_format(uint8_t id, const char* fmt, char* out, size_t out_len) {
         : elapsed;
     timer_unlock();
     uint32_t total_s = ms / 1000;
-    uint32_t h = total_s / 3600;
-    uint32_t m = (total_s % 3600) / 60;
-    uint32_t s = total_s % 60;
     uint32_t ds = (ms % 1000) / 100;  // deciseconds
     const char* sign = overtime ? "-" : "";
-
-    if (!fmt || !fmt[0]) {
-        // Raw numeric default: seconds with decisecond precision
-        return snprintf(out, out_len, "%s%u.%u", sign, (unsigned)total_s, (unsigned)ds);
-    } else if (strcmp(fmt, "mm:ss") == 0) {
-        return snprintf(out, out_len, "%s%u:%02u", sign, (unsigned)(h * 60 + m), (unsigned)s);
-    } else if (strcmp(fmt, "hh:mm:ss") == 0) {
-        return snprintf(out, out_len, "%s%u:%02u:%02u", sign, (unsigned)h, (unsigned)m, (unsigned)s);
-    } else if (strcmp(fmt, "ss") == 0) {
-        return snprintf(out, out_len, "%s%u", sign, (unsigned)total_s);
-    } else if (strcmp(fmt, "mm:ss.d") == 0) {
-        return snprintf(out, out_len, "%s%u:%02u.%u", sign, (unsigned)(h * 60 + m), (unsigned)s, (unsigned)ds);
-    }
-    // Unknown format — fall back to mm:ss
-    return snprintf(out, out_len, "%s%u:%02u", sign, (unsigned)(h * 60 + m), (unsigned)s);
+    return snprintf(out, out_len, "%s%u.%u", sign, (unsigned)total_s, (unsigned)ds);
 }
 
 void timer_engine_tick() {

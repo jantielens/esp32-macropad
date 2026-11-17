@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add `datetime()` and `duration()` expression functions for formatting Unix
+  timestamps and durations. Choose a timezone and date format or a compact
+  duration format, and use numeric expressions with literal unit labels for
+  custom text. Find examples in the Binding Reference, Expression Builder, and
+  [expression guide](docs/user/pads/expressions.md#format-dates-and-durations).
 * Add the `esp32-p4-lcd4b-sd` board variant with SD-primary storage.
   A readable FAT32 card is required at boot; existing files are not migrated
   from internal flash. See [LCD4B SD storage](src/boards/esp32-p4-lcd4b-sd/README.md).
@@ -93,6 +98,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Standardize timestamp bindings on Unix seconds and return unavailable when
+  the timestamp is unknown. Replace `[alarm:1_once_epoch]` and
+  `[alarm:1_next_epoch]` with `[alarm:1_once_at]` and `[alarm:1_next_at]`;
+  replace the alarm `*_local` bindings with `datetime()` expressions. Rename
+  `[camera:last_motion]` to `[camera:last_motion_at]` and the sensor field
+  `camera_last_motion` to `camera_last_motion_at`.
+* Replace `[brew:timer]` with `[brew:timer_ms]` and remove duration format
+  parameters from timer, exposure, and test-strip bindings. Use `duration()`
+  expressions for formatted output. Update affected pad configurations;
+  these binding changes are not migrated automatically.
 * Require SD-primary storage for Voice Notes. The flash-backed LCD4B and
   reTerminal Sticky targets no longer include Voice Notes; use their SD variants
   instead. Back up recordings before switching because files are not migrated.

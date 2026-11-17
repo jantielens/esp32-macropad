@@ -75,4 +75,4 @@ void timer_engine_tick();
 // Default (NULL/empty): raw seconds with decisecond precision ("45.3")
 // Named formats: "mm:ss", "hh:mm:ss", "ss", "mm:ss.d"
 // For countdown timers past zero, output is prefixed with "-".
-int timer_format(uint8_t id, const char* fmt, char* out, size_t out_len);
+int timer_format(uint8_t id, char* out, size_t out_len);

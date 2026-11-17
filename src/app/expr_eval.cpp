@@ -67,6 +67,9 @@ typedef struct {
     const char* src;
     int         pos;
     uint8_t     nesting;
+    char        strings[EXPR_STR_MAX * 4];
+    size_t      strings_used;
+    expr_datetime_format_fn datetime_format;
 } Parser;
 
 static void skip_ws(Parser* p) {
@@ -145,6 +148,72 @@ static ExprVal parse_clamp_function(Parser* p) {
     return make_num(fmax(low.num, fmin(value.num, high.num)));
 }
 
+static bool copy_arg_string(const ExprVal& value, char* out, size_t size) {
+    if (value.type != VAL_STR || value.str_len >= size) return false;
+    memcpy(out, value.str, value.str_len);
+    out[value.str_len] = '\0';
+    return true;
+}
+
+static bool format_duration(double value, const char* unit, const char* format,
+                            char* out, size_t out_len) {
+    if (!isfinite(value) || (strcmp(unit, "s") && strcmp(unit, "ms"))) return false;
+    double tenths_value = fabs(value) * (strcmp(unit, "s") == 0 ? 10.0 : 0.01);
+    if (!isfinite(tenths_value) || tenths_value >= 90071992547409.0) return false;
+    uint64_t tenths = static_cast<uint64_t>(tenths_value);
+    uint64_t seconds = tenths / 10;
+    uint64_t minutes = seconds / 60;
+    const char* sign = value < 0 ? "-" : "";
+    int n = -1;
+    if (!strcmp(format, "mm:ss"))
+        n = snprintf(out, out_len, "%s%llu:%02u", sign, (unsigned long long)minutes, (unsigned)(seconds % 60));
+    else if (!strcmp(format, "hh:mm:ss"))
+        n = snprintf(out, out_len, "%s%llu:%02u:%02u", sign, (unsigned long long)(minutes / 60),
+                     (unsigned)(minutes % 60), (unsigned)(seconds % 60));
+    else if (!strcmp(format, "mm:ss.d"))
+        n = snprintf(out, out_len, "%s%llu:%02u.%u", sign, (unsigned long long)minutes,
+                     (unsigned)(seconds % 60), (unsigned)(tenths % 10));
+    else if (!strcmp(format, "ss"))
+        n = snprintf(out, out_len, "%s%llu", sign, (unsigned long long)seconds);
+    else if (!strcmp(format, "ss.d"))
+        n = snprintf(out, out_len, "%s%llu.%u", sign, (unsigned long long)seconds, (unsigned)(tenths % 10));
+    return n >= 0 && static_cast<size_t>(n) < out_len;
+}
+
+static ExprVal parse_format_function(Parser* p, bool datetime) {
+    p->pos += 9;
+    ExprVal value = parse_nested_ternary(p);
+    if (value.type == VAL_ERR) return value;
+    if (value.type != VAL_NUM) return make_err("format: value must be numeric");
+    char first[128] = "";
+    char second[128] = "";
+    if (match_char(p, ',')) {
+        ExprVal arg = parse_nested_ternary(p);
+        if (arg.type == VAL_ERR) return arg;
+        if (!copy_arg_string(arg, first, sizeof(first))) return make_err("format: invalid argument");
+        if (match_char(p, ',')) {
+            arg = parse_nested_ternary(p);
+            if (arg.type == VAL_ERR) return arg;
+            if (!copy_arg_string(arg, second, sizeof(second))) return make_err("format: invalid argument");
+        }
+    } else if (!datetime) {
+        return make_err("duration: unit required");
+    }
+    if (!match_char(p, ')')) return make_err("format: expected closing ')'");
+    char result[EXPR_STR_MAX];
+    bool ok = datetime
+        ? p->datetime_format && p->datetime_format(value.num, first[0] ? first : "%Y-%m-%d %H:%M",
+                                                    second, result, sizeof(result))
+        : format_duration(value.num, first, second[0] ? second : "mm:ss", result, sizeof(result));
+    if (!ok) return make_err("invalid date or duration");
+    size_t len = strlen(result);
+    if (len + 1 > sizeof(p->strings) - p->strings_used) return make_err("formatted text too long");
+    char* stored = p->strings + p->strings_used;
+    memcpy(stored, result, len + 1);
+    p->strings_used += len + 1;
+    return make_str(stored, len);
+}
+
 // ============================================================================
 // Primary: number, string literal, parenthesized expression
 // ============================================================================
@@ -153,6 +222,10 @@ static ExprVal parse_primary(Parser* p) {
     skip_ws(p);
     char c = p->src[p->pos];
 
+    if (strncmp(p->src + p->pos, "datetime(", 9) == 0)
+        return parse_format_function(p, true);
+    if (strncmp(p->src + p->pos, "duration(", 9) == 0)
+        return parse_format_function(p, false);
     // Built-in function: threshold(value, color0, t1, color1, ..., tN, colorN)
     // Stream-processed so variable-length calls use fixed stack space.
     if (strncmp(p->src + p->pos, "threshold(", 10) == 0) {
@@ -435,7 +508,8 @@ static void format_number(double val, char* out, size_t out_len) {
 // Public API
 // ============================================================================
 
-bool expr_eval(const char* expression, char* out, size_t out_len) {
+bool expr_eval_with_datetime(const char* expression, char* out, size_t out_len,
+                             expr_datetime_format_fn datetime_format) {
     if (!expression || !out || out_len == 0) {
         if (out && out_len > 0) snprintf(out, out_len, "ERR:null");
         return false;
@@ -453,6 +527,8 @@ bool expr_eval(const char* expression, char* out, size_t out_len) {
     parser.src = expression;
     parser.pos = 0;
     parser.nesting = 0;
+    parser.strings_used = 0;
+    parser.datetime_format = datetime_format;
 
     ExprVal result = parse_ternary(&parser);
 
@@ -473,4 +549,8 @@ bool expr_eval(const char* expression, char* out, size_t out_len) {
         format_number(result.num, out, out_len);
     }
     return true;
+}
+
+bool expr_eval(const char* expression, char* out, size_t out_len) {
+    return expr_eval_with_datetime(expression, out, out_len, nullptr);
 }

@@ -44,28 +44,6 @@ static const TimerBindingKeyDef* find_timer_binding_key(const char* params) {
 // ============================================================================
 
 static BindingResolverStatus timer_binding_resolve(const char* params, char* out, size_t out_len) {
-    // Split at first ';' for format override (only relevant for value keys)
-    char buf[64];
-    const char* format = NULL;
-    if (params) {
-        const char* semi = NULL;
-        // Find ';' at bracket depth 0
-        int depth = 0;
-        for (const char* p = params; *p; ++p) {
-            if (*p == '[') depth++;
-            else if (*p == ']') depth--;
-            else if (*p == ';' && depth == 0) { semi = p; break; }
-        }
-        if (semi) {
-            size_t key_len = semi - params;
-            if (key_len >= sizeof(buf)) key_len = sizeof(buf) - 1;
-            memcpy(buf, params, key_len);
-            buf[key_len] = '\0';
-            params = buf;
-            format = semi + 1;
-        }
-    }
-
     const TimerBindingKeyDef* key = find_timer_binding_key(params);
     if (!key) {
         snprintf(out, out_len, "ERR:bad_timer");
@@ -96,8 +74,7 @@ static BindingResolverStatus timer_binding_resolve(const char* params, char* out
         }
     }
 
-    // Value key: format timer
-    timer_format(key->id, format, out, out_len);
+    timer_format(key->id, out, out_len);
     return BINDING_RESOLVER_RESOLVED;
 }
 
@@ -121,11 +98,10 @@ static const char* timer_binding_key_at(uint8_t index) {
 
 static const BindingParamDoc kTimerParams[] = {
     {"key", "Timer number 1-3, or N_state, N_mode, N_expired, N_target."},
-    {"format", "Duration format for the timer value, see Format strings."},
 };
 
 static const BindingKeyDoc kTimerKeyDocs[] = {
-    {"#", "Timer value; default 245.3 (seconds with tenths)", nullptr},
+    {"#", "Timer value in seconds with tenths, e.g. 245.3", nullptr},
     {"#_state", "running, paused, or stopped", nullptr},
     {"#_mode", "up (count-up) or down (countdown)", nullptr},
     {"#_expired", "ON once a countdown has passed zero", nullptr},
@@ -133,23 +109,16 @@ static const BindingKeyDoc kTimerKeyDocs[] = {
 };
 
 static const BindingExampleDoc kTimerExamples[] = {
-    {"[timer:1;mm:ss]", "Timer 1 as minutes and seconds."},
+    {"[expr:duration([timer:1],\"s\")]", "Timer 1 as minutes and seconds."},
     {"[timer:1_target]", "Stable maximum for a countdown gauge."},
     {"[expr:[timer:1_expired]==\"ON\"?\"#dc2626\":\"#333333\"]", "Red once the countdown expires."},
-};
-
-static const BindingReferenceDoc kTimerFormats[] = {
-    {nullptr, "mm:ss", "4:05", "Minutes and seconds", "[timer:1;mm:ss]"},
-    {nullptr, "hh:mm:ss", "0:04:05", "With hours", "[timer:1;hh:mm:ss]"},
-    {nullptr, "mm:ss.d", "4:05.3", "With tenths", "[timer:1;mm:ss.d]"},
-    {nullptr, "ss", "245", "Whole seconds", "[timer:1;ss]", "s", BINDING_AUTHORING_KIND_INTEGER},
 };
 
 static const BindingSchemeDoc kTimerDoc = {
     "Device", "Value and state of the 3 on-device timers.",
     BINDING_DOC_LIST(kTimerParams), BINDING_DOC_LIST(kTimerKeyDocs), BINDING_DOC_LIST(kTimerExamples),
-    "Timer durations", true, BINDING_DOC_LIST(kTimerFormats),
-    "Countdowns that run past zero show negative values, e.g. -0:05.", nullptr,
+    nullptr, false, BINDING_DOC_NONE,
+    "Countdowns that run past zero show negative seconds, e.g. -5.0.", nullptr,
 };
 static const BindingAuthoringKey kTimerAuthoringKeys[] = {
     binding_authoring_number("#", "s", "245.3", false),
@@ -167,7 +136,7 @@ static const BindingAuthoringSpec kTimerAuthoring = {BINDING_DOC_LIST(kTimerAuth
 void timer_binding_init() {
     timer_engine_init();
     if (!binding_template_register("timer", timer_binding_resolve, timer_binding_collect,
-                                   {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
+                                   {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, false,
                                     timer_binding_key_count, timer_binding_key_at, &kTimerDoc,
                                     &kTimerAuthoring})) {
         LOGE(TAG, "Failed to register timer binding scheme");

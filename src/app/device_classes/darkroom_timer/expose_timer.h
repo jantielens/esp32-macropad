@@ -20,16 +20,12 @@
 //
 // Binding scheme "expose" (all time tokens default to seconds with 1 decimal):
 //   [expose:time]             — exposure time setting (e.g. "8.0")
-//   [expose:time;mm:ss.d]     — formatted setting
 //   [expose:remaining]        — countdown remaining (e.g. "6.3")
-//   [expose:remaining;mm:ss.d]— with format override
 //   [expose:elapsed]          — countdown elapsed (e.g. "1.7")
-//   [expose:elapsed;mm:ss.d]  — with format override
 //   [expose:state]            — "stopped" / "running" / "paused" / "focus"
 //   [expose:relay]            — "ON" / "OFF"
 //   [expose:dry_down]         — dry-down compensation (percent, e.g. "8.0")
 //   [expose:effective_time]   — compensated exposure time (set_time × (1 - dry_down/100))
-//   [expose:effective_time;mm:ss.d] — with format override
 //
 // Action type "expose" (command + value as separate fields):
 //   command="start"                  — start countdown (relay ON)

@@ -15,7 +15,7 @@ Timer actions on your pad choose mode, duration, and live controls.
 2. Select the command for the intended timer, such as **T1 Start**.
 3. Choose **Countdown** and enter a positive whole-second duration, such as
    `240`. Duration can also use a binding that resolves to valid seconds.
-4. Put `[timer:1;mm:ss]` in a label and **Save Pad**.
+4. Put `[expr:duration([timer:1],"s")]` in a label and **Save Pad**.
 5. Show the saved pad and tap the button. Check the countdown on the device.
 
 For a stopwatch, select **Stopwatch (Count Up)** instead; it needs no duration.
@@ -60,17 +60,16 @@ stopping automatically. Use Stop or Reset when that is not desired.
 
 Replace `1` with timer `2` or `3` where needed:
 
-| Binding              | Value                                                       |
-| -------------------- | ----------------------------------------------------------- |
-| `[timer:1]`          | Raw seconds with a decisecond, suitable for numeric widgets |
-| `[timer:1;mm:ss]`    | Minutes and seconds, such as `4:05`                         |
-| `[timer:1;hh:mm:ss]` | Hours, minutes, and seconds                                 |
-| `[timer:1;mm:ss.d]`  | Minutes/seconds with deciseconds                            |
-| `[timer:1;ss]`       | Whole seconds                                               |
-| `[timer:1_state]`    | `running`, `paused`, or `stopped`                           |
-| `[timer:1_expired]`  | `ON` after crossing zero, otherwise `OFF`                   |
-| `[timer:1_mode]`     | `up` or `down`                                              |
-| `[timer:1_target]`   | Active countdown target in whole seconds                    |
+| Binding                                     | Value                                                       |
+| ------------------------------------------- | ----------------------------------------------------------- |
+| `[timer:1]`                                 | Raw seconds with a decisecond, suitable for numeric widgets |
+| `[expr:duration([timer:1],"s")]`            | Minutes and seconds, such as `4:05`                         |
+| `[expr:duration([timer:1],"s","hh:mm:ss")]` | Hours, minutes, and seconds                                 |
+| `[expr:duration([timer:1],"s","mm:ss.d")]`  | Minutes/seconds with deciseconds                            |
+| `[timer:1_state]`                           | `running`, `paused`, or `stopped`                           |
+| `[timer:1_expired]`                         | `ON` after crossing zero, otherwise `OFF`                   |
+| `[timer:1_mode]`                            | `up` or `down`                                              |
+| `[timer:1_target]`                          | Active countdown target in whole seconds                    |
 
 Overtime values are negative. The target updates after Start, Set, and Adjust;
 ordinary ticking, Stop, and Reset leave it unchanged. Count-up and unconfigured

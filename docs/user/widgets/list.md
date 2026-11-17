@@ -14,7 +14,7 @@ each List keeps its own focus and viewport.
    IDs contain 1-32 ASCII letters, digits, underscores, or hyphens.
 3. Choose a **Source**. The available fields appear below it.
 4. Configure the top and optional bottom label. For recent notes, try
-   `[item:title|Untitled]` and `[item:duration_ms] ms`. Use **Aa** beside
+   `[item:title|Untitled]` and `[expr:duration([item:duration_ms],"ms")]`. Use **Aa** beside
    a label to override its style and **?** for the style reference.
 5. Add item tap or long-press actions and choose **Save Pad**.
 

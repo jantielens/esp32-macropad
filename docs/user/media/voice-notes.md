@@ -133,7 +133,7 @@ service's retry cycle, not an individual note, and resets on reboot.
    **List ID** and choose **Recent voice notes** (`[voice_note:recent_notes]`)
    as the source.
 2. Set the top item label to `[item:title|Untitled]` and the bottom label to
-   `[item:duration_ms] ms`. Titles are available after successful enrichment;
+   `[expr:duration([item:duration_ms],"ms")]`. Titles are available after successful enrichment;
    the fallback also works without cloud processing.
 3. Under **Item tap actions**, add **Voice notes > Load saved note** with
    **Note ID** set to `[item:id]`. Add **Navigate to screen** targeting
@@ -142,9 +142,10 @@ service's retry cycle, not an individual note, and resets on reboot.
 
 The source contains up to 20 recent notes, newest first. It also exposes
 `id`, `created_at`, `duration_ms`, `has_transcript`, and `has_enrichment`.
-`created_at` is a Unix timestamp in seconds, not a formatted date, and is
-unavailable if the clock was not set. See the [List guide](../widgets/list.md)
-for row layout, paging, and item actions.
+`created_at` is a Unix timestamp in seconds and is unavailable if the clock
+was not set. Format it with `[expr:datetime([item:created_at])|Time unavailable]`.
+See [expressions](../pads/expressions.md#format-dates-and-durations) for more
+formats, and the [List guide](../widgets/list.md) for row layout and item actions.
 
 ### Configure the detail pad
 

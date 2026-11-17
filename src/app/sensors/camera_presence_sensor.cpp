@@ -76,9 +76,12 @@ void camera_presence_sample(JsonObject& doc) {
     const CameraMotionStatus status = camera_motion_get_status();
     sensor_manager_set_bool(doc, "camera_presence", status.presence, status.enabled);
     if (status.enabled) {
-        doc["camera_last_motion"] = status.has_last_motion ? status.last_motion_epoch : 0;
+        if (status.has_last_motion && status.last_motion_epoch)
+            doc["camera_last_motion_at"] = status.last_motion_epoch;
+        else
+            doc["camera_last_motion_at"] = nullptr;
     } else {
-        doc["camera_last_motion"] = nullptr;
+        doc["camera_last_motion_at"] = nullptr;
     }
 }
 
@@ -96,7 +99,7 @@ void camera_presence_publish_ha(MqttManager& mqtt) {
 void register_camera_presence_sensor(SensorRegistry& registry) {
     static const SensorField fields[] = {
         {"camera_presence", "Camera presence detected: 1 or 0.", "", "1"},
-        {"camera_last_motion", "Last camera motion as Unix seconds; 0 if none.", "s", "0"},
+        {"camera_last_motion_at", "Last camera motion as Unix seconds when known.", "s", "1791360000"},
     };
     SensorCallbacks callbacks = {};
     callbacks.name = "Camera Presence";

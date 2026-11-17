@@ -841,6 +841,8 @@ TEST_F(ListSourceTest, ItemContextIsScopedAndDoesNotInterpretFieldContents) {
     JsonDocument input;
     input["id"] = "first";
     input["title"] = "[item:id]";
+    input["created_at"] = 1704110400;
+    input["duration_ms"] = 65000;
     ASSERT_EQ(snapshot->append(input.as<JsonObjectConst>()), nullptr);
     input["id"] = "second";
     input["title"] = "Other";
@@ -854,6 +856,12 @@ TEST_F(ListSourceTest, ItemContextIsScopedAndDoesNotInterpretFieldContents) {
         snapshot->release();
         binding_template_resolve("[item:title]", out, sizeof(out));
         EXPECT_STREQ(out, "[item:id]");
+        binding_template_resolve("[expr:datetime([item:created_at],\"%H:%M\",\"UTC\")]", out, sizeof(out));
+        EXPECT_STREQ(out, "12:00");
+        binding_template_resolve("[expr:duration([item:duration_ms],\"ms\")]", out, sizeof(out));
+        EXPECT_STREQ(out, "1:05");
+        binding_template_resolve("[expr:datetime([item:missing])|unavailable]", out, sizeof(out));
+        EXPECT_STREQ(out, "unavailable");
         std::thread other_task([] { ItemBindingScope::end_current(); });
         other_task.join();
         binding_template_resolve("[item:id]", out, sizeof(out));

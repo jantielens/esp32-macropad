@@ -13,7 +13,7 @@
           {
             "size": "M",
             "shape": "wide",
-            "label_center": "[timer:1;mm:ss]",
+            "label_center": "[expr:duration([timer:1],\"s\")]",
             "label_bottom": "(tap to toggle, \nhold to reset)",
             "label_center_style": "font:dseg7",
             "label_bottom_style": "color:999999",

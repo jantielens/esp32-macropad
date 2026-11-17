@@ -356,7 +356,7 @@ static void test_concurrent_engine_access() {
             (void)timer_get_ms(1);
             (void)timer_is_expired(1);
             char formatted[24];
-            timer_format(1, "mm:ss", formatted, sizeof(formatted));
+            timer_format(1, formatted, sizeof(formatted));
         }
     });
     writer.join();

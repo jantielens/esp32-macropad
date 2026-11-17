@@ -11,8 +11,8 @@ const context = {
                 return Promise.resolve({
                     schemes: [
                         {
-                            name: 'timer', min_params: 1, max_params: 2,
-                            widget_max_params: 1, format_param: 1,
+                            name: 'timer', min_params: 1, max_params: 1,
+                            widget_max_params: 1, format_param: -1,
                             validation_mode: 0, free_form: false,
                             keys: [
                                 '1', '1_state', '1_mode', '1_expired', '1_target',
@@ -40,7 +40,6 @@ vm.runInContext(fs.readFileSync('src/app/web/portal_binding_validator.js', 'utf8
 
     for (const token of [
         '[timer:1]',
-        '[timer:1;ss]',
         '[timer:1_state]',
         '[timer:1_mode]',
         '[timer:1_expired]',
@@ -56,6 +55,7 @@ vm.runInContext(fs.readFileSync('src/app/web/portal_binding_validator.js', 'utf8
     const invalid = context.validateBinding('[timer:1_unknown]');
     assert.strictEqual(invalid.valid, false);
     assert.match(invalid.errors[0].message, /Unknown binding key/);
+    assert.strictEqual(context.validateBinding('[timer:1;ss]').valid, false);
 
     console.log('portal_timer_binding: PASS');
 })().catch(function(error) {

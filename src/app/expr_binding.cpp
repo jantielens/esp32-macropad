@@ -7,12 +7,42 @@
 #include "binding_value.h"
 #include "expr_eval.h"
 #include "log_manager.h"
+#include "time_service.h"
 
+#include <cmath>
+#include <limits>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #define TAG "ExprBind"
+
+static bool format_datetime(double value, const char* format, const char* timezone,
+                            char* out, size_t out_len) {
+    if (!std::isfinite(value) || std::trunc(value) != value ||
+        std::fabs(value) > 9007199254740991.0 ||
+        static_cast<long double>(value) < std::numeric_limits<time_t>::lowest() ||
+        static_cast<long double>(value) > std::numeric_limits<time_t>::max() ||
+        (timezone[0] && !time_service_timezone_valid(timezone))) return false;
+    char expanded[128];
+    size_t used = 0;
+    for (const char* p = format; *p;) {
+        const char* replacement = nullptr;
+        size_t consumed = 1;
+        if (*p == '%' && p[1] == '%') consumed = 2;
+        else if (!strncmp(p, "%ums", 4)) return false;
+        else if (!strncmp(p, "%ms", 3)) { replacement = "000"; consumed = 3; }
+        else if (!strncmp(p, "%cs", 3)) { replacement = "00"; consumed = 3; }
+        else if (!strncmp(p, "%ds", 3)) { replacement = "0"; consumed = 3; }
+        const size_t count = replacement ? strlen(replacement) : consumed;
+        if (count >= sizeof(expanded) - used) return false;
+        memcpy(expanded + used, replacement ? replacement : p, count);
+        used += count;
+        p += consumed;
+    }
+    expanded[used] = '\0';
+    return time_service_format(static_cast<time_t>(value), expanded, timezone, out, out_len);
+}
 
 // ============================================================================
 // Find format suffix — last ';' not inside quotes or brackets
@@ -151,7 +181,7 @@ static BindingResolverStatus expr_binding_resolve(const char* params, char* out,
 
     // Step 2: Evaluate the expression
     char eval_result[EXPR_STR_MAX];
-    if (!expr_eval(resolved, eval_result, sizeof(eval_result))) {
+    if (!expr_eval_with_datetime(resolved, eval_result, sizeof(eval_result), format_datetime)) {
         snprintf(out, out_len, "%s", eval_result);
         return BINDING_RESOLVER_UNAVAILABLE;
     }
@@ -186,7 +216,7 @@ static void expr_binding_collect(const char* params, void* user_data) {
 // ============================================================================
 
 static const BindingParamDoc kExprParams[] = {
-    {"expression", "Arithmetic, comparisons, ternaries, numeric functions, and threshold(); inner tokens resolve first."},
+    {"expression", "Arithmetic, comparisons, ternaries, numeric functions, datetime(), duration(), and threshold(); inner tokens resolve first."},
     {"format", "printf format applied to the result, e.g. %.1f."},
 };
 
@@ -195,6 +225,9 @@ static const BindingExampleDoc kExprExamples[] = {
     {"[expr:([health:heap_free] / 1024);%.0f KB]", "Derived number with a unit."},
     {"[expr:abs([health:wifi_rssi])]", "Show the magnitude of a signed value."},
     {"[expr:clamp([health:cpu],0,100)]", "Keep a value within a range."},
+    {"[expr:datetime(1700000000)]", "Format Unix seconds in the device timezone."},
+    {"[expr:duration(65000,\"ms\")]", "Format milliseconds as minutes and seconds."},
+    {"[expr:floor(4920000/60000);%.0f] minute(s)", "Show total minutes with a manual suffix."},
     {"[expr:threshold([health:cpu],\"#16a34a\",50,\"#f59e0b\",80,\"#dc2626\")]", "Map a number to color zones."},
     {"[expr:[time:%ms] % 500 < 250 ? \"#dc2626\" : \"#f8fafc\"]", "Blink between two colors."},
 };
@@ -215,6 +248,21 @@ static const BindingReferenceDoc kExprReference[] = {
     {"Functions", "floor(x)", nullptr, "Round down to the next integer", "[expr:floor([health:cpu])]"},
     {"Functions", "ceil(x)", nullptr, "Round up to the next integer", "[expr:ceil([health:cpu])]"},
     {"Functions", "threshold(v, c0, t1, c1, ...)", nullptr, "c0 below t1, c1 below t2, ..., else the last value; thresholds ascend", "[expr:threshold([health:cpu],\"#16a34a\",50,\"#dc2626\")]"},
+    {"Date & duration", "datetime(epoch, format, timezone)", "Device-local time",
+     "Integer Unix seconds; format and timezone are optional. Defaults to device timezone and %Y-%m-%d %H:%M.",
+     "[expr:datetime(1700000000)]"},
+    {"Date & duration", "duration(value, unit, format)", "1:05",
+     "Unit is s or ms; format defaults to mm:ss. Also supports hh:mm:ss, mm:ss.d, ss, and ss.d. Negative values are supported; precision is truncated.",
+     "[expr:duration(65000,\"ms\")]"},
+    {"Date & duration", "Manual suffix", "82 minute(s)",
+     "Use arithmetic and a literal suffix for total minutes.",
+     "[expr:floor(4920000/60000);%.0f] minute(s)"},
+    {"Date & duration", "Minutes and seconds", "5 min and 3 sec",
+     "Combine expressions and literal suffixes for custom units.",
+     "[expr:floor(303000/60000);%.0f] min and [expr:floor(303000/1000)%60;%.0f] sec"},
+    {"Date & duration", "Hours and minutes", "1 hour(s) and 5 minute(s)",
+     "For nonnegative durations, divide into whole units and add literal suffixes.",
+     "[expr:floor(3900000/3600000);%.0f] hour(s) and [expr:floor(3900000/60000)%60;%.0f] minute(s)"},
 };
 
 static const BindingSchemeDoc kExprDoc = {

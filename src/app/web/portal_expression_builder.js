@@ -12,6 +12,8 @@ const EXPRESSION_BUILDER_FUNCTIONS = [
     { label: 'round(x)', text: 'round(value)', operand: 'value' },
     { label: 'floor(x)', text: 'floor(value)', operand: 'value' },
     { label: 'ceil(x)', text: 'ceil(value)', operand: 'value' },
+    { label: 'datetime(epoch, format, timezone)', text: 'datetime(value)', operand: 'value' },
+    { label: 'duration(value, unit, format)', text: 'duration(value, "ms")', operand: 'value' },
     { label: 'threshold(value, below, boundary, above)', text: 'threshold(value, below, boundary, above)', operand: 'value' },
     { label: 'if / then / else', text: 'condition\n  ? then_value\n  : else_value', operand: 'condition' }
 ];

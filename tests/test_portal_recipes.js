@@ -34,7 +34,7 @@ assert.strictEqual(catalog.recipes[0].layout.buttons.length, 1);
 assert.strictEqual(catalog.recipes[0].layout.flow, 'row');
 assert.strictEqual(catalog.recipes[0].layout.buttons[0].size, 'M');
 assert.strictEqual(catalog.recipes[0].layout.buttons[0].shape, 'wide');
-assert.strictEqual(catalog.recipes[0].layout.buttons[0].label_center, '[timer:1;mm:ss]');
+assert.strictEqual(catalog.recipes[0].layout.buttons[0].label_center, '[expr:duration([timer:1],"s")]');
 assert.deepStrictEqual(JSON.parse(JSON.stringify(catalog.recipes[0].layout.buttons[0].icon)),
     { catalog_id: 'material-symbols:timer', kind: 'mono' });
 assert.strictEqual(catalog.recipes[0].layout.buttons[0].icon_scale_pct, 50);

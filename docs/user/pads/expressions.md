@@ -115,6 +115,42 @@ equal to `high`.
 [expr:floor([mqtt:room;temp])]
 ```
 
+## Format dates and durations
+
+`datetime(timestamp, format, timezone)` formats Unix seconds. The optional
+format defaults to `%Y-%m-%d %H:%M`; the optional timezone defaults to the
+device timezone. Use standard `strftime` codes and a supported timezone name
+or POSIX rule. Whole-second timestamps display zeros for `%ms`, `%cs`, and
+`%ds`; `%ums` is not supported. An unknown timestamp, fractional timestamp,
+invalid timezone, or failed formatting makes the expression unavailable.
+Formatting a known timestamp does not require the current clock to be synced.
+
+```text
+[expr:datetime([item:created_at])|Time unavailable]
+[expr:datetime([voice_note:loaded.created_at],"%d %b %Y %H:%M")]
+[expr:datetime([alarm:1_next_at],"%H:%M","Europe/Amsterdam")|No alarm]
+```
+
+`duration(value, unit, format)` formats a duration. Choose `"s"` or `"ms"`
+explicitly. The default format is `mm:ss`; other formats are `hh:mm:ss`,
+`mm:ss.d`, `ss`, and `ss.d`. Values can be fractional or negative. Results
+truncate to the displayed precision; `mm:ss` counts total minutes.
+
+```text
+[expr:duration([item:duration_ms],"ms")|Unknown]
+[expr:duration([timer:1],"s","hh:mm:ss")]
+[expr:duration([timer:1],"s","mm:ss.d")]
+```
+
+For manual suffixes, calculate whole units with existing numeric formatting.
+These examples assume a nonnegative duration:
+
+```text
+[expr:floor([item:duration_ms]/60000);%.0f] minute(s)
+[expr:floor([item:duration_ms]/60000);%.0f] min and [expr:floor([item:duration_ms]/1000)%60;%.0f] sec
+[expr:floor([item:duration_ms]/3600000);%.0f] hour(s) and [expr:floor([item:duration_ms]/60000)%60;%.0f] minute(s)
+```
+
 ## Map thresholds to colors
 
 Use `threshold()` to map a number to a color:

@@ -95,30 +95,6 @@ static uint32_t remaining_ms() {
 // Timer format helper (reuse timer_engine patterns)
 // ============================================================================
 
-static int format_ms(uint32_t ms, const char* fmt, char* out, size_t out_len) {
-    if (!fmt || !fmt[0]) fmt = "mm:ss";
-
-    uint32_t total_sec = ms / 1000;
-    uint32_t frac_ms   = ms % 1000;
-    uint32_t h = total_sec / 3600;
-    uint32_t m = (total_sec % 3600) / 60;
-    uint32_t sec = total_sec % 60;
-    uint32_t deci = frac_ms / 100;
-
-    if (strcmp(fmt, "hh:mm:ss") == 0) {
-        return snprintf(out, out_len, "%u:%02u:%02u", h, m, sec);
-    } else if (strcmp(fmt, "ss") == 0) {
-        return snprintf(out, out_len, "%u", (unsigned)(ms / 1000));
-    } else if (strcmp(fmt, "mm:ss.d") == 0) {
-        return snprintf(out, out_len, "%u:%02u.%u", m, sec, deci);
-    } else if (strcmp(fmt, "ss.d") == 0) {
-        return snprintf(out, out_len, "%u.%u", (unsigned)total_sec, deci);
-    } else {
-        // default mm:ss
-        return snprintf(out, out_len, "%u:%02u", m, sec);
-    }
-}
-
 // ============================================================================
 // Commands
 // ============================================================================
@@ -255,33 +231,9 @@ static BindingResolverStatus expose_resolve(const char* params, char* out, size_
         return BINDING_RESOLVER_UNAVAILABLE;
     }
 
-    // Split key;format at first ';' (bracket-depth-aware)
-    char key_buf[32];
-    const char* format = NULL;
-    {
-        int depth = 0;
-        for (const char* p = params; *p; ++p) {
-            if (*p == '[') depth++;
-            else if (*p == ']') depth--;
-            else if (*p == ';' && depth == 0) {
-                size_t klen = p - params;
-                if (klen >= sizeof(key_buf)) klen = sizeof(key_buf) - 1;
-                memcpy(key_buf, params, klen);
-                key_buf[klen] = '\0';
-                params = key_buf;
-                format = p + 1;
-                break;
-            }
-        }
-    }
-
     // Key: time (always the user's set time, unaffected by dry-down)
     if (strcmp(params, "time") == 0) {
-        if (format) {
-            format_ms((uint32_t)(g_expose.exposure_time_s * 1000.0f), format, out, out_len);
-        } else {
-            snprintf(out, out_len, "%.1f", g_expose.exposure_time_s);
-        }
+        snprintf(out, out_len, "%.1f", g_expose.exposure_time_s);
         return BINDING_RESOLVER_RESOLVED;
     }
 
@@ -289,11 +241,7 @@ static BindingResolverStatus expose_resolve(const char* params, char* out, size_
     if (strcmp(params, "remaining") == 0) {
         uint32_t rem = (g_expose.state == EXPOSE_RUNNING || g_expose.state == EXPOSE_PAUSED)
                        ? remaining_ms() : exposure_time_ms();
-        if (format) {
-            format_ms(rem, format, out, out_len);
-        } else {
-            snprintf(out, out_len, "%.1f", rem / 1000.0f);
-        }
+        snprintf(out, out_len, "%.1f", rem / 1000.0f);
         return BINDING_RESOLVER_RESOLVED;
     }
 
@@ -301,11 +249,7 @@ static BindingResolverStatus expose_resolve(const char* params, char* out, size_
     if (strcmp(params, "elapsed") == 0) {
         uint32_t el = (g_expose.state == EXPOSE_RUNNING || g_expose.state == EXPOSE_PAUSED)
                       ? raw_elapsed_ms() : 0;
-        if (format) {
-            format_ms(el, format, out, out_len);
-        } else {
-            snprintf(out, out_len, "%.1f", el / 1000.0f);
-        }
+        snprintf(out, out_len, "%.1f", el / 1000.0f);
         return BINDING_RESOLVER_RESOLVED;
     }
 
@@ -337,11 +281,7 @@ static BindingResolverStatus expose_resolve(const char* params, char* out, size_
     // Key: effective_time
     if (strcmp(params, "effective_time") == 0) {
         float eff = effective_time_s();
-        if (format) {
-            format_ms((uint32_t)(eff * 1000.0f), format, out, out_len);
-        } else {
-            snprintf(out, out_len, "%.1f", eff);
-        }
+        snprintf(out, out_len, "%.1f", eff);
         return BINDING_RESOLVER_RESOLVED;
     }
 
@@ -486,7 +426,6 @@ const char* expose_state_str(uint8_t state) {
 
 static const BindingParamDoc kExposeParams[] = {
     {"key", "Exposure key, see below."},
-    {"format", "Duration format for time keys: mm:ss, hh:mm:ss, ss, mm:ss.d, ss.d."},
 };
 
 static const BindingKeyDoc kExposeKeyDocs[] = {
@@ -500,23 +439,15 @@ static const BindingKeyDoc kExposeKeyDocs[] = {
 };
 
 static const BindingExampleDoc kExposeExamples[] = {
-    {"[expose:remaining;mm:ss.d]", "Countdown with tenths."},
+    {"[expr:duration([expose:remaining],\"s\",\"mm:ss.d\")]", "Countdown with tenths."},
     {"[expose:state]", "Current exposure state."},
-};
-
-static const BindingReferenceDoc kExposeFormats[] = {
-    {nullptr, "mm:ss", "1:05", "Minutes and seconds", "[expose:remaining;mm:ss]"},
-    {nullptr, "mm:ss.d", "1:05.3", "With tenths", "[expose:remaining;mm:ss.d]"},
-    {nullptr, "ss.d", "65.3", "Seconds with tenths", "[expose:remaining;ss.d]", "s", BINDING_AUTHORING_KIND_NUMBER},
-    {nullptr, "ss", "65", "Whole seconds", "[expose:remaining;ss]", "s", BINDING_AUTHORING_KIND_INTEGER},
-    {nullptr, "hh:mm:ss", "0:01:05", "With hours", "[expose:remaining;hh:mm:ss]"},
 };
 
 static const BindingSchemeDoc kExposeDoc = {
     "Darkroom", "Enlarger exposure timer and lamp state.",
     BINDING_DOC_LIST(kExposeParams), BINDING_DOC_LIST(kExposeKeyDocs), BINDING_DOC_LIST(kExposeExamples),
-    "Exposure durations", true, BINDING_DOC_LIST(kExposeFormats),
-    "Without a format, time keys show seconds with one decimal.", nullptr,
+    nullptr, false, BINDING_DOC_NONE,
+    "Time keys show seconds with one decimal.", nullptr,
 };
 static const BindingAuthoringKey kExposeAuthoringKeys[] = {
     binding_authoring_number("time", "s", "65.3", false),
@@ -531,7 +462,7 @@ static const BindingAuthoringSpec kExposeAuthoring = {BINDING_DOC_LIST(kExposeAu
 
 void expose_timer_init() {
     if (!binding_template_register("expose", expose_resolve, expose_collect,
-                                   {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
+                                   {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, false,
                                     expose_binding_key_count, expose_binding_key_at, &kExposeDoc,
                                     &kExposeAuthoring})) {
         LOGE(TAG, "Failed to register expose binding scheme");

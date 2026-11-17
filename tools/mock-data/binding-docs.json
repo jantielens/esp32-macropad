@@ -1773,7 +1773,7 @@
       "params": [
         {
           "name": "expression",
-          "desc": "Arithmetic, comparisons, ternaries, numeric functions, and threshold(); inner tokens resolve first.",
+          "desc": "Arithmetic, comparisons, ternaries, numeric functions, datetime(), duration(), and threshold(); inner tokens resolve first.",
           "required": true
         },
         {
@@ -1798,6 +1798,18 @@
         {
           "code": "[expr:clamp([health:cpu],0,100)]",
           "desc": "Keep a value within a range."
+        },
+        {
+          "code": "[expr:datetime(1700000000)]",
+          "desc": "Format Unix seconds in the device timezone."
+        },
+        {
+          "code": "[expr:duration(65000,\"ms\")]",
+          "desc": "Format milliseconds as minutes and seconds."
+        },
+        {
+          "code": "[expr:floor(4920000/60000);%.0f] minute(s)",
+          "desc": "Show total minutes with a manual suffix."
         },
         {
           "code": "[expr:threshold([health:cpu],\"#16a34a\",50,\"#f59e0b\",80,\"#dc2626\")]",
@@ -1901,6 +1913,51 @@
             "syntax": "threshold(v, c0, t1, c1, ...)",
             "desc": "c0 below t1, c1 below t2, ..., else the last value; thresholds ascend",
             "example": "[expr:threshold([health:cpu],\"#16a34a\",50,\"#dc2626\")]"
+          },
+          {
+            "group": "Date & duration",
+            "syntax": "datetime(epoch, format, timezone)",
+            "sample": "Device-local time",
+            "desc": "Integer Unix seconds; format and timezone are optional. Defaults to device timezone and %Y-%m-%d %H:%M.",
+            "example": "[expr:datetime(1700000000)]",
+            "unit": "",
+            "kind": "text"
+          },
+          {
+            "group": "Date & duration",
+            "syntax": "duration(value, unit, format)",
+            "sample": "1:05",
+            "desc": "Unit is s or ms; format defaults to mm:ss. Also supports hh:mm:ss, mm:ss.d, ss, and ss.d. Negative values are supported; precision is truncated.",
+            "example": "[expr:duration(65000,\"ms\")]",
+            "unit": "",
+            "kind": "text"
+          },
+          {
+            "group": "Date & duration",
+            "syntax": "Manual suffix",
+            "sample": "82 minute(s)",
+            "desc": "Use arithmetic and a literal suffix for total minutes.",
+            "example": "[expr:floor(4920000/60000);%.0f] minute(s)",
+            "unit": "",
+            "kind": "text"
+          },
+          {
+            "group": "Date & duration",
+            "syntax": "Minutes and seconds",
+            "sample": "5 min and 3 sec",
+            "desc": "Combine expressions and literal suffixes for custom units.",
+            "example": "[expr:floor(303000/60000);%.0f] min and [expr:floor(303000/1000)%60;%.0f] sec",
+            "unit": "",
+            "kind": "text"
+          },
+          {
+            "group": "Date & duration",
+            "syntax": "Hours and minutes",
+            "sample": "1 hour(s) and 5 minute(s)",
+            "desc": "For nonnegative durations, divide into whole units and add literal suffixes.",
+            "example": "[expr:floor(3900000/3600000);%.0f] hour(s) and [expr:floor(3900000/60000)%60;%.0f] minute(s)",
+            "unit": "",
+            "kind": "text"
           }
         ]
       }
@@ -2150,9 +2207,9 @@
     {
       "name": "timer",
       "min_params": 1,
-      "max_params": 2,
+      "max_params": 1,
       "widget_max_params": 1,
-      "format_param": 1,
+      "format_param": -1,
       "validation_mode": 0,
       "free_form": false,
       "keys": [
@@ -2174,23 +2231,18 @@
       ],
       "category": "Device",
       "summary": "Value and state of the 3 on-device timers.",
-      "note": "Countdowns that run past zero show negative values, e.g. -0:05.",
+      "note": "Countdowns that run past zero show negative seconds, e.g. -5.0.",
       "params": [
         {
           "name": "key",
           "desc": "Timer number 1-3, or N_state, N_mode, N_expired, N_target.",
           "required": true
-        },
-        {
-          "name": "format",
-          "desc": "Duration format for the timer value, see Format strings.",
-          "required": false
         }
       ],
       "key_docs": [
         {
           "key": "#",
-          "desc": "Timer value; default 245.3 (seconds with tenths)"
+          "desc": "Timer value in seconds with tenths, e.g. 245.3"
         },
         {
           "key": "#_state",
@@ -2211,7 +2263,7 @@
       ],
       "examples": [
         {
-          "code": "[timer:1;mm:ss]",
+          "code": "[expr:duration([timer:1],\"s\")]",
           "desc": "Timer 1 as minutes and seconds."
         },
         {
@@ -2223,44 +2275,6 @@
           "desc": "Red once the countdown expires."
         }
       ],
-      "reference": {
-        "title": "Timer durations",
-        "formats": true,
-        "rows": [
-          {
-            "syntax": "mm:ss",
-            "sample": "4:05",
-            "desc": "Minutes and seconds",
-            "example": "[timer:1;mm:ss]",
-            "unit": "",
-            "kind": "text"
-          },
-          {
-            "syntax": "hh:mm:ss",
-            "sample": "0:04:05",
-            "desc": "With hours",
-            "example": "[timer:1;hh:mm:ss]",
-            "unit": "",
-            "kind": "text"
-          },
-          {
-            "syntax": "mm:ss.d",
-            "sample": "4:05.3",
-            "desc": "With tenths",
-            "example": "[timer:1;mm:ss.d]",
-            "unit": "",
-            "kind": "text"
-          },
-          {
-            "syntax": "ss",
-            "sample": "245",
-            "desc": "Whole seconds",
-            "example": "[timer:1;ss]",
-            "unit": "s",
-            "kind": "integer"
-          }
-        ]
-      },
       "authoring": {
         "keys": [
           {
@@ -2507,11 +2521,9 @@
         "1_repeat",
         "1_snooze_minutes",
         "1_auto_dismiss_minutes",
-        "1_once_epoch",
-        "1_once_local",
+        "1_once_at",
         "1_once_available",
-        "1_next_epoch",
-        "1_next_local",
+        "1_next_at",
         "1_next_seconds",
         "1_next_available",
         "1_snooze_seconds",
@@ -2596,13 +2608,8 @@
           "group": "Schedule"
         },
         {
-          "key": "1_once_epoch",
-          "desc": "One-time alarm as epoch seconds; empty if none",
-          "group": "Schedule"
-        },
-        {
-          "key": "1_once_local",
-          "desc": "One-time alarm as YYYY-MM-DD HH:MM; empty if none",
+          "key": "1_once_at",
+          "desc": "One-time alarm as Unix seconds; unavailable if none",
           "group": "Schedule"
         },
         {
@@ -2621,13 +2628,8 @@
           "group": "Now"
         },
         {
-          "key": "1_next_epoch",
-          "desc": "Next scheduled alarm as epoch seconds; empty if none",
-          "group": "Now"
-        },
-        {
-          "key": "1_next_local",
-          "desc": "Next scheduled alarm as YYYY-MM-DD HH:MM",
+          "key": "1_next_at",
+          "desc": "Next scheduled alarm as Unix seconds; unavailable if none",
           "group": "Now"
         },
         {
@@ -3003,7 +3005,7 @@
             "read_only": true
           },
           {
-            "key": "1_once_epoch",
+            "key": "1_once_at",
             "kind": "integer",
             "unit": "s",
             "example_value": "1791360000",
@@ -3016,19 +3018,6 @@
               "display",
               "numeric_widget",
               "live_sampling"
-            ],
-            "read_only": true
-          },
-          {
-            "key": "1_once_local",
-            "kind": "text",
-            "unit": "",
-            "example_value": "2026-10-07 07:30",
-            "formats": [
-              "raw"
-            ],
-            "capabilities": [
-              "display"
             ],
             "read_only": true
           },
@@ -3046,7 +3035,7 @@
             "read_only": true
           },
           {
-            "key": "1_next_epoch",
+            "key": "1_next_at",
             "kind": "integer",
             "unit": "s",
             "example_value": "1791360000",
@@ -3059,19 +3048,6 @@
               "display",
               "numeric_widget",
               "live_sampling"
-            ],
-            "read_only": true
-          },
-          {
-            "key": "1_next_local",
-            "kind": "text",
-            "unit": "",
-            "example_value": "2026-10-07 07:30",
-            "formats": [
-              "raw"
-            ],
-            "capabilities": [
-              "display"
             ],
             "read_only": true
           },

@@ -53,6 +53,21 @@ Every `BindingSchemeSpec` carries a `BindingSchemeDoc`: category, summary, one `
 - Expression evaluator (`expr_eval.cpp`) supports arithmetic, comparisons, ternaries, string comparisons, numeric functions (`abs`, `min`, `max`, `clamp`, `round`, `floor`, `ceil`), and `threshold()`
 - `expr_eval.cpp` is pure C with no ESP32 dependencies — host-testable
 
+## Dates and Durations
+
+- Device timestamp bindings use `_at` names and expose Unix seconds in UTC.
+  Return unavailable for unknown timestamps; zero is a valid Unix timestamp.
+  Capture wall-clock timestamps only when the time service is ready.
+- Keep timestamp and duration bindings numeric. Format timestamps with
+  `[expr:datetime(value,format,timezone)]`; omitted format and timezone use
+  `%Y-%m-%d %H:%M` and the device timezone. Use the shared time service.
+- Format durations with `[expr:duration(value,unit,format)]`. Require `s` or
+  `ms` and default to `mm:ss`. Document the unit of every duration binding.
+  Keep custom unit labels as literal text around numeric expressions.
+- Document date and duration examples in the expression metadata, portal
+  builder, and user guide. Cover unavailable values, timezone rules, units,
+  precision, and negative durations with focused tests.
+
 ## Pad Binding (`[pad:]`)
 
 - Resolves against pad-level `bindings` array (name→value map)
