@@ -122,6 +122,7 @@ static uint16_t sparkline_parse_raw_hours(JsonVariantConst value) {
 struct SparklineLineDrawContext {
     lv_point_precise_t* points;
     uint16_t count;
+    int16_t zero_y;
 };
 
 struct SparklineState {
@@ -162,8 +163,6 @@ static bool sparkline_has_fill(const SparklineState* st) {
 #if HAS_DISPLAY
 static void sparkline_draw_fill_event(lv_event_t* event) {
     auto* st = static_cast<SparklineState*>(lv_event_get_user_data(event));
-    lv_area_t area;
-    lv_obj_get_coords(static_cast<lv_obj_t*>(lv_event_get_target(event)), &area);
     lv_layer_t* layer = lv_event_get_layer(event);
     lv_draw_rect_dsc_t descriptor;
     lv_draw_rect_dsc_init(&descriptor);
@@ -175,6 +174,7 @@ static void sparkline_draw_fill_event(lv_event_t* event) {
         if (!context.points) continue;
         lv_area_t line_area;
         lv_obj_get_coords(st->lines[line], &line_area);
+        const int32_t baseline = line_area.y1 + context.zero_y;
         descriptor.bg_color = lv_obj_get_style_line_color(st->lines[line], LV_PART_MAIN);
         for (uint16_t i = 1; i < context.count; ++i) {
             const auto& first = context.points[i - 1];
@@ -187,17 +187,20 @@ static void sparkline_draw_fill_event(lv_event_t* event) {
             const int32_t start = first_x > layer->_clip_area.x1 ? first_x : layer->_clip_area.x1;
             const int32_t end = last_x < layer->_clip_area.x2 ? last_x : layer->_clip_area.x2;
             if (start > end) continue;
-            lv_area_t run = {start, 0, start - 1, area.y2};
+            lv_area_t run = {start, 0, start - 1, 0};
             // Half-open strips avoid alpha seams at shared triangle/series-segment edges.
             // Equal-height columns share one rectangle; work is bounded by visible width.
             for (int32_t x = start; x <= end; ++x) {
                 const int32_t numerator = first.y * span + (second.y - first.y) * (x - first_x);
-                const int32_t top = line_area.y1 + (numerator + span - 1) / span;
-                if (run.x2 >= run.x1 && top != run.y1) {
+                const int32_t curve_y = line_area.y1 + (numerator + span - 1) / span;
+                const int32_t top = curve_y < baseline ? curve_y : baseline;
+                const int32_t bottom = curve_y > baseline ? curve_y : baseline;
+                if (run.x2 >= run.x1 && (top != run.y1 || bottom != run.y2)) {
                     if (run.y1 <= run.y2) lv_draw_rect(layer, &descriptor, &run);
                     run.x1 = x;
                 }
                 run.y1 = top;
+                run.y2 = bottom;
                 run.x2 = x;
             }
             if (run.y1 <= run.y2) lv_draw_rect(layer, &descriptor, &run);
@@ -530,7 +533,7 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         lv_obj_set_clickable(line, false);
         lv_line_set_points(line, st->points[i], 0);
         st->lines[i] = line;
-        st->draw_context[i] = {st->points[i], 0};
+        st->draw_context[i] = {st->points[i], 0, 0};
         lv_obj_add_event_cb(line, sparkline_draw_line_event, LV_EVENT_DRAW_MAIN,
                             &st->draw_context[i]);
     }
@@ -678,6 +681,7 @@ static bool sparkline_rebuild_points(const SparklineConfig* cfg,
                                      float shared_auto_min, float shared_auto_max,
                                      float ref_expand_min, float ref_expand_max,
                                      int16_t y_offset,
+                                     int16_t& zero_y,
                                      SmoothLineInfo* out_info) {
     // Initialize output info
     if (out_info) {
@@ -703,6 +707,13 @@ static bool sparkline_rebuild_points(const SparklineConfig* cfg,
     if (y_min >= y_max) { y_min -= 1.0f; y_max += 1.0f; }
     if (!isfinite(y_min) || !isfinite(y_max)) { y_min = 0.0f; y_max = 1.0f; }
     float y_range = y_max - y_min;
+    // Clip an off-screen zero to the chart edge without expanding the scale.
+    float zero_ratio = (0.0f - y_min) / y_range;
+    if (zero_ratio < 0.0f) zero_ratio = 0.0f;
+    if (zero_ratio > 1.0f) zero_ratio = 1.0f;
+    const int16_t baseline = (int16_t)((1.0f - zero_ratio) * (chart_h - 1));
+    const bool baseline_changed = zero_y != baseline;
+    zero_y = baseline;
 
     const uint16_t n = snap->slot_count;
     const uint16_t count = snap->count > n ? n : snap->count;
@@ -789,7 +800,7 @@ static bool sparkline_rebuild_points(const SparklineConfig* cfg,
     if (line_obj && points_changed) {
         lv_line_set_points(line_obj, points, count);
     }
-    return points_changed;
+    return points_changed || baseline_changed;
 }
 
 // ---- Helper: read data stream snapshots and redraw all lines ----
@@ -874,6 +885,7 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
                                  shared_auto_min, shared_auto_max,
                                  ref_expand_min, ref_expand_max,
                                  y_off,
+                                 st->draw_context[i].zero_y,
                                  &smooth_info[i]);
         st->draw_context[i].count = snap.count;
 

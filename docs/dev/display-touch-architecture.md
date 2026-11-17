@@ -1050,11 +1050,12 @@ Sparkline uses shared fill opacity, line width, and current dot size with
 optional per-line overrides. The chart height is a centered percentage of its
 available height after annotation margins. A chart draw callback renders fills
 before child lines and annotations, reusing cached plotted points and their
-missing-data sentinels.
+missing-data sentinels. Each fill extends to zero on its line's effective scale,
+clipped to the chart edge when zero is outside the visible range.
 Non-overlapping vertical strips avoid translucent tessellation seams;
 equal-height columns share rectangles, clipped work is bounded by visible
 width, and no additional sample or full-chart buffer is allocated.
-Point or line-color changes invalidate the filled chart bounds; unchanged
+Point, zero-baseline, or line-color changes invalidate the filled chart bounds; unchanged
 output retains the existing revision/throttle behavior.
 
 `WidgetType.createUI` receives the widget region, configuration, button
