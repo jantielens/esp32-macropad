@@ -527,7 +527,7 @@ run bare `./build.sh`, or flash hardware.
 
 At implementation's commit-ready checkpoint, reconcile the smallest owners:
 
-* [Audio and Voice Notes](../user/media/audio.md): automatic setting, manual
+* [Voice Notes](../user/media/voice-notes.md): automatic setting, manual
   action, optional binding, offline behavior, and retry limitations
 * [Portal architecture/API](web-portal.md): boolean configuration field,
   coordinator status object, and rate-limit response

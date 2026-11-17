@@ -92,7 +92,7 @@ controls are unavailable. Physical sound and volume still need device validation
 
 The onboard microphone supports
 [microphone level bindings](../../../docs/user/pads/data-sources.md#read-local-sensors-and-health)
-and [local voice notes](../../../docs/user/media/audio.md#record-and-manage-voice-notes).
+and [local voice notes](../../../docs/user/media/voice-notes.md#record-and-manage-voice-notes).
 Recording uses 16 kHz mono PCM in the selected file storage; audio quality and practical
 recording duration depend on the environment and available storage.
 

@@ -30,7 +30,7 @@ reset selects download mode.
 The standard firmware supports Wi-Fi/MQTT, USB/BLE keyboard output, MCP,
 remote images, native Extensions, ES8311 speaker/MP3 playback, and ES7210
 microphone input, including music analysis. It does not enable a camera.
-Persistent files, including [voice notes](../../../docs/user/media/audio.md#record-and-manage-voice-notes),
+Persistent files, including [voice notes](../../../docs/user/media/voice-notes.md#record-and-manage-voice-notes),
 use internal flash.
 
 > [!IMPORTANT]

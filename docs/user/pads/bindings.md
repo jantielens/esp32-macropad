@@ -121,7 +121,7 @@ those definitions first. Then Save Pad and inspect the actual display.
 Missing data normally shows `---`; resolver errors can show `ERR:...`.
 The label's format and the widget's numeric input are separate.
 Loaded Voice Notes fields use cached snapshots, not a read triggered by a
-binding. See [loaded note details](../media/audio.md#show-a-loaded-voice-note-on-a-pad)
+binding. See [loaded note details](../media/voice-notes.md#show-a-loaded-voice-note-on-a-pad)
 for their lifetime and preview limits.
 
 ## Set a fallback

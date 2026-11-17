@@ -571,7 +571,7 @@ Do not claim device behavior from mocks or the local service request.
 
 Update the existing authoritative owners rather than creating another manual:
 
-* [User audio topic](../user/media/audio.md): Voice Notes navigation, recording,
+* [Voice Notes topic](../user/media/voice-notes.md): navigation, recording,
   setup, manual transcription, replacement/retry, and useful binding examples
 * [User action topic](../user/pads/actions.md): affected action names/examples
 * [Board README](../../src/boards/reterminal-sticky-interactive/README.md):

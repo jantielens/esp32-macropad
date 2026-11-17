@@ -882,7 +882,7 @@ documentation verification alone is not live validation.
 
 At implementation's commit-ready checkpoint, update the smallest owners:
 
-* [Audio and Voice Notes](../user/media/audio.md): setup, processing switch,
+* [Voice Notes](../user/media/voice-notes.md): setup, processing switch,
   controls, generated results, bindings, replacement semantics, and failure limits
 * [Portal architecture/API](web-portal.md): configuration fields, new POST
   routes, enriched responses, and service-aware status

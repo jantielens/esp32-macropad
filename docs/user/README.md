@@ -32,6 +32,7 @@ The portal shows only features included in the installed firmware.
 * [Use local images or remote camera streams](media/images.md)
 * [Upload fonts and change device typography](media/fonts.md)
 * [Configure feedback, sounds, and Music](media/audio.md)
+* [Record, process, and browse Voice Notes](media/voice-notes.md)
 * [Use an attached camera and motion sensing](media/camera.md)
 * [Install and place native Extensions](media/extensions.md)
 * [Design pads, buttons, actions, and live data](pads/README.md)

@@ -20,7 +20,7 @@ instead of assuming another firmware's action catalog applies.
 An action that queues network work is not proof its external effect completed.
 **Load saved note** also returns after accepting a request, so a following
 navigation action does not wait for storage. See
-[loaded note details](../media/audio.md#show-a-loaded-voice-note-on-a-pad).
+[loaded note details](../media/voice-notes.md#show-a-loaded-voice-note-on-a-pad).
 
 ## Set a runtime variable
 

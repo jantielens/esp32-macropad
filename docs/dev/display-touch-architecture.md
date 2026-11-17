@@ -1629,7 +1629,7 @@ To add another provider, follow the
 Voice Notes retains the loaded data until another load or reboot, including
 after source edits or deletion. Its full text remains available in the snapshot;
 ordinary bindings expose previews, not a long-text reader. See the
-[user workflow](../user/media/audio.md#show-a-loaded-voice-note-on-a-pad).
+[user workflow](../user/media/voice-notes.md#show-a-loaded-voice-note-on-a-pad).
 
 ## Touch Driver HAL
 

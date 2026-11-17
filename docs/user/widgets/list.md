@@ -14,7 +14,7 @@ each List keeps its own focus and viewport.
    IDs contain 1-32 ASCII letters, digits, underscores, or hyphens.
 3. Choose a **Source**. The available fields appear below it.
 4. Configure the top and optional bottom label. For recent notes, try
-   `[item:title|Untitled]` and `[item:created_at|Unknown]`. Use **Aa** beside
+   `[item:title|Untitled]` and `[item:duration_ms] ms`. Use **Aa** beside
    a label to override its style and **?** for the style reference.
 5. Add item tap or long-press actions and choose **Save Pad**.
 
@@ -23,7 +23,8 @@ available sources depend on the device:
 
 * `[pad:pads]`: saved pads in numeric order, with `id` and `title`
 * `[voice_note:recent_notes]`: up to 20 recent notes, newest first; optional
-  titles and creation times may be unavailable
+  titles and creation times may be unavailable. Creation times are Unix
+  timestamps in seconds, not formatted dates.
 * `[shutter:tests]`: guided test definitions, with `id`, optional `title`,
   `shots_per_speed`, and `speed_count`
 * `[health:metrics]`: local device health; see [Display device health](#display-device-health)
@@ -108,7 +109,7 @@ For example, a pad chooser can navigate directly to `[item:id]` in the
 item's Navigate to screen action. See [runtime variables](../pads/actions.md#set-a-runtime-variable).
 For a Voice Notes detail pad, use **Load saved note** with `[item:id]` before
 navigation instead. The action captures the ID without a variable; see
-[loaded note details](../media/audio.md#show-a-loaded-voice-note-on-a-pad).
+the [recording, list, and detail pad walkthrough](../media/voice-notes.md#build-recording-list-and-detail-pads).
 
 Loading, empty, and source-error states appear in the List.
 Lists require a display and PSRAM. Existing
