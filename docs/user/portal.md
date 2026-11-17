@@ -21,10 +21,13 @@ does not work. Sleeping devices may need to be woken using their
 
 ## Find a setting
 
-Expand a sidebar category, then select its section. On a narrow screen, open
-the navigation menu first. Opening a category closes the previous one;
-collapsing it does not change the displayed section. Browser Back and Forward
-return to visited sections. You can bookmark a section's URL.
+Select a sidebar category to open its first available section, or use its
+chevron to expand the list without changing the displayed section. Select
+another section from the expanded list. On a narrow screen, open the navigation
+menu first. You can browse one other category while the current section's
+category stays open. Selecting a section closes the other categories. If you
+collapse the current category, its label remains highlighted. Browser Back and
+Forward return to visited sections. You can bookmark a section's URL.
 
 Common paths include:
 

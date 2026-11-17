@@ -91,19 +91,37 @@
     navEl.appendChild(welcomeLink);
     itemMap['welcome'] = { cat: null, item: { id: 'welcome', display_name: 'Home' } };
 
-    cats.forEach(function (cat) {
+    cats.forEach(function (cat, index) {
       // Category header
       var header = document.createElement('div');
       header.className = 'nav-category-header';
       header.setAttribute('data-category', cat.id);
-      header.innerHTML =
+      var categoryLink = document.createElement('a');
+      categoryLink.className = 'nav-category-link';
+      categoryLink.href = '#' + cat.items[0].id;
+      categoryLink.innerHTML =
         portalCategoryIcon(cat.id, cat.icon) +
-        '<span class="nav-category-label">' + escapeHtml(cat.display_name) + '</span>' +
-        '<span class="nav-category-chevron"></span>';
+        '<span class="nav-category-label">' + escapeHtml(cat.display_name) + '</span>';
+      categoryLink.addEventListener('click', function (e) {
+        e.preventDefault();
+        navigateTo(cat.items[0].id);
+      });
+
+      var toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'nav-category-toggle';
+      toggle.setAttribute('aria-controls', 'nav-category-items-' + index);
+      toggle.innerHTML = '<span class="nav-category-chevron" aria-hidden="true"></span>';
+      toggle.addEventListener('click', function () {
+        toggleExpandedCategory(header);
+      });
+      header.appendChild(categoryLink);
+      header.appendChild(toggle);
 
       // Items container
       var itemsDiv = document.createElement('div');
       itemsDiv.className = 'nav-category-items';
+      itemsDiv.id = 'nav-category-items-' + index;
 
       cat.items.forEach(function (item) {
         itemMap[item.id] = { cat: cat, item: item };
@@ -121,14 +139,10 @@
         itemsDiv.appendChild(link);
       });
 
-      // Toggle expand/collapse
-      header.addEventListener('click', function () {
-        setExpandedCategory(header.classList.contains('expanded') ? null : cat.id);
-      });
-
       navEl.appendChild(header);
       navEl.appendChild(itemsDiv);
     });
+    setExpandedCategory(null);
   }
 
   // ---------- Active state ----------
@@ -142,15 +156,44 @@
     for (var i = 0; i < links.length; i++) {
       links[i].classList.toggle('active', links[i].getAttribute('data-item') === itemId);
     }
+    var info = itemMap[itemId];
+    var headers = navEl.querySelectorAll('.nav-category-header');
+    for (var j = 0; j < headers.length; j++) {
+      headers[j].classList.toggle('active', !!info && !!info.cat &&
+        headers[j].getAttribute('data-category') === info.cat.id);
+    }
+  }
+
+  function setCategoryExpanded(header, items, expanded) {
+    header.classList.toggle('expanded', expanded);
+    items.classList.toggle('expanded', expanded);
+    var toggle = header.querySelector('.nav-category-toggle');
+    toggle.setAttribute('aria-expanded', String(expanded));
+    toggle.setAttribute('aria-label',
+      (expanded ? 'Collapse ' : 'Expand ') + header.querySelector('.nav-category-label').textContent);
   }
 
   function setExpandedCategory(catId) {
     var headers = navEl.querySelectorAll('.nav-category-header');
     var items = navEl.querySelectorAll('.nav-category-items');
     for (var i = 0; i < headers.length; i++) {
-      var expanded = headers[i].getAttribute('data-category') === catId;
-      headers[i].classList.toggle('expanded', expanded);
-      items[i].classList.toggle('expanded', expanded);
+      setCategoryExpanded(headers[i], items[i], headers[i].getAttribute('data-category') === catId);
+    }
+  }
+
+  function toggleExpandedCategory(target) {
+    var headers = navEl.querySelectorAll('.nav-category-header');
+    var items = navEl.querySelectorAll('.nav-category-items');
+    var info = itemMap[currentItem];
+    var activeCatId = info && info.cat ? info.cat.id : null;
+    var catId = target.getAttribute('data-category');
+    var opening = !target.classList.contains('expanded');
+    for (var i = 0; i < headers.length; i++) {
+      var id = headers[i].getAttribute('data-category');
+      var expanded = headers[i].classList.contains('expanded');
+      if (id === catId) expanded = opening;
+      else if (opening && catId !== activeCatId && id !== activeCatId) expanded = false;
+      setCategoryExpanded(headers[i], items[i], expanded);
     }
   }
 
@@ -166,7 +209,10 @@
       history.replaceState(null, '', '#' + currentItem);
       return false;
     }
-    if (currentItem === itemId) return;
+    if (currentItem === itemId) {
+      if (revealCategory !== false) expandCategoryFor(itemId);
+      return;
+    }
     if (currentItem === 'pad-editor' && typeof padWorkspace !== 'undefined' && padWorkspace) {
       if (padDirty && !await padWorkspaceConfirm('Discard pad edits and leave the editor?')) {
         history.replaceState(null, '', '#' + currentItem);

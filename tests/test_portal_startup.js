@@ -536,6 +536,60 @@ async function main() {
     assert(soundSelect.options.some(option => option.value === 'new.mp3'));
     assert.strictEqual(soundSelect.value, 'saved.mp3');
     const navSource = fs.readFileSync('src/app/web/portal_nav.js', 'utf8');
+    const navClassList = () => {
+        const values = new Set();
+        return {
+            contains: name => values.has(name),
+            toggle: (name, enabled) => enabled ? values.add(name) : values.delete(name)
+        };
+    };
+    const navHeaders = ['a', 'b', 'c'].map(id => {
+        const toggle = { attrs: {}, setAttribute(name, value) { this.attrs[name] = value; } };
+        return {
+            classList: navClassList(),
+            getAttribute: () => id,
+            querySelector: selector => selector === '.nav-category-toggle' ? toggle : {textContent: id},
+            toggle
+        };
+    });
+    const navItems = navHeaders.map(() => ({classList: navClassList()}));
+    const navState = {
+        navEl: {
+            querySelector: () => null,
+            querySelectorAll: selector => selector === '.nav-category-header' ? navHeaders :
+                selector === '.nav-category-items' ? navItems : []
+        },
+        itemMap: {first: {cat: {id: 'a'}}, third: {cat: {id: 'c'}}},
+        currentItem: 'first'
+    };
+    vm.createContext(navState);
+    vm.runInContext(navSource.slice(navSource.indexOf('  function setActive('),
+        navSource.indexOf('  // ---------- Fragment loading')), navState);
+    const expanded = () => navHeaders.filter(header => header.classList.contains('expanded'))
+        .map(header => header.getAttribute('data-category'));
+    navState.setActive('first');
+    navState.expandCategoryFor('first');
+    navState.toggleExpandedCategory(navHeaders[1]);
+    assert.deepStrictEqual(expanded(), ['a', 'b'], 'browsing keeps the active category open');
+    navState.toggleExpandedCategory(navHeaders[2]);
+    assert.deepStrictEqual(expanded(), ['a', 'c'], 'a third category replaces the browsed category');
+    navState.toggleExpandedCategory(navHeaders[0]);
+    assert.deepStrictEqual(expanded(), ['c'], 'the active category can be collapsed');
+    assert(navHeaders[0].classList.contains('active'), 'the collapsed active category stays marked');
+    assert.strictEqual(navHeaders[0].toggle.attrs['aria-expanded'], 'false');
+    navState.toggleExpandedCategory(navHeaders[0]);
+    assert.deepStrictEqual(expanded(), ['a', 'c'], 'reopening the active category preserves the browsed category');
+    navState.currentItem = 'third';
+    navState.setActive('third');
+    navState.expandCategoryFor('third');
+    assert.deepStrictEqual(expanded(), ['c'], 'selecting an item closes the previous category');
+    assert(navHeaders[2].classList.contains('active'));
+    navState.currentItem = 'welcome';
+    navState.setActive('welcome');
+    navState.expandCategoryFor('welcome');
+    navState.toggleExpandedCategory(navHeaders[0]);
+    navState.toggleExpandedCategory(navHeaders[1]);
+    assert.deepStrictEqual(expanded(), ['b'], 'without an active category only the browsed category stays open');
     const navInit = navSource.slice(navSource.indexOf('  function init()'),
         navSource.indexOf("  if (document.readyState === 'loading')"));
     const headerLookup = context.document.getElementById;

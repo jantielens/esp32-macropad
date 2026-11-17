@@ -78,6 +78,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Open the first available portal section when selecting a sidebar category.
+  Use the chevron to browse another category without leaving the current
+  section; selecting a section closes the other categories.
 * Group Voice Notes actions under **Voice notes**: Recording
   (`vnote_record`), Process saved notes (`vnote_process`),
   Load saved note (`vnote_load`), and Delete saved note
