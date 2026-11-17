@@ -18,14 +18,39 @@
 #include "action_validate.h"
 #include "voice_notes.h"
 #include "voice_notes_processing.h"
+#include "action_continuation.h"
+#include "main_loop_bridge.h"
 #include <string>
 
 #if HAS_VOICE_NOTES
+#include "voice_notes_file.h"
 bool voice_notes_command(VoiceNoteCommand, uint32_t) { return true; }
 static VoiceNotesProcessingStart processing_start_result = VoiceNotesProcessingStart::Accepted;
 VoiceNotesProcessingStart voice_notes_processing_start() { return processing_start_result; }
+static LoopBridgeExec delete_exec = nullptr;
+alignas(uint32_t) static unsigned char delete_job[LOOP_BRIDGE_CTX_BYTES];
+static bool delete_queue_busy = false;
+static VoiceNoteFileStatus delete_result = VoiceNoteFileStatus::Ready;
+static char deleted_id[17] = {};
+LoopBridgeResult loop_bridge_enqueue(LoopBridgeExec exec, const void* context, size_t size) {
+    if (delete_queue_busy) return LOOP_BRIDGE_BUSY;
+    if (!exec || !context || size > sizeof(delete_job)) return LOOP_BRIDGE_INVALID;
+    delete_exec = exec;
+    memcpy(delete_job, context, size);
+    return LOOP_BRIDGE_OK;
+}
+VoiceNoteFileStatus voice_notes_remove(const char* id) {
+    strlcpy(deleted_id, id, sizeof(deleted_id));
+    return delete_result;
+}
 #if HAS_DISPLAY && HAS_PSRAM
 bool voice_notes_load_request(const char*) { return true; }
+static unsigned cleared_notes = 0;
+static char cleared_id[17] = {};
+void voice_notes_loaded_clear_if_matches(const char* id) {
+    ++cleared_notes;
+    strlcpy(cleared_id, id, sizeof(cleared_id));
+}
 #endif
 #endif
 
@@ -35,6 +60,10 @@ void display_manager_request_binding_refresh() {}
 ActionResult action_dispatch(const ButtonAction& action, const char* label, uint32_t token, bool) {
     if (!strcmp(action.type, ACTION_TYPE_HA_SERVICE))
         return action_type_find(action.type)->dispatch(action, label, token);
+#if HAS_VOICE_NOTES
+    if (!strcmp(action.type, ACTION_TYPE_VOICE_NOTE_DELETE))
+        return action_type_find(action.type)->dispatch(action, label, token);
+#endif
     ++g_followup_dispatches;
     return ACTION_COMPLETE;
 }
@@ -293,6 +322,66 @@ TEST(voice_note_load_contract) {
     ASSERT_TRUE(action_type_validate(def, invalid.as<JsonObjectConst>()) != nullptr);
 #else
     ASSERT_TRUE(action_type_find("voice_note_load") == nullptr);
+#endif
+}
+
+TEST(voice_note_delete_contract) {
+#if HAS_VOICE_NOTES
+    const ActionTypeDef* def = action_type_find(ACTION_TYPE_VOICE_NOTE_DELETE);
+    ASSERT_TRUE(def && def->execution == ACTION_EXECUTION_PAUSABLE);
+    ButtonAction bound = round_trip(R"({"type":"voice_note_del","id":"[item:id]"})");
+    ASSERT_STR(bound.type, ACTION_TYPE_VOICE_NOTE_DELETE);
+    ASSERT_STR(bound.payload.voice_note_delete.id, "[item:id]");
+    ASSERT_TRUE(action_type_has_binding(def, bound));
+    for (const char* json : {
+            R"({"type":"voice_note_del"})",
+            R"({"type":"voice_note_del","id":""})",
+            R"({"type":"voice_note_del","id":42})",
+            R"({"type":"voice_note_del","id":"abc","extra":true})",
+            R"({"type":"voice_note_del","id":"abc\u0000def"})"}) {
+        JsonDocument doc;
+        ASSERT_TRUE(!deserializeJson(doc, json));
+        ASSERT_TRUE(action_type_validate(def, doc.as<JsonObjectConst>()) != nullptr);
+    }
+
+    ButtonAction actions[2] = {};
+    actions[0] = round_trip(R"({"type":"voice_note_del","id":"0123456789abcdef"})");
+    strlcpy(actions[1].type, ACTION_TYPE_BACK, sizeof(actions[1].type));
+    delete_exec = nullptr;
+    deleted_id[0] = '\0';
+    g_followup_dispatches = 0;
+    ASSERT_TRUE(action_list_dispatch_result(actions, 2, "delete") == ACTION_PENDING);
+    ASSERT_TRUE(delete_exec && !deleted_id[0] && g_followup_dispatches == 0);
+    bool ok = false;
+    delete_exec(delete_job, &ok, nullptr, 0);
+    ASSERT_TRUE(ok);
+    ASSERT_STR(deleted_id, "0123456789abcdef");
+#if HAS_DISPLAY && HAS_PSRAM
+    ASSERT_EQ(cleared_notes, 1);
+    ASSERT_STR(cleared_id, deleted_id);
+#endif
+    action_list_dispatch_continuation();
+    ASSERT_EQ(g_followup_dispatches, 1);
+
+    delete_result = VoiceNoteFileStatus::Busy;
+    ASSERT_TRUE(action_list_dispatch_result(actions, 2, "delete") == ACTION_PENDING);
+    delete_exec(delete_job, &ok, nullptr, 0);
+    ASSERT_TRUE(!ok);
+#if HAS_DISPLAY && HAS_PSRAM
+    ASSERT_EQ(cleared_notes, 1);
+#endif
+    action_list_dispatch_continuation();
+    ASSERT_EQ(g_followup_dispatches, 1);
+    delete_result = VoiceNoteFileStatus::Ready;
+
+    delete_queue_busy = true;
+    ASSERT_TRUE(action_list_dispatch_result(actions, 2, "delete") == ACTION_FAILED);
+    delete_queue_busy = false;
+    strlcpy(actions[0].payload.voice_note_delete.id, "invalid", sizeof(actions[0].payload.voice_note_delete.id));
+    ASSERT_TRUE(action_list_dispatch_result(actions, 2, "delete") == ACTION_FAILED);
+    ASSERT_EQ(g_followup_dispatches, 1);
+#else
+    ASSERT_TRUE(action_type_find("voice_note_del") == nullptr);
 #endif
 }
 
@@ -1282,6 +1371,7 @@ int main(int argc, char** argv) {
     RUN(list_navigation_contract);
     RUN(voice_note_action_contract);
     RUN(voice_note_load_contract);
+    RUN(voice_note_delete_contract);
     RUN(bthome_round_trip_and_validation);
     RUN(set_var_round_trip_and_validation);
     RUN(gamepad_round_trip_and_validation);

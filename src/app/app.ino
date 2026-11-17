@@ -35,6 +35,7 @@
 #include "hw_button_config.h"
 #if HAS_DISPLAY || HAS_BUTTON
 #include "action_dispatch.h"
+#include "action_registry.h"
 #endif
 #if HAS_BLE
 #include "ble_telemetry.h"
@@ -424,6 +425,9 @@ void setup()
 
 	// Initialize logger (wraps Serial for web streaming)
 	log_init(115200);
+	#if HAS_DISPLAY || HAS_BUTTON
+	action_registry_logging_ready();
+	#endif
 	#ifdef BOARD_EARLY_POWER_INIT
 	if (!board_power_ready) LOGE("Board", "Early power latch initialization failed");
 	#endif

@@ -6,30 +6,38 @@
 #include <string.h>
 
 #include "binding_template.h"
+#include "log_manager.h"
 
-// Built-ins and device classes share this fixed-size registry. Reserve room
-// for device classes even when every built-in action is present.
-#ifndef ACTION_TYPE_REGISTRY_MAX_TYPES
-#define ACTION_TYPE_REGISTRY_MAX_TYPES 27
-#endif
-static constexpr int MAX_ACTION_TYPES = ACTION_TYPE_REGISTRY_MAX_TYPES
-#if HAS_VOICE_NOTES
-    + 1
-#if HAS_DISPLAY && HAS_PSRAM
-    + 1
-#endif
-#endif
-#if HAS_DISPLAY && HAS_PSRAM
-    + 1
-#endif
-    ;
+// Shared headroom for built-in, device-class, and board-local actions.
+static constexpr int MAX_ACTION_TYPES = 48;
 static const ActionTypeDef* s_types[MAX_ACTION_TYPES] = {};
 static int s_count = 0;
+static const char* s_first_overflow = nullptr;
+static unsigned s_overflow_count = 0;
+static bool s_logging_ready = false;
 
 void action_type_register(const ActionTypeDef* type) {
-    if (!type || !type->type_name || action_type_find(type->type_name)
-            || s_count >= MAX_ACTION_TYPES) return;
+    if (!type || !type->type_name || action_type_find(type->type_name)) return;
+    if (s_count >= MAX_ACTION_TYPES) {
+        if (s_logging_ready) {
+            LOGE("Action", "Registry full; cannot register '%s'", type->type_name);
+        } else {
+            if (!s_first_overflow) s_first_overflow = type->type_name;
+            ++s_overflow_count;
+        }
+        return;
+    }
     s_types[s_count++] = type;
+}
+
+void action_registry_logging_ready() {
+    s_logging_ready = true;
+    if (s_overflow_count) {
+        LOGE("Action", "Registry full; %u action(s) not registered, first: '%s'",
+             s_overflow_count, s_first_overflow);
+        s_first_overflow = nullptr;
+        s_overflow_count = 0;
+    }
 }
 
 const ActionTypeDef* action_type_find(const char* type_name) {

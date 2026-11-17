@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 394
+Total flags: 393
 
 ### Features (HAS_*)
 
@@ -171,7 +171,6 @@ Total flags: 394
 
 ### Limits & Tuning
 
-- **ACTION_TYPE_REGISTRY_MAX_TYPES** default: `(no default)` — Room for the built-in catalog and four board-local actions.
 - **AP_MAX_CONNECTIONS** default: `(no default)` — One client is sufficient for first-time provisioning.
 - **AUDIO_TASK_STACK_SIZE** default: `(no default)` — Audio worker stack bytes: 8 KB on ESP32/S3 with tones or PSRAM MP3 scratch; otherwise 24 KB.
 - **BOOT_APPEARANCE_DEFAULT_FONT_SIZE** default: `0` — Device-defined boot appearance defaults; boards may override these values.
@@ -834,6 +833,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/system_action.cpp
   - src/app/actions/timer_action.cpp
   - src/app/actions/visual_alert_action.cpp
+  - src/app/actions/voice_note_delete_action.cpp
   - src/app/actions/voice_note_load_action.cpp
   - src/app/actions/volume_action.cpp
   - src/app/app.ino
@@ -1539,8 +1539,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/boards/jc1060p470c/board_overrides.h
   - src/boards/jc4880p433/board_overrides.h
 - **HAS_VOICE_NOTES**
-  - src/app/action_registry.cpp
   - src/app/actions/voice_note_action.cpp
+  - src/app/actions/voice_note_delete_action.cpp
   - src/app/actions/voice_note_load_action.cpp
   - src/app/app.ino
   - src/app/binding_builtin_schemes.cpp
@@ -1625,8 +1625,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/touch_manager.cpp
 - **ACTION_CONTINUATION_SLOTS**
   - src/app/board_config.h
-- **ACTION_TYPE_REGISTRY_MAX_TYPES**
-  - src/app/action_registry.cpp
 - **ALARM_ENABLED**
   - src/app/actions/alarm_action.cpp
   - src/app/actions/alarm_mp3_action.cpp

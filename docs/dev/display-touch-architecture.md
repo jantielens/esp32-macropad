@@ -324,8 +324,7 @@ USB operation with charging off remains required.
 `BOARD_ACTION_SOURCE` selects the board-local action module through `actions.cpp`.
 `stopwatch_actions.cpp` registers `charging_mode`, `status_led`, `vibrate`, and
 `shutdown` under **M5Stack StopWatch**. Their payloads use the existing opaque
-action storage. The board raises `ACTION_TYPE_REGISTRY_MAX_TYPES` to 28 to fit
-the built-in catalog and four board actions. Other boards do not compile this
+action storage. Other boards do not compile this
 module, its metadata, or the StopWatch hardware implementation. The generic
 catalog-driven editor supplies the controls; there are no board-specific portal
 assets or generic configuration settings.

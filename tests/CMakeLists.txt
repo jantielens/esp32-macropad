@@ -939,6 +939,7 @@ add_host_legacy_test(test_action_parse_voice_notes
     DEFINITIONS ALARM_ENABLED=1 HAS_AUDIO=1 HAS_SOUND_PLAYER=1 HAS_TOUCH=1 HAS_VOICE_NOTES=1
     OPTIONS -Wno-deprecated-declarations
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
+        ${PROJECT_SOURCE_DIR}/tests/binding_schema_profiles/LittleFS.h
 )
 add_host_legacy_test(test_action_parse_alarm_disabled
     SOURCES test_action_parse.cpp ${ACTION_TEST_SOURCES} ${PROJECT_SOURCE_DIR}/src/app/action_catalog.cpp
@@ -981,12 +982,15 @@ if(runtime_profile STREQUAL "display")
     target_compile_definitions(test_runtime_variable_actions_${runtime_profile} PRIVATE HAS_VOICE_NOTES=1)
     target_sources(test_runtime_variable_actions_${runtime_profile} PRIVATE
         ${PROJECT_SOURCE_DIR}/src/app/actions/voice_note_load_action.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/actions/voice_note_delete_action.cpp
         ${PROJECT_SOURCE_DIR}/src/app/list_source.cpp
         ${PROJECT_SOURCE_DIR}/src/app/item_binding.cpp
         ${PROJECT_SOURCE_DIR}/src/app/item_binding_scheme.cpp
         ${PROJECT_SOURCE_DIR}/src/app/pad_binding.cpp)
     target_include_directories(test_runtime_variable_actions_${runtime_profile} BEFORE PRIVATE
         ${PROJECT_SOURCE_DIR}/tests/list_source_overrides)
+    target_compile_options(test_runtime_variable_actions_${runtime_profile} PRIVATE
+        "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/binding_schema_profiles/LittleFS.h")
 endif()
 endforeach()
 add_host_legacy_test(test_action_continuation
@@ -998,6 +1002,7 @@ add_host_legacy_test(test_action_continuation
 add_host_legacy_test(test_action_registry_value_field
     SOURCES test_action_registry_value_field.cpp ${PROJECT_SOURCE_DIR}/src/app/action_registry.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp stubs.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS HOST_LOG_CAPTURE=1
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
     LIBRARIES m
 )

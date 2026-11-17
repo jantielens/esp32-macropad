@@ -32,7 +32,8 @@ bool action_continuation_begin(const ButtonAction* remaining, uint8_t remaining_
 void action_continuation_release(uint32_t token);
 void action_continuation_mark_pending(uint32_t token);
 // Override only this reservation's watchdog. Zero disables it for an explicit
-// user-input wait; all other reservations keep the default 60-second deadline.
+// user-input wait or an irreversible operation that must report completion;
+// all other reservations keep the default 60-second deadline.
 bool action_continuation_set_timeout(uint32_t token, uint32_t timeout_ms);
 
 // Thread-safe completion hook for asynchronous workers. It records the result;

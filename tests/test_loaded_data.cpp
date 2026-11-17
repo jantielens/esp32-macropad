@@ -49,4 +49,19 @@ int main() {
     retired = slot.take_unused();
     assert(retired == latest);
     retired->release();
+    auto* still_referenced = LoadedDataSnapshot::create();
+    assert(still_referenced && slot.publish(request5, still_referenced));
+    retained = slot.acquire();
+    slot.clear();
+    assert(slot.state() == LoadedDataState::Idle && !slot.acquire() && !slot.current(request5));
+    assert(!slot.take_unused());
+    retained->release();
+    retired = slot.take_unused();
+    assert(retired == still_referenced);
+    retired->release();
+    const uint64_t request6 = slot.begin();
+    slot.clear();
+    assert(!slot.current(request6));
+    assert(!slot.publish(request6, nullptr));
+    assert(slot.begin() != request6);
 }

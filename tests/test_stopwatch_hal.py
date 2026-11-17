@@ -1354,6 +1354,7 @@ int main() {
 #define HAS_DISPLAY 1
 #define HAS_BUTTON 1
 #define HAS_MQTT 0
+#define LOGE(...) ((void)0)
 #define CONFIG_ACTION_TYPE_MAX_LEN 16
 #define STOPWATCH_CHARGING_MODE 2
 #define ACTION_CONTINUATION_SLOTS 1
@@ -1530,10 +1531,7 @@ int main() {
             assert "m5stack_stopwatch_loop" not in overrides.read_text()
             assert "STOPWATCH_CHARGING_MODE" not in overrides.read_text()
     for board_action in (False, True):
-        capacity = re.search(r"#define ACTION_TYPE_REGISTRY_MAX_TYPES (\d+)",
-                     (ROOT / "src/boards/m5stack-stopwatch/board_overrides.h").read_text()).group(1)
-        define = (f'#define BOARD_ACTION_SOURCE "{module}"\n'
-              f'#define ACTION_TYPE_REGISTRY_MAX_TYPES {capacity}\n') if board_action else ""
+        define = f'#define BOARD_ACTION_SOURCE "{module}"\n' if board_action else ""
         header = production("src/boards/m5stack-stopwatch/stopwatch_hardware.h").replace("#pragma once", "")
         enum = re.search(r"enum class StopWatchChargingMode[^;]+;", header).group(0)
         source.write_text(define + "#include <cstdint>\n" + enum + action_prelude +

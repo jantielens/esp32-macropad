@@ -51,6 +51,8 @@ class LoadedDataSlot {
 public:
     // Starts a distinct request, retiring the previous snapshot immediately.
     uint64_t begin();
+    // Cancel the current request and retire its snapshot.
+    void clear();
     bool current(uint64_t request) const;
     // Success consumes the caller's reference; failure leaves ownership unchanged.
     bool publish(uint64_t request, LoadedDataSnapshot* snapshot);

@@ -190,6 +190,7 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_SET_VAR "set_var"
 #if HAS_VOICE_NOTES
 #define ACTION_TYPE_VOICE_NOTE "voice_note"
+#define ACTION_TYPE_VOICE_NOTE_DELETE "voice_note_del"
 #if HAS_DISPLAY && HAS_PSRAM
 #define ACTION_TYPE_VOICE_NOTE_LOAD "voice_note_load"
 #endif
@@ -329,6 +330,9 @@ struct VoiceNotePayload {
     char command[16];
     char scenario[8];
 };
+struct VoiceNoteDeletePayload {
+    char id[CONFIG_BINDABLE_SHORT_LEN];
+};
 #if HAS_DISPLAY && HAS_PSRAM
 struct VoiceNoteLoadPayload {
     char id[CONFIG_BINDABLE_SHORT_LEN];
@@ -381,6 +385,7 @@ union ActionPayload {
     SetVariablePayload set_var;
 #if HAS_VOICE_NOTES
     VoiceNotePayload voice_note;
+    VoiceNoteDeletePayload voice_note_delete;
 #if HAS_DISPLAY && HAS_PSRAM
     VoiceNoteLoadPayload voice_note_load;
 #endif

@@ -191,17 +191,28 @@ are also available in the Binding Reference. Missing optional results use the
 configured fallback. A rejected ID stops the action list; later read errors
 appear in the loaded status instead.
 
+To delete a saved note from a List, add **Delete voice note** and set **Note ID**
+to `[item:id]`. Deletion is permanent and also removes the note's transcript
+and enrichment. The action waits for deletion to finish; if the note is busy
+or deletion fails, later actions do not run. To ask for confirmation, capture
+`[item:id]` with **Set variable**, then add **Confirm** and **Delete voice note**
+using `[var:name]`. The List refreshes after deletion.
+
+When the action deletes the loaded note, its details clear and loaded status
+returns to `idle`. Deleting a different note leaves the loaded details unchanged.
+Deleting through the web portal does not clear the loaded snapshot.
+
 Use labels for details that must not show a previous note. Some widgets retain
 their last value while a binding is unavailable or animate from that value;
 historical charts can also include samples from previous notes. Check the loaded
 status and ID before relying on widget values.
 
 One loaded note is shared by all pads. Its saved title, summary, and transcript
-remain unchanged until another Load or reboot, even if the source note is
-edited or deleted. Labels show short UTF-8-safe previews, not a scrolling
-reader. Checked action fields reject values that do not fit rather than using
-a truncated prefix. Loading defers while recording or a firmware update needs
-the device.
+remain unchanged until another Load, a matching **Delete voice note** action,
+or reboot, even if the source note is edited or deleted through the portal.
+Labels show short UTF-8-safe previews, not a scrolling reader. Checked action
+fields reject values that do not fit rather than using a truncated prefix.
+Loading defers while recording or a firmware update needs the device.
 
 ## Understand sound priority
 

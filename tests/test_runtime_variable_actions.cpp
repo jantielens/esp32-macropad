@@ -37,6 +37,8 @@ static const ActionTypeDef sync_context_action = {
 
 #if HAS_DISPLAY && HAS_PSRAM
 #include "item_binding.h"
+#include "main_loop_bridge.h"
+#include "voice_notes_file.h"
 #include <cstdlib>
 
 static bool fail_psram = false;
@@ -52,6 +54,20 @@ static char requested_note[64] = {};
 bool voice_notes_load_request(const char* id) {
     strlcpy(requested_note, id, sizeof(requested_note));
     return accept_load;
+}
+void voice_notes_loaded_clear_if_matches(const char*) {}
+static LoopBridgeExec delete_exec = nullptr;
+alignas(uint32_t) static unsigned char delete_job[LOOP_BRIDGE_CTX_BYTES];
+static char deleted_note[17] = {};
+LoopBridgeResult loop_bridge_enqueue(LoopBridgeExec exec, const void* context, size_t size) {
+    if (!exec || !context || size > sizeof(delete_job)) return LOOP_BRIDGE_INVALID;
+    delete_exec = exec;
+    std::memcpy(delete_job, context, size);
+    return LOOP_BRIDGE_OK;
+}
+VoiceNoteFileStatus voice_notes_remove(const char* id) {
+    strlcpy(deleted_note, id, sizeof(deleted_note));
+    return VoiceNoteFileStatus::Ready;
 }
 
 static bool boundary_fields(ButtonAction& action, ActionFieldVisitor visitor, void* context) {
@@ -186,6 +202,42 @@ int main() {
         snapshot->release();
         std::puts("FAIL: populate item snapshot");
         return 1;
+    }
+    {
+        ListSourceSnapshot* notes = ListSourceSnapshot::create();
+        JsonDocument note;
+        note["id"] = "0123456789abcdef";
+        if (!notes || notes->append(note.as<JsonObjectConst>()) || notes->seal()) {
+            if (notes) notes->release();
+            snapshot->release();
+            std::puts("FAIL: create note snapshot");
+            return 1;
+        }
+        ButtonAction deletion = {};
+        strlcpy(deletion.type, ACTION_TYPE_VOICE_NOTE_DELETE, sizeof(deletion.type));
+        strlcpy(deletion.payload.voice_note_delete.id, "[item:id]", sizeof(deletion.payload.voice_note_delete.id));
+        const ButtonAction actions[] = {deletion, set_variable_action("after_delete", "done")};
+        runtime_variable_set("after_delete", "before");
+        {
+            ItemBindingScope scope(notes, 0);
+            if (action_list_dispatch_result(actions, 2, "delete") != ACTION_PENDING ||
+                !delete_exec || !get_equals("after_delete", "before")) {
+                notes->release();
+                snapshot->release();
+                std::puts("FAIL: note deletion resolves item ID and waits");
+                return 1;
+            }
+        }
+        bool ok = false;
+        delete_exec(delete_job, &ok, nullptr, 0);
+        action_list_dispatch_continuation();
+        notes->release();
+        if (!ok || std::strcmp(deleted_note, "0123456789abcdef") ||
+            !get_equals("after_delete", "done")) {
+            snapshot->release();
+            std::puts("FAIL: note deletion continues after the resolved note is deleted");
+            return 1;
+        }
     }
     {
         ItemBindingScope outer(snapshot, 0);

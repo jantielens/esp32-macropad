@@ -17,10 +17,23 @@
 
 #include <cstdio>
 #include <cstring>
+#include <cstdarg>
+#include <vector>
 
 #include "action_registry.h"
 #include "binding_template.h"
 #include "pad_config.h"
+
+static unsigned registry_errors = 0;
+static char registry_error[256] = {};
+void log_noop(const char* module, const char* format, ...) {
+    if (strcmp(module, "Action")) return;
+    ++registry_errors;
+    va_list args;
+    va_start(args, format);
+    vsnprintf(registry_error, sizeof(registry_error), format, args);
+    va_end(args);
+}
 
 // ---------------------------------------------------------------------------
 // Synthetic device-class payload — same shape every device class uses.
@@ -242,6 +255,34 @@ static void test_resolve_bindings_rejects_overflow() {
     check_str(fake_payload(act).value, "[long:x]", "overflow leaves original value unchanged");
 }
 
+static void test_registry_overflow_reporting() {
+    static char names[64][16] = {};
+    std::vector<ActionTypeDef> fillers;
+    fillers.reserve(64);
+    unsigned index = 0;
+    for (; index < 64; ++index) {
+        snprintf(names[index], sizeof(names[index]), "filler%u", index);
+        fillers.emplace_back(names[index], nullptr, nullptr, nullptr, nullptr, nullptr);
+        const uint8_t before = action_type_count();
+        action_type_register(&fillers[index]);
+        if (action_type_count() == before) break;
+    }
+    check_true(index < 64, "registry reaches its finite capacity");
+    if (index >= 64) return;
+    check_true(!action_type_find(names[index]), "overflow does not register action");
+    check_true(registry_errors == 0, "startup overflow waits for logging");
+    action_registry_logging_ready();
+    check_true(registry_errors == 1 && strstr(registry_error, names[index]),
+               "startup overflow reports rejected action");
+    action_registry_logging_ready();
+    check_true(registry_errors == 1, "startup overflow is reported once");
+    action_type_register(&fillers[index]);
+    check_true(registry_errors == 2 && strstr(registry_error, names[index]),
+               "later overflow reports immediately");
+    action_type_register(&fake_action_type);
+    check_true(registry_errors == 2, "duplicate registration is not overflow");
+}
+
 int main() {
     printf("=== action registry value-field contract tests ===\n\n");
 
@@ -266,6 +307,7 @@ int main() {
     test_has_binding_via_registry();
     test_resolve_bindings_via_registry();
     test_resolve_bindings_rejects_overflow();
+    test_registry_overflow_reporting();
 
     printf("\n=== %d passed, %d failed ===\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;

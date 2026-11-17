@@ -152,7 +152,8 @@ void display_manager_lock_if_needed(bool* locked) {
 void display_manager_unlock_if_needed(bool locked) {
     if (locked) display_mutex.unlock();
 }
-void display_manager_request_binding_refresh() {}
+static std::atomic<unsigned> loaded_refreshes{0};
+void display_manager_request_binding_refresh() { ++loaded_refreshes; }
 
 void log_noop(const char* module, const char* format, ...) {
     if (strcmp(module, "VoiceNotes") != 0) return;
@@ -508,7 +509,31 @@ int main(int argc, char**) {
         assert(loaded);
         const JsonString stored = loaded->data()["transcript"]["transcript"]["text"].as<JsonString>();
         assert(stored.size() == text.size() && memcmp(stored.c_str(), text.data(), text.size()) == 0);
+        const unsigned before_clear = loaded_refreshes;
+        voice_notes_loaded_clear_if_matches("ffffffffffffffff");
+        loaded_expect("status", "ready");
+        assert(loaded_refreshes == before_clear);
+        voice_notes_loaded_clear_if_matches(saved.last_clip);
+        loaded_expect("status", "idle");
+        char cleared_value[128];
+        assert(voice_notes_loaded_resolve("title", cleared_value, sizeof(cleared_value)) == BINDING_RESOLVER_UNAVAILABLE);
+        assert(binding_template_resolve_checked("[loaded:title|]", cleared_value, sizeof(cleared_value)));
+        assert(!cleared_value[0]);
+        assert(loaded_refreshes == before_clear + 1);
+        finish_loaded();
+        assert(stored.size() == text.size() && memcmp(stored.c_str(), text.data(), text.size()) == 0);
         loaded->release();
+        assert(voice_notes_load_request(saved.last_clip));
+        voice_notes_loaded_loop();
+        voice_notes_loaded_clear_if_matches(saved.last_clip);
+        finish_loaded();
+        loaded_expect("status", "idle");
+        assert(voice_notes_load_request("ffffffffffffffff"));
+        voice_notes_loaded_clear_if_matches(saved.last_clip);
+        loaded_expect("status", "loading");
+        assert(voice_notes_load_request(saved.last_clip));
+        finish_loaded();
+        loaded_expect("status", "ready");
         char checked[192];
         assert(!binding_template_resolve_checked("[loaded:transcript]", checked, sizeof(checked)));
         assert(binding_template_resolve_checked("[loaded:transcript|fallback]", checked, sizeof(checked)));

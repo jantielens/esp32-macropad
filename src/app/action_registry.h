@@ -89,6 +89,8 @@ struct ActionTypeDef {
 };
 
 void action_type_register(const ActionTypeDef* type);
+// Report registration failures collected before logging was initialized.
+void action_registry_logging_ready();
 const ActionTypeDef* action_type_find(const char* type_name);
 
 // Registry enumeration (for the MCP capability manifest): device-class action

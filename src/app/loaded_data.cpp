@@ -35,14 +35,19 @@ uint32_t LoadedDataSnapshot::references() const {
 
 uint64_t LoadedDataSlot::begin() {
     if (++request_ == 0) ++request_;
+    clear();
+    state_ = LoadedDataState::Loading;
+    return request_;
+}
+
+void LoadedDataSlot::clear() {
     if (current_) {
         current_->retired_next_ = retired_;
         retired_ = current_;
         current_ = nullptr;
     }
-    state_ = LoadedDataState::Loading;
+    state_ = LoadedDataState::Idle;
     error_ = nullptr;
-    return request_;
 }
 
 bool LoadedDataSlot::current(uint64_t request) const {

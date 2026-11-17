@@ -209,6 +209,21 @@ bool voice_notes_load_request(const char* id) {
     return true;
 }
 
+void voice_notes_loaded_clear_if_matches(const char* id) {
+    if (!id || !id[0]) return;
+    bool cleared = false;
+    {
+        LoadedDataLock lock;
+        if (strcmp(requested_id, id) == 0) {
+            slot.clear();
+            requested_id[0] = '\0';
+            requested_generation = 0;
+            cleared = true;
+        }
+    }
+    if (cleared) display_manager_request_binding_refresh();
+}
+
 void voice_notes_loaded_loop() {
     for (;;) {
         LoadedDataSnapshot* unused;
