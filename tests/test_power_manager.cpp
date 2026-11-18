@@ -325,6 +325,22 @@ TEST(SystemAction, NetworkAdmissionDoesNotClaimSuccessOnRejection) {
     EXPECT_EQ(system_action->dispatch(action, "test", 0), ACTION_COMPLETE);
 }
 
+TEST(SystemAction, StationSetterRequestsExplicitCommandsAndPropagatesRejection) {
+    ASSERT_EQ(system_action->operation_count, 1);
+    const ActionOperationDef& operation = system_action->operations[0];
+    ActionResolvedArgument argument = {};
+    network_command_allowed = true;
+    argument.integer = 1;
+    EXPECT_EQ(operation.dispatch(&argument, "test", 0), ACTION_COMPLETE);
+    EXPECT_EQ(last_network_command, WifiNetworkCommand::Connect);
+    argument.integer = 0;
+    EXPECT_EQ(operation.dispatch(&argument, "test", 0), ACTION_COMPLETE);
+    EXPECT_EQ(last_network_command, WifiNetworkCommand::Disconnect);
+    network_command_allowed = false;
+    EXPECT_EQ(operation.dispatch(&argument, "test", 0), ACTION_FAILED);
+    network_command_allowed = true;
+}
+
 TEST(DeviceClass, SetupRegistrationAndNormalRuntimeAreSeparate) {
     static unsigned setup_calls = 0;
     static unsigned runtime_calls = 0;

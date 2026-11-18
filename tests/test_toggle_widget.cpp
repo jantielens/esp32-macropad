@@ -9,8 +9,13 @@ static std::string dispatched;
 static ActionResult dispatch_result;
 static std::function<void()> during_dispatch;
 static const char* thermostat_value = "10";
+static const PadBinding* dispatch_bindings;
+static uint8_t dispatch_binding_count;
 
-ActionResult action_list_dispatch_result(const ButtonAction* actions, uint8_t count, const char*, ActionContinuationOwner, bool) {
+ActionResult action_list_dispatch_result(const ButtonAction* actions, uint8_t count, const char*, ActionContinuationOwner, bool,
+                                         const PadBinding* bindings, uint8_t binding_count) {
+    dispatch_bindings = bindings;
+    dispatch_binding_count = binding_count;
     if (count) { ++dispatches; dispatched = actions[0].payload.ha_service.data_json; }
     if (during_dispatch) during_dispatch();
     return dispatch_result;
@@ -64,6 +69,15 @@ TEST_F(ToggleWidget, LocalAlternatesActionsAndResetsOnHide) {
     EXPECT_EQ(dispatches, 3u);
     toggle_hide(&runtime); EXPECT_FALSE(state().value);
     tap(0); EXPECT_TRUE(state().value); EXPECT_EQ(dispatches, 3u);
+}
+
+TEST_F(ToggleWidget, DispatchUsesOriginatingPadBindings) {
+    create();
+    PadBinding binding{};
+    toggle_tap(&config, &runtime, &on_action, 1, &off_action, 1, &binding, 1);
+    EXPECT_EQ(dispatches, 1u);
+    EXPECT_EQ(dispatch_bindings, &binding);
+    EXPECT_EQ(dispatch_binding_count, 1);
 }
 
 TEST_F(ToggleWidget, BoundReportsConfirmCategoriesNotExactTemperatureCommands) {

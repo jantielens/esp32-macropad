@@ -335,6 +335,12 @@ async function main() {
     };
     const soundSelect = selectNode();
     const screenSelect = selectNode();
+    const operationScreenSelect = selectNode();
+    operationScreenSelect.strict = true;
+    operationScreenSelect.attributes = {};
+    operationScreenSelect.getAttribute = name => operationScreenSelect.attributes[name];
+    operationScreenSelect.setAttribute = (name, value) => { operationScreenSelect.attributes[name] = value; };
+    operationScreenSelect.removeAttribute = name => { delete operationScreenSelect.attributes[name]; };
     screenSelect.strict = true;
     screenSelect.id = 'test-target';
     const screenBinding = { id: 'test-target-binding', value: '', focus() {} };
@@ -351,6 +357,7 @@ async function main() {
     context.document.createElement = () => ({ value: '', textContent: '' });
     context.document.getElementById = id => id === 'pad-edit-extension-id' ? extensionSelect :
         id === 'test-sound-alert-file' ? soundSelect : id === 'test-target' ? screenSelect :
+        id === 'test-op-screen.open-target-fixed' ? operationScreenSelect :
         id === 'test-target-binding' ? screenBinding : id === 'test-target-binding-group' ? screenBindingGroup : extensionInputs[id] || null;
     for (const module of ['portal_pad_dialog', 'portal_action_editor', 'portal_action_editor_screen', 'portal_action_editor_sound_alert']) {
         vm.runInContext(fs.readFileSync('src/app/web/' + module + '.js', 'utf8'), context);
@@ -425,6 +432,18 @@ async function main() {
         {id:'pad_0', name:'Living Room'}, {id:'pad_1', name:'Pad 2'}
     ];
     context.actionEditorPopulateScreens(['test'], screens);
+    assert.strictEqual(operationScreenSelect.value, 'pad_0', 'new operation selects first available screen');
+    operationScreenSelect.value = 'pad_2';
+    context.actionEditorPopulateScreens(['test'], screens);
+    assert.strictEqual(operationScreenSelect.value, 'pad_2', 'refresh retains the selected operation screen');
+    operationScreenSelect.setAttribute('data-pending-value', 'pad_1');
+    context.actionEditorPopulateScreens(['test'], screens);
+    assert.strictEqual(operationScreenSelect.value, 'pad_1', 'late screen list restores the saved operation target');
+    operationScreenSelect.value = '';
+    context.actionEditorPopulateScreens(['test'], []);
+    assert.strictEqual(operationScreenSelect.value, '', 'empty screen list does not invent a target');
+    context.actionEditorPopulateScreens(['test'], screens);
+    assert.strictEqual(operationScreenSelect.value, 'pad_0', 'first screen is selected after a delayed list');
     assert.deepStrictEqual(Array.from(screenSelect.options, option => [option.value, option.textContent]), [
         ['', '(none)'], ['pad_0', 'Pad 1: Living Room'], ['pad_1', 'Pad 2'],
         ['pad_2', 'Pad 3'], ['__binding__', 'Binding value'], ['info', 'Device Info']

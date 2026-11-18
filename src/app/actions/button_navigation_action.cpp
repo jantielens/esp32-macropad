@@ -1,4 +1,7 @@
 #include "action_registry.h"
+#if defined(ARDUINO) && HAS_DISPLAY && HAS_PSRAM
+#include "item_binding.h"
+#endif
 #if defined(ARDUINO) && HAS_DISPLAY
 #include "display_manager.h"
 #include "device_dialog.h"
@@ -50,6 +53,25 @@ ActionResult dispatch_button_navigation(const ButtonAction& act, const char*, ui
 #endif
 }
 
+ActionResult dispatch_button_navigation_operation(const ActionResolvedArgument* arguments, const char* label, uint32_t token) {
+#if defined(ARDUINO) && HAS_PSRAM
+    if (!strcmp(arguments[0].text, "tap") || !strcmp(arguments[0].text, "tap_hold"))
+        ItemBindingScope::end_current();
+#endif
+    ButtonAction action = {};
+    strlcpy(action.payload.button_navigation.command, arguments[0].text,
+            sizeof(action.payload.button_navigation.command));
+    return dispatch_button_navigation(action, label, token);
+}
+
+const ActionArgumentDef kButtonNavigationArguments[] = {
+    {"command", "Command", ACTION_ARGUMENT_ENUM, 0, 0, sizeof(ButtonNavigationPayload::command) - 1,
+     true, "[var:command]", "select", buttonNavigationCommands, 4, false, nullptr, buttonNavigationLabels},
+};
+const ActionOperationDef kButtonNavigationOperations[] = {
+    {"button.navigate", "Navigate buttons", kButtonNavigationArguments, 1, dispatch_button_navigation_operation},
+};
+
 const char* validate_button_navigation(const JsonObjectConst action) {
     return action["command"].is<const char*>() && valid_button_navigation_command(action["command"].as<const char*>())
         ? nullptr : "button_nav command must be previous, next, tap, or tap_hold";
@@ -83,6 +105,6 @@ DEFINE_AND_REGISTER_ACTION_TYPE(kButtonNavigationActionType, ACTION_TYPE_BUTTON_
     [](const ButtonAction& action) {
         const char* command = action.payload.button_navigation.command;
         return strcmp(command, "tap") == 0 || strcmp(command, "tap_hold") == 0;
-    });
+    }, kButtonNavigationOperations, 1);
 }
 #endif

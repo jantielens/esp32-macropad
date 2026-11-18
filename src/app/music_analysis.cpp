@@ -140,12 +140,10 @@ static void collect_key(const char* key, uint8_t* demand) {
 }
 
 static void collect_action(const ButtonAction& action, uint8_t* demand) {
-    auto collect = [](char* field, size_t, bool, void* context) {
+    auto collect = [](const char* field, void* context) {
         music_analysis_collect_demand(field, static_cast<uint8_t*>(context));
-        return true;
     };
-    action_type_visit_bindable_fields(action_type_find(action.type),
-                                      const_cast<ButtonAction&>(action), collect, demand);
+    action_visit_templates(action, collect, demand);
 }
 
 } // namespace

@@ -235,11 +235,16 @@ const char* validate_targets(JsonVariantConst value, const char* const* ids, uin
         }
     } else if (value.is<JsonObjectConst>()) {
         JsonObjectConst object = value.as<JsonObjectConst>();
-        if (!strcmp(object["type"] | "", ACTION_TYPE_LIST_NAVIGATION)) {
-            const char* target = object["target"] | "";
+        const bool legacy = !strcmp(object["type"] | "", ACTION_TYPE_LIST_NAVIGATION);
+        const bool operation = !strcmp(object["op"] | "", "list.navigate") &&
+            !object.containsKey("type");
+        if (legacy || operation) {
+            JsonVariantConst value = operation ? object["args"]["target"] : object["target"];
+            if (operation && value.is<JsonObjectConst>()) return nullptr;
+            const char* target = value | "";
             for (uint8_t index = 0; index < count; ++index)
                 if (!strcmp(ids[index], target)) return nullptr;
-            return "list_nav target must identify a List on the composed pad";
+            return "List navigation target must identify a List on the composed pad";
         }
     }
     return nullptr;

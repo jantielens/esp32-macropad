@@ -17,22 +17,9 @@ static void hw_buttons_get_config(AsyncWebServerRequest *request) {
     auto doc = make_psram_json_doc(4096);
     JsonArray buttons = doc->createNestedArray("buttons");
 
-    for (uint8_t i = 0; i < NUM_HW_BUTTONS; i++) {
-        const HwButtonDef& def = HW_BUTTON_DEFS[i];
-        const HwButtonConfig* cfg = hw_button_config_get(i);
-
-        JsonObject b = buttons.createNestedObject();
-        b["label"] = def.label;
-        b["pin"] = def.pin;
-
-        JsonArray tap = b.createNestedArray("tap_actions");
-        for (uint8_t a = 0; cfg && a < cfg->tap_count; a++) {
-            action_to_json(cfg->tap_actions[a], tap.createNestedObject());
-        }
-        JsonArray hold = b.createNestedArray("hold_actions");
-        for (uint8_t a = 0; cfg && a < cfg->hold_count; a++) {
-            action_to_json(cfg->hold_actions[a], hold.createNestedObject());
-        }
+    if (!hw_button_config_to_json(buttons) || doc->overflowed()) {
+        web_portal_send_json_error(request, 500, "Could not read button actions");
+        return;
     }
 
     web_portal_send_json_chunked(request, doc);

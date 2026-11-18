@@ -3,129 +3,196 @@
 #if HAS_DISPLAY
 
 #include "action_parse.h"
+#include "action_registry.h"
+#include "action_storage.h"
+#include "action_validate.h"
 #include "config_psram.h"
-#include "log_manager.h"
 #include "fs_health.h"
+#include "log_manager.h"
 #include "psram_json_allocator.h"
+#include "storage.h"
 
 #include <ArduinoJson.h>
-#include "storage.h"
+#include <freertos/semphr.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define TAG "SwipeCfg"
 
 static const char* SWIPE_CONFIG_PATH = "/config/swipe_actions.json";
-
-// RAM cache (always valid — defaults if file missing). Heap-allocated
-// (PSRAM preferred, SRAM fallback) via config_psram_alloc().
 static SwipeConfig* g_config = nullptr;
-static bool g_loaded = false;
+static ActionStorage g_storage = {};
+static SemaphoreHandle_t g_lock = nullptr;
 
-static void parse_swipe_action(JsonVariant v, ButtonAction* act) {
-    memset(act, 0, sizeof(ButtonAction));
-    if (!v.is<JsonObject>()) return;
-    action_parse(v.as<JsonObject>(), *act);
-}
-
-static void apply_defaults(SwipeConfig* cfg) {
-    if (!cfg) return;
-    memset(cfg, 0, sizeof(SwipeConfig));
-    // Default: swipe right = navigate back (natural iOS-like gesture)
-    strlcpy(cfg->swipe_right.type, ACTION_TYPE_BACK, CONFIG_ACTION_TYPE_MAX_LEN);
-}
-
-static bool load_from_flash(SwipeConfig* cfg) {
-    if (!cfg) return false;
-    apply_defaults(cfg);
-
-    if (!Storage.exists(SWIPE_CONFIG_PATH)) {
-        LOGD(TAG, "No swipe config file, using defaults");
-        return false;
+static ButtonAction* direction_action(SwipeConfig& cfg, SwipeDirection direction) {
+    switch (direction) {
+        case SWIPE_LEFT: return &cfg.swipe_left;
+        case SWIPE_RIGHT: return &cfg.swipe_right;
+        case SWIPE_UP: return &cfg.swipe_up;
+        case SWIPE_DOWN: return &cfg.swipe_down;
+        default: return nullptr;
     }
+}
 
+static bool parse_config(JsonDocument& doc, SwipeConfig& cfg, ActionStorage& storage,
+                         bool validate_bindings) {
+    if (!doc.is<JsonObject>()) return false;
+    const char* names[] = {"swipe_left", "swipe_right", "swipe_up", "swipe_down"};
+    ActionStorageScope scope(&storage);
+    for (unsigned index = 0; index < 4; ++index) {
+        JsonVariant value = doc[names[index]];
+        if (value.isNull() && !doc.containsKey(names[index])) continue;
+        if (!value.is<JsonObject>()) return false;
+        JsonObject action = value.as<JsonObject>();
+        if (action.size() == 0) continue;
+        const char* type = action["type"] | "";
+        const char* error = nullptr;
+        if (validate_bindings) {
+            error = action_validate_json(action);
+        } else if (!action.containsKey("type") && action.containsKey("op")) {
+            error = action_operation_validate_json(action, false);
+        } else if (!action["type"].is<const char*>() || !type[0] ||
+                   action.containsKey("args") ||
+                   (action.containsKey("op") && strcmp(type, ACTION_TYPE_VISUAL_ALERT))) {
+            error = "invalid action envelope";
+        }
+        if (!error && type[0] && strcmp(type, "none") && !action_type_is_supported(type))
+            error = "action is unavailable on this board";
+        if (error) {
+            LOGW(TAG, "Invalid %s: %s", names[index], error);
+            return false;
+        }
+        if (!strcmp(type, "none")) continue;
+        ButtonAction* target = direction_action(cfg, static_cast<SwipeDirection>(index));
+        action_parse(action, *target);
+        if (storage.failed || !target->type[0]) return false;
+    }
+    return true;
+}
+
+static bool apply_defaults(SwipeConfig& cfg, ActionStorage& storage) {
+    JsonDocument doc;
+    JsonObject action = doc.to<JsonObject>();
+    action["op"] = "screen.back";
+    action.createNestedObject("args");
+    ActionStorageScope scope(&storage);
+    action_parse(action, cfg.swipe_right);
+    return !storage.failed && cfg.swipe_right.type[0];
+}
+
+// Called with g_lock held after initialization.
+static bool load_from_flash(SwipeConfig& cfg, ActionStorage& storage) {
+    if (!Storage.exists(SWIPE_CONFIG_PATH)) return apply_defaults(cfg, storage);
     File f = Storage.open(SWIPE_CONFIG_PATH, "r");
-    if (!f) {
-        LOGW(TAG, "Failed to open swipe config");
-        return false;
-    }
-
-    size_t file_size = f.size();
-    if (file_size == 0 || file_size > 4096) {
-        LOGW(TAG, "Invalid swipe config size: %u", (unsigned)file_size);
+    if (!f) return false;
+    const size_t size = f.size();
+    if (!size || size > 4096) {
         f.close();
         return false;
     }
-
-    BasicJsonDocument<PsramJsonAllocator> doc(2048);
-    DeserializationError err = deserializeJson(doc, f);
+    BasicJsonDocument<PsramJsonAllocator> doc(4096);
+    const DeserializationError error = deserializeJson(doc, f);
     f.close();
-
-    if (err) {
-        LOGE(TAG, "JSON parse error: %s", err.c_str());
-        return false;
-    }
-
-    parse_swipe_action(doc["swipe_left"],  &cfg->swipe_left);
-    parse_swipe_action(doc["swipe_right"], &cfg->swipe_right);
-    parse_swipe_action(doc["swipe_up"],    &cfg->swipe_up);
-    parse_swipe_action(doc["swipe_down"],  &cfg->swipe_down);
-
-    LOGI(TAG, "Loaded (L=%s R=%s U=%s D=%s)",
-         cfg->swipe_left.type[0]  ? cfg->swipe_left.type  : "-",
-         cfg->swipe_right.type[0] ? cfg->swipe_right.type : "-",
-         cfg->swipe_up.type[0]    ? cfg->swipe_up.type    : "-",
-         cfg->swipe_down.type[0]  ? cfg->swipe_down.type  : "-");
-    return true;
+    if (error || doc.overflowed()) return false;
+    return parse_config(doc, cfg, storage, false);
 }
 
 void swipe_config_init() {
-    g_config = (SwipeConfig*)config_psram_alloc(sizeof(SwipeConfig), "swipe_config");
+    if (!g_lock) g_lock = xSemaphoreCreateMutex();
+    if (!g_lock) {
+        LOGE(TAG, "Failed to allocate swipe config lock");
+        return;
+    }
+    g_config = static_cast<SwipeConfig*>(config_psram_alloc(sizeof(SwipeConfig), "swipe_config"));
     if (!g_config) {
         LOGE(TAG, "Failed to allocate swipe config");
-        return;  // feature disabled
+        return;
     }
-    load_from_flash(g_config);
-    g_loaded = true;
+    if (!load_from_flash(*g_config, g_storage)) {
+        LOGW(TAG, "Invalid swipe config, using defaults");
+        action_storage_clear(g_storage);
+        memset(g_config, 0, sizeof(*g_config));
+        if (!apply_defaults(*g_config, g_storage))
+            LOGE(TAG, "Failed to allocate default swipe action");
+    }
 }
 
-const SwipeConfig* swipe_config_get() {
-    if (!g_config) return nullptr;
-    if (!g_loaded) {
-        apply_defaults(g_config);
-        g_loaded = true;
+bool swipe_config_to_json(JsonObject object) {
+    if (!g_config || !g_lock || object.isNull() ||
+        xSemaphoreTake(g_lock, portMAX_DELAY) != pdTRUE) return false;
+    const char* names[] = {"swipe_left", "swipe_right", "swipe_up", "swipe_down"};
+    for (unsigned index = 0; index < 4; ++index) {
+        JsonObject action = object.createNestedObject(names[index]);
+        action_to_json(*direction_action(*g_config, static_cast<SwipeDirection>(index)), action);
     }
-    return g_config;
-}
-
-bool swipe_config_save_raw(const uint8_t* json, size_t len) {
-    const StorageMutationGuard guard;
-    if (!guard) return false;
-    if (!json || len == 0) return false;
-
-    File f = Storage.open(SWIPE_CONFIG_PATH, "w");
-    if (!f) {
-        LOGE(TAG, "Failed to open for write");
-        return false;
-    }
-
-    size_t written = f.write(json, len);
-    f.close();
-
-    if (written != len) {
-        LOGE(TAG, "Write failed (%u of %u)", (unsigned)written, (unsigned)len);
-        return false;
-    }
-
-    // Update RAM cache
-    load_from_flash(g_config);
-    storage_publish_usage(false);
-
-    LOGI(TAG, "Saved (%u bytes)", (unsigned)len);
+    xSemaphoreGive(g_lock);
     return true;
 }
 
+bool swipe_config_copy_action(SwipeDirection direction, ButtonAction& action, ActionStorage& storage) {
+    if (!g_config || !g_lock || xSemaphoreTake(g_lock, portMAX_DELAY) != pdTRUE) return false;
+    const ButtonAction* source = direction_action(*g_config, direction);
+    const bool copied = source && action_storage_copy_actions(storage, &action, source, 1);
+    xSemaphoreGive(g_lock);
+    return copied;
+}
+
+bool swipe_config_save_raw(const uint8_t* json, size_t len) {
+    if (!g_config || !g_lock || !json || !len || len > 4096) {
+        LOGW(TAG, "Swipe config save unavailable or invalid size");
+        return false;
+    }
+    BasicJsonDocument<PsramJsonAllocator> doc(4096);
+    const DeserializationError error = deserializeJson(doc, json, len);
+    if (error || doc.overflowed()) {
+        LOGW(TAG, "Invalid swipe config JSON: %s", error ? error.c_str() : "document overflow");
+        return false;
+    }
+    auto* replacement = static_cast<SwipeConfig*>(config_psram_alloc(sizeof(SwipeConfig), "swipe_save"));
+    if (!replacement) {
+        LOGE(TAG, "Failed to allocate swipe config for save");
+        return false;
+    }
+    ActionStorage storage = {};
+    bool saved = false;
+    if (!parse_config(doc, *replacement, storage, true)) {
+        LOGW(TAG, "Invalid swipe config or action allocation failed");
+    } else if (xSemaphoreTake(g_lock, portMAX_DELAY) != pdTRUE) {
+        LOGE(TAG, "Failed to lock swipe config for save");
+    } else {
+        saved = storage_write_atomic(SWIPE_CONFIG_PATH, json, len);
+        if (saved) {
+            action_storage_clear(g_storage);
+            *g_config = *replacement;
+            action_storage_move(g_storage, storage);
+        } else {
+            LOGE(TAG, "Atomic swipe config write failed");
+        }
+        xSemaphoreGive(g_lock);
+    }
+    action_storage_clear(storage);
+    free(replacement);
+    if (saved) storage_publish_usage(false);
+    return saved;
+}
+
 void swipe_config_reload() {
-    load_from_flash(g_config);
+    if (!g_config || !g_lock) return;
+    auto* replacement = static_cast<SwipeConfig*>(config_psram_alloc(sizeof(SwipeConfig), "swipe_reload"));
+    if (!replacement) return;
+    ActionStorage storage = {};
+    if (xSemaphoreTake(g_lock, portMAX_DELAY) == pdTRUE) {
+        if (load_from_flash(*replacement, storage)) {
+            action_storage_clear(g_storage);
+            *g_config = *replacement;
+            action_storage_move(g_storage, storage);
+        } else {
+            LOGW(TAG, "Failed to reload swipe config");
+        }
+        xSemaphoreGive(g_lock);
+    }
+    action_storage_clear(storage);
+    free(replacement);
 }
 
 #endif // HAS_DISPLAY

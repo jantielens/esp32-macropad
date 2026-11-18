@@ -100,13 +100,11 @@ right. Its opaque track and indicator colors default to the device-wide button
 background and foreground; override them under **Position indicator** if needed.
 These colors accept scalar bindings, but not item bindings.
 
-An item binding is available only while its row renders or its immediate
-actions run. If an action references an unknown or missing field without a
+An item binding is available while its row renders and, for operation actions,
+throughout the activated action sequence. If an action references an unknown or missing field without a
 fallback, the action fails and the remaining actions do not run. Provide a
-fallback when appropriate. Before a delay, confirmation, or navigation, use
-**Set variable** to capture `[item:id]`. Later actions can read that value as `[var:name]`.
-For example, a pad chooser can navigate directly to `[item:id]` in the
-item's Navigate to screen action. See [runtime variables](../pads/actions.md#set-a-runtime-variable).
+fallback when appropriate. For example, a pad chooser can use `[item:id]` as
+the dynamic target of the item's **Navigate to screen** action.
 For a Voice Notes detail pad, use **Load saved note** with `[item:id]` before
 navigation instead. The action captures the ID without a variable; see
 the [recording, list, and detail pad walkthrough](../media/voice-notes.md#build-recording-list-and-detail-pads).
@@ -115,8 +113,7 @@ If saving fails, binding syntax errors appear beside the field and in the editor
 error message. Item-context errors checked by the device identify the List ID
 and field; action errors also identify the tap or long-press action array and
 the action's one-based position. For position indicator colors, replace item
-bindings with scalar bindings. For actions after a context-ending action,
-capture the item in a variable before that action.
+bindings with scalar bindings.
 
 Loading, empty, and source-error states appear in the List.
 Lists require a display and PSRAM. Existing

@@ -7,6 +7,13 @@ Actions tell the device what to do when a button or another event is activated.
 They can change a screen, send a command, adjust a feature, or show feedback,
 and several actions can form an ordered sequence.
 
+> [!WARNING]
+> The experimental action-format build accepts screen navigation, timer
+> commands, brightness, volume, music, camera capture, variables, **Delay**, and
+> Wi-Fi commands in pad actions when supported. Existing unversioned pad actions
+> cannot run or be saved in this build. Back up your pads before testing.
+> Boot actions also support these operations; other hosts use the existing format.
+
 ## Configure one interaction
 
 In Button **Actions**, choose an unused Tap or Long-press slot.
@@ -15,7 +22,8 @@ Set a slot to **(none)** to remove it, then **Save Pad**.
 Holding an ordinary button for about 500 ms invokes its long-press list.
 Touch-owning [widgets](../widgets/README.md) can replace these interaction rules.
 
-The dropdown groups supported actions by category. Use its current fields/help
+The dropdown groups supported actions by category. Use **Search operations** to
+filter by name, category, or operation ID. Use the current fields and help
 instead of assuming another firmware's action catalog applies.
 An action that queues network work is not proof its external effect completed.
 **Load saved note** also returns after accepting a request, so a following
@@ -24,12 +32,13 @@ navigation action does not wait for storage. See
 
 ## Set a runtime variable
 
-Choose **Set variable** and enter a literal **Name** and a **Value**. The Value
-can contain binding tokens or an expression; it is resolved once when the
-action runs. The action does not require MQTT or Home Assistant.
+Choose **Set variable** and enter a **Name** and a **Value**. Fixed values
+are stored literally; choose **Dynamic** beside an argument to resolve its
+binding or expression when the action runs. The action does not require MQTT
+or Home Assistant.
 
 1. Add **Set variable** to a button's Tap actions. Set **Name** to `counter`
-	and **Value** to `[expr:[var:counter|0] + 1]`.
+	and select **Dynamic** for **Value**. Enter `[expr:[var:counter|0] + 1]`.
 2. Set a button label to `[var:counter|0]`. Add a reset button with **Set
 	variable**, **Name** `counter`, and **Value** `0`.
 3. Choose **Save Pad**, activate the counter button, and observe the label
@@ -44,6 +53,9 @@ unchanged, and stops the remaining actions in that list. See
 [expression examples](expressions.md#update-runtime-state).
 
 ## Pause and confirm safely
+
+Confirmation is not available in pad actions in the experimental build.
+Other action hosts retain their existing behavior.
 
 Delay accepts a literal whole number, 1-55000 ms, and pauses only that list.
 Send keys, gamepad taps, recording-until-silence, and confirmation also have
@@ -61,17 +73,21 @@ can interrupt UI/work; do not sequence them as though they were a save barrier.
 
 ## Navigate between screens
 
-**Navigate to screen** offers currently available screens. Choose **Binding
-value** for a dynamic target such as `[item:id]` in a List item action.
+**Navigate to screen** offers currently available screens. Choose **Dynamic**
+for a target such as `[item:id]` in a List item action.
 The result must be a valid screen ID within 31 UTF-8 bytes.
-An item target only resolves during immediate List item activation; capture it
-in a variable before a pause or later navigation.
+The activated List row and originating pad bindings remain available throughout
+the action sequence, including after a pause or navigation.
+The [sample pad](../../samples/action-framework-gate1.json) includes a fixed
+screen choice, a List target, and a Numeric Rocker timer adjustment. Create Pad 2
+before using its fixed screen action.
 
 Successful Navigate to screen/back/pad sequence wakes the display and resets
 inactivity without disabling the screensaver. Failed navigation does not wake it.
 Automated repeated navigation can keep it awake.
 
-**Navigate pad sequence** visits saved, nonempty effective pads in numeric order.
+**Navigate pad sequence** is not available in pad actions in the experimental
+build. In other action hosts it visits saved, nonempty effective pads in numeric order.
 Inherited, disabled, or dynamically hidden buttons count; a local full-screen
 tap action also makes a pad eligible. Choose Next/Previous, optional Wrap, and
 comma-separated 1-based exclusions such as `2,5,8`.

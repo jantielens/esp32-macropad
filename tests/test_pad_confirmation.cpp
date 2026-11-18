@@ -2,6 +2,8 @@
 
 #include <cstdio>
 #include <cstring>
+#include <fstream>
+#include <iterator>
 #include <string>
 
 #include "binding_template.h"
@@ -71,6 +73,25 @@ bool binding_template_has_bindings(const char* text) {
     return text && std::strstr(text, "[mqtt:");
 }
 
+bool binding_template_resolve_checked(const char*, char*, size_t) { return false; }
+bool binding_template_well_formed(const char*) { return true; }
+const ActionOperationDef* action_operation_find(const char* id, const ActionTypeDef**) {
+    static const ActionArgumentDef screen_arguments[] = {
+        {"target", "Screen", ACTION_ARGUMENT_SCREEN, 0, 0, 31, true, "[item:id]", "screens"}
+    };
+    static const ActionArgumentDef timer_arguments[] = {
+        {"timer", "Timer", ACTION_ARGUMENT_INTEGER, 1, 3, 0, true, "[var:timer]", "timers"},
+        {"seconds", "Seconds", ACTION_ARGUMENT_INTEGER, INT32_MIN, INT32_MAX, 0, true, "[event:step]", "number"}
+    };
+    static const ActionOperationDef operations[] = {
+        {"screen.open", "Navigate to screen", screen_arguments, 1, nullptr},
+        {"timer.adjust", "Adjust timer", timer_arguments, 2, nullptr}
+    };
+    for (const auto& operation : operations)
+        if (id && !std::strcmp(id, operation.id)) return &operation;
+    return nullptr;
+}
+
 const char* binding_template_validate_params(const char* scheme, size_t name_len,
                                              const char* params) {
     (void)scheme;
@@ -130,6 +151,39 @@ static JsonObject make_button(JsonDocument& doc) {
 
 int main() {
     std::printf("=== pad confirmation validation tests ===\n");
+
+    {
+        std::ifstream file("docs/samples/action-framework-gate1.json");
+        CHECK(file.is_open());
+        std::string source((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        JsonDocument doc;
+        CHECK(!deserializeJson(doc, source));
+        CHECK(pad_validate_action_version(doc.as<JsonObjectConst>()) == nullptr);
+        g_contextual_list = true;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        g_contextual_list = false;
+    }
+
+    {
+        JsonDocument doc;
+        JsonObject button = make_button(doc);
+        JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
+        action["op"] = "screen.open";
+        action["args"]["target"] = "pad_1";
+        CHECK(pad_validate_action_version(doc.as<JsonObjectConst>()) != nullptr);
+        doc["action_format_version"] = 1;
+        CHECK(pad_validate_action_version(doc.as<JsonObjectConst>()) == nullptr);
+        action["args"]["target"]["$template"] = "[item:id]";
+        CHECK(pad_validate_action_version(doc.as<JsonObjectConst>()) == nullptr);
+        action["type"] = "screen";
+        CHECK(pad_validate_action_version(doc.as<JsonObjectConst>()) != nullptr);
+        action.remove("type");
+        doc["action_format_version"] = 2;
+        CHECK(pad_validate_action_version(doc.as<JsonObjectConst>()) != nullptr);
+        doc["action_format_version"] = 1;
+        action["args"]["extra"] = true;
+        CHECK(pad_validate_action_version(doc.as<JsonObjectConst>()) != nullptr);
+    }
 
     {
         JsonDocument doc;

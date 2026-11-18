@@ -49,23 +49,18 @@ accept the resulting value. Zero disables that zone pair and gives its area
 to the center; both zero makes the full content area center.
 Give the control a wide/tall span so all targets remain usable.
 
-Configure one **Adjustment Action** using `{step}`, for example:
+Configure one **Adjustment Action**. Enable **Dynamic** on the argument that
+needs the signed step:
 
-* Timer: slot 1, Adjust countdown, Value `{step}`
-* Volume: Adjust volume, Value `{step}`
-* MQTT: payload `{"delta":{step}}` for an automation expecting a numeric delta
-* Notification: message `Adjusted by {step}`
+* **Adjust timer**: choose Timer 1 and enter `[event:step]` in **Adjust (seconds)**.
+* **Adjust volume**: enter `[event:step]` in **Adjust (%)**.
+* **Publish MQTT message**: enter `{"delta":[event:step]}` in **Payload**
+  for an automation expecting a numeric delta.
+* **Show notification**: enter `Adjusted by [event:step]` in **Message**.
 
-Small/large zones substitute the signed adjustment into supported text fields,
-including notification messages, variable values, MQTT topics and payloads,
-keys, volume, brightness, and timer values. `{step}` is the change requested,
-not the resulting absolute value. For a decrement of 10, `Adjusted by {step}`
-becomes `Adjusted by -10`.
-
-Event-token support is separate from live bindings. Commands, variable names,
-action field names, and native numeric properties such as delay duration stay
-literal. The editor rejects unsupported fields and substitutions that exceed
-their byte capacity. `{value}` belongs to sliders and is unavailable here.
+`[event:step]` is the requested change, not the resulting absolute value. For
+a decrement of 10, the notification displays `Adjusted by -10`. The center
+tap does not supply a step.
 
 The center has its own up-to-three tap actions; the adjustment action may be
 empty. The editor omits ordinary long-press actions for this widget.

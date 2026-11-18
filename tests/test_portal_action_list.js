@@ -265,7 +265,148 @@ async function checkIndependentBootSaves() {
     console.log('independent boot actions / appearance saves: PASS');
 }
 
-checkIndependentBootSaves().catch(error => {
+async function checkSwipeActions() {
+    const node = new Element();
+    const loaded = {};
+    const first = {
+        swipe_left: { op: 'screen.open', args: { target: 'pad_2' } },
+        swipe_right: { op: 'screen.back', args: {} },
+        swipe_up: { type: 'shutter', command: 'start' },
+        swipe_down: {}
+    };
+    const requests = [];
+    const options = [];
+    const ctx = {
+        console,
+        document: { getElementById: id => id === 'swipe-editors' ? node : null },
+        actionEditorSlotPrefixes: context.actionEditorSlotPrefixes,
+        getDeviceInfo: async () => {},
+        actionEditorHTML: (prefix, label, opts) => {
+            options.push({ prefix, operations: opts.operations, mixed: opts.mixed });
+            return context.actionEditorHTML(prefix, label, opts);
+        },
+        actionEditorLoad: (prefix, action) => { loaded[prefix] = action; },
+        actionEditorBuild: prefix => loaded[prefix],
+        showMessage() {},
+        actionEditorHandleError: () => false,
+        fetch: async (url, request) => {
+            requests.push({ url, request });
+            return { ok: true, json: async () => first };
+        }
+    };
+    vm.createContext(ctx);
+    vm.runInContext(fs.readFileSync('src/app/web/portal_config_actions.js', 'utf8'), ctx);
+    const screen = context.deviceInfoCache.catalog.find(entry => entry.type === 'screen');
+    const previousOperations = screen.operations;
+    context.escAttr = value => String(value || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    screen.operations = [
+        { id: 'screen.open', label: 'Open screen', arguments: [
+            { name: 'target', label: 'Screen', type: 'screen', dynamic: true, max_length: 31 }
+        ] },
+        { id: 'screen.back', label: 'Back', arguments: [] }
+    ];
+    context.deviceInfoCache.catalog.push({ type: 'shutter', group: 'Shutter', label: 'Shutter' });
+    await ctx.swipeInitEditors();
+    screen.operations = previousOperations;
+    context.deviceInfoCache.catalog.pop();
+    assert.deepStrictEqual(options.map(x => x.prefix),
+        ['swipe-left', 'swipe-right', 'swipe-up', 'swipe-down']);
+    assert(options.every(x => x.operations && x.mixed));
+    assert(node.innerHTML.includes('data-operations="true" data-mixed="true"'));
+    assert(node.innerHTML.includes('value="@screen.open"'));
+    assert(node.innerHTML.includes('value="@screen.back"'));
+    assert(node.innerHTML.includes('value="shutter"'));
+    await ctx.loadSwipeActions();
+    await ctx.saveSwipeActions();
+    assert.strictEqual(requests[1].url, '/api/component/swipe-actions/config');
+    assert.deepStrictEqual(JSON.parse(requests[1].request.body), first);
+}
+
+async function checkTriggerHosts() {
+    const nodes = new Map();
+    const getNode = id => {
+        if (!nodes.has(id)) nodes.set(id, new Element());
+        return nodes.get(id);
+    };
+    getNode('hw-button-editors').querySelectorAll = () => [{}];
+    getNode('mqtt-trigger-editors').querySelectorAll = () => [{}];
+    const drafts = new Map();
+    const rendered = [];
+    const requests = [];
+    const tap = { op: 'screen.open', args: { target: { $template: '[var:target]' } } };
+    const legacy = { type: 'shutter', command: 'start' };
+    const mqtt = { op: 'screen.back', args: {} };
+    const ctx = {
+        console,
+        document: { getElementById: getNode },
+        actionEditorSlotPrefixes: context.actionEditorSlotPrefixes,
+        getDeviceInfo: async () => ({ has_display: true }),
+        actionEditorListRender: (container, prefixes, labels, options) => {
+            rendered.push({ container, options: options.actionOptions });
+            const html = context.actionEditorHTML(prefixes[0], '', options.actionOptions);
+            assert(html.includes('data-operations="true" data-mixed="true"'));
+        },
+        actionEditorListLoad: (prefixes, actions) => drafts.set(prefixes[0], actions),
+        actionEditorListBuild: prefixes => drafts.get(prefixes[0]) || [],
+        actionEditorWireFragment() {},
+        actionEditorHandleError: () => false,
+        showMessage() {},
+        fetch: async (url, request) => {
+            requests.push({ url, request });
+            return { ok: true, json: async () => url.includes('hw-buttons')
+                ? { buttons: [{ label: 'Key', pin: 1, tap_actions: [tap], hold_actions: [legacy] }] }
+                : { max: 1, triggers: [{ topic: 'event', value: 'on', actions: [mqtt] }] } };
+        }
+    };
+    vm.createContext(ctx);
+    vm.runInContext(fs.readFileSync('src/app/web/portal_config_actions.js', 'utf8'), ctx);
+    await ctx.initHwButtons();
+    await ctx.initMqttTriggers();
+    assert.deepStrictEqual(rendered.map(entry => entry.container),
+        ['hwbtn-1-tap-editors', 'hwbtn-1-hold-editors', 'mqtttrig-1-editors']);
+    assert(rendered.every(entry => entry.options.operations && entry.options.mixed));
+    await ctx.saveHwButtons();
+    await ctx.saveMqttTriggers();
+    assert.deepStrictEqual(JSON.parse(requests[2].request.body),
+        { buttons: [{ tap_actions: [tap], hold_actions: [legacy] }] });
+    assert.deepStrictEqual(JSON.parse(requests[3].request.body),
+        { triggers: [{ topic: 'event', value: 'on', actions: [mqtt] }] });
+}
+
+async function checkTimerLoadFailure() {
+    const button = new Element();
+    const messages = [];
+    const requests = [];
+    let ok = false;
+    const ctx = {
+        console: {error() {}},
+        document: {getElementById: id => id === 'timer-config-save' ? button : null},
+        actionEditorSlotPrefixes: context.actionEditorSlotPrefixes,
+        actionEditorListLoad() {},
+        actionEditorListBuild: () => [],
+        actionEditorHandleError: () => false,
+        showMessage: (text, kind) => messages.push({text, kind}),
+        fetch: async (url, options) => {
+            requests.push({url, options});
+            return {ok, json: async () => ({})};
+        }
+    };
+    vm.createContext(ctx);
+    vm.runInContext(fs.readFileSync('src/app/web/portal_config_actions.js', 'utf8'), ctx);
+    await ctx.loadTimerConfig();
+    assert(button.disabled);
+    assert.strictEqual(messages.at(-1).kind, 'error');
+    await ctx.saveTimerConfig();
+    assert.strictEqual(requests.length, 1);
+    ok = true;
+    await ctx.loadTimerConfig();
+    assert(!button.disabled);
+    await ctx.saveTimerConfig();
+    assert.strictEqual(requests.length, 3);
+    assert.strictEqual(requests[2].options.method, 'POST');
+}
+
+Promise.all([checkIndependentBootSaves(), checkSwipeActions(), checkTriggerHosts(), checkTimerLoadFailure()]).catch(error => {
     console.error(error);
     process.exitCode = 1;
 });

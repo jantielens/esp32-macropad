@@ -53,6 +53,8 @@ const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid = false,
 const char* pad_validate_with_template(JsonObjectConst pad, int page, bool tolerate_offgrid,
                                        const PadValidationGeometry* geometry = nullptr);
 
+const char* pad_validate_action_version(JsonObjectConst pad, bool validate_bindings = true);
+
 bool pad_validation_needs_context();
 const char* pad_validate_context(JsonObjectConst pad, JsonObjectConst template_pad);
 

@@ -451,19 +451,17 @@ bool activate(State* state, uint8_t index, bool hold) {
     if (!actions) { LOGE("List", "Cannot allocate activation actions in PSRAM"); return false; }
     memcpy(actions, hold ? tile->lp_actions : tile->actions, sizeof(ButtonAction) * count);
     ListSourceSnapshot* snapshot = state->snapshot;
-    const PadBinding* previous = nullptr;
-    uint8_t previous_count = 0;
-    pad_binding_get_bindings(&previous, &previous_count);
-    pad_binding_set_bindings(tile->pad_bindings, tile->pad_binding_count);
+    const PadBinding* bindings = tile->pad_bindings;
+    const uint8_t binding_count = tile->pad_binding_count;
     ActionResult result;
     {
         ActivationGuard guard;
+        PadBindingScope pad(bindings, binding_count);
         ItemBindingScope item(snapshot, index);
         feedback(state, index, hold ? LV_EVENT_LONG_PRESSED : LV_EVENT_CLICKED);
         result = action_list_dispatch_result(actions, count, hold ? "ListHold" : "ListSelect",
-                                            ACTION_CONTINUATION_OWNER_LVGL, true);
+                                            ACTION_CONTINUATION_OWNER_LVGL, true, bindings, binding_count);
     }
-    pad_binding_set_bindings(previous, previous_count);
     heap_caps_free(actions);
     return result != ACTION_FAILED;
 }

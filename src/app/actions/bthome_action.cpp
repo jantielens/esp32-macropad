@@ -64,6 +64,31 @@ ActionResult dispatch_bthome(const ButtonAction& act, const char* label, uint32_
     return ACTION_FAILED;
 }
 
+const char* const kBthomeEventChoices[] = {
+    kBthomeEventOptions[0].id, kBthomeEventOptions[1].id, kBthomeEventOptions[2].id
+};
+const char* const kBthomeEventLabels[] = {
+    kBthomeEventOptions[0].label, kBthomeEventOptions[1].label, kBthomeEventOptions[2].label
+};
+const ActionArgumentDef kBthomeSendArguments[] = {
+    {"button", "Button number", ACTION_ARGUMENT_INTEGER, 1, bthome::button_count, 0,
+     true, "[var:button]", "bthome_buttons"},
+    {"event", "Event", ACTION_ARGUMENT_ENUM, 0, 0, 12, true,
+     "[var:event]", "select", kBthomeEventChoices, 3, false, nullptr, kBthomeEventLabels},
+};
+ActionResult dispatch_bthome_send(const ActionResolvedArgument* arguments, const char* label,
+                                  uint32_t token) {
+    const BthomeEventOption* option = bthome_event_option(arguments[1].text);
+    if (!option) return ACTION_FAILED;
+    ButtonAction act = {};
+    act.payload.bthome.button = static_cast<uint8_t>(arguments[0].integer);
+    act.payload.bthome.event = option->value;
+    return dispatch_bthome(act, label, token);
+}
+const ActionOperationDef kBthomeOperations[] = {
+    {"bthome.send", "Send BTHome event", kBthomeSendArguments, 2, dispatch_bthome_send},
+};
+
 bool bthome_available() {
 #if HAS_BLE || HAS_BLE_HID
     return true;
@@ -119,6 +144,7 @@ void describe_bthome(JsonObject& action) {
 
 DEFINE_AND_REGISTER_ACTION_TYPE(kBthomeActionType, ACTION_TYPE_BTHOME, parse_bthome,
     serialize_bthome, dispatch_bthome, nullptr, describe_bthome, bthome_available,
-    validate_bthome, ACTION_EXECUTION_SYNC, false);
+    validate_bthome, ACTION_EXECUTION_SYNC, false, true, false, nullptr,
+    kBthomeOperations, sizeof(kBthomeOperations) / sizeof(kBthomeOperations[0]));
 }
 #endif

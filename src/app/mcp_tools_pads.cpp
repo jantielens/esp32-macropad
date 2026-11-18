@@ -80,7 +80,7 @@ static bool pad_fail(JsonObject& result, String& err, int code, const char* msg)
 // ============================================================================
 // get_capabilities — registry-generated manifest
 // ============================================================================
-static const char* const WIDGET_COMMON = "all widgets: widget_type + widget_data_binding (and _2.._4 for extra binding templates); widget config fields are flat on the button. A config field whose \"type\" is \"action\" is a NESTED action object (same {type, <mode>, <value>} shape as a button action, and supports the {step} token), NOT a string — e.g. numericrocker's widget_numericrocker_action.";
+static const char* const WIDGET_COMMON = "all widgets: widget_type + widget_data_binding (and _2.._4 for extra binding templates); widget config fields are flat on the button. A config field whose \"type\" is \"action\" is a NESTED operation object (same {op, args} shape as a pad button action), NOT a string — e.g. numericrocker's widget_numericrocker_action supports [event:step].";
 
 static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, String& err) {
     if (args.containsKey("widget") && args.containsKey("binding_scheme"))
@@ -196,7 +196,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     // list to keep in sync when an action type is added or changed.
     JsonArray acts = result.createNestedArray("action_types");
     action_catalog_emit(acts, /* include_field_docs */ true);
-    result["actions_note"] = "button.actions (tap) / button.lp_actions (long-press): arrays of {type, ...fields above}";
+    result["actions_note"] = "Pad actions require action_format_version: 1. button.actions (tap) / button.lp_actions (long-press) are arrays of {op, args}; dynamic arguments use {\"$template\":\"...\"}. Only the listed operations are supported in pads.";
     result["position_note"] = "set_button/set_buttons/remove_button positions are 0-based indices in the selected layer's array, NOT grid cells (placement is col/row). Omitted layer means Main; positions at or past the end append. The combined Main and Overlay count cannot exceed grid.max_buttons.";
     result["screen_ref_note"] = "pad tools accept the 'screen' arg as either the canonical id 'pad_N' or a pad's friendly name (case-insensitive). Names may be unset or non-unique; an ambiguous name is refused with the matching ids so you can pick one. Creating a new pad requires the 'pad_N' id. list_pads shows each pad's name.";
 
@@ -324,6 +324,7 @@ static bool load_or_seed(uint8_t page, JsonDocument& doc) {
         if (!e) return true;
     }
     doc.clear();
+    doc["action_format_version"] = 1;
     doc["layout"] = "grid";
     doc["cols"] = 4;
     doc["rows"] = 4;

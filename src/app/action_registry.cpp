@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "binding_template.h"
+#include "action_storage.h"
 #include "log_manager.h"
 
 // Shared headroom for built-in, device-class, and board-local actions.
@@ -52,6 +53,48 @@ uint8_t action_type_count() { return (uint8_t)s_count; }
 
 const ActionTypeDef* action_type_at(uint8_t index) {
     return (index < s_count) ? s_types[index] : nullptr;
+}
+
+const ActionOperationDef* action_operation_find(const char* id, const ActionTypeDef** owner) {
+    if (owner) *owner = nullptr;
+    if (!id || !id[0]) return nullptr;
+    if (*id == '@') ++id;
+    for (int i = 0; i < s_count; ++i) {
+        const ActionTypeDef* type = s_types[i];
+        if (type->available && !type->available()) continue;
+        for (uint8_t j = 0; j < type->operation_count; ++j) {
+            const ActionOperationDef* operation = &type->operations[j];
+            if (strcmp(operation->id, id)) continue;
+            if (owner) *owner = type;
+            return operation;
+        }
+    }
+    return nullptr;
+}
+
+const ActionOperationDef* action_operation_for_action(const ButtonAction& action,
+                                                      const ActionTypeDef** owner) {
+    if (owner) *owner = nullptr;
+    if (action.type[0] != '@') return nullptr;
+    for (int i = 0; i < s_count; ++i) {
+        const ActionTypeDef* type = s_types[i];
+        if (type->available && !type->available()) continue;
+        for (uint8_t j = 0; j < type->operation_count; ++j) {
+            const ActionOperationDef* operation = &type->operations[j];
+            if (operation != action.payload.operation.descriptor) continue;
+            if (owner) *owner = type;
+            return operation;
+        }
+    }
+    return nullptr;
+}
+
+bool action_may_pause(const ButtonAction& action) {
+    const ActionOperationDef* operation = action_operation_for_action(action);
+    if (operation) return operation->execution != ACTION_EXECUTION_SYNC;
+    if (action.type[0] == '@') return true;
+    const ActionTypeDef* type = action_type_find(action.type);
+    return type && type->execution != ACTION_EXECUTION_SYNC;
 }
 
 bool action_type_is_supported(const char* type_name) {
@@ -148,6 +191,27 @@ bool action_type_visit_bindable_fields(const ActionTypeDef* def, ButtonAction& a
     return action_type_visit_fields(def, act, visit, &adapter);
 }
 
+void action_visit_templates(const ButtonAction& act, ActionTemplateVisitor visitor, void* context) {
+    if (!visitor) return;
+    if (act.type[0] == '@') {
+        const ActionOperationDef* operation = action_operation_for_action(act);
+        const ActionArgumentBlock* block = act.payload.operation.arguments;
+        if (!operation || !block || block->count != operation->argument_count) return;
+        const ActionStoredArgument* arguments = action_storage_arguments(block);
+        for (uint8_t index = 0; index < block->count; ++index)
+            if (arguments[index].dynamic)
+                visitor(action_storage_text(block, arguments[index]), context);
+        return;
+    }
+    struct Context { ActionTemplateVisitor visitor; void* user; } adapter = {visitor, context};
+    action_type_visit_bindable_fields(action_type_find(act.type), const_cast<ButtonAction&>(act),
+        [](char* field, size_t, bool, void* opaque) {
+            auto* adapter = static_cast<Context*>(opaque);
+            adapter->visitor(field, adapter->user);
+            return true;
+        }, &adapter);
+}
+
 bool action_type_has_binding(const ActionTypeDef* def, const ButtonAction& act) {
     bool has_binding = false;
     auto check = [](char* field, size_t, bool, void* context) {
@@ -170,15 +234,5 @@ bool action_type_resolve_bindings(const ActionTypeDef* def, ButtonAction& act) {
     };
     return action_type_visit_bindable_fields(def, act, resolve, nullptr);
 }
-
-#if HAS_MQTT || HAS_HA_LIVE
-void action_type_collect_topics(const ActionTypeDef* def, const ButtonAction& act, void* user_data) {
-    auto collect = [](char* field, size_t, bool, void* context) {
-        if (field[0]) binding_template_collect_topics(field, context);
-        return true;
-    };
-    action_type_visit_bindable_fields(def, const_cast<ButtonAction&>(act), collect, user_data);
-}
-#endif
 
 #endif // HAS_DISPLAY || HAS_BUTTON

@@ -15,13 +15,13 @@ padRegisterWidgetEditor({
     actions: { tap: true, longPress: false, prefixes: ['pad-edit-nr-adjust'] },
     init() {
         document.getElementById('pad-edit-nr-adjust-container').innerHTML = actionEditorHTML(
-            'pad-edit-nr-adjust', 'Adjustment Action', { showBleHint: true, showKeyHelp: true });
+            'pad-edit-nr-adjust', 'Adjustment Action', { showBleHint: true, showKeyHelp: true, operations: true });
     },
     load(button) {
         actionEditorLoad('pad-edit-nr-adjust', button.widget_numericrocker_action || null);
     },
     build(button) {
         const action = actionEditorBuild('pad-edit-nr-adjust', '{step}');
-        if (action.type) button.widget_numericrocker_action = action;
+        if (action.type || action.op) button.widget_numericrocker_action = action;
     }
 });

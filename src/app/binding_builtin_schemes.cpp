@@ -8,6 +8,9 @@
 #endif
 #include "camera_binding.h"
 #include "expr_binding.h"
+#if HAS_DISPLAY || HAS_BUTTON
+#include "event_binding.h"
+#endif
 #include "ext_binding.h"
 #include "health_binding.h"
 #include "sensor_binding.h"
@@ -39,6 +42,9 @@ void binding_builtin_schemes_init() {
     sensor_binding_init();
     time_binding_init();
     expr_binding_init();
+#if HAS_DISPLAY || HAS_BUTTON
+    event_binding_init();
+#endif
 #if HAS_EXTERNAL_DATA
     external_binding_init();
 #endif

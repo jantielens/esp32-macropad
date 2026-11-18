@@ -32,7 +32,7 @@ const BindingAuthoringSpec kAuthoring = {BINDING_DOC_LIST(kAuthoringKeys)};
 void item_binding_init() {
     if (!binding_template_register("item", item_binding_resolve, nullptr,
         {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr,
-         &kItemDoc, &kAuthoring, item_binding_field_valid})) {
+         &kItemDoc, &kAuthoring, item_binding_field_valid, nullptr, item_binding_value_kind})) {
         LOGE("ItemBind", "Failed to register item binding scheme");
     }
 }

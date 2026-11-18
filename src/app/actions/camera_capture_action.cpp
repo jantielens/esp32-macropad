@@ -29,6 +29,16 @@ bool camera_capture_save_to_is_valid(const char* save_to) {
            strcmp(save_to, "both") == 0;
 }
 
+const char* const kCameraDestinations[] = {"both", "latest", "roll"};
+const char* const kCameraDestinationLabels[] = {
+    "Latest and camera roll", "Latest image", "Camera roll image"
+};
+const ActionArgumentDef kCameraCaptureArguments[] = {
+    {"save_to", "Save to", ACTION_ARGUMENT_ENUM, 0, 0, 6, true,
+     "[var:camera_destination]", "select", kCameraDestinations, 3, false, nullptr,
+     kCameraDestinationLabels},
+};
+
 void parse_camera_capture(const JsonObject& action, ButtonAction& act) {
     const char* save_to = action["save_to"] | "both";
     if (!camera_capture_save_to_is_valid(save_to)) {
@@ -74,15 +84,15 @@ void execute_camera_capture(const void* opaque, bool* ok, char*, size_t) {
     action_continuation_complete(job->continuation_token, *ok);
 }
 
-ActionResult dispatch_camera_capture(const ButtonAction& action, const char* label,
-                                     uint32_t continuation_token) {
+ActionResult queue_camera_capture(CameraCaptureSaveTo save_to, const char* label,
+                                  uint32_t continuation_token) {
     if (!continuation_token) {
         LOGW(kCameraCaptureActionTag, "%s camera capture: must be used in an action list", label);
         return ACTION_FAILED;
     }
     const CameraCaptureJob job = {
         .continuation_token = continuation_token,
-        .save_to = camera_capture_save_to_parse(action.payload.camera_capture.save_to),
+        .save_to = save_to,
     };
     const LoopBridgeResult result = loop_bridge_enqueue(
         execute_camera_capture, &job, sizeof(job));
@@ -92,6 +102,22 @@ ActionResult dispatch_camera_capture(const ButtonAction& action, const char* lab
     }
     return ACTION_PENDING;
 }
+
+ActionResult dispatch_camera_capture(const ButtonAction& action, const char* label,
+                                     uint32_t continuation_token) {
+    return queue_camera_capture(camera_capture_save_to_parse(action.payload.camera_capture.save_to),
+                                label, continuation_token);
+}
+
+ActionResult dispatch_camera_capture_operation(const ActionResolvedArgument* arguments,
+                                               const char* label, uint32_t continuation_token) {
+    return queue_camera_capture(camera_capture_save_to_parse(arguments[0].text), label, continuation_token);
+}
+
+const ActionOperationDef kCameraCaptureOperations[] = {
+    {"camera.capture", "Save camera snapshot", kCameraCaptureArguments, 1,
+     dispatch_camera_capture_operation, ACTION_EXECUTION_PAUSABLE},
+};
 
 void describe_camera_capture(JsonObject& action) {
     action["group"] = "Camera";
@@ -118,7 +144,8 @@ void describe_camera_capture(JsonObject& action) {
     both["label"] = "Latest and camera roll";
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(kCameraCaptureActionType, ACTION_TYPE_CAMERA_CAPTURE, parse_camera_capture, serialize_camera_capture, dispatch_camera_capture, nullptr, describe_camera_capture, camera_capture_available, validate_camera_capture, ACTION_EXECUTION_PAUSABLE);
+DEFINE_AND_REGISTER_ACTION_TYPE(kCameraCaptureActionType, ACTION_TYPE_CAMERA_CAPTURE, parse_camera_capture, serialize_camera_capture, dispatch_camera_capture, nullptr, describe_camera_capture, camera_capture_available, validate_camera_capture, ACTION_EXECUTION_PAUSABLE, true, true, false, nullptr,
+    kCameraCaptureOperations, sizeof(kCameraCaptureOperations) / sizeof(kCameraCaptureOperations[0]));
 
 } // namespace
 

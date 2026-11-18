@@ -27,21 +27,39 @@ individual options is not supported.
    be distinct, ignoring letter case.
 4. Under **Option selector**, choose a **Selection mode**. For Bound mode,
    enter a **State source** that reports one of the option values.
-5. Under **Actions**, configure the shared **Option action** list. Put
-   `{value}` in a supported action text field to use the tapped option's value.
-   Every action in the list receives the same value. For example, an MQTT
-   payload can be `{"mode":"{value}"}`.
+5. Under **Actions**, configure the shared **Option action** list. For a typed
+   operation, select **Dynamic** beside an argument and use `[event:value]`
+   to read the tapped option's value.
 6. Adjust the colors and layout if needed, then select **Save Pad**. No reboot
    is needed. Test the options on the device and check the receiving service
    when actions control something external.
 
 The option action list replaces ordinary button tap actions; long-press actions
-are not available. `{value}` works in supported action text fields, not in every
-field or native numeric property. It is the option's value, not its label.
-An option without a value substitutes an empty string. An action that requires
-a value may be rejected during validation or fail when run.
-For JSON strings, include the quotes as in the example above. See
-[slider value actions](slider.md#use-value-actions) for supported fields.
+are not available. `[event:value]` is the option's value, not its label.
+An option without a value supplies an empty string. An action that requires a
+value may be rejected during validation or fail when run.
+
+### Control Wi-Fi station mode
+
+Keep a local recovery method available before testing: enabling station mode
+can replace the active AP, and disabling station mode can disconnect your
+portal session.
+
+1. Add options with values `aan` and `uit`. Set **Selection mode** to **Bound**.
+2. Set **State source** to
+   `[expr:[health:wifi_station_enabled]=="ON"?"aan":"uit"]`.
+3. Add **Set Wi-Fi station mode** to the option actions. Enable **Dynamic** for
+   **Station mode** and enter
+   `[expr:[event:value]=="aan"?"true":[event:value]=="uit"?"false":"invalid"]`.
+4. Save the pad and test both options. An unknown value fails the action,
+   displays an error, and stops its remaining actions.
+
+The state source reports applied station mode, refreshed at most every two
+seconds; it is not connection status. During a pending or rejected request it
+can still show the previous applied state. A successful action means the
+network request was admitted, not that station mode was applied or connected.
+Enabling station mode may replace an active AP. Disabling station mode leaves
+an active AP alone. Turning off the entire radio is a separate command.
 
 ## Choose a selection mode
 
@@ -104,8 +122,9 @@ values. Choose **Local**, leave **Option action** empty, and save. Tapping an
 option highlights it; leaving and returning to the pad clears the highlight.
 
 Add values `red`, `green`, and `blue` and an action if the choice should do
-something. For example, a notification message `Selected {value}` displays
-`Selected green` when you tap **Green**.
+something. For example, add **Show notification**, enable **Dynamic** for
+**Message**, and enter `Selected [event:value]`. Tapping **Green** displays
+`Selected green`.
 The highlight alone does not store a setting or control a light.
 
 ## Share a choice through a runtime variable
@@ -118,9 +137,10 @@ and `C`. Set **State source** to:
 [var:a|unset]
 ```
 
-Add a **Set variable** option action with **Name** `a` and **Value** `{value}`.
-Save the pad and tap **B**: the action writes `B`, and the reported variable
-selects **B**. Another button can show the choice with `[var:a]`.
+Add a **Set variable** option action with **Name** `a`. Enable **Dynamic** for
+**Value** and enter `[event:value]`. Save the pad and tap **B**: the action
+writes `B`, and the reported variable selects **B**. Another button can show the
+choice with `[var:a]`.
 
 The `unset` fallback lets you make the first selection before the variable
 exists. Choose a fallback different from every option value, ignoring case.
@@ -140,8 +160,8 @@ those values, choose **Bound**, and set **State source** to:
 [mqtt:home/fan/state;mode]
 ```
 
-Add a **Publish MQTT message** option action with topic `home/fan/set` and
-payload `{"mode":"{value}"}`. Tapping **High** sends
+Add a **Publish MQTT message** option action with topic `home/fan/set`. Enable
+**Dynamic** for **Payload** and enter `{"mode":"[event:value]"}`. Tapping **High** sends
 `{"mode":"high"}`. The selector highlights **High** when the state topic
 reports `{"mode":"high"}`, including when the mode changes elsewhere.
 

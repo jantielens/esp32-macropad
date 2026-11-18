@@ -3,6 +3,10 @@
 #if MQTT_TRIGGERS_ENABLED
 
 #include "action_list.h"
+#include "action_parse.h"
+#include "action_registry.h"
+#include "action_storage.h"
+#include "action_validate.h"
 #include "config_psram.h"
 #include "log_manager.h"
 #include "mqtt_manager.h"
@@ -13,6 +17,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/portmacro.h>
 #include <freertos/semphr.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define TAG "MqttTrig"
@@ -26,6 +31,7 @@ static_assert(MAX_MQTT_TRIGGERS <= 32, "MAX_MQTT_TRIGGERS must be <= 32 (pending
 // RAM cache (PSRAM preferred, SRAM fallback). nullptr if allocation failed
 // (feature then degrades to a no-op).
 static MqttTriggerConfig* g_triggers = nullptr;
+static ActionStorage g_action_storage = {};
 struct MqttTriggerStorage {
     MqttTriggerConfig triggers[MAX_MQTT_TRIGGERS];
     char registered_topics[MAX_MQTT_TRIGGERS][CONFIG_MQTT_TOPIC_MAX_LEN];
@@ -35,8 +41,9 @@ static char (*g_registered_topics)[CONFIG_MQTT_TOPIC_MAX_LEN] = nullptr;
 // Mutex guarding the g_triggers array. The save path (load_from_flash) runs on
 // the async web-server task and mutates the cache, while the MQTT message
 // callback and the loop drain read it on the main task. A FreeRTOS mutex (not a
-// spinlock) is used so it can be held across the brief cache repopulation; slow
-// work (file I/O on save, action dispatch on drain) stays outside the lock.
+// spinlock) protects cache replacement and serialization. Save holds it
+// through the atomic write so concurrent saves cannot reorder file and cache.
+// Action dispatch stays outside the lock.
 static SemaphoreHandle_t g_lock = nullptr;
 
 static inline void triggers_lock() { if (g_lock) xSemaphoreTake(g_lock, portMAX_DELAY); }
@@ -53,6 +60,7 @@ static inline void triggers_unlock() { if (g_lock) xSemaphoreGive(g_lock); }
 // ---------------------------------------------------------------------------
 static portMUX_TYPE g_mux = portMUX_INITIALIZER_UNLOCKED;
 static volatile uint32_t g_pending_mask = 0;
+static uint32_t g_generation = 0;
 
 // ---------------------------------------------------------------------------
 // Config load / save
@@ -63,65 +71,87 @@ static volatile uint32_t g_pending_mask = 0;
 // PubSubClient subscription limit. This is a documented edge case, not enforced
 // at runtime — excess subscriptions simply fail and are logged by MqttManager.
 // ---------------------------------------------------------------------------
-static void apply_defaults() {
-    if (!g_triggers) return;
-    memset(g_triggers, 0, (size_t)MAX_MQTT_TRIGGERS * sizeof(MqttTriggerConfig));
+static bool parse_config(JsonDocument& doc, MqttTriggerConfig* configs,
+                         ActionStorage& storage, bool validate_bindings) {
+    if (!doc.is<JsonObject>() || !doc["triggers"].is<JsonArray>()) return false;
+    JsonArray triggers = doc["triggers"].as<JsonArray>();
+    if (triggers.size() > MAX_MQTT_TRIGGERS) return false;
+    ActionStorageScope scope(&storage);
+    for (size_t i = 0; i < triggers.size(); ++i) {
+        if (!triggers[i].is<JsonObject>()) return false;
+        JsonObject t = triggers[i].as<JsonObject>();
+        if ((t.containsKey("topic") && !t["topic"].is<const char*>()) ||
+            (t.containsKey("value") && !t["value"].is<const char*>())) return false;
+        const char* topic = t["topic"] | "";
+        const char* value = t["value"] | "";
+        if (strlen(topic) >= sizeof(configs[i].topic) ||
+            strlen(value) >= sizeof(configs[i].value) ||
+            strchr(topic, '#') || strchr(topic, '+')) return false;
+        strlcpy(configs[i].topic, topic, sizeof(configs[i].topic));
+        strlcpy(configs[i].value, value, sizeof(configs[i].value));
+        if (!t.containsKey("actions")) continue;
+        if (!t["actions"].is<JsonArray>()) return false;
+        JsonArray actions = t["actions"].as<JsonArray>();
+        if (actions.size() > MAX_BUTTON_ACTIONS) return false;
+        for (JsonVariant item : actions) {
+            if (!item.is<JsonObject>()) return false;
+            JsonObject action = item.as<JsonObject>();
+            const char* type = action["type"] | "";
+            if (action.containsKey("type") &&
+                (action.containsKey("args") ||
+                 (action.containsKey("op") && strcmp(type, ACTION_TYPE_VISUAL_ALERT)))) {
+                LOGW(TAG, "Invalid trigger action: mixed action envelope");
+                return false;
+            }
+            const char* error = validate_bindings ? action_validate_json(action)
+                : (!action.containsKey("type") && action.containsKey("op")
+                    ? action_operation_validate_json(action, false)
+                    : (!action["type"].is<const char*>() ? "missing action type" : nullptr));
+            if (!error && type[0] && strcmp(type, "none") && !action_type_is_supported(type))
+                error = "action unavailable";
+            if (error) {
+                LOGW(TAG, "Invalid trigger action: %s", error);
+                return false;
+            }
+            if (!strcmp(type, "none")) continue;
+            ButtonAction& parsed = configs[i].actions[configs[i].action_count];
+            action_parse(action, parsed);
+            if (storage.failed || !parsed.type[0]) return false;
+            ++configs[i].action_count;
+        }
+    }
+    return true;
 }
 
 static bool load_from_flash() {
-    if (!g_triggers) return false;
-
-    // Read and parse the file OUTSIDE the cache lock (file I/O + JSON parse are
-    // the slow part). The parsed document is then applied to the shared cache
-    // under the lock, keeping the locked region down to a few memcpy-speed ops.
-    bool have_file = false;
+    if (!g_triggers || !Storage.exists(MQTT_TRIGGERS_PATH)) return false;
+    File f = Storage.open(MQTT_TRIGGERS_PATH, "r");
+    if (!f) return false;
+    const size_t size = f.size();
     BasicJsonDocument<PsramJsonAllocator> doc(MQTT_TRIGGERS_JSON_CAP);
-
-    if (!Storage.exists(MQTT_TRIGGERS_PATH)) {
-        LOGD(TAG, "No triggers file, using defaults");
-    } else {
-        File f = Storage.open(MQTT_TRIGGERS_PATH, "r");
-        if (!f) {
-            LOGW(TAG, "Failed to open triggers config");
-        } else {
-            size_t file_size = f.size();
-            if (file_size == 0 || file_size > MQTT_TRIGGERS_JSON_CAP) {
-                LOGW(TAG, "Invalid triggers size: %u", (unsigned)file_size);
-            } else {
-                DeserializationError err = deserializeJson(doc, f);
-                if (err) {
-                    LOGE(TAG, "JSON parse error: %s", err.c_str());
-                } else {
-                    have_file = true;
-                }
-            }
-            f.close();
-        }
+    const bool valid = size && size <= MQTT_TRIGGERS_JSON_CAP &&
+                       !deserializeJson(doc, f) && !doc.overflowed();
+    f.close();
+    if (!valid) return false;
+    auto* replacement = static_cast<MqttTriggerConfig*>(
+        config_psram_alloc(MAX_MQTT_TRIGGERS * sizeof(MqttTriggerConfig), "mqtt_trigger_load"));
+    if (!replacement) return false;
+    ActionStorage storage = {};
+    const bool parsed = parse_config(doc, replacement, storage, false);
+    if (parsed) {
+        triggers_lock();
+        action_storage_clear(g_action_storage);
+        memcpy(g_triggers, replacement, MAX_MQTT_TRIGGERS * sizeof(MqttTriggerConfig));
+        action_storage_move(g_action_storage, storage);
+        portENTER_CRITICAL(&g_mux);
+        g_pending_mask = 0;
+        ++g_generation;
+        portEXIT_CRITICAL(&g_mux);
+        triggers_unlock();
     }
-
-    JsonArray triggers = have_file ? doc["triggers"].as<JsonArray>() : JsonArray();
-
-    // Apply to the shared cache under the lock (fast, no I/O).
-    triggers_lock();
-    apply_defaults();
-    uint8_t n = 0;
-    if (!triggers.isNull()) {
-        for (size_t i = 0; i < triggers.size() && i < MAX_MQTT_TRIGGERS; i++) {
-            JsonObject t = triggers[i].as<JsonObject>();
-            if (t.isNull()) continue;
-            const char* topic = t["topic"] | "";
-            const char* value = t["value"] | "";
-            strlcpy(g_triggers[i].topic, topic, sizeof(g_triggers[i].topic));
-            strlcpy(g_triggers[i].value, value, sizeof(g_triggers[i].value));
-            g_triggers[i].action_count =
-                action_list_parse(t["actions"], g_triggers[i].actions, MAX_BUTTON_ACTIONS);
-            if (g_triggers[i].topic[0]) n++;
-        }
-    }
-    triggers_unlock();
-
-    LOGI(TAG, "Loaded %u trigger(s)", n);
-    return have_file && !triggers.isNull();
+    action_storage_clear(storage);
+    free(replacement);
+    return parsed;
 }
 
 void mqtt_triggers_init() {
@@ -144,33 +174,51 @@ void mqtt_triggers_init() {
     load_from_flash();
 }
 
-const MqttTriggerConfig* mqtt_triggers_get(uint8_t index) {
-    if (index >= MAX_MQTT_TRIGGERS) return nullptr;
-    if (!g_triggers) return nullptr;
-    return &g_triggers[index];
+bool mqtt_triggers_to_json(JsonArray triggers) {
+    if (!g_triggers || !g_lock || triggers.isNull()) return false;
+    triggers_lock();
+    for (uint8_t i = 0; i < MAX_MQTT_TRIGGERS; ++i) {
+        const MqttTriggerConfig& cfg = g_triggers[i];
+        if (!cfg.topic[0]) continue;
+        JsonObject entry = triggers.createNestedObject();
+        entry["topic"] = JsonString(cfg.topic, strlen(cfg.topic), JsonString::Copied);
+        entry["value"] = JsonString(cfg.value, strlen(cfg.value), JsonString::Copied);
+        JsonArray actions = entry.createNestedArray("actions");
+        for (uint8_t a = 0; a < cfg.action_count; ++a)
+            action_to_json(cfg.actions[a], actions.createNestedObject());
+    }
+    triggers_unlock();
+    return true;
 }
 
 bool mqtt_triggers_save_raw(const uint8_t* json, size_t len) {
-    const StorageMutationGuard guard;
-    if (!guard) return false;
-    if (!json || len == 0) return false;
-
-    File f = Storage.open(MQTT_TRIGGERS_PATH, "w");
-    if (!f) {
-        LOGE(TAG, "Failed to open for write");
+    if (!g_triggers || !g_lock || !json || !len || len > MQTT_TRIGGERS_JSON_CAP) return false;
+    BasicJsonDocument<PsramJsonAllocator> doc(MQTT_TRIGGERS_JSON_CAP);
+    if (deserializeJson(doc, json, len) || doc.overflowed()) return false;
+    auto* replacement = static_cast<MqttTriggerConfig*>(
+        config_psram_alloc(MAX_MQTT_TRIGGERS * sizeof(MqttTriggerConfig), "mqtt_trigger_save"));
+    if (!replacement) return false;
+    ActionStorage storage = {};
+    if (!parse_config(doc, replacement, storage, true)) {
+        action_storage_clear(storage);
+        free(replacement);
         return false;
     }
-
-    size_t written = f.write(json, len);
-    f.close();
-
-    if (written != len) {
-        LOGE(TAG, "Write failed (%u of %u)", (unsigned)written, (unsigned)len);
-        return false;
+    triggers_lock();
+    const bool saved = storage_write_atomic(MQTT_TRIGGERS_PATH, json, len);
+    if (saved) {
+        action_storage_clear(g_action_storage);
+        memcpy(g_triggers, replacement, MAX_MQTT_TRIGGERS * sizeof(MqttTriggerConfig));
+        action_storage_move(g_action_storage, storage);
+        portENTER_CRITICAL(&g_mux);
+        g_pending_mask = 0;
+        ++g_generation;
+        portEXIT_CRITICAL(&g_mux);
     }
-
-    // Reload the RAM cache and (re)subscribe so changes take effect immediately.
-    load_from_flash();
+    triggers_unlock();
+    action_storage_clear(storage);
+    free(replacement);
+    if (!saved) return false;
     mqtt_triggers_on_connected();
     storage_publish_usage(false);
 
@@ -246,19 +294,20 @@ void mqtt_triggers_on_message(const char* topic, const uint8_t* payload, unsigne
 }
 
 // Main-loop drain (main task). Snapshot+clear the pending mask under the
-// spinlock, then for each set bit copy the action structs from g_triggers (which
-// may be PSRAM-resident) into a stack array under the cache mutex, and dispatch
-// from that copy after releasing the mutex. This keeps the locked region tiny and
-// avoids holding the lock during slow action I/O (HTTP, relay, MQTT publish).
+// spinlock, then for each set bit copy the actions and their owned arguments
+// under the cache mutex, and dispatch after releasing it. A saved replacement
+// cancels matches not yet copied from the old configuration.
 //
 // Coalescing: repeated fires of the SAME trigger within one drain window collapse
 // to a single dispatch (one dispatch per trigger per drain cycle). Distinct
 // triggers are never dropped.
 void mqtt_triggers_loop() {
     uint32_t pending;
+    uint32_t generation;
     portENTER_CRITICAL(&g_mux);
     pending = g_pending_mask;
     g_pending_mask = 0;
+    generation = g_generation;
     portEXIT_CRITICAL(&g_mux);
 
     if (!pending || !g_triggers) return;
@@ -266,17 +315,26 @@ void mqtt_triggers_loop() {
     for (uint8_t i = 0; i < MAX_MQTT_TRIGGERS; i++) {
         if (!(pending & (1u << i))) continue;
 
-        // Copy the action structs into a stack array under the cache lock (guards
-        // against a concurrent save reloading g_triggers), then dispatch from the
-        // copy AFTER releasing the lock so slow action I/O never holds it.
-        ButtonAction local[MAX_BUTTON_ACTIONS];
+        // Snapshot owned arguments as well as action structs before dispatch.
+        auto* local = static_cast<ButtonAction*>(
+            action_storage_allocate(MAX_BUTTON_ACTIONS * sizeof(ButtonAction)));
+        if (!local) continue;
+        ActionStorage storage = {};
         triggers_lock();
+        if (generation != g_generation) {
+            triggers_unlock();
+            action_storage_free(local);
+            break;
+        }
         uint8_t count = g_triggers[i].action_count;
         if (count > MAX_BUTTON_ACTIONS) count = MAX_BUTTON_ACTIONS;
-        memcpy(local, g_triggers[i].actions, (size_t)count * sizeof(ButtonAction));
+        const bool copied = action_storage_copy_actions(storage, local, g_triggers[i].actions, count);
         triggers_unlock();
 
-        action_list_dispatch(local, count, "MQTT Trigger");
+        if (copied) action_list_dispatch(local, count, "MQTT Trigger");
+        else LOGE(TAG, "Cannot copy MQTT trigger actions");
+        action_storage_clear(storage);
+        action_storage_free(local);
     }
 }
 

@@ -1,7 +1,6 @@
 // Swipe Actions component — migrated from web_portal_swipe.cpp
 
 #include "component_registry.h"
-#include "action_parse.h"
 #include "board_config.h"
 #include "log_manager.h"
 #include "swipe_config.h"
@@ -11,19 +10,10 @@
 #include <ArduinoJson.h>
 
 static void swipe_actions_get_config(AsyncWebServerRequest *request) {
-    const SwipeConfig* cfg = swipe_config_get();
-
-    auto doc = make_psram_json_doc(1024);
-    JsonObject left  = doc->createNestedObject("swipe_left");
-    JsonObject right = doc->createNestedObject("swipe_right");
-    JsonObject up    = doc->createNestedObject("swipe_up");
-    JsonObject down  = doc->createNestedObject("swipe_down");
-
-    if (cfg) {
-        action_to_json(cfg->swipe_left,  left);
-        action_to_json(cfg->swipe_right, right);
-        action_to_json(cfg->swipe_up,    up);
-        action_to_json(cfg->swipe_down,  down);
+    auto doc = make_psram_json_doc(4096);
+    if (!swipe_config_to_json(doc->to<JsonObject>()) || doc->overflowed()) {
+        request->send(503, "application/json", "{\"error\":\"Swipe actions unavailable\"}");
+        return;
     }
 
     web_portal_send_json_chunked(request, doc);

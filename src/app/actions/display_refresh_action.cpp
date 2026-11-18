@@ -39,6 +39,21 @@ ActionResult dispatch_display_refresh(const ButtonAction& act, const char* label
     return ACTION_COMPLETE;
 }
 
+ActionResult dispatch_full_refresh(const ActionResolvedArgument*, const char* label, uint32_t token) {
+#if defined(ARDUINO) && HAS_LVGL_EPAPER
+    ButtonAction act = {};
+    return dispatch_display_refresh(act, label, token);
+#else
+    (void)token;
+    LOGW(kDisplayRefreshActionTag, "%s display_refresh: unsupported", label);
+    return ACTION_FAILED;
+#endif
+}
+
+const ActionOperationDef kDisplayRefreshOperations[] = {
+    {"display.refresh_full", "E-paper full refresh", nullptr, 0, dispatch_full_refresh},
+};
+
 bool display_refresh_available() {
     return HAS_DISPLAY && HAS_LVGL_EPAPER;
 }
@@ -59,7 +74,7 @@ void describe_display_refresh(JsonObject& action) {
     JsonObject editor_mode = editor_fields.createNestedObject(); editor_mode["name"] = "mode"; editor_mode["label"] = "Mode"; editor_mode["type"] = "select"; editor_mode["command_options"] = true;
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(kDisplayRefreshActionType, ACTION_TYPE_DISPLAY_REFRESH, parse_display_refresh, serialize_display_refresh, dispatch_display_refresh, nullptr, describe_display_refresh, display_refresh_available, validate_display_refresh, ACTION_EXECUTION_SYNC);
+DEFINE_AND_REGISTER_ACTION_TYPE(kDisplayRefreshActionType, ACTION_TYPE_DISPLAY_REFRESH, parse_display_refresh, serialize_display_refresh, dispatch_display_refresh, nullptr, describe_display_refresh, display_refresh_available, validate_display_refresh, ACTION_EXECUTION_SYNC, true, true, false, nullptr, kDisplayRefreshOperations, 1);
 
 } // namespace
 #endif // HAS_DISPLAY || HAS_BUTTON

@@ -68,6 +68,13 @@ typedef uint8_t (*binding_key_count_fn)(void);
 typedef const char* (*binding_key_at_fn)(uint8_t index);
 typedef bool (*binding_first_param_validator_fn)(const char* value, size_t length);
 
+enum BindingResolvedValueKind : uint8_t {
+    BINDING_VALUE_KIND_UNKNOWN,
+    BINDING_VALUE_KIND_TEXT,
+    BINDING_VALUE_KIND_NUMBER,
+};
+typedef BindingResolvedValueKind (*binding_value_kind_fn)(const char* params);
+
 enum BindingValidationMode : uint8_t {
     BINDING_VALIDATION_STANDARD,
     BINDING_VALIDATION_EXPRESSION,
@@ -232,6 +239,7 @@ struct BindingSchemeSpec {
     const BindingAuthoringSpec* authoring;
     binding_first_param_validator_fn validate_first_param;
     binding_text_resolver_fn acquire_text;
+    binding_value_kind_fn value_kind;
 
     constexpr BindingSchemeSpec(uint8_t minimum_params = 0, uint8_t maximum_params = 0,
                                 uint8_t widget_params = 0, int8_t format_index = 0,
@@ -242,11 +250,13 @@ struct BindingSchemeSpec {
                                                                 const BindingSchemeDoc* documentation = nullptr,
                                                                 const BindingAuthoringSpec* authoring_spec = nullptr,
                                                                 binding_first_param_validator_fn first_parameter_validator = nullptr,
-                                binding_text_resolver_fn text_resolver = nullptr)
+                                                                binding_text_resolver_fn text_resolver = nullptr,
+                                                                binding_value_kind_fn resolved_value_kind = nullptr)
         : min_params(minimum_params), max_params(maximum_params), widget_max_params(widget_params),
           format_param(format_index), validation_mode(validation), free_form(is_free_form),
                     key_count(count_keys), key_at(key_at_index), doc(documentation), authoring(authoring_spec),
-          validate_first_param(first_parameter_validator), acquire_text(text_resolver) {}
+          validate_first_param(first_parameter_validator), acquire_text(text_resolver),
+          value_kind(resolved_value_kind) {}
 };
 
 // Exact single tokens only; unsupported schemes/keys return UNKNOWN so callers
@@ -289,6 +299,9 @@ const char* binding_template_validate_params(const char* scheme, size_t name_len
 // Check if a label string contains any binding tokens [xxx:...]
 bool binding_template_has_bindings(const char* label);
 
+// Reject incomplete binding-shaped tokens while allowing literal text.
+bool binding_template_well_formed(const char* templ);
+
 // Resolve all binding tokens in a template string.
 // Static text is preserved. Binding tokens are replaced with resolver output.
 // On resolver failure or unknown scheme, the token is replaced with "---".
@@ -322,6 +335,10 @@ struct BindingTokenView {
 
 // Inspect one complete token without resolving it. The view borrows templ.
 bool binding_template_single_token(const char* templ, BindingTokenView* token);
+
+// Report source identity when the scheme can distinguish text from numbers.
+// Unknown preserves the normal expression resolver's numeric inference.
+BindingResolvedValueKind binding_template_value_kind(const char* templ);
 
 // Scan a template string and call the collector for each binding token.
 // Used by mqtt_sub_store to discover topics to subscribe.

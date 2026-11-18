@@ -85,6 +85,30 @@ ActionResult dispatch_list_navigation(const ButtonAction& action, const char*, u
 #endif
 }
 
+const char* validate_list_target(const char* target) {
+    return list_identifier_valid(target) ? nullptr : "target must be a List ID";
+}
+
+const ActionArgumentDef kListNavigationArguments[] = {
+    {"target", "List ID", ACTION_ARGUMENT_STRING, 0, 0, sizeof(ListNavigationPayload::target) - 1,
+     true, "[var:list_id]", "list_ids", nullptr, 0, false, validate_list_target},
+    {"command", "Command", ACTION_ARGUMENT_ENUM, 0, 0, sizeof(ListNavigationPayload::command) - 1,
+     true, "[var:command]", "select", commands, 2, false, nullptr, labels},
+};
+
+ActionResult dispatch_list_navigation_operation(const ActionResolvedArgument* arguments, const char* label, uint32_t token) {
+    ButtonAction action = {};
+    strlcpy(action.payload.list_navigation.target, arguments[0].text,
+            sizeof(action.payload.list_navigation.target));
+    strlcpy(action.payload.list_navigation.command, arguments[1].text,
+            sizeof(action.payload.list_navigation.command));
+    return dispatch_list_navigation(action, label, token);
+}
+
+const ActionOperationDef kListNavigationOperations[] = {
+    {"list.navigate", "Navigate List", kListNavigationArguments, 2, dispatch_list_navigation_operation},
+};
+
 void describe_list_navigation(JsonObject& action) {
     action["group"] = "Navigation";
     action["label"] = "Navigate List";
@@ -112,6 +136,6 @@ void describe_list_navigation(JsonObject& action) {
 DEFINE_AND_REGISTER_ACTION_TYPE(kListNavigationActionType, ACTION_TYPE_LIST_NAVIGATION,
     parse_list_navigation, serialize_list_navigation, dispatch_list_navigation, nullptr,
     describe_list_navigation, nullptr, validate_list_navigation,
-    ACTION_EXECUTION_SYNC, false, true, false);
+    ACTION_EXECUTION_SYNC, false, true, false, nullptr, kListNavigationOperations, 1);
 }
 #endif

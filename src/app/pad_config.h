@@ -10,6 +10,7 @@
 #include "image_library.h"
 #include "image_decoder.h"
 #include "button_content_layout.h"
+#include "action_storage.h"
 
 // ============================================================================
 // Pad Config — per-pad button configuration stored on LittleFS
@@ -326,6 +327,12 @@ struct SetVariablePayload {
     char var_name[33];
     char var_value[192];
 };
+#if HAS_DISPLAY || HAS_BUTTON
+struct OperationPayload {
+    const ActionOperationDef* descriptor;
+    ActionArgumentBlock* arguments;
+};
+#endif
 #if HAS_VOICE_NOTES
 struct VoiceNoteRecordPayload {
     char command[16];
@@ -383,6 +390,9 @@ union ActionPayload {
     ButtonNavigationPayload button_navigation;
     ListNavigationPayload list_navigation;
     SetVariablePayload set_var;
+#if HAS_DISPLAY || HAS_BUTTON
+    OperationPayload operation;
+#endif
 #if HAS_VOICE_NOTES
     VoiceNoteRecordPayload voice_note_record;
     VoiceNoteDeletePayload voice_note_delete;
@@ -602,6 +612,9 @@ struct ButtonDefaults {
 // Per-pad config
 struct PadConfig {
     uint16_t ref_count;                    // cache/readers; managed by pad_config_acquire/release
+#if HAS_DISPLAY || HAS_BUTTON
+    ActionStorage action_storage;
+#endif
     uint8_t button_capacity;               // allocated entries in buttons
     const char* name;
     char layout[CONFIG_LAYOUT_NAME_MAX_LEN]; // "grid" or curated layout name

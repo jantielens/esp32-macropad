@@ -15,6 +15,8 @@
 #include "touch_manager.h"
 #endif
 #if HAS_BUTTON
+#include "action_registry.h"
+#include "action_storage.h"
 #include "hw_button_config.h"
 #endif
 #include <algorithm>
@@ -65,21 +67,41 @@ bool confirmation_input_available() {
 #if HAS_BUTTON
     bool select = false;
     bool tap = false;
+    auto* actions = static_cast<ButtonAction*>(action_storage_allocate(MAX_BUTTON_ACTIONS * sizeof(ButtonAction)));
+    if (!actions) return false;
     for (uint8_t i = 0; i < NUM_HW_BUTTONS; ++i) {
-        const HwButtonConfig* config = hw_button_config_get(i);
-        if (!config) continue;
         for (bool hold : {false, true}) {
-            const ButtonAction* actions = hold ? config->hold_actions : config->tap_actions;
-            const uint8_t count = hold ? config->hold_count : config->tap_count;
+            ActionStorage storage = {};
+            uint8_t count = 0;
+            if (!hw_button_config_snapshot(i, hold, actions, &count, storage)) {
+                action_storage_clear(storage);
+                continue;
+            }
             for (uint8_t index = 0; index < count; ++index) {
-                if (strcmp(actions[index].type, ACTION_TYPE_BUTTON_NAVIGATION)) continue;
-                const char* command = actions[index].payload.button_navigation.command;
-                select |= !strcmp(command, "next") || !strcmp(command, "previous");
-                tap |= !strcmp(command, "tap");
+                const char* command = nullptr;
+                if (!strcmp(actions[index].type, ACTION_TYPE_BUTTON_NAVIGATION)) {
+                    command = actions[index].payload.button_navigation.command;
+                } else {
+                    const ActionOperationDef* operation = action_operation_for_action(actions[index]);
+                    if (!operation || strcmp(operation->id, "button.navigate")) continue;
+                    const ActionArgumentBlock* block = actions[index].payload.operation.arguments;
+                    if (block && block->count == 1) {
+                        const ActionStoredArgument& argument = action_storage_arguments(block)[0];
+                        // A dynamic command may change before the button is pressed,
+                        // so it cannot guarantee input for an untimed confirmation.
+                        if (!argument.dynamic) command = action_storage_text(block, argument);
+                    }
+                }
+                if (command) {
+                    select |= !strcmp(command, "next") || !strcmp(command, "previous");
+                    tap |= !strcmp(command, "tap");
+                }
                 break;
             }
+            action_storage_clear(storage);
         }
     }
+    action_storage_free(actions);
     return select && tap;
 #else
     return false;

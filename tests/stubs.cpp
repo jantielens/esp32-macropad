@@ -6,6 +6,28 @@
 #include <cstddef>
 #include <cstdint>
 
+#if ACTION_LIST_HOST_ISOLATED
+#include "action_run_context.h"
+#include "event_binding.h"
+#if HAS_DISPLAY && HAS_PSRAM
+#include "item_binding.h"
+ItemBindingScope::ItemBindingScope(ListSourceSnapshot*, size_t)
+    : snapshot_(nullptr), index_(0), previous_(nullptr) {}
+ItemBindingScope::~ItemBindingScope() {}
+#endif
+ActionRunScope::ActionRunScope(const ActionRunContext*) : previous_(nullptr) {}
+ActionRunScope::~ActionRunScope() {}
+ActionRunContext* action_run_capture(const PadBinding*, uint8_t, bool) { return nullptr; }
+void action_run_retain(ActionRunContext*) {}
+void action_run_release(ActionRunContext*) {}
+const ActionEventData* action_run_event(const ActionRunContext*) { return nullptr; }
+#if HAS_DISPLAY && HAS_PSRAM
+ListSourceSnapshot* action_run_item(const ActionRunContext*) { return nullptr; }
+#endif
+EventBindingScope::EventBindingScope(const ActionEventData*) : previous_(nullptr) {}
+EventBindingScope::~EventBindingScope() {}
+#endif
+
 #if LIST_TEST_BUTTON_DEFAULTS
 #include "button_defaults.h"
 ButtonDefaults list_test_defaults{};

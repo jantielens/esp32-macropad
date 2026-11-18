@@ -3,7 +3,13 @@
 #if HAS_DISPLAY || HAS_BUTTON
 
 #include <Arduino.h>
+#include <stdlib.h>
 #include <string.h>
+
+#include "log_manager.h"
+#if HAS_PSRAM
+#include <esp_heap_caps.h>
+#endif
 
 #if __has_include(<freertos/FreeRTOS.h>)
 #include <freertos/FreeRTOS.h>
@@ -26,7 +32,9 @@ struct ActionContinuation {
     uint32_t deadline_ms;
     uint32_t success_due_ms;
     uint32_t timeout_ms;
-    ButtonAction remaining[MAX_REMAINING_ACTIONS];
+    ButtonAction* remaining;
+    ActionStorage storage;
+    ActionContinuationContext context;
     uint8_t remaining_count;
     char label[ACTION_CONTINUATION_LABEL_MAX_LEN];
     ActionContinuationOwner owner;
@@ -65,21 +73,56 @@ ActionContinuation* find_free_slot() {
 void clear_continuation(ActionContinuation* continuation) {
     memset(continuation, 0, sizeof(*continuation));
 }
+
+void free_remaining(ButtonAction* remaining) {
+#if HAS_PSRAM
+    if (remaining) heap_caps_free(remaining);
+#else
+    free(remaining);
+#endif
+}
 } // namespace
 
 bool action_continuation_begin(const ButtonAction* remaining, uint8_t remaining_count,
                                const char* label, uint32_t* token,
-                               ActionContinuationOwner owner, bool interactive) {
+                               ActionContinuationOwner owner, bool interactive,
+                               ActionContinuationContext context) {
     if (!token || remaining_count > MAX_REMAINING_ACTIONS ||
-        (remaining_count && !remaining)) {
+        (remaining_count && !remaining) ||
+        (context.value && (!context.retain || !context.release))) {
         return false;
     }
     *token = 0;
+    ButtonAction* snapshot = nullptr;
+    ActionStorage storage = {};
+    if (remaining_count) {
+        const size_t bytes = remaining_count * sizeof(ButtonAction);
+#if HAS_PSRAM
+        snapshot = static_cast<ButtonAction*>(
+            heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+#else
+        snapshot = static_cast<ButtonAction*>(malloc(bytes));
+#endif
+        if (!snapshot) {
+            LOGW("Action", "%s continuation snapshot allocation failed", label ? label : "Action");
+            return false;
+        }
+        if (!action_storage_copy_actions(storage, snapshot, remaining, remaining_count)) {
+            LOGW("Action", "%s continuation argument allocation failed", label ? label : "Action");
+            action_storage_clear(storage);
+            free_remaining(snapshot);
+            return false;
+        }
+    }
 
+    if (context.value) context.retain(context.value);
     ACTION_CONTINUATION_LOCK();
     ActionContinuation* continuation = find_free_slot();
     if (!continuation) {
         ACTION_CONTINUATION_UNLOCK();
+        action_storage_clear(storage);
+        free_remaining(snapshot);
+        if (context.value) context.release(context.value);
         return false;
     }
 
@@ -87,10 +130,9 @@ bool action_continuation_begin(const ButtonAction* remaining, uint8_t remaining_
     if (++s_next_token == 0) ++s_next_token;
     continuation->token = s_next_token;
     continuation->remaining_count = remaining_count;
-    if (remaining_count) {
-        memcpy(continuation->remaining, remaining,
-               remaining_count * sizeof(ButtonAction));
-    }
+    continuation->remaining = snapshot;
+    continuation->storage = storage;
+    continuation->context = context;
     strlcpy(continuation->label, label ? label : "Action",
             sizeof(continuation->label));
     continuation->owner = owner;
@@ -105,8 +147,14 @@ bool action_continuation_begin(const ButtonAction* remaining, uint8_t remaining_
 void action_continuation_release(uint32_t token) {
     ACTION_CONTINUATION_LOCK();
     ActionContinuation* continuation = find_by_token(token);
+    ButtonAction* remaining = continuation ? continuation->remaining : nullptr;
+    ActionStorage storage = continuation ? continuation->storage : ActionStorage{};
+    ActionContinuationContext context = continuation ? continuation->context : ActionContinuationContext{};
     if (continuation) clear_continuation(continuation);
     ACTION_CONTINUATION_UNLOCK();
+    action_storage_clear(storage);
+    if (context.value) context.release(context.value);
+    free_remaining(remaining);
 }
 
 void action_continuation_mark_pending(uint32_t token) {
@@ -195,7 +243,8 @@ bool action_continuation_schedule_success(uint32_t token, uint32_t duration_ms) 
 
 ActionContinuationTakeResult action_continuation_take(
     ButtonAction* out_actions, uint8_t* out_count,
-    char* out_label, uint8_t out_label_len, ActionContinuationOwner owner, bool* out_interactive) {
+    char* out_label, uint8_t out_label_len, ActionContinuationOwner owner, bool* out_interactive,
+    ActionStorage* out_storage, ActionContinuationContext* out_context) {
     if (out_count) *out_count = 0;
     if (out_interactive) *out_interactive = false;
     if (out_label && out_label_len) out_label[0] = '\0';
@@ -224,16 +273,30 @@ ActionContinuationTakeResult action_continuation_take(
         if (out_label && out_label_len) {
             strlcpy(out_label, continuation->label, out_label_len);
         }
+        if (result == ACTION_CONTINUATION_SUCCESS &&
+            ((continuation->storage.blocks && !out_storage) ||
+             (continuation->context.value && !out_context)))
+            result = ACTION_CONTINUATION_FAILED;
         if (result == ACTION_CONTINUATION_SUCCESS && out_actions && out_count) {
             if (out_interactive) *out_interactive = continuation->interactive;
             *out_count = continuation->remaining_count;
-            if (*out_count) {
-                memcpy(out_actions, continuation->remaining,
-                       *out_count * sizeof(ButtonAction));
-            }
         }
+        ButtonAction* remaining = continuation->remaining;
+        ActionStorage storage = continuation->storage;
+        ActionContinuationContext context = continuation->context;
         clear_continuation(continuation);
         ACTION_CONTINUATION_UNLOCK();
+        if (result == ACTION_CONTINUATION_SUCCESS && out_actions && out_count && *out_count)
+            memcpy(out_actions, remaining, *out_count * sizeof(ButtonAction));
+        if (result == ACTION_CONTINUATION_SUCCESS && out_storage)
+            action_storage_move(*out_storage, storage);
+        if (result == ACTION_CONTINUATION_SUCCESS && out_context) {
+            *out_context = context;
+            context = {};
+        }
+        action_storage_clear(storage);
+        if (context.value) context.release(context.value);
+        free_remaining(remaining);
         return result;
     }
     ACTION_CONTINUATION_UNLOCK();

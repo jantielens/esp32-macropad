@@ -70,7 +70,8 @@ window.init_camera_motion_fragment = function () {
         holdSeconds.value = config.presence_hold_seconds;
         holdSecondsValue.textContent = config.presence_hold_seconds;
         getDeviceInfo().then(function () {
-            actionEditorListRender('camera-motion-action-editors', actionPrefixes);
+            actionEditorListRender('camera-motion-action-editors', actionPrefixes, null,
+                { actionOptions: { operations: true, mixed: true } });
             actionEditorListLoad(actionPrefixes, config.actions || []);
             actionEditorWireFragment(actionPrefixes);
         });

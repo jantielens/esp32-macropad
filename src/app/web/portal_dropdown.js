@@ -52,6 +52,10 @@
         menuEl.innerHTML = '';
         var flatIndex = 0;
         function renderOption(opt, grouped) {
+            if (opt.hidden) {
+                flatIndex++;
+                return;
+            }
             var item = document.createElement('button');
             item.type = 'button';
             item.className = grouped ? 'cdd-item cdd-item-grouped' : 'cdd-item';
@@ -70,6 +74,10 @@
         for (var i = 0; i < sel.children.length; i++) {
             var node = sel.children[i];
             if (node.tagName === 'OPTGROUP') {
+                if (node.hidden) {
+                    flatIndex += node.children.length;
+                    continue;
+                }
                 var header = document.createElement('div');
                 header.className = 'cdd-group-label';
                 header.textContent = node.label;

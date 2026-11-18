@@ -103,8 +103,9 @@ or that an external JSON path exists.
 Accepted/queued means admitted, not necessarily executed or durably saved.
 For eligible Home Assistant actions, press_button returns an execution ID;
 use get_ha_execution_result until terminal, then inspect every action result.
-Records are short-lived. Lists using confirmations follow normal continuations
-instead and do not provide that tracked completion path.
+Records are short-lived. Typed HA service operations remain tracked across
+confirmations; calls skipped after cancellation or failure report `cancelled`.
+Legacy-only HA lists with confirmations do not provide tracked completion.
 
 Inspect a fresh framebuffer through the authenticated portal
 `/api/screenshot` in an image-capable browser, not as text.

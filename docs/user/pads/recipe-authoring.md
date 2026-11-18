@@ -37,9 +37,11 @@ Overlay button limit still applies.
         "row_offset": 0,
         "label_center": "Hello",
         "actions": [{
-          "type": "notify",
-          "message": "${message}",
-          "duration_ms": 3000
+          "op": "dialog.notify",
+          "args": {
+            "message": "${message}",
+            "duration_ms": 3000
+          }
         }]
       }]
     },

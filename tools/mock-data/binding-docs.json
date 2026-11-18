@@ -108,6 +108,7 @@
         "psram_largest",
         "wifi_state",
         "wifi_connected",
+        "wifi_station_enabled",
         "wifi_ssid",
         "wifi_ip",
         "wifi_rssi",
@@ -278,6 +279,11 @@
           "group": "WiFi"
         },
         {
+          "key": "wifi_station_enabled",
+          "desc": "Applied Wi-Fi station mode",
+          "group": "WiFi"
+        },
+        {
           "key": "wifi_ssid",
           "desc": "Wi-Fi network name",
           "group": "WiFi"
@@ -438,6 +444,14 @@
             "syntax": "wifi_connected",
             "sample": "ON / OFF",
             "desc": "ON only while connected to a network, not while serving an AP.",
+            "unit": "",
+            "kind": "text"
+          },
+          {
+            "group": "Wi-Fi details",
+            "syntax": "wifi_station_enabled",
+            "sample": "ON / OFF",
+            "desc": "Applied station mode, not connection status. Pending requests may show the previous state.",
             "unit": "",
             "kind": "text"
           },
@@ -903,6 +917,19 @@
           },
           {
             "key": "wifi_connected",
+            "kind": "text",
+            "unit": "",
+            "example_value": "ON",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "wifi_station_enabled",
             "kind": "text",
             "unit": "",
             "example_value": "ON",
@@ -1958,6 +1985,81 @@
             "example": "[expr:floor(3900000/3600000);%.0f] hour(s) and [expr:floor(3900000/60000)%60;%.0f] minute(s)",
             "unit": "",
             "kind": "text"
+          }
+        ]
+      }
+    },
+    {
+      "name": "event",
+      "min_params": 1,
+      "max_params": 1,
+      "widget_max_params": 1,
+      "format_param": -1,
+      "validation_mode": 0,
+      "free_form": false,
+      "keys": [
+        "value",
+        "step"
+      ],
+      "category": "Logic",
+      "summary": "Read a value captured when an action is activated.",
+      "note": "Available only in an action triggered by a control that supplies the value.",
+      "params": [
+        {
+          "name": "key",
+          "desc": "Event value or Numeric Rocker step.",
+          "required": true
+        }
+      ],
+      "key_docs": [
+        {
+          "key": "value",
+          "desc": "Value supplied by the activating control."
+        },
+        {
+          "key": "step",
+          "desc": "Signed Numeric Rocker adjustment."
+        }
+      ],
+      "examples": [
+        {
+          "code": "[event:value]",
+          "desc": "Use the activating control's value."
+        },
+        {
+          "code": "[event:step]",
+          "desc": "Use the Numeric Rocker's signed step."
+        }
+      ],
+      "authoring": {
+        "keys": [
+          {
+            "key": "value",
+            "kind": "text",
+            "unit": "",
+            "example_value": "value",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "step",
+            "kind": "number",
+            "unit": "",
+            "example_value": "1",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
           }
         ]
       }

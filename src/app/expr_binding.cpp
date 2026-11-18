@@ -57,7 +57,8 @@ static char* split_format(char* buf) {
     int bracket_depth = 0;
 
     for (char* p = buf; *p; p++) {
-        if (*p == '"') in_quotes = !in_quotes;
+        if (in_quotes && *p == '\\' && p[1]) p++;
+        else if (*p == '"') in_quotes = !in_quotes;
         else if (!in_quotes) {
             if (*p == '[') bracket_depth++;
             else if (*p == ']') { if (bracket_depth > 0) bracket_depth--; }
@@ -85,11 +86,15 @@ static bool resolve_and_quote(const char* expr, char* out, size_t out_len) {
     size_t wp = 0;
     const char* p = expr;
     bool in_quotes = false;
+    const bool checked = binding_template_checked_resolution_active();
 
     while (*p && wp < out_len - 1) {
         if (*p == '\\' && in_quotes && *(p + 1)) {
             // Escape sequence inside user-written string — copy both chars
-            if (wp + 2 > out_len - 1) break;
+            if (wp + 2 > out_len - 1) {
+                if (checked) return false;
+                break;
+            }
             out[wp++] = *p++;
             out[wp++] = *p++;
         } else if (*p == '"') {
@@ -110,15 +115,18 @@ static bool resolve_and_quote(const char* expr, char* out, size_t out_len) {
             // Extract and resolve the token
             size_t tok_len = (size_t)(p - tok_start);
             char token[BINDING_TEMPLATE_MAX_LEN];
+            if (checked && (depth != 0 || tok_len >= sizeof(token))) return false;
             if (tok_len >= sizeof(token)) tok_len = sizeof(token) - 1;
             memcpy(token, tok_start, tok_len);
             token[tok_len] = '\0';
 
             char resolved[BINDING_TEMPLATE_MAX_LEN];
-            binding_template_resolve(token, resolved, sizeof(resolved));
+            const bool available = checked
+                ? binding_template_resolve_checked(token, resolved, sizeof(resolved))
+                : (binding_template_resolve(token, resolved, sizeof(resolved)), true);
 
             // Unresolved binding → whole expression is unresolved
-            if (strcmp(resolved, "---") == 0) {
+            if (!available || (!checked && strcmp(resolved, "---") == 0)) {
                 snprintf(out, out_len, "---");
                 return false;
             }
@@ -126,25 +134,40 @@ static bool resolve_and_quote(const char* expr, char* out, size_t out_len) {
             // Check if the resolved value is numeric (consumed entirely by strtod)
             char* end = NULL;
             strtod(resolved, &end);
-            bool is_numeric = (end && end != resolved && *end == '\0');
+            bool is_numeric = (end && end != resolved && *end == '\0') &&
+                (!checked || binding_template_value_kind(token) != BINDING_VALUE_KIND_TEXT);
 
             if (is_numeric) {
                 size_t rlen = strlen(resolved);
-                if (wp + rlen >= out_len) break;
+                if (wp + rlen >= out_len) {
+                    if (checked) return false;
+                    break;
+                }
                 memcpy(out + wp, resolved, rlen);
                 wp += rlen;
             } else {
                 // Wrap in quotes, escaping embedded " and backslash
-                if (wp >= out_len - 1) break;
+                if (wp >= out_len - 1) {
+                    if (checked) return false;
+                    break;
+                }
                 out[wp++] = '"';
-                for (const char* r = resolved; *r && wp < out_len - 2; r++) {
+                const char* r = resolved;
+                for (; *r && wp < out_len - 2; r++) {
                     if (*r == '"' || *r == '\\') {
-                        if (wp + 2 >= out_len - 1) break;
+                        if (wp + 2 >= out_len - 1) {
+                            if (checked) return false;
+                            break;
+                        }
                         out[wp++] = '\\';
                     }
                     out[wp++] = *r;
                 }
-                if (wp >= out_len - 1) break;
+                if (checked && *r) return false;
+                if (wp >= out_len - 1) {
+                    if (checked) return false;
+                    break;
+                }
                 out[wp++] = '"';
             }
         } else {
@@ -152,7 +175,7 @@ static bool resolve_and_quote(const char* expr, char* out, size_t out_len) {
         }
     }
     out[wp] = '\0';
-    return true;
+    return !checked || !*p;
 }
 
 // ============================================================================
@@ -181,7 +204,10 @@ static BindingResolverStatus expr_binding_resolve(const char* params, char* out,
 
     // Step 2: Evaluate the expression
     char eval_result[EXPR_STR_MAX];
-    if (!expr_eval_with_datetime(resolved, eval_result, sizeof(eval_result), format_datetime)) {
+    const bool evaluated = binding_template_checked_resolution_active()
+        ? expr_eval_checked_with_datetime(resolved, eval_result, sizeof(eval_result), format_datetime)
+        : expr_eval_with_datetime(resolved, eval_result, sizeof(eval_result), format_datetime);
+    if (!evaluated) {
         snprintf(out, out_len, "%s", eval_result);
         return BINDING_RESOLVER_UNAVAILABLE;
     }

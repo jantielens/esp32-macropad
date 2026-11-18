@@ -1,5 +1,6 @@
 #include "pad_screen.h"
 #include "../action_registry.h"
+#include "../event_binding.h"
 #include "../display_manager.h"
 #include "../touch_manager.h"
 #include "../widgets/numericrocker_zones.h"
@@ -591,7 +592,7 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
         }
 #endif
         toggle_tap(&tile->widget_cfg, &tile->widget_state, tile->actions, tile->action_count,
-                    tile->lp_actions, tile->lp_action_count);
+                    tile->lp_actions, tile->lp_action_count, tile->pad_bindings, tile->pad_binding_count);
         return;
     }
 
@@ -686,7 +687,12 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
 
             ButtonAction local_nr;
             memcpy(&local_nr, &cfg->adjust_action, sizeof(ButtonAction));
-            if (!action_type_substitute_step(action_type_find(local_nr.type), local_nr, step)) return;
+            if (local_nr.type[0] != '@' &&
+                !action_type_substitute_step(action_type_find(local_nr.type), local_nr, step)) return;
+            char step_text[24];
+            snprintf(step_text, sizeof(step_text), "%.9g", static_cast<double>(step));
+            const ActionEventData event = {nullptr, step_text, BINDING_VALUE_KIND_UNKNOWN};
+            EventBindingScope event_scope(&event);
 
             do_tap_flash_px(tile, flash_start, flash_end, cfg->horizontal);
 #if HAS_AUDIO
@@ -697,7 +703,8 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
                 }
             }
 #endif
-            action_list_dispatch(&local_nr, 1, nr_event, ACTION_CONTINUATION_OWNER_LVGL, true);
+            action_list_dispatch(&local_nr, 1, nr_event, ACTION_CONTINUATION_OWNER_LVGL, true,
+                                 tile->pad_bindings, tile->pad_binding_count);
 #if HAS_MQTT
             publish_button_event(tile, "press", overlay);
 #endif
@@ -731,10 +738,12 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
     }
 
     if (tile->widget_type) {
-        action_list_dispatch(local, count, event_label, ACTION_CONTINUATION_OWNER_LVGL, true);
+        action_list_dispatch(local, count, event_label, ACTION_CONTINUATION_OWNER_LVGL, true,
+                             tile->pad_bindings, tile->pad_binding_count);
     } else {
         if (!device_dialog_active())
-            action_list_dispatch(local, count, event_label, ACTION_CONTINUATION_OWNER_LVGL, true);
+            action_list_dispatch(local, count, event_label, ACTION_CONTINUATION_OWNER_LVGL, true,
+                                 tile->pad_bindings, tile->pad_binding_count);
     }
 
 #if HAS_MQTT
@@ -810,10 +819,12 @@ void PadScreen::longPressAt(ButtonTile* tile, const lv_point_t& point) {
     }
 
     if (tile->widget_type) {
-        action_list_dispatch(local, count, "LP", ACTION_CONTINUATION_OWNER_LVGL, true);
+        action_list_dispatch(local, count, "LP", ACTION_CONTINUATION_OWNER_LVGL, true,
+                             tile->pad_bindings, tile->pad_binding_count);
     } else {
         if (!device_dialog_active())
-            action_list_dispatch(local, count, "LP", ACTION_CONTINUATION_OWNER_LVGL, true);
+            action_list_dispatch(local, count, "LP", ACTION_CONTINUATION_OWNER_LVGL, true,
+                                 tile->pad_bindings, tile->pad_binding_count);
     }
 
 #if HAS_MQTT
@@ -882,7 +893,8 @@ void PadScreen::onPadActionTap(lv_event_t* e) {
         }
     }
 #endif
-    action_list_dispatch(local, count, "PadTap", ACTION_CONTINUATION_OWNER_LVGL, true);
+    action_list_dispatch(local, count, "PadTap", ACTION_CONTINUATION_OWNER_LVGL, true,
+                         pad->pageBindings, pad->pageBindingCount);
 }
 
 void PadScreen::onSwipeGuard(lv_event_t* event) {

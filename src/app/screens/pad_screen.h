@@ -141,6 +141,7 @@ class PadScreen : public Screen {
 private:
     uint8_t pageIndex;
     DisplayManager* displayMgr;
+    const PadConfig* actionConfig = nullptr;
 
     lv_obj_t* screen;
     lv_obj_t* container;       // Content container (offset by pixel shift margin)

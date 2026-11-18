@@ -53,6 +53,8 @@ static const lv_image_dsc_t* g_selector_icon = nullptr;
 static std::vector<std::string> g_validated_option_values;
 static const PadBinding* g_pad_bindings = nullptr;
 static uint8_t g_pad_binding_count = 0;
+static const PadBinding* g_dispatch_bindings = nullptr;
+static uint8_t g_dispatch_binding_count = 0;
 
 void pad_binding_set_bindings(const PadBinding* bindings, uint8_t count) {
     g_pad_bindings = bindings;
@@ -102,6 +104,8 @@ bool binding_template_resolve(const char* value, char* output, size_t size) {
     return true;
 }
 bool binding_template_has_bindings(const char* value) { return value && strchr(value, '['); }
+bool binding_template_register(const char*, binding_resolver_fn, binding_topic_collector_fn,
+                               const BindingSchemeSpec&) { return true; }
 bool device_dialog_active() { return false; }
 bool device_dialog_notify(const char*, uint32_t, uint32_t*) { return true; }
 uint32_t swipe_actions_last_swipe_time() { return 0; }
@@ -128,6 +132,14 @@ ActionResult action_list_dispatch_result(const ButtonAction* actions, uint8_t co
         lv_obj_delete(target);
     }
     return g_dispatch_result;
+}
+
+ActionResult action_list_dispatch_result(const ButtonAction* actions, uint8_t count, const char* label,
+                                         ActionContinuationOwner owner, bool interactive,
+                                         const PadBinding* bindings, uint8_t binding_count) {
+    g_dispatch_bindings = bindings;
+    g_dispatch_binding_count = binding_count;
+    return action_list_dispatch_result(actions, count, label, owner, interactive);
 }
 
 void action_parse(const JsonObject& action, ButtonAction& output) {
@@ -223,6 +235,8 @@ protected:
                 ++*static_cast<unsigned*>(lv_event_get_user_data(event));
         }, LV_EVENT_VALUE_CHANGED, &feedback_count);
         g_dispatches = 0;
+        g_dispatch_bindings = nullptr;
+        g_dispatch_binding_count = 0;
         g_dispatched_value[0] = '\0';
         g_binding_value = "0";
         g_dispatch_result = ACTION_COMPLETE;
@@ -276,6 +290,16 @@ protected:
         slider_layout(&state());
     }
 };
+
+TEST_F(SliderNativeWidget, DispatchUsesOriginatingPadBindings) {
+    PadBinding binding{};
+    slider_attach(&runtime, source.actions, source.action_count, nullptr, nullptr, &binding, 1);
+    begin(37);
+    release();
+    EXPECT_EQ(g_dispatches, 1u);
+    EXPECT_EQ(g_dispatch_bindings, &binding);
+    EXPECT_EQ(g_dispatch_binding_count, 1);
+}
 
 TEST_F(SliderNativeWidget, AutomaticSizingUsesConfiguredLengthAndShrinksToFitBothAxes) {
     auto* settings = reinterpret_cast<SliderConfig*>(config.data);
@@ -1105,6 +1129,8 @@ TEST_F(OptionSelectorNativeWidget, EventRenderUsesAndRestoresPadBindings) {
     pad_binding_set_bindings(&other, 1);
     option_selector_widget_impl::activate(state(), 1);
     EXPECT_EQ(g_dispatches, 1u);
+    EXPECT_EQ(g_dispatch_bindings, named_bindings);
+    EXPECT_EQ(g_dispatch_binding_count, 3);
     EXPECT_EQ(state()->selected, 1);
     EXPECT_STREQ(lv_label_get_text(state()->slots[1].content), "Own label");
     EXPECT_EQ(state()->slots[1].state, BTN_STATE_ENABLED);

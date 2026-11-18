@@ -162,6 +162,7 @@ async function runImport(options = {}) {
         padRenderBindings() { context.importedBindingsRendered = true; },
         actionEditorBuild() { return {}; },
         actionEditorLoad() {},
+        actionEditorOperation(id) { return id === 'screen.open' || id === 'timer.adjust' ? { id } : null; },
         actionEditorListLoad(prefixes, actions) {
             (actions || []).forEach(function(a, i) { context.actionEditorLoad(prefixes[i], a); });
         },
@@ -260,7 +261,8 @@ async function runImport(options = {}) {
             cols: 4,
             rows: 1,
             template_pad: 0,
-            pad_actions: [{ type: 'sound_alert', sound_alert_kind: 'tone', sound_alert_pattern: '1' }],
+            action_format_version: 1,
+            pad_actions: [{ op: 'screen.open', args: { target: 'pad_0' } }],
             buttons: [{ col: 1, row: 0, icon: { source_id: sourceId(1), catalog_id: 'material-symbols:home', kind: 'mono' } }],
         },
     ];
@@ -352,7 +354,7 @@ async function testClearPad() {
     assert.deepStrictEqual(messages, [{ message: 'Pad cleared (unsaved)', type: 'success' }]);
     const saved = context.padBuildSaveContext();
     assert.strictEqual(saved.page, 4);
-    assert.deepStrictEqual(JSON.parse(saved.body), { layout: 'grid', cols: 3, rows: 2, buttons: [] },
+    assert.deepStrictEqual(JSON.parse(saved.body), { action_format_version: 1, layout: 'grid', cols: 3, rows: 2, buttons: [] },
         'Clearing a customized pad must produce a saveable empty pad without old settings');
     for (const id of ['pad-row-heights', 'pad-column-widths']) {
         const field = document.getElementById(id);
@@ -383,6 +385,17 @@ async function testClearPad() {
 
 (async function() {
     await testClearPad();
+    for (const invalid of [
+        { action_format_version: 2, buttons: [] },
+        { buttons: [{ actions: [{ op: 'screen.open', args: { target: 'pad_0' } }] }] },
+        { action_format_version: 1, buttons: [{ actions: [{ type: 'screen', target: 'pad_0' }] }] },
+        { action_format_version: 1, buttons: [{ actions: [{ type: '', op: 'screen.open', args: {} }] }] },
+        { action_format_version: 1, buttons: [{ actions: [{ op: 'unknown', args: {} }] }] },
+    ]) {
+        const rejected = await runImport({ pads: [Object.assign({ cols: 1, rows: 1 }, invalid)] });
+        assert.strictEqual(rejected.requests.length, 0, 'Invalid action formats must fail before any settings or pad writes');
+        assert(rejected.messages.some(message => message.type === 'error'));
+    }
     const layoutImport = await runImport({
         pads: [{ cols: 1, rows: 1, buttons: [{
             col: 0, row: 0, widget_type: 'sparkline', widget_position: 'left',
@@ -483,7 +496,7 @@ async function testClearPad() {
     assert.strictEqual(JSON.parse(padSaves[1].options.body).template_pad, 0);
     assert.ok(!Object.hasOwn(JSON.parse(padSaves[0].options.body), 'pad_actions'));
     assert.deepStrictEqual(JSON.parse(padSaves[1].options.body).pad_actions, [
-        { type: 'sound_alert', sound_alert_kind: 'tone', sound_alert_pattern: '1' },
+        { op: 'screen.open', args: { target: 'pad_0' } },
     ]);
     assert.deepStrictEqual(success.reloads, [1]);
     assert.strictEqual(success.requests.filter(request => request.kind === 'device-info').length, 1);

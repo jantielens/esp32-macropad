@@ -38,6 +38,7 @@ class Element {
         this.dataset = {};
         this.attributes = {};
         this.options = []; // appendChild-based options only (unsupported-type test)
+        this.children = [];
         var classes = new Set();
         this.classList = {
             add: function(c) { classes.add(c); },
@@ -46,6 +47,7 @@ class Element {
         };
     }
     appendChild(opt) { this.options.push(opt); return opt; }
+    remove(index) { this.options.splice(index, 1); }
     addEventListener() {}
     setCustomValidity() {}
     reportValidity() { return true; }
@@ -134,6 +136,7 @@ const context = {
     console,
     TextEncoder,
     document,
+    escAttr(s) { return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); },
     deviceInfoCache: { catalog: FIXTURE_CATALOG },
     listInjectSyntheticScreenOption() {},
     padInitBindableColor() {},
@@ -205,6 +208,346 @@ for (const button of ['Left', 'Right', 'Middle']) {
 }
 assert(optionsHtml.includes('<optgroup label="Shutter Tester">'));
 assert(optionsHtml.includes('<option value="shutter">Shutter tester</option>'));
+
+// Operation editors use the firmware descriptor, preserve dynamic text, and
+// keep the fixed timer choice independent of the dynamic seconds argument.
+const originalCatalog = context.deviceInfoCache.catalog;
+context.deviceInfoCache.catalog = productionCatalogs.portal.concat([{
+    type: 'camera_capture', group: 'Camera', label: 'Save camera snapshot',
+    operations: [{ id: 'camera.capture', label: 'Save camera snapshot', arguments: [{
+        name: 'save_to', label: 'Save to', type: 'enum', dynamic: true,
+        example: '[var:camera_destination]', control: 'select', max_length: 6,
+        choices: ['both', 'latest', 'roll'], choice_labels: ['Latest and camera roll', 'Latest image', 'Camera roll image']
+    }] }]
+}, {
+    type: 'test_picker', group: 'Test', label: 'Picker',
+    operations: [{ id: 'test.pickers', label: 'Pick', arguments: [
+        { name: 'button', label: 'Button', type: 'integer', min: 1, max: 16,
+          dynamic: true, example: '[var:button]', control: 'gamepad_buttons' },
+        { name: 'file', label: 'Sound', type: 'string', max_length: 63,
+          dynamic: true, example: '[var:file]', control: 'sounds' }
+    ] }]
+}, {
+    type: 'test_defaults', group: 'Test', label: 'Defaults',
+    operations: [{ id: 'test.defaults', label: 'Defaults', arguments: [
+        { name: 'on', label: 'On', type: 'boolean', default: true },
+        { name: 'off', label: 'Off', type: 'boolean', default: false },
+        { name: 'implicit', label: 'Implicit', type: 'boolean' }
+    ] }]
+}]);
+context.validateBinding = value => ({ valid: !!value, errors: [{ message: 'Invalid binding' }] });
+const operationOptions = context.actionEditorTypeOptionsHTML({ operations: true });
+assert(operationOptions.includes('value="@screen.open">Navigate to screen'));
+assert(operationOptions.includes('value="@screen.back">Navigate back'));
+assert(operationOptions.includes('value="@music.next">Next track'));
+assert(operationOptions.includes('value="@timer.adjust">Adjust timer'));
+assert(operationOptions.includes('value="@wifi.station.set_enabled">Set Wi-Fi station mode'));
+assert(operationOptions.includes('value="@wifi.ap.set_enabled">Set access point'));
+assert(operationOptions.includes('value="@wifi.radio.turn_off">Turn off Wi-Fi'));
+assert(operationOptions.includes('value="@delay.wait">Delay'));
+const mixedOptions = context.actionEditorTypeOptionsHTML({ operations: true, mixed: true });
+assert(mixedOptions.includes('value="@screen.open">Navigate to screen'));
+assert(!mixedOptions.includes('value="screen">Navigate to screen'));
+assert(mixedOptions.includes('value="@visual_alert.start">'));
+const legacyVisual = { type: 'visual_alert', op: 'show', color: 'ff0000' };
+document.getElementById('legacy-pad-type').setAttribute('data-operations', 'true');
+context.actionEditorLoad('legacy-pad', legacyVisual);
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('legacy-pad'))), legacyVisual);
+context.actionEditorLoad('legacy-host', legacyVisual);
+assert.strictEqual(document.getElementById('legacy-host-type').value, 'visual_alert');
+const mixedType = document.getElementById('mixed-host-type');
+mixedType.setAttribute('data-operations', 'true');
+mixedType.setAttribute('data-mixed', 'true');
+const mixedLegacy = { type: 'visual_alert', op: 'stop', pattern: 'breathe' };
+context.actionEditorLoad('mixed-host', mixedLegacy);
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('mixed-host'))), mixedLegacy);
+for (const action of [
+    { op: 'screen.open', args: { target: 'pad_2' } },
+    { op: 'wifi.station.set_enabled', args: { enabled: false } }
+]) {
+    context.actionEditorLoad('mixed-host', action);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('mixed-host'))), action);
+}
+context.actionEditorLoad('mixed-host', { op: 'unknown.operation', args: { value: 'preserve' } });
+assert.throws(() => context.actionEditorBuild('mixed-host'), /unavailable/);
+const mockCatalog = JSON.parse(fs.readFileSync('tools/mock-data/pad-editor.json', 'utf8')).catalog;
+const catalogsToCheck = [productionCatalogs.portal, voiceCatalogs.portal];
+if (process.env.ACTION_CATALOG_FULL_BINARY) {
+    catalogsToCheck.push(JSON.parse(execFileSync(process.env.ACTION_CATALOG_FULL_BINARY, ['--catalog'], {encoding:'utf8'})).portal);
+}
+for (const catalog of catalogsToCheck) {
+    for (const entry of catalog) {
+        assert.deepStrictEqual(mockCatalog.find(item => item.type === entry.type), entry);
+    }
+}
+const operationMarkup = context.actionEditorHTML('operation-test', '', { operations: true });
+assert(operationMarkup.includes('for="operation-test-search">Search operations'));
+assert(operationMarkup.includes('> Dynamic</label>'));
+assert(operationMarkup.includes('Timer 1'));
+assert(operationMarkup.includes('min="1" max="55000" value="1"'));
+assert(operationMarkup.includes('Expected: true or false'));
+const cycleWrap = context.actionEditorOperation('pad.cycle').arguments.find(argument => argument.name === 'wrap');
+assert.strictEqual(cycleWrap.default, true);
+const cycleWrapOptions = operationMarkup.match(/<select[^>]*id="operation-test-op-pad\.cycle-wrap-fixed"[^>]*>(.*?)<\/select>/)[1];
+assert(cycleWrapOptions.startsWith('<option value="true" selected>'));
+const defaultMarkup = name => operationMarkup.match(new RegExp('<select[^>]*id="operation-test-op-test.defaults-' + name + '-fixed"[^>]*>(.*?)</select>'))[1];
+assert(defaultMarkup('on').includes('<option value="true" selected>'));
+assert(defaultMarkup('off').includes('<option value="false" selected>'));
+assert(!defaultMarkup('implicit').includes(' selected'));
+assert(operationMarkup.includes('Optional comma-separated 1-based pad numbers.'));
+assert(operationMarkup.includes('List ID on the active pad.'));
+const defaultPrefix = 'boolean-defaults';
+const defaultInputs = ['on', 'off', 'implicit'].map((name, index) => {
+    const input = document.getElementById(defaultPrefix + '-op-test.defaults-' + name + '-fixed');
+    input.options = [
+        {value:'true', defaultSelected:index === 0},
+        {value:'false', defaultSelected:index === 1}
+    ];
+    Object.defineProperty(input, 'selectedIndex', {set(i) { this.value = this.options[i].value; }});
+    return input;
+});
+document.getElementById(defaultPrefix + '-fields').querySelectorAll = () => defaultInputs;
+context.actionEditorLoad(defaultPrefix, {op:'test.defaults', args:{on:false, off:true, implicit:false}});
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(defaultPrefix))),
+    {op:'test.defaults', args:{on:false, off:true, implicit:false}});
+context.actionEditorLoad(defaultPrefix, {});
+document.getElementById(defaultPrefix + '-type').value = '@test.defaults';
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(defaultPrefix))),
+    {op:'test.defaults', args:{on:true, off:false, implicit:true}});
+assert(operationMarkup.includes('<option value="roll">Camera roll image</option>'));
+assert(operationMarkup.includes('Expected: both, latest, roll.'));
+assert(operationMarkup.includes('&quot;aan&quot;'));
+assert(operationMarkup.includes('<textarea class="form-control form-control-sm" id="operation-test-op-dialog.confirm-message-fixed"'));
+assert(operationMarkup.includes('operation-test-op-dialog.confirm-timeout_ms-zero'));
+assert(operationMarkup.includes('No timeout'));
+for (const [id, value] of [['dialog.notify-duration_ms', 3000], ['dialog.confirm-timeout_ms', 10000]]) {
+    const base = 'operation-test-op-' + id;
+    const input = operationMarkup.match(new RegExp('<input[^>]*value="' + value + '"[^>]*id="' + base + '-fixed"[^>]*>'))[0];
+    const zero = operationMarkup.match(new RegExp('<input[^>]*id="' + base + '-zero"[^>]*>'))[0];
+    assert(!input.includes(' disabled'));
+    assert(!zero.includes(' checked'));
+}
+assert(operationMarkup.includes('operation-test-op-visual_alert.start-color-color-wrap'));
+assert(operationMarkup.includes('value="Continue"'));
+assert(operationMarkup.includes('<option value="16">Button 16</option>'));
+const bthomeOperation = context.actionEditorOperation('bthome.send');
+assert(bthomeOperation);
+const bthomeButton = bthomeOperation.arguments.find(argument => argument.name === 'button');
+assert.strictEqual(bthomeButton.control, 'bthome_buttons');
+const bthomeMarkup = operationMarkup.match(/<select[^>]*id="operation-test-op-bthome.send-button-fixed"[^>]*>(.*?)<\/select>/)[1];
+assert(bthomeMarkup.startsWith('<option value="1">Button 1</option>'));
+assert(bthomeMarkup.endsWith('<option value="10">Button 10</option>'));
+const haAction = { op: 'ha.service.call', args: {
+    entity_id: 'light.living_room', service: 'turn_on', data_json: '{"brightness_pct":80}'
+} };
+context.actionEditorLoad('operation-test', haAction);
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('operation-test'))), haAction);
+for (const invalid of ['[1]', 'null', '{"brightness_pct":}']) {
+    document.getElementById('operation-test-op-ha.service.call-data_json-fixed').value = invalid;
+    assert.throws(() => context.actionEditorBuild('operation-test'), /JSON object/);
+}
+document.getElementById('operation-test-op-ha.service.call-data_json-fixed').value = '';
+assert.strictEqual(context.actionEditorBuild('operation-test').args.data_json, '');
+haAction.args.data_json = { $template: '[var:service_data]' };
+context.actionEditorLoad('operation-test', haAction);
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('operation-test'))), haAction);
+for (const button of [1, 10]) {
+    const saved = { op: 'bthome.send', args: { button, event: 'press' } };
+    context.actionEditorLoad('operation-test', saved);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('operation-test'))), saved);
+}
+document.getElementById('operation-test-op-bthome.send-button-fixed').value = '11';
+assert.throws(() => context.actionEditorBuild('operation-test'), /whole number/);
+assert(operationMarkup.includes('Select a sound'));
+const longKeys = { op: 'keyboard.send', args: { sequence: 'a'.repeat(255) } };
+context.actionEditorLoad('operation-test', longKeys);
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('operation-test'))), longKeys);
+document.getElementById('operation-test-op-keyboard.send-sequence-fixed').value += 'a';
+assert.throws(() => context.actionEditorBuild('operation-test'), /allowed length/);
+context.actionEditorLoad('operation-test', { op: 'keyboard.send', args: {
+    sequence: { $template: 'a'.repeat(192) }
+} });
+assert.throws(() => context.actionEditorBuild('operation-test'), /under 192 bytes/);
+const soundInput = document.getElementById('operation-test-op-test.pickers-file-fixed');
+soundInput.appendChild({ value: '', textContent: 'Select a sound' });
+const pickerAction = { op: 'test.pickers', args: { button: 16, file: 'missing.mp3' } };
+context.actionEditorLoad('operation-test', pickerAction);
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('operation-test'))), pickerAction);
+context.actionEditorUpdateSounds(soundInput, ['bell.mp3']);
+assert.deepStrictEqual(soundInput.options.map(option => option.value), ['', 'bell.mp3', 'missing.mp3']);
+assert.strictEqual(soundInput.value, 'missing.mp3');
+context.fetch = url => {
+    assert.strictEqual(url, '/api/sounds/list');
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(['chime.mp3']) });
+};
+const pickerOperation = context.actionEditorOperation('test.pickers');
+context.actionEditorLoadOperationSounds('operation-test', pickerOperation)
+    .then(() => {
+        assert.deepStrictEqual(soundInput.options.map(option => option.value), ['', 'chime.mp3', 'missing.mp3']);
+        assert.strictEqual(soundInput.value, 'missing.mp3');
+        context.fetch = () => Promise.resolve({ ok: false, status: 503 });
+        return context.actionEditorLoadOperationSounds('operation-test', pickerOperation);
+    }).then(() => {
+        const message = document.getElementById('operation-test-op-test.pickers-file-load-error');
+        assert.match(message.textContent, /Could not load sounds/);
+        context.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve(['bell.mp3']) });
+        return context.actionEditorLoadOperationSounds('operation-test', pickerOperation);
+    }).then(() => {
+        assert.strictEqual(document.getElementById('operation-test-op-test.pickers-file-load-error').textContent, '');
+    }).catch(error => { console.error(error); process.exitCode = 1; });
+for (const action of [
+    { op: 'pad.cycle', args: { direction: 'previous', wrap: false, excluded_pads: '1,3' } },
+    { op: 'pad.cycle', args: { direction: 'next', wrap: true, excluded_pads: { $template: '[var:excluded_pads]' } } },
+    { op: 'list.navigate', args: { target: 'notes', command: 'next_page' } },
+    { op: 'dialog.notify', args: { message: 'First\nSecond', duration_ms: 0 } },
+    { op: 'dialog.confirm', args: { message: 'Proceed?', approve_text: 'Yes', cancel_text: 'No', timeout_ms: 1000 } },
+    { op: 'visual_alert.start', args: { color: '#abc', pattern: 'blink', period_ms: 800, intensity: 80, duration_ms: 0 } }
+]) {
+    context.actionEditorLoad('operation-test', action);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('operation-test'))), action);
+}
+context.actionEditorLoad('operation-test', {op:'pad.cycle', args:{direction:'next', wrap:false, excluded_pads:' 1, 3 '}});
+assert.strictEqual(context.actionEditorBuild('operation-test').args.excluded_pads, ' 1, 3 ');
+for (const value of ['0', '17', '1,', '1,abc']) {
+    document.getElementById('operation-test-op-pad.cycle-excluded_pads-fixed').value = value;
+    assert.throws(() => context.actionEditorBuild('operation-test'), /comma-separated pad numbers/);
+}
+context.actionEditorLoad('operation-test', {op:'list.navigate', args:{target:'list-1_A', command:'next_page'}});
+assert.strictEqual(context.actionEditorBuild('operation-test').args.target, 'list-1_A');
+document.getElementById('operation-test-op-list.navigate-target-fixed').value = 'bad.id';
+assert.throws(() => context.actionEditorBuild('operation-test'), /List ID/);
+context.actionEditorLoad('operation-test', {op:'list.navigate', args:{target:{$template:'[var:list_id]'}, command:'next_page'}});
+assert.strictEqual(context.actionEditorBuild('operation-test').args.target.$template, '[var:list_id]');
+const dialogTiming = 'operation-test-op-dialog.confirm-timeout_ms';
+context.actionEditorLoad('operation-test', { op: 'dialog.confirm', args: {
+    message: 'Proceed?', approve_text: 'Yes', cancel_text: 'No', timeout_ms: 0
+} });
+assert.strictEqual(document.getElementById(dialogTiming + '-zero').checked, true);
+assert.strictEqual(document.getElementById(dialogTiming + '-fixed').disabled, true);
+document.getElementById(dialogTiming + '-zero').checked = false;
+context.actionEditorOperationTimingChanged('operation-test', 'dialog.confirm', 'timeout_ms');
+document.getElementById(dialogTiming + '-fixed').value = '999';
+assert.throws(() => context.actionEditorBuild('operation-test'), /0 or a whole number from 1000/);
+document.getElementById(dialogTiming + '-fixed').value = '1000';
+assert.strictEqual(context.actionEditorBuild('operation-test').args.timeout_ms, 1000);
+const alertColor = 'operation-test-op-visual_alert.start-color-fixed';
+context.actionEditorLoad('operation-test', { op: 'visual_alert.start', args: {
+    color: '', pattern: 'breathe', period_ms: 0, intensity: 0, duration_ms: 0
+} });
+assert.strictEqual(context.actionEditorBuild('operation-test').args.color, '');
+document.getElementById(alertColor).value = 'invalid';
+assert.throws(() => context.actionEditorBuild('operation-test'), /hex color/);
+const searchSelect = document.getElementById('search-test-type');
+const searchInput = document.getElementById('search-test-search');
+const navigationGroup = { tagName: 'OPTGROUP', label: 'Navigation', children: [] };
+const wifiGroup = { tagName: 'OPTGROUP', label: 'Connectivity', children: [] };
+const selectedOption = { value: '@screen.open', textContent: 'Navigate to screen', selected: true, parentElement: navigationGroup };
+const wifiOption = { value: '@wifi.station.set_enabled', textContent: 'Set Wi-Fi station mode', selected: false, parentElement: wifiGroup };
+navigationGroup.children.push(selectedOption);
+wifiGroup.children.push(wifiOption);
+searchSelect.options = [selectedOption, wifiOption];
+searchSelect.children = [navigationGroup, wifiGroup];
+searchSelect.value = selectedOption.value;
+searchInput.value = 'station';
+context.actionEditorFilterOperations('search-test');
+assert.strictEqual(searchSelect.value, '@screen.open');
+assert.strictEqual(selectedOption.hidden, false);
+assert.strictEqual(wifiOption.hidden, false);
+assert.strictEqual(document.getElementById('search-test-search-status').textContent, '1 matching operation');
+searchInput.value = 'connectivity';
+context.actionEditorFilterOperations('search-test');
+assert.strictEqual(wifiGroup.hidden, false);
+searchInput.value = 'no match';
+context.actionEditorFilterOperations('search-test');
+assert.strictEqual(wifiGroup.hidden, true);
+assert.strictEqual(navigationGroup.hidden, false);
+searchInput.value = '';
+context.actionEditorFilterOperations('search-test');
+assert.strictEqual(wifiGroup.hidden, false);
+for (const action of [
+    { op: 'screen.back', args: {} },
+    { op: 'device.restart', args: {} },
+    { op: 'display.brightness.save', args: {} },
+    { op: 'audio.volume.save', args: {} },
+    { op: 'music.next', args: {} },
+    { op: 'camera.capture', args: { save_to: 'roll' } },
+    { op: 'camera.capture', args: { save_to: { $template: '[var:camera_destination]' } } },
+    { op: 'variable.set', args: { name: 'counter', value: '' } },
+    { op: 'variable.set', args: { name: 'counter', value: '[var:counter]' } },
+    { op: 'variable.set', args: { name: 'counter', value: { $template: '[var:counter]' } } },
+    { op: 'display.brightness.set', args: { percent: 60 } },
+    { op: 'display.brightness.adjust', args: { percent: { $template: '[event:step]' } } },
+    { op: 'audio.volume.set', args: { percent: 40 } },
+    { op: 'audio.volume.adjust', args: { percent: { $template: '[event:step]' } } }
+]) {
+    context.actionEditorLoad('operation-test', action);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('operation-test'))), action);
+}
+context.actionEditorLoad('operation-test', { op: 'camera.capture', args: { save_to: 'roll' } });
+document.getElementById('operation-test-op-camera.capture-save_to-fixed').value = 'invalid';
+assert.throws(() => context.actionEditorBuild('operation-test'), /available choice/);
+const wifiAction = { op: 'wifi.station.set_enabled', args: { enabled: false } };
+context.actionEditorLoad('operation-test', wifiAction);
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('operation-test'))), wifiAction);
+const wifiBase = 'operation-test-op-wifi.station.set_enabled-enabled';
+document.getElementById(wifiBase + '-dynamic').checked = true;
+context.actionEditorOperationModeChanged('operation-test', 'wifi.station.set_enabled', 'enabled');
+assert.strictEqual(document.getElementById(wifiBase + '-template').value, 'false');
+document.getElementById(wifiBase + '-template').value = '[event:value]';
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('operation-test'))),
+    { op: 'wifi.station.set_enabled', args: { enabled: { $template: '[event:value]' } } });
+for (const action of [
+    { op: 'wifi.ap.set_enabled', args: { enabled: true } },
+    { op: 'wifi.radio.turn_off', args: {} }
+]) {
+    context.actionEditorLoad('operation-test', action);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('operation-test'))), action);
+}
+const operation = { op: 'timer.adjust', args: { timer: 2, seconds: { $template: '[expr:[event:step]*2]' } } };
+context.actionEditorLoad('operation-test', operation);
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('operation-test'))), operation);
+const timerBase = 'operation-test-op-timer.adjust-timer';
+document.getElementById(timerBase + '-dynamic').checked = true;
+context.actionEditorOperationModeChanged('operation-test', 'timer.adjust', 'timer');
+assert.strictEqual(document.getElementById(timerBase + '-template').value, '2');
+document.getElementById(timerBase + '-template').value = '[var:timer]';
+document.getElementById(timerBase + '-dynamic').checked = false;
+context.actionEditorOperationModeChanged('operation-test', 'timer.adjust', 'timer');
+document.getElementById(timerBase + '-dynamic').checked = true;
+context.actionEditorOperationModeChanged('operation-test', 'timer.adjust', 'timer');
+assert.strictEqual(document.getElementById(timerBase + '-template').value, '[var:timer]');
+document.getElementById(timerBase + '-dynamic').checked = false;
+document.getElementById(timerBase + '-fixed').value = '3';
+context.actionEditorOperationFixedChanged('operation-test', 'timer.adjust', 'timer');
+document.getElementById(timerBase + '-dynamic').checked = true;
+context.actionEditorOperationModeChanged('operation-test', 'timer.adjust', 'timer');
+assert.strictEqual(document.getElementById(timerBase + '-template').value, '3');
+document.getElementById(timerBase + '-dynamic').checked = false;
+const screenBase = 'operation-test-op-screen.open-target';
+document.getElementById(screenBase + '-fixed').value = 'pad_2';
+document.getElementById(screenBase + '-dynamic').checked = true;
+context.actionEditorOperationModeChanged('operation-test', 'screen.open', 'target');
+assert.strictEqual(document.getElementById(screenBase + '-template').value, 'pad_2');
+const savedDynamic = { op: 'timer.adjust', args: { timer: { $template: '[var:timer]' }, seconds: 5 } };
+context.actionEditorLoad('operation-test', savedDynamic);
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('operation-test'))), savedDynamic);
+context.actionEditorLoad('operation-test', operation);
+const secondsBase = 'operation-test-op-timer.adjust-seconds';
+assert.strictEqual(document.getElementById(secondsBase + '-fixed-group').style.display, 'none');
+assert.strictEqual(document.getElementById(secondsBase + '-dynamic-group').style.display, '');
+assert.strictEqual(document.getElementById(secondsBase + '-label').htmlFor, secondsBase + '-template');
+document.getElementById(secondsBase + '-fixed').value = '42';
+document.getElementById(secondsBase + '-dynamic').checked = false;
+context.actionEditorOperationRefresh('operation-test', 'timer.adjust');
+assert.strictEqual(document.getElementById(secondsBase + '-fixed-group').style.display, '');
+assert.strictEqual(document.getElementById(secondsBase + '-dynamic-group').style.display, 'none');
+assert.strictEqual(context.actionEditorBuild('operation-test').args.seconds, 42);
+document.getElementById(secondsBase + '-dynamic').checked = true;
+context.actionEditorOperationRefresh('operation-test', 'timer.adjust');
+assert.strictEqual(context.actionEditorBuild('operation-test').args.seconds.$template, '[expr:[event:step]*2]');
+document.getElementById('operation-test-op-timer.adjust-seconds-template').value = '';
+assert.throws(() => context.actionEditorBuild('operation-test'), /dynamic value/);
+context.deviceInfoCache.catalog = originalCatalog;
 
 // --- Command population for a multi-command type ---
 const volumeCommands = context.actionEditorCommandOptionsHTML('volume');
@@ -437,6 +780,37 @@ for (const type of ['delay', 'mqtt', 'unknown_action']) {
 }
 context.actionEditorLoad('alarm-hook-1', {type:'alarm_mp3', sound_alert_file:'wake-up'});
 assert.strictEqual(context.actionEditorBuild('alarm-hook-1').type, 'alarm_mp3');
+const savedCatalog = context.deviceInfoCache.catalog;
+context.deviceInfoCache.catalog = [
+    { type: 'sync_owner', group: 'Test', label: 'Synchronous legacy', alarm_hook_allowed: true, operations: [
+        { id: 'test.pause', label: 'Pausable', alarm_hook_allowed: false, arguments: [] },
+        { id: 'test.unknown', label: 'Unknown', alarm_hook_allowed: false, arguments: [] }
+    ] },
+    { type: 'pause_owner', group: 'Test', label: 'Pausable legacy', alarm_hook_allowed: false, operations: [
+        { id: 'test.sync', label: 'Synchronous', alarm_hook_allowed: true, arguments: [] },
+        { id: 'test.missing', label: 'Missing metadata', arguments: [] }
+    ] },
+    { type: 'legacy_sync', group: 'Test', label: 'Legacy', alarm_hook_allowed: true }
+];
+const mixedAlarm = context.actionEditorTypeOptionsHTML({alarmHook:true, operations:true, mixed:true});
+assert(mixedAlarm.includes('value="@test.sync"'));
+assert(!mixedAlarm.includes('value="@test.pause"'));
+assert(!mixedAlarm.includes('value="@test.unknown"'));
+assert(!mixedAlarm.includes('value="@test.missing"'));
+assert(mixedAlarm.includes('value="legacy_sync"'));
+assert(!mixedAlarm.includes('value="sync_owner"'));
+assert(!mixedAlarm.includes('value="pause_owner"'));
+alarmType.setAttribute('data-operations', 'true');
+alarmType.setAttribute('data-mixed', 'true');
+context.actionEditorLoad('alarm-hook-1', {op:'test.sync', args:{}});
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('alarm-hook-1'))), {op:'test.sync', args:{}});
+for (const id of ['test.pause', 'test.unknown', 'test.missing']) {
+    context.actionEditorEnsureUnsupportedOption(alarmType, '@' + id);
+    assert.strictEqual(alarmType.options[alarmType.options.length - 1].disabled, true);
+    context.actionEditorLoad('alarm-hook-1', {op:id, args:{}});
+    assert.throws(() => context.actionEditorBuild('alarm-hook-1'), /not allowed for alarm hooks/);
+}
+context.deviceInfoCache.catalog = savedCatalog;
 assert(context.actionEditorTypeOptionsHTML().includes('<option value="delay">'));
 context.actionEditorLoad(prefix, {type:'alarm_tone', sound_alert_pattern:'1000:200 800'});
 assert.strictEqual(context.actionEditorBuild(prefix).type, 'alarm_tone');

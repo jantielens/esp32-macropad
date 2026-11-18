@@ -105,6 +105,8 @@ void PadScreen::clearTiles() {
     padActions = nullptr;
     padActionCount = 0;
     if (!tiles) {
+        pad_config_release(actionConfig);
+        actionConfig = nullptr;
         fontCache.clear();
         tileCount = 0;
             mainButtonCount = 0;
@@ -178,6 +180,8 @@ void PadScreen::clearTiles() {
     hasTimeBinding = false;
     tilesBuilt = false;
     fontCache.clear();
+    pad_config_release(actionConfig);
+    actionConfig = nullptr;
     icon_store_collect_retired(pageIndex);
 }
 
@@ -203,6 +207,7 @@ void PadScreen::buildTiles() {
         tilesBuilt = true; // Mark built (empty) to avoid retrying every frame
         return;
     }
+    actionConfig = cfg;
     mainButtonCount = cfg->main_button_count;
 
     const bool swipes_enabled = !pad_disables_swipes(*cfg);
@@ -231,7 +236,6 @@ void PadScreen::buildTiles() {
     // Only grid layout supported in v0
     if (strcmp(cfg->layout, "grid") != 0) {
         LOGW(TAG, "Pad %u: unsupported layout '%s', skipping", pageIndex, cfg->layout);
-        pad_config_release(cfg);
         tilesBuilt = true;
         return;
     }
@@ -487,7 +491,7 @@ void PadScreen::buildTiles() {
 #if HAS_TOUCH
                     if (strcmp(wt->name, "slider") == 0)
                         slider_attach(&tile.widget_state, tile.actions, tile.action_count,
-                                      PadScreen::onPress, &tile);
+                                      PadScreen::onPress, &tile, pageBindings, pageBindingCount);
 #endif
                 }
             }
@@ -754,7 +758,6 @@ void PadScreen::buildTiles() {
     }
 #endif
 
-    pad_config_release(cfg);
 
     // Detect device-class engine-hold consumers: any registered device class
     // that declares a pad_hold_scheme (e.g. "[shutter:") whose binding token

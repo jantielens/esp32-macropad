@@ -4,6 +4,7 @@
 #include <ArduinoJson.h>
 
 #include "action_continuation.h"
+#include "action_catalog.h"
 #include "action_registry.h"
 #include "camera.h"
 #include "main_loop_bridge.h"
@@ -44,6 +45,13 @@ int main() {
     const ActionTypeDef* type = action_type_find(ACTION_TYPE_CAMERA_CAPTURE);
     CHECK(type != nullptr);
     CHECK(type && type->available && type->available());
+    JsonDocument catalog;
+    action_catalog_emit(catalog.to<JsonArray>(), false);
+    JsonObjectConst argument = catalog[0]["operations"][0]["arguments"][0];
+    CHECK(strcmp(argument["choices"][0] | "", "both") == 0);
+    CHECK(strcmp(argument["choices"][2] | "", "roll") == 0);
+    CHECK(strcmp(argument["choice_labels"][2] | "", "Camera roll image") == 0);
+    CHECK(type && type->operations[0].execution == ACTION_EXECUTION_PAUSABLE);
 
     JsonDocument valid_doc;
     valid_doc["type"] = ACTION_TYPE_CAMERA_CAPTURE;

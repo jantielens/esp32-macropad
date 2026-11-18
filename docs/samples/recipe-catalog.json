@@ -6,7 +6,7 @@
       "id": "pomodoro",
       "name": "Pomodoro",
       "description": "A 25-minute focus timer with pause, reset, and an alert on completion.",
-      "requires": ["display"],
+      "requires": ["display", "audio"],
       "layout": {
         "flow": "row",
         "buttons": [
@@ -21,16 +21,10 @@
             "icon_scale_pct": 50,
             "icon_position": "left",
             "actions": [
-              {
-                "type": "timer",
-                "timer_id": 1,
-                "timer_command": "toggle",
-                "timer_mode": "down",
-                "timer_value": "1500"
-              }
+              {"op": "timer.toggle_down", "args": {"timer": 1, "seconds": 1500}}
             ],
             "lp_actions": [
-              { "type": "timer", "timer_id": 1, "timer_command": "reset" }
+              {"op": "timer.reset", "args": {"timer": 1}}
             ]
           }
         ]
@@ -40,12 +34,8 @@
           "timers": {
             "1": {
               "expire_actions": [
-                {
-                  "type": "sound_alert",
-                  "sound_alert_kind": "tone",
-                  "sound_alert_pattern": "880:200;0:100;880:200"
-                },
-                { "type": "notify", "message": "Focus session complete" }
+                {"op": "audio.alert.tone", "args": {"pattern": "880:200;0:100;880:200", "volume": 0}},
+                {"op": "dialog.notify", "args": {"message": "Focus session complete", "duration_ms": 3000}}
               ]
             }
           }
@@ -83,21 +73,21 @@
             "label_center": "[time:%H:%M:%S]",
             "label_center_style": "font:dseg7-classic;font_size:96",
             "bg_color": "000000", "fg_color": "F44336",
-            "actions": [{"type": "system", "system_command": "screensaver"}]
+            "actions": [{"op": "display.sleep", "args": {}}]
           },
           {
             "col_offset": 0, "row_offset": 3, "row_span": 2,
             "label_bottom": "Dismiss alarm", "bg_color": "F44336", "fg_color": "FFFFFF",
             "icon": { "catalog_id": "material-symbols:alarm-off", "kind": "mono" },
             "btn_state": "[expr:[alarm:1_state]==\"idle\"?\"hidden\":\"\"]",
-            "actions": [{"type": "confirm", "message": "Dismiss the alarm?"}, {"type": "alarm", "alarm_id": 1, "alarm_command": "cancel"}]
+            "actions": [{"op": "dialog.confirm", "args": {"message": "Dismiss the alarm?", "approve_text": "Continue", "cancel_text": "Cancel", "timeout_ms": 10000}}, {"op": "alarm.cancel", "args": {"alarm": "1"}}]
           },
           {
             "col_offset": 1, "row_offset": 3, "col_span": 4, "row_span": 2,
             "label_bottom": "Snooze alarm", "bg_color": "8BC34A", "fg_color": "FFFFFF",
             "icon": { "catalog_id": "material-symbols:snooze", "kind": "mono" },
             "btn_state": "[expr:[alarm:1_state]!=\"ringing\"?\"hidden\":\"enabled\"]",
-            "actions": [{"type": "alarm", "alarm_id": 1, "alarm_command": "snooze"}]
+            "actions": [{"op": "alarm.snooze", "args": {"alarm": "1"}}]
           }
         ]
       },
@@ -107,8 +97,8 @@
             "1": {
               "enabled": false,
               "on_ring": [
-                {"type": "alarm_tone", "sound_alert_pattern": "2000:100 100 2000:100 100 2000:100 100 2000:100 700"},
-                {"type": "screen", "target": "${target_pad}"}
+                {"op": "alarm.tone", "args": {"pattern": "2000:100 100 2000:100 100 2000:100 100 2000:100 700", "volume": 0}},
+                {"op": "screen.open", "args": {"target": "${target_pad}"}}
               ],
               "on_stop": []
             }

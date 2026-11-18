@@ -314,16 +314,24 @@ static void expect_health_authoring_contract() {
                BINDING_RESOLVER_UNAVAILABLE,
            "inactive AP purpose supports binding fallback");
     binding_test_network.state = WifiNetworkState::Connecting;
+    binding_test_network.station_enabled = true;
     std::strcpy(binding_test_network.last_error, "Connection timed out");
     binding_test_now_ms += 2000;
     expect(binding_template_resolve_registered("health", 6, "wifi_state", value, sizeof(value)) ==
                BINDING_RESOLVER_RESOLVED && std::strcmp(value, "CONNECTING") == 0,
            "station startup status resolves from the network snapshot");
+    expect(binding_template_resolve_registered("health", 6, "wifi_station_enabled", value, sizeof(value)) ==
+               BINDING_RESOLVER_RESOLVED && std::strcmp(value, "ON") == 0,
+           "station mode is enabled while not connected");
+    expect(binding_template_resolve_registered("health", 6, "wifi_connected", value, sizeof(value)) ==
+               BINDING_RESOLVER_RESOLVED && std::strcmp(value, "OFF") == 0,
+           "connecting is distinct from connected");
     expect(binding_template_resolve_registered("health", 6, "wifi_last_error", value, sizeof(value)) ==
                BINDING_RESOLVER_RESOLVED && std::strcmp(value, "Connection timed out") == 0,
            "failure diagnostics resolve separately from activity");
     binding_test_network.state = WifiNetworkState::Ap;
     binding_test_network.ap_active = true;
+    binding_test_network.station_enabled = false;
     std::strcpy(binding_test_network.ssid, "Remote-AP");
     std::strcpy(binding_test_network.ip, "192.168.4.1");
     binding_test_now_ms += 2000;

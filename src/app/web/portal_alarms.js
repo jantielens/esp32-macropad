@@ -66,8 +66,8 @@ async function alarmInitFragment() {
         if (!schedule) {
             await getDeviceInfo();
             if (document.getElementById('alarm-config-form') !== form) return;
-            actionEditorListRender('alarm-ring-editors', ALARM_RING_PREFIXES, null, {actionOptions:{alarmHook:true}});
-            actionEditorListRender('alarm-stop-editors', ALARM_STOP_PREFIXES, null, {actionOptions:{alarmHook:true}});
+            actionEditorListRender('alarm-ring-editors', ALARM_RING_PREFIXES, null, {actionOptions:{alarmHook:true, operations:true, mixed:true}});
+            actionEditorListRender('alarm-stop-editors', ALARM_STOP_PREFIXES, null, {actionOptions:{alarmHook:true, operations:true, mixed:true}});
         }
         var response = await fetch('/api/component/alarms/config');
         if (!response.ok) throw new Error('Alarm configuration unavailable');

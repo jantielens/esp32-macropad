@@ -62,6 +62,17 @@ BindingResolverStatus item_binding_resolve(const char* params, char* out, size_t
         ? BINDING_RESOLVER_RESOLVED : BINDING_RESOLVER_UNAVAILABLE;
 }
 
+BindingResolvedValueKind item_binding_value_kind(const char* params) {
+    if (!params || !item_binding_field_valid(params, strlen(params)) ||
+        !thread_execution_context.item_scope) return BINDING_VALUE_KIND_UNKNOWN;
+    JsonVariantConst value = thread_execution_context.item_scope->item()[params];
+    if (value.is<const char*>()) return BINDING_VALUE_KIND_TEXT;
+    if (!value.isNull() && !value.is<bool>() &&
+        (value.is<int64_t>() || value.is<uint64_t>() || value.is<double>()))
+        return BINDING_VALUE_KIND_NUMBER;
+    return BINDING_VALUE_KIND_UNKNOWN;
+}
+
 const char* item_binding_validate(const char* templ, const ListSourceDescriptor* source,
                                   const PadBinding* bindings, uint8_t binding_count) {
     if (!templ) return "binding template is required";
@@ -73,10 +84,24 @@ const char* item_binding_validate(const char* templ, const ListSourceDescriptor*
 const char* item_binding_validate_actions(JsonArrayConst actions, const ListSourceDescriptor* source,
                                           const PadBinding* bindings, uint8_t binding_count) {
     bool item_available = source != nullptr;
+    bool captures_context = false;
+    for (JsonObjectConst action : actions)
+        if (!action.containsKey("type") && action.containsKey("op")) captures_context = true;
     size_t action_index = 0;
     size_t boundary_index = 0;
     for (JsonObjectConst action : actions) {
         ++action_index;
+        if (!action.containsKey("type") && action.containsKey("op")) {
+            for (JsonPairConst argument : action["args"].as<JsonObjectConst>()) {
+                JsonObjectConst dynamic = argument.value().as<JsonObjectConst>();
+                if (dynamic.isNull()) continue;
+                const char* error = item_binding_validate(dynamic["$template"] | "",
+                                                          item_available ? source : nullptr,
+                                                          bindings, binding_count);
+                if (error) return error;
+            }
+            continue;
+        }
         BoundedPsramJsonAllocator allocator(LIST_SOURCE_DOCUMENT_BYTES);
         JsonDocument copy(&allocator);
         if (!copy.set(action) || copy.overflowed()) return "action validation allocation failed";
@@ -123,7 +148,7 @@ const char* item_binding_validate_actions(JsonArrayConst actions, const ListSour
                 return action_error.get();
             }
         }
-        if (ends_context) {
+        if (ends_context && !captures_context) {
             if (item_available) boundary_index = action_index;
             item_available = false;
         }

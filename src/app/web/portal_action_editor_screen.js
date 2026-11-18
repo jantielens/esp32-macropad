@@ -20,6 +20,27 @@ function actionEditorPopulateScreens(prefixes, screens) {
     var builtins = screens.filter(function(screen) { return !/^pad_\d+$/.test(screen.id); });
     pads.sort(function(first, second) { return Number(first.id.slice(4)) - Number(second.id.slice(4)); });
     prefixes.forEach(function(prefix) {
+        var operationSelect = document.getElementById(prefix + '-op-screen.open-target-fixed');
+        if (operationSelect) {
+            var operationSelected = operationSelect.getAttribute('data-pending-value') || operationSelect.value;
+            var availableScreens = pads.concat(builtins);
+            while (operationSelect.options.length) operationSelect.remove(0);
+            availableScreens.forEach(function(screen) {
+                var option = document.createElement('option');
+                option.value = screen.id;
+                option.textContent = screen.name || screen.id;
+                operationSelect.appendChild(option);
+            });
+            if (!availableScreens.length) {
+                var empty = document.createElement('option');
+                empty.value = '';
+                empty.textContent = 'No screens available';
+                operationSelect.appendChild(empty);
+            }
+            if (operationSelected) operationSelect.value = operationSelected;
+            else if (availableScreens.length) operationSelect.value = availableScreens[0].id;
+            if (availableScreens.length) operationSelect.removeAttribute('data-pending-value');
+        }
         var sel = document.getElementById(prefix + '-target');
         if (!sel) return;
         var selected = sel.getAttribute('data-pending-value') || sel.value;

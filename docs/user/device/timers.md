@@ -39,7 +39,9 @@ Set/Adjust can prepare a paused countdown from a stopped stopwatch. For example,
 **Adjust countdown** `20` prepares a 20-second target; Toggle or Resume then
 starts that prepared target even if Toggle's configured duration is `1`.
 Reset returns to the prepared or adjusted target.
-Use signed seconds such as `15`, `-10`, or Numeric Rocker `{step}` for adjustments.
+Use signed seconds such as `15` or `-10` for adjustments. In a pad's Numeric
+Rocker, choose **Adjust timer** and enable **Dynamic** for seconds.
+For example, `[expr:[event:step]*60]` changes the countdown in minutes.
 
 ## Configure expiry actions
 
@@ -52,6 +54,11 @@ A countdown copies the expiry list when it starts. A prepared countdown copies
 it when Toggle or Resume starts it. Editing the list does not change an
 already running or paused run. Stop and start the timer to use the new list.
 There is no reboot requirement for saving expiry settings.
+
+If saved expiry actions are invalid or unavailable on this firmware, timer
+settings cannot be loaded or saved, and countdowns needing those actions cannot
+start. The saved file is protected. Back it up from [Storage](storage.md), then
+restore compatible firmware or a compatible configuration and reboot.
 
 The timer continues below zero after expiry, showing overtime rather than
 stopping automatically. Use Stop or Reset when that is not desired.

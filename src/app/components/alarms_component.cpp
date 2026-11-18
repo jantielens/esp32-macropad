@@ -33,7 +33,10 @@ bool alarm_save_bridge(const uint8_t* data, size_t length, bool scoped = false,
 }
 void alarms_get_config(AsyncWebServerRequest* request) {
     auto document = make_psram_json_doc(16384);
-    alarm_config_to_json(document->to<JsonObject>());
+    if (!alarm_config_to_json(document->to<JsonObject>())) {
+        web_portal_send_json_error(request, 503, "Alarm configuration unavailable; saved settings are protected");
+        return;
+    }
     web_portal_send_json_chunked(request, document);
 }
 void alarms_save_config(AsyncWebServerRequest* request, uint8_t* data, size_t length, size_t index, size_t total) {

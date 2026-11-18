@@ -168,32 +168,6 @@ def reset_pad_fixtures(server, scenario="normal"):
     server.mock_alarm_status = {"active_id": 0, "state": "idle", "ready": True,
                                "ota_deferred": False, "storage_error": False, "hook_error": False,
                                "enabled": False, "once_epoch": 0, "once_local": "", "lateness_minutes": 360}
-    for action in fixture["catalog"]:
-        action["alarm_hook_allowed"] = action["type"] not in ("confirm", "delay", "key", "gamepad", "camera_capture", "voice_assistant")
-        if action["type"] == "sound_alert":
-            action["label"] = "Sound alert"
-    fixture["catalog"].append({"type": "alarm", "group": "Alarm", "label": "Alarm Control", "alarm_hook_allowed": True,
-        "commands": [{"id": command, "label": label} for command, label in (
-            ("cancel", "Dismiss alarm"), ("snooze", "Snooze"), ("set_time", "Set time"), ("adjust_minutes", "Adjust time"),
-            ("enable", "Enable alarm"), ("disable", "Disable alarm"), ("toggle", "Toggle alarm"),
-            ("weekday_enable", "Enable day"), ("weekday_disable", "Disable day"), ("weekday_toggle", "Toggle day"))],
-        "editor_fields": [{"name": "alarm_id", "label": "Target alarm", "type": "select", "default": "1", "numeric": True,
-                           "help": "Active alarm works only with Snooze and Dismiss alarm. Dismiss alarm ends ringing or snoozing without disabling the weekly schedule.",
-                           "options": [{"id": "0", "label": "Active alarm"}, {"id": "1", "label": "Alarm 1"}]},
-                          {"name": "alarm_command", "label": "Command", "type": "select", "default": "snooze", "command_options": True},
-                          {"name": "alarm_value", "label": "Adjustment (minutes)", "type": "text", "bindable": True},
-                          {"name": "alarm_day", "label": "Day", "type": "select", "numeric": True, "default": "1",
-                           "options": [{"id": day, "label": name} for day, name in enumerate(("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"))]}]})
-    for action_type, label, source in (("alarm_tone", "Loop Tone", "sound_alert_pattern"),
-                                      ("alarm_mp3", "Loop MP3", "sound_alert_file")):
-        field = {"name": source, "label": "MP3 file" if action_type == "alarm_mp3" else "Tone pattern",
-                 "type": "select" if action_type == "alarm_mp3" else "text",
-                 "help": "Repeats until stopped. Stop audio stops playback; Dismiss alarm ends the alarm session."}
-        field.update({"options_source": "sounds"} if action_type == "alarm_mp3" else {"bindable": True})
-        fixture["catalog"].append({"type": action_type, "group": "Alarm", "label": label,
-            "alarm_hook_allowed": True, "editor_fields": [field,
-                {"name": "sound_alert_volume", "label": "Volume override (%)", "type": "number",
-                 "min": 0, "max": 100, "default": "0", "help": "0 = use device volume; 1-100 overrides it."}]})
     fixture["binding_schema"]["schemes"].append({"name": "ha", "min_params": 1, "max_params": 3,
         "widget_max_params": 2, "format_param": 2, "validation_mode": 0, "free_form": True, "keys": []})
     fixture["binding_schema"]["schemes"].append({"name": "ext", "min_params": 1, "max_params": 3,
@@ -202,8 +176,8 @@ def reset_pad_fixtures(server, scenario="normal"):
         "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": False,
         "keys": ["1_time", "1_enabled", "1_state", "1_ready", "active_id", "1_hour", "1_minute", "1_minutes",
              "1_weekdays", "1_day_0", "1_day_1", "1_day_2", "1_day_3", "1_day_4", "1_day_5", "1_day_6",
-             "1_repeat", "1_snooze_minutes", "1_auto_dismiss_minutes", "1_once_epoch", "1_once_local", "1_once_available",
-             "1_next_epoch", "1_next_local", "1_next_seconds", "1_next_available", "1_snooze_seconds", "1_snooze_available",
+             "1_repeat", "1_snooze_minutes", "1_auto_dismiss_minutes", "1_once_at", "1_once_available",
+             "1_next_at", "1_next_seconds", "1_next_available", "1_snooze_seconds", "1_snooze_available",
              "1_dismiss_seconds", "1_dismiss_available", "1_next_ring_seconds", "1_next_ring_available",
              "1_ota_deferred", "1_storage_error", "1_hook_error", "1_command_error", "1_command_message",
              "1_pending_commands", "1_completed_commands", "1_save_state"]})
@@ -214,6 +188,47 @@ def reset_pad_fixtures(server, scenario="normal"):
     ]
     if scenario == "invalid-bindings":
         server.mock_pads["0"]["buttons"][0]["label_center"] = "[pad:]"
+
+
+def valid_alarm_hook(action, catalog):
+    if not isinstance(action, dict):
+        return False
+    if "type" in action:
+        return "args" not in action and any(
+            item["type"] == action["type"] and item["alarm_hook_allowed"] for item in catalog
+        )
+    operation = next((op for item in catalog for op in item.get("operations", [])
+                      if op["id"] == action.get("op")), None)
+    if not operation or not operation["alarm_hook_allowed"] or set(action) != {"op", "args"}:
+        return False
+    args = action["args"]
+    definitions = operation["arguments"]
+    if not isinstance(args, dict) or set(args) != {arg["name"] for arg in definitions}:
+        return False
+    for arg in definitions:
+        value = args[arg["name"]]
+        if isinstance(value, dict):
+            template = value.get("$template")
+            if (not arg["dynamic"] or set(value) != {"$template"} or not isinstance(template, str)
+                    or not 0 < len(template.encode("utf-8")) < 192 or "\0" in template):
+                return False
+        elif arg["type"] in ("string", "enum"):
+            if (not isinstance(value, str) or "\0" in value
+                    or (not value and not arg.get("allow_empty"))
+                    or len(value.encode("utf-8")) > arg["max_length"]
+                    or (arg["type"] == "enum" and value not in arg["choices"])):
+                return False
+        elif arg["type"] == "integer":
+            if (type(value) is not int or not arg["min"] <= value <= arg["max"]
+                    or (value != 0 and value < arg.get("nonzero_min", arg["min"]))):
+                return False
+        elif arg["type"] == "boolean":
+            if type(value) is not bool:
+                return False
+        else:
+            return False
+    return True
+
 
 CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -241,6 +256,10 @@ class PortalHandler(SimpleHTTPRequestHandler):
 
     def _voice_notes_capable(self):
         return self._selected_profile() in SD_PROFILE_BASES
+
+    def _alarm_capable(self):
+        return self._profile() in ("esp32-p4-lcd4b", "crowpanel-4.2-interactive",
+                                   "reterminal-sticky-interactive")
 
     def _fonts_available(self):
         return self._profile() in ("esp32-p4-lcd4b", "jc3248w535")
@@ -382,7 +401,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             else:
                 self.send_error(404, "Fonts unavailable")
         elif path == "/portal_alarms.js":
-            if self._profile() == "reterminal-e1003-frame":
+            if not self._alarm_capable():
                 self.send_error(404, "Alarm unavailable")
             else:
                 self._serve_file(APP_WEB_DIR / "portal_alarms.js")
@@ -654,7 +673,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                                                     "reboot_required": active["default_font"] != saved.get("default_font", "@builtin") or
                                                     active["base_text_size"] != saved.get("base_text_size", 0)}})
         elif path in ("/api/component/alarms/config", "/api/component/alarms/status"):
-            if self._profile() not in ("esp32-p4-lcd4b", "jc3248w535"):
+            if not self._alarm_capable():
                 self._serve_json({"error": "Alarm unavailable"}, 404)
             else:
                 self._serve_json(self.server.mock_alarms if path.endswith("/config") else self.server.mock_alarm_status)
@@ -938,7 +957,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             if fragment == "fonts" and not self._fonts_available():
                 self.send_error(404, "Fonts unavailable")
                 return
-            if fragment in ("alarm-schedule", "alarm-behavior") and self._profile() == "reterminal-e1003-frame":
+            if fragment in ("alarm-schedule", "alarm-behavior") and not self._alarm_capable():
                 self.send_error(404, "Alarm unavailable")
                 return
             if not all(c.isalnum() or c in "-_" for c in fragment) or not fragment:
@@ -1190,7 +1209,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             return
 
         if path.startswith("/api/component/alarms/") or path == "/__mock/alarm":
-            if self._profile() not in ("esp32-p4-lcd4b", "jc3248w535"):
+            if not self._alarm_capable():
                 self._serve_json({"error": "Alarm unavailable"}, 404)
                 return
             try:
@@ -1216,13 +1235,13 @@ class PortalHandler(SimpleHTTPRequestHandler):
                             merged["1"][key] = value
                     data = merged
                 slot = data.get("1", {})
-                allowed = {action["type"] for action in self.server.pad_fixture["catalog"] if action["alarm_hook_allowed"]}
+                catalog = self._device_info(include_catalog=True)["catalog"]
                 if (set(data) != {"1", "lateness_minutes"} or type(data.get("lateness_minutes")) is not int
                     or not 0 <= data["lateness_minutes"] <= 10080 or type(slot.get("enabled")) is not bool
                         or any(type(slot.get(key)) is not int or not minimum <= slot[key] <= maximum for key, minimum, maximum in
                                (("hour", 0, 23), ("minute", 0, 59), ("weekdays", 0, 127), ("snooze_minutes", 1, 1440), ("auto_dismiss_minutes", 1, 1440)))
                         or any(not isinstance(slot.get(key), list) or len(slot[key]) > 3
-                               or any(not isinstance(action, dict) or action.get("type") not in allowed for action in slot[key]) for key in ("on_ring", "on_stop"))):
+                               or any(not valid_alarm_hook(action, catalog) for action in slot[key]) for key in ("on_ring", "on_stop"))):
                     self._serve_json({"error": "Invalid alarm config"}, 400)
                     return
                 if self.server.scenario == "save-error":
@@ -1794,7 +1813,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
 
     def _navigation(self, profile):
         nav = json.loads((MOCK_DIR / "nav.json").read_text(encoding="utf-8"))
-        if profile in ("esp32-p4-lcd4b", "jc3248w535"):
+        if self._alarm_capable():
             actions_index = next(index for index, category in enumerate(nav["categories"]) if category["id"] == "actions")
             nav["categories"].insert(actions_index + 1, {"id": "alarm", "display_name": "Alarm", "icon": "\u23f0", "items": [
                 {"id": "alarm-schedule", "display_name": "Schedule", "portal_script": "/portal_alarms.js"},
@@ -1877,44 +1896,43 @@ class PortalHandler(SimpleHTTPRequestHandler):
                                            for page in range(16)] + [{"id": "info", "name": "Device Info"}])
             if self._profile() == "jc3248w535":
                 info.update(chip_model="ESP32-S3", has_audio=False, has_sound_player=False,
-                            has_image_fetch=False, has_image_library=False,
+                            has_alarm=False, has_image_fetch=False, has_image_library=False,
                             display_coord_width=480, display_coord_height=320)
             if self._profile() == "crowpanel-4.2-interactive":
                 info.update(chip_model="ESP32-S3", has_touch=False, has_audio=False, has_sound_player=False,
-                            has_backlight=False, has_alarm=False, has_native_extensions=False,
+                            has_backlight=False, has_usb_hid=False, has_native_extensions=False,
                             has_image_fetch=False, has_image_library=False,
                             display_coord_width=400, display_coord_height=300)
             if self._profile() == "reterminal-sticky-interactive":
                 info.update(chip_model="ESP32-S3", has_ble=True, has_ble_hid=False, has_usb_hid=False,
-                            has_audio=False, has_sound_player=False, has_backlight=False, has_alarm=False,
+                            has_audio=True, has_sound_player=False, has_backlight=False,
                             has_native_extensions=False, has_image_fetch=False, has_image_library=False,
                             display_coord_width=384, display_coord_height=472)
             if include_catalog:
-                info["catalog"] = copy.deepcopy(self.server.pad_fixture["catalog"])
-                if self._voice_notes_capable():
-                    commands = [
-                        {"id": "toggle", "label": "Toggle recording (start/save)"},
-                        {"id": "start", "label": "Start recording"},
-                        {"id": "pause", "label": "Pause recording"},
-                        {"id": "resume", "label": "Resume recording"},
-                        {"id": "save", "label": "Stop and save recording"},
-                        {"id": "discard", "label": "Discard recording"},
-                    ]
-                    info["catalog"].append({"type": "vnote_record", "group": "Voice notes", "label": "Recording",
-                        "alarm_hook_allowed": False, "pausable": True,
-                        "command_field": "command", "commands": commands,
-                        "editor_fields": [{"name": "command", "label": "Command", "type": "select",
-                                           "default": "toggle", "command_options": True}]})
-                    info["catalog"].append({"type": "vnote_process", "group": "Voice notes",
-                        "label": "Process saved notes", "alarm_hook_allowed": True, "pausable": False})
-                    for action_type, label, pausable in (
-                            ("vnote_load", "Load saved note", False),
-                            ("vnote_delete", "Delete saved note", True)):
-                        info["catalog"].append({"type": action_type, "group": "Voice notes", "label": label,
-                            "alarm_hook_allowed": not pausable, "pausable": pausable,
-                            "template_fields": {"id": {"max": 63}},
-                            "editor_fields": [{"name": "id", "label": "Note ID", "type": "text",
-                                               "bindable": True}]})
+                enabled = {
+                    "alarm": info["has_alarm"], "alarm_tone": info["has_alarm"] and info["has_audio"],
+                    "alarm_mp3": info["has_alarm"] and info["has_sound_player"],
+                    "volume": info["has_audio"], "save_volume": info["has_audio"],
+                    "sound_alert": info["has_audio"], "music": info["has_sound_player"],
+                    "key": info["has_usb_hid"] or info["has_ble_hid"],
+                    "mouse_button": info["has_usb_hid"] or info["has_ble_hid"],
+                    "gamepad": info["has_usb_hid"] or info["has_ble_hid"],
+                    "ble_pair": info["has_ble_hid"], "bthome": info["has_ble"] or info["has_ble_hid"],
+                    "image_next": info["has_image_library"], "image_previous": info["has_image_library"],
+                    "camera_capture": info["has_camera"],
+                    "display_refresh": self._profile() in ("crowpanel-4.2-interactive",
+                                                             "reterminal-sticky-interactive"),
+                }
+                info["catalog"] = [
+                    copy.deepcopy(action) for action in self.server.pad_fixture["catalog"]
+                    if enabled.get(action["type"], self._voice_notes_capable()
+                                   if action["type"].startswith("vnote_") else True)
+                ]
+                if not info["has_sound_player"]:
+                    for action in info["catalog"]:
+                        if action["type"] == "sound_alert":
+                            action["operations"] = [op for op in action["operations"]
+                                                    if op["id"] != "audio.alert.mp3"]
                 info["widget_catalog"] = [
                     widget for widget in self.server.pad_fixture["widget_catalog"]
                     if widget.get("type") != "slider" or info["has_touch"]

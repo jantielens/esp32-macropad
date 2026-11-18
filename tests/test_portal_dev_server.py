@@ -1330,30 +1330,19 @@ class PortalDevServerTest(unittest.TestCase):
     def test_catalog_source_parity(self):
         actions_dir = ROOT / "src/app/actions"
         manifest = (actions_dir / "action_modules.inc").read_text()
-        voice_actions = {"vnote_record", "vnote_process", "vnote_load", "vnote_delete"}
-        unavailable = {"ble_pair", "display_refresh", "camera_capture"} | voice_actions
-        action_files = {"list_nav": "list_navigation",
+        action_files = {"list_nav": "list_navigation", "button_nav": "button_navigation",
                         **{"vnote_" + command: "voice_note_" + command
                            for command in ("record", "process", "load", "delete")}}
         expected = {next((key for key, value in action_files.items() if value == name), name)
-                    for name in re.findall(r'#include "([^"/]+)_action.cpp"', manifest)} - unavailable
+                    for name in re.findall(r'#include "([^"/]+)_action.cpp"', manifest)}
         catalog = self.server.pad_fixture["catalog"]
         self.assertEqual({action["type"] for action in catalog}, expected)
+        self.assertEqual(len(catalog), len(expected))
         for action in catalog:
-            source = (actions_dir / (action_files.get(action["type"], action["type"]) + "_action.cpp")).read_text()
-            if action["type"] in {"notify", "confirm"}:
-                source += (actions_dir / "dialog_action.h").read_text()
-                self.assertIn(json.dumps(action["label"]), source)
-            else:
-                self.assertIn('action["label"] = ' + json.dumps(action["label"]), source)
-            self.assertIn('action["group"] = ' + json.dumps(action["group"]), source)
-        sticky_catalog = self.request("/api/info?catalog=1", profile="reterminal-sticky-interactive")[1]["catalog"]
-        for action in sticky_catalog:
-            if action["type"] not in voice_actions:
-                continue
-            source = (actions_dir / (action_files[action["type"]] + "_action.cpp")).read_text()
-            self.assertIn('action["label"] = ' + json.dumps(action["label"]), source)
-            self.assertIn('action["group"] = ' + json.dumps(action["group"]), source)
+            self.assertTrue(action["operations"], action["type"])
+            for operation in action["operations"]:
+                self.assertIn(operation["execution"], ("sync", "pausable"))
+                self.assertEqual(operation["pausable"], operation["execution"] == "pausable")
         fields = ("name", "icon", "second_icon", "axis_field", "horizontal_icon", "vertical_icon", "default_axis")
         widgets = {widget["type"]: widget for widget in self.server.pad_fixture["widget_catalog"]}
         for path in (ROOT / "src/app/widgets").glob("*_widget.cpp"):
@@ -1369,6 +1358,49 @@ class PortalDevServerTest(unittest.TestCase):
             expected.update({field: value for field, value in zip(fields, values) if value is not None})
             self.assertEqual(widgets.pop(widget_type), expected)
         self.assertEqual(widgets, {})
+
+    def test_action_catalog_capability_projection(self):
+        cases = (
+            ("esp32-p4-lcd4b", {"alarm", "alarm_tone", "alarm_mp3", "image_next", "key"},
+             {"display_refresh", "vnote_record", "camera_capture", "bthome"}),
+            ("jc3248w535", {"key"}, {"alarm", "alarm_tone", "image_next", "display_refresh"}),
+            ("crowpanel-4.2-interactive", {"alarm", "display_refresh"},
+             {"alarm_tone", "key", "image_next", "vnote_record"}),
+            ("reterminal-sticky-interactive", {"alarm", "alarm_tone", "display_refresh", "bthome"},
+             {"alarm_mp3", "key", "image_next", "vnote_record"}),
+            ("reterminal-sticky-interactive-sd", {"vnote_record", "vnote_load", "display_refresh"},
+             {"alarm_mp3", "key", "camera_capture"}),
+        )
+        for profile, present, absent in cases:
+            with self.subTest(profile=profile):
+                info = self.request("/api/info?catalog=1", profile=profile)[1]
+                types = {action["type"] for action in info["catalog"]}
+                self.assertTrue(present <= types, present - types)
+                self.assertFalse(absent & types, absent & types)
+                sound = next((action for action in info["catalog"] if action["type"] == "sound_alert"), None)
+                if sound:
+                    self.assertEqual(any(op["id"] == "audio.alert.mp3" for op in sound["operations"]),
+                                     info["has_sound_player"])
+                self.assertEqual(info["has_alarm"], "alarm" in types)
+
+    def test_alarm_typed_hook_validation(self):
+        config = self.request("/api/component/alarms/config")[1]
+        for hook in (
+                {"op": "alarm.enable", "args": {}},
+                {"op": "dialog.notify", "args": {"message": "Hello", "duration_ms": 1000}},
+                {"op": "dialog.notify", "args": {"message": {"$template": "[var:message]"}, "duration_ms": 0}}):
+            config["1"]["on_ring"] = [hook]
+            self.assertEqual(self.request("/api/component/alarms/config", "POST", config)[0], 200)
+        for hook in (
+                {"op": "delay.wait", "args": {"duration_ms": 1000}},
+                {"op": "camera.capture", "args": {"save_to": "both"}},
+                {"op": "alarm.enable", "args": {"extra": 1}},
+                {"op": "dialog.notify", "args": {"message": "Hello", "duration_ms": 999}},
+                {"op": "dialog.notify", "args": {"message": "Hello"}},
+                {"op": "dialog.notify", "args": {"message": {"$template": ""}, "duration_ms": 1000}}):
+            config["1"]["on_ring"] = [hook]
+            self.assertEqual(self.request("/api/component/alarms/config", "POST", config)[0], 400, hook)
+        self.assertEqual(self.request("/api/component/alarms/config", profile="jc3248w535")[0], 404)
 
     def test_slider_catalog_requires_touch(self):
         _, touch_info = self.request("/api/info?catalog=1", profile="esp32-p4-lcd4b")

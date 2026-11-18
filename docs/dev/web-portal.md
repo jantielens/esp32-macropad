@@ -41,8 +41,9 @@ physical device. The server binds to localhost. Pad-editor previews keep raw
 bindings abbreviated; they do not resolve or simulate values.
 
 See the [script reference](scripts.md#toolsportal-dev-serverpy) for reset
-commands, failure scenarios, and focused regression tests. The P4 profile is the
-only pad-editor fixture target; this mock does not replace hardware verification.
+commands, failure scenarios, and focused regression tests. Interactive profiles
+share the pad fixtures but expose profile-specific action catalogs; the mock does
+not replace hardware verification.
 
 ## Overview
 
@@ -1409,7 +1410,7 @@ E-Paper Frame firmware cannot enable this policy.
 |--------|------|-------------|
 | `GET` | `/api/pad?page=N` | Returns one pad's stored JSON. `bg_image_password` is redacted in both button arrays and reported through `bg_image_password_set`. |
 | `GET` | `/api/pad/icon_context?page=N` | Returns local layout context for pads directly referencing template pad N, without fetching their complete configurations. |
-| `POST` | `/api/pad?page=N` | Validates and saves one complete pad object. `buttons` is Main; optional `overlay_buttons` is Overlay. Both share grid settings and `max_pad_buttons`. |
+| `POST` | `/api/pad?page=N` | Validates and saves one complete pad object. `buttons` is Main; optional `overlay_buttons` is Overlay. Both share grid settings and `max_pad_buttons`. Action-bearing pads require `action_format_version: 1` and operation envelopes; incompatible actions are rejected before writing. |
 | `DELETE` | `/api/pad?page=N` | Deletes the pad configuration. |
 
 Button backgrounds use `bg_image_fit`: `fill-center` (default when omitted),

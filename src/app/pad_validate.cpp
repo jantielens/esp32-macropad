@@ -223,6 +223,47 @@ static const char* validate_action_array(JsonArrayConst arr, bool require_known_
     return nullptr;
 }
 
+static const char* validate_versioned_action(JsonVariantConst value, bool versioned, bool validate_bindings) {
+    if (value.isNull()) return nullptr;
+    if (!value.is<JsonObjectConst>()) return "action must be an object";
+    if (!versioned) return "action_format_version is required for actions";
+    if (value["type"].is<const char*>()) return "legacy actions are not supported in this format";
+    return action_operation_validate_json(value.as<JsonObjectConst>(), validate_bindings);
+}
+
+static const char* validate_versioned_actions(JsonVariantConst value, bool versioned, bool validate_bindings) {
+    if (value.isNull()) return nullptr;
+    if (!value.is<JsonArrayConst>()) return "actions must be an array";
+    for (JsonVariantConst action : value.as<JsonArrayConst>()) {
+        const char* error = validate_versioned_action(action, versioned, validate_bindings);
+        if (error) return error;
+    }
+    return nullptr;
+}
+
+const char* pad_validate_action_version(JsonObjectConst pad, bool validate_bindings) {
+    const bool versioned = pad.containsKey("action_format_version");
+    if (versioned && (!pad["action_format_version"].is<int>() ||
+                      pad["action_format_version"].as<int>() != 1))
+        return "unsupported action_format_version";
+    const char* error = validate_versioned_actions(pad["pad_actions"], versioned, validate_bindings);
+    if (error) return error;
+    for (const char* layer : {"buttons", "overlay_buttons"}) {
+        for (JsonObjectConst button : pad[layer].as<JsonArrayConst>()) {
+            if (button.containsKey("action") || button.containsKey("lp_action") ||
+                button.containsKey("action_screen") || button.containsKey("lp_action_screen"))
+                return "legacy action fields are not supported";
+            for (const char* field : {"actions", "lp_actions"}) {
+                error = validate_versioned_actions(button[field], versioned, validate_bindings);
+                if (error) return error;
+            }
+            error = validate_versioned_action(button["widget_numericrocker_action"], versioned, validate_bindings);
+            if (error) return error;
+        }
+    }
+    return nullptr;
+}
+
 static const char* validate_button(JsonObjectConst b, int cols, int rows, bool tolerate_offgrid) {
     int col = b["col"] | 0;
     int row = b["row"] | 0;
@@ -348,10 +389,9 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
                                  "widget field '%s' must be a nested action object {type,...}, not a bare value", fname);
                         return s_len_err;
                     }
-                    const char* at = av["type"] | "";
-                    if (!at[0]) {
+                    if (!av["type"].is<const char*>() && !av["op"].is<const char*>()) {
                         snprintf(s_len_err, sizeof(s_len_err),
-                                 "widget field '%s' action is missing 'type'", fname);
+                                 "widget field '%s' action is missing 'type' or 'op'", fname);
                         return s_len_err;
                     }
                     const char* action_error = action_validate_json(av.as<JsonObjectConst>(), true, f["event_token"] | static_cast<const char*>(nullptr));

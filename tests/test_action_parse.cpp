@@ -662,6 +662,28 @@ TEST(sound_alert_stop_choices) {
     ASSERT_STR(parse_from_string("{\"type\":\"sound_alert\",\"sound_alert_kind\":\"stop_all\",\"sound_alert_pattern\":\"1000:200\"}").type, "");
 }
 
+TEST(typed_audio_actions_suppress_feedback) {
+#if HAS_AUDIO
+    for (const char* id : {"audio.alert.tone", "audio.alert.stop"}) {
+        JsonDocument input;
+        input["op"] = id;
+        JsonObject args = input["args"].to<JsonObject>();
+        if (!strcmp(id, "audio.alert.tone")) {
+            args["pattern"] = "1000:200";
+            args["volume"] = 0;
+        }
+        ActionStorage storage = {};
+        ButtonAction action = {};
+        {
+            ActionStorageScope scope(&storage);
+            action_parse(input.as<JsonObject>(), action);
+        }
+        ASSERT_TRUE(!storage.failed && action_list_has_audio(&action, 1));
+        action_storage_clear(storage);
+    }
+#endif
+}
+
 TEST(legacy_alert_aliases_are_rejected) {
     ButtonAction act = parse_from_string(
         "{\"type\":\"beep\",\"beep_pattern\":\"1000:100\"}");
@@ -1069,6 +1091,17 @@ TEST(visual_alert_action_parse) {
     ASSERT_TRUE(act.payload.visual_alert.va_duration_ms == 30000u);
 }
 
+TEST(action_envelope_legacy_op_validation) {
+    JsonDocument input;
+    ASSERT_TRUE(!deserializeJson(input, R"({"type":"visual_alert","op":"stop"})"));
+    ASSERT_TRUE(!action_validate_json(input.as<JsonObjectConst>()));
+    input["type"] = "screen";
+    ASSERT_TRUE(action_validate_json(input.as<JsonObjectConst>()));
+    input["type"] = "visual_alert";
+    input["args"].to<JsonObject>();
+    ASSERT_TRUE(action_validate_json(input.as<JsonObjectConst>()));
+}
+
 TEST(visual_alert_action_round_trip) {
     ButtonAction act = round_trip(
         "{\"type\":\"visual_alert\",\"op\":\"stop\",\"pattern\":\"breathe\","
@@ -1102,6 +1135,30 @@ TEST(cycle_pad_defaults) {
     ASSERT_EQ(act.payload.cycle_pad.direction, 1);
     ASSERT_TRUE(act.payload.cycle_pad.wrap);
     ASSERT_TRUE(act.payload.cycle_pad.excluded_mask == 0u);
+}
+
+TEST(cycle_pad_operation_defaults_and_validation) {
+    JsonDocument document;
+    JsonArray catalog = document.to<JsonArray>();
+    action_catalog_emit(catalog, false);
+    JsonObjectConst operation;
+    for (JsonObjectConst owner : catalog)
+        if (!strcmp(owner["type"] | "", ACTION_TYPE_CYCLE_PAD))
+            operation = owner["operations"][0];
+    ASSERT_TRUE(!operation.isNull());
+    ASSERT_TRUE(operation["arguments"][1]["default"].is<bool>());
+    ASSERT_TRUE(operation["arguments"][1]["default"].as<bool>());
+    ASSERT_STR(operation["arguments"][2]["control"].as<const char*>(), "pad_exclusions");
+
+    document.clear();
+    ASSERT_TRUE(!deserializeJson(document, R"({"op":"pad.cycle","args":{"direction":"next","wrap":true,"excluded_pads":"1, 3"}})"));
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()) == nullptr);
+    document["args"]["excluded_pads"] = "";
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()) == nullptr);
+    document["args"]["excluded_pads"] = "1,bad";
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()) != nullptr);
+    document["args"]["excluded_pads"] = "0";
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()) != nullptr);
 }
 
 TEST(cycle_pad_previous_no_wrap) {
@@ -1224,6 +1281,19 @@ TEST(catalog_feature_gates_and_metadata_parity) {
         const ActionTypeDef* type = action_type_find(name);
         ASSERT_TRUE(type != nullptr);
         ASSERT_EQ(entry["alarm_hook_allowed"].as<bool>(), type->execution == ACTION_EXECUTION_SYNC);
+        JsonArrayConst operations = entry["operations"];
+        ASSERT_EQ(operations.size(), type->operation_count);
+        for (uint8_t index = 0; index < type->operation_count; ++index) {
+            const ActionOperationDef& operation = type->operations[index];
+            JsonObjectConst metadata = operations[index];
+            ASSERT_TRUE(metadata["alarm_hook_allowed"].is<bool>());
+            ASSERT_TRUE(metadata["pausable"].is<bool>());
+            ASSERT_EQ(metadata["alarm_hook_allowed"].as<bool>(), operation.execution == ACTION_EXECUTION_SYNC);
+            ASSERT_EQ(metadata["pausable"].as<bool>(), operation.execution == ACTION_EXECUTION_PAUSABLE);
+            ASSERT_TRUE(!strcmp(metadata["execution"] | "",
+                operation.execution == ACTION_EXECUTION_SYNC ? "sync"
+                : operation.execution == ACTION_EXECUTION_PAUSABLE ? "pausable" : "unknown"));
+        }
         if (!strcmp(name, "alarm") || !strcmp(name, "alarm_tone") || !strcmp(name, "alarm_mp3")) ++alarm_count;
         entry.remove("fields");
     }
@@ -1263,6 +1333,148 @@ TEST(catalog_feature_gates_and_metadata_parity) {
     serializeJson(portal, portal_json);
     serializeJson(mcp, mcp_json);
     ASSERT_TRUE(portal_json == mcp_json);
+}
+
+TEST(typed_operation_descriptors_and_arguments) {
+    const ActionTypeDef* owner = nullptr;
+    const ActionOperationDef* screen = action_operation_find("screen.open", &owner);
+    ASSERT_TRUE(screen != nullptr && owner == action_type_find(ACTION_TYPE_SCREEN));
+    const ActionOperationDef* timer = action_operation_find("timer.adjust", &owner);
+    ASSERT_TRUE(timer != nullptr && owner == action_type_find(ACTION_TYPE_TIMER));
+    const ActionOperationDef* wifi = action_operation_find("wifi.station.set_enabled", &owner);
+    ASSERT_TRUE(wifi != nullptr && owner == action_type_find(ACTION_TYPE_SYSTEM));
+    ASSERT_TRUE(action_operation_find("screen.unknown") == nullptr);
+
+    JsonDocument document;
+    ASSERT_TRUE(!deserializeJson(document, R"({"op":"screen.open","args":{"target":"[item:id]"}})"));
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()) == nullptr);
+    document.clear();
+    ASSERT_TRUE(!deserializeJson(document, R"({"op":"timer.adjust","args":{"timer":1,"seconds":{"$template":"-15"}}})"));
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()) == nullptr);
+    ActionStorage storage = {};
+    ButtonAction parsed = {};
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(document.as<JsonObject>(), parsed);
+    }
+    ASSERT_TRUE(!storage.failed && parsed.payload.operation.arguments);
+    JsonDocument round_trip;
+    action_to_json(parsed, round_trip.to<JsonObject>());
+    ASSERT_STR(round_trip["op"].as<const char*>(), "timer.adjust");
+    ASSERT_EQ(round_trip["args"]["timer"].as<int>(), 1);
+    ASSERT_STR(round_trip["args"]["seconds"]["$template"].as<const char*>(), "-15");
+    action_storage_clear(storage);
+    document["args"]["timer"] = 4;
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()) != nullptr);
+    document["args"]["timer"] = 1;
+    document["args"]["extra"] = true;
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()) != nullptr);
+    document["args"].as<JsonObject>().remove("extra");
+    document["args"].as<JsonObject>().remove("seconds");
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()) != nullptr);
+    document.clear();
+    ASSERT_TRUE(!deserializeJson(document, R"({"op":"wifi.station.set_enabled","args":{"enabled":true}})"));
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()) == nullptr);
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(document.as<JsonObject>(), parsed);
+    }
+    ASSERT_TRUE(!storage.failed && action_operation_for_action(parsed) == wifi);
+    round_trip.clear();
+    action_to_json(parsed, round_trip.to<JsonObject>());
+    ASSERT_STR(round_trip["op"].as<const char*>(), "wifi.station.set_enabled");
+    ASSERT_TRUE(round_trip["args"]["enabled"].is<bool>());
+    ASSERT_TRUE(round_trip["args"]["enabled"].as<bool>());
+    action_storage_clear(storage);
+    document["args"]["enabled"] = "true";
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()) != nullptr);
+    document["args"]["enabled"].to<JsonObject>()["$template"] = "[event:value]";
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>(), false) == nullptr);
+}
+
+TEST(dialog_operation_timing_and_color_validation) {
+#if HAS_DISPLAY && (HAS_TOUCH || HAS_BUTTON)
+    for (const char* id : {"dialog.notify", "dialog.confirm"}) {
+        const ActionOperationDef* operation = action_operation_find(id);
+        ASSERT_TRUE(operation != nullptr);
+        const ActionArgumentDef& timing = operation->arguments[operation->argument_count - 1];
+        ASSERT_TRUE(!action_operation_validate_descriptor(*operation));
+        ASSERT_EQ(operation->execution, !strcmp(id, "dialog.confirm")
+            ? ACTION_EXECUTION_PAUSABLE : ACTION_EXECUTION_SYNC);
+        ASSERT_TRUE(timing.has_default_integer);
+        ASSERT_EQ(timing.default_integer, !strcmp(id, "dialog.notify") ? 3000 : 10000);
+        JsonDocument document;
+        document["op"] = id;
+        JsonObject args = document["args"].to<JsonObject>();
+        args["message"] = "Continue?";
+        if (!strcmp(id, "dialog.confirm")) {
+            args["approve_text"] = "Continue";
+            args["cancel_text"] = "Cancel";
+        }
+        for (int32_t value : {0, 1000, 300000}) {
+            args[timing.name] = value;
+            ASSERT_TRUE(!action_operation_validate_json(document.as<JsonObjectConst>()));
+            char text[16];
+            snprintf(text, sizeof(text), "%ld", static_cast<long>(value));
+            int32_t normalized = -1;
+            ASSERT_TRUE(!action_argument_normalize_text(timing, text, nullptr, &normalized));
+            ASSERT_EQ(normalized, value);
+        }
+        for (int32_t value : {-1, 1, 999, 300001}) {
+            args[timing.name] = value;
+            ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()));
+            char text[16];
+            snprintf(text, sizeof(text), "%ld", static_cast<long>(value));
+            int32_t normalized = 0;
+            ASSERT_TRUE(action_argument_normalize_text(timing, text, nullptr, &normalized));
+        }
+    }
+    const ActionOperationDef* alert = action_operation_find("visual_alert.start");
+    ASSERT_TRUE(alert != nullptr);
+    const ActionArgumentDef& color = alert->arguments[0];
+    const char* normalized = nullptr;
+    for (const char* value : {"", "#abc", "0x123456"})
+        ASSERT_TRUE(!action_argument_normalize_text(color, value, &normalized, nullptr));
+    ASSERT_TRUE(action_argument_normalize_text(color, "#not-color", &normalized, nullptr));
+#endif
+}
+
+TEST(key_operation_literal_and_template_boundaries) {
+#if HAS_BLE_HID || HAS_USB_HID
+    const ActionOperationDef* key = action_operation_find("keyboard.send");
+    ASSERT_TRUE(key != nullptr);
+    ActionArgumentDef oversized = key->arguments[0];
+    oversized.max_length = ACTION_OPERATION_MAX_TEXT_LENGTH + 1;
+    ActionOperationDef invalid = *key;
+    invalid.arguments = &oversized;
+    ASSERT_TRUE(action_operation_validate_descriptor(invalid));
+    JsonDocument document;
+    document["op"] = "keyboard.send";
+    JsonObject args = document["args"].to<JsonObject>();
+    std::string literal(CONFIG_KEY_SEQ_MAX_LEN - 1, 'a');
+    args["sequence"] = literal.c_str();
+    ASSERT_TRUE(!action_operation_validate_json(document.as<JsonObjectConst>()));
+    ActionStorage storage = {};
+    ButtonAction action = {};
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(document.as<JsonObject>(), action);
+    }
+    ASSERT_TRUE(!storage.failed && action.payload.operation.arguments);
+    JsonDocument output;
+    action_to_json(action, output.to<JsonObject>());
+    action_storage_clear(storage);
+    ASSERT_TRUE(literal == output["args"]["sequence"].as<const char*>());
+    literal.push_back('a');
+    args["sequence"] = literal.c_str();
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()));
+    std::string templ(BINDING_TEMPLATE_MAX_LEN - 1, 'a');
+    args["sequence"].to<JsonObject>()["$template"] = templ.c_str();
+    ASSERT_TRUE(!action_operation_validate_json(document.as<JsonObjectConst>(), false));
+    templ.push_back('a');
+    args["sequence"]["$template"] = templ.c_str();
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>(), false));
+#endif
 }
 
 TEST(slider_value_action_validation) {
@@ -1380,6 +1592,19 @@ TEST(slider_ha_json_template_validation) {
 }
 
 int main(int argc, char** argv) {
+    if (argc == 3 && !strcmp(argv[1], "--validate-operations")) {
+        JsonDocument input;
+        if (deserializeJson(input, argv[2]) || !input.is<JsonArray>()) return 1;
+        for (JsonVariantConst value : input.as<JsonArrayConst>()) {
+            if (!value.is<JsonObjectConst>()) return 1;
+            const char* error = action_operation_validate_json(value.as<JsonObjectConst>(), false);
+            if (error) {
+                std::fprintf(stderr, "Recipe operation invalid: %s\n", error);
+                return 1;
+            }
+        }
+        return 0;
+    }
     if (argc == 2 && !strcmp(argv[1], "--catalog")) {
         JsonDocument catalogs;
         action_catalog_emit(catalogs["portal"].to<JsonArray>(), false);
@@ -1395,6 +1620,9 @@ int main(int argc, char** argv) {
     RUN(registered_identifiers_survive_storage);
     RUN(field_metadata_identifies_persisted_binding_values);
     RUN(catalog_feature_gates_and_metadata_parity);
+    RUN(typed_operation_descriptors_and_arguments);
+    RUN(dialog_operation_timing_and_color_validation);
+    RUN(key_operation_literal_and_template_boundaries);
     RUN(slider_value_action_validation);
     RUN(option_id_action_validation);
     RUN(slider_ha_json_template_validation);
@@ -1435,6 +1663,7 @@ int main(int argc, char** argv) {
     RUN(sound_alert_tone_parse);
     RUN(sound_alert_mp3_round_trip);
     RUN(sound_alert_stop_choices);
+    RUN(typed_audio_actions_suppress_feedback);
     RUN(legacy_alert_aliases_are_rejected);
     RUN(alarm_audio_round_trip);
 
@@ -1488,11 +1717,13 @@ int main(int argc, char** argv) {
 
     printf("\n--- Visual alert action ---\n");
     RUN(visual_alert_action_parse);
+    RUN(action_envelope_legacy_op_validation);
     RUN(visual_alert_action_round_trip);
     RUN(visual_alert_zero_fields_not_serialized);
 
     printf("\n--- Cycle pad action ---\n");
     RUN(cycle_pad_defaults);
+    RUN(cycle_pad_operation_defaults_and_validation);
     RUN(cycle_pad_previous_no_wrap);
     RUN(cycle_pad_canonical_exclusions);
     RUN(cycle_pad_round_trip);

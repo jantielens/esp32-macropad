@@ -17,8 +17,7 @@
 //   Horizontal: «  ‹  [label]  ›  »
 //   Vertical:   ▲▲  ▲  [label]  ▼  ▼▼
 //
-// Each zone dispatches the same action template with {step} replaced by
-// ±small_step (inner) or ±large_step (outer).
+// Each zone dispatches the same action with its signed small or large step.
 //
 // Zone layout: pixel-clamped zones that adapt to button size.
 // Each outer/inner zone targets a percentage of the span but is clamped
@@ -201,24 +200,19 @@ static void numericrocker_describe(JsonObject& out) {
     add("widget_numericrocker_small_step","number","inner-arrow step (± per tap)");
     add("widget_numericrocker_large_step","number","outer-arrow step (± per tap)");
     add("widget_numericrocker_zone_scale_pct","number","tap-area scale percentage (50-150, default 100)");
-    // The adjust action is a NESTED action OBJECT (same shape as a button
-    // action) — NOT a bare string. Spell that out with an example so an LLM does
-    // not emit "volume"/"brightness" as a string (which the device ignores).
     {
         JsonObject o = f.createNestedObject();
         o["name"] = "widget_numericrocker_action";
-        o["event_token"] = "{step}";
+        o["event_token"] = "[event:step]";
         o["type"] = "action";
-        o["desc"] = "REQUIRED nested action OBJECT (same shape as a button action; NOT a bare string). "
-                    "Dispatched on every arrow tap with the literal token {step} substituted by the small/large "
-                    "step (negative for the down/left arrows). Typically adjusts volume, brightness, a timer, or "
-                    "a device-class value.";
-        o["example"] = "{\"type\":\"volume\",\"volume_mode\":\"adjust\",\"volume_value\":\"{step}\"}";
+        o["desc"] = "REQUIRED nested operation OBJECT (same shape as a pad button action; NOT a bare string). "
+                    "Dispatched on every arrow tap with [event:step] set to the signed small/large step.";
+        o["example"] = "{\"op\":\"timer.adjust\",\"args\":{\"timer\":1,\"seconds\":{\"$template\":\"[expr:[event:step]*60]\"}}}";
     }
     add("widget_numericrocker_color","color","indicator color");
     add("widget_numericrocker_opacity","number","0-100");
-    out["note"] = "Numeric rocker: the outer/inner arrows run widget_numericrocker_action with {step} substituted "
-                  "by large/small step; a tap in the CENTER falls through to the button's normal actions[]. "
+    out["note"] = "Numeric rocker: the outer/inner arrows run widget_numericrocker_action with [event:step] set "
+                  "to the signed large/small step; a tap in the CENTER falls through to the button's normal actions[]. "
                   "Set small_step/large_step to the ± amounts (e.g. 5 and 20).";
 }
 #endif

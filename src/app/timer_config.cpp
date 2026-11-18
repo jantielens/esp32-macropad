@@ -4,6 +4,9 @@
 
 #include "action_list.h"
 #include "action_parse.h"
+#include "action_registry.h"
+#include "action_storage.h"
+#include "action_validate.h"
 #include "config_psram.h"
 #include "fs_health.h"
 #include "log_manager.h"
@@ -14,14 +17,16 @@
 #include <freertos/semphr.h>
 #include "storage.h"
 #include <string.h>
+#include <string>
 
 #define TAG "TimerCfg"
 
 static const char* TIMER_CONFIG_PATH = "/config/timers.json";
 
-// RAM cache (always valid — defaults if file missing). Heap-allocated
+// RAM cache (defaults if file missing). Heap-allocated
 // (PSRAM preferred, SRAM fallback) via config_psram_alloc().
 static TimerConfig* g_config = nullptr;
+static ActionStorage g_actions = {};
 static bool g_loaded = false;
 static SemaphoreHandle_t g_config_mutex = nullptr;
 static SemaphoreHandle_t g_save_mutex = nullptr;
@@ -40,13 +45,28 @@ static void apply_defaults(TimerConfig* cfg) {
     memset(cfg, 0, sizeof(TimerConfig));
 }
 
-static bool load_from_flash(TimerConfig* cfg) {
+static const char* validate_action_envelope(JsonObjectConst action) {
+    if (action.containsKey("type")) {
+        if (!action["type"].is<const char*>() || !action["type"].as<const char*>()[0] ||
+            action.containsKey("args")) return "invalid legacy action envelope";
+        const char* type = action["type"].as<const char*>();
+        if (!action_type_is_supported(type)) return "unsupported legacy action";
+        if (action.containsKey("op")) {
+            if (strcmp(type, ACTION_TYPE_VISUAL_ALERT)) return "mixed action envelope";
+            return action_type_validate(action_type_find(type), action);
+        }
+        return nullptr;
+    }
+    return action.containsKey("op") ? action_validate_json(action) : "action missing type or operation";
+}
+
+static bool load_from_flash(TimerConfig* cfg, ActionStorage& storage) {
     if (!cfg) return false;
     apply_defaults(cfg);
 
     if (!Storage.exists(TIMER_CONFIG_PATH)) {
         LOGD(TAG, "No timer config file, using defaults");
-        return false;
+        return true;
     }
 
     File f = Storage.open(TIMER_CONFIG_PATH, "r");
@@ -66,31 +86,53 @@ static bool load_from_flash(TimerConfig* cfg) {
     DeserializationError err = deserializeJson(doc, f);
     f.close();
 
-    if (err) {
-        LOGE(TAG, "JSON parse error: %s", err.c_str());
+    if (err || !doc.is<JsonObject>()) {
+        LOGE(TAG, "Invalid timer config JSON: %s", err.c_str());
         return false;
     }
 
+    ActionStorageScope scope(&storage);
     // Parse per-timer settings: keys "1", "2", "3"
     for (uint8_t i = 0; i < TIMER_COUNT; i++) {
         char key[4];
         snprintf(key, sizeof(key), "%u", i + 1);
         JsonVariant tv = doc[key];
-        if (!tv.is<JsonObject>()) continue;
+        if (!doc.containsKey(key)) continue;
+        if (!tv.is<JsonObject>()) {
+            LOGE(TAG, "Timer %u: configuration must be an object", i + 1);
+            return false;
+        }
         JsonObject tobj = tv.as<JsonObject>();
 
         JsonVariant actions_value = tobj["expire_actions"];
-        if (!actions_value.is<JsonArray>()) continue;
+        if (!tobj.containsKey("expire_actions")) continue;
+        if (!actions_value.is<JsonArray>()) {
+            LOGE(TAG, "Timer %u: expire actions must be an array", i + 1);
+            return false;
+        }
 
         TimerSettings& ts = cfg->timers[i];
         for (JsonVariant action_value : actions_value.as<JsonArray>()) {
-            if (!action_value.is<JsonObject>()) continue;
+            if (!action_value.is<JsonObject>()) {
+                LOGE(TAG, "Timer %u: expire action must be an object", i + 1);
+                return false;
+            }
+            JsonObject object = action_value.as<JsonObject>();
+            const char* error = validate_action_envelope(object);
+            if (error) {
+                LOGE(TAG, "Timer %u: cannot load expire action: %s", i + 1, error);
+                return false;
+            }
             ButtonAction action = {};
-            action_parse(action_value.as<JsonObject>(), action);
-            if (!action.type[0]) continue;
+            action_parse(object, action);
+            if (storage.failed) return false;
+            if (!action.type[0]) {
+                LOGE(TAG, "Timer %u: cannot parse expire action", i + 1);
+                return false;
+            }
             if (ts.expire_action_count >= TIMER_MAX_EXPIRE_ACTIONS) {
-                LOGW(TAG, "Timer %u: extra expire action ignored", i + 1);
-                continue;
+                LOGE(TAG, "Timer %u: too many expire actions", i + 1);
+                return false;
             }
             ts.expire_actions[ts.expire_action_count++] = action;
         }
@@ -115,34 +157,42 @@ void timer_config_init() {
         LOGE(TAG, "Failed to allocate timer save mutex");
         return;
     }
+    action_storage_clear(g_actions);
+    free(g_config);
     g_config = (TimerConfig*)config_psram_alloc(sizeof(TimerConfig), "timer_config");
     if (!g_config) {
         LOGE(TAG, "Failed to allocate timer config");
         return;  // feature disabled
     }
-    load_from_flash(g_config);
+    if (!load_from_flash(g_config, g_actions)) {
+        action_storage_clear(g_actions);
+        apply_defaults(g_config);
+        LOGE(TAG, "Timer configuration unavailable; saved settings are protected");
+        return;
+    }
     g_loaded = true;
     g_config_ready = true;
 }
 
 bool timer_config_snapshot_expiry(uint8_t id, TimerExpirySnapshot* out) {
     if (!g_config_ready || !out || id < 1 || id > TIMER_COUNT) return false;
-    memset(out, 0, sizeof(*out));
+    *out = TimerExpirySnapshot{};
     config_lock();
+    bool copied = true;
     if (g_config && g_loaded) {
         const TimerSettings& settings = g_config->timers[id - 1];
         out->count = settings.expire_action_count;
-        if (out->count > 0) {
-            memcpy(out->actions, settings.expire_actions,
-                   out->count * sizeof(ButtonAction));
-        }
+        copied = action_storage_copy_actions(out->storage, out->actions,
+                                             settings.expire_actions, out->count);
     }
     config_unlock();
-    return true;
+    if (!copied) *out = TimerExpirySnapshot{};
+    return copied;
 }
 
-void timer_config_to_json(JsonObject root) {
-    if (g_config_ready) config_lock();
+bool timer_config_to_json(JsonObject root) {
+    if (!g_config_ready) return false;
+    config_lock();
     for (uint8_t i = 0; i < TIMER_COUNT; i++) {
         char key[4];
         snprintf(key, sizeof(key), "%u", i + 1);
@@ -156,7 +206,8 @@ void timer_config_to_json(JsonObject root) {
                            actions.createNestedObject());
         }
     }
-    if (g_config_ready) config_unlock();
+    config_unlock();
+    return true;
 }
 
 bool timer_config_exists() {
@@ -164,7 +215,7 @@ bool timer_config_exists() {
 }
 
 static bool parse_strict_write(const uint8_t* json, size_t len,
-                               TimerConfig* candidate) {
+                               TimerConfig* candidate, ActionStorage& storage) {
     if (!json || !candidate || len == 0 || len > 4096) return false;
     apply_defaults(candidate);
 
@@ -175,6 +226,7 @@ static bool parse_strict_write(const uint8_t* json, size_t len,
     }
 
     JsonObject root = doc.as<JsonObject>();
+    ActionStorageScope scope(&storage);
     for (JsonPair slot_pair : root) {
         const char* key = slot_pair.key().c_str();
         if (!key || key[1] != '\0' || key[0] < '1' || key[0] > '3') {
@@ -213,14 +265,14 @@ static bool parse_strict_write(const uint8_t* json, size_t len,
                 return false;
             }
             JsonObject action_object = action_value.as<JsonObject>();
-            const char* type = action_object["type"] | "";
-            if (!type[0]) {
-                LOGW(TAG, "Write rejected: timer %s action requires type", key);
+            const char* error = validate_action_envelope(action_object);
+            if (error) {
+                LOGW(TAG, "Write rejected: timer %s action invalid: %s", key, error);
                 return false;
             }
             action_parse(action_object,
                          settings.expire_actions[settings.expire_action_count]);
-            if (!settings.expire_actions[settings.expire_action_count].type[0]) {
+            if (storage.failed || !settings.expire_actions[settings.expire_action_count].type[0]) {
                 LOGW(TAG, "Write rejected: timer %s action fields are too long", key);
                 return false;
             }
@@ -256,7 +308,9 @@ bool timer_config_save_raw(const uint8_t* json, size_t len) {
         xSemaphoreGive(g_save_mutex);
         return false;
     }
-    if (!parse_strict_write(json, len, candidate)) {
+    ActionStorage candidate_actions = {};
+    if (!parse_strict_write(json, len, candidate, candidate_actions)) {
+        action_storage_clear(candidate_actions);
         free(candidate);
         xSemaphoreGive(g_save_mutex);
         return false;
@@ -265,21 +319,13 @@ bool timer_config_save_raw(const uint8_t* json, size_t len) {
     BasicJsonDocument<PsramJsonAllocator> normalized(4096);
     config_to_json(*candidate, normalized.to<JsonObject>());
 
-    File f = Storage.open(TIMER_CONFIG_PATH, "w");
-    if (!f) {
-        LOGE(TAG, "Failed to open for write");
-        free(candidate);
-        xSemaphoreGive(g_save_mutex);
-        return false;
-    }
-
-    size_t expected = measureJson(normalized);
-    size_t written = serializeJson(normalized, f);
-    f.close();
-
-    if (written != expected) {
-        LOGE(TAG, "Write failed (%u of %u)", (unsigned)written,
-             (unsigned)expected);
+    std::string payload;
+    serializeJson(normalized, payload);
+    if (normalized.overflowed() || payload.size() > 4096 ||
+        !storage_write_atomic(TIMER_CONFIG_PATH,
+            reinterpret_cast<const uint8_t*>(payload.data()), payload.size())) {
+        LOGE(TAG, "Atomic timer config write failed");
+        action_storage_clear(candidate_actions);
         free(candidate);
         xSemaphoreGive(g_save_mutex);
         return false;
@@ -287,15 +333,18 @@ bool timer_config_save_raw(const uint8_t* json, size_t len) {
 
     config_lock();
     if (g_config) {
+        action_storage_clear(g_actions);
         memcpy(g_config, candidate, sizeof(TimerConfig));
+        action_storage_move(g_actions, candidate_actions);
         g_loaded = true;
     }
     config_unlock();
+    action_storage_clear(candidate_actions);
     free(candidate);
     storage_publish_usage(false);
     xSemaphoreGive(g_save_mutex);
 
-    LOGI(TAG, "Saved (%u bytes)", (unsigned)written);
+    LOGI(TAG, "Saved (%u bytes)", (unsigned)payload.size());
     return true;
 }
 

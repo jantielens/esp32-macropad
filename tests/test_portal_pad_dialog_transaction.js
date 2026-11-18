@@ -393,7 +393,8 @@ context.actionEditorBuildGamepad = function(prefix, held) {
 };
 context.padWorkspaceEdit();
 assert.strictEqual(context.padState.buttons[0].actions.length, 1);
-assert.strictEqual(context.padState.buttons[0].actions[0].trigger, 'left');
+assert.strictEqual(context.padState.buttons[0].actions[0].op, 'gamepad.trigger.down');
+assert.strictEqual(context.padState.buttons[0].actions[0].args.trigger, 'left');
 assert.strictEqual(context.padState.buttons[0].lp_actions, undefined);
 document.getElementById('pad-edit-widget-type').value = '';
 context.actionEditorBuild = function() { return {}; };
@@ -752,6 +753,31 @@ delete context.bindingValidateInput;
 document.getElementById('pad-edit-widget-type').value = 'gamepad_button';
 assert.strictEqual(gamepadEditor.available({ has_touch: true, has_usb_hid: true }), true);
 assert.strictEqual(gamepadEditor.available({ has_touch: true, has_usb_hid: false }), false);
+context._actionEditorExtensions = [];
+context.actionEditorCatalogEntry = () => ({ button_count: 16 });
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_gamepad.js', 'utf8'), context);
+gamepadEditor.init();
+gamepadEditor.supported = true;
+for (const action of [
+    { op: 'gamepad.button.down', args: { button: 16 } },
+    { op: 'gamepad.hat.down', args: { direction: 'right' } },
+    { op: 'gamepad.trigger.down', args: { trigger: 'left' } }
+]) {
+    context.padWidgetEditorsLoad({ widget_type: 'gamepad_button', actions: [action] });
+    const result = context.padDialogBuildButton();
+    assert.strictEqual(JSON.stringify(result.actions), JSON.stringify([action]));
+    assert.strictEqual(result.lp_actions, undefined);
+}
+context.padWidgetEditorsLoad({ widget_type: 'gamepad_button',
+    actions: [{ op: 'gamepad.button.down', args: { button: { $template: '[var:button]' } } }] });
+assert.throws(() => context.padDialogBuildButton(), /literal Gamepad held control/);
+const heldControl = document.getElementById('pad-edit-gamepad-hold-gamepad-control');
+heldControl.value = 'button';
+heldControl.listeners.change[0]();
+assert.strictEqual(context.padDialogBuildButton().actions[0].op, 'gamepad.button.down');
+context.padWidgetEditorsLoad({ widget_type: 'gamepad_button',
+    actions: [{ op: 'gamepad.button.tap', args: { button: 1 } }] });
+assert.throws(() => context.padDialogBuildButton(), /literal Gamepad held control/);
 document.getElementById('pad-edit-widget-type').value = 'gamepad_button';
 gamepadEditor.supported = false;
 assert.throws(() => context.padDialogBuildButton(), /not supported/);

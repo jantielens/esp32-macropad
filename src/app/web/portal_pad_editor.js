@@ -289,7 +289,7 @@ async function padInit() {
     padSetImageCapabilityVisibility(deviceInfoCache);
     const aeContainer = document.getElementById('pad-action-editors');
     if (aeContainer) {
-        var aeOpts = { showBleHint: true, showKeyHelp: true };
+        var aeOpts = { showBleHint: true, showKeyHelp: true, operations: true };
         aeContainer.innerHTML =
             '<div class="action-group-heading" id="pad-edit-tap-heading">Tap actions</div>' +
             '<div id="pad-edit-tap-actions"></div>' +
@@ -302,7 +302,7 @@ async function padInit() {
     const padActionContainer = document.getElementById('pad-level-action-editors');
     if (padActionContainer) {
         actionEditorListRender('pad-level-action-editors', padLevelActionPrefixes(), padDefaultActionLabels('Tap action'),
-            { actionOptions: { showBleHint: true, showKeyHelp: true } });
+            { actionOptions: { showBleHint: true, showKeyHelp: true, operations: true } });
     }
 
     document.getElementById('pad-cols').addEventListener('change', (e) => {
@@ -449,7 +449,7 @@ function padDefaultActionLabels(base) {
 
 function padLoadLevelActions(actions) {
     padState.padActions = (actions || []).filter(function(action) {
-        return action && typeof action === 'object' && action.type && action.type !== 'none';
+        return action && typeof action === 'object' && (action.op || (action.type && action.type !== 'none'));
     }).slice(0, MAX_ACTIONS);
     actionEditorListLoad(padLevelActionPrefixes(), padState.padActions);
     if (typeof padWorkspace !== 'undefined' && padWorkspace) {
@@ -910,6 +910,7 @@ function padBuildSaveContext() {
     }
 
     var padActions = padCloneJson(padBuildLevelActions());
+    if (payload.action_format_version === undefined) payload.action_format_version = 1;
     if (padActions.length > 0) payload.pad_actions = padActions;
     else delete payload.pad_actions;
 

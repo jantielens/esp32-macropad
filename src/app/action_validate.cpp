@@ -7,7 +7,9 @@
 #include "pad_config.h"
 
 #include <ctype.h>
+#include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static char s_action_validation_error[96];
@@ -144,6 +146,143 @@ const char* action_validate_binding_tokens(const char* value) {
     return nullptr;
 }
 
+const char* action_operation_validate_descriptor(const ActionOperationDef& operation) {
+    if (operation.argument_count > ACTION_OPERATION_MAX_ARGUMENTS ||
+        (operation.argument_count && !operation.arguments))
+        return "invalid operation argument count";
+    if (operation.variable_transaction && operation.execution != ACTION_EXECUTION_SYNC)
+        return "variable transaction must be synchronous";
+    for (uint8_t index = 0; index < operation.argument_count; ++index) {
+        const ActionArgumentDef& argument = operation.arguments[index];
+        if (!argument.name || !argument.name[0]) return "invalid argument name";
+        if (action_argument_is_text(argument.type) &&
+            (!argument.max_length || argument.max_length > ACTION_OPERATION_MAX_TEXT_LENGTH))
+            return "invalid argument length limit";
+        if (argument.type == ACTION_ARGUMENT_INTEGER && argument.minimum > argument.maximum)
+            return "invalid argument range";
+        if (argument.nonzero_minimum &&
+            (argument.type != ACTION_ARGUMENT_INTEGER || argument.minimum != 0 ||
+             argument.nonzero_minimum <= 0 || argument.nonzero_minimum > argument.maximum))
+            return "invalid nonzero minimum";
+        if (argument.type > ACTION_ARGUMENT_STRING) return "unsupported argument type";
+        if (argument.type == ACTION_ARGUMENT_ENUM) {
+            if (!argument.choices || !argument.choice_count) return "enum choices are required";
+            for (uint8_t choice = 0; choice < argument.choice_count; ++choice) {
+                const char* value = argument.choices[choice];
+                if (!value || !value[0] || strlen(value) > argument.max_length ||
+                    (argument.choice_labels && (!argument.choice_labels[choice] || !argument.choice_labels[choice][0])))
+                    return "invalid enum choice";
+                for (uint8_t previous = 0; previous < choice; ++previous)
+                    if (!strcmp(value, argument.choices[previous])) return "duplicate enum choice";
+            }
+        }
+    }
+    return nullptr;
+}
+
+static const char* validate_argument_literal(const ActionArgumentDef& argument, JsonVariantConst value) {
+    if (action_argument_is_text(argument.type)) {
+        if (!value.is<const char*>()) return "argument must be a string";
+        const JsonString text = value.as<JsonString>();
+        if ((!text.size() && !argument.allow_empty) || text.size() > argument.max_length ||
+            strlen(text.c_str()) != text.size()) return "invalid string argument";
+        const char* output = nullptr;
+        return action_argument_normalize_text(argument, text.c_str(), &output, nullptr);
+    }
+    if (argument.type == ACTION_ARGUMENT_BOOLEAN)
+        return value.is<bool>() ? nullptr : "argument must be boolean";
+    if (argument.type != ACTION_ARGUMENT_INTEGER) return "unsupported argument type";
+    if (!value.is<int32_t>()) return "argument must be a whole number";
+    const int32_t number = value.as<int32_t>();
+    return number < argument.minimum || number > argument.maximum ||
+        (argument.nonzero_minimum && number != 0 && number < argument.nonzero_minimum)
+        ? "argument out of range" : nullptr;
+}
+
+const char* action_operation_validate_json(JsonObjectConst action, bool validate_bindings) {
+    if (!action["op"].is<const char*>()) return "operation is required";
+    const ActionOperationDef* operation = action_operation_find(action["op"].as<const char*>());
+    if (!operation) return "unknown or unavailable operation";
+    if (const char* error = action_operation_validate_descriptor(*operation)) return error;
+    if (!action["args"].is<JsonObjectConst>()) return "operation arguments must be an object";
+    for (JsonPairConst pair : action) {
+        if (strcmp(pair.key().c_str(), "op") && strcmp(pair.key().c_str(), "args"))
+            return "unknown operation field";
+    }
+    JsonObjectConst args = action["args"].as<JsonObjectConst>();
+    for (JsonPairConst pair : args) {
+        bool known = false;
+        for (uint8_t index = 0; index < operation->argument_count; ++index)
+            if (!strcmp(pair.key().c_str(), operation->arguments[index].name)) known = true;
+        if (!known) return "unknown operation argument";
+    }
+    for (uint8_t index = 0; index < operation->argument_count; ++index) {
+        const ActionArgumentDef& argument = operation->arguments[index];
+        if (!args.containsKey(argument.name)) return "required operation argument missing";
+        JsonVariantConst value = args[argument.name];
+        if (value.is<JsonObjectConst>()) {
+            JsonObjectConst dynamic = value.as<JsonObjectConst>();
+            if (!argument.dynamic || dynamic.size() != 1 || !dynamic["$template"].is<const char*>())
+                return "invalid dynamic argument";
+            const JsonString templ = dynamic["$template"].as<JsonString>();
+            if (!templ.size() || templ.size() >= BINDING_TEMPLATE_MAX_LEN ||
+                strlen(templ.c_str()) != templ.size() ||
+                !binding_template_well_formed(templ.c_str())) return "invalid dynamic template";
+            const char* error = validate_bindings ? action_validate_binding_tokens(templ.c_str()) : nullptr;
+            if (error) return error;
+        } else {
+            const char* error = validate_argument_literal(argument, value);
+            if (error) return error;
+        }
+    }
+    return nullptr;
+}
+
+const char* action_argument_normalize_text(const ActionArgumentDef& argument, const char* value,
+                                           const char** text, int32_t* integer) {
+    if (!value) return "argument is unavailable";
+    if (action_argument_is_text(argument.type)) {
+        const size_t length = strlen(value);
+        if ((!length && !argument.allow_empty) || length > argument.max_length || !text)
+            return "invalid string argument";
+        if (argument.type == ACTION_ARGUMENT_ENUM) {
+            bool found = false;
+            for (uint8_t index = 0; index < argument.choice_count; ++index)
+                if (argument.choices && argument.choices[index] &&
+                    !strcmp(value, argument.choices[index])) found = true;
+            if (!found) return "unknown enum value";
+        }
+        if (argument.validate_text) {
+            const char* error = argument.validate_text(value);
+            if (error) return error;
+        }
+        *text = value;
+        return nullptr;
+    }
+    if (argument.type == ACTION_ARGUMENT_BOOLEAN) {
+        if (!integer) return "missing boolean output";
+        if (!strcmp(value, "true")) *integer = 1;
+        else if (!strcmp(value, "false")) *integer = 0;
+        else return "argument must be true or false";
+        return nullptr;
+    }
+    if (argument.type != ACTION_ARGUMENT_INTEGER) return "unsupported argument type";
+    if (!integer || !value[0]) return "argument must be a whole number";
+    const char* cursor = value;
+    if (*cursor == '-' || *cursor == '+') ++cursor;
+    if (!*cursor) return "argument must be a whole number";
+    for (; *cursor; ++cursor)
+        if (*cursor < '0' || *cursor > '9') return "argument must be a whole number";
+    errno = 0;
+    char* end = nullptr;
+    long long parsed = strtoll(value, &end, 10);
+    if (errno == ERANGE || *end || parsed < argument.minimum || parsed > argument.maximum ||
+        (argument.nonzero_minimum && parsed != 0 && parsed < argument.nonzero_minimum))
+        return "argument out of range";
+    *integer = static_cast<int32_t>(parsed);
+    return nullptr;
+}
+
 static const char* validate_action_contract(JsonObjectConst action) {
     const char* type = action["type"] | "";
     const ActionTypeDef* registered_type = action_type_find(type);
@@ -226,8 +365,14 @@ static bool validate_binding_field(char* value, size_t, bool, void* context) {
 
 const char* action_validate_json(JsonObjectConst action, bool require_known_type,
                                  const char* value_token, const char* event_value) {
+    if (!action.containsKey("type") && action.containsKey("op"))
+        return action_operation_validate_json(action);
+    if (action.containsKey("type") && action.containsKey("args"))
+        return "mixed legacy and operation action";
     const char* type = action["type"] | "";
     if (!type[0]) return "action missing type";
+    if (action.containsKey("op") && strcmp(type, ACTION_TYPE_VISUAL_ALERT))
+        return "mixed legacy and operation action";
     if (require_known_type && !action_type_known(type)) return "unknown action type";
 
     const ActionTypeDef* registered_type = action_type_find(type);

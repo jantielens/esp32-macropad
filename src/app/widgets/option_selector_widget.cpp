@@ -8,6 +8,7 @@
 #include "../action_registry.h"
 #include "../action_validate.h"
 #include "../device_dialog.h"
+#include "../event_binding.h"
 #include "../icon_store.h"
 #include "../log_manager.h"
 #include "../pad_binding.h"
@@ -270,7 +271,8 @@ void activate(State* state, uint8_t index) {
     ButtonAction actions[MAX_BUTTON_ACTIONS];
     for (uint8_t action = 0; action < state->action_count; ++action) {
         actions[action] = state->actions[action];
-        if (!action_type_substitute_token(action_type_find(actions[action].type), actions[action],
+        if (actions[action].type[0] != '@' &&
+            !action_type_substitute_token(action_type_find(actions[action].type), actions[action],
                                           "{value}", state->config->slots[index].value)) {
             device_dialog_notify("Option action is too long", 3000);
             return;
@@ -288,8 +290,11 @@ void activate(State* state, uint8_t index) {
     lv_obj_t* parent = state->parent;
     bool deleted = false;
     lv_obj_add_event_cb(parent, delete_guard, LV_EVENT_DELETE, &deleted);
+    const ActionEventData event = {state->config->slots[index].value, nullptr, BINDING_VALUE_KIND_TEXT};
+    EventBindingScope event_scope(&event);
     const ActionResult result = action_list_dispatch_result(actions, state->action_count,
-                                                           "OptionValue", ACTION_CONTINUATION_OWNER_LVGL, true);
+                                                           "OptionValue", ACTION_CONTINUATION_OWNER_LVGL, true,
+                                                           state->bindings, state->binding_count);
     if (deleted) return;
     lv_obj_remove_event_cb_with_user_data(parent, delete_guard, &deleted);
     if (result == ACTION_FAILED) {
@@ -487,7 +492,7 @@ void describe(JsonObject& out) {
         JsonObject entry = fields.createNestedObject();
         entry["name"] = icon; entry["type"] = "object";
     }
-    out["note"] = "Five optional touch targets; use {value} in shared actions. Bound mode follows the reported selection.";
+    out["note"] = "Five optional touch targets; use [event:value] in a dynamic action argument for the selected option's value, not its label. Bound mode follows the reported selection.";
 }
 #endif
 

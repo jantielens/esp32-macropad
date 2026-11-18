@@ -118,6 +118,9 @@ static void pad_config_destroy(PadConfig* config) {
 #endif
         free(config->buttons[index].fill_style);
     }
+#if HAS_DISPLAY || HAS_BUTTON
+    action_storage_clear(config->action_storage);
+#endif
     free(config);
 }
 
@@ -140,6 +143,9 @@ static bool pad_config_resize(PadConfig** config_ptr, uint8_t button_capacity) {
     memcpy(replacement->buttons, config->buttons,
            (size_t)config->button_count * sizeof(ScreenButtonConfig));
     config->button_count = 0;
+#if HAS_DISPLAY || HAS_BUTTON
+    config->action_storage = {};
+#endif
     pad_config_destroy(config);
     *config_ptr = replacement;
     return true;
@@ -645,6 +651,9 @@ static bool merge_template_buttons(uint8_t page, PadConfig** out_ptr, bool* owne
         }
         out->main_button_count += merged;
         out->button_count += merged;
+#if HAS_DISPLAY || HAS_BUTTON
+        action_storage_move(out->action_storage, tpl_cfg->action_storage);
+#endif
     }
 
     // Merge template bindings (target wins on name collision)
@@ -661,7 +670,11 @@ static bool merge_template_buttons(uint8_t page, PadConfig** out_ptr, bool* owne
 }
 
 static PadConfig* pad_config_parse(uint8_t page, JsonDocument& doc, bool* owned_failure = nullptr) {
-    (void)page;
+    const char* action_error = pad_validate_action_version(doc.as<JsonObjectConst>(), false);
+    if (action_error) {
+        LOGE(TAG, "Pad %u: %s", page, action_error);
+        return nullptr;
+    }
     JsonArray buttons = doc["buttons"].as<JsonArray>();
     JsonArray overlay_buttons = doc["overlay_buttons"].as<JsonArray>();
     if ((doc.containsKey("buttons") && buttons.isNull()) ||
@@ -676,6 +689,9 @@ static PadConfig* pad_config_parse(uint8_t page, JsonDocument& doc, bool* owned_
         LOGE(TAG, "Pad %u: OOM for %u buttons", page, button_capacity);
         return nullptr;
     }
+#if HAS_DISPLAY || HAS_BUTTON
+    ActionStorageScope action_storage_scope(&out->action_storage);
+#endif
     strlcpy(out->layout, "grid", CONFIG_LAYOUT_NAME_MAX_LEN);
     out->cols = 3;
     out->rows = 3;
@@ -759,6 +775,13 @@ static PadConfig* pad_config_parse(uint8_t page, JsonDocument& doc, bool* owned_
         out->button_count++;
     }
 
+#if HAS_DISPLAY || HAS_BUTTON
+    if (out->action_storage.failed) {
+        LOGE(TAG, "Pad %u: failed to allocate or parse operation arguments", page);
+        pad_config_destroy(out);
+        return nullptr;
+    }
+#endif
     LOGT(TAG, "Pad %u loaded: layout=%s cols=%u rows=%u buttons=%u",
          page, out->layout, out->cols, out->rows, out->button_count);
     return out;
@@ -970,6 +993,8 @@ static const char* read_template_document(JsonObjectConst pad, int page, JsonDoc
 
 const char* pad_validate_with_template(JsonObjectConst pad, int page, bool tolerate_offgrid,
                                        const PadValidationGeometry* geometry) {
+    const char* action_error = pad_validate_action_version(pad);
+    if (action_error) return action_error;
     if (!pad_validation_needs_context())
         return pad_validate(pad, tolerate_offgrid, geometry);
 
@@ -996,9 +1021,14 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
         if (error) *error = "Invalid JSON";
         return false;
     }
+    const char* action_error = pad_validate_action_version(doc.as<JsonObjectConst>());
+    if (action_error) {
+        if (error) *error = action_error;
+        return false;
+    }
     BasicJsonDocument<PsramJsonAllocator> template_doc(256);
     const char* validation_error = read_template_document(doc.as<JsonObjectConst>(), page, template_doc);
-    if (!validation_error && (geometry || pad_validation_needs_context())) {
+    if (!validation_error) {
         validation_error = pad_validate(doc.as<JsonObjectConst>(), true, geometry,
                                          template_doc.as<JsonObjectConst>());
     }

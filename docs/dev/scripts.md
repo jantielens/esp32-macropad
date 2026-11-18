@@ -311,6 +311,9 @@ http://localhost:8765/?profile=jc3248w535&fragment=screensaver
 * The server binds to `127.0.0.1`. Mock writes are process-local and never contact a device.
 * Pad edits, defaults, icon uploads, brightness, and screen commands are retained in memory.
 * Fixtures include populated, empty, widget, template, inherited, dense 8x8, and input-control pads.
+* The action catalog includes typed operation metadata and is filtered by the
+  selected profile's capabilities. Alarm hooks accept legacy actions and typed
+  synchronous operations; the mock does not execute them or resolve bindings.
 * In Button Builder, use MQTT topic `sensors/room/state` (or `mock/received`)
   for JSON with `temperature: 21.37`, `active: true`, and `nested.value: "ok"`.
   Use `mock/zero` for a scalar numeric value.

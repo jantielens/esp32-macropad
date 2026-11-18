@@ -71,6 +71,20 @@ void pad_resolve(const char* const* inputs, size_t count,
 
 #ifdef __cplusplus
 }
+
+class PadBindingScope {
+public:
+    PadBindingScope(const PadBinding* bindings, uint8_t count, bool enabled = true);
+    ~PadBindingScope();
+    PadBindingScope(const PadBindingScope&) = delete;
+    PadBindingScope& operator=(const PadBindingScope&) = delete;
+private:
+    const PadBinding* bindings_;
+    uint8_t count_;
+    bool enabled_;
+    const PadBindingScope* previous_;
+    friend void pad_binding_effective(const PadBinding**, uint8_t*);
+};
 #endif
 
 #endif // HAS_DISPLAY

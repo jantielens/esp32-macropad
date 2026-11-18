@@ -1,6 +1,8 @@
 const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
+const path = require('path');
+const { execFileSync } = require('child_process');
 
 const context = { console, Blob, Set, URL };
 context.window = context;
@@ -28,8 +30,26 @@ assert.deepStrictEqual(padOptions.map(option => option.textContent), ['Pad 1: Ki
 assert.deepStrictEqual(padOptions.map(option => option.value), ['0', '1', '2', '3']);
 context.recipeLoadPad = originalLoadPad;
 const catalog = context.recipeLoadCatalogJson(fixture);
+const recipeOperations = [];
+function collectOperations(value) {
+    if (!value || typeof value !== 'object') return;
+    if (value.op && value.args) recipeOperations.push(value);
+    Object.values(value).forEach(collectOperations);
+}
+catalog.recipes.forEach(recipe => {
+    const parameters = Object.fromEntries((recipe.parameters || []).map(parameter => [parameter.id, parameter.default]));
+    parameters.target_pad = 'pad_1';
+    collectOperations(context.recipeExpand(recipe, parameters));
+});
+assert(recipeOperations.length > 0);
+const actionBinary = process.env.ACTION_CATALOG_BINARY || path.resolve('build/host-tests/tests/test_action_parse');
+execFileSync(actionBinary, ['--validate-operations', JSON.stringify(recipeOperations)]);
 assert.strictEqual(catalog.recipes.length, 3);
 assert.strictEqual(catalog.recipes[0].id, 'pomodoro');
+context.deviceInfoCache = { has_display: true, has_audio: false };
+assert.strictEqual(context.recipeSupports(catalog.recipes[0]), false);
+context.deviceInfoCache.has_audio = true;
+assert.strictEqual(context.recipeSupports(catalog.recipes[0]), true);
 assert.strictEqual(catalog.recipes[0].layout.buttons.length, 1);
 assert.strictEqual(catalog.recipes[0].layout.flow, 'row');
 assert.strictEqual(catalog.recipes[0].layout.buttons[0].size, 'M');
@@ -39,11 +59,11 @@ assert.deepStrictEqual(JSON.parse(JSON.stringify(catalog.recipes[0].layout.butto
     { catalog_id: 'material-symbols:timer', kind: 'mono' });
 assert.strictEqual(catalog.recipes[0].layout.buttons[0].icon_scale_pct, 50);
 assert.strictEqual(catalog.recipes[0].layout.buttons[0].icon_position, 'left');
-assert.strictEqual(catalog.recipes[0].layout.buttons[0].actions[0].timer_command, 'toggle');
-assert.strictEqual(catalog.recipes[0].layout.buttons[0].lp_actions[0].timer_command, 'reset');
-assert.strictEqual(catalog.recipes[0].provision.components.timers['1'].expire_actions[0].type, 'sound_alert');
-assert.strictEqual(catalog.recipes[0].provision.components.timers['1'].expire_actions[0].sound_alert_pattern, '880:200;0:100;880:200');
-assert.strictEqual(catalog.recipes[0].provision.components.timers['1'].expire_actions[1].message, 'Focus session complete');
+assert.strictEqual(catalog.recipes[0].layout.buttons[0].actions[0].op, 'timer.toggle_down');
+assert.strictEqual(catalog.recipes[0].layout.buttons[0].lp_actions[0].op, 'timer.reset');
+assert.strictEqual(catalog.recipes[0].provision.components.timers['1'].expire_actions[0].op, 'audio.alert.tone');
+assert.strictEqual(catalog.recipes[0].provision.components.timers['1'].expire_actions[0].args.pattern, '880:200;0:100;880:200');
+assert.strictEqual(catalog.recipes[0].provision.components.timers['1'].expire_actions[1].args.message, 'Focus session complete');
 
 const energyRecipe = catalog.recipes.find(recipe => recipe.id === 'home-energy');
 const energy = context.recipeExpand(energyRecipe, {
@@ -60,12 +80,12 @@ assert.strictEqual(energyRecipe.parameters[0].description, 'MQTT value for impor
 assert.strictEqual(context.recipeImpactSummary(energyRecipe), 'Adds 5 buttons | needs a 3x4 free area | adds 3 named bindings');
 const clockRecipe = catalog.recipes.find(recipe => recipe.id === 'alarm-clock');
 assert.strictEqual(clockRecipe.layout.buttons[0].fg_color, '333333');
-assert.strictEqual(clockRecipe.layout.buttons[2].actions[0].type, 'confirm');
-assert.strictEqual(clockRecipe.layout.buttons[2].actions[0].message, 'Dismiss the alarm?');
+assert.strictEqual(clockRecipe.layout.buttons[2].actions[0].op, 'dialog.confirm');
+assert.strictEqual(clockRecipe.layout.buttons[2].actions[0].args.message, 'Dismiss the alarm?');
 assert.strictEqual(clockRecipe.layout.buttons[2].label_bottom, 'Dismiss alarm');
 assert.strictEqual(clockRecipe.provision.components.alarms['1'].enabled, false);
 assert.strictEqual(clockRecipe.provision.components.alarms['1'].hour, undefined);
-assert.strictEqual(context.recipeExpand(clockRecipe, { target_pad: 'pad_12' }).provision.components.alarms['1'].on_ring[1].target, 'pad_12');
+assert.strictEqual(context.recipeExpand(clockRecipe, { target_pad: 'pad_12' }).provision.components.alarms['1'].on_ring[1].args.target, 'pad_12');
 assert.strictEqual(clockRecipe.post_install.links[0].fragment, 'alarm-schedule');
 assert.strictEqual(clockRecipe.fonts[0].name, 'dseg7-classic');
 assert.strictEqual(clockRecipe.layout.buttons[1].label_center_style, 'font:dseg7-classic;font_size:96');
@@ -154,7 +174,7 @@ const alarmRecipe = {
     confirmation: 'Replace Alarm 1 actions and disable its schedule?',
     post_install: { message: 'Configure your alarm.', links: [{ label: 'Open alarm schedule', fragment: 'alarm-schedule' }] },
     layout: { buttons: [{ col_offset: 0, row_offset: 0 }] },
-    provision: { components: { alarms: { '1': { enabled: false, on_ring: [{ type: 'screen', target: '${target_pad}' }] } } } },
+    provision: { components: { alarms: { '1': { enabled: false, on_ring: [{ op: 'screen.open', args: { target: '${target_pad}' } }] } } } },
 };
 const alarmCatalog = { schema: 1, catalog_version: 'test', recipes: [alarmRecipe] };
 assert.doesNotThrow(() => context.recipeLoadCatalogJson(JSON.stringify(alarmCatalog)));
@@ -165,7 +185,7 @@ alarmRecipe.layout.buttons[0].col_offset = 10;
 assert.throws(() => context.recipeLoadCatalogJson(JSON.stringify(alarmCatalog)), /10x10/);
 alarmRecipe.layout.buttons[0].col_offset = 0;
 alarmRecipe.layout.buttons[0].row_offset = 0;
-assert.strictEqual(context.recipeExpand(alarmRecipe, { target_pad: 'pad_7' }).provision.components.alarms['1'].on_ring[0].target, 'pad_7');
+assert.strictEqual(context.recipeExpand(alarmRecipe, { target_pad: 'pad_7' }).provision.components.alarms['1'].on_ring[0].args.target, 'pad_7');
 alarmRecipe.parameters = [{ id: 'target_pad', label: 'Target', type: 'string', default: 'pad_1' }];
 assert.throws(() => context.recipeLoadCatalogJson(JSON.stringify(alarmCatalog)), /reserved/);
 delete alarmRecipe.parameters;
@@ -310,7 +330,7 @@ async function testInstallation() {
         if (success) {
             assert.strictEqual(configWrites[1].body['1'].enabled, false);
             assert.strictEqual(configWrites[1].body['1'].hour, 8);
-            assert.strictEqual(configWrites[1].body['1'].on_ring[0].target, 'pad_6');
+            assert.strictEqual(configWrites[1].body['1'].on_ring[0].args.target, 'pad_6');
             assert.strictEqual(install.state.installationComplete, true);
             assert.strictEqual(elements.get('recipe-followup').hidden, false);
             assert.strictEqual(elements.get('recipe-followup-links').children[0].href, '#alarm-schedule');

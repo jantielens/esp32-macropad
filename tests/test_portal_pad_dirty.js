@@ -371,11 +371,12 @@ for (const type of ['mousepad', 'scrollpad']) {
 	assert.strictEqual(option.disabled, false);
 }
 
-const draftInput = { id: 'pad-edit-label-center', value: 'Original', checked: false };
+const draftInput = { id: 'pad-edit-label-center', value: 'Original', checked: false, classList: { contains() { return false; } } };
+const searchInput = { id: 'action-search', value: '', checked: false, classList: { contains(name) { return name === 'action-operation-search'; } } };
 const draftGroup = { open: false };
 const draftRoot = {
 	isConnected: true,
-	querySelectorAll(selector) { return selector.includes('input') ? [draftInput] : selector === '#pad-edit-overlay details' ? [draftGroup] : []; },
+	querySelectorAll(selector) { return selector.includes('input') ? [draftInput, searchInput] : selector === '#pad-edit-overlay details' ? [draftGroup] : []; },
 	querySelector() { return { scrollTop: 42 }; },
 	classList: { add() {}, remove() {}, toggle() {} }
 };
@@ -415,6 +416,9 @@ workspaceContext.padWorkspaceSummaries = () => {};
 const setWorkspaceScope = workspaceContext.padWorkspaceSetScope;
 workspaceContext.padWorkspaceSetScope = () => {};
 workspaceContext.padWorkspaceCapture();
+searchInput.value = 'timer';
+workspaceContext.padWorkspaceEdit();
+assert.strictEqual(workspaceContext.padDirty, false, 'Operation search must not change the saved draft');
 draftInput.value = '[unfinished';
 workspaceContext.padWorkspaceEdit();
 assert.strictEqual(workspaceContext.padState.buttons[0].label_center, 'Original');

@@ -17,9 +17,16 @@ static unsigned activations = 0;
 static lv_event_code_t last_feedback = LV_EVENT_ALL;
 static lv_event_code_t activation_feedback = LV_EVENT_ALL;
 static WidgetState* destroy_on_dispatch = nullptr;
+static const PadBinding* dispatch_bindings = nullptr;
+static uint8_t dispatch_binding_count = 0;
+static const PadBinding* effective_bindings = nullptr;
 extern ButtonDefaults list_test_defaults;
 ActionResult action_list_dispatch_result(const ButtonAction*, uint8_t count, const char*,
-                                         ActionContinuationOwner, bool) {
+                                         ActionContinuationOwner, bool,
+                                         const PadBinding* bindings, uint8_t binding_count) {
+    dispatch_bindings = bindings;
+    dispatch_binding_count = binding_count;
+    pad_binding_get_bindings(&effective_bindings, nullptr);
     if (count) {
         activation_feedback = last_feedback;
         char id[64];
@@ -30,6 +37,8 @@ ActionResult action_list_dispatch_result(const ButtonAction*, uint8_t count, con
     if (destroy_on_dispatch) {
         WidgetState* runtime = destroy_on_dispatch;
         destroy_on_dispatch = nullptr;
+        dispatch_bindings = effective_bindings = nullptr;
+        dispatch_binding_count = 0;
         list_widget_impl::destroy(runtime);
     }
     return ACTION_COMPLETE;
@@ -201,6 +210,24 @@ protected:
         reconfigure(json.as<JsonObject>());
     }
 };
+
+TEST_F(ListWidget, DispatchUsesOriginatingBindingsInsideNestedPadScope) {
+    PadBinding own[] = {{"test", "own"}};
+    PadBinding other[] = {{"test", "other"}};
+    tile.pad_bindings = own;
+    tile.pad_binding_count = 1;
+    {
+        PadBindingScope outer(other, 1);
+        tap(0);
+        const PadBinding* active = nullptr;
+        pad_binding_get_bindings(&active, nullptr);
+        EXPECT_EQ(active, other);
+    }
+    EXPECT_EQ(activations, 1u);
+    EXPECT_EQ(dispatch_bindings, own);
+    EXPECT_EQ(dispatch_binding_count, 1);
+    EXPECT_EQ(effective_bindings, own);
+}
 
 TEST_F(ListWidget, NavigationReservesSlotsAndPreservesItemActionsAndSelection) {
     use_navigation();

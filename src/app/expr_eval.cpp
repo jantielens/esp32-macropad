@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <float.h>
 
 // ============================================================================
 // Value type — tagged union for numbers and strings
@@ -70,6 +71,7 @@ typedef struct {
     char        strings[EXPR_STR_MAX * 4];
     size_t      strings_used;
     expr_datetime_format_fn datetime_format;
+    bool        checked;
 } Parser;
 
 static void skip_ws(Parser* p) {
@@ -324,6 +326,22 @@ static ExprVal parse_primary(Parser* p) {
         if (p->src[p->pos] != '"') return make_err("unclosed string");
         size_t len = (size_t)(p->src + p->pos - start);
         p->pos++; // skip closing "
+        if (p->checked) {
+            if (p->strings_used >= sizeof(p->strings)) return make_err("string too long");
+            char* stored = p->strings + p->strings_used;
+            size_t used = 0;
+            for (size_t i = 0; i < len; ++i) {
+                if (start[i] == '\\' && i + 1 < len &&
+                    (start[i + 1] == '\\' || start[i + 1] == '"')) ++i;
+                if (used >= EXPR_STR_MAX - 1 ||
+                    used + 1 >= sizeof(p->strings) - p->strings_used)
+                    return make_err("string too long");
+                stored[used++] = start[i];
+            }
+            stored[used] = '\0';
+            p->strings_used += used + 1;
+            return make_str(stored, used);
+        }
         return make_str(start, len);
     }
 
@@ -497,19 +515,40 @@ static ExprVal parse_ternary(Parser* p) {
 
 static void format_number(double val, char* out, size_t out_len) {
     // If it's an integer value, format without decimals
-    if (val == (double)(long long)val && fabs(val) < 1e15) {
+    if (isfinite(val) && fabs(val) < 1e15 && val == trunc(val)) {
         snprintf(out, out_len, "%lld", (long long)val);
     } else {
         snprintf(out, out_len, "%g", val);
     }
 }
 
+static bool format_checked_number(double val, char* out, size_t out_len) {
+    char full[64];
+    if (fabs(val) <= 9007199254740991.0 && val == trunc(val)) {
+        int written = snprintf(full, sizeof(full), "%.0f", val);
+        if (written < 0 || static_cast<size_t>(written) >= sizeof(full) ||
+            static_cast<size_t>(written) >= out_len) return false;
+        memcpy(out, full, written + 1);
+        return true;
+    }
+    for (int precision = 6; precision <= DBL_DECIMAL_DIG; ++precision) {
+        int written = snprintf(full, sizeof(full), "%.*g", precision, val);
+        if (written < 0 || static_cast<size_t>(written) >= sizeof(full)) return false;
+        if (strtod(full, nullptr) == val) {
+            if (static_cast<size_t>(written) >= out_len) return false;
+            memcpy(out, full, written + 1);
+            return true;
+        }
+    }
+    return false;
+}
+
 // ============================================================================
 // Public API
 // ============================================================================
 
-bool expr_eval_with_datetime(const char* expression, char* out, size_t out_len,
-                             expr_datetime_format_fn datetime_format) {
+static bool expr_eval_impl(const char* expression, char* out, size_t out_len,
+                           expr_datetime_format_fn datetime_format, bool checked) {
     if (!expression || !out || out_len == 0) {
         if (out && out_len > 0) snprintf(out, out_len, "ERR:null");
         return false;
@@ -529,6 +568,7 @@ bool expr_eval_with_datetime(const char* expression, char* out, size_t out_len,
     parser.nesting = 0;
     parser.strings_used = 0;
     parser.datetime_format = datetime_format;
+    parser.checked = checked;
 
     ExprVal result = parse_ternary(&parser);
 
@@ -544,11 +584,27 @@ bool expr_eval_with_datetime(const char* expression, char* out, size_t out_len,
     }
 
     if (result.type == VAL_STR) {
-        snprintf(out, out_len, "%.*s", (int)result.str_len, result.str);
+        int written = snprintf(out, out_len, "%.*s", (int)result.str_len, result.str);
+        if (checked && (written < 0 || static_cast<size_t>(written) >= out_len)) return false;
     } else {
+        if (checked && !isfinite(result.num)) {
+            snprintf(out, out_len, "ERR:non-finite");
+            return false;
+        }
+        if (checked) return format_checked_number(result.num, out, out_len);
         format_number(result.num, out, out_len);
     }
     return true;
+}
+
+bool expr_eval_with_datetime(const char* expression, char* out, size_t out_len,
+                             expr_datetime_format_fn datetime_format) {
+    return expr_eval_impl(expression, out, out_len, datetime_format, false);
+}
+
+bool expr_eval_checked_with_datetime(const char* expression, char* out, size_t out_len,
+                                     expr_datetime_format_fn datetime_format) {
+    return expr_eval_impl(expression, out, out_len, datetime_format, true);
 }
 
 bool expr_eval(const char* expression, char* out, size_t out_len) {

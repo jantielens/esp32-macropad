@@ -631,6 +631,18 @@ TEST_F(ListSourceTest, ComposedPadValidatesListIdentityAndInheritedItemAliases) 
     EXPECT_EQ(validate_list_pad(pad.as<JsonObjectConst>(), inherited.as<JsonObjectConst>()), nullptr);
     navigation["target"] = "missing";
     EXPECT_NE(validate_list_pad(pad.as<JsonObjectConst>(), inherited.as<JsonObjectConst>()), nullptr);
+    navigation.clear();
+    navigation["op"] = "list.navigate";
+    navigation["args"]["command"] = "next_page";
+    navigation["args"]["target"] = "other";
+    EXPECT_EQ(validate_list_pad(pad.as<JsonObjectConst>(), inherited.as<JsonObjectConst>()), nullptr);
+    navigation["args"]["target"] = "missing";
+    EXPECT_NE(validate_list_pad(pad.as<JsonObjectConst>(), inherited.as<JsonObjectConst>()), nullptr);
+    navigation["args"]["target"].to<JsonObject>()["$template"] = "[var:list]";
+    EXPECT_EQ(validate_list_pad(pad.as<JsonObjectConst>(), inherited.as<JsonObjectConst>()), nullptr);
+    navigation.clear();
+    navigation["type"] = "list_nav";
+    navigation["command"] = "next_page";
     navigation["target"] = "other";
     other["col"] = 0;
     EXPECT_NE(validate_list_pad(pad.as<JsonObjectConst>(), inherited.as<JsonObjectConst>()), nullptr);
@@ -1047,6 +1059,19 @@ const PadConfig* pad_config_acquire(uint8_t page) {
     return &cached_pad;
 }
 void pad_config_release(const PadConfig*) { ++pad_releases; }
+
+TEST_F(ListSourceTest, GateOneSampleUsesValidPadListContext) {
+    ASSERT_NE(pads_source(), nullptr);
+    std::ifstream file("docs/samples/action-framework-gate1.json");
+    ASSERT_TRUE(file.is_open());
+    std::string source((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    JsonDocument document;
+    ASSERT_FALSE(deserializeJson(document, source));
+    JsonObjectConst list = document["buttons"][2];
+    EXPECT_EQ(list_validate_config(list), nullptr);
+    EXPECT_EQ(list_validate_actions(list, nullptr, 0), nullptr);
+    EXPECT_EQ(validate_list_pad(document.as<JsonObjectConst>(), JsonObjectConst()), nullptr);
+}
 
 TEST_F(ListSourceTest, PadsLoadLazilyOneAtATimeAndRefreshByRevision) {
     auto* source = pads_source();

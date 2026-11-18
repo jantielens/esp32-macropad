@@ -8,6 +8,10 @@
 
 #include <ArduinoJson.h>
 
+ActionArgumentBlock* action_storage_parse(ActionStorage& storage,
+                                         const ActionOperationDef& operation,
+                                         JsonObjectConst arguments);
+
 // Parse a JSON action object into a ButtonAction struct.
 // Handles the full action schema: type, target, topic, payload, sequence,
 // beep, sound, volume, timer fields.

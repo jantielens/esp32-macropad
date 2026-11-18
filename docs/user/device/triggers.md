@@ -40,6 +40,8 @@ background color. Uploading stages the image but does not select it. Choose
 to save the selected logo, appearance, and up to three sequential boot actions.
 The action list runs after the first screen appears; saving does not execute it
 now. Appearance settings take effect on the next boot.
+Use **Search actions** to filter the available choices. Unsupported or invalid
+actions are rejected without replacing the saved list.
 
 The settings and action list are saved independently. If one save fails, the
 portal reports which part did not save. Select **Save Boot Settings** again to

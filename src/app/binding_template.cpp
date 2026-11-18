@@ -81,7 +81,8 @@ const char* binding_template_validate_params(const char* scheme, size_t name_len
             bool in_quotes = false;
             int bracket_depth = 0;
             for (const char* p = params; *p; ++p) {
-                if (*p == '"') in_quotes = !in_quotes;
+                if (in_quotes && *p == '\\' && p[1]) ++p;
+                else if (*p == '"') in_quotes = !in_quotes;
                 else if (!in_quotes) {
                     if (*p == '[') ++bracket_depth;
                     else if (*p == ']' && bracket_depth > 0) --bracket_depth;
@@ -117,6 +118,21 @@ static const SchemeEntry* find_scheme(const char* name, size_t name_len) {
     return nullptr;
 }
 
+static char* split_pipe_fallback(char* buf);
+
+BindingResolvedValueKind binding_template_value_kind(const char* templ) {
+    BindingTokenView token;
+    if (!binding_template_single_token(templ, &token) ||
+        token.params_len >= BINDING_TEMPLATE_MAX_LEN) return BINDING_VALUE_KIND_UNKNOWN;
+    const SchemeEntry* entry = find_scheme(token.scheme, token.scheme_len);
+    if (!entry || !entry->spec.value_kind) return BINDING_VALUE_KIND_UNKNOWN;
+    char params[BINDING_TEMPLATE_MAX_LEN];
+    memcpy(params, token.params, token.params_len);
+    params[token.params_len] = '\0';
+    split_pipe_fallback(params);
+    return entry->spec.value_kind(params);
+}
+
 BindingResolverStatus binding_template_resolve_registered(const char* scheme, size_t name_len,
                                                           const char* params, char* out,
                                                           size_t out_len) {
@@ -138,7 +154,7 @@ BindingResolverStatus binding_template_resolve_registered(const char* scheme, si
 static bool find_next_token(const char* templ, const char** out_token_start,
                             const char** out_scheme, size_t* out_scheme_len,
                             const char** out_params, size_t* out_params_len,
-                            const char** out_token_end) {
+                            const char** out_token_end, bool* malformed = nullptr) {
     const char* p = templ;
     while (*p) {
         if (*p != '[') { p++; continue; }
@@ -169,6 +185,10 @@ static bool find_next_token(const char* templ, const char** out_token_start,
             p++;
         }
         if (depth != 0) {
+            if (malformed) {
+                *malformed = true;
+                return false;
+            }
             // Unclosed bracket — skip
             p = token_start + 1;
             continue;
@@ -195,7 +215,8 @@ static char* split_pipe_fallback(char* buf) {
     bool in_quotes = false;
     int bracket_depth = 0;
     for (char* p = buf; *p; p++) {
-        if (*p == '"') in_quotes = !in_quotes;
+        if (in_quotes && *p == '\\' && p[1]) p++;
+        else if (*p == '"') in_quotes = !in_quotes;
         else if (!in_quotes) {
             if (*p == '[') bracket_depth++;
             else if (*p == ']') { if (bracket_depth > 0) bracket_depth--; }
@@ -216,6 +237,17 @@ bool binding_template_has_bindings(const char* label) {
     const char *ts, *sc, *pm, *te;
     size_t sl, pl;
     return find_next_token(label, &ts, &sc, &sl, &pm, &pl, &te);
+}
+
+bool binding_template_well_formed(const char* templ) {
+    if (!templ) return false;
+    const char* p = templ;
+    const char *start, *scheme, *params, *end;
+    size_t scheme_len, params_len;
+    bool malformed = false;
+    while (find_next_token(p, &start, &scheme, &scheme_len, &params, &params_len, &end, &malformed))
+        p = end;
+    return !malformed;
 }
 
 static bool checked_resolution_active = false;

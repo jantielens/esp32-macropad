@@ -23,9 +23,7 @@ void serialize_delay(const ButtonAction& act, JsonObject action) {
     action["duration_ms"] = act.payload.delay.duration_ms;
 }
 
-ActionResult dispatch_delay(const ButtonAction& act, const char* label,
-                            uint32_t continuation_token) {
-    const uint32_t duration_ms = act.payload.delay.duration_ms;
+ActionResult run_delay(uint32_t duration_ms, const char* label, uint32_t continuation_token) {
     if (!action_delay_duration_is_valid(duration_ms)) {
         LOGW(TAG, "%s delay: duration must be 1-%u ms", label,
              (unsigned)ACTION_DELAY_MAX_DURATION_MS);
@@ -46,6 +44,25 @@ ActionResult dispatch_delay(const ButtonAction& act, const char* label,
     return ACTION_PENDING;
 }
 
+ActionResult dispatch_delay(const ButtonAction& act, const char* label,
+                            uint32_t continuation_token) {
+    return run_delay(act.payload.delay.duration_ms, label, continuation_token);
+}
+
+const ActionArgumentDef kWaitArguments[] = {
+    {"duration_ms", "Duration (ms)", ACTION_ARGUMENT_INTEGER, 1, ACTION_DELAY_MAX_DURATION_MS,
+     0, true, "[expr:[event:step]*1000]", "number"},
+};
+
+ActionResult dispatch_wait(const ActionResolvedArgument* arguments, const char* label,
+                           uint32_t continuation_token) {
+    return run_delay(static_cast<uint32_t>(arguments[0].integer), label, continuation_token);
+}
+
+const ActionOperationDef kDelayOperations[] = {
+    {"delay.wait", "Delay", kWaitArguments, 1, dispatch_wait, ACTION_EXECUTION_PAUSABLE},
+};
+
 const char* validate_delay(JsonObjectConst action) {
     if (!action.containsKey("duration_ms") || !action["duration_ms"].is<uint32_t>()) {
         return "delay duration_ms must be a whole number";
@@ -64,7 +81,7 @@ void describe_delay(JsonObject& action) {
     duration["description"] = "whole milliseconds, 1-55000";
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(kDelayActionType, ACTION_TYPE_DELAY, parse_delay, serialize_delay, dispatch_delay, nullptr, describe_delay, nullptr, validate_delay, ACTION_EXECUTION_PAUSABLE);
+DEFINE_AND_REGISTER_ACTION_TYPE(kDelayActionType, ACTION_TYPE_DELAY, parse_delay, serialize_delay, dispatch_delay, nullptr, describe_delay, nullptr, validate_delay, ACTION_EXECUTION_PAUSABLE, true, true, false, nullptr, kDelayOperations, 1);
 
 } // namespace
 

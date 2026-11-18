@@ -13,6 +13,9 @@
 #include "loaded_data.h"
 #include "voice_notes_enrichment_request.h"
 #include "bounded_psram_json_allocator.h"
+#include "action_registry.h"
+#include "action_continuation.h"
+#include "main_loop_bridge.h"
 #include <WiFi.h>
 #include <esp_heap_caps.h>
 #include <LittleFS.h>
@@ -26,6 +29,52 @@
 #include <map>
 #include <mutex>
 #include <thread>
+
+void action_type_register(const ActionTypeDef*) {}
+
+#include "../src/app/actions/voice_note_record_action.cpp"
+#include "../src/app/actions/voice_note_process_action.cpp"
+#include "../src/app/actions/voice_note_delete_action.cpp"
+#include "../src/app/actions/voice_note_load_action.cpp"
+
+namespace {
+LoopBridgeExec queued_delete = nullptr;
+alignas(uint32_t) unsigned char queued_delete_job[LOOP_BRIDGE_CTX_BYTES];
+bool reject_delete_queue = false;
+bool reject_delete_timeout = false;
+uint32_t delete_timeout = UINT32_MAX;
+
+const ActionOperationDef& voice_operation(const ActionTypeDef& owner, const char* id) {
+    for (uint8_t i = 0; i < owner.operation_count; ++i)
+        if (!strcmp(owner.operations[i].id, id)) return owner.operations[i];
+    assert(false && "voice note operation not registered");
+    abort();
+}
+
+bool run_queued_delete() {
+    assert(queued_delete);
+    LoopBridgeExec execute = queued_delete;
+    queued_delete = nullptr;
+    bool ok = false;
+    char message[1] = {};
+    execute(queued_delete_job, &ok, message, sizeof(message));
+    return ok;
+}
+}
+
+bool action_continuation_set_timeout(uint32_t token, uint32_t timeout) {
+    if (!token || reject_delete_timeout) return false;
+    delete_timeout = timeout;
+    return true;
+}
+
+LoopBridgeResult loop_bridge_enqueue(LoopBridgeExec execute, const void* context, size_t size) {
+    if (reject_delete_queue || queued_delete) return LOOP_BRIDGE_BUSY;
+    if (!execute || !context || size > sizeof(queued_delete_job)) return LOOP_BRIDGE_INVALID;
+    queued_delete = execute;
+    memcpy(queued_delete_job, context, size);
+    return LOOP_BRIDGE_OK;
+}
 
 FakeIndexedStorage LittleFS;
 #if USE_SD_STORAGE
@@ -330,17 +379,38 @@ int main(int argc, char**) {
     LittleFS.write_hook = write_hook;
     assert(voice_notes_init());
     assert(capture_psram_stack == !no_psram && capture_internal_stack == no_psram);
+    const auto& toggle = voice_operation(kVoiceNoteRecordActionType, "voice_note.record.toggle");
+    const auto& start = voice_operation(kVoiceNoteRecordActionType, "voice_note.record.start");
+    const auto& pause = voice_operation(kVoiceNoteRecordActionType, "voice_note.record.pause");
+    const auto& resume = voice_operation(kVoiceNoteRecordActionType, "voice_note.record.resume");
+    const auto& save = voice_operation(kVoiceNoteRecordActionType, "voice_note.record.save");
+    const auto& discard = voice_operation(kVoiceNoteRecordActionType, "voice_note.record.discard");
+    const auto& process = voice_operation(kVoiceNoteProcessActionType, "voice_note.process");
+    const auto& remove = voice_operation(kVoiceNoteDeleteAction, "voice_note.delete");
+    const auto& load = voice_operation(kVoiceNoteLoadAction, "voice_note.load");
+    assert(toggle.execution == ACTION_EXECUTION_PAUSABLE && remove.execution == ACTION_EXECUTION_PAUSABLE);
+    assert(process.execution == ACTION_EXECUTION_SYNC && load.execution == ACTION_EXECUTION_SYNC);
+    for (const auto* operation : {&remove, &load}) {
+        assert(operation->argument_count == 1 && operation->arguments[0].dynamic);
+        auto validate = operation->arguments[0].validate_text;
+        assert(validate && !validate("0123456789abcdef"));
+        assert(validate("0123456789abcdeF") && validate("0123456789abcde"));
+    }
+    ActionResolvedArgument invalid_note[] = {{"not-a-note", 0}};
+    assert(load.dispatch(invalid_note, "test", 0) == ACTION_FAILED);
+    assert(remove.dispatch(invalid_note, "test", 3000) == ACTION_FAILED && !queued_delete);
+    assert(process.dispatch(nullptr, "test", 0) == ACTION_FAILED);
     block_start = true;
-    assert(!voice_notes_command(VoiceNoteCommand::Toggle, 0));
-    assert(voice_notes_command(VoiceNoteCommand::Toggle, 1));
+    assert(toggle.dispatch(nullptr, "test", 0) == ACTION_FAILED);
+    assert(toggle.dispatch(nullptr, "test", 1) == ACTION_PENDING);
     wait_until([] { return start_entered.load(); });
     assert(snapshot().state == VoiceNoteState::Starting);
-    assert(!voice_notes_command(VoiceNoteCommand::Toggle, 9000));
+    assert(toggle.dispatch(nullptr, "test", 9000) == ACTION_FAILED);
     block_start = false;
     assert(wait_completion(1));
     assert(strcmp(snapshot().scenario, "general") == 0);
     wait_until([] { return reads.load() > 0; });
-    assert(voice_notes_command(VoiceNoteCommand::Pause, 2));
+    assert(pause.dispatch(nullptr, "test", 2) == ACTION_PENDING);
     assert(wait_completion(2));
     assert(snapshot().state == VoiceNoteState::Paused && owned);
     JsonDocument recent_while_recording;
@@ -348,9 +418,9 @@ int main(int argc, char**) {
     const uint64_t paused_duration = snapshot().duration_ms;
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
     assert(snapshot().duration_ms == paused_duration);
-    assert(voice_notes_command(VoiceNoteCommand::Resume, 3));
+    assert(resume.dispatch(nullptr, "test", 3) == ACTION_PENDING);
     assert(wait_completion(3));
-    assert(voice_notes_command(VoiceNoteCommand::Toggle, 4));
+    assert(toggle.dispatch(nullptr, "test", 4) == ACTION_PENDING);
     assert(wait_completion(4));
     VoiceNoteSnapshot saved = snapshot();
     assert(saved.state == VoiceNoteState::Idle && !owned && saved.last_clip[0]);
@@ -387,7 +457,8 @@ int main(int argc, char**) {
         assert(binding_template_register("loaded", resolve_loaded_test, nullptr, spec));
         loaded_expect("status", "idle");
         assert(!voice_notes_load_request("invalid"));
-        assert(voice_notes_load_request(saved.last_clip));
+        ActionResolvedArgument note_arg[] = {{saved.last_clip, 0}};
+        assert(load.dispatch(note_arg, "test", 0) == ACTION_COMPLETE);
         loaded_expect("status", "loading");
         finish_loaded();
         loaded_expect("status", "ready");
@@ -404,6 +475,18 @@ int main(int argc, char**) {
         assert(voice_notes_open(saved.last_clip, &reader) == VoiceNoteFileStatus::Ready);
     assert(voice_notes_open(saved.last_clip, &other) == VoiceNoteFileStatus::Busy);
     assert(voice_notes_remove(saved.last_clip) == VoiceNoteFileStatus::Busy);
+    ActionResolvedArgument delete_arg[] = {{saved.last_clip, 0}};
+    assert(remove.dispatch(delete_arg, "test", 0) == ACTION_FAILED && !queued_delete);
+    reject_delete_timeout = true;
+    assert(remove.dispatch(delete_arg, "test", 3000) == ACTION_FAILED && !queued_delete);
+    reject_delete_timeout = false;
+    reject_delete_queue = true;
+    assert(remove.dispatch(delete_arg, "test", 3000) == ACTION_FAILED && !queued_delete);
+    reject_delete_queue = false;
+    assert(remove.dispatch(delete_arg, "test", 3000) == ACTION_PENDING && delete_timeout == 0);
+    assert(remove.dispatch(delete_arg, "test", 3002) == ACTION_FAILED);
+    assert(!run_queued_delete() && !wait_completion(3000));
+    assert(voice_notes_exists(saved.last_clip));
     for (auto& reader : readers) voice_notes_close(&reader, saved.last_clip);
     assert(voice_notes_open("missing", &other) == VoiceNoteFileStatus::NotFound);
     const std::vector<uint8_t> original_wav = LittleFS.files.at(path.c_str());
@@ -766,7 +849,7 @@ int main(int argc, char**) {
 
     block_start = true;
     start_entered = false;
-    assert(voice_notes_command(VoiceNoteCommand::Start, 5));
+    assert(start.dispatch(nullptr, "test", 5) == ACTION_PENDING);
     wait_until([] { return start_entered.load(); });
     assert(!voice_notes_command(VoiceNoteCommand::Toggle, 9001));
     assert(strcmp(snapshot().last_clip, saved.last_clip) == 0);
@@ -812,7 +895,7 @@ int main(int argc, char**) {
     assert(voice_notes_command(VoiceNoteCommand::Pause, 12));
     assert(wait_completion(12));
     LittleFS.short_write = true;
-    assert(voice_notes_command(VoiceNoteCommand::Save, 13));
+    assert(save.dispatch(nullptr, "test", 13) == ACTION_PENDING);
     assert(!wait_completion(13));
     LittleFS.short_write = false;
     assert(snapshot().state == VoiceNoteState::Error && !owned);
@@ -821,7 +904,7 @@ int main(int argc, char**) {
 
     assert(voice_notes_command(VoiceNoteCommand::Start, 14));
     assert(wait_completion(14));
-    assert(voice_notes_command(VoiceNoteCommand::Discard, 15));
+    assert(discard.dispatch(nullptr, "test", 15) == ACTION_PENDING);
     assert(wait_completion(15));
     assert(snapshot().state == VoiceNoteState::Idle && !owned);
     assert(strcmp(snapshot().last_clip, saved.last_clip) == 0);
@@ -1047,9 +1130,9 @@ int main(int argc, char**) {
             simulated_outcome = VoiceNotesRequestOutcome::SharedFailure;
         }
         wifi_connected = false;
-        assert(voice_notes_processing_start() == VoiceNotesProcessingStart::Offline);
+        assert(process.dispatch(nullptr, "test", 0) == ACTION_FAILED);
         wifi_connected = true;
-        assert(voice_notes_processing_start() == VoiceNotesProcessingStart::Accepted);
+        assert(process.dispatch(nullptr, "test", 0) == ACTION_COMPLETE);
         wait_until([&] {
             std::lock_guard<std::mutex> lock(request_mutex);
             return request_ids.size() == 2;
@@ -1103,7 +1186,19 @@ int main(int argc, char**) {
             std::lock_guard<std::mutex> lock(request_mutex);
             assert(request_ids.size() == 1 && request_ids[0] == pass_ids[1]);
         }
-        for (const auto& id : pass_ids) assert(voice_notes_remove(id.c_str()) == VoiceNoteFileStatus::Ready);
+        char transient_id[17];
+        strlcpy(transient_id, pass_ids[0].c_str(), sizeof(transient_id));
+        ActionResolvedArgument transient_arg[] = {{transient_id, 0}};
+        assert(load.dispatch(transient_arg, "test", 0) == ACTION_COMPLETE);
+        finish_loaded();
+        loaded_expect("id", transient_id);
+        assert(remove.dispatch(transient_arg, "test", 3001) == ACTION_PENDING);
+        memset(transient_id, '0', 16);
+        assert(run_queued_delete() && wait_completion(3001));
+        assert(!voice_notes_exists(pass_ids[0].c_str()));
+        loaded_expect("status", "idle");
+        for (size_t i = 1; i < pass_ids.size(); ++i)
+            assert(voice_notes_remove(pass_ids[i].c_str()) == VoiceNoteFileStatus::Ready);
 
         assert(voice_notes_command(VoiceNoteCommand::Start, 2050));
         assert(wait_completion(2050));

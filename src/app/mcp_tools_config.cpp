@@ -73,13 +73,21 @@
 #define MCP_CONFIG_STRINGIFY_INNER(value) #value
 #define MCP_CONFIG_STRINGIFY(value) MCP_CONFIG_STRINGIFY_INNER(value)
 
-// Building a ButtonAction to reuse the shared action dispatch path (DRY with the
-// pad editor / physical taps). ACTION_TYPE_* and ButtonAction are always defined.
 #include "pad_config.h"
 
 #if HAS_DISPLAY || HAS_BUTTON
 #include "action_dispatch.h"
+#include "action_parse.h"
+#include "action_storage.h"
 #include "action_validate.h"
+#include "binding_template.h"
+#if HAS_AUDIO
+#include "mcp_control_number.h"
+#endif
+#include "runtime_variables.h"
+#if HAS_DISPLAY
+#include "display_manager_lock.h"
+#endif
 #endif
 
 #if HAS_DISPLAY
@@ -417,7 +425,8 @@ static bool tool_get_component_config(const JsonObject& args, JsonObject& result
 #if ALARM_ENABLED
     if (strcmp(entry->name, "alarms") == 0) {
         result["exists"] = true;
-        alarm_config_to_json(result.createNestedObject("config"));
+        if (!alarm_config_to_json(result.createNestedObject("config")))
+            return cfg_fail(result, err, CFG_ERR_INTERNAL, "Alarm configuration unavailable; saved settings are protected");
         alarm_status_to_json(result.createNestedObject("status"));
         return true;
     }
@@ -428,7 +437,8 @@ static bool tool_get_component_config(const JsonObject& args, JsonObject& result
         bool exists = timer_config_exists();
         result["exists"] = exists;
         if (!exists) result["note"] = "not configured — empty expiry lists are in effect";
-        timer_config_to_json(result.createNestedObject("config"));
+        if (!timer_config_to_json(result.createNestedObject("config")))
+            return cfg_fail(result, err, CFG_ERR_INTERNAL, "Timer configuration unavailable; saved settings are protected");
         return true;
     }
 #endif
@@ -605,6 +615,44 @@ static bool tool_set_component_config(const JsonObject& args, JsonObject& result
 
 #endif // HAS_DISPLAY || HAS_BUTTON || MQTT_TRIGGERS_ENABLED
 
+#if HAS_DISPLAY || (HAS_AUDIO && HAS_BUTTON)
+static bool resolve_control_text(const char* input, char* output, size_t capacity,
+                                 bool reject_overflow) {
+    if (!binding_template_has_bindings(input)) {
+        strlcpy(output, input, capacity);
+        return true;
+    }
+    char resolved[BINDING_TEMPLATE_MAX_LEN];
+#if HAS_DISPLAY
+    bool did_lock = false;
+    display_manager_lock_if_needed(&did_lock);
+#endif
+    runtime_variable_transaction_lock();
+    const bool success = binding_template_resolve_checked(input, resolved, sizeof(resolved));
+    runtime_variable_transaction_unlock();
+#if HAS_DISPLAY
+    display_manager_unlock_if_needed(did_lock);
+#endif
+    if (!success || (reject_overflow && strlen(resolved) >= capacity)) return false;
+    strlcpy(output, resolved, capacity);
+    return true;
+}
+
+static bool dispatch_control_operation(JsonDocument& document) {
+    if (document.overflowed()) return false;
+    ActionStorage storage = {};
+    ButtonAction action = {};
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(document.as<JsonObject>(), action);
+    }
+    const bool success = !storage.failed && action.type[0] == '@' &&
+        action_dispatch(action, "MCP") == ACTION_COMPLETE;
+    action_storage_clear(storage);
+    return success;
+}
+#endif
+
 // ============================================================================
 // notify — show a modal notification using device-wide appearance
 // ============================================================================
@@ -623,13 +671,9 @@ static void exec_notify(const void* ctx, bool* ok, char* msg, size_t msg_len) {
         strlcpy(msg, "dismissed", msg_len);
         return;
     }
-    ButtonAction act;
-    memset(&act, 0, sizeof(act));
-    strlcpy(act.type, ACTION_TYPE_NOTIFY, sizeof(act.type));
-    NotifyPayload& n = act.payload.notify;
-    strlcpy(n.message, c->text, sizeof(n.message));
-    n.duration_ms = c->duration_ms;
-    *ok = action_dispatch(act, "MCP") == ACTION_COMPLETE;
+    char text[CONFIG_DIALOG_MESSAGE_MAX_LEN];
+    *ok = resolve_control_text(c->text, text, sizeof(text), true) &&
+          device_dialog_notify(text, c->duration_ms);
     strlcpy(msg, *ok ? "shown" : "Notification could not be displayed", msg_len);
 }
 
@@ -665,19 +709,31 @@ struct VisualAlertCtx {
 
 static void exec_visual_alert(const void* ctx, bool* ok, char* msg, size_t msg_len) {
     const VisualAlertCtx* c = (const VisualAlertCtx*)ctx;
-    ButtonAction act;
-    memset(&act, 0, sizeof(act));
-    strlcpy(act.type, ACTION_TYPE_VISUAL_ALERT, sizeof(act.type));
-    VisualAlertPayload& v = act.payload.visual_alert;
-    strlcpy(v.va_op,      c->op,      sizeof(v.va_op));
-    strlcpy(v.va_color,   c->color,   sizeof(v.va_color));
-    strlcpy(v.va_pattern, c->pattern, sizeof(v.va_pattern));
-    v.va_period_ms   = c->period_ms;
-    v.va_intensity   = c->intensity;
-    v.va_duration_ms = c->duration_ms;
-    action_dispatch(act, "MCP");
-    *ok = true;
-    strlcpy(msg, (strcmp(c->op, "stop") == 0) ? "cleared" : "raised", msg_len);
+    char color[CONFIG_BINDABLE_SHORT_LEN];
+    if (!resolve_control_text(c->color, color, sizeof(color), true)) {
+        *ok = false;
+        strlcpy(msg, "Alert color could not be resolved", msg_len);
+        return;
+    }
+    uint32_t parsed_color;
+    if (color[0] && !parse_hex_color(color, &parsed_color)) {
+        *ok = false;
+        strlcpy(msg, "Alert color must be a hex color", msg_len);
+        return;
+    }
+    const bool stop = !strcmp(c->op, "stop");
+    JsonDocument document;
+    document["op"] = stop ? "visual_alert.stop" : "visual_alert.start";
+    JsonObject arguments = document["args"].to<JsonObject>();
+    if (!stop) {
+        arguments["color"] = color;
+        arguments["pattern"] = c->pattern[0] ? c->pattern : "breathe";
+        arguments["period_ms"] = c->period_ms;
+        arguments["intensity"] = c->intensity;
+        arguments["duration_ms"] = c->duration_ms;
+    }
+    *ok = dispatch_control_operation(document);
+    strlcpy(msg, *ok ? (stop ? "cleared" : "raised") : "Alert request failed", msg_len);
 }
 
 static bool tool_visual_alert(const JsonObject& args, JsonObject& result, String& err) {
@@ -687,7 +743,17 @@ static bool tool_visual_alert(const JsonObject& args, JsonObject& result, String
     if (strcmp(ctx.op, "start") != 0 && strcmp(ctx.op, "stop") != 0) {
         return cfg_fail(result, err, CFG_ERR_PARAMS, "op must be 'start' or 'stop'");
     }
-    strlcpy(ctx.color,   args["color"]   | "", sizeof(ctx.color));
+    if (args.containsKey("color") && !args["color"].is<const char*>())
+        return cfg_fail(result, err, CFG_ERR_PARAMS, "color must be a string");
+    const char* color = args["color"] | "";
+    const size_t color_length = strlen(color);
+    if (color_length >= sizeof(ctx.color) ||
+        (args.containsKey("color") && args["color"].as<JsonString>().size() != color_length))
+        return cfg_fail(result, err, CFG_ERR_PARAMS, "invalid color length");
+    uint32_t parsed_color;
+    if (color[0] && !binding_template_has_bindings(color) && !parse_hex_color(color, &parsed_color))
+        return cfg_fail(result, err, CFG_ERR_PARAMS, "color must be a hex color");
+    strlcpy(ctx.color, color, sizeof(ctx.color));
     strlcpy(ctx.pattern, args["pattern"] | "", sizeof(ctx.pattern));
     if (ctx.pattern[0] && strcmp(ctx.pattern, "breathe") != 0 &&
         strcmp(ctx.pattern, "blink") != 0 && strcmp(ctx.pattern, "solid") != 0) {
@@ -718,13 +784,28 @@ struct VolumeCtx {
 
 static void exec_set_volume(const void* ctx, bool* ok, char* msg, size_t msg_len) {
     const VolumeCtx* c = (const VolumeCtx*)ctx;
-    ButtonAction act;
-    memset(&act, 0, sizeof(act));
-    strlcpy(act.type, ACTION_TYPE_VOLUME, sizeof(act.type));
-    strlcpy(act.payload.volume.volume_mode,  c->mode,  sizeof(act.payload.volume.volume_mode));
-    strlcpy(act.payload.volume.volume_value, c->value, sizeof(act.payload.volume.volume_value));
-    action_dispatch(act, "MCP");
-    *ok = true;
+    char value[CONFIG_VALUE_MAX_LEN];
+    if (!resolve_control_text(c->value, value, sizeof(value), true)) {
+        *ok = false;
+        strlcpy(msg, "Volume value could not be resolved", msg_len);
+        return;
+    }
+    int32_t percent;
+    if (!mcp_volume_percent(value, &percent)) {
+        *ok = false;
+        strlcpy(msg, "Volume value must be a finite number", msg_len);
+        return;
+    }
+    const bool adjust = !strcmp(c->mode, "adjust");
+    if (!adjust && percent < 0) percent = 0;
+    JsonDocument document;
+    document["op"] = adjust ? "audio.volume.adjust" : "audio.volume.set";
+    document["args"]["percent"] = percent;
+    *ok = dispatch_control_operation(document);
+    if (!*ok) {
+        strlcpy(msg, "Volume request failed", msg_len);
+        return;
+    }
     snprintf(msg, msg_len, "volume %s %s -> %u%%", c->mode, c->value, (unsigned)audio_get_volume());
 }
 
@@ -739,11 +820,24 @@ static bool tool_set_volume(const JsonObject& args, JsonObject& result, String& 
     VolumeCtx ctx;
     memset(&ctx, 0, sizeof(ctx));
     strlcpy(ctx.mode, mode, sizeof(ctx.mode));
-    // Accept a number or a numeric string; the shared volume action clamps/steps.
+    // Accept a number, numeric string, or binding; the operation clamps/steps.
     if (args["value"].is<const char*>()) {
-        strlcpy(ctx.value, args["value"] | "0", sizeof(ctx.value));
+        const char* value = args["value"].as<const char*>();
+        const size_t length = strlen(value);
+        if (length >= sizeof(ctx.value) || args["value"].as<JsonString>().size() != length)
+            return cfg_fail(result, err, CFG_ERR_PARAMS, "invalid value length");
+        int32_t percent;
+        if (!binding_template_has_bindings(value) && !mcp_volume_percent(value, &percent))
+            return cfg_fail(result, err, CFG_ERR_PARAMS, "value must be a finite number or binding");
+        strlcpy(ctx.value, value, sizeof(ctx.value));
+    } else if (args["value"].is<double>()) {
+        const int length = snprintf(ctx.value, sizeof(ctx.value), "%.9g", args["value"].as<double>());
+        int32_t percent;
+        if (length < 0 || static_cast<size_t>(length) >= sizeof(ctx.value) ||
+            !mcp_volume_percent(ctx.value, &percent))
+            return cfg_fail(result, err, CFG_ERR_PARAMS, "value must be a finite number");
     } else {
-        snprintf(ctx.value, sizeof(ctx.value), "%ld", (long)(args["value"] | 0));
+        return cfg_fail(result, err, CFG_ERR_PARAMS, "value must be a finite number or binding");
     }
 
     return mcp_run_control(exec_set_volume, &ctx, sizeof(ctx),

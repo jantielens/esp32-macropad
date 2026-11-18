@@ -293,6 +293,10 @@ static bool lookup_value(const char* key, char* out, size_t out_len) {
         strlcpy(out, s_network.state == WifiNetworkState::Connected ? "ON" : "OFF", out_len);
         return true;
     }
+    if (strcmp(key, "wifi_station_enabled") == 0) {
+        strlcpy(out, s_network.station_enabled ? "ON" : "OFF", out_len);
+        return true;
+    }
     if (strcmp(key, "wifi_ssid") == 0 || strcmp(key, "wifi_ip") == 0) {
         if (s_network.state != WifiNetworkState::Connected && s_network.state != WifiNetworkState::Ap)
             return false;
@@ -479,6 +483,7 @@ static const BindingKeyDoc HEALTH_KEYS[] = {
 #endif
     {"wifi_state",          "Wi-Fi state", "WiFi"},
     {"wifi_connected",      "Wi-Fi network connection", "WiFi"},
+    {"wifi_station_enabled", "Applied Wi-Fi station mode", "WiFi"},
     {"wifi_ssid",           "Wi-Fi network name", "WiFi"},
     {"wifi_ip",             "Wi-Fi IP address", "WiFi"},
     {"wifi_rssi",           "Wi-Fi signal strength", "WiFi"},
@@ -529,6 +534,7 @@ static const BindingReferenceDoc kHealthWifiReference[] = {
     {"Wi-Fi states", "STOPPING", nullptr, "Wi-Fi transport shutdown is underway."},
     {"Wi-Fi states", "ERROR", nullptr, "Radio shutdown failed; Wi-Fi-off cannot be confirmed."},
     {"Wi-Fi details", "wifi_connected", "ON / OFF", "ON only while connected to a network, not while serving an AP."},
+    {"Wi-Fi details", "wifi_station_enabled", "ON / OFF", "Applied station mode, not connection status. Pending requests may show the previous state."},
     {"Wi-Fi details", "wifi_ssid / wifi_ip", nullptr, "Name and address of the active network or AP. Unavailable otherwise; use a |fallback."},
     {"Wi-Fi details", "wifi_rssi", "-62", "Signal strength in dBm while connected to a network. Unavailable otherwise; use a |fallback."},
     {"Wi-Fi details", "wifi_hostname", "kitchen-pad", "Configured Wi-Fi hostname, including while Wi-Fi is off."},
@@ -551,6 +557,7 @@ static const BindingAuthoringKey kHealthAuthoringKeys[] = {
     binding_authoring_integer("heap_free", "B", "245760", "%ld"),
     binding_authoring_text("wifi_ssid", "Home WiFi"),
     binding_authoring_text("wifi_connected", "ON"),
+    binding_authoring_text("wifi_station_enabled", "ON"),
     binding_authoring_text("wifi_state", "CONNECTED"),
     binding_authoring_text("wifi_last_error", "Connection timed out"),
     binding_authoring_text("wifi_ap_active", "ON"),

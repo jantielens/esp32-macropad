@@ -19,6 +19,20 @@ VoiceNoteCancelStatus voice_notes_cancel() { return recorderStatus; }
 #include <utility>
 #include <cmath>
 #include <string>
+#include "../src/app/component_registry.h"
+#define DISPLAY_MANAGER_H
+enum DisplayRefreshRequestResult : uint8_t {
+    DISPLAY_REFRESH_QUEUED, DISPLAY_REFRESH_UNAVAILABLE, DISPLAY_REFRESH_FAILED
+};
+static DisplayRefreshRequestResult refreshResult = DISPLAY_REFRESH_QUEUED;
+static unsigned refreshRequests = 0;
+DisplayRefreshRequestResult display_manager_request_full_refresh() {
+    ++refreshRequests;
+    return refreshResult;
+}
+bool component_registry_add(ComponentDef*) { return true; }
+#include "../src/app/components/epaper_refresh_component.cpp"
+#undef DISPLAY_MANAGER_H
 #include "../src/boards/reterminal-sticky-interactive/drivers/sticky_sensors.cpp"
 #define MQTT_MANAGER_H
 class MqttManager {
@@ -91,7 +105,7 @@ void device_dialog_dismiss_notification(uint32_t generation) {
     }
 }
 bool action_continuation_begin(const ButtonAction*, uint8_t, const char*, uint32_t* token,
-                              ActionContinuationOwner, bool) {
+                              ActionContinuationOwner, bool, ActionContinuationContext) {
     *token = 100 + ++automaticRequests;
     actionBusy = true;
     if (activityDuringBegin) {
@@ -233,6 +247,17 @@ int main() {
 #ifdef HW_BUTTON_DEFAULTS_JSON
 #error Sticky runtime button assignments must remain empty
 #endif
+    AsyncWebServerRequest refreshRequest;
+    epaper_refresh_full_refresh_post(&refreshRequest);
+    CHECK(refreshRequest.response_code == 202 && refreshRequests == 1);
+    refreshResult = DISPLAY_REFRESH_UNAVAILABLE;
+    AsyncWebServerRequest unavailableRequest;
+    epaper_refresh_full_refresh_post(&unavailableRequest);
+    CHECK(unavailableRequest.response_code == 503 && refreshRequests == 2);
+    refreshResult = DISPLAY_REFRESH_FAILED;
+    AsyncWebServerRequest failedRequest;
+    epaper_refresh_full_refresh_post(&failedRequest);
+    CHECK(failedRequest.response_code == 503 && refreshRequests == 3);
     AudioOutputDriver* buzzer = audio_output_driver_create();
     CHECK(buzzer->begin(48000) && buzzerDuty == 0 && buzzer->supportsNativeTone());
     CHECK(!buzzer->supportsMute() && buzzer->needsRebootShutdown());

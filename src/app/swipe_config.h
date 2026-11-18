@@ -4,7 +4,17 @@
 
 #if HAS_DISPLAY
 
-#include "pad_config.h"  // ButtonAction struct, ACTION_TYPE_* constants
+#include "pad_config.h"
+#include <ArduinoJson.h>
+
+struct ActionStorage;
+
+enum SwipeDirection : uint8_t {
+    SWIPE_LEFT,
+    SWIPE_RIGHT,
+    SWIPE_UP,
+    SWIPE_DOWN,
+};
 
 // Swipe action configuration — 4 directions, each a standard ButtonAction
 struct SwipeConfig {
@@ -17,10 +27,12 @@ struct SwipeConfig {
 // Load swipe config from LittleFS. Call after pad_config_init().
 void swipe_config_init();
 
-// Get the current swipe config (never null, returns defaults if file missing).
-const SwipeConfig* swipe_config_get();
+// Serialize or copy under the cache lock; copied operation arguments are owned
+// by storage and remain valid until action_storage_clear(storage).
+bool swipe_config_to_json(JsonObject object);
+bool swipe_config_copy_action(SwipeDirection direction, ButtonAction& action, ActionStorage& storage);
 
-// Save raw JSON to LittleFS and update RAM cache. Returns true on success.
+// Validate and atomically save JSON before replacing the RAM cache.
 bool swipe_config_save_raw(const uint8_t* json, size_t len);
 
 // Reload from flash into RAM cache (e.g. after external file change).

@@ -52,7 +52,7 @@ grep -q 's_confirmed_motion = true' "$MOTION"
 grep -q 'camera_motion_take_confirmed_motion' src/app/camera_motion.h
 grep -q 'CAMERA_MOTION_ACTIONS_ENABLED (HAS_CAMERA && (HAS_DISPLAY || HAS_BUTTON))' src/app/camera_motion_actions.h
 grep -q '"/config/camera_motion_actions.json"' "$ACTIONS"
-grep -q 'action_list_dispatch(actions, count, "Camera motion")' "$ACTIONS"
+grep -q 'action_list_dispatch(snapshot->actions, count, "Camera motion")' "$ACTIONS"
 grep -q 'loop_bridge_dispatch(save_on_main' "$ACTIONS"
 grep -q 'camera_motion_actions_collect_binding_topics' "$ACTIONS"
 grep -q 'Failed to create motion actions lock' "$ACTIONS"

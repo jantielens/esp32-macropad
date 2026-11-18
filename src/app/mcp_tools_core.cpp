@@ -319,8 +319,16 @@ static bool press_reserve(uint8_t action_count, uint32_t* execution_id,
 
 static void press_dispatch_list(const ButtonAction* actions, uint8_t count,
                                 void* context) {
-    (void)context;
-    action_list_dispatch(actions, count, "MCP");
+    const PadConfig* cfg = static_cast<const PadConfig*>(context);
+    action_list_dispatch(actions, count, "MCP", ACTION_CONTINUATION_OWNER_LOOP, false,
+                         cfg->bindings, cfg->binding_count);
+}
+
+static void press_dispatch_observed(const ButtonAction* actions, uint8_t count,
+                                    const ActionRunObserver& observer, void* context) {
+    const PadConfig* cfg = static_cast<const PadConfig*>(context);
+    action_list_dispatch_observed(actions, count, "MCP", ACTION_CONTINUATION_OWNER_LOOP,
+                                  false, cfg->bindings, cfg->binding_count, observer);
 }
 
 static void press_dispatch_action(const ButtonAction& action, void* context) {
@@ -347,8 +355,9 @@ static HaServiceEnqueueResult press_enqueue(const HaServicePayload& payload,
 static void press_record(const HaServiceResult& result, void* context) {
     (void)context;
     ha_service_execution_record(result);
-    LOGW("MCP", "HA queue full: entity='%s' service='%s'",
-         result.entity_id, result.service);
+    if (result.status == HA_STATUS_QUEUE_FULL)
+        LOGW("MCP", "HA queue full: entity='%s' service='%s'",
+             result.entity_id, result.service);
 }
 
 static const McpPressDispatchOps PRESS_DISPATCH_OPS = {
@@ -358,6 +367,7 @@ static const McpPressDispatchOps PRESS_DISPATCH_OPS = {
     press_set_action,
     press_enqueue,
     press_record,
+    press_dispatch_observed,
 };
 
 static void exec_press_button(const void* ctx, bool* ok, char* msg, size_t msg_len) {
@@ -400,7 +410,7 @@ static void exec_press_button(const void* ctx, bool* ok, char* msg, size_t msg_l
     // Confirmation actions keep their on-device approval requirement.
     uint32_t execution_id = 0;
     const McpPressDispatchResult dispatch = mcp_press_button_dispatch(
-        btn.actions, btn.action_count, PRESS_DISPATCH_OPS, nullptr,
+        btn.actions, btn.action_count, PRESS_DISPATCH_OPS, const_cast<PadConfig*>(cfg),
         &execution_id);
     if (dispatch == MCP_PRESS_DISPATCH_BUSY) {
         pad_config_release(cfg);
@@ -614,8 +624,7 @@ static bool tool_tap_screen(const JsonObject& args, JsonObject& result, String& 
 // Board-agnostic buffer for the small set of system commands (reboot,
 // reboot_ap, wifi_connect, wifi_disconnect, wifi_off, ap_enable, ap_disable, screensaver).
 // Sized independently of pad_config.h, which is
-// not compiled on action-less boards (e.g. e-paper), and kept in sync with
-// ButtonAction::payload.system.system_command (CONFIG_ACTION_TYPE_MAX_LEN = 16).
+// not compiled on action-less boards (e.g. e-paper).
 struct SysCtx { char command[16]; };
 
 static void exec_system_command(const void* ctx, bool* ok, char* msg, size_t msg_len) {
@@ -647,20 +656,16 @@ static void exec_system_command(const void* ctx, bool* ok, char* msg, size_t msg
         return;
     }
 
-#if HAS_DISPLAY || HAS_BUTTON
-    // Forward through the shared System Command path (DRY) for the safe
-    // commands; running on the main loop makes LVGL/I/O safe.
-    ButtonAction act;
-    memset(&act, 0, sizeof(act));
-    strlcpy(act.type, ACTION_TYPE_SYSTEM, sizeof(act.type));
-    strlcpy(act.payload.system.system_command, c->command, sizeof(act.payload.system.system_command));
-    action_dispatch(act, "MCP");
-    *ok = true;
-    strlcpy(msg, "dispatched", msg_len);
-#else
+#if HAS_DISPLAY
+    if (strcmp(c->command, "screensaver") == 0) {
+        screen_saver_manager_sleep_now();
+        *ok = true;
+        strlcpy(msg, "dispatched", msg_len);
+        return;
+    }
+#endif
     *ok = false;
     strlcpy(msg, "command unavailable on this board", msg_len);
-#endif
 }
 
 static bool tool_system_command(const JsonObject& args, JsonObject& result, String& err) {

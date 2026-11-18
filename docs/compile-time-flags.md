@@ -718,6 +718,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/action_parse.h
   - src/app/action_registry.cpp
   - src/app/action_registry.h
+  - src/app/action_run_context.cpp
+  - src/app/action_run_context.h
+  - src/app/action_storage.cpp
+  - src/app/action_storage.h
   - src/app/action_validate.cpp
   - src/app/action_validate.h
   - src/app/actions/alarm_mp3_action.cpp
@@ -750,6 +754,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/components/hw_buttons_component.cpp
   - src/app/device_dialog.cpp
+  - src/app/event_binding.cpp
+  - src/app/event_binding.h
   - src/app/expr_binding.cpp
   - src/app/gamepad_hid.cpp
   - src/app/ha_service.cpp
@@ -763,6 +769,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_press_button.h
   - src/app/mcp_tools_config.cpp
   - src/app/mcp_tools_core.cpp
+  - src/app/pad_config.cpp
+  - src/app/pad_config.h
   - src/app/portal_components.cpp
   - src/app/runtime_variables.cpp
   - src/app/var_binding.cpp
@@ -815,6 +823,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/action_parse.h
   - src/app/action_registry.cpp
   - src/app/action_registry.h
+  - src/app/action_run_context.cpp
+  - src/app/action_run_context.h
+  - src/app/action_storage.cpp
+  - src/app/action_storage.h
   - src/app/action_validate.cpp
   - src/app/action_validate.h
   - src/app/actions/alarm_mp3_action.cpp
@@ -896,6 +908,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/display_manager_api.cpp
   - src/app/display_screen_nav.cpp
   - src/app/display_task.cpp
+  - src/app/event_binding.cpp
+  - src/app/event_binding.h
   - src/app/expr_binding.cpp
   - src/app/freetype_mono_font.cpp
   - src/app/freetype_mono_font.h
@@ -1133,8 +1147,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HAS_HA_LIVE**
   - src/app/action_dispatch.cpp
   - src/app/action_dispatch.h
-  - src/app/action_registry.cpp
-  - src/app/action_registry.h
   - src/app/app.ino
   - src/app/binding_builtin_schemes.cpp
   - src/app/binding_sources.cpp
@@ -1214,6 +1226,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/list_widget.cpp
   - src/app/widgets/text_reader_widget.cpp
 - **HAS_MCP**
+  - src/app/action_list.cpp
+  - src/app/action_list.h
+  - src/app/action_run_context.cpp
+  - src/app/action_run_context.h
+  - src/app/actions/ha_service_action.cpp
   - src/app/binding_value.cpp
   - src/app/binding_value.h
   - src/app/board_config.h
@@ -1285,8 +1302,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HAS_MQTT**
   - src/app/action_dispatch.cpp
   - src/app/action_dispatch.h
-  - src/app/action_registry.cpp
-  - src/app/action_registry.h
   - src/app/actions/mqtt_action.cpp
   - src/app/app.ino
   - src/app/binding_builtin_schemes.cpp

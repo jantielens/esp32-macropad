@@ -346,4 +346,7 @@ uint32_t net_activity_age_mqtt_ms() { return NET_ACTIVITY_NEVER; }
 BindingResolverStatus item_binding_resolve(const char*, char*, size_t) {
     return BINDING_RESOLVER_UNAVAILABLE;
 }
+BindingResolvedValueKind item_binding_value_kind(const char*) {
+    return BINDING_VALUE_KIND_UNKNOWN;
+}
 #endif

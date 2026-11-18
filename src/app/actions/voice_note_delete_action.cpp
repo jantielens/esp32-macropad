@@ -51,8 +51,7 @@ void execute_voice_note_delete(const void* opaque, bool* ok, char*, size_t) {
         LOGW("Action", "Delete voice note %s could not complete its action sequence", job->id);
 }
 
-ActionResult dispatch_voice_note_delete(const ButtonAction& action, const char* label, uint32_t token) {
-    const char* id = action.payload.voice_note_delete.id;
+ActionResult queue_voice_note_delete(const char* id, const char* label, uint32_t token) {
     // A queued deletion must not run after its action sequence has timed out.
     if (!token || !voice_notes_id_valid(id) || !action_continuation_set_timeout(token, 0)) {
         LOGW("Action", "%s delete voice note rejected", label);
@@ -66,6 +65,29 @@ ActionResult dispatch_voice_note_delete(const ButtonAction& action, const char* 
     }
     return ACTION_PENDING;
 }
+
+ActionResult dispatch_voice_note_delete(const ButtonAction& action, const char* label, uint32_t token) {
+    return queue_voice_note_delete(action.payload.voice_note_delete.id, label, token);
+}
+
+const char* validate_delete_note_id(const char* id) {
+    return voice_notes_id_valid(id) ? nullptr : "note ID must be 16 lowercase hexadecimal characters";
+}
+
+const ActionArgumentDef kDeleteArguments[] = {
+    {"id", "Note ID", ACTION_ARGUMENT_STRING, 0, 0, 16, true, "[item:id]", "text",
+     nullptr, 0, false, validate_delete_note_id},
+};
+
+ActionResult dispatch_delete_operation(const ActionResolvedArgument* arguments, const char* label,
+                                       uint32_t token) {
+    return queue_voice_note_delete(arguments[0].text, label, token);
+}
+
+const ActionOperationDef kDeleteOperations[] = {
+    {"voice_note.delete", "Delete saved note", kDeleteArguments, 1, dispatch_delete_operation,
+     ACTION_EXECUTION_PAUSABLE},
+};
 
 bool fields_voice_note_delete(ButtonAction& action, ActionFieldVisitor visitor, void* context) {
     return action_visit_field(visitor, context, "id", action.payload.voice_note_delete.id);
@@ -90,6 +112,7 @@ void describe_voice_note_delete(JsonObject& action) {
 DEFINE_AND_REGISTER_ACTION_TYPE(kVoiceNoteDeleteAction, ACTION_TYPE_VOICE_NOTE_DELETE,
     parse_voice_note_delete, serialize_voice_note_delete, dispatch_voice_note_delete,
     fields_voice_note_delete, describe_voice_note_delete, nullptr, validate_voice_note_delete,
-    ACTION_EXECUTION_PAUSABLE);
+    ACTION_EXECUTION_PAUSABLE, true, true, false, nullptr,
+    kDeleteOperations, sizeof(kDeleteOperations) / sizeof(kDeleteOperations[0]));
 }
 #endif

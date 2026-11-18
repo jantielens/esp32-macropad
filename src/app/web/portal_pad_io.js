@@ -186,6 +186,30 @@ function padPastePad() {
 
 // --- Export/import single pad ---
 
+function padCheckImportedActionFormat(pad) {
+    if (pad.action_format_version !== undefined && pad.action_format_version !== 1)
+        throw new Error('Unsupported action format version.');
+    const buttons = (pad.buttons || []).concat(pad.overlay_buttons || []);
+    const arrays = [pad.pad_actions];
+    for (const button of buttons) {
+        if (['action', 'lp_action', 'action_screen', 'lp_action_screen'].some(key => Object.prototype.hasOwnProperty.call(button, key)))
+            throw new Error('Legacy pad actions are not supported.');
+        arrays.push(button.actions, button.lp_actions);
+        if (button.widget_numericrocker_action !== undefined) arrays.push([button.widget_numericrocker_action]);
+    }
+    for (const actions of arrays) {
+        if (actions === undefined || actions === null) continue;
+        if (!Array.isArray(actions)) throw new Error('Pad actions must be arrays.');
+        for (const action of actions) {
+            if (pad.action_format_version !== 1 || !action || typeof action !== 'object' ||
+                Array.isArray(action) || Object.keys(action).some(key => key !== 'op' && key !== 'args') ||
+                typeof action.op !== 'string' || !action.args || typeof action.args !== 'object' ||
+                Array.isArray(action.args) || !actionEditorOperation(action.op))
+                throw new Error('Pad actions require action format version 1 and supported operation envelopes.');
+        }
+    }
+}
+
 async function padExportPad() {
     const tracks = padTrackValidate(true);
     if (!tracks.valid) {
@@ -201,6 +225,7 @@ async function padExportPad() {
     catch (error) { showMessage(error.message, 'error'); return; }
     padCollectButtonDefaults();
     const payload = {
+        action_format_version: 1,
         layout: 'grid',
         cols: padState.cols,
         rows: padState.rows,
@@ -272,6 +297,7 @@ async function padImportPad(evt) {
             (json.overlay_buttons !== undefined && !Array.isArray(json.overlay_buttons))) {
             throw new Error('Invalid pad JSON: missing cols, rows, or buttons');
         }
+        padCheckImportedActionFormat(json);
         const importedSources = padValidateImportedIconSources([json], json._icon_sources);
         if (json.buttons.length + (json.overlay_buttons || []).length > padMaxButtons())
             throw new Error('Combined Main and Overlay button limit exceeded (' + padMaxButtons() + ')');
@@ -406,6 +432,7 @@ async function deviceImportConfig(evt) {
             throw new Error('Unrecognized file format');
         }
         if (!Array.isArray(data.pads)) throw new Error('Device config must contain a pad list.');
+        data.pads.forEach(pad => { if (pad) padCheckImportedActionFormat(pad); });
         const importedSources = padValidateImportedIconSources(data.pads, data._icon_sources);
 
         if (!confirm('Import device configuration? This will overwrite current settings and all pad configs. The device will reboot.')) return;

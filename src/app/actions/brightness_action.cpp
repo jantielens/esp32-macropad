@@ -1,5 +1,7 @@
 #include "action_registry.h"
 #include "log_manager.h"
+#include <limits.h>
+#include <math.h>
 #if defined(ARDUINO) && HAS_DISPLAY
 #include "display_manager.h"
 #include "screen_saver_manager.h"
@@ -10,6 +12,43 @@
 namespace {
 
 constexpr const char* kBrightnessActionTag = "Action";
+
+const ActionArgumentDef kBrightnessSetArguments[] = {
+    {"percent", "Brightness (%)", ACTION_ARGUMENT_INTEGER, 0, 100, 0, true,
+     "[var:brightness]", "number"},
+};
+const ActionArgumentDef kBrightnessAdjustArguments[] = {
+    {"percent", "Adjust (%)", ACTION_ARGUMENT_INTEGER, INT32_MIN, INT32_MAX, 0, true,
+     "[event:step]", "number"},
+};
+
+ActionResult set_brightness(const ActionResolvedArgument* arguments, const char* label, bool adjust) {
+#if defined(ARDUINO) && HAS_DISPLAY
+    int64_t value = arguments[0].integer;
+    if (adjust) value += screen_saver_manager_get_brightness();
+    if (value < MIN_USER_BRIGHTNESS) value = MIN_USER_BRIGHTNESS;
+    if (value > 100) value = 100;
+    screen_saver_manager_set_brightness(static_cast<uint8_t>(value));
+    LOGI(kBrightnessActionTag, "%s brightness -> %u%%", label, static_cast<unsigned>(value));
+    return ACTION_COMPLETE;
+#else
+    (void)arguments;
+    (void)adjust;
+    LOGW(kBrightnessActionTag, "%s brightness: no display", label);
+    return ACTION_FAILED;
+#endif
+}
+
+ActionResult dispatch_brightness_set(const ActionResolvedArgument* arguments, const char* label, uint32_t) {
+    return set_brightness(arguments, label, false);
+}
+ActionResult dispatch_brightness_adjust(const ActionResolvedArgument* arguments, const char* label, uint32_t) {
+    return set_brightness(arguments, label, true);
+}
+const ActionOperationDef kBrightnessOperations[] = {
+    {"display.brightness.set", "Set brightness", kBrightnessSetArguments, 1, dispatch_brightness_set},
+    {"display.brightness.adjust", "Adjust brightness", kBrightnessAdjustArguments, 1, dispatch_brightness_adjust},
+};
 
 void parse_brightness(const JsonObject& action, ButtonAction& act) {
     strlcpy(act.payload.brightness.brightness_mode, action["brightness_mode"] | "",
@@ -29,7 +68,8 @@ ActionResult dispatch_brightness(const ButtonAction& act, const char* label, uin
     const bool adjust = strcmp(brightness.brightness_mode, "adjust") == 0;
     int value = adjust ? screen_saver_manager_get_brightness() + lroundf(atof(brightness.brightness_value))
                        : lroundf(atof(brightness.brightness_value));
-    value = constrain(value, MIN_USER_BRIGHTNESS, 100);
+    if (value < MIN_USER_BRIGHTNESS) value = MIN_USER_BRIGHTNESS;
+    if (value > 100) value = 100;
     screen_saver_manager_set_brightness(value);
     LOGI(kBrightnessActionTag, "%s brightness %s %s -> %u%%", label,
          adjust ? "adjust" : "set", brightness.brightness_value, value);
@@ -75,7 +115,8 @@ void describe_brightness(JsonObject& action) {
     JsonObject editor_value = editor_fields.createNestedObject(); editor_value["name"] = "brightness_value"; editor_value["label"] = "Value (%)"; editor_value["type"] = "text"; editor_value["bindable"] = true; editor_value["max"] = CONFIG_VALUE_MAX_LEN - 1;
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(kBrightnessActionType, ACTION_TYPE_BRIGHTNESS, parse_brightness, serialize_brightness, dispatch_brightness, visit_brightness_fields, describe_brightness, brightness_available, validate_brightness, ACTION_EXECUTION_SYNC);
+DEFINE_AND_REGISTER_ACTION_TYPE(kBrightnessActionType, ACTION_TYPE_BRIGHTNESS, parse_brightness, serialize_brightness, dispatch_brightness, visit_brightness_fields, describe_brightness, brightness_available, validate_brightness, ACTION_EXECUTION_SYNC, true, true, false, nullptr,
+    kBrightnessOperations, sizeof(kBrightnessOperations) / sizeof(kBrightnessOperations[0]));
 
 } // namespace
 

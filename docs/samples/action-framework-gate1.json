@@ -1,0 +1,41 @@
+{
+  "action_format_version": 1,
+  "name": "Action framework",
+  "layout": "grid",
+  "cols": 2,
+  "rows": 2,
+  "buttons": [
+    {
+      "col": 0,
+      "row": 0,
+      "label_center": "Open Pad 2",
+      "actions": [
+        { "op": "screen.open", "args": { "target": "pad_1" } }
+      ]
+    },
+    {
+      "col": 1,
+      "row": 0,
+      "label_center": "Adjust timer 1",
+      "widget_type": "numericrocker",
+      "widget_numericrocker_small_step": 1,
+      "widget_numericrocker_large_step": 10,
+      "widget_numericrocker_action": {
+        "op": "timer.adjust",
+        "args": { "timer": 1, "seconds": { "$template": "[expr:[event:step]*60]" } }
+      }
+    },
+    {
+      "col": 0,
+      "row": 1,
+      "col_span": 2,
+      "widget_type": "list",
+      "widget_data_binding": "[pad:pads]",
+      "widget_list_id": "pads",
+      "widget_list_label_top": "[item:title]",
+      "actions": [
+        { "op": "screen.open", "args": { "target": { "$template": "[item:id]" } } }
+      ]
+    }
+  ]
+}

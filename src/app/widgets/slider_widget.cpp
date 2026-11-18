@@ -8,6 +8,7 @@
 #include "../action_parse.h"
 #include "../action_registry.h"
 #include "../action_validate.h"
+#include "../event_binding.h"
 #include "../binding_value.h"
 #include <algorithm>
 #include <new>
@@ -37,6 +38,8 @@ struct SliderState {
     const SliderConfig* config;
     const ButtonAction* actions;
     uint8_t action_count;
+    const PadBinding* bindings;
+    uint8_t binding_count;
     lv_obj_t* button;
     lv_obj_t* control;
     lv_obj_t* value_label;
@@ -463,7 +466,8 @@ static void slider_release_gesture(SliderState* state) {
     ButtonAction actions[MAX_BUTTON_ACTIONS];
     for (uint8_t index = 0; index < state->action_count; ++index) {
         actions[index] = state->actions[index];
-        if (!action_type_substitute_token(action_type_find(actions[index].type), actions[index], "{value}", value)) {
+        if (actions[index].type[0] != '@' &&
+            !action_type_substitute_token(action_type_find(actions[index].type), actions[index], "{value}", value)) {
             slider_cancel_gesture(state);
             return;
         }
@@ -486,8 +490,11 @@ static void slider_release_gesture(SliderState* state) {
     lv_obj_t* button = state->button;
     bool deleted = false;
     lv_obj_add_event_cb(button, slider_delete_guard, LV_EVENT_DELETE, &deleted);
+    const ActionEventData event = {value, nullptr, BINDING_VALUE_KIND_NUMBER};
+    EventBindingScope event_scope(&event);
     const ActionResult result = action_list_dispatch_result(
-        actions, state->action_count, "SliderValue", ACTION_CONTINUATION_OWNER_LVGL, true);
+        actions, state->action_count, "SliderValue", ACTION_CONTINUATION_OWNER_LVGL, true,
+        state->bindings, state->binding_count);
     if (deleted) return;
     lv_obj_remove_event_cb_with_user_data(button, slider_delete_guard, &deleted);
     if (result == ACTION_FAILED) {
@@ -697,7 +704,7 @@ static void slider_describe(JsonObject& out) {
     side["name"] = "widget_slider_value_side"; side["type"] = "string"; side["default"] = "auto";
     JsonArray sides = side.createNestedArray("enum");
     for (const char* value : {"auto", "before", "after"}) sides.add(value);
-    out["note"] = "Touch slider. actions[] runs once on a changed release; {value} is optional in registered value fields. No long press. Length is a percentage of the widget region width (horizontal) or height (vertical), including the knob. Automatic sizing targets a 50px knob and 20px track, shrinking to fit. Bound reports are authoritative, with a five-second confirmation timeout.";
+    out["note"] = "Touch slider. actions[] runs once on a changed release; use [event:value] in a dynamic action argument for the selected absolute value. No long press. Length is a percentage of the widget region width (horizontal) or height (vertical), including the knob. Automatic sizing targets a 50px knob and 20px track, shrinking to fit. Bound reports are authoritative, with a five-second confirmation timeout.";
 }
 #endif
 
@@ -712,10 +719,13 @@ void slider_cancel_input(WidgetState* runtime) {
 }
 
 void slider_attach(WidgetState* runtime, const ButtonAction* actions, uint8_t count,
-                   lv_event_cb_t input_guard, void* context) {
+                   lv_event_cb_t input_guard, void* context,
+                   const PadBinding* bindings, uint8_t binding_count) {
     auto* state = reinterpret_cast<SliderState*>(runtime->data);
     state->actions = actions;
     state->action_count = count > MAX_BUTTON_ACTIONS ? MAX_BUTTON_ACTIONS : count;
+    state->bindings = bindings;
+    state->binding_count = binding_count;
     if (state->control && input_guard)
         lv_obj_add_event_cb(state->control, input_guard,
             static_cast<lv_event_code_t>(LV_EVENT_ALL | LV_EVENT_PREPROCESS), context);

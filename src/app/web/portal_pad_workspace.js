@@ -215,7 +215,8 @@ function padWorkspaceCapture() {
     if (!padWorkspace || !padWorkspace.selected) return;
     const values = [];
     padWorkspace.root.querySelectorAll('#pad-edit-overlay input, #pad-edit-overlay select, #pad-edit-overlay textarea').forEach(input => {
-        if (input.id) values.push({ id: input.id, value: input.value, checked: input.checked });
+        if (input.id && !input.classList.contains('action-operation-search'))
+            values.push({ id: input.id, value: input.value, checked: input.checked });
     });
     const details = [];
     padWorkspace.root.querySelectorAll('#pad-edit-overlay details').forEach((node, index) => details.push({ index, open: node.open }));

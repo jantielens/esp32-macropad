@@ -20,7 +20,7 @@ async function swipeInitEditors() {
         html += '<details class="editor-group" id="' + dir + '-group">';
         html += '<summary>' + SWIPE_LABELS[dir] + '</summary>';
         html += '<div class="editor-group-body">';
-        html += actionEditorHTML(dir);
+        html += actionEditorHTML(dir, '', { operations: true, mixed: true });
         html += '</div></details>';
     });
     container.innerHTML = html;
@@ -173,7 +173,8 @@ const BOOT_ACTION_PREFIXES = actionEditorSlotPrefixes('boot-action-');
 
 async function bootActionsInitEditors() {
     await getDeviceInfo();
-    actionEditorListRender('boot-action-editors', BOOT_ACTION_PREFIXES);
+    actionEditorListRender('boot-action-editors', BOOT_ACTION_PREFIXES, null,
+        { actionOptions: { operations: true, mixed: true } });
 }
 
 async function loadBootActions() {
@@ -503,8 +504,10 @@ async function initHwButtons() {
         var n = idx + 1;
         var tapPrefixes = hwButtonTapPrefixes(n);
         var holdPrefixes = hwButtonHoldPrefixes(n);
-        actionEditorListRender('hwbtn-' + n + '-tap-editors', tapPrefixes);
-        actionEditorListRender('hwbtn-' + n + '-hold-editors', holdPrefixes);
+        actionEditorListRender('hwbtn-' + n + '-tap-editors', tapPrefixes, null,
+            { actionOptions: { operations: true, mixed: true } });
+        actionEditorListRender('hwbtn-' + n + '-hold-editors', holdPrefixes, null,
+            { actionOptions: { operations: true, mixed: true } });
         actionEditorListLoad(tapPrefixes, btn.tap_actions || []);
         actionEditorListLoad(holdPrefixes, btn.hold_actions || []);
         HW_BUTTON_PREFIXES = HW_BUTTON_PREFIXES.concat(tapPrefixes, holdPrefixes);
@@ -595,7 +598,8 @@ async function initMqttTriggers() {
 
     for (var n = 1; n <= max; n++) {
         var prefixes = mqttTriggerPrefixes(n);
-        actionEditorListRender('mqtttrig-' + n + '-editors', prefixes);
+        actionEditorListRender('mqtttrig-' + n + '-editors', prefixes, null,
+            { actionOptions: { operations: true, mixed: true } });
         var trig = triggers[n - 1];
         if (trig) {
             var topicEl = document.getElementById('mqtttrig-' + n + '-topic');
@@ -685,25 +689,32 @@ async function timerConfigInitEditors() {
     });
     container.innerHTML = html;
     TIMER_IDS.forEach(function(tid) {
-        actionEditorListRender('timer-' + tid + '-expire-editors', timerExpirePrefixes(tid));
+        actionEditorListRender('timer-' + tid + '-expire-editors', timerExpirePrefixes(tid), null,
+            { actionOptions: { operations: true, mixed: true } });
     });
 }
 
 async function loadTimerConfig() {
+    const saveButton = document.getElementById('timer-config-save');
+    if (saveButton) saveButton.disabled = true;
     try {
         const response = await fetch('/api/component/timers/config');
-        if (!response.ok) return;
+        if (!response.ok) throw new Error('Timer configuration unavailable; saved settings are protected');
         const data = await response.json();
         TIMER_IDS.forEach(function(tid) {
             var tcfg = data[String(tid)] || {};
             actionEditorListLoad(timerExpirePrefixes(tid), tcfg.expire_actions || []);
         });
+        if (saveButton) saveButton.disabled = false;
     } catch (err) {
         console.error('Failed to load timer config:', err);
+        showMessage('Failed to load timer config: ' + err.message, 'error');
     }
 }
 
 async function saveTimerConfig() {
+    const saveButton = document.getElementById('timer-config-save');
+    if (!saveButton || saveButton.disabled) return;
     try {
         var payload = {};
         TIMER_IDS.forEach(function(tid) {

@@ -25,6 +25,7 @@ enum HaServiceStatus : uint8_t {
     HA_STATUS_TRANSPORT_ERROR,
     HA_STATUS_HTTP_ERROR,
     HA_STATUS_QUEUE_FULL,
+    HA_STATUS_CANCELLED,
 };
 
 static constexpr int16_t HA_HTTP_STATUS_NONE = INT16_MIN;

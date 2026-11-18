@@ -1,11 +1,56 @@
 // Unit tests for the fixed action continuation pool.
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include "action_continuation.h"
 #include "action_dispatch.h"
 #include "action_list.h"
+#include "action_registry.h"
+#include <string>
+
+#define MQTT_MANAGER_H
+class MqttManager {
+public:
+    bool accepted = true;
+    bool retained = true;
+    unsigned calls = 0;
+    std::string topic;
+    std::string payload;
+    bool publish(const char* new_topic, const char* new_payload, bool new_retained) {
+        ++calls;
+        topic = new_topic;
+        payload = new_payload;
+        retained = new_retained;
+        return accepted;
+    }
+};
+static MqttManager mqtt_manager;
+void action_type_register(const ActionTypeDef*) {}
+#define ARDUINO 1
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#include "../src/app/actions/mqtt_action.cpp"
+#pragma GCC diagnostic pop
+#undef ARDUINO
+
+#if HAS_PSRAM
+#include <esp_heap_caps.h>
+
+static bool s_fail_allocation = false;
+static unsigned s_live_allocations = 0;
+void* heap_caps_malloc(size_t size, uint32_t caps) {
+    if (s_fail_allocation || caps != (MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)) return nullptr;
+    void* memory = std::malloc(size);
+    if (memory) ++s_live_allocations;
+    return memory;
+}
+void heap_caps_free(void* memory) {
+    if (memory) --s_live_allocations;
+    std::free(memory);
+}
+#endif
 
 static unsigned long s_millis = 0;
 extern "C" unsigned long millis() { return s_millis; }
@@ -17,6 +62,7 @@ static char g_dispatched[4][CONFIG_ACTION_TYPE_MAX_LEN] = {};
 static uint8_t g_dispatched_count = 0;
 static bool g_interactive[4] = {};
 static char g_notification[CONFIG_DIALOG_MESSAGE_MAX_LEN] = {};
+static ActionResolvedArgument g_mqtt_arguments[] = {{"home/room", 0}, {"on", 0}};
 
 #define TEST(name) static void test_##name()
 #define RUN(name) do { test_##name(); g_pass++; } while (0)
@@ -31,6 +77,15 @@ static char g_notification[CONFIG_DIALOG_MESSAGE_MAX_LEN] = {};
 
 void action_parse(const JsonObject&, ButtonAction&) {}
 
+const ActionOperationDef* action_operation_for_action(const ButtonAction&, const ActionTypeDef** owner) {
+    if (owner) *owner = nullptr;
+    return nullptr;
+}
+
+bool action_may_pause(const ButtonAction& action) {
+    return !strcmp(action.type, "pending");
+}
+
 ActionResult action_dispatch(const ButtonAction& action, const char*,
                              uint32_t continuation_token, bool interactive) {
     g_interactive[g_dispatched_count] = interactive;
@@ -38,6 +93,8 @@ ActionResult action_dispatch(const ButtonAction& action, const char*,
             sizeof(g_dispatched[0]));
     if (!strcmp(action.type, ACTION_TYPE_NOTIFY))
         strlcpy(g_notification, action.payload.notify.message, sizeof(g_notification));
+    if (!strcmp(action.type, "mqtt_op_test"))
+        return kMqttOperations[0].dispatch(g_mqtt_arguments, "Test", continuation_token);
     if (!strcmp(action.type, "failed")) return ACTION_FAILED;
     if (strcmp(action.type, "pending") == 0) {
         g_pending_token = continuation_token;
@@ -58,6 +115,40 @@ static uint32_t begin_with_suffix(const char* suffix_type) {
     uint32_t token = 0;
     if (!action_continuation_begin(suffix, 1, "Test", &token)) return 0;
     return token;
+}
+
+TEST(mqtt_publish_rejection_stops_suffix_and_legacy_completes) {
+    ButtonAction actions[2] = {};
+    strlcpy(actions[0].type, "mqtt_op_test", sizeof(actions[0].type));
+    strlcpy(actions[1].type, ACTION_TYPE_SCREEN, sizeof(actions[1].type));
+    mqtt_manager.accepted = true;
+    mqtt_manager.calls = 0;
+    reset_dispatch();
+    ASSERT_EQ(action_list_dispatch_result(actions, 2, "Test"), ACTION_COMPLETE);
+    ASSERT_EQ(g_dispatched_count, 2);
+    ASSERT_EQ(mqtt_manager.calls, 1);
+    ASSERT_TRUE(mqtt_manager.topic == "home/room" && mqtt_manager.payload == "on");
+    ASSERT_TRUE(!mqtt_manager.retained);
+
+    g_mqtt_arguments[1].text = "";
+    ASSERT_EQ(kMqttOperations[0].dispatch(g_mqtt_arguments, "Test", 0), ACTION_COMPLETE);
+    ASSERT_TRUE(mqtt_manager.payload.empty());
+    g_mqtt_arguments[1].text = "on";
+    g_mqtt_arguments[0].text = "";
+    ASSERT_EQ(kMqttOperations[0].dispatch(g_mqtt_arguments, "Test", 0), ACTION_FAILED);
+    ASSERT_EQ(mqtt_manager.calls, 2);
+    g_mqtt_arguments[0].text = "home/room";
+
+    mqtt_manager.accepted = false;
+    reset_dispatch();
+    ASSERT_EQ(action_list_dispatch_result(actions, 2, "Test"), ACTION_FAILED);
+    ASSERT_EQ(g_dispatched_count, 1);
+    ASSERT_EQ(mqtt_manager.calls, 3);
+
+    ButtonAction legacy = {};
+    strlcpy(legacy.payload.mqtt.mqtt_topic, "home/room", sizeof(legacy.payload.mqtt.mqtt_topic));
+    ASSERT_EQ(dispatch_mqtt(legacy, "Test", 0), ACTION_COMPLETE);
+    ASSERT_EQ(mqtt_manager.calls, 4);
 }
 
 TEST(success_copies_saved_suffix) {
@@ -107,6 +198,33 @@ TEST(late_completion_cannot_override_timeout) {
     ASSERT_TRUE(!action_continuation_complete(token, true));
     ASSERT_EQ(action_continuation_take(nullptr, nullptr, nullptr, 0),
               ACTION_CONTINUATION_TIMED_OUT);
+}
+
+TEST(captured_context_released_on_terminal_outcomes) {
+    int references = 1;
+    ActionContinuationContext context = {
+        &references,
+        [](void* value) { ++*static_cast<int*>(value); },
+        [](void* value) { --*static_cast<int*>(value); }
+    };
+    for (int outcome = 0; outcome < 3; ++outcome) {
+        s_millis = 0;
+        uint32_t token = 0;
+        ASSERT_TRUE(action_continuation_begin(nullptr, 0, "Test", &token,
+                                              ACTION_CONTINUATION_OWNER_LOOP, false, context));
+        ASSERT_EQ(references, 2);
+        action_continuation_mark_pending(token);
+        if (outcome == 0) {
+            action_continuation_release(token);
+        } else {
+            if (outcome == 1) ASSERT_TRUE(action_continuation_complete(token, false));
+            else s_millis += ACTION_CONTINUATION_TIMEOUT_MS;
+            ASSERT_EQ(action_continuation_take(nullptr, nullptr, nullptr, 0),
+                      outcome == 1 ? ACTION_CONTINUATION_FAILED : ACTION_CONTINUATION_TIMED_OUT);
+        }
+        ASSERT_EQ(references, 1);
+        ASSERT_TRUE(!action_continuation_complete(token, true));
+    }
 }
 
 TEST(scheduled_success_waits_for_due_time) {
@@ -292,12 +410,38 @@ TEST(reservations_block_shutdown_until_consumed) {
     ASSERT_TRUE(!action_continuation_is_pending(token));
 }
 
+#if HAS_PSRAM
+TEST(allocation_failure_does_not_reserve_or_spill) {
+    ButtonAction suffix[1] = {};
+    uint32_t token = 1;
+    s_fail_allocation = true;
+    const bool reserved = action_continuation_begin(suffix, 1, "Allocation", &token);
+    s_fail_allocation = false;
+    ASSERT_TRUE(!reserved && token == 0);
+    ASSERT_TRUE(!action_continuation_is_active());
+    ASSERT_EQ(s_live_allocations, 0);
+
+    reset_dispatch();
+    ButtonAction actions[2] = {};
+    strcpy(actions[0].type, "pending");
+    strcpy(actions[1].type, "next");
+    s_fail_allocation = true;
+    const ActionResult result = action_list_dispatch_result(actions, 2, "Allocation");
+    s_fail_allocation = false;
+    ASSERT_EQ(result, ACTION_FAILED);
+    ASSERT_EQ(g_dispatched_count, 0);
+    ASSERT_TRUE(!g_pending_token && !action_continuation_is_active());
+}
+#endif
+
 int main() {
+    RUN(mqtt_publish_rejection_stops_suffix_and_legacy_completes);
     RUN(reservations_block_shutdown_until_consumed);
     RUN(success_copies_saved_suffix);
     RUN(failure_discards_suffix);
     RUN(timeout_discards_suffix);
     RUN(late_completion_cannot_override_timeout);
+    RUN(captured_context_released_on_terminal_outcomes);
     RUN(scheduled_success_waits_for_due_time);
     RUN(completed_suffix_stays_with_originating_owner);
     RUN(pool_accepts_capacity_and_rejects_overflow);
@@ -308,6 +452,13 @@ int main() {
     RUN(explicit_input_wait_and_completion_are_single_use);
     RUN(dispatch_reports_initial_result_without_changing_suffix_policy);
     RUN(interaction_origin_survives_pause_but_not_next_background_list);
+#if HAS_PSRAM
+    RUN(allocation_failure_does_not_reserve_or_spill);
+    if (s_live_allocations != 0) {
+        std::puts("FAIL: continuation snapshots leaked");
+        ++g_fail;
+    }
+#endif
     std::printf("action continuation: %d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }
