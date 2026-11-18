@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add **Capsule**, a chunky arcade-style Face widget option with all eight
+  expressions. Choose it under **Style** when editing a Face button.
 * Add **Audio > Microphone** for shared digital input gain, rumble reduction,
   a full-width level meter, and optional listening within one microphone test
   in a desktop Chrome browser. Input changes apply immediately; save them as

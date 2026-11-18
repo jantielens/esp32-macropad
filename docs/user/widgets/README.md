@@ -92,8 +92,10 @@ for one example of a full-text source.
 ## Face
 
 A Face adds personality to a button rather than showing a measurement. On
-animated LCD/OLED displays, it blinks, looks around at irregular intervals, and
-transitions smoothly between emotions. Interactive e-paper displays also allow
+animated LCD/OLED displays, it blinks and looks around at irregular intervals.
+Robot Eyes and Doodle Buddy transition smoothly between emotions. Capsule
+switches expressions in a single step and shifts its eyes in whole pixels.
+Interactive e-paper displays also allow
 face motion, with a roughly one-second closed-eye hold instead of a quick blink.
 Updates still follow the device's binding and e-paper refresh settings, so gaze
 and emotion changes can appear as discrete steps. Long refresh or binding
@@ -102,14 +104,15 @@ when your installed firmware includes it; E-Paper Frame firmware does not offer
 pad widgets.
 
 1. Select a button in **Pads**, then choose **Face** in **Content**.
-2. Choose **Style**: **Robot Eyes** for an eyes-only face, or **Doodle Buddy**
- for eyes, eyebrows, and a mouth.
+2. Choose **Style**: **Robot Eyes** for an eyes-only face, **Doodle Buddy**
+ for eyes, eyebrows, and a mouth, or **Capsule** for a round arcade face
+ with chunky pixels.
 3. Set **Emotion** to `content`, `relaxed`, `happy`, `worried`, `angry`, `sad`,
  `surprised`, or `sleepy`. You can choose a suggested value or enter a binding
  that returns one of these lowercase names. Blank means `content`.
 4. Choose **Liveliness**: **Still**, **Calm**, **Normal**, or **Lively**.
  **Still** disables blinking and gaze movement, keeps the gaze centered, and
- only animates emotion changes. The other options change idle activity, not the
+ still shows emotion changes. The other options change idle activity, not the
  emotion source. **Normal** is the default.
 5. Use the existing button text color for the face and background color for its
  background. Labels and icons remain available in the shared content group.

@@ -16,8 +16,8 @@
         actions: { tap: true, longPress: true },
         load: button => { fixedEmotion = button.widget_face_emotion || 'content'; },
         build: button => {
-            if (!['robot', 'doodle'].includes(button.widget_face_style))
-                fail('pad-edit-face-style', 'Choose Robot Eyes or Doodle Buddy.');
+            if (!['robot', 'doodle', 'arcade'].includes(button.widget_face_style))
+                fail('pad-edit-face-style', 'Choose Robot Eyes, Doodle Buddy, or Capsule.');
             if (!['still', 'calm', 'normal', 'lively'].includes(button.widget_face_liveliness))
                 fail('pad-edit-face-liveliness', 'Choose Still, Calm, Normal, or Lively.');
             const value = button.widget_data_binding || 'content';

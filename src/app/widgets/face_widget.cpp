@@ -9,13 +9,13 @@
 #include <string.h>
 
 enum class FaceEmotion : uint8_t { Content, Relaxed, Happy, Worried, Angry, Sad, Surprised, Sleepy };
-enum class FaceStyle : uint8_t { Robot, Doodle };
+enum class FaceStyle : uint8_t { Robot, Doodle, Arcade };
 enum class FaceLiveliness : uint8_t { Calm, Normal, Lively, Still };
 
 static constexpr const char* face_emotions[] = {
     "content", "relaxed", "happy", "worried", "angry", "sad", "surprised", "sleepy"
 };
-static constexpr const char* face_styles[] = {"robot", "doodle"};
+static constexpr const char* face_styles[] = {"robot", "doodle", "arcade"};
 static constexpr const char* face_liveliness[] = {"calm", "normal", "lively", "still"};
 
 struct FaceConfig {
@@ -68,7 +68,7 @@ static const char* face_validate(JsonObjectConst btn) {
     if (btn.containsKey("widget_face_style") &&
         (!btn["widget_face_style"].is<const char*>() ||
          face_choice(btn["widget_face_style"].as<const char*>(), face_styles) < 0))
-        return "face style must be robot or doodle";
+        return "face style must be robot, doodle, or arcade";
     if (btn.containsKey("widget_face_emotion") &&
         (!btn["widget_face_emotion"].is<const char*>() ||
          face_choice(btn["widget_face_emotion"].as<const char*>(), face_emotions) < 0))
@@ -139,9 +139,10 @@ static uint32_t face_pause(FaceState* state) {
 
 static void face_set_emotion(FaceState* state, FaceEmotion emotion, uint32_t now) {
     if (state->emotion == emotion) return;
-    state->from = state->pose;
     state->emotion = emotion;
     state->transition_start = now;
+    if (state->style == FaceStyle::Arcade) return;
+    state->from = state->pose;
     state->transition_ms = emotion == FaceEmotion::Surprised ? 180 :
         emotion == FaceEmotion::Relaxed || emotion == FaceEmotion::Sleepy ? 900 : 450;
     if (DISPLAY_DISABLE_ANIMATIONS && !HAS_LVGL_EPAPER) {
@@ -246,18 +247,107 @@ static void face_eye(const FaceDraw& draw, const FaceState* state, float center,
     }
 }
 
+static constexpr int capsule_columns = 15, capsule_rows = 11;
+static constexpr int capsule_eye_top = 3, capsule_mouth_top = 7;
+static constexpr int capsule_insets[capsule_rows] = {4, 2, 1, 0, 0, 0, 0, 0, 0, 1, 2};
+
+struct CapsulePose {
+    char eye[4][6];
+    char mouth[3][8];
+};
+
+// Cutouts in the solid silhouette. The right eye mirrors the left.
+static constexpr CapsulePose capsule_poses[] = {
+    {{".....", ".##..", ".##..", ".##.."}, {".......", ".#####.", "......."}}, // content
+    {{".....", ".....", "####.", ".##.."}, {".......", ".#...#.", "..###.."}}, // relaxed
+    {{"..#..", ".#.#.", "#...#", "....."}, {"#.....#", ".#####.", "..###.."}}, // happy
+    {{"...##", "..#..", ".##..", ".##.."}, {".......", "..###..", ".#...#."}}, // worried
+    {{"##...", "..##.", ".####", ".##.."}, {".......", ".#####.", ".#...#."}}, // angry
+    {{"...#.", "..#..", ".##..", "....."}, {"..###..", ".#...#.", "#.....#"}}, // sad
+    {{".###.", "##.##", "##.##", ".###."}, {"..###..", ".##.##.", "..###.."}}, // surprised
+    {{".....", ".....", ".....", "#####"}, {".......", "...#...", "......."}}, // sleepy
+};
+static_assert(sizeof(capsule_poses) / sizeof(*capsule_poses) == sizeof(face_emotions) / sizeof(*face_emotions),
+              "Capsule needs a sprite for every emotion");
+
+static int capsule_scale(const lv_area_t& bounds) {
+    const int width = lv_area_get_width(&bounds), height = lv_area_get_height(&bounds);
+    if (width < capsule_columns || height < capsule_rows) return 0;
+    const int sx = (width - 2) / capsule_columns, sy = (height - 2) / capsule_rows;
+    const int scale = sx < sy ? sx : sy;
+    return scale > 0 ? scale : 1;
+}
+
+static bool capsule_closed(const FaceState& state) { return state.eye_open < 0.5f; }
+
+static int capsule_gaze(const FaceState& state) {
+    if (capsule_closed(state)) return 0;
+    return (state.gaze_x >= 2.5f) - (state.gaze_x <= -2.5f);
+}
+
+static lv_area_t capsule_area(const lv_area_t& bounds, int scale) {
+    const int x = bounds.x1 + (lv_area_get_width(&bounds) - capsule_columns * scale) / 2;
+    const int y = bounds.y1 + (lv_area_get_height(&bounds) - capsule_rows * scale) / 2;
+    return {x, y, x + capsule_columns * scale - 1, y + capsule_rows * scale - 1};
+}
+
+static void capsule_draw(lv_layer_t* layer, const lv_area_t& bounds, lv_color_t color, const FaceState& state) {
+    const int scale = capsule_scale(bounds);
+    if (!scale) return;
+    const auto area = capsule_area(bounds, scale);
+    const auto& pose = capsule_poses[static_cast<unsigned>(state.emotion)];
+    const int gaze = capsule_gaze(state);
+    const bool closed = capsule_closed(state);
+    lv_draw_rect_dsc_t rect;
+    lv_draw_rect_dsc_init(&rect);
+    rect.bg_color = color;
+
+    for (int row = 0; row < capsule_rows; ++row) {
+        int run = -1;
+        const int end = capsule_columns - capsule_insets[row];
+        for (int col = capsule_insets[row]; col <= end; ++col) {
+            bool ink = col < end;
+            if (ink && row >= capsule_eye_top && row < capsule_mouth_top &&
+                col > 0 && col < capsule_columns - 1) {
+                const int shifted = col - gaze;
+                const int reflected = capsule_columns - 1 - shifted;
+                const int eye_col = (shifted < reflected ? shifted : reflected) - 1;
+                if (eye_col >= 0 && eye_col < 5) {
+                    const int eye_row = row - capsule_eye_top;
+                    ink = closed ? eye_row != 2 : pose.eye[eye_row][eye_col] != '#';
+                }
+            }
+            if (ink && row >= capsule_mouth_top && row < capsule_mouth_top + 3 && col >= 4 && col < 11)
+                ink = pose.mouth[row - capsule_mouth_top][col - 4] != '#';
+            if (ink) {
+                if (run < 0) run = col;
+            } else if (run >= 0) {
+                const lv_area_t span{area.x1 + run * scale, area.y1 + row * scale,
+                                     area.x1 + col * scale - 1, area.y1 + (row + 1) * scale - 1};
+                lv_draw_rect(layer, &rect, &span);
+                run = -1;
+            }
+        }
+    }
+}
+
 static void face_draw(lv_event_t* event) {
     auto* state = static_cast<FaceState*>(lv_event_get_user_data(event));
     lv_obj_t* object = state->object;
     lv_area_t bounds;
     lv_obj_get_coords(object, &bounds);
+    lv_obj_t* button = lv_obj_get_parent(object);
+    const auto color = lv_obj_get_style_text_color(button, LV_PART_MAIN);
+    if (state->style == FaceStyle::Arcade) {
+        capsule_draw(lv_event_get_layer(event), bounds, color, *state);
+        return;
+    }
     const float scale = fminf(lv_area_get_width(&bounds) / 180.0f, lv_area_get_height(&bounds) / 140.0f);
     if (scale <= 0) return;
-    lv_obj_t* button = lv_obj_get_parent(object);
     const FaceDraw draw = {
         lv_event_get_layer(event), (bounds.x1 + bounds.x2) / 2.0f,
         (bounds.y1 + bounds.y2) / 2.0f, scale,
-        lv_obj_get_style_text_color(button, LV_PART_MAIN),
+        color,
         lv_obj_get_style_bg_color(button, LV_PART_MAIN)
     };
     face_eye(draw, state, -41, -1);
@@ -320,6 +410,20 @@ static void face_invalidate_region(lv_obj_t* object, const FaceRegion& before, c
 }
 
 static void face_invalidate_changes(const FaceState& before, const FaceState& after) {
+    if (after.style == FaceStyle::Arcade) {
+        const bool emotion_changed = before.emotion != after.emotion;
+        if (!emotion_changed && capsule_closed(before) == capsule_closed(after) &&
+            capsule_gaze(before) == capsule_gaze(after)) return;
+        lv_area_t bounds;
+        lv_obj_get_coords(after.object, &bounds);
+        const int scale = capsule_scale(bounds);
+        if (!scale) return;
+        auto dirty = capsule_area(bounds, scale);
+        dirty.y2 = dirty.y1 + (capsule_mouth_top + (emotion_changed ? 3 : 0)) * scale - 1;
+        dirty.y1 += capsule_eye_top * scale;
+        lv_obj_invalidate_area(after.object, &dirty);
+        return;
+    }
     for (float center : {-41.0f, 41.0f})
         face_invalidate_region(after.object, face_eye_region(before, center), face_eye_region(after, center));
     if (after.style != FaceStyle::Doodle) return;
@@ -338,6 +442,7 @@ static void face_hide(WidgetState* runtime) {
 
 static void face_show(WidgetState* runtime) {
     auto* state = reinterpret_cast<FaceState*>(runtime->data);
+    const bool reopen = state->style == FaceStyle::Arcade && state->object && capsule_closed(*state);
     const uint32_t now = lv_tick_get();
     state->active = true;
     state->last_frame = now;
@@ -352,6 +457,7 @@ static void face_show(WidgetState* runtime) {
     state->gaze_from_x = state->gaze_to_x = state->gaze_x;
     state->gaze_from_y = state->gaze_to_y = state->gaze_y;
     state->gaze_start = now;
+    if (reopen) lv_obj_invalidate(state->object);
 }
 
 static void face_deleted(lv_event_t* event) {

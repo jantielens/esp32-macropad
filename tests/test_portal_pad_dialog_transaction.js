@@ -724,6 +724,10 @@ for (const liveliness of ['still', 'calm', 'normal', 'lively']) {
         widget_face_liveliness: liveliness });
     assert.strictEqual(context.padDialogBuildButton().widget_face_liveliness, liveliness);
 }
+context.padWidgetEditorsLoad({ widget_type: 'face', widget_face_style: 'arcade', widget_data_binding: '[pad:mood]' });
+const capsule = context.padDialogBuildButton();
+assert.strictEqual(capsule.widget_face_style, 'arcade');
+assert.strictEqual(capsule.widget_data_binding, '[pad:mood]');
 context.padWidgetEditorsLoad({ widget_type: 'face', widget_face_emotion: 'happy' });
 assert.strictEqual(context.padDialogBuildButton().widget_data_binding, 'happy', 'Load renderer-only fixed emotion settings');
 context.padWidgetEditorsLoad({ widget_type: 'face' });

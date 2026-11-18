@@ -1085,7 +1085,7 @@ or a separately implemented approximation.
 The existing [Face fixture](../../tests/test_face_widget.cpp) includes the
 production implementation, creates an off-screen 192x160 RGB888 LVGL display,
 and captures its flush output. Setting `FACE_WIDGET_PREVIEW_DIR` exports PPM
-images. The expression test exports both styles across all eight emotions;
+images. The expression test exports all three styles across all eight emotions;
 the sequence test exports 180 frames per style, advancing the animation clock
 by 66 ms per frame and changing target emotion every 20 frames through the
 eight emotions.
@@ -1107,8 +1107,10 @@ Use `test_face_widget_0`, the animation-enabled LCD profile. Profile `_1`
 disables animations and capture export; `_2` exercises interactive e-paper
 animation behavior, rather than simulating a physical panel. The destination
 directory must already exist. Output names include `robot_content.ppm`,
-`doodle_happy.ppm`, and `robot_frame_0.ppm` through `robot_frame_179.ppm`
-(with equivalent `doodle` frames). Outputs stay under ignored `build/`.
+`doodle_happy.ppm`, `arcade_sleepy.ppm`, and `robot_frame_0.ppm` through
+`robot_frame_179.ppm` (with equivalent `doodle` and `arcade` frames). Outputs
+stay under ignored `build/`. Capsule uses a 15x11 sprite grid. Its expression
+changes are discrete, and its gaze and blink use the same grid.
 
 #### Make an Expression Sheet and Animation
 
@@ -1123,7 +1125,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 directory = Path("build/face-previews")
-styles = ("robot", "doodle")
+styles = ("robot", "doodle", "arcade")
 emotions = "content relaxed happy worried angry sad surprised sleepy".split()
 tiles = []
 for style in styles:
