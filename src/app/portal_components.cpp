@@ -116,8 +116,8 @@
 #include "components/music_component.cpp"
 #endif // HAS_SOUND_PLAYER
 
-#if HAS_MICROPHONE_STREAMING
-#include "components/live_microphone_component.cpp"
+#if HAS_AUDIO_INPUT
+#include "components/microphone_component.cpp"
 #endif
 
 #if HAS_VOICE_NOTES

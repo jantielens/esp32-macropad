@@ -40,6 +40,23 @@ SD_PROFILE_BASES = {
 PROFILES = ("esp32-p4-lcd4b", "jc3248w535", "reterminal-e1003-frame", "crowpanel-4.2-interactive",
             "reterminal-sticky-interactive", *SD_PROFILE_BASES)
 SCENARIOS = ("normal", "load-error", "save-error", "invalid-bindings")
+
+
+def parse_microphone_settings(update):
+    if not isinstance(update, dict):
+        raise ValueError("Microphone settings must be an object")
+    if "microphone_gain_db" in update:
+        value = update["microphone_gain_db"]
+        if isinstance(value, str) and re.fullmatch(r"[+-]?[0-9]+", value):
+            value = int(value)
+        if type(value) is not int or not -12 <= value <= 24:
+            raise ValueError("Invalid microphone gain")
+        update["microphone_gain_db"] = value
+    if "microphone_reduce_rumble" in update and type(update["microphone_reduce_rumble"]) is not bool:
+        raise ValueError("Invalid microphone rumble setting")
+    return update
+
+
 HA_ENTITIES = {
     "sensor.living_room_temperature": {
         "name": "Living room temperature", "state": "21.37", "unit": "\u00b0C",
@@ -330,6 +347,11 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 self._serve_file(APP_WEB_DIR / "portal_live_microphone.js")
             else:
                 self._serve_json({"error": "Live Microphone is unavailable"}, 404)
+        elif path == "/portal-microphone.js":
+            if self._profile() in ("esp32-p4-lcd4b", "reterminal-sticky-interactive"):
+                self._serve_file(APP_WEB_DIR / "portal_microphone.js")
+            else:
+                self._serve_json({"error": "Microphone unavailable"}, 404)
         elif path == "/portal-voice-notes.js":
             if self._voice_notes_capable():
                 self._serve_file(APP_WEB_DIR / "portal_voice_notes.js")
@@ -379,6 +401,16 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 self._serve_json({"success": False, "message": "Mock configuration load failed"}, 503)
                 return
             config = copy.deepcopy(self.server.mock_config)
+            if self._profile() in ("esp32-p4-lcd4b", "reterminal-sticky-interactive"):
+                config.setdefault("microphone_gain_db", 0)
+                config.setdefault("microphone_reduce_rumble", False)
+                config.setdefault("current_microphone_gain_db", config["microphone_gain_db"])
+                config.setdefault("current_microphone_reduce_rumble", config["microphone_reduce_rumble"])
+            else:
+                config.pop("microphone_gain_db", None)
+                config.pop("microphone_reduce_rumble", None)
+                config.pop("current_microphone_gain_db", None)
+                config.pop("current_microphone_reduce_rumble", None)
             if self._profile() == "reterminal-sticky-interactive":
                 config["auto_shutdown_timeout_seconds"] = config.get("auto_shutdown_timeout_seconds", 300)
             else:
@@ -866,8 +898,31 @@ class PortalHandler(SimpleHTTPRequestHandler):
                         self._serve_bytes(data, "audio/wav", 200, headers)
             else:
                 self._serve_json({"error": "Unknown voice notes action"}, 404)
+        elif path == "/api/component/microphone/levels":
+            if self._profile() not in ("esp32-p4-lcd4b", "reterminal-sticky-interactive"):
+                self._serve_json({"error": "Microphone unavailable"}, 404)
+            elif not self.headers.get("X-Microphone-Test"):
+                self._serve_json({"error": "Browser request required"}, 403)
+            else:
+                state = query.get("state", ["normal"])[0]
+                gain = self.server.mock_config.get("current_microphone_gain_db",
+                                                  self.server.mock_config.get("microphone_gain_db", 0))
+                amplitude = 10 ** (gain / 20)
+                payload = {"available": state != "unavailable", "ota": state == "ota", "sampled": True,
+                           "in_use": state == "busy", "fresh": state not in ("stale", "unavailable", "ota"),
+                           "rms": min(32768, round(7500 * amplitude)),
+                           "peak": 32768 if state == "clipped" else min(32767, round(18000 * amplitude)),
+                           "input_full_scale": state == "clipped",
+                           "gain_clipped": state == "clipped" or 18000 * amplitude > 32767}
+                self._serve_bytes(json.dumps(payload).encode("utf-8"), "application/json",
+                                  headers={"Cache-Control": "no-store"})
+        elif path == "/api/component/microphone/stream":
+            self._serve_json({"error": "Live audio is unavailable in the development server"}, 503)
         elif path.startswith("/api/section/"):
             fragment = path[len("/api/section/"):]
+            if fragment == "microphone" and self._profile() not in ("esp32-p4-lcd4b", "reterminal-sticky-interactive"):
+                self.send_error(404, "Microphone unavailable")
+                return
             if fragment in ("voice-notes", "voice-notes-settings") and not self._voice_notes_capable():
                 self.send_error(404, "Voice notes unavailable")
                 return
@@ -898,7 +953,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 if frag.is_file():
                     html = render(frag, APP_WEB_DIR, "esp32-macropad", "ESP32 Macropad (Local Mock)",
                                   "dev-mock", self._profile() != "esp32-p4-lcd4b",
-                                  has_binding_help=False)
+                                  has_binding_help=False,
+                                  has_microphone_streaming=self._profile() in ("esp32-p4-lcd4b", "reterminal-sticky-interactive"))
                     self._serve_bytes(html.encode("utf-8"), "text/html; charset=utf-8")
                     return
             self.send_error(404, f"Fragment not found: {fragment}")
@@ -1333,6 +1389,11 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 if not isinstance(update, dict):
                     self._serve_json({"success": False, "message": "Configuration must be an object"}, 400)
                     return
+                try:
+                    parse_microphone_settings(update)
+                except ValueError:
+                    self._serve_json({"success": False, "message": "Invalid microphone settings"}, 400)
+                    return
                 voice_keys = tuple("voice_notes_" + service + "_" + field for service in ("transcription", "llm")
                                    for field in ("endpoint", "api_key", "deployment"))
                 auto_key = "voice_notes_auto_process"
@@ -1446,6 +1507,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 if "backlight_brightness" in update and "current_backlight_brightness" not in update:
                     self.server.mock_config["current_backlight_brightness"] = update["backlight_brightness"]
                 self.server.mock_config.update(update)
+                for field in ("microphone_gain_db", "microphone_reduce_rumble"):
+                    if field in update:
+                        self.server.mock_config["current_" + field] = update[field]
             except (UnicodeDecodeError, json.JSONDecodeError):
                 self.send_error(400, "Invalid JSON")
                 return
@@ -1477,6 +1541,23 @@ class PortalHandler(SimpleHTTPRequestHandler):
 
     def do_PUT(self):
         path = urlparse(self.path).path
+        if path == "/api/component/microphone/settings":
+            if self._profile() not in ("esp32-p4-lcd4b", "reterminal-sticky-interactive"):
+                self._serve_json({"success": False, "message": "Microphone unavailable"}, 404)
+                return
+            try:
+                data = parse_microphone_settings(json.loads(
+                    self.rfile.read(int(self.headers.get("Content-Length", "0")))))
+                if not any(field in data for field in ("microphone_gain_db", "microphone_reduce_rumble")):
+                    raise ValueError()
+            except ValueError:
+                self._serve_json({"success": False, "message": "Invalid microphone settings"}, 400)
+                return
+            for field in ("microphone_gain_db", "microphone_reduce_rumble"):
+                if field in data:
+                    self.server.mock_config["current_" + field] = data[field]
+            self._serve_json({"success": True})
+            return
         if path not in ("/api/component/display/brightness", "/api/component/display/screen", "/api/component/volume/level"):
             self.send_error(404, "Not found")
             return
@@ -1719,6 +1800,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 {"id": "alarm-schedule", "display_name": "Schedule", "portal_script": "/portal_alarms.js"},
                 {"id": "alarm-behavior", "display_name": "Behavior", "portal_script": "/portal_alarms.js"}]})
         for category in nav["categories"]:
+            if category["id"] == "audio" and profile in ("esp32-p4-lcd4b", "reterminal-sticky-interactive"):
+                category["items"].append({"id": "microphone", "display_name": "Microphone",
+                                          "portal_script": "/portal-microphone.js"})
             if category["id"] == "pads":
                 if profile in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
                     next(item for item in category["items"] if item["id"] == "pad-editor")["portal_script"] = "/portal-external-data.js"

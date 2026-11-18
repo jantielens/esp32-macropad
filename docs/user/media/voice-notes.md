@@ -33,6 +33,9 @@ Save completes before subsequent actions run;
 failed commands stop the remaining actions. Pause retains the microphone and
 does not add silence to the recording. The microphone level meter is unavailable
 while recording or paused.
+The [Microphone test](audio.md#configure-and-test-the-microphone) can show
+recent input from an active recording. Current microphone settings apply to the
+recording immediately after a save, including while recording.
 
 Open **Voice Notes > Notes** to play, seek, download, or delete saved WAV files.
 Notes are grouped by date; recordings made before the device clock is set appear

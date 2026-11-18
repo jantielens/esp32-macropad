@@ -56,6 +56,10 @@
 #if HAS_AUDIO
 #include "audio.h"
 #endif
+#if HAS_AUDIO_INPUT
+#include "audio_input.h"
+#include "microphone_config_json.h"
+#endif
 
 #include <ArduinoJson.h>
 #include <WiFi.h>
@@ -189,6 +193,13 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["ap_password"] = current_config->ap_password;
 				(*doc)["device_name"] = current_config->device_name;
 				(*doc)["timezone"] = current_config->timezone;
+#if HAS_AUDIO_INPUT
+				(*doc)["microphone_gain_db"] = current_config->microphone_gain_db;
+				(*doc)["microphone_reduce_rumble"] = current_config->microphone_reduce_rumble;
+				const auto microphone_current = audio_input_get_processing();
+				(*doc)["current_microphone_gain_db"] = microphone_current.gain_db;
+				(*doc)["current_microphone_reduce_rumble"] = microphone_current.reduce_rumble;
+#endif
 
 				// Sanitized name for display
 				char sanitized[CONFIG_DEVICE_NAME_MAX_LEN];
@@ -506,6 +517,20 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				portEXIT_CRITICAL(&g_config_post_mux);
 				return;
 		}
+
+#if HAS_AUDIO_INPUT
+		const int8_t previous_mic_gain = current_config->microphone_gain_db;
+		const bool previous_mic_rumble = current_config->microphone_reduce_rumble;
+		const bool microphone_update = doc.containsKey("microphone_gain_db") ||
+				doc.containsKey("microphone_reduce_rumble");
+		int8_t mic_gain = previous_mic_gain;
+		bool mic_rumble = previous_mic_rumble;
+		if (!microphone_parse_settings(doc.as<JsonObjectConst>(), &mic_gain, &mic_rumble)) {
+				request->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid microphone settings\"}");
+				portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+				return;
+		}
+#endif
 
 #if HAS_VOICE_NOTES
 		struct VoiceNotesConfigUpdate {
@@ -1327,10 +1352,18 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 #if HAS_VOICE_NOTES
 		if (voice_notes_update) current_config->voice_notes = voice_notes_candidate->candidate;
 #endif
+#if HAS_AUDIO_INPUT
+		current_config->microphone_gain_db = mic_gain;
+		current_config->microphone_reduce_rumble = mic_rumble;
+#endif
 #if HAS_EXTERNAL_DATA
 		if (config_manager_save(current_config, external_candidate.get())) {
 #else
 		if (config_manager_save(current_config)) {
+#endif
+#if HAS_AUDIO_INPUT
+				if (microphone_update)
+						audio_input_set_processing({current_config->microphone_gain_db, current_config->microphone_reduce_rumble});
 #endif
 #if HAS_VOICE_NOTES
 				if (voice_notes_update && !voice_notes_processing_configure(current_config->voice_notes)) {
@@ -1380,6 +1413,10 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				}
 		} else {
 				LOGE("Portal", "Config save failed");
+#if HAS_AUDIO_INPUT
+				current_config->microphone_gain_db = previous_mic_gain;
+				current_config->microphone_reduce_rumble = previous_mic_rumble;
+#endif
 #if HAS_VOICE_NOTES
 				if (voice_notes_update) current_config->voice_notes = voice_notes_candidate->previous;
 #endif

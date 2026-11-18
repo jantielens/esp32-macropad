@@ -1,4 +1,5 @@
 #include "audio_input.h"
+#include "component_registry.h"
 #include "rtos_task_utils.h"
 #include "web_portal_live_microphone.h"
 
@@ -7,6 +8,7 @@
 #include <cassert>
 #include <chrono>
 #include <cstdlib>
+#include <cstring>
 #include <thread>
 
 namespace {
@@ -22,6 +24,8 @@ std::atomic<unsigned> frees{0};
 std::atomic<size_t> allocation_size{0};
 std::atomic<uint32_t> sample_rate{16000};
 std::atomic<uint8_t> channels{1};
+AudioInputProcessingSettings processing = {};
+bool recovery_ap = false;
 
 template<typename Predicate>
 bool wait_until(Predicate predicate) {
@@ -33,7 +37,7 @@ bool wait_until(Predicate predicate) {
 }
 }
 
-bool web_portal_is_recovery_ap_active() { return false; }
+bool web_portal_is_recovery_ap_active() { return recovery_ap; }
 bool ota_activity_is_active() { return ota_active; }
 AudioInputFormat audio_input_format() { return {sample_rate, channels, 16}; }
 void* heap_caps_malloc(size_t size, uint32_t caps) {
@@ -49,6 +53,13 @@ bool audio_input_start_capture() {
     return true;
 }
 bool audio_input_capture_owned() { return capture_running; }
+AudioInputProcessingSettings audio_input_get_processing() { return processing; }
+bool audio_input_set_processing(AudioInputProcessingSettings settings) {
+    processing = settings;
+    return true;
+}
+void audio_input_meter_request() {}
+AudioInputDiagnostics audio_input_diagnostics() { return {}; }
 bool audio_input_stop_capture() {
     capture_running = false;
     ++capture_stops;
@@ -120,6 +131,48 @@ int main() {
     next.disconnect();
     assert(wait_until([] { return !capture_running.load() && capture_stops.load() == 2; }));
     assert(wait_until([] { return frees.load() == 3; }));
+
+    auto* component = component_registry_find("microphone");
+    assert(component);
+    auto update = component->custom_actions[0].body_handler;
+    assert(update);
+    const char* json = "{\"microphone_gain_db\":6,\"microphone_reduce_rumble\":true}";
+    const size_t size = strlen(json);
+    auto* data = reinterpret_cast<uint8_t*>(const_cast<char*>(json));
+    AsyncWebServerRequest settings;
+    update(&settings, data, 7, 0, size);
+    assert(settings.code == 0 && processing.gain_db == 0);
+    update(&settings, data + 7, size - 7, 7, size);
+    assert(settings.code == 200 && settings._tempObject == nullptr);
+    assert(processing.gain_db == 6 && processing.reduce_rumble);
+    settings.disconnect();
+
+    AsyncWebServerRequest invalid;
+    const char* bad = "{\"microphone_gain_db\":25}";
+    update(&invalid, reinterpret_cast<uint8_t*>(const_cast<char*>(bad)), strlen(bad), 0, strlen(bad));
+    assert(invalid.code == 400 && processing.gain_db == 6);
+
+    const unsigned before_free = frees;
+    AsyncWebServerRequest interrupted;
+    update(&interrupted, data, 7, 0, size);
+    interrupted.disconnect();
+    assert(frees == before_free + 1 && interrupted._tempObject == nullptr);
+
+    allocation_fails = true;
+    AsyncWebServerRequest no_settings_memory;
+    update(&no_settings_memory, data, size, 0, size);
+    assert(no_settings_memory.code == 503 && processing.gain_db == 6);
+    allocation_fails = false;
+    ota_active = true;
+    AsyncWebServerRequest update_ota;
+    update(&update_ota, data, size, 0, size);
+    assert(update_ota.code == 409);
+    ota_active = false;
+    recovery_ap = true;
+    AsyncWebServerRequest update_recovery;
+    update(&update_recovery, data, size, 0, size);
+    assert(update_recovery.code == 404);
+    recovery_ap = false;
 
     audio_test_stopping = true;
     audio_test_cv.notify_all();

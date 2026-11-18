@@ -97,7 +97,10 @@ add_test(NAME test_audio_input_no_psram COMMAND test_audio_input --no-psram)
 
 add_host_legacy_test(test_live_microphone
     SOURCES test_live_microphone.cpp ${PROJECT_SOURCE_DIR}/src/app/web_portal_live_microphone.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/components/microphone_component.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/component_registry.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/live_microphone_overrides ${PROJECT_SOURCE_DIR}/tests/audio_input_overrides
+        "$ENV{HOME}/Arduino/libraries/ArduinoJson/src"
     DEFINITIONS HAS_AUDIO_INPUT=1 HAS_MICROPHONE_STREAMING=1 TEST_HEAP_CAPS_ALLOCATOR=1
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
 )
@@ -1260,6 +1263,7 @@ add_host_legacy_test(test_sd_storage_spi_shared SOURCES test_sd_storage_spi.cpp 
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h)
 add_host_legacy_test(test_factory_reset_storage SOURCES test_factory_reset_storage.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides OPTIONS -ffunction-sections -fdata-sections LIBRARIES -Wl,--gc-sections)
 add_host_legacy_test(test_config_level_save SOURCES test_factory_reset_storage.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides DEFINITIONS HAS_AUDIO=1 OPTIONS -ffunction-sections -fdata-sections LIBRARIES -Wl,--gc-sections)
+add_host_legacy_test(test_config_microphone_save SOURCES test_factory_reset_storage.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides ${HOST_ARDUINOJSON_DIR} DEFINITIONS HAS_AUDIO=1 HAS_AUDIO_INPUT=1 OPTIONS -ffunction-sections -fdata-sections LIBRARIES -Wl,--gc-sections)
 add_host_legacy_test(test_factory_reset_no_filesystem SOURCES test_factory_reset_storage.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides
     DEFINITIONS HAS_FILESYSTEM=0 USE_SD_STORAGE=0

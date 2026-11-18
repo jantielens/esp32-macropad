@@ -124,6 +124,15 @@ retains ownership until cleanup succeeds. A later start by the same owner retrie
 cleanup. Only one FreeRTOS task can own a capture session at a time. The input
 layer does not resample, create WAV files, retain audio, or make network requests.
 
+Shared input processing runs in place in the capture owner's read path: an
+optional approximately 80 Hz low-cut filter, followed by digital gain and
+16-bit saturation. Settings apply at audio-block boundaries to all consumers.
+The filter keeps separate channel history; processing adds no task or PCM
+buffer. Defaults of 0 dB and filter off preserve samples unchanged.
+**Audio > Microphone** applies adjustments without saving; **Save settings**
+persists them for restart. Runtime and saved settings are reported separately
+by the [microphone API](web-portal.md#microphone-api).
+
 `esp32-p4-lcd4b` combines the ES8311 output codec with an ES7210 microphone ADC
 on the same 48 kHz I2S clock. The ES8311 driver owns both channels and exposes
 the existing RX channel through `AudioInputDriver`; input capture neither
@@ -140,10 +149,11 @@ Pads can display these read-only microphone bindings:
 * `[audio:input.active]` returns `true` while the meter is sampling and `false`
     after its short resolver-driven sampling lease expires.
 
-The meter task remains asleep and does not read I2S data unless one of these
-bindings is actively resolved. It yields to another capture owner and during
-firmware updates. Its task stack and sample buffer prefer PSRAM, with internal
-RAM fallback.
+The meter task remains asleep unless a binding or the portal microphone test
+renews its sampling lease. It yields to another capture owner and during
+firmware updates. Portal diagnostics can observe processed blocks from another
+capture owner without opening a second session. Its task stack and sample
+buffer prefer PSRAM, with internal RAM fallback.
 
 ## Local Voice Notes
 

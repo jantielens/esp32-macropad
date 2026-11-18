@@ -8,23 +8,52 @@ audio resources, so playback
 priority matters when more than one feature requests sound.
 
 To record and browse microphone input, see [Voice Notes](voice-notes.md).
-To hear live microphone input without saving a recording, use Live Microphone.
+Use **Audio > Microphone** to configure and test shared microphone input.
 
 Audio controls appear only when supported by the installed firmware.
 Speaker output, MP3 playback, microphone input, and music analysis are distinct
 capabilities. Check the [hardware reference](../hardware.md) for connections.
 
-## Listen to the microphone
+## Configure and test the microphone
 
-On microphone-capable firmware, open **Audio > Live Microphone** in a desktop
-Chrome browser and select **Start listening**. Select **Stop** or leave the
-section to end the stream. Only one browser can listen at a time. If another
-feature is using the microphone, stop that feature before trying again.
+On microphone-capable firmware, open **Audio > Microphone**. Set **Input gain
+(digital)** from -12 to +24 dB and optionally enable **Low-cut filter**. Select
+**Save settings** to retain the changes across restarts without rebooting.
+Gain applies when you release the slider; the filter applies when toggled.
+**Applied, not saved** means the current input differs from your saved settings.
+**Revert to saved** reapplies the saved settings. **Reset to factory values**
+applies 0 dB and disables the filter without saving. Select **Save settings**
+afterward to keep those factory values across restarts.
+
+Leaving the section does not undo applied changes. Restarting the device
+restores the saved settings. No settings are written to flash while dragging.
+
+The settings apply to all microphone capture, including a recording already in
+progress. Existing saved recordings do not change. Digital gain also amplifies
+noise and cannot recover input that is already clipped. The low-cut filter
+reduces rumble and handling noise below approximately 80 Hz but can reduce bass.
+
+Turn on **Test microphone**, speak normally at the intended distance, then speak
+loudly. The peak meter shows processed input on a logarithmic -60 to 0 dBFS
+scale. Red means peaks within 1 dB of full scale; reduce gain if peaks turn red.
+The peak number holds for two seconds. **Input reached full scale** signals a raw digital rail sample;
+**Digital gain clipped** indicates processing saturated. Neither warning detects
+every kind of distortion. When another feature owns the microphone, the test
+shows its current input if recent samples are available; it does not interrupt
+that feature. Turn off **Test microphone** or leave the section to stop testing.
+
+Where **Hear microphone** is available, enable it during the same test in a
+desktop Chrome browser to hear input without saving a recording. Use headphones
+to avoid feedback. Uncheck it to continue with metering only, or
+turn off **Test microphone** to stop both metering and listening. Leaving the section also
+stops the test.
+Only one browser can listen at a time. If another feature is using the
+microphone, stop that feature before trying to listen.
 
 The browser shows when listening is active; the device does not show a
 listening indicator. Audio is not saved by this feature and travels unencrypted.
 Use a trusted local network and enable portal authentication when needed.
-Live Microphone requires available PSRAM and reports an error if it cannot
+Listening requires available PSRAM and reports an error if it cannot
 allocate the stream buffers or capture task.
 A lost connection ends capture when the device detects the disconnect, which
 may take longer than closing the browser normally.

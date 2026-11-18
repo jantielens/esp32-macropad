@@ -139,6 +139,7 @@ async function saveFragmentConfig(requiresReboot, fieldNames, validateFields) {
             } else {
                 showMessage('Configuration saved', 'success');
             }
+            return true;
         } else {
             showMessage(result.message || 'Failed to save configuration', 'error');
         }

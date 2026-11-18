@@ -1,0 +1,49 @@
+<div class="section-header">
+  <h2><span class="portal-icon" aria-hidden="true">mic</span>Microphone</h2>
+  <p>Adjust and test the shared microphone input.</p>
+</div>
+<section class="card mb-3">
+  <div class="card-header"><h3 class="mb-0">Settings</h3></div>
+  <div class="card-body">
+    <label class="form-label" for="microphone_gain_db">Input gain (digital): <output id="microphone-gain-value">0 dB</output></label>
+    <input class="form-range" type="range" id="microphone_gain_db" name="microphone_gain_db" min="-12" max="24" step="1" value="0" disabled>
+    <p class="form-text">Digital gain also amplifies noise and cannot recover audio already clipped at the microphone.</p>
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" id="microphone_reduce_rumble" name="microphone_reduce_rumble" disabled>
+      <label class="form-check-label" for="microphone_reduce_rumble">Low-cut filter</label>
+    </div>
+    <p class="form-text">Reduces rumble and handling noise below approximately 80 Hz. May reduce bass.</p>
+    <p>Changes apply immediately to all microphone use, including an active recording. Select Save settings to keep them after restart. Existing recordings do not change.</p>
+    <div class="d-flex flex-wrap gap-2">
+      <button type="button" class="btn btn-primary" id="microphone-save" disabled>Save settings</button>
+      <button type="button" class="btn btn-outline-secondary" id="microphone-undo" disabled>Revert to saved</button>
+      <button type="button" class="btn btn-outline-secondary" id="microphone-defaults" disabled>Reset to factory values</button>
+    </div>
+    <p id="microphone-unsaved" class="form-text mt-2" role="status" hidden>Applied, not saved.</p>
+  </div>
+</section>
+<section class="card">
+  <div class="card-header"><h3 class="mb-0">Test microphone</h3></div>
+  <div class="card-body">
+    <p>Speak normally from the intended distance, then speak loudly. Keep loud peaks below the red zone.</p>
+    <div class="form-check form-switch">
+      <input class="form-check-input" type="checkbox" role="switch" id="microphone-test" disabled>
+      <label class="form-check-label" for="microphone-test">Test microphone</label>
+    </div>
+    <div class="d-flex flex-wrap justify-content-between gap-2 mt-3 mb-2">
+      <span id="microphone-level-label">Input peak level</span>
+      <span id="microphone-peak">Peak: unavailable</span>
+    </div>
+    <div class="progress w-100 mb-2" id="microphone-level" role="meter" aria-labelledby="microphone-level-label"
+         aria-valuemin="-60" aria-valuemax="0" aria-valuenow="-60" style="height: 2rem;" hidden>
+      <div class="progress-bar bg-success" id="microphone-level-bar" style="width: 0%;"></div>
+    </div>
+    <div class="d-flex justify-content-between form-text mb-2" aria-hidden="true">
+      <span>-60</span><span>-45</span><span>-30</span><span>-15</span><span>0 dBFS</span>
+    </div>
+    <p class="form-text">Red means peaks within 1 dB of full scale. The peak number holds for 2 seconds.</p>
+    <div id="microphone-test-status" role="status">Test stopped</div>
+    <div id="microphone-warning" role="status"></div>
+    {{MICROPHONE_LISTEN}}
+  </div>
+</section>

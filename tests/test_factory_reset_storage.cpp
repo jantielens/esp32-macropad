@@ -62,6 +62,7 @@ PowerMode power_config_parse_power_mode(const DeviceConfig* config) {
     return strcmp(config->operating_mode, "offline") == 0 ? PowerMode::Offline : PowerMode::AlwaysOn;
 }
 bool time_service_timezone_valid(const char*) { return true; }
+bool time_service_set_timezone(const char*) { return true; }
 bool wifi_ap_password_is_valid(const char* password) { return password && !password[0]; }
 
 static void test_offline_config_without_ssid() {
@@ -109,6 +110,60 @@ static void test_save_current_volume() {
     config_write_allowed = true;
     assert(config_manager_save_current_volume(&config));
     assert(config.audio_volume == 60 && Preferences::saved_volume == 60);
+}
+#endif
+
+#if HAS_AUDIO_INPUT
+#include "microphone_config_json.h"
+
+static void test_microphone_config_persistence() {
+    DeviceConfig config = {};
+    assert(!config_manager_load(&config));
+    assert(config.microphone_gain_db == 0 && !config.microphone_reduce_rumble);
+    config.magic = CONFIG_MAGIC;
+    strcpy(config.device_name, "remote");
+    strcpy(config.wifi_failure_mode, "ap");
+    strcpy(config.operating_mode, "offline");
+    strcpy(config.timezone, "UTC0");
+    config.microphone_gain_db = -12;
+    config.microphone_reduce_rumble = true;
+    assert(config_manager_save(&config));
+    DeviceConfig loaded = {};
+    assert(config_manager_load(&loaded));
+    assert(loaded.microphone_gain_db == -12 && loaded.microphone_reduce_rumble);
+    config.microphone_gain_db = 25;
+    assert(!config_manager_save(&config));
+    config.microphone_gain_db = 24;
+    Preferences::mic_write_ok = false;
+    assert(!config_manager_save(&config));
+    Preferences::mic_write_ok = true;
+    Preferences::mic_gain = 100;
+    assert(config_manager_load(&loaded));
+    assert(loaded.microphone_gain_db == 0);
+}
+
+static void test_microphone_config_json() {
+    int8_t gain = 5;
+    bool rumble = false;
+    JsonDocument doc;
+    assert(!deserializeJson(doc, "{\"microphone_gain_db\":\"-12\",\"microphone_reduce_rumble\":true}"));
+    assert(microphone_parse_settings(doc.as<JsonObjectConst>(), &gain, &rumble));
+    assert(gain == -12 && rumble);
+    for (const char* json : {"{\"microphone_gain_db\":25}", "{\"microphone_gain_db\":1.0}",
+                             "{\"microphone_gain_db\":null}", "{\"microphone_reduce_rumble\":null}",
+                             "{\"microphone_gain_db\":true}", "{\"microphone_gain_db\":\"1x\"}",
+                             "{\"microphone_gain_db\":\"99999999999999999999999\"}",
+                             "{\"microphone_gain_db\":\"1\\u00002\"}",
+                             "{\"microphone_gain_db\":4,\"microphone_reduce_rumble\":\"true\"}"}) {
+        doc.clear();
+        assert(!deserializeJson(doc, json));
+        assert(!microphone_parse_settings(doc.as<JsonObjectConst>(), &gain, &rumble));
+        assert(gain == -12 && rumble);
+    }
+    doc.clear();
+    assert(!deserializeJson(doc, "{\"microphone_gain_db\":24}"));
+    assert(microphone_parse_settings(doc.as<JsonObjectConst>(), &gain, &rumble));
+    assert(gain == 24 && rumble);
 }
 #endif
 
@@ -170,6 +225,10 @@ int main() {
     test_offline_config_without_ssid();
 #if HAS_AUDIO
     test_save_current_volume();
+#endif
+#if HAS_AUDIO_INPUT
+    test_microphone_config_persistence();
+    test_microphone_config_json();
 #endif
 #if HAS_FILESYSTEM
     test_success_removes_owned_roots_only();

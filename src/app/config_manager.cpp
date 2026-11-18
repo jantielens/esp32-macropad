@@ -53,6 +53,10 @@
 #define KEY_VN_LLM_DEPLOY "vn_llm_deploy"
 #define KEY_VN_AUTO_PROCESS "vn_auto_proc"
 #endif
+#if HAS_AUDIO_INPUT
+#define KEY_MIC_GAIN "mic_gain"
+#define KEY_MIC_RUMBLE "mic_rumble"
+#endif
 #define KEY_WIFI_SSID      "wifi_ssid"
 #define KEY_WIFI_PASS      "wifi_pass"
 #define KEY_WIFI_FAILURE   "wifi_fail"
@@ -380,6 +384,10 @@ bool config_manager_load(DeviceConfig *config) {
 
 		strlcpy(config->wifi_failure_mode, "ap", sizeof(config->wifi_failure_mode));
 		config->ap_password[0] = '\0';
+#if HAS_AUDIO_INPUT
+		config->microphone_gain_db = 0;
+		config->microphone_reduce_rumble = false;
+#endif
 #if HAS_VOICE_NOTES
 		config->voice_notes = {};
 #endif
@@ -514,6 +522,14 @@ bool config_manager_load(DeviceConfig *config) {
 		}
 		
 		// Load WiFi settings
+#if HAS_AUDIO_INPUT
+		config->microphone_gain_db = preferences.getChar(KEY_MIC_GAIN, 0);
+		config->microphone_reduce_rumble = preferences.getBool(KEY_MIC_RUMBLE, false);
+		if (config->microphone_gain_db < -12 || config->microphone_gain_db > 24) {
+				LOGW("Config", "Invalid stored microphone gain; using 0 dB");
+				config->microphone_gain_db = 0;
+		}
+#endif
 #if HAS_VOICE_NOTES
 		preferences.getString(KEY_VN_TX_URL, config->voice_notes.transcription.endpoint,
 				sizeof(config->voice_notes.transcription.endpoint));
@@ -1040,6 +1056,14 @@ static bool save_config_locked(const DeviceConfig *config) {
 				return false;
 		}
 #endif
+#if HAS_AUDIO_INPUT
+		if (preferences.putChar(KEY_MIC_GAIN, config->microphone_gain_db) != sizeof(int8_t) ||
+				preferences.putBool(KEY_MIC_RUMBLE, config->microphone_reduce_rumble) != sizeof(uint8_t)) {
+				LOGE("Config", "Failed to persist microphone settings");
+				preferences.end();
+				return false;
+		}
+#endif
 		preferences.end();
 #if HAS_EXTERNAL_DATA
 		if (external_override) {
@@ -1252,6 +1276,9 @@ bool config_manager_is_valid(const DeviceConfig *config) {
 		if (strcmp(config->wifi_failure_mode, "ap") != 0 &&
 				strcmp(config->wifi_failure_mode, "offline") != 0) return false;
 		if (!wifi_ap_password_is_valid(config->ap_password)) return false;
+#if HAS_AUDIO_INPUT
+		if (config->microphone_gain_db < -12 || config->microphone_gain_db > 24) return false;
+#endif
 #if HAS_BLE || HAS_BLE_HID
 		if (!bthome::valid_event_settings(config->bthome_event)) return false;
 		if (!bluetooth_power_valid(config->bluetooth_tx_power_dbm)) return false;

@@ -7,11 +7,8 @@
 
   function updateStatus(text, active) {
     var status = document.getElementById('live-microphone-status');
-    var start = document.getElementById('live-microphone-start');
-    var stop = document.getElementById('live-microphone-stop');
     if (status) status.textContent = text;
-    if (start) start.disabled = active;
-    if (stop) stop.disabled = !active;
+    if (window.microphoneStream.onStatus) window.microphoneStream.onStatus(text, active);
   }
 
   function stopListening(message) {
@@ -84,8 +81,8 @@
     updateStatus('Starting...', true);
     try {
       await session.context.resume();
-      var response = await streamFetch('/api/component/live-microphone/stream', {
-        headers: { 'X-Live-Microphone': '1' },
+      var response = await streamFetch('/api/component/microphone/stream', {
+        headers: { 'X-Microphone-Stream': '1' },
         signal: session.controller.signal
       });
       if (!response.ok) {
@@ -126,14 +123,5 @@
     }
   }
 
-  window.init_live_microphone_fragment = function () {
-    document.getElementById('live-microphone-start').addEventListener('click', startListening);
-    document.getElementById('live-microphone-stop').addEventListener('click', function () {
-      stopListening();
-    });
-  };
-  window.addEventListener('portal-fragment-leave', function (event) {
-    if (event.detail === 'live-microphone') stopListening();
-  });
-  window.addEventListener('pagehide', function () { if (current) stopListening(); });
+  window.microphoneStream = { start: startListening, stop: stopListening };
 }());

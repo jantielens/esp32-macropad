@@ -32,6 +32,28 @@ try {
         assert.equal(execFileSync('nm', ['--defined-only', object], {encoding: 'utf8'}).trim(), '',
             module + ' must emit no code or data when external data is disabled');
     }
+    for (const module of ['audio_input.cpp', 'web_portal_live_microphone.cpp']) {
+        const object = path.join(nativeDirectory, 'microphone.o');
+        execFileSync('c++', ['-std=c++17', '-c', 'src/app/' + module, '-o', object,
+            '-DBOARD_CONFIG_H', '-DHAS_AUDIO_INPUT=0', '-DHAS_MICROPHONE_STREAMING=0',
+            '-Itests', '-Isrc/app'], {cwd: root, stdio: 'pipe'});
+        assert.equal(execFileSync('nm', ['--defined-only', object], {encoding: 'utf8'}).trim(), '',
+            module + ' must emit no code or data without microphone input');
+    }
+    for (const streaming of [0, 1]) {
+        const object = path.join(nativeDirectory, 'microphone-component.o');
+        execFileSync('c++', ['-std=c++17', '-c', 'src/app/components/microphone_component.cpp',
+            '-o', object, '-DHAS_AUDIO_INPUT=1', '-DHAS_MICROPHONE_STREAMING=' + streaming,
+            '-Itests/live_microphone_overrides', '-Itests/audio_input_overrides', '-Itests', '-Isrc/app',
+            '-I' + path.join(os.homedir(), 'Arduino/libraries/ArduinoJson/src'),
+            '-include', 'tests/log_manager.h', '-include', 'tests/board_config.h'],
+            {cwd: root, stdio: 'pipe'});
+        const symbols = execFileSync('nm', ['-C', object], {encoding: 'utf8'});
+        assert.equal(symbols.includes('handleLiveMicrophoneStream'), !!streaming,
+            'Only streaming-enabled components may reference the stream handler');
+        assert(symbols.includes('microphone_levels'));
+        assert(symbols.includes('microphone_settings_body'));
+    }
     for (const module of ['voice_notes.cpp', 'voice_notes_binding.cpp', 'voice_note_range.cpp', 'voice_notes_metadata.cpp',
         'voice_notes_processing.cpp', 'voice_notes_transcription_request.cpp',
         'voice_notes_enrichment.cpp', 'voice_notes_enrichment_request.cpp']) {
@@ -142,7 +164,10 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
     }
     const js = assets.get('portal_js_gz');
     const microphone = board === 'esp32-p4-lcd4b' && integrationMode !== 'microphone-disabled';
-    assert.equal(assets.has('live_microphone_fragment_html_gz'), microphone);
+    const audioInput = board === 'esp32-p4-lcd4b';
+    assert.equal(assets.has('microphone_fragment_html_gz'), audioInput);
+    assert.equal(assets.has('portal_microphone_js_gz'), audioInput);
+    if (audioInput) assert.equal(assets.get('microphone_fragment_html_gz').includes('Hear microphone'), microphone);
     assert.equal(assets.has('portal_live_microphone_js_gz'), microphone);
     assert(!js.includes('portalStreamFetch'), 'Microphone fetch hook leaked into the shared bundle');
     for (const name of ['init_bluetooth_fragment', 'bluetooth_tx_power_dbm', 'bthome_event_burst_ms']) {
@@ -266,7 +291,8 @@ for (const board of ['reterminal-sticky-interactive', 'reterminal-sticky-interac
     const microphone = board !== 'm5stack-stopwatch';
     const shell = decodeAsset('shell_html_gz');
     assert.equal(selected.includes('portal_live_microphone_js_gz'), microphone);
-    assert.equal(selected.includes('live_microphone_fragment_html_gz'), microphone);
+    assert.equal(selected.includes('microphone_fragment_html_gz'), microphone);
+    assert.equal(selected.includes('portal_microphone_js_gz'), microphone);
     assert.equal(shell.includes('src="/portal-live-microphone.js'), microphone);
     if (microphone) assert(shell.indexOf('src="/portal-live-microphone.js') < shell.indexOf('src="/portal.js'));
     new vm.Script(decodeAsset('portal_power_savings_js_gz'));
@@ -289,5 +315,26 @@ for (const shutdown of [0, 1]) {
             assert.equal(shell.includes('src="/portal-live-microphone.js'), !!microphone);
             if (microphone) assert(shell.indexOf('src="/portal-live-microphone.js') < shell.indexOf('src="/portal.js'));
         }
+
+        for (const [input, stream] of [[0, 0], [1, 0], [1, 1]]) {
+            const selected = execFileSync('c++', ['-E', '-P', '-x', 'c++', 'src/app/web_assets.h',
+                '-Itests', '-DBOARD_CONFIG_H', '-DHAS_AUDIO_INPUT=' + input,
+                '-DHAS_MICROPHONE_STREAMING=' + stream],
+                {cwd: root, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024});
+            const extract = name => {
+                const match = selected.match(new RegExp('const uint8_t ' + name + '\\[\\] PROGMEM = \\{([\\s\\S]*?)\\};'));
+                if (!match) return null;
+                return zlib.gunzipSync(Buffer.from([...match[1].matchAll(/0x([0-9a-f]{2})/g)]
+                    .map(value => parseInt(value[1], 16)))).toString();
+            };
+            const fragment = extract('microphone_fragment_html_gz');
+            assert.equal(fragment !== null, !!input);
+            assert.equal(extract('portal_microphone_js_gz') !== null, !!input);
+            assert.equal(extract('portal_live_microphone_js_gz') !== null, !!stream);
+            if (fragment) assert.equal(fragment.includes('Hear microphone'), !!stream);
+        }
+        assert.throws(() => execFileSync('c++', ['-E', '-x', 'c++', '-',
+            '-DHAS_AUDIO_INPUT=0', '-DHAS_MICROPHONE_STREAMING=1'],
+            {cwd: root, input: '#include "src/app/board_config.h"\n', stdio: ['pipe', 'pipe', 'pipe']}));
     }
 }

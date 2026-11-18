@@ -28,10 +28,12 @@ FEATURES = {
         ("audio.cpp.o", "audio_output_drivers.cpp.o", "web_portal_audio*.cpp.o"),
         ("volume_fragment_html_gz",),
     ),
-    "Audio input (HAS_AUDIO_INPUT)": (("audio_input*.cpp.o",), ()),
+    "Audio input (HAS_AUDIO_INPUT)": (
+        ("audio_input*.cpp.o",), ("microphone_fragment_html_gz", "portal_microphone_js_gz"),
+    ),
     "Live microphone (HAS_MICROPHONE_STREAMING)": (
         ("web_portal_live_microphone.cpp.o",),
-        ("live_microphone_fragment_html_gz", "portal_live_microphone_js_gz"),
+        ("portal_live_microphone_js_gz",),
     ),
     "Voice Notes (HAS_VOICE_NOTES)": (
         ("voice_notes*.cpp.o", "voice_note_range.cpp.o", "voice_notes_metadata.cpp.o"),

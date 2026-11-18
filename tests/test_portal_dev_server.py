@@ -57,10 +57,15 @@ class PortalDevServerTest(unittest.TestCase):
         self.server.mock_config.pop("external_data", None)
         for key in [key for key in self.server.mock_config if key.startswith("voice_notes_")]:
             self.server.mock_config.pop(key, None)
+        self.server.mock_config.pop("microphone_gain_db", None)
+        self.server.mock_config.pop("microphone_reduce_rumble", None)
+        self.server.mock_config.pop("current_microphone_gain_db", None)
+        self.server.mock_config.pop("current_microphone_reduce_rumble", None)
 
     def request(self, path, method="GET", body=None, profile="esp32-p4-lcd4b", raw=False,
-                content_type="application/json"):
+                content_type="application/json", extra_headers=None):
         headers = {"Cookie": "portal_mock_profile=" + profile, "Content-Type": content_type}
+        headers.update(extra_headers or {})
         data = body if isinstance(body, bytes) else json.dumps(body).encode() if body is not None else None
         request = Request(self.base + path, data=data, headers=headers, method=method)
         try:
@@ -128,6 +133,55 @@ class PortalDevServerTest(unittest.TestCase):
                 self.assertLess(shell.index(script), shell.index('src="/portal.js'))
             self.assertEqual(self.request("/portal-live-microphone.js", profile=profile, raw=True)[0],
                              200 if enabled else 404)
+
+    def test_microphone_settings_and_levels_fixture(self):
+        config_path = "/api/config?no_reboot=1"
+        nav = self.request("/api/portal/nav")[1]
+        audio = next(category for category in nav["categories"] if category["id"] == "audio")
+        self.assertIn("microphone", [item["id"] for item in audio["items"]])
+        self.assertEqual(self.request("/api/section/microphone", raw=True)[0], 200)
+        self.assertEqual(self.request("/api/section/microphone", profile="jc3248w535", raw=True)[0], 404)
+        self.assertEqual(self.request("/api/section/live-microphone", raw=True)[0], 404)
+        self.assertEqual(self.request("/api/config")[1]["microphone_gain_db"], 0)
+        self.assertEqual(self.request(config_path, "POST", {"microphone_gain_db": "-12",
+                         "microphone_reduce_rumble": True})[0], 200)
+        current = self.request("/api/config")[1]
+        self.assertEqual(current["microphone_gain_db"], -12)
+        self.assertIs(current["microphone_reduce_rumble"], True)
+        for invalid in ("1.5", "1x", 25, -13, True):
+            self.assertEqual(self.request(config_path, "POST", {"microphone_gain_db": invalid})[0], 400)
+        self.assertEqual(self.request(config_path, "POST", {"microphone_reduce_rumble": "true"})[0], 400)
+        self.assertEqual(self.request("/api/component/microphone/levels")[0], 403)
+        status, data = self.request("/api/component/microphone/levels?state=clipped",
+                                    extra_headers={"X-Microphone-Test": "1"})
+        self.assertEqual(status, 200)
+        self.assertTrue(data["fresh"] and data["input_full_scale"] and data["gain_clipped"])
+        self.assertEqual(data["peak"], 32768)
+
+    def test_microphone_live_settings_do_not_persist(self):
+        endpoint = "/api/component/microphone/settings"
+        self.assertEqual(self.request(endpoint, "PUT", {"microphone_gain_db": 6,
+                         "microphone_reduce_rumble": True})[0], 200)
+        config = self.request("/api/config")[1]
+        self.assertEqual(config["current_microphone_gain_db"], 6)
+        self.assertIs(config["current_microphone_reduce_rumble"], True)
+        self.assertEqual(config["microphone_gain_db"], 0)
+        self.assertIs(config["microphone_reduce_rumble"], False)
+        status, levels = self.request("/api/component/microphone/levels",
+                                      extra_headers={"X-Microphone-Test": "1"})
+        self.assertEqual(status, 200)
+        self.assertGreater(levels["peak"], 18000)
+        self.assertTrue(levels["gain_clipped"])
+        self.assertEqual(self.request("/api/config?no_reboot=1", "POST", {"device_name": "Mock"})[0], 200)
+        self.assertEqual(self.request("/api/config")[1]["current_microphone_gain_db"], 6)
+        for invalid in ({}, [], {"microphone_gain_db": 25}, {"microphone_reduce_rumble": "true"}):
+            self.assertEqual(self.request(endpoint, "PUT", invalid)[0], 400)
+        self.assertEqual(self.request("/api/config")[1]["current_microphone_gain_db"], 6)
+        self.assertEqual(self.request(endpoint, "PUT", {"microphone_gain_db": 0,
+                         "microphone_reduce_rumble": False})[0], 200)
+        self.assertEqual(self.request("/api/config")[1]["current_microphone_gain_db"], 0)
+        self.assertEqual(self.request(endpoint, "PUT", {"microphone_gain_db": 6},
+                                      profile="jc3248w535")[0], 404)
 
     def test_voice_notes_automatic_processing_fixture(self):
         profile = "reterminal-sticky-interactive-sd"

@@ -73,6 +73,9 @@ def render(input_path: Path, web_dir: Path,
     html = html.replace("{{LIVE_MICROPHONE_SCRIPT}}",
                         '<script src="/portal-live-microphone.js?v={{FIRMWARE_VERSION}}"></script>'
                         if has_microphone_streaming else "")
+    html = html.replace("{{MICROPHONE_LISTEN}}",
+                        load_template(web_dir, "_microphone_listen.html")
+                        if has_microphone_streaming else "")
     html = html.replace("{{PROJECT_NAME}}", project_name)
     html = html.replace("{{PROJECT_DISPLAY_NAME}}", project_display_name)
     html = html.replace("{{FIRMWARE_VERSION}}", firmware_version)

@@ -100,6 +100,10 @@ struct EpaperRefreshSettings {
 #endif
 
 struct DeviceConfig {
+#if HAS_AUDIO_INPUT
+		int8_t microphone_gain_db;
+		bool microphone_reduce_rumble;
+#endif
 #if HAS_VOICE_NOTES
 		VoiceNotesConfig voice_notes;
 #endif

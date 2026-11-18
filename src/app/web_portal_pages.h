@@ -40,6 +40,9 @@ void handlePortalVoiceNotesJS(AsyncWebServerRequest *request);
 #if HAS_MICROPHONE_STREAMING
 void handlePortalLiveMicrophoneJS(AsyncWebServerRequest *request);
 #endif
+#if HAS_AUDIO_INPUT
+void handlePortalMicrophoneJS(AsyncWebServerRequest *request);
+#endif
 #if HAS_CAMERA
 void handlePortalCameraJS(AsyncWebServerRequest *request);
 void handlePortalCameraCSS(AsyncWebServerRequest *request);

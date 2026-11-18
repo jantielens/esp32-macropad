@@ -935,6 +935,16 @@ for fragment_file in "${FRAGMENT_FILES[@]}"; do
         FRAGMENT_VARIANT_FLAGS["$filename"]="HAS_BLE_HID"
         FRAGMENT_VARIANT_FLAGS["${filename}_without_ble"]="!HAS_BLE_HID"
     fi
+    if [[ "$stem" == "microphone" ]]; then
+        with_stream=$(python3 "$SCRIPT_DIR/_render_html_template.py" \
+            --web-dir "$WEB_DIR" --input "$fragment_file" \
+            --project-name "$PROJECT_NAME" --project-display-name "$PROJECT_DISPLAY_NAME" \
+            --firmware-version "$FIRMWARE_VERSION" --with-microphone-streaming)
+        FRAGMENT_GZIP_CONTENTS["${filename}_with_stream"]=$(gzip_to_c_array "$with_stream")
+        FRAGMENT_VARIANTS["$filename"]="$filename ${filename}_with_stream"
+        FRAGMENT_VARIANT_FLAGS["$filename"]="!HAS_MICROPHONE_STREAMING"
+        FRAGMENT_VARIANT_FLAGS["${filename}_with_stream"]="HAS_MICROPHONE_STREAMING"
+    fi
     if [[ "$content" == *'{{WIDGET_OPTIONS}}'* || "$content" == *'{{WIDGET_EDITORS}}'* ]]; then
         widget_gate_output=$(python3 "$SCRIPT_DIR/widget_manifest.py" --portal-gates)
         widget_gates=()
@@ -1146,7 +1156,9 @@ asset_feature_flag() {
             echo "HAS_SOUND_PLAYER" ;;
         voice_notes|voice_notes_settings|portal_voice_notes)
             echo "HAS_VOICE_NOTES" ;;
-        live_microphone|portal_live_microphone)
+        microphone|portal_microphone)
+            echo "HAS_AUDIO_INPUT" ;;
+        portal_live_microphone)
             echo "HAS_MICROPHONE_STREAMING" ;;
         fonts|portal_fonts)
             echo "HAS_TTF_FONTS" ;;

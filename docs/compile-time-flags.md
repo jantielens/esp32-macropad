@@ -556,11 +556,19 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/audio_input.h
   - src/app/audio_input_binding.cpp
   - src/app/audio_input_drivers.cpp
+  - src/app/audio_input_processing.h
   - src/app/binding_builtin_schemes.cpp
   - src/app/board_config.h
+  - src/app/config_manager.cpp
+  - src/app/config_manager.h
   - src/app/drivers/es8311_audio_driver.cpp
   - src/app/drivers/es8311_audio_driver.h
   - src/app/drivers/pcm510xa_audio_driver.cpp
+  - src/app/portal_components.cpp
+  - src/app/web_portal_config.cpp
+  - src/app/web_portal_pages.cpp
+  - src/app/web_portal_pages.h
+  - src/app/web_portal_routes.cpp
 - **HAS_AUTO_SHUTDOWN**
   - src/app/action_continuation.cpp
   - src/app/action_continuation.h
@@ -1268,7 +1276,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/widget_registry.h
 - **HAS_MICROPHONE_STREAMING**
   - src/app/board_config.h
-  - src/app/portal_components.cpp
+  - src/app/components/microphone_component.cpp
   - src/app/web_portal_live_microphone.cpp
   - src/app/web_portal_live_microphone.h
   - src/app/web_portal_pages.cpp

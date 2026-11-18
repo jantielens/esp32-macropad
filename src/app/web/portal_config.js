@@ -436,6 +436,7 @@ async function loadConfig() {
                 }
             });
         }
+        return config;
     } catch (error) {
         showMessage('Error loading configuration: ' + error.message, 'error');
         console.error('Load error:', error);

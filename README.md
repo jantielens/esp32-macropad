@@ -393,6 +393,7 @@ The [device power API](docs/dev/web-portal.md#device-power-control) includes:
 |--------|------|-------------|
 | `POST` | `/api/sleep?seconds=N` | One-shot deep sleep for 1 to 65535 seconds, using portal authentication; does not save or change operating mode. |
 | `POST` | `/api/component/power-savings/activity` | Authenticated user-activity notification on firmware with battery inactivity shutdown. |
+| `GET`, `PUT` | `/api/component/microphone/...` | Test microphone levels, optionally hear input, and adjust input settings without saving; see the [microphone API](docs/dev/web-portal.md#microphone-api). |
 | `GET`, `POST`, `DELETE` | `/api/component/voice-notes/...` | Manage recordings, transcripts, and summaries when Voice Notes is enabled; see the [portal API](docs/dev/web-portal.md#voice-notes-api). |
 
 ### Running Tests

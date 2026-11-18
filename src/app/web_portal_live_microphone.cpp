@@ -215,7 +215,7 @@ void handleLiveMicrophoneStream(AsyncWebServerRequest* request) {
         request->send(404, "application/json", "{\"error\":\"Unavailable in recovery mode\"}");
         return;
     }
-    if (!request->hasHeader("X-Live-Microphone")) {
+    if (!request->hasHeader("X-Microphone-Stream")) {
         request->send(403, "application/json", "{\"error\":\"Browser request required\"}");
         return;
     }

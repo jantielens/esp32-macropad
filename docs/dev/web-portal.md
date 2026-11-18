@@ -65,15 +65,44 @@ release the slot. Callers receive the response only after downloading completes.
 This reduces overlapping transfers but does not guarantee DMA-memory headroom.
 Native script, stylesheet, and image requests bypass the queue, as do other
 tabs and clients. The limiter is not a device-wide admission control.
-When enabled, Live Microphone loads its gated script before the shared portal
+When enabled, live listening loads its gated script before the shared portal
 bundle and captures the native fetch for its ongoing stream. The stream bypasses
 the queue, and the feature limits capture to one listener.
 
-### Live Microphone API
+### Microphone API
 
-`GET /api/component/live-microphone/stream` requires the `X-Live-Microphone`
-request header, follows portal authentication, and is unavailable in recovery
-mode. It is included when `HAS_MICROPHONE_STREAMING` is enabled. A single
+`HAS_AUDIO_INPUT` enables **Audio > Microphone**, the
+`microphone_gain_db` and `microphone_reduce_rumble` configuration fields, and
+the current runtime fields `current_microphone_gain_db` and
+`current_microphone_reduce_rumble` in `GET /api/config`.
+`PUT /api/component/microphone/settings` accepts a JSON object with either or
+both settings, validates them, and applies them without writing NVS.
+Gain accepts integer values or strict integer strings from -12 to +24;
+rumble reduction must be a boolean. Request bodies are limited to 256 bytes,
+assembled in PSRAM, and parsed with a bounded PSRAM allocator.
+Runtime changes remain active after leaving the fragment; reboot restores the
+saved defaults. `POST /api/config?no_reboot=1` persists explicitly supplied
+microphone settings and applies them. Saving unrelated settings does not
+replace the current microphone settings with their saved defaults.
+
+`GET /api/component/microphone/levels` requires the
+`X-Microphone-Test` header, renews a short meter lease, and returns a no-store
+JSON object with `available`, `ota`, `in_use`, `fresh`, `sampled`, `rms`, `peak`,
+`input_full_scale`, and `gain_clipped`. RMS and peak are unsigned post-processing
+PCM amplitudes from 0 to 32768; they are valid only when `fresh` is true.
+Clipping flags retain recent events. Microphone endpoints require portal
+authentication and are unavailable in recovery mode.
+Runtime updates are rejected during OTA.
+
+The fragment presents one Test microphone switch. Its optional Hear microphone
+checkbox controls streaming within that test; stopping the test stops both
+polling and streaming. Live slider/checkbox adjustments update runtime settings;
+Save settings persists them, and Revert to saved reapplies the saved settings.
+Reset to factory values applies 0 dB and disables the low-cut filter without
+persisting. The API field remains `microphone_reduce_rumble`.
+
+`GET /api/component/microphone/stream` requires the `X-Microphone-Stream`
+request header and is included when `HAS_MICROPHONE_STREAMING` is enabled. A single
 listener receives an `application/octet-stream` response. The first
 12 bytes contain `LM`, protocol version `1`, status (`1` streaming, `2` busy
 or unable to start, `3` unavailable), a little-endian 32-bit sample rate, channel count, sample
