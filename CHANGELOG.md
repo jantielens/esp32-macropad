@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-11-17
+ms.date: 2026-11-19
 ms.topic: reference
 ---
 
@@ -182,6 +182,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Leave remote-image letterbox bars transparent when the button background is
+  `transparent`, so overlay buttons reveal the buttons underneath. Preserve
+  opaque letterbox backgrounds and Fill modes.
 * Correct reTerminal Sticky battery current and power for the stock gauge
   profile. Current and power are unavailable if the profile cannot be
   confirmed; voltage, percentage, and runtime estimates are unchanged.

@@ -53,6 +53,8 @@ struct ImageSlot {
     uint16_t* front_buf;       // Most-recent decode (handed to LVGL on next get_frame)
     uint16_t* back_buf;        // Scratch — fetch task writes new decode here
     uint16_t* lvgl_buf;        // Owned by LVGL between get_frame calls
+    ImageContentBounds front_content;
+    ImageContentBounds lvgl_content;
     size_t buf_size;           // Byte size of each buffer
 
     volatile bool new_frame;   // Set by fetch task, cleared by ack
@@ -642,9 +644,10 @@ static void fetch_task(void* param) {
         // Decode + scale to RGB565
         uint16_t* pixels = nullptr;
         size_t pixel_size = 0;
+        ImageContentBounds content = {};
 
         bool decoded = image_decode_to_rgb565(
-            raw_data, raw_len, tw, th, sm, &pixels, &pixel_size, letterbox_color);
+            raw_data, raw_len, tw, th, sm, &pixels, &pixel_size, letterbox_color, &content);
         heap_caps_free(raw_data);
 
         if (!decoded || !pixels) {
@@ -667,6 +670,7 @@ static void fetch_task(void* param) {
             uint16_t* old_front = s.front_buf;
             s.front_buf = s.back_buf;
             s.back_buf = old_front;
+            s.front_content = content;
             if (s.new_frame) {
                 s.frame_drops++;
             }
@@ -986,7 +990,9 @@ bool image_fetch_has_new_frame(image_slot_t slot) {
 //  * cancel()/cancel_all() may free lvgl_buf, but they only run from the
 //    LVGL task (clearTiles), which is the same task that calls get_frame,
 //    so there is no concurrent free.
-const uint16_t* image_fetch_get_frame(image_slot_t slot, uint16_t* out_w, uint16_t* out_h) {
+const uint16_t* image_fetch_get_frame(image_slot_t slot, uint16_t* out_w, uint16_t* out_h,
+                                    ImageContentBounds* out_content) {
+    if (out_content) *out_content = {};
     if (!g_slots || slot < 0 || slot >= IMAGE_SLOT_MAX) return nullptr;
     if (!g_mutex) return nullptr;
     xSemaphoreTake(g_mutex, portMAX_DELAY);
@@ -1000,11 +1006,13 @@ const uint16_t* image_fetch_get_frame(image_slot_t slot, uint16_t* out_w, uint16
         uint16_t* prev_lvgl = s.lvgl_buf;
         s.lvgl_buf = s.front_buf;
         s.front_buf = prev_lvgl;   // may be nullptr on first hand-off
+        s.lvgl_content = s.front_content;
         s.new_frame = false;
     }
     uint16_t* result = s.lvgl_buf;
     if (out_w) *out_w = s.target_w;
     if (out_h) *out_h = s.target_h;
+    if (result && out_content) *out_content = s.lvgl_content;
     xSemaphoreGive(g_mutex);
     return result;
 }

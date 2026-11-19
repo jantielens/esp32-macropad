@@ -96,8 +96,10 @@ bool image_fetch_has_new_frame(image_slot_t slot);
 
 // Get the front-buffer RGB565 pixel data for a slot.
 // Returns the pixel buffer pointer; sets out_w, out_h to dimensions.
+// Optional out_content excludes padding and belongs to the returned frame.
 // Returns nullptr if no frame is available yet.
-const uint16_t* image_fetch_get_frame(image_slot_t slot, uint16_t* out_w, uint16_t* out_h);
+const uint16_t* image_fetch_get_frame(image_slot_t slot, uint16_t* out_w, uint16_t* out_h,
+                                    ImageContentBounds* out_content = nullptr);
 
 // Get the cumulative count of frames silently dropped for this slot.
 // A drop occurs when the fetch task writes a new frame before LVGL has

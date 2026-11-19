@@ -182,8 +182,11 @@ Spacing is 2-64 logical px; stroke is 1-8 px, no greater than spacing.
 Dots use stroke as diameter; Checkerboard uses spacing and ignores stroke.
 Geometry is static while supported colors can be live-bound.
 
-Images cover these fills, including letterbox bands; do not assume PNG
-transparency reveals a pattern. Gauge fills are unpatterned.
+Images normally cover these fills, including letterbox bands; do not assume PNG
+transparency reveals a pattern. Remote images with a `transparent` button
+background leave letterbox bands undrawn, revealing the content underneath.
+See [remote images](../media/images.md#fetch-a-snapshot-or-stream).
+Gauge fills are unpatterned.
 Track outlines and bar corner radius belong to their widget's Content controls.
 Color badges are representative previews, not a live device simulation.
 

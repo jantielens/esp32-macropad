@@ -17,8 +17,10 @@ bool rtos_create_task_psram_stack_pinned(TaskFunction_t task, const char*, uint3
     return true;
 }
 
+static ImageContentBounds decoded_content = {0, 0, 2, 2};
+
 bool image_decode_to_rgb565(const uint8_t*, size_t, uint16_t width, uint16_t height,
-    ImageScaleMode, uint16_t** pixels, size_t* size, uint16_t) {
+    ImageScaleMode, uint16_t** pixels, size_t* size, uint16_t, ImageContentBounds* content) {
     ++fetch_decodes;
     if (fetch_on_decode) {
         auto hook = std::move(fetch_on_decode);
@@ -30,6 +32,7 @@ bool image_decode_to_rgb565(const uint8_t*, size_t, uint16_t width, uint16_t hei
     *size = width * height * 2;
     *pixels = static_cast<uint16_t*>(malloc(*size));
     (*pixels)[0] = static_cast<uint16_t>(fetch_decodes);
+    if (content) *content = decoded_content;
     return true;
 }
 
@@ -54,6 +57,42 @@ static const uint16_t* frame(image_slot_t slot) {
 
 int main() {
     image_fetch_init();
+    auto bounds_slot = image_fetch_request("https://host/portrait", "", "", 2, 2, 1,
+                                          IMAGE_SCALE_LETTERBOX);
+    assert(bounds_slot != IMAGE_SLOT_INVALID);
+    decoded_content = {0, 0, 1, 2};
+    step();
+    ImageContentBounds content = {};
+    assert(image_fetch_get_frame(bounds_slot, nullptr, nullptr, &content));
+    assert(content.width == 1 && content.height == 2);
+    decoded_content = {0, 0, 2, 1};
+    image_fetch_update_source(bounds_slot, "https://host/landscape");
+    assert(image_fetch_get_frame(bounds_slot, nullptr, nullptr, &content));
+    assert(content.width == 1 && content.height == 2);
+    step();
+    assert(image_fetch_get_frame(bounds_slot, nullptr, nullptr, &content));
+    assert(content.width == 2 && content.height == 1);
+    image_fetch_update_source(bounds_slot, "https://host/failure");
+    fetch_decode_ok = false;
+    step();
+    assert(image_fetch_get_frame(bounds_slot, nullptr, nullptr, &content));
+    assert(content.width == 2 && content.height == 1);
+    fetch_decode_ok = true;
+    image_fetch_update_source(bounds_slot, "https://host/dropped");
+    decoded_content = {0, 0, 1, 2};
+    step();
+    decoded_content = {0, 0, 2, 2};
+    step();
+    assert(image_fetch_get_drops(bounds_slot) == 1);
+    const uint16_t* latest = image_fetch_get_frame(bounds_slot, nullptr, nullptr, &content);
+    assert(latest && latest[0] == fetch_decodes);
+    assert(content.width == 2 && content.height == 2);
+    image_fetch_update_source(bounds_slot, "");
+    assert(!image_fetch_get_frame(bounds_slot, nullptr, nullptr, &content));
+    assert(content.width == 0 && content.height == 0);
+    image_fetch_cancel_all();
+    decoded_content = {0, 0, 2, 2};
+
     auto authenticated = image_fetch_request("https://camera/private", "camera", "test-password", 2, 2, 0);
     assert(authenticated != IMAGE_SLOT_INVALID);
     step();

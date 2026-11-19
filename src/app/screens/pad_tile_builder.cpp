@@ -609,6 +609,7 @@ void PadScreen::buildTiles() {
         tile.bg_image = nullptr;
         tile.image_slot = IMAGE_SLOT_INVALID;
         tile.image_url_template = nullptr;
+        tile.image_presentation_dirty = false;
 #endif
 #if HAS_IMAGE_LIBRARY
         tile.local_bg_image = nullptr;
