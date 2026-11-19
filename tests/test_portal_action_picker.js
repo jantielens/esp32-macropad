@@ -160,6 +160,26 @@ for (const action of [
 }
 context.actionEditorLoad('mixed-host', { op: 'unknown.operation', args: { value: 'preserve' } });
 assert.throws(() => context.actionEditorBuild('mixed-host'), /unavailable/);
+const restoredSelect = document.getElementById('restored-type');
+let restoredValue = '';
+Object.defineProperty(restoredSelect, 'value', {
+    get() { return restoredValue; },
+    set(value) { restoredValue = restoredSelect.options.some(option => option.value === value) ? value : ''; }
+});
+context.actionEditorLoad('restored', { op: 'unknown.operation', args: {} });
+assert.strictEqual(restoredSelect.value, '@unknown.operation');
+assert.strictEqual(restoredSelect.options[0].disabled, true);
+assert.match(restoredSelect.options[0].textContent, /unsupported by this build/);
+assert.strictEqual(document.getElementById('restored-remove').hidden, false);
+assert.throws(() => context.actionEditorBuild('restored'), /unavailable/);
+context.actionEditorLoad('restored', { op: 'screen.back', args: {} });
+assert.strictEqual(restoredSelect.value, '@screen.back');
+assert.strictEqual(restoredSelect.options[1].disabled, false);
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('restored'))),
+    { op: 'screen.back', args: {} });
+context.actionEditorLoad('restored', {});
+assert.strictEqual(restoredSelect.value, '');
+assert.strictEqual(document.getElementById('restored-remove').hidden, true);
 const mockCatalog = JSON.parse(fs.readFileSync('tools/mock-data/pad-editor.json', 'utf8')).catalog;
 const catalogsToCheck = [productionCatalogs.portal, voiceCatalogs.portal];
 if (process.env.ACTION_CATALOG_FULL_BINARY) {
@@ -171,7 +191,7 @@ for (const catalog of catalogsToCheck) {
     }
 }
 const operationMarkup = context.actionEditorHTML('operation-test', '', { operations: true });
-assert(operationMarkup.includes('for="operation-test-search">Search operations'));
+assert(operationMarkup.includes('data-search-placeholder="Search actions..."'));
 assert(!operationMarkup.includes('operation-test-generic-volume'));
 assert(!operationMarkup.includes('operation-test-shutter-group'));
 assert(operationMarkup.includes('> Dynamic</label>'));
@@ -335,33 +355,21 @@ context.actionEditorLoad('operation-test', { op: 'visual_alert.start', args: {
 assert.strictEqual(context.actionEditorBuild('operation-test').args.color, '');
 document.getElementById(alertColor).value = 'invalid';
 assert.throws(() => context.actionEditorBuild('operation-test'), /hex color/);
-const searchSelect = document.getElementById('search-test-type');
-const searchInput = document.getElementById('search-test-search');
-const navigationGroup = { tagName: 'OPTGROUP', label: 'Navigation', children: [] };
-const wifiGroup = { tagName: 'OPTGROUP', label: 'Connectivity', children: [] };
-const selectedOption = { value: '@screen.open', textContent: 'Navigate to screen', selected: true, parentElement: navigationGroup };
-const wifiOption = { value: '@wifi.station.set_enabled', textContent: 'Set Wi-Fi station mode', selected: false, parentElement: wifiGroup };
-navigationGroup.children.push(selectedOption);
-wifiGroup.children.push(wifiOption);
-searchSelect.options = [selectedOption, wifiOption];
-searchSelect.children = [navigationGroup, wifiGroup];
-searchSelect.value = selectedOption.value;
-searchInput.value = 'station';
-context.actionEditorFilterOperations('search-test');
-assert.strictEqual(searchSelect.value, '@screen.open');
-assert.strictEqual(selectedOption.hidden, false);
-assert.strictEqual(wifiOption.hidden, false);
-assert.strictEqual(document.getElementById('search-test-search-status').textContent, '1 matching operation');
-searchInput.value = 'connectivity';
-context.actionEditorFilterOperations('search-test');
-assert.strictEqual(wifiGroup.hidden, false);
-searchInput.value = 'no match';
-context.actionEditorFilterOperations('search-test');
-assert.strictEqual(wifiGroup.hidden, true);
-assert.strictEqual(navigationGroup.hidden, false);
-searchInput.value = '';
-context.actionEditorFilterOperations('search-test');
-assert.strictEqual(wifiGroup.hidden, false);
+const clearSelect = document.getElementById('clear-test-type');
+clearSelect.value = '@screen.open';
+let clearChanges = 0;
+context.Event = class { constructor(type, options) { this.type = type; this.bubbles = options.bubbles; } };
+clearSelect.dispatchEvent = event => {
+    assert.strictEqual(event.type, 'change');
+    assert.strictEqual(event.bubbles, true);
+    clearChanges++;
+    context.actionEditorTypeChanged('clear-test');
+};
+context.actionEditorClear('clear-test');
+assert.strictEqual(clearSelect.value, '');
+assert.strictEqual(clearChanges, 1);
+assert.strictEqual(document.getElementById('clear-test-remove').hidden, true);
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('clear-test'))), {});
 for (const action of [
     { op: 'screen.back', args: {} },
     { op: 'device.restart', args: {} },

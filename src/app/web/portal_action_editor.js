@@ -378,7 +378,7 @@ function actionEditorTypeOptionsHTML(opts) {
         if (!byGroup[entry.group]) { byGroup[entry.group] = []; order.push(entry.group); }
         byGroup[entry.group].push(choices.join(''));
     });
-    var html = '<option value="">(none)</option>';
+    var html = '<option value="">Choose an action...</option>';
     order.forEach(function(group) {
         html += '<optgroup label="' + group + '">';
         html += byGroup[group].join('');
@@ -387,27 +387,12 @@ function actionEditorTypeOptionsHTML(opts) {
     return html;
 }
 
-function actionEditorFilterOperations(prefix) {
-    var search = document.getElementById(prefix + '-search');
+function actionEditorClear(prefix) {
     var select = document.getElementById(prefix + '-type');
-    if (!search || !select) return;
-    var query = search.value.trim().toLowerCase();
-    var count = 0;
-    Array.from(select.options).forEach(function(option) {
-        var group = option.parentElement;
-        var groupLabel = group && group.tagName === 'OPTGROUP' ? group.label : '';
-        var match = !query || (option.textContent + ' ' + option.value + ' ' + groupLabel).toLowerCase().includes(query);
-        if (option.value && match) count++;
-        option.hidden = !!option.value && !match && !option.selected;
-    });
-    Array.from(select.children).forEach(function(group) {
-        if (group.tagName === 'OPTGROUP') {
-            group.hidden = !Array.from(group.children).some(function(option) { return !option.hidden; });
-        }
-    });
-    var status = document.getElementById(prefix + '-search-status');
-    if (status) status.textContent = query ? count + ' matching operation' + (count === 1 ? '' : 's') : '';
-    if (typeof dropdownRefresh === 'function') dropdownRefresh(select);
+    if (!select) return;
+    select.value = '';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    if (select._cddToggle) select._cddToggle.focus();
 }
 
 // Give the <select> a disabled placeholder option for an unsupported type so
@@ -435,11 +420,10 @@ function actionEditorHTML(prefix, label, opts) {
     opts = opts || {};
     var h = '';
     h += '<div class="form-group">';
-    if (label) h += '<label class="form-label" for="' + prefix + '-type">' + label + '</label>';
-    h += '<label class="form-label" for="' + prefix + '-search">Search operations</label>';
-    h += '<input type="search" class="form-control form-control-sm action-operation-search" id="' + prefix + '-search" aria-controls="' + prefix + '-type" aria-describedby="' + prefix + '-search-status" oninput="actionEditorFilterOperations(\'' + prefix + '\'); event.stopPropagation()" onchange="event.stopPropagation()">';
-    h += '<small id="' + prefix + '-search-status" role="status" aria-live="polite"></small>';
-    h += '<select class="form-select form-select-sm action-type-select" id="' + prefix + '-type" data-alarm-hook="' + (opts.alarmHook === true) + '" onchange="actionEditorTypeChanged(\'' + prefix + '\')">';
+    h += '<div class="d-flex justify-content-between align-items-center gap-2 mb-1">';
+    h += '<label class="form-label mb-0" for="' + prefix + '-type">' + (label || 'Action') + '</label>';
+    h += '<button type="button" class="btn btn-sm action-remove" id="' + prefix + '-remove" aria-label="Remove action" title="Remove action" hidden onclick="actionEditorClear(\'' + prefix + '\')"><span class="portal-icon" aria-hidden="true">delete</span><span class="portal-icon-fallback">Remove action</span></button></div>';
+    h += '<select class="form-select form-select-sm action-type-select" id="' + prefix + '-type" data-search-placeholder="Search actions..." data-alarm-hook="' + (opts.alarmHook === true) + '" onchange="actionEditorTypeChanged(\'' + prefix + '\')">';
     h += actionEditorTypeOptionsHTML(opts);
     h += '</select>';
     h += '<small id="' + prefix + '-context" class="action-context" style="display:none;"></small>';
@@ -454,7 +438,9 @@ function actionEditorTypeChanged(prefix) {
     var typeEl = document.getElementById(prefix + '-type');
     if (!typeEl) return;
     var type = typeEl.value;
-    actionEditorFilterOperations(prefix);
+    if (typeof dropdownRefresh === 'function') dropdownRefresh(typeEl);
+    var remove = document.getElementById(prefix + '-remove');
+    if (remove) remove.hidden = !type;
     var contextEl = document.getElementById(prefix + '-context');
     if (contextEl) {
         var operation = type.charAt(0) === '@' ? actionEditorOperation(type.slice(1)) : null;
@@ -583,7 +569,8 @@ function actionEditorHandleError(error) {
             if (parent.tagName === 'DETAILS') parent.open = true;
         }
         if (typeof bindingShowError === 'function') bindingShowError(input, error.message);
-        input.focus();
+        if (input._cddToggle) input._cddToggle.focus();
+        else input.focus();
     }
     showMessage(error.message, 'error');
     return true;

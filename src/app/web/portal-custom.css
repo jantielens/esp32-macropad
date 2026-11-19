@@ -1928,6 +1928,24 @@ body {
 }
 .action-list-slot { border-radius: 4px; }
 .action-list-slot > .editor-group-body { padding: 10px; }
+.btn.action-remove {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 4px;
+  color: var(--portal-text-muted);
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+.btn.action-remove:hover,
+.btn.action-remove:focus-visible {
+  color: var(--bs-danger, #dc3545);
+}
+.btn.action-remove:focus-visible {
+  outline: 2px solid var(--portal-primary);
+  outline-offset: 2px;
+}
+.action-remove .portal-icon { font-size: 18px; }
 .editor-group > summary {
   cursor: pointer;
   color: var(--portal-text); padding: 10px 14px;
@@ -2331,6 +2349,39 @@ input[type="text"].label-style-input {
 
 .cdd-wrap.cdd-open .cdd-menu {
   display: block;
+}
+
+.cdd-searchable .cdd-menu {
+  max-height: none;
+  overflow: hidden;
+}
+
+.cdd-search-tools {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+}
+
+.cdd-search-tools input {
+  min-width: 0;
+}
+
+.cdd-results {
+  max-height: min(240px, 35vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.cdd-status:not(:empty) {
+  display: block;
+  padding: 4px 8px;
+  color: var(--portal-text-muted);
+}
+
+.cdd-item.cdd-active {
+  outline: 2px solid var(--portal-primary);
+  outline-offset: -2px;
+  background: var(--portal-surface-hover);
 }
 
 .cdd-group-label {

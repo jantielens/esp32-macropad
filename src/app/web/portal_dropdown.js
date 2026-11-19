@@ -20,10 +20,18 @@
 
     var openDropdown = null; // currently open custom dropdown wrapper
 
-    function closeAny() {
+    function closeAny(restoreFocus) {
         if (openDropdown) {
+            var toggle = openDropdown.querySelector('.cdd-toggle');
+            var search = openDropdown.querySelector('.cdd-search');
             openDropdown.classList.remove('cdd-open');
+            toggle.setAttribute('aria-expanded', 'false');
+            if (search) {
+                search.setAttribute('aria-expanded', 'false');
+                search.removeAttribute('aria-activedescendant');
+            }
             openDropdown = null;
+            if (restoreFocus) toggle.focus();
         }
     }
 
@@ -45,14 +53,22 @@
         var opt = getSelectedOption(sel);
         var text = opt ? opt.textContent : '';
         toggleEl.textContent = text || '\u00a0';
-        toggleEl.classList.toggle('cdd-placeholder', !text);
+        toggleEl.classList.toggle('cdd-placeholder', !text || (!!sel.dataset.searchPlaceholder && !sel.value));
     }
 
     function renderMenu(sel, menuEl) {
-        menuEl.innerHTML = '';
+        var search = menuEl.querySelector('.cdd-search');
+        var list = search ? menuEl.querySelector('.cdd-results') : menuEl;
+        var query = search ? search.value.trim().toLowerCase() : '';
+        list.innerHTML = '';
         var flatIndex = 0;
+        var count = 0;
+        function matches(opt, groupLabel) {
+            return !opt.hidden && (!search || !!opt.value) &&
+                (!query || (opt.textContent + ' ' + opt.value + ' ' + (groupLabel || '')).toLowerCase().includes(query));
+        }
         function renderOption(opt, grouped) {
-            if (opt.hidden) {
+            if (!matches(opt, grouped)) {
                 flatIndex++;
                 return;
             }
@@ -63,7 +79,15 @@
             if (flatIndex === sel.selectedIndex) item.classList.add('cdd-selected');
             item.textContent = opt.textContent;
             item.dataset.cddIndex = String(flatIndex);
-            menuEl.appendChild(item);
+            if (search) {
+                item.id = sel.id + '-choice-' + flatIndex;
+                item.setAttribute('role', 'option');
+                item.setAttribute('aria-selected', String(flatIndex === sel.selectedIndex));
+                item.setAttribute('aria-disabled', String(opt.disabled));
+                item.tabIndex = -1;
+            }
+            list.appendChild(item);
+            count++;
             flatIndex++;
         }
         // Walk top-level children so <optgroup> renders a non-interactive
@@ -74,18 +98,38 @@
         for (var i = 0; i < sel.children.length; i++) {
             var node = sel.children[i];
             if (node.tagName === 'OPTGROUP') {
-                if (node.hidden) {
+                if (node.hidden || !Array.from(node.children).some(function(opt) { return matches(opt, node.label); })) {
                     flatIndex += node.children.length;
                     continue;
                 }
                 var header = document.createElement('div');
                 header.className = 'cdd-group-label';
                 header.textContent = node.label;
-                menuEl.appendChild(header);
-                for (var j = 0; j < node.children.length; j++) renderOption(node.children[j], true);
+                list.appendChild(header);
+                for (var j = 0; j < node.children.length; j++) renderOption(node.children[j], node.label);
             } else if (node.tagName === 'OPTION') {
                 renderOption(node);
             }
+        }
+        if (search) {
+            menuEl.querySelector('.cdd-status').textContent = count
+                ? (query ? count + ' matching action' + (count === 1 ? '' : 's') : '')
+                : 'No actions found';
+            menuEl.querySelector('.cdd-clear-search').hidden = !search.value;
+            setActive(menuEl, null);
+        }
+    }
+
+    function setActive(menu, item) {
+        menu.querySelectorAll('.cdd-active').forEach(function(node) { node.classList.remove('cdd-active'); });
+        var search = menu.querySelector('.cdd-search');
+        if (!search) return;
+        if (item) {
+            item.classList.add('cdd-active');
+            search.setAttribute('aria-activedescendant', item.id);
+            item.scrollIntoView({ block: 'nearest' });
+        } else {
+            search.removeAttribute('aria-activedescendant');
         }
     }
 
@@ -103,7 +147,41 @@
 
         var menu = document.createElement('div');
         menu.className = 'cdd-menu';
-        menu.setAttribute('role', 'listbox');
+        if (sel.dataset.searchPlaceholder) {
+            wrap.classList.add('cdd-searchable');
+            var tools = document.createElement('div');
+            tools.className = 'cdd-search-tools';
+            var search = document.createElement('input');
+            search.type = 'search';
+            search.className = 'form-control form-control-sm cdd-search action-operation-search';
+            search.placeholder = sel.dataset.searchPlaceholder;
+            search.setAttribute('aria-label', 'Search actions');
+            search.setAttribute('role', 'combobox');
+            search.setAttribute('aria-autocomplete', 'list');
+            search.setAttribute('aria-expanded', 'false');
+            var results = document.createElement('div');
+            results.className = 'cdd-results';
+            results.id = sel.id + '-choices';
+            results.setAttribute('role', 'listbox');
+            results.setAttribute('aria-label', 'Actions');
+            search.setAttribute('aria-controls', results.id);
+            var status = document.createElement('small');
+            status.className = 'cdd-status';
+            status.setAttribute('role', 'status');
+            var clear = document.createElement('button');
+            clear.type = 'button';
+            clear.className = 'btn btn-sm btn-outline-secondary cdd-clear-search';
+            clear.textContent = 'Clear';
+            clear.setAttribute('aria-label', 'Clear search');
+            tools.appendChild(search);
+            tools.appendChild(clear);
+            menu.appendChild(tools);
+            menu.appendChild(status);
+            menu.appendChild(results);
+            toggle.setAttribute('aria-controls', results.id);
+        } else {
+            menu.setAttribute('role', 'listbox');
+        }
 
         wrap.appendChild(toggle);
         wrap.appendChild(menu);
@@ -123,18 +201,22 @@
         sel.parentNode.insertBefore(wrap, sel);
         wrap.appendChild(sel);
         sel.classList.add('cdd-hidden');
+        var search = menu.querySelector('.cdd-search');
+        if (search) {
+            sel.tabIndex = -1;
+            sel.setAttribute('aria-hidden', 'true');
+        }
 
         renderMenu(sel, menu);
         renderToggleLabel(sel, toggle);
 
-        toggle.addEventListener('click', function (e) {
-            e.stopPropagation();
+        function openMenu() {
             if (sel.disabled) return;
-            if (wrap.classList.contains('cdd-open')) {
-                closeAny();
-                return;
-            }
             closeAny();
+            if (search) {
+                search.value = '';
+                menu.querySelector('.cdd-results').style.maxHeight = '';
+            }
             // Refresh the menu in case options changed since last render.
             renderMenu(sel, menu);
             wrap.classList.add('cdd-open');
@@ -145,11 +227,74 @@
             menu.style.bottom = '';
             var rect = toggle.getBoundingClientRect();
             var spaceBelow = window.innerHeight - rect.bottom;
-            if (spaceBelow < 220 && rect.top > 220) {
+            var flip = search
+                ? spaceBelow < menu.getBoundingClientRect().height && rect.top > spaceBelow
+                : spaceBelow < 220 && rect.top > 220;
+            if (flip) {
                 menu.style.bottom = '100%';
                 menu.style.top = 'auto';
             }
+            if (search) {
+                var results = menu.querySelector('.cdd-results');
+                var overhead = menu.getBoundingClientRect().height - results.getBoundingClientRect().height;
+                results.style.maxHeight = Math.max(0, Math.min(240, window.innerHeight * 0.35,
+                    (flip ? rect.top : spaceBelow) - overhead - 8)) + 'px';
+                search.setAttribute('aria-expanded', 'true');
+                search.focus();
+            }
+        }
+
+        toggle.addEventListener('click', function (e) {
+            e.stopPropagation();
+            if (wrap.classList.contains('cdd-open')) {
+                closeAny();
+                return;
+            }
+            openMenu();
         });
+
+        if (search) {
+            ['input', 'change'].forEach(function(event) {
+                search.addEventListener(event, function(e) {
+                    e.stopPropagation();
+                    if (event === 'input') renderMenu(sel, menu);
+                });
+            });
+            menu.querySelector('.cdd-clear-search').addEventListener('click', function() {
+                search.focus();
+                search.value = '';
+                renderMenu(sel, menu);
+            });
+            toggle.addEventListener('keydown', function(e) {
+                if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+                e.preventDefault();
+                openMenu();
+            });
+            wrap.addEventListener('keydown', function(e) {
+                if (!wrap.classList.contains('cdd-open')) return;
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    closeAny(true);
+                } else if (e.target === search) {
+                    var items = Array.from(menu.querySelectorAll('.cdd-item:not(.cdd-disabled)'));
+                    var active = menu.querySelector('.cdd-active');
+                    var index = items.indexOf(active);
+                    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        var next = e.key === 'ArrowDown' ? index + 1 : (index < 0 ? items.length - 1 : index - 1);
+                        setActive(menu, items[(next + items.length) % items.length]);
+                    } else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (active) active.click();
+                    }
+                }
+            });
+            wrap.addEventListener('focusout', function(e) {
+                if (!wrap.contains(e.relatedTarget) && openDropdown === wrap) closeAny();
+            });
+        }
 
         menu.addEventListener('click', function (e) {
             var item = e.target.closest('.cdd-item');
@@ -157,6 +302,7 @@
             if (item.classList.contains('cdd-disabled')) return;
             var idx = parseInt(item.dataset.cddIndex, 10);
             if (isNaN(idx)) return;
+            if (search) search.focus();
             if (sel.selectedIndex !== idx) {
                 sel.selectedIndex = idx;
                 // Fire native change event so existing onchange handlers run.
@@ -164,13 +310,14 @@
             }
             renderToggleLabel(sel, toggle);
             renderMenu(sel, menu);
-            closeAny();
+            closeAny(!!search);
         });
 
         // Mirror disabled state.
         var disabledObserver = new MutationObserver(function () {
             wrap.classList.toggle('cdd-disabled', sel.disabled);
             toggle.disabled = sel.disabled;
+            if (sel.disabled && openDropdown === wrap) closeAny();
         });
         disabledObserver.observe(sel, { attributes: true, attributeFilter: ['disabled'] });
 

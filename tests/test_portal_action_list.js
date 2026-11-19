@@ -275,7 +275,7 @@ async function checkSwipeActions() {
     assert.deepStrictEqual(options.map(x => x.prefix),
         ['swipe-left', 'swipe-right', 'swipe-up', 'swipe-down']);
     assert(options.every(x => x.operations && !x.mixed));
-    assert(node.innerHTML.includes('Search operations'));
+    assert(node.innerHTML.includes('data-search-placeholder="Search actions..."'));
     assert(node.innerHTML.includes('value="@screen.open"'));
     assert(node.innerHTML.includes('value="@screen.back"'));
     assert(!node.innerHTML.includes('value="shutter"'));
@@ -307,7 +307,7 @@ async function checkTriggerHosts() {
         actionEditorListRender: (container, prefixes, labels, options) => {
             rendered.push({ container, options: options.actionOptions });
             const html = context.actionEditorHTML(prefixes[0], '', options.actionOptions);
-            assert(html.includes('Search operations'));
+            assert(html.includes('data-search-placeholder="Search actions..."'));
         },
         actionEditorListLoad: (prefixes, actions) => drafts.set(prefixes[0], actions),
         actionEditorListBuild: prefixes => drafts.get(prefixes[0]) || [],

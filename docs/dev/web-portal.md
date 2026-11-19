@@ -1962,6 +1962,11 @@ operations are authored by registering descriptors, not by adding an editor
 extension. Unsupported or incompatible action documents are rejected rather
 than translated.
 
+Action selectors opt into the shared dropdown's searchable mode with
+`data-search-placeholder`. The original select remains the source of truth
+for loading, validation, and change events. Search only filters the visible
+choices; it does not change action values or become part of a pad draft.
+
 Run the action picker, action-list, cycle, timer, and startup host regressions after
 action editor changes, followed by asset minification and desktop/mobile checks. The
 picker guards the ownership boundary and exercises payload round-trips against

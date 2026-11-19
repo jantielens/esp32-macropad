@@ -10,7 +10,7 @@ and several actions can form an ordered sequence.
 > [!WARNING]
 > Action configuration uses the versioned operation format. Older actions
 > cannot run or be saved in this format and are not converted automatically.
-> Back up your configuration and recreate affected actions using the operation
+> Back up your configuration and recreate affected actions using the action
 > picker. If the pad cannot load, see
 > [pad replacement guidance](../device/backup-and-restore.md#export-and-restore-one-pad).
 > Available operations depend on the installed firmware.
@@ -19,12 +19,15 @@ and several actions can form an ordered sequence.
 
 In Button **Actions**, choose an unused Tap or Long-press slot.
 Ordinary buttons support up to three ordered actions for each gesture.
-Set a slot to **(none)** to remove it, then **Save Pad**.
+Choose the delete icon (**Remove action**) to clear a slot, then **Save Pad**.
 Holding an ordinary button for about 500 ms invokes its long-press list.
 Touch-owning [widgets](../widgets/README.md) can replace these interaction rules.
 
-The dropdown groups supported actions by category. Use **Search operations** to
-filter by name, category, or operation ID. Use the current fields and help
+Open **Choose an action...** to browse supported actions by category, or use
+**Search actions** inside the picker to filter by name, category, or operation
+ID. Choosing a result shows its settings below the picker. Searching does not
+change the selected action; press Escape to close without choosing.
+Use the current fields and help
 instead of assuming another firmware's action catalog applies.
 An action that queues network work is not proof its external effect completed.
 **Load saved note** also returns after accepting a request, so a following
