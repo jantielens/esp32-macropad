@@ -23,6 +23,7 @@ function alarmScheduleSummary() {
 function alarmConfigBuild() {
     if (document.getElementById('alarm-config-form').dataset.section === 'behavior') {
         return {
+            action_format_version: 1,
             lateness_minutes: Number(document.getElementById('alarm-lateness-minutes').value),
             snooze_minutes: Number(document.getElementById('alarm-snooze-minutes').value),
             auto_dismiss_minutes: Number(document.getElementById('alarm-dismiss-minutes').value),
@@ -66,12 +67,13 @@ async function alarmInitFragment() {
         if (!schedule) {
             await getDeviceInfo();
             if (document.getElementById('alarm-config-form') !== form) return;
-            actionEditorListRender('alarm-ring-editors', ALARM_RING_PREFIXES, null, {actionOptions:{alarmHook:true, operations:true, mixed:true}});
-            actionEditorListRender('alarm-stop-editors', ALARM_STOP_PREFIXES, null, {actionOptions:{alarmHook:true, operations:true, mixed:true}});
+            actionEditorListRender('alarm-ring-editors', ALARM_RING_PREFIXES, null, {actionOptions:{alarmHook:true, operations:true}});
+            actionEditorListRender('alarm-stop-editors', ALARM_STOP_PREFIXES, null, {actionOptions:{alarmHook:true, operations:true}});
         }
         var response = await fetch('/api/component/alarms/config');
         if (!response.ok) throw new Error('Alarm configuration unavailable');
         var settings = await response.json();
+        if (settings.action_format_version !== 1) throw new Error('Incompatible alarm action format; saved settings are protected');
         var config = settings['1'];
         if (document.getElementById('alarm-config-form') !== form) return;
         if (schedule) {

@@ -17,6 +17,10 @@
 #include <cstring>
 #include <cstdint>
 #include <cstdlib>
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
 
 // Pull in headers that session.cpp depends on so we can define the symbols
 // it expects (matching the real signatures).
@@ -30,6 +34,10 @@
 
 #include <LittleFS.h>
 FakeStorage LittleFS;  // satisfies `Storage` macro from src/app/storage.h
+bool shutter_test_task_creation_fails = false;
+bool shutter_test_defer_task = false;
+void (*shutter_test_deferred_fn)(void*) = nullptr;
+void* shutter_test_deferred_arg = nullptr;
 
 void storage_publish_usage(bool /*force*/) {}
 
@@ -43,11 +51,25 @@ struct MeasureRecorder {
     int  set_lock_false_calls = 0;
     char last_target[32]      = {};
     bool last_recompute       = true;
+    bool locked               = false;
     void reset() { *this = MeasureRecorder(); }
 };
 static MeasureRecorder g_measure;
+static std::mutex g_race_mutex;
+static std::condition_variable g_race_cv;
+static bool g_block_target = false;
+static bool g_target_entered = false;
+static bool g_release_target = false;
 
 bool shutter_measure_set_target(const char* label, bool recompute) {
+    {
+        std::unique_lock<std::mutex> lock(g_race_mutex);
+        if (g_block_target) {
+            g_target_entered = true;
+            g_race_cv.notify_all();
+            g_race_cv.wait(lock, [] { return g_release_target; });
+        }
+    }
     g_measure.set_target_calls++;
     g_measure.last_recompute = recompute;
     if (label) {
@@ -59,6 +81,7 @@ bool shutter_measure_set_target(const char* label, bool recompute) {
     return true;
 }
 bool shutter_measure_set_lock(bool locked) {
+    g_measure.locked = locked;
     if (locked) g_measure.set_lock_true_calls++;
     else        g_measure.set_lock_false_calls++;
     return true;
@@ -100,7 +123,9 @@ struct CaptureLifecycleRecorder {
     void reset() { *this = CaptureLifecycleRecorder(); }
 };
 static CaptureLifecycleRecorder g_capture_lifecycle;
+static bool g_capture_available = true;
 bool shutter_capture_acquire(const char* tag) {
+    if (!g_capture_available) return false;
     g_capture_lifecycle.acquire_calls++;
     if (tag) { strncpy(g_capture_lifecycle.last_acquire_tag, tag, sizeof(g_capture_lifecycle.last_acquire_tag) - 1); }
     return true;
@@ -263,6 +288,121 @@ static void test_guided_start_locks_and_targets_first_speed() {
     shutter_session_stop();
 }
 
+static void test_guided_start_capture_failure() {
+    const char* speeds[] = {"1/60"};
+    install_test_script("fail", "Capture failure", speeds, 1, 1);
+    g_measure.reset();
+    g_capture_available = false;
+    shutter_session_guide_start("fail");
+    g_capture_available = true;
+
+    CHECK(!shutter_session_is_active(), "failed capture does not start a session");
+    CHECK(g_measure.set_target_calls == 0 && g_measure.set_lock_true_calls == 0,
+          "failed capture does not change or lock the target");
+    shutter_session_start("freeform");
+    CHECK(!shutter_session_is_guided(), "subsequent freeform session is not guided");
+    shutter_session_stop();
+}
+
+static void test_start_admission_failures() {
+    g_capture_available = false;
+    CHECK(!shutter_session_start("camera"), "session reports capture failure");
+    CHECK(!shutter_session_toggle("camera"), "toggle reports capture failure");
+    g_capture_available = true;
+    CHECK(!shutter_session_guide_start(""), "guide rejects an empty ID");
+    shutter_test_task_creation_fails = true;
+    CHECK(!shutter_session_guide_start("test"), "guide reports task creation failure");
+    shutter_test_task_creation_fails = false;
+    CHECK(shutter_session_start("camera"), "session starts after admission failures");
+    CHECK(!shutter_session_start("camera"), "session rejects duplicate start");
+    shutter_session_stop();
+}
+
+static void test_stop_cancels_queued_guide() {
+    const char* speeds[] = {"1/60"};
+    install_test_script("queued", "Queued", speeds, 1, 1);
+    shutter_test_defer_task = true;
+    CHECK(shutter_session_guide_start("queued"), "guide start was queued");
+    shutter_test_defer_task = false;
+    shutter_session_stop();
+    shutter_test_deferred_fn(shutter_test_deferred_arg);
+    shutter_test_deferred_fn = nullptr;
+    shutter_test_deferred_arg = nullptr;
+    CHECK(!shutter_session_is_active(), "stop cancels queued guide before it starts");
+    CHECK(!g_measure.locked, "cancelled guide does not lock the target");
+    if (shutter_session_is_active()) shutter_session_stop();
+}
+
+static void test_stop_during_guide_start() {
+    const char* speeds[] = {"1/60"};
+    install_test_script("race", "Race", speeds, 1, 1);
+    g_measure.reset();
+    {
+        std::lock_guard<std::mutex> lock(g_race_mutex);
+        g_block_target = true;
+        g_target_entered = false;
+        g_release_target = false;
+    }
+    std::thread starter([] { shutter_session_guide_start("race"); });
+    {
+        std::unique_lock<std::mutex> lock(g_race_mutex);
+        g_race_cv.wait(lock, [] { return g_target_entered; });
+    }
+    bool stop_finished = false;
+    std::thread stopper([&] {
+        shutter_session_stop();
+        std::lock_guard<std::mutex> lock(g_race_mutex);
+        stop_finished = true;
+        g_race_cv.notify_all();
+    });
+    {
+        std::unique_lock<std::mutex> lock(g_race_mutex);
+        g_race_cv.wait_for(lock, std::chrono::milliseconds(100), [&] { return stop_finished; });
+        g_release_target = true;
+        g_race_cv.notify_all();
+    }
+    starter.join();
+    stopper.join();
+    g_block_target = false;
+    CHECK(!shutter_session_is_active(), "stop leaves the racing guide inactive");
+    CHECK(!g_measure.locked, "stop leaves the racing guide target unlocked");
+}
+
+static void test_stop_during_guide_skip() {
+    const char* speeds[] = {"1/60", "1/125"};
+    install_test_script("skip_race", "Skip race", speeds, 2, 1);
+    shutter_session_guide_start("skip_race");
+    {
+        std::lock_guard<std::mutex> lock(g_race_mutex);
+        g_block_target = true;
+        g_target_entered = false;
+        g_release_target = false;
+    }
+    std::thread skipper([] { shutter_session_guide_skip(); });
+    {
+        std::unique_lock<std::mutex> lock(g_race_mutex);
+        g_race_cv.wait(lock, [] { return g_target_entered; });
+    }
+    bool stop_finished = false;
+    std::thread stopper([&] {
+        shutter_session_stop();
+        std::lock_guard<std::mutex> lock(g_race_mutex);
+        stop_finished = true;
+        g_race_cv.notify_all();
+    });
+    {
+        std::unique_lock<std::mutex> lock(g_race_mutex);
+        g_race_cv.wait_for(lock, std::chrono::milliseconds(100), [&] { return stop_finished; });
+        g_release_target = true;
+        g_race_cv.notify_all();
+    }
+    skipper.join();
+    stopper.join();
+    g_block_target = false;
+    CHECK(!shutter_session_is_active(), "stop leaves the skipping guide inactive");
+    CHECK(!g_measure.locked, "stop leaves the skipping guide target unlocked");
+}
+
 static void test_guided_manual_stop_releases_lock() {
     printf("\n--- test_guided_manual_stop_releases_lock ---\n");
     const char* speeds[] = {"1/60", "1/125"};
@@ -356,6 +496,11 @@ int main() {
     shutter_session_init();
 
     test_freeform_stop_does_not_re_lock();
+    test_start_admission_failures();
+    test_stop_cancels_queued_guide();
+    test_stop_during_guide_start();
+    test_stop_during_guide_skip();
+    test_guided_start_capture_failure();
     test_guided_start_locks_and_targets_first_speed();
     test_guided_manual_stop_releases_lock();
     test_guided_auto_stop_releases_lock();

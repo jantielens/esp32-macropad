@@ -21,9 +21,6 @@ static unsigned immediate_calls = 0;
 void action_type_register(const ActionTypeDef*) {}
 bool action_run_dispatch_ha(const HaServicePayload&, ActionResult*) { return false; }
 ActionDispatchContext action_dispatch_context() { return operation_context; }
-const char* action_validate_json(JsonObjectConst action, bool, const char*, const char*) {
-    return validate_ha_service(action);
-}
 bool action_json_object_valid(const char* value) {
     JsonDocument document;
     return !deserializeJson(document, value) && document.is<JsonObject>();
@@ -40,7 +37,7 @@ bool ha_service_execute_immediate(const HaServicePayload& value) {
 
 static void test_operation_dispatch() {
     ActionResolvedArgument arguments[] = {
-        {"light.kitchen", 0}, {"turn_on", 0}, {"{\"brightness_pct\":80}", 0}
+        {"light.kitchen", 0, 0}, {"turn_on", 0, 0}, {"{\"brightness_pct\":80}", 0, 0}
     };
     const ActionOperationDef& operation = kHaServiceOperations[0];
     assert(operation.dispatch(arguments, "test", 0) == ACTION_COMPLETE);

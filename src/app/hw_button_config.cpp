@@ -7,6 +7,7 @@
 #include "action_storage.h"
 #include "action_validate.h"
 #include "config_psram.h"
+#include "json_key_validation.h"
 #include "log_manager.h"
 #include "psram_json_allocator.h"
 #include "storage.h"
@@ -22,6 +23,7 @@ static const char* HW_BUTTONS_PATH = "/config/hw_buttons.json";
 static HwButtonConfig* g_config = nullptr;
 static ActionStorage g_storage = {};
 static SemaphoreHandle_t g_lock = nullptr;
+static bool g_config_valid = false;
 
 static bool parse_list(JsonVariant value, ButtonAction* actions, uint8_t& count,
                        ActionStorage& storage, bool validate_bindings) {
@@ -34,24 +36,15 @@ static bool parse_list(JsonVariant value, ButtonAction* actions, uint8_t& count,
     for (JsonVariant item : list) {
         if (!item.is<JsonObject>()) return false;
         JsonObject action = item.as<JsonObject>();
-        const char* type = action["type"] | "";
-        if (action.containsKey("type") &&
-            (action.containsKey("args") ||
-             (action.containsKey("op") && strcmp(type, ACTION_TYPE_VISUAL_ALERT)))) {
-            LOGW(TAG, "Invalid button action: mixed action envelope");
-            return false;
-        }
         const char* error = validate_bindings ? action_validate_json(action)
-            : (!action.containsKey("type") && action.containsKey("op")
-                ? action_operation_validate_json(action, false)
-                : (!action["type"].is<const char*>() ? "missing action type" : nullptr));
-        if (!error && type[0] && strcmp(type, "none") && !action_type_is_supported(type))
-            error = "action unavailable";
+                                              : action_operation_validate_json(action, false);
+        const char* operation = action["op"] | "";
+        if (!error && (action.containsKey("type") || !operation[0]))
+            error = "legacy action is not supported";
         if (error) {
             LOGW(TAG, "Invalid button action: %s", error);
             return false;
         }
-        if (!strcmp(type, "none")) continue;
         action_parse(action, actions[count]);
         if (storage.failed || !actions[count].type[0]) return false;
         ++count;
@@ -61,7 +54,11 @@ static bool parse_list(JsonVariant value, ButtonAction* actions, uint8_t& count,
 
 static bool parse_config(JsonDocument& doc, HwButtonConfig* config,
                          ActionStorage& storage, bool validate_bindings) {
-    if (!doc.is<JsonObject>() || !doc["buttons"].is<JsonArray>()) return false;
+    if (!doc.is<JsonObject>() || !doc["action_format_version"].is<int>() ||
+        doc["action_format_version"].as<int>() != 1 || !doc["buttons"].is<JsonArray>()) {
+        LOGW(TAG, "Incompatible hardware button actions document; recreate it");
+        return false;
+    }
     JsonArray buttons = doc["buttons"].as<JsonArray>();
     if (buttons.size() > NUM_HW_BUTTONS) return false;
     for (size_t i = 0; i < buttons.size(); ++i) {
@@ -117,17 +114,20 @@ void hw_button_config_init() {
         return;
     }
     storage_mount();
+    bool config_valid = true;
     if (Storage.exists(HW_BUTTONS_PATH)) {
         File f = Storage.open(HW_BUTTONS_PATH, "r");
         bool valid = false;
         if (f) {
             const size_t size = f.size();
             BasicJsonDocument<PsramJsonAllocator> doc(4096);
-            valid = size && size <= 4096 && !deserializeJson(doc, f) && !doc.overflowed() &&
+            valid = size && size <= 4096 && json_stream_scan_keys(f) == JsonKeyScanResult::Valid &&
+                    !deserializeJson(doc, f) && !doc.overflowed() &&
                     parse_config(doc, replacement, storage, false);
             f.close();
         }
         if (!valid) {
+            config_valid = false;
             LOGW(TAG, "Invalid button config; using board defaults");
             action_storage_clear(storage);
             memset(replacement, 0, NUM_HW_BUTTONS * sizeof(HwButtonConfig));
@@ -140,6 +140,7 @@ void hw_button_config_init() {
     }
     if (xSemaphoreTake(g_lock, portMAX_DELAY) == pdTRUE) {
         replace_config(replacement, storage);
+        g_config_valid = config_valid;
         xSemaphoreGive(g_lock);
     }
     action_storage_clear(storage);
@@ -161,6 +162,10 @@ bool hw_button_config_snapshot(uint8_t index, bool hold, ButtonAction* actions,
 bool hw_button_config_to_json(JsonArray buttons) {
     if (!g_config || !g_lock || buttons.isNull()) return false;
     if (xSemaphoreTake(g_lock, portMAX_DELAY) != pdTRUE) return false;
+    if (!g_config_valid) {
+        xSemaphoreGive(g_lock);
+        return false;
+    }
     for (uint8_t index = 0; index < NUM_HW_BUTTONS; ++index) {
         const HwButtonConfig& config = g_config[index];
         JsonObject button = buttons.createNestedObject();
@@ -179,6 +184,10 @@ bool hw_button_config_to_json(JsonArray buttons) {
 
 bool hw_button_config_save_raw(const uint8_t* json, size_t len) {
     if (!g_config || !g_lock || !json || !len || len > 4096) return false;
+    if (!json_keys_valid(json, len)) {
+        LOGW(TAG, "Button config JSON contains an invalid NUL");
+        return false;
+    }
     BasicJsonDocument<PsramJsonAllocator> doc(4096);
     if (deserializeJson(doc, json, len) || doc.overflowed()) return false;
     auto* replacement = static_cast<HwButtonConfig*>(
@@ -197,7 +206,10 @@ bool hw_button_config_save_raw(const uint8_t* json, size_t len) {
         return false;
     }
     const bool saved = storage_write_atomic(HW_BUTTONS_PATH, json, len);
-    if (saved) replace_config(replacement, storage);
+    if (saved) {
+        replace_config(replacement, storage);
+        g_config_valid = true;
+    }
     xSemaphoreGive(g_lock);
     action_storage_clear(storage);
     free(replacement);

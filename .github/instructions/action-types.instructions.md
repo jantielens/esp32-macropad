@@ -5,12 +5,12 @@ applyTo: "src/app/actions/**, src/app/actions.cpp, src/app/action_*.cpp, src/app
 
 # Action Type Conventions
 
-`ActionTypeDef` is the contract for parsing, serialization, dispatch, availability,
-authoring validation, bindings, and portal/MCP catalog metadata. Keep action-specific
-behavior in a self-registering module, not in `action_parse.cpp` or
-`action_dispatch.cpp`.
-Read `src/app/action_registry.h` for callback signatures and a neighboring
-action module for implementation patterns.
+`ActionTypeDef` registers typed operations, availability, execution policy,
+and portal/MCP catalog metadata. The shared operation parser and validator
+handle serialization and bindings. Keep operation handlers in their
+self-registering modules, not in `action_parse.cpp` or `action_dispatch.cpp`.
+Read `src/app/action_registry.h` and a neighboring action module for
+implementation patterns.
 
 ## Typed operations
 
@@ -54,11 +54,11 @@ through the existing continuation machinery.
 1. Define stable operation IDs, argument descriptors, and normalized handlers
    in `src/app/actions/<type>_action.cpp`. Reuse the shared parser, storage,
    validation, and catalog projection.
-2. Record arguments, completion semantics, and behavioral verification in
-   `docs/dev/action-migration-ledger.md`. Test actual handler dispatch and
-   failures, not registration alone.
-3. Keep legacy parsing and payloads only where existing callers still require
-   them; do not introduce a legacy conversion adapter.
+2. Keep argument definitions in the descriptor and make the operation's
+   completion condition explicit. Test actual handler dispatch and failures,
+   not registration alone. See the [typed action framework](../../docs/dev/action-framework.md)
+   for the shared execution contract.
+3. Reject legacy action payloads; do not add a legacy parser or conversion adapter.
 4. Call `DEFINE_AND_REGISTER_ACTION_TYPE(...)` exactly once in the module.
 5. Include the module in `src/app/actions/action_modules.inc`. Arduino compiles
    sketch-root `.cpp` files, not modules in subdirectories; sketch-root

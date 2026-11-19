@@ -23,7 +23,7 @@ enum class MqttPublishScope { SensorsOnly };
 const char* device_class_get_full_name() { return "ESP32 Macropad"; }
 void device_class_dispatch_config_defaults(DeviceConfig*) {}
 void device_class_dispatch_config_load(DeviceConfig*, Preferences&) {}
-void device_class_dispatch_config_save(const DeviceConfig*, Preferences&) {}
+bool device_class_dispatch_config_save(const DeviceConfig*, Preferences&) { return true; }
 PowerMode power_config_parse_power_mode(const DeviceConfig*);
 MqttPublishScope power_config_parse_mqtt_publish_scope(const DeviceConfig*) { return MqttPublishScope::SensorsOnly; }
 const char* power_config_power_mode_to_string(PowerMode) { return "always_on"; }

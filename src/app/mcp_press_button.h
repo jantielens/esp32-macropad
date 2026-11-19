@@ -15,7 +15,6 @@ enum McpPressDispatchResult : uint8_t {
 struct McpPressDispatchOps {
     bool (*reserve)(uint8_t action_count, uint32_t* execution_id, void* context);
     void (*dispatch_list)(const ButtonAction* actions, uint8_t count, void* context);
-    void (*dispatch_action)(const ButtonAction& action, void* context);
     void (*set_action)(uint32_t execution_id, uint8_t result_index,
                        uint8_t action_index, const HaServicePayload& payload,
                        void* context);

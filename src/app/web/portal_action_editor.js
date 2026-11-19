@@ -1,16 +1,7 @@
 // ============================================================================
 // Shared Action Editor — reusable UI component for ButtonAction editing
 // ============================================================================
-// Catalog-backed fields, extension dispatch, and reusable action-list plumbing.
-
-// Extension modules (e.g. portal_action_editor_shutter.js) can register into
-// _actionEditorExtensions to add action types without modifying this file.
-// Extensions provide groups, typeChanged, load, build, optional wireFragment,
-// and bindingSuffixes/colorSuffixes declarations. Type-select
-// options are no longer contributed by extensions — action_catalog.cpp (see
-// GET /api/info?catalog=1) is the single source for every type's group and
-// label, built-in or device-class.
-var _actionEditorExtensions = [];
+// Catalog-backed operation fields and reusable action-list plumbing.
 
 // Shared fixed slot count for every action-array host (pad tap/long-press,
 // pad-level, boot, hardware button, MQTT trigger, timer expiry, Shutter
@@ -83,6 +74,9 @@ function actionEditorOperationHTML(prefix) {
                 } else if (argument.control === 'sounds') {
                     html += '<select class="form-select form-select-sm" id="' + id + '-fixed"' + fixedChanged + '><option value="">Select a sound</option></select>';
                     html += '<small class="text-danger" id="' + id + '-load-error" role="alert"></small>';
+                } else if (argument.control === 'brew_templates') {
+                    html += '<select class="form-select form-select-sm" id="' + id + '-fixed"' + fixedChanged + '><option value="">Loading templates...</option></select>';
+                    html += '<small class="text-danger" id="' + id + '-load-error" role="alert"></small>';
                 } else if (argument.type === 'boolean') {
                     html += '<select class="form-select form-select-sm" id="' + id + '-fixed"' + fixedChanged + '>';
                     html += '<option value="true"' + (argument.default === true ? ' selected' : '') + '>Enabled</option>';
@@ -116,7 +110,7 @@ function actionEditorOperationHTML(prefix) {
                         html += '<input type="number" step="1" min="' + argument.nonzero_min + '" max="' + argument.max + '" value="' + (initial || argument.nonzero_min) + '" class="form-control form-control-sm" id="' + id + '-fixed"' + (initial === 0 ? ' disabled' : '') + '>';
                         html += '<label><input type="checkbox" id="' + id + '-zero"' + (initial === 0 ? ' checked' : '') + ' onchange="actionEditorOperationTimingChanged(\'' + prefix + '\',\'' + operation.id + '\',\'' + argument.name + '\')"> ' + escAttr(argument.zero_label || 'No timeout') + '</label>';
                     } else {
-                        html += '<input type="number" step="1" min="' + argument.min + '" max="' + argument.max + '" value="' + initial + '" class="form-control form-control-sm" id="' + id + '-fixed">';
+                        html += '<input type="number" step="' + (argument.type === 'number' ? 'any' : '1') + '" min="' + argument.min + '" max="' + argument.max + '" value="' + initial + '" class="form-control form-control-sm" id="' + id + '-fixed">';
                     }
                 }
                 html += '</div>';
@@ -125,7 +119,7 @@ function actionEditorOperationHTML(prefix) {
                     var expected = argument.control === 'screens' ? 'screen ID'
                         : argument.type === 'boolean' ? 'true or false'
                         : argument.type === 'enum' ? (argument.choices || []).map(escAttr).join(', ')
-                        : argument.type === 'string' ? 'text' : 'whole number';
+                        : argument.type === 'string' ? 'text' : argument.type === 'number' ? 'number' : 'whole number';
                     html += '<small>Expected: ' + expected + '. Example: <code>' + escAttr(argument.example) + '</code></small></div>';
                 }
                 html += '</div>';
@@ -134,6 +128,59 @@ function actionEditorOperationHTML(prefix) {
         });
     });
     return html;
+}
+
+function actionEditorLoadBrewTemplates(prefix, operation) {
+    var fields = operation.arguments.filter(function(argument) { return argument.control === 'brew_templates'; });
+    if (!fields.length || typeof fetch !== 'function') return;
+    var selects = fields.map(function(argument) {
+        var id = prefix + '-op-' + operation.id + '-' + argument.name + '-fixed';
+        return { id: id, element: document.getElementById(id) };
+    });
+    return fetch('/api/brew-templates').then(function(response) {
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        return response.json();
+    }).then(function(templates) {
+        if (!Array.isArray(templates)) throw new Error('Invalid template list');
+        selects.forEach(function(select) {
+            var element = select.element;
+            if (!element || document.getElementById(select.id) !== element) return;
+            var selected = element.getAttribute('data-pending-value') || element.value;
+            while (element.options.length) element.remove(0);
+            templates.forEach(function(template) {
+                if (!template || typeof template.name !== 'string' || !template.name) return;
+                var option = document.createElement('option');
+                option.value = template.name;
+                option.textContent = template.display_name || template.name;
+                element.appendChild(option);
+            });
+            if (selected && !Array.from(element.options).some(function(option) { return option.value === selected; })) {
+                var missing = document.createElement('option');
+                missing.value = selected;
+                missing.textContent = selected + ' (unavailable)';
+                element.appendChild(missing);
+            }
+            if (selected) element.value = selected;
+            element.removeAttribute('data-pending-value');
+            var template = document.getElementById(select.id.replace(/-fixed$/, '-template'));
+            if (template && template.hasAttribute('data-dynamic-waiting')) {
+                if (!template.value && element.value) {
+                    template.value = element.value;
+                    template.setAttribute('data-dynamic-initialized', '1');
+                }
+                template.removeAttribute('data-dynamic-waiting');
+            }
+            var error = document.getElementById(select.id.replace(/-fixed$/, '-load-error'));
+            if (error) error.textContent = element.options.length ? '' : 'No brew templates are available.';
+        });
+    }).catch(function(error) {
+        console.error('Cannot load brew templates:', error);
+        selects.forEach(function(select) {
+            if (document.getElementById(select.id) !== select.element) return;
+            var message = document.getElementById(select.id.replace(/-fixed$/, '-load-error'));
+            if (message) message.textContent = 'Could not load brew templates. Reopen this action to retry.';
+        });
+    });
 }
 
 function actionEditorUpdateSounds(select, sounds) {
@@ -149,6 +196,20 @@ function actionEditorUpdateSounds(select, sounds) {
         select.appendChild(option);
     });
     select.value = selected;
+}
+
+function actionEditorPopulateSounds(prefixes, sounds) {
+    if (!Array.isArray(sounds)) return;
+    prefixes.forEach(function(prefix) {
+        actionEditorCatalog().forEach(function(entry) {
+            (entry.operations || []).forEach(function(operation) {
+                operation.arguments.forEach(function(argument) {
+                    if (argument.control === 'sounds')
+                        actionEditorUpdateSounds(document.getElementById(prefix + '-op-' + operation.id + '-' + argument.name + '-fixed'), sounds);
+                });
+            });
+        });
+    });
 }
 
 function actionEditorLoadOperationSounds(prefix, operation) {
@@ -193,7 +254,13 @@ function actionEditorOperationFixedChanged(prefix, id, name) {
     var fixed = document.getElementById(base + '-fixed');
     var template = document.getElementById(base + '-template');
     if (!fixed || !template) return;
-    template.value = fixed.value;
+    var value = fixed.value || fixed.getAttribute('data-pending-value');
+    if (!value) {
+        template.setAttribute('data-dynamic-waiting', '1');
+        return;
+    }
+    template.value = value;
+    template.removeAttribute('data-dynamic-waiting');
     template.setAttribute('data-dynamic-initialized', '1');
 }
 
@@ -239,6 +306,11 @@ function actionEditorBuildOperation(prefix, operation) {
             if (!value || new TextEncoder().encode(value).length >= 192) error = 'Enter a dynamic value under 192 bytes.';
             else if (!checked.valid) error = checked.errors[0].message;
             args[argument.name] = { '$template': value };
+        } else if (argument.type === 'number') {
+            if (!value.trim() || !Number.isFinite(Number(value)) ||
+                Number(value) < argument.min || Number(value) > argument.max)
+                error = 'Enter a number from ' + argument.min + ' to ' + argument.max + '.';
+            args[argument.name] = Number(value);
         } else if (argument.type === 'integer') {
             var zero = argument.control === 'timing' && document.getElementById(base + '-zero');
             if (zero && zero.checked) value = '0';
@@ -298,11 +370,8 @@ function actionEditorTypeOptionsHTML(opts) {
     var byGroup = {};
     actionEditorCatalog().forEach(function(entry) {
         var choices = [];
-        if ((!opts || !opts.operations || (opts.mixed && !(entry.operations || []).length)) &&
-            (!opts || !opts.alarmHook || entry.alarm_hook_allowed === true))
-            choices.push('<option value="' + entry.type + '">' + entry.label + '</option>');
-        if (opts && opts.operations) (entry.operations || []).forEach(function(operation) {
-            if (!opts.alarmHook || operation.alarm_hook_allowed === true)
+        (entry.operations || []).forEach(function(operation) {
+            if (!opts || !opts.alarmHook || operation.alarm_hook_allowed === true)
                 choices.push('<option value="@' + operation.id + '">' + operation.label + '</option>');
         });
         if (!choices.length) return;
@@ -337,158 +406,9 @@ function actionEditorFilterOperations(prefix) {
         }
     });
     var status = document.getElementById(prefix + '-search-status');
-    var noun = select.getAttribute('data-mixed') === 'true' ? ' action' : ' operation';
-    if (status) status.textContent = query ? count + ' matching' + noun + (count === 1 ? '' : 's') : '';
+    if (status) status.textContent = query ? count + ' matching operation' + (count === 1 ? '' : 's') : '';
     if (typeof dropdownRefresh === 'function') dropdownRefresh(select);
 }
-
-// <option> tags for a multi-command type's Command selector. '' for a
-// direct action (no commands) or a type absent from this build's catalog.
-function actionEditorCommandOptionsHTML(type, selected) {
-    var entry = actionEditorCatalogEntry(type);
-    if (!entry || !entry.commands) return '';
-    return entry.commands.map(function(c) {
-        return '<option value="' + c.id + '"' + (selected !== undefined && String(c.id) === String(selected) ? ' selected' : '') + '>' + c.label + '</option>';
-    }).join('');
-}
-
-// Render only the small common field vocabulary. Actions that need conditional
-// controls or visual previews keep their explicit editor extension.
-function actionEditorGenericFieldsHTML(prefix) {
-    var html = '';
-    actionEditorCatalog().forEach(function(entry) {
-        var fields = actionEditorGenericFields(entry.type);
-        if (!fields.length) return;
-        html += '<div id="' + prefix + '-generic-' + entry.type + '-group" style="display:none;">';
-        fields.forEach(function(field) {
-            var id = prefix + '-generic-' + entry.type + '-' + field.name;
-            html += '<div class="form-group">';
-            if (field.type === 'toggle') {
-                html += '<label><input type="checkbox" id="' + id + '"> ' + field.label + '</label>';
-            } else {
-                html += '<label class="form-label" for="' + id + '">' + field.label;
-                if (field.bindable) html += ' <span class="fx-hint" onclick="showBindingHelp()">fx</span>';
-                html += '</label>';
-                if (field.type === 'select') {
-                    html += '<select class="form-select form-select-sm" id="' + id + '">';
-                    if (field.command_options) html += actionEditorCommandOptionsHTML(entry.type, field.default);
-                    else if (field.options_source === 'sounds') html += '<option value="">(none)</option>';
-                    else if (field.options) html += field.options.map(function(option) {
-                        return '<option value="' + option.id + '"' + (field.default !== undefined && String(option.id) === String(field.default) ? ' selected' : '') + '>' + option.label + '</option>';
-                    }).join('');
-                    html += '</select>';
-                } else {
-                    var inputType = field.type === 'number' ? 'number' : 'text';
-                    html += '<input type="' + inputType + '" class="form-control form-control-sm" id="' + id + '"';
-                    if (field.min !== undefined) html += ' min="' + Number(field.min) + '"';
-                    if (field.max !== undefined) html += ' max="' + Number(field.max) + '"';
-                    html += '>';
-                }
-            }
-            if (field.help) html += '<small>' + field.help + '</small>';
-            html += '</div>';
-        });
-        html += '</div>';
-    });
-    return html;
-}
-
-function actionEditorGenericFields(type) {
-    if (_actionEditorExtensions.some(function(ext) { return ext.type === type; })) return [];
-    var entry = actionEditorCatalogEntry(type);
-    return entry && entry.editor_fields ? entry.editor_fields : [];
-}
-
-function actionEditorSetGenericFields(prefix, type, action) {
-    actionEditorGenericFields(type).forEach(function(field) {
-        var el = document.getElementById(prefix + '-generic-' + type + '-' + field.name);
-        if (!el) return;
-        if (field.type === 'toggle') el.checked = !!action[field.name];
-        else {
-            var value = action[field.name] === undefined ? (field.default === undefined ? '' : field.default) : action[field.name];
-            if (field.options_source === 'sounds' && value && !Array.from(el.options).some(function(option) { return option.value === value; })) {
-                var option = document.createElement('option');
-                option.value = value;
-                option.textContent = value;
-                el.appendChild(option);
-            }
-            el.value = value;
-        }
-    });
-}
-
-function actionEditorBuildGenericFields(prefix, type, action) {
-    actionEditorGenericFields(type).forEach(function(field) {
-        var el = document.getElementById(prefix + '-generic-' + type + '-' + field.name);
-        if (!el) return;
-        if (field.type === 'toggle') {
-            action[field.name] = el.checked;
-        } else if (el.value !== '') {
-            action[field.name] = field.type === 'number' || field.numeric ? Number(el.value) : el.value.trim();
-        }
-    });
-}
-
-function actionEditorBindingSuffixes(type) {
-    var extension = _actionEditorExtensions.find(function(candidate) { return candidate.type === type; });
-    var suffixes = extension ? (extension.bindingSuffixes || []).slice() : [];
-    if (extension) (extension.colorSuffixes || []).forEach(function(suffix) {
-        suffixes.push(suffix.replace(/-wrap$/, ''));
-    });
-    actionEditorGenericFields(type).forEach(function(field) {
-        if (field.bindable) suffixes.push('-generic-' + type + '-' + field.name);
-    });
-    return suffixes;
-}
-
-function actionEditorInitBindings(prefix, type) {
-    var extension = _actionEditorExtensions.find(function(candidate) { return candidate.type === type; });
-    if (extension) (extension.colorSuffixes || []).forEach(function(suffix) {
-        var wrap = document.getElementById(prefix + suffix);
-        if (wrap) padInitBindableColor(wrap);
-    });
-    actionEditorBindingSuffixes(type).forEach(function(suffix) {
-        var input = document.getElementById(prefix + suffix);
-        if (input && !input.dataset.bcBind && typeof bindingAttachValidation === 'function') {
-            input.dataset.bcBind = '1';
-            bindingAttachValidation(input);
-        }
-    });
-}
-
-// Family-then-command types (currently only Shutter Tester).
-function actionEditorFamilyOptionsHTML(type) {
-    var entry = actionEditorCatalogEntry(type);
-    if (!entry || !entry.command_families) return '';
-    return entry.command_families.map(function(f) {
-        return '<option value="' + f.id + '">' + f.label + '</option>';
-    }).join('');
-}
-
-function actionEditorFamilyCommandOptionsHTML(type, familyId) {
-    var entry = actionEditorCatalogEntry(type);
-    if (!entry || !entry.command_families) return '';
-    var family = entry.command_families.filter(function(f) { return f.id === familyId; })[0];
-    if (!family || !family.commands) return '';
-    return family.commands.map(function(c) {
-        return '<option value="' + c.id + '">' + c.label + '</option>';
-    }).join('');
-}
-
-function actionEditorFamilyForCommand(type, commandId) {
-    var entry = actionEditorCatalogEntry(type);
-    if (!entry || !entry.command_families) return null;
-    var match = entry.command_families.filter(function(f) {
-        return (f.commands || []).some(function(c) { return c.id === commandId; });
-    })[0];
-    return match ? match.id : null;
-}
-
-// Preserves a persisted action whose type this build's catalog does not
-// contain, keyed by prefix, so a save round-trips it untouched instead of
-// silently reducing it to a bare {type}. Cleared once the user picks a
-// different type for that slot.
-var _actionEditorUnsupported = {};
 
 // Give the <select> a disabled placeholder option for an unsupported type so
 // el.value = type actually sticks (a <select> silently ignores an unknown value).
@@ -499,7 +419,7 @@ function actionEditorEnsureUnsupportedOption(select, type) {
     }
     var opt = document.createElement('option');
     opt.value = type;
-    var entry = type.charAt(0) === '@' ? actionEditorOperation(type.slice(1)) : actionEditorCatalogEntry(type);
+    var entry = type.charAt(0) === '@' ? actionEditorOperation(type.slice(1)) : null;
     var disallowed = select.getAttribute('data-alarm-hook') === 'true' && (!entry || entry.alarm_hook_allowed !== true);
     opt.textContent = disallowed ? type + ' (not allowed for alarm hooks)'
         : entry ? entry.label : type + ' (unsupported by this build)';
@@ -516,21 +436,16 @@ function actionEditorHTML(prefix, label, opts) {
     var h = '';
     h += '<div class="form-group">';
     if (label) h += '<label class="form-label" for="' + prefix + '-type">' + label + '</label>';
-    if (opts.operations) {
-        h += '<label class="form-label" for="' + prefix + '-search">Search ' + (opts.mixed ? 'actions' : 'operations') + '</label>';
-        h += '<input type="search" class="form-control form-control-sm action-operation-search" id="' + prefix + '-search" aria-controls="' + prefix + '-type" aria-describedby="' + prefix + '-search-status" oninput="actionEditorFilterOperations(\'' + prefix + '\'); event.stopPropagation()" onchange="event.stopPropagation()">';
-        h += '<small id="' + prefix + '-search-status" role="status" aria-live="polite"></small>';
-    }
-    h += '<select class="form-select form-select-sm action-type-select" id="' + prefix + '-type" data-alarm-hook="' + (opts.alarmHook === true) + '" data-operations="' + (opts.operations === true) + '" data-mixed="' + (opts.mixed === true) + '" onchange="actionEditorTypeChanged(\'' + prefix + '\')">';
+    h += '<label class="form-label" for="' + prefix + '-search">Search operations</label>';
+    h += '<input type="search" class="form-control form-control-sm action-operation-search" id="' + prefix + '-search" aria-controls="' + prefix + '-type" aria-describedby="' + prefix + '-search-status" oninput="actionEditorFilterOperations(\'' + prefix + '\'); event.stopPropagation()" onchange="event.stopPropagation()">';
+    h += '<small id="' + prefix + '-search-status" role="status" aria-live="polite"></small>';
+    h += '<select class="form-select form-select-sm action-type-select" id="' + prefix + '-type" data-alarm-hook="' + (opts.alarmHook === true) + '" onchange="actionEditorTypeChanged(\'' + prefix + '\')">';
     h += actionEditorTypeOptionsHTML(opts);
     h += '</select>';
     h += '<small id="' + prefix + '-context" class="action-context" style="display:none;"></small>';
     h += '</div>';
     h += '<div id="' + prefix + '-fields">';
-    h += actionEditorGenericFieldsHTML(prefix);
-    if (opts.operations) h += actionEditorOperationHTML(prefix);
-    // Extension-contributed groups (e.g. shutter command UI on shutter-tester builds)
-    _actionEditorExtensions.forEach(function(ext) { if (ext.groups) h += ext.groups(prefix, opts); });
+    h += actionEditorOperationHTML(prefix);
     return h + '</div>';
 }
 
@@ -539,20 +454,18 @@ function actionEditorTypeChanged(prefix) {
     var typeEl = document.getElementById(prefix + '-type');
     if (!typeEl) return;
     var type = typeEl.value;
-    if (typeEl.getAttribute('data-operations') === 'true') actionEditorFilterOperations(prefix);
-    if (_actionEditorUnsupported[prefix] && _actionEditorUnsupported[prefix].type !== type) {
-        delete _actionEditorUnsupported[prefix];
-    }
+    actionEditorFilterOperations(prefix);
     var contextEl = document.getElementById(prefix + '-context');
     if (contextEl) {
-        var entry = actionEditorCatalogEntry(type);
-        contextEl.textContent = entry ? (entry.group + ' / ' + entry.label) : '';
-        contextEl.style.display = entry ? '' : 'none';
+        var operation = type.charAt(0) === '@' ? actionEditorOperation(type.slice(1)) : null;
+        var owner = operation && actionEditorCatalog().find(function(entry) {
+            return (entry.operations || []).includes(operation);
+        });
+        contextEl.textContent = operation && owner ? (owner.group + ' / ' + operation.label) : '';
+        contextEl.style.display = operation && owner ? '' : 'none';
     }
     actionEditorListRefreshSlot(prefix);
     actionEditorCatalog().forEach(function(entry) {
-        var group = document.getElementById(prefix + '-generic-' + entry.type + '-group');
-        if (group) group.style.display = entry.type === type ? '' : 'none';
         (entry.operations || []).forEach(function(operation) {
             var operationGroup = document.getElementById(prefix + '-op-' + operation.id + '-group');
             if (operationGroup) operationGroup.style.display = type === '@' + operation.id ? '' : 'none';
@@ -563,12 +476,10 @@ function actionEditorTypeChanged(prefix) {
                 if (wrap) padInitBindableColor(wrap);
             });
             if (type === '@' + operation.id) actionEditorLoadOperationSounds(prefix, operation);
+            if (type === '@' + operation.id) actionEditorLoadBrewTemplates(prefix, operation);
             actionEditorOperationRefresh(prefix, operation.id);
         });
     });
-    actionEditorInitBindings(prefix, type);
-    // Extension-contributed type-change hooks (e.g. shutter group visibility)
-    _actionEditorExtensions.forEach(function(ext) { if (ext.typeChanged) ext.typeChanged(prefix, type); });
 }
 
 // Load an action object { type, target, topic, payload, sequence } into the form.
@@ -585,6 +496,8 @@ function actionEditorLoad(prefix, action) {
             input.checked = input.defaultChecked;
         }
         input.removeAttribute('data-dynamic-initialized');
+        input.removeAttribute('data-dynamic-waiting');
+        input.removeAttribute('data-pending-value');
         if (input.setCustomValidity) input.setCustomValidity('');
     });
     var el;
@@ -628,29 +541,26 @@ function actionEditorLoad(prefix, action) {
                         actionEditorOperationTimingChanged(prefix, operation.id, argument.name);
                     } else input.value = dynamic ? value.$template : String(value);
                     if (dynamic) input.setAttribute('data-dynamic-initialized', '1');
-                    if (!dynamic && input.tagName === 'SELECT' && input.value !== String(value))
-                        input.setAttribute('data-pending-value', String(value));
+                    if (!dynamic && input.tagName === 'SELECT' && input.value !== String(value)) {
+                        if (argument.control === 'screens' && input.hasAttribute('data-screens-loaded')) {
+                            var missingScreen = document.createElement('option');
+                            missingScreen.value = String(value);
+                            missingScreen.textContent = String(value) + ' (unavailable)';
+                            input.appendChild(missingScreen);
+                            input.value = String(value);
+                        } else input.setAttribute('data-pending-value', String(value));
+                    }
                     if (!dynamic && argument.control === 'color' && input.dispatchEvent)
                         input.dispatchEvent(new Event('input', { bubbles: true }));
                 }
             });
         }
-        var legacyEntry = actionEditorCatalogEntry(action.type);
-        if (action.type && (!legacyEntry || (el.getAttribute('data-operations') === 'true' &&
-            (el.getAttribute('data-mixed') !== 'true' || (legacyEntry.operations || []).length)))) {
-            _actionEditorUnsupported[prefix] = action;
-        } else {
-            delete _actionEditorUnsupported[prefix];
-        }
     }
-    actionEditorSetGenericFields(prefix, action.type || '', action);
-    // Extension-contributed load hooks (e.g. shutter field population)
-    _actionEditorExtensions.forEach(function(ext) { if (ext.load) ext.load(prefix, action); });
     actionEditorTypeChanged(prefix);
 }
 
 // Build an action object from the form. Returns {} if type is empty.
-function actionEditorBuild(prefix, eventToken, eventValues) {
+function actionEditorBuild(prefix) {
     var typeEl = document.getElementById(prefix + '-type');
     if (!typeEl) return {};
     var type = typeEl.value;
@@ -662,56 +572,7 @@ function actionEditorBuild(prefix, eventToken, eventValues) {
             throw Object.assign(new Error('Operation "' + type.slice(1) + '" is not allowed for alarm hooks. Replace or remove it.'), { fieldIds: [prefix + '-type'] });
         return actionEditorBuildOperation(prefix, operation);
     }
-    var entry = actionEditorCatalogEntry(type);
-    if (typeEl.getAttribute('data-alarm-hook') === 'true' && (!entry || entry.alarm_hook_allowed !== true)) {
-        throw Object.assign(new Error('Action "' + type + '" is not allowed for alarm hooks. Replace or remove it.'), { fieldIds: [prefix + '-type'] });
-    }
-    // Round-trip a persisted action whose type this build's catalog does not
-    // contain — its fields have no editor, so save it back exactly as loaded.
-    if (_actionEditorUnsupported[prefix] && _actionEditorUnsupported[prefix].type === type) {
-        return _actionEditorUnsupported[prefix];
-    }
-    var act = { type: type };
-    actionEditorBuildGenericFields(prefix, type, act);
-    // Extension-contributed build hooks (e.g. shutter merges shutter_command/shutter_value).
-    _actionEditorExtensions.forEach(function(ext) {
-        if (ext.build) {
-            var extra = ext.build(prefix, type);
-            if (extra) { for (var k in extra) act[k] = extra[k]; }
-        }
-    });
-    actionEditorValidateEventTokens(act, eventToken, prefix, eventValues);
-    return act;
-}
-
-function actionEditorValidateEventTokens(action, eventToken, prefix, eventValues) {
-    const entry = actionEditorCatalogEntry(action.type) || {};
-    const fields = entry.template_fields || {};
-    const fail = (field, message) => {
-        throw Object.assign(new Error(field + ': ' + message), { fieldIds: [prefix + '-type'] });
-    };
-    const candidates = eventValues === undefined ? [null] : (eventValues.length ? eventValues : ['value']);
-    for (const candidate of candidates) {
-        const normalized = { ...action };
-        for (const [name, value] of Object.entries(action)) {
-            if (/\{(?:value|step)\}/.test(name)) fail(name, 'event tokens are not valid in field names');
-            if (typeof value !== 'string') continue;
-            let expanded = value;
-            for (const token of ['{value}', '{step}']) {
-                if (!value.includes(token)) continue;
-                if (token !== eventToken)
-                    fail(name, token + ' is unavailable here' + (eventToken ? '; use ' + eventToken : ''));
-                if (!fields[name]) fail(name, 'this field does not support event tokens');
-                expanded = value.replaceAll(token, candidate === null ? '-999999.9999' : candidate);
-                normalized[name] = value.replaceAll(token, candidate === null ? '0' : candidate);
-            }
-            if (fields[name] && new TextEncoder().encode(expanded).length > fields[name].max)
-                fail(name, 'expanded value exceeds ' + fields[name].max + ' bytes');
-        }
-        _actionEditorExtensions.forEach(extension => {
-            if (extension.validate) extension.validate(normalized, prefix);
-        });
-    }
+    throw Object.assign(new Error('Legacy actions are not supported. Replace or remove this action.'), { fieldIds: [prefix + '-type'] });
 }
 
 function actionEditorHandleError(error) {
@@ -805,16 +666,14 @@ function actionEditorListLoad(prefixes, actions) {
 
 // Build an array of action objects from N editor prefixes. Empty slots are
 // omitted; non-empty actions keep their configured order.
-function actionEditorListBuild(prefixes, eventToken, eventValues) {
-    return prefixes.map(function(prefix) { return actionEditorBuild(prefix, eventToken, eventValues); })
-        .filter(function(action) { return !!(action.type || action.op); });
+function actionEditorListBuild(prefixes) {
+    return prefixes.map(function(prefix) { return actionEditorBuild(prefix); })
+        .filter(function(action) { return !!action.op; });
 }
 
 function actionEditorWireFragment(prefixes) {
     if (typeof getDeviceInfo !== 'function') return Promise.resolve();
     return getDeviceInfo().then(function(info) {
-        return Promise.all(_actionEditorExtensions.map(function(extension) {
-            return extension.wireFragment ? extension.wireFragment(prefixes, info) : null;
-        }));
+        actionEditorPopulateScreens(prefixes, info && info.available_screens);
     });
 }

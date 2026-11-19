@@ -309,8 +309,8 @@ selects the boot policy: `0` off, `1` low (default, nominal 185 mA, CHG_PROG hig
 `2` high (nominal 425 mA, CHG_PROG low). Change this board-local setting
 and rebuild StopWatch to select another default. Invalid values fail compilation.
 Startup disables retained charging before configuring CHG_PROG; an off boot
-never deliberately enables charging. The board-local `charging_mode` action
-uses flat JSON such as `{"type":"charging_mode","mode":"low"}`; its mode is
+never deliberately enables charging. The board-local charging operation
+uses `{"op":"power.charging.set_mode","args":{"mode":"low"}}`; its mode is
 `off`, `low`, or `high`. Runtime changes are not persisted: reboot applies the
 boot setting again, before any configured boot actions.
 
@@ -329,23 +329,23 @@ module, its metadata, or the StopWatch hardware implementation. The generic
 catalog-driven editor supplies the controls; there are no board-specific portal
 assets or generic configuration settings.
 
-`status_led` uses `{"type":"status_led","mode":"on"}` or `"off"` and changes
+`device.status_led.set` uses `{"op":"device.status_led.set","args":{"mode":"on"}}`
+or `"off"` and changes
 only PWR_CFG bit 4 (LED_EN). No preference is persisted. Every firmware boot
 explicitly restores LED_EN high before boot actions, including ESP32-only
 restarts that do not reset the PMIC. This controls the PMIC's LED enable level;
 its proprietary status/download signalling may override the visible state.
 Physical on/off behavior still needs hardware validation.
 
-`vibrate` accepts `{"type":"vibrate","pattern":"200"}` (default `200`);
+`device.vibrate` accepts `{"op":"device.vibrate","args":{"pattern":"200"}}`;
 `pattern: "0"` stops vibration. IO9 is driven
 through the expander GPIO latch without changing shared PWM frequency or other
-channels. `{"type":"vibrate","pattern":"20,100,20"}` runs
+channels. `{"op":"device.vibrate","args":{"pattern":"20,100,20"}}` runs
 20 ms on, 100 ms off, and 20 ms on. Patterns accept whitespace around commas,
 1-15 positive whole-millisecond steps with an odd count, and at most 5000 ms
 total including pauses. A standalone `0` is the only zero-duration pattern.
 `pattern` is the sole action field; `duration_ms` is not supported.
-The action payload stores compiled durations without growing the existing
-96-byte allocation; the driver copies them into a fixed array without heap
+The driver copies compiled durations into a fixed array without heap
 allocation. Pulses and patterns are nonblocking; a new request replaces the
 active sequence, and a successful `0` pattern cancels it.
 `BOARD_HARDWARE_LOOP` selects the board-only main-loop hook, which checks motor
@@ -356,7 +356,7 @@ actual transition, so delayed servicing does not skip pulses. Timing depends on 
 service and I2C availability, so the deadline is not a hardware timer guarantee.
 Startup disables retained motor PWM and clears its output.
 
-`{"type":"shutdown"}` is a terminal pausable action. A nonzero continuation
+`{"op":"device.shutdown","args":{}}` is a terminal pausable action. A nonzero continuation
 token is required; the action reserves the existing OTA activity gate before
 queueing power-off, so an active update rejects it and a new update cannot race
 the power cut. The main-loop hook stops audio outside the I2C lock, clears motor

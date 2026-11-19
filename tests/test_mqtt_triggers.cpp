@@ -1,7 +1,7 @@
 #define HAS_BUTTON 1
 #define NUM_HW_BUTTONS 2
 #define HW_BUTTON_HOLD_MS 100
-#define HW_BUTTON_DEFAULTS_JSON "{\"buttons\":[{\"hold_actions\":[{\"type\":\"screen\"}]}]}"
+#define HW_BUTTON_DEFAULTS_JSON "{\"action_format_version\":1,\"buttons\":[{\"hold_actions\":[{\"op\":\"test.set\",\"args\":{\"value\":\"default\"}}]}]}"
 #include "mqtt_sub_store_test_support.h"
 #undef PAD_CONFIG_H
 #include "pad_config.h"
@@ -113,12 +113,9 @@ const char* action_operation_validate_json(JsonObjectConst action, bool) {
     if (value.is<JsonObjectConst>() && value["$template"].is<const char*>()) return nullptr;
     return "invalid argument";
 }
-const char* action_validate_json(JsonObjectConst action, bool, const char*, const char*) {
-    if (!action.containsKey("type") && action.containsKey("op")) {
-        return action_operation_validate_json(action, true);
-    }
-    if (action.containsKey("type") && action.containsKey("args")) return "mixed action";
-    return action["type"].is<const char*>() ? nullptr : "missing type";
+const char* action_validate_json(JsonObjectConst action) {
+    if (action.containsKey("type")) return "legacy actions are not supported";
+    return action_operation_validate_json(action, true);
 }
 bool action_type_is_supported(const char* type) {
     return !strcmp(type, "screen") || !strcmp(type, ACTION_TYPE_VISUAL_ALERT);
@@ -183,6 +180,7 @@ protected:
         action_storage_clear(hw_host::g_storage);
         free(hw_host::g_config);
         hw_host::g_config = nullptr;
+        hw_host::g_config_valid = false;
         delete hw_host::g_lock;
         hw_host::g_lock = nullptr;
         action_storage_clear(g_action_storage);
@@ -193,6 +191,7 @@ protected:
         g_lock = nullptr;
         g_pending_mask = 0;
         g_generation = 0;
+        g_config_valid = false;
     }
     static void seed(const char* json) {
         LittleFS.files[MQTT_TRIGGERS_PATH] = std::vector<uint8_t>(json, json + strlen(json));
@@ -235,24 +234,35 @@ TEST_F(MqttTriggers, AllocationFailureLeavesUnavailableStateAndRetryReusesMutex)
     EXPECT_EQ(mutex_creations, 1U);
 }
 
-TEST_F(MqttTriggers, LegacyVisualAlertCommandIsNotAMixedEnvelope) {
+TEST_F(MqttTriggers, IncompatibleSavedDocumentIsRetainedAndNotExecuted) {
+    const char* legacy = R"({"triggers":[{"topic":"event","actions":[{"type":"screen"}]}]})";
+    seed(legacy);
+    mqtt_triggers_init();
+    DynamicJsonDocument response(MQTT_TRIGGERS_JSON_CAP);
+    EXPECT_FALSE(mqtt_triggers_to_json(response.to<JsonArray>()));
+    mqtt_triggers_on_message("event", nullptr, 0);
+    mqtt_triggers_loop();
+    EXPECT_EQ(dispatches, 0U);
+    EXPECT_EQ(std::string(LittleFS.files[MQTT_TRIGGERS_PATH].begin(),
+                          LittleFS.files[MQTT_TRIGGERS_PATH].end()), legacy);
+}
+
+TEST_F(MqttTriggers, RejectsLegacyTriggerActions) {
     for (bool validate_bindings : {false, true}) {
         JsonDocument trigger_doc;
         ASSERT_FALSE(deserializeJson(trigger_doc,
-            R"({"triggers":[{"topic":"event","actions":[{"type":"visual_alert","op":"stop"}]}]})"));
+            R"({"action_format_version":1,"triggers":[{"topic":"event","actions":[{"type":"visual_alert","op":"stop"}]}]})"));
         std::vector<MqttTriggerConfig> triggers(MAX_MQTT_TRIGGERS);
         ActionStorage trigger_storage = {};
-        EXPECT_TRUE(parse_config(trigger_doc, triggers.data(), trigger_storage, validate_bindings));
-        EXPECT_STREQ(triggers[0].actions[0].type, "visual_alert");
+        EXPECT_FALSE(parse_config(trigger_doc, triggers.data(), trigger_storage, validate_bindings));
         action_storage_clear(trigger_storage);
 
         JsonDocument button_doc;
         ASSERT_FALSE(deserializeJson(button_doc,
-            R"({"buttons":[{"tap_actions":[{"type":"visual_alert","op":"stop"}]}]})"));
+            R"({"action_format_version":1,"buttons":[{"tap_actions":[{"type":"visual_alert","op":"stop"}]}]})"));
         HwButtonConfig buttons[NUM_HW_BUTTONS] = {};
         ActionStorage button_storage = {};
-        EXPECT_TRUE(hw_host::parse_config(button_doc, buttons, button_storage, validate_bindings));
-        EXPECT_STREQ(buttons[0].tap_actions[0].type, "visual_alert");
+        EXPECT_FALSE(hw_host::parse_config(button_doc, buttons, button_storage, validate_bindings));
         action_storage_clear(button_storage);
 
         trigger_doc["triggers"][0]["actions"][0]["args"].to<JsonObject>();
@@ -263,14 +273,14 @@ TEST_F(MqttTriggers, LegacyVisualAlertCommandIsNotAMixedEnvelope) {
 }
 
 TEST_F(MqttTriggers, ReinitAndSaveKeepPointersAndReconcileRegisteredTopics) {
-    seed(R"({"triggers":[{"topic":"old"},{"topic":"keep"}]})");
+    seed(R"({"action_format_version":1,"triggers":[{"topic":"old"},{"topic":"keep"}]})");
     mqtt_triggers_init();
     const auto* original = g_triggers;
     ASSERT_NE(original, nullptr);
     mqtt_triggers_on_connected();
     owner_calls.clear();
 
-    seed(R"({"triggers":[{"topic":"new"},{"topic":"keep"}]})");
+    seed(R"({"action_format_version":1,"triggers":[{"topic":"new"},{"topic":"keep"}]})");
     mqtt_triggers_init();
     EXPECT_EQ(g_triggers, original);
     EXPECT_STREQ(original->topic, "new");
@@ -286,7 +296,7 @@ TEST_F(MqttTriggers, ReinitAndSaveKeepPointersAndReconcileRegisteredTopics) {
     EXPECT_TRUE(owner_calls[2].active);
 
     owner_calls.clear();
-    ASSERT_TRUE(save(R"({"triggers":[{"topic":"keep"},{"topic":"added"}]})"));
+    ASSERT_TRUE(save(R"({"action_format_version":1,"triggers":[{"topic":"keep"},{"topic":"added"}]})"));
     EXPECT_EQ(g_triggers, original);
     EXPECT_STREQ(original->topic, "keep");
     ASSERT_EQ(owner_calls.size(), 3U);
@@ -305,8 +315,8 @@ TEST_F(MqttTriggers, ReinitAndSaveKeepPointersAndReconcileRegisteredTopics) {
 }
 
 TEST_F(MqttTriggers, MatchingFanoutCoalescesAndDispatchesOutsideMutex) {
-    seed(R"({"triggers":[{"topic":"event","value":"on","actions":[{"type":"screen"}]},
-                           {"topic":"event","actions":[{"type":"screen"}]}]})");
+    seed(R"({"action_format_version":1,"triggers":[{"topic":"event","value":"on","actions":[{"op":"test.set","args":{"value":"first"}}]},
+                           {"topic":"event","actions":[{"op":"test.set","args":{"value":"second"}}]}]})");
     mqtt_triggers_init();
     const uint8_t off[] = {'o', 'f', 'f'};
     mqtt_triggers_on_message("event", off, sizeof(off));
@@ -324,20 +334,22 @@ TEST_F(MqttTriggers, MatchingFanoutCoalescesAndDispatchesOutsideMutex) {
 
 TEST_F(MqttTriggers, TypedActionsRoundTripAndInvalidSavesKeepCacheAndFile) {
     mqtt_triggers_init();
-    const char* valid = R"({"triggers":[{"topic":"event","actions":[{"op":"test.set","args":{"value":{"$template":"[var:x]"}}}]}]})";
+    const char* valid = R"({"action_format_version":1,"triggers":[{"topic":"event","actions":[{"op":"test.set","args":{"value":{"$template":"[var:x]"}}}]}]})";
     ASSERT_TRUE(save(valid));
     DynamicJsonDocument response(MQTT_TRIGGERS_JSON_CAP);
     ASSERT_TRUE(mqtt_triggers_to_json(response.to<JsonArray>()));
     ASSERT_STREQ(response[0]["actions"][0]["args"]["value"]["$template"], "[var:x]");
     const auto original = LittleFS.files[MQTT_TRIGGERS_PATH];
-    EXPECT_FALSE(save(R"({"triggers":[{"topic":"bad/+","actions":[]}]})"));
-    EXPECT_FALSE(save(R"({"triggers":[{"topic":"event","actions":[{"op":"unknown","args":{}}]}]})"));
-    atomic_write_fails = true;
     EXPECT_FALSE(save(R"({"triggers":[]})"));
+    EXPECT_FALSE(save(R"({"action_format_version":1,"triggers":[{"topic":"bad/+","actions":[]}]})"));
+    EXPECT_FALSE(save(R"({"action_format_version":1,"triggers":[{"topic":"event","actions":[{"op":"unknown","args":{}}]}]})"));
+    EXPECT_FALSE(save(R"({"action_format_version":1,"triggers":[],"triggers\u0000x":[{"topic":"event","actions":[{"type":"legacy"}]}]})"));
+    atomic_write_fails = true;
+    EXPECT_FALSE(save(R"({"action_format_version":1,"triggers":[]})"));
     EXPECT_EQ(LittleFS.files[MQTT_TRIGGERS_PATH], original);
     ASSERT_STREQ(response[0]["actions"][0]["args"]["value"]["$template"], "[var:x]");
     atomic_write_fails = false;
-    ASSERT_TRUE(save(R"({"triggers":[{"topic":"changed"}]})"));
+    ASSERT_TRUE(save(R"({"action_format_version":1,"triggers":[{"topic":"changed"}]})"));
     EXPECT_STREQ(response[0]["topic"], "event");
     EXPECT_STREQ(response[0]["actions"][0]["args"]["value"]["$template"], "[var:x]");
     ASSERT_TRUE(save(valid));
@@ -348,18 +360,18 @@ TEST_F(MqttTriggers, TypedActionsRoundTripAndInvalidSavesKeepCacheAndFile) {
 
 TEST_F(MqttTriggers, SaveCancelsQueuedMatchesRatherThanRunningNewSlot) {
     mqtt_triggers_init();
-    ASSERT_TRUE(save(R"({"triggers":[{"topic":"old","actions":[{"type":"screen"}]}]})"));
+    ASSERT_TRUE(save(R"({"action_format_version":1,"triggers":[{"topic":"old","actions":[{"op":"test.set","args":{"value":"old"}}]}]})"));
     mqtt_triggers_on_message("old", nullptr, 0);
-    ASSERT_TRUE(save(R"({"triggers":[{"topic":"new","actions":[{"type":"screen"}]}]})"));
+    ASSERT_TRUE(save(R"({"action_format_version":1,"triggers":[{"topic":"new","actions":[{"op":"test.set","args":{"value":"new"}}]}]})"));
     mqtt_triggers_loop();
     EXPECT_EQ(dispatches, 0U);
 }
 
 TEST_F(MqttTriggers, SnapshotSurvivesReplacementAndRemainingMatchesAreCancelled) {
     mqtt_triggers_init();
-    ASSERT_TRUE(save(R"({"triggers":[{"topic":"event","actions":[{"op":"test.set","args":{"value":"original"}}]},{"topic":"event","actions":[{"type":"screen"}]}]})"));
+    ASSERT_TRUE(save(R"({"action_format_version":1,"triggers":[{"topic":"event","actions":[{"op":"test.set","args":{"value":"original"}}]},{"topic":"event","actions":[{"op":"test.set","args":{"value":"other"}}]}]})"));
     mqtt_triggers_on_message("event", nullptr, 0);
-    replacement_on_dispatch = R"({"triggers":[{"topic":"new","actions":[{"type":"screen"}]}]})";
+    replacement_on_dispatch = R"({"action_format_version":1,"triggers":[{"topic":"new","actions":[{"op":"test.set","args":{"value":"new"}}]}]})";
     mqtt_triggers_loop();
     EXPECT_EQ(dispatched_argument, "original");
     EXPECT_EQ(dispatches, 1U);
@@ -367,7 +379,7 @@ TEST_F(MqttTriggers, SnapshotSurvivesReplacementAndRemainingMatchesAreCancelled)
 
 TEST_F(MqttTriggers, TypedActionsReloadAndDispatchOnMainLoop) {
     mqtt_triggers_init();
-    ASSERT_TRUE(save(R"({"triggers":[{"topic":"event","actions":[{"op":"test.set","args":{"value":"reloaded"}}]}]})"));
+    ASSERT_TRUE(save(R"({"action_format_version":1,"triggers":[{"topic":"event","actions":[{"op":"test.set","args":{"value":"reloaded"}}]}]})"));
     mqtt_triggers_init();
     mqtt_triggers_on_message("event", nullptr, 0);
     EXPECT_EQ(dispatches, 0U);
@@ -381,7 +393,7 @@ TEST_F(MqttTriggers, TypedActionsReloadAndDispatchOnMainLoop) {
 TEST_F(MqttTriggers, HardwareTypedSaveReloadAndDispatchUsesOwnedSnapshots) {
     mqtt_triggers_init();
     hw_host::hw_button_config_init();
-    const char* config = R"({"buttons":[{"tap_actions":[{"op":"test.set","args":{"value":{"$template":"[var:tap]"}}}],"hold_actions":[{"op":"test.set","args":{"value":"hold"}}]}]})";
+    const char* config = R"({"action_format_version":1,"buttons":[{"tap_actions":[{"op":"test.set","args":{"value":{"$template":"[var:tap]"}}}],"hold_actions":[{"op":"test.set","args":{"value":"hold"}}]}]})";
     ASSERT_TRUE(hw_host::hw_button_config_save_raw(reinterpret_cast<const uint8_t*>(config), strlen(config)));
     hw_host::hw_button_config_init();
     DynamicJsonDocument response(4096);
@@ -398,7 +410,7 @@ TEST_F(MqttTriggers, HardwareTypedSaveReloadAndDispatchUsesOwnedSnapshots) {
     pin_levels[1] = HIGH;
     hw_host::hw_buttons_loop();
     clock_ms += 21;
-    hw_replacement_on_dispatch = R"({"buttons":[{"tap_actions":[]}]})";
+    hw_replacement_on_dispatch = R"({"action_format_version":1,"buttons":[{"tap_actions":[]}]})";
     hw_host::hw_buttons_loop();
     EXPECT_EQ(dispatched_argument, "[var:tap]");
     EXPECT_EQ(dispatches, 1U);
@@ -424,15 +436,17 @@ TEST_F(MqttTriggers, HardwareInvalidOrFailedWritePreservesFileAndCache) {
     auto save_hw = [](const char* json) {
         return hw_host::hw_button_config_save_raw(reinterpret_cast<const uint8_t*>(json), strlen(json));
     };
-    ASSERT_TRUE(save_hw(R"({"buttons":[{"tap_actions":[{"op":"test.set","args":{"value":"kept"}}]}]})"));
+    ASSERT_TRUE(save_hw(R"({"action_format_version":1,"buttons":[{"tap_actions":[{"op":"test.set","args":{"value":"kept"}}]}]})"));
     const auto original = LittleFS.files[hw_host::HW_BUTTONS_PATH];
-    EXPECT_FALSE(save_hw(R"({"buttons":[{"tap_actions":[{"op":"unknown","args":{}}]}]})"));
-    EXPECT_FALSE(save_hw(R"({"buttons":[{"tap_actions":[{"op":"test.set","args":{"value":3}}]}]})"));
-    atomic_write_fails = true;
     EXPECT_FALSE(save_hw(R"({"buttons":[]})"));
+    EXPECT_FALSE(save_hw(R"({"action_format_version":1,"buttons":[{"tap_actions":[{"op":"unknown","args":{}}]}]})"));
+    EXPECT_FALSE(save_hw(R"({"action_format_version":1,"buttons":[{"tap_actions":[{"op":"test.set","args":{"value":3}}]}]})"));
+    EXPECT_FALSE(save_hw(R"({"action_format_version":1,"buttons":[],"buttons\u0000x":[{"tap_actions":[{"type":"legacy"}]}]})"));
+    atomic_write_fails = true;
+    EXPECT_FALSE(save_hw(R"({"action_format_version":1,"buttons":[]})"));
     EXPECT_EQ(LittleFS.files[hw_host::HW_BUTTONS_PATH], original);
     DynamicJsonDocument response(4096);
     ASSERT_TRUE(hw_host::hw_button_config_to_json(response.to<JsonArray>()));
     EXPECT_STREQ(response[0]["tap_actions"][0]["args"]["value"], "kept");
-    EXPECT_STREQ(response[0]["hold_actions"][0]["type"], "screen");
+    EXPECT_STREQ(response[0]["hold_actions"][0]["args"]["value"], "default");
 }

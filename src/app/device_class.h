@@ -70,7 +70,7 @@ struct DeviceClass {
 		// Called during load with the NVS namespace already open (read-only).
 		void (*config_load)(DeviceConfig *config, Preferences &preferences);
 		// Called during save with the NVS namespace already open (read-write).
-		void (*config_save)(const DeviceConfig *config, Preferences &preferences);
+		bool (*config_save)(const DeviceConfig *config, Preferences &preferences);
 		// Append device-class fields to the GET /api/config response.
 		void (*config_api_get)(const DeviceConfig *config, JsonObject &root);
 		// Parse device-class fields from the POST /api/config body into the
@@ -139,7 +139,7 @@ void device_class_dispatch_sleep_prepare(uint32_t *seconds_inout);
 // Config
 void device_class_dispatch_config_defaults(DeviceConfig *config);
 void device_class_dispatch_config_load(DeviceConfig *config, Preferences &preferences);
-void device_class_dispatch_config_save(const DeviceConfig *config, Preferences &preferences);
+bool device_class_dispatch_config_save(const DeviceConfig *config, Preferences &preferences);
 void device_class_dispatch_config_api_get(const DeviceConfig *config, JsonObject &root);
 void device_class_dispatch_config_api_set(DeviceConfig *config, JsonObject &body);
 const char *device_class_dispatch_config_api_validate(const DeviceConfig *config,

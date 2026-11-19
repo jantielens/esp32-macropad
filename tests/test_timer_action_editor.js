@@ -1,153 +1,52 @@
 const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
+const path = require('path');
+const {execFileSync} = require('child_process');
 
-class Element {
-    constructor() {
-        this.value = '';
-        this.style = { display: 'none' };
-        this.dataset = {};
-        this.selectedIndex = 0;
-        this.attributes = {};
-        this.validationMessage = '';
-        this.focused = false;
-        this.parentNode = { querySelector() { return null; } };
-        var classes = new Set();
-        this.classList = {
-            add: function(c) { classes.add(c); },
-            remove: function(c) { classes.delete(c); },
-            contains: function(c) { return classes.has(c); }
-        };
-    }
-    setCustomValidity(message) { this.validationMessage = message; }
-    reportValidity() { return !this.validationMessage; }
-    focus() { this.focused = true; }
-    addEventListener() {}
-    closest() { return null; }
-    hasAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name); }
-    getAttribute(name) { return this.attributes[name]; }
-    setAttribute(name, value) { this.attributes[name] = value; }
-    removeAttribute(name) { delete this.attributes[name]; }
-}
-
+const binary = process.env.ACTION_CATALOG_BINARY || path.resolve('build/host-tests/tests/test_action_parse');
+const catalog = JSON.parse(execFileSync(binary, ['--catalog'], {encoding:'utf8'})).portal;
 const elements = new Map();
 const document = {
     getElementById(id) {
-        if (!elements.has(id)) elements.set(id, new Element());
+        if (!elements.has(id)) elements.set(id, {
+            id, value:'', checked:false, style:{}, options:[], children:[], attributes:{},
+            classList:{contains() { return false; }},
+            getAttribute(name) { return this.attributes[name]; },
+            setAttribute(name, value) { this.attributes[name] = value; },
+            removeAttribute(name) { delete this.attributes[name]; },
+            hasAttribute(name) { return Object.hasOwn(this.attributes, name); },
+            setCustomValidity(message) { this.error = message; }
+        });
         return elements.get(id);
-    }
-};
-const context = {
-    console,
-    document,
-    deviceInfoCache: {
-        catalog: [
-            { type: 'timer', group: 'Timer', label: 'Timer',
-              commands: ['toggle', 'start', 'stop', 'pause', 'resume', 'reset', 'set', 'adjust']
-                  .map(function(id) { return { id: id, label: id }; }) }
-        ]
     },
-    showMessage() {},
-    listInjectSyntheticScreenOption() {},
-    padInitBindableColor() {},
-    padSetBindableColor() {},
-    padGetBindableColor() { return ''; }
+    createElement() { return {}; }
+};
+const context = {console, document, TextEncoder, deviceInfoCache:{catalog},
+    escAttr(value) { return value || ''; },
+    validateBinding(value) { return {valid:value === '[mqtt:duration]', errors:[{message:'Invalid binding'}]}; }
 };
 vm.createContext(context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_binding_validator.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_screen.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_cycle_pad.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_mqtt.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_key.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_sound_alert.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_timer.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_notify.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_visual_alert.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_delay.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_gamepad.js', 'utf8'), context);
 
-context._bindingSchemaLoaded = true;
-context._bindingSchemeRegistry.mqtt = {
-    name: 'mqtt', min_params: 1, max_params: 3, widget_max_params: 2,
-    format_param: 2, validation_mode: 0, free_form: true
-};
-
-const prefix = 'test';
-function element(suffix) { return document.getElementById(prefix + suffix); }
-function setTimer(command, mode, duration) {
-    element('-type').value = 'timer';
-    element('-timer-action').value = '1:' + command;
-    element('-timer-mode').value = mode || '';
-    element('-timer-duration').value = duration || '';
+const prefix = 'timer-test';
+const action = {op:'timer.start_down', args:{timer:2, seconds:45}};
+context.actionEditorLoad(prefix, action);
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(prefix))), action);
+const duration = document.getElementById(prefix + '-op-timer.start_down-seconds-fixed');
+for (const value of ['', '0', '-1', '1.5', '4294968']) {
+    duration.value = value;
+    assert.throws(() => context.actionEditorBuild(prefix), /whole number/);
 }
-function buildFails(message) {
-    assert.throws(() => context.actionEditorBuild(prefix), new RegExp(message));
-}
-
-const html = context.actionEditorHTML(prefix, '', {});
-assert(html.includes(prefix + '-timer-mode'));
-assert(html.includes(prefix + '-timer-duration'));
-assert(!html.toLowerCase().includes('lap'));
-
-setTimer('start', 'down', '300');
-context.actionEditorTimerChanged(prefix);
-assert.strictEqual(element('-timer-mode-group').style.display, '');
-assert.strictEqual(element('-timer-duration-group').style.display, '');
-assert.deepStrictEqual(
-    JSON.parse(JSON.stringify(context.actionEditorBuild(prefix))),
-    { type: 'timer', timer_id: 1, timer_command: 'start', timer_mode: 'down', timer_value: '300' }
-);
-
-setTimer('toggle', 'up', 'stale');
-context.actionEditorTimerChanged(prefix);
-assert.strictEqual(element('-timer-duration-group').style.display, 'none');
-assert.deepStrictEqual(
-    JSON.parse(JSON.stringify(context.actionEditorBuild(prefix))),
-    { type: 'timer', timer_id: 1, timer_command: 'toggle', timer_mode: 'up' }
-);
-
-setTimer('start', '', '');
-buildFails('Mode');
-assert(element('-timer-mode').focused);
-context.padWorkspace = {};
-element('-timer-mode').focused = false;
-let validationToasts = 0;
-context.showMessage = () => { validationToasts++; };
-assert.throws(() => context.actionEditorBuild(prefix), error => error.fieldIds[0] === prefix + '-timer-mode');
-assert.strictEqual(element('-timer-mode').focused, false, 'Pad workspace validation must not trigger native focus/popups');
-assert.strictEqual(validationToasts, 0, 'Pad workspace validation must not emit a duplicate action toast');
-delete context.padWorkspace;
-setTimer('start', 'down', '');
-buildFails('Duration');
-setTimer('start', 'down', '0');
-buildFails('Duration');
-setTimer('start', 'down', '1.5');
-buildFails('Duration');
-setTimer('start', 'down', '4294968');
-buildFails('Duration');
-setTimer('start', 'down', 'bad[');
-buildFails('Duration');
-setTimer('start', 'down', '[junk]');
-buildFails('Duration');
-setTimer('start', 'down', '[unknown:value]');
-buildFails('Duration');
-setTimer('start', 'down', '[mqtt:duration');
-buildFails('Duration');
-setTimer('start', 'down', '[mqtt:duration]');
-assert.strictEqual(context.actionEditorBuild(prefix).timer_value, '[mqtt:duration]');
-
-context.actionEditorLoad(prefix, {
-    type: 'timer', timer_id: 2, timer_command: 'toggle', timer_mode: 'down', timer_value: '45'
-});
-assert.strictEqual(element('-timer-action').value, '2:toggle');
-assert.strictEqual(element('-timer-mode').value, 'down');
-assert.strictEqual(element('-timer-duration').value, '45');
-assert.strictEqual(element('-timer-duration-group').style.display, '');
-
-setTimer('set', '', '');
-context.actionEditorTimerChanged(prefix);
-assert.strictEqual(element('-timer-mode-group').style.display, 'none');
-assert.strictEqual(element('-timer-set-group').style.display, '');
-
+duration.value = '1';
+assert.strictEqual(context.actionEditorBuild(prefix).args.seconds, 1);
+duration.value = '4294967';
+assert.strictEqual(context.actionEditorBuild(prefix).args.seconds, 4294967);
+document.getElementById(prefix + '-op-timer.start_down-seconds-dynamic').checked = true;
+const template = document.getElementById(prefix + '-op-timer.start_down-seconds-template');
+template.value = '[mqtt:duration';
+assert.throws(() => context.actionEditorBuild(prefix), /Invalid binding/);
+template.value = '[mqtt:duration]';
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(prefix).args.seconds)),
+    {$template:'[mqtt:duration]'});
 console.log('timer_action_editor: PASS');

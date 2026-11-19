@@ -96,7 +96,7 @@ REGISTER_WIDGET_SCHEMA_VALIDATED_LIFECYCLE(test, nullptr, false, nullptr);
                     result = self.compile(
                         '#include "action_registry.h"\n'
                         f'DEFINE_AND_REGISTER_ACTION_TYPE(unrelated_symbol, "{name}", '
-                        "nullptr, nullptr, nullptr, nullptr, nullptr);\n", mcp)
+                        "nullptr);\n", mcp)
                     if len(name) <= 15:
                         self.assertEqual(result.returncode, 0, result.stderr)
                     else:
@@ -108,7 +108,7 @@ REGISTER_WIDGET_SCHEMA_VALIDATED_LIFECYCLE(test, nullptr, false, nullptr);
             '#include "action_registry.h"\n'
             'const char* name = "gamepad_joystick";\n'
             "DEFINE_AND_REGISTER_ACTION_TYPE(pointer_type, name, "
-            "nullptr, nullptr, nullptr, nullptr, nullptr);\n", 0)
+            "nullptr);\n", 0)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("action_type_name_fits", result.stderr)
 

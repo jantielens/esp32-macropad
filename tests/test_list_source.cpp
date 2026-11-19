@@ -380,29 +380,6 @@ TEST_F(ListSourceTest, ItemValidationFollowsPadAliasesAndEnforcesContext) {
 }
 
 namespace {
-void parse_normalized_list_action(const JsonObject&, ButtonAction& action) {
-    strlcpy(action.payload.screen.screen_id, "normalized", sizeof(action.payload.screen.screen_id));
-}
-
-void parse_list_test_action(const JsonObject& json, ButtonAction& action) {
-    strlcpy(action.payload.screen.screen_id, json["target"] | "", sizeof(action.payload.screen.screen_id));
-}
-bool list_test_fields(ButtonAction& action, ActionFieldVisitor visitor, void* context) {
-    return action_visit_field(visitor, context, "target", action.payload.screen.screen_id);
-}
-const ActionTypeDef list_test_sync = {
-    "list_test_sync", parse_list_test_action, nullptr, nullptr, list_test_fields, nullptr,
-    nullptr, nullptr, ACTION_EXECUTION_SYNC
-};
-const ActionTypeDef list_test_pause = {
-    "list_test_pause", parse_list_test_action, nullptr, nullptr, list_test_fields, nullptr,
-    nullptr, nullptr, ACTION_EXECUTION_PAUSABLE
-};
-const ActionTypeDef list_test_late = {
-    "list_test_late", parse_list_test_action, nullptr, nullptr, list_test_fields, nullptr,
-    nullptr, nullptr, ACTION_EXECUTION_PAUSABLE, true, false
-};
-
 const char* validate_list_pad(JsonObjectConst pad, JsonObjectConst template_pad) {
     PadComposedContext context;
     const char* error = pad_compose_context(pad, template_pad, context);
@@ -410,24 +387,19 @@ const char* validate_list_pad(JsonObjectConst pad, JsonObjectConst template_pad)
 }
 }
 
-TEST_F(ListSourceTest, ActionValidationUsesDeclaredKeysEvenWhenParsingNormalizesText) {
-    static const ActionTypeDef normalized = {
-        "list_normalized", parse_normalized_list_action, nullptr, nullptr, list_test_fields, nullptr,
-        nullptr, nullptr, ACTION_EXECUTION_SYNC
-    };
-    action_type_register(&normalized);
+TEST_F(ListSourceTest, ActionValidationChecksDynamicItemContext) {
     static const ListSourceField fields[] = {{"id", "ID", ListSourceFieldType::String, false}};
     static const ListSourceDescriptor source{"[test:normalized]", "Test", fields, 1};
     JsonDocument input;
     JsonObject action = input.to<JsonArray>().add<JsonObject>();
-    action["type"] = normalized.type_name;
-    action["target"] = "[item:id]";
+    action["op"] = "variable.set";
+    action["args"]["name"] = "selected";
+    action["args"]["value"]["$template"] = "[item:id]";
     EXPECT_EQ(item_binding_validate_actions(input.as<JsonArrayConst>(), &source, nullptr, 0), nullptr);
     EXPECT_NE(item_binding_validate_actions(input.as<JsonArrayConst>(), nullptr, nullptr, 0), nullptr);
-    action["structural"] = "[item:id]";
-    EXPECT_STREQ(item_binding_validate_actions(input.as<JsonArrayConst>(), &source, nullptr, 0),
-                 "action 1 (list_normalized), field 'structural': this field does not support item bindings");
-    EXPECT_STREQ(action["target"], "[item:id]");
+    action["type"] = "set_var";
+    EXPECT_NE(item_binding_validate_actions(input.as<JsonArrayConst>(), &source, nullptr, 0), nullptr);
+    EXPECT_STREQ(action["args"]["value"]["$template"], "[item:id]");
 }
 
 TEST_F(ListSourceTest, ListConfigChecksSourceRowsGeometryAndOwnership) {
@@ -567,33 +539,20 @@ TEST_F(ListSourceTest, ListConfigChecksSourceRowsGeometryAndOwnership) {
     doc["widget_list_bg_color"] = std::string(192, 'x');
     EXPECT_NE(list_validate_config(doc.as<JsonObjectConst>(), aliases, 1), nullptr);
     doc.remove("widget_list_bg_color");
-    action_type_register(&list_test_sync);
-    action_type_register(&list_test_pause);
-    action_type_register(&list_test_late);
     JsonArray tap = doc["actions"].to<JsonArray>();
-    tap.add<JsonObject>()["type"] = "list_test_pause";
+    tap.add<JsonObject>()["op"] = "delay.wait";
     JsonObject next = tap.add<JsonObject>();
-    next["type"] = "list_test_sync";
-    next["target"] = "[pad:name]";
-    EXPECT_STREQ(list_validate_actions(doc.as<JsonObjectConst>(), aliases, 1),
-                 "List 'notes_1', field 'actions': action 2 (list_test_sync), field 'target': item context ended at action 1 (pause, confirmation, or navigation); capture the item in a variable first");
-    next["target"] = "static";
+    next["op"] = "variable.set";
+    next["args"]["value"]["$template"] = "[pad:name]";
+    EXPECT_EQ(list_validate_actions(doc.as<JsonObjectConst>(), aliases, 1), nullptr);
     JsonArray hold = doc["lp_actions"].to<JsonArray>();
     JsonObject hold_boundary = hold.add<JsonObject>();
-    hold_boundary["type"] = "list_test_pause";
-    hold_boundary["target"] = "[item:id]";
-    hold_boundary["unused"] = "~0~";
+    hold_boundary["op"] = "variable.set";
+    hold_boundary["args"]["value"]["$template"] = "[item:id]";
     EXPECT_EQ(list_validate_actions(doc.as<JsonObjectConst>(), aliases, 1), nullptr);
-    hold_boundary["type"] = "list_test_late";
+    hold_boundary["type"] = "set_var";
     EXPECT_STREQ(list_validate_actions(doc.as<JsonObjectConst>(), aliases, 1),
-                 "List 'notes_1', field 'lp_actions': action 1 (list_test_late), field 'target': this action ends item context before resolving bindings; capture the item in a variable first");
-    hold_boundary["type"] = "list_test_pause";
-    JsonObject hold_later = hold.add<JsonObject>();
-    hold_later["type"] = "list_test_sync";
-    hold_later["target"] = "[pad:name]";
-    EXPECT_NE(list_validate_actions(doc.as<JsonObjectConst>(), aliases, 1), nullptr);
-    hold_later["target"] = "[item:missing]";
-    EXPECT_NE(list_validate_actions(doc.as<JsonObjectConst>(), aliases, 1), nullptr);
+                 "List 'notes_1', field 'lp_actions': legacy actions are not supported");
 }
 
 TEST_F(ListSourceTest, ComposedPadValidatesListIdentityAndInheritedItemAliases) {
@@ -603,8 +562,6 @@ TEST_F(ListSourceTest, ComposedPadValidatesListIdentityAndInheritedItemAliases) 
     };
     static const ListSourceDescriptor source = {"[test:composed]", "Test", fields, 2};
     ASSERT_TRUE(list_source_register(&source));
-    if (!action_type_find("list_test_sync")) action_type_register(&list_test_sync);
-    if (!action_type_find("list_test_pause")) action_type_register(&list_test_pause);
 
     JsonDocument pad, inherited;
     pad["cols"] = 2;
@@ -657,12 +614,11 @@ TEST_F(ListSourceTest, ComposedPadValidatesListIdentityAndInheritedItemAliases) 
     other["widget_list_id"] = "other";
 
     JsonArray hold = list["lp_actions"].to<JsonArray>();
-    hold.add<JsonObject>()["type"] = "list_test_pause";
+    hold.add<JsonObject>()["op"] = "delay.wait";
     JsonObject later = hold.add<JsonObject>();
-    later["type"] = "list_test_sync";
-    later["target"] = "[pad:selected]";
-    EXPECT_NE(validate_list_pad(pad.as<JsonObjectConst>(), inherited.as<JsonObjectConst>()), nullptr);
-    later["target"] = "static";
+    later["op"] = "variable.set";
+    later["args"]["value"]["$template"] = "[pad:selected]";
+    EXPECT_EQ(validate_list_pad(pad.as<JsonObjectConst>(), inherited.as<JsonObjectConst>()), nullptr);
     list["label_top"] = "[pad:selected]";
     EXPECT_NE(validate_list_pad(pad.as<JsonObjectConst>(), inherited.as<JsonObjectConst>()), nullptr);
 }
@@ -1207,6 +1163,15 @@ TEST_F(ListSourceTest, PadsReadCachedOrFilteredMetadataAndPropagateFailures) {
     EXPECT_EQ(pad_config_list_read(2, name, sizeof(name), &error), PadListReadResult::Present);
     EXPECT_STREQ(name, "Small");
 
+    const std::string nul_key = "{\"name\\u0000suffix\":\"Misleading\"}";
+    LittleFS.files["/config/pad_2.json"] = std::vector<uint8_t>(nul_key.begin(), nul_key.end());
+    EXPECT_EQ(pad_config_list_read(2, name, sizeof(name), &error), PadListReadResult::Error);
+    EXPECT_STREQ(error, "pad JSON contains an invalid NUL");
+    const std::string nul_byte("{\"name\":\"Good\"}\0", 16);
+    LittleFS.files["/config/pad_2.json"] = std::vector<uint8_t>(nul_byte.begin(), nul_byte.end());
+    EXPECT_EQ(pad_config_list_read(2, name, sizeof(name), &error), PadListReadResult::Error);
+    EXPECT_STREQ(error, "pad JSON contains an invalid NUL");
+
     const std::string no_name = "{\"ignored\":1}";
     LittleFS.files["/config/pad_2.json"] = std::vector<uint8_t>(no_name.begin(), no_name.end());
     EXPECT_EQ(pad_config_list_read(2, name, sizeof(name), &error), PadListReadResult::Present);
@@ -1221,7 +1186,7 @@ TEST_F(ListSourceTest, PadsReadCachedOrFilteredMetadataAndPropagateFailures) {
     fail_allocations = false;
     LittleFS.short_read_path = "/config/pad_2.json";
     EXPECT_EQ(pad_config_list_read(2, name, sizeof(name), &error), PadListReadResult::Error);
-    EXPECT_STREQ(error, "pad metadata parse failed");
+    EXPECT_STREQ(error, "pad metadata read failed");
     LittleFS.short_read_path.clear();
     LittleFS.files["/config/pad_2.json"] = {'{'};
     EXPECT_EQ(pad_config_list_read(2, name, sizeof(name), &error), PadListReadResult::Error);

@@ -1,76 +1,89 @@
-// Darkroom-timer ActionTypeDef — parse, serialize, dispatch for the "strip"
-// (f-stop test strip) action type. Registered via REGISTER_ACTION_TYPE so
-// action_dispatch.cpp / action_parse.cpp do not need to know about the strip
-// arm at compile time.
-//
-// Aggregated into the build via
-// device_classes/darkroom_timer/darkroom_timer_device_class.cpp
-// under #if IS_DARKROOM_TIMER.
+// Test strip operations, aggregated by darkroom_timer_device_class.cpp.
 
 #include "../../action_registry.h"
 
 #if HAS_DISPLAY && IS_DARKROOM_TIMER
 
-#include "../../log_manager.h"
 #include "darkroom_timer_payload.h"
 #include "test_strip.h"
 
-#include <string.h>
-
-#define TAG "StripAction"
-
-// Wire format: flat JSON {strip_command, strip_value} (legacy field names
-// preserved for field-deployed pad-config backward compatibility).
-static void strip_parse(const JsonObject& a, ButtonAction& act) {
-    StripPayload& p = strip_payload(act);
-    strlcpy(p.command, a["strip_command"] | "", sizeof(p.command));
-    strlcpy(p.value,   a["strip_value"]   | "", sizeof(p.value));
-}
-
-static void strip_serialize(const ButtonAction& act, JsonObject obj) {
-    const StripPayload& p = strip_payload(act);
-    if (p.command[0]) obj["strip_command"] = p.command;
-    if (p.value[0])   obj["strip_value"]   = p.value;
-}
-
-static ActionResult strip_dispatch(const ButtonAction& act, const char* label,
-                                   uint32_t /*continuation_token*/) {
-    const StripPayload& p = strip_payload(act);
-    if (!p.command[0]) {
-        LOGW(TAG, "%s strip: empty command", label);
-        return ACTION_COMPLETE;
-    }
-    LOGT(TAG, "%s strip: %s %s", label, p.command, p.value);
-    test_strip_dispatch(p.command, p.value);
-    return ACTION_COMPLETE;
-}
-
-// `value` is the single bindable/numeric field (numeric rocker {step} target
-// for adjust_* commands); expose it so shared code drives binding + {step}.
-static bool strip_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {
-    StripPayload& p = strip_payload(act);
-    return action_visit_field(visitor, context, "strip_value", p.value);
-}
+#include <limits.h>
+#include <stdio.h>
 
 static void strip_describe(JsonObject& out) {
     out["group"] = "Darkroom Timer";
     out["label"] = "Test strip";
-    JsonArray fields = out.createNestedArray("fields");
-    JsonObject command_field = fields.createNestedObject();
-    command_field["name"] = "strip_command";
-    command_field["description"] = "required command identifier";
-    JsonObject value_field = fields.createNestedObject();
-    value_field["name"] = "strip_value";
-    value_field["description"] = "command-specific time, segment, or tick value; binding templates are supported";
-    JsonArray commands = out.createNestedArray("commands");
-    const char* ids[] = {"start", "cancel", "set_base", "adjust_base", "step_up", "step_down", "adjust_segments", "set_segments", "set_countdown", "adjust_countdown", "set_pause", "adjust_pause", "set_tick"};
-    const char* labels[] = {"Start sequence", "Cancel sequence", "Set base time", "Adjust base time", "Increase step interval", "Decrease step interval", "Adjust segments", "Set segments", "Set initial countdown", "Adjust initial countdown", "Set pause duration", "Adjust pause duration", "Set exposure tick"};
-    for (uint8_t i = 0; i < 13; ++i) {
-        JsonObject item = commands.createNestedObject();
-        item["id"] = ids[i]; item["label"] = labels[i];
-    }
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(strip_action_type, ACTION_TYPE_STRIP, strip_parse, strip_serialize, strip_dispatch, strip_fields, strip_describe, nullptr, nullptr, ACTION_EXECUTION_SYNC);
+static const ActionArgumentDef strip_seconds[] = {
+    {"seconds", "Base time (seconds)", ACTION_ARGUMENT_NUMBER, INT32_MIN, INT32_MAX, 0,
+     true, "[event:step]", "number"},
+};
+static const ActionArgumentDef strip_segments[] = {
+    {"segments", "Segments", ACTION_ARGUMENT_INTEGER, INT32_MIN, INT32_MAX, 0,
+     true, "[event:step]", "number"},
+};
+static const ActionArgumentDef strip_duration[] = {
+    {"seconds", "Seconds", ACTION_ARGUMENT_INTEGER, INT32_MIN, INT32_MAX, 0,
+     true, "[event:step]", "number"},
+};
+static const ActionArgumentDef strip_tick[] = {
+    {"enabled", "Exposure tick", ACTION_ARGUMENT_BOOLEAN, 0, 0, 0,
+     true, "[var:tick_enabled]", "toggle"},
+};
+#define STRIP_SIMPLE(fn, command) \
+    static ActionResult fn(const ActionResolvedArgument*, const char*, uint32_t) { \
+        test_strip_dispatch(command, ""); return ACTION_COMPLETE; \
+    }
+#define STRIP_NUMBER(fn, command) \
+    static ActionResult fn(const ActionResolvedArgument* args, const char*, uint32_t) { \
+        char value[24]; snprintf(value, sizeof(value), "%.9g", static_cast<double>(args[0].number)); \
+        test_strip_dispatch(command, value); return ACTION_COMPLETE; \
+    }
+#define STRIP_INTEGER(fn, command) \
+    static ActionResult fn(const ActionResolvedArgument* args, const char*, uint32_t) { \
+        int32_t n = args[0].integer; \
+        /* The strip adds adjustments to state values no larger than 15. */ \
+        if (n > INT32_MAX - 15) n = INT32_MAX - 15; \
+        char value[16]; snprintf(value, sizeof(value), "%ld", static_cast<long>(n)); \
+        test_strip_dispatch(command, value); return ACTION_COMPLETE; \
+    }
+STRIP_SIMPLE(strip_start_op, "start")
+STRIP_SIMPLE(strip_cancel_op, "cancel")
+STRIP_SIMPLE(strip_step_up_op, "step_up")
+STRIP_SIMPLE(strip_step_down_op, "step_down")
+STRIP_NUMBER(strip_set_base_op, "set_base")
+STRIP_NUMBER(strip_adjust_base_op, "adjust_base")
+STRIP_INTEGER(strip_adjust_segments_op, "adjust_segments")
+STRIP_INTEGER(strip_set_segments_op, "set_segments")
+STRIP_INTEGER(strip_set_countdown_op, "set_countdown")
+STRIP_INTEGER(strip_adjust_countdown_op, "adjust_countdown")
+STRIP_INTEGER(strip_set_pause_op, "set_pause")
+STRIP_INTEGER(strip_adjust_pause_op, "adjust_pause")
+#undef STRIP_SIMPLE
+#undef STRIP_NUMBER
+#undef STRIP_INTEGER
+static ActionResult strip_set_tick_op(const ActionResolvedArgument* args, const char*, uint32_t) {
+    test_strip_dispatch("set_tick", args[0].integer ? "on" : "off");
+    return ACTION_COMPLETE;
+}
+static const ActionOperationDef strip_operations[] = {
+    {"strip.start", "Start test strip", nullptr, 0, strip_start_op},
+    {"strip.cancel", "Cancel test strip", nullptr, 0, strip_cancel_op},
+    {"strip.step.increase", "Increase step interval", nullptr, 0, strip_step_up_op},
+    {"strip.step.decrease", "Decrease step interval", nullptr, 0, strip_step_down_op},
+    {"strip.base.set", "Set base time", strip_seconds, 1, strip_set_base_op},
+    {"strip.base.adjust", "Adjust base time", strip_seconds, 1, strip_adjust_base_op},
+    {"strip.segments.adjust", "Adjust segments", strip_segments, 1, strip_adjust_segments_op},
+    {"strip.segments.set", "Set segments", strip_segments, 1, strip_set_segments_op},
+    {"strip.countdown.set", "Set initial countdown", strip_duration, 1, strip_set_countdown_op},
+    {"strip.countdown.adjust", "Adjust initial countdown", strip_duration, 1, strip_adjust_countdown_op},
+    {"strip.pause.set", "Set pause duration", strip_duration, 1, strip_set_pause_op},
+    {"strip.pause.adjust", "Adjust pause duration", strip_duration, 1, strip_adjust_pause_op},
+    {"strip.tick.set", "Set exposure tick", strip_tick, 1, strip_set_tick_op},
+};
+
+DEFINE_AND_REGISTER_ACTION_TYPE(strip_action_type, ACTION_TYPE_STRIP, strip_describe, nullptr, ACTION_EXECUTION_SYNC,
+    true, false, strip_operations, sizeof(strip_operations) / sizeof(strip_operations[0]));
 
 #endif // HAS_DISPLAY && IS_DARKROOM_TIMER

@@ -14,8 +14,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking changes
+
+* Replace legacy action configurations with typed operations. Legacy actions
+  are not converted automatically; recreate them in the editor or update the
+  configuration to the [new action format](docs/user/pads/actions.md).
+* Remove full-device configuration import. Device exports are reference-only.
+  Compatible, separately exported pads can still be imported as drafts and saved.
+
 ### Added
 
+* Add searchable actions with familiar fixed controls and a **Dynamic** option
+  per eligible argument. Use widget values, List items, live bindings, or
+  expressions to choose what an action does. For example, open the pad tapped
+  in a List or set Wi-Fi station mode from an Option Selector.
 * Add **Capsule**, a chunky arcade-style Face widget option with all eight
   expressions. Choose it under **Style** when editing a Face button.
 * Add **Audio > Microphone** for shared digital input gain, rumble reduction,
@@ -108,6 +120,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Replace legacy action documents with versioned typed operations. Existing
+  actions are not converted and must be recreated using the operation picker;
+  back up configurations before upgrading. Numeric Rocker adjustments use a
+  Dynamic argument with `[event:step]` instead of `{step}` substitution.
+  See [actions](docs/user/pads/actions.md).
 * Standardize timestamp bindings on Unix seconds and return unavailable when
   the timestamp is unknown. Replace `[alarm:1_once_epoch]` and
   `[alarm:1_next_epoch]` with `[alarm:1_once_at]` and `[alarm:1_next_at]`;

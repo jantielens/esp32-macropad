@@ -1,4 +1,5 @@
 #include "coffee_scale_config.h"
+#include "config_nvs_write.h"
 
 #if IS_COFFEE_SCALE
 
@@ -75,10 +76,12 @@ void coffee_scale_config_load(Preferences& prefs) {
     }
 }
 
-void coffee_scale_config_save(Preferences& prefs) {
-    prefs.putString(KEY_SCALE_CAL, coffee_scale_config.scale_cal_factor);
-    prefs.putString(KEY_SCALE_OFS, coffee_scale_config.scale_offset);
-    prefs.putUChar(KEY_SCALE_SMOOTH, coffee_scale_config.scale_smoothing);
+bool coffee_scale_config_save(Preferences& prefs) {
+    bool saved_ok = true;
+    saved_ok = (config_nvs_put_string(prefs, KEY_SCALE_CAL, coffee_scale_config.scale_cal_factor)) && saved_ok;
+    saved_ok = (config_nvs_put_string(prefs, KEY_SCALE_OFS, coffee_scale_config.scale_offset)) && saved_ok;
+    saved_ok = (prefs.putUChar(KEY_SCALE_SMOOTH, coffee_scale_config.scale_smoothing) == sizeof(coffee_scale_config.scale_smoothing)) && saved_ok;
+    return saved_ok;
 }
 
 #endif // IS_COFFEE_SCALE

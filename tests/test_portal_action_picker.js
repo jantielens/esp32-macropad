@@ -1,8 +1,7 @@
 // tests/test_portal_action_picker.js — action-type picker host test
 //
 // Verifies the picker renders from the firmware-authored catalog: grouped
-// type options, command options for multi-command types, and Shutter
-// Tester's command-family -> command population. Also guards against the
+// type options and typed operation arguments. Also guards against the
 // regression that broke the previous (discarded) implementation: a broad
 // DOM sweep on action-type selects that also matched the unrelated pad
 // editor's widget-type and icon-type selects.
@@ -22,12 +21,13 @@ assert.deepStrictEqual(productionCatalogs.portal, productionCatalogs.mcp.map(ent
     return metadata;
 }));
 const setVariableCatalog = productionCatalogs.portal.find(entry => entry.type === 'set_var');
+const setVariableOperation = setVariableCatalog.operations.find(operation => operation.id === 'variable.set');
 assert.deepStrictEqual(setVariableCatalog && {
     group: setVariableCatalog.group,
     label: setVariableCatalog.label,
-    nameBindable: setVariableCatalog.editor_fields[0].bindable === true,
-    valueBindable: setVariableCatalog.editor_fields[1].bindable === true
-}, { group: 'Variables', label: 'Set variable', nameBindable: false, valueBindable: true });
+    nameDynamic: setVariableOperation.arguments.find(argument => argument.name === 'name').dynamic,
+    valueDynamic: setVariableOperation.arguments.find(argument => argument.name === 'value').dynamic
+}, { group: 'Variables', label: 'Set variable', nameDynamic: true, valueDynamic: true });
 
 class Element {
     constructor(tag) {
@@ -67,70 +67,8 @@ const document = {
     createElement(tag) { return new Element(tag); }
 };
 
-// A fixture standing in for GET /api/info?catalog=1's "catalog" array
-// (see src/app/action_catalog.cpp). Presentation-only, mirrors real shapes.
-const FIXTURE_CATALOG = [
-    { type: 'screen', group: 'Navigation', label: 'Navigate to screen' },
-    { type: 'back', group: 'Navigation', label: 'Navigate back' },
-    { type: 'mqtt', group: 'Connectivity', label: 'Publish MQTT message' },
-    { type: 'ha_service', group: 'Connectivity', label: 'Call Home Assistant service' },
-    ...productionCatalogs.portal.filter(entry => entry.type === 'bthome'),
-    { type: 'gamepad', group: 'Gamepad', label: 'Gamepad', button_count: 16 },
-    {
-        type: 'mouse_button', group: 'Mouse', label: 'Mouse button',
-        commands: [{ id: 'left', label: 'Left' }, { id: 'right', label: 'Right' }, { id: 'middle', label: 'Middle' }],
-        editor_fields: [{ name: 'button', label: 'Button', type: 'select', default: 'left', command_options: true }]
-    },
-    {
-        type: 'volume', group: 'Audio', label: 'Volume',
-        template_fields: { volume_value: { max: 15 } },
-        commands: [{ id: 'set', label: 'Set volume' }, { id: 'adjust', label: 'Adjust volume' }],
-        editor_fields: [
-            { name: 'volume_mode', label: 'Command', type: 'select', command_options: true },
-            { name: 'volume_value', label: 'Value (%)', type: 'text', bindable: true }
-        ]
-    },
-    {
-        type: 'brightness', group: 'Display', label: 'Brightness',
-        commands: [{ id: 'set', label: 'Set brightness' }, { id: 'adjust', label: 'Adjust brightness' }],
-        editor_fields: [
-            { name: 'brightness_mode', label: 'Command', type: 'select', command_options: true },
-            { name: 'brightness_value', label: 'Value (%)', type: 'text', bindable: true }
-        ]
-    },
-    ...productionCatalogs.portal.filter(entry => entry.type === 'system'),
-    ...voiceCatalogs.portal.filter(entry => entry.group === 'Voice notes'),
-    {
-        type: 'music', group: 'Audio', label: 'Music',
-        commands: [{ id: 'play_pause', label: 'Play/Pause' }, { id: 'next', label: 'Next track' }],
-        editor_fields: [{ name: 'music_command', label: 'Command', type: 'select', command_options: true }]
-    },
-    {
-        type: 'timer', group: 'Timer', label: 'Timer',
-        commands: ['toggle', 'start', 'stop', 'pause', 'resume', 'reset', 'set', 'adjust']
-            .map(function(id) { return { id: id, label: id }; })
-    },
-    { type: 'delay', group: 'Timer', label: 'Delay', max_pending_actions: 3 },
-    ...productionCatalogs.portal.filter(entry => ['alarm_tone', 'alarm_mp3'].includes(entry.type)),
-    {
-        type: 'shutter', group: 'Shutter Tester', label: 'Shutter tester',
-        command_families: [
-            {
-                id: 'target_speed', label: 'Target speed', commands: [
-                    { id: 'toggle_lock', label: 'Toggle lock' },
-                    { id: 'set', label: 'Set target speed' },
-                    { id: 'adjust', label: 'Adjust target speed' }
-                ]
-            },
-            {
-                id: 'session', label: 'Session', commands: [
-                    { id: 'sess_toggle', label: 'Toggle start/stop' },
-                    { id: 'sess_start', label: 'Start' }
-                ]
-            }
-        ]
-    }
-];
+const FIXTURE_CATALOG = productionCatalogs.portal.concat(
+    voiceCatalogs.portal.filter(entry => entry.group === 'Voice notes'));
 
 const context = {
     console,
@@ -147,68 +85,13 @@ const context = {
 vm.createContext(context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_screen.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_cycle_pad.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_mqtt.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_ha.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_key.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_sound_alert.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_timer.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_notify.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_visual_alert.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_delay.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_gamepad.js', 'utf8'), context);
-vm.runInContext(
-    fs.readFileSync('src/app/device_classes/shutter_tester/web/portal_action_editor_shutter.js', 'utf8'),
-    context
-);
 
-const keyEditor = context._actionEditorExtensions.find(extension => extension.type === 'key');
-for (const type of ['key', 'ble_pair', 'mqtt']) {
-    keyEditor.typeChanged('keyboard-test', type);
-    assert.strictEqual(document.getElementById('keyboard-test-ble-hint').style.display,
-        type === 'mqtt' ? 'none' : '');
-}
-FIXTURE_CATALOG.push({ type: 'key', group: 'Keyboard', label: 'Send keys' });
-for (const type of ['key', 'ble_pair']) {
-    keyEditor.typeChanged('keyboard-test', type);
-    assert.strictEqual(document.getElementById('keyboard-test-ble-hint').style.display, 'none');
-}
-assert.strictEqual(document.getElementById('keyboard-test-key-group').style.display, 'none');
-keyEditor.typeChanged('keyboard-test', 'key');
-assert.strictEqual(document.getElementById('keyboard-test-key-group').style.display, '');
-FIXTURE_CATALOG.pop();
-
-// --- Group assembly from the fixture catalog ---
-const optionsHtml = context.actionEditorTypeOptionsHTML();
-assert(optionsHtml.includes('<optgroup label="Navigation">'));
-assert(optionsHtml.includes('<option value="screen">Navigate to screen</option>'));
-assert(optionsHtml.includes('<option value="back">Navigate back</option>'));
-assert(optionsHtml.includes('<option value="delay">Delay</option>'));
-assert(optionsHtml.includes('<optgroup label="Connectivity">'));
-assert(optionsHtml.includes('<option value="mqtt">Publish MQTT message</option>'));
-assert(optionsHtml.includes('<optgroup label="Mouse">'));
-assert(optionsHtml.includes('<option value="mouse_button">Mouse button</option>'));
-assert(optionsHtml.includes('<option value="gamepad">Gamepad</option>'));
-for (const action of [
-    { type: 'gamepad', control: 'button', button: 16, operation: 'tap' },
-    { type: 'gamepad', control: 'hat', direction: 'left', operation: 'down' },
-    { type: 'gamepad', control: 'trigger', trigger: 'right', operation: 'up' }
-]) {
-    context.actionEditorLoad('gamepad-test', action);
-    assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('gamepad-test'))), action);
-}
 context.actionEditorLoadGamepad('held-test', { control: 'hat', direction: 'up' });
-assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuildGamepad('held-test', true))),
-    { type: 'gamepad', control: 'hat', direction: 'up', operation: 'down' });
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuildGamepad('held-test'))),
+    { op: 'gamepad.hat.down', args: { direction: 'up' } });
 context.actionEditorLoadGamepad('held-test', { control: 'button', button: 17 });
-assert.throws(() => context.actionEditorBuildGamepad('held-test', true), /1-16/);
-const mouseCommands = context.actionEditorCommandOptionsHTML('mouse_button');
-for (const button of ['Left', 'Right', 'Middle']) {
-    assert(mouseCommands.includes('<option value="' + button.toLowerCase() + '">' + button + '</option>'));
-}
-assert(optionsHtml.includes('<optgroup label="Shutter Tester">'));
-assert(optionsHtml.includes('<option value="shutter">Shutter tester</option>'));
-
+assert.throws(() => context.actionEditorBuildGamepad('held-test'), /1-16/);
 // Operation editors use the firmware descriptor, preserve dynamic text, and
 // keep the fixed timer choice independent of the dynamic seconds argument.
 const originalCatalog = context.deviceInfoCache.catalog;
@@ -228,6 +111,12 @@ context.deviceInfoCache.catalog = productionCatalogs.portal.concat([{
           dynamic: true, example: '[var:file]', control: 'sounds' }
     ] }]
 }, {
+    type: 'shutter', group: 'Shutter Tester', label: 'Shutter tester',
+    operations: [{ id: 'shutter.target.set', label: 'Set target speed', arguments: [{
+        name: 'speed', label: 'Target speed', type: 'enum', max_length: 8,
+        dynamic: true, example: '[item:speed]', control: 'select', choices: ['1s', '1/125s']
+    }] }]
+}, {
     type: 'test_defaults', group: 'Test', label: 'Defaults',
     operations: [{ id: 'test.defaults', label: 'Defaults', arguments: [
         { name: 'on', label: 'On', type: 'boolean', default: true },
@@ -238,6 +127,7 @@ context.deviceInfoCache.catalog = productionCatalogs.portal.concat([{
 context.validateBinding = value => ({ valid: !!value, errors: [{ message: 'Invalid binding' }] });
 const operationOptions = context.actionEditorTypeOptionsHTML({ operations: true });
 assert(operationOptions.includes('value="@screen.open">Navigate to screen'));
+assert(operationOptions.includes('value="@shutter.target.set">Set target speed'));
 assert(operationOptions.includes('value="@screen.back">Navigate back'));
 assert(operationOptions.includes('value="@music.next">Next track'));
 assert(operationOptions.includes('value="@timer.adjust">Adjust timer'));
@@ -252,15 +142,15 @@ assert(mixedOptions.includes('value="@visual_alert.start">'));
 const legacyVisual = { type: 'visual_alert', op: 'show', color: 'ff0000' };
 document.getElementById('legacy-pad-type').setAttribute('data-operations', 'true');
 context.actionEditorLoad('legacy-pad', legacyVisual);
-assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('legacy-pad'))), legacyVisual);
+assert.throws(() => context.actionEditorBuild('legacy-pad'), /Legacy actions are not supported/);
 context.actionEditorLoad('legacy-host', legacyVisual);
-assert.strictEqual(document.getElementById('legacy-host-type').value, 'visual_alert');
+assert.throws(() => context.actionEditorBuild('legacy-host'), /Legacy actions are not supported/);
 const mixedType = document.getElementById('mixed-host-type');
 mixedType.setAttribute('data-operations', 'true');
 mixedType.setAttribute('data-mixed', 'true');
 const mixedLegacy = { type: 'visual_alert', op: 'stop', pattern: 'breathe' };
 context.actionEditorLoad('mixed-host', mixedLegacy);
-assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('mixed-host'))), mixedLegacy);
+assert.throws(() => context.actionEditorBuild('mixed-host'), /Legacy actions are not supported/);
 for (const action of [
     { op: 'screen.open', args: { target: 'pad_2' } },
     { op: 'wifi.station.set_enabled', args: { enabled: false } }
@@ -282,10 +172,18 @@ for (const catalog of catalogsToCheck) {
 }
 const operationMarkup = context.actionEditorHTML('operation-test', '', { operations: true });
 assert(operationMarkup.includes('for="operation-test-search">Search operations'));
+assert(!operationMarkup.includes('operation-test-generic-volume'));
+assert(!operationMarkup.includes('operation-test-shutter-group'));
 assert(operationMarkup.includes('> Dynamic</label>'));
 assert(operationMarkup.includes('Timer 1'));
 assert(operationMarkup.includes('min="1" max="55000" value="1"'));
 assert(operationMarkup.includes('Expected: true or false'));
+assert(operationMarkup.includes('<option value="1/125s">1/125s</option>'));
+for (const speed of ['1/125s', { $template: '[item:speed]' }]) {
+    const action = { op: 'shutter.target.set', args: { speed } };
+    context.actionEditorLoad('operation-test', action);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('operation-test'))), action);
+}
 const cycleWrap = context.actionEditorOperation('pad.cycle').arguments.find(argument => argument.name === 'wrap');
 assert.strictEqual(cycleWrap.default, true);
 const cycleWrapOptions = operationMarkup.match(/<select[^>]*id="operation-test-op-pad\.cycle-wrap-fixed"[^>]*>(.*?)<\/select>/)[1];
@@ -381,7 +279,7 @@ context.fetch = url => {
     return Promise.resolve({ ok: true, json: () => Promise.resolve(['chime.mp3']) });
 };
 const pickerOperation = context.actionEditorOperation('test.pickers');
-context.actionEditorLoadOperationSounds('operation-test', pickerOperation)
+const soundPickerTest = context.actionEditorLoadOperationSounds('operation-test', pickerOperation)
     .then(() => {
         assert.deepStrictEqual(soundInput.options.map(option => option.value), ['', 'chime.mp3', 'missing.mp3']);
         assert.strictEqual(soundInput.value, 'missing.mp3');
@@ -528,6 +426,14 @@ document.getElementById(screenBase + '-fixed').value = 'pad_2';
 document.getElementById(screenBase + '-dynamic').checked = true;
 context.actionEditorOperationModeChanged('operation-test', 'screen.open', 'target');
 assert.strictEqual(document.getElementById(screenBase + '-template').value, 'pad_2');
+const screenSelect = document.getElementById('pending-screen-op-screen.open-target-fixed');
+const screenTemplate = document.getElementById('pending-screen-op-screen.open-target-template');
+screenSelect.setAttribute('data-pending-value', 'pad_missing');
+screenTemplate.setAttribute('data-dynamic-waiting', '1');
+context.actionEditorPopulateScreens(['pending-screen'], [{id:'pad_0', name:'Home'}]);
+assert.strictEqual(screenSelect.value, 'pad_missing');
+assert(screenSelect.options.some(option => option.value === 'pad_missing' && option.textContent.includes('unavailable')));
+assert.strictEqual(screenTemplate.value, 'pad_missing');
 const savedDynamic = { op: 'timer.adjust', args: { timer: { $template: '[var:timer]' }, seconds: 5 } };
 context.actionEditorLoad('operation-test', savedDynamic);
 assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('operation-test'))), savedDynamic);
@@ -549,126 +455,6 @@ document.getElementById('operation-test-op-timer.adjust-seconds-template').value
 assert.throws(() => context.actionEditorBuild('operation-test'), /dynamic value/);
 context.deviceInfoCache.catalog = originalCatalog;
 
-// --- Command population for a multi-command type ---
-const volumeCommands = context.actionEditorCommandOptionsHTML('volume');
-assert(volumeCommands.includes('<option value="set">Set volume</option>'));
-assert(volumeCommands.includes('<option value="adjust">Adjust volume</option>'));
-
-const brightnessCommands = context.actionEditorCommandOptionsHTML('brightness');
-assert(brightnessCommands.includes('<option value="set">Set brightness</option>'));
-assert(brightnessCommands.includes('<option value="adjust">Adjust brightness</option>'));
-
-// --- Shutter Tester: command family -> command population ---
-const familyOptions = context.actionEditorFamilyOptionsHTML('shutter');
-assert(familyOptions.includes('<option value="target_speed">Target speed</option>'));
-assert(familyOptions.includes('<option value="session">Session</option>'));
-
-const targetSpeedCommands = context.actionEditorFamilyCommandOptionsHTML('shutter', 'target_speed');
-assert(targetSpeedCommands.includes('<option value="toggle_lock">Toggle lock</option>'));
-assert(!targetSpeedCommands.includes('sess_start'));
-
-const sessionCommands = context.actionEditorFamilyCommandOptionsHTML('shutter', 'session');
-assert(sessionCommands.includes('<option value="sess_start">Start</option>'));
-assert(!sessionCommands.includes('toggle_lock'));
-
-assert.strictEqual(context.actionEditorFamilyForCommand('shutter', 'sess_toggle'), 'session');
-assert.strictEqual(context.actionEditorFamilyForCommand('shutter', 'toggle_lock'), 'target_speed');
-
-// Selecting a family repopulates the command select for that family alone.
-const prefix = 'picker';
-const editorHtml = context.actionEditorHTML(prefix, '', {});
-assert(editorHtml.includes('Up to 3 pausable actions can be pending device-wide at a time'));
-assert(editorHtml.includes('picker-generic-volume-volume_mode'));
-assert(editorHtml.includes('picker-generic-brightness-brightness_mode'));
-assert(editorHtml.includes('picker-generic-brightness-brightness_value'));
-assert(editorHtml.includes('picker-generic-system-system_command'));
-assert(editorHtml.includes('picker-generic-music-music_command'));
-assert(editorHtml.includes('picker-generic-mouse_button-button'));
-assert(optionsHtml.includes('<optgroup label="Voice notes">'));
-assert(!optionsHtml.includes('<option value="voice_note">'));
-assert(!optionsHtml.includes('<option value="voice_note_del">'));
-const recordCommands = context.actionEditorCommandOptionsHTML('vnote_record');
-assert(recordCommands.includes('<option value="toggle">Toggle recording (start/save)</option>'));
-assert(recordCommands.includes('<option value="save">Stop and save recording</option>'));
-assert(!recordCommands.includes('process'));
-context.actionEditorLoad(prefix, { type: 'vnote_record' });
-assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(prefix))),
-    { type: 'vnote_record', command: 'toggle' });
-for (const command of ['toggle', 'start', 'pause', 'resume', 'save', 'discard']) {
-    const action = { type: 'vnote_record', command };
-    context.actionEditorLoad(prefix, action);
-    assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(prefix))), action);
-}
-context.actionEditorLoad(prefix, { type: 'vnote_process' });
-assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(prefix))),
-    { type: 'vnote_process' });
-for (const type of ['vnote_load', 'vnote_delete']) {
-    const action = { type, id: '[item:id]' };
-    context.actionEditorLoad(prefix, action);
-    assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(prefix))), action);
-}
-for (const button of ['left', 'right', 'middle', undefined]) {
-    context.actionEditorLoad(prefix, { type: 'mouse_button', button: button });
-    const mouseAction = context.actionEditorBuild(prefix);
-    assert.strictEqual(mouseAction.type, 'mouse_button');
-    assert.strictEqual(mouseAction.button, button || 'left');
-}
-assert(!editorHtml.includes('picker-system-command'));
-assert(!editorHtml.includes('picker-music-command'));
-context.actionEditorLoad(prefix, { type: 'volume', volume_mode: 'adjust', volume_value: '{step}' });
-const volumeAction = context.actionEditorBuild(prefix, '{step}');
-assert.strictEqual(volumeAction.type, 'volume');
-assert.strictEqual(volumeAction.volume_mode, 'adjust');
-assert.strictEqual(volumeAction.volume_value, '{step}');
-context.actionEditorLoad(prefix, { type: 'brightness', brightness_mode: 'adjust', brightness_value: '-10' });
-const brightnessAction = context.actionEditorBuild(prefix);
-assert.strictEqual(brightnessAction.type, 'brightness');
-assert.strictEqual(brightnessAction.brightness_mode, 'adjust');
-assert.strictEqual(brightnessAction.brightness_value, '-10');
-context.actionEditorLoad(prefix, { type: 'system', system_command: 'wifi_connect' });
-const systemAction = context.actionEditorBuild(prefix);
-assert.strictEqual(systemAction.type, 'system');
-assert.strictEqual(systemAction.system_command, 'wifi_connect');
-assert(editorHtml.includes('Turn off Wi-Fi'));
-context.actionEditorLoad(prefix, { type: 'system', system_command: 'wifi_off' });
-assert.strictEqual(context.actionEditorBuild(prefix).system_command, 'wifi_off');
-context.actionEditorLoad(prefix, { type: 'music', music_command: 'next' });
-const musicAction = context.actionEditorBuild(prefix);
-assert.strictEqual(musicAction.type, 'music');
-assert.strictEqual(musicAction.music_command, 'next');
-const familyEl = document.getElementById(prefix + '-shutter-family');
-familyEl.value = 'session';
-context.actionEditorShutterFamilyChanged(prefix);
-const commandEl = document.getElementById(prefix + '-shutter-command');
-assert(commandEl.innerHTML.includes('sess_start'));
-assert(!commandEl.innerHTML.includes('toggle_lock'));
-
-// Loading a persisted shutter action derives the family from its command.
-context.actionEditorLoad(prefix, { type: 'shutter', shutter_command: 'sess_start' });
-assert.strictEqual(familyEl.value, 'session');
-assert(document.getElementById(prefix + '-shutter-command').innerHTML.includes('sess_start'));
-
-const bthomeCatalog = productionCatalogs.portal.find(entry => entry.type === 'bthome');
-assert(bthomeCatalog, 'BLE-capable firmware exposes the BTHome action');
-const bthomeFields = context.actionEditorGenericFields('bthome');
-assert.strictEqual(bthomeFields[0].options.length, 10);
-assert.strictEqual(bthomeFields[1].type, 'select');
-assert.deepStrictEqual(bthomeFields[1].options.map(option => option.id),
-    ['press', 'double_press', 'long_press']);
-context.actionEditorLoad(prefix, {type: 'bthome'});
-assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(prefix))),
-    {type: 'bthome', button: 1, event: 'press'});
-context.actionEditorLoad(prefix, {type: 'bthome', button: 10, event: 'long_press'});
-assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(prefix))),
-    {type: 'bthome', button: 10, event: 'long_press'});
-
-// Delay uses a bounded numeric duration and persists the flat JSON contract.
-context.actionEditorLoad(prefix, { type: 'delay', duration_ms: 2500 });
-assert.strictEqual(document.getElementById(prefix + '-delay-duration').value, 2500);
-const delayAction = context.actionEditorBuild(prefix);
-assert.strictEqual(delayAction.type, 'delay');
-assert.strictEqual(delayAction.duration_ms, 2500);
-
 // --- Regression guard: no broad DOM sweep that could catch unrelated selects ---
 // The discarded prior implementation used
 // document.querySelectorAll('select[id$="-type"]') to refresh every action
@@ -679,107 +465,8 @@ assert.strictEqual(delayAction.duration_ms, 2500);
 const editorSource = fs.readFileSync('src/app/web/portal_action_editor.js', 'utf8');
 assert(!editorSource.includes('document.querySelectorAll'));
 assert(editorSource.includes('action-type-select'));
-const resetPrefix = 'reset-test';
-const resetFields = ['-ha-entity', '-ha-service', '-ha-data', '-generic-volume-volume_value', '-timer-set-sec', '-timer-adjust-sec'].map(suffix => {
-    const input = document.getElementById(resetPrefix + suffix);
-    input.tagName = 'INPUT';
-    input.defaultValue = '';
-    input.defaultChecked = false;
-    return input;
-});
-const resetCommand = document.getElementById(resetPrefix + '-generic-system-system_command');
-resetCommand.options = [{ value: 'reboot', defaultSelected: false }, { value: 'wifi_connect', defaultSelected: false }];
-Object.defineProperty(resetCommand, 'selectedIndex', { set(index) { this.value = this.options[index].value; } });
-const resetCheckbox = new Element('INPUT');
-resetCheckbox.defaultValue = 'on';
-resetCheckbox.defaultChecked = true;
-resetCheckbox.checked = false;
-const resetSelected = new Element('SELECT');
-resetSelected.options = [{ value: 'first', defaultSelected: false }, { value: 'configured', defaultSelected: true }];
-Object.defineProperty(resetSelected, 'selectedIndex', { set(index) { this.value = this.options[index].value; } });
-document.getElementById(resetPrefix + '-fields').querySelectorAll = () => resetFields.concat(resetCommand, resetCheckbox, resetSelected);
-const previousHa = { type: 'ha_service', entity_id: 'light.previous', service: 'turn_on', data_json: '{"brightness_pct":80}' };
-context.actionEditorLoad(resetPrefix, previousHa);
-assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(resetPrefix))), previousHa);
-document.getElementById(resetPrefix + '-type').value = 'mqtt';
-context.actionEditorTypeChanged(resetPrefix);
-document.getElementById(resetPrefix + '-type').value = 'ha_service';
-context.actionEditorTypeChanged(resetPrefix);
-assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(resetPrefix))), previousHa, 'type switching within a button preserves its draft');
-context.actionEditorLoad(resetPrefix, {});
-document.getElementById(resetPrefix + '-type').value = 'ha_service';
-context.actionEditorTypeChanged(resetPrefix);
-assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(resetPrefix))), {type:'ha_service'}, 'new buttons must not inherit HA settings');
-context.actionEditorLoad(resetPrefix, {type:'volume', volume_mode:'set', volume_value:'73'});
-document.getElementById(resetPrefix + '-timer-set-sec').value = '123';
-document.getElementById(resetPrefix + '-timer-adjust-sec').value = '-45';
-resetCommand.value = 'wifi_connect';
-context.actionEditorLoad(resetPrefix, {type:'mqtt', topic:'new/button', payload:'fresh'});
-document.getElementById(resetPrefix + '-type').value = 'volume';
-context.actionEditorTypeChanged(resetPrefix);
-assert.strictEqual(context.actionEditorBuild(resetPrefix).volume_value, undefined, 'different action types also clear inactive generic fields');
-assert.strictEqual(document.getElementById(resetPrefix + '-timer-set-sec').value, '');
-assert.strictEqual(document.getElementById(resetPrefix + '-timer-adjust-sec').value, '');
-assert.strictEqual(resetCommand.value, 'reboot');
-assert.strictEqual(resetSelected.value, 'configured');
-assert.strictEqual(resetCheckbox.checked, true);
-const specializedTypes = ['screen', 'cycle_pad', 'mqtt', 'key', 'sound_alert', 'timer', 'notify', 'visual_alert', 'delay', 'gamepad'];
-const manifest = fs.readFileSync('src/app/web/portal.js.bundle', 'utf8');
-for (const type of specializedTypes) {
-    assert(!new RegExp("(?:type|action\\.type)\\s*===?\\s*['\"]" + type + "['\"]").test(editorSource), 'shared editor must not branch on ' + type);
-    const filename = 'portal_action_editor_' + type + '.js';
-    assert(manifest.indexOf(filename) > manifest.indexOf('portal_action_editor.js'), 'extension dependency order: ' + type);
-    const extension = context._actionEditorExtensions.find(candidate => candidate.type === type);
-    assert(extension && extension.groups && extension.load && extension.build && extension.typeChanged, 'complete ownership: ' + type);
-}
-for (const suffix of ['-timer-action', '-sound-alert-file', '-gamepad-control', '-cycle-pad-exclusions', '-notify-text', '-va-color', '-delay-duration', '-target', '-topic', '-sequence']) {
-    assert(!editorSource.includes(suffix), 'shared editor must not own action controls: ' + suffix);
-}
-assert.deepStrictEqual(Array.from(context.actionEditorBindingSuffixes('mqtt')), ['-topic', '-payload']);
-assert.deepStrictEqual(Array.from(context.actionEditorBindingSuffixes('volume')), ['-generic-volume-volume_value']);
-assert(!context.actionEditorBindingSuffixes('delay').length);
-let attachedBindings = [];
-context.bindingAttachValidation = input => attachedBindings.push(input);
-context.actionEditorLoad('binding-test', {type:'mqtt', topic:'[mqtt:topic]', payload:'{step}'});
-context.actionEditorTypeChanged('binding-test');
-assert.strictEqual(attachedBindings.length, 2, 'binding setup must be idempotent');
-assert(attachedBindings.includes(document.getElementById('binding-test-topic')));
-context.actionEditorLoad('binding-test', {type:'key', sequence:'ctrl+c'});
-assert.strictEqual(attachedBindings.length, 3);
-const unknownAction = {type:'future_action', custom:{nested:[1, 2]}, enabled:false};
-context.actionEditorLoad('unknown-test', unknownAction);
-assert.deepStrictEqual(context.actionEditorBuild('unknown-test'), unknownAction);
-document.getElementById('unknown-test-type').value = 'back';
-context.actionEditorTypeChanged('unknown-test');
-assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('unknown-test'))), {type:'back'});
-for (const invalid of ['', '0', '-1', '1.5', '55001', '[mqtt:duration]']) {
-    context.actionEditorLoad(prefix, {type:'delay', duration_ms:1000});
-    document.getElementById(prefix + '-delay-duration').value = invalid;
-    assert.throws(() => context.actionEditorBuild(prefix), /Delay duration/);
-}
-for (const duration of [1, 55000]) {
-    document.getElementById(prefix + '-delay-duration').value = String(duration);
-    assert.strictEqual(context.actionEditorBuild(prefix).duration_ms, duration);
-}
-
-FIXTURE_CATALOG[0].alarm_hook_allowed = true;
-context.actionEditorListRender('alarm-hooks', ['alarm-hook-1'], null, {actionOptions:{alarmHook:true}});
-const alarmHtml = document.getElementById('alarm-hooks').innerHTML;
-assert(alarmHtml.includes('<option value="screen">'));
-assert(!alarmHtml.includes('<option value="delay">'));
-assert(!alarmHtml.includes('<option value="key">'));
-assert(!alarmHtml.includes('<option value="mqtt">'));
-assert(alarmHtml.includes('data-alarm-hook="true"'));
 const alarmType = document.getElementById('alarm-hook-1-type');
 alarmType.setAttribute('data-alarm-hook', 'true');
-for (const type of ['delay', 'mqtt', 'unknown_action']) {
-    context.actionEditorEnsureUnsupportedOption(alarmType, type);
-    assert.strictEqual(alarmType.options[alarmType.options.length - 1].disabled, true);
-    context.actionEditorLoad('alarm-hook-1', {type});
-    assert.throws(() => context.actionEditorBuild('alarm-hook-1'), /not allowed for alarm hooks/);
-}
-context.actionEditorLoad('alarm-hook-1', {type:'alarm_mp3', sound_alert_file:'wake-up'});
-assert.strictEqual(context.actionEditorBuild('alarm-hook-1').type, 'alarm_mp3');
 const savedCatalog = context.deviceInfoCache.catalog;
 context.deviceInfoCache.catalog = [
     { type: 'sync_owner', group: 'Test', label: 'Synchronous legacy', alarm_hook_allowed: true, operations: [
@@ -797,7 +484,7 @@ assert(mixedAlarm.includes('value="@test.sync"'));
 assert(!mixedAlarm.includes('value="@test.pause"'));
 assert(!mixedAlarm.includes('value="@test.unknown"'));
 assert(!mixedAlarm.includes('value="@test.missing"'));
-assert(mixedAlarm.includes('value="legacy_sync"'));
+assert(!mixedAlarm.includes('value="legacy_sync"'));
 assert(!mixedAlarm.includes('value="sync_owner"'));
 assert(!mixedAlarm.includes('value="pause_owner"'));
 alarmType.setAttribute('data-operations', 'true');
@@ -811,22 +498,6 @@ for (const id of ['test.pause', 'test.unknown', 'test.missing']) {
     assert.throws(() => context.actionEditorBuild('alarm-hook-1'), /not allowed for alarm hooks/);
 }
 context.deviceInfoCache.catalog = savedCatalog;
-assert(context.actionEditorTypeOptionsHTML().includes('<option value="delay">'));
-context.actionEditorLoad(prefix, {type:'alarm_tone', sound_alert_pattern:'1000:200 800'});
-assert.strictEqual(context.actionEditorBuild(prefix).type, 'alarm_tone');
-assert.strictEqual(context.actionEditorBuild(prefix).sound_alert_pattern, '1000:200 800');
-context.actionEditorLoad(prefix, {type:'alarm_mp3', sound_alert_file:'missing-clip', sound_alert_volume:65});
-assert.strictEqual(context.actionEditorBuild(prefix).type, 'alarm_mp3');
-assert.strictEqual(context.actionEditorBuild(prefix).sound_alert_file, 'missing-clip');
-assert.strictEqual(context.actionEditorBuild(prefix).sound_alert_volume, 65);
-assert.strictEqual(context.actionEditorBuild(prefix).sound_alert_kind, undefined);
-assert(context.actionEditorTypeOptionsHTML().includes('<option value="alarm_mp3">Loop MP3</option>'));
-assert(!context.actionEditorHTML(prefix).includes('<option value="tone_loop">'));
-context.actionEditorLoad(prefix, {type:'sound_alert', sound_alert_kind:'stop'});
-const stopAudio = context.actionEditorBuild(prefix);
-assert.strictEqual(stopAudio.sound_alert_kind, 'stop');
-assert.strictEqual(stopAudio.sound_alert_file, undefined);
-assert.strictEqual(stopAudio.sound_alert_pattern, undefined);
 context.window = {};
 vm.runInContext(fs.readFileSync('src/app/web/portal_alarms.js', 'utf8'), context);
 document.getElementById('alarm-time').value = '07:30';
@@ -866,7 +537,7 @@ assert(!scheduleFragment.includes('alarm-ring-editors'));
 assert(!behaviorFragment.includes('alarm-time'));
 assert.deepStrictEqual(Object.keys(context.alarmConfigBuild()).sort(), ['enabled', 'hour', 'minute', 'weekdays']);
 alarmForm.dataset.section = 'behavior';
-assert.deepStrictEqual(Object.keys(context.alarmConfigBuild()).sort(), ['auto_dismiss_minutes', 'lateness_minutes', 'on_ring', 'on_stop', 'snooze_minutes']);
+assert.deepStrictEqual(Object.keys(context.alarmConfigBuild()).sort(), ['action_format_version', 'auto_dismiss_minutes', 'lateness_minutes', 'on_ring', 'on_stop', 'snooze_minutes']);
 for (const label of ['Repeat days', 'Snooze duration (minutes)', 'Auto-dismiss after (minutes)',
     'When ringing starts', 'When ringing stops', 'Maximum alarm lateness (minutes)']) {
     assert(alarmFragment.includes(label));
@@ -880,84 +551,54 @@ for (const key of ['1_next_seconds', '1_next_ring_seconds', '1_dismiss_seconds']
 console.log('portal_action_picker: PASS');
 context.deviceInfoCache.catalog = productionCatalogs.portal;
 const roundTrips = [
-    {type:'set_var', var_name:'counter', var_value:'[expr:[var:counter|0] + 1]'},
-    {type:'mqtt', topic:'home/topic', payload:'[mqtt:value]'},
-    {type:'key', sequence:'ctrl+c'},
-    {type:'cycle_pad', direction:'previous', wrap:false, excluded_pads:'1,3'},
-    {type:'sound_alert', sound_alert_kind:'tone', sound_alert_pattern:'1000:200 100', sound_alert_volume:50},
-    {type:'sound_alert', sound_alert_kind:'mp3', sound_alert_file:'missing-sound', sound_alert_volume:60},
-    {type:'sound_alert', sound_alert_kind:'stop'},
-    {type:'notify', message:'[mqtt:message]\nSecond line', duration_ms:0},
-    {type:'confirm', message:'Continue?', approve_text:'Yes', cancel_text:'No', timeout_ms:300000},
-    {type:'confirm', message:'No deadline', approve_text:'Continue', cancel_text:'Cancel', timeout_ms:0},
-    {type:'visual_alert', op:'stop', pattern:'blink', period_ms:900, intensity:75, duration_ms:5000},
-    {type:'timer', timer_id:2, timer_command:'adjust', timer_value:'{step}'},
-    {type:'delay', duration_ms:55000}
+    {op:'variable.set', args:{name:'counter', value:{$template:'[expr:[var:counter|0] + 1]'}}},
+    {op:'keyboard.send', args:{sequence:'ctrl+c'}},
+    {op:'timer.adjust', args:{timer:2, seconds:{$template:'[event:step]'}}},
+    {op:'delay.wait', args:{duration_ms:55000}}
 ];
 for (const action of roundTrips) {
     context.actionEditorLoad('round-trip', action);
-    assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('round-trip', '{step}'))), action, 'round-trip: ' + action.type);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('round-trip'))), action, 'round-trip: ' + action.op);
 }
-context.actionEditorLoad('round-trip', {type:'sound_alert'});
-assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('round-trip'))), {type:'sound_alert', sound_alert_kind:'tone', sound_alert_pattern:''});
-context.actionEditorLoad('round-trip', {type:'notify', message:'Notification'});
-assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('round-trip'))), {type:'notify', message:'Notification', duration_ms:0});
-for (const type of ['notify', 'confirm']) {
-    for (const initial of [{}, {type:'mqtt', message:'Unrelated content', duration_ms:5000}, {type}]) {
-        context.actionEditorLoad('dialog-defaults', initial);
-        document.getElementById('dialog-defaults-type').value = type;
-        context.actionEditorTypeChanged('dialog-defaults');
-        const action = context.actionEditorBuild('dialog-defaults');
-        assert.strictEqual(action.message, 'Your message to show');
-        assert.strictEqual(action[type === 'confirm' ? 'timeout_ms' : 'duration_ms'], 0);
-        assert.strictEqual(document.getElementById('dialog-defaults-' + type + '-persistent').checked, true);
-        assert.strictEqual(document.getElementById('dialog-defaults-' + type + '-seconds').disabled, true);
-        if (type === 'confirm') {
-            assert.strictEqual(action.approve_text, 'Continue');
-            assert.strictEqual(action.cancel_text, 'Cancel');
-        }
-    }
-    const timingField = type === 'confirm' ? 'timeout_ms' : 'duration_ms';
-    const saved = {type, message:'Keep my message', [timingField]:61000};
-    context.actionEditorLoad('dialog-defaults', saved);
-    assert.strictEqual(context.actionEditorBuild('dialog-defaults')[timingField], 61000);
-    assert.strictEqual(context.actionEditorBuild('dialog-defaults').message, saved.message);
-    assert.strictEqual(document.getElementById('dialog-defaults-' + type + '-persistent').checked, false);
-    assert.strictEqual(document.getElementById('dialog-defaults-' + type + '-seconds').disabled, false);
-    context.actionEditorLoad('dialog-defaults', {...saved, message:''});
-    assert.throws(() => context.actionEditorBuild('dialog-defaults'), /Dialog message is required/);
-}
-context.actionEditorLoad('round-trip', {type:'delay'});
-assert.strictEqual(context.actionEditorBuild('round-trip').duration_ms, 1000);
-context.actionEditorLoad('round-trip', {type:'visual_alert', op:'stop'});
-assert.strictEqual(document.getElementById('round-trip-va-config-group').style.display, 'none');
-context.actionEditorLoad('round-trip', {type:'sound_alert', sound_alert_kind:'mp3'});
-assert.strictEqual(document.getElementById('round-trip-sound-alert-tone-group').style.display, 'none');
-assert.strictEqual(document.getElementById('round-trip-sound-alert-mp3-group').style.display, '');
 const productionOptions = context.actionEditorTypeOptionsHTML({alarmHook:true});
 for (const entry of productionCatalogs.portal) {
-    assert.strictEqual(productionOptions.includes('<option value="' + entry.type + '">'),
-        entry.alarm_hook_allowed === true, 'actual hook eligibility: ' + entry.type);
+    for (const operation of entry.operations || []) {
+        assert.strictEqual(productionOptions.includes('<option value="@' + operation.id + '">'),
+            operation.alarm_hook_allowed === true, 'actual hook eligibility: ' + operation.id);
+    }
 }
-for (const type of ['alarm', 'alarm_tone', 'alarm_mp3']) {
-    assert(productionOptions.includes('<option value="' + type + '">'));
-}
-assert(productionOptions.includes('<option value="alarm_tone">Loop Tone</option>'));
-assert(productionOptions.includes('<option value="alarm_mp3">Loop MP3</option>'));
-assert(context.actionEditorCommandOptionsHTML('alarm').includes('<option value="cancel">Cancel</option>'));
-assert(context.actionEditorCommandOptionsHTML('alarm').includes('<option value="weekday_enable">Enable weekday</option>'));
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_alarm.js', 'utf8'), context);
-const productionEditor = context.actionEditorHTML(prefix);
-assert(productionEditor.includes('Repeats until stopped.'));
-assert(productionEditor.includes('0 = use device volume; 1-100 overrides it.'));
-assert(productionEditor.includes('<span id="' + prefix + '-generic-alarm-alarm_id-label">Alarm</span>'));
-assert(productionEditor.includes('<option value="0">Active alarm</option>'));
-document.getElementById(prefix + '-generic-alarm-alarm_command').value = 'set_time';
-context.actionEditorAlarmChanged(prefix);
-assert.strictEqual(document.getElementById(prefix + '-generic-alarm-alarm_value-label').textContent, 'Time (minutes since midnight)');
-assert(document.getElementById(prefix + '-generic-alarm-alarm_value-help').textContent.includes('420 = 07:00'));
-document.getElementById(prefix + '-generic-alarm-alarm_command').value = 'adjust_minutes';
-context.actionEditorAlarmChanged(prefix);
-assert.strictEqual(document.getElementById(prefix + '-generic-alarm-alarm_value-label').textContent, 'Adjustment (minutes)');
-assert(document.getElementById(prefix + '-generic-alarm-alarm_value-help').textContent.includes('{step}'));
 console.log('production portal/MCP action parity: PASS');
+
+async function testBrewTemplateLoading() {
+    const operation = { id: 'brew.select', arguments: [{ name: 'template', control: 'brew_templates' }] };
+    const base = 'brew-test-op-brew.select-template';
+    const select = document.getElementById(base + '-fixed');
+    const template = document.getElementById(base + '-template');
+    select.appendChild = function(option) {
+        this.options.push(option);
+        if (this.options.length === 1 && !this.value) this.value = option.value;
+    };
+    context.fetch = () => Promise.resolve({
+        ok: true, json: () => Promise.resolve([{ name: 'espresso', display_name: 'Espresso' }])
+    });
+    context.actionEditorOperationFixedChanged('brew-test', operation.id, 'template');
+    assert.strictEqual(template.value, '');
+    await context.actionEditorLoadBrewTemplates('brew-test', operation);
+    assert.strictEqual(select.value, 'espresso');
+    assert.strictEqual(template.value, 'espresso');
+
+    select.setAttribute('data-pending-value', 'missing');
+    template.value = '';
+    template.removeAttribute('data-dynamic-initialized');
+    select.value = '';
+    context.actionEditorOperationFixedChanged('brew-test', operation.id, 'template');
+    await context.actionEditorLoadBrewTemplates('brew-test', operation);
+    assert.strictEqual(select.value, 'missing');
+    assert.strictEqual(template.value, 'missing');
+    assert(select.options.some(option => option.value === 'missing' && option.textContent.includes('unavailable')));
+
+    context.fetch = () => Promise.resolve({ ok: false, status: 503 });
+    await context.actionEditorLoadBrewTemplates('brew-test', operation);
+    assert(document.getElementById(base + '-load-error').textContent.includes('Could not load'));
+}
+soundPickerTest.then(testBrewTemplateLoading).catch(error => { console.error(error); process.exitCode = 1; });

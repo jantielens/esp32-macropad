@@ -12,7 +12,7 @@
 static void swipe_actions_get_config(AsyncWebServerRequest *request) {
     auto doc = make_psram_json_doc(4096);
     if (!swipe_config_to_json(doc->to<JsonObject>()) || doc->overflowed()) {
-        request->send(503, "application/json", "{\"error\":\"Swipe actions unavailable\"}");
+        request->send(409, "application/json", "{\"error\":\"Swipe actions unavailable or incompatible; recreate the document\"}");
         return;
     }
 

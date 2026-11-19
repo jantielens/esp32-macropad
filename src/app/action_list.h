@@ -13,11 +13,8 @@
 #endif
 
 // Parse a JSON array of action objects into out[0..max-1].
-// Drops empty/typeless entries. When filter_literal_none is true, also drops
-// the JSON action type "none". Returns the count actually populated.
-// Zero-initializes the full out buffer before parsing.
-uint8_t action_list_parse(JsonVariant v, ButtonAction* out, uint8_t max,
-						  bool filter_literal_none = false);
+// Returns the count actually populated and zero-initializes the output buffer.
+uint8_t action_list_parse(JsonVariant v, ButtonAction* out, uint8_t max);
 
 bool action_list_has_audio(const ButtonAction* actions, uint8_t count);
 

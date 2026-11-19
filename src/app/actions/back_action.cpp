@@ -27,27 +27,12 @@ const ActionOperationDef kBackOperations[] = {
     {"screen.back", "Navigate back", nullptr, 0, dispatch_screen_back},
 };
 
-ActionResult dispatch_back(const ButtonAction&, const char* label, uint32_t) {
-#if !defined(ARDUINO)
-    (void)label;
-    return ACTION_COMPLETE;
-#elif HAS_DISPLAY
-    if (!display_manager_go_back(true)) {
-        LOGW(kBackActionTag, "%s back: no previous screen", label);
-    }
-#else
-    LOGW(kBackActionTag, "%s back: no display", label);
-#endif
-    return ACTION_COMPLETE;
-}
-
 void describe_back(JsonObject& action) {
     action["group"] = "Navigation";
     action["label"] = "Navigate back";
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(kBackActionType, ACTION_TYPE_BACK, nullptr, nullptr, dispatch_back, nullptr, describe_back, nullptr, nullptr, ACTION_EXECUTION_SYNC, true, true, false,
-    [](const ButtonAction&) { return true; }, kBackOperations, 1);
+DEFINE_AND_REGISTER_ACTION_TYPE(kBackActionType, ACTION_TYPE_BACK, describe_back, nullptr, ACTION_EXECUTION_SYNC, true, false, kBackOperations, 1);
 
 } // namespace
 

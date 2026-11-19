@@ -90,8 +90,7 @@ static void dispatch_event(uint8_t index, bool is_hold) {
     if (device_dialog_active()) {
         for (uint8_t i = 0; i < count; ++i) {
             const ActionOperationDef* operation = action_operation_for_action(actions[i]);
-            if (!strcmp(actions[i].type, ACTION_TYPE_BUTTON_NAVIGATION) ||
-                (operation && !strcmp(operation->id, "button.navigate"))) {
+            if (operation && !strcmp(operation->id, "button.navigate")) {
                 action_dispatch(actions[i], "Dialog navigation");
                 break;
             }

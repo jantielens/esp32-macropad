@@ -8,18 +8,6 @@
 #endif
 
 namespace {
-void parse_notify(const JsonObject& action, ButtonAction& act) {
-    if (const char* error = dialog_action::validate(action, false)) {
-        LOGW("Action", "Invalid notification: %s", error);
-        return;
-    }
-    strlcpy(act.payload.notify.message, action["message"] | "", sizeof(act.payload.notify.message));
-    act.payload.notify.duration_ms = action["duration_ms"] | 3000U;
-}
-void serialize_notify(const ButtonAction& act, JsonObject action) {
-    action["message"] = act.payload.notify.message;
-    action["duration_ms"] = act.payload.notify.duration_ms;
-}
 ActionResult dispatch_notify(const ButtonAction& act, const char* label, uint32_t) {
 #if defined(ARDUINO) && HAS_DISPLAY
     if (dialog_action::timing_valid(act.payload.notify.duration_ms) &&
@@ -52,13 +40,8 @@ const ActionOperationDef kNotifyOperations[] = {
     {"dialog.notify", "Show notification", kNotifyArguments, 2, dispatch_notify_operation},
 };
 bool notify_available() { return HAS_DISPLAY; }
-const char* validate_notify(JsonObjectConst action) { return dialog_action::validate(action, false); }
-bool visit_notify_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {
-    return action_visit_field(visitor, context, "message", act.payload.notify.message);
-}
 void describe_notify(JsonObject& action) { dialog_action::describe(action, false); }
-DEFINE_AND_REGISTER_ACTION_TYPE(kNotifyActionType, ACTION_TYPE_NOTIFY, parse_notify, serialize_notify,
-    dispatch_notify, visit_notify_fields, describe_notify, notify_available, validate_notify,
-    ACTION_EXECUTION_SYNC, true, true, false, nullptr, kNotifyOperations, 1);
+DEFINE_AND_REGISTER_ACTION_TYPE(kNotifyActionType, ACTION_TYPE_NOTIFY, describe_notify, notify_available,
+    ACTION_EXECUTION_SYNC, true, false, kNotifyOperations, 1);
 }
 #endif

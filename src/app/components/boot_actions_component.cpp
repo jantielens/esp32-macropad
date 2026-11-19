@@ -10,10 +10,11 @@
 #include <ArduinoJson.h>
 
 static void boot_actions_get_config(AsyncWebServerRequest *request) {
-    auto doc = make_psram_json_doc(1024);
+    auto doc = make_psram_json_doc(4096);
+    (*doc)["action_format_version"] = 1;
     JsonArray arr = doc->createNestedArray("actions");
     if (!boot_actions_to_json(arr) || doc->overflowed()) {
-        request->send(503, "application/json", "{\"error\":\"Boot actions unavailable\"}");
+        request->send(409, "application/json", "{\"error\":\"Boot actions unavailable or incompatible; recreate the document\"}");
         return;
     }
 

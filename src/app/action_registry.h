@@ -11,38 +11,8 @@
 // ============================================================================
 // Action Type Registry
 // ============================================================================
-// Vtable-based registry for built-in and device-class action types. The
-// registry is the production source of truth for parse/serialize, dispatch,
-// availability, validation, catalog metadata, and bindable fields.
-//
-// All function pointers may be nullptr. parse/serialize are mandatory for
-// types with payload data; dispatch is mandatory for types that produce side
-// effects.
-//
-typedef bool (*ActionBindableFieldVisitor)(char* field, size_t field_size,
-                                           bool reject_overflow, void* context);
+// Registry for built-in and device-class typed operations and catalog metadata.
 typedef void (*ActionTemplateVisitor)(const char* field, void* context);
-enum ActionFieldFlags : uint8_t {
-    ACTION_FIELD_BINDING = 1,
-    ACTION_FIELD_EVENT = 2,
-    ACTION_FIELD_REJECT_OVERFLOW = 4
-};
-// name is the persisted JSON key, not the C++ payload member name. Shared
-// authoring validation and catalog metadata use this identity directly.
-typedef bool (*ActionFieldVisitor)(const char* name, char* field, size_t capacity,
-                                   uint8_t flags, void* context);
-typedef bool (*ActionFields)(ButtonAction&, ActionFieldVisitor, void*);
-
-template<size_t capacity>
-bool action_visit_field(ActionFieldVisitor visitor, void* context, const char* name,
-                        char (&field)[capacity], uint8_t flags = ACTION_FIELD_BINDING |
-                            ACTION_FIELD_EVENT | ACTION_FIELD_REJECT_OVERFLOW) {
-    return visitor(name, field, capacity, flags, context);
-}
-
-// describe() may expose only the existing generic editor field types (text,
-// number, select, toggle). Actions with conditional or specialized controls
-// keep their custom portal editor while still using this registry contract.
 enum ActionExecutionClass { ACTION_EXECUTION_UNKNOWN, ACTION_EXECUTION_SYNC,
                             ACTION_EXECUTION_PAUSABLE };
 
@@ -55,6 +25,7 @@ enum ActionArgumentType : uint8_t {
     ACTION_ARGUMENT_BOOLEAN,
     ACTION_ARGUMENT_ENUM,
     ACTION_ARGUMENT_STRING,
+    ACTION_ARGUMENT_NUMBER,
 };
 
 inline bool action_argument_is_text(ActionArgumentType type) {
@@ -87,6 +58,7 @@ struct ActionArgumentDef {
 struct ActionResolvedArgument {
     const char* text;
     int32_t integer;
+    float number;
 };
 
 struct ActionOperationDef {
@@ -103,47 +75,24 @@ struct ActionOperationDef {
 struct ActionTypeDef {
     constexpr ActionTypeDef(
         const char* type_name,
-        void (*parse)(const JsonObject& a, ButtonAction& act),
-        void (*serialize)(const ButtonAction& act, JsonObject obj),
-        ActionResult (*dispatch)(const ButtonAction& act, const char* label,
-                                 uint32_t continuation_token),
-        ActionFields fields,
         void (*describe)(JsonObject& out),
         bool (*available)() = nullptr,
-                const char* (*validate)(JsonObjectConst action) = nullptr,
         ActionExecutionClass execution = ACTION_EXECUTION_UNKNOWN,
-            bool display_lock_required = true,
-            bool resolve_bindings_before_dispatch = true,
-            bool dispatch_lock_always = false,
-            bool (*ends_item_context)(const ButtonAction&) = nullptr,
-            const ActionOperationDef* operations = nullptr,
-            uint8_t operation_count = 0)
-        : type_name(type_name), parse(parse), serialize(serialize), dispatch(dispatch),
-          fields(fields), describe(describe), available(available),
-                    validate(validate), execution(execution),
-                    display_lock_required(display_lock_required),
-                    resolve_bindings_before_dispatch(resolve_bindings_before_dispatch),
-                    dispatch_lock_always(dispatch_lock_always),
-                    ends_item_context(ends_item_context),
-                    operations(operations), operation_count(operation_count) {}
+        bool display_lock_required = true,
+        bool dispatch_lock_always = false,
+        const ActionOperationDef* operations = nullptr,
+        uint8_t operation_count = 0)
+        : type_name(type_name), describe(describe), available(available),
+          execution(execution), display_lock_required(display_lock_required),
+          dispatch_lock_always(dispatch_lock_always),
+          operations(operations), operation_count(operation_count) {}
 
-    const char* type_name;                                                  // matches ButtonAction::type
-    void (*parse)(const JsonObject& a, ButtonAction& act);                  // flat JSON -> payload arm
-    void (*serialize)(const ButtonAction& act, JsonObject obj);             // payload arm -> flat JSON
-    // A nonzero continuation_token reserves the action suffix. Return
-    // ACTION_PENDING only after accepting that token; token 0 means another
-    // continuation is active and must be rejected with ACTION_FAILED.
-    ActionResult (*dispatch)(const ButtonAction& act, const char* label,
-                             uint32_t continuation_token);                  // execute side effects
-    ActionFields fields;
-    void (*describe)(JsonObject& out);                                       // optional: list flat JSON fields for the MCP manifest (nullptr = none)
-    bool (*available)();                                                      // optional: false hides and rejects the type on this build
-    const char* (*validate)(JsonObjectConst action);                         // optional: authoring validation; nullptr = valid
+    const char* type_name;
+    void (*describe)(JsonObject& out);
+    bool (*available)();
     ActionExecutionClass execution;
     bool display_lock_required;
-    bool resolve_bindings_before_dispatch;
     bool dispatch_lock_always;
-    bool (*ends_item_context)(const ButtonAction&);
     const ActionOperationDef* operations;
     uint8_t operation_count;
 };
@@ -166,26 +115,7 @@ bool action_may_pause(const ButtonAction& action);
 // this shared decision for authoring validation and catalog discovery.
 bool action_type_is_supported(const char* type_name);
 
-// Unknown or pausable actions end the item context conservatively.
-bool action_type_ends_item_context(const ActionTypeDef* type, const ButtonAction& action);
-
-// Invoke an action type's optional authoring validator. nullptr means valid.
-const char* action_type_validate(const ActionTypeDef* type, JsonObjectConst action);
-
-// Replace every literal token with a value without modifying the field on failure.
-bool action_substitute_token_field(char* field, size_t field_size,
-                                   const char* token, const char* replacement);
-bool action_type_substitute_token(const ActionTypeDef* def, ButtonAction& act,
-                                  const char* token, const char* value);
-bool action_type_visit_fields(const ActionTypeDef* def, ButtonAction& act,
-                              ActionFieldVisitor visitor, void* context);
-
-bool action_type_substitute_step(const ActionTypeDef* def, ButtonAction& act, float step);
-bool action_type_visit_bindable_fields(const ActionTypeDef* def, ButtonAction& act,
-                                       ActionBindableFieldVisitor visitor, void* context);
 void action_visit_templates(const ButtonAction& act, ActionTemplateVisitor visitor, void* context);
-bool action_type_has_binding(const ActionTypeDef* def, const ButtonAction& act);
-bool action_type_resolve_bindings(const ActionTypeDef* def, ButtonAction& act);
 
 // Auto-register an ActionTypeDef instance via a static constructor.
 #define REGISTER_ACTION_TYPE(var)                                              \

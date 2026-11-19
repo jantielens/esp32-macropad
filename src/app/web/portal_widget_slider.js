@@ -66,7 +66,7 @@
             tap: true, longPress: false,
             labels: () => ['Value set action', 'Long-press action'],
             buildTap() {
-                return actionEditorListBuild(padActionPrefixes('tap'), '{value}');
+                return actionEditorListBuild(padActionPrefixes('tap'));
             }
         },
         build(button) {

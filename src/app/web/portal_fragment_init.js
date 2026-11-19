@@ -829,7 +829,7 @@ window.init_screensaver_fragment = async function () {
 
 window.init_swipe_actions_fragment = async function () {
     if (typeof swipeInitEditors === 'function') await swipeInitEditors();
-    if (typeof loadSwipeActions === 'function') loadSwipeActions();
+    if (typeof loadSwipeActions === 'function') await loadSwipeActions();
     actionEditorWireFragment(SWIPE_DIRECTIONS);
 };
 

@@ -28,7 +28,6 @@ struct VoicePayload {
 inline bool voice_auto_stop_settings_valid(uint32_t silence_ms, uint32_t speech_threshold) {
     return silence_ms >= VOICE_AUTO_STOP_MIN_SILENCE_MS &&
             silence_ms <= VOICE_AUTO_STOP_MAX_SILENCE_MS &&
-            speech_threshold >= VOICE_AUTO_STOP_MIN_THRESHOLD &&
             speech_threshold <= VOICE_AUTO_STOP_MAX_THRESHOLD;
 }
 

@@ -209,6 +209,7 @@ protected:
     WidgetConfig config{};
     WidgetState state{};
     ScreenButtonConfig button_config{};
+    ActionStorage button_actions{};
     lv_obj_t* extra_button = nullptr;
     const WidgetType* extra_type = nullptr;
     WidgetConfig extra_config{};
@@ -261,8 +262,13 @@ protected:
             EXPECT_EQ(lv_obj_has_state(fixture->button, LV_STATE_PRESSED), *feedback == LV_EVENT_PRESSED);
         }, LV_EVENT_VALUE_CHANGED, this);
         button_config.action_count = 1;
-        strcpy(button_config.actions[0].type, ACTION_TYPE_GAMEPAD);
-        button_config.actions[0].payload.gamepad = {0, 0, 1};
+        JsonDocument action;
+        action["button"] = 1;
+        strcpy(button_config.actions[0].type, "@");
+        button_config.actions[0].payload.operation = {
+            &kGamepadOperations[1], action_storage_parse(button_actions, kGamepadOperations[1], action.as<JsonObjectConst>())
+        };
+        ASSERT_FALSE(button_actions.failed);
     }
 
     void create(const char* name, bool mouse_buttons = false, bool show_back = false, int back_size = 0) {
@@ -308,8 +314,23 @@ protected:
         document["widget_gamepad_stick"] = "right";
         extra_type->parseConfig(document.as<JsonObject>(), extra_config.data);
         ScreenButtonConfig configuration = button_config;
-        configuration.actions[0].payload.gamepad = {uint8_t(control.kind), control.index, 1};
+        ActionStorage extra_actions{};
+        JsonDocument action;
+        const unsigned operation = control.kind == GamepadControlKind::Button ? 1 :
+            control.kind == GamepadControlKind::Hat ? 4 : 7;
+        if (control.kind == GamepadControlKind::Button) action["button"] = control.index + 1;
+        else if (control.kind == GamepadControlKind::Hat) {
+            const char* directions[] = {"up", "down", "left", "right"};
+            action["direction"] = directions[control.index];
+        } else {
+            action["trigger"] = control.index ? "right" : "left";
+        }
+        configuration.actions[0].payload.operation = {
+            &kGamepadOperations[operation], action_storage_parse(extra_actions, kGamepadOperations[operation], action.as<JsonObjectConst>())
+        };
+        ASSERT_FALSE(extra_actions.failed);
         extra_type->createUI(extra_button, &extra_config, &configuration, nullptr, nullptr, &extra_state);
+        action_storage_clear(extra_actions);
         lv_obj_update_layout(extra_button);
     }
 
@@ -335,6 +356,7 @@ protected:
     void TearDown() override {
         if (extra_type) extra_type->destroyUI(&extra_state);
         if (type) type->destroyUI(&state);
+        action_storage_clear(button_actions);
         lv_indev_delete(indev);
         lv_display_delete(display);
     }
@@ -633,7 +655,7 @@ TEST_F(GamepadWidget, ValidatorsWorkWithoutMcp) {
     JsonObject action = button_json["actions"].to<JsonArray>().add<JsonObject>();
     action["type"] = "gamepad";
     action["operation"] = "down";
-    EXPECT_EQ(type->validateConfig(button_json), nullptr);
+    EXPECT_NE(type->validateConfig(button_json), nullptr);
     action["operation"] = "tap";
     EXPECT_NE(type->validateConfig(button_json), nullptr);
     button_json["widget_gamepad_dead_zone"] = 1;
@@ -990,7 +1012,9 @@ TEST_F(GamepadWidget, RouterHeldTriggerCoexistsWithStickAndFeedback) {
 
 TEST_F(GamepadWidget, RouterHatDirectionsComposeAndReleaseIndependently) {
     lv_obj_set_size(button, 150, 150);
-    button_config.actions[0].payload.gamepad = {uint8_t(GamepadControlKind::Hat), 0, 1};
+    JsonDocument action;
+    action["direction"] = "up";
+    set_widget_operation(button_config, button_actions, kGamepadOperations[4], action.as<JsonObjectConst>());
     create("gamepad_button");
     create_extra("gamepad_button", {GamepadControlKind::Hat, 3});
     GamepadTouchRouter router;

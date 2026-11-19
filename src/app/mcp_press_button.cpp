@@ -9,9 +9,7 @@
 
 namespace {
 bool is_ha_action(const ButtonAction& action) {
-    if (!strcmp(action.type, ACTION_TYPE_HA_SERVICE)) return true;
-    const ActionOperationDef* operation = action.type[0] == '@'
-        ? action.payload.operation.descriptor : nullptr;
+    const ActionOperationDef* operation = action.payload.operation.descriptor;
     return operation && operation->id && !strcmp(operation->id, "ha.service.call");
 }
 
@@ -83,16 +81,19 @@ McpPressDispatchResult mcp_press_button_dispatch(
     const McpPressDispatchOps& ops, void* context,
     uint32_t* execution_id, void* observer_context) {
     if (count > MAX_BUTTON_ACTIONS) return MCP_PRESS_DISPATCH_INVALID;
-    if (!actions || !count) return MCP_PRESS_DISPATCH_COMPLETED;
+    if (!count) return MCP_PRESS_DISPATCH_COMPLETED;
+    if (!actions) return MCP_PRESS_DISPATCH_INVALID;
 
     uint8_t ha_action_count = 0;
-    bool has_typed_ha = false;
     for (uint8_t index = 0; index < count; ++index) {
+        const ButtonAction& action = actions[index];
+        if (action.type[0] != '@' || action.type[1] ||
+            !action.payload.operation.descriptor || !action.payload.operation.descriptor->id)
+            return MCP_PRESS_DISPATCH_INVALID;
         if (!is_ha_action(actions[index])) continue;
         ++ha_action_count;
-        if (actions[index].type[0] == '@') has_typed_ha = true;
     }
-    if (has_typed_ha) {
+    if (ha_action_count) {
         if (!ops.dispatch_observed) return MCP_PRESS_DISPATCH_INVALID;
         void* memory = action_storage_allocate(sizeof(TrackedPress));
         if (!memory) return MCP_PRESS_DISPATCH_BUSY;
@@ -119,58 +120,8 @@ McpPressDispatchResult mcp_press_button_dispatch(
         ops.dispatch_observed(actions, count, observer, context);
         return MCP_PRESS_DISPATCH_TRACKED;
     }
-
-    // Tracked HA dispatch runs individual actions and cannot preserve a paused
-    // suffix. Pausable typed operations and legacy confirmations must stay
-    // with the continuation runner.
-    for (uint8_t index = 0; index < count; ++index) {
-        const ButtonAction& action = actions[index];
-        if (!strcmp(action.type, ACTION_TYPE_CONFIRM) ||
-            (action.type[0] == '@' &&
-             (!action.payload.operation.descriptor ||
-              action.payload.operation.descriptor->execution != ACTION_EXECUTION_SYNC))) {
-            ops.dispatch_list(actions, count, context);
-            return MCP_PRESS_DISPATCH_COMPLETED;
-        }
-    }
-
-    if (!ha_action_count) {
-        ops.dispatch_list(actions, count, context);
-        return MCP_PRESS_DISPATCH_COMPLETED;
-    }
-
-    uint32_t reserved_id = 0;
-    if (!ops.reserve(ha_action_count, &reserved_id, context)) {
-        return MCP_PRESS_DISPATCH_BUSY;
-    }
-    if (execution_id) *execution_id = reserved_id;
-
-    uint8_t result_index = 0;
-    for (uint8_t action_index = 0; action_index < count; action_index++) {
-        const ButtonAction& action = actions[action_index];
-        if (strcmp(action.type, ACTION_TYPE_HA_SERVICE) != 0) {
-            ops.dispatch_action(action, context);
-            continue;
-        }
-
-        const HaServicePayload& payload = action.payload.ha_service;
-        ops.set_action(reserved_id, result_index, action_index, payload, context);
-        if (ops.enqueue(payload, reserved_id, action_index, context) ==
-            HA_SERVICE_QUEUE_FULL) {
-            HaServiceResult rejected = {};
-            rejected.execution_id = reserved_id;
-            rejected.action_index = action_index;
-            rejected.status = HA_STATUS_QUEUE_FULL;
-            rejected.http_status = HA_HTTP_STATUS_NONE;
-            strncpy(rejected.entity_id, payload.entity_id,
-                    sizeof(rejected.entity_id) - 1);
-            strncpy(rejected.service, payload.service,
-                    sizeof(rejected.service) - 1);
-            ops.record(rejected, context);
-        }
-        result_index++;
-    }
-    return MCP_PRESS_DISPATCH_TRACKED;
+    ops.dispatch_list(actions, count, context);
+    return MCP_PRESS_DISPATCH_COMPLETED;
 }
 
 #endif

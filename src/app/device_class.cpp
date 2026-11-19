@@ -100,11 +100,12 @@ void device_class_dispatch_config_load(DeviceConfig *config, Preferences &prefer
 		}
 }
 
-void device_class_dispatch_config_save(const DeviceConfig *config, Preferences &preferences) {
+bool device_class_dispatch_config_save(const DeviceConfig *config, Preferences &preferences) {
 		for (unsigned i = 0; i < g_count; ++i) {
 				const DeviceClass *c = g_classes[i];
-				if (c && c->config_save) c->config_save(config, preferences);
+				if (c && c->config_save && !c->config_save(config, preferences)) return false;
 		}
+		return true;
 }
 
 void device_class_dispatch_config_api_get(const DeviceConfig *config, JsonObject &root) {

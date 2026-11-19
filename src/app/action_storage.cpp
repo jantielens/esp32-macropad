@@ -126,6 +126,8 @@ ActionArgumentBlock* action_storage_parse(ActionStorage& storage,
             stored[index].offset = static_cast<uint16_t>(offset);
             memcpy(reinterpret_cast<char*>(block) + offset, text, length + 1);
             offset += length + 1;
+        } else if (operation.arguments[index].type == ACTION_ARGUMENT_NUMBER) {
+            stored[index].number = value.as<float>();
         } else {
             stored[index].integer = operation.arguments[index].type == ACTION_ARGUMENT_BOOLEAN
                 ? (value.as<bool>() ? 1 : 0) : value.as<int32_t>();

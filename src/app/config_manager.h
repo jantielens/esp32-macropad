@@ -251,7 +251,7 @@ struct DeviceConfig {
 #define CONFIG_MAGIC 0xDEADBEEF
 
 // API Functions
-void config_manager_init();                           // Initialize NVS
+bool config_manager_init();                           // Initialize NVS
 bool config_manager_load(DeviceConfig *config);       // Load config from NVS
 #if HAS_EXTERNAL_DATA
 bool config_manager_save(DeviceConfig *config, const ExternalDataConfig* external_override = nullptr);

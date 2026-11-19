@@ -3,6 +3,7 @@
 #if HAS_DISPLAY && HAS_PSRAM
 
 #include "bounded_psram_json_allocator.h"
+#include "json_key_validation.h"
 #include "log_manager.h"
 #include "storage.h"
 
@@ -51,6 +52,13 @@ PadListReadResult pad_config_list_read(uint8_t page, char* name, size_t name_siz
     if (!size || size > 64 * 1024) {
         file.close();
         if (error) *error = "invalid pad configuration size";
+        return PadListReadResult::Error;
+    }
+    const JsonKeyScanResult scan = json_stream_scan_keys(file);
+    if (scan != JsonKeyScanResult::Valid) {
+        file.close();
+        if (error) *error = scan == JsonKeyScanResult::InvalidNul
+            ? "pad JSON contains an invalid NUL" : "pad metadata read failed";
         return PadListReadResult::Error;
     }
     BoundedPsramJsonAllocator allocator(16 * 1024);

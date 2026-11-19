@@ -56,7 +56,7 @@ const context = {
     padActionPrefixes(gesture) { return [gesture + '-0', gesture + '-1', gesture + '-2']; },
     actionEditorListBuild(prefixes) {
         return prefixes.map(function(p) { return context.actionEditorBuild(p); })
-            .filter(function(a) { return a && a.type; });
+            .filter(function(a) { return a && (a.op || a.type); });
     }
 };
 
@@ -387,9 +387,8 @@ assert.strictEqual(context.padState.buttons[0].widget_gamepad_dead_zone, .2);
 assert.strictEqual(context.padState.buttons[0].widget_gamepad_invert_x, true);
 assert.strictEqual(context.padState.buttons[0].actions, undefined);
 document.getElementById('pad-edit-widget-type').value = 'gamepad_button';
-context.actionEditorBuildGamepad = function(prefix, held) {
-    assert.strictEqual(held, true);
-    return { type: 'gamepad', control: 'trigger', trigger: 'left', operation: 'down' };
+context.actionEditorBuildGamepad = function() {
+    return { op: 'gamepad.trigger.down', args: { trigger: 'left' } };
 };
 context.padWorkspaceEdit();
 assert.strictEqual(context.padState.buttons[0].actions.length, 1);
@@ -753,8 +752,8 @@ delete context.bindingValidateInput;
 document.getElementById('pad-edit-widget-type').value = 'gamepad_button';
 assert.strictEqual(gamepadEditor.available({ has_touch: true, has_usb_hid: true }), true);
 assert.strictEqual(gamepadEditor.available({ has_touch: true, has_usb_hid: false }), false);
-context._actionEditorExtensions = [];
-context.actionEditorCatalogEntry = () => ({ button_count: 16 });
+context.actionEditorOperation = id => id === 'gamepad.button.down'
+    ? { arguments: [{ name: 'button', max: 16 }] } : null;
 vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_gamepad.js', 'utf8'), context);
 gamepadEditor.init();
 gamepadEditor.supported = true;
@@ -778,6 +777,9 @@ assert.strictEqual(context.padDialogBuildButton().actions[0].op, 'gamepad.button
 context.padWidgetEditorsLoad({ widget_type: 'gamepad_button',
     actions: [{ op: 'gamepad.button.tap', args: { button: 1 } }] });
 assert.throws(() => context.padDialogBuildButton(), /literal Gamepad held control/);
+context.padWidgetEditorsLoad({ widget_type: 'gamepad_button',
+    actions: [{ type: 'gamepad', control: 'button', button: 1, operation: 'down' }] });
+assert.throws(() => context.padDialogBuildButton(), /literal Gamepad held control/);
 document.getElementById('pad-edit-widget-type').value = 'gamepad_button';
 gamepadEditor.supported = false;
 assert.throws(() => context.padDialogBuildButton(), /not supported/);
@@ -785,10 +787,11 @@ assert.throws(() => context.padDialogBuildButton(), /not supported/);
 context.padWidgetEditorsLoad({ widget_type: 'numericrocker', widget_numericrocker_small_step: 0.25 });
 document.getElementById('pad-edit-widget-type').value = 'numericrocker';
 context.actionEditorBuild = prefix => prefix === 'pad-edit-nr-adjust'
-    ? { type: 'mqtt', payload: '{step}' } : { type: 'screen', target: 'info' };
+    ? { op: 'mqtt.publish', args: { topic: 'device/adjust', payload: { $template: '[event:step]' } } }
+    : { op: 'screen.open', args: { target: 'info' } };
 let numericRocker = context.padDialogBuildButton();
 assert.strictEqual(numericRocker.widget_numericrocker_small_step, 0.25);
-assert.strictEqual(numericRocker.widget_numericrocker_action.payload, '{step}');
+assert.strictEqual(numericRocker.widget_numericrocker_action.args.payload.$template, '[event:step]');
 assert.strictEqual(numericRocker.actions.length, 3);
 assert.strictEqual(numericRocker.lp_actions, undefined);
 context.actionEditorBuild = () => ({});
@@ -1044,24 +1047,12 @@ assert.strictEqual(sliderEditor.available({ has_display: true, has_touch: false 
 const sliderAxis = document.getElementById('pad-edit-slider-axis');
 context.actionEditorHTML = () => '<div></div>';
 context.actionEditorLoad = () => {};
-context.actionEditorCatalogEntry = type => ({
-    type,
-    template_fields: ({ mqtt: { topic: { max: 127 }, payload: { max: 127 } },
-        ha_service: { entity_id: { max: 47 }, service: { max: 63 }, data_json: { max: 63 } }, volume: { volume_value: { max: 15 } },
-        brightness: { brightness_value: { max: 15 } }, notify: { message: { max: 191 } },
-        set_var: { var_value: { max: 191 } } })[type]
-});
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_ha.js', 'utf8'), context);
-const buildActions = actions => (prefix, token) => {
-    const action = actions[Number(prefix.slice(-1))] || {};
-    context.actionEditorValidateEventTokens(action, token, prefix);
-    return action;
-};
+const buildActions = actions => prefix => actions[Number(prefix.slice(-1))] || {};
 context.padGetBindableColor = id => document.getElementById(id).value;
 const sliderActions = [
-    { type: 'mqtt', topic: 'device/set', payload: '{value}' },
-    { type: 'screen', target: 'info' },
-    { type: 'volume', volume_mode: 'adjust', volume_value: '1' }
+    { op: 'mqtt.publish', args: { topic: 'device/set', payload: { $template: '[event:value]' } } },
+    { op: 'screen.open', args: { target: 'info' } },
+    { op: 'audio.volume.adjust', args: { percent: 1 } }
 ];
 context.actionEditorBuild = buildActions(sliderActions);
 const sliderButton = { widget_type: 'slider', widget_data_binding: '[mqtt:device/level]',
@@ -1131,45 +1122,11 @@ context.actionEditorBuild = () => ({});
 const noActionSlider = context.padDialogBuildButton();
 assert.strictEqual(noActionSlider.actions, undefined);
 
-context.actionEditorBuild = buildActions([{ type: 'ha_service', entity_id: 'light.room', service: 'turn_on',
-    data_json: '{"brightness":{value}}' }]);
+context.actionEditorBuild = buildActions([{ op: 'ha.service.call', args: {
+    entity_id: 'light.room', service: 'turn_on', data_json: { $template: '{"brightness":[event:value]}' }
+} }]);
 const haSlider = context.padDialogBuildButton();
-assert.strictEqual(haSlider.actions[0].data_json, '{"brightness":{value}}');
-context.actionEditorBuild = buildActions([{ type: 'ha_service', entity_id: 'light.room', service: 'turn_on',
-    data_json: '{"brightness":{value}.0}' }]);
-assert.doesNotThrow(() => context.padDialogBuildButton());
-context.actionEditorBuild = buildActions([{ type: 'ha_service', entity_id: 'light.lamp_{value}', service: 'scene_{value}',
-    data_json: '{"brightness":{value}0}' }]);
-assert.throws(() => context.padDialogBuildButton(), /JSON object/);
-context.actionEditorBuild = buildActions([
-    { type: 'notify', message: 'Brightness set to {value}%' },
-    { type: 'set_var', var_name: 'a', var_value: '{value}%' },
-    { type: 'mqtt', topic: 'device/{value}', payload: '{value}' }
-]);
-assert.strictEqual(context.padDialogBuildButton().actions[1].var_value, '{value}%');
-for (const token of ['{value}', '{step}']) {
-    assert.doesNotThrow(() => context.actionEditorValidateEventTokens({ type: 'notify', message: token + '%' }, token, 'test'));
-    assert.doesNotThrow(() => context.actionEditorValidateEventTokens({ type: 'set_var', var_name: 'a', var_value: token }, token, 'test'));
-    assert.throws(() => context.actionEditorValidateEventTokens({ type: 'set_var', var_name: token, var_value: '1' }, token, 'test'), /var_name.*does not support/);
-    assert.throws(() => context.actionEditorValidateEventTokens({ type: 'notify', message: token }, undefined, 'test'), /message.*unavailable/);
-    assert.throws(() => context.actionEditorValidateEventTokens({ type: 'notify', message: 'x'.repeat(185) + token }, token, 'test'), /message.*exceeds/);
-}
-assert.throws(() => context.actionEditorValidateEventTokens({ type: 'notify', message: '{step}' }, '{value}', 'test'), /use \{value\}/);
-assert.doesNotThrow(() => context.actionEditorValidateEventTokens({
-    type: 'ha_service', entity_id: 'climate.room', service: 'set_mode', data_json: '{"mode":"{value}"}'
-}, '{value}', 'test', ['cool', 'heat']));
-assert.doesNotThrow(() => context.actionEditorValidateEventTokens({
-    type: 'ha_service', entity_id: 'climate.room', service: 'set_mode', data_json: '{"mode":"{value}"}'
-}, '{value}', 'test', ['']));
-assert.throws(() => context.actionEditorValidateEventTokens({
-    type: 'ha_service', entity_id: 'climate.room', service: 'set_mode', data_json: '{"mode":{value}}'
-}, '{value}', 'test', ['cool']), /JSON object/);
-assert.throws(() => context.actionEditorValidateEventTokens({
-    type: 'ha_service', entity_id: 'climate.room', service: 'set_mode', data_json: '{"mode":{value}}'
-}, '{value}', 'test', ['']), /JSON object/);
-assert.throws(() => context.actionEditorValidateEventTokens({
-    type: 'notify', message: 'x'.repeat(150) + '{value}'
-}, '{value}', 'test', ['a'.repeat(63)]), /exceeds/);
+assert.strictEqual(haSlider.actions[0].args.data_json.$template, '{"brightness":[event:value]}');
 
 async function checkSourceColors() {
     document.querySelector = () => null;
@@ -1260,8 +1217,9 @@ async function checkSourceColors() {
     const source = '[expr:[ha:climate.bureau_boven_thermostaat;attributes.temperature]>20?"on":"off"]';
     const bottom = '[ha:climate.bureau_boven_thermostaat;attributes.temperature;%.1f \u00b0C]';
     const foreground = '[expr:[ha:climate.bureau_boven_thermostaat;attributes.temperature]>20?"#FF0000":"#FFFFFF"]';
-    const on = { type: 'ha_service', entity_id: 'climate.bureau_boven_thermostaat', service: 'set_temperature', data_json: '{"temperature": 21}' };
-    const off = { ...on, data_json: '{"temperature": 10}' };
+    const on = { op: 'ha.service.call', args: {entity_id:'climate.bureau_boven_thermostaat',
+        service:'set_temperature', data_json:'{"temperature": 21}'} };
+    const off = { ...on, args: {...on.args, data_json:'{"temperature": 10}'} };
     context.padLabelFromInput = id => document.getElementById(id).value;
     document.getElementById('pad-edit-label-top').value = 'Bureau';
     document.getElementById('pad-edit-label-bottom').value = bottom;

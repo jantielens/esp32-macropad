@@ -55,7 +55,10 @@ static void button_defaults_write_firmware_defaults(JsonObject defaults) {
 static void button_defaults_get_config(AsyncWebServerRequest *request) {
     WebPortalTiming timing;
     auto doc = make_psram_json_doc(4096);
-    button_defaults_load_overrides(*doc);
+    if (!button_defaults_load_overrides(*doc)) {
+        web_portal_send_json_error(request, 500, "Failed to read pad and button defaults", &timing);
+        return;
+    }
     timing.mark("defaults");
     button_defaults_write_firmware_defaults((*doc)["firmware_defaults"].to<JsonObject>());
     button_defaults_typography_status((*doc)["typography_status"].to<JsonObject>());

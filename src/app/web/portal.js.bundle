@@ -51,32 +51,8 @@ portal_button_builder.js
 # editors, all of which are HAS_DISPLAY-gated fragments.
 portal_action_editor.js
 portal_action_editor_screen.js
-portal_action_editor_cycle_pad.js
-portal_action_editor_mqtt.js
-portal_action_editor_key.js
-portal_action_editor_sound_alert.js
-portal_action_editor_timer.js
-portal_action_editor_notify.js
-portal_action_editor_visual_alert.js
-portal_action_editor_delay.js
 portal_action_editor_gamepad.js
 portal_config_actions.js
-
-# Home Assistant Service action-editor extension. Registers the "ha_service"
-# type with the shared editor via the _actionEditorExtensions hook array, so
-# it must come after portal_action_editor.js (which defines the hook). Core
-# feature (not device-class), so it lives under src/app/web/.
-portal_action_editor_ha.js
-portal_action_editor_alarm.js
-
-# [chunk:shutter_actions IS_SHUTTER_TESTER]
-# Shutter Tester action-editor extension. Registers the "shutter" action type
-# with the shared editor via the _actionEditorExtensions hook array, so only
-# shutter-tester builds pay the flash cost. Must come after the actions chunk
-# (which defines _actionEditorExtensions). Lives under
-# src/app/device_classes/shutter_tester/web/ — the asset bundler scans
-# device_classes/*/web/ for *.js files.
-portal_action_editor_shutter.js
 
 # [chunk:shutter_pages IS_SHUTTER_TESTER]
 # Shutter Tester portal pages: Sensor Configuration, Session Save Actions,
@@ -143,12 +119,6 @@ portal.js
 # the shell chunk is immaterial.
 epaper_init.js
 
-# [chunk:coffee_scale_actions IS_COFFEE_SCALE]
-# Coffee Scale action-editor extensions. Registers "scale" + "brew" types
-# with the shared editor via the _actionEditorExtensions hook array. Must come
-# after the actions chunk (which defines _actionEditorExtensions).
-portal_action_editor_scale.js
-
 # [chunk:coffee_scale_pages IS_COFFEE_SCALE]
 # Coffee Scale portal pages: scale calibration, brew session list/detail, and
 # brew template editor. Each module installs its own init_<id>_fragment()
@@ -160,21 +130,12 @@ portal_brews.js
 portal_brews_charts.js
 portal_brews_templates.js
 
-# [chunk:darkroom_actions IS_DARKROOM_TIMER]
-# Darkroom Timer action-editor extension. Registers the expose/strip/meter/
-# print/shelly types with the shared editor via the _actionEditorExtensions
-# hook array. Must come after the actions chunk (which defines the hook).
-portal_action_editor_darkroom.js
-
 # [chunk:darkroom_pages IS_DARKROOM_TIMER]
 # Darkroom Timer portal pages: relay-config init + print session log viewer.
 # portal_darkroom_init.js owns the relay-slot editor helpers and the
 # init_<id>_fragment() handlers that portal_fragment_init.js invokes on load.
 portal_darkroom_init.js
 portal_prints.js
-
-# [chunk:voice_actions IS_VOICE_ASSISTANT]
-portal_action_editor_voice.js
 
 # [chunk:voice_pages IS_VOICE_ASSISTANT]
 portal_voice.js

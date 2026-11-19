@@ -101,6 +101,7 @@ int main(int argc, char**) {
     add_file("/icon_sources/z-remove.json.tmp");
     add_file("/icon_sources/z-restored.json.bak");
     icon_store_init();
+    assert(LittleFS.exists("/icons/a-kept.png"));
     assert(LittleFS.exists("/icons/folder.tmp"));
     assert(LittleFS.exists("/icons/unknown"));
     assert(LittleFS.exists("/icons/z-restored.png"));

@@ -64,7 +64,8 @@ typedef bool (*ComponentSaveRawFn)(const uint8_t* data, size_t len);
 void component_handle_save_body(AsyncWebServerRequest* request,
     uint8_t* data, size_t len, size_t index, size_t total,
     ComponentSaveRawFn save_fn, size_t max_size = 4096,
-    const char* failure_response = "{\"success\":false,\"error\":\"save failed\"}");
+    const char* failure_response = "{\"success\":false,\"error\":\"save failed\"}",
+    int failure_status = 500);
 
 // Host-test allocation hooks. Passing nullptr restores the defaults.
 typedef void* (*ComponentBodyAllocFn)(size_t size);

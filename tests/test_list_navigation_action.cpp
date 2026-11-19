@@ -98,7 +98,7 @@ TEST_F(ListNavigationAction, DispatchesFromOtherTasksAndRejectsStalePad) {
 }
 
 TEST_F(ListNavigationAction, OperationDispatchesAndPropagatesRejections) {
-    const ActionResolvedArgument arguments[] = {{"notes", 0}, {"next_page", 0}};
+    const ActionResolvedArgument arguments[] = {{"notes", 0, 0}, {"next_page", 0, 0}};
     EXPECT_EQ(kListNavigationOperations[0].dispatch(arguments, "", 0), ACTION_COMPLETE);
     EXPECT_EQ(dispatches, 1u);
     EXPECT_EQ(navigations, 1u);
@@ -117,7 +117,7 @@ TEST(ListNavigationValidation, RejectsInvalidTargets) {
 }
 
 TEST_F(ListNavigationAction, ButtonOperationDispatchesAndRejectsStaleDialog) {
-    const ActionResolvedArgument arguments[] = {{"next", 0}};
+    const ActionResolvedArgument arguments[] = {{"next", 0, 0}};
     EXPECT_EQ(kButtonNavigationOperations[0].dispatch(arguments, "", 0), ACTION_COMPLETE);
     EXPECT_EQ(button_navigations, 1u);
     navigation_ok = false;

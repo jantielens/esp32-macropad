@@ -11,7 +11,6 @@
 #include "pad_validate.h"
 #include "pad_composition.h"
 #include "widgets/widget_registry.h"
-#include "../src/app/actions/dialog_action.h"
 
 static int g_failures = 0;
 static bool g_contextual_list = false;
@@ -100,18 +99,8 @@ const char* binding_template_validate_params(const char* scheme, size_t name_len
     return nullptr;
 }
 
-static void parse_registered_test(const JsonObject& action, ButtonAction& parsed) {
-    strlcpy(parsed.payload.mqtt.mqtt_topic, action["value"] | "",
-            sizeof(parsed.payload.mqtt.mqtt_topic));
-}
-
-static bool visit_registered_test_fields(ButtonAction& parsed,
-                                         ActionFieldVisitor visitor, void* context) {
-    return action_visit_field(visitor, context, "value", parsed.payload.mqtt.mqtt_topic, ACTION_FIELD_BINDING | ACTION_FIELD_EVENT);
-}
-
 static const ActionTypeDef registered_type = {
-    "registered_test", parse_registered_test, nullptr, nullptr, visit_registered_test_fields, nullptr
+    "registered_test", nullptr
 };
 
 const ActionTypeDef* action_type_find(const char* type) {
@@ -121,23 +110,6 @@ const ActionTypeDef* action_type_find(const char* type) {
 
 bool action_type_is_supported(const char* type) {
     return action_type_find(type) != nullptr;
-}
-
-const char* action_type_validate(const ActionTypeDef*, JsonObjectConst) {
-    return nullptr;
-}
-
-bool action_substitute_token_field(char*, size_t, const char*, const char*) { return true; }
-
-bool action_type_visit_fields(const ActionTypeDef* def, ButtonAction& action,
-                              ActionFieldVisitor visitor, void* context) {
-    return !def || !def->fields || def->fields(action, visitor, context);
-}
-
-bool action_type_visit_bindable_fields(const ActionTypeDef* def, ButtonAction& action,
-                                       ActionBindableFieldVisitor visitor, void* context) {
-    return !def || def != &registered_type || visitor(action.payload.mqtt.mqtt_topic,
-        sizeof(action.payload.mqtt.mqtt_topic), false, context);
 }
 
 static JsonObject make_button(JsonDocument& doc) {
@@ -166,6 +138,12 @@ int main() {
 
     {
         JsonDocument doc;
+        CHECK(!deserializeJson(doc, R"({"action_format_version":1,"buttons":[{"col":0,"row":0,"actions":[{"op":"screen.open\u0000other","args":{"target":"pad_1"}}]}]})"));
+        CHECK(pad_validate_action_version(doc.as<JsonObjectConst>()) != nullptr);
+    }
+
+    {
+        JsonDocument doc;
         JsonObject button = make_button(doc);
         JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
         action["op"] = "screen.open";
@@ -177,12 +155,40 @@ int main() {
         CHECK(pad_validate_action_version(doc.as<JsonObjectConst>()) == nullptr);
         action["type"] = "screen";
         CHECK(pad_validate_action_version(doc.as<JsonObjectConst>()) != nullptr);
+        action["type"] = nullptr;
+        CHECK(pad_validate_action_version(doc.as<JsonObjectConst>()) != nullptr);
         action.remove("type");
         doc["action_format_version"] = 2;
         CHECK(pad_validate_action_version(doc.as<JsonObjectConst>()) != nullptr);
         doc["action_format_version"] = 1;
         action["args"]["extra"] = true;
         CHECK(pad_validate_action_version(doc.as<JsonObjectConst>()) != nullptr);
+        action["args"].as<JsonObject>().remove("extra");
+        button["actions"].to<JsonArray>().add(nullptr);
+        CHECK(pad_validate_action_version(doc.as<JsonObjectConst>()) != nullptr);
+    }
+
+    {
+        JsonDocument doc;
+        doc["action_format_version"] = 1;
+        JsonObject button = make_button(doc);
+        JsonArray actions = button["actions"].to<JsonArray>();
+        for (int i = 0; i < MAX_BUTTON_ACTIONS; ++i) {
+            JsonObject action = actions.add<JsonObject>();
+            action["op"] = "screen.open";
+            action["args"]["target"] = "pad_1";
+        }
+        CHECK(pad_validate_action_version(doc.as<JsonObjectConst>(), false) == nullptr);
+        JsonObject overflow = actions.add<JsonObject>();
+        overflow["op"] = "screen.open";
+        overflow["args"]["target"] = "pad_1";
+        CHECK(pad_validate_action_version(doc.as<JsonObjectConst>(), false) != nullptr);
+        doc["pad_actions"] = actions;
+        button.remove("actions");
+        CHECK(pad_validate_action_version(doc.as<JsonObjectConst>(), false) != nullptr);
+        doc.remove("pad_actions");
+        doc["overlay_buttons"].to<JsonArray>().add(42);
+        CHECK(pad_validate_action_version(doc.as<JsonObjectConst>(), false) != nullptr);
     }
 
     {
@@ -400,8 +406,14 @@ int main() {
         JsonDocument doc;
         JsonObject button = make_button(doc);
         JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
-        action["type"] = "registered_test";
-        action["value"] = "[unknown:value]";
+        action["op"] = "screen.open";
+        action["args"]["target"]["$template"] = "[unknown:value]";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        action["args"]["target"]["$template"] = "[event:step]";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        action.clear();
+        action["type"] = "screen";
+        action["target"] = "pad_1";
         CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
     }
 
@@ -519,14 +531,16 @@ int main() {
         make_button(doc);
         JsonArray actions = doc["pad_actions"].to<JsonArray>();
         actions.add<JsonObject>()["type"] = "none";
-        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
     }
 
     {
         JsonDocument doc;
         make_button(doc);
         JsonArray actions = doc["pad_actions"].to<JsonArray>();
-        actions.add<JsonObject>()["type"] = "registered_test";
+        JsonObject action = actions.add<JsonObject>();
+        action["op"] = "screen.open";
+        action["args"]["target"] = "pad_1";
         CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
     }
 
@@ -552,7 +566,7 @@ int main() {
         make_button(doc);
         doc["pad_actions"].to<JsonArray>().add<JsonObject>();
         CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
-                          "action missing type") == 0);
+                          "operation is required") == 0);
     }
 
     {
@@ -560,7 +574,7 @@ int main() {
         make_button(doc);
         doc["pad_actions"].to<JsonArray>().add("sound_alert");
         CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
-                          "action missing type") == 0);
+                          "operation is required") == 0);
     }
 
     {
@@ -568,7 +582,7 @@ int main() {
         make_button(doc);
         doc["pad_actions"].to<JsonArray>().add<JsonArray>();
         CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
-                          "action missing type") == 0);
+                          "operation is required") == 0);
     }
 
     {
@@ -576,68 +590,37 @@ int main() {
         make_button(doc);
         doc["pad_actions"].to<JsonArray>().add(nullptr);
         CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
-                          "action missing type") == 0);
-    }
-
-    {
-        JsonDocument doc;
-        make_button(doc);
-        doc["pad_actions"].to<JsonArray>().add<JsonObject>()["type"] = "unknown";
-        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
-                          "unknown action type") == 0);
+                          "operation is required") == 0);
     }
 
     {
         JsonDocument doc;
         make_button(doc);
         JsonObject action = doc["pad_actions"].to<JsonArray>().add<JsonObject>();
-        action["type"] = "ha_service";
-        action["entity_id"] = "light.kitchen";
-        action["service"] = "light.toggle";
+        action["op"] = "unknown";
+        action["args"].to<JsonObject>();
         CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
-                          "service must be bare; use 'toggle'") == 0);
+                          "unknown or unavailable operation") == 0);
     }
 
-    for (bool confirmation : {false, true}) {
+    {
         JsonDocument doc;
-        doc["message"] = "Line one\nLine two";
-        const char* timing = confirmation ? "timeout_ms" : "duration_ms";
-        for (uint32_t duration : {0U, 1000U, 61000U, 300000U}) {
-            doc[timing] = duration;
-            CHECK(dialog_action::validate(doc.as<JsonObjectConst>(), confirmation) == nullptr);
-        }
-        for (uint32_t duration : {1U, 999U, 300001U}) {
-            doc[timing] = duration;
-            CHECK(dialog_action::validate(doc.as<JsonObjectConst>(), confirmation) != nullptr);
-        }
-        doc[timing] = 0;
-        char text[CONFIG_DIALOG_MESSAGE_MAX_LEN + 1];
-        memset(text, 'a', sizeof(text) - 1);
-        text[sizeof(text) - 1] = '\0';
-        doc["message"] = text;
-        CHECK(dialog_action::validate(doc.as<JsonObjectConst>(), confirmation) != nullptr);
-        text[CONFIG_DIALOG_MESSAGE_MAX_LEN - 1] = '\0';
-        doc["message"] = text;
-        CHECK(dialog_action::validate(doc.as<JsonObjectConst>(), confirmation) == nullptr);
-        if (confirmation) {
-            doc["approve_text"] = "";
-            CHECK(dialog_action::validate(doc.as<JsonObjectConst>(), true) != nullptr);
-            doc["approve_text"] = "[literal:caption]";
-            CHECK(dialog_action::validate(doc.as<JsonObjectConst>(), true) == nullptr);
-        }
+        make_button(doc);
+        JsonObject action = doc["pad_actions"].to<JsonArray>().add<JsonObject>();
+        action["op"] = "screen.open";
+        action["args"]["target"] = "pad_1";
+        action["type"] = "screen";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
     }
 
     {
         JsonDocument doc;
         JsonObject button = make_button(doc);
         JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
-        action["type"] = "timer";
-        action["timer_id"] = 1;
-        action["timer_command"] = "start";
-        action["timer_mode"] = "down";
-        action["timer_value"] = "1234567890123456";
-        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
-                          "timer value too long") == 0);
+        action["op"] = "timer.adjust";
+        action["args"]["timer"] = 4;
+        action["args"]["seconds"] = 1;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
     }
 
     {
@@ -679,239 +662,19 @@ int main() {
         CHECK(pad_option_icon_render_key(doc.as<JsonObjectConst>(), doc["buttons"][0], 5) == 0xf09f7bd1u);
     }
 
-    const char* invalid_timer_bindings[] = {
-        "[junk]", "[unknown:value]", "[mqtt:value"
-    };
-    for (const char* value : invalid_timer_bindings) {
+    for (const char* field : {"actions", "lp_actions"}) {
         JsonDocument doc;
         JsonObject button = make_button(doc);
-        JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
-        action["type"] = "timer";
-        action["timer_value"] = value;
+        JsonObject action = button[field].to<JsonArray>().add<JsonObject>();
+        action["op"] = "timer.adjust";
+        action["args"]["timer"] = 1;
+        action["args"]["seconds"] = 15;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        action["args"]["seconds"].to<JsonObject>()["$template"] = "[unknown:value]";
         CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
-    }
-
-    {
-        JsonDocument doc;
-        JsonObject button = make_button(doc);
-        JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
-        action["type"] = "cycle_pad";
-        action["direction"] = "previous";
-        action["wrap"] = false;
-        action["excluded_pads"] = "5, 1,5,bad,99";
+        action["args"]["seconds"]["$template"] = "[event:step]";
         CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
-    }
-
-    const char* cycle_field_errors[] = {
-        "cycle_pad direction must be a string",
-        "cycle_pad direction must be 'next' or 'previous'",
-        "cycle_pad wrap must be boolean",
-        "cycle_pad excluded_pads must be a string",
-    };
-    for (int field = 0; field < 4; ++field) {
-        JsonDocument doc;
-        JsonObject button = make_button(doc);
-        JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
-        action["type"] = "cycle_pad";
-        if (field == 0) action["direction"] = 42;
-        if (field == 1) action["direction"] = "sideways";
-        if (field == 2) action["wrap"] = "true";
-        if (field == 3) action["excluded_pads"].to<JsonArray>().add(1);
-        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
-                          cycle_field_errors[field]) == 0);
-    }
-
-    const char* valid_services[] = {
-        "media_stop",
-        "volume_mute",
-        "media_play_pause",
-        "media_previous_track",
-        "turn_on",
-    };
-    for (const char* service : valid_services) {
-        JsonDocument doc;
-        JsonObject button = make_button(doc);
-        JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
-        action["type"] = "ha_service";
-        action["entity_id"] = "media_player.keuken";
-        action["service"] = service;
-        action["data_json"] = "{}";
-        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
-    }
-
-    {
-        JsonDocument doc;
-        JsonObject button = make_button(doc);
-        JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
-        action["type"] = "ha_service";
-        action["entity_id"] = "media_player.keuken";
-        action["service"] = "media_player.media_play_pause";
-        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
-                          "service must be bare; use 'media_play_pause'") == 0);
-    }
-
-    const char* invalid_services[] = { "MediaStop", "media-stop" };
-    for (const char* service : invalid_services) {
-        JsonDocument doc;
-        JsonObject button = make_button(doc);
-        JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
-        action["type"] = "ha_service";
-        action["entity_id"] = "media_player.keuken";
-        action["service"] = service;
-        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
-                          "ha_service service must contain only lowercase letters, digits, and '_'") == 0);
-    }
-
-    const char* missing_field_errors[] = {
-        "ha_service missing entity_id",
-        "ha_service missing service",
-    };
-    for (int missing = 0; missing < 2; ++missing) {
-        JsonDocument doc;
-        JsonObject button = make_button(doc);
-        JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
-        action["type"] = "ha_service";
-        if (missing != 0) action["entity_id"] = "light.kitchen";
-        if (missing != 1) action["service"] = "toggle";
-        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
-                          missing_field_errors[missing]) == 0);
-    }
-
-    const char* empty_field_errors[] = {
-        "ha_service entity_id must not be empty",
-        "ha_service service must not be empty",
-    };
-    for (int empty = 0; empty < 2; ++empty) {
-        JsonDocument doc;
-        JsonObject button = make_button(doc);
-        JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
-        action["type"] = "ha_service";
-        action["entity_id"] = empty == 0 ? "" : "light.kitchen";
-        action["service"] = empty == 1 ? "" : "toggle";
-        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
-                          empty_field_errors[empty]) == 0);
-    }
-
-    const char* type_errors[] = {
-        "ha_service entity_id must be a string",
-        "ha_service service must be a string",
-        "ha_service data_json must be a string",
-    };
-    for (int field = 0; field < 3; ++field) {
-        JsonDocument doc;
-        JsonObject button = make_button(doc);
-        JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
-        action["type"] = "ha_service";
-        if (field == 0) action["entity_id"] = 42;
-        else action["entity_id"] = "light.kitchen";
-        if (field == 1) action["service"] = 42;
-        else action["service"] = "toggle";
-        if (field == 2) action["data_json"].to<JsonObject>()["brightness_pct"] = 80;
-        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()), type_errors[field]) == 0);
-    }
-
-    const char* malformed_entity_ids[] = {
-        "light", ".kitchen", "light.", "light.kitchen.extra", "light. kitchen"
-    };
-    for (const char* entity_id : malformed_entity_ids) {
-        JsonDocument doc;
-        JsonObject button = make_button(doc);
-        JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
-        action["type"] = "ha_service";
-        action["entity_id"] = entity_id;
-        action["service"] = "toggle";
-        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
-    }
-
-    {
-        char entity_id[sizeof(((HaServicePayload*)nullptr)->entity_id) + 1];
-        std::memset(entity_id, 'a', sizeof(entity_id) - 1);
-        entity_id[5] = '.';
-        entity_id[sizeof(entity_id) - 1] = '\0';
-        JsonDocument doc;
-        JsonObject button = make_button(doc);
-        JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
-        action["type"] = "ha_service";
-        action["entity_id"] = entity_id;
-        action["service"] = "toggle";
-        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
-                          "ha_service entity_id too long") == 0);
-    }
-
-    {
-        char service[sizeof(((HaServicePayload*)nullptr)->service) + 1];
-        std::memset(service, 'a', sizeof(service) - 1);
-        service[sizeof(service) - 1] = '\0';
-        JsonDocument doc;
-        JsonObject button = make_button(doc);
-        JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
-        action["type"] = "ha_service";
-        action["entity_id"] = "light.kitchen";
-        action["service"] = service;
-        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
-                          "ha_service service too long") == 0);
-    }
-
-    {
-        char data_json[sizeof(((HaServicePayload*)nullptr)->data_json) + 1];
-        std::memset(data_json, ' ', sizeof(data_json) - 1);
-        data_json[0] = '{';
-        data_json[1] = '}';
-        data_json[sizeof(data_json) - 1] = '\0';
-        JsonDocument doc;
-        JsonObject button = make_button(doc);
-        JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
-        action["type"] = "ha_service";
-        action["entity_id"] = "light.kitchen";
-        action["service"] = "toggle";
-        action["data_json"] = data_json;
-        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
-                          "ha_service data_json too long") == 0);
-    }
-
-    const char* rejected_data_json[] = {
-        "{", "[]", "42", "true", "null"
-    };
-    for (const char* data_json : rejected_data_json) {
-        JsonDocument doc;
-        JsonObject button = make_button(doc);
-        JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
-        action["type"] = "ha_service";
-        action["entity_id"] = "light.kitchen";
-        action["service"] = "toggle";
-        action["data_json"] = data_json;
-        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
-    }
-
-    const char* accepted_data_json[] = { "", "{}", "{\"brightness_pct\":80}" };
-    for (const char* data_json : accepted_data_json) {
-        JsonDocument doc;
-        JsonObject button = make_button(doc);
-        JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
-        action["type"] = "ha_service";
-        action["entity_id"] = "light.kitchen";
-        action["service"] = "turn_on";
-        action["data_json"] = data_json;
-        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
-    }
-
-    {
-        JsonDocument doc;
-        JsonObject button = make_button(doc);
-        JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
-        action["type"] = "ha_service";
-        action["entity_id"] = "light.kitchen";
-        action["service"] = "toggle";
-        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
-    }
-
-    {
-        JsonDocument doc;
-        JsonObject button = make_button(doc);
-        JsonObject action = button["lp_actions"].to<JsonArray>().add<JsonObject>();
-        action["type"] = "ha_service";
-        action["entity_id"] = "light.kitchen";
-        action["service"] = "light.toggle";
+        action["args"]["timer"] = 4;
         CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
     }
 
@@ -920,9 +683,8 @@ int main() {
         JsonObject button = make_button(doc);
         button["widget_type"] = "test";
         JsonObject action = button["widget_test_action"].to<JsonObject>();
-        action["type"] = "ha_service";
-        action["entity_id"] = "light.kitchen";
-        action["service"] = "light.toggle";
+        action["op"] = "screen.open";
+        action["args"]["target"]["$template"] = "[unknown:value]";
         CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
     }
 

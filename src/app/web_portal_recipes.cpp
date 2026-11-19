@@ -2,6 +2,7 @@
 
 #if HAS_DISPLAY
 
+#include "json_key_validation.h"
 #include "log_manager.h"
 #include "storage.h"
 #include "web_portal_auth.h"
@@ -13,7 +14,6 @@
 
 namespace {
 constexpr char kCatalogPath[] = "/config/recipes.json";
-constexpr char kCatalogTemporaryPath[] = "/config/recipes.json.tmp";
 constexpr size_t kCatalogMaxBytes = 64 * 1024;
 constexpr char kEmptyCatalog[] = "{\"schema\":1,\"catalog_version\":\"device\",\"recipes\":[]}";
 
@@ -35,22 +35,6 @@ void catalog_upload_reset(AsyncWebServerRequest* request) {
     request->_tempObject = nullptr;
 }
 
-bool catalog_save(const uint8_t* json, size_t length) {
-    const StorageMutationGuard guard;
-    if (!guard) return false;
-    File file = Storage.open(kCatalogTemporaryPath, "w");
-    if (!file) return false;
-    const size_t written = file.write(json, length);
-    file.close();
-    if (written != length) {
-        Storage.remove(kCatalogTemporaryPath);
-        return false;
-    }
-    if (Storage.exists(kCatalogPath)) Storage.remove(kCatalogPath);
-    if (Storage.rename(kCatalogTemporaryPath, kCatalogPath)) return true;
-    Storage.remove(kCatalogTemporaryPath);
-    return false;
-}
 }  // namespace
 
 void handleGetRecipeCatalog(AsyncWebServerRequest* request) {
@@ -104,13 +88,25 @@ void handlePostRecipeCatalog(AsyncWebServerRequest* request, uint8_t* data,
     if (upload->received != upload->total) return;
 
     upload->buffer[upload->total] = '\0';
+    if (!json_keys_valid(upload->buffer, upload->total)) {
+        catalog_upload_reset(request);
+        web_portal_send_json_error(request, 400, "Recipe catalog contains an invalid JSON NUL");
+        return;
+    }
     JsonDocument document;
     if (deserializeJson(document, upload->buffer, upload->total)) {
         catalog_upload_reset(request);
         web_portal_send_json_error(request, 400, "Recipe catalog is not valid JSON");
         return;
     }
-    const bool saved = catalog_save(upload->buffer, upload->total);
+    if (!document.is<JsonObject>() || !document["schema"].is<int>() ||
+        document["schema"].as<int>() != 1 || !document["catalog_version"].is<const char*>() ||
+        !document["recipes"].is<JsonArray>()) {
+        catalog_upload_reset(request);
+        web_portal_send_json_error(request, 400, "Unsupported recipe catalog format");
+        return;
+    }
+    const bool saved = storage_write_atomic(kCatalogPath, upload->buffer, upload->total);
     catalog_upload_reset(request);
     if (!saved) {
         web_portal_send_json_error(request, 500, "Failed to save recipe catalog");

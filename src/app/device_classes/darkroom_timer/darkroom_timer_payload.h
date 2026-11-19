@@ -52,7 +52,7 @@ inline const ShellyPayload& shelly_payload(const ButtonAction& act) {
 // value argument. Command buffers are sized to 20 bytes to fit the longest
 // verb "adjust_countdown" (16 chars + nul) — matching the field-proven
 // CONFIG_TIMER_CMD_MAX_LEN=20 from the legacy branch. Value buffers are 16
-// bytes (matching CONFIG_VALUE_MAX_LEN, which supports "{step}" templates).
+// bytes, matching CONFIG_VALUE_MAX_LEN.
 //
 // All four payloads share the same layout but keep distinct type names and
 // accessors so the storage cost and wire-strings stay inside this device

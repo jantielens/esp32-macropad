@@ -6,6 +6,7 @@
 #include "action_validate.h"
 #include "action_dispatch.h"
 #include "config_psram.h"
+#include "json_key_validation.h"
 #include "psram_json_allocator.h"
 #include "storage.h"
 #include "time_service.h"
@@ -130,6 +131,7 @@ static uint32_t checksum(const std::string& text) {
 }
 
 static void definition_json(const AlarmDefinition& value, JsonObject root) {
+    root["action_format_version"] = 1;
     root["lateness_minutes"] = value.lateness_minutes;
     JsonObject slot = root.createNestedObject("1");
     slot["enabled"] = value.enabled;
@@ -152,18 +154,14 @@ static bool parse_hooks(JsonVariantConst input, ButtonAction* output, uint8_t* c
     for (JsonVariantConst item : input.as<JsonArrayConst>()) {
         if (!item.is<JsonObjectConst>()) return fail("Hook action must be an object");
         JsonObjectConst action = item.as<JsonObjectConst>();
-        if (action.containsKey("type") && action.containsKey("op") &&
-            strcmp(action["type"] | "", ACTION_TYPE_VISUAL_ALERT))
-            return fail("Mixed action envelope");
-        const char* error = action_validate_json(action);
+        if (action.containsKey("type") || !action["op"].is<const char*>())
+            return fail("Legacy alarm actions are not supported");
+        const char* error = action_operation_validate_json(action);
         if (error) return fail(error);
-        const char* type_name = action["type"] | "";
         const ActionTypeDef* type = nullptr;
-        const ActionOperationDef* operation = action["op"].is<const char*>()
-            ? action_operation_find(action["op"].as<const char*>(), &type) : nullptr;
-        if (!type) type = action_type_find(type_name);
-        if (!type || !action_type_is_supported(type->type_name)) return fail("Hook action is unavailable");
-        if ((operation ? operation->execution : type->execution) != ACTION_EXECUTION_SYNC)
+        const ActionOperationDef* operation = action_operation_find(action["op"].as<const char*>(), &type);
+        if (!operation || !type || !action_type_is_supported(type->type_name)) return fail("Hook action is unavailable");
+        if (operation->execution != ACTION_EXECUTION_SYNC)
             return fail("Pausable or unclassified actions are not allowed in alarm hooks");
         JsonDocument copy;
         copy.set(action);
@@ -187,7 +185,11 @@ static bool parse_hooks(JsonVariantConst input, ButtonAction* output, uint8_t* c
 }
 
 static bool parse_definition(JsonObjectConst root, AlarmDefinition* output, bool* invalid_hooks = nullptr) {
-    if (root.size() != 2 || !root["1"].is<JsonObjectConst>()) return fail("Alarm config requires lateness_minutes and exactly slot 1");
+    if (!root["action_format_version"].is<int>() || root["action_format_version"].as<int>() != 1) {
+        if (invalid_hooks) *invalid_hooks = true;
+        return fail("Incompatible alarm action format; recreate alarm configuration");
+    }
+    if (root.size() != 3 || !root["1"].is<JsonObjectConst>()) return fail("Alarm config requires lateness_minutes and exactly slot 1");
     if (!root["lateness_minutes"].is<int>() || root["lateness_minutes"].as<int>() < 0
         || root["lateness_minutes"].as<int>() > 10080) return fail("lateness_minutes must be 0-10080 whole minutes");
     output->lateness_minutes = root["lateness_minutes"];
@@ -224,7 +226,8 @@ static bool parse_definition(JsonObjectConst root, AlarmDefinition* output, bool
 static bool read_snapshot(int index, AlarmDocument& document) {
     File file = Storage.open(snapshot_paths[index], "r");
     if (!file || !file.size() || file.size() > ALARM_SNAPSHOT_MAX) { file.close(); return false; }
-    const bool parsed = !deserializeJson(document, file);
+    const bool parsed = json_stream_scan_keys(file) == JsonKeyScanResult::Valid &&
+                        !deserializeJson(document, file);
     file.close();
     if (!parsed || document["schema"] != 3 || !document["generation"].is<uint64_t>()
         || !document["data"].is<JsonObject>()) return false;
@@ -346,11 +349,10 @@ static void flush_hooks() {
         if (!session_work_valid(generation_at_copy)) return;
         if (result != ACTION_COMPLETE) hook_error = true;
         if (ring) {
-            if ((result != ACTION_COMPLETE && action.type[0] == '@') || ++ring_index == alarm_state->session.ring_count)
+            if (++ring_index == alarm_state->session.ring_count)
                 ring_pending = false;
         } else {
-            if (result != ACTION_COMPLETE && action.type[0] == '@') stop_index = stop_count;
-            else ++stop_index;
+            ++stop_index;
             if (stop_index == stop_count) action_storage_clear(alarm_state->stop_actions);
         }
     }
@@ -486,6 +488,7 @@ void alarm_manager_init() {
 
 static bool alarm_config_apply_raw(const uint8_t* data, size_t length, bool deferred_save) {
     if (!initialized || !data || !length || length > ALARM_JSON_MAX) return fail("Alarm configuration unavailable or oversized");
+    if (!json_keys_valid(data, length)) return fail("Alarm JSON contains an invalid NUL");
     if (ota_activity_is_active()) return fail("Firmware update in progress");
     DefinitionPtr candidate(static_cast<AlarmDefinition*>(config_psram_alloc(sizeof(AlarmDefinition), "alarm_candidate")), free);
     if (!candidate) return fail("Alarm allocation failed");
@@ -557,20 +560,22 @@ bool alarm_config_save_raw(const uint8_t* data, size_t length) {
 }
 
 bool alarm_config_save_section_raw(const uint8_t* data, size_t length, AlarmConfigSection section) {
+    if (!data || !length || length > ALARM_JSON_MAX) return fail("Invalid alarm JSON size");
+    if (!json_keys_valid(data, length)) return fail("Alarm JSON contains an invalid NUL");
     AlarmDocument input(ALARM_JSON_MAX * 2);
     if (deserializeJson(input, data, length) || !input.is<JsonObject>()) return fail("Invalid alarm JSON");
     const char* schedule_fields[] = {"enabled", "hour", "minute", "weekdays"};
-    const char* behavior_fields[] = {"lateness_minutes", "snooze_minutes", "auto_dismiss_minutes", "on_ring", "on_stop"};
+    const char* behavior_fields[] = {"action_format_version", "lateness_minutes", "snooze_minutes", "auto_dismiss_minutes", "on_ring", "on_stop"};
     const bool behavior = section == AlarmConfigSection::Behavior;
     const char* const* fields = behavior ? behavior_fields : schedule_fields;
-    const size_t count = behavior ? 5 : 4;
+    const size_t count = behavior ? 6 : 4;
     if (input.size() != count) return fail("Alarm section requires exactly its own fields");
     AlarmDocument merged(ALARM_JSON_MAX * 2);
     if (!alarm_config_to_json(merged.to<JsonObject>())) return fail("Alarm configuration unavailable");
     for (size_t index = 0; index < count; ++index) {
         const char* name = fields[index];
         if (!input.containsKey(name)) return fail("Missing alarm section field");
-        if (!strcmp(name, "lateness_minutes")) merged[name].set(input[name]);
+        if (!strcmp(name, "action_format_version") || !strcmp(name, "lateness_minutes")) merged[name].set(input[name]);
         else merged["1"][name].set(input[name]);
     }
     if (merged.overflowed()) return fail("Alarm allocation failed");

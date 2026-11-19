@@ -15,6 +15,7 @@ import base64
 import copy
 import time
 import json
+import math
 import os
 import re
 import struct
@@ -162,7 +163,7 @@ def reset_pad_fixtures(server, scenario="normal"):
     server.mock_voice_retry = False
     server.mock_voice_cooldown = False
     server.mock_recipe_catalog = json.loads((SCRIPT_DIR.parent / "docs/samples/recipe-catalog.json").read_text(encoding="utf-8"))
-    server.mock_alarms = {"lateness_minutes": 360, "1": {"enabled": False, "hour": 7, "minute": 0, "weekdays": 62,
+    server.mock_alarms = {"action_format_version": 1, "lateness_minutes": 360, "1": {"enabled": False, "hour": 7, "minute": 0, "weekdays": 62,
                                "snooze_minutes": 9, "auto_dismiss_minutes": 30,
                                "on_ring": [], "on_stop": []}}
     server.mock_alarm_status = {"active_id": 0, "state": "idle", "ready": True,
@@ -193,10 +194,6 @@ def reset_pad_fixtures(server, scenario="normal"):
 def valid_alarm_hook(action, catalog):
     if not isinstance(action, dict):
         return False
-    if "type" in action:
-        return "args" not in action and any(
-            item["type"] == action["type"] and item["alarm_hook_allowed"] for item in catalog
-        )
     operation = next((op for item in catalog for op in item.get("operations", [])
                       if op["id"] == action.get("op")), None)
     if not operation or not operation["alarm_hook_allowed"] or set(action) != {"op", "args"}:
@@ -221,6 +218,10 @@ def valid_alarm_hook(action, catalog):
         elif arg["type"] == "integer":
             if (type(value) is not int or not arg["min"] <= value <= arg["max"]
                     or (value != 0 and value < arg.get("nonzero_min", arg["min"]))):
+                return False
+        elif arg["type"] == "number":
+            if (type(value) not in (int, float) or not arg["min"] <= value <= arg["max"]
+                    or not math.isfinite(value)):
                 return False
         elif arg["type"] == "boolean":
             if type(value) is not bool:
@@ -681,7 +682,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             if self._profile() not in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
                 self._serve_json({"error": "Boot actions unavailable"}, 404)
             else:
-                self._serve_json({"actions": self.server.mock_boot_actions})
+                self._serve_json({"action_format_version": 1, "actions": self.server.mock_boot_actions})
         elif path == "/api/boot-logo":
             if self._profile() not in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
                 self._serve_json({"error": "Startup logo unavailable"}, 404)
@@ -1139,7 +1140,12 @@ class PortalHandler(SimpleHTTPRequestHandler):
             try:
                 data = json.loads(body.decode("utf-8")) if body else {}
                 actions = data["actions"]
-                if not isinstance(actions, list) or len(actions) > 3 or not all(isinstance(action, dict) for action in actions):
+                if type(data.get("action_format_version")) is not int or data["action_format_version"] != 1:
+                    raise ValueError()
+                if (not isinstance(actions, list) or len(actions) > 3 or
+                    not all(isinstance(action, dict) and isinstance(action.get("op"), str) and
+                            action["op"] and isinstance(action.get("args"), dict) and "type" not in action
+                            for action in actions)):
                     raise ValueError()
             except (UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError, ValueError):
                 self._serve_json({"error": "Invalid boot actions"}, 400)
@@ -1223,20 +1229,22 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 if not path.endswith("/config"):
                     section = path.rsplit("/", 1)[1]
                     fields = {"enabled", "hour", "minute", "weekdays"} if section == "schedule" else {
-                        "lateness_minutes", "snooze_minutes", "auto_dismiss_minutes", "on_ring", "on_stop"}
+                        "action_format_version", "lateness_minutes", "snooze_minutes", "auto_dismiss_minutes", "on_ring", "on_stop"}
                     if set(data) != fields:
                         self._serve_json({"error": "Alarm section requires exactly its own fields"}, 400)
                         return
                     merged = json.loads(json.dumps(self.server.mock_alarms))
                     for key, value in data.items():
-                        if key == "lateness_minutes":
+                        if key in ("action_format_version", "lateness_minutes"):
                             merged[key] = value
                         else:
                             merged["1"][key] = value
                     data = merged
                 slot = data.get("1", {})
                 catalog = self._device_info(include_catalog=True)["catalog"]
-                if (set(data) != {"1", "lateness_minutes"} or type(data.get("lateness_minutes")) is not int
+                if (set(data) != {"1", "lateness_minutes", "action_format_version"}
+                    or type(data.get("action_format_version")) is not int or data["action_format_version"] != 1
+                    or type(data.get("lateness_minutes")) is not int
                     or not 0 <= data["lateness_minutes"] <= 10080 or type(slot.get("enabled")) is not bool
                         or any(type(slot.get(key)) is not int or not minimum <= slot[key] <= maximum for key, minimum, maximum in
                                (("hour", 0, 23), ("minute", 0, 59), ("weekdays", 0, 127), ("snooze_minutes", 1, 1440), ("auto_dismiss_minutes", 1, 1440)))

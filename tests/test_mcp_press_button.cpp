@@ -13,7 +13,6 @@ void action_storage_free(void* memory) { free(memory); }
 enum EventType : uint8_t {
     EVENT_RESERVE,
     EVENT_DISPATCH_LIST,
-    EVENT_DISPATCH_ACTION,
     EVENT_SET_ACTION,
     EVENT_ENQUEUE,
     EVENT_RECORD,
@@ -59,11 +58,6 @@ static void dispatch_list(const ButtonAction* actions, uint8_t count, void* cont
     add_event(harness, EVENT_DISPATCH_LIST, count);
 }
 
-static void dispatch_action(const ButtonAction& action, void* context) {
-    add_event(static_cast<Harness*>(context), EVENT_DISPATCH_ACTION,
-              action.type[0] == '@' ? 0 : (uint8_t)atoi(action.payload.system.system_command));
-}
-
 static void set_action(uint32_t execution_id, uint8_t result_index,
                        uint8_t action_index, const HaServicePayload&,
                        void* context) {
@@ -96,32 +90,19 @@ static void dispatch_observed(const ButtonAction*, uint8_t count,
 }
 
 static const McpPressDispatchOps OPS = {
-    reserve, dispatch_list, dispatch_action, set_action, enqueue, record, dispatch_observed,
+    reserve, dispatch_list, set_action, enqueue, record, dispatch_observed,
 };
-
-static ButtonAction system_action(uint8_t marker) {
-    ButtonAction action = {};
-    strcpy(action.type, ACTION_TYPE_SYSTEM);
-    snprintf(action.payload.system.system_command,
-             sizeof(action.payload.system.system_command), "%u", marker);
-    return action;
-}
-
-static ButtonAction ha_action(const char* entity, const char* service) {
-    ButtonAction action = {};
-    strcpy(action.type, ACTION_TYPE_HA_SERVICE);
-    strncpy(action.payload.ha_service.entity_id, entity,
-            sizeof(action.payload.ha_service.entity_id) - 1);
-    strncpy(action.payload.ha_service.service, service,
-            sizeof(action.payload.ha_service.service) - 1);
-    return action;
-}
 
 static ButtonAction typed_action(const ActionOperationDef* operation) {
     ButtonAction action = {};
     action.type[0] = '@';
     action.payload.operation.descriptor = operation;
     return action;
+}
+
+static ButtonAction system_action(uint8_t) {
+    static const ActionOperationDef system = {"system.reboot", "Reboot", nullptr, 0, nullptr};
+    return typed_action(&system);
 }
 
 static void test_typed_ha_tracking_and_cancellation() {
@@ -199,40 +180,43 @@ static void test_typed_confirmation_uses_continuation_runner() {
     const ActionOperationDef confirm = {
         "dialog.confirm", "Ask for confirmation", nullptr, 0, nullptr, ACTION_EXECUTION_PAUSABLE
     };
+    const ActionOperationDef ha = {"ha.service.call", "Call service", nullptr, 0, nullptr};
     for (bool confirmation_first : {true, false}) {
         Harness harness;
         ButtonAction actions[] = {
-            confirmation_first ? typed_action(&confirm) : ha_action("light.wait", "toggle"),
-            confirmation_first ? ha_action("light.wait", "toggle") : typed_action(&confirm),
+            confirmation_first ? typed_action(&confirm) : typed_action(&ha),
+            confirmation_first ? typed_action(&ha) : typed_action(&confirm),
             system_action(2),
         };
         uint32_t execution_id = 0;
-        assert(mcp_press_button_dispatch(actions, 3, OPS, &harness, &execution_id) ==
-               MCP_PRESS_DISPATCH_COMPLETED);
-        assert(execution_id == 0 && harness.event_count == 1);
-        assert(harness.events[0].type == EVENT_DISPATCH_LIST);
-        assert(harness.events[0].action_index == 3 && harness.list_actions == actions);
+        assert(mcp_press_button_dispatch(actions, 3, OPS, &harness, &execution_id, &harness) ==
+               MCP_PRESS_DISPATCH_TRACKED);
+        assert(execution_id == 77 && harness.event_count == 3);
+        assert(harness.events[2].type == EVENT_DISPATCH_OBSERVED);
+        harness.observer.release(harness.observer.data);
+        assert(harness.record_count == 1 && harness.records[0].status == HA_STATUS_CANCELLED);
     }
 
     Harness unknown;
-    ButtonAction actions[] = {typed_action(nullptr), ha_action("light.wait", "toggle")};
+    ButtonAction actions[] = {typed_action(nullptr), typed_action(&ha)};
     assert(mcp_press_button_dispatch(actions, 2, OPS, &unknown, nullptr) ==
-           MCP_PRESS_DISPATCH_COMPLETED);
-    assert(unknown.event_count == 1 && unknown.events[0].type == EVENT_DISPATCH_LIST);
+           MCP_PRESS_DISPATCH_INVALID);
+    assert(unknown.event_count == 0);
 }
 
 static void test_synchronous_typed_action_keeps_ha_tracking() {
     const ActionOperationDef sync = {"display.refresh_full", "Refresh", nullptr, 0, nullptr};
+    const ActionOperationDef ha = {"ha.service.call", "Call service", nullptr, 0, nullptr};
     Harness harness;
-    ButtonAction actions[] = {typed_action(&sync), ha_action("light.one", "toggle")};
+    ButtonAction actions[] = {typed_action(&sync), typed_action(&ha)};
     uint32_t execution_id = 0;
-    assert(mcp_press_button_dispatch(actions, 2, OPS, &harness, &execution_id) ==
+    assert(mcp_press_button_dispatch(actions, 2, OPS, &harness, &execution_id, &harness) ==
            MCP_PRESS_DISPATCH_TRACKED);
-    assert(execution_id == 77 && harness.event_count == 4);
+    assert(execution_id == 77 && harness.event_count == 3);
     assert(harness.events[0].type == EVENT_RESERVE);
-    assert(harness.events[1].type == EVENT_DISPATCH_ACTION);
-    assert(harness.events[2].type == EVENT_SET_ACTION);
-    assert(harness.events[3].type == EVENT_ENQUEUE);
+    assert(harness.events[1].type == EVENT_SET_ACTION);
+    assert(harness.events[2].type == EVENT_DISPATCH_OBSERVED);
+    harness.observer.release(harness.observer.data);
 }
 
 static void test_no_ha_uses_unchanged_list_dispatch() {
@@ -272,76 +256,35 @@ static void test_action_count_boundaries() {
     assert(harness.event_count == 0);
 }
 
-static void test_reserve_precedes_mixed_side_effects() {
+static void test_incompatible_actions_have_no_side_effects() {
+    const ActionOperationDef ha = {"ha.service.call", "Call service", nullptr, 0, nullptr};
     Harness harness;
-    ButtonAction actions[] = {
-        ha_action("light.one", "turn_on"),
-        system_action(1),
-        ha_action("light.two", "turn_off"),
-    };
-    uint32_t execution_id = 0;
-    assert(mcp_press_button_dispatch(actions, 3, OPS, &harness, &execution_id) ==
-           MCP_PRESS_DISPATCH_TRACKED);
-    assert(execution_id == 77);
-    const Event expected[] = {
-        {EVENT_RESERVE, 2, 0},
-        {EVENT_SET_ACTION, 0, 0}, {EVENT_ENQUEUE, 0, 0},
-        {EVENT_DISPATCH_ACTION, 1, 0},
-        {EVENT_SET_ACTION, 2, 1}, {EVENT_ENQUEUE, 2, 0},
-    };
-    assert(harness.event_count == sizeof(expected) / sizeof(expected[0]));
-    assert(memcmp(harness.events, expected, sizeof(expected)) == 0);
-}
-
-static void test_queue_full_records_terminal_result() {
-    Harness harness;
-    harness.enqueue_results[0] = HA_SERVICE_QUEUE_FULL;
-    ButtonAction action = ha_action("light.full", "toggle");
-    uint32_t execution_id = 0;
-    assert(mcp_press_button_dispatch(&action, 1, OPS, &harness, &execution_id) ==
-           MCP_PRESS_DISPATCH_TRACKED);
-    assert(harness.event_count == 4);
-    assert(harness.events[3].type == EVENT_RECORD);
-    assert(harness.recorded.execution_id == 77);
-    assert(harness.recorded.action_index == 0);
-    assert(harness.recorded.status == HA_STATUS_QUEUE_FULL);
-    assert(harness.recorded.http_status == HA_HTTP_STATUS_NONE);
-    assert(strcmp(harness.recorded.entity_id, "light.full") == 0);
-    assert(strcmp(harness.recorded.service, "toggle") == 0);
-}
-
-static void test_busy_rejects_before_side_effects() {
-    Harness harness;
-    harness.reserve_ok = false;
-    ButtonAction actions[] = {system_action(0), ha_action("light.busy", "toggle")};
+    ButtonAction legacy = {};
+    strcpy(legacy.type, ACTION_TYPE_HA_SERVICE);
+    ButtonAction actions[] = {typed_action(&ha), legacy};
     uint32_t execution_id = 0;
     assert(mcp_press_button_dispatch(actions, 2, OPS, &harness, &execution_id) ==
-           MCP_PRESS_DISPATCH_BUSY);
-    assert(execution_id == 0);
-    assert(harness.event_count == 1);
-    assert(harness.events[0].type == EVENT_RESERVE);
+           MCP_PRESS_DISPATCH_INVALID);
+    assert(execution_id == 0 && harness.event_count == 0);
+    assert(mcp_press_button_dispatch(nullptr, 1, OPS, &harness, nullptr) ==
+           MCP_PRESS_DISPATCH_INVALID);
+
+    McpPressDispatchOps no_observer = OPS;
+    no_observer.dispatch_observed = nullptr;
+    ButtonAction typed = typed_action(&ha);
+    assert(mcp_press_button_dispatch(&typed, 1, no_observer, &harness, nullptr) ==
+           MCP_PRESS_DISPATCH_INVALID);
+    assert(harness.event_count == 0);
 }
 
 int main() {
-    {
-        Harness harness;
-        ButtonAction confirm{};
-        strcpy(confirm.type, ACTION_TYPE_CONFIRM);
-        ButtonAction actions[] = {confirm, ha_action("light.wait", "toggle")};
-        uint32_t id = 0;
-        assert(mcp_press_button_dispatch(actions, 2, OPS, &harness, &id) == MCP_PRESS_DISPATCH_COMPLETED);
-        assert(id == 0 && harness.event_count == 1);
-        assert(harness.events[0].type == EVENT_DISPATCH_LIST);
-    }
     test_no_ha_uses_unchanged_list_dispatch();
     test_typed_ha_tracking_and_cancellation();
     test_typed_ha_failure_and_busy();
     test_typed_confirmation_uses_continuation_runner();
     test_synchronous_typed_action_keeps_ha_tracking();
     test_action_count_boundaries();
-    test_reserve_precedes_mixed_side_effects();
-    test_queue_full_records_terminal_result();
-    test_busy_rejects_before_side_effects();
+    test_incompatible_actions_have_no_side_effects();
     puts("All MCP press-button orchestration tests passed");
     return 0;
 }

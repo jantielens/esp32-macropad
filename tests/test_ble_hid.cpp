@@ -103,7 +103,7 @@ protected:
 };
 
 TEST_F(BleHid, BthomeOperationQueuesNormalizedEventsAndReportsRejection) {
-    ActionResolvedArgument arguments[] = {{nullptr, 10}, {"press", 0}};
+    ActionResolvedArgument arguments[] = {{nullptr, 10, 0}, {"press", 0, 0}};
     const char* names[] = {"press", "double_press", "long_press"};
     const uint8_t values[] = {bthome::press, bthome::double_press, bthome::long_press};
     for (unsigned index = 0; index < 3; ++index) {

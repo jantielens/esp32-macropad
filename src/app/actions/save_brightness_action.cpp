@@ -19,14 +19,6 @@ ActionResult save_brightness(const char* label) {
 #endif
     return ACTION_COMPLETE;
 }
-ActionResult dispatch_save_brightness(const ButtonAction&, const char* label, uint32_t) {
-#if !defined(ARDUINO) || !HAS_DISPLAY
-    (void)label;
-    return ACTION_COMPLETE;
-#else
-    return save_brightness(label);
-#endif
-}
 ActionResult dispatch_save_brightness_operation(const ActionResolvedArgument*, const char* label, uint32_t) {
     return save_brightness(label);
 }
@@ -38,6 +30,6 @@ void describe_save_brightness(JsonObject& action) {
     action["group"] = "Display";
     action["label"] = "Save brightness";
 }
-DEFINE_AND_REGISTER_ACTION_TYPE(kSaveBrightnessActionType, ACTION_TYPE_SAVE_BRIGHTNESS, nullptr, nullptr, dispatch_save_brightness, nullptr, describe_save_brightness, save_brightness_available, nullptr, ACTION_EXECUTION_SYNC, false, true, false, nullptr, kSaveBrightnessOperations, 1);
+DEFINE_AND_REGISTER_ACTION_TYPE(kSaveBrightnessActionType, ACTION_TYPE_SAVE_BRIGHTNESS, describe_save_brightness, save_brightness_available, ACTION_EXECUTION_SYNC, false, false, kSaveBrightnessOperations, 1);
 }
 #endif

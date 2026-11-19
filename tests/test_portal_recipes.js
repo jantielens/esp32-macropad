@@ -217,7 +217,7 @@ context.recipeFindMinimumResize({
 });
 
 async function testInstallation() {
-    for (const outcome of ['success', 'cancel', 'pad-failure', 'component-failure', 'unsupported', 'capacity-exceeded',
+    for (const outcome of ['success', 'cancel', 'pad-failure', 'component-failure', 'component-unavailable', 'unsupported', 'capacity-exceeded', 'invalid-recipe-action', 'invalid-component-action', 'pausable-alarm-action', 'too-many-alarm-actions',
         'font-success', 'font-existing', 'font-list-failure', 'font-download-failure',
         'font-network-failure', 'font-upload-failure', 'font-unsupported', 'font-prepare-failure']) {
         const elements = new Map();
@@ -233,10 +233,18 @@ async function testInstallation() {
         const success = ['success', 'font-success', 'font-existing'].includes(outcome);
         const fontData = new Blob([new Uint8Array([0, 1, 0, 0])]);
         const install = {
-            console, Blob, Set, URL, deviceInfoCache: { has_alarm: outcome !== 'unsupported', has_sound_player: true,
+            console, Blob, Set, URL, MAX_ACTIONS: 3,
+            actionEditorOperation: id => ({ alarm_hook_allowed: id !== 'delay.wait' }),
+            deviceInfoCache: { has_alarm: outcome !== 'unsupported', has_sound_player: true,
                 has_ttf_fonts: outcome !== 'font-unsupported', max_pad_buttons: outcome === 'capacity-exceeded' ? 1 : 64 },
             confirm: () => outcome !== 'cancel',
             showMessage: (message) => messages.push(message),
+            padCheckImportedActionFormat: pad => {
+                if (outcome === 'invalid-recipe-action' && pad.buttons && pad.buttons.length)
+                    throw new Error('Unsupported recipe action');
+                if (outcome === 'invalid-component-action' && pad.pad_actions)
+                    throw new Error('Unsupported component action');
+            },
             padCaptureIconLayout: () => ({}),
             padPreparePageSave: async context => {
                 if (outcome === 'font-prepare-failure') throw new Error('Icon preparation failed');
@@ -282,7 +290,8 @@ async function testInstallation() {
                         outcome === 'component-failure' && url.includes('/component/');
                     return { ok: !failed, status: failed ? 503 : 200, json: async () => ({ error: 'Save failed' }) };
                 }
-                return { ok: true, json: async () => ({ lateness_minutes: 360, '1': { enabled: true, hour: 8, minute: 30, weekdays: 62, snooze_minutes: 9, on_stop: [] } }) };
+                return { ok: outcome !== 'component-unavailable', status: 409,
+                    json: async () => ({ action_format_version: 1, lateness_minutes: 360, '1': { enabled: true, hour: 8, minute: 30, weekdays: 62, snooze_minutes: 9, on_stop: [] } }) };
             },
         };
         install.window = install;
@@ -292,6 +301,11 @@ async function testInstallation() {
         install.recipeLoadPad = async () => {};
         install.state.selected = JSON.parse(JSON.stringify(alarmCatalog.recipes[0]));
         install.state.selected.confirmation = 'Replace Alarm 1 actions and disable its schedule?';
+        if (outcome === 'pausable-alarm-action')
+            install.state.selected.provision.components.alarms['1'].on_ring[0].op = 'delay.wait';
+        if (outcome === 'too-many-alarm-actions')
+            install.state.selected.provision.components.alarms['1'].on_ring =
+                Array(4).fill({ op: 'screen.open', args: { target: 'pad_1' } });
         if (usesFont) install.state.selected.fonts = [{ name: 'digital', url: 'https://example.org/digital.ttf' }];
         install.state.pad = { page: 6, cols: 2, rows: 2, buttons: [],
             overlay_buttons: [{ col: 0, row: 0, icon: { source_id: 's_000000000000000000000001',
@@ -307,11 +321,22 @@ async function testInstallation() {
             assert(messages.some(message => message.includes('combined Main and Overlay button limit')));
             continue;
         }
-        if (outcome === 'cancel' || outcome === 'unsupported' || usesFont && !success) {
+        if (outcome === 'cancel' || outcome === 'unsupported' || outcome === 'component-unavailable' ||
+            outcome === 'invalid-recipe-action' || outcome === 'invalid-component-action' ||
+            outcome === 'pausable-alarm-action' || outcome === 'too-many-alarm-actions' || usesFont && !success) {
             assert.strictEqual(configWrites.length, 0);
             assert.strictEqual(iconsUploaded, false);
+            if (outcome === 'invalid-recipe-action')
+                assert(messages.some(message => message.includes('Unsupported recipe action')));
+            if (outcome === 'invalid-component-action')
+                assert(messages.some(message => message.includes('Unsupported component action')));
+            if (outcome === 'pausable-alarm-action')
+                assert(messages.some(message => message.includes('Alarm hooks cannot use pausable operations')));
+            if (outcome === 'too-many-alarm-actions')
+                assert(messages.some(message => message.includes('too many actions')));
         } else {
             assert.strictEqual(configWrites[0].url, '/api/pad?page=6');
+            assert.strictEqual(configWrites[0].body.action_format_version, 1);
             assert.strictEqual(configWrites.length, outcome === 'pad-failure' ? 1 : 2);
             assert.deepStrictEqual(configWrites[0].body.overlay_buttons, [
                 { col: 0, row: 0, icon: { source_id: 's_000000000000000000000001', catalog_id: 'noto:house', kind: 'color' } },
@@ -328,6 +353,7 @@ async function testInstallation() {
         }
         if (outcome === 'font-prepare-failure') assert.strictEqual(downloads.length, 0);
         if (success) {
+            assert.strictEqual(configWrites[1].body.action_format_version, 1);
             assert.strictEqual(configWrites[1].body['1'].enabled, false);
             assert.strictEqual(configWrites[1].body['1'].hour, 8);
             assert.strictEqual(configWrites[1].body['1'].on_ring[0].args.target, 'pad_6');

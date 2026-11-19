@@ -756,7 +756,7 @@ class PortalDevServerTest(unittest.TestCase):
             invalid["lateness_minutes"] = minutes
             self.assertEqual(self.request("/api/component/alarms/config", "POST", invalid)[0], 400)
         alarm["lateness_minutes"] = 360
-        alarm["1"].update(enabled=True, hour=8, on_ring=[{"type": "alarm_tone"}])
+        alarm["1"].update(enabled=True, hour=8, on_ring=[{"op": "alarm.tone", "args": {"pattern": "", "volume": 0}}])
         self.assertEqual(self.request("/api/component/alarms/config", "POST", alarm)[0], 200)
         self.assertEqual(self.request("/api/component/alarms/config")[1], alarm)
         invalid = copy.deepcopy(alarm)
@@ -819,8 +819,8 @@ class PortalDevServerTest(unittest.TestCase):
         for key in ("snooze_minutes", "auto_dismiss_minutes", "on_ring", "on_stop"):
             self.assertEqual(current["1"][key], config["1"][key])
         self.assertEqual(current["lateness_minutes"], config["lateness_minutes"])
-        behavior = {"lateness_minutes": 12, "snooze_minutes": 4, "auto_dismiss_minutes": 15,
-                    "on_ring": [{"type": "alarm_tone"}], "on_stop": []}
+        behavior = {"action_format_version": 1, "lateness_minutes": 12, "snooze_minutes": 4, "auto_dismiss_minutes": 15,
+                    "on_ring": [{"op": "alarm.tone", "args": {"pattern": "", "volume": 0}}], "on_stop": []}
         self.assertEqual(self.request("/api/component/alarms/behavior", "POST", behavior)[0], 200)
         current = self.request("/api/component/alarms/config")[1]
         for key, value in schedule.items():
@@ -835,11 +835,15 @@ class PortalDevServerTest(unittest.TestCase):
         action = next(item for item in catalog if item["type"] == "alarm")
         header = (ROOT / "src/app/alarm_manager.h").read_text()
         commands = re.search(r'alarm_command_names\[\].*?\{(.*?)\}', header, re.S).group(1)
-        self.assertEqual([item["id"] for item in action["commands"]], [item for item in re.findall(r'"([^"]*)"', commands) if item])
-        fields = {field["name"]: field for field in action["editor_fields"]}
-        self.assertTrue(fields["alarm_value"]["bindable"])
-        self.assertEqual(fields["alarm_id"]["default"], "1")
-        self.assertEqual([item["id"] for item in fields["alarm_day"]["options"]], list(range(7)))
+        operations = {item["id"]: item for item in action["operations"]}
+        self.assertEqual(set(operations), {"alarm." + item for item in re.findall(r'"([^"]*)"', commands) if item})
+        minutes = operations["alarm.adjust_minutes"]["arguments"][0]
+        self.assertTrue(minutes["dynamic"])
+        self.assertEqual(minutes["example"], "[event:step]")
+        target = operations["alarm.cancel"]["arguments"][0]
+        self.assertEqual(target["choices"], ["0", "1"])
+        day = operations["alarm.weekday_toggle"]["arguments"][0]
+        self.assertEqual(day["choices"], [str(value) for value in range(7)])
         schema = self.request("/api/bindings")[1]
         alarm = next(item for item in schema["schemes"] if item["name"] == "alarm")
         source = (ROOT / "src/app/alarm_binding.cpp").read_text()
@@ -939,11 +943,15 @@ class PortalDevServerTest(unittest.TestCase):
             self.assertIn('onclick="deleteBootLogo()"', fragment)
             self.assertIn('baseline (non-progressive) JPEG', fragment)
 
-            self.assertEqual(self.request("/api/component/boot-actions/config")[1], {"actions": []})
-            actions = [{"type": "notify", "message": "Local mock"}]
+            self.assertEqual(self.request("/api/component/boot-actions/config")[1],
+                             {"action_format_version": 1, "actions": []})
+            actions = [{"op": "screen.back", "args": {}}]
             self.assertEqual(self.request("/api/component/boot-actions/config", "POST",
-                                          {"actions": actions})[0], 200)
-            self.assertEqual(self.request("/api/component/boot-actions/config")[1], {"actions": actions})
+                                          {"action_format_version": 1, "actions": actions})[0], 200)
+            self.assertEqual(self.request("/api/component/boot-actions/config", "POST",
+                                          {"actions": [{"type": "screen"}]})[0], 400)
+            self.assertEqual(self.request("/api/component/boot-actions/config")[1],
+                             {"action_format_version": 1, "actions": actions})
 
             png = base64.b64decode(
                 "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p2cAAAAASUVORK5CYII=")
@@ -1266,6 +1274,7 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(self.request("/api/pad/button_sizes?cols=0&rows=3")[0], 400)
         self.assertEqual(self.request("/api/component/button-defaults/config", "POST", {"corner_radius": "4"})[0], 200)
         self.assertEqual(self.request("/api/component/button-defaults/config")[1]["corner_radius"], "4")
+        self.assertEqual(self.request("/api/component/button-defaults/config", "POST", {"base_text_size": -1})[0], 400)
         defaults = self.request("/api/component/button-defaults/config")[1]
         self.assertEqual(defaults["firmware_defaults"]["bg_color"], "#333333")
         self.assertEqual(defaults["firmware_defaults"]["pixel_shift_distance_px"], 4)
@@ -1406,8 +1415,10 @@ class PortalDevServerTest(unittest.TestCase):
         _, touch_info = self.request("/api/info?catalog=1", profile="esp32-p4-lcd4b")
         slider = next(widget for widget in touch_info["widget_catalog"] if widget["type"] == "slider")
         self.assertEqual(slider["axis_field"], "widget_slider_axis")
-        self.assertTrue(any(action.get("template_fields", {}).get("data_json", {}).get("max") == 63
-                            for action in touch_info["catalog"] if action["type"] == "ha_service"))
+        ha = next(action for action in touch_info["catalog"] if action["type"] == "ha_service")
+        call = next(operation for operation in ha["operations"] if operation["id"] == "ha.service.call")
+        data = next(argument for argument in call["arguments"] if argument["name"] == "data_json")
+        self.assertEqual(data["max_length"], 63)
 
         _, non_touch_info = self.request("/api/info?catalog=1", profile="crowpanel-4.2-interactive")
         self.assertFalse(any(widget["type"] == "slider" for widget in non_touch_info["widget_catalog"]))

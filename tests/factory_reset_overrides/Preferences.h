@@ -45,7 +45,7 @@ public:
         strings[key] = value;
         return std::strlen(value);
     }
-    bool putUShort(const char*, uint16_t) { return true; }
+    size_t putUShort(const char*, uint16_t value) { return sizeof(value); }
     bool putUChar(const char* key, uint8_t value) {
         if (!write_ok) return false;
         if (std::strcmp(key, "audio_vol") == 0) {

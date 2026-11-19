@@ -20,27 +20,11 @@ const char* processing_rejection(VoiceNotesProcessingStart result) {
     return "unknown rejection";
 }
 
-const char* validate_voice_note_process(JsonObjectConst json) {
-    for (JsonPairConst field : json) {
-        if (strcmp(field.key().c_str(), "type") != 0)
-            return "vnote_process does not accept fields";
-    }
-    return nullptr;
-}
-
-void parse_voice_note_process(const JsonObject& json, ButtonAction& action) {
-    if (validate_voice_note_process(json)) memset(&action, 0, sizeof(action));
-}
-
 ActionResult submit_processing(const char* label) {
     const VoiceNotesProcessingStart result = voice_notes_processing_start();
     if (result == VoiceNotesProcessingStart::Accepted) return ACTION_COMPLETE;
     LOGW("Action", "%s processing request rejected: %s", label, processing_rejection(result));
     return ACTION_FAILED;
-}
-
-ActionResult dispatch_voice_note_process(const ButtonAction&, const char* label, uint32_t) {
-    return submit_processing(label);
 }
 
 ActionResult dispatch_process_operation(const ActionResolvedArgument*, const char* label, uint32_t) {
@@ -57,9 +41,7 @@ void describe_voice_note_process(JsonObject& action) {
     action["note"] = "Starts a background pass for missing results without waiting for completion. Offline or busy requests schedule nothing.";
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(kVoiceNoteProcessActionType, ACTION_TYPE_VOICE_NOTE_PROCESS,
-    parse_voice_note_process, nullptr, dispatch_voice_note_process, nullptr, describe_voice_note_process,
-    nullptr, validate_voice_note_process, ACTION_EXECUTION_SYNC, true, true, false, nullptr,
+DEFINE_AND_REGISTER_ACTION_TYPE(kVoiceNoteProcessActionType, ACTION_TYPE_VOICE_NOTE_PROCESS, describe_voice_note_process, nullptr, ACTION_EXECUTION_SYNC, true, false,
     kProcessOperations, sizeof(kProcessOperations) / sizeof(kProcessOperations[0]));
 }
 #endif

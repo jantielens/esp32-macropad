@@ -4,7 +4,13 @@
 #if IS_DARKROOM_TIMER
 
 #include "action_dispatch.h"
+#include "action_list.h"
 #include "action_parse.h"
+#include "action_registry.h"
+#include "action_storage.h"
+#include "action_validate.h"
+#include "json_key_validation.h"
+#include "config_psram.h"
 #include "darkroom_timer_payload.h"
 #include "log_manager.h"
 #include "psram_json_allocator.h"
@@ -14,6 +20,8 @@
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
 #include <WiFiClient.h>
+#include <freertos/semphr.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define TAG "Relay"
@@ -45,6 +53,9 @@ static SemaphoreHandle_t  g_relay_sem   = nullptr;
 
 // Cached relay action configs (one per slot)
 static ButtonAction s_relay_actions[RELAY_SLOT_COUNT];
+static ActionStorage s_relay_storage = {};
+static SemaphoreHandle_t s_config_mutex = nullptr;
+static bool s_config_valid = false;
 
 // Pending slots bitmask — latest-state semantics (replaced, not accumulated)
 static volatile uint8_t s_pending_slots = 0;
@@ -58,6 +69,10 @@ static bool          s_adhoc_shelly_on    = true;
 // Deferred action for non-shelly types (dispatched on main loop)
 static volatile bool s_deferred_pending = false;
 static ButtonAction  s_deferred_action;
+static ActionStorage s_deferred_storage = {};
+static SemaphoreHandle_t s_deferred_mutex = nullptr;
+static bool s_slot_shelly_active = false;
+static bool s_slot_shelly_on = false;
 
 // ============================================================================
 // Persistent Shelly HTTP connection — reused across calls to avoid TCP
@@ -142,6 +157,10 @@ static void shelly_http_send(const char* host, uint8_t relay_index, bool on) {
 
 void relay_queue_shelly(const char* host, uint8_t relay_index, bool on) {
     if (!host || !host[0]) return;
+    if (g_relay_task && xTaskGetCurrentTaskHandle() == g_relay_task && s_slot_shelly_active) {
+        shelly_http_send(host, relay_index, s_slot_shelly_on);
+        return;
+    }
     portENTER_CRITICAL(&g_relay_lock);
     strlcpy(s_adhoc_shelly_host, host, sizeof(s_adhoc_shelly_host));
     s_adhoc_shelly_relay = relay_index;
@@ -155,87 +174,113 @@ void relay_queue_shelly(const char* host, uint8_t relay_index, bool on) {
 // Config load / save / clear
 // ============================================================================
 
-void relay_load_config() {
-    portENTER_CRITICAL(&g_relay_lock);
-    memset(s_relay_actions, 0, sizeof(s_relay_actions));
-    portEXIT_CRITICAL(&g_relay_lock);
-
-    if (!Storage.exists(RELAY_CONFIG_PATH)) {
-        LOGD(TAG, "No relay config file, all slots empty");
-        return;
+static bool relay_parse_config(JsonDocument& doc, ButtonAction* actions,
+                               ActionStorage& storage, bool validate_bindings) {
+    if (!doc.is<JsonObject>() || !doc["action_format_version"].is<int>() ||
+        doc["action_format_version"].as<int>() != 1) {
+        LOGW(TAG, "Incompatible relay actions document; recreate it");
+        return false;
     }
-
-    File f = Storage.open(RELAY_CONFIG_PATH, "r");
-    if (!f) {
-        LOGW(TAG, "Failed to open relay config");
-        return;
-    }
-
-    size_t file_size = f.size();
-    if (file_size == 0 || file_size > 4096) {
-        LOGW(TAG, "Invalid relay config size: %u", (unsigned)file_size);
-        f.close();
-        return;
-    }
-
-    BasicJsonDocument<PsramJsonAllocator> doc(2048);
-    DeserializationError err = deserializeJson(doc, f);
-    f.close();
-
-    if (err) {
-        LOGE(TAG, "Relay config parse error: %s", err.c_str());
-        return;
-    }
-
-    // Parse one slot at a time to avoid a large stack allocation, then copy
-    // each parsed action into the cache under lock.
-    for (int i = 0; i < RELAY_SLOT_COUNT; i++) {
-        ButtonAction parsed;
-        memset(&parsed, 0, sizeof(parsed));
-        if (doc[SLOT_KEYS[i]].is<JsonObject>()) {
-            action_parse(doc[SLOT_KEYS[i]].as<JsonObject>(), parsed);
+    ActionStorageScope scope(&storage);
+    for (int i = 0; i < RELAY_SLOT_COUNT; ++i) {
+        if (!doc[SLOT_KEYS[i]].is<JsonObject>()) {
+            LOGW(TAG, "Relay slot %s must be an object", SLOT_KEYS[i]);
+            return false;
         }
-        portENTER_CRITICAL(&g_relay_lock);
-        s_relay_actions[i] = parsed;
-        portEXIT_CRITICAL(&g_relay_lock);
+        JsonObject action = doc[SLOT_KEYS[i]].as<JsonObject>();
+        if (action.size() == 0) continue;
+        const char* operation = action["op"] | "";
+        const char* error = validate_bindings ? action_validate_json(action)
+                                              : action_operation_validate_json(action, false);
+        if (!error && (action.containsKey("type") || !operation[0]))
+            error = "legacy action is not supported";
+        if (error) {
+            LOGW(TAG, "Invalid relay slot %s: %s", SLOT_KEYS[i], error);
+            return false;
+        }
+        action_parse(action, actions[i]);
+        if (storage.failed || !actions[i].type[0]) {
+            LOGW(TAG, "Cannot parse relay slot %s", SLOT_KEYS[i]);
+            return false;
+        }
     }
-
-    LOGI(TAG, "Loaded relay config (%u bytes)", (unsigned)file_size);
-}
-
-static bool relay_save_to_flash(const uint8_t* json, size_t len) {
-    if (!json || len == 0) return false;
-
-    File f = Storage.open(RELAY_CONFIG_PATH, "w");
-    if (!f) {
-        LOGE(TAG, "Failed to open relay config for write");
-        return false;
-    }
-
-    size_t written = f.write(json, len);
-    f.close();
-    storage_publish_usage(false);
-
-    if (written != len) {
-        LOGE(TAG, "Relay config write failed (%u of %u)",
-             (unsigned)written, (unsigned)len);
-        return false;
-    }
-
-    LOGI(TAG, "Relay config saved (%u bytes)", (unsigned)len);
     return true;
 }
 
-void relay_controller_clear_config() {
-    portENTER_CRITICAL(&g_relay_lock);
-    memset(s_relay_actions, 0, sizeof(s_relay_actions));
-    portEXIT_CRITICAL(&g_relay_lock);
-
-    if (Storage.exists(RELAY_CONFIG_PATH)) {
-        Storage.remove(RELAY_CONFIG_PATH);
-        storage_publish_usage(false);
-        LOGI(TAG, "Relay config deleted");
+void relay_load_config() {
+    if (!s_config_mutex || xSemaphoreTake(s_config_mutex, portMAX_DELAY) != pdTRUE) {
+        LOGE(TAG, "Cannot lock relay config");
+        return;
     }
+    if (!Storage.exists(RELAY_CONFIG_PATH)) {
+        s_config_valid = true;
+        xSemaphoreGive(s_config_mutex);
+        LOGD(TAG, "No relay config file, all slots empty");
+        return;
+    }
+    File f = Storage.open(RELAY_CONFIG_PATH, "r");
+    if (!f) {
+        LOGW(TAG, "Failed to open relay config");
+        xSemaphoreGive(s_config_mutex);
+        return;
+    }
+    const size_t file_size = f.size();
+    if (file_size == 0 || file_size > 4096) {
+        LOGW(TAG, "Invalid relay config size: %u", (unsigned)file_size);
+        f.close();
+        xSemaphoreGive(s_config_mutex);
+        return;
+    }
+    const JsonKeyScanResult scan = json_stream_scan_keys(f);
+    if (scan != JsonKeyScanResult::Valid) {
+        LOGW(TAG, "Relay config %s", scan == JsonKeyScanResult::InvalidNul
+             ? "contains an invalid JSON NUL" : "could not be read");
+        f.close();
+        xSemaphoreGive(s_config_mutex);
+        return;
+    }
+    BasicJsonDocument<PsramJsonAllocator> doc(4096);
+    const DeserializationError err = deserializeJson(doc, f);
+    f.close();
+    if (err || doc.overflowed()) {
+        LOGE(TAG, "Relay config parse error: %s", err.c_str());
+        xSemaphoreGive(s_config_mutex);
+        return;
+    }
+    auto* actions = static_cast<ButtonAction*>(
+        config_psram_alloc(sizeof(s_relay_actions), "relay_actions"));
+    ActionStorage storage = {};
+    if (actions && relay_parse_config(doc, actions, storage, false)) {
+        action_storage_clear(s_relay_storage);
+        memcpy(s_relay_actions, actions, sizeof(s_relay_actions));
+        action_storage_move(s_relay_storage, storage);
+        s_config_valid = true;
+        LOGI(TAG, "Loaded relay config (%u bytes)", (unsigned)file_size);
+    } else {
+        LOGW(TAG, "Relay config unavailable or incompatible");
+    }
+    action_storage_clear(storage);
+    free(actions);
+    xSemaphoreGive(s_config_mutex);
+}
+
+void relay_controller_clear_config() {
+    if (!s_config_mutex || xSemaphoreTake(s_config_mutex, portMAX_DELAY) != pdTRUE) {
+        LOGE(TAG, "Cannot lock relay config for deletion");
+        return;
+    }
+    StorageMutationGuard guard;
+    if (!guard || (Storage.exists(RELAY_CONFIG_PATH) && !Storage.remove(RELAY_CONFIG_PATH))) {
+        LOGE(TAG, "Cannot delete relay config");
+        xSemaphoreGive(s_config_mutex);
+        return;
+    }
+    action_storage_clear(s_relay_storage);
+    memset(s_relay_actions, 0, sizeof(s_relay_actions));
+    s_config_valid = true;
+    xSemaphoreGive(s_config_mutex);
+    storage_publish_usage(false);
+    LOGI(TAG, "Relay config deleted");
 }
 
 // ============================================================================
@@ -243,10 +288,23 @@ void relay_controller_clear_config() {
 // ============================================================================
 
 static void relay_defer_action(const ButtonAction& act) {
-    portENTER_CRITICAL(&g_relay_lock);
-    s_deferred_action = act;
+    ActionStorage storage = {};
+    ButtonAction copy = {};
+    if (!action_storage_copy_actions(storage, &copy, &act, 1)) {
+        LOGE(TAG, "Cannot copy deferred relay action");
+        action_storage_clear(storage);
+        return;
+    }
+    if (!s_deferred_mutex || xSemaphoreTake(s_deferred_mutex, portMAX_DELAY) != pdTRUE) {
+        LOGE(TAG, "Cannot lock deferred relay action");
+        action_storage_clear(storage);
+        return;
+    }
+    action_storage_clear(s_deferred_storage);
+    s_deferred_action = copy;
+    action_storage_move(s_deferred_storage, storage);
     s_deferred_pending = true;
-    portEXIT_CRITICAL(&g_relay_lock);
+    xSemaphoreGive(s_deferred_mutex);
 }
 
 // ============================================================================
@@ -282,20 +340,32 @@ static void relay_task_fn(void*) {
         for (int i = 0; i < RELAY_SLOT_COUNT; i++) {
             if (!(slots & (1 << i))) continue;
 
-            portENTER_CRITICAL(&g_relay_lock);
-            ButtonAction act = s_relay_actions[i];
-            portEXIT_CRITICAL(&g_relay_lock);
+            ButtonAction act = {};
+            ActionStorage storage = {};
+            if (!s_config_mutex || xSemaphoreTake(s_config_mutex, portMAX_DELAY) != pdTRUE) {
+                LOGE(TAG, "Cannot lock relay config for dispatch");
+                continue;
+            }
+            const bool copied = s_config_valid &&
+                action_storage_copy_actions(storage, &act, &s_relay_actions[i], 1);
+            xSemaphoreGive(s_config_mutex);
+            if (!copied) {
+                LOGW(TAG, "Cannot copy relay slot %s", SLOT_KEYS[i]);
+                action_storage_clear(storage);
+                continue;
+            }
 
-            if (!act.type[0]) continue;  // empty slot
-
-            if (strcmp(act.type, ACTION_TYPE_SHELLY) == 0) {
-                bool on = (i == 0 || i == 2);  // slots 0,2 = ON
-                const ShellyPayload& p = shelly_payload(act);
-                shelly_http_send(p.host, p.relay, on);
-            } else {
-                // Defer all non-shelly types to main loop
+            const ActionOperationDef* operation = action_operation_for_action(act);
+            if (operation && strcmp(operation->id, "shelly.relay.set") == 0) {
+                s_slot_shelly_on = (i == 0 || i == 2);
+                s_slot_shelly_active = true;
+                if (action_dispatch(act, "Relay") != ACTION_COMPLETE)
+                    LOGW(TAG, "Relay slot %s failed", SLOT_KEYS[i]);
+                s_slot_shelly_active = false;
+            } else if (act.type[0]) {
                 relay_defer_action(act);
             }
+            action_storage_clear(storage);
         }
     }
 }
@@ -309,7 +379,13 @@ void relay_controller_init() {
     s_pending_slots = 0;
     memset(s_relay_actions, 0, sizeof(s_relay_actions));
 
+    s_config_mutex = xSemaphoreCreateMutex();
+    s_deferred_mutex = xSemaphoreCreateMutex();
     g_relay_sem = xSemaphoreCreateBinary();
+    if (!s_config_mutex || !s_deferred_mutex || !g_relay_sem) {
+        LOGE(TAG, "Failed to create relay synchronization objects");
+        return;
+    }
 
     bool ok = rtos_create_task_psram_stack_pinned(
         relay_task_fn, "relay",
@@ -344,35 +420,93 @@ bool relay_is_on() {
 }
 
 void relay_loop() {
-    if (!s_deferred_pending) return;
-    portENTER_CRITICAL(&g_relay_lock);
-    ButtonAction act = s_deferred_action;
-    s_deferred_pending = false;
-    portEXIT_CRITICAL(&g_relay_lock);
-    action_dispatch(act, "Relay");
+    if (!s_deferred_mutex || xSemaphoreTake(s_deferred_mutex, portMAX_DELAY) != pdTRUE) return;
+    ButtonAction act = {};
+    ActionStorage storage = {};
+    const bool pending = s_deferred_pending;
+    if (pending) {
+        act = s_deferred_action;
+        action_storage_move(storage, s_deferred_storage);
+        s_deferred_pending = false;
+    }
+    xSemaphoreGive(s_deferred_mutex);
+    if (pending) {
+        action_list_dispatch(&act, 1, "Relay", ACTION_CONTINUATION_OWNER_LOOP);
+        action_storage_clear(storage);
+    }
 }
 
 // ============================================================================
 // REST API helpers (called from web_portal_relay.cpp)
 // ============================================================================
 
-bool relay_get_config_json(String& out) {
-    // Reference s_relay_actions directly — ArduinoJson stores pointers to
-    // char arrays (zero-copy), so the source must outlive serializeJson().
-    // No spinlock needed: GET/PUT handlers are serialized by AsyncWebServer,
-    // and the relay task only reads s_relay_actions (never writes).
-    BasicJsonDocument<PsramJsonAllocator> doc(2048);
+bool relay_get_config_json(std::string& out) {
+    if (!s_config_mutex || xSemaphoreTake(s_config_mutex, portMAX_DELAY) != pdTRUE)
+        return false;
+    if (!s_config_valid) {
+        xSemaphoreGive(s_config_mutex);
+        return false;
+    }
+    BasicJsonDocument<PsramJsonAllocator> doc(4096);
+    doc["action_format_version"] = 1;
     for (int i = 0; i < RELAY_SLOT_COUNT; i++) {
         JsonObject obj = doc[SLOT_KEYS[i]].to<JsonObject>();
-        action_to_json(s_relay_actions[i], obj);
+        if (s_relay_actions[i].type[0]) action_to_json(s_relay_actions[i], obj);
     }
-    serializeJson(doc, out);
-    return true;
+    out = "";
+    const bool ok = !doc.overflowed() && serializeJson(doc, out) > 0;
+    xSemaphoreGive(s_config_mutex);
+    return ok;
 }
 
 bool relay_save_config_from_json(const uint8_t* json, size_t len) {
-    if (!relay_save_to_flash(json, len)) return false;
-    relay_load_config();
+    if (!json || !len || len > 4096 || !s_config_mutex) {
+        LOGW(TAG, "Invalid relay config save");
+        return false;
+    }
+    if (!json_keys_valid(json, len)) {
+        LOGW(TAG, "Relay config JSON contains an invalid NUL");
+        return false;
+    }
+    BasicJsonDocument<PsramJsonAllocator> doc(4096);
+    const DeserializationError err = deserializeJson(doc, json, len);
+    if (err || doc.overflowed()) {
+        LOGW(TAG, "Invalid relay config JSON: %s", err.c_str());
+        return false;
+    }
+    auto* actions = static_cast<ButtonAction*>(
+        config_psram_alloc(sizeof(s_relay_actions), "relay_actions_save"));
+    if (!actions) {
+        LOGE(TAG, "Cannot allocate relay config");
+        return false;
+    }
+    ActionStorage storage = {};
+    if (!relay_parse_config(doc, actions, storage, true)) {
+        action_storage_clear(storage);
+        free(actions);
+        return false;
+    }
+    if (xSemaphoreTake(s_config_mutex, portMAX_DELAY) != pdTRUE) {
+        LOGE(TAG, "Cannot lock relay config for save");
+        action_storage_clear(storage);
+        free(actions);
+        return false;
+    }
+    const bool saved = storage_write_atomic(RELAY_CONFIG_PATH, json, len);
+    if (saved) {
+        action_storage_clear(s_relay_storage);
+        memcpy(s_relay_actions, actions, sizeof(s_relay_actions));
+        action_storage_move(s_relay_storage, storage);
+        s_config_valid = true;
+    }
+    xSemaphoreGive(s_config_mutex);
+    action_storage_clear(storage);
+    free(actions);
+    if (!saved) {
+        LOGE(TAG, "Atomic relay config write failed");
+        return false;
+    }
+    storage_publish_usage(false);
     return true;
 }
 

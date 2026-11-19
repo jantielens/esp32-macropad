@@ -97,8 +97,8 @@ static void on_config_load_hook(DeviceConfig * /*config*/, Preferences &preferen
 		shutter_config_load(preferences);
 }
 
-static void on_config_save_hook(const DeviceConfig * /*config*/, Preferences &preferences) {
-		shutter_config_save(preferences);
+static bool on_config_save_hook(const DeviceConfig * /*config*/, Preferences &preferences) {
+		return shutter_config_save(preferences);
 }
 
 // Expose shutter_config fields on GET /api/config so the portal Sensor

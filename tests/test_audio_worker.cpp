@@ -256,7 +256,7 @@ static ActionResult dispatch_sound_operation(const char* id, const ActionResolve
 
 static void test_sound_operations() {
     operation_context = {true, owner_guard, owner_generation, true, false};
-    ActionResolvedArgument args[] = {{"400:20", 0}, {nullptr, 75}};
+    ActionResolvedArgument args[] = {{"400:20", 0, 0}, {nullptr, 75, 0}};
     assert(dispatch_sound_operation("audio.alert.tone", args) == ACTION_COMPLETE);
     assert(audio_queue->items.size() == 1);
     AudioCommand command = {};

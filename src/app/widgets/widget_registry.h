@@ -83,8 +83,8 @@ struct WidgetType {
     const char* (*validateActions)(JsonObjectConst button, JsonArrayConst actions);
     // Pad-owned composition supplies the same inherited buttons and bindings
     // used by runtime loading. The callback must not perform storage I/O.
-    const char* (*validatePadContext)(JsonObjectConst pad, const PadComposedContext& context) = nullptr;
-    bool collectionBinding = false;
+    const char* (*validatePadContext)(JsonObjectConst pad, const PadComposedContext& context);
+    bool collectionBinding;
 };
 
 inline bool widget_owns_input(const WidgetType* type) {

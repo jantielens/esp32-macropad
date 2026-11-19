@@ -6,12 +6,14 @@
 #include "button_defaults.h"
 #include "display_manager.h"
 #include "icon_store.h"
+#include "json_key_validation.h"
 #include "log_manager.h"
 #include "pad_block.h"
 #include "pad_config.h"
 #include "pad_resolve_request.h"
 #include "pad_validate.h"
 #include "psram_json_allocator.h"
+#include "storage.h"
 #include "web_portal_auth.h"
 #include "web_portal_json.h"
 #if HAS_MQTT
@@ -169,7 +171,8 @@ static void preserve_pad_image_passwords(JsonArray submitted_buttons,
                                         JsonArrayConst existing_buttons) {
     for (JsonObject button : submitted_buttons) {
         const char* submitted_password = button["bg_image_password"] | "";
-        const bool preserve_password = (button["bg_image_password_set"] | false) && submitted_password[0] == '\0';
+        const bool preserve_password = (button["bg_image_password_set"] | false) &&
+            submitted_password[0] == '\0';
         button.remove("bg_image_password_set");
         if (!preserve_password) continue;
 
@@ -191,9 +194,22 @@ static uint8_t* prepare_pad_save_json(uint8_t page, const uint8_t* json, size_t 
     if (deserializeJson(submitted, json, len)) return nullptr;
 
     size_t existing_len = 0;
-    char* existing_json = pad_config_read_raw(page, &existing_len);
+    char path[40];
+    pad_config_path(page, path, sizeof(path));
+    char* existing_json = pad_config_read_raw_mounted(page, &existing_len);
+    if (!existing_json && Storage.exists(path)) {
+        LOGE(TAG, "Pad %u: existing configuration could not be read", page);
+        return nullptr;
+    }
     BasicJsonDocument<PsramJsonAllocator> existing(existing_len * 2 + 512);
-    const bool have_existing = existing_json && !deserializeJson(existing, existing_json, existing_len);
+    const bool have_existing = existing_json &&
+        !deserializeJson(existing, static_cast<const char*>(existing_json), existing_len) &&
+        existing.is<JsonObjectConst>();
+    if (existing_json && !have_existing) {
+        LOGE(TAG, "Pad %u: existing configuration could not be parsed", page);
+        free(existing_json);
+        return nullptr;
+    }
 
     preserve_pad_image_passwords(submitted["buttons"].as<JsonArray>(),
         have_existing ? existing["buttons"].as<JsonArrayConst>() : JsonArrayConst());
@@ -201,12 +217,16 @@ static uint8_t* prepare_pad_save_json(uint8_t page, const uint8_t* json, size_t 
         have_existing ? existing["overlay_buttons"].as<JsonArrayConst>() : JsonArrayConst());
 
     if (existing_json) free(existing_json);
+    if (submitted.overflowed()) return nullptr;
 
     const size_t serialized_len = measureJson(submitted);
     uint8_t* prepared = allocate_pad_json_buffer(serialized_len);
     if (!prepared) return nullptr;
 
-    serializeJson(submitted, prepared, serialized_len + 1);
+    if (serializeJson(submitted, prepared, serialized_len + 1) != serialized_len) {
+        free(prepared);
+        return nullptr;
+    }
     *prepared_len = serialized_len;
     return prepared;
 }
@@ -326,13 +346,24 @@ void handlePostPadConfig(AsyncWebServerRequest *request, uint8_t *data, size_t l
 
     // All data received — validate and save
     g_pad_post.buf[g_pad_post.total] = '\0';
+    if (!json_keys_valid(g_pad_post.buf, g_pad_post.total)) {
+        web_portal_send_json_error(request, 400, "JSON contains an invalid NUL");
+        pad_post_reset();
+        return;
+    }
+    const StorageMutationGuard storage_guard;
+    if (!storage_guard) {
+        web_portal_send_json_error(request, 409, "Device is busy");
+        pad_post_reset();
+        return;
+    }
     const uint32_t save_started_ms = millis();
     LOGI(TAG, "Pad %u save processing started", g_pad_post.page);
 
     size_t prepared_len = 0;
     uint8_t* prepared_json = prepare_pad_save_json(g_pad_post.page, g_pad_post.buf, g_pad_post.total, &prepared_len);
     if (!prepared_json) {
-        web_portal_send_json_error(request, 400, "Invalid JSON");
+        web_portal_send_json_error(request, 400, "Invalid pad JSON or existing pad could not be read");
         pad_post_reset();
         return;
     }

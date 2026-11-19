@@ -28,7 +28,7 @@ struct VoiceConfig {
 
 void voice_config_defaults();
 void voice_config_load(Preferences& prefs);
-void voice_config_save(Preferences& prefs);
+bool voice_config_save(Preferences& prefs);
 void voice_config_snapshot(VoiceConfig* out);
 void voice_config_set_host(const char* host);
 void voice_config_set_deployment(const char* deployment);

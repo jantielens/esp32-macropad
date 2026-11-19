@@ -532,8 +532,8 @@ void setup()
 
 	// Load persisted settings before creating the display. The Inkplate driver
 	// samples its panel mode during initialization and never changes it live.
-	config_manager_init();
-	config_loaded = config_manager_load(&device_config);
+	const bool config_store_ready = config_manager_init();
+	config_loaded = config_store_ready && config_manager_load(&device_config);
 	#if HAS_AUDIO_INPUT
 	if (!audio_input_set_processing({device_config.microphone_gain_db, device_config.microphone_reduce_rumble}))
 		LOGE("Main", "Invalid microphone processing settings");

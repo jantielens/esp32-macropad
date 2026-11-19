@@ -396,7 +396,7 @@ int main(int argc, char**) {
         assert(validate && !validate("0123456789abcdef"));
         assert(validate("0123456789abcdeF") && validate("0123456789abcde"));
     }
-    ActionResolvedArgument invalid_note[] = {{"not-a-note", 0}};
+    ActionResolvedArgument invalid_note[] = {{"not-a-note", 0, 0}};
     assert(load.dispatch(invalid_note, "test", 0) == ACTION_FAILED);
     assert(remove.dispatch(invalid_note, "test", 3000) == ACTION_FAILED && !queued_delete);
     assert(process.dispatch(nullptr, "test", 0) == ACTION_FAILED);
@@ -457,7 +457,7 @@ int main(int argc, char**) {
         assert(binding_template_register("loaded", resolve_loaded_test, nullptr, spec));
         loaded_expect("status", "idle");
         assert(!voice_notes_load_request("invalid"));
-        ActionResolvedArgument note_arg[] = {{saved.last_clip, 0}};
+        ActionResolvedArgument note_arg[] = {{saved.last_clip, 0, 0}};
         assert(load.dispatch(note_arg, "test", 0) == ACTION_COMPLETE);
         loaded_expect("status", "loading");
         finish_loaded();
@@ -475,7 +475,7 @@ int main(int argc, char**) {
         assert(voice_notes_open(saved.last_clip, &reader) == VoiceNoteFileStatus::Ready);
     assert(voice_notes_open(saved.last_clip, &other) == VoiceNoteFileStatus::Busy);
     assert(voice_notes_remove(saved.last_clip) == VoiceNoteFileStatus::Busy);
-    ActionResolvedArgument delete_arg[] = {{saved.last_clip, 0}};
+    ActionResolvedArgument delete_arg[] = {{saved.last_clip, 0, 0}};
     assert(remove.dispatch(delete_arg, "test", 0) == ACTION_FAILED && !queued_delete);
     reject_delete_timeout = true;
     assert(remove.dispatch(delete_arg, "test", 3000) == ACTION_FAILED && !queued_delete);
@@ -1188,7 +1188,7 @@ int main(int argc, char**) {
         }
         char transient_id[17];
         strlcpy(transient_id, pass_ids[0].c_str(), sizeof(transient_id));
-        ActionResolvedArgument transient_arg[] = {{transient_id, 0}};
+        ActionResolvedArgument transient_arg[] = {{transient_id, 0, 0}};
         assert(load.dispatch(transient_arg, "test", 0) == ACTION_COMPLETE);
         finish_loaded();
         loaded_expect("id", transient_id);

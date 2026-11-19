@@ -299,7 +299,7 @@ On mobile, **Return to pad** retains edits; the inspector also has **Save Pad**.
 
 Device-wide defaults save separately. Clearing, importing, pasting, filling,
 and block placement change the draft unless the operation explicitly says it
-writes immediately; recipe installation and device import are separate paths.
+writes immediately; recipe installation is a separate path.
 
 ## Move and resize
 

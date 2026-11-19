@@ -576,9 +576,12 @@ int main() {
     JsonObject actionObject = actionDoc.to<JsonObject>();
     shutdownAction->describe(actionObject);
     CHECK(actionDoc["label"] == "Shutdown" && actionDoc["fields"].size() == 0);
-    ButtonAction shutdown{};
+    CHECK(shutdownAction->operation_count == 1);
+    const ActionOperationDef& shutdown = shutdownAction->operations[0];
+    CHECK(std::string(shutdown.id) == "device.shutdown");
+    CHECK(shutdown.execution == ACTION_EXECUTION_PAUSABLE);
     const auto requestShutdown = [&](uint32_t token) {
-        return shutdownAction->dispatch(shutdown, "test", token);
+        return shutdown.dispatch(nullptr, "test", token);
     };
     outputs.clear();
     CHECK(requestShutdown(0) == ACTION_FAILED);

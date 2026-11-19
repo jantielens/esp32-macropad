@@ -20,10 +20,8 @@
 //     parks — no use-after-free), but a concurrent capture can overwrite them
 //     mid-read. get_shutter_waveform re-checks capture_id to flag a torn
 //     snapshot rather than locking across the bulk copy.
-//   - CONTROL tools build a ButtonAction and defer to the main loop via
-//     mcp_control_dispatch() (exactly like system_command) — session/guide
-//     start-stop dispatch user actions through action_dispatch(), which touches
-//     LVGL and must not run on the web task.
+//   - CONTROL tools defer typed operations to the main loop because session and
+//     guide actions can touch LVGL and must not run on the web task.
 //   - delete_shutter_session and set_shutter_tests are plain Storage/manifest
 //     I/O (no LVGL, no action dispatch) and run inline on the web task, the same
 //     way the existing portal DELETE/PUT handlers do.
@@ -42,8 +40,11 @@
 #include "../shutter_session.h"
 #include "../shutter_test_scripts.h"
 #include "../shutter_payload.h"   // ShutterPayload, ACTION_TYPE_SHUTTER
+#include "control_mapping.h"
 
 #include "action_dispatch.h"
+#include "action_parse.h"
+#include "action_storage.h"
 #include "fs_indexed_store.h"
 #include "storage.h"
 #include "psram_json_allocator.h"
@@ -437,12 +438,11 @@ static bool tool_get_shutter_test(const JsonObject& args, JsonObject& result, St
 // ============================================================================
 // Control tool: shutter_control — deferred ButtonAction dispatch
 // ============================================================================
-// One consolidated tool mapping 1:1 onto the shutter ButtonAction command set
-// (see shutter_actions.cpp dispatch ladder). The exec builds a ButtonAction and
-// runs action_dispatch() on the main loop so binding/LVGL/session work is safe.
+// The command interface dispatches the corresponding typed operation on the
+// main loop so binding, LVGL, and session work remain on the owning task.
 
 struct ShutterCtrlCtx {
-    char command[CONFIG_TIMER_CMD_MAX_LEN];
+    char command[sizeof("sess_discard")];
     char value[CONFIG_BINDABLE_SHORT_LEN];
 };
 
@@ -460,15 +460,29 @@ static bool shutter_command_known(const char* cmd) {
 
 static void exec_shutter_control(const void* ctx, bool* ok, char* msg, size_t msg_len) {
     const ShutterCtrlCtx* c = (const ShutterCtrlCtx*)ctx;
-    ButtonAction act;
-    memset(&act, 0, sizeof(act));
-    strlcpy(act.type, ACTION_TYPE_SHUTTER, sizeof(act.type));
-    ShutterPayload& p = shutter_payload(act);
-    strlcpy(p.command, c->command, sizeof(p.command));
-    strlcpy(p.value, c->value, sizeof(p.value));
-    action_dispatch(act, "MCP");
-    *ok = true;
-    snprintf(msg, msg_len, "dispatched %s", c->command);
+    const ShutterControlMapping* selected = shutter_control_mapping(c->command);
+    if (!selected) {
+        *ok = false;
+        snprintf(msg, msg_len, "unknown shutter command");
+        return;
+    }
+    auto doc = make_psram_json_doc(512);
+    if (!doc || doc->capacity() == 0) {
+        *ok = false;
+        snprintf(msg, msg_len, "cannot allocate control request");
+        return;
+    }
+    shutter_control_request(doc->to<JsonObject>(), *selected, c->value);
+    ActionStorage storage = {};
+    ButtonAction act = {};
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(doc->as<JsonObject>(), act);
+    }
+    *ok = !doc->overflowed() && !storage.failed && act.type[0] == '@' &&
+          action_dispatch(act, "MCP") == ACTION_COMPLETE;
+    action_storage_clear(storage);
+    snprintf(msg, msg_len, *ok ? "dispatched %s" : "failed to dispatch %s", c->command);
 }
 
 static bool tool_shutter_control(const JsonObject& args, JsonObject& result, String& err) {
@@ -478,10 +492,7 @@ static bool tool_shutter_control(const JsonObject& args, JsonObject& result, Str
 
     const char* value = args["value"] | "";
 
-    // Per-command value validation. action_dispatch() runs on the main loop and
-    // cannot report command-level failure back, so a bad speed/direction/test-id
-    // would otherwise return a misleading "dispatched" with nothing happening.
-    // Validate the checkable cases up front (all read-only and thread-safe).
+    // Validate checkable values before scheduling work on the main loop.
     if (strcmp(cmd, "set") == 0) {
         if (!value[0]) return sh_fail(result, err, SH_ERR_PARAMS, "set requires value (a shutter speed, e.g. '1/125' or '1')");
         if (!shutter_measure_is_valid_speed(value)) return sh_fail(result, err, SH_ERR_PARAMS, "unknown shutter speed; use a standard speed like '1/125' or '1'");
@@ -491,15 +502,16 @@ static bool tool_shutter_control(const JsonObject& args, JsonObject& result, Str
     } else if (strcmp(cmd, "guide_start") == 0) {
         if (!value[0]) return sh_fail(result, err, SH_ERR_PARAMS, "guide_start requires value (a test id from list_shutter_tests)");
         ShutterTestParseResult* pr = sh_tests_alloc_parse(nullptr);
-        if (pr) {
-            bool found = shutter_test_scripts_find(pr, value) != nullptr;
-            heap_caps_free(pr);
-            if (!found) return sh_fail(result, err, SH_ERR_PARAMS, "test id not found; see list_shutter_tests");
-        }
+        if (!pr) return sh_fail(result, err, SH_ERR_INTERNAL, "out of memory");
+        bool found = shutter_test_scripts_find(pr, value) != nullptr;
+        heap_caps_free(pr);
+        if (!found) return sh_fail(result, err, SH_ERR_PARAMS, "test id not found; see list_shutter_tests");
     }
 
     ShutterCtrlCtx ctx;
     memset(&ctx, 0, sizeof(ctx));
+    if (strlen(cmd) >= sizeof(ctx.command) || strlen(value) >= sizeof(ctx.value))
+        return sh_fail(result, err, SH_ERR_PARAMS, "control argument is too long");
     strlcpy(ctx.command, cmd, sizeof(ctx.command));
     strlcpy(ctx.value, value, sizeof(ctx.value));
 

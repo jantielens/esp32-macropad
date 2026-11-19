@@ -32,6 +32,7 @@ PRELUDE = r'''
 #include "binding_value.h"
 #include "mqtt_sub_store.h"
 #include "psram_json_allocator.h"
+#include "json_key_validation.h"
 #include "LittleFS.h"
 #define Storage LittleFS
 #include "storage.h"
@@ -55,6 +56,10 @@ void* config_psram_alloc(size_t size, const char*) {
 static unsigned rebuilds = 0;
 void pad_config_rebuild_all_caches() { ++rebuilds; }
 void storage_publish_usage(bool) {}
+bool storage_write_atomic(const char* path, const uint8_t* data, size_t length) {
+    storage_test_files[path] = std::string(reinterpret_cast<const char*>(data), length);
+    return true;
+}
 bool binding_template_register(const char*, binding_resolver_fn, binding_topic_collector_fn,
                               const BindingSchemeSpec&) { return true; }
 template <typename Value> Value constrain(Value value, Value low, Value high) {

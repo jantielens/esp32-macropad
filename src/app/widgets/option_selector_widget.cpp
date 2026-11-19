@@ -5,8 +5,6 @@
 #include "option_selector_config.h"
 #include "widget_value.h"
 #include "../action_list.h"
-#include "../action_registry.h"
-#include "../action_validate.h"
 #include "../device_dialog.h"
 #include "../event_binding.h"
 #include "../icon_store.h"
@@ -62,34 +60,6 @@ const char* validate(JsonObjectConst button) {
     if (button.containsKey("lp_actions") &&
         (!button["lp_actions"].is<JsonArrayConst>() || button["lp_actions"].size()))
         return "option selector does not support long-press actions";
-    return nullptr;
-}
-
-const char* validate_actions(JsonObjectConst button, JsonArrayConst actions) {
-    bool any_option = false;
-    for (unsigned index = 0; index < OPTION_SELECTOR_SLOTS; ++index) {
-        char field[40];
-        if (index == 0) snprintf(field, sizeof(field), "widget_option_label");
-        else snprintf(field, sizeof(field), "widget_option_label_%u", index + 1);
-        const char* label = button[field] | "";
-        if (index == 0) snprintf(field, sizeof(field), "widget_option_icon");
-        else snprintf(field, sizeof(field), "widget_option_icon_%u", index + 1);
-        if (!label[0] && button[field].isNull()) continue;
-        any_option = true;
-        if (index == 0) snprintf(field, sizeof(field), "widget_option_value");
-        else snprintf(field, sizeof(field), "widget_option_value_%u", index + 1);
-        const char* value = button[field] | "";
-        for (JsonObjectConst action : actions) {
-            const char* error = action_validate_json(action, true, "{value}", value);
-            if (error) return error;
-        }
-    }
-    if (!any_option) {
-        for (JsonObjectConst action : actions) {
-            const char* error = action_validate_json(action, true, "{value}", "value");
-            if (error) return error;
-        }
-    }
     return nullptr;
 }
 
@@ -269,15 +239,8 @@ void activate(State* state, uint8_t index) {
     const auto mode = state->config->mode;
     if (mode == OptionSelectorMode::Bound && (state->selected == index || !state->action_count)) return;
     ButtonAction actions[MAX_BUTTON_ACTIONS];
-    for (uint8_t action = 0; action < state->action_count; ++action) {
+    for (uint8_t action = 0; action < state->action_count; ++action)
         actions[action] = state->actions[action];
-        if (actions[action].type[0] != '@' &&
-            !action_type_substitute_token(action_type_find(actions[action].type), actions[action],
-                                          "{value}", state->config->slots[index].value)) {
-            device_dialog_notify("Option action is too long", 3000);
-            return;
-        }
-    }
     const bool local_change = mode == OptionSelectorMode::Local && state->selected != index;
     if (mode == OptionSelectorMode::Local) state->selected = index;
     if (mode == OptionSelectorMode::Bound) {
@@ -511,7 +474,7 @@ static const WidgetType option_selector_widget_type{
     option_selector_widget_impl::show, option_selector_widget_impl::hide, option_selector_widget_impl::validate,
     &option_selector_widget_impl::preview, option_selector_widget_impl::cancel_input, option_selector_parse_config,
     option_selector_retain_config, option_selector_release_config, option_selector_visit_resources,
-    option_selector_widget_impl::validate_actions
+    nullptr, nullptr, false
 };
 static struct OptionSelectorRegistration {
     OptionSelectorRegistration() { widget_register(&option_selector_widget_type); }

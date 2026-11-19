@@ -315,29 +315,27 @@ TEST(PowerManager, OfflinePreservesProvisioningAndForcedRecovery) {
     EXPECT_STREQ(config.operating_mode, "offline");
 }
 
-TEST(SystemAction, NetworkAdmissionDoesNotClaimSuccessOnRejection) {
-    ButtonAction action = {};
-    std::strcpy(action.payload.system.system_command, "wifi_connect");
-    network_command_allowed = false;
-    EXPECT_EQ(system_action->dispatch(action, "test", 0), ACTION_FAILED);
-    EXPECT_EQ(last_network_command, WifiNetworkCommand::Connect);
-    network_command_allowed = true;
-    EXPECT_EQ(system_action->dispatch(action, "test", 0), ACTION_COMPLETE);
+static const ActionOperationDef* system_operation(const char* id) {
+    if (!system_action) return nullptr;
+    for (uint8_t i = 0; i < system_action->operation_count; ++i)
+        if (std::strcmp(system_action->operations[i].id, id) == 0)
+            return &system_action->operations[i];
+    return nullptr;
 }
 
 TEST(SystemAction, StationSetterRequestsExplicitCommandsAndPropagatesRejection) {
-    ASSERT_EQ(system_action->operation_count, 1);
-    const ActionOperationDef& operation = system_action->operations[0];
+    const ActionOperationDef* operation = system_operation("wifi.station.set_enabled");
+    ASSERT_NE(operation, nullptr);
     ActionResolvedArgument argument = {};
     network_command_allowed = true;
     argument.integer = 1;
-    EXPECT_EQ(operation.dispatch(&argument, "test", 0), ACTION_COMPLETE);
+    EXPECT_EQ(operation->dispatch(&argument, "test", 0), ACTION_COMPLETE);
     EXPECT_EQ(last_network_command, WifiNetworkCommand::Connect);
     argument.integer = 0;
-    EXPECT_EQ(operation.dispatch(&argument, "test", 0), ACTION_COMPLETE);
+    EXPECT_EQ(operation->dispatch(&argument, "test", 0), ACTION_COMPLETE);
     EXPECT_EQ(last_network_command, WifiNetworkCommand::Disconnect);
     network_command_allowed = false;
-    EXPECT_EQ(operation.dispatch(&argument, "test", 0), ACTION_FAILED);
+    EXPECT_EQ(operation->dispatch(&argument, "test", 0), ACTION_FAILED);
     network_command_allowed = true;
 }
 
@@ -359,11 +357,10 @@ TEST(DeviceClass, SetupRegistrationAndNormalRuntimeAreSeparate) {
 }
 
 TEST(SystemAction, SetupApRestartRunsOnlyInQueuedJob) {
-    ASSERT_NE(system_action, nullptr);
-    ButtonAction action = {};
-    std::strcpy(action.payload.system.system_command, "reboot_ap");
+    const ActionOperationDef* operation = system_operation("device.restart_setup_ap");
+    ASSERT_NE(operation, nullptr);
     test_power_preferences["req_ap"] = false;
-    ASSERT_EQ(system_action->dispatch(action, "test", 0), ACTION_COMPLETE);
+    ASSERT_EQ(operation->dispatch(nullptr, "test", 0), ACTION_COMPLETE);
     EXPECT_FALSE(test_power_preferences["req_ap"]);
     EXPECT_EQ(reboot_requests, 0U);
     ASSERT_NE(queued_job, nullptr);
@@ -378,11 +375,11 @@ TEST(SystemAction, SetupApRestartRunsOnlyInQueuedJob) {
     ota_activity_finish_network_transition();
 
     enqueue_result = LOOP_BRIDGE_BUSY;
-    EXPECT_EQ(system_action->dispatch(action, "test", 0), ACTION_FAILED);
+    EXPECT_EQ(operation->dispatch(nullptr, "test", 0), ACTION_FAILED);
     enqueue_result = LOOP_BRIDGE_OK;
 
     ASSERT_TRUE(ota_activity_try_begin());
-    ASSERT_EQ(system_action->dispatch(action, "test", 0), ACTION_COMPLETE);
+    ASSERT_EQ(operation->dispatch(nullptr, "test", 0), ACTION_COMPLETE);
     ok = true;
     queued_job(nullptr, &ok, nullptr, 0);
     EXPECT_FALSE(ok);

@@ -281,19 +281,24 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		#if HAS_DISPLAY || HAS_BUTTON
 				if (request->hasParam("catalog")) {
 						auto catalog_doc = make_psram_json_doc(6144);
+						if (!catalog_doc || !catalog_doc->capacity()) {
+								delete response;
+								web_portal_send_json_error(request, 503, "Action catalog unavailable", &timing);
+								return;
+						}
+						JsonArray actions = catalog_doc->to<JsonArray>();
+						action_catalog_emit(actions);
+						timing.mark("actions_build");
+						if (catalog_doc->overflowed()) {
+								delete response;
+								web_portal_send_json_error(request, 503, "Action catalog unavailable", &timing);
+								return;
+						}
 						response->print(",\"catalog\":");
-						if (catalog_doc && catalog_doc->capacity() > 0) {
-								JsonArray actions = catalog_doc->to<JsonArray>();
-								action_catalog_emit(actions, false);
-								timing.mark("actions_build");
-								if (!write_json_buffered(actions, *response)) {
-										delete response;
-										web_portal_send_json_error(request, 503, "Action catalog unavailable", &timing);
-										return;
-								}
-						} else {
-								timing.mark("actions_build");
-								response->print("[]");
+						if (!write_json_buffered(actions, *response)) {
+								delete response;
+								web_portal_send_json_error(request, 503, "Action catalog unavailable", &timing);
+								return;
 						}
 						timing.mark("actions_json");
 				}

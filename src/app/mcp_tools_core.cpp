@@ -331,11 +331,6 @@ static void press_dispatch_observed(const ButtonAction* actions, uint8_t count,
                                   false, cfg->bindings, cfg->binding_count, observer);
 }
 
-static void press_dispatch_action(const ButtonAction& action, void* context) {
-    (void)context;
-    action_dispatch(action, "MCP");
-}
-
 static void press_set_action(uint32_t execution_id, uint8_t result_index,
                              uint8_t action_index,
                              const HaServicePayload& payload, void* context) {
@@ -363,7 +358,6 @@ static void press_record(const HaServiceResult& result, void* context) {
 static const McpPressDispatchOps PRESS_DISPATCH_OPS = {
     press_reserve,
     press_dispatch_list,
-    press_dispatch_action,
     press_set_action,
     press_enqueue,
     press_record,
@@ -419,7 +413,7 @@ static void exec_press_button(const void* ctx, bool* ok, char* msg, size_t msg_l
     }
     if (dispatch == MCP_PRESS_DISPATCH_INVALID) {
         pad_config_release(cfg);
-        strlcpy(msg, "invalid button action count", msg_len);
+        strlcpy(msg, "invalid or incompatible button actions", msg_len);
         return;
     }
     screen_saver_manager_notify_activity(true);

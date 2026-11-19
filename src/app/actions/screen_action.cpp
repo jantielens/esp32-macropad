@@ -26,24 +26,8 @@ ActionResult dispatch_open_screen(const ActionResolvedArgument* arguments, const
 const ActionOperationDef kScreenOperations[] = {
     {"screen.open", "Navigate to screen", kOpenScreenArguments, 1, dispatch_open_screen},
 };
-void parse_screen(const JsonObject& action, ButtonAction& act) { strlcpy(act.payload.screen.screen_id, action["target"] | "", sizeof(act.payload.screen.screen_id)); }
-void serialize_screen(const ButtonAction& act, JsonObject action) { if (act.payload.screen.screen_id[0]) action["target"] = act.payload.screen.screen_id; }
-ActionResult dispatch_screen(const ButtonAction& act, const char* label, uint32_t) {
-#if defined(ARDUINO) && HAS_DISPLAY
-    if (act.payload.screen.screen_id[0]) { bool ok = false; display_manager_show_screen(act.payload.screen.screen_id, &ok, true); if (!ok) LOGW(kScreenActionTag, "%s nav failed: '%s'", label, act.payload.screen.screen_id); }
-#else
-    (void)act;
-    LOGW(kScreenActionTag, "%s screen: no display", label);
-#endif
-    return ACTION_COMPLETE;
-}
-bool visit_screen_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {
-    return action_visit_field(visitor, context, "target", act.payload.screen.screen_id);
-}
 bool screen_available() { return HAS_DISPLAY; }
-const char* validate_screen(const JsonObjectConst action) { return action.containsKey("target") && !action["target"].is<const char*>() ? "screen target must be a string" : nullptr; }
-void describe_screen(JsonObject& action) { action["group"] = "Navigation"; action["label"] = "Navigate to screen"; JsonArray fields = action.createNestedArray("fields"); JsonObject target = fields.createNestedObject(); target["name"] = "target"; target["description"] = "screen id to navigate to"; }
-DEFINE_AND_REGISTER_ACTION_TYPE(kScreenActionType, ACTION_TYPE_SCREEN, parse_screen, serialize_screen, dispatch_screen, visit_screen_fields, describe_screen, screen_available, validate_screen, ACTION_EXECUTION_SYNC, true, true, false,
-    [](const ButtonAction&) { return true; }, kScreenOperations, 1);
+void describe_screen(JsonObject& action) { action["group"] = "Navigation"; action["label"] = "Navigate to screen"; }
+DEFINE_AND_REGISTER_ACTION_TYPE(kScreenActionType, ACTION_TYPE_SCREEN, describe_screen, screen_available, ACTION_EXECUTION_SYNC, true, false, kScreenOperations, 1);
 } // namespace
 #endif // HAS_DISPLAY || HAS_BUTTON

@@ -8,6 +8,7 @@
 #include "action_storage.h"
 #include "action_validate.h"
 #include "config_psram.h"
+#include "json_key_validation.h"
 #include "log_manager.h"
 #include "mqtt_manager.h"
 #include "psram_json_allocator.h"
@@ -32,6 +33,7 @@ static_assert(MAX_MQTT_TRIGGERS <= 32, "MAX_MQTT_TRIGGERS must be <= 32 (pending
 // (feature then degrades to a no-op).
 static MqttTriggerConfig* g_triggers = nullptr;
 static ActionStorage g_action_storage = {};
+static bool g_config_valid = false;
 struct MqttTriggerStorage {
     MqttTriggerConfig triggers[MAX_MQTT_TRIGGERS];
     char registered_topics[MAX_MQTT_TRIGGERS][CONFIG_MQTT_TOPIC_MAX_LEN];
@@ -73,7 +75,11 @@ static uint32_t g_generation = 0;
 // ---------------------------------------------------------------------------
 static bool parse_config(JsonDocument& doc, MqttTriggerConfig* configs,
                          ActionStorage& storage, bool validate_bindings) {
-    if (!doc.is<JsonObject>() || !doc["triggers"].is<JsonArray>()) return false;
+    if (!doc.is<JsonObject>() || !doc["action_format_version"].is<int>() ||
+        doc["action_format_version"].as<int>() != 1 || !doc["triggers"].is<JsonArray>()) {
+        LOGW(TAG, "Incompatible MQTT triggers document; recreate it");
+        return false;
+    }
     JsonArray triggers = doc["triggers"].as<JsonArray>();
     if (triggers.size() > MAX_MQTT_TRIGGERS) return false;
     ActionStorageScope scope(&storage);
@@ -96,24 +102,15 @@ static bool parse_config(JsonDocument& doc, MqttTriggerConfig* configs,
         for (JsonVariant item : actions) {
             if (!item.is<JsonObject>()) return false;
             JsonObject action = item.as<JsonObject>();
-            const char* type = action["type"] | "";
-            if (action.containsKey("type") &&
-                (action.containsKey("args") ||
-                 (action.containsKey("op") && strcmp(type, ACTION_TYPE_VISUAL_ALERT)))) {
-                LOGW(TAG, "Invalid trigger action: mixed action envelope");
-                return false;
-            }
             const char* error = validate_bindings ? action_validate_json(action)
-                : (!action.containsKey("type") && action.containsKey("op")
-                    ? action_operation_validate_json(action, false)
-                    : (!action["type"].is<const char*>() ? "missing action type" : nullptr));
-            if (!error && type[0] && strcmp(type, "none") && !action_type_is_supported(type))
-                error = "action unavailable";
+                                                  : action_operation_validate_json(action, false);
+            const char* operation = action["op"] | "";
+            if (!error && (action.containsKey("type") || !operation[0]))
+                error = "legacy action is not supported";
             if (error) {
                 LOGW(TAG, "Invalid trigger action: %s", error);
                 return false;
             }
-            if (!strcmp(type, "none")) continue;
             ButtonAction& parsed = configs[i].actions[configs[i].action_count];
             action_parse(action, parsed);
             if (storage.failed || !parsed.type[0]) return false;
@@ -130,6 +127,7 @@ static bool load_from_flash() {
     const size_t size = f.size();
     BasicJsonDocument<PsramJsonAllocator> doc(MQTT_TRIGGERS_JSON_CAP);
     const bool valid = size && size <= MQTT_TRIGGERS_JSON_CAP &&
+                       json_stream_scan_keys(f) == JsonKeyScanResult::Valid &&
                        !deserializeJson(doc, f) && !doc.overflowed();
     f.close();
     if (!valid) return false;
@@ -143,6 +141,7 @@ static bool load_from_flash() {
         action_storage_clear(g_action_storage);
         memcpy(g_triggers, replacement, MAX_MQTT_TRIGGERS * sizeof(MqttTriggerConfig));
         action_storage_move(g_action_storage, storage);
+        g_config_valid = true;
         portENTER_CRITICAL(&g_mux);
         g_pending_mask = 0;
         ++g_generation;
@@ -171,12 +170,22 @@ void mqtt_triggers_init() {
         g_triggers = storage->triggers;
     }
     storage_mount();  // idempotent — ensures FS is mounted on headless boards too
-    load_from_flash();
+    if (!Storage.exists(MQTT_TRIGGERS_PATH)) {
+        triggers_lock();
+        g_config_valid = true;
+        triggers_unlock();
+    } else if (!load_from_flash()) {
+        LOGW(TAG, "MQTT triggers unavailable or incompatible");
+    }
 }
 
 bool mqtt_triggers_to_json(JsonArray triggers) {
     if (!g_triggers || !g_lock || triggers.isNull()) return false;
     triggers_lock();
+    if (!g_config_valid) {
+        triggers_unlock();
+        return false;
+    }
     for (uint8_t i = 0; i < MAX_MQTT_TRIGGERS; ++i) {
         const MqttTriggerConfig& cfg = g_triggers[i];
         if (!cfg.topic[0]) continue;
@@ -193,6 +202,10 @@ bool mqtt_triggers_to_json(JsonArray triggers) {
 
 bool mqtt_triggers_save_raw(const uint8_t* json, size_t len) {
     if (!g_triggers || !g_lock || !json || !len || len > MQTT_TRIGGERS_JSON_CAP) return false;
+    if (!json_keys_valid(json, len)) {
+        LOGW(TAG, "MQTT triggers JSON contains an invalid NUL");
+        return false;
+    }
     BasicJsonDocument<PsramJsonAllocator> doc(MQTT_TRIGGERS_JSON_CAP);
     if (deserializeJson(doc, json, len) || doc.overflowed()) return false;
     auto* replacement = static_cast<MqttTriggerConfig*>(
@@ -210,6 +223,7 @@ bool mqtt_triggers_save_raw(const uint8_t* json, size_t len) {
         action_storage_clear(g_action_storage);
         memcpy(g_triggers, replacement, MAX_MQTT_TRIGGERS * sizeof(MqttTriggerConfig));
         action_storage_move(g_action_storage, storage);
+        g_config_valid = true;
         portENTER_CRITICAL(&g_mux);
         g_pending_mask = 0;
         ++g_generation;

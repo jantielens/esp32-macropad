@@ -159,16 +159,10 @@ function padDialogOpen(col, row) {
     }
 
     // Tap actions (array of up to 3)
-    var tapActions = btn.actions || [];
-    // Legacy single-action fallback
-    if (!tapActions.length && btn.action && btn.action.type) tapActions = [btn.action];
-    actionEditorListLoad(padActionPrefixes('tap'), tapActions);
+    actionEditorListLoad(padActionPrefixes('tap'), btn.actions || []);
 
     // Long-press actions (array of up to 3)
-    var lpActions = btn.lp_actions || [];
-    // Legacy single-action fallback
-    if (!lpActions.length && btn.lp_action && btn.lp_action.type) lpActions = [btn.lp_action];
-    actionEditorListLoad(padActionPrefixes('lp'), lpActions);
+    actionEditorListLoad(padActionPrefixes('lp'), btn.lp_actions || []);
 
     document.getElementById('pad-edit-confirm').checked = !!btn.confirm && !btn.widget_type;
     document.getElementById('pad-edit-confirm-text').value = btn.confirm_text || '';

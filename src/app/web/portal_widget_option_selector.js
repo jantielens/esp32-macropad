@@ -39,11 +39,6 @@
     function fail(slot, name, message) {
         throw Object.assign(new Error('Option ' + slot + ': ' + message), { fieldIds: [id(slot, name)] });
     }
-    function values() {
-        return Array.from({ length: 5 }, (_, index) => index + 1)
-            .filter(slot => input(slot, 'label').value.trim() || input(slot, 'icon').value)
-            .map(slot => input(slot, 'value').value.trim());
-    }
     function syncMode() {
         document.getElementById(prefix + 'source-group').hidden =
             document.getElementById(prefix + 'mode').value !== 'bound' &&
@@ -80,7 +75,7 @@
         actions: {
             tap: true, longPress: false,
             labels: () => ['Option action', 'Long-press action'],
-            buildTap: () => actionEditorListBuild(padActionPrefixes('tap'), '{value}', values())
+            buildTap: () => actionEditorListBuild(padActionPrefixes('tap'))
         },
         init() {
             const container = document.getElementById('pad-edit-option-slots');

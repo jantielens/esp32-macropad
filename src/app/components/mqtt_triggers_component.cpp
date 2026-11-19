@@ -13,11 +13,12 @@
 #include <ArduinoJson.h>
 static void mqtt_triggers_get_config(AsyncWebServerRequest *request) {
     auto doc = make_psram_json_doc(MQTT_TRIGGERS_JSON_CAP);
+    (*doc)["action_format_version"] = 1;
     (*doc)["max"] = MAX_MQTT_TRIGGERS;
     JsonArray triggers = doc->createNestedArray("triggers");
 
     if (!mqtt_triggers_to_json(triggers) || doc->overflowed()) {
-        web_portal_send_json_error(request, 500, "Could not read triggers");
+        web_portal_send_json_error(request, 409, "MQTT triggers unavailable or incompatible; recreate the document");
         return;
     }
 

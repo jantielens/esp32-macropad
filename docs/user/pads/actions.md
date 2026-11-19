@@ -8,11 +8,12 @@ They can change a screen, send a command, adjust a feature, or show feedback,
 and several actions can form an ordered sequence.
 
 > [!WARNING]
-> The experimental action-format build accepts screen navigation, timer
-> commands, brightness, volume, music, camera capture, variables, **Delay**, and
-> Wi-Fi commands in pad actions when supported. Existing unversioned pad actions
-> cannot run or be saved in this build. Back up your pads before testing.
-> Boot actions also support these operations; other hosts use the existing format.
+> Action configuration uses the versioned operation format. Older actions
+> cannot run or be saved in this format and are not converted automatically.
+> Back up your configuration and recreate affected actions using the operation
+> picker. If the pad cannot load, see
+> [pad replacement guidance](../device/backup-and-restore.md#export-and-restore-one-pad).
+> Available operations depend on the installed firmware.
 
 ## Configure one interaction
 
@@ -54,9 +55,6 @@ unchanged, and stops the remaining actions in that list. See
 
 ## Pause and confirm safely
 
-Confirmation is not available in pad actions in the experimental build.
-Other action hosts retain their existing behavior.
-
 Delay accepts a literal whole number, 1-55000 ms, and pauses only that list.
 Send keys, gamepad taps, recording-until-silence, and confirmation also have
 their own completion/failure behavior. Pending-action capacity is bounded;
@@ -86,12 +84,11 @@ Successful Navigate to screen/back/pad sequence wakes the display and resets
 inactivity without disabling the screensaver. Failed navigation does not wake it.
 Automated repeated navigation can keep it awake.
 
-**Navigate pad sequence** is not available in pad actions in the experimental
-build. In other action hosts it visits saved, nonempty effective pads in numeric order.
+**Navigate pad sequence** visits saved, nonempty effective pads in numeric order.
 Inherited, disabled, or dynamically hidden buttons count; a local full-screen
 tap action also makes a pad eligible. Choose Next/Previous, optional Wrap, and
 comma-separated 1-based exclusions such as `2,5,8`.
-Empty pads are skipped; without Wrap, a boundary is a no-op.
+Empty pads are skipped; the action fails if no destination is available.
 
 ## Use full-screen tap actions
 
@@ -107,7 +104,7 @@ check both layers before investigating an unreachable control.
 
 ## Restart into setup AP
 
-The **Device command** action includes **Restart into setup AP**. It restarts
+The **Restart into AP** action restarts
 the device into its setup network without clearing saved Wi-Fi settings or the
 AP password. The active button action ends when the device restarts. If the
 device is already in setup mode, use its displayed credentials and portal URL.

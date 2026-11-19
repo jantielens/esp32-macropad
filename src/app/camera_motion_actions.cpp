@@ -9,6 +9,7 @@
 #include "action_storage.h"
 #include "action_validate.h"
 #include "config_psram.h"
+#include "json_key_validation.h"
 #include "log_manager.h"
 #include "main_loop_bridge.h"
 #include "psram_json_allocator.h"
@@ -27,6 +28,7 @@ constexpr uint32_t kSaveTimeoutMs = 5000;
 CameraMotionActionsConfig* s_config = nullptr;
 ActionStorage s_storage = {};
 SemaphoreHandle_t s_lock = nullptr;
+bool s_config_valid = false;
 
 struct SaveRequest {
     const uint8_t* json;
@@ -50,20 +52,15 @@ bool parse_actions(JsonArray actions, CameraMotionActionsConfig& config,
             return false;
         }
         JsonObject action = value.as<JsonObject>();
-        const char* type = action["type"] | "";
         const char* error = validate_bindings ? action_validate_json(action)
-            : (!action.containsKey("type") && action.containsKey("op")
-                ? action_operation_validate_json(action, false)
-                : (!action["type"].is<const char*>() || action.containsKey("args") ||
-                   (action.containsKey("op") && strcmp(type, ACTION_TYPE_VISUAL_ALERT))
-                    ? "invalid action envelope" : nullptr));
-        if (!error && type[0] && strcmp(type, "none") && !action_type_is_supported(type))
-            error = "action is unavailable on this board";
+                                              : action_operation_validate_json(action, false);
+        const char* operation = action["op"] | "";
+        if (!error && (action.containsKey("type") || !operation[0]))
+            error = "legacy action is not supported";
         if (error) {
             LOGW("Camera", "Invalid motion action: %s", error);
             return false;
         }
-        if (!strcmp(type, "none")) continue;
         action_parse(action, config.actions[config.action_count]);
         if (storage.failed || !config.actions[config.action_count].type[0]) {
             LOGW("Camera", "Cannot parse motion action");
@@ -77,7 +74,7 @@ bool parse_actions(JsonArray actions, CameraMotionActionsConfig& config,
 bool load_from_storage() {
     if (!s_config) return false;
     apply_defaults(s_config);
-    if (!Storage.exists(kConfigPath)) return false;
+    if (!Storage.exists(kConfigPath)) return true;
 
     File file = Storage.open(kConfigPath, "r");
     if (!file) {
@@ -89,11 +86,20 @@ bool load_from_storage() {
         LOGW("Camera", "Invalid motion actions size");
         return false;
     }
+    if (json_stream_scan_keys(file) != JsonKeyScanResult::Valid) {
+        LOGW("Camera", "Motion actions contain an invalid JSON NUL or could not be read");
+        file.close();
+        return false;
+    }
     BasicJsonDocument<PsramJsonAllocator> doc(kJsonCapacity);
     const DeserializationError error = deserializeJson(doc, file);
     file.close();
     if (error || doc.overflowed()) {
         LOGW("Camera", "Motion actions JSON parse error: %s", error.c_str());
+        return false;
+    }
+    if (!doc["action_format_version"].is<int>() || doc["action_format_version"].as<int>() != 1) {
+        LOGW("Camera", "Incompatible motion actions document; recreate it");
         return false;
     }
     ActionStorage storage = {};
@@ -109,9 +115,14 @@ bool load_from_storage() {
 
 bool save_raw_on_main(const uint8_t* json, size_t len) {
     if (!json || !len || len > kJsonCapacity || !s_lock || !s_config) return false;
+    if (!json_keys_valid(json, len)) {
+        LOGW("Camera", "Motion actions JSON contains an invalid NUL");
+        return false;
+    }
     BasicJsonDocument<PsramJsonAllocator> doc(kJsonCapacity);
     const DeserializationError error = deserializeJson(doc, json, len);
-    if (error || doc.overflowed()) {
+    if (error || doc.overflowed() || !doc["action_format_version"].is<int>() ||
+        doc["action_format_version"].as<int>() != 1) {
         LOGW("Camera", "Invalid motion actions JSON: %s", error.c_str());
         return false;
     }
@@ -135,6 +146,7 @@ bool save_raw_on_main(const uint8_t* json, size_t len) {
         action_storage_clear(s_storage);
         *s_config = *replacement;
         action_storage_move(s_storage, storage);
+        s_config_valid = true;
     }
     xSemaphoreGive(s_lock);
     action_storage_clear(storage);
@@ -177,7 +189,7 @@ void camera_motion_actions_init() {
     }
     storage_mount();
     xSemaphoreTake(s_lock, portMAX_DELAY);
-    load_from_storage();
+    s_config_valid = load_from_storage();
     xSemaphoreGive(s_lock);
 }
 
@@ -189,6 +201,11 @@ void camera_motion_actions_on_presence_started() {
     ActionStorage storage = {};
     if (xSemaphoreTake(s_lock, portMAX_DELAY) != pdTRUE) {
         LOGE("Camera", "Failed to lock motion actions for dispatch");
+        free(snapshot);
+        return;
+    }
+    if (!s_config_valid) {
+        xSemaphoreGive(s_lock);
         free(snapshot);
         return;
     }
@@ -209,6 +226,10 @@ bool camera_motion_actions_to_json(JsonArray actions) {
     if (!s_config || !s_lock || actions.isNull()) return false;
     if (xSemaphoreTake(s_lock, portMAX_DELAY) != pdTRUE) {
         LOGE("Camera", "Failed to lock motion actions for serialization");
+        return false;
+    }
+    if (!s_config_valid) {
+        xSemaphoreGive(s_lock);
         return false;
     }
     const uint8_t count = s_config->action_count > MAX_BUTTON_ACTIONS

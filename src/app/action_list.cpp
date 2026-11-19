@@ -29,16 +29,15 @@ bool action_list_has_audio(const ButtonAction* actions, uint8_t count) {
     if (!actions) return false;
     for (uint8_t index = 0; index < count; ++index) {
         const ActionTypeDef* owner = nullptr;
-        if (actions[index].type[0] == '@') action_operation_for_action(actions[index], &owner);
-        const char* type = owner ? owner->type_name : actions[index].type;
+        action_operation_for_action(actions[index], &owner);
+        const char* type = owner ? owner->type_name : "";
         if (!strcmp(type, ACTION_TYPE_SOUND_ALERT) || !strcmp(type, ACTION_TYPE_ALARM_TONE) ||
             !strcmp(type, ACTION_TYPE_ALARM_MP3)) return true;
     }
     return false;
 }
 
-uint8_t action_list_parse(JsonVariant v, ButtonAction* out, uint8_t max,
-                          bool filter_literal_none) {
+uint8_t action_list_parse(JsonVariant v, ButtonAction* out, uint8_t max) {
     if (!out || max == 0) return 0;
     memset(out, 0, sizeof(ButtonAction) * max);
     if (!v.is<JsonArray>()) return 0;
@@ -47,8 +46,7 @@ uint8_t action_list_parse(JsonVariant v, ButtonAction* out, uint8_t max,
     for (size_t i = 0; i < arr.size() && count < max; i++) {
         if (!arr[i].is<JsonObject>()) continue;
         action_parse(arr[i].as<JsonObject>(), out[count]);
-        if (out[count].type[0] &&
-            (!filter_literal_none || strcmp(out[count].type, "none") != 0)) {
+        if (out[count].type[0]) {
             count++;
         } else {
             memset(&out[count], 0, sizeof(ButtonAction));

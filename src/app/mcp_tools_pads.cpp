@@ -35,6 +35,7 @@
 #include "display_manager.h"
 #include "pad_validate.h"
 #include "pad_resolve_request.h"
+#include "json_key_validation.h"
 #include "psram_json_allocator.h"
 #include "widgets/widget.h"
 #include "binding_template.h"
@@ -195,7 +196,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     // docs included. One source for both surfaces — no separate hand-written
     // list to keep in sync when an action type is added or changed.
     JsonArray acts = result.createNestedArray("action_types");
-    action_catalog_emit(acts, /* include_field_docs */ true);
+    action_catalog_emit(acts);
     result["actions_note"] = "Pad actions require action_format_version: 1. button.actions (tap) / button.lp_actions (long-press) are arrays of {op, args}; dynamic arguments use {\"$template\":\"...\"}. Only the listed operations are supported in pads.";
     result["position_note"] = "set_button/set_buttons/remove_button positions are 0-based indices in the selected layer's array, NOT grid cells (placement is col/row). Omitted layer means Main; positions at or past the end append. The combined Main and Overlay count cannot exceed grid.max_buttons.";
     result["screen_ref_note"] = "pad tools accept the 'screen' arg as either the canonical id 'pad_N' or a pad's friendly name (case-insensitive). Names may be unset or non-unique; an ambiguous name is refused with the matching ids so you can pick one. Creating a new pad requires the 'pad_N' id. list_pads shows each pad's name.";
@@ -314,21 +315,35 @@ static int pad_index(const char* screen) {
     return pad_config_resolve_ref(screen, s_pad_err, sizeof(s_pad_err));
 }
 
-// Load pad raw into doc; if missing, seed a minimal grid pad. Returns false on OOM.
-static bool load_or_seed(uint8_t page, JsonDocument& doc) {
+// An existing pad must be readable and compatible before any partial edit.
+static bool load_or_seed(uint8_t page, BasicJsonDocument<PsramJsonAllocator>& doc, JsonObject& result, String& err) {
+    if (!doc.capacity()) return pad_fail(result, err, PAD_ERR_INTERNAL, "out of memory");
     size_t len = 0;
     char* raw = pad_config_read_raw(page, &len);
     if (raw) {
+        if (!json_keys_valid(reinterpret_cast<const uint8_t*>(raw), len)) {
+            free(raw);
+            return pad_fail(result, err, PAD_ERR_PARAMS, "saved pad contains an invalid JSON NUL; recreate it");
+        }
         DeserializationError e = deserializeJson(doc, raw, len);
         free(raw);
-        if (!e) return true;
+        if (e == DeserializationError::NoMemory || doc.overflowed())
+            return pad_fail(result, err, PAD_ERR_INTERNAL, "not enough memory to read saved pad");
+        if (e || !doc.is<JsonObject>())
+            return pad_fail(result, err, PAD_ERR_PARAMS, "saved pad cannot be parsed; recreate it");
+        const char* error = pad_validate_action_version(doc.as<JsonObjectConst>(), false);
+        if (error) return pad_fail(result, err, PAD_ERR_PARAMS, error);
+        return true;
     }
+    if (pad_config_exists(page))
+        return pad_fail(result, err, PAD_ERR_INTERNAL, "saved pad could not be read");
     doc.clear();
     doc["action_format_version"] = 1;
     doc["layout"] = "grid";
     doc["cols"] = 4;
     doc["rows"] = 4;
     doc.createNestedArray("buttons");
+    if (doc.overflowed()) return pad_fail(result, err, PAD_ERR_INTERNAL, "out of memory");
     return true;
 }
 
@@ -429,7 +444,7 @@ static bool tool_set_button(const JsonObject& args, JsonObject& result, String& 
     if (button.isNull()) return pad_fail(result, err, PAD_ERR_PARAMS, "missing button object");
 
     BasicJsonDocument<PsramJsonAllocator> doc(48 * 1024);
-    if (!load_or_seed((uint8_t)pg, doc)) return pad_fail(result, err, PAD_ERR_INTERNAL, "out of memory");
+    if (!load_or_seed((uint8_t)pg, doc, result, err)) return false;
     JsonArray btns = doc[field].as<JsonArray>();
     if (btns.isNull()) btns = doc.createNestedArray(field);
     uint16_t count = combined_button_count(doc);
@@ -446,7 +461,7 @@ static bool tool_set_buttons(const JsonObject& args, JsonObject& result, String&
     if (!get_layer_field(args, &field)) return pad_fail(result, err, PAD_ERR_PARAMS, "layer must be 'main' or 'overlay'");
 
     BasicJsonDocument<PsramJsonAllocator> doc(48 * 1024);
-    if (!load_or_seed((uint8_t)pg, doc)) return pad_fail(result, err, PAD_ERR_INTERNAL, "out of memory");
+    if (!load_or_seed((uint8_t)pg, doc, result, err)) return false;
     JsonArray btns = doc[field].as<JsonArray>();
     if (btns.isNull()) btns = doc.createNestedArray(field);
     uint16_t count = combined_button_count(doc);
@@ -467,7 +482,7 @@ static bool tool_remove_button(const JsonObject& args, JsonObject& result, Strin
     if (!get_layer_field(args, &field)) return pad_fail(result, err, PAD_ERR_PARAMS, "layer must be 'main' or 'overlay'");
 
     BasicJsonDocument<PsramJsonAllocator> doc(48 * 1024);
-    if (!load_or_seed((uint8_t)pg, doc)) return pad_fail(result, err, PAD_ERR_INTERNAL, "out of memory");
+    if (!load_or_seed((uint8_t)pg, doc, result, err)) return false;
     JsonArray btns = doc[field].as<JsonArray>();
     if (btns.isNull() || pos < 0 || pos >= (int)btns.size())
         return pad_fail(result, err, PAD_ERR_PARAMS, "position out of range");
@@ -481,7 +496,7 @@ static bool tool_clear_pad(const JsonObject& args, JsonObject& result, String& e
     const char* field = nullptr;
     if (!get_layer_field(args, &field)) return pad_fail(result, err, PAD_ERR_PARAMS, "layer must be 'main' or 'overlay'");
     BasicJsonDocument<PsramJsonAllocator> doc(48 * 1024);
-    if (!load_or_seed((uint8_t)pg, doc)) return pad_fail(result, err, PAD_ERR_INTERNAL, "out of memory");
+    if (!load_or_seed((uint8_t)pg, doc, result, err)) return false;
     JsonArray btns = doc[field].as<JsonArray>();
     if (btns.isNull()) doc.createNestedArray(field);
     else btns.clear();
@@ -496,7 +511,7 @@ static bool tool_set_pad(const JsonObject& args, JsonObject& result, String& err
     if (pg < 0) return pad_fail(result, err, PAD_ERR_PARAMS, s_pad_err);
 
     BasicJsonDocument<PsramJsonAllocator> doc(48 * 1024);
-    if (!load_or_seed((uint8_t)pg, doc)) return pad_fail(result, err, PAD_ERR_INTERNAL, "out of memory");
+    if (!load_or_seed((uint8_t)pg, doc, result, err)) return false;
 
     if (args.containsKey("layout"))       doc["layout"] = args["layout"];
     // Friendly label. The argument is 'pad_name' (not 'name') because some MCP

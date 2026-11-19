@@ -351,11 +351,6 @@ add_host_legacy_test(test_web_portal_path SOURCES test_web_portal_path.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR} OPTIONS -Wno-deprecated-declarations)
 target_include_directories(test_web_portal_path PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 add_host_legacy_test(test_alarm_clock_core SOURCES test_alarm_clock_core.cpp)
-add_host_legacy_test(test_alarm_dispatch_lock
-    SOURCES test_alarm_dispatch_lock.cpp
-    INCLUDES ${HOST_ARDUINOJSON_DIR}
-    OPTIONS -Wno-deprecated-declarations
-    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h)
 add_host_legacy_test(test_navigation_wake
     SOURCES test_navigation_wake.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_cycle.cpp
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
@@ -671,7 +666,7 @@ foreach(voice_notes 0 1)
   endif()
   add_host_legacy_test(${reboot_service_target}
     SOURCES test_reboot_service.cpp ${PROJECT_SOURCE_DIR}/src/app/ota_activity.cpp
-    INCLUDES ${PROJECT_SOURCE_DIR}/tests/ota_upload_overrides ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/ota_upload_overrides ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides ${HOST_ARDUINOJSON_DIR}
     DEFINITIONS OTA_ACTIVITY_HOST_TEST HAS_AUDIO=1 HAS_VOICE_NOTES=${voice_notes}
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
 )
@@ -1021,9 +1016,11 @@ add_host_legacy_test(test_action_bindings
         ${PROJECT_SOURCE_DIR}/tests/freertos/portmacro.h
     LIBRARIES m
 )
-foreach(runtime_profile display headless headless_no_psram)
+foreach(runtime_profile display headless headless_no_psram coffee darkroom shutter relay stopwatch sticky)
 if(runtime_profile STREQUAL "headless_no_psram")
     set(runtime_board headless)
+elseif(runtime_profile STREQUAL "coffee" OR runtime_profile STREQUAL "darkroom" OR runtime_profile STREQUAL "shutter" OR runtime_profile STREQUAL "relay" OR runtime_profile STREQUAL "stopwatch" OR runtime_profile STREQUAL "sticky")
+    set(runtime_board display)
 else()
     set(runtime_board ${runtime_profile})
 endif()
@@ -1051,7 +1048,7 @@ add_host_legacy_test(test_runtime_variable_actions_${runtime_profile}
 if(runtime_profile STREQUAL "headless_no_psram")
     target_compile_definitions(test_runtime_variable_actions_${runtime_profile} PRIVATE HAS_PSRAM=0)
 endif()
-if(runtime_profile STREQUAL "display")
+if(runtime_profile STREQUAL "display" OR runtime_profile STREQUAL "coffee" OR runtime_profile STREQUAL "darkroom" OR runtime_profile STREQUAL "shutter" OR runtime_profile STREQUAL "relay" OR runtime_profile STREQUAL "stopwatch" OR runtime_profile STREQUAL "sticky")
     target_compile_definitions(test_runtime_variable_actions_${runtime_profile} PRIVATE ALARM_ENABLED=1 HAS_VOICE_NOTES=1 HAS_AUDIO=1 HAS_SOUND_PLAYER=1 HAS_CAMERA=1 HAS_MCP=1)
     target_sources(test_runtime_variable_actions_${runtime_profile} PRIVATE
         ${PROJECT_SOURCE_DIR}/src/app/mcp_press_button.cpp
@@ -1067,8 +1064,66 @@ if(runtime_profile STREQUAL "display")
         ${PROJECT_SOURCE_DIR}/src/app/pad_binding.cpp)
     target_include_directories(test_runtime_variable_actions_${runtime_profile} BEFORE PRIVATE
         ${PROJECT_SOURCE_DIR}/tests/list_source_overrides)
-    target_compile_options(test_runtime_variable_actions_${runtime_profile} PRIVATE
-        "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/binding_schema_profiles/LittleFS.h")
+    if(runtime_profile MATCHES "^(coffee|darkroom|shutter)$")
+        target_compile_definitions(test_runtime_variable_actions_${runtime_profile} PRIVATE TEST_SPECIALIZED_MCP_BRIDGE=1)
+        target_sources(test_runtime_variable_actions_${runtime_profile} PRIVATE
+            test_shutter_mcp_bridge.cpp
+            ${PROJECT_SOURCE_DIR}/src/app/main_loop_bridge.cpp)
+        target_compile_options(test_runtime_variable_actions_${runtime_profile} PRIVATE -ffunction-sections -fdata-sections)
+        # Preserve the voice-note enqueue fake; synchronous MCP dispatch uses the real bridge.
+        target_link_options(test_runtime_variable_actions_${runtime_profile} PRIVATE
+            -Wl,--wrap=_Z19loop_bridge_enqueuePFvPKvPbPcmES0_m)
+    endif()
+    if(runtime_profile STREQUAL "shutter" OR runtime_profile STREQUAL "relay")
+        target_compile_definitions(test_runtime_variable_actions_${runtime_profile} PRIVATE HAS_FILESYSTEM=1)
+        target_compile_options(test_runtime_variable_actions_${runtime_profile} PRIVATE
+            -Wno-unused-parameter
+            "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/timer_test_overrides/LittleFS.h"
+            "SHELL:-idirafter ${PROJECT_SOURCE_DIR}/tests/timer_test_overrides")
+    else()
+        target_compile_options(test_runtime_variable_actions_${runtime_profile} PRIVATE
+            "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/binding_schema_profiles/LittleFS.h")
+    endif()
+    if(runtime_profile STREQUAL "display")
+        target_compile_definitions(test_runtime_variable_actions_${runtime_profile} PRIVATE IS_VOICE_ASSISTANT=1)
+        target_sources(test_runtime_variable_actions_${runtime_profile} PRIVATE
+            ${PROJECT_SOURCE_DIR}/src/app/device_classes/voice_assistant/voice_actions.cpp)
+    elseif(runtime_profile STREQUAL "darkroom" OR runtime_profile STREQUAL "relay")
+        target_compile_definitions(test_runtime_variable_actions_${runtime_profile} PRIVATE IS_DARKROOM_TIMER=1)
+        if(runtime_profile STREQUAL "relay")
+            target_compile_definitions(test_runtime_variable_actions_${runtime_profile} PRIVATE TEST_RELAY_HOST=1)
+            target_include_directories(test_runtime_variable_actions_${runtime_profile} BEFORE PRIVATE
+                ${PROJECT_SOURCE_DIR}/tests/relay_test_overrides)
+        endif()
+        target_sources(test_runtime_variable_actions_${runtime_profile} PRIVATE
+            ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer/shelly_actions.cpp
+            ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer/print_log_actions.cpp
+            ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer/expose_actions.cpp
+            ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer/test_strip_actions.cpp
+            ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer/meter_actions.cpp)
+    elseif(runtime_profile STREQUAL "shutter")
+        target_compile_definitions(test_runtime_variable_actions_${runtime_profile} PRIVATE TEST_SHUTTER_OPERATIONS=1
+            SCREEN_HISTORY_MAX=8 MAX_SCREENS=32)
+        target_sources(test_runtime_variable_actions_${runtime_profile} PRIVATE
+            ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester/shutter_actions.cpp
+            ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester/shutter_session_actions.cpp)
+    elseif(runtime_profile STREQUAL "stopwatch")
+        target_compile_definitions(test_runtime_variable_actions_${runtime_profile} PRIVATE
+            TEST_STOPWATCH_OPERATIONS=1 STOPWATCH_CHARGING_MODE=1)
+        target_sources(test_runtime_variable_actions_${runtime_profile} PRIVATE
+            ${PROJECT_SOURCE_DIR}/src/boards/m5stack-stopwatch/stopwatch_actions.cpp)
+    elseif(runtime_profile STREQUAL "sticky")
+        target_compile_definitions(test_runtime_variable_actions_${runtime_profile} PRIVATE TEST_STICKY_OPERATIONS=1)
+        target_sources(test_runtime_variable_actions_${runtime_profile} PRIVATE
+            ${PROJECT_SOURCE_DIR}/src/boards/reterminal-sticky-interactive/sticky_actions.cpp)
+    else()
+        target_compile_definitions(test_runtime_variable_actions_${runtime_profile} PRIVATE IS_COFFEE_SCALE=1 HAS_SCALE=1)
+        target_include_directories(test_runtime_variable_actions_${runtime_profile} PRIVATE
+            ${PROJECT_SOURCE_DIR}/tests/binding_schema_profiles)
+        target_sources(test_runtime_variable_actions_${runtime_profile} PRIVATE
+            ${PROJECT_SOURCE_DIR}/src/app/device_classes/coffee_scale/scale_actions.cpp
+            ${PROJECT_SOURCE_DIR}/src/app/device_classes/coffee_scale/brew_actions.cpp)
+    endif()
 endif()
 endforeach()
 add_library(test_mcp_direct_control_actions OBJECT
@@ -1145,7 +1200,19 @@ target_compile_options(test_action_operations_hardware PRIVATE -Wno-deprecated-d
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/runtime_variable_action_overrides/display_board_config.h"
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/binding_schema_profiles/LittleFS.h")
 target_sources(test_runtime_variable_actions_display PRIVATE $<TARGET_OBJECTS:test_action_operations_hardware>)
+target_sources(test_runtime_variable_actions_coffee PRIVATE $<TARGET_OBJECTS:test_action_operations_hardware>)
+target_sources(test_runtime_variable_actions_darkroom PRIVATE $<TARGET_OBJECTS:test_action_operations_hardware>)
+target_sources(test_runtime_variable_actions_shutter PRIVATE $<TARGET_OBJECTS:test_action_operations_hardware>)
+target_sources(test_runtime_variable_actions_relay PRIVATE $<TARGET_OBJECTS:test_action_operations_hardware>)
+target_sources(test_runtime_variable_actions_stopwatch PRIVATE $<TARGET_OBJECTS:test_action_operations_hardware>)
+target_sources(test_runtime_variable_actions_sticky PRIVATE $<TARGET_OBJECTS:test_action_operations_hardware>)
 target_link_options(test_runtime_variable_actions_display PRIVATE -Wl,--gc-sections)
+target_link_options(test_runtime_variable_actions_coffee PRIVATE -Wl,--gc-sections)
+target_link_options(test_runtime_variable_actions_darkroom PRIVATE -Wl,--gc-sections)
+target_link_options(test_runtime_variable_actions_shutter PRIVATE -Wl,--gc-sections)
+target_link_options(test_runtime_variable_actions_relay PRIVATE -Wl,--gc-sections)
+target_link_options(test_runtime_variable_actions_stopwatch PRIVATE -Wl,--gc-sections)
+target_link_options(test_runtime_variable_actions_sticky PRIVATE -Wl,--gc-sections)
 add_host_legacy_test(test_action_continuation
     SOURCES test_action_continuation.cpp ${PROJECT_SOURCE_DIR}/src/app/action_list.cpp ${PROJECT_SOURCE_DIR}/src/app/action_continuation.cpp stubs.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
@@ -1179,7 +1246,7 @@ add_host_legacy_test(test_pad_confirmation
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
 )
 add_host_legacy_test(test_camera_capture_action
-    SOURCES test_camera_capture_action.cpp ${PROJECT_SOURCE_DIR}/src/app/action_catalog.cpp ${PROJECT_SOURCE_DIR}/src/app/action_continuation.cpp ${PROJECT_SOURCE_DIR}/src/app/action_registry.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp stubs.cpp
+    SOURCES test_camera_capture_action.cpp ${PROJECT_SOURCE_DIR}/src/app/action_catalog.cpp ${PROJECT_SOURCE_DIR}/src/app/action_continuation.cpp ${PROJECT_SOURCE_DIR}/src/app/action_registry.cpp ${PROJECT_SOURCE_DIR}/src/app/action_validate.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp stubs.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
     DEFINITIONS HAS_CAMERA=1
     OPTIONS -Wno-deprecated-declarations
@@ -1263,7 +1330,7 @@ add_host_legacy_test(test_alarm_manager
     LIBRARIES m pthread -Wl,--wrap=calloc)
 add_test(NAME test_alarm_manager_allocation_failure COMMAND test_alarm_manager allocation-failure)
 add_host_command_test(test_static_state python3 ${PROJECT_SOURCE_DIR}/tests/test_static_state.py)
-add_host_legacy_test(test_timer_format SOURCES test_timer_format.cpp ${PROJECT_SOURCE_DIR}/src/app/config_psram.cpp stubs.cpp INCLUDES ${HOST_ARDUINOJSON_DIR} PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h)
+add_host_legacy_test(test_timer_format SOURCES test_timer_format.cpp ${PROJECT_SOURCE_DIR}/src/app/config_psram.cpp ${PROJECT_SOURCE_DIR}/src/app/action_storage.cpp stubs.cpp INCLUDES ${HOST_ARDUINOJSON_DIR} PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h)
 add_host_legacy_test(test_sound_player_loop
     SOURCES test_sound_player_loop.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/timer_test_overrides
@@ -1292,18 +1359,7 @@ add_host_legacy_test(test_shutter_capture SOURCES test_shutter_capture.cpp INCLU
 add_host_legacy_test(test_shutter_measure SOURCES test_shutter_measure.cpp stubs.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester DEFINITIONS IS_SHUTTER_TESTER=true PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h LIBRARIES m)
 add_host_legacy_test(test_shutter_measure_no_csv SOURCES test_shutter_measure.cpp stubs.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester DEFINITIONS IS_SHUTTER_TESTER=true LOG_SHUTTER_CSV=0 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h LIBRARIES m)
 add_host_legacy_test(test_shutter_binding SOURCES test_shutter_binding.cpp stubs.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester DEFINITIONS HAS_DISPLAY=true IS_SHUTTER_TESTER=true PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h LIBRARIES m)
-add_host_legacy_test(test_shutter_session SOURCES test_shutter_session.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester/shutter_session.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester/shutter_curtain_stats.cpp stubs.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/shutter_session_overrides ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester ${HOST_ARDUINOJSON_DIR} DEFINITIONS IS_SHUTTER_TESTER=true HAS_FILESYSTEM=1 OPTIONS -Wno-deprecated-declarations PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h LIBRARIES m)
-add_host_legacy_test(test_shutter_session_actions
-    SOURCES test_shutter_session_actions.cpp ${PROJECT_SOURCE_DIR}/src/app/actions.cpp
-        ${PROJECT_SOURCE_DIR}/src/app/music_command.cpp ${PROJECT_SOURCE_DIR}/src/app/action_parse.cpp
-        ${PROJECT_SOURCE_DIR}/src/app/action_validate.cpp ${PROJECT_SOURCE_DIR}/src/app/runtime_variables.cpp
-        ${PROJECT_SOURCE_DIR}/src/app/action_continuation.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_cycle.cpp
-        ${PROJECT_SOURCE_DIR}/src/app/action_registry.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp stubs.cpp
-    INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester ${HOST_ARDUINOJSON_DIR}
-    OPTIONS -Wno-deprecated-declarations
-    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
-)
-
+add_host_legacy_test(test_shutter_session SOURCES test_shutter_session.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester/shutter_session.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester/shutter_curtain_stats.cpp stubs.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/shutter_session_overrides ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester ${HOST_ARDUINOJSON_DIR} DEFINITIONS IS_SHUTTER_TESTER=true HAS_FILESYSTEM=1 OPTIONS -Wno-deprecated-declarations -pthread PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h LIBRARIES pthread m)
 set(LIST_SOURCE_TEST_SOURCES test_list_source.cpp stubs.cpp ${PROJECT_SOURCE_DIR}/src/app/list_source.cpp
         ${PROJECT_SOURCE_DIR}/src/app/list_source_service.cpp
         ${PROJECT_SOURCE_DIR}/src/app/list_source_voice_notes.cpp

@@ -9,6 +9,7 @@
 #include "button_defaults.h"
 #include "fs_health.h"
 #include "icon_store.h"
+#include "json_key_validation.h"
 #include "log_manager.h"
 #include "pad_cycle.h"
 #include "pad_composition.h"
@@ -254,24 +255,13 @@ static void parse_bindable_field(JsonVariant v, char* out, size_t out_len, const
     strlcpy(out, default_str, out_len);
 }
 
-// Parse a typed action object, with legacy flat key fallback for old pad configs.
-static void parse_pad_action(JsonVariant v, ButtonAction* act, const char* legacy_screen_key, JsonObject obj) {
+static void parse_pad_action(JsonVariant v, ButtonAction* act) {
     memset(act, 0, sizeof(ButtonAction));
 
     if (v.is<JsonObject>()) {
 #if HAS_DISPLAY
         action_parse(v.as<JsonObject>(), *act);
 #endif
-        return;
-    }
-
-    // Legacy flat key fallback: "action_screen" / "lp_action_screen" → type=screen
-    if (legacy_screen_key) {
-        const char* screen = obj[legacy_screen_key] | "";
-        if (screen[0]) {
-            strlcpy(act->type, ACTION_TYPE_SCREEN, CONFIG_ACTION_TYPE_MAX_LEN);
-            strlcpy(act->payload.screen.screen_id, screen, CONFIG_SCREEN_ID_MAX_LEN);
-        }
     }
 }
 
@@ -411,8 +401,7 @@ static bool parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
                          btn_default(defs ? defs->content_pad : nullptr, DEFAULT_BUTTON_CONTENT_PAD), false);
     btn->button_shadow = parse_button_shadow_mode(obj["button_shadow"]);
 
-    // Typed actions — array of up to MAX_BUTTON_ACTIONS sequential actions per gesture.
-    // JSON: "actions": [ { "type": "mqtt", ... }, { "type": "sound_alert", ... } ]
+    // Up to MAX_BUTTON_ACTIONS sequential operations per gesture.
     btn->action_count = 0;
     btn->lp_action_count = 0;
     memset(btn->actions, 0, sizeof(btn->actions));
@@ -423,14 +412,9 @@ static bool parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
         if (v.is<JsonArray>()) {
             JsonArray arr = v.as<JsonArray>();
             for (size_t i = 0; i < arr.size() && btn->action_count < MAX_BUTTON_ACTIONS; i++) {
-                parse_pad_action(arr[i], &btn->actions[btn->action_count], nullptr, obj);
+                parse_pad_action(arr[i], &btn->actions[btn->action_count]);
                 if (btn->actions[btn->action_count].type[0]) btn->action_count++;
             }
-        } else {
-            // Legacy: try singular "action" key (old single-object format)
-            JsonVariant legacy = v.isNull() ? obj["action"].as<JsonVariant>() : v;
-            parse_pad_action(legacy, &btn->actions[0], "action_screen", obj);
-            if (btn->actions[0].type[0]) btn->action_count = 1;
         }
     }
     {
@@ -438,14 +422,9 @@ static bool parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
         if (v.is<JsonArray>()) {
             JsonArray arr = v.as<JsonArray>();
             for (size_t i = 0; i < arr.size() && btn->lp_action_count < MAX_BUTTON_ACTIONS; i++) {
-                parse_pad_action(arr[i], &btn->lp_actions[btn->lp_action_count], nullptr, obj);
+                parse_pad_action(arr[i], &btn->lp_actions[btn->lp_action_count]);
                 if (btn->lp_actions[btn->lp_action_count].type[0]) btn->lp_action_count++;
             }
-        } else {
-            // Legacy: try singular "lp_action" key (old single-object format)
-            JsonVariant legacy = v.isNull() ? obj["lp_action"].as<JsonVariant>() : v;
-            parse_pad_action(legacy, &btn->lp_actions[0], "lp_action_screen", obj);
-            if (btn->lp_actions[0].type[0]) btn->lp_action_count = 1;
         }
     }
 
@@ -747,7 +726,7 @@ static PadConfig* pad_config_parse(uint8_t page, JsonDocument& doc, bool* owned_
     // Full-screen actions are deliberately parsed before template buttons are
     // merged so template_pad contributes only buttons and named bindings.
     out->pad_action_count = action_list_parse(doc["pad_actions"], out->pad_actions,
-                                              MAX_BUTTON_ACTIONS, true);
+                                              MAX_BUTTON_ACTIONS);
 
     // Use device-level pad and button defaults for cascading to buttons
 #if HAS_DISPLAY
@@ -803,6 +782,11 @@ static PadConfig* pad_config_load_from_flash(uint8_t page, bool skip_template, b
     const size_t read = file.readBytes(buffer, size);
     file.close();
     buffer[read] = '\0';
+    if (!json_keys_valid(reinterpret_cast<const uint8_t*>(buffer), read)) {
+        LOGE(TAG, "Pad %u: JSON contains an invalid NUL", page);
+        free(buffer);
+        return nullptr;
+    }
     BasicJsonDocument<PsramJsonAllocator> doc(size * 2 + 256);
     const DeserializationError error = deserializeJson(doc, buffer, read);
     free(buffer);
@@ -978,6 +962,9 @@ static const char* read_pad_document(uint8_t page, JsonDocument& document) {
     File file = Storage.open(path, "r");
     if (!file) return "could not read pad configuration";
     if (!file.size() || file.size() > 64 * 1024) return "invalid pad configuration size";
+    const JsonKeyScanResult scan = json_stream_scan_keys(file);
+    if (scan == JsonKeyScanResult::InvalidNul) return "pad JSON contains an invalid NUL";
+    if (scan != JsonKeyScanResult::Valid) return "could not read pad configuration";
     const auto error = deserializeJson(document, file);
     if (error || !document.is<JsonObject>()) return "could not parse pad configuration";
     return nullptr;
@@ -1007,8 +994,14 @@ const char* pad_validate_with_template(JsonObjectConst pad, int page, bool toler
 bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
                          const char** error, const PadValidationGeometry* geometry) {
     if (error) *error = nullptr;
+    const StorageMutationGuard storage_guard;
+    if (!storage_guard) return false;
     if (page >= MAX_PADS) return false;
     if (!json || len == 0 || len > 64 * 1024) return false;
+    if (!json_keys_valid(json, len)) {
+        if (error) *error = "pad JSON contains an invalid NUL";
+        return false;
+    }
     const PadConfigMutationGuard guard;
     if (!guard) {
         if (error) *error = "pad configuration unavailable";
@@ -1193,9 +1186,16 @@ bool pad_config_exists(uint8_t page) {
 }
 
 char* pad_config_read_raw(uint8_t page, size_t* out_len) {
+    if (!g_fs_mounted) {
+        if (out_len) *out_len = 0;
+        return nullptr;
+    }
+    return pad_config_read_raw_mounted(page, out_len);
+}
+
+char* pad_config_read_raw_mounted(uint8_t page, size_t* out_len) {
     if (out_len) *out_len = 0;
     if (page >= MAX_PADS) return nullptr;
-    if (!g_fs_mounted) return nullptr;
 
     char path[32];
     pad_config_path(page, path, sizeof(path));
@@ -1223,6 +1223,16 @@ char* pad_config_read_raw(uint8_t page, size_t* out_len) {
 
     size_t read = f.readBytes(buf, file_size);
     f.close();
+    if (read != file_size) {
+        LOGE(TAG, "Pad %u: incomplete raw read", page);
+        free(buf);
+        return nullptr;
+    }
+    if (!json_keys_valid(reinterpret_cast<const uint8_t*>(buf), read)) {
+        LOGE(TAG, "Pad %u: stored JSON contains an invalid NUL", page);
+        free(buf);
+        return nullptr;
+    }
     buf[read] = '\0';
 
     if (out_len) *out_len = read;

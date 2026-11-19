@@ -7,6 +7,7 @@
 // directly; it dispatches through the DeviceClass registry.
 
 #include "board_config.h"
+#include "config_nvs_write.h"
 #include "time_service.h"
 
 #if IS_EPAPER_FRAME
@@ -29,6 +30,7 @@
 #include "epaper_frame/epaper_frame_timing.h"
 #include "epaper_frame/epaper_frame_wake_budget.h"
 #include "log_manager.h"
+#include "ota_activity.h"
 #include "power_config.h"
 #include "power_manager.h"
 #include "reboot_service.h"
@@ -263,12 +265,20 @@ EpaperButtonWakeAction epaper_frame_button_wake_action() { return EpaperButtonWa
 // Single-key CRC persist so the refresh pipeline doesn't have to rewrite the
 // entire config (and wear NVS) on every successful redraw.
 void epaper_frame_config_persist_crc(uint32_t crc) {
+		if (!ota_activity_try_begin_config_write()) {
+				LOGW("EpaperCfg", "CRC persist deferred: device busy");
+				return;
+		}
+		struct WriteGuard {
+				~WriteGuard() { ota_activity_finish_config_write(); }
+		} guard;
 		Preferences prefs;
 		if (!prefs.begin(kNvsNamespace, false)) {
 				LOGW("EpaperCfg", "CRC persist: NVS open failed");
 				return;
 		}
-		prefs.putUInt(kKeyCrc32, crc);
+		if (prefs.putUInt(kKeyCrc32, crc) != sizeof(crc))
+				LOGW("EpaperCfg", "CRC persist: NVS write failed");
 		prefs.end();
 }
 
@@ -387,34 +397,35 @@ static void config_load_hook(DeviceConfig * /*cfg*/, Preferences &prefs) {
 		if (g_epaper_config.schedule_tz_offset > 14) g_epaper_config.schedule_tz_offset = 14;
 }
 
-static void config_save_hook(const DeviceConfig * /*cfg*/, Preferences &prefs) {
-		prefs.putUChar(kKeySourceMode, (uint8_t)g_epaper_config.source_mode);
-		prefs.putString(kKeyServiceUrl, g_epaper_config.service_url);
-		prefs.putString(kKeyServiceToken, g_epaper_config.service_token);
-		prefs.putUInt(kKeyServiceInt, g_epaper_config.service_interval_seconds);
-		prefs.putUInt(kKeyWakeBudget, g_epaper_config.wake_budget_ms);
-		prefs.putUInt(kKeyWakeWifiTarget, g_epaper_config.wake_wifi_target_ms);
-		prefs.putUInt(kKeyWakeWifiBudget, g_epaper_config.wake_wifi_budget_ms);
-		prefs.putUInt(kKeyWakeFetchTarget, g_epaper_config.wake_fetch_target_ms);
-		prefs.putUInt(kKeyWakeFetchBudget, g_epaper_config.wake_fetch_budget_ms);
-		prefs.putUInt(kKeyWakeMqttTarget, g_epaper_config.wake_mqtt_target_ms);
-		prefs.putUInt(kKeyWakeMqttBudget, g_epaper_config.wake_mqtt_budget_ms);
-		prefs.putUInt(kKeyWakeCutRetry, g_epaper_config.wake_cutoff_retry_seconds);
-		prefs.putUChar(kKeyOfflineSyncs, g_epaper_config.offline_refreshes_between_syncs);
-		prefs.putUChar(kKeyRotation, g_epaper_config.epaper_frame_rotation);
-		prefs.putUInt(kKeyCrc32, g_epaper_config.epaper_frame_last_crc32);
-		prefs.putBool(kKeyCrcEnabled, g_epaper_config.epaper_frame_crc32_enabled);
-		prefs.putBool(kKeySdCacheEn, g_epaper_config.epaper_frame_sd_cache_enabled);
-		prefs.putBool(kKeyWakeLogEn, g_epaper_config.epaper_frame_wake_log_enabled);
-		prefs.putBool(kKeyOverlayEn, g_epaper_config.epaper_frame_overlay_enabled);
-		prefs.putUChar(kKeyOverlayPos, g_epaper_config.epaper_frame_overlay_position);
-		prefs.putUChar(kKeyOverlayCol, g_epaper_config.epaper_frame_overlay_color);
-		prefs.putUChar(kKeyOverlayItems, g_epaper_config.epaper_frame_overlay_items);
-		prefs.putUChar(kKeyFrontBright, g_epaper_config.epaper_frame_frontlight_brightness);
-		prefs.putUShort(kKeyFrontDuration, g_epaper_config.epaper_frame_frontlight_duration_s);
+static bool config_save_hook(const DeviceConfig * /*cfg*/, Preferences &prefs) {
+		bool saved_ok = true;
+		saved_ok = (prefs.putUChar(kKeySourceMode, (uint8_t)g_epaper_config.source_mode) == sizeof(uint8_t)) && saved_ok;
+		saved_ok = (config_nvs_put_string(prefs, kKeyServiceUrl, g_epaper_config.service_url)) && saved_ok;
+		saved_ok = (config_nvs_put_string(prefs, kKeyServiceToken, g_epaper_config.service_token)) && saved_ok;
+		saved_ok = (prefs.putUInt(kKeyServiceInt, g_epaper_config.service_interval_seconds) == sizeof(uint32_t)) && saved_ok;
+		saved_ok = (prefs.putUInt(kKeyWakeBudget, g_epaper_config.wake_budget_ms) == sizeof(uint32_t)) && saved_ok;
+		saved_ok = (prefs.putUInt(kKeyWakeWifiTarget, g_epaper_config.wake_wifi_target_ms) == sizeof(uint32_t)) && saved_ok;
+		saved_ok = (prefs.putUInt(kKeyWakeWifiBudget, g_epaper_config.wake_wifi_budget_ms) == sizeof(uint32_t)) && saved_ok;
+		saved_ok = (prefs.putUInt(kKeyWakeFetchTarget, g_epaper_config.wake_fetch_target_ms) == sizeof(uint32_t)) && saved_ok;
+		saved_ok = (prefs.putUInt(kKeyWakeFetchBudget, g_epaper_config.wake_fetch_budget_ms) == sizeof(uint32_t)) && saved_ok;
+		saved_ok = (prefs.putUInt(kKeyWakeMqttTarget, g_epaper_config.wake_mqtt_target_ms) == sizeof(uint32_t)) && saved_ok;
+		saved_ok = (prefs.putUInt(kKeyWakeMqttBudget, g_epaper_config.wake_mqtt_budget_ms) == sizeof(uint32_t)) && saved_ok;
+		saved_ok = (prefs.putUInt(kKeyWakeCutRetry, g_epaper_config.wake_cutoff_retry_seconds) == sizeof(uint32_t)) && saved_ok;
+		saved_ok = (prefs.putUChar(kKeyOfflineSyncs, g_epaper_config.offline_refreshes_between_syncs) == sizeof(uint8_t)) && saved_ok;
+		saved_ok = (prefs.putUChar(kKeyRotation, g_epaper_config.epaper_frame_rotation) == sizeof(uint8_t)) && saved_ok;
+		saved_ok = (prefs.putUInt(kKeyCrc32, g_epaper_config.epaper_frame_last_crc32) == sizeof(uint32_t)) && saved_ok;
+		saved_ok = (prefs.putBool(kKeyCrcEnabled, g_epaper_config.epaper_frame_crc32_enabled) == sizeof(uint8_t)) && saved_ok;
+		saved_ok = (prefs.putBool(kKeySdCacheEn, g_epaper_config.epaper_frame_sd_cache_enabled) == sizeof(uint8_t)) && saved_ok;
+		saved_ok = (prefs.putBool(kKeyWakeLogEn, g_epaper_config.epaper_frame_wake_log_enabled) == sizeof(uint8_t)) && saved_ok;
+		saved_ok = (prefs.putBool(kKeyOverlayEn, g_epaper_config.epaper_frame_overlay_enabled) == sizeof(uint8_t)) && saved_ok;
+		saved_ok = (prefs.putUChar(kKeyOverlayPos, g_epaper_config.epaper_frame_overlay_position) == sizeof(uint8_t)) && saved_ok;
+		saved_ok = (prefs.putUChar(kKeyOverlayCol, g_epaper_config.epaper_frame_overlay_color) == sizeof(uint8_t)) && saved_ok;
+		saved_ok = (prefs.putUChar(kKeyOverlayItems, g_epaper_config.epaper_frame_overlay_items) == sizeof(uint8_t)) && saved_ok;
+		saved_ok = (prefs.putUChar(kKeyFrontBright, g_epaper_config.epaper_frame_frontlight_brightness) == sizeof(uint8_t)) && saved_ok;
+		saved_ok = (prefs.putUShort(kKeyFrontDuration, g_epaper_config.epaper_frame_frontlight_duration_s) == sizeof(uint16_t)) && saved_ok;
 
 		// Save carousel (only write non-empty entries to save NVS space)
-		prefs.putUChar(kKeyCarouselCount, g_epaper_config.carousel_count);
+		saved_ok = (prefs.putUChar(kKeyCarouselCount, g_epaper_config.carousel_count) == sizeof(uint8_t)) && saved_ok;
 		for (int i = 0; i < 5; ++i) {
 				char key_url[16], key_int[16], key_stay[16];
 				snprintf(key_url, sizeof(key_url), "ep_c%d_url", i);
@@ -422,15 +433,16 @@ static void config_save_hook(const DeviceConfig * /*cfg*/, Preferences &prefs) {
 				snprintf(key_stay, sizeof(key_stay), "ep_c%d_stay", i);
 				// Only write non-empty carousel entries
 				if (g_epaper_config.carousel[i].url[0] != '\0') {
-						prefs.putString(key_url, g_epaper_config.carousel[i].url);
-						prefs.putUInt(key_int, g_epaper_config.carousel[i].interval_seconds);
-						prefs.putBool(key_stay, g_epaper_config.carousel[i].stay);
+						saved_ok = (config_nvs_put_string(prefs, key_url, g_epaper_config.carousel[i].url)) && saved_ok;
+						saved_ok = (prefs.putUInt(key_int, g_epaper_config.carousel[i].interval_seconds) == sizeof(uint32_t)) && saved_ok;
+						saved_ok = (prefs.putBool(key_stay, g_epaper_config.carousel[i].stay) == sizeof(uint8_t)) && saved_ok;
 				}
 		}
 
 		// Save schedule
-		prefs.putUInt(kKeyScheduleHours, g_epaper_config.schedule_hours);
-		prefs.putChar(kKeyScheduleTzOff, g_epaper_config.schedule_tz_offset);
+		saved_ok = (prefs.putUInt(kKeyScheduleHours, g_epaper_config.schedule_hours) == sizeof(uint32_t)) && saved_ok;
+		saved_ok = (prefs.putChar(kKeyScheduleTzOff, g_epaper_config.schedule_tz_offset) == sizeof(int8_t)) && saved_ok;
+		return saved_ok;
 }
 
 static void config_api_get_hook(const DeviceConfig * /*cfg*/, JsonObject &root) {

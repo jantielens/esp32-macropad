@@ -62,7 +62,7 @@ static char g_dispatched[4][CONFIG_ACTION_TYPE_MAX_LEN] = {};
 static uint8_t g_dispatched_count = 0;
 static bool g_interactive[4] = {};
 static char g_notification[CONFIG_DIALOG_MESSAGE_MAX_LEN] = {};
-static ActionResolvedArgument g_mqtt_arguments[] = {{"home/room", 0}, {"on", 0}};
+static ActionResolvedArgument g_mqtt_arguments[] = {{"home/room", 0, 0}, {"on", 0, 0}};
 
 #define TEST(name) static void test_##name()
 #define RUN(name) do { test_##name(); g_pass++; } while (0)
@@ -117,7 +117,7 @@ static uint32_t begin_with_suffix(const char* suffix_type) {
     return token;
 }
 
-TEST(mqtt_publish_rejection_stops_suffix_and_legacy_completes) {
+TEST(mqtt_publish_rejection_stops_suffix) {
     ButtonAction actions[2] = {};
     strlcpy(actions[0].type, "mqtt_op_test", sizeof(actions[0].type));
     strlcpy(actions[1].type, ACTION_TYPE_SCREEN, sizeof(actions[1].type));
@@ -145,10 +145,6 @@ TEST(mqtt_publish_rejection_stops_suffix_and_legacy_completes) {
     ASSERT_EQ(g_dispatched_count, 1);
     ASSERT_EQ(mqtt_manager.calls, 3);
 
-    ButtonAction legacy = {};
-    strlcpy(legacy.payload.mqtt.mqtt_topic, "home/room", sizeof(legacy.payload.mqtt.mqtt_topic));
-    ASSERT_EQ(dispatch_mqtt(legacy, "Test", 0), ACTION_COMPLETE);
-    ASSERT_EQ(mqtt_manager.calls, 4);
 }
 
 TEST(success_copies_saved_suffix) {
@@ -435,7 +431,7 @@ TEST(allocation_failure_does_not_reserve_or_spill) {
 #endif
 
 int main() {
-    RUN(mqtt_publish_rejection_stops_suffix_and_legacy_completes);
+    RUN(mqtt_publish_rejection_stops_suffix);
     RUN(reservations_block_shutdown_until_consumed);
     RUN(success_copies_saved_suffix);
     RUN(failure_discards_suffix);

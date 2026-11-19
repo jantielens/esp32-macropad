@@ -22,7 +22,23 @@
 static bool outer_guard(uint32_t) { return true; }
 static bool inner_guard(uint32_t) { return true; }
 
-static ActionResult inspect_sync_context(const ButtonAction& action, const char*, uint32_t) {
+#if HAS_DISPLAY
+static thread_local bool test_display_locked = false;
+static thread_local unsigned test_display_locks = 0;
+static bool check_dispatch_lock = false;
+#endif
+
+static ButtonAction sync_action = {};
+static ActionStorage test_action_storage = {};
+
+static ButtonAction make_test_operation(JsonObject action) {
+    ButtonAction result = {};
+    ActionStorageScope scope(&test_action_storage);
+    action_parse(action, result);
+    return result;
+}
+
+static ActionResult inspect_sync_context(const ActionResolvedArgument*, const char*, uint32_t) {
     const ActionDispatchContext context = action_dispatch_context();
     if (!context.synchronous || context.interactive) return ACTION_FAILED;
     if (context.generation == 202) {
@@ -30,7 +46,7 @@ static ActionResult inspect_sync_context(const ButtonAction& action, const char*
             ? ACTION_COMPLETE : ACTION_FAILED;
     }
     if (context.generation != 101 || context.work_guard != outer_guard || !context.alarm_audio ||
-        action_dispatch_synchronous(action, "nested", inner_guard, 202, false) != ACTION_COMPLETE)
+        action_dispatch_synchronous(sync_action, "nested", inner_guard, 202, false) != ACTION_COMPLETE)
         return ACTION_FAILED;
     const ActionDispatchContext restored = action_dispatch_context();
     return restored.synchronous && restored.work_guard == outer_guard &&
@@ -38,9 +54,12 @@ static ActionResult inspect_sync_context(const ButtonAction& action, const char*
         ? ACTION_COMPLETE : ACTION_FAILED;
 }
 
+static const ActionOperationDef sync_context_operations[] = {
+    {"test.sync_context", "Test synchronous context", nullptr, 0, inspect_sync_context}
+};
 static const ActionTypeDef sync_context_action = {
-    "sync_context", nullptr, nullptr, inspect_sync_context, nullptr, nullptr,
-    nullptr, nullptr, ACTION_EXECUTION_SYNC
+    "sync_context", nullptr, nullptr, ACTION_EXECUTION_SYNC, true, false,
+    sync_context_operations, 1
 };
 
 static unsigned wide_calls = 0;
@@ -48,6 +67,11 @@ static char wide_target[81] = {};
 static int32_t wide_number = 0;
 static int32_t wide_enabled = 0;
 static ActionResult capture_wide(const ActionResolvedArgument* args, const char*, uint32_t) {
+#if HAS_DISPLAY
+    if (check_dispatch_lock)
+        return test_display_locked && action_dispatch_context().synchronous
+            ? ACTION_FAILED : ACTION_COMPLETE;
+#endif
     ++wide_calls;
     strlcpy(wide_target, args[0].text, sizeof(wide_target));
     wide_number = args[1].integer;
@@ -63,9 +87,76 @@ static const ActionOperationDef wide_operations[] = {
     {"test.wide", "Wide", wide_arguments, 3, capture_wide}
 };
 static const ActionTypeDef wide_type = {
-    "test_wide", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-    ACTION_EXECUTION_SYNC, true, true, false, nullptr, wide_operations, 1
+    "test_wide", nullptr, nullptr,
+    ACTION_EXECUTION_SYNC, true, false, wide_operations, 1
 };
+
+static float captured_number = 0;
+static unsigned number_calls = 0;
+static ActionResult capture_number(const ActionResolvedArgument* args, const char*, uint32_t) {
+#if HAS_DISPLAY
+    if (check_dispatch_lock && (test_display_locked || !action_dispatch_context().synchronous))
+        return ACTION_FAILED;
+#endif
+    captured_number = args[0].number;
+    ++number_calls;
+    return ACTION_COMPLETE;
+}
+static const ActionArgumentDef number_arguments[] = {
+    {"value", "Value", ACTION_ARGUMENT_NUMBER, -10, 10, 0, true, "[var:number]", "number"},
+};
+static const ActionArgumentDef number_wide_arguments[] = {
+    {"value", "Value", ACTION_ARGUMENT_NUMBER, INT32_MIN, INT32_MAX, 0, true, "[var:number]", "number"},
+};
+static const ActionOperationDef number_operations[] = {
+    {"test.number", "Number", number_arguments, 1, capture_number},
+    {"test.number_wide", "Wide number", number_wide_arguments, 1, capture_number},
+};
+static const ActionTypeDef number_type = {
+    "test_number", nullptr, nullptr,
+    ACTION_EXECUTION_SYNC, false, false, number_operations, 2
+};
+static bool number_operation_dispatch() {
+    JsonDocument input;
+    if (deserializeJson(input, R"({"op":"test.number","args":{"value":1.25}})")) return false;
+    ActionStorage storage = {};
+    ButtonAction action = {};
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(input.as<JsonObject>(), action);
+    }
+    JsonDocument output;
+    action_to_json(action, output.to<JsonObject>());
+    bool ok = !storage.failed && output["args"]["value"].is<float>() &&
+        output["args"]["value"].as<float>() == 1.25f &&
+        action_dispatch(action, "number") == ACTION_COMPLETE && captured_number == 1.25f;
+    action_storage_clear(storage);
+    input["args"]["value"].to<JsonObject>()["$template"] = "[var:number]";
+    runtime_variable_set("number", "-0.5");
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(input.as<JsonObject>(), action);
+    }
+    ok = ok && !storage.failed && action_dispatch(action, "number") == ACTION_COMPLETE &&
+        captured_number == -0.5f;
+    const unsigned before = number_calls;
+    for (const char* invalid : {"nan", "1x", "11", "1e999"}) {
+        runtime_variable_set("number", invalid);
+        ok = ok && action_dispatch(action, "number") == ACTION_FAILED && number_calls == before;
+    }
+    action_storage_clear(storage);
+    input["args"]["value"] = true;
+    ok = ok && action_operation_validate_json(input.as<JsonObjectConst>(), false);
+    input["args"]["value"] = 2;
+    ok = ok && !action_operation_validate_json(input.as<JsonObjectConst>(), false);
+    input["op"] = "test.number_wide";
+    input["args"]["value"] = 2147483647;
+    ok = ok && action_operation_validate_json(input.as<JsonObjectConst>(), false);
+    float normalized = 0;
+    ok = ok && action_argument_normalize_text(number_wide_arguments[0], "2147483647",
+                                              nullptr, nullptr, &normalized);
+    return ok;
+}
 
 static bool wide_operation_dispatch() {
     char target[81];
@@ -232,7 +323,7 @@ static char navigation_command[32] = {};
 static char navigation_target[33] = {};
 
 struct DisplayManager {
-    bool isInLvglTask() const { return false; }
+    bool isInLvglTask() const;
     bool captureListNavigation(uint32_t* generation) {
         *generation = 7;
         return list_capture_available;
@@ -249,6 +340,7 @@ struct DisplayManager {
         return generation == 7 && navigation_available;
     }
 };
+bool DisplayManager::isInLvglTask() const { return false; }
 
 static DisplayManager navigation_manager;
 DisplayManager* displayManager = &navigation_manager;
@@ -1521,8 +1613,8 @@ static const ActionOperationDef typed_operations[] = {
     {"test.typed", "Typed", typed_arguments, 2, capture_typed_operation}
 };
 static const ActionTypeDef typed_type = {
-    "test_typed", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-    ACTION_EXECUTION_SYNC, true, true, false, nullptr, typed_operations, 1
+    "test_typed", nullptr, nullptr,
+    ACTION_EXECUTION_SYNC, true, false, typed_operations, 1
 };
 
 static bool typed_operation_validation() {
@@ -1592,7 +1684,7 @@ static bool typed_operation_validation() {
 }
 
 static bool boundary_received_item = false;
-static bool nested_item_hidden = false;
+static bool nested_item_retained = false;
 static bool accept_load = true;
 static char requested_note[64] = {};
 static bool accept_record = true;
@@ -1609,12 +1701,23 @@ bool voice_notes_load_request(const char* id) {
     strlcpy(requested_note, id, sizeof(requested_note));
     return accept_load;
 }
-void voice_notes_loaded_clear_if_matches(const char*) {}
+static unsigned cleared_notes = 0;
+static char cleared_note[17] = {};
+void voice_notes_loaded_clear_if_matches(const char* id) {
+    ++cleared_notes;
+    strlcpy(cleared_note, id, sizeof(cleared_note));
+}
 static LoopBridgeExec delete_exec = nullptr;
 alignas(uint32_t) static unsigned char delete_job[LOOP_BRIDGE_CTX_BYTES];
 static char deleted_note[17] = {};
+static VoiceNoteFileStatus delete_result = VoiceNoteFileStatus::Ready;
 static bool bridge_reject = false;
+#if TEST_SPECIALIZED_MCP_BRIDGE
+extern "C" LoopBridgeResult __wrap__Z19loop_bridge_enqueuePFvPKvPbPcmES0_m(LoopBridgeExec exec, const void* context, size_t size);
+LoopBridgeResult __wrap__Z19loop_bridge_enqueuePFvPKvPbPcmES0_m(LoopBridgeExec exec, const void* context, size_t size) {
+#else
 LoopBridgeResult loop_bridge_enqueue(LoopBridgeExec exec, const void* context, size_t size) {
+#endif
     if (!exec || (!context && size) || size > sizeof(delete_job)) return LOOP_BRIDGE_INVALID;
     if (bridge_reject) return LOOP_BRIDGE_BUSY;
     delete_exec = exec;
@@ -1750,45 +1853,45 @@ static bool camera_operation_boundaries() {
 
 VoiceNoteFileStatus voice_notes_remove(const char* id) {
     strlcpy(deleted_note, id, sizeof(deleted_note));
-    return VoiceNoteFileStatus::Ready;
+    return delete_result;
 }
 
-static bool boundary_fields(ButtonAction& action, ActionFieldVisitor visitor, void* context) {
-    return action_visit_field(visitor, context, "target", action.payload.screen.screen_id);
-}
-
-static void parse_boundary(const JsonObject& json, ButtonAction& action) {
-    strlcpy(action.payload.screen.screen_id, json["target"] | "", sizeof(action.payload.screen.screen_id));
-}
-
-static ActionResult inspect_nested_action(const ButtonAction&, const char*, uint32_t) {
+static ActionResult inspect_nested_action(const ActionResolvedArgument*, const char*, uint32_t) {
     char value[32];
     binding_template_resolve("[item:id|none]", value, sizeof(value));
-    nested_item_hidden = std::strcmp(value, "none") == 0;
+    nested_item_retained = std::strcmp(value, "item-1") == 0;
     return ACTION_COMPLETE;
 }
 
-static ActionResult dispatch_boundary(const ButtonAction& action, const char*, uint32_t) {
-    boundary_received_item = std::strcmp(action.payload.screen.screen_id, "item-1") == 0;
-    ButtonAction nested = {};
-    strlcpy(nested.type, "test_nested", sizeof(nested.type));
+static ActionResult dispatch_boundary(const ActionResolvedArgument* arguments, const char*, uint32_t) {
+    boundary_received_item = std::strcmp(arguments[0].text, "item-1") == 0;
+    JsonDocument document;
+    document["op"] = "test.nested";
+    document.createNestedObject("args");
+    ButtonAction nested = make_test_operation(document.as<JsonObject>());
     return action_dispatch(nested, "nested");
 }
 
+static const ActionOperationDef nested_operations[] = {
+    {"test.nested", "Nested", nullptr, 0, inspect_nested_action}
+};
 static const ActionTypeDef nested_action = {
-    "test_nested", nullptr, nullptr, inspect_nested_action, nullptr, nullptr,
-    nullptr, nullptr, ACTION_EXECUTION_SYNC
+    "test_nested", nullptr, nullptr, ACTION_EXECUTION_SYNC, true, false, nested_operations, 1
+};
+static const ActionArgumentDef boundary_arguments[] = {
+    {"target", "Target", ACTION_ARGUMENT_STRING, 0, 0, 31, true, "[item:id]", "text"}
+};
+static const ActionOperationDef boundary_operations[] = {
+    {"test.boundary", "Boundary", boundary_arguments, 1, dispatch_boundary}
 };
 static const ActionTypeDef boundary_action = {
-    "test_boundary", parse_boundary, nullptr, dispatch_boundary, boundary_fields, nullptr,
-    nullptr, nullptr, ACTION_EXECUTION_SYNC, true, true, false,
-    [](const ButtonAction&) { return true; }
+    "test_boundary", nullptr, nullptr, ACTION_EXECUTION_SYNC, true, false, boundary_operations, 1
 };
 
 static uint32_t suspended_token = 0;
 static char operation_target[32] = {};
 static int32_t operation_seconds = 0;
-static ActionResult suspend_action(const ButtonAction&, const char*, uint32_t token) {
+static ActionResult suspend_action(const ActionResolvedArgument*, const char*, uint32_t token) {
     suspended_token = token;
     return token ? ACTION_PENDING : ACTION_FAILED;
 }
@@ -1805,12 +1908,15 @@ static const ActionOperationDef captured_operations[] = {
     {"test.capture", "Capture", captured_arguments, 2, capture_operation}
 };
 static const ActionTypeDef capture_type = {
-    "test_capture", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-    ACTION_EXECUTION_SYNC, true, true, false, nullptr, captured_operations, 1
+    "test_capture", nullptr, nullptr,
+    ACTION_EXECUTION_SYNC, true, false, captured_operations, 1
+};
+static const ActionOperationDef suspend_operations[] = {
+    {"test.suspend", "Suspend", nullptr, 0, suspend_action, ACTION_EXECUTION_PAUSABLE}
 };
 static const ActionTypeDef suspend_type = {
-    "test_suspend", nullptr, nullptr, suspend_action, nullptr, nullptr, nullptr, nullptr,
-    ACTION_EXECUTION_PAUSABLE
+    "test_suspend", nullptr, nullptr,
+    ACTION_EXECUTION_PAUSABLE, true, false, suspend_operations, 1
 };
 
 static unsigned typed_pause_calls = 0;
@@ -1824,8 +1930,8 @@ static const ActionOperationDef pause_operations[] = {
     {"test.pause", "Pause", nullptr, 0, pause_operation, ACTION_EXECUTION_PAUSABLE}
 };
 static const ActionTypeDef pause_type = {
-    "test_pause", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-    ACTION_EXECUTION_SYNC, true, true, false, nullptr, pause_operations, 1
+    "test_pause", nullptr, nullptr,
+    ACTION_EXECUTION_SYNC, true, false, pause_operations, 1
 };
 
 #if HAS_MCP
@@ -1864,7 +1970,6 @@ static bool mcp_test_reserve(uint8_t count, uint32_t* id, void* data) {
     return static_cast<TrackedMcpProbe*>(data)->delivery.execution_reserve(count, 100, *id);
 }
 static void mcp_test_list(const ButtonAction*, uint8_t, void*) {}
-static void mcp_test_action(const ButtonAction&, void*) {}
 static void mcp_test_set(uint32_t id, uint8_t result_index, uint8_t action_index,
                          const HaServicePayload& payload, void* data) {
     static_cast<TrackedMcpProbe*>(data)->delivery.execution_set_action(id, result_index,
@@ -1885,7 +1990,7 @@ static void mcp_test_observed(const ButtonAction* actions, uint8_t count,
         &probe->binding, 1, observer);
 }
 static const McpPressDispatchOps kMcpTestOps = {
-    mcp_test_reserve, mcp_test_list, mcp_test_action, mcp_test_set,
+    mcp_test_reserve, mcp_test_list, mcp_test_set,
     mcp_test_enqueue, mcp_test_record, mcp_test_observed
 };
 
@@ -2157,7 +2262,10 @@ static bool captured_run_survives_pause() {
     }})")) return false;
     ActionStorage storage = {};
     ButtonAction actions[2] = {};
-    strlcpy(actions[0].type, "test_suspend", sizeof(actions[0].type));
+    JsonDocument suspend_document;
+    suspend_document["op"] = "test.suspend";
+    suspend_document.createNestedObject("args");
+    actions[0] = make_test_operation(suspend_document.as<JsonObject>());
     {
         ActionStorageScope scope(&storage);
         action_parse(document.as<JsonObject>(), actions[1]);
@@ -2212,7 +2320,10 @@ static bool real_operations_survive_pause() {
     ])")) return false;
     ActionStorage storage = {};
     ButtonAction actions[3] = {};
-    strlcpy(actions[0].type, "test_suspend", sizeof(actions[0].type));
+    JsonDocument suspend_document;
+    suspend_document["op"] = "test.suspend";
+    suspend_document.createNestedObject("args");
+    actions[0] = make_test_operation(suspend_document.as<JsonObject>());
     {
         ActionStorageScope scope(&storage);
         action_parse(document[0].as<JsonObject>(), actions[1]);
@@ -2255,10 +2366,24 @@ static bool real_operations_survive_pause() {
 #endif
 
 void display_manager_lock_if_needed(bool* did_lock) {
+#if HAS_DISPLAY
+    *did_lock = !test_display_locked;
+    if (*did_lock) {
+        test_display_locked = true;
+        ++test_display_locks;
+    }
+#else
     if (did_lock) *did_lock = false;
+#endif
 }
 
-void display_manager_unlock_if_needed(bool) {}
+void display_manager_unlock_if_needed(bool did_lock) {
+#if HAS_DISPLAY
+    if (did_lock) test_display_locked = false;
+#else
+    (void)did_lock;
+#endif
+}
 static unsigned binding_refreshes = 0;
 void display_manager_request_binding_refresh() { ++binding_refreshes; }
 void ha_service_execute() {}
@@ -2277,11 +2402,13 @@ extern "C" unsigned long millis() {
 }
 
 static ButtonAction set_variable_action(const char* name, const char* value) {
-    ButtonAction action = {};
-    strlcpy(action.type, ACTION_TYPE_SET_VAR, sizeof(action.type));
-    strlcpy(action.payload.set_var.var_name, name, sizeof(action.payload.set_var.var_name));
-    strlcpy(action.payload.set_var.var_value, value, sizeof(action.payload.set_var.var_value));
-    return action;
+    JsonDocument document;
+    document["op"] = "variable.set";
+    JsonObject arguments = document.createNestedObject("args");
+    arguments["name"] = name;
+    if (strchr(value, '[')) arguments.createNestedObject("value")["$template"] = value;
+    else arguments["value"] = value;
+    return make_test_operation(document.as<JsonObject>());
 }
 
 static bool get_equals(const char* name, const char* expected) {
@@ -2290,7 +2417,1118 @@ static bool get_equals(const char* name, const char* expected) {
            std::strcmp(value, expected) == 0;
 }
 
+#if TEST_STOPWATCH_OPERATIONS || TEST_STICKY_OPERATIONS
+static bool board_request_accepted = true;
+static uint32_t board_shutdown_token = 0;
+
+#if TEST_STOPWATCH_OPERATIONS
+#include "../src/boards/m5stack-stopwatch/stopwatch_hardware.h"
+static StopWatchChargingMode board_charge_mode = StopWatchChargingMode::Off;
+static bool board_led_enabled = false;
+static uint16_t board_vibration[STOPWATCH_VIBRATION_MAX_STEPS] = {};
+static uint8_t board_vibration_count = 0;
+
+bool m5stack_stopwatch_set_charging_mode(StopWatchChargingMode mode) {
+    if (!board_request_accepted) return false;
+    board_charge_mode = mode;
+    return true;
+}
+bool m5stack_stopwatch_set_status_led(bool enabled) {
+    if (!board_request_accepted) return false;
+    board_led_enabled = enabled;
+    return true;
+}
+bool m5stack_stopwatch_vibrate_pattern(const uint16_t* durations, uint8_t count) {
+    if (!board_request_accepted) return false;
+    board_vibration_count = count;
+    memcpy(board_vibration, durations, count * sizeof(*durations));
+    return true;
+}
+bool m5stack_stopwatch_request_shutdown(uint32_t token, bool) {
+    if (!board_request_accepted) return false;
+    board_shutdown_token = token;
+    return true;
+}
+
+static bool stopwatch_operation_boundaries() {
+    struct Case { const char* op; const char* argument; const char* value; };
+    const Case cases[] = {
+        {"power.charging.set_mode", "mode", "high"},
+        {"device.status_led.set", "mode", "on"},
+        {"device.vibrate", "pattern", "20,100,20"},
+    };
+    for (const Case& test : cases) {
+        JsonDocument input;
+        input["op"] = test.op;
+        input["args"][test.argument]["$template"] = "[var:board_value]";
+        runtime_variable_set("board_value", test.value);
+        ActionStorage storage = {};
+        ButtonAction action = {};
+        {
+            ActionStorageScope scope(&storage);
+            action_parse(input.as<JsonObject>(), action);
+        }
+        bool ok = !storage.failed && action_dispatch(action, "board") == ACTION_COMPLETE;
+        if (!strcmp(test.op, "power.charging.set_mode"))
+            ok = ok && board_charge_mode == StopWatchChargingMode::High;
+        else if (!strcmp(test.op, "device.status_led.set"))
+            ok = ok && board_led_enabled;
+        else
+            ok = ok && board_vibration_count == 3 && board_vibration[0] == 20 &&
+                 board_vibration[1] == 100 && board_vibration[2] == 20;
+        board_request_accepted = false;
+        ok = ok && action_dispatch(action, "board rejected") == ACTION_FAILED;
+        board_request_accepted = true;
+        runtime_variable_set("board_value", "invalid");
+        ok = ok && action_dispatch(action, "invalid board value") == ACTION_FAILED;
+        action_storage_clear(storage);
+
+        input["args"][test.argument] = test.value;
+        ActionStorage fixed_storage = {};
+        ButtonAction fixed_action = {};
+        {
+            ActionStorageScope scope(&fixed_storage);
+            action_parse(input.as<JsonObject>(), fixed_action);
+        }
+        ok = ok && !fixed_storage.failed &&
+            !action_operation_validate_json(input.as<JsonObjectConst>()) &&
+            action_dispatch(fixed_action, "fixed board value") == ACTION_COMPLETE;
+        action_storage_clear(fixed_storage);
+        input["args"][test.argument] = "invalid";
+        ok = ok && action_operation_validate_json(input.as<JsonObjectConst>());
+        if (!ok) return false;
+    }
+    return true;
+}
+#else
+bool sticky_request_shutdown(uint32_t token) {
+    if (!board_request_accepted) return false;
+    board_shutdown_token = token;
+    return true;
+}
+#endif
+
+static bool board_shutdown_operation() {
+    JsonDocument input;
+    input["op"] = "device.shutdown";
+    input["args"].to<JsonObject>();
+    ActionStorage storage = {};
+    ButtonAction actions[2] = {};
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(input.as<JsonObject>(), actions[0]);
+    }
+    actions[1] = set_variable_action("shutdown_after", "done");
+    runtime_variable_set("shutdown_after", "before");
+    board_request_accepted = false;
+    bool ok = !storage.failed &&
+        action_list_dispatch_result(actions, 2, "shutdown") == ACTION_FAILED &&
+        get_equals("shutdown_after", "before");
+    board_request_accepted = true;
+    board_shutdown_token = 0;
+    ok = ok && action_list_dispatch_result(actions, 2, "shutdown") == ACTION_PENDING &&
+        board_shutdown_token && get_equals("shutdown_after", "before");
+    if (ok) {
+        action_continuation_release(board_shutdown_token);
+        ok = !action_continuation_complete(board_shutdown_token, true) &&
+            get_equals("shutdown_after", "before");
+    }
+    board_shutdown_token = 0;
+    ok = ok && action_list_dispatch_result(actions, 2, "shutdown") == ACTION_PENDING &&
+        board_shutdown_token && action_continuation_complete(board_shutdown_token, false);
+    action_list_dispatch_continuation();
+    ok = ok && get_equals("shutdown_after", "before");
+    action_storage_clear(storage);
+    return ok;
+}
+#endif
+
 #if HAS_DISPLAY && HAS_PSRAM
+#if IS_VOICE_ASSISTANT
+#include "device_classes/voice_assistant/voice.h"
+
+static bool voice_accept = true;
+static uint32_t voice_token = 0;
+static uint16_t voice_silence = 0;
+static uint8_t voice_threshold = 0, voice_volume = 0;
+static char voice_text[60] = {}, voice_name[8] = {};
+#endif
+#if TEST_SPECIALIZED_MCP_BRIDGE && (IS_COFFEE_SCALE || IS_DARKROOM_TIMER)
+#include "mcp_tool_registry.h"
+#include <freertos/task.h>
+bool test_specialized_mcp_control(const char* tool, const char* command, const char* value,
+                                  int expected_code, bool drain, const char* expected_error);
+void test_specialized_mcp_drain();
+static unsigned specialized_mcp_effects = 0;
+static TaskHandle_t specialized_mcp_task = nullptr;
+static void capture_specialized_effect() {
+    ++specialized_mcp_effects;
+    specialized_mcp_task = xTaskGetCurrentTaskHandle();
+}
+
+static bool check_specialized_control(const char* tool, const char* command, const char* value,
+                                      int error = 0, bool drain = true, const char* message = nullptr) {
+    const unsigned before = specialized_mcp_effects;
+    if (!test_specialized_mcp_control(tool, command, value, error, drain, message)) return false;
+    if (error ? specialized_mcp_effects != before
+              : specialized_mcp_effects != before + 1 ||
+                    specialized_mcp_task != reinterpret_cast<TaskHandle_t>(1)) {
+        std::printf("FAIL: unexpected effect or task for %s/%s\n", tool, command ? command : "<missing>");
+        return false;
+    }
+    return true;
+}
+#endif
+#if IS_DARKROOM_TIMER
+#include "device_classes/darkroom_timer/mcp/control_mapping.h"
+static char shelly_host[64] = {}, print_command[20] = {}, print_value[16] = {};
+static uint8_t shelly_relay = 0;
+static bool shelly_enabled = false;
+static char darkroom_owner[16] = {}, darkroom_command[32] = {}, darkroom_value[32] = {};
+static void darkroom_capture(const char* owner, const char* command, const char* value) {
+#if TEST_SPECIALIZED_MCP_BRIDGE
+    capture_specialized_effect();
+#endif
+    strlcpy(darkroom_owner, owner, sizeof(darkroom_owner));
+    strlcpy(darkroom_command, command, sizeof(darkroom_command));
+    strlcpy(darkroom_value, value, sizeof(darkroom_value));
+}
+void expose_timer_dispatch(const char* command, const char* value) {
+    darkroom_capture("exposure", command, value);
+}
+void test_strip_dispatch(const char* command, const char* value) {
+    darkroom_capture("strip", command, value);
+}
+void meter_dispatch(const char* command, const char* value) {
+    darkroom_capture("meter", command, value);
+}
+#endif
+#if IS_COFFEE_SCALE
+#include "device_classes/coffee_scale/mcp/control_mapping.h"
+#include "device_classes/coffee_scale/brew/brew_templates.h"
+static float scale_weight = 0;
+static unsigned scale_tares = 0, scale_calibrations = 0;
+static char brew_command[24] = {}, brew_template[24] = {};
+void scale_request_tare() { capture_specialized_effect(); ++scale_tares; }
+void scale_request_tare_no_persist() { strlcpy(brew_command, "tare", sizeof(brew_command)); }
+void scale_request_calibrate() { ++scale_calibrations; }
+float scale_get_cal_weight() { return scale_weight; }
+void scale_adjust_cal_weight(float value) { capture_specialized_effect(); scale_weight += value; }
+void scale_set_cal_weight(float value) { capture_specialized_effect(); scale_weight = value; }
+void brew_advance(const char*) { strlcpy(brew_command, "advance", sizeof(brew_command)); }
+void brew_start(const char*) { strlcpy(brew_command, "start", sizeof(brew_command)); }
+void brew_next() { capture_specialized_effect(); strlcpy(brew_command, "next", sizeof(brew_command)); }
+void brew_stop() { strlcpy(brew_command, "stop", sizeof(brew_command)); }
+void brew_reset() { strlcpy(brew_command, "reset", sizeof(brew_command)); }
+void brew_hint_template(const char* name) {
+    capture_specialized_effect();
+    strlcpy(brew_template, name, sizeof(brew_template));
+}
+const BrewTemplate* brew_template_find(const char* name) {
+    static BrewTemplate known = {};
+    static BrewTemplate fallback = {};
+    strlcpy(known.name, "v60", sizeof(known.name));
+    strlcpy(fallback.name, "free_pour", sizeof(fallback.name));
+    return !std::strcmp(name, known.name) ? &known : &fallback;
+}
+#endif
+#if TEST_SHUTTER_OPERATIONS || TEST_RELAY_HOST
+#include <map>
+#include <string>
+std::map<std::string, std::string> storage_test_files;
+bool storage_test_fail_open = false;
+size_t storage_test_write_limit = SIZE_MAX;
+FakeLittleFS LittleFS;
+static bool shutter_write_failure = false;
+void storage_publish_usage(bool) {}
+void* config_psram_alloc(size_t bytes, const char*) { return std::calloc(1, bytes); }
+bool storage_write_atomic(const char* path, const uint8_t* data, size_t length) {
+    if (shutter_write_failure) return false;
+    storage_test_files[path] = std::string(reinterpret_cast<const char*>(data), length);
+    return true;
+}
+#endif
+#if TEST_SHUTTER_OPERATIONS
+#include "device_classes/shutter_tester/mcp/control_mapping.h"
+#include "device_classes/shutter_tester/shutter_session_actions.h"
+#include <freertos/task.h>
+bool test_shutter_mcp_control(const char* command, const char* value, bool drain, int* error_code);
+void test_shutter_mcp_drain();
+static char shutter_command[32] = {}, shutter_value[64] = {};
+static bool shutter_accept = true;
+static TaskHandle_t shutter_dispatch_task = nullptr;
+static void shutter_capture_operation(const char* command, const char* value = "") {
+    strlcpy(shutter_command, command, sizeof(shutter_command));
+    strlcpy(shutter_value, value, sizeof(shutter_value));
+    shutter_dispatch_task = xTaskGetCurrentTaskHandle();
+}
+bool shutter_measure_set_target(const char* value, bool) {
+    shutter_capture_operation("set", value);
+    return shutter_accept;
+}
+void shutter_measure_adjust_target(bool faster) {
+    shutter_capture_operation("adjust", faster ? "faster" : "slower");
+}
+bool shutter_measure_toggle_lock() {
+    shutter_capture_operation("toggle_lock");
+    return shutter_accept;
+}
+bool shutter_session_start(const char* value) { shutter_capture_operation("sess_start", value); return shutter_accept; }
+bool shutter_session_toggle(const char* value) { shutter_capture_operation("sess_toggle", value); return shutter_accept; }
+bool shutter_session_guide_start(const char* value) { shutter_capture_operation("guide_start", value); return shutter_accept; }
+void shutter_session_stop() { shutter_capture_operation("sess_stop"); }
+void shutter_session_discard_last() { shutter_capture_operation("sess_discard"); }
+void shutter_session_guide_stop() { shutter_capture_operation("guide_stop"); }
+void shutter_session_guide_skip() { shutter_capture_operation("guide_skip"); }
+void shutter_session_guide_redo() { shutter_capture_operation("guide_redo"); }
+void shutter_capture_start_alignment() { shutter_capture_operation("align_start"); }
+void shutter_capture_stop_alignment() { shutter_capture_operation("align_stop"); }
+void shutter_capture_recalibrate() { shutter_capture_operation("recalibrate"); }
+#endif
+#if IS_DARKROOM_TIMER
+#if !TEST_RELAY_HOST
+void relay_queue_shelly(const char* host, uint8_t relay, bool enabled) {
+    strlcpy(shelly_host, host, sizeof(shelly_host));
+    shelly_relay = relay;
+    shelly_enabled = enabled;
+}
+#endif
+void print_log_dispatch(const char* command, const char* value) {
+#if TEST_SPECIALIZED_MCP_BRIDGE
+    capture_specialized_effect();
+#endif
+    strlcpy(print_command, command, sizeof(print_command));
+    strlcpy(print_value, value, sizeof(print_value));
+}
+#endif
+#if TEST_RELAY_HOST
+#include <freertos/portmacro.h>
+#include "device_classes/darkroom_timer/relay_controller.cpp"
+static TaskFunction_t relay_test_worker = nullptr;
+bool rtos_create_task_psram_stack_pinned(TaskFunction_t fn, const char*, uint32_t,
+                                        void*, UBaseType_t, TaskHandle_t* handle,
+                                        RtosTaskPsramAlloc*, BaseType_t) {
+    relay_test_worker = fn;
+    *handle = reinterpret_cast<TaskHandle_t>(1);
+    return true;
+}
+
+struct RelayTestDone {};
+static void relay_stop_worker(SemaphoreHandle_t, TickType_t) { throw RelayTestDone{}; }
+static void relay_run_pending() {
+    test_freertos_current_task = g_relay_task;
+    test_freertos_semaphore_take_hook = relay_stop_worker;
+    try { relay_test_worker(nullptr); } catch (const RelayTestDone&) {}
+    test_freertos_semaphore_take_hook = nullptr;
+    test_freertos_current_task = nullptr;
+}
+
+static bool relay_host_operations() {
+    const char* path = "/config/relay_actions.json";
+    storage_test_files[path] = R"({"enlarger_on":{"type":"shelly"}})";
+    relay_controller_init();
+    relay_load_config();
+    std::string serialized;
+    bool ok = relay_test_worker && !relay_get_config_json(serialized);
+    const char* config = R"({"action_format_version":1,
+        "enlarger_on":{"op":"shelly.relay.set","args":{"host":{"$template":"[var:relay_host]"},"relay":0,"enabled":false}},
+        "enlarger_off":{},
+        "safelight_on":{},
+        "safelight_off":{"op":"shelly.relay.set","args":{"host":"safe.local","relay":1,"enabled":true}}})";
+    ok = ok && relay_save_config_from_json(reinterpret_cast<const uint8_t*>(config), strlen(config));
+    const std::string saved = storage_test_files[path];
+    shutter_write_failure = true;
+    ok = ok && !relay_save_config_from_json(reinterpret_cast<const uint8_t*>(config), strlen(config)) &&
+         storage_test_files[path] == saved;
+    shutter_write_failure = false;
+    const char* invalid = R"({"action_format_version":1,"enlarger_on":{"type":"shelly"}})";
+    ok = ok && !relay_save_config_from_json(reinterpret_cast<const uint8_t*>(invalid), strlen(invalid)) &&
+         storage_test_files[path] == saved && relay_get_config_json(serialized);
+    const std::string previous = serialized;
+    const std::string nul_key = std::string(199, ' ') +
+        R"({"action_format_version":1,"enlarger_on":{},"enlarger_on\u0000x":{"type":"shelly"},"enlarger_off":{},"safelight_on":{},"safelight_off":{}})";
+    ok = ok && !relay_save_config_from_json(reinterpret_cast<const uint8_t*>(nul_key.data()), nul_key.size()) &&
+         storage_test_files[path] == saved;
+    storage_test_files[path] = nul_key;
+    relay_load_config();
+    ok = ok && storage_test_files[path] == nul_key && relay_get_config_json(serialized) &&
+         serialized == previous;
+    storage_test_files[path] = saved;
+    runtime_variable_set("relay_host", "enlarger.local");
+    relay_test_requests.clear();
+    relay_request(true);
+    relay_run_pending();
+    ok = ok && relay_test_requests.size() == 2 &&
+         relay_test_requests[0] == "http://enlarger.local/relay/0?turn=on" &&
+         relay_test_requests[1] == "http://safe.local/relay/1?turn=off";
+    runtime_variable_set("relay_host", "");
+    relay_test_requests.clear();
+    relay_request(true);
+    relay_run_pending();
+    ok = ok && relay_test_requests.size() == 1 &&
+         relay_test_requests[0] == "http://safe.local/relay/1?turn=off";
+    const char* deferred = R"({"action_format_version":1,
+        "enlarger_on":{"op":"variable.set","args":{"name":"relay_result","value":"first"}},
+        "enlarger_off":{},
+        "safelight_on":{},
+        "safelight_off":{"op":"variable.set","args":{"name":"relay_result","value":"last"}}})";
+    ok = ok && relay_save_config_from_json(reinterpret_cast<const uint8_t*>(deferred), strlen(deferred));
+    relay_request(true);
+    relay_run_pending();
+    const char* empty = R"({"action_format_version":1,"enlarger_on":{},"enlarger_off":{},"safelight_on":{},"safelight_off":{}})";
+    ok = ok && relay_save_config_from_json(reinterpret_cast<const uint8_t*>(empty), strlen(empty));
+    relay_loop();
+    ok = ok && get_equals("relay_result", "last");
+    return ok;
+}
+#endif
+#if IS_VOICE_ASSISTANT
+bool voice_start_recording() { return voice_accept; }
+bool voice_start_until_silence(uint16_t silence, uint8_t threshold, uint32_t token) {
+    voice_silence = silence;
+    voice_threshold = threshold;
+    voice_token = token;
+    return voice_accept;
+}
+VoiceStopResult voice_stop_and_transcribe(uint32_t token) {
+    voice_token = token;
+    return voice_accept ? VOICE_STOP_PENDING : VOICE_STOP_FAILED;
+}
+bool voice_cancel_recording() { return voice_accept; }
+bool voice_speak(const char* text, const char* voice, uint8_t volume) {
+    strlcpy(voice_text, text, sizeof(voice_text));
+    strlcpy(voice_name, voice, sizeof(voice_name));
+    voice_volume = volume;
+    return voice_accept;
+}
+
+static bool voice_assistant_operations() {
+    JsonDocument input;
+    if (deserializeJson(input, R"({"op":"voice.record.until_silence","args":{"silence_ms":{"$template":"[var:voice_delay]"},"speech_threshold":7}})"))
+        return false;
+    ActionStorage storage = {};
+    ButtonAction actions[2] = {};
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(input.as<JsonObject>(), actions[0]);
+    }
+    actions[1] = set_variable_action("voice_after", "done");
+    runtime_variable_set("voice_after", "before");
+    runtime_variable_set("voice_delay", "1200");
+    voice_accept = false;
+    bool ok = !storage.failed &&
+        action_list_dispatch_result(actions, 2, "voice") == ACTION_FAILED &&
+        get_equals("voice_after", "before");
+    voice_accept = true;
+    voice_token = 0;
+    ok = ok && action_list_dispatch_result(actions, 2, "voice") == ACTION_PENDING &&
+        voice_token && voice_silence == 1200 && voice_threshold == 7 &&
+        get_equals("voice_after", "before");
+    if (ok) {
+        ok = action_continuation_complete(voice_token, true);
+        action_list_dispatch_continuation();
+        ok = ok && get_equals("voice_after", "done");
+    }
+    runtime_variable_set("voice_delay", "10001");
+    ok = ok && action_list_dispatch_result(actions, 2, "voice") == ACTION_FAILED;
+    action_storage_clear(storage);
+
+    input.clear();
+    if (deserializeJson(input, R"({"op":"voice.speak","args":{"text":{"$template":"[var:message]"},"voice":"nova","volume":45}})"))
+        return false;
+    runtime_variable_set("message", "hello");
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(input.as<JsonObject>(), actions[0]);
+    }
+    ok = ok && !storage.failed && action_dispatch(actions[0], "voice") == ACTION_COMPLETE &&
+        !std::strcmp(voice_text, "hello") && !std::strcmp(voice_name, "nova") && voice_volume == 45;
+    voice_accept = false;
+    ok = ok && action_dispatch(actions[0], "voice") == ACTION_FAILED;
+    voice_accept = true;
+    action_storage_clear(storage);
+
+    input.clear();
+    input["op"] = "voice.record.start";
+    input["args"].to<JsonObject>();
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(input.as<JsonObject>(), actions[0]);
+    }
+    ok = ok && !storage.failed && action_dispatch(actions[0], "voice") == ACTION_COMPLETE;
+    voice_accept = false;
+    ok = ok && action_dispatch(actions[0], "voice") == ACTION_FAILED;
+    voice_accept = true;
+    action_storage_clear(storage);
+
+    input["op"] = "voice.record.stop_transcribe";
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(input.as<JsonObject>(), actions[0]);
+    }
+    runtime_variable_set("voice_after", "before");
+    voice_token = 0;
+    ok = ok && !storage.failed &&
+        action_list_dispatch_result(actions, 2, "voice") == ACTION_PENDING && voice_token;
+    if (ok) {
+        action_continuation_release(voice_token);
+        ok = !action_continuation_complete(voice_token, true) && get_equals("voice_after", "before");
+    }
+    action_storage_clear(storage);
+
+    input["op"] = "voice.record.cancel";
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(input.as<JsonObject>(), actions[0]);
+    }
+    ok = ok && !storage.failed &&
+        action_list_dispatch_result(actions, 2, "voice") == ACTION_FAILED &&
+        get_equals("voice_after", "before");
+    action_storage_clear(storage);
+    return ok;
+}
+#endif
+
+#if IS_DARKROOM_TIMER || IS_COFFEE_SCALE || TEST_SHUTTER_OPERATIONS
+static bool mcp_mapping_dispatch(JsonDocument& input) {
+    ActionStorage storage = {};
+    ButtonAction action = {};
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(input.as<JsonObject>(), action);
+    }
+    const bool ok = !storage.failed && action.type[0] == '@' &&
+        action_dispatch(action, "MCP") == ACTION_COMPLETE;
+    action_storage_clear(storage);
+    return ok;
+}
+#endif
+
+#if IS_DARKROOM_TIMER
+static bool darkroom_simple_operations() {
+    JsonDocument input;
+    if (deserializeJson(input, R"({"op":"shelly.relay.set","args":{"host":{"$template":"[var:relay_host]"},"relay":2,"enabled":{"$template":"[var:relay_enabled]"}}})"))
+        return false;
+    runtime_variable_set("relay_host", "shelly.local");
+    runtime_variable_set("relay_enabled", "false");
+    ActionStorage storage = {};
+    ButtonAction action = {};
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(input.as<JsonObject>(), action);
+    }
+    bool ok = !storage.failed && action_dispatch(action, "relay") == ACTION_COMPLETE &&
+        !std::strcmp(shelly_host, "shelly.local") && shelly_relay == 2 && !shelly_enabled;
+    runtime_variable_set("relay_enabled", "invalid");
+    shelly_host[0] = '\0';
+    ok = ok && action_dispatch(action, "relay") == ACTION_FAILED && !shelly_host[0];
+    action_storage_clear(storage);
+
+    input.clear();
+    input["op"] = "print.star.set";
+    input["args"]["starred"] = true;
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(input.as<JsonObject>(), action);
+    }
+    ok = ok && !storage.failed && action_dispatch(action, "print") == ACTION_COMPLETE &&
+        !std::strcmp(print_command, "set_star") && !std::strcmp(print_value, "1");
+    action_storage_clear(storage);
+    input["op"] = "print.star.toggle";
+    input["args"].to<JsonObject>();
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(input.as<JsonObject>(), action);
+    }
+    ok = ok && !storage.failed && action_dispatch(action, "print") == ACTION_COMPLETE &&
+        !std::strcmp(print_command, "toggle_star");
+    action_storage_clear(storage);
+    return ok;
+}
+
+static bool darkroom_timer_operations() {
+    struct Case { const char* op; const char* owner; const char* command; const char* argument; const char* value; };
+    const Case cases[] = {
+        {"exposure.toggle", "exposure", "toggle", nullptr, ""},
+        {"exposure.start", "exposure", "start", nullptr, ""},
+        {"exposure.stop", "exposure", "stop", nullptr, ""},
+        {"exposure.pause", "exposure", "pause", nullptr, ""},
+        {"exposure.resume", "exposure", "resume", nullptr, ""},
+        {"exposure.reset", "exposure", "reset", nullptr, ""},
+        {"exposure.focus.on", "exposure", "focus", nullptr, ""},
+        {"exposure.focus.off", "exposure", "focus_off", nullptr, ""},
+        {"exposure.focus.toggle", "exposure", "focus_toggle", nullptr, ""},
+        {"exposure.time.set", "exposure", "set_time", "seconds", "1.25"},
+        {"exposure.time.adjust", "exposure", "adjust_seconds", "seconds", "1.25"},
+        {"exposure.stops.adjust", "exposure", "adjust_stops", "stops", "1.25"},
+        {"exposure.dry_down.set", "exposure", "set_dry_down", "percent", "1.25"},
+        {"exposure.dry_down.adjust", "exposure", "adjust_dry_down", "percent", "1.25"},
+        {"strip.start", "strip", "start", nullptr, ""},
+        {"strip.cancel", "strip", "cancel", nullptr, ""},
+        {"strip.step.increase", "strip", "step_up", nullptr, ""},
+        {"strip.step.decrease", "strip", "step_down", nullptr, ""},
+        {"strip.base.set", "strip", "set_base", "seconds", "1.25"},
+        {"strip.base.adjust", "strip", "adjust_base", "seconds", "1.25"},
+        {"strip.segments.adjust", "strip", "adjust_segments", "segments", "2"},
+        {"strip.segments.set", "strip", "set_segments", "segments", "2"},
+        {"strip.countdown.set", "strip", "set_countdown", "seconds", "2"},
+        {"strip.countdown.adjust", "strip", "adjust_countdown", "seconds", "2"},
+        {"strip.pause.set", "strip", "set_pause", "seconds", "2"},
+        {"strip.pause.adjust", "strip", "adjust_pause", "seconds", "2"},
+        {"strip.tick.set", "strip", "set_tick", "enabled", "on"},
+        {"meter.reference.read", "meter", "read_lref", nullptr, ""},
+        {"meter.bright.read", "meter", "read_bright", nullptr, ""},
+        {"meter.dark.read", "meter", "read_dark", nullptr, ""},
+        {"meter.magnification.measure_a", "meter", "mag_measure_a", nullptr, ""},
+        {"meter.magnification.measure_b", "meter", "mag_measure_b", nullptr, ""},
+        {"meter.magnification.clear", "meter", "mag_clear", nullptr, ""},
+        {"meter.reference.set", "meter", "set_lref", "lux", "1.25"},
+        {"meter.reference.adjust", "meter", "adjust_lref", "lux", "1.25"},
+        {"meter.zone5.set", "meter", "set_zone5", "seconds", "1.25"},
+        {"meter.zone5.adjust", "meter", "adjust_zone5", "seconds", "1.25"},
+    };
+    for (const Case& test : cases) {
+        JsonDocument input;
+        input["op"] = test.op;
+        JsonObject args = input["args"].to<JsonObject>();
+        if (test.argument) {
+            args[test.argument]["$template"] = "[var:darkroom_value]";
+            runtime_variable_set("darkroom_value",
+                !std::strcmp(test.value, "on") ? "true" : test.value);
+        }
+        ActionStorage storage = {};
+        ButtonAction action = {};
+        {
+            ActionStorageScope scope(&storage);
+            action_parse(input.as<JsonObject>(), action);
+        }
+        darkroom_command[0] = '\0';
+        bool ok = !storage.failed && action_dispatch(action, "darkroom") == ACTION_COMPLETE &&
+            !std::strcmp(darkroom_owner, test.owner) && !std::strcmp(darkroom_command, test.command) &&
+            !std::strcmp(darkroom_value, test.value);
+        if (test.argument) {
+            runtime_variable_set("darkroom_value", "invalid");
+            darkroom_command[0] = '\0';
+            ok = ok && action_dispatch(action, "darkroom") == ACTION_FAILED && !darkroom_command[0];
+        }
+        action_storage_clear(storage);
+        if (!ok) {
+            std::printf("FAIL: darkroom operation %s\n", test.op);
+            return false;
+        }
+        const char* type = !std::strcmp(test.owner, "exposure") ? ACTION_TYPE_EXPOSE :
+            !std::strcmp(test.owner, "strip") ? ACTION_TYPE_STRIP : ACTION_TYPE_METER;
+        const DrControlMapping* mapping = dr_control_mapping(type, test.command);
+        if (!mapping) return false;
+        input.clear();
+        const char* value = test.argument && !mapping->boolean ? "[var:darkroom_value]" : test.value;
+        if (test.argument && !mapping->boolean) runtime_variable_set("darkroom_value", test.value);
+        if (!dr_control_request(input.to<JsonObject>(), *mapping, value) ||
+            std::strcmp(input["op"].as<const char*>(), test.op)) return false;
+        darkroom_command[0] = '\0';
+        if (!mcp_mapping_dispatch(input) || std::strcmp(darkroom_owner, test.owner) ||
+            std::strcmp(darkroom_command, test.command) || std::strcmp(darkroom_value, test.value))
+            return false;
+    }
+    if (dr_control_mapping(ACTION_TYPE_EXPOSE, "set_tick") ||
+        dr_control_mapping(ACTION_TYPE_STRIP, "unknown") ||
+        dr_control_mapping(nullptr, "start")) return false;
+    struct BoolCase { const char* type; const char* command; const char* value; bool expected; };
+    const BoolCase bool_cases[] = {
+        {ACTION_TYPE_STRIP, "set_tick", "on", true}, {ACTION_TYPE_STRIP, "set_tick", "off", false},
+        {ACTION_TYPE_PRINT, "set_star", "1", true}, {ACTION_TYPE_PRINT, "set_star", "0", false},
+    };
+    for (const BoolCase& test : bool_cases) {
+        const DrControlMapping* mapping = dr_control_mapping(test.type, test.command);
+        runtime_variable_set("mcp_bool", test.value);
+        char resolved[BINDING_TEMPLATE_MAX_LEN];
+        if (!mapping || !binding_template_resolve_checked("[var:mcp_bool]", resolved, sizeof(resolved)))
+            return false;
+        JsonDocument input;
+        if (!dr_control_request(input.to<JsonObject>(), *mapping, resolved) ||
+            !input["args"][mapping->argument].is<bool>() ||
+            input["args"][mapping->argument].as<bool>() != test.expected ||
+            !mcp_mapping_dispatch(input)) return false;
+        if (!std::strcmp(test.type, ACTION_TYPE_STRIP)) {
+            if (std::strcmp(darkroom_value, test.value)) return false;
+        } else if (std::strcmp(print_command, "set_star") || std::strcmp(print_value, test.value)) {
+            return false;
+        }
+        input.clear();
+        if (dr_control_request(input.to<JsonObject>(), *mapping, "true")) return false;
+        input.clear();
+        if (dr_control_request(input.to<JsonObject>(), *mapping,
+                               !std::strcmp(test.type, ACTION_TYPE_STRIP) ? "1" : "on")) return false;
+    }
+    const DrControlMapping* toggle = dr_control_mapping(ACTION_TYPE_PRINT, "toggle_star");
+    JsonDocument input;
+    if (!toggle || !dr_control_request(input.to<JsonObject>(), *toggle, "") ||
+        !mcp_mapping_dispatch(input) || std::strcmp(print_command, "toggle_star")) return false;
+    const DrControlMapping* numeric = dr_control_mapping(ACTION_TYPE_EXPOSE, "set_time");
+    input.clear();
+    runtime_variable_set("mcp_bad_number", "not-a-number");
+    if (!numeric || !dr_control_request(input.to<JsonObject>(), *numeric, "[var:mcp_bad_number]"))
+        return false;
+    darkroom_command[0] = '\0';
+    if (mcp_mapping_dispatch(input) || darkroom_command[0]) return false;
+    char unresolved[BINDING_TEMPLATE_MAX_LEN];
+    if (binding_template_resolve_checked("[var:missing_mcp_boolean]", unresolved, sizeof(unresolved)))
+        return false;
+    return true;
+}
+
+#if TEST_SPECIALIZED_MCP_BRIDGE
+static bool darkroom_mcp_bridge() {
+    runtime_variable_set("mcp_seconds", "12.5");
+    runtime_variable_set("mcp_print_star", "1");
+    if (!check_specialized_control("expose_control", "set_time", "[var:mcp_seconds]") ||
+        std::strcmp(darkroom_owner, "exposure") || std::strcmp(darkroom_command, "set_time") ||
+        std::strcmp(darkroom_value, "12.5")) return false;
+    if (!check_specialized_control("strip_control", "set_tick", "off") ||
+        std::strcmp(darkroom_owner, "strip") || std::strcmp(darkroom_command, "set_tick") ||
+        std::strcmp(darkroom_value, "off")) return false;
+    if (!check_specialized_control("meter_control", "read_bright", nullptr) ||
+        std::strcmp(darkroom_owner, "meter") || std::strcmp(darkroom_command, "read_bright")) return false;
+    if (!check_specialized_control("print_control", "set_star", "[var:mcp_print_star]") ||
+        std::strcmp(print_command, "set_star") || std::strcmp(print_value, "1")) return false;
+    if (!check_specialized_control("print_control", "start", nullptr, MCP_RPC_ERR_PARAMS) ||
+        !check_specialized_control("expose_control", nullptr, nullptr, MCP_RPC_ERR_PARAMS) ||
+        !check_specialized_control("strip_control", "set_tick",
+                                   "onxxxxxxxxxxxxxxxxxxxxxxxx", MCP_RPC_ERR_PARAMS) ||
+        !check_specialized_control("meter_control", "set_lref", "not-a-number",
+                                   MCP_RPC_ERR_INTERNAL, true, "failed to dispatch") ||
+        !check_specialized_control("strip_control", "set_tick", "1",
+                                   MCP_RPC_ERR_INTERNAL, true, "invalid value") ||
+        !check_specialized_control("print_control", "set_star", "[var:no_mcp_bool]",
+                                   MCP_RPC_ERR_INTERNAL, true, "invalid value")) return false;
+
+    const unsigned before = specialized_mcp_effects;
+    if (!check_specialized_control("expose_control", "set_time", "[var:mcp_seconds]",
+                                   MCP_RPC_ERR_INTERNAL, false, "timed out") ||
+        !check_specialized_control("strip_control", "cancel", nullptr, MCP_RPC_ERR_CONTROL_BUSY))
+        return false;
+    // A timeout abandons only the reply. The copied job resolves bindings when drained.
+    runtime_variable_set("mcp_seconds", "19.25");
+    test_specialized_mcp_drain();
+    if (specialized_mcp_effects != before + 1 ||
+        specialized_mcp_task != reinterpret_cast<TaskHandle_t>(1) ||
+        std::strcmp(darkroom_owner, "exposure") || std::strcmp(darkroom_command, "set_time") ||
+        std::strcmp(darkroom_value, "19.25")) return false;
+    test_specialized_mcp_drain();
+    return specialized_mcp_effects == before + 1 &&
+        check_specialized_control("strip_control", "cancel", nullptr) &&
+        !std::strcmp(darkroom_owner, "strip") && !std::strcmp(darkroom_command, "cancel");
+}
+#endif
+#endif
+
+#if IS_COFFEE_SCALE
+static bool coffee_operations() {
+    JsonDocument input;
+    if (deserializeJson(input, R"({"op":"scale.calibration.set_weight","args":{"grams":251.5}})"))
+        return false;
+    ActionStorage storage = {};
+    ButtonAction action = {};
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(input.as<JsonObject>(), action);
+    }
+    bool ok = !storage.failed && action_dispatch(action, "scale") == ACTION_COMPLETE &&
+        scale_weight == 251.5f;
+    action_storage_clear(storage);
+    input["op"] = "scale.calibration.adjust_weight";
+    input["args"]["grams"].to<JsonObject>()["$template"] = "[var:weight_delta]";
+    runtime_variable_set("weight_delta", "-0.5");
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(input.as<JsonObject>(), action);
+    }
+    ok = ok && !storage.failed && action_dispatch(action, "scale") == ACTION_COMPLETE && scale_weight == 251.0f;
+    runtime_variable_set("weight_delta", "0");
+    ok = ok && action_dispatch(action, "scale") == ACTION_FAILED && scale_weight == 251.0f;
+    action_storage_clear(storage);
+
+    input.clear();
+    input["op"] = "brew.template.set";
+    input["args"]["template"]["$template"] = "[var:recipe]";
+    runtime_variable_set("recipe", "v60");
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(input.as<JsonObject>(), action);
+    }
+    ok = ok && !storage.failed && action_dispatch(action, "brew") == ACTION_COMPLETE &&
+        !std::strcmp(brew_template, "v60");
+    runtime_variable_set("recipe", "missing");
+    ok = ok && action_dispatch(action, "brew") == ACTION_FAILED && !std::strcmp(brew_template, "v60");
+    action_storage_clear(storage);
+
+    struct Case { const char* operation; const char* command; };
+    const Case cases[] = {
+        {"brew.advance", "advance"}, {"brew.start", "start"}, {"brew.next", "next"},
+        {"brew.stop", "stop"}, {"brew.reset", "reset"}, {"brew.tare", "tare"},
+    };
+    for (const Case& test : cases) {
+        input.clear();
+        input["op"] = test.operation;
+        input["args"].to<JsonObject>();
+        {
+            ActionStorageScope scope(&storage);
+            action_parse(input.as<JsonObject>(), action);
+        }
+        ok = ok && !storage.failed && action_dispatch(action, "brew") == ACTION_COMPLETE &&
+            !std::strcmp(brew_command, test.command);
+        action_storage_clear(storage);
+    }
+    for (const char* op : {"scale.tare", "scale.calibrate"}) {
+        input.clear();
+        input["op"] = op;
+        input["args"].to<JsonObject>();
+        {
+            ActionStorageScope scope(&storage);
+            action_parse(input.as<JsonObject>(), action);
+        }
+        ok = ok && !storage.failed && action_dispatch(action, "scale") == ACTION_COMPLETE;
+        action_storage_clear(storage);
+    }
+    return ok && scale_tares == 1 && scale_calibrations == 1;
+}
+
+static bool coffee_mcp_mappings() {
+    struct Case { const char* type; const char* command; const char* operation; const char* value; };
+    const Case cases[] = {
+        {ACTION_TYPE_SCALE, "tare", "scale.tare", ""},
+        {ACTION_TYPE_SCALE, "calibrate", "scale.calibrate", ""},
+        {ACTION_TYPE_SCALE, "cal_weight", "scale.calibration.adjust_weight", "-0.5"},
+        {ACTION_TYPE_SCALE, "cal_weight_set", "scale.calibration.set_weight", "123.5"},
+        {ACTION_TYPE_BREW, "advance", "brew.advance", ""},
+        {ACTION_TYPE_BREW, "start", "brew.start", ""},
+        {ACTION_TYPE_BREW, "next", "brew.next", ""},
+        {ACTION_TYPE_BREW, "stop", "brew.stop", ""},
+        {ACTION_TYPE_BREW, "reset", "brew.reset", ""},
+        {ACTION_TYPE_BREW, "tare", "brew.tare", ""},
+        {ACTION_TYPE_BREW, "set_template", "brew.template.set", "v60"},
+    };
+    const unsigned tares_before = scale_tares, calibrations_before = scale_calibrations;
+    for (const Case& test : cases) {
+        const CsControlMapping* mapping = cs_control_mapping(test.type, test.command);
+        if (!mapping) return false;
+        JsonDocument input;
+        cs_control_request(input.to<JsonObject>(), *mapping, test.value);
+        if (std::strcmp(input["op"].as<const char*>(), test.operation) || !mcp_mapping_dispatch(input))
+            return false;
+        if (!std::strcmp(test.command, "cal_weight") && scale_weight != 250.5f) return false;
+        if (!std::strcmp(test.command, "cal_weight_set") && scale_weight != 123.5f) return false;
+        if (!std::strcmp(test.command, "set_template") && std::strcmp(brew_template, "v60")) return false;
+        if (!std::strcmp(test.type, ACTION_TYPE_BREW) && std::strcmp(test.command, "set_template") &&
+            std::strcmp(brew_command, test.command)) return false;
+    }
+    if (scale_tares != tares_before + 1 || scale_calibrations != calibrations_before + 1) return false;
+    if (cs_control_mapping(ACTION_TYPE_SCALE, "start") || cs_control_mapping(nullptr, "tare") ||
+        cs_control_mapping(ACTION_TYPE_BREW, "unknown")) return false;
+    JsonDocument input;
+    const CsControlMapping* mapping = cs_control_mapping(ACTION_TYPE_SCALE, "cal_weight");
+    cs_control_request(input.to<JsonObject>(), *mapping, "invalid");
+    if (mcp_mapping_dispatch(input) || scale_weight != 123.5f) return false;
+    input.clear();
+    mapping = cs_control_mapping(ACTION_TYPE_BREW, "set_template");
+    cs_control_request(input.to<JsonObject>(), *mapping, "missing");
+    return !mcp_mapping_dispatch(input) && !std::strcmp(brew_template, "v60");
+}
+
+static bool coffee_mcp_bridge() {
+    const unsigned tares_before = scale_tares;
+    if (!check_specialized_control("scale_control", "tare", nullptr) ||
+        scale_tares != tares_before + 1 ||
+        !check_specialized_control("scale_control", "cal_weight_set", "120.5") ||
+        scale_weight != 120.5f ||
+        !check_specialized_control("scale_control", "cal_weight", "-0.25") ||
+        scale_weight != 120.25f) return false;
+    brew_template[0] = '\0';
+    if (!check_specialized_control("brew_control", "set_template", "v60") ||
+        std::strcmp(brew_template, "v60")) return false;
+    if (!check_specialized_control("scale_control", "start", nullptr, MCP_RPC_ERR_PARAMS) ||
+        !check_specialized_control("scale_control", "cal_weight", "0", MCP_RPC_ERR_PARAMS) ||
+        !check_specialized_control("brew_control", "set_template", "not-a-template", MCP_RPC_ERR_PARAMS) ||
+        !check_specialized_control("scale_control", "cal_weight_set", "121.5junk",
+                                   MCP_RPC_ERR_INTERNAL, true, "failed to dispatch")) return false;
+
+    fail_psram = true;
+    const bool allocation_rejected = check_specialized_control("scale_control", "tare", nullptr,
+        MCP_RPC_ERR_INTERNAL);
+    fail_psram = false;
+    if (!allocation_rejected) return false;
+
+    const unsigned before = specialized_mcp_effects;
+    if (!check_specialized_control("scale_control", "cal_weight_set", "135.25",
+                                   MCP_RPC_ERR_INTERNAL, false, "timed out") ||
+        !check_specialized_control("brew_control", "next", nullptr, MCP_RPC_ERR_CONTROL_BUSY) ||
+        scale_weight != 120.25f) return false;
+    test_specialized_mcp_drain();
+    if (specialized_mcp_effects != before + 1 || scale_weight != 135.25f ||
+        specialized_mcp_task != reinterpret_cast<TaskHandle_t>(1)) return false;
+    test_specialized_mcp_drain();
+    brew_command[0] = '\0';
+    return specialized_mcp_effects == before + 1 &&
+        check_specialized_control("brew_control", "next", nullptr) &&
+        !std::strcmp(brew_command, "next");
+}
+#endif
+
+#if TEST_SHUTTER_OPERATIONS
+static bool shutter_operations() {
+    struct Case { const char* op; const char* command; const char* argument; const char* value; };
+    const Case cases[] = {
+        {"shutter.target.set", "set", "speed", "1/125"},
+        {"shutter.target.adjust", "adjust", "direction", "slower"},
+        {"shutter.target.toggle_lock", "toggle_lock", nullptr, ""},
+        {"shutter.session.start", "sess_start", "camera", "camera1"},
+        {"shutter.session.toggle", "sess_toggle", "camera", "camera1"},
+        {"shutter.session.stop", "sess_stop", nullptr, ""},
+        {"shutter.session.discard", "sess_discard", nullptr, ""},
+        {"shutter.guide.start", "guide_start", "test", "test1"},
+        {"shutter.guide.stop", "guide_stop", nullptr, ""},
+        {"shutter.guide.skip", "guide_skip", nullptr, ""},
+        {"shutter.guide.redo", "guide_redo", nullptr, ""},
+        {"shutter.alignment.start", "align_start", nullptr, ""},
+        {"shutter.alignment.stop", "align_stop", nullptr, ""},
+        {"shutter.recalibrate", "recalibrate", nullptr, ""},
+    };
+    for (const Case& test : cases) {
+        JsonDocument input;
+        input["op"] = test.op;
+        JsonObject args = input["args"].to<JsonObject>();
+        if (test.argument) {
+            args[test.argument]["$template"] = "[var:shutter_value]";
+            runtime_variable_set("shutter_value", test.value);
+        }
+
+        ActionStorage storage = {};
+        ButtonAction action = {};
+        {
+            ActionStorageScope scope(&storage);
+            action_parse(input.as<JsonObject>(), action);
+        }
+        shutter_command[0] = '\0';
+        bool ok = !storage.failed && action_dispatch(action, "shutter") == ACTION_COMPLETE &&
+            !std::strcmp(shutter_command, test.command) && !std::strcmp(shutter_value, test.value);
+        if (!std::strcmp(test.command, "set") || !std::strcmp(test.command, "adjust")) {
+            runtime_variable_set("shutter_value", "invalid");
+            shutter_command[0] = '\0';
+            ok = ok && action_dispatch(action, "shutter") == ACTION_FAILED && !shutter_command[0];
+        }
+        if (!std::strcmp(test.command, "toggle_lock") ||
+            !std::strcmp(test.command, "sess_start") ||
+            !std::strcmp(test.command, "sess_toggle") ||
+            !std::strcmp(test.command, "guide_start")) {
+            shutter_accept = false;
+            ok = ok && action_dispatch(action, "shutter") == ACTION_FAILED;
+            shutter_accept = true;
+        }
+        action_storage_clear(storage);
+        if (!ok) {
+            std::printf("FAIL: shutter operation %s\n", test.op);
+            return false;
+        }
+        const ShutterControlMapping* mapping = shutter_control_mapping(test.command);
+        if (!mapping) return false;
+        input.clear();
+        shutter_control_request(input.to<JsonObject>(), *mapping, test.value);
+        shutter_command[0] = '\0';
+        if (std::strcmp(input["op"].as<const char*>(), test.op) || !mcp_mapping_dispatch(input) ||
+            std::strcmp(shutter_command, test.command) || std::strcmp(shutter_value, test.value)) return false;
+    }
+    if (shutter_control_mapping("unknown") || shutter_control_mapping(nullptr)) return false;
+    JsonDocument input;
+    const ShutterControlMapping* mapping = shutter_control_mapping("sess_start");
+    shutter_control_request(input.to<JsonObject>(), *mapping, "");
+    if (!mcp_mapping_dispatch(input) || std::strcmp(shutter_command, "sess_start") || shutter_value[0])
+        return false;
+    input.clear();
+    mapping = shutter_control_mapping("adjust");
+    shutter_control_request(input.to<JsonObject>(), *mapping, "invalid");
+    shutter_command[0] = '\0';
+    if (mcp_mapping_dispatch(input) || shutter_command[0]) return false;
+    input.clear();
+    runtime_variable_set("mcp_direction", "faster");
+    shutter_control_request(input.to<JsonObject>(), *mapping, "[var:mcp_direction]");
+    if (!mcp_mapping_dispatch(input) || std::strcmp(shutter_value, "faster")) return false;
+    input.clear();
+    mapping = shutter_control_mapping("toggle_lock");
+    shutter_control_request(input.to<JsonObject>(), *mapping, "");
+    shutter_accept = false;
+    const bool dispatched = mcp_mapping_dispatch(input);
+    shutter_accept = true;
+    return !dispatched;
+}
+
+static bool shutter_mcp_bridge() {
+    int error = 0;
+    shutter_command[0] = '\0';
+    if (!test_shutter_mcp_control("sess_start", "camera", true, &error) ||
+        std::strcmp(shutter_command, "sess_start") ||
+        std::strcmp(shutter_value, "camera") ||
+        shutter_dispatch_task != reinterpret_cast<TaskHandle_t>(1)) return false;
+    const struct { const char* command; const char* value; } controls[] = {
+        {"set", "1/125"}, {"toggle_lock", ""}, {"sess_toggle", "camera"},
+        {"sess_stop", ""}, {"sess_discard", ""}, {"guide_start", "test"},
+        {"guide_skip", ""}, {"guide_redo", ""}, {"guide_stop", ""},
+        {"align_start", ""}, {"align_stop", ""}, {"recalibrate", ""},
+        {"adjust", "faster"},
+    };
+    for (const auto& control : controls) {
+        shutter_command[0] = '\0';
+        if (!test_shutter_mcp_control(control.command, control.value, true, &error) ||
+            std::strcmp(shutter_command, control.command) ||
+            shutter_dispatch_task != reinterpret_cast<TaskHandle_t>(1)) {
+            std::printf("FAIL: shutter MCP command %s (error %d, dispatched %s)\n",
+                        control.command, error, shutter_command);
+            return false;
+        }
+        if (!std::strcmp(control.command, "adjust") && std::strcmp(shutter_value, "faster")) return false;
+    }
+    shutter_command[0] = '\0';
+    if (test_shutter_mcp_control("adjust", "invalid", true, &error) ||
+        error != -32602 || shutter_command[0]) return false;
+    shutter_command[0] = '\0';
+    if (test_shutter_mcp_control("unknown", "", true, &error) || error != -32602 ||
+        shutter_command[0]) return false;
+    shutter_accept = false;
+    bool accepted = test_shutter_mcp_control("sess_start", "camera", true, &error);
+    shutter_accept = true;
+    if (accepted || error != -32603) return false;
+    shutter_command[0] = '\0';
+    if (test_shutter_mcp_control("sess_start", "later", false, &error) ||
+        error != -32603 || shutter_command[0]) return false;
+    if (test_shutter_mcp_control("sess_stop", "", true, &error) || error != -32001) return false;
+    test_shutter_mcp_drain();
+    if (std::strcmp(shutter_command, "sess_start") ||
+        std::strcmp(shutter_value, "later") ||
+        shutter_dispatch_task != reinterpret_cast<TaskHandle_t>(1)) return false;
+    shutter_command[0] = '\0';
+    return test_shutter_mcp_control("sess_stop", "", true, &error) &&
+        !std::strcmp(shutter_command, "sess_stop") &&
+        shutter_dispatch_task == reinterpret_cast<TaskHandle_t>(1);
+}
+
+static bool shutter_session_hook_storage() {
+    const char* path = "/config/shutter_session_actions.json";
+    const char* legacy = R"({"save_start_actions":[{"type":"notify"}],"save_complete_actions":[]})";
+    storage_test_files[path] = legacy;
+    shutter_session_actions_init();
+    std::string serialized;
+    if (shutter_session_actions_to_json(serialized) || storage_test_files[path] != legacy) return false;
+    const char* valid = R"({"action_format_version":1,"save_start_actions":[{"op":"test.number","args":{"value":{"$template":"[var:number]"}}}],"save_complete_actions":[{"op":"shutter.alignment.start","args":{}}]})";
+    if (!shutter_session_actions_save_raw(reinterpret_cast<const uint8_t*>(valid), strlen(valid))) return false;
+    if (!shutter_session_actions_to_json(serialized) || serialized.find("[var:number]") == std::string::npos)
+        return false;
+    const char* full = R"({"action_format_version":1,"save_start_actions":[{"op":"test.number","args":{"value":1}},{"op":"test.number","args":{"value":2}},{"op":"test.number","args":{"value":3}}],"save_complete_actions":[{"op":"shutter.alignment.start","args":{}},{"op":"shutter.alignment.stop","args":{}},{"op":"shutter.recalibrate","args":{}}]})";
+    if (!shutter_session_actions_save_raw(reinterpret_cast<const uint8_t*>(full), strlen(full)) ||
+        !shutter_session_actions_to_json(serialized)) return false;
+    JsonDocument round_trip;
+    if (deserializeJson(round_trip, serialized) ||
+        round_trip["save_start_actions"].size() != 3 ||
+        round_trip["save_complete_actions"].size() != 3 ||
+        round_trip["save_start_actions"][2]["args"]["value"] != 3 ||
+        round_trip["save_complete_actions"][2]["op"] != "shutter.recalibrate") return false;
+    struct GuidedHook { const char* op; const char* command; const char* argument; };
+    const GuidedHook guided_hooks[] = {
+        {"shutter.guide.start", "guide_start", "test"},
+        {"shutter.guide.stop", "guide_stop", nullptr},
+        {"shutter.guide.skip", "guide_skip", nullptr},
+    };
+    for (const GuidedHook& item : guided_hooks) {
+        for (const char* event : {"save_start_actions", "save_complete_actions"}) {
+            JsonDocument input;
+            input["action_format_version"] = 1;
+            input["save_start_actions"].to<JsonArray>();
+            input["save_complete_actions"].to<JsonArray>();
+            JsonObject action = input[event].as<JsonArray>().add<JsonObject>();
+            action["op"] = item.op;
+            JsonObject args = action["args"].to<JsonObject>();
+            if (item.argument) args[item.argument] = "test";
+            std::string json;
+            serializeJson(input, json);
+            if (!shutter_session_actions_save_raw(reinterpret_cast<const uint8_t*>(json.data()), json.size()))
+                return false;
+            shutter_command[0] = '\0';
+            if (!strcmp(event, "save_start_actions")) shutter_session_actions_dispatch_start();
+            else {
+                shutter_session_actions_notify_complete();
+                shutter_session_actions_loop();
+            }
+            if (strcmp(shutter_command, item.command)) return false;
+        }
+    }
+    if (!shutter_session_actions_save_raw(reinterpret_cast<const uint8_t*>(valid), strlen(valid))) return false;
+    const char* invalid[] = {
+        legacy,
+        R"({"action_format_version":1,"save_start_actions":[{},{"op":"shutter.alignment.start","args":{}}],"save_complete_actions":[]})",
+        R"({"action_format_version":1,"save_start_actions":[{"op":"shutter.alignment.start","args":{}},{"op":"shutter.alignment.start","args":{}},{"op":"shutter.alignment.start","args":{}},{"op":"shutter.alignment.start","args":{}}],"save_complete_actions":[]})",
+        R"({"action_format_version":1,"save_start_actions":[{"op":"shutter.session.stop","args":{}}],"save_complete_actions":[]})",
+        R"({"action_format_version":1,"save_start_actions":[{"op":"test.number","args":{"value":true}}],"save_complete_actions":[]})",
+        R"({"action_format_version":1,"save_start_actions":[],"save_start_actions\u0000x":[{"type":"notify"}],"save_complete_actions":[]})"
+    };
+    for (const char* json : invalid) {
+        if (shutter_session_actions_save_raw(reinterpret_cast<const uint8_t*>(json), strlen(json)) ||
+            storage_test_files[path] != valid) return false;
+    }
+    struct Forbidden { const char* op; const char* argument; };
+    const Forbidden forbidden[] = {
+        {"shutter.session.start", "camera"},
+        {"shutter.session.stop", nullptr},
+        {"shutter.session.toggle", "camera"},
+    };
+    for (const Forbidden& item : forbidden) {
+        for (const char* event : {"save_start_actions", "save_complete_actions"}) {
+            JsonDocument input;
+            input["action_format_version"] = 1;
+            input["save_start_actions"].to<JsonArray>();
+            input["save_complete_actions"].to<JsonArray>();
+            JsonObject action = input[event].as<JsonArray>().add<JsonObject>();
+            action["op"] = item.op;
+            JsonObject args = action["args"].to<JsonObject>();
+            if (item.argument) args[item.argument] = "test";
+            if (action_operation_validate_json(action, false)) return false;
+            std::string json;
+            serializeJson(input, json);
+            if (shutter_session_actions_save_raw(reinterpret_cast<const uint8_t*>(json.data()), json.size()) ||
+                storage_test_files[path] != valid) return false;
+        }
+    }
+    shutter_write_failure = true;
+    const bool saved = shutter_session_actions_save_raw(reinterpret_cast<const uint8_t*>(valid), strlen(valid));
+    shutter_write_failure = false;
+    if (saved || storage_test_files[path] != valid) return false;
+    runtime_variable_set("number", "2.5");
+    captured_number = 0;
+    shutter_session_actions_dispatch_start();
+    if (captured_number != 2.5f) return false;
+    shutter_command[0] = '\0';
+    shutter_session_actions_notify_complete();
+    shutter_session_actions_loop();
+    if (std::strcmp(shutter_command, "align_start")) return false;
+    const char* independent = R"({"action_format_version":1,"save_start_actions":[{"op":"test.number","args":{"value":{"$template":"[var:number]"}}},{"op":"shutter.alignment.start","args":{}}],"save_complete_actions":[]})";
+    if (!shutter_session_actions_save_raw(reinterpret_cast<const uint8_t*>(independent), strlen(independent)))
+        return false;
+    runtime_variable_set("number", "not-a-number");
+    shutter_command[0] = '\0';
+    shutter_session_actions_dispatch_start();
+    if (std::strcmp(shutter_command, "align_start")) return false;
+    const char* pending = R"({"action_format_version":1,"save_start_actions":[{"op":"delay.wait","args":{"duration_ms":100}},{"op":"shutter.alignment.start","args":{}}],"save_complete_actions":[]})";
+    if (!shutter_session_actions_save_raw(reinterpret_cast<const uint8_t*>(pending), strlen(pending)))
+        return false;
+    shutter_command[0] = '\0';
+    shutter_session_actions_dispatch_start();
+    if (std::strcmp(shutter_command, "align_start") ||
+        !shutter_session_actions_save_raw(reinterpret_cast<const uint8_t*>(valid), strlen(valid))) return false;
+    shutter_command[0] = '\0';
+    test_now_ms += 100;
+    action_list_dispatch_continuation(ACTION_CONTINUATION_OWNER_LOOP);
+    action_list_dispatch_continuation(ACTION_CONTINUATION_OWNER_LOOP);
+    return !shutter_command[0];
+}
+#endif
+
 static bool voice_note_command_operations() {
     struct Case { const char* id; VoiceNoteCommand command; };
     const Case cases[] = {
@@ -2354,6 +3592,15 @@ static bool voice_note_command_operations() {
 #endif
 
 static bool variable_operation_boundaries() {
+    for (const char* json : {
+            R"({"op":"@variable.set","args":{"name":"counter","value":"1"}})",
+            R"({"op\u0000other":"variable.set","args":{"name":"counter","value":"1"}})",
+            R"({"op":"variable.set","args":{"name\u0000other":"counter","value":"1"}})",
+            R"({"op":"variable.set","args":{"name":"counter","value":{"$template\u0000other":"[var:counter]"}}})"}) {
+        JsonDocument invalid;
+        if (deserializeJson(invalid, json) ||
+            !action_operation_validate_json(invalid.as<JsonObjectConst>(), false)) return false;
+    }
     JsonDocument input;
     if (deserializeJson(input, R"({"op":"variable.set","args":{"name":"counter","value":"[var:counter]"}})"))
         return false;
@@ -2422,27 +3669,64 @@ static bool item_action_validation() {
     strlcpy(alias.value, "[item:id]", sizeof(alias.value));
     JsonDocument input;
     if (deserializeJson(input, R"([
-        {"type":"set_var","var_name":"chosen","var_value":"[pad:chosen]"},
-        {"type":"test_boundary","target":"[item:id]"},
-        {"type":"set_var","var_name":"later","var_value":"[var:chosen]"}
+        {"op":"variable.set","args":{"name":"chosen","value":{"$template":"[pad:chosen]"}}},
+        {"op":"test.boundary","args":{}},
+        {"op":"variable.set","args":{"name":"later","value":{"$template":"[var:chosen]"}}}
     ])")) return false;
     JsonArray actions = input.as<JsonArray>();
     if (item_binding_validate_actions(actions, &source, &alias, 1)) return false;
-    actions[2]["var_value"] = "[pad:chosen]";
-    if (!item_binding_validate_actions(actions, &source, &alias, 1)) return false;
-    actions[2]["var_value"] = "[var:chosen]";
-    actions[0]["var_value"] = "[item:unknown]";
+    actions[2]["args"]["value"]["$template"] = "[pad:chosen]";
     if (item_binding_validate_actions(actions, &source, &alias, 1)) return false;
-    actions[0]["var_value"] = "value";
-    actions[0]["var_name"] = "[item:id]";
-    if (!item_binding_validate_actions(actions, &source, &alias, 1)) return false;
-    actions[0]["var_name"] = "chosen";
-    actions[0]["var_value"] = "[item:id]";
+    actions[0]["args"]["value"]["$template"] = "[item:unknown]";
+    if (item_binding_validate_actions(actions, &source, &alias, 1)) return false;
+    actions[0]["args"]["value"]["$template"] = "[item:id]";
     if (!item_binding_validate_actions(actions, nullptr, &alias, 1)) return false;
-    fail_psram = true;
-    const char* allocation_error = item_binding_validate_actions(actions, &source, &alias, 1);
-    fail_psram = false;
-    return allocation_error && !std::strcmp(allocation_error, "action validation allocation failed");
+    actions[0]["type"] = "set_var";
+    return item_binding_validate_actions(actions, &source, &alias, 1) != nullptr;
+}
+#endif
+
+#if HAS_DISPLAY
+static bool synchronous_operation_locks() {
+    JsonDocument input;
+    if (deserializeJson(input, R"([
+        {"op":"test.wide","args":{"target":"screen","number":1,"enabled":true}},
+        {"op":"test.number","args":{"value":{"$template":"[var:lock_test]"}}}
+    ])")) return false;
+    ActionStorage storage = {};
+    ButtonAction actions[2] = {};
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(input[0].as<JsonObject>(), actions[0]);
+        action_parse(input[1].as<JsonObject>(), actions[1]);
+    }
+    if (storage.failed) {
+        action_storage_clear(storage);
+        return false;
+    }
+    check_dispatch_lock = true;
+    unsigned before = test_display_locks;
+    bool ok = action_dispatch_synchronous(actions[0], "ui", nullptr, 0) == ACTION_FAILED &&
+              !test_display_locked && test_display_locks == before + 2;
+    test_display_locked = true;
+    before = test_display_locks;
+    ok = ok && action_dispatch_synchronous(actions[0], "ui locked", nullptr, 0) == ACTION_FAILED &&
+         test_display_locked && test_display_locks == before;
+    test_display_locked = false;
+    runtime_variable_set("lock_test", "1.5");
+    before = test_display_locks;
+    const unsigned calls = number_calls;
+    ok = ok && action_dispatch_synchronous(actions[1], "network", nullptr, 0) == ACTION_COMPLETE &&
+         number_calls == calls + 1 && test_display_locks == before + 1 && !test_display_locked;
+    runtime_variable_set("lock_test", "invalid");
+    before = test_display_locks;
+    ok = ok && action_dispatch_synchronous(actions[1], "invalid", nullptr, 0) == ACTION_FAILED &&
+         number_calls == calls + 1 && test_display_locks == before + 1 && !test_display_locked &&
+         !action_dispatch_context().synchronous;
+    check_dispatch_lock = false;
+    number_calls = calls;
+    action_storage_clear(storage);
+    return ok;
 }
 #endif
 
@@ -2451,16 +3735,64 @@ int main() {
     var_binding_init();
     action_type_register(&sync_context_action);
     action_type_register(&wide_type);
+    action_type_register(&number_type);
+#if HAS_DISPLAY
+    if (!synchronous_operation_locks()) {
+        std::puts("FAIL: synchronous operation lock ownership");
+        return 1;
+    }
+#endif
+    if (!number_operation_dispatch()) {
+        std::puts("FAIL: numeric operation arguments");
+        return 1;
+    }
     if (!wide_operation_dispatch()) {
         std::puts("FAIL: bounded operation arguments through production dispatch");
         return 1;
     }
+#if HAS_DISPLAY && HAS_PSRAM && TEST_RELAY_HOST
+    if (!relay_host_operations() || !darkroom_timer_operations()) {
+        std::puts("FAIL: relay host operations");
+        return 1;
+    }
+    return 0;
+#elif HAS_DISPLAY && HAS_PSRAM && IS_DARKROOM_TIMER
+    if (!darkroom_simple_operations() || !darkroom_timer_operations()) {
+        std::puts("FAIL: darkroom operations");
+        return 1;
+    }
+    if (!darkroom_mcp_bridge()) {
+        std::puts("FAIL: darkroom MCP bridge");
+        return 1;
+    }
+    return 0;
+#endif
+#if HAS_DISPLAY && HAS_PSRAM && TEST_SHUTTER_OPERATIONS
+    if (!shutter_operations() || !shutter_session_hook_storage() || !shutter_mcp_bridge()) {
+        std::puts("FAIL: shutter operations");
+        return 1;
+    }
+    return 0;
+#endif
+#if TEST_STOPWATCH_OPERATIONS || TEST_STICKY_OPERATIONS
+    if (!board_shutdown_operation()
+#if TEST_STOPWATCH_OPERATIONS
+        || !stopwatch_operation_boundaries()
+#endif
+    ) {
+        std::puts("FAIL: board control operation lifecycle");
+        return 1;
+    }
+    return 0;
+#endif
     if (!malformed_operation_templates()) {
         std::puts("FAIL: malformed dynamic operation templates");
         return 1;
     }
-    ButtonAction sync_action = {};
-    strlcpy(sync_action.type, "sync_context", sizeof(sync_action.type));
+    JsonDocument sync_document;
+    sync_document["op"] = "test.sync_context";
+    sync_document.createNestedObject("args");
+    sync_action = make_test_operation(sync_document.as<JsonObject>());
     if (action_dispatch_synchronous(sync_action, "outer", outer_guard, 101, true) != ACTION_COMPLETE) {
         std::puts("FAIL: nested synchronous action context");
         return 1;
@@ -2481,6 +3813,32 @@ int main() {
     action_type_register(&boundary_action);
     action_type_register(&typed_type);
     action_type_register(&pause_type);
+#if IS_VOICE_ASSISTANT
+    if (!voice_assistant_operations()) {
+        std::printf("FAIL: voice assistant operations\n");
+        return 1;
+    }
+#endif
+#if IS_DARKROOM_TIMER
+    if (!darkroom_simple_operations()) {
+        std::printf("FAIL: darkroom simple operations\n");
+        return 1;
+    }
+    if (!darkroom_timer_operations()) {
+        std::puts("FAIL: darkroom timer operations");
+        return 1;
+    }
+#endif
+#if IS_COFFEE_SCALE
+    if (!coffee_operations() || !coffee_mcp_mappings()) {
+        std::printf("FAIL: coffee operations\n");
+        return 1;
+    }
+    if (!coffee_mcp_bridge()) {
+        std::puts("FAIL: coffee MCP bridge");
+        return 1;
+    }
+#endif
     if (!voice_note_command_operations()) {
         std::puts("FAIL: voice-note command operation dispatch");
         return 1;
@@ -2648,31 +4006,6 @@ int main() {
             std::puts("FAIL: create note snapshot");
             return 1;
         }
-        ButtonAction deletion = {};
-        strlcpy(deletion.type, ACTION_TYPE_VOICE_NOTE_DELETE, sizeof(deletion.type));
-        strlcpy(deletion.payload.voice_note_delete.id, "[item:id]", sizeof(deletion.payload.voice_note_delete.id));
-        const ButtonAction actions[] = {deletion, set_variable_action("after_delete", "done")};
-        runtime_variable_set("after_delete", "before");
-        {
-            ItemBindingScope scope(notes, 0);
-            if (action_list_dispatch_result(actions, 2, "delete") != ACTION_PENDING ||
-                !delete_exec || !get_equals("after_delete", "before")) {
-                notes->release();
-                snapshot->release();
-                std::puts("FAIL: note deletion resolves item ID and waits");
-                return 1;
-            }
-        }
-        bool ok = false;
-        delete_exec(delete_job, &ok, nullptr, 0);
-        action_list_dispatch_continuation();
-        if (!ok || std::strcmp(deleted_note, "0123456789abcdef") ||
-            !get_equals("after_delete", "done")) {
-            notes->release();
-            snapshot->release();
-            std::puts("FAIL: note deletion continues after the resolved note is deleted");
-            return 1;
-        }
         JsonDocument typed;
         deserializeJson(typed, R"([
             {"op":"voice_note.load","args":{"id":{"$template":"[item:id]"}}},
@@ -2686,6 +4019,7 @@ int main() {
             action_parse(typed[1].as<JsonObject>(), operations[1]);
         }
         runtime_variable_set("after_load", "before");
+        runtime_variable_set("after_delete", "before");
         const ButtonAction load_actions[] = {operations[0], set_variable_action("after_load", "done")};
         const ButtonAction delete_actions[] = {operations[1], set_variable_action("after_delete", "typed")};
         delete_exec = nullptr;
@@ -2703,15 +4037,35 @@ int main() {
             accept_load = true;
             typed_ok = typed_ok &&
                 action_list_dispatch_result(delete_actions, 2, "typed delete") == ACTION_PENDING &&
-                delete_exec && get_equals("after_delete", "done");
+                delete_exec && get_equals("after_delete", "before");
         }
         if (typed_ok) {
-            ok = false;
+            bool ok = false;
             delete_exec(delete_job, &ok, nullptr, 0);
             action_list_dispatch_continuation();
             typed_ok = ok && !std::strcmp(deleted_note, "0123456789abcdef") &&
-                get_equals("after_delete", "typed");
+                get_equals("after_delete", "typed") && cleared_notes == 1 &&
+                !std::strcmp(cleared_note, deleted_note);
         }
+        {
+            ItemBindingScope scope(notes, 0);
+            runtime_variable_set("after_delete", "before");
+            bridge_reject = true;
+            typed_ok = typed_ok &&
+                action_list_dispatch_result(delete_actions, 2, "busy delete") == ACTION_FAILED &&
+                get_equals("after_delete", "before") && cleared_notes == 1;
+            bridge_reject = false;
+            delete_result = VoiceNoteFileStatus::Busy;
+            typed_ok = typed_ok &&
+                action_list_dispatch_result(delete_actions, 2, "failed delete") == ACTION_PENDING;
+        }
+        if (typed_ok) {
+            bool ok = true;
+            delete_exec(delete_job, &ok, nullptr, 0);
+            action_list_dispatch_continuation();
+            typed_ok = !ok && get_equals("after_delete", "before") && cleared_notes == 1;
+        }
+        delete_result = VoiceNoteFileStatus::Ready;
         {
             ItemBindingScope scope(snapshot, 0);
             runtime_variable_set("after_load", "before");
@@ -2736,35 +4090,6 @@ int main() {
             std::puts("FAIL: synchronous dispatch with item scope");
             return 1;
         }
-        {
-            ButtonAction load = {};
-            strlcpy(load.type, ACTION_TYPE_VOICE_NOTE_LOAD, sizeof(load.type));
-            strlcpy(load.payload.voice_note_load.id, "[item:id]", sizeof(load.payload.voice_note_load.id));
-            const ButtonAction actions[] = {load, set_variable_action("after_load", "navigated")};
-            ItemBindingScope scope(snapshot, 0);
-            if (action_list_dispatch_result(actions, 2, "load") != ACTION_COMPLETE ||
-                std::strcmp(requested_note, "item-1") != 0 || !get_equals("after_load", "navigated")) {
-                snapshot->release();
-                std::puts("FAIL: accepted item load captures the ID and continues immediately");
-                return 1;
-            }
-        }
-        {
-            runtime_variable_set("after_load", "before");
-            ButtonAction load = {};
-            strlcpy(load.type, ACTION_TYPE_VOICE_NOTE_LOAD, sizeof(load.type));
-            strlcpy(load.payload.voice_note_load.id, "[item:id]", sizeof(load.payload.voice_note_load.id));
-            const ButtonAction actions[] = {load, set_variable_action("after_load", "navigated")};
-            ItemBindingScope scope(snapshot, 0);
-            accept_load = false;
-            const ActionResult result = action_list_dispatch_result(actions, 2, "load");
-            accept_load = true;
-            if (result != ACTION_FAILED || !get_equals("after_load", "before")) {
-                snapshot->release();
-                std::puts("FAIL: rejected item load stops the action list");
-                return 1;
-            }
-        }
         binding_template_resolve("[item:id|none]", item_value, sizeof(item_value));
         if (std::strcmp(item_value, "item-1") != 0) {
             snapshot->release();
@@ -2773,26 +4098,27 @@ int main() {
         }
         {
             ItemBindingScope inner(snapshot, 0);
-            ButtonAction boundary = {};
-            strlcpy(boundary.type, "test_boundary", sizeof(boundary.type));
-            strlcpy(boundary.payload.screen.screen_id, "[item:id]", sizeof(boundary.payload.screen.screen_id));
+            JsonDocument boundary_document;
+            boundary_document["op"] = "test.boundary";
+            boundary_document["args"]["target"]["$template"] = "[item:id]";
+            ButtonAction boundary = make_test_operation(boundary_document.as<JsonObject>());
             const ButtonAction actions[] = {
                 set_variable_action("captured", "[item:id]"), boundary,
                 set_variable_action("after_boundary", "[item:id|none]"),
             };
             if (action_list_dispatch_result(actions, 3, "item") != ACTION_COMPLETE ||
-                !get_equals("captured", "item-1") || !get_equals("after_boundary", "none") ||
-                !boundary_received_item || !nested_item_hidden) {
+                !get_equals("captured", "item-1") || !get_equals("after_boundary", "item-1") ||
+                !boundary_received_item || !nested_item_retained) {
                 snapshot->release();
-                std::puts("FAIL: capture precedes boundary, boundary resolves first, nested and later actions lose item context");
+                std::puts("FAIL: nested and subsequent operations retain item context across the boundary");
                 return 1;
             }
         }
         char value[32];
         binding_template_resolve("[item:id|none]", value, sizeof(value));
-        if (std::strcmp(value, "none") != 0) {
+        if (std::strcmp(value, "item-1") != 0) {
             snapshot->release();
-            std::puts("FAIL: nested scope does not restore an ended outer context");
+            std::puts("FAIL: nested operation preserves the outer item context");
             return 1;
         }
     }
@@ -2800,12 +4126,12 @@ int main() {
         ItemBindingScope scope(snapshot, 0);
         ButtonAction unknown = {};
         strlcpy(unknown.type, "unknown_action", sizeof(unknown.type));
-        action_dispatch(unknown, "unknown");
+        const ActionResult result = action_dispatch(unknown, "unknown");
         char value[32];
         binding_template_resolve("[item:id|none]", value, sizeof(value));
-        if (std::strcmp(value, "none") != 0) {
+        if (result != ACTION_FAILED || std::strcmp(value, "item-1") != 0) {
             snapshot->release();
-            std::puts("FAIL: unknown action ends item context");
+            std::puts("FAIL: unknown action fails without changing item context");
             return 1;
         }
     }

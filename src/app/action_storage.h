@@ -11,7 +11,10 @@ struct ActionOperationDef;
 struct ButtonAction;
 
 struct ActionStoredArgument {
-    int32_t integer;
+    union {
+        int32_t integer;
+        float number;
+    };
     uint16_t offset;
     bool dynamic;
 };

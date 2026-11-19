@@ -405,6 +405,7 @@ struct JsonValue {
     bool null = true;
     double value = 0;
     template<typename T> JsonValue& operator=(T v) { null = false; value = v; return *this; }
+    JsonValue& operator=(const char*) { null = false; return *this; }
     JsonValue& operator=(std::nullptr_t) { null = true; return *this; }
 };
 struct JsonObject {
@@ -876,26 +877,29 @@ int main() {
     clockMs += 20; m5stack_stopwatch_loop();
     assert(m5stack_stopwatch_vibrate_pattern(pattern, 3) && motorRunning && motorStepIndex == 0);
     assert(m5stack_stopwatch_vibrate(0));
+    assert(shutdownAction && shutdownAction->operation_count == 1);
+    assert(strcmp(shutdownAction->operations[0].id, "device.shutdown") == 0);
     lockFails = true;
     assert(!m5stack_stopwatch_vibrate(200));
     assert(!m5stack_stopwatch_set_status_led(false));
-    assert(!m5stack_stopwatch_request_shutdown(42));
+    assert(shutdownAction->operations[0].dispatch(nullptr, "test", 42) == ACTION_FAILED);
     m5stack_stopwatch_loop();
     lockFails = false;
     ready = false;
     assert(!m5stack_stopwatch_vibrate(200));
     assert(!m5stack_stopwatch_set_status_led(false));
-    assert(!m5stack_stopwatch_request_shutdown(42));
+    assert(shutdownAction->operations[0].dispatch(nullptr, "test", 42) == ACTION_FAILED);
     ready = true;
     otaActive = true;
-    assert(!m5stack_stopwatch_request_shutdown(42));
+    assert(shutdownAction->operations[0].dispatch(nullptr, "test", 42) == ACTION_FAILED);
     otaActive = false;
-    assert(!m5stack_stopwatch_request_shutdown(0));
+    assert(shutdownAction->operations[0].dispatch(nullptr, "test", 0) == ACTION_FAILED);
     assert(m5stack_stopwatch_vibrate(5000));
     const int beforeShutdown = Wire.transactions;
-    assert(m5stack_stopwatch_request_shutdown(42) && otaActive);
+    assert(shutdownAction->operations[0].execution == ACTION_EXECUTION_PAUSABLE);
+    assert(shutdownAction->operations[0].dispatch(nullptr, "test", 42) == ACTION_PENDING && otaActive);
     assert(Wire.transactions == beforeShutdown);
-    assert(!m5stack_stopwatch_request_shutdown(43));
+    assert(shutdownAction->operations[0].dispatch(nullptr, "test", 43) == ACTION_FAILED);
     assert(!ota_activity_try_begin());
     assert(!m5stack_stopwatch_vibrate(200));
     assert(!m5stack_stopwatch_set_status_led(false));
@@ -917,7 +921,7 @@ int main() {
     ++clockMs; m5stack_stopwatch_loop();
     assert(failedShutdowns == std::vector<uint32_t>({42}) && !otaActive && !shutdownToken);
     for (int failure = 0; failure < 5; ++failure) {
-        assert(m5stack_stopwatch_request_shutdown(44));
+        assert(shutdownAction->operations[0].dispatch(nullptr, "test", 44) == ACTION_PENDING);
         Wire.failureAt = Wire.transactions + failure;
         Wire.writes.clear(); m5stack_stopwatch_loop();
         assert(!shutdownToken && !otaActive && lockDepth == 0);
@@ -1302,7 +1306,17 @@ directory.mkdir(parents=True, exist_ok=True)
 try:
     source = directory / "check.cpp"
     executable = directory / "check"
-    source.write_text(PRELUDE + BODY.replace("#pragma once", "") + TESTS)
+    action_context = (
+        "\n#define HAS_DISPLAY 1\n#define HAS_BUTTON 1\n"
+        "#define CONFIG_ACTION_TYPE_MAX_LEN 16\n#define ACTION_CONTINUATION_SLOTS 1\n"
+        "struct ButtonAction;\n" + production("src/app/action_result.h") +
+        production("src/app/action_registry.h").replace("#pragma once", "") +
+        "\nstatic const ActionTypeDef* shutdownAction = nullptr;\n"
+        "void action_type_register(const ActionTypeDef* action) {\n"
+        '    if (strcmp(action->type_name, "shutdown") == 0) shutdownAction = action;\n'
+        "}\n" + production("src/boards/m5stack-stopwatch/stopwatch_actions.cpp")
+    )
+    source.write_text(PRELUDE + BODY.replace("#pragma once", "") + action_context + TESTS)
     subprocess.run(["c++", "-std=c++17", "-Wall", "-Wextra", "-Werror", "-Wno-unused-parameter", "-Wno-unused-function",
                     str(source), "-o", str(executable)], check=True)
     subprocess.run([str(executable)], check=True)
@@ -1359,7 +1373,18 @@ int main() {
 #define STOPWATCH_CHARGING_MODE 2
 #define ACTION_CONTINUATION_SLOTS 1
 constexpr uint8_t STOPWATCH_VIBRATION_MAX_STEPS = 15;
-struct ButtonAction { char type[16]; union { uint8_t device_class[96]; } payload; };
+struct ActionOperationDef;
+struct ActionStoredArgument { bool dynamic; };
+struct ActionArgumentBlock { uint8_t count; };
+struct ButtonAction {
+    char type[16];
+    union {
+        uint8_t device_class[96];
+        struct { const ActionOperationDef* descriptor; ActionArgumentBlock* arguments; } operation;
+    } payload;
+};
+const ActionStoredArgument* action_storage_arguments(const ActionArgumentBlock*) { assert(false); return nullptr; }
+const char* action_storage_text(const ActionArgumentBlock*, const ActionStoredArgument&) { assert(false); return nullptr; }
 bool binding_template_has_bindings(const char*) { assert(false); return false; }
 bool binding_template_resolve_checked(const char*, char*, size_t) { assert(false); return false; }
 #ifdef BOARD_ACTION_SOURCE
@@ -1400,118 +1425,56 @@ int main() {
         auto metadata = catalog.to<JsonObject>(); registered->describe(metadata);
         assert(strcmp(metadata["group"], "M5Stack StopWatch") == 0);
     }
-    const auto* type = action_type_find("charging_mode");
-    assert(type->execution == ACTION_EXECUTION_SYNC && !type->display_lock_required);
-    JsonDocument catalog;
-    auto metadata = catalog.to<JsonObject>();
-    type->describe(metadata);
-    assert(strcmp(metadata["label"], "Set charging mode") == 0);
-    assert(metadata["commands"].size() == 3);
-    assert(metadata["editor_fields"][0]["command_options"].as<bool>());
+    const auto* charging_op = action_operation_find("power.charging.set_mode");
+    const auto* led_op = action_operation_find("device.status_led.set");
+    const auto* vibration_op = action_operation_find("device.vibrate");
+    const auto* shutdown_op = action_operation_find("device.shutdown");
+    assert(charging_op && led_op && vibration_op && shutdown_op);
+    ActionResolvedArgument argument{};
     for (const char* mode : {"off", "low", "high"}) {
-        JsonDocument input, output;
-        auto action = input.to<JsonObject>();
-        action["mode"] = mode;
-        assert(!action_type_validate(type, action));
-        ButtonAction act{};
-        type->parse(action, act);
-        type->serialize(act, output.to<JsonObject>());
-        assert(strcmp(output["mode"], mode) == 0);
-        assert(type->dispatch(act, "test", 0) == ACTION_COMPLETE);
-        assert(static_cast<uint8_t>(requestedMode) == act.payload.device_class[0]);
-        setterOk = false;
-        assert(type->dispatch(act, "test", 0) == ACTION_FAILED);
-        setterOk = true;
+        argument.text = mode;
+        assert(charging_op->dispatch(&argument, "test", 0) == ACTION_COMPLETE);
+        assert(static_cast<uint8_t>(requestedMode) == charging_mode_value(mode));
     }
-    for (const char* invalid : {"", "HIGH", "highx", "unknown", "[mqtt:x]"}) {
-        JsonDocument input;
-        auto action = input.to<JsonObject>();
-        action["mode"] = invalid;
-        assert(action_type_validate(type, action));
-        ButtonAction act{};
-        type->parse(action, act);
-        assert(type->dispatch(act, "test", 0) == ACTION_FAILED);
-    }
-    JsonDocument input;
-    assert(action_type_validate(type, input.to<JsonObject>()));
-    input["mode"] = 1;
-    assert(action_type_validate(type, input.as<JsonObjectConst>()));
-    const auto* led = action_type_find("status_led");
-    assert(led->execution == ACTION_EXECUTION_SYNC);
-    for (const char* mode : {"on", "off"}) {
-        input.clear(); input["mode"] = mode;
-        assert(!action_type_validate(led, input.as<JsonObjectConst>()));
-        ButtonAction act{}; led->parse(input.as<JsonObject>(), act);
-        JsonDocument output; led->serialize(act, output.to<JsonObject>());
-        assert(strcmp(output["mode"], mode) == 0);
-        assert(led->dispatch(act, "test", 0) == ACTION_COMPLETE);
-        assert(requestedLed == (strcmp(mode, "on") == 0));
-        setterOk = false; assert(led->dispatch(act, "test", 0) == ACTION_FAILED); setterOk = true;
-    }
-    for (const char* mode : {"", "ON", "low", "high", "unknown", "[mqtt:x]"}) {
-        input.clear(); input["mode"] = mode;
-        assert(action_type_validate(led, input.as<JsonObjectConst>()));
-        ButtonAction act{}; led->parse(input.as<JsonObject>(), act);
-        assert(led->dispatch(act, "test", 0) == ACTION_FAILED);
-    }
-    input.clear(); assert(action_type_validate(led, input.to<JsonObject>()));
-    input["mode"] = true; assert(action_type_validate(led, input.as<JsonObjectConst>()));
-    const auto* vibrate = action_type_find("vibrate");
-    assert(vibrate->execution == ACTION_EXECUTION_SYNC);
-    JsonDocument vibrationCatalog;
-    auto vibrationMetadata = vibrationCatalog.to<JsonObject>(); vibrate->describe(vibrationMetadata);
-    assert(vibrationMetadata["editor_fields"].size() == 1);
-    assert(vibrationMetadata["fields"].size() == 1);
-    assert(strcmp(vibrationMetadata["editor_fields"][0]["name"], "pattern") == 0);
-    assert(strcmp(vibrationMetadata["editor_fields"][0]["default"], "200") == 0);
-    for (int duration : {-1, 0, 200, 5000, 5001}) {
-        input.clear(); input["duration_ms"] = duration;
-        assert(action_type_validate(vibrate, input.as<JsonObjectConst>()));
-        ButtonAction act{}; vibrate->parse(input.as<JsonObject>(), act);
-        assert(vibrate->dispatch(act, "test", 0) == ACTION_FAILED);
-    }
-    for (const char* invalid : {"1.5", "200", "true", "null", "[]", "{}", "4294967296"}) {
-        input.clear(); deserializeJson(input, std::string("{\"pattern\":") + invalid + "}");
-        assert(action_type_validate(vibrate, input.as<JsonObjectConst>()));
-        ButtonAction act{}; vibrate->parse(input.as<JsonObject>(), act);
-        assert(vibrate->dispatch(act, "test", 0) == ACTION_FAILED);
-    }
-    input.clear(); auto empty = input.to<JsonObject>();
-    assert(!action_type_validate(vibrate, empty));
-    ButtonAction act{}; vibrate->parse(empty, act);
-    assert(vibrate->dispatch(act, "test", 0) == ACTION_COMPLETE && requestedStepCount == 1 && requestedSteps[0] == 200);
-    const auto* shutdown = action_type_find("shutdown");
-    for (const char* pattern : {"0", "200", "5000", "20,100,20", " 20 , 100 , 20 \t", "1,1,1,1,1,1,1,1,1,1,1,1,1,1,1"}) {
-        input.clear(); input["pattern"] = pattern;
-        assert(!action_type_validate(vibrate, input.as<JsonObjectConst>()));
-        vibrate->parse(input.as<JsonObject>(), act);
-        assert(vibrate->dispatch(act, "test", 0) == ACTION_COMPLETE);
+    argument.text = "on";
+    assert(led_op->dispatch(&argument, "test", 0) == ACTION_COMPLETE && requestedLed);
+    argument.text = "off";
+    assert(led_op->dispatch(&argument, "test", 0) == ACTION_COMPLETE && !requestedLed);
+    argument.text = "20,100,20";
+    assert(!vibration_op->arguments[0].validate_text(argument.text));
+    assert(vibration_op->dispatch(&argument, "test", 0) == ACTION_COMPLETE);
+    assert(requestedStepCount == 3 && requestedSteps[0] == 20 && requestedSteps[1] == 100);
+    for (const char* pattern : {"0", "200", "5000", " 20 , 100 , 20 \t",
+                                "1,1,1,1,1,1,1,1,1,1,1,1,1,1,1"}) {
+        argument.text = pattern;
+        assert(!vibration_op->arguments[0].validate_text(pattern));
+        assert(vibration_op->dispatch(&argument, "test", 0) == ACTION_COMPLETE);
         assert(requestedStepCount & 1);
-        JsonDocument output; vibrate->serialize(act, output.to<JsonObject>());
-        assert(output["pattern"].is<const char*>() && !output.containsKey("duration_ms"));
-        assert(!action_type_validate(vibrate, output.as<JsonObjectConst>()));
-        setterOk = false; assert(vibrate->dispatch(act, "test", 0) == ACTION_FAILED); setterOk = true;
     }
-    for (const char* pattern : {"", "0,100,20", "20,0,20", "20,100,0", "20,100", "20,,20", "20,", "-20", "1.5", "v20 p100 v20", "5001", "2500,1,2500", "9999999999999999999", "1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1"}) {
-        input.clear(); input["pattern"] = pattern;
-        assert(action_type_validate(vibrate, input.as<JsonObjectConst>()));
-        vibrate->parse(input.as<JsonObject>(), act);
-        assert(vibrate->dispatch(act, "test", 0) == ACTION_FAILED);
+    for (const char* pattern : {"", "0,100,20", "20,0,20", "20,100,0", "20,100",
+                                "20,,20", "20,", "-20", "1.5", "v20 p100 v20", "5001",
+                                "2500,1,2500", "9999999999999999999",
+                                "1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1"}) {
+        argument.text = pattern;
+        assert(vibration_op->arguments[0].validate_text(pattern));
+        assert(vibration_op->dispatch(&argument, "test", 0) == ACTION_FAILED);
     }
-    input.clear(); input["pattern"] = "20,100,20"; input["duration_ms"] = 200;
-    assert(action_type_validate(vibrate, input.as<JsonObjectConst>()));
-    input.clear(); input["pattern"] = 200;
-    assert(action_type_validate(vibrate, input.as<JsonObjectConst>()));
-    assert(shutdown->execution == ACTION_EXECUTION_PAUSABLE);
-    assert(!shutdown->parse && !shutdown->serialize);
-    assert(shutdown->dispatch(act, "test", 0) == ACTION_FAILED);
-    assert(shutdown->dispatch(act, "test", 42) == ACTION_PENDING && requestedToken == 42);
-    setterOk = false; assert(shutdown->dispatch(act, "test", 42) == ACTION_FAILED); setterOk = true;
+    setterOk = false;
+    argument.text = "off";
+    assert(charging_op->dispatch(&argument, "test", 0) == ACTION_FAILED);
+    assert(led_op->dispatch(&argument, "test", 0) == ACTION_FAILED);
+    argument.text = "200";
+    assert(vibration_op->dispatch(&argument, "test", 0) == ACTION_FAILED);
+    assert(shutdown_op->dispatch(nullptr, "test", 42) == ACTION_FAILED);
+    setterOk = true;
+    assert(shutdown_op->execution == ACTION_EXECUTION_PAUSABLE);
+    assert(shutdown_op->dispatch(nullptr, "test", 0) == ACTION_FAILED);
+    assert(shutdown_op->dispatch(nullptr, "test", 42) == ACTION_PENDING && requestedToken == 42);
     static char names[22][16];
     std::vector<ActionTypeDef> fillers; fillers.reserve(22);
     for (int index = 0; index < 22; ++index) {
         snprintf(names[index], sizeof(names[index]), "filler%d", index);
-        fillers.emplace_back(names[index], nullptr, nullptr, nullptr, nullptr, nullptr);
+        fillers.emplace_back(names[index], nullptr);
         action_type_register(&fillers.back());
     }
     assert(action_type_count() == 26);
@@ -1552,7 +1515,7 @@ int main() {
             assert "charging_mode mode must" not in strings
             for identifier in ("status_led", "vibrate", "shutdown", "M5Stack StopWatch"):
                 assert identifier not in strings
-    print("PASS: all boot charging modes, board action round trips, validation, dispatch, and generic exclusion", flush=True)
+    print("PASS: all boot charging modes, board operation validation, dispatch, and generic exclusion", flush=True)
     loop_hook = re.search(r"void loop\(\)\s*\{(.*?)\s*time_service_loop\(\);",
                           (ROOT / "src/app/app.ino").read_text(), re.S).group(1)
     for enabled in (False, True):

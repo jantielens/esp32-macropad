@@ -9,6 +9,7 @@
 #include "action_validate.h"
 #include "config_psram.h"
 #include "fs_health.h"
+#include "json_key_validation.h"
 #include "log_manager.h"
 #include "psram_json_allocator.h"
 
@@ -27,11 +28,13 @@ static const char* BOOT_ACTIONS_PATH = "/config/boot_actions.json";
 static BootActionsConfig* g_config = nullptr;
 static ActionStorage g_storage = {};
 static SemaphoreHandle_t g_lock = nullptr;
+static bool g_config_valid = false;
 
 static bool parse_config(JsonDocument& doc, BootActionsConfig& cfg, ActionStorage& storage,
                          bool validate_bindings) {
-    if (!doc.is<JsonObject>() || !doc["actions"].is<JsonArray>()) {
-        LOGW(TAG, "Boot actions must contain an actions array");
+    if (!doc.is<JsonObject>() || !doc["action_format_version"].is<int>() ||
+        doc["action_format_version"].as<int>() != 1 || !doc["actions"].is<JsonArray>()) {
+        LOGW(TAG, "Incompatible boot actions document; recreate it");
         return false;
     }
     JsonArray actions = doc["actions"].as<JsonArray>();
@@ -46,21 +49,15 @@ static bool parse_config(JsonDocument& doc, BootActionsConfig& cfg, ActionStorag
             return false;
         }
         JsonObject action = value.as<JsonObject>();
-        const char* error = nullptr;
-        if (validate_bindings) error = action_validate_json(action);
-        else if (!action.containsKey("type") && action.containsKey("op"))
-            error = action_operation_validate_json(action, false);
-        else if (!action["type"].is<const char*>() || action.containsKey("args") ||
-                 (action.containsKey("op") && strcmp(action["type"] | "", ACTION_TYPE_VISUAL_ALERT)))
-            error = "invalid action envelope";
-        const char* type = action["type"] | "";
-        if (!error && type[0] && strcmp(type, "none") && !action_type_is_supported(type))
-            error = "action is unavailable on this board";
+        const char* error = validate_bindings ? action_validate_json(action)
+                                              : action_operation_validate_json(action, false);
+        const char* operation = action["op"] | "";
+        if (!error && (action.containsKey("type") || !operation[0]))
+            error = "legacy action is not supported";
         if (error) {
             LOGW(TAG, "Invalid boot action: %s", error);
             return false;
         }
-        if (!strcmp(type, "none")) continue;
         action_parse(action, cfg.actions[cfg.action_count]);
         if (storage.failed || !cfg.actions[cfg.action_count].type[0]) {
             LOGW(TAG, "Cannot parse boot action");
@@ -76,7 +73,7 @@ static bool load_from_flash(BootActionsConfig* cfg) {
 
     if (!Storage.exists(BOOT_ACTIONS_PATH)) {
         LOGD(TAG, "No boot actions file, using defaults");
-        return false;
+        return true;
     }
 
     File f = Storage.open(BOOT_ACTIONS_PATH, "r");
@@ -92,6 +89,11 @@ static bool load_from_flash(BootActionsConfig* cfg) {
         return false;
     }
 
+    if (json_stream_scan_keys(f) != JsonKeyScanResult::Valid) {
+        LOGW(TAG, "Boot actions contain an invalid JSON NUL or could not be read");
+        f.close();
+        return false;
+    }
     BasicJsonDocument<PsramJsonAllocator> doc(4096);
     DeserializationError err = deserializeJson(doc, f);
     f.close();
@@ -124,12 +126,16 @@ void boot_actions_init() {
         LOGE(TAG, "Failed to allocate boot actions config");
         return;  // feature disabled
     }
-    load_from_flash(g_config);
+    g_config_valid = load_from_flash(g_config);
 }
 
 bool boot_actions_to_json(JsonArray actions) {
     if (!g_config || !g_lock || actions.isNull()) return false;
     if (xSemaphoreTake(g_lock, portMAX_DELAY) != pdTRUE) return false;
+    if (!g_config_valid) {
+        xSemaphoreGive(g_lock);
+        return false;
+    }
     for (uint8_t index = 0; index < g_config->action_count; ++index) {
         JsonObject action = actions.createNestedObject();
         action_to_json(g_config->actions[index], action);
@@ -141,6 +147,10 @@ bool boot_actions_to_json(JsonArray actions) {
 bool boot_actions_save_raw(const uint8_t* json, size_t len) {
     if (!g_config || !g_lock || !json || !len || len > 4096) {
         LOGW(TAG, "Boot actions save unavailable or invalid size");
+        return false;
+    }
+    if (!json_keys_valid(json, len)) {
+        LOGW(TAG, "Boot actions JSON contains an invalid NUL");
         return false;
     }
     BasicJsonDocument<PsramJsonAllocator> doc(4096);
@@ -172,6 +182,7 @@ bool boot_actions_save_raw(const uint8_t* json, size_t len) {
         action_storage_clear(g_storage);
         *g_config = *replacement;
         action_storage_move(g_storage, storage);
+        g_config_valid = true;
     }
     xSemaphoreGive(g_lock);
     action_storage_clear(storage);

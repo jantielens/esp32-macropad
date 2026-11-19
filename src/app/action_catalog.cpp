@@ -7,21 +7,12 @@
 
 // Built-ins and device-class actions are emitted from the live registry, so
 // their metadata and availability share one definition.
-void action_catalog_emit(JsonArray actions, bool include_field_docs) {
+void action_catalog_emit(JsonArray actions) {
     for (uint8_t i = 0; i < action_type_count(); ++i) {
         const ActionTypeDef* type = action_type_at(i);
         if (!type || !type->type_name || !action_type_is_supported(type->type_name)) continue;
         JsonObject action = actions.createNestedObject();
         action["type"] = type->type_name;
-        ButtonAction parsed{};
-        auto emit = [](const char* name, char*, size_t capacity, uint8_t flags, void* opaque) {
-            if (!(flags & ACTION_FIELD_EVENT)) return true;
-            auto* action = static_cast<JsonObject*>(opaque);
-            JsonObject field = (*action)["template_fields"][name].to<JsonObject>();
-            field["max"] = capacity - 1;
-            return true;
-        };
-        action_type_visit_fields(type, parsed, emit, &action);
         action["alarm_hook_allowed"] = type->execution == ACTION_EXECUTION_SYNC;
         action["pausable"] = type->execution == ACTION_EXECUTION_PAUSABLE;
         if (type->operation_count) {
@@ -43,13 +34,14 @@ void action_catalog_emit(JsonArray actions, bool include_field_docs) {
                     arg["label"] = argument.label;
                     const char* type_name = argument.type == ACTION_ARGUMENT_SCREEN ? "screen"
                         : argument.type == ACTION_ARGUMENT_INTEGER ? "integer"
+                        : argument.type == ACTION_ARGUMENT_NUMBER ? "number"
                         : argument.type == ACTION_ARGUMENT_BOOLEAN ? "boolean"
                         : argument.type == ACTION_ARGUMENT_ENUM ? "enum" : "string";
                     arg["type"] = type_name;
                     arg["dynamic"] = argument.dynamic;
                     arg["example"] = argument.example;
                     arg["control"] = argument.control;
-                    if (argument.type == ACTION_ARGUMENT_INTEGER) {
+                    if (argument.type == ACTION_ARGUMENT_INTEGER || argument.type == ACTION_ARGUMENT_NUMBER) {
                         arg["min"] = argument.minimum;
                         arg["max"] = argument.maximum;
                         if (argument.nonzero_minimum) arg["nonzero_min"] = argument.nonzero_minimum;
@@ -77,7 +69,6 @@ void action_catalog_emit(JsonArray actions, bool include_field_docs) {
         }
         if (type->describe) {
             type->describe(action);
-            if (!include_field_docs) action.remove("fields");
         } else {
             action["group"] = "Device";
             action["label"] = type->type_name;

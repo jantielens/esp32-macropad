@@ -219,9 +219,8 @@ inline bool action_delay_duration_is_valid(uint32_t duration_ms) {
 // tests/test_action_sizes.cpp). Device-class arms are added by conditionally
 // including their header below.
 //
-// JSON wire format is intentionally *flat* (e.g. `{"type":"mqtt","topic":...,
-// "payload":...}`) — see action_parse.cpp for the type-dispatched mapping
-// between flat JSON keys and the active union arm.
+// The JSON wire format uses typed operation envelopes. Parsed operations use
+// the operation payload arm and own their arguments through ActionStorage.
 
 struct ScreenPayload {
     char screen_id[CONFIG_SCREEN_ID_MAX_LEN];        // target screen
@@ -256,11 +255,11 @@ struct SoundAlertPayload {
 };
 struct VolumePayload {
     char volume_mode[CONFIG_VOLUME_MODE_MAX_LEN];    // "set" or "adjust"
-    char volume_value[CONFIG_VALUE_MAX_LEN];         // absolute 0-100, signed delta, or {step}
+    char volume_value[CONFIG_VALUE_MAX_LEN];         // absolute 0-100 or signed delta
 };
 struct BrightnessPayload {
     char brightness_mode[CONFIG_VOLUME_MODE_MAX_LEN]; // "set" or "adjust"
-    char brightness_value[CONFIG_VALUE_MAX_LEN];      // absolute 5-100, signed delta, or {step}
+    char brightness_value[CONFIG_VALUE_MAX_LEN];      // absolute 5-100 or signed delta
 };
 struct AlarmPayload {
     uint8_t alarm_id;
@@ -272,7 +271,7 @@ struct TimerPayload {
     uint8_t timer_id;                                 // 1-3
     char timer_command[CONFIG_TIMER_CMD_MAX_LEN];     // "toggle", "start", "stop", "adjust", "set", etc.
     char timer_mode[5];                               // "up" or "down" for start/toggle
-    char timer_value[CONFIG_VALUE_MAX_LEN];           // seconds for set/adjust (supports {step})
+    char timer_value[CONFIG_VALUE_MAX_LEN];           // seconds for set/adjust
 };
 struct NotifyPayload {
     char message[CONFIG_DIALOG_MESSAGE_MAX_LEN];
@@ -699,6 +698,8 @@ void pad_config_path(uint8_t page, char* out, size_t out_len);
 // Read raw JSON from LittleFS. Caller must free() the returned buffer.
 // Returns NULL on failure. *out_len is set to the file size.
 char* pad_config_read_raw(uint8_t page, size_t* out_len);
+// Recovery may read persisted JSON before the pad cache is initialized.
+char* pad_config_read_raw_mounted(uint8_t page, size_t* out_len);
 
 // Read just the pad's optional friendly "name" label into `out` (empty when
 // unset). Returns true when a non-empty name was found in the RAM cache.

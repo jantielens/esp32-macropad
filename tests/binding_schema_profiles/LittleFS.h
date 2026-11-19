@@ -10,7 +10,10 @@ public:
     File openNextFile() { return {}; }
     const char* name() const { return ""; }
     size_t size() const { return 0; }
+    int read() { return -1; }
     size_t readBytes(char*, size_t) { return 0; }
+    size_t write(uint8_t) { return 0; }
+    size_t write(const uint8_t*, size_t) { return 0; }
     void close() {}
     size_t print(const char*) { return 0; }
     size_t print(char) { return 0; }

@@ -19,14 +19,6 @@ ActionResult save_volume(const char* label) {
 #endif
     return ACTION_COMPLETE;
 }
-ActionResult dispatch_save_volume(const ButtonAction&, const char* label, uint32_t) {
-#if !defined(ARDUINO) || !HAS_AUDIO
-    (void)label;
-    return ACTION_COMPLETE;
-#else
-    return save_volume(label);
-#endif
-}
 ActionResult dispatch_save_volume_operation(const ActionResolvedArgument*, const char* label, uint32_t) {
     return save_volume(label);
 }
@@ -44,6 +36,6 @@ void describe_save_volume(JsonObject& action) {
     action["group"] = "Audio";
     action["label"] = "Save volume";
 }
-DEFINE_AND_REGISTER_ACTION_TYPE(kSaveVolumeActionType, ACTION_TYPE_SAVE_VOLUME, nullptr, nullptr, dispatch_save_volume, nullptr, describe_save_volume, save_volume_available, nullptr, ACTION_EXECUTION_SYNC, false, true, false, nullptr, kSaveVolumeOperations, 1);
+DEFINE_AND_REGISTER_ACTION_TYPE(kSaveVolumeActionType, ACTION_TYPE_SAVE_VOLUME, describe_save_volume, save_volume_available, ACTION_EXECUTION_SYNC, false, false, kSaveVolumeOperations, 1);
 }
 #endif

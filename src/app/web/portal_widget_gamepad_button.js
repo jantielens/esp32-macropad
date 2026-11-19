@@ -14,13 +14,11 @@ padRegisterWidgetEditor({
                 throw Object.assign(new Error('Choose a literal Gamepad held control to replace the unsupported action'),
                     { fieldIds: ['pad-edit-gamepad-hold-gamepad-control'] });
             }
-            const action = actionEditorBuildGamepad('pad-edit-gamepad-hold', true);
-            const field = action.control === 'hat' ? 'direction' : action.control;
-            return [{ op: 'gamepad.' + action.control + '.down', args: { [field]: action[field] } }];
+            return [actionEditorBuildGamepad('pad-edit-gamepad-hold')];
         }
     },
     init() {
-        document.getElementById('pad-edit-gamepad-button-fields').innerHTML = actionEditorGamepadHTML('pad-edit-gamepad-hold', true);
+        document.getElementById('pad-edit-gamepad-button-fields').innerHTML = actionEditorGamepadHTML('pad-edit-gamepad-hold');
         ['control', 'button', 'direction', 'trigger'].forEach(field => {
             document.getElementById('pad-edit-gamepad-hold-gamepad-' + field)
                 .addEventListener('change', () => { padGamepadHeldInvalid = false; });
@@ -29,7 +27,7 @@ padRegisterWidgetEditor({
     load(button) {
         const actions = Array.isArray(button.actions) ? button.actions : [];
         const action = actions[0];
-        let legacy = {};
+        let selection = {};
         padGamepadHeldInvalid = (button.actions !== undefined && !Array.isArray(button.actions)) ||
             actions.length > 1 || (actions.length === 1 && (!action || typeof action !== 'object'));
         if (action) {
@@ -48,9 +46,9 @@ padRegisterWidgetEditor({
                 Object.keys(action).length !== 2 || Object.keys(args).length !== 1 || !validValue) {
                 padGamepadHeldInvalid = true;
             } else {
-                legacy = { control: control[0], [control[1]]: value };
+                selection = { control: control[0], [control[1]]: value };
             }
         }
-        actionEditorLoadGamepad('pad-edit-gamepad-hold', legacy);
+        actionEditorLoadGamepad('pad-edit-gamepad-hold', selection);
     }
 });

@@ -5,14 +5,9 @@
 #include "binding_template.h"
 #include "item_binding_scheme.h"
 #include "binding_value_json.h"
-#include "action_parse.h"
-#include "action_registry.h"
 #include "execution_context.h"
 #include "log_manager.h"
 #include "pad_binding.h"
-#include <memory>
-#include <new>
-#include <stdio.h>
 #include <string.h>
 
 namespace {
@@ -83,74 +78,15 @@ const char* item_binding_validate(const char* templ, const ListSourceDescriptor*
 
 const char* item_binding_validate_actions(JsonArrayConst actions, const ListSourceDescriptor* source,
                                           const PadBinding* bindings, uint8_t binding_count) {
-    bool item_available = source != nullptr;
-    bool captures_context = false;
-    for (JsonObjectConst action : actions)
-        if (!action.containsKey("type") && action.containsKey("op")) captures_context = true;
-    size_t action_index = 0;
-    size_t boundary_index = 0;
     for (JsonObjectConst action : actions) {
-        ++action_index;
-        if (!action.containsKey("type") && action.containsKey("op")) {
-            for (JsonPairConst argument : action["args"].as<JsonObjectConst>()) {
-                JsonObjectConst dynamic = argument.value().as<JsonObjectConst>();
-                if (dynamic.isNull()) continue;
-                const char* error = item_binding_validate(dynamic["$template"] | "",
-                                                          item_available ? source : nullptr,
-                                                          bindings, binding_count);
-                if (error) return error;
-            }
-            continue;
-        }
-        BoundedPsramJsonAllocator allocator(LIST_SOURCE_DOCUMENT_BYTES);
-        JsonDocument copy(&allocator);
-        if (!copy.set(action) || copy.overflowed()) return "action validation allocation failed";
-        ButtonAction parsed = {};
-        action_parse(copy.as<JsonObject>(), parsed);
-        const ActionTypeDef* type = action_type_find(parsed.type);
-        const bool ends_context = action_type_ends_item_context(type, parsed);
-        for (JsonPairConst pair : action) {
-            if (!pair.value().is<const char*>()) continue;
-            struct FieldCheck { const char* name; bool bindable; } check{pair.key().c_str(), false};
-            const auto visit = [](const char* name, char*, size_t, uint8_t flags, void* context) {
-                auto& check = *static_cast<FieldCheck*>(context);
-                if (!strcmp(check.name, name)) check.bindable = flags & ACTION_FIELD_BINDING;
-                return true;
-            };
-            if (!action_type_visit_fields(type, parsed, visit, &check)) return "invalid action fields";
-            const bool resolves_in_context = !ends_context || (type && type->resolve_bindings_before_dispatch);
-            const ListSourceDescriptor* allowed = item_available && check.bindable && resolves_in_context
-                ? source : nullptr;
-            const char* error = item_binding_validate(pair.value().as<const char*>(), allowed,
-                                                       bindings, binding_count);
-            if (error) {
-                static thread_local std::unique_ptr<char[]> action_error;
-                constexpr size_t error_capacity = 384;
-                if (!action_error) action_error.reset(new (std::nothrow) char[error_capacity]);
-                if (!action_error) return "item action validation failed; out of memory while formatting error details";
-                const char* reason = error;
-                char boundary_reason[128];
-                if (!strcmp(error, "item binding is unavailable in this context")) {
-                    if (source && !item_available) {
-                        snprintf(boundary_reason, sizeof(boundary_reason),
-                                 "item context ended at action %u (pause, confirmation, or navigation); capture the item in a variable first",
-                                 static_cast<unsigned>(boundary_index));
-                        reason = boundary_reason;
-                    } else if (!check.bindable) {
-                        reason = "this field does not support item bindings";
-                    } else if (source && !resolves_in_context) {
-                        reason = "this action ends item context before resolving bindings; capture the item in a variable first";
-                    }
-                }
-                snprintf(action_error.get(), error_capacity, "action %u (%s), field '%s': %s",
-                         static_cast<unsigned>(action_index), action["type"] | "",
-                         pair.key().c_str(), reason);
-                return action_error.get();
-            }
-        }
-        if (ends_context && !captures_context) {
-            if (item_available) boundary_index = action_index;
-            item_available = false;
+        if (action.containsKey("type") || !action["op"].is<const char*>())
+            return "legacy actions are not supported";
+        for (JsonPairConst argument : action["args"].as<JsonObjectConst>()) {
+            JsonObjectConst dynamic = argument.value().as<JsonObjectConst>();
+            if (dynamic.isNull()) continue;
+            const char* error = item_binding_validate(dynamic["$template"] | "",
+                                                      source, bindings, binding_count);
+            if (error) return error;
         }
     }
     return nullptr;

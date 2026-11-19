@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <vector>
 
+#include "action_registry.h"
 #include "widgets/slider_numeric.h"
 #include "widgets/slider_widget.cpp"
 #include "widgets/option_selector_widget.cpp"
@@ -35,8 +36,9 @@ void heap_caps_free(void* data) {
 
 static unsigned g_dispatches;
 static uint8_t g_action_count;
-static char g_action_values[MAX_BUTTON_ACTIONS][32];
+static const ActionOperationDef* g_action_descriptors[MAX_BUTTON_ACTIONS];
 static char g_dispatched_value[32];
+static BindingResolvedValueKind g_dispatched_kind;
 static const char* g_binding_value = "0";
 static ActionResult g_dispatch_result = ACTION_COMPLETE;
 static lv_obj_t* g_delete_on_dispatch = nullptr;
@@ -50,7 +52,6 @@ static OptionSelectorConfig g_selector_config{};
 static bool g_selector_source_available = true;
 static const char* g_selector_background = "#123456";
 static const lv_image_dsc_t* g_selector_icon = nullptr;
-static std::vector<std::string> g_validated_option_values;
 static const PadBinding* g_pad_bindings = nullptr;
 static uint8_t g_pad_binding_count = 0;
 static const PadBinding* g_dispatch_bindings = nullptr;
@@ -84,10 +85,6 @@ void option_selector_retain_config(uint8_t*) {}
 void option_selector_release_config(uint8_t*) {}
 const OptionSelectorConfig* option_selector_config(const uint8_t*) { return &g_selector_config; }
 void option_selector_visit_resources(const uint8_t*, WidgetResourceVisitor, void*) {}
-const char* action_validate_json(JsonObjectConst, bool, const char*, const char* value) {
-    if (value) g_validated_option_values.emplace_back(value);
-    return nullptr;
-}
 bool binding_template_resolve(const char* value, char* output, size_t size) {
     if (!strncmp(value, "[pad:test_", 10)) {
         for (uint8_t i = 0; i < g_pad_binding_count; ++i) {
@@ -122,9 +119,13 @@ ActionResult action_list_dispatch_result(const ButtonAction* actions, uint8_t co
         ++g_dispatches;
         g_action_count = count;
         for (uint8_t index = 0; index < count; ++index)
-            strlcpy(g_action_values[index], actions[index].payload.mqtt.mqtt_payload, sizeof(g_action_values[index]));
-        strlcpy(g_dispatched_value, actions[0].payload.mqtt.mqtt_payload,
-                sizeof(g_dispatched_value));
+            g_action_descriptors[index] = actions[index].payload.operation.descriptor;
+        const ActionEventData* event = event_binding_current();
+        EXPECT_NE(event, nullptr);
+        if (event) {
+            strlcpy(g_dispatched_value, event->value ? event->value : "", sizeof(g_dispatched_value));
+            g_dispatched_kind = event->value_kind;
+        }
     }
     if (g_delete_on_dispatch) {
         lv_obj_t* target = g_delete_on_dispatch;
@@ -142,45 +143,8 @@ ActionResult action_list_dispatch_result(const ButtonAction* actions, uint8_t co
     return action_list_dispatch_result(actions, count, label, owner, interactive);
 }
 
-void action_parse(const JsonObject& action, ButtonAction& output) {
-    memset(&output, 0, sizeof(output));
-    strlcpy(output.type, action["type"] | "", sizeof(output.type));
-    strlcpy(output.payload.mqtt.mqtt_payload, action["payload"] | "",
-            sizeof(output.payload.mqtt.mqtt_payload));
-}
-
-static char* test_mqtt_value_field(ButtonAction& action, size_t* size) {
-    *size = sizeof(action.payload.mqtt.mqtt_payload);
-    return action.payload.mqtt.mqtt_payload;
-}
-
-static bool test_mqtt_fields(ButtonAction& action, ActionFieldVisitor visitor, void* context) {
-    return action_visit_field(visitor, context, "payload", action.payload.mqtt.mqtt_payload);
-}
-
-static const ActionTypeDef g_mqtt_type = {
-    "mqtt", nullptr, nullptr, nullptr, test_mqtt_fields, nullptr
-};
-
-const ActionTypeDef* action_type_find(const char* type) {
-    return type && strcmp(type, "mqtt") == 0 ? &g_mqtt_type : nullptr;
-}
-
-bool action_type_substitute_token(const ActionTypeDef* type,
-                                  ButtonAction& action, const char* name, const char* value) {
-    if (type != &g_mqtt_type) return false;
-    size_t field_size = 0;
-    char* field = test_mqtt_value_field(action, &field_size);
-    char* token = strstr(field, name);
-    if (!token) return true;
-    const size_t tail = strlen(token + 7);
-    const size_t replacement = strlen(value);
-    if (static_cast<size_t>(token - field) + replacement + tail >= field_size)
-        return false;
-    memmove(token + replacement, token + 7, tail + 1);
-    memcpy(token, value, replacement);
-    return true;
-}
+static const ActionOperationDef g_dynamic_operation{"test.dynamic", "Dynamic", nullptr, 0, nullptr};
+static const ActionOperationDef g_fixed_operation{"test.fixed", "Fixed", nullptr, 0, nullptr};
 
 struct SliderPointerInput {
     lv_point_t point{};
@@ -245,8 +209,8 @@ protected:
         pointer = {};
         JsonObject object = json.to<JsonObject>();
         source.action_count = 1;
-        strlcpy(source.actions[0].type, "mqtt", sizeof(source.actions[0].type));
-        strlcpy(source.actions[0].payload.mqtt.mqtt_payload, "{value}", sizeof(source.actions[0].payload.mqtt.mqtt_payload));
+        strlcpy(source.actions[0].type, "@", sizeof(source.actions[0].type));
+        source.actions[0].payload.operation.descriptor = &g_dynamic_operation;
         slider_parse(object, config.data);
         strlcpy(config.type, "slider", sizeof(config.type));
         runtime.font_owner = &fonts;
@@ -703,16 +667,18 @@ TEST_F(SliderNativeWidget, ImmediateDispatchFailureRestoresGestureStart) {
 TEST_F(SliderNativeWidget, ThreeActionsShareReleaseSnapshotAndAllowLiteralActions) {
     source.actions[1] = source.actions[0];
     source.actions[2] = source.actions[0];
-    strlcpy(source.actions[1].payload.mqtt.mqtt_payload, "literal", sizeof(source.actions[1].payload.mqtt.mqtt_payload));
+    source.actions[1].payload.operation.descriptor = &g_fixed_operation;
     state().action_count = 3;
     begin(43);
     release();
     EXPECT_EQ(g_dispatches, 1u);
     EXPECT_EQ(g_action_count, 3u);
-    EXPECT_STREQ(g_action_values[0], "43");
-    EXPECT_STREQ(g_action_values[1], "literal");
-    EXPECT_STREQ(g_action_values[2], "43");
-    EXPECT_STREQ(source.actions[0].payload.mqtt.mqtt_payload, "{value}");
+    EXPECT_STREQ(g_dispatched_value, "43");
+    EXPECT_EQ(g_dispatched_kind, BINDING_VALUE_KIND_NUMBER);
+    EXPECT_EQ(g_action_descriptors[0], &g_dynamic_operation);
+    EXPECT_EQ(g_action_descriptors[1], &g_fixed_operation);
+    EXPECT_EQ(g_action_descriptors[2], &g_dynamic_operation);
+    EXPECT_EQ(source.actions[0].payload.operation.descriptor, &g_dynamic_operation);
 }
 
 TEST_F(SliderNativeWidget, LengthAndThicknessFollowConfiguration) {
@@ -1000,9 +966,8 @@ protected:
             strlcpy(slot.content.label, slot.value, sizeof(slot.content.label));
         }
         strlcpy(config.data_binding[0], "selector_source", sizeof(config.data_binding[0]));
-        strlcpy(source.actions[0].type, "mqtt", sizeof(source.actions[0].type));
-        strlcpy(source.actions[0].payload.mqtt.mqtt_payload, "{value}",
-                sizeof(source.actions[0].payload.mqtt.mqtt_payload));
+        strlcpy(source.actions[0].type, "@", sizeof(source.actions[0].type));
+        source.actions[0].payload.operation.descriptor = &g_dynamic_operation;
         runtime.font_owner = &fonts;
         g_binding_value = "cool";
         g_selector_source_available = true;
@@ -1441,27 +1406,14 @@ TEST_F(OptionSelectorNativeWidget, NoneDispatchesRepeatedValuesAndLocalResetsOnH
     EXPECT_EQ(state()->selected, option_selector_widget_impl::NO_SLOT);
 }
 
-TEST_F(OptionSelectorNativeWidget, EmptyLocalValueSelectsAndExpandsToEmpty) {
+TEST_F(OptionSelectorNativeWidget, EmptyLocalValueIsAvailableInEventContext) {
     g_selector_config.slots[0].value[0] = '\0';
-    strlcpy(source.actions[0].payload.mqtt.mqtt_payload, "before{value}after",
-            sizeof(source.actions[0].payload.mqtt.mqtt_payload));
     create(OptionSelectorMode::Local);
     option_selector_widget_impl::activate(state(), 0);
     EXPECT_EQ(state()->selected, 0);
     EXPECT_EQ(g_dispatches, 1u);
-    EXPECT_STREQ(g_dispatched_value, "beforeafter");
-}
-
-TEST_F(OptionSelectorNativeWidget, ValidatesActionsForEmptyAndNonemptyOptionValues) {
-    JsonDocument doc;
-    doc["widget_option_label"] = "Auto";
-    doc["widget_option_label_2"] = "Manual";
-    doc["widget_option_value_2"] = "manual";
-    JsonArray actions = doc.createNestedArray("actions");
-    actions.createNestedObject()["type"] = "mqtt";
-    g_validated_option_values.clear();
-    ASSERT_EQ(option_selector_widget_impl::validate_actions(doc.as<JsonObjectConst>(), actions), nullptr);
-    EXPECT_EQ(g_validated_option_values, (std::vector<std::string>{"", "manual"}));
+    EXPECT_STREQ(g_dispatched_value, "");
+    EXPECT_EQ(g_dispatched_kind, BINDING_VALUE_KIND_TEXT);
 }
 
 TEST_F(OptionSelectorNativeWidget, BoundWaitsForConfirmationOrTimeoutAndBlocksUnavailableInput) {

@@ -533,7 +533,7 @@ static const WidgetType text_reader_widget_type{
 #endif
     text_reader_impl::show, text_reader_impl::hide, text_reader_impl::validate,
     &text_reader_impl::text_reader_preview, text_reader_impl::cancel_runtime, nullptr, nullptr, nullptr,
-    text_reader_impl::resources, nullptr
+    text_reader_impl::resources, nullptr, nullptr, false
 };
 static struct TextReaderRegistration {
     TextReaderRegistration() { widget_register(&text_reader_widget_type); }

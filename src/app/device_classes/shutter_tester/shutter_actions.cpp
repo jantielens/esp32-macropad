@@ -1,11 +1,4 @@
-// Shutter Tester ActionTypeDef: parse, serialize, dispatch and named fields
-// for the "shutter" action type. Registered via
-// REGISTER_ACTION_TYPE so action_dispatch.cpp / action_parse.cpp do not need
-// to know about the shutter arm at compile time (beyond the union arm itself,
-// which must live in pad_config.h because ActionPayload is a union).
-//
-// Aggregated into the build via device_classes/shutter_tester_device_class.cpp
-// under #if IS_SHUTTER_TESTER.
+// Shutter Tester operations, aggregated by shutter_tester_device_class.cpp.
 
 #include "../../action_registry.h"
 
@@ -21,132 +14,96 @@
 
 #define TAG "ShutterAction"
 
-static void shutter_parse(const JsonObject& a, ButtonAction& act) {
-    ShutterPayload& p = shutter_payload(act);
-    strlcpy(p.command, a["shutter_command"] | "", sizeof(p.command));
-    strlcpy(p.value,   a["shutter_value"]   | "", sizeof(p.value));
-}
-
-static void shutter_serialize(const ButtonAction& act, JsonObject obj) {
-    const ShutterPayload& p = shutter_payload(act);
-    if (p.command[0]) obj["shutter_command"] = p.command;
-    if (p.value[0])   obj["shutter_value"]   = p.value;
-}
-
-// The `value` field is the single bindable/numeric field: user-templated for
-// commands like guide_start ([item:id]) and sess_start
-// (camera id from a list). Expose it so shared code drives binding resolution
-// + {step} substitution. `command` is structural and never bindable.
-static bool shutter_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {
-    ShutterPayload& p = shutter_payload(act);
-    return action_visit_field(visitor, context, "shutter_value", p.value);
-}
-
 static void shutter_describe(JsonObject& out) {
     out["group"] = "Shutter Tester";
     out["label"] = "Shutter tester";
-    JsonArray fields = out.createNestedArray("fields");
-    JsonObject command_field = fields.createNestedObject();
-    command_field["name"] = "shutter_command";
-    command_field["description"] = "required command identifier";
-    JsonObject value_field = fields.createNestedObject();
-    value_field["name"] = "shutter_value";
-    value_field["description"] = "optional value; target speed, adjustment direction, camera id, or guided-test id depending on the command; binding templates are supported";
-    struct Command { const char* id; const char* label; };
-    struct Family { const char* id; const char* label; const Command* commands; uint8_t count; };
-    static const Command target_speed_cmds[] = {
-        {"toggle_lock", "Toggle lock"}, {"set", "Set target speed"}, {"adjust", "Adjust target speed"}
-    };
-    static const Command session_cmds[] = {
-        {"sess_toggle", "Toggle start/stop"}, {"sess_start", "Start"},
-        {"sess_stop", "Stop"}, {"sess_discard", "Discard last shot"}
-    };
-    static const Command guided_test_cmds[] = {
-        {"guide_start", "Start test"}, {"guide_stop", "Stop"},
-        {"guide_skip", "Skip step"}, {"guide_redo", "Redo step"}
-    };
-    static const Command alignment_cmds[] = {
-        {"align_start", "Start"}, {"align_stop", "Stop"}, {"recalibrate", "Recalibrate baseline"}
-    };
-    static const Family families[] = {
-        {"target_speed", "Target speed", target_speed_cmds, 3},
-        {"session", "Session", session_cmds, 4},
-        {"guided_test", "Guided test", guided_test_cmds, 4},
-        {"alignment", "Alignment", alignment_cmds, 3},
-    };
-    JsonArray out_families = out.createNestedArray("command_families");
-    for (const Family& family : families) {
-        JsonObject out_family = out_families.createNestedObject();
-        out_family["id"] = family.id;
-        out_family["label"] = family.label;
-        JsonArray out_commands = out_family.createNestedArray("commands");
-        for (uint8_t i = 0; i < family.count; ++i) {
-            JsonObject item = out_commands.createNestedObject();
-            item["id"] = family.commands[i].id;
-            item["label"] = family.commands[i].label;
-        }
-    }
 }
 
-static ActionResult shutter_dispatch(const ButtonAction& act, const char* label,
-                                     uint32_t /*continuation_token*/) {
-    const ShutterPayload& sh = shutter_payload(act);
-    const char* cmd = sh.command;
-    if (strcmp(cmd, "set") == 0) {
-        if (!shutter_measure_set_target(sh.value)) {
-            LOGW(TAG, "%s shutter set: unknown speed '%s'", label, sh.value);
-        } else {
-            LOGI(TAG, "%s shutter set: %s", label, sh.value);
-        }
-    } else if (strcmp(cmd, "adjust") == 0) {
-        bool faster = strcmp(sh.value, "faster") == 0;
-        shutter_measure_adjust_target(faster);
-        LOGI(TAG, "%s shutter adjust: %s", label, sh.value);
-    } else if (strcmp(cmd, "toggle_lock") == 0) {
-        if (!shutter_measure_toggle_lock()) {
-            LOGW(TAG, "%s shutter toggle_lock: no target set", label);
-        } else {
-            LOGI(TAG, "%s shutter toggle_lock", label);
-        }
-    } else if (strcmp(cmd, "sess_start") == 0) {
-        shutter_session_start(sh.value);
-        LOGI(TAG, "%s shutter sess_start: camera='%s'", label, sh.value);
-    } else if (strcmp(cmd, "sess_stop") == 0) {
-        shutter_session_stop();
-        LOGI(TAG, "%s shutter sess_stop", label);
-    } else if (strcmp(cmd, "sess_toggle") == 0) {
-        shutter_session_toggle(sh.value);
-        LOGI(TAG, "%s shutter sess_toggle: camera='%s'", label, sh.value);
-    } else if (strcmp(cmd, "sess_discard") == 0) {
-        shutter_session_discard_last();
-        LOGI(TAG, "%s shutter sess_discard", label);
-    } else if (strcmp(cmd, "guide_start") == 0) {
-        shutter_session_guide_start(sh.value);
-        LOGI(TAG, "%s shutter guide_start: test='%s'", label, sh.value);
-    } else if (strcmp(cmd, "guide_stop") == 0) {
-        shutter_session_guide_stop();
-        LOGI(TAG, "%s shutter guide_stop", label);
-    } else if (strcmp(cmd, "guide_skip") == 0) {
-        shutter_session_guide_skip();
-        LOGI(TAG, "%s shutter guide_skip", label);
-    } else if (strcmp(cmd, "guide_redo") == 0) {
-        shutter_session_guide_redo();
-        LOGI(TAG, "%s shutter guide_redo", label);
-    } else if (strcmp(cmd, "align_start") == 0) {
-        shutter_capture_start_alignment();
-        LOGI(TAG, "%s shutter align_start", label);
-    } else if (strcmp(cmd, "align_stop") == 0) {
-        shutter_capture_stop_alignment();
-        LOGI(TAG, "%s shutter align_stop", label);
-    } else if (strcmp(cmd, "recalibrate") == 0) {
-        shutter_capture_recalibrate();
-        LOGI(TAG, "%s shutter recalibrate", label);
-    } else {
-        LOGW(TAG, "%s shutter: unknown cmd '%s'", label, cmd);
+static const char* const shutter_speed_choices[] = {
+    "4s", "2s", "1s", "1/2s", "1/4s", "1/5s", "1/8s", "1/10s", "1/15s",
+    "1/25s", "1/30s", "1/50s", "1/60s", "1/100s", "1/125s", "1/200s",
+    "1/250s", "1/500s", "1/1000s", "1/2000s",
+    "4", "2", "1", "1/2", "1/4", "1/5", "1/8", "1/10", "1/15",
+    "1/25", "1/30", "1/50", "1/60", "1/100", "1/125", "1/200",
+    "1/250", "1/500", "1/1000", "1/2000"
+};
+static const char* const shutter_direction_choices[] = {"faster", "slower"};
+static const char* const shutter_direction_labels[] = {"Faster (shorter)", "Slower (longer)"};
+static const ActionArgumentDef shutter_speed_arguments[] = {
+    {"speed", "Target speed", ACTION_ARGUMENT_ENUM, 0, 0, 8, true,
+     "[item:speed]", "select", shutter_speed_choices,
+     sizeof(shutter_speed_choices) / sizeof(shutter_speed_choices[0])},
+};
+static const ActionArgumentDef shutter_direction_arguments[] = {
+    {"direction", "Direction", ACTION_ARGUMENT_ENUM, 0, 0, 6, true,
+     "[var:direction]", "select", shutter_direction_choices, 2, false, nullptr, shutter_direction_labels},
+};
+static const ActionArgumentDef shutter_camera_arguments[] = {
+    {"camera", "Camera (optional)", ACTION_ARGUMENT_STRING, 0, 0, CONFIG_BINDABLE_SHORT_LEN - 1,
+     true, "[item:id]", "text", nullptr, 0, true},
+};
+static const ActionArgumentDef shutter_test_arguments[] = {
+    {"test", "Test ID", ACTION_ARGUMENT_STRING, 0, 0, CONFIG_BINDABLE_SHORT_LEN - 1,
+     true, "[item:id]", "text"},
+};
+static ActionResult shutter_set_op(const ActionResolvedArgument* args, const char* label, uint32_t) {
+    if (!shutter_measure_set_target(args[0].text)) {
+        LOGW(TAG, "%s shutter set: unknown speed '%s'", label, args[0].text);
+        return ACTION_FAILED;
     }
     return ACTION_COMPLETE;
 }
+static ActionResult shutter_adjust_op(const ActionResolvedArgument* args, const char*, uint32_t) {
+    shutter_measure_adjust_target(!strcmp(args[0].text, "faster"));
+    return ACTION_COMPLETE;
+}
+static ActionResult shutter_lock_op(const ActionResolvedArgument*, const char* label, uint32_t) {
+    if (!shutter_measure_toggle_lock()) {
+        LOGW(TAG, "%s shutter toggle_lock: no target set", label);
+        return ACTION_FAILED;
+    }
+    return ACTION_COMPLETE;
+}
+static ActionResult shutter_session_start_op(const ActionResolvedArgument* args, const char*, uint32_t) {
+    return shutter_session_start(args[0].text) ? ACTION_COMPLETE : ACTION_FAILED;
+}
+static ActionResult shutter_session_toggle_op(const ActionResolvedArgument* args, const char*, uint32_t) {
+    return shutter_session_toggle(args[0].text) ? ACTION_COMPLETE : ACTION_FAILED;
+}
+static ActionResult shutter_guide_start_op(const ActionResolvedArgument* args, const char*, uint32_t) {
+    return shutter_session_guide_start(args[0].text) ? ACTION_COMPLETE : ACTION_FAILED;
+}
+#define SHUTTER_SIMPLE(fn, call) \
+    static ActionResult fn(const ActionResolvedArgument*, const char*, uint32_t) { \
+        call(); return ACTION_COMPLETE; \
+    }
+SHUTTER_SIMPLE(shutter_session_stop_op, shutter_session_stop)
+SHUTTER_SIMPLE(shutter_session_discard_op, shutter_session_discard_last)
+SHUTTER_SIMPLE(shutter_guide_stop_op, shutter_session_guide_stop)
+SHUTTER_SIMPLE(shutter_guide_skip_op, shutter_session_guide_skip)
+SHUTTER_SIMPLE(shutter_guide_redo_op, shutter_session_guide_redo)
+SHUTTER_SIMPLE(shutter_align_start_op, shutter_capture_start_alignment)
+SHUTTER_SIMPLE(shutter_align_stop_op, shutter_capture_stop_alignment)
+SHUTTER_SIMPLE(shutter_recalibrate_op, shutter_capture_recalibrate)
+#undef SHUTTER_SIMPLE
+static const ActionOperationDef shutter_operations[] = {
+    {"shutter.target.set", "Set target speed", shutter_speed_arguments, 1, shutter_set_op},
+    {"shutter.target.adjust", "Adjust target speed", shutter_direction_arguments, 1, shutter_adjust_op},
+    {"shutter.target.toggle_lock", "Toggle target lock", nullptr, 0, shutter_lock_op},
+    {"shutter.session.start", "Start shutter session", shutter_camera_arguments, 1, shutter_session_start_op},
+    {"shutter.session.toggle", "Toggle shutter session", shutter_camera_arguments, 1, shutter_session_toggle_op},
+    {"shutter.session.stop", "Stop shutter session", nullptr, 0, shutter_session_stop_op},
+    {"shutter.session.discard", "Discard last shot", nullptr, 0, shutter_session_discard_op},
+    {"shutter.guide.start", "Start guided test", shutter_test_arguments, 1, shutter_guide_start_op},
+    {"shutter.guide.stop", "Stop guided test", nullptr, 0, shutter_guide_stop_op},
+    {"shutter.guide.skip", "Skip guided step", nullptr, 0, shutter_guide_skip_op},
+    {"shutter.guide.redo", "Redo guided step", nullptr, 0, shutter_guide_redo_op},
+    {"shutter.alignment.start", "Start alignment", nullptr, 0, shutter_align_start_op},
+    {"shutter.alignment.stop", "Stop alignment", nullptr, 0, shutter_align_stop_op},
+    {"shutter.recalibrate", "Recalibrate baseline", nullptr, 0, shutter_recalibrate_op},
+};
 
-DEFINE_AND_REGISTER_ACTION_TYPE(shutter_action_type, ACTION_TYPE_SHUTTER, shutter_parse, shutter_serialize, shutter_dispatch, shutter_fields, shutter_describe, nullptr, nullptr, ACTION_EXECUTION_SYNC);
+DEFINE_AND_REGISTER_ACTION_TYPE(shutter_action_type, ACTION_TYPE_SHUTTER, shutter_describe, nullptr, ACTION_EXECUTION_SYNC,
+    true, false, shutter_operations, sizeof(shutter_operations) / sizeof(shutter_operations[0]));
 
 #endif // HAS_DISPLAY && IS_SHUTTER_TESTER

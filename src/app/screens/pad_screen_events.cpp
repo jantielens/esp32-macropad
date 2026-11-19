@@ -640,7 +640,7 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
             flash_zone = 1;
         }
     } else if (tile->widget_type && strcmp(tile->widget_type->name, "numericrocker") == 0) {
-        // Numeric rocker: outer/inner zones use adjust_action with {step} substitution;
+        // Numeric rocker: outer/inner zones use adjust_action with [event:step];
         // center zone falls through to standard tap dispatch (actions[0-2]).
         auto* cfg = reinterpret_cast<const NumericRockerConfig*>(tile->widget_cfg.data);
 
@@ -658,7 +658,7 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
         float sign = cfg->horizontal ? 1.0f : -1.0f;
 
         if (rel < z.inner_end || rel >= z.inner2_start) {
-            // Outer or inner zone — dispatch adjust_action with {step}
+            // Outer or inner zone — dispatch the adjustment action.
             float step;
             int flash_start, flash_end;
             const char* nr_event;
@@ -687,8 +687,6 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
 
             ButtonAction local_nr;
             memcpy(&local_nr, &cfg->adjust_action, sizeof(ButtonAction));
-            if (local_nr.type[0] != '@' &&
-                !action_type_substitute_step(action_type_find(local_nr.type), local_nr, step)) return;
             char step_text[24];
             snprintf(step_text, sizeof(step_text), "%.9g", static_cast<double>(step));
             const ActionEventData event = {nullptr, step_text, BINDING_VALUE_KIND_UNKNOWN};

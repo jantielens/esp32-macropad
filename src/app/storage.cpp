@@ -42,6 +42,9 @@ bool storage_write_verified(const char* path, const uint8_t* data, size_t length
     File file = Storage.open(path, "w");
     if (!file) return false;
     const size_t written = file.write(data, length);
+#if defined(ARDUINO_ARCH_ESP32)
+    file.flush();
+#endif
     file.close();
     if (written != length) {
         Storage.remove(path);
@@ -75,6 +78,10 @@ bool storage_write_atomic(const char* path, const uint8_t* data, size_t length) 
     char temporary[112], backup[112];
     if (snprintf(temporary, sizeof(temporary), "%s.tmp", path) >= (int)sizeof(temporary) ||
         snprintf(backup, sizeof(backup), "%s.bak", path) >= (int)sizeof(backup)) return false;
+    if (Storage.exists(backup) && !Storage.exists(path) && !Storage.rename(backup, path)) {
+        LOGE(TAG, "Failed to recover %s before replacement", path);
+        return false;
+    }
     if ((Storage.exists(temporary) && !Storage.remove(temporary)) ||
         (Storage.exists(backup) && !Storage.remove(backup)) ||
         !storage_write_verified(temporary, data, length)) return false;
@@ -89,8 +96,10 @@ bool storage_write_atomic(const char* path, const uint8_t* data, size_t length) 
         Storage.remove(temporary);
         return false;
     }
-    if (had_previous && !Storage.remove(backup))
-        LOGW(TAG, "Replacement succeeded but backup cleanup failed: %s", backup);
+    if (had_previous && !Storage.remove(backup)) {
+        LOGE(TAG, "Replacement succeeded but backup cleanup failed: %s", backup);
+        return false;
+    }
     return true;
 }
 

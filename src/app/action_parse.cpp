@@ -21,33 +21,21 @@ static void copy_action_strings(JsonVariant value) {
 
 void action_parse(const JsonObject& a, ButtonAction& act) {
     memset(&act, 0, sizeof(ButtonAction));
-    if (!a.containsKey("type") && a.containsKey("op")) {
-        ActionStorage* storage = action_storage_current();
-        const char* error = action_operation_validate_json(a, false);
-        const ActionOperationDef* operation = action_operation_find(a["op"] | "");
-        if (!storage || error || !operation) {
-            if (storage) storage->failed = true;
-            LOGW("Action", "Cannot parse operation: %s", error ? error : "no argument storage");
-            return;
-        }
-        ActionArgumentBlock* arguments = action_storage_parse(*storage, *operation, a["args"]);
-        if (!arguments) {
-            LOGE("Action", "Cannot allocate operation arguments");
-            return;
-        }
-        act.type[0] = '@';
-        act.payload.operation = {operation, arguments};
+    ActionStorage* storage = action_storage_current();
+    const char* error = action_operation_validate_json(a, false);
+    const ActionOperationDef* operation = action_operation_find(a["op"] | "");
+    if (!storage || error || !operation) {
+        if (storage) storage->failed = true;
+        LOGW("Action", "Cannot parse operation: %s", error ? error : "no argument storage");
         return;
     }
-    strlcpy(act.type, a["type"] | "", sizeof(act.type));
-    if (!act.type[0]) return;
-
-    const ActionTypeDef* type = action_type_find(act.type);
-    if (type && type->parse) {
-        type->parse(a, act);
-    } else if (strcmp(act.type, "beep") == 0 || strcmp(act.type, "sound") == 0) {
-        memset(&act, 0, sizeof(ButtonAction));
+    ActionArgumentBlock* arguments = action_storage_parse(*storage, *operation, a["args"]);
+    if (!arguments) {
+        LOGE("Action", "Cannot allocate operation arguments");
+        return;
     }
+    act.type[0] = '@';
+    act.payload.operation = {operation, arguments};
 }
 
 void action_to_json(const ButtonAction& act, JsonObject obj) {
@@ -67,6 +55,8 @@ void action_to_json(const ButtonAction& act, JsonObject obj) {
                 arguments[argument.name] = action_storage_text(block, value);
             } else if (argument.type == ACTION_ARGUMENT_BOOLEAN) {
                 arguments[argument.name] = value.integer != 0;
+            } else if (argument.type == ACTION_ARGUMENT_NUMBER) {
+                arguments[argument.name] = value.number;
             } else {
                 arguments[argument.name] = value.integer;
             }
@@ -74,11 +64,7 @@ void action_to_json(const ButtonAction& act, JsonObject obj) {
         copy_action_strings(obj);
         return;
     }
-    obj["type"] = act.type;
-
-    const ActionTypeDef* type = action_type_find(act.type);
-    if (type && type->serialize) type->serialize(act, obj);
-    copy_action_strings(obj);
+    LOGE("Action", "Cannot serialize an invalid or legacy action");
 }
 
 #endif // HAS_DISPLAY || HAS_BUTTON

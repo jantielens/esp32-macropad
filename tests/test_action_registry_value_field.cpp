@@ -1,28 +1,9 @@
-// ============================================================================
-// Guard test for the action-type registry named-field contract
-// ============================================================================
-// Device-class action types store their value in the opaque
-// ActionPayload::device_class arm, invisible to shared firmware at compile
-// time. The registry's named-field visitor reaches that field; shared
-// code drives binding resolution, the '[' scan, and {step} substitution
-// generically against it. A device class that omits its field declaration
-// silently loses all three behaviors (the bug that motivated this test).
-//
-// This test registers a SYNTHETIC device-class value-action — mirroring the
-// canonical `{ char command[]; char value[]; }` payload shape — and asserts
-// that all three generic behaviors work when invoked through the registry
-// helpers (action_type_substitute_step / _has_binding / _resolve_bindings).
-// It is intentionally decoupled from any one device class so it keeps guarding
-// the contract even as device classes come and go.
-
 #include <cstdio>
 #include <cstring>
 #include <cstdarg>
 #include <vector>
 
 #include "action_registry.h"
-#include "binding_template.h"
-#include "pad_config.h"
 
 static unsigned registry_errors = 0;
 static char registry_error[256] = {};
@@ -35,224 +16,47 @@ void log_noop(const char* module, const char* format, ...) {
     va_end(args);
 }
 
-// ---------------------------------------------------------------------------
-// Synthetic device-class payload — same shape every device class uses.
-// ---------------------------------------------------------------------------
-#define ACTION_TYPE_FAKE "fake"
-
-struct FakePayload {
-    char command[16];
-    char value[32];
-    char message[16];
+static bool fake_enabled = true;
+static bool fake_available() { return fake_enabled; }
+static ActionResult fake_dispatch(const ActionResolvedArgument*, const char*, uint32_t) {
+    return ACTION_COMPLETE;
+}
+static const ActionOperationDef fake_operations[] = {
+    {"test.device.operation", "Device operation", nullptr, 0, fake_dispatch}
 };
-static_assert(sizeof(FakePayload) <= ACTION_PAYLOAD_DEVICE_CLASS_BYTES,
-              "FakePayload exceeds device_class arm");
-
-static FakePayload& fake_payload(ButtonAction& act) {
-    return *reinterpret_cast<FakePayload*>(act.payload.device_class);
-}
-
-// ---------------------------------------------------------------------------
-// Accessor implementation — mirrors the device-class pattern exactly.
-// ---------------------------------------------------------------------------
-static bool fake_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {
-    FakePayload& p = fake_payload(act);
-    return action_visit_field(visitor, context, "value", p.value) &&
-        action_visit_field(visitor, context, "message", p.message, ACTION_FIELD_EVENT);
-}
-
-static bool s_fake_available = true;
-
-static bool fake_available() {
-    return s_fake_available;
-}
-
-static const char* fake_validate(JsonObjectConst) {
-    return "fake validation failed";
-}
-
 static const ActionTypeDef fake_action_type = {
-    /* type_name   */ ACTION_TYPE_FAKE,
-    /* parse       */ nullptr,
-    /* serialize   */ nullptr,
-    /* dispatch    */ nullptr,
-    /* fields      */ fake_fields,
-    /* describe    */ nullptr,
-    /* available   */ fake_available,
-    /* validate    */ fake_validate,
+    "fake", nullptr, fake_available,
+    ACTION_EXECUTION_SYNC, true, false, fake_operations, 1
 };
 
-// ---------------------------------------------------------------------------
-// Mock binding resolver
-// ---------------------------------------------------------------------------
-static BindingResolverStatus mock_resolve(const char* params, char* out, size_t out_len) {
-    (void)params;
-    strlcpy(out, "RESOLVED", out_len);
-    return BINDING_RESOLVER_RESOLVED;
-}
-static void mock_collect(const char* params, void* user_data) {
-    (void)params;
-    (void)user_data;
-}
-
-// ---------------------------------------------------------------------------
-// Harness
-// ---------------------------------------------------------------------------
-static int g_pass = 0;
-static int g_fail = 0;
-
-static void check_str(const char* got, const char* expected, const char* label) {
-    if (strcmp(got, expected) != 0) {
-        printf("  FAIL [%s]\n    got:      \"%s\"\n    expected: \"%s\"\n", label, got, expected);
-        g_fail++;
-        return;
-    }
-    g_pass++;
-}
-static void check_true(bool cond, const char* label) {
-    if (!cond) {
-        printf("  FAIL [%s]\n", label);
-        g_fail++;
-        return;
-    }
-    g_pass++;
-}
-
-static ButtonAction make_fake(const char* value) {
-    ButtonAction act;
-    memset(&act, 0, sizeof(act));
-    strlcpy(act.type, ACTION_TYPE_FAKE, sizeof(act.type));
-    FakePayload& p = fake_payload(act);
-    strlcpy(p.command, "adjust", sizeof(p.command));
-    strlcpy(p.value, value, sizeof(p.value));
-    return act;
-}
-
-// ---------------------------------------------------------------------------
-// Tests — all hooks reached through the registry, never directly.
-// ---------------------------------------------------------------------------
-static void test_lookup_returns_registered_def() {
-    printf("--- registry returns the registered def ---\n");
-    const ActionTypeDef* def = action_type_find(ACTION_TYPE_FAKE);
-    check_true(def != nullptr, "fake type is registered");
-    check_true(def && def->fields != nullptr, "field declaration present");
-}
-
-static void test_support_and_validation_hooks() {
-    printf("--- support and validation hooks ---\n");
-    s_fake_available = true;
-    check_true(action_type_is_supported(ACTION_TYPE_FAKE), "available type is supported");
-    s_fake_available = false;
-    check_true(!action_type_is_supported(ACTION_TYPE_FAKE), "unavailable type is rejected");
-    s_fake_available = true;
-
-    JsonDocument doc;
-    const ActionTypeDef* def = action_type_find(ACTION_TYPE_FAKE);
-    check_str(action_type_validate(def, doc.to<JsonObject>()), "fake validation failed",
-              "validation hook result is returned");
-}
-
-static void test_substitute_step_via_registry() {
-    printf("--- substitute_step substitutes {step} via registry ---\n");
-    const ActionTypeDef* def = action_type_find(ACTION_TYPE_FAKE);
-    if (!def || !def->fields) { g_fail++; return; }
-    {
-        ButtonAction act = make_fake("adjust_base {step}");
-        action_type_substitute_step(def, act, 5.0f);
-        check_str(fake_payload(act).value, "adjust_base 5", "positive step substituted");
-    }
-    {
-        ButtonAction act = make_fake("adjust_base {step}");
-        action_type_substitute_step(def, act, -2.5f);
-        check_str(fake_payload(act).value, "adjust_base -2.5", "negative fractional step substituted");
-    }
-    {
-        ButtonAction act = make_fake("no token here");
-        action_type_substitute_step(def, act, 9.0f);
-        check_str(fake_payload(act).value, "no token here", "field without token unchanged");
+static int failures = 0;
+static void check(bool result, const char* message) {
+    if (!result) {
+        std::printf("FAIL: %s\n", message);
+        ++failures;
     }
 }
 
-static void test_token_substitution_is_atomic() {
-    printf("--- token substitution is bounded and atomic ---\n");
-    char field[16] = "{value}:{value}";
-    check_true(action_substitute_token_field(field, sizeof(field), "{value}", "7"),
-               "repeated token replacement succeeds");
-    check_str(field, "7:7", "all occurrences are replaced");
+static void test_operation_registry() {
+    action_type_register(&fake_action_type);
+    const ActionTypeDef* owner = nullptr;
+    check(action_operation_find("test.device.operation", &owner) == &fake_operations[0],
+          "registered operation is found");
+    check(owner == &fake_action_type, "operation retains its owner");
 
-    strlcpy(field, "{value}{value}", sizeof(field));
-    check_true(!action_substitute_token_field(field, sizeof(field), "{value}", "12345678"),
-               "overflow is rejected");
-    check_str(field, "{value}{value}", "overflow leaves original unchanged");
+    ButtonAction action = {};
+    action.type[0] = '@';
+    action.payload.operation.descriptor = &fake_operations[0];
+    check(action_operation_for_action(action, &owner) == &fake_operations[0] &&
+          owner == &fake_action_type, "stored operation resolves through registry");
+    check(!action_operation_find("@test.device.operation"), "wire IDs do not accept discriminator");
 
-    check_true(!action_substitute_token_field(field, sizeof(field), "{value}", "{value}"),
-               "recursive replacement is rejected");
-    check_str(field, "{value}{value}", "recursive replacement leaves original unchanged");
-
-    const ActionTypeDef* def = action_type_find(ACTION_TYPE_FAKE);
-    ButtonAction act = make_fake("{value}");
-    strlcpy(fake_payload(act).message, "{value}{value}", sizeof(fake_payload(act).message));
-    check_true(!action_type_substitute_token(def, act, "{value}", "12345678"), "second-field overflow is rejected");
-    check_str(fake_payload(act).value, "{value}", "first field is unchanged on second-field failure");
-    check_true(action_type_substitute_token(def, act, "{value}", "20"), "multi-field substitution succeeds");
-    check_str(fake_payload(act).value, "20", "value field substituted");
-    check_str(fake_payload(act).message, "2020", "event-only field substituted");
-    strlcpy(fake_payload(act).message, "[mock:x]", sizeof(fake_payload(act).message));
-    check_true(!action_type_has_binding(def, act), "event-only field does not enable live bindings");
-    strlcpy(fake_payload(act).message, "{step}", sizeof(fake_payload(act).message));
-    check_true(!action_type_substitute_token(def, act, "{value}", "20"), "unavailable token is rejected");
-}
-
-static void test_has_binding_via_registry() {
-    printf("--- has_binding detects bindings via registry ---\n");
-    const ActionTypeDef* def = action_type_find(ACTION_TYPE_FAKE);
-    if (!def || !def->fields) { g_fail++; return; }
-    {
-        ButtonAction act = make_fake("[mock:x]");
-        check_true(action_type_has_binding(def, act), "binding token detected");
-    }
-    {
-        ButtonAction act = make_fake("plain");
-        check_true(!action_type_has_binding(def, act), "plain value reports no binding");
-    }
-    {
-        ButtonAction act = make_fake("");
-        check_true(!action_type_has_binding(def, act), "empty value reports no binding");
-    }
-}
-
-static void test_resolve_bindings_via_registry() {
-    printf("--- resolve_bindings resolves value via registry ---\n");
-    const ActionTypeDef* def = action_type_find(ACTION_TYPE_FAKE);
-    if (!def || !def->fields) { g_fail++; return; }
-    {
-        ButtonAction act = make_fake("[mock:x]");
-        check_true(action_type_resolve_bindings(def, act), "binding resolution succeeds");
-        check_str(fake_payload(act).value, "RESOLVED", "binding resolved");
-    }
-    {
-        // resolve_bindings must leave {step} untouched — only the rocker
-        // substitutes it. This is the cross-feature invariant.
-        ButtonAction act = make_fake("{step}");
-        check_true(action_type_resolve_bindings(def, act), "plain value resolution succeeds");
-        check_str(fake_payload(act).value, "{step}", "{step} survives binding resolution");
-    }
-}
-
-static BindingResolverStatus long_resolve(const char* params, char* out, size_t out_len) {
-    (void)params;
-    memset(out, 'x', out_len - 1);
-    out[out_len - 1] = '\0';
-    return BINDING_RESOLVER_RESOLVED;
-}
-
-static void test_resolve_bindings_rejects_overflow() {
-    printf("--- resolve_bindings rejects overflow ---\n");
-    const ActionTypeDef* def = action_type_find(ACTION_TYPE_FAKE);
-    if (!def || !def->fields) { g_fail++; return; }
-    ButtonAction act = make_fake("[long:x]");
-    check_true(!action_type_resolve_bindings(def, act), "oversized binding result is rejected");
-    check_str(fake_payload(act).value, "[long:x]", "overflow leaves original value unchanged");
+    fake_enabled = false;
+    check(!action_type_is_supported("fake"), "unavailable owner is excluded");
+    check(!action_operation_find("test.device.operation", &owner) && !owner,
+          "unavailable operation is excluded from lookup");
+    check(!action_operation_for_action(action), "stored unavailable operation cannot dispatch");
+    fake_enabled = true;
 }
 
 static void test_registry_overflow_reporting() {
@@ -261,54 +65,30 @@ static void test_registry_overflow_reporting() {
     fillers.reserve(64);
     unsigned index = 0;
     for (; index < 64; ++index) {
-        snprintf(names[index], sizeof(names[index]), "filler%u", index);
-        fillers.emplace_back(names[index], nullptr, nullptr, nullptr, nullptr, nullptr);
+        std::snprintf(names[index], sizeof(names[index]), "filler%u", index);
+        fillers.emplace_back(names[index], nullptr);
         const uint8_t before = action_type_count();
         action_type_register(&fillers[index]);
         if (action_type_count() == before) break;
     }
-    check_true(index < 64, "registry reaches its finite capacity");
+    check(index < 64, "registry reaches finite capacity");
     if (index >= 64) return;
-    check_true(!action_type_find(names[index]), "overflow does not register action");
-    check_true(registry_errors == 0, "startup overflow waits for logging");
+    check(!action_type_find(names[index]), "overflow does not register action");
+    check(registry_errors == 0, "startup overflow waits for logging");
     action_registry_logging_ready();
-    check_true(registry_errors == 1 && strstr(registry_error, names[index]),
-               "startup overflow reports rejected action");
+    check(registry_errors == 1 && strstr(registry_error, names[index]),
+          "startup overflow reports rejected action");
     action_registry_logging_ready();
-    check_true(registry_errors == 1, "startup overflow is reported once");
+    check(registry_errors == 1, "startup overflow is reported once");
     action_type_register(&fillers[index]);
-    check_true(registry_errors == 2 && strstr(registry_error, names[index]),
-               "later overflow reports immediately");
+    check(registry_errors == 2 && strstr(registry_error, names[index]),
+          "later overflow reports immediately");
     action_type_register(&fake_action_type);
-    check_true(registry_errors == 2, "duplicate registration is not overflow");
+    check(registry_errors == 2, "duplicate registration is not overflow");
 }
 
 int main() {
-    printf("=== action registry value-field contract tests ===\n\n");
-
-    static const ActionTypeDef fitting_type = {
-        "abcdefghijklmno", nullptr, nullptr, nullptr, nullptr, nullptr
-    };
-    action_type_register(&fitting_type);
-    ButtonAction stored = {};
-    strlcpy(stored.type, fitting_type.type_name, sizeof(stored.type));
-    check_str(stored.type, fitting_type.type_name, "maximum fitting name survives storage");
-    check_true(action_type_find(stored.type) == &fitting_type, "stored name resolves registered type");
-
-    const BindingSchemeSpec free_form = {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr, nullptr};
-    binding_template_register("mock", mock_resolve, mock_collect, free_form);
-    binding_template_register("long", long_resolve, mock_collect, free_form);
-    action_type_register(&fake_action_type);
-
-    test_lookup_returns_registered_def();
-    test_support_and_validation_hooks();
-    test_substitute_step_via_registry();
-    test_token_substitution_is_atomic();
-    test_has_binding_via_registry();
-    test_resolve_bindings_via_registry();
-    test_resolve_bindings_rejects_overflow();
+    test_operation_registry();
     test_registry_overflow_reporting();
-
-    printf("\n=== %d passed, %d failed ===\n", g_pass, g_fail);
-    return g_fail == 0 ? 0 : 1;
+    return failures ? 1 : 0;
 }

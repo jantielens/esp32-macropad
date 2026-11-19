@@ -9,6 +9,7 @@
 #include "action_validate.h"
 #include "config_psram.h"
 #include "fs_health.h"
+#include "json_key_validation.h"
 #include "log_manager.h"
 #include "psram_json_allocator.h"
 #include "timer_engine.h"
@@ -46,19 +47,12 @@ static void apply_defaults(TimerConfig* cfg) {
 }
 
 static const char* validate_action_envelope(JsonObjectConst action) {
-    if (action.containsKey("type")) {
-        if (!action["type"].is<const char*>() || !action["type"].as<const char*>()[0] ||
-            action.containsKey("args")) return "invalid legacy action envelope";
-        const char* type = action["type"].as<const char*>();
-        if (!action_type_is_supported(type)) return "unsupported legacy action";
-        if (action.containsKey("op")) {
-            if (strcmp(type, ACTION_TYPE_VISUAL_ALERT)) return "mixed action envelope";
-            return action_type_validate(action_type_find(type), action);
-        }
-        return nullptr;
-    }
-    return action.containsKey("op") ? action_validate_json(action) : "action missing type or operation";
+    if (action.containsKey("type") || !action["op"].is<const char*>() ||
+        !action["op"].as<const char*>()[0]) return "legacy action is not supported";
+    return action_validate_json(action);
 }
+
+static bool parse_timer_document(JsonObject root, TimerConfig* candidate, ActionStorage& storage);
 
 static bool load_from_flash(TimerConfig* cfg, ActionStorage& storage) {
     if (!cfg) return false;
@@ -82,66 +76,25 @@ static bool load_from_flash(TimerConfig* cfg, ActionStorage& storage) {
         return false;
     }
 
-    BasicJsonDocument<PsramJsonAllocator> doc(3072);
+    if (json_stream_scan_keys(f) != JsonKeyScanResult::Valid) {
+        LOGW(TAG, "Timer config contains an invalid JSON NUL or could not be read");
+        f.close();
+        return false;
+    }
+    BasicJsonDocument<PsramJsonAllocator> doc(4096);
     DeserializationError err = deserializeJson(doc, f);
     f.close();
 
-    if (err || !doc.is<JsonObject>()) {
+    if (err || doc.overflowed() || !doc.is<JsonObject>()) {
         LOGE(TAG, "Invalid timer config JSON: %s", err.c_str());
         return false;
     }
-
-    ActionStorageScope scope(&storage);
-    // Parse per-timer settings: keys "1", "2", "3"
-    for (uint8_t i = 0; i < TIMER_COUNT; i++) {
-        char key[4];
-        snprintf(key, sizeof(key), "%u", i + 1);
-        JsonVariant tv = doc[key];
-        if (!doc.containsKey(key)) continue;
-        if (!tv.is<JsonObject>()) {
-            LOGE(TAG, "Timer %u: configuration must be an object", i + 1);
-            return false;
-        }
-        JsonObject tobj = tv.as<JsonObject>();
-
-        JsonVariant actions_value = tobj["expire_actions"];
-        if (!tobj.containsKey("expire_actions")) continue;
-        if (!actions_value.is<JsonArray>()) {
-            LOGE(TAG, "Timer %u: expire actions must be an array", i + 1);
-            return false;
-        }
-
-        TimerSettings& ts = cfg->timers[i];
-        for (JsonVariant action_value : actions_value.as<JsonArray>()) {
-            if (!action_value.is<JsonObject>()) {
-                LOGE(TAG, "Timer %u: expire action must be an object", i + 1);
-                return false;
-            }
-            JsonObject object = action_value.as<JsonObject>();
-            const char* error = validate_action_envelope(object);
-            if (error) {
-                LOGE(TAG, "Timer %u: cannot load expire action: %s", i + 1, error);
-                return false;
-            }
-            ButtonAction action = {};
-            action_parse(object, action);
-            if (storage.failed) return false;
-            if (!action.type[0]) {
-                LOGE(TAG, "Timer %u: cannot parse expire action", i + 1);
-                return false;
-            }
-            if (ts.expire_action_count >= TIMER_MAX_EXPIRE_ACTIONS) {
-                LOGE(TAG, "Timer %u: too many expire actions", i + 1);
-                return false;
-            }
-            ts.expire_actions[ts.expire_action_count++] = action;
-        }
-
-        LOGI(TAG, "Timer %u: expire_actions=%u", i + 1,
-             ts.expire_action_count);
+    if (!doc["action_format_version"].is<int>() || doc["action_format_version"].as<int>() != 1) {
+        LOGE(TAG, "Incompatible timer action format; recreate timer configuration");
+        return false;
     }
 
-    return true;
+    return parse_timer_document(doc.as<JsonObject>(), cfg, storage);
 }
 
 void timer_config_init() {
@@ -193,6 +146,7 @@ bool timer_config_snapshot_expiry(uint8_t id, TimerExpirySnapshot* out) {
 bool timer_config_to_json(JsonObject root) {
     if (!g_config_ready) return false;
     config_lock();
+    root["action_format_version"] = 1;
     for (uint8_t i = 0; i < TIMER_COUNT; i++) {
         char key[4];
         snprintf(key, sizeof(key), "%u", i + 1);
@@ -217,20 +171,37 @@ bool timer_config_exists() {
 static bool parse_strict_write(const uint8_t* json, size_t len,
                                TimerConfig* candidate, ActionStorage& storage) {
     if (!json || !candidate || len == 0 || len > 4096) return false;
+    if (!json_keys_valid(json, len)) {
+        LOGW(TAG, "Timer config JSON contains an invalid NUL");
+        return false;
+    }
     apply_defaults(candidate);
 
     BasicJsonDocument<PsramJsonAllocator> doc(4096);
-    if (deserializeJson(doc, json, len) || !doc.is<JsonObject>()) {
+    if (deserializeJson(doc, json, len) || doc.overflowed() || !doc.is<JsonObject>()) {
         LOGW(TAG, "Write rejected: root must be an object");
         return false;
     }
 
-    JsonObject root = doc.as<JsonObject>();
+    return parse_timer_document(doc.as<JsonObject>(), candidate, storage);
+}
+
+static bool parse_timer_document(JsonObject root, TimerConfig* candidate, ActionStorage& storage) {
+    if (!root["action_format_version"].is<int>() || root["action_format_version"].as<int>() != 1) {
+        LOGW(TAG, "Write rejected: incompatible timer actions document");
+        return false;
+    }
     ActionStorageScope scope(&storage);
     for (JsonPair slot_pair : root) {
-        const char* key = slot_pair.key().c_str();
-        if (!key || key[1] != '\0' || key[0] < '1' || key[0] > '3') {
-            LOGW(TAG, "Write rejected: invalid timer key '%s'", key ? key : "");
+        const JsonString json_key = slot_pair.key();
+        const char* key = json_key.c_str();
+        if (!key || json_key.size() != strlen(key)) {
+            LOGW(TAG, "Write rejected: invalid timer key");
+            return false;
+        }
+        if (!strcmp(key, "action_format_version")) continue;
+        if (json_key.size() != 1 || key[0] < '1' || key[0] > '3') {
+            LOGW(TAG, "Write rejected: invalid timer key '%s'", key);
             return false;
         }
         if (!slot_pair.value().is<JsonObject>()) {
@@ -240,7 +211,9 @@ static bool parse_strict_write(const uint8_t* json, size_t len,
 
         JsonObject slot = slot_pair.value().as<JsonObject>();
         for (JsonPair field : slot) {
-            if (strcmp(field.key().c_str(), "expire_actions") != 0) {
+            const JsonString field_key = field.key();
+            if (field_key.size() != strlen(field_key.c_str()) ||
+                strcmp(field_key.c_str(), "expire_actions") != 0) {
                 LOGW(TAG, "Write rejected: unknown timer %s field '%s'",
                      key, field.key().c_str());
                 return false;
@@ -283,6 +256,7 @@ static bool parse_strict_write(const uint8_t* json, size_t len,
 }
 
 static void config_to_json(const TimerConfig& config, JsonObject root) {
+    root["action_format_version"] = 1;
     for (uint8_t i = 0; i < TIMER_COUNT; i++) {
         char key[4];
         snprintf(key, sizeof(key), "%u", i + 1);

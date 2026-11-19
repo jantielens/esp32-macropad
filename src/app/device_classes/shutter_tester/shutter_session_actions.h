@@ -5,9 +5,7 @@
 #if IS_SHUTTER_TESTER
 
 #include "../../pad_config.h"  // ButtonAction, MAX_BUTTON_ACTIONS
-#include "shutter_payload.h"   // ACTION_TYPE_SHUTTER, shutter_payload()
-
-#include <string.h>
+#include <string>
 
 // Lifecycle actions dispatched around shutter session persistence.
 // Each event holds up to MAX_BUTTON_ACTIONS (3) actions executed sequentially,
@@ -23,8 +21,8 @@ struct ShutterSessionActionsConfig {
 // Load config from /config/shutter_session_actions.json. Call once at boot.
 void shutter_session_actions_init();
 
-// Get the current cached config (never null; empty if file missing).
-const ShutterSessionActionsConfig* shutter_session_actions_get();
+// Serialize under lock; returns false for an incompatible saved document.
+bool shutter_session_actions_to_json(std::string& out);
 
 // Save raw JSON to flash and refresh the RAM cache. Returns true on success.
 bool shutter_session_actions_save_raw(const uint8_t* json, size_t len);
@@ -40,16 +38,5 @@ void shutter_session_actions_notify_complete();
 // Drain any pending save_complete notification and dispatch the configured actions.
 // Must be called from the LVGL/main loop task.
 void shutter_session_actions_loop();
-
-// Self-trigger guard helper (exposed for tests, inline so test builds don't
-// need to link the full module). Returns true when the action would re-enter
-// session start/stop and must be skipped.
-inline bool shutter_session_actions_is_self_trigger(const ButtonAction& act) {
-    if (strcmp(act.type, ACTION_TYPE_SHUTTER) != 0) return false;
-    const char* cmd = shutter_payload(act).command;
-    return strcmp(cmd, "sess_stop")   == 0
-        || strcmp(cmd, "sess_start")  == 0
-        || strcmp(cmd, "sess_toggle") == 0;
-}
 
 #endif // IS_SHUTTER_TESTER

@@ -752,7 +752,7 @@ delete context.testHelpSchemes;
     }
 
     // Whole-button generation must produce ordinary, valid bindings and literal service actions.
-    context.actionEditorCatalogEntry = type => type === 'ha_service' ? {} : null;
+    context.actionEditorOperation = id => id === 'ha.service.call' ? {} : null;
     context.padGetEffectiveDefault = () => '#000000';
     context.padColorNormalizeLiteral = color => color;
     const builders = vm.runInContext('padButtonBuilders', context);
@@ -880,7 +880,7 @@ delete context.testHelpSchemes;
     assert.strictEqual(generatedLight.label_top_style, 'color:#000000', 'Keep the title legible on light button backgrounds');
     assert.strictEqual(generatedLight.fg_color, '[expr:[ha:light.kitchen]=="on"?"#FFC857":"#64748B"|#EF6B73]');
     assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedLight.actions)), [
-        { type: 'ha_service', entity_id: 'light.kitchen', service: 'toggle' }
+        { op: 'ha.service.call', args: { entity_id: 'light.kitchen', service: 'toggle', data_json: '' } }
     ]);
     assert.strictEqual(toggleBuilder.available(makeDraft(temperature)), false);
     assert.strictEqual(toggleBuilder.available(makeDraft(light)), true);
@@ -894,7 +894,7 @@ delete context.testHelpSchemes;
     });
     assert.strictEqual(generatedSwitch.fg_color, '[expr:[ha:switch.desk_fan]=="on"?"#FFC857":"#64748B"|#EF6B73]');
     assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedSwitch.actions)), [
-        { type: 'ha_service', entity_id: 'switch.desk_fan', service: 'toggle' }
+        { op: 'ha.service.call', args: { entity_id: 'switch.desk_fan', service: 'toggle', data_json: '' } }
     ]);
     const toggleRuntime = { widget_catalog: [{ type: 'toggle' }] };
     assert.strictEqual(toggleWidgetBuilder.available(makeDraft(temperature), toggleRuntime), false);
@@ -904,17 +904,17 @@ delete context.testHelpSchemes;
     assert.strictEqual(generatedToggleWidget.widget_type, 'toggle');
     assert.strictEqual(generatedToggleWidget.widget_data_binding, '[ha:light.kitchen]');
     assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedToggleWidget.actions)), [
-        { type: 'ha_service', entity_id: 'light.kitchen', service: 'turn_on' }
+        { op: 'ha.service.call', args: { entity_id: 'light.kitchen', service: 'turn_on', data_json: '' } }
     ]);
     assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedToggleWidget.lp_actions)), [
-        { type: 'ha_service', entity_id: 'light.kitchen', service: 'turn_off' }
+        { op: 'ha.service.call', args: { entity_id: 'light.kitchen', service: 'turn_off', data_json: '' } }
     ]);
-    const catalogEntry = context.actionEditorCatalogEntry;
-    context.actionEditorCatalogEntry = () => null;
+    const catalogEntry = context.actionEditorOperation;
+    context.actionEditorOperation = () => null;
     assert.strictEqual(toggleBuilder.available(makeDraft(switchDetail)), false);
     assert.strictEqual(toggleBuilder.available(makeDraft(light)), false);
     assert.strictEqual(toggleWidgetBuilder.available(makeDraft(light), toggleRuntime), false);
-    context.actionEditorCatalogEntry = catalogEntry;
+    context.actionEditorOperation = catalogEntry;
     const longLight = { ...light, entity_id: 'light.' + 'a'.repeat(41) };
     assert.ok(context.padButtonBuilderBuild(buildSession(longLight, toggleBuilder)));
     assert.throws(() => context.padButtonBuilderBuild(buildSession({ ...longLight, entity_id: longLight.entity_id + 'a' }, toggleBuilder)), /48/);

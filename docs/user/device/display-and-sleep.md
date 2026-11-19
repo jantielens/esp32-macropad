@@ -68,7 +68,7 @@ If MQTT is configured, a wake binding can follow a presence signal, for example:
 An `ON` value wakes and leaves Idle Screen/Display Sleep and holds both stages
 off while it remains on. The normal inactivity sequence resumes afterward.
 Save the screen saver section after entering the binding.
-Use a **Device command > Wake display** action for a one-time wake; repeated
+Use a **Wake display** action for a one-time wake; repeated
 movement can also use [camera motion](../media/camera.md#detect-motion).
 
 ## Save battery power with automatic shutdown

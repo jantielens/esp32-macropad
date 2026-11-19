@@ -441,6 +441,47 @@ static bool tool_get_component_config(const JsonObject& args, JsonObject& result
             return cfg_fail(result, err, CFG_ERR_INTERNAL, "Timer configuration unavailable; saved settings are protected");
         return true;
     }
+    if (strcmp(entry->name, "swipe") == 0 || strcmp(entry->name, "boot") == 0) {
+        result["exists"] = Storage.exists(entry->path);
+        JsonObject config = result.createNestedObject("config");
+        bool ok;
+        if (strcmp(entry->name, "swipe") == 0) {
+            ok = swipe_config_to_json(config);
+        } else {
+            config["action_format_version"] = 1;
+            ok = boot_actions_to_json(config.createNestedArray("actions"));
+        }
+        if (!ok) return cfg_fail(result, err, CFG_ERR_INTERNAL, "Action configuration unavailable or incompatible; saved settings are protected");
+        return true;
+    }
+#endif
+#if HAS_BUTTON || MQTT_TRIGGERS_ENABLED
+    {
+        JsonObject config;
+        bool handled = false;
+        bool ok = false;
+#if HAS_BUTTON
+        if (strcmp(entry->name, "hw-buttons") == 0) {
+            config = result.createNestedObject("config");
+            config["action_format_version"] = 1;
+            ok = hw_button_config_to_json(config.createNestedArray("buttons"));
+            handled = true;
+        }
+#endif
+#if MQTT_TRIGGERS_ENABLED
+        if (strcmp(entry->name, "mqtt-triggers") == 0) {
+            config = result.createNestedObject("config");
+            config["action_format_version"] = 1;
+            ok = mqtt_triggers_to_json(config.createNestedArray("triggers"));
+            handled = true;
+        }
+#endif
+        if (handled) {
+            result["exists"] = Storage.exists(entry->path);
+            if (!ok) return cfg_fail(result, err, CFG_ERR_INTERNAL, "Action configuration unavailable or incompatible; saved settings are protected");
+            return true;
+        }
+    }
 #endif
 
     if (!Storage.exists(entry->path)) {
@@ -485,6 +526,8 @@ static const char* val_action_list(JsonVariantConst v) {
     if (a.size() > MAX_BUTTON_ACTIONS) return "too many actions (max 3 per list)";
     for (JsonVariantConst e : a) {
         if (!e.is<JsonObjectConst>()) return "each action must be an object";
+        if (e.as<JsonObjectConst>().containsKey("type") || !e["op"].is<const char*>())
+            return "legacy actions are not supported";
         const char* error = action_validate_json(e.as<JsonObjectConst>());
         if (error) return error;
     }
@@ -501,8 +544,11 @@ static const char* validate_component(const char* name, JsonObjectConst cfg) {
         return nullptr;  // timer_config_save_raw owns strict validation
     }
     if (strcmp(name, "swipe") == 0) {
+        if (!cfg["action_format_version"].is<int>() || cfg["action_format_version"].as<int>() != 1)
+            return "action_format_version must be 1";
         for (JsonPairConst kv : cfg) {
             const char* k = kv.key().c_str();
+            if (!strcmp(k, "action_format_version")) continue;
             if (strcmp(k, "swipe_left") && strcmp(k, "swipe_right") &&
                 strcmp(k, "swipe_up") && strcmp(k, "swipe_down"))
                 return "swipe keys must be swipe_left/right/up/down";
@@ -511,6 +557,8 @@ static const char* validate_component(const char* name, JsonObjectConst cfg) {
         return nullptr;
     }
     if (strcmp(name, "boot") == 0) {
+        if (!cfg["action_format_version"].is<int>() || cfg["action_format_version"].as<int>() != 1)
+            return "action_format_version must be 1";
         return val_action_list(cfg["actions"]);
     }
     if (strcmp(name, "button-defaults") == 0) {
@@ -519,6 +567,8 @@ static const char* validate_component(const char* name, JsonObjectConst cfg) {
 #endif
 #if HAS_BUTTON
     if (strcmp(name, "hw-buttons") == 0) {
+        if (!cfg["action_format_version"].is<int>() || cfg["action_format_version"].as<int>() != 1)
+            return "action_format_version must be 1";
         JsonVariantConst bv = cfg["buttons"];
         if (bv.isNull()) return nullptr;
         if (!bv.is<JsonArrayConst>()) return "'buttons' must be an array";
@@ -536,6 +586,8 @@ static const char* validate_component(const char* name, JsonObjectConst cfg) {
 #endif
 #if MQTT_TRIGGERS_ENABLED
     if (strcmp(name, "mqtt-triggers") == 0) {
+        if (!cfg["action_format_version"].is<int>() || cfg["action_format_version"].as<int>() != 1)
+            return "action_format_version must be 1";
         JsonVariantConst tv = cfg["triggers"];
         if (tv.isNull()) return nullptr;
         if (!tv.is<JsonArrayConst>()) return "'triggers' must be an array";
@@ -1352,7 +1404,7 @@ void mcp_config_capabilities(JsonObject& out) {
     alarm["component"] = "alarms";
     alarm["status_tool"] = "get_alarm_status";
     alarm["control_tool"] = "alarm_control";
-    alarm["device_configuration"] = "alarm actions: set_time, adjust_minutes (bindable string including {step}), enable/disable/toggle, weekday_enable/disable/toggle; configuration targets slot 1; read-only alarm bindings advertise settings, weekdays, next occurrence, countdowns and command feedback";
+    alarm["device_configuration"] = "alarm operations support setting or adjusting time, enabling or disabling, and changing weekdays; dynamic arguments can use bindings such as [event:step]; configuration targets slot 1; read-only alarm bindings advertise settings, weekdays, next occurrence, countdowns and command feedback";
     alarm["command_queue"] = "four queued commands, one per main-loop iteration, no coalescing; settings apply live, saved after 10 seconds without substantive changes; no-ops do not extend the delay; save_state pending/saved/failed reports durability; failures retain live settings and retry after 10 seconds; explicit config saves and occurrence records persist immediately";
     alarm["grace_seconds"] = alarm_snapshot().lateness_minutes * 60U;
     alarm["recovery"] = "device-wide lateness_minutes (0-10080, default 360); shared startup/live window, inclusive; zero allows on-time only; current-boot synchronized time required; latest eligible occurrence only; edits and timezone changes exclude past occurrences; no session restoration";

@@ -227,14 +227,15 @@ with tempfile.TemporaryDirectory() as directory:
 int main() { std::puts(HW_BUTTON_DEFAULTS_JSON); }
 ''', text=True, check=True,
     )
-    defaults = json.loads(subprocess.check_output([str(executable)], text=True))["buttons"]
-    assert defaults == [
+    defaults = json.loads(subprocess.check_output([str(executable)], text=True))
+    assert defaults["action_format_version"] == 1
+    assert defaults["buttons"] == [
         {}, {},
-        {"tap_actions": [{"type": "button_nav", "command": "previous"}]},
-        {"tap_actions": [{"type": "button_nav", "command": "next"}]},
-        {"tap_actions": [{"type": "button_nav", "command": "tap"}],
-         "hold_actions": [{"type": "button_nav", "command": "tap_hold"}]},
-        {"tap_actions": [{"type": "display_refresh", "mode": "full"}]},
+        {"tap_actions": [{"op": "button.navigate", "args": {"command": "previous"}}]},
+        {"tap_actions": [{"op": "button.navigate", "args": {"command": "next"}}]},
+        {"tap_actions": [{"op": "button.navigate", "args": {"command": "tap"}}],
+         "hold_actions": [{"op": "button.navigate", "args": {"command": "tap_hold"}}]},
+        {"tap_actions": [{"op": "display.refresh_full", "args": {}}]},
     ]
 print("PASS: CrowPanel generic hardware action defaults")
 for grayscale in (0, 1):

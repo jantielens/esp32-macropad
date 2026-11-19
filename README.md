@@ -353,6 +353,9 @@ HID hosts or multiple power sources.
 
 [Follow the first-time setup guide](docs/user/getting-started.md).
 
+For portable settings and pad backups, see
+[Back up and restore configuration](docs/user/device/backup-and-restore.md).
+
 ## 📚 Documentation
 
 | Guide | Description |

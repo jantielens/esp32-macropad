@@ -13,34 +13,6 @@ namespace {
 const char* const commands[] = {"previous_page", "next_page"};
 const char* const labels[] = {"Previous page", "Next page"};
 
-bool valid_command(const char* command) {
-    if (!command) return false;
-    for (const char* candidate : commands)
-        if (!strcmp(candidate, command)) return true;
-    return false;
-}
-
-const char* validate_list_navigation(JsonObjectConst action) {
-    if (!action["target"].is<const char*>() ||
-        !list_identifier_valid(action["target"].as<const char*>()))
-        return "list_nav target must be a List ID";
-    if (!action["command"].is<const char*>() ||
-        !valid_command(action["command"].as<const char*>()))
-        return "list_nav command must be previous_page or next_page";
-    return nullptr;
-}
-
-void parse_list_navigation(const JsonObject& action, ButtonAction& result) {
-    if (validate_list_navigation(action)) { memset(&result, 0, sizeof(result)); return; }
-    strlcpy(result.payload.list_navigation.target, action["target"], sizeof(result.payload.list_navigation.target));
-    strlcpy(result.payload.list_navigation.command, action["command"], sizeof(result.payload.list_navigation.command));
-}
-
-void serialize_list_navigation(const ButtonAction& action, JsonObject result) {
-    result["target"] = action.payload.list_navigation.target;
-    result["command"] = action.payload.list_navigation.command;
-}
-
 ActionResult dispatch_list_navigation(const ButtonAction& action, const char*, uint32_t) {
 #if defined(ARDUINO)
     if (!displayManager) {
@@ -112,30 +84,9 @@ const ActionOperationDef kListNavigationOperations[] = {
 void describe_list_navigation(JsonObject& action) {
     action["group"] = "Navigation";
     action["label"] = "Navigate List";
-    JsonArray choices = action.createNestedArray("commands");
-    for (size_t i = 0; i < sizeof(commands) / sizeof(commands[0]); ++i) {
-        JsonObject choice = choices.createNestedObject();
-        choice["id"] = commands[i];
-        choice["label"] = labels[i];
-    }
-    JsonArray fields = action.createNestedArray("fields");
-    JsonObject target = fields.createNestedObject();
-    target["name"] = "target";
-    target["description"] = "List ID on the active pad";
-    JsonObject command = fields.createNestedObject();
-    command["name"] = "command";
-    command["description"] = "previous_page or next_page";
-    JsonArray editor = action.createNestedArray("editor_fields");
-    JsonObject target_editor = editor.createNestedObject();
-    target_editor["name"] = "target"; target_editor["label"] = "List ID"; target_editor["type"] = "text";
-    JsonObject command_editor = editor.createNestedObject();
-    command_editor["name"] = "command"; command_editor["label"] = "Command";
-    command_editor["type"] = "select"; command_editor["command_options"] = true;
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(kListNavigationActionType, ACTION_TYPE_LIST_NAVIGATION,
-    parse_list_navigation, serialize_list_navigation, dispatch_list_navigation, nullptr,
-    describe_list_navigation, nullptr, validate_list_navigation,
-    ACTION_EXECUTION_SYNC, false, true, false, nullptr, kListNavigationOperations, 1);
+DEFINE_AND_REGISTER_ACTION_TYPE(kListNavigationActionType, ACTION_TYPE_LIST_NAVIGATION, describe_list_navigation, nullptr,
+    ACTION_EXECUTION_SYNC, false, false, kListNavigationOperations, 1);
 }
 #endif

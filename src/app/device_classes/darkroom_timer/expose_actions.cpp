@@ -1,75 +1,75 @@
-// Darkroom-timer ActionTypeDef — parse, serialize, dispatch for the "expose"
-// action type. Registered via REGISTER_ACTION_TYPE so action_dispatch.cpp /
-// action_parse.cpp do not need to know about the expose arm at compile time.
-//
-// Aggregated into the build via
-// device_classes/darkroom_timer/darkroom_timer_device_class.cpp
-// under #if IS_DARKROOM_TIMER.
+// Exposure timer operations, aggregated by darkroom_timer_device_class.cpp.
 
 #include "../../action_registry.h"
 
 #if HAS_DISPLAY && IS_DARKROOM_TIMER
 
-#include "../../log_manager.h"
 #include "darkroom_timer_payload.h"
 #include "expose_timer.h"
 
-#include <string.h>
-
-#define TAG "ExposeAction"
-
-// Wire format: flat JSON {expose_command, expose_value} (legacy field names
-// preserved for field-deployed pad-config backward compatibility).
-static void expose_parse(const JsonObject& a, ButtonAction& act) {
-    ExposePayload& p = expose_payload(act);
-    strlcpy(p.command, a["expose_command"] | "", sizeof(p.command));
-    strlcpy(p.value,   a["expose_value"]   | "", sizeof(p.value));
-}
-
-static void expose_serialize(const ButtonAction& act, JsonObject obj) {
-    const ExposePayload& p = expose_payload(act);
-    if (p.command[0]) obj["expose_command"] = p.command;
-    if (p.value[0])   obj["expose_value"]   = p.value;
-}
-
-static ActionResult expose_dispatch(const ButtonAction& act, const char* label,
-                                    uint32_t /*continuation_token*/) {
-    const ExposePayload& p = expose_payload(act);
-    if (!p.command[0]) {
-        LOGW(TAG, "%s expose: empty command", label);
-        return ACTION_COMPLETE;
-    }
-    LOGT(TAG, "%s expose: %s %s", label, p.command, p.value);
-    expose_timer_dispatch(p.command, p.value);
-    return ACTION_COMPLETE;
-}
-
-// `value` is the single bindable/numeric field (numeric rocker {step} target
-// for adjust_* commands); expose it so shared code drives binding + {step}.
-static bool expose_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {
-    ExposePayload& p = expose_payload(act);
-    return action_visit_field(visitor, context, "expose_value", p.value);
-}
+#include <limits.h>
+#include <stdio.h>
 
 static void expose_describe(JsonObject& out) {
     out["group"] = "Darkroom Timer";
     out["label"] = "Exposure timer";
-    JsonArray fields = out.createNestedArray("fields");
-    JsonObject command_field = fields.createNestedObject();
-    command_field["name"] = "expose_command";
-    command_field["description"] = "required command identifier";
-    JsonObject value_field = fields.createNestedObject();
-    value_field["name"] = "expose_value";
-    value_field["description"] = "seconds for set_time/adjust_seconds, f-stops for adjust_stops, or percentage points for dry-down commands; binding templates are supported";
-    JsonArray commands = out.createNestedArray("commands");
-    const char* ids[] = {"toggle", "start", "stop", "pause", "resume", "reset", "focus", "focus_off", "focus_toggle", "set_time", "adjust_seconds", "adjust_stops", "set_dry_down", "adjust_dry_down"};
-    const char* labels[] = {"Toggle start/pause/resume", "Start", "Stop", "Pause", "Resume", "Reset", "Focus light on", "Focus light off", "Toggle focus light", "Set time", "Adjust seconds", "Adjust f-stops", "Set dry-down", "Adjust dry-down"};
-    for (uint8_t i = 0; i < 14; ++i) {
-        JsonObject item = commands.createNestedObject();
-        item["id"] = ids[i]; item["label"] = labels[i];
-    }
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(expose_action_type, ACTION_TYPE_EXPOSE, expose_parse, expose_serialize, expose_dispatch, expose_fields, expose_describe, nullptr, nullptr, ACTION_EXECUTION_SYNC);
+static const ActionArgumentDef expose_seconds[] = {
+    {"seconds", "Seconds", ACTION_ARGUMENT_NUMBER, INT32_MIN, INT32_MAX, 0,
+     true, "[event:step]", "number"},
+};
+static const ActionArgumentDef expose_stops[] = {
+    {"stops", "F-stops", ACTION_ARGUMENT_NUMBER, INT32_MIN, INT32_MAX, 0,
+     true, "[event:step]", "number"},
+};
+static const ActionArgumentDef expose_percent[] = {
+    {"percent", "Dry-down (%)", ACTION_ARGUMENT_NUMBER, INT32_MIN, INT32_MAX, 0,
+     true, "[event:step]", "number"},
+};
+#define EXPOSE_SIMPLE(fn, command) \
+    static ActionResult fn(const ActionResolvedArgument*, const char*, uint32_t) { \
+        expose_timer_dispatch(command, ""); return ACTION_COMPLETE; \
+    }
+#define EXPOSE_NUMBER(fn, command) \
+    static ActionResult fn(const ActionResolvedArgument* args, const char*, uint32_t) { \
+        char value[24]; snprintf(value, sizeof(value), "%.9g", static_cast<double>(args[0].number)); \
+        expose_timer_dispatch(command, value); return ACTION_COMPLETE; \
+    }
+EXPOSE_SIMPLE(expose_toggle_op, "toggle")
+EXPOSE_SIMPLE(expose_start_op, "start")
+EXPOSE_SIMPLE(expose_stop_op, "stop")
+EXPOSE_SIMPLE(expose_pause_op, "pause")
+EXPOSE_SIMPLE(expose_resume_op, "resume")
+EXPOSE_SIMPLE(expose_reset_op, "reset")
+EXPOSE_SIMPLE(expose_focus_op, "focus")
+EXPOSE_SIMPLE(expose_focus_off_op, "focus_off")
+EXPOSE_SIMPLE(expose_focus_toggle_op, "focus_toggle")
+EXPOSE_NUMBER(expose_set_time_op, "set_time")
+EXPOSE_NUMBER(expose_adjust_seconds_op, "adjust_seconds")
+EXPOSE_NUMBER(expose_adjust_stops_op, "adjust_stops")
+EXPOSE_NUMBER(expose_set_dry_down_op, "set_dry_down")
+EXPOSE_NUMBER(expose_adjust_dry_down_op, "adjust_dry_down")
+#undef EXPOSE_SIMPLE
+#undef EXPOSE_NUMBER
+static const ActionOperationDef expose_operations[] = {
+    {"exposure.toggle", "Toggle exposure", nullptr, 0, expose_toggle_op},
+    {"exposure.start", "Start exposure", nullptr, 0, expose_start_op},
+    {"exposure.stop", "Stop exposure", nullptr, 0, expose_stop_op},
+    {"exposure.pause", "Pause exposure", nullptr, 0, expose_pause_op},
+    {"exposure.resume", "Resume exposure", nullptr, 0, expose_resume_op},
+    {"exposure.reset", "Reset exposure", nullptr, 0, expose_reset_op},
+    {"exposure.focus.on", "Focus light on", nullptr, 0, expose_focus_op},
+    {"exposure.focus.off", "Focus light off", nullptr, 0, expose_focus_off_op},
+    {"exposure.focus.toggle", "Toggle focus light", nullptr, 0, expose_focus_toggle_op},
+    {"exposure.time.set", "Set exposure time", expose_seconds, 1, expose_set_time_op},
+    {"exposure.time.adjust", "Adjust exposure seconds", expose_seconds, 1, expose_adjust_seconds_op},
+    {"exposure.stops.adjust", "Adjust exposure f-stops", expose_stops, 1, expose_adjust_stops_op},
+    {"exposure.dry_down.set", "Set dry-down", expose_percent, 1, expose_set_dry_down_op},
+    {"exposure.dry_down.adjust", "Adjust dry-down", expose_percent, 1, expose_adjust_dry_down_op},
+};
+
+DEFINE_AND_REGISTER_ACTION_TYPE(expose_action_type, ACTION_TYPE_EXPOSE, expose_describe, nullptr, ACTION_EXECUTION_SYNC,
+    true, false, expose_operations, sizeof(expose_operations) / sizeof(expose_operations[0]));
 
 #endif // HAS_DISPLAY && IS_DARKROOM_TIMER

@@ -8,6 +8,7 @@
 #include "action_validate.h"
 #include "config_psram.h"
 #include "fs_health.h"
+#include "json_key_validation.h"
 #include "log_manager.h"
 #include "psram_json_allocator.h"
 #include "storage.h"
@@ -23,6 +24,7 @@ static const char* SWIPE_CONFIG_PATH = "/config/swipe_actions.json";
 static SwipeConfig* g_config = nullptr;
 static ActionStorage g_storage = {};
 static SemaphoreHandle_t g_lock = nullptr;
+static bool g_config_valid = false;
 
 static ButtonAction* direction_action(SwipeConfig& cfg, SwipeDirection direction) {
     switch (direction) {
@@ -36,7 +38,11 @@ static ButtonAction* direction_action(SwipeConfig& cfg, SwipeDirection direction
 
 static bool parse_config(JsonDocument& doc, SwipeConfig& cfg, ActionStorage& storage,
                          bool validate_bindings) {
-    if (!doc.is<JsonObject>()) return false;
+    if (!doc.is<JsonObject>() || !doc["action_format_version"].is<int>() ||
+        doc["action_format_version"].as<int>() != 1) {
+        LOGW(TAG, "Incompatible swipe actions document; recreate it");
+        return false;
+    }
     const char* names[] = {"swipe_left", "swipe_right", "swipe_up", "swipe_down"};
     ActionStorageScope scope(&storage);
     for (unsigned index = 0; index < 4; ++index) {
@@ -45,24 +51,15 @@ static bool parse_config(JsonDocument& doc, SwipeConfig& cfg, ActionStorage& sto
         if (!value.is<JsonObject>()) return false;
         JsonObject action = value.as<JsonObject>();
         if (action.size() == 0) continue;
-        const char* type = action["type"] | "";
-        const char* error = nullptr;
-        if (validate_bindings) {
-            error = action_validate_json(action);
-        } else if (!action.containsKey("type") && action.containsKey("op")) {
-            error = action_operation_validate_json(action, false);
-        } else if (!action["type"].is<const char*>() || !type[0] ||
-                   action.containsKey("args") ||
-                   (action.containsKey("op") && strcmp(type, ACTION_TYPE_VISUAL_ALERT))) {
-            error = "invalid action envelope";
-        }
-        if (!error && type[0] && strcmp(type, "none") && !action_type_is_supported(type))
-            error = "action is unavailable on this board";
+        const char* error = validate_bindings ? action_validate_json(action)
+                                              : action_operation_validate_json(action, false);
+        const char* operation = action["op"] | "";
+        if (!error && (action.containsKey("type") || !operation[0]))
+            error = "legacy action is not supported";
         if (error) {
             LOGW(TAG, "Invalid %s: %s", names[index], error);
             return false;
         }
-        if (!strcmp(type, "none")) continue;
         ButtonAction* target = direction_action(cfg, static_cast<SwipeDirection>(index));
         action_parse(action, *target);
         if (storage.failed || !target->type[0]) return false;
@@ -90,6 +87,11 @@ static bool load_from_flash(SwipeConfig& cfg, ActionStorage& storage) {
         f.close();
         return false;
     }
+    if (json_stream_scan_keys(f) != JsonKeyScanResult::Valid) {
+        LOGW(TAG, "Swipe config contains an invalid JSON NUL or could not be read");
+        f.close();
+        return false;
+    }
     BasicJsonDocument<PsramJsonAllocator> doc(4096);
     const DeserializationError error = deserializeJson(doc, f);
     f.close();
@@ -108,8 +110,9 @@ void swipe_config_init() {
         LOGE(TAG, "Failed to allocate swipe config");
         return;
     }
-    if (!load_from_flash(*g_config, g_storage)) {
-        LOGW(TAG, "Invalid swipe config, using defaults");
+    g_config_valid = load_from_flash(*g_config, g_storage);
+    if (!g_config_valid) {
+        LOGW(TAG, "Swipe config unavailable; using navigation defaults");
         action_storage_clear(g_storage);
         memset(g_config, 0, sizeof(*g_config));
         if (!apply_defaults(*g_config, g_storage))
@@ -120,6 +123,11 @@ void swipe_config_init() {
 bool swipe_config_to_json(JsonObject object) {
     if (!g_config || !g_lock || object.isNull() ||
         xSemaphoreTake(g_lock, portMAX_DELAY) != pdTRUE) return false;
+    if (!g_config_valid) {
+        xSemaphoreGive(g_lock);
+        return false;
+    }
+    object["action_format_version"] = 1;
     const char* names[] = {"swipe_left", "swipe_right", "swipe_up", "swipe_down"};
     for (unsigned index = 0; index < 4; ++index) {
         JsonObject action = object.createNestedObject(names[index]);
@@ -140,6 +148,10 @@ bool swipe_config_copy_action(SwipeDirection direction, ButtonAction& action, Ac
 bool swipe_config_save_raw(const uint8_t* json, size_t len) {
     if (!g_config || !g_lock || !json || !len || len > 4096) {
         LOGW(TAG, "Swipe config save unavailable or invalid size");
+        return false;
+    }
+    if (!json_keys_valid(json, len)) {
+        LOGW(TAG, "Swipe config JSON contains an invalid NUL");
         return false;
     }
     BasicJsonDocument<PsramJsonAllocator> doc(4096);
@@ -165,6 +177,7 @@ bool swipe_config_save_raw(const uint8_t* json, size_t len) {
             action_storage_clear(g_storage);
             *g_config = *replacement;
             action_storage_move(g_storage, storage);
+            g_config_valid = true;
         } else {
             LOGE(TAG, "Atomic swipe config write failed");
         }
@@ -186,6 +199,7 @@ void swipe_config_reload() {
             action_storage_clear(g_storage);
             *g_config = *replacement;
             action_storage_move(g_storage, storage);
+            g_config_valid = true;
         } else {
             LOGW(TAG, "Failed to reload swipe config");
         }

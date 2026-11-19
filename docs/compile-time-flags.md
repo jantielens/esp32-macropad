@@ -1675,7 +1675,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/alarm_action.cpp
   - src/app/actions/alarm_mp3_action.cpp
   - src/app/actions/alarm_tone_action.cpp
-  - src/app/actions/sound_alert_action.cpp
   - src/app/alarm_binding.cpp
   - src/app/alarm_manager.cpp
   - src/app/alarm_manager.h

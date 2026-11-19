@@ -1,76 +1,63 @@
-// Darkroom-timer ActionTypeDef — parse, serialize, dispatch for the "meter"
-// (light metering) action type. Registered via REGISTER_ACTION_TYPE so
-// action_dispatch.cpp / action_parse.cpp do not need to know about the meter
-// arm at compile time.
-//
-// Aggregated into the build via
-// device_classes/darkroom_timer/darkroom_timer_device_class.cpp
-// under #if IS_DARKROOM_TIMER.
+// Light meter operations, aggregated by darkroom_timer_device_class.cpp.
 
 #include "../../action_registry.h"
 
 #if HAS_DISPLAY && IS_DARKROOM_TIMER
 
-#include "../../log_manager.h"
 #include "darkroom_timer_payload.h"
 #include "meter.h"
 
-#include <string.h>
-
-#define TAG "MeterAction"
-
-// Wire format: flat JSON {meter_command, meter_value} (legacy field names
-// preserved for field-deployed pad-config backward compatibility).
-static void meter_parse(const JsonObject& a, ButtonAction& act) {
-    MeterPayload& p = meter_payload(act);
-    strlcpy(p.command, a["meter_command"] | "", sizeof(p.command));
-    strlcpy(p.value,   a["meter_value"]   | "", sizeof(p.value));
-}
-
-static void meter_serialize(const ButtonAction& act, JsonObject obj) {
-    const MeterPayload& p = meter_payload(act);
-    if (p.command[0]) obj["meter_command"] = p.command;
-    if (p.value[0])   obj["meter_value"]   = p.value;
-}
-
-static ActionResult meter_action_dispatch(const ButtonAction& act, const char* label,
-                                          uint32_t /*continuation_token*/) {
-    const MeterPayload& p = meter_payload(act);
-    if (!p.command[0]) {
-        LOGW(TAG, "%s meter: empty command", label);
-        return ACTION_COMPLETE;
-    }
-    LOGT(TAG, "%s meter: %s %s", label, p.command, p.value);
-    meter_dispatch(p.command, p.value);
-    return ACTION_COMPLETE;
-}
-
-// `value` is the single bindable/numeric field (numeric rocker {step} target
-// for adjust_* commands); expose it so shared code drives binding + {step}.
-static bool meter_fields(ButtonAction& act, ActionFieldVisitor visitor, void* context) {
-    MeterPayload& p = meter_payload(act);
-    return action_visit_field(visitor, context, "meter_value", p.value);
-}
+#include <limits.h>
+#include <stdio.h>
 
 static void meter_describe(JsonObject& out) {
     out["group"] = "Darkroom Timer";
     out["label"] = "Light meter";
-    JsonArray fields = out.createNestedArray("fields");
-    JsonObject command_field = fields.createNestedObject();
-    command_field["name"] = "meter_command";
-    command_field["description"] = "required command identifier";
-    JsonObject value_field = fields.createNestedObject();
-    value_field["name"] = "meter_value";
-    value_field["description"] = "lux or seconds for set/adjust commands; binding templates are supported";
-    JsonArray commands = out.createNestedArray("commands");
-    const char* ids[] = {"read_lref", "read_bright", "read_dark", "set_lref", "adjust_lref", "set_zone5", "adjust_zone5", "mag_measure_a", "mag_measure_b", "mag_clear"};
-    const char* labels[] = {"Read Lref", "Read bright spot", "Read dark spot", "Set Lref", "Adjust Lref", "Set Zone V time", "Adjust Zone V time", "Measure magnification A", "Measure magnification B", "Clear magnification compensation"};
-    for (uint8_t i = 0; i < 10; ++i) {
-        JsonObject item = commands.createNestedObject();
-        item["id"] = ids[i]; item["label"] = labels[i];
-    }
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(meter_action_type, ACTION_TYPE_METER, meter_parse, meter_serialize, meter_action_dispatch, meter_fields, meter_describe, nullptr, nullptr, ACTION_EXECUTION_SYNC);
+static const ActionArgumentDef meter_lux[] = {
+    {"lux", "Lux", ACTION_ARGUMENT_NUMBER, INT32_MIN, INT32_MAX, 0,
+     true, "[event:step]", "number"},
+};
+static const ActionArgumentDef meter_seconds[] = {
+    {"seconds", "Seconds", ACTION_ARGUMENT_NUMBER, INT32_MIN, INT32_MAX, 0,
+     true, "[event:step]", "number"},
+};
+#define METER_SIMPLE(fn, command) \
+    static ActionResult fn(const ActionResolvedArgument*, const char*, uint32_t) { \
+        meter_dispatch(command, ""); return ACTION_COMPLETE; \
+    }
+#define METER_NUMBER(fn, command) \
+    static ActionResult fn(const ActionResolvedArgument* args, const char*, uint32_t) { \
+        char value[24]; snprintf(value, sizeof(value), "%.9g", static_cast<double>(args[0].number)); \
+        meter_dispatch(command, value); return ACTION_COMPLETE; \
+    }
+METER_SIMPLE(meter_read_lref_op, "read_lref")
+METER_SIMPLE(meter_read_bright_op, "read_bright")
+METER_SIMPLE(meter_read_dark_op, "read_dark")
+METER_SIMPLE(meter_mag_a_op, "mag_measure_a")
+METER_SIMPLE(meter_mag_b_op, "mag_measure_b")
+METER_SIMPLE(meter_mag_clear_op, "mag_clear")
+METER_NUMBER(meter_set_lref_op, "set_lref")
+METER_NUMBER(meter_adjust_lref_op, "adjust_lref")
+METER_NUMBER(meter_set_zone5_op, "set_zone5")
+METER_NUMBER(meter_adjust_zone5_op, "adjust_zone5")
+#undef METER_SIMPLE
+#undef METER_NUMBER
+static const ActionOperationDef meter_operations[] = {
+    {"meter.reference.read", "Read Lref", nullptr, 0, meter_read_lref_op},
+    {"meter.bright.read", "Read bright spot", nullptr, 0, meter_read_bright_op},
+    {"meter.dark.read", "Read dark spot", nullptr, 0, meter_read_dark_op},
+    {"meter.magnification.measure_a", "Measure magnification A", nullptr, 0, meter_mag_a_op},
+    {"meter.magnification.measure_b", "Measure magnification B", nullptr, 0, meter_mag_b_op},
+    {"meter.magnification.clear", "Clear magnification compensation", nullptr, 0, meter_mag_clear_op},
+    {"meter.reference.set", "Set Lref", meter_lux, 1, meter_set_lref_op},
+    {"meter.reference.adjust", "Adjust Lref", meter_lux, 1, meter_adjust_lref_op},
+    {"meter.zone5.set", "Set Zone V time", meter_seconds, 1, meter_set_zone5_op},
+    {"meter.zone5.adjust", "Adjust Zone V time", meter_seconds, 1, meter_adjust_zone5_op},
+};
+
+DEFINE_AND_REGISTER_ACTION_TYPE(meter_action_type, ACTION_TYPE_METER, meter_describe, nullptr, ACTION_EXECUTION_SYNC,
+    true, false, meter_operations, sizeof(meter_operations) / sizeof(meter_operations[0]));
 
 #endif // HAS_DISPLAY && IS_DARKROOM_TIMER

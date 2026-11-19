@@ -22,7 +22,11 @@ def section(start, end):
 harness = r'''
 #include "pad_config.h"
 #include "pad_validate.h"
+#include "widgets/widget_registry.h"
+#include "action_registry.h"
+#include "binding_template.h"
 #include "fill_pattern.h"
+#include "json_key_validation.h"
 #include "esp_heap_caps.h"
 #include "psram_json_allocator.h"
 #include "storage.h"
@@ -50,7 +54,9 @@ unsigned long millis() { return 0; }
 #define LOGT(...) ((void)0)
 #define LOGI(...) ((void)0)
 #define LOGW(...) ((void)0)
-#define LOGE(...) ((void)0)
+#define TAG "PadCfg"
+static void test_log(const char*, const char*, ...) {}
+#define LOGE(...) test_log(__VA_ARGS__)
 using portMUX_TYPE = std::mutex;
 #define portMUX_INITIALIZER_UNLOCKED {}
 #define portENTER_CRITICAL(mutex) (mutex)->lock()
@@ -65,10 +71,13 @@ static size_t test_strlcpy(char* dst, const char* src, size_t capacity) {
     return size;
 }
 #define strlcpy test_strlcpy
+#include "pad_composition.h"
 static std::map<std::string, std::string> files;
 static bool ota_active = false;
 static bool fail_write = false;
 static bool fail_rename = false;
+static bool fail_remove = false;
+static std::string fail_remove_path;
 static bool ota_activity_is_active() { return ota_active; }
 static int g_file_mutex = 1;
 static bool xSemaphoreTake(int, int) { return true; }
@@ -115,7 +124,9 @@ struct TestStorage {
         return {path, files.count(path) != 0};
     }
     bool exists(const char* path) { return files.count(path) != 0; }
-    bool remove(const char* path) { return files.erase(path) != 0; }
+    bool remove(const char* path) {
+        return !fail_remove && fail_remove_path != path && files.erase(path) != 0;
+    }
     bool rename(const char* from, const char* to) {
         if (fail_rename) return false;
         const auto found = files.find(from);
@@ -134,8 +145,6 @@ bool icon_store_source_matches_metadata(const char*, const char*, const char*) {
 enum IconArtifactValidation : uint8_t { ICON_ARTIFACT_VALID, ICON_ARTIFACT_INVALID_SOURCE, ICON_ARTIFACT_INVALID_PNG };
 IconArtifactValidation icon_store_validate_artifact(const char*, const char*, const char*, const char*,
                                                     const char*, uint32_t) { return ICON_ARTIFACT_VALID; }
-uint32_t pad_icon_render_key(JsonObjectConst, JsonObjectConst) { return 1; }
-uint32_t pad_option_icon_render_key(JsonObjectConst, JsonObjectConst, uint8_t) { return 1; }
 void icon_store_build_key(uint8_t, const char*, uint8_t, uint8_t, char* key_out, size_t size) {
     if (size) key_out[0] = '\0';
 }
@@ -150,8 +159,22 @@ bool icon_store_source_delete_if_unreferenced(const char* source) {
 void icon_store_delete_page_icons(uint8_t) {}
 void icon_store_retire_unused_pad_icons(uint8_t) {}
 static ButtonDefaults defaults = {};
-struct WidgetType { void (*releaseConfig)(uint8_t*) = nullptr; };
-static const WidgetType* widget_find(const char*) { return nullptr; }
+const WidgetType* widget_find(const char*) { return nullptr; }
+uint8_t widget_count() { return 0; }
+const WidgetType* widget_at(uint8_t) { return nullptr; }
+bool binding_template_scheme_known(const char*, size_t) { return false; }
+const char* binding_template_validate_params(const char*, size_t, const char*) { return nullptr; }
+bool binding_template_well_formed(const char*) { return true; }
+bool binding_template_has_bindings(const char* text) { return text && strchr(text, '['); }
+const ActionOperationDef* action_operation_find(const char* id, const ActionTypeDef**) {
+    static const ActionOperationDef operation = {
+        "test.valid", "Test", nullptr, 0,
+        [](const ActionResolvedArgument*, const char*, uint32_t) { return ACTION_COMPLETE; }
+    };
+    return id && strcmp(id, operation.id) == 0 ? &operation : nullptr;
+}
+const ActionTypeDef* action_type_find(const char*) { return nullptr; }
+bool action_type_is_supported(const char*) { return false; }
 static void button_defaults_init() {}
 static const ButtonDefaults* button_defaults_get() { return &defaults; }
 static const char* btn_default(const char* value, const char* fallback) {
@@ -160,12 +183,11 @@ static const char* btn_default(const char* value, const char* fallback) {
 static ButtonShadowMode parse_button_shadow_mode(JsonVariantConst) {
     return BUTTON_SHADOW_INHERIT;
 }
-static bool is_valid_binding_name(const char*) { return true; }
-static uint8_t action_list_parse(JsonVariantConst, ButtonAction*, size_t, bool) {
+static uint8_t action_list_parse(JsonVariant, ButtonAction*, uint8_t) {
     return 0;
 }
 '''
-harness += section("static void parse_bindable_field", "// Parse a typed action object")
+harness += section("static void parse_bindable_field", "static void parse_pad_action")
 harness += section("static bool parse_button_fill_style", "static bool parse_button(")
 harness += r'''
 static bool parse_button(JsonObject object, ScreenButtonConfig* button, const ButtonDefaults*, bool*) {
@@ -185,9 +207,9 @@ harness += icon_source[icon_source.index("static bool validate_png"):icon_source
 harness += icon_source[icon_source.index("bool icon_store_source_path"):icon_source.index("bool icon_store_source_matches_kind")]
 harness += icon_source[icon_source.index("struct IconSourceUpload {"):icon_source.index("IconStoreResult icon_store_source_install")]
 harness += icon_source[icon_source.index("static bool read_artifact_metadata_unlocked"):icon_source.index("struct IconPreloadPass")]
-harness += storage_source[storage_source.index("bool storage_write_verified"):storage_source.index("bool storage_mount")]
+harness += storage_source[storage_source.index("bool storage_write_verified"):storage_source.index("bool storage_mount()")]
 harness += section("static bool g_fs_mounted", "// ============================================================================")
-harness += section("static void pad_config_path", "// ============================================================================")
+harness += section("void pad_config_path", "// ============================================================================")
 harness += section("bool pad_config_init()", "// Internal: read and parse")
 harness += section("static int select_template_buttons",
                    "void pad_config_rebuild_all_caches()")
@@ -241,12 +263,22 @@ static void web_portal_send_json_error(AsyncWebServerRequest* request, int statu
 }
 #define PAD_CONFIG_MAX_JSON_BYTES (48 * 1024)
 '''
-harness += pad_api_source[pad_api_source.index("void handleGetPadIconContext"):pad_api_source.index("static void preserve_pad_image_passwords")]
+harness += r'''
+static uint8_t* allocate_pad_json_buffer(size_t length) {
+    return static_cast<uint8_t*>(malloc(length + 1));
+}
+'''
+harness += pad_api_source[pad_api_source.index("void handleGetPadIconContext"):pad_api_source.index("// GET /api/pad?page=N")]
 harness += r'''
 static bool save_document(uint8_t pad, JsonDocument& doc) {
+    if (!doc.containsKey("cols")) doc["cols"] = 3;
+    if (!doc.containsKey("rows")) doc["rows"] = 3;
     std::string json;
     serializeJson(doc, json);
-    return pad_config_save_raw(pad, reinterpret_cast<const uint8_t*>(json.data()), json.size());
+    const char* error = nullptr;
+    const bool saved = pad_config_save_raw(pad, reinterpret_cast<const uint8_t*>(json.data()), json.size(), &error);
+    if (!saved) fprintf(stderr, "Pad save rejected: %s\n", error ? error : "storage failure");
+    return saved;
 }
 static bool save(uint8_t pad, const std::string& name) {
     JsonDocument doc;
@@ -262,6 +294,45 @@ static void add_buttons(JsonArray buttons, unsigned count) {
     }
 }
 int main() {
+    {
+        files["/config/pad_0.json"] = R"({"buttons":[{"col":0,"row":0,"bg_image_password":"destination-secret"}]})";
+        const char submitted[] = R"({"buttons":[{"col":0,"row":0,"bg_image_password_set":true}]})";
+        size_t length = 0;
+        uint8_t* prepared = prepare_pad_save_json(0, reinterpret_cast<const uint8_t*>(submitted),
+                                                 sizeof(submitted) - 1, &length);
+        assert(prepared);
+        JsonDocument result;
+        assert(!deserializeJson(result, prepared, length));
+        assert(result["buttons"][0]["bg_image_password"] == "destination-secret");
+        assert(!result["buttons"][0].containsKey("bg_image_password_set"));
+        free(prepared);
+        files.clear();
+    }
+    {
+        const char* path = "/config/recovery-test.json";
+        const char* backup = "/config/recovery-test.json.bak";
+        const uint8_t replacement[] = {'n', 'e', 'w'};
+        files[backup] = "previous";
+        fail_rename = true;
+        assert(!storage_write_atomic(path, replacement, sizeof(replacement)));
+        assert(files.count(backup) && files[backup] == "previous");
+        assert(!files.count(path));
+        fail_rename = false;
+        fail_write = true;
+        assert(!storage_write_atomic(path, replacement, sizeof(replacement)));
+        assert(files[path] == "previous");
+        fail_write = false;
+        assert(storage_write_atomic(path, replacement, sizeof(replacement)));
+        assert(files[path] == "new");
+        fail_remove_path = backup;
+        const uint8_t second[] = {'n', 'e', 'x', 't'};
+        assert(!storage_write_atomic(path, second, sizeof(second)));
+        assert(files[path] == "next" && files.count(backup));
+        fail_remove_path.clear();
+        assert(storage_write_atomic(path, second, sizeof(second)));
+        assert(files[path] == "next" && !files.count(backup));
+        files.clear();
+    }
     {
         JsonDocument doc;
         JsonObject button = doc.to<JsonObject>();
@@ -360,9 +431,17 @@ int main() {
         const char* second_source = "s_000000000000000000000002";
         JsonDocument original;
         JsonArray buttons = original["buttons"].to<JsonArray>();
-        buttons.add<JsonObject>()["icon"]["source_id"] = first_source;
-        buttons.add<JsonObject>()["icon"]["source_id"] = first_source;
-        original["overlay_buttons"].to<JsonArray>().add<JsonObject>()["icon"]["source_id"] = second_source;
+        JsonObject first_icon = buttons.add<JsonObject>()["icon"].to<JsonObject>();
+        first_icon["source_id"] = first_source;
+        first_icon["kind"] = "color";
+        JsonObject duplicate_button = buttons.add<JsonObject>();
+        duplicate_button["col"] = 1;
+        JsonObject duplicate_icon = duplicate_button["icon"].to<JsonObject>();
+        duplicate_icon["source_id"] = first_source;
+        duplicate_icon["kind"] = "color";
+        JsonObject second_icon = original["overlay_buttons"].to<JsonArray>().add<JsonObject>()["icon"].to<JsonObject>();
+        second_icon["source_id"] = second_source;
+        second_icon["kind"] = "color";
         JsonDocument empty;
         empty["buttons"].to<JsonArray>();
         assert(save_document(2, original));
@@ -381,6 +460,25 @@ int main() {
     assert(storage_reads == reads);
     const PadConfig* old = pad_config_acquire(0);
     assert(save(0, "Renamed"));
+    const std::string saved_renamed = files.at("/config/pad_0.json");
+    const std::string nul_key = R"({"cols":3,"rows":3,"buttons":[],"action_format_version":1,"action_format_version\u0000extra":1})";
+    const char* invalid_key_error = nullptr;
+    assert(!pad_config_save_raw(0, reinterpret_cast<const uint8_t*>(nul_key.data()), nul_key.size(), &invalid_key_error));
+    assert(invalid_key_error && files.at("/config/pad_0.json") == saved_renamed);
+    files["/config/pad_3.json"] = nul_key;
+    JsonDocument malformed;
+    assert(read_pad_document(3, malformed));
+    assert(!pad_config_load_from_flash(3));
+    files.erase("/config/pad_3.json");
+    const std::string too_many_actions =
+        R"({"action_format_version":1,"buttons":[],"pad_actions":[{"op":"test.valid","args":{}},{"op":"test.valid","args":{}},{"op":"test.valid","args":{}},{"op":"test.valid","args":{}}]})";
+    files["/config/pad_3.json"] = too_many_actions;
+    assert(!pad_config_load_from_flash(3));
+    assert(files.at("/config/pad_3.json") == too_many_actions);
+    files.erase("/config/pad_3.json");
+    const std::string literal_escape = R"({"cols":3,"rows":3,"buttons":[],"note\\u0000":1})";
+    assert(pad_config_save_raw(3, reinterpret_cast<const uint8_t*>(literal_escape.data()), literal_escape.size()));
+    assert(pad_config_delete(3));
     assert(strcmp(old->name, "Boot name") == 0);
     assert(pad_config_read_name(0, copied, sizeof(copied)));
     assert(strcmp(copied, "Renamed") == 0);
@@ -486,6 +584,10 @@ int main() {
     local["bg_image_password"] = "Secret password";
     child["column_widths_px"].add(40);
     child["row_heights_px"].add(50);
+    for (unsigned index = 1; index < 8; ++index) {
+        child["column_widths_px"].add(0);
+        child["row_heights_px"].add(0);
+    }
     assert(save_document(0, child));
     AsyncWebServerRequest context_request;
     context_request.page = 1;
@@ -589,6 +691,8 @@ with tempfile.TemporaryDirectory() as tmp:
         "-include", str(root / "tests/board_config.h"),
         "-I", str(root / "tests"), "-I", str(root / "src/app"),
         "-I", str(pathlib.Path.home() / "Arduino/libraries/ArduinoJson/src"),
-        str(harness_path), "-o", str(executable),
+        str(harness_path), str(root / "src/app/action_storage.cpp"),
+        str(root / "src/app/action_validate.cpp"),
+        str(root / "src/app/pad_validate.cpp"), "-o", str(executable),
     ], check=True)
     subprocess.run([str(executable)], check=True)

@@ -5,9 +5,6 @@
 #include "slider_widget.h"
 #include "slider_numeric.h"
 #include "../action_list.h"
-#include "../action_parse.h"
-#include "../action_registry.h"
-#include "../action_validate.h"
 #include "../event_binding.h"
 #include "../binding_value.h"
 #include <algorithm>
@@ -464,14 +461,8 @@ static void slider_release_gesture(SliderState* state) {
         return;
     }
     ButtonAction actions[MAX_BUTTON_ACTIONS];
-    for (uint8_t index = 0; index < state->action_count; ++index) {
+    for (uint8_t index = 0; index < state->action_count; ++index)
         actions[index] = state->actions[index];
-        if (actions[index].type[0] != '@' &&
-            !action_type_substitute_token(action_type_find(actions[index].type), actions[index], "{value}", value)) {
-            slider_cancel_gesture(state);
-            return;
-        }
-    }
 
     const bool was_pending = state->pending;
     const uint16_t previous_pending_position = state->pending_position;

@@ -413,7 +413,7 @@ const haButtonBuilderProvider = {
     invalidReferenceMessage: 'Enter an exact entity ID, such as sensor.living_room_temperature.',
     noResultsMessage: 'No matching entities. Try another name or enter an exact entity ID.',
     moreResultsMessage: 'Showing 20 matches. Keep typing to narrow the results.',
-    controlActionType: 'ha_service',
+    controlOperation: 'ha.service.call',
     setupHref: '#ha-discovery',
     supported: config => config.caps?.ha_live === true,
     availability(config) {
@@ -524,7 +524,7 @@ const haButtonBuilderProvider = {
             icon: { catalog_id: 'material-symbols:' + options.icon.replace(/_/g, '-'), kind: 'mono' },
             label_top_style: 'color:' + (padColorNormalizeLiteral(padGetEffectiveDefault('fg_color')) || '#FFFFFF'),
             fg_color: '[expr:' + state + '=="on"?"' + options.on + '":"' + options.off + '"|#EF6B73]',
-            actions: [{ type: 'ha_service', entity_id: entityId, service: 'toggle' }]
+            actions: [{ op: 'ha.service.call', args: { entity_id: entityId, service: 'toggle', data_json: '' } }]
         };
     },
     buildToggleWidget(candidate) {
@@ -534,8 +534,8 @@ const haButtonBuilderProvider = {
         return {
             widget_type: 'toggle',
             widget_data_binding: this.buildBinding(candidate, { format: '' }),
-            actions: [{ type: 'ha_service', entity_id: entityId, service: 'turn_on' }],
-            lp_actions: [{ type: 'ha_service', entity_id: entityId, service: 'turn_off' }]
+            actions: [{ op: 'ha.service.call', args: { entity_id: entityId, service: 'turn_on', data_json: '' } }],
+            lp_actions: [{ op: 'ha.service.call', args: { entity_id: entityId, service: 'turn_off', data_json: '' } }]
         };
     }
 };

@@ -60,8 +60,7 @@ static const char* gamepad_button_validate(JsonObjectConst button) {
             (kind == 0 ? !value.is<int32_t>() : !value.is<const char*>()) ||
             !gamepad_button_control(kind, value.as<int32_t>(), value.as<const char*>(), control))
             return "gamepad_button requires a valid literal held control";
-    } else if (strcmp(action["type"] | "", ACTION_TYPE_GAMEPAD) != 0 ||
-               strcmp(action["operation"] | "tap", "down") != 0) {
+    } else {
         return "gamepad_button requires a Gamepad down action; release is automatic";
     }
     if (button["lp_actions"].size() || button.containsKey("action") || button.containsKey("lp_action"))
@@ -137,10 +136,6 @@ static void gamepad_button_create(lv_obj_t* button, const WidgetConfig*,
                         held->control);
                 }
             }
-        } else if (!strcmp(action.type, ACTION_TYPE_GAMEPAD) && action.payload.gamepad.operation == 1) {
-            const auto& payload = action.payload.gamepad;
-            held->control = {static_cast<GamepadControlKind>(payload.control), payload.index};
-            held->configured = held->control.mask() != 0;
         }
     }
     held->touch.attach(button, gamepad_button_event, held, gamepad_button_point);

@@ -530,13 +530,15 @@ assert.strictEqual(defaultInputs.get('pad-def-icon-position').value, 'above');
     inputs.get('pad-edit-option-2-value').value = 'second';
     assert.doesNotThrow(() => selectorContext.padWidgetEditorBuild({}, editor));
 
-    let actionValues;
-    selectorContext.padActionPrefixes = () => [];
-    selectorContext.actionEditorListBuild = (prefixes, token, values) => { actionValues = Array.from(values); return []; };
+    const typedActions = [{ op: 'variable.set', args: { name: 'selected', value: { $template: '[event:value]' } } }];
+    selectorContext.padActionPrefixes = () => ['tap-1'];
+    selectorContext.actionEditorListBuild = (...args) => {
+        assert.deepStrictEqual(args, [['tap-1']]);
+        return typedActions;
+    };
     mode.value = 'local';
     inputs.get('pad-edit-option-1-value').value = '';
-    editor.actions.buildTap();
-    assert.deepStrictEqual(actionValues, ['', 'second']);
+    assert.strictEqual(editor.actions.buildTap(), typedActions);
 }
 
 (async function testDefaultsSaveRebootWarning() {

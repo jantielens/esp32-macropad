@@ -13,14 +13,18 @@
 #if HAS_DISPLAY || HAS_BUTTON
 namespace {
 constexpr const char* kHaServiceActionTag = "Action";
-void parse_ha_service(const JsonObject& action, ButtonAction& act) { strlcpy(act.payload.ha_service.entity_id, action["entity_id"] | "", sizeof(act.payload.ha_service.entity_id)); strlcpy(act.payload.ha_service.service, action["service"] | "", sizeof(act.payload.ha_service.service)); strlcpy(act.payload.ha_service.data_json, action["data_json"] | "", sizeof(act.payload.ha_service.data_json)); }
-void serialize_ha_service(const ButtonAction& act, JsonObject action) { if (act.payload.ha_service.entity_id[0]) action["entity_id"] = act.payload.ha_service.entity_id; if (act.payload.ha_service.service[0]) action["service"] = act.payload.ha_service.service; if (act.payload.ha_service.data_json[0]) action["data_json"] = act.payload.ha_service.data_json; }
+const char* validate_ha_entity(const char* entity);
+const char* validate_ha_service_name(const char* service);
+const char* validate_ha_service_data(const char* data);
 ActionResult dispatch_ha_service(const ButtonAction& act, const char* label, uint32_t) {
-    JsonDocument resolved;
-    JsonObject object = resolved.to<JsonObject>();
-    object["type"] = ACTION_TYPE_HA_SERVICE;
-    serialize_ha_service(act, object);
-    if (action_validate_json(object, false)) return ACTION_FAILED;
+    const HaServicePayload& payload = act.payload.ha_service;
+    const char* error = validate_ha_entity(payload.entity_id);
+    if (!error) error = validate_ha_service_name(payload.service);
+    if (!error) error = validate_ha_service_data(payload.data_json);
+    if (error) {
+        LOGW(kHaServiceActionTag, "%s ha_service: %s", label, error);
+        return ACTION_FAILED;
+    }
 #if defined(ARDUINO)
     const auto& service = act.payload.ha_service;
 #if HAS_MCP
@@ -53,15 +57,6 @@ const char* validate_ha_service_data(const char* data) {
     if (strlen(data) >= sizeof(((HaServicePayload*)nullptr)->data_json)) return "ha_service data_json too long";
     return action_json_object_valid(data) ? nullptr : "ha_service data_json must contain a JSON object";
 }
-const char* validate_ha_service(const JsonObjectConst action) {
-    if (!action.containsKey("entity_id") || !action["entity_id"].is<const char*>()) return "ha_service entity_id must be a string";
-    if (const char* error = validate_ha_entity(action["entity_id"].as<const char*>())) return error;
-    if (!action.containsKey("service") || !action["service"].is<const char*>()) return "ha_service service must be a string";
-    if (const char* error = validate_ha_service_name(action["service"].as<const char*>())) return error;
-    if (!action.containsKey("data_json")) return nullptr;
-    if (!action["data_json"].is<const char*>()) return "ha_service data_json must be a string";
-    return validate_ha_service_data(action["data_json"].as<const char*>());
-}
 const ActionArgumentDef kHaServiceCallArguments[] = {
     {"entity_id", "Entity ID", ACTION_ARGUMENT_STRING, 0, 0,
      sizeof(((HaServicePayload*)nullptr)->entity_id) - 1, true, "[var:entity_id]", "text",
@@ -85,13 +80,8 @@ const ActionOperationDef kHaServiceOperations[] = {
     {"ha.service.call", "Call Home Assistant service", kHaServiceCallArguments, 3,
      dispatch_ha_service_call},
 };
-bool visit_ha_service_fields(ButtonAction& action, ActionFieldVisitor visitor, void* context) {
-    return action_visit_field(visitor, context, "entity_id", action.payload.ha_service.entity_id, ACTION_FIELD_EVENT) &&
-        action_visit_field(visitor, context, "service", action.payload.ha_service.service, ACTION_FIELD_EVENT) &&
-        action_visit_field(visitor, context, "data_json", action.payload.ha_service.data_json, ACTION_FIELD_EVENT);
-}
-void describe_ha_service(JsonObject& action) { action["group"] = "Connectivity"; action["label"] = "Call Home Assistant service"; JsonArray fields = action.createNestedArray("fields"); JsonObject entity = fields.createNestedObject(); entity["name"] = "entity_id"; entity["description"] = "required domain-qualified entity"; JsonObject service = fields.createNestedObject(); service["name"] = "service"; service["description"] = "required bare service name"; }
-DEFINE_AND_REGISTER_ACTION_TYPE(kHaServiceActionType, ACTION_TYPE_HA_SERVICE, parse_ha_service, serialize_ha_service, dispatch_ha_service, visit_ha_service_fields, describe_ha_service, ha_service_available, validate_ha_service, ACTION_EXECUTION_SYNC, false, true, false, nullptr,
+void describe_ha_service(JsonObject& action) { action["group"] = "Connectivity"; action["label"] = "Call Home Assistant service"; }
+DEFINE_AND_REGISTER_ACTION_TYPE(kHaServiceActionType, ACTION_TYPE_HA_SERVICE, describe_ha_service, ha_service_available, ACTION_EXECUTION_SYNC, false, false,
     kHaServiceOperations, sizeof(kHaServiceOperations) / sizeof(kHaServiceOperations[0]));
 } // namespace
 #endif // HAS_DISPLAY || HAS_BUTTON

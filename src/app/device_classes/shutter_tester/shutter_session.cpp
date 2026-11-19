@@ -16,6 +16,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <esp_heap_caps.h>
+#include <new>
 #include <string.h>
 #include <time.h>
 #include <vector>
@@ -45,6 +46,10 @@ static FsIndexedStore s_store(
 // ============================================================================
 
 static SemaphoreHandle_t s_session_mutex = nullptr;
+// Serialize guide transitions with stop without holding the session mutex
+// across measurement callbacks. Stop also invalidates queued starts.
+static SemaphoreHandle_t s_lifecycle_mutex = nullptr;
+static uint32_t s_guide_generation = 0;
 
 static bool     s_active       = false;
 static uint32_t s_current_id   = 0;    // numeric id of the active session
@@ -694,6 +699,13 @@ void shutter_session_init() {
         LOGE(TAG, "Mutex creation failed");
         return;
     }
+    s_lifecycle_mutex = xSemaphoreCreateMutex();
+    if (!s_lifecycle_mutex) {
+        LOGE(TAG, "Lifecycle mutex creation failed");
+        vSemaphoreDelete(s_session_mutex);
+        s_session_mutex = nullptr;
+        return;
+    }
     // Ensure parent directory exists — Storage mkdir() is not recursive.
     // (Also pre-created by pad_config_init() on SD builds; defensive on flash storage.)
     if (!Storage.exists("/storage")) {
@@ -707,8 +719,11 @@ void shutter_session_init() {
     LOGI(TAG, "Init OK (next_id=%lu)", (unsigned long)s_next_id);
 }
 
-void shutter_session_start(const char* camera) {
-    if (!s_session_mutex) return;
+static bool session_start(const char* camera, uint32_t* started_id) {
+    if (!s_session_mutex) {
+        LOGE(TAG, "start: session is not initialized");
+        return false;
+    }
 
     // Acquire the ADC engine before doing any session bookkeeping. This is
     // the call that allocates the ~28 KB of DMA-internal RAM when no other
@@ -717,7 +732,7 @@ void shutter_session_start(const char* camera) {
     // active state — callers and bindings will see s_active stay false.
     if (!shutter_capture_acquire("session")) {
         LOGE(TAG, "start: failed to acquire capture engine");
-        return;
+        return false;
     }
 
     // Snapshot capture configuration before acquiring the mutex to avoid
@@ -728,18 +743,25 @@ void shutter_session_start(const char* camera) {
 
     if (xSemaphoreTake(s_session_mutex, portMAX_DELAY) != pdTRUE) {
         shutter_capture_release("session");
-        return;
+        LOGE(TAG, "start: failed to lock session");
+        return false;
     }
 
     if (s_active) {
         xSemaphoreGive(s_session_mutex);
         shutter_capture_release("session");
         LOGW(TAG, "start: session already active");
-        return;
+        return false;
     }
 
     // Allocate PSRAM vector for measurements
-    s_measurements = new std::vector<ShutterSessionMeasurement>();
+    s_measurements = new (std::nothrow) std::vector<ShutterSessionMeasurement>();
+    if (!s_measurements) {
+        xSemaphoreGive(s_session_mutex);
+        shutter_capture_release("session");
+        LOGE(TAG, "start: failed to allocate measurements");
+        return false;
+    }
 
     // Reserve the next id in memory only — no disk I/O here because this
     // function runs on the LVGL task which has a PSRAM stack (flash writes
@@ -754,6 +776,7 @@ void shutter_session_start(const char* camera) {
 
     strlcpy(s_camera, camera ? camera : "", sizeof(s_camera));
     s_active = true;
+    if (started_id) *started_id = s_current_id;
 
     // Copy pre-snapshotted capture configuration into session statics
     strlcpy(s_caps_preset_id_str, caps.preset_id_str ? caps.preset_id_str : "", sizeof(s_caps_preset_id_str));
@@ -769,14 +792,40 @@ void shutter_session_start(const char* camera) {
 
     xSemaphoreGive(s_session_mutex);
     LOGI(TAG, "Session %s started (camera='%s')", s_session_id, s_camera);
+    return true;
 }
 
-void shutter_session_stop() {
-    if (!s_session_mutex) return;
-    if (xSemaphoreTake(s_session_mutex, portMAX_DELAY) != pdTRUE) return;
+bool shutter_session_start(const char* camera) {
+    if (!s_lifecycle_mutex || xSemaphoreTake(s_lifecycle_mutex, portMAX_DELAY) != pdTRUE) {
+        LOGE(TAG, "start: lifecycle unavailable");
+        return false;
+    }
+    ++s_guide_generation;
+    bool started = session_start(camera, nullptr);
+    xSemaphoreGive(s_lifecycle_mutex);
+    return started;
+}
 
+static void session_stop(uint32_t expected_id, bool require_match) {
+    if (!s_lifecycle_mutex || xSemaphoreTake(s_lifecycle_mutex, portMAX_DELAY) != pdTRUE) {
+        LOGE(TAG, "stop: lifecycle unavailable");
+        return;
+    }
+    if (xSemaphoreTake(s_session_mutex, portMAX_DELAY) != pdTRUE) {
+        xSemaphoreGive(s_lifecycle_mutex);
+        LOGE(TAG, "stop: failed to lock session");
+        return;
+    }
+
+    if (require_match && (!s_active || s_current_id != expected_id)) {
+        xSemaphoreGive(s_session_mutex);
+        xSemaphoreGive(s_lifecycle_mutex);
+        return;
+    }
+    ++s_guide_generation;
     if (!s_active) {
         xSemaphoreGive(s_session_mutex);
+        xSemaphoreGive(s_lifecycle_mutex);
         return;
     }
 
@@ -843,6 +892,7 @@ void shutter_session_stop() {
     if (ctx->guided) {
         shutter_measure_set_lock(false);
     }
+    xSemaphoreGive(s_lifecycle_mutex);
 
     // Fire the user-configured "save started" lifecycle action (e.g. notify
     // bubble, screen navigation, MQTT publish). Dispatched AFTER releasing
@@ -887,16 +937,23 @@ void shutter_session_stop() {
     shutter_capture_release("session");
 }
 
-void shutter_session_toggle(const char* camera) {
-    if (!s_session_mutex) return;
-    xSemaphoreTake(s_session_mutex, portMAX_DELAY);
+void shutter_session_stop() {
+    session_stop(0, false);
+}
+
+bool shutter_session_toggle(const char* camera) {
+    if (!s_session_mutex || xSemaphoreTake(s_session_mutex, portMAX_DELAY) != pdTRUE) {
+        LOGE(TAG, "toggle: session unavailable");
+        return false;
+    }
     bool active = s_active;
     xSemaphoreGive(s_session_mutex);
 
     if (active) {
         shutter_session_stop();
+        return true;
     } else {
-        shutter_session_start(camera);
+        return shutter_session_start(camera);
     }
 }
 
@@ -942,13 +999,18 @@ uint32_t shutter_session_get_id() {
 
 void shutter_session_on_measurement(const ShutterMeasurement* m) {
     if (!m || !m->valid) return;
-    if (!s_session_mutex) return;
-    if (xSemaphoreTake(s_session_mutex, portMAX_DELAY) != pdTRUE) return;
+    if (!s_lifecycle_mutex || xSemaphoreTake(s_lifecycle_mutex, portMAX_DELAY) != pdTRUE) return;
+    if (xSemaphoreTake(s_session_mutex, portMAX_DELAY) != pdTRUE) {
+        xSemaphoreGive(s_lifecycle_mutex);
+        return;
+    }
 
     if (!s_active || !s_measurements) {
         xSemaphoreGive(s_session_mutex);
+        xSemaphoreGive(s_lifecycle_mutex);
         return;
     }
+    const uint32_t session_id = s_current_id;
 
     // snapshot_measurement() calls shutter_capture_get_latest() which is safe here:
     // capture task writes to a double-buffered frame, get_latest() copies atomically.
@@ -987,9 +1049,10 @@ void shutter_session_on_measurement(const ShutterMeasurement* m) {
     if (do_advance) {
         shutter_measure_set_target(next_speed, false);  // don't recompute last measurement
     }
+    xSemaphoreGive(s_lifecycle_mutex);
     if (do_auto_stop) {
         LOGI(TAG, "Guided session complete — auto-stopping");
-        shutter_session_stop();
+        session_stop(session_id, true);
     }
 }
 
@@ -1043,7 +1106,7 @@ void shutter_session_on_recompute() {
 // shutter_test_scripts_parse() performs filesystem I/O which can disable the SPI
 // flash cache.  The calling LVGL/action-dispatch task has a PSRAM stack,
 // which is illegal when the cache is disabled.
-static void guide_start_inner(const char* test_id) {
+static void guide_start_inner(const char* test_id, uint32_t generation) {
     if (shutter_session_is_active()) {
         LOGW(TAG, "guide_start: session already active");
         return;
@@ -1085,10 +1148,39 @@ static void guide_start_inner(const char* test_id) {
     }
     memcpy(speeds_copy, script->speeds, speeds_size);
 
+    if (!s_lifecycle_mutex || xSemaphoreTake(s_lifecycle_mutex, portMAX_DELAY) != pdTRUE) {
+        LOGE(TAG, "guide_start: lifecycle unavailable");
+        heap_caps_free(speeds_copy);
+        heap_caps_free(result);
+        return;
+    }
+    if (generation != s_guide_generation) {
+        xSemaphoreGive(s_lifecycle_mutex);
+        LOGI(TAG, "guide_start: cancelled");
+        heap_caps_free(speeds_copy);
+        heap_caps_free(result);
+        return;
+    }
     shutter_capture_stop_alignment();
-    shutter_session_start(nullptr);
+    uint32_t started_id = 0;
+    if (!session_start(nullptr, &started_id)) {
+        xSemaphoreGive(s_lifecycle_mutex);
+        heap_caps_free(speeds_copy);
+        heap_caps_free(result);
+        return;
+    }
 
     if (xSemaphoreTake(s_session_mutex, portMAX_DELAY) != pdTRUE) {
+        LOGE(TAG, "guide_start: failed to lock session");
+        xSemaphoreGive(s_lifecycle_mutex);
+        heap_caps_free(speeds_copy);
+        heap_caps_free(result);
+        return;
+    }
+    if (!s_active || s_current_id != started_id) {
+        xSemaphoreGive(s_session_mutex);
+        xSemaphoreGive(s_lifecycle_mutex);
+        LOGW(TAG, "guide_start: started session is no longer active");
         heap_caps_free(speeds_copy);
         heap_caps_free(result);
         return;
@@ -1105,8 +1197,9 @@ static void guide_start_inner(const char* test_id) {
 
     xSemaphoreGive(s_session_mutex);
 
-    shutter_measure_set_target(speeds_copy[0].speed_suffixed);
+    shutter_measure_set_target(script->speeds[0].speed_suffixed);
     shutter_measure_set_lock(true);
+    xSemaphoreGive(s_lifecycle_mutex);
 
     LOGI(TAG, "Guided session started: '%s' (%u speeds, %u shots/speed)",
          script->name, (unsigned)script->speed_count, (unsigned)script->shots_per_speed);
@@ -1114,28 +1207,52 @@ static void guide_start_inner(const char* test_id) {
     heap_caps_free(result);
 }
 
-void shutter_session_guide_start(const char* test_id) {
+bool shutter_session_guide_start(const char* test_id) {
     if (!test_id || !test_id[0]) {
         LOGW(TAG, "guide_start: empty test id");
-        return;
+        return false;
     }
 
-    // Copy id so it survives across task boundary
-    char* id_copy = strdup(test_id);
-    if (!id_copy) return;
+    struct GuideStartRequest {
+        char* id;
+        uint32_t generation;
+    };
+    GuideStartRequest* request = new (std::nothrow) GuideStartRequest{};
+    if (!request) {
+        LOGE(TAG, "guide_start: failed to allocate request");
+        return false;
+    }
+    request->id = strdup(test_id);
+    if (!request->id) {
+        LOGE(TAG, "guide_start: failed to copy test id");
+        delete request;
+        return false;
+    }
+    if (!s_lifecycle_mutex || xSemaphoreTake(s_lifecycle_mutex, portMAX_DELAY) != pdTRUE) {
+        LOGE(TAG, "guide_start: lifecycle unavailable");
+        free(request->id);
+        delete request;
+        return false;
+    }
+    request->generation = s_guide_generation;
+    xSemaphoreGive(s_lifecycle_mutex);
 
     auto task_fn = [](void* arg) {
-        char* id = static_cast<char*>(arg);
-        guide_start_inner(id);
-        free(id);
+        GuideStartRequest* request = static_cast<GuideStartRequest*>(arg);
+        guide_start_inner(request->id, request->generation);
+        free(request->id);
+        delete request;
         vTaskDelete(nullptr);
     };
 
     // xTaskCreate places stack in internal RAM — required for filesystem I/O
-    if (xTaskCreate(task_fn, "guide_start", 4096, id_copy, 5, nullptr) != pdPASS) {
+    if (xTaskCreate(task_fn, "guide_start", 4096, request, 5, nullptr) != pdPASS) {
         LOGE(TAG, "guide_start: failed to create task");
-        free(id_copy);
+        free(request->id);
+        delete request;
+        return false;
     }
+    return true;
 }
 
 void shutter_session_guide_stop() {
@@ -1143,15 +1260,20 @@ void shutter_session_guide_stop() {
 }
 
 void shutter_session_guide_skip() {
-    if (!s_session_mutex) return;
-    if (xSemaphoreTake(s_session_mutex, portMAX_DELAY) != pdTRUE) return;
+    if (!s_lifecycle_mutex || xSemaphoreTake(s_lifecycle_mutex, portMAX_DELAY) != pdTRUE) return;
+    if (xSemaphoreTake(s_session_mutex, portMAX_DELAY) != pdTRUE) {
+        xSemaphoreGive(s_lifecycle_mutex);
+        return;
+    }
 
     if (!s_active || !s_guided || !s_guide_speeds) {
         xSemaphoreGive(s_session_mutex);
+        xSemaphoreGive(s_lifecycle_mutex);
         return;
     }
 
     bool do_auto_stop = false;
+    const uint32_t session_id = s_current_id;
     char next_speed[16] = {};
 
     s_guide_step++;
@@ -1167,26 +1289,33 @@ void shutter_session_guide_skip() {
     xSemaphoreGive(s_session_mutex);
 
     if (do_auto_stop) {
+        xSemaphoreGive(s_lifecycle_mutex);
         LOGI(TAG, "guide_skip: at last speed — auto-stopping");
-        shutter_session_stop();
+        session_stop(session_id, true);
     } else {
         shutter_measure_set_target(next_speed, false);
         shutter_measure_set_lock(true);
+        xSemaphoreGive(s_lifecycle_mutex);
         LOGI(TAG, "guide_skip: advanced to %s", next_speed);
     }
 }
 
 void shutter_session_guide_redo() {
-    if (!s_session_mutex) return;
-    if (xSemaphoreTake(s_session_mutex, portMAX_DELAY) != pdTRUE) return;
+    if (!s_lifecycle_mutex || xSemaphoreTake(s_lifecycle_mutex, portMAX_DELAY) != pdTRUE) return;
+    if (xSemaphoreTake(s_session_mutex, portMAX_DELAY) != pdTRUE) {
+        xSemaphoreGive(s_lifecycle_mutex);
+        return;
+    }
 
     if (!s_active || !s_guided) {
         xSemaphoreGive(s_session_mutex);
+        xSemaphoreGive(s_lifecycle_mutex);
         return;
     }
 
     if (s_guide_shot == 0 && s_guide_step == 0) {
         xSemaphoreGive(s_session_mutex);
+        xSemaphoreGive(s_lifecycle_mutex);
         LOGI(TAG, "guide_redo: at very first shot, no-op");
         return;
     }
@@ -1219,6 +1348,7 @@ void shutter_session_guide_redo() {
     } else {
         LOGI(TAG, "guide_redo: discarded last shot, now at shot %u", (unsigned)s_guide_shot);
     }
+    xSemaphoreGive(s_lifecycle_mutex);
 }
 
 bool shutter_session_is_guided() {

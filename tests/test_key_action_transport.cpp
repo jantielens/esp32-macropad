@@ -127,16 +127,9 @@ void check_pointer_transport(KeyboardTransport transport) {
     gamepad_hid_loop();
     usb_mouse_calls = ble_mouse_calls = usb_gamepad_calls = ble_gamepad_calls = 0;
     assert(mouse_hid_is_ready() && gamepad_hid_is_ready());
-    ButtonAction click = {};
     const char* buttons[] = {"left", "right", "middle"};
     for (unsigned index = 0; index < 3; ++index) {
-        strlcpy(click.payload.mouse_button.button, buttons[index], sizeof(click.payload.mouse_button.button));
-        assert(dispatch_mouse_button(click, "click", 0) == ACTION_COMPLETE);
-        mouse_hid_loop();
-        assert(last_mouse.buttons == (1 << index));
-        mouse_hid_loop();
-        assert(last_mouse.buttons == 0);
-        const ActionResolvedArgument argument{buttons[index], 0};
+        const ActionResolvedArgument argument{buttons[index], 0, 0};
         assert(kMouseOperations[0].dispatch(&argument, "click operation", 0) == ACTION_COMPLETE);
         mouse_hid_loop();
         assert(last_mouse.buttons == (1 << index));
@@ -144,7 +137,7 @@ void check_pointer_transport(KeyboardTransport transport) {
         assert(last_mouse.buttons == 0);
     }
 
-    const ActionResolvedArgument controls[] = {{nullptr, 16}, {"right", 0}, {"right", 0}};
+    const ActionResolvedArgument controls[] = {{nullptr, 16, 0}, {"right", 0, 0}, {"right", 0, 0}};
     for (unsigned family = 0; family < 3; ++family) {
         const ActionOperationDef* operations = kGamepadOperations + family * 3;
         const ActionResolvedArgument* argument = &controls[family];
@@ -175,7 +168,7 @@ void check_pointer_transport(KeyboardTransport transport) {
     const uint32_t pointer_owner = mouse_hid_acquire(pointer_epoch, 1);
     const uint32_t controller_owner = gamepad_hid_acquire_stick(0, controller_generation);
     assert(pointer_owner && controller_owner);
-    const ActionResolvedArgument left_button{"left", 0};
+    const ActionResolvedArgument left_button{"left", 0, 0};
     assert(kMouseOperations[0].dispatch(&left_button, "owned click", 0) == ACTION_FAILED);
     mouse_hid_move(12, -9, pointer_epoch);
     assert(gamepad_hid_move(controller_owner, 1234, -2345, controller_generation));
@@ -241,22 +234,23 @@ int main() {
     keyboard_hid_loop();
     assert(registered_actions == 3 + unsigned(TEST_USB_TRANSPORT || TEST_BLE_TRANSPORT));
     assert(mouse_button_available() == bool(TEST_USB_TRANSPORT || TEST_BLE_TRANSPORT));
-    ButtonAction mouse_action = {};
     const char* buttons[] = { "left", "right", "middle" };
     for (unsigned index = 0; index < 3; ++index) {
-        strlcpy(mouse_action.payload.mouse_button.button, buttons[index], sizeof(mouse_action.payload.mouse_button.button));
-        const ActionResult result = dispatch_mouse_button(mouse_action, "mouse test", 0);
+        const ActionResolvedArgument argument{buttons[index], 0, 0};
+        const ActionResult result = kMouseOperations[0].dispatch(&argument, "mouse test", 0);
         assert(result == ACTION_FAILED);
     }
     assert(keyboard_hid_transport() == keyboard_transport_default(TEST_BLE_TRANSPORT, TEST_USB_TRANSPORT));
-    ButtonAction action = {};
-    strlcpy(action.payload.key.key_sequence, "a 100ms b", sizeof(action.payload.key.key_sequence));
+#if TEST_USB_TRANSPORT || TEST_BLE_TRANSPORT
+    char action_sequence[] = "a 100ms b";
+    ActionResolvedArgument arguments[] = {{action_sequence, 0, 0}};
+#endif
     assert(!keyboard_hid_is_ready());
     assert(!keyboard_hid_is_busy());
     assert(!keyboard_hid_request_sequence("a", 40));
 #if TEST_USB_TRANSPORT || TEST_BLE_TRANSPORT
     assert(key_available());
-    assert(dispatch_key(action, "disabled", 40) == ACTION_FAILED);
+    assert(dispatch_key_operation(arguments, "disabled", 40) == ACTION_FAILED);
 #endif
     assert(usb_calls == 0 && ble_calls == 0);
     assert(strcmp(keyboard_hid_status(), TEST_USB_TRANSPORT || TEST_BLE_TRANSPORT ? "disabled" : "unavailable") == 0);
@@ -281,9 +275,9 @@ int main() {
     keyboard_hid_loop();
     assert(finished_token == 0 && usb_calls == 0 && ble_calls == 0);
     allocation_succeeds = true;
-    assert(dispatch_key(action, "test", 42) == ACTION_PENDING);
+    assert(dispatch_key_operation(arguments, "test", 42) == ACTION_PENDING);
     assert(allocation_calls == 2 && allocation_caps == (MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-    action.payload.key.key_sequence[0] = '\0';
+    action_sequence[0] = '\0';
     assert(!keyboard_hid_request_sequence("c", 43));
     assert(keyboard_hid_is_busy());
     run_until_idle();
@@ -291,7 +285,7 @@ int main() {
     assert(free_calls == 0 && workspace != nullptr);
     assert(usages.size() == 4 && usages[0] == 4 && usages[1] == 0 && usages[2] == 5 && usages[3] == 0);
     assert(TEST_USB_TRANSPORT ? usb_calls == 4 && ble_calls == 0 : ble_calls == 4 && usb_calls == 0);
-    assert(dispatch_key(action, "test", 44) == ACTION_FAILED);
+    assert(dispatch_key_operation(arguments, "test", 44) == ACTION_FAILED);
     assert(!keyboard_hid_request_sequence("a", 0));
     assert(keyboard_hid_request_sequence("\"unterminated", 55));
     keyboard_hid_loop();
@@ -408,7 +402,7 @@ int main() {
     keyboard_hid_init(TEST_BLE_TRANSPORT ? KeyboardTransport::Ble : KeyboardTransport::Usb);
     poll_until_ready();
     char sequence[] = "a";
-    const ActionResolvedArgument key_argument{sequence, 0};
+    const ActionResolvedArgument key_argument{sequence, 0, 0};
     assert(kKeyOperations[0].dispatch(&key_argument, "no token", 0) == ACTION_FAILED);
     assert(kKeyOperations[0].dispatch(&key_argument, "keys", 130) == ACTION_PENDING);
     sequence[0] = 'b';
@@ -424,7 +418,7 @@ int main() {
     char max_sequence[CONFIG_KEY_SEQ_MAX_LEN];
     memset(max_sequence, 'a', sizeof(max_sequence) - 1);
     max_sequence[sizeof(max_sequence) - 1] = '\0';
-    const ActionResolvedArgument max_key_argument{max_sequence, 0};
+    const ActionResolvedArgument max_key_argument{max_sequence, 0, 0};
     assert(kKeyOperations[0].dispatch(&max_key_argument, "max sequence", 132) == ACTION_PENDING);
     assert(workspace && strcmp(workspace->sequence, max_sequence) == 0);
     ota_active = true;
@@ -435,7 +429,7 @@ int main() {
     char too_long[CONFIG_KEY_SEQ_MAX_LEN + 1];
     memset(too_long, 'a', sizeof(too_long) - 1);
     too_long[sizeof(too_long) - 1] = '\0';
-    const ActionResolvedArgument too_long_argument{too_long, 0};
+    const ActionResolvedArgument too_long_argument{too_long, 0, 0};
     assert(kKeyOperations[0].dispatch(&too_long_argument, "oversized sequence", 133) == ACTION_FAILED);
 #endif
 #if TEST_BLE_TRANSPORT
@@ -453,8 +447,8 @@ int main() {
 #if !TEST_USB_TRANSPORT && !TEST_BLE_TRANSPORT
     assert(usb_mouse_calls + ble_mouse_calls == 0);
     assert(usb_gamepad_calls + ble_gamepad_calls == 0);
-    const ActionResolvedArgument button{"left", 0};
-    const ActionResolvedArgument gamepad_button{nullptr, 1};
+    const ActionResolvedArgument button{"left", 0, 0};
+    const ActionResolvedArgument gamepad_button{nullptr, 1, 0};
     assert(kMouseOperations[0].dispatch(&button, "unavailable", 0) == ACTION_FAILED);
     assert(kGamepadOperations[0].dispatch(&gamepad_button, "unavailable", 140) == ACTION_FAILED);
     assert(kGamepadOperations[1].dispatch(&gamepad_button, "unavailable", 0) == ACTION_FAILED);
