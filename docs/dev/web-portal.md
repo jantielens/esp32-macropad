@@ -1969,7 +1969,13 @@ rendering and validation, dynamic input, and action-list slots. Catalog
 controls provide resource selectors such as screens and sounds. Ordinary new
 operations are authored by registering descriptors, not by adding an editor
 extension. Unsupported or incompatible action documents are rejected rather
-than translated.
+than translated. The Pad Editor makes one exception for opening and importing
+older pads: `padResetOlderActions()` removes all action fields from the draft
+and stamps `PAD_ACTION_FORMAT_VERSION` before normal validation and the
+merge-on-save snapshot. If action fields were removed, the editor shows a
+notification and keeps the draft unsaved. Current-format validation failures
+and newer or invalid versions remain blocked; recovery never writes a file
+until the user saves.
 
 Action selectors opt into the shared dropdown's searchable mode with
 `data-search-placeholder`. The original select remains the source of truth

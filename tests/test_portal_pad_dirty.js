@@ -82,7 +82,6 @@ assert.strictEqual(context.padDirty, true);
 
 assert(source.includes('} finally {\n        // Loading action lists, bindings, and template buttons can update'));
 assert(source.includes('if (current()) {'));
-assert(source.includes('            padClearDirty();\n        }\n    }\n}\n\nfunction padCloneJson'));
 
 const loadingName = { value: 'Previous pad' };
 const loadingNames = [];
@@ -738,6 +737,8 @@ async function checkFailedLoadProtectsSavedPad() {
 		padTrackLoad() {}, padInitBindableColor() {}, padSetBindableColor() {},
 		padPageBackgroundModeChanged() {}, padRenderBindings() {}, padPopulateTemplateDropdown() {},
 		padCacheColors() {}, padGetEffectiveDefault() { return ''; },
+		padGetBindableColor() { return ''; }, padColorsToHex() {},
+		padCaptureIconLayout() { return {}; }, actionEditorListBuild() { return []; },
 		padBindingsFromJson() { return []; }, padColorToHex() { return ''; },
 		actionEditorOperation() { return { arguments: [{ name: 'target', type: 'screen', max_length: 31 }] }; },
 		actionEditorListLoad() {}, padLoadTemplateButtons: async () => {},
@@ -751,6 +752,7 @@ async function checkFailedLoadProtectsSavedPad() {
 	testContext.padPopulateTemplateDropdown = () => {};
 	testContext.padLoadTemplateButtons = async () => {};
 	testContext.padTrackLoad = () => {};
+	const buildSaveContext = testContext.padBuildSaveContext;
 	testContext.padBuildSaveContext = () => ({ page: 0 });
 	let writes = 0;
 	testContext.padQueuePersistence = async () => { writes++; };
@@ -769,14 +771,46 @@ async function checkFailedLoadProtectsSavedPad() {
 	assert.strictEqual(writes, 0, 'An unreadable saved pad must not be overwritten');
 	assert(validationErrors.some(message => /load|reload/i.test(message)));
 
+	const legacyPad = {
+		cols: 2, rows: 2, name: 'Old pad', custom_setting: { retained: true },
+		pad_actions: [{ type: 'screen' }],
+		buttons: [{ col: 0, row: 0, label: 'Keep me', bg_color: 'aabbcc',
+			actions: [{ type: 'screen' }], lp_actions: [{ type: 'mqtt' }],
+			action: 'screen', action_screen: 'pad_1', lp_action: 'screen', lp_action_screen: 'pad_2',
+			widget_type: 'numericrocker', widget_numericrocker_action: { type: 'mqtt' } }],
+		overlay_buttons: [{ col: 1, row: 1, label: 'Overlay', actions: [{ type: 'screen' }],
+			lp_actions: [{ type: 'mqtt' }] }],
+	};
 	testContext.fetch = async () => ({
 		ok: true,
-		async json() { return { cols: 2, rows: 2, buttons: [{ action: { type: 'screen' } }] }; }
+		async json() { return JSON.parse(JSON.stringify(legacyPad)); }
 	});
 	await testContext.padLoadPage(0);
-	assert.strictEqual(await testContext.padSavePage(), null);
-	assert.strictEqual(writes, 0, 'A legacy pad must not be silently rewritten');
-	assert(messages.some(message => /legacy/i.test(message)), 'The load error must identify legacy actions');
+	assert.strictEqual(vm.runInContext('padState.loadError', testContext), null);
+	assert.strictEqual(vm.runInContext('padDirty', testContext), true, 'Action cleanup must remain an unsaved change');
+	assert.strictEqual(writes, 0, 'Loading a legacy pad must not write it');
+	assert(messages.some(message => /older action format.*draft/i.test(message)), 'Recovery must warn about discarded actions');
+	testContext.padTrackValidate = () => ({
+		valid: true, rows: { sizes: [] }, columns: { sizes: [] },
+	});
+	const recovered = JSON.parse(buildSaveContext().body);
+	assert.deepStrictEqual(recovered, {
+		action_format_version: 1, layout: 'grid', cols: 2, rows: 2, name: 'Old pad',
+		custom_setting: { retained: true },
+		buttons: [{ col: 0, row: 0, label: 'Keep me', bg_color: 'aabbcc', widget_type: 'numericrocker' }],
+		overlay_buttons: [{ col: 1, row: 1, label: 'Overlay' }],
+	}, 'The save payload must preserve non-action settings without restoring legacy action fields');
+	assert.doesNotThrow(() => testContext.padCheckImportedActionFormat(recovered));
+
+	for (const version of [2, '1', null, -1]) {
+		testContext.fetch = async () => ({
+			ok: true,
+			async json() { return { action_format_version: version, buttons: [] }; },
+		});
+		await testContext.padLoadPage(0);
+		assert.strictEqual(await testContext.padSavePage(), null);
+		assert.strictEqual(writes, 0, 'Newer or invalid formats must not be overwritten');
+	}
 	testContext.padTrackValidate = () => { throw new Error('An unreadable pad must not be exported'); };
 	await testContext.padExportPad();
 
@@ -801,6 +835,7 @@ async function checkFailedLoadProtectsSavedPad() {
 	assert.strictEqual(vm.runInContext('padState.loadError', testContext), null, 'A valid reload clears the failure');
 	assert.strictEqual(vm.runInContext('padState.padActions[0].op', testContext), 'screen.open',
 		'Valid typed operations remain in the editor');
+	assert.strictEqual(vm.runInContext('padDirty', testContext), false, 'A current-format reload is a clean baseline');
 
 	testContext.fetch = async () => ({ ok: false, status: 404 });
 	await testContext.padLoadPage(0);

@@ -57,8 +57,11 @@ to keep first. Files are supported import/export artifacts; you do not need
 to edit their persisted schema by hand.
 
 If a saved pad cannot be loaded, the editor blocks saving to protect its
-contents. Reload it after correcting the error. To replace a readable pad
-with incompatible actions, choose **Import Pad** or **Clear Pad**, confirm the
+contents. Reload it after correcting the error. Opening or importing a pad
+with an older action format removes its actions from the draft and shows a
+notification; other settings are retained. Save only after reviewing the draft.
+Newer action formats remain blocked. To replace an incompatible saved pad,
+choose **Import Pad** with a supported file or **Clear Pad**, confirm the
 replacement warning, and save the new draft. If the device cannot read the
 saved pad, repair storage or restore the file from a backup first.
 

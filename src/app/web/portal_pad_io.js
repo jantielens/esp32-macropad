@@ -1,6 +1,8 @@
 // portal_pad_io.js - Pad clipboard, import/export, and device config I/O
 // Part of the ESP32 Macropad configuration portal.
 
+const PAD_ACTION_RESET_WARNING = 'This pad uses an older action format. Actions were removed from this draft; other settings are retained. Save Pad to apply, or leave without saving to keep the original.';
+
 function padStripPosition(btn) {
     const copy = padCloneJson(btn);
     delete copy.col;
@@ -198,8 +200,28 @@ function padCheckImportedKeys(value) {
     }
 }
 
+function padResetOlderActions(pad) {
+    const version = pad.action_format_version === undefined ? 0 : pad.action_format_version;
+    if (!Number.isInteger(version) || version < 0 || version > PAD_ACTION_FORMAT_VERSION)
+        throw new Error('Unsupported action format version.');
+    if (version === PAD_ACTION_FORMAT_VERSION) return false;
+    let removed = Object.prototype.hasOwnProperty.call(pad, 'pad_actions');
+    delete pad.pad_actions;
+    for (const button of (pad.buttons || []).concat(pad.overlay_buttons || [])) {
+        for (const key of ['actions', 'lp_actions', 'action', 'lp_action',
+            'action_screen', 'lp_action_screen', 'widget_numericrocker_action']) {
+            if (Object.prototype.hasOwnProperty.call(button, key)) {
+                delete button[key];
+                removed = true;
+            }
+        }
+    }
+    pad.action_format_version = PAD_ACTION_FORMAT_VERSION;
+    return removed;
+}
+
 function padCheckImportedActionFormat(pad) {
-    if (pad.action_format_version !== undefined && pad.action_format_version !== 1)
+    if (pad.action_format_version !== undefined && pad.action_format_version !== PAD_ACTION_FORMAT_VERSION)
         throw new Error('Unsupported action format version.');
     const buttons = (pad.buttons || []).concat(pad.overlay_buttons || []);
     const arrays = [pad.pad_actions];
@@ -214,11 +236,11 @@ function padCheckImportedActionFormat(pad) {
         if (!Array.isArray(actions)) throw new Error('Pad actions must be arrays.');
         if (actions.length > MAX_ACTIONS) throw new Error('Pad action limit exceeded (' + MAX_ACTIONS + ').');
         for (const action of actions) {
-            if (pad.action_format_version !== 1 || !action || typeof action !== 'object' ||
+            if (pad.action_format_version !== PAD_ACTION_FORMAT_VERSION || !action || typeof action !== 'object' ||
                 Array.isArray(action) || Object.keys(action).some(key => key !== 'op' && key !== 'args') ||
                 typeof action.op !== 'string' || !action.args || typeof action.args !== 'object' ||
                 Array.isArray(action.args) || !actionEditorOperation(action.op))
-                throw new Error('Pad actions require action format version 1 and supported operation envelopes.');
+                throw new Error('Pad actions require action format version ' + PAD_ACTION_FORMAT_VERSION + ' and supported operation envelopes.');
             const operation = actionEditorOperation(action.op);
             if (!Array.isArray(operation.arguments))
                 throw new Error('Operation argument information is unavailable: ' + action.op);
@@ -269,7 +291,7 @@ async function padExportPad() {
     catch (error) { showMessage(error.message, 'error'); return; }
     padCollectButtonDefaults();
     const payload = {
-        action_format_version: 1,
+        action_format_version: PAD_ACTION_FORMAT_VERSION,
         layout: 'grid',
         cols: padState.cols,
         rows: padState.rows,
@@ -343,6 +365,7 @@ async function padImportPad(evt) {
             (json.overlay_buttons !== undefined && !Array.isArray(json.overlay_buttons))) {
             throw new Error('Invalid pad JSON: missing cols, rows, or buttons');
         }
+        const actionsReset = padResetOlderActions(json);
         padCheckImportedActionFormat(json);
         const importedSources = padValidateImportedIconSources([json], json._icon_sources);
         if (json.buttons.length + (json.overlay_buttons || []).length > padMaxButtons())
@@ -393,7 +416,8 @@ async function padImportPad(evt) {
         padRenderGrid();
         padState.loadError = null;
         padMarkDirty();
-        showMessage('Pad imported (unsaved) — click Save Pad to apply', 'success');
+        if (actionsReset) showMessage(PAD_ACTION_RESET_WARNING, 'info');
+        else showMessage('Pad imported (unsaved) — click Save Pad to apply', 'success');
     } catch (err) {
         showMessage('Import failed: ' + err.message, 'error');
     }

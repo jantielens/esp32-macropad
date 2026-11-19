@@ -442,6 +442,24 @@ async function testClearPad() {
     await importPad({ cols: 10, rows: 10, buttons: [{ col: 9, row: 9 }] });
     assert(success.messages.some(message => message.type === 'success' && message.message.includes('Pad imported')));
     assert.strictEqual(vm.runInContext('padState.cols', success.context), 10);
+    await importPad({
+        action_format_version: 0, cols: 10, rows: 10, name: 'Legacy import',
+        pad_actions: [{ type: 'screen' }],
+        buttons: [{ col: 0, row: 0, label: 'Retained', actions: [{ type: 'mqtt' }] }],
+        overlay_buttons: [{ col: 1, row: 1, label: 'Overlay', lp_action: 'screen' }],
+    });
+    assert.deepStrictEqual(JSON.parse(vm.runInContext('JSON.stringify(padState.mainButtons)', success.context)),
+        [{ col: 0, row: 0, label: 'Retained' }]);
+    assert.deepStrictEqual(JSON.parse(vm.runInContext('JSON.stringify(padState.overlayButtons)', success.context)),
+        [{ col: 1, row: 1, label: 'Overlay' }]);
+    assert.strictEqual(vm.runInContext('padState.padActions.length', success.context), 0);
+    assert.strictEqual(success.context.document.getElementById('pad-name').value, 'Legacy import');
+    assert(success.messages.some(message => /older action format.*draft/i.test(message.message)));
+    await importPad({ action_format_version: 2, cols: 1, rows: 1, buttons: [] });
+    assert.strictEqual(vm.runInContext('padState.cols', success.context), 10, 'A newer format must not replace the draft');
+    await importPad({ action_format_version: 1, cols: 1, rows: 1,
+        buttons: [{ actions: [{ type: 'mqtt' }] }] });
+    assert.strictEqual(vm.runInContext('padState.cols', success.context), 10, 'Invalid current-format actions must not be discarded');
     success.context.deviceInfoCache.max_grid_cols = 5;
     await importPad({ cols: 10, rows: 10, buttons: [] });
     assert(success.messages.some(message => message.type === 'error' && message.message.includes('maximum 5 columns')));
