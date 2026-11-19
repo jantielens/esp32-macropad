@@ -15,7 +15,7 @@ Workflow:
     2. Open http://localhost:8080 in a browser.
     3. Edit any file in src/app/web/ and hit refresh — changes appear instantly.
     4. When happy, run:
-         ./tools/minify-web-assets.sh && ./build.sh <board>
+         ./build.sh <board>
        to embed the changes into firmware.
 """
 

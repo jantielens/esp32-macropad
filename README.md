@@ -389,6 +389,10 @@ For portal-only UI work, use the [device-free portal development server](docs/de
 Widget firmware and portal packaging share one explicit manifest; see the
 [widget manifest generator](docs/dev/scripts.md#toolswidget_manifestpy) and
 [editor extension contract](docs/dev/web-portal.md).
+Portal assets are resolved with the firmware compiler for each build, without
+enumerating feature combinations. See the
+[asset builder](docs/dev/scripts.md#toolsportal_assetspy) for generated paths
+and focused regeneration.
 
 The [device power API](docs/dev/web-portal.md#device-power-control) includes:
 

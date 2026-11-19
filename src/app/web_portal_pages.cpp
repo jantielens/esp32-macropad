@@ -6,7 +6,7 @@
 #include "web_portal_timing.h"
 #include "web_portal_logs.h"
 
-#include "web_assets.h"
+#include <web_assets.h>
 
 #include <string.h>
 

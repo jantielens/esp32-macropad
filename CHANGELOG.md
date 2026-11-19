@@ -125,6 +125,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Build portal assets for each firmware configuration, excluding disabled
+  features without enumerating bundle variants. Preserve unavailable widget
+  data when opening pads, and prevent edits that would discard it.
 * Clarify conditional text and units in the Expression builder with a quoted
   **if / then / else** template and a **Numeric formatting** hint. Return `""`
   to hide a value and its unit without repeating the condition or changing

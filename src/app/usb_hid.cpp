@@ -4,7 +4,7 @@
 
 #include "log_manager.h"
 #include "keyboard_transport.h"
-#include "project_branding.h"
+#include <project_branding.h>
 #include "mouse_hid_state.h"
 #include "gamepad_hid_state.h"
 #include "ota_activity.h"

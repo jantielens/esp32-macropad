@@ -27,10 +27,10 @@
 #include "binding_schema.h"
 #include "config_manager.h"
 #include "device_telemetry.h"
-#include "repo_slug_config.h"
+#include <repo_slug_config.h>
 #include "log_manager.h"
 #include "psram_json_allocator.h"
-#include "project_branding.h"
+#include <project_branding.h>
 #include "class_branding.h"
 #include "web_portal_json.h"
 #if HEALTH_HISTORY_ENABLED

@@ -11,6 +11,7 @@ Usage:
 """
 
 import argparse
+import ast
 import base64
 import copy
 import time
@@ -974,6 +975,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                     html = render(frag, APP_WEB_DIR, "esp32-macropad", "ESP32 Macropad (Local Mock)",
                                   "dev-mock", self._profile() != "esp32-p4-lcd4b",
                                   has_binding_help=False,
+                                  widget_flags=self._portal_flags(),
                                   has_microphone_streaming=self._profile() in ("esp32-p4-lcd4b", "reterminal-sticky-interactive"))
                     self._serve_bytes(html.encode("utf-8"), "text/html; charset=utf-8")
                     return
@@ -1760,9 +1762,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
     def _serve_production_bundle(self):
         self._serve_bundle("portal.js.bundle", "application/javascript; charset=utf-8")
 
-    def _serve_bundle(self, manifest, content_type):
-        files = []
-        enabled = True
+    def _portal_flags(self):
         flags = {"HAS_DISPLAY", "HAS_STORAGE_BROWSER", "HAS_SOUND_PLAYER", "HAS_NATIVE_EXTENSIONS", "HAS_MQTT"} if self._profile() in ("esp32-p4-lcd4b", "jc3248w535") else {"IS_EPAPER_FRAME", "HAS_MQTT"}
         if self._profile() == "esp32-p4-lcd4b":
             flags.add("HAS_HA_LIVE")
@@ -1772,13 +1772,42 @@ class PortalHandler(SimpleHTTPRequestHandler):
             flags = {"HAS_DISPLAY", "HAS_MQTT", "HAS_AUTO_SHUTDOWN"}
         if "HAS_DISPLAY" in flags:
             flags.add("HAS_FACE_WIDGET")
+            info = self._device_info()
+            if info.get("psram_size", 0) > 0:
+                flags.add("HAS_PSRAM")
+            flags.update(gate for gate in ("HAS_TOUCH", "HAS_USB_HID", "HAS_BLE_HID")
+                         if info.get(gate.lower()) is True)
         if self._profile() == "jc3248w535":
             flags.discard("HAS_SOUND_PLAYER")
+        return flags
+
+    def _serve_bundle(self, manifest, content_type):
+        files = []
+        enabled = True
+        flags = self._portal_flags()
+
+        def condition(expression):
+            expression = re.sub(r"\b[A-Z_][A-Z0-9_]*\b",
+                                lambda match: str(match[0] in flags), expression)
+            expression = expression.replace("&&", " and ").replace("||", " or ").replace("!", " not ")
+
+            def evaluate(node):
+                if isinstance(node, ast.Constant):
+                    return bool(node.value)
+                if isinstance(node, ast.BoolOp) and isinstance(node.op, (ast.And, ast.Or)):
+                    values = [evaluate(value) for value in node.values]
+                    return all(values) if isinstance(node.op, ast.And) else any(values)
+                if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+                    return not evaluate(node.operand)
+                raise ValueError("Invalid mock portal gate")
+
+            return evaluate(ast.parse(expression.strip(), mode="eval").body)
+
         for line in expand_bundle(APP_WEB_DIR / manifest).splitlines():
             line = line.strip()
             if line.startswith("# [chunk:"):
-                chunk = line.removeprefix("# [chunk:").removesuffix("]").split()
-                enabled = all(flag in flags for flag in chunk[1:])
+                chunk = line.removeprefix("# [chunk:").removesuffix("]").split(maxsplit=1)
+                enabled = condition(chunk[1]) if len(chunk) > 1 else True
             elif enabled and line and not line.startswith("#"):
                 source = APP_WEB_DIR / line
                 files.append(source if source.is_file() else EPAPER_WEB_DIR / line)

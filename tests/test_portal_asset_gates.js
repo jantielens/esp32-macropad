@@ -4,10 +4,10 @@ const path = require('node:path');
 const os = require('node:os');
 const vm = require('node:vm');
 const zlib = require('node:zlib');
+const fs = require('node:fs');
 
 const root = path.resolve(__dirname, '..');
-const fs = require('node:fs');
-const nativeDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dialog-gates-'));
+const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'portal-gates-'));
 try {
     for (const buttons of [0, 1]) {
         for (const module of [
@@ -16,7 +16,7 @@ try {
             'widgets/bar_chart_widget.cpp', 'widgets/gauge_widget.cpp', 'widgets/sparkline_widget.cpp',
             'widgets/face_widget.cpp'
         ]) {
-            const object = path.join(nativeDirectory, 'module.o');
+            const object = path.join(directory, 'module.o');
             execFileSync('c++', ['-std=c++17', '-c', 'src/app/' + module, '-o', object,
                 '-DBOARD_CONFIG_H', '-DHAS_DISPLAY=0', '-DHAS_BUTTON=' + buttons,
                 '-Itests', '-Isrc/app'], {cwd: root, stdio: 'pipe'});
@@ -24,24 +24,24 @@ try {
                 module + ' must emit no code or data without a display (HAS_BUTTON=' + buttons + ')');
         }
     }
-    for (const module of ['external_data.cpp', 'external_data_config.cpp', 'ext_binding.cpp']) {
-        const object = path.join(nativeDirectory, 'external.o');
-        execFileSync('c++', ['-std=c++17', '-c', 'src/app/' + module, '-o', object,
-            '-DBOARD_CONFIG_H', '-DHAS_EXTERNAL_DATA=0', '-Itests', '-Isrc/app'],
-            {cwd: root, stdio: 'pipe'});
-        assert.equal(execFileSync('nm', ['--defined-only', object], {encoding: 'utf8'}).trim(), '',
-            module + ' must emit no code or data when external data is disabled');
-    }
-    for (const module of ['audio_input.cpp', 'web_portal_live_microphone.cpp']) {
-        const object = path.join(nativeDirectory, 'microphone.o');
-        execFileSync('c++', ['-std=c++17', '-c', 'src/app/' + module, '-o', object,
-            '-DBOARD_CONFIG_H', '-DHAS_AUDIO_INPUT=0', '-DHAS_MICROPHONE_STREAMING=0',
-            '-Itests', '-Isrc/app'], {cwd: root, stdio: 'pipe'});
-        assert.equal(execFileSync('nm', ['--defined-only', object], {encoding: 'utf8'}).trim(), '',
-            module + ' must emit no code or data without microphone input');
+    for (const [flag, modules] of [
+        ['HAS_EXTERNAL_DATA', ['external_data.cpp', 'external_data_config.cpp', 'ext_binding.cpp']],
+        ['HAS_VOICE_NOTES', ['voice_notes.cpp', 'voice_notes_binding.cpp', 'voice_note_range.cpp', 'voice_notes_metadata.cpp',
+            'voice_notes_processing.cpp', 'voice_notes_transcription_request.cpp',
+            'voice_notes_enrichment.cpp', 'voice_notes_enrichment_request.cpp']],
+        ['HAS_AUTO_SHUTDOWN', ['auto_shutdown.cpp']],
+        ['HAS_AUDIO_INPUT', ['audio_input.cpp', 'web_portal_live_microphone.cpp']]
+    ]) {
+        for (const module of modules) {
+            const object = path.join(directory, 'disabled.o');
+            execFileSync('c++', ['-std=c++17', '-c', 'src/app/' + module, '-o', object,
+                '-DBOARD_CONFIG_H', '-D' + flag + '=0', '-DHAS_MICROPHONE_STREAMING=0', '-Itests', '-Isrc/app'],
+                {cwd: root, stdio: 'pipe'});
+            assert.equal(execFileSync('nm', ['--defined-only', object], {encoding: 'utf8'}).trim(), '', module);
+        }
     }
     for (const streaming of [0, 1]) {
-        const object = path.join(nativeDirectory, 'microphone-component.o');
+        const object = path.join(directory, 'microphone-component.o');
         execFileSync('c++', ['-std=c++17', '-c', 'src/app/components/microphone_component.cpp',
             '-o', object, '-DHAS_AUDIO_INPUT=1', '-DHAS_MICROPHONE_STREAMING=' + streaming,
             '-Itests/live_microphone_overrides', '-Itests/audio_input_overrides', '-Itests', '-Isrc/app',
@@ -49,292 +49,187 @@ try {
             '-include', 'tests/log_manager.h', '-include', 'tests/board_config.h'],
             {cwd: root, stdio: 'pipe'});
         const symbols = execFileSync('nm', ['-C', object], {encoding: 'utf8'});
-        assert.equal(symbols.includes('handleLiveMicrophoneStream'), !!streaming,
-            'Only streaming-enabled components may reference the stream handler');
+        assert.equal(symbols.includes('handleLiveMicrophoneStream'), !!streaming);
         assert(symbols.includes('microphone_levels'));
         assert(symbols.includes('microphone_settings_body'));
     }
-    for (const module of ['voice_notes.cpp', 'voice_notes_binding.cpp', 'voice_note_range.cpp', 'voice_notes_metadata.cpp',
-        'voice_notes_processing.cpp', 'voice_notes_transcription_request.cpp',
-        'voice_notes_enrichment.cpp', 'voice_notes_enrichment_request.cpp']) {
-        const object = path.join(nativeDirectory, 'voice-notes.o');
-        execFileSync('c++', ['-std=c++17', '-c', 'src/app/' + module, '-o', object,
-            '-DBOARD_CONFIG_H', '-DHAS_VOICE_NOTES=0', '-Itests', '-Isrc/app'],
-            {cwd: root, stdio: 'pipe'});
-        assert.equal(execFileSync('nm', ['--defined-only', object], {encoding: 'utf8'}).trim(), '',
-            module + ' must emit no code or data when Voice Notes is disabled');
-    }
-    const shutdownObject = path.join(nativeDirectory, 'shutdown.o');
-    execFileSync('c++', ['-std=c++17', '-c', 'src/app/auto_shutdown.cpp', '-o', shutdownObject,
-        '-DBOARD_CONFIG_H', '-DHAS_AUTO_SHUTDOWN=0', '-Itests', '-Isrc/app'],
-        {cwd: root, stdio: 'pipe'});
-    assert.equal(execFileSync('nm', ['--defined-only', shutdownObject], {encoding: 'utf8'}).trim(), '',
-        'Disabled auto-shutdown must emit no policy code or data');
-} finally {
-    fs.rmSync(nativeDirectory, {recursive: true, force: true});
-}
-const headlessMqttObject = path.join(os.tmpdir(), 'mqtt-inspection-headless-' + process.pid + '.o');
-try {
-    execFileSync('c++', ['-std=c++17', '-c', 'src/app/mqtt_inspection.cpp', '-o', headlessMqttObject,
-        '-DBOARD_CONFIG_H', '-DHAS_DISPLAY=0', '-DHAS_MQTT=1',
-        '-Itests', '-Isrc/app'], {cwd: root, stdio: 'pipe'});
-    assert.equal(execFileSync('nm', ['--defined-only', headlessMqttObject], {encoding: 'utf8'}).trim(), '',
-        'MQTT inspection must emit no code or data without a display');
-} finally {
-    fs.rmSync(headlessMqttObject, {force: true});
-}
-const widgets = JSON.parse(fs.readFileSync(path.join(root, 'src/app/widgets/manifest.json'), 'utf8'));
-const expanded = execFileSync('python3', ['tools/widget_manifest.py', '--bundle', 'src/app/web/portal.js.bundle'],
-    {cwd: root, encoding: 'utf8'});
-const modules = expanded.split('\n').filter(line => /^portal_widget_/.test(line) && line !== 'portal_widget_editor.js');
-assert.equal(modules.length, new Set(modules).size, 'Shared widget modules must execute once');
-assert.equal(modules.length, new Set(widgets.filter(widget => widget.portal).map(widget => widget.portal.js)).size);
-execFileSync('bash', ['tools/minify-web-assets.sh', 'esp32-macropad', 'ESP32 Macropad'],
-    {cwd: root, stdio: 'pipe'});
+    const mqttObject = path.join(directory, 'mqtt.o');
+    execFileSync('c++', ['-std=c++17', '-c', 'src/app/mqtt_inspection.cpp', '-o', mqttObject,
+        '-DBOARD_CONFIG_H', '-DHAS_DISPLAY=0', '-DHAS_MQTT=1', '-Itests', '-Isrc/app'], {cwd: root});
+    assert.equal(execFileSync('nm', ['--defined-only', mqttObject], {encoding: 'utf8'}).trim(), '');
 
-const guards = execFileSync('awk', [
-    '/^#if / { guard = substr($0, 5) } /^const uint8_t portal_js_gz\\[/ { print guard }',
-    'src/app/web_assets.h'
-], {cwd: root, encoding: 'utf8'}).trim().split('\n');
-const flags = [...new Set(guards.join(' ').match(/\b(?:HAS|IS)_[A-Z_0-9]+\b/g))];
-const independent = flags.filter(flag => flag.startsWith('HAS_'));
-const classes = flags.filter(flag => flag.startsWith('IS_'));
-const predicates = guards.map(guard => new Function(...flags, 'return ' + guard + ';'));
-assert(guards.length <= 512, 'Distinct portal bundles must remain within the asset variant cap');
-for (let mask = 0; mask < 2 ** independent.length; mask++) {
-    for (const deviceClass of [null, ...classes]) {
-        const enabled = new Set(independent.filter((_, bit) => mask & (1 << bit)));
-        if (deviceClass) enabled.add(deviceClass);
-        const values = flags.map(flag => enabled.has(flag));
-        assert.equal(predicates.filter(predicate => predicate(...values)).length, 1,
-            'Exactly one combined portal bundle must match ' + [...enabled].join(', '));
-    }
-}
+    const widgets = JSON.parse(fs.readFileSync(path.join(root, 'src/app/widgets/manifest.json'), 'utf8'));
+    const expanded = execFileSync('python3', ['tools/widget_manifest.py', '--bundle', 'src/app/web/portal.js.bundle'],
+        {cwd: root, encoding: 'utf8'});
+    const modules = expanded.split('\n').filter(line => /^portal_widget_/.test(line) && line !== 'portal_widget_editor.js');
+    assert.equal(modules.length, new Set(modules).size, 'Shared widget modules must execute once');
+    assert.equal(modules.length, new Set(widgets.map(widget => widget.portal.js)).size);
 
-for (const [board, target, psram, integrationMode = 'default', epaperProfile = false] of [
-    ['esp32c3-withsensors', 'ESP32C3', false],
-    ['esp32-p4-lcd4b', 'ESP32P4', true],
-    ['esp32-p4-lcd4b', 'ESP32P4', true, 'face-disabled'],
-    ['esp32-p4-lcd4b', 'ESP32P4', true, 'external-disabled'],
-    ['esp32-p4-lcd4b', 'ESP32P4', true, 'bluetooth-disabled'],
-    ['esp32-p4-lcd4b', 'ESP32P4', true, 'microphone-disabled'],
-    ['esp32-p4-lcd4b', 'ESP32P4', false],
-    ['esp32-p4-lcd4b', 'ESP32P4', false, 'builtin-only'],
-    ['esp32-p4-lcd4b', 'ESP32P4', true, 'ha-only'],
-    ['reterminal-e1003-frame', 'ESP32S3', true, 'default', true]
-]) {
-    const source = execFileSync('c++', ['-E', '-P', '-x', 'c++', 'src/app/web_assets.h',
-        '-Itests', '-Isrc/boards/' + board, '-DBOARD_HAS_OVERRIDE', '-DCONFIG_IDF_TARGET_' + target,
-        ...(psram ? ['-DBOARD_HAS_PSRAM'] : []),
-        ...(integrationMode === 'builtin-only' ? ['-DHAS_MQTT=0', '-DHAS_HA_LIVE=0'] : []),
-        ...(integrationMode === 'ha-only' ? ['-DHAS_MQTT=0', '-DHAS_HA_LIVE=1'] : []),
-        ...(integrationMode === 'face-disabled' ? ['-DHAS_FACE_WIDGET=0'] : []),
-        ...(integrationMode === 'bluetooth-disabled' ? ['-DHAS_BLE=0', '-DHAS_BLE_HID=0'] : []),
-        ...(integrationMode === 'microphone-disabled' ? ['-DHAS_MICROPHONE_STREAMING=0'] : []),
-        ...(integrationMode === 'external-disabled' ? ['-DHAS_EXTERNAL_DATA=0'] : [])],
-        {cwd: root, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe']});
-    const assets = new Map();
-    const pattern = /const uint8_t (\w+_gz)\[\] PROGMEM = \{([\s\S]*?)\};/g;
-    for (const match of source.matchAll(pattern)) {
-        assert(!assets.has(match[1]), 'Duplicate selected asset: ' + match[1]);
-        const bytes = Buffer.from([...match[2].matchAll(/0x([0-9a-f]{2})/g)].map(value => parseInt(value[1], 16)));
-        assets.set(match[1], zlib.gunzipSync(bytes).toString());
-    }
-
-    assert(assets.has('portal_js_gz'));
-    const voiceNotes = false;
-    assert.equal(assets.has('voice_notes_fragment_html_gz'), voiceNotes);
-    assert.equal(assets.has('voice_notes_settings_fragment_html_gz'), voiceNotes);
-    assert.equal(assets.has('portal_voice_notes_js_gz'), voiceNotes);
-    assert.equal(assets.has('bluetooth_fragment_html_gz'),
-        board !== 'reterminal-e1003-frame' && integrationMode !== 'bluetooth-disabled',
-        'Bluetooth fragment must follow HAS_BLE || HAS_BLE_HID independently of display and HID transport');
-    assert.equal(assets.has('portal_bluetooth_js_gz'), assets.has('bluetooth_fragment_html_gz'),
-        'Bluetooth script and fragment must share their feature gate');
-    if (!epaperProfile) {
-        assert(!assets.has('epaper_refresh_fragment_html_gz'));
-        assert(!assets.has('portal_epaper_refresh_js_gz'));
-    }
-    for (const [name, text] of assets) {
-        if (!epaperProfile) {
-            assert(!text.includes('epaper_bw_conversion'), 'E-paper conversion leaked into ' + board + '/' + name);
-            assert(!text.includes('epaper_bw_threshold'), 'E-paper threshold leaked into ' + board + '/' + name);
+    const profiles = [
+        ['esp32c3-withsensors', 'ESP32C3', false],
+        ['esp32c3-withsensors', 'ESP32C3', false, ['HAS_BUTTON=1', 'HAS_MQTT=1']],
+        ['esp32-p4-lcd4b', 'ESP32P4', true],
+        ['esp32-p4-lcd4b', 'ESP32P4', true, ['HAS_FACE_WIDGET=0']],
+        ['esp32-p4-lcd4b', 'ESP32P4', true, ['HAS_EXTERNAL_DATA=0']],
+        ['esp32-p4-lcd4b', 'ESP32P4', true, ['HAS_BLE=0', 'HAS_BLE_HID=0']],
+        ['esp32-p4-lcd4b', 'ESP32P4', true, ['HAS_MICROPHONE_STREAMING=0']],
+        ['esp32-p4-lcd4b', 'ESP32P4', false],
+        ['esp32-p4-lcd4b', 'ESP32P4', false, ['HAS_MQTT=0', 'HAS_HA_LIVE=0']],
+        ['esp32-p4-lcd4b', 'ESP32P4', true, ['HAS_MQTT=0', 'HAS_HA_LIVE=1']],
+        ['esp32-p4-lcd4b', 'ESP32P4', true, ['HAS_CAMERA=0', 'HAS_NATIVE_EXTENSIONS=0', 'HAS_TOUCH=0', 'HAS_SOUND_PLAYER=0', 'HAS_IMAGE_LIBRARY=0', 'HAS_BUTTON=0']],
+        ['reterminal-e1003-frame', 'ESP32S3', true],
+        ['reterminal-sticky-interactive', 'ESP32S3', true],
+        ['reterminal-sticky-interactive-sd', 'ESP32S3', true],
+        ['m5stack-stopwatch', 'ESP32S3', true],
+        ['jc3248w535', 'ESP32S3', true],
+        ['jc4880p433-shutter', 'ESP32P4', true],
+        ['esp32-p4-lcd4b', 'ESP32P4', true, ['ALARM_ENABLED=0', 'HAS_USB_HID=0', 'HAS_BLE_HID=0']]
+    ];
+    for (const [index, [board, target, psram, overrides = []]] of profiles.entries()) {
+        const output = path.join(directory, String(index));
+        const compiler = ['c++', '-Isrc/app', '-Itests', '-Isrc/boards/' + board, '-DBOARD_HAS_OVERRIDE',
+            '-DCONFIG_IDF_TARGET_' + target, ...(psram ? ['-DBOARD_HAS_PSRAM'] : []),
+            ...overrides.map(flag => '-D' + flag)];
+        if (overrides.length) {
+            const overrideHeader = path.join(directory, 'overrides-' + index + '.h');
+            fs.writeFileSync(overrideHeader, '#include "' + path.join(root, 'src/app/board_config.h') + '"\n' +
+                overrides.map(flag => {
+                    const [name, value] = flag.split('=');
+                    return '#undef ' + name + '\n#define ' + name + ' ' + value + '\n';
+                }).join(''));
+            compiler.push('-include', overrideHeader);
         }
-        if (name.endsWith('_js_gz')) new vm.Script(text, {filename: board + '/' + name});
-    }
-    const js = assets.get('portal_js_gz');
-    const microphone = board === 'esp32-p4-lcd4b' && integrationMode !== 'microphone-disabled';
-    const audioInput = board === 'esp32-p4-lcd4b';
-    assert.equal(assets.has('microphone_fragment_html_gz'), audioInput);
-    assert.equal(assets.has('portal_microphone_js_gz'), audioInput);
-    if (audioInput) assert.equal(assets.get('microphone_fragment_html_gz').includes('Hear microphone'), microphone);
-    assert.equal(assets.has('portal_live_microphone_js_gz'), microphone);
-    assert(!js.includes('portalStreamFetch'), 'Microphone fetch hook leaked into the shared bundle');
-    for (const name of ['init_bluetooth_fragment', 'bluetooth_tx_power_dbm', 'bthome_event_burst_ms']) {
-        assert(!js.includes(name), 'Bluetooth component code leaked into the shared bundle: ' + name);
-        if (assets.has('portal_bluetooth_js_gz')) assert(assets.get('portal_bluetooth_js_gz').includes(name));
-    }
-    assert(js.includes('function uploadFirmware('), 'HTML upload callback was removed');
-    assert(js.includes('function saveFragmentConfig('), 'Fragment save callback was removed');
-    const display = board === 'esp32-p4-lcd4b';
-    const face = display && integrationMode !== 'face-disabled';
-    assert.equal(js.includes('widget_face_style'), face, 'Face editor JS must follow HAS_FACE_WIDGET');
-    assert.equal(js.includes('widget_face_liveliness'), face, 'Face validation must follow HAS_FACE_WIDGET');
-    const padEditor = assets.get('pad_editor_fragment_html_gz') || '';
-    assert.equal(padEditor.includes('id="pad-edit-face-widget-option"'), face,
-        'Face selector option must follow HAS_FACE_WIDGET');
-    assert.equal(padEditor.includes('id="pad-edit-face-section"'), face,
-        'Face editor HTML must follow HAS_FACE_WIDGET');
-    const external = display && psram && integrationMode !== 'external-disabled';
-    assert.equal(assets.has('external_data_fragment_html_gz'), external);
-    assert.equal(assets.has('portal_external_data_js_gz'), external);
-    assert(!js.includes('externalDataBuilderProvider'), 'External builder must not leak into the shared bundle');
-    if (external) assert(assets.get('portal_external_data_js_gz').includes('externalDataBuilderProvider'),
-        'External builder must be included in the gated External Data asset');
-    const ha = display && psram && integrationMode !== 'builtin-only';
-    const mqtt = display && !['builtin-only', 'ha-only'].includes(integrationMode);
-    const shell = assets.get('shell_html_gz');
-    assert.equal(shell.includes('src="/portal-live-microphone.js'), microphone);
-    if (microphone) assert(shell.indexOf('src="/portal-live-microphone.js') < shell.indexOf('src="/portal.js'));
-    assert(!shell.includes('portal_power_savings.js'));
-    assert(!assets.has('power_savings_fragment_html_gz'));
-    assert(!assets.has('portal_power_savings_js_gz'));
-    assert.equal(shell.includes('id="binding-help-overlay"'), display, 'Binding dialog HTML must follow HAS_DISPLAY');
-    assert.equal(js.includes('function haBindingBuilderHTML('), ha, 'HA builder JS must follow HAS_HA_LIVE');
-    assert.equal(js.includes('const haButtonBuilderProvider='), ha, 'HA button source provider must follow HAS_HA_LIVE');
-    assert.equal(js.includes('function padButtonBuilderOpen('), display, 'Shared button builder must follow HAS_DISPLAY');
-    assert.equal(js.includes('const padButtonBuilders='), display, 'Shared button templates must follow HAS_DISPLAY');
-    assert.equal(js.includes('function bindingBuilderToken('), display, 'Shared builder helpers must follow HAS_DISPLAY');
-    assert.equal(js.includes('function showBindingBuilder('), display, 'Binding dialog must follow HAS_DISPLAY');
-    assert.equal(js.includes('function bindingBuilderFormatControlsHTML('), display);
-    assert.equal(js.includes('const catalogBindingProvider='), display,
-        'Catalog binding provider must follow HAS_DISPLAY');
-    assert.equal(js.includes('const mqttBindingProvider='), mqtt,
-        'MQTT binding provider must require HAS_MQTT and HAS_DISPLAY');
-    assert.equal(js.includes('catalogButtonBuilderProvider='), display,
-        'Catalog button scenarios must be available without integrations');
-    assert.equal(js.includes('mqttButtonBuilderProvider='), mqtt,
-        'MQTT button scenarios must follow the binding-provider gates');
-    if (display) {
-        const shared = js.indexOf('const BUTTON_BUILDER_PROVIDERS=');
-        const templates = js.indexOf('const padButtonBuilders=');
-        const dialog = js.indexOf('function padButtonBuilderOpen(');
-        assert(shared >= 0 && shared < templates && templates < dialog,
-            'Shared provider registry and scenarios must precede the button dialog');
-        for (const [provider, enabled] of [
-            ['catalogButtonBuilderProvider=', true],
-            ['mqttButtonBuilderProvider=', mqtt],
-            ['const haButtonBuilderProvider=', ha]
+        execFileSync('python3', ['tools/portal_assets.py', 'esp32-macropad', 'ESP32 Macropad',
+            '--cpp-command', JSON.stringify(compiler), '--output-dir', output], {cwd: root, stdio: 'pipe'});
+        const header = fs.readFileSync(path.join(output, 'web_assets.h'), 'utf8');
+        const {conditions, sizes} = JSON.parse(fs.readFileSync(path.join(output, 'portal-assets.json')));
+        const selected = execFileSync(compiler[0], [...compiler.slice(1), '-I' + output,
+            '-E', '-P', '-x', 'c++', path.join(output, 'web_assets.h')],
+        {cwd: root, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, stdio: 'pipe'});
+        const assets = new Map();
+        for (const match of selected.matchAll(/const uint8_t (\w+_gz)\[\] PROGMEM = \{([\s\S]*?)\};/g)) {
+            assert(!assets.has(match[1]), 'Duplicate selected asset: ' + match[1]);
+            const bytes = Buffer.from([...match[2].matchAll(/0x([0-9a-f]{2})/g)].map(value => parseInt(value[1], 16)));
+            assert.equal(bytes.length, sizes[match[1]]);
+            assets.set(match[1], zlib.gunzipSync(bytes).toString());
+        }
+        assert.equal((header.match(/const uint8_t portal_js_gz\[/g) || []).length, 1,
+            'Generate exactly one bundle, not a combination matrix');
+        for (const [name, text] of assets) if (name.endsWith('_js_gz')) new vm.Script(text, {filename: board + '/' + name});
+        const js = assets.get('portal_js_gz');
+        const css = assets.get('portal_all_css_gz');
+        const shell = assets.get('shell_html_gz');
+        const pad = assets.get('pad_editor_fragment_html_gz') || '';
+        assert(js && css && shell);
+        for (const callback of ['uploadFirmware', 'saveFragmentConfig', 'init_wifi_fragment']) assert(js.includes(callback));
+        for (const [gate, marker] of [
+            ['HAS_DISPLAY', 'init_screen_preview_fragment'],
+            ['HAS_DISPLAY', 'init_pad_editor_fragment'],
+            ['HAS_DISPLAY', 'function actionEditorPopulateScreens('],
+            ['HAS_AUDIO', 'init_volume_fragment'],
+            ['HAS_AUDIO', 'updateAmplifierSettings'],
+            ['HAS_MQTT', 'init_mqtt_fragment'],
+            ['HAS_BUTTON', 'HW_BUTTON_PREFIXES'],
+            ['HAS_MQTT && (HAS_DISPLAY || HAS_BUTTON)', 'MQTT_TRIGGER_PREFIXES'],
+            ['HAS_MCP', 'init_mcp_fragment'],
+            ['HAS_SOUND_PLAYER', 'function loadSoundList('],
+            ['HAS_HA_LIVE', 'function haBindingBuilderHTML('],
+            ['HAS_NATIVE_EXTENSIONS', 'init_extensions_fragment'],
+            ['HAS_IMAGE_LIBRARY', 'init_image_library_fragment'],
+            ['IS_COFFEE_SCALE', 'function actionEditorLoadBrewTemplates(']
         ]) {
-            if (enabled) assert(shared < js.indexOf(provider) && js.indexOf(provider) < templates,
-                provider + ' must register after the shared registry and before scenarios');
+            // Some modules require an action-editor host as well as their owner.
+            const enabled = conditions[gate] && (gate !== 'IS_COFFEE_SCALE' || conditions['HAS_DISPLAY || HAS_BUTTON']);
+            assert.equal(js.includes(marker), !!enabled, board + '/' + marker);
         }
-    }
-    assert.equal(js.includes("Build a Home Assistant binding"), ha, 'HA shortcut registration must follow HAS_HA_LIVE');
-    assert.equal(assets.has('dialog_appearance_fragment_html_gz'), display);
-    assert.equal(js.includes('init_dialog_appearance_fragment'), display);
-    const css = assets.get('portal_all_css_gz');
-    assert(css, 'Main stylesheet must be selected');
-    assert.equal(css.includes('.binding-docs-modal'), display, 'Binding reference CSS must follow HAS_DISPLAY');
-    assert.equal(css.includes('.binding-tools-menu'), display, 'Binding tools menu CSS must follow HAS_DISPLAY');
-    assert.equal(css.includes('.binding-builder-step'), display, 'Shared builder CSS must follow HAS_DISPLAY');
-    assert.equal(css.includes('.pad-button-builder-entry'), display, 'Button builder CSS must follow HAS_DISPLAY');
-    assert.equal(css.includes('.dialog-appearance-layout'), display);
-    assert.equal(assets.has('fonts_fragment_html_gz'), display && psram);
-    assert.equal(assets.has('portal_fonts_js_gz'), display && psram);
-    if (display && psram) {
-        const fonts = assets.get('fonts_fragment_html_gz');
-        const idPattern = fonts.match(/pattern="([^"]+)"/)[1];
-        const validId = new RegExp('^(?:' + idPattern + ')$', 'v');
-        assert(validId.test('my-font_1'));
-        assert(!validId.test('Bad.ttf'));
-        assert(!validId.test('../font'));
-        assert(fonts.includes('portal-icon-fallback'));
-        assert(assets.get('portal_fonts_js_gz').includes('portal-icon-fallback'));
-        assert(!fonts.includes('data-icon='));
-    }
-    assert.equal(js.includes('function showBindingHelp('), display);
-    assert.equal(js.includes('function bindingValidateHomeConfig('), display);
-    assert.equal(js.includes('init_extensions_fragment'), display);
-    if (!epaperProfile) {
-        for (const stem of ['mcp', 'recipes', 'recipe_catalog', 'extensions']) {
-            assert.equal(assets.has(stem + '_fragment_html_gz'), display, stem);
+        for (const widget of widgets) {
+            const gate = [...widget.gates, ...(widget.any_gates ? ['(' + widget.any_gates.join(' || ') + ')'] : [])].join(' && ');
+            const enabled = conditions[gate];
+            assert.equal(pad.includes('id="pad-edit-' + widget.type + '-widget-option"'), enabled, board + '/' + widget.type);
         }
-    }
-    if (!display && !epaperProfile) {
-        for (const stem of ['music', 'camera_motion', 'mqtt_triggers', 'hw_buttons', 'feedback', 'storage']) {
-            assert(!assets.has(stem + '_fragment_html_gz'), 'Headless-unused asset: ' + stem);
+        for (const [gate, symbol] of [
+            ['ALARM_ENABLED', 'portal_alarms_js_gz'],
+            ['HAS_EXTERNAL_DATA', 'portal_external_data_js_gz'],
+            ['HAS_MICROPHONE_STREAMING', 'portal_live_microphone_js_gz'],
+            ['HAS_AUDIO_INPUT', 'portal_microphone_js_gz'],
+            ['HAS_VOICE_NOTES', 'portal_voice_notes_js_gz'],
+            ['HAS_TTF_FONTS', 'portal_fonts_js_gz'],
+            ['HAS_REMOTE_LOG', 'portal_logs_js_gz'],
+            ['HAS_AUTO_SHUTDOWN', 'portal_power_savings_js_gz'],
+            ['HAS_BLE || HAS_BLE_HID', 'portal_bluetooth_js_gz']
+        ]) assert.equal(assets.has(symbol), conditions[gate], board + '/' + symbol);
+        for (const [gate, symbol] of [
+            ['ALARM_ENABLED', 'alarm_schedule_fragment_html_gz'],
+            ['ALARM_ENABLED', 'alarm_behavior_fragment_html_gz'],
+            ['HAS_EXTERNAL_DATA', 'external_data_fragment_html_gz'],
+            ['HAS_VOICE_NOTES', 'voice_notes_fragment_html_gz'],
+            ['HAS_VOICE_NOTES', 'voice_notes_settings_fragment_html_gz'],
+            ['HAS_AUDIO_INPUT', 'microphone_fragment_html_gz'],
+            ['HAS_TTF_FONTS', 'fonts_fragment_html_gz'],
+            ['HAS_BLE || HAS_BLE_HID', 'bluetooth_fragment_html_gz']
+        ]) {
+            assert.equal(assets.has(symbol), conditions[gate], board + '/' + symbol);
+            const id = symbol.replace(/_fragment_html_gz$/, '').replaceAll('_', '-');
+            assert.equal(selected.includes('{"' + id + '", ' + symbol), conditions[gate],
+                'Fragment dispatch table must contain only selected assets');
         }
-    }
-    console.log('PASS: selected, valid minified assets for ' + board +
-        ' (PSRAM=' + psram + ', integrations=' + integrationMode + ')');
-}
-
-for (const board of ['reterminal-sticky-interactive', 'reterminal-sticky-interactive-sd', 'm5stack-stopwatch']) {
-    const selected = execFileSync('c++', ['-E', '-P', '-x', 'c++', 'src/app/web_assets.h',
-        '-Itests', '-Isrc/boards/' + board, '-DBOARD_HAS_OVERRIDE',
-        '-DCONFIG_IDF_TARGET_ESP32S3', '-DBOARD_HAS_PSRAM'],
-        {cwd: root, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024});
-    const decodeAsset = symbol => {
-        const content = selected.match(new RegExp('const uint8_t ' + symbol + '\\[\\] PROGMEM = \\{([\\s\\S]*?)\\};'))[1];
-        return zlib.gunzipSync(Buffer.from([...content.matchAll(/0x([0-9a-f]{2})/g)].map(value => parseInt(value[1], 16)))).toString();
-    };
-    assert(selected.includes('power_savings_fragment_html_gz'));
-    const voiceClips = board === 'reterminal-sticky-interactive-sd';
-    assert.equal(selected.includes('voice_notes_fragment_html_gz'), voiceClips);
-    assert.equal(selected.includes('voice_notes_settings_fragment_html_gz'), voiceClips);
-    assert.equal(selected.includes('portal_voice_notes_js_gz'), voiceClips);
-    assert.equal(selected.includes('portal_bluetooth_js_gz'), selected.includes('bluetooth_fragment_html_gz'));
-    if (selected.includes('portal_bluetooth_js_gz')) new vm.Script(decodeAsset('portal_bluetooth_js_gz'));
-    if (voiceClips) new vm.Script(decodeAsset('portal_voice_notes_js_gz'));
-    assert(decodeAsset('shell_html_gz').includes('src="/portal_power_savings.js'));
-    const microphone = board !== 'm5stack-stopwatch';
-    const shell = decodeAsset('shell_html_gz');
-    assert.equal(selected.includes('portal_live_microphone_js_gz'), microphone);
-    assert.equal(selected.includes('microphone_fragment_html_gz'), microphone);
-    assert.equal(selected.includes('portal_microphone_js_gz'), microphone);
-    assert.equal(shell.includes('src="/portal-live-microphone.js'), microphone);
-    if (microphone) assert(shell.indexOf('src="/portal-live-microphone.js') < shell.indexOf('src="/portal.js'));
-    new vm.Script(decodeAsset('portal_power_savings_js_gz'));
-    console.log('PASS: gated power savings assets for ' + board);
-}
-
-for (const shutdown of [0, 1]) {
-    for (const display of [0, 1]) {
-        for (const microphone of [0, 1]) {
-            const selected = execFileSync('c++', ['-E', '-P', '-x', 'c++', 'src/app/web_assets.h',
-                '-Itests', '-DBOARD_CONFIG_H', '-DHAS_AUTO_SHUTDOWN=' + shutdown,
-                '-DHAS_DISPLAY=' + display, '-DHAS_MICROPHONE_STREAMING=' + microphone],
-                {cwd: root, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024});
-            const shells = [...selected.matchAll(/const uint8_t shell_html_gz\[\] PROGMEM = \{([\s\S]*?)\};/g)];
-            assert.equal(shells.length, 1, 'Each shell feature combination must select exactly one asset');
-            const bytes = Buffer.from([...shells[0][1].matchAll(/0x([0-9a-f]{2})/g)].map(value => parseInt(value[1], 16)));
-            const shell = zlib.gunzipSync(bytes).toString();
-            assert.equal(shell.includes('src="/portal_power_savings.js'), !!shutdown);
-            assert.equal(shell.includes('id="binding-help-overlay"'), !!display);
-            assert.equal(shell.includes('src="/portal-live-microphone.js'), !!microphone);
-            if (microphone) assert(shell.indexOf('src="/portal-live-microphone.js') < shell.indexOf('src="/portal.js'));
+        for (const [marker, enabled] of [
+            ['function showBindingHelp(', conditions.HAS_DISPLAY],
+            ['function bindingValidateHomeConfig(', conditions.HAS_DISPLAY],
+            ['function padButtonBuilderOpen(', conditions.HAS_DISPLAY],
+            ['function bindingBuilderToken(', conditions.HAS_DISPLAY],
+            ['function showBindingBuilder(', conditions.HAS_DISPLAY],
+            ['function bindingBuilderFormatControlsHTML(', conditions.HAS_DISPLAY],
+            ['const catalogBindingProvider=', conditions.HAS_DISPLAY],
+            ['const mqttBindingProvider=', conditions['HAS_MQTT && HAS_DISPLAY']],
+            ['mqttButtonBuilderProvider=', conditions['HAS_MQTT && HAS_DISPLAY']],
+            ['catalogButtonBuilderProvider=', conditions.HAS_DISPLAY],
+            ['const haButtonBuilderProvider=', conditions.HAS_HA_LIVE]
+        ]) assert.equal(js.includes(marker), enabled, board + '/' + marker);
+        if (conditions.HAS_DISPLAY) {
+            const shared = js.indexOf('const BUTTON_BUILDER_PROVIDERS=');
+            const templates = js.indexOf('const padButtonBuilders=');
+            const dialog = js.indexOf('function padButtonBuilderOpen(');
+            assert(shared >= 0 && shared < templates && templates < dialog);
+            for (const provider of ['catalogButtonBuilderProvider=', 'mqttButtonBuilderProvider=', 'const haButtonBuilderProvider=']) {
+                if (js.includes(provider)) assert(shared < js.indexOf(provider) && js.indexOf(provider) < templates);
+            }
         }
-
-        for (const [input, stream] of [[0, 0], [1, 0], [1, 1]]) {
-            const selected = execFileSync('c++', ['-E', '-P', '-x', 'c++', 'src/app/web_assets.h',
-                '-Itests', '-DBOARD_CONFIG_H', '-DHAS_AUDIO_INPUT=' + input,
-                '-DHAS_MICROPHONE_STREAMING=' + stream],
-                {cwd: root, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024});
-            const extract = name => {
-                const match = selected.match(new RegExp('const uint8_t ' + name + '\\[\\] PROGMEM = \\{([\\s\\S]*?)\\};'));
-                if (!match) return null;
-                return zlib.gunzipSync(Buffer.from([...match[1].matchAll(/0x([0-9a-f]{2})/g)]
-                    .map(value => parseInt(value[1], 16)))).toString();
-            };
-            const fragment = extract('microphone_fragment_html_gz');
-            assert.equal(fragment !== null, !!input);
-            assert.equal(extract('portal_microphone_js_gz') !== null, !!input);
-            assert.equal(extract('portal_live_microphone_js_gz') !== null, !!stream);
-            if (fragment) assert.equal(fragment.includes('Hear microphone'), !!stream);
+        assert(!js.includes('externalDataBuilderProvider'));
+        if (conditions.HAS_EXTERNAL_DATA) assert(assets.get('portal_external_data_js_gz').includes('externalDataBuilderProvider'));
+        if (conditions.HAS_TTF_FONTS) {
+            const fonts = assets.get('fonts_fragment_html_gz');
+            const idPattern = fonts.match(/pattern="([^"]+)"/)[1];
+            const validId = new RegExp('^(?:' + idPattern + ')$', 'v');
+            assert(validId.test('my-font_1'));
+            assert(!validId.test('Bad.ttf'));
+            assert(!validId.test('../font'));
+            assert(fonts.includes('portal-icon-fallback'));
+            assert(assets.get('portal_fonts_js_gz').includes('portal-icon-fallback'));
+            assert(!fonts.includes('data-icon='));
         }
-        assert.throws(() => execFileSync('c++', ['-E', '-x', 'c++', '-',
-            '-DHAS_AUDIO_INPUT=0', '-DHAS_MICROPHONE_STREAMING=1'],
-            {cwd: root, input: '#include "src/app/board_config.h"\n', stdio: ['pipe', 'pipe', 'pipe']}));
+        assert.equal(shell.includes('src="/portal_power_savings.js'), conditions.HAS_AUTO_SHUTDOWN);
+        assert.equal(shell.includes('id="binding-help-overlay"'), conditions.HAS_DISPLAY);
+        assert.equal(shell.includes('src="/portal-live-microphone.js'), conditions.HAS_MICROPHONE_STREAMING);
+        assert.equal(css.includes('.binding-docs-modal'), conditions.HAS_DISPLAY);
+        assert(!js.includes('portalStreamFetch'), 'Standalone microphone transport leaked into shared bundle');
+        assert(!js.includes('init_bluetooth_fragment'), 'Standalone Bluetooth script leaked into shared bundle');
+        if (!conditions.HAS_DISPLAY) assert(!js.includes('const padWidgetEditors='));
+        if (board === 'reterminal-sticky-interactive' || overrides.includes('HAS_CAMERA=0')) {
+            for (const marker of ['widget_camera_scale', 'extension_tick_interval_ms', 'widget_waveform_sensor',
+                'function actionEditorGamepadHTML(']) assert(!js.includes(marker), board + '/' + marker);
+        }
+        if (!conditions.HAS_MQTT) assert(!js.includes('function initMqttTriggers('));
+        if (!conditions.HAS_SOUND_PLAYER) assert(!js.includes('function actionEditorLoadOperationSounds('));
+        if (!conditions.HAS_IMAGE_LIBRARY) assert(!js.includes('/api/images?directory='));
+        if (!conditions.HAS_EPAPER_PANEL) assert(!js.includes('epaper_bw_conversion'));
+        if (index === 0) {
+            assert.throws(() => execFileSync(compiler[0], [...compiler.slice(1), '-DALARM_ENABLED=1', '-I' + output,
+                '-E', '-P', '-x', 'c++', path.join(output, 'web_assets.h')], {cwd: root, stdio: 'pipe'}),
+            error => error.stderr.toString().includes('Portal assets do not match firmware configuration'));
+        }
+        console.log('PASS: selected payloads ' + board + ' ' + overrides.join(',') + ' (portal.js=' + sizes.portal_js_gz + ')');
     }
+} finally {
+    fs.rmSync(directory, {recursive: true, force: true});
 }

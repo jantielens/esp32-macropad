@@ -9,6 +9,17 @@ function padWidgetEditor(type) {
     return padWidgetEditors.get(type);
 }
 
+function padWidgetSelectType(select, type) {
+    if (type && !Array.from(select.options).some(option => option.value === type)) {
+        const option = document.createElement('option');
+        option.value = type;
+        option.textContent = type + ' (unsupported by this build)';
+        option.disabled = true;
+        select.appendChild(option);
+    }
+    select.value = type || '';
+}
+
 function padWidgetSetGroupColor(groupId, field, resolved) {
     const raw = document.getElementById(field.id).value;
     const fallback = typeof field.default === 'function' ? field.default() : field.default;

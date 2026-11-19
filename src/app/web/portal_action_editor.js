@@ -130,6 +130,7 @@ function actionEditorOperationHTML(prefix) {
     return html;
 }
 
+// @portal-if IS_COFFEE_SCALE
 function actionEditorLoadBrewTemplates(prefix, operation) {
     var fields = operation.arguments.filter(function(argument) { return argument.control === 'brew_templates'; });
     if (!fields.length || typeof fetch !== 'function') return;
@@ -182,7 +183,9 @@ function actionEditorLoadBrewTemplates(prefix, operation) {
         });
     });
 }
+// @portal-endif
 
+// @portal-if HAS_SOUND_PLAYER
 function actionEditorUpdateSounds(select, sounds) {
     if (!select || !Array.isArray(sounds)) return;
     var selected = select.value;
@@ -241,6 +244,8 @@ function actionEditorLoadOperationSounds(prefix, operation) {
             });
         });
 }
+
+// @portal-endif
 
 function actionEditorOperationTimingChanged(prefix, id, name) {
     var base = prefix + '-op-' + id + '-' + name;
@@ -461,8 +466,12 @@ function actionEditorTypeChanged(prefix) {
                 var wrap = document.getElementById(base + '-color-wrap');
                 if (wrap) padInitBindableColor(wrap);
             });
+            // @portal-if HAS_SOUND_PLAYER
             if (type === '@' + operation.id) actionEditorLoadOperationSounds(prefix, operation);
+            // @portal-endif
+            // @portal-if IS_COFFEE_SCALE
             if (type === '@' + operation.id) actionEditorLoadBrewTemplates(prefix, operation);
+            // @portal-endif
             actionEditorOperationRefresh(prefix, operation.id);
         });
     });
@@ -659,8 +668,11 @@ function actionEditorListBuild(prefixes) {
 }
 
 function actionEditorWireFragment(prefixes) {
+    // @portal-if HAS_DISPLAY
     if (typeof getDeviceInfo !== 'function') return Promise.resolve();
     return getDeviceInfo().then(function(info) {
         actionEditorPopulateScreens(prefixes, info && info.available_screens);
     });
+    // @portal-endif
+    return Promise.resolve();
 }

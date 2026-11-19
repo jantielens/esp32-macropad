@@ -185,12 +185,19 @@ The build system automatically applies project branding during compilation:
 
 1. `build.sh` sources `config.sh` to get `PROJECT_NAME` and `PROJECT_DISPLAY_NAME` (and `config.sh` will also source `config.project.sh` if present)
 2. (Optional) If `assets/png/*.png` exists and you are building a display-enabled board, `build.sh` generates LVGL image assets into `src/app/png_assets.cpp` and `src/app/png_assets.h`
-3. `tools/minify-web-assets.sh` performs template substitution in HTML files
-   and emits feature-gated shell, JavaScript, and CSS variants. Binding reference
-   HTML/styles follow `HAS_DISPLAY`; HA builder assets follow `HAS_HA_LIVE`.
-   Each firmware selects one variant, excluding unsupported binding UI from flash.
-4. Branding C++ `#define` statements are generated in `src/app/project_branding.h` (and `web_assets.h` includes it)
-5. If the repo was built from a GitHub checkout with a detectable `remote.origin.url`, the repo slug is generated into `src/app/repo_slug_config.h` (used to construct GitHub Pages links)
+3. After assembling FQBN, board overrides, profile properties, and compiler flags,
+   `build.sh` captures Arduino's expanded compiler recipe in
+   `build/<board>/portal-build.properties`. `tools/minify-web-assets.sh` invokes
+   `tools/portal_assets.py`, which evaluates feature predicates using that
+   compiler configuration. Only selected HTML, JavaScript, CSS, and widget
+   editors are rendered and compressed. Each bundle has exactly one gzip stream;
+   the generator does not enumerate feature combinations.
+4. Asset and branding headers (`web_assets.h`, `project_branding.h`) are generated
+   in `build/<board>/web-assets/`, first on the compiler include path. The asset
+   header rejects a mismatched feature configuration at compile time.
+5. A detectable GitHub `remote.origin.url` supplies `repo_slug_config.h` in the
+   same output directory, for GitHub Pages links. A missing slug produces a
+   diagnostic and empty owner/name strings, as before.
 6. `build.sh` also embeds the board name as a compile-time string define (`BUILD_BOARD_NAME`) so the portal can report the active board
 7. Firmware compiles with branded values embedded
 
@@ -200,6 +207,10 @@ when it is missing. For an offline build, run that command beforehand. The versi
 and dependency graph are recorded in `tools/package.json` and `tools/package-lock.json`.
 Terser compresses code and mangles local names, but preserves top-level names and
 properties used by HTML handlers and dynamically loaded portal scripts.
+`web-assets/portal-assets.json` records resolved predicates and compressed array
+sizes for inspection. These sizes describe embedded asset payloads, not measured
+whole-firmware flash savings. See the
+[ownership convention](web-portal.md#feature-ownership-and-selection).
 
 Component, indexed-store, and shutter-session routes use prefix matchers with
 explicit segment validation, not `ASYNCWEBSERVER_REGEX`. This avoids linking the

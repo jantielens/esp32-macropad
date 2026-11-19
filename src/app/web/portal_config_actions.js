@@ -6,6 +6,7 @@
 // Swipe Actions (uses shared portal_action_editor.js)
 // ============================================================================
 
+// @portal-if HAS_DISPLAY
 const SWIPE_DIRECTIONS = ['swipe-left', 'swipe-right', 'swipe-up', 'swipe-down'];
 const SWIPE_LABELS = { 'swipe-right': 'Swipe Right', 'swipe-left': 'Swipe Left', 'swipe-up': 'Swipe Up', 'swipe-down': 'Swipe Down' };
 var swipeActionsLoaded = false;
@@ -47,9 +48,8 @@ async function loadSwipeActions() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Sound file management
-// ---------------------------------------------------------------------------
+// @portal-endif
+// @portal-if HAS_SOUND_PLAYER
 function soundEsc(s) {
     var d = document.createElement('span');
     d.textContent = s;
@@ -147,6 +147,8 @@ async function deleteSound(name) {
     } catch (err) { /* ignore */ }
 }
 
+// @portal-endif
+// @portal-if HAS_DISPLAY
 async function saveSwipeActions() {
     if (!swipeActionsLoaded) {
         showMessage('Load swipe actions before saving.', 'error');
@@ -461,6 +463,8 @@ async function saveSystemScreenAppearance() {
 // Hardware Button Actions (uses shared portal_action_editor.js)
 // ============================================================================
 
+// @portal-endif
+// @portal-if HAS_BUTTON
 // Flat list of every action editor prefix currently rendered, used to wire
 // screen + sound dropdowns in one pass after the editors are built.
 var HW_BUTTON_PREFIXES = [];
@@ -580,6 +584,8 @@ async function saveHwButtons() {
 // MQTT Triggers (uses shared portal_action_editor.js)
 // ============================================================================
 
+// @portal-endif
+// @portal-if HAS_MQTT && (HAS_DISPLAY || HAS_BUTTON)
 // Flat list of every action editor prefix currently rendered, used to wire
 // screen + sound dropdowns in one pass after the editors are built.
 var MQTT_TRIGGER_PREFIXES = [];
@@ -700,6 +706,8 @@ async function saveMqttTriggers() {
 // Timer Config (device-level, uses shared portal_action_editor.js)
 // ============================================================================
 
+// @portal-endif
+// @portal-if HAS_DISPLAY
 const TIMER_IDS = [1, 2, 3];
 function timerExpirePrefixes(tid) {
     return actionEditorSlotPrefixes('timer-' + tid + '-expire-');
@@ -776,3 +784,4 @@ async function saveTimerConfig() {
         showMessage('Error saving timer config: ' + err.message, 'error');
     }
 }
+// @portal-endif

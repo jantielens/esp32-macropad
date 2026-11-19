@@ -1,21 +1,16 @@
 # Bundle manifest for portal.js
 #
-# JS modules are concatenated (in order) into NAMED chunks. Each chunk is
-# independently minified + gzipped and emitted as its own PROGMEM array.
+# JS modules are selected in dependency order for the actual compiler config,
+# then concatenated, minified, and gzipped once.
 #
 # Chunk markers:
-#   # [chunk:NAME]            — always-on chunk
-#   # [chunk:NAME HAS_FLAG ...] — included only when every listed flag is true
+#   # [chunk:NAME]            - always-on chunk
+#   # [chunk:NAME EXPRESSION] - C-preprocessor feature predicate
 #
 # The first marker opens the first chunk; each subsequent marker closes the
-# previous one. Files before any marker are rejected. Disabled chunks are
-# compiled out via #if guards in web_assets.h, so they never reach flash.
-#
-# Build-time assembly: the minifier enumerates the unique HAS_* flag set
-# across chunks (bounded by the generator's variant limit), and for each reachable combination
-# concatenates the chunks whose flag is unset OR matches the combination,
-# then gzips ONCE. Each variant is emitted as an #if-guarded PROGMEM blob
-# under the same symbol name (portal_js_gz), so exactly one variant links.
+# previous one. Predicates support &&, ||, !, and parentheses. The generator
+# uses the firmware compiler to evaluate them, never enumerating combinations.
+# web_assets.h rejects compilation when its selection disagrees with firmware.
 #
 # Runtime loading: shell.html issues a single GET /portal.js, which returns
 # the one matching combined-gzip blob in a single HTTP response.
@@ -36,7 +31,7 @@ portal_expression_builder.js
 # [chunk:catalog_bindings HAS_DISPLAY]
 portal_binding_builder_catalog.js
 
-# [chunk:mqtt_bindings HAS_MQTT HAS_DISPLAY]
+# [chunk:mqtt_bindings HAS_MQTT && HAS_DISPLAY]
 portal_binding_builder_mqtt.js
 
 # [chunk:ha_bindings HAS_HA_LIVE]
@@ -46,12 +41,14 @@ portal_binding_builder_ha.js
 portal_button_templates.js
 portal_button_builder.js
 
-# [chunk:actions HAS_DISPLAY]
-# Action editor + config actions UI: only reachable from pad/swipe/boot/timer
-# editors, all of which are HAS_DISPLAY-gated fragments.
+# [chunk:actions HAS_DISPLAY || HAS_BUTTON]
+# Catalog-driven action editor shared by pad and hardware-button editors.
 portal_action_editor.js
+# [chunk:action_screens HAS_DISPLAY]
 portal_action_editor_screen.js
+# [chunk:gamepad HAS_DISPLAY && HAS_TOUCH && (HAS_USB_HID || HAS_BLE_HID)]
 portal_action_editor_gamepad.js
+# [chunk:config_actions HAS_DISPLAY || HAS_BUTTON || HAS_SOUND_PLAYER]
 portal_config_actions.js
 
 # [chunk:shutter_pages IS_SHUTTER_TESTER]
@@ -89,7 +86,9 @@ portal_extensions.js
 
 # [chunk:pad HAS_DISPLAY]
 # Pad editor — only consumed by the pad editor fragment on display boards.
+# [chunk:image_library HAS_IMAGE_LIBRARY]
 portal_image_library.js
+# [chunk:pad_editor HAS_DISPLAY]
 portal_pad_colors.js
 portal_pad_io.js
 portal_pad_blocks.js

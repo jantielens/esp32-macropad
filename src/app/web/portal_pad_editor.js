@@ -288,7 +288,9 @@ async function padInit() {
     await getDeviceInfo();
     if (document.getElementById('pad-config-section') !== section) return;
 
+    // @portal-if HAS_SOUND_PLAYER
     padSoundListLoading = deviceInfoCache.has_sound_player === true;
+    // @portal-endif
     padWidgetEditorsInit(deviceInfoCache, padWorkspaceWidgetSettled);
     padSetImageCapabilityVisibility(deviceInfoCache);
     const aeContainer = document.getElementById('pad-action-editors');
@@ -360,10 +362,12 @@ async function padInit() {
     document.getElementById('pad-edit-copy').addEventListener('click', padDialogCopyBtn);
     document.getElementById('pad-edit-paste').addEventListener('click', padDialogPasteBtn);
     document.getElementById('pad-edit-clear').addEventListener('click', padDialogClear);
+    // @portal-if HAS_IMAGE_LIBRARY
     var imageRefresh = document.getElementById('pad-edit-bg-image-refresh');
     if (imageRefresh) imageRefresh.addEventListener('click', function () {
         padLoadLocalImageOptions(document.getElementById('pad-edit-bg-image-path').value, true);
     });
+    // @portal-endif
 
     // Wire appearance field input listeners for reset-hint visibility (once)
     PAD_APPEARANCE_FIELDS.forEach(function(f) {
@@ -412,7 +416,9 @@ async function padInit() {
         const initialPage = Number.isInteger(requestedPage) && requestedPage >= 0 &&
             requestedPage < deviceInfoCache.max_pads ? requestedPage : 0;
         padState.page = initialPage;
+        // @portal-if HAS_SOUND_PLAYER
         padPopulateSoundDropdown();
+        // @portal-endif
         await padLoadInitialPage(initialPage);
     } else {
         const noDisp = document.getElementById('pad-no-display-section');
@@ -427,7 +433,9 @@ async function padLoadInitialPage(page) {
     const defaultsReady = padLoadButtonDefaultsFromDevice();
     await padLoadPage(page, defaultsReady);
     if (document.getElementById('pad-config-section') !== section) return;
+    // @portal-if HAS_SOUND_PLAYER
     if (deviceInfoCache.has_sound_player === true) padFetchSoundList();
+    // @portal-endif
     padLoadBlockCatalog();
 }
 
@@ -556,6 +564,7 @@ function padPopulateScreenDropdown() {
 }
 
 // Cached sound file list (populated at init, used synchronously on dialog open)
+// @portal-if HAS_SOUND_PLAYER
 var padSoundListCache = [];
 let padSoundListLoading = false;
 
@@ -583,6 +592,7 @@ function padPopulateSoundDropdown() {
         if (select) select.disabled = padSoundListLoading;
     });
 }
+// @portal-endif
 
 function padRefreshWidgetEditor() {
     const widget = document.getElementById('pad-edit-widget-type');

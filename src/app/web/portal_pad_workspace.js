@@ -150,7 +150,9 @@ function padWorkspaceDispose() {
     if (padWorkspace.confirmResolve) padWorkspace.confirmResolve(false);
     if (typeof padPvHide === 'function') padPvHide();
     if (typeof padWidgetEditorsDispose === 'function') padWidgetEditorsDispose();
+    // @portal-if HAS_IMAGE_LIBRARY
     padImageLibraryCache = null;
+    // @portal-endif
     padImageLibraryFiles = [];
     padWorkspace = null;
     padDirty = false;

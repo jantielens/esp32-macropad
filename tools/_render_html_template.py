@@ -51,11 +51,14 @@ def render(input_path: Path, web_dir: Path,
            has_binding_help: bool = True,
            widget_flags: set[str] | None = None,
            has_auto_shutdown: bool = False,
-           has_microphone_streaming: bool = False) -> str:
+           has_microphone_streaming: bool = False,
+           widget_types: set[str] | None = None) -> str:
     html = input_path.read_text()
 
     if "{{WIDGET_OPTIONS}}" in html or "{{WIDGET_EDITORS}}" in html:
         widgets = portal_widgets(load_widgets(), widget_flags)
+        if widget_types is not None:
+            widgets = [widget for widget in widgets if widget["type"] in widget_types]
         html = html.replace("{{WIDGET_OPTIONS}}", "".join(
             f'<option value="{widget["type"]}" id="pad-edit-{widget["type"]}-widget-option">'
             f'{escape(widget["portal"]["label"])}</option>' for widget in widgets))

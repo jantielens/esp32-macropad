@@ -3,9 +3,8 @@
 # parallel HTTP requests at portal load (mitigates ESP-Hosted SDIO DMA pressure).
 # Order follows CSS cascade: framework first, custom overrides last.
 #
-# Chunked-bundle markers (mirror the JS chunked path): each [chunk:NAME FLAG]
-# group is compiled into a separate variant; exactly one #if branch matches
-# per build so device-class CSS contributes zero bytes to non-matching boards.
+# Chunk markers use the same compiler-resolved predicates as JavaScript.
+# Only matching groups are concatenated into this build's single CSS asset.
 # [chunk:core]
 bootstrap.min.css
 portal-custom.css

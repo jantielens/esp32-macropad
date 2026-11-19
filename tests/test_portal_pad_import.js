@@ -442,6 +442,15 @@ async function testClearPad() {
     await importPad({ cols: 10, rows: 10, buttons: [{ col: 9, row: 9 }] });
     assert(success.messages.some(message => message.type === 'success' && message.message.includes('Pad imported')));
     assert.strictEqual(vm.runInContext('padState.cols', success.context), 10);
+    const unpackagedWidget = {
+        col: 0, row: 0, widget_type: 'external', extension_id: 'other-board-widget',
+        extension_config: { source: 'sensor' }, extension_tick_interval_ms: 750,
+    };
+    await importPad({ action_format_version: 1, cols: 1, rows: 1, buttons: [unpackagedWidget] });
+    assert.deepStrictEqual(JSON.parse(vm.runInContext('JSON.stringify(padState.buttons)', success.context)),
+        [unpackagedWidget], 'Import must retain widgets whose editor is not packaged');
+    assert.deepStrictEqual(JSON.parse(success.context.padBuildSaveContext().body).buttons,
+        [unpackagedWidget], 'Saving an unedited imported widget must preserve its complete configuration');
     await importPad({
         action_format_version: 0, cols: 10, rows: 10, name: 'Legacy import',
         pad_actions: [{ type: 'screen' }],

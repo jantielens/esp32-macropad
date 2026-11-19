@@ -29,6 +29,7 @@ class Element {
 const elements = new Map();
 elements.set('pad-edit-icon-badge-padding', Object.assign(new Element('pad-edit-icon-badge-padding'), { value: '8' }));
 const document = {
+    createElement() { return new Element(''); },
     getElementById(id) {
         if (!elements.has(id)) elements.set(id, new Element(id));
         return elements.get(id);
@@ -65,6 +66,16 @@ const bindingContext = vm.createContext({ console });
 vm.runInContext(fs.readFileSync('src/app/web/portal_binding_validator.js', 'utf8'), bindingContext);
 context.bindingTokenize = bindingContext.bindingTokenize;
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_editor.js', 'utf8'), context);
+{
+    const select = { options: [{ value: '' }], appendChild(option) { this.options.push(option); } };
+    context.padWidgetSelectType(select, 'unpackaged_widget');
+    assert.strictEqual(select.value, 'unpackaged_widget');
+    assert.strictEqual(select.options[1].disabled, true);
+    context.padWidgetSelectType(select, 'unpackaged_widget');
+    assert.strictEqual(select.options.length, 2);
+    context.padWidgetSelectType(select, '');
+    assert.strictEqual(select.value, '');
+}
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_table.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_gamepad_button.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_rocker.js', 'utf8'), context);
@@ -191,6 +202,11 @@ document.getElementById('pad-edit-widget-type').value = 'external';
 context.padGetBindableColor = id => id === 'pad-edit-bg-color' ? '#03A9F4' : '';
 context.padWorkspaceEdit();
 assert.strictEqual(context.padState.buttons[0], unavailableWidget, 'An unrelated edit must not discard an unavailable widget');
+assert.match(validationErrors.get('main:1,2').message, /not supported/);
+document.getElementById('pad-edit-widget-type').value = 'unpackaged-widget';
+context.padWorkspaceEdit();
+assert.strictEqual(context.padState.buttons[0], unavailableWidget,
+    'A widget with no packaged editor must not be silently removed or rewritten');
 assert.match(validationErrors.get('main:1,2').message, /not supported/);
 document.getElementById('pad-edit-widget-type').value = '';
 context.padWorkspaceEdit();

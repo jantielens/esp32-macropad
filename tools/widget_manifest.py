@@ -36,9 +36,17 @@ def load_widgets(path=MANIFEST):
         assets = [(widget["source"], APP, ".cpp")]
         portal = widget.get("portal")
         if portal is not None:
-            portal_gates = portal.get("gates", [])
+            portal_gates = portal.get("gates", gates)
             if not isinstance(portal_gates, list) or any(gate not in gates for gate in portal_gates):
                 raise ValueError(f"Portal gates must be widget gates: {kind}")
+            portal_any_gates = portal.get("any_gates", any_gates)
+            if not isinstance(portal_any_gates, list) or any(gate not in any_gates for gate in portal_any_gates):
+                raise ValueError(f"Portal any_gates must be widget any_gates: {kind}")
+            if (portal_gates != gates or portal_any_gates != any_gates) and not portal.get("gate_exception"):
+                raise ValueError(f"Cross-board portal authoring requires a gate_exception: {kind}")
+            condition = " && ".join(portal_gates + (
+                [f"({' || '.join(portal_any_gates)})"] if portal_any_gates else [])) or "1"
+            portal["condition"] = condition
             if not isinstance(portal["label"], str) or not portal["label"]:
                 raise ValueError(f"Missing widget label: {kind}")
             assets.extend((portal[key], APP / "web", suffix)
@@ -49,8 +57,8 @@ def load_widgets(path=MANIFEST):
             for key in ("html", "js", "css"):
                 if key not in portal:
                     continue
-                previous = portal_asset_gates.setdefault(portal[key], portal_gates)
-                if previous != portal_gates:
+                previous = portal_asset_gates.setdefault(portal[key], condition)
+                if previous != condition:
                     raise ValueError(f"Shared portal asset has conflicting gates: {portal[key]}")
         for asset, base, suffix in assets:
             resolved = (base / asset).resolve()
@@ -75,7 +83,10 @@ def firmware_includes(widgets):
 
 def portal_widgets(widgets, enabled_flags=None):
     return [widget for widget in widgets if "portal" in widget and
-            (enabled_flags is None or all(gate in enabled_flags for gate in widget["portal"].get("gates", [])))]
+            (enabled_flags is None or (
+                all(gate in enabled_flags for gate in widget["portal"].get("gates", widget["gates"])) and
+                (not widget["portal"].get("any_gates", widget.get("any_gates", [])) or
+                 any(gate in enabled_flags for gate in widget["portal"].get("any_gates", widget.get("any_gates", []))))))]
 
 
 def portal_assets(widgets, extension):
@@ -106,36 +117,36 @@ def expand_bundle(path):
     widgets = load_widgets()
     extension = "js" if path.name.endswith(".js.bundle") else "css"
     lines = []
-    chunk_name, chunk_flags = None, []
+    chunk_name, chunk_condition = None, "1"
     restore_chunk = False
     serial = 0
     for line in path.read_text(encoding="utf-8").splitlines():
-        marker = re.fullmatch(r"#\s*\[chunk:([a-z0-9_-]+)((?:\s+(?:HAS|IS)_[A-Z_0-9]+)*)\]\s*", line.strip())
+        marker = re.fullmatch(r"#\s*\[chunk:([a-z0-9_-]+)(?:\s+(.+?))?\]\s*", line.strip())
         if marker:
-            chunk_name, chunk_flags = marker[1], marker[2].split()
+            chunk_name, chunk_condition = marker[1], marker[2] or "1"
             restore_chunk = False
         if line.strip() == "@widgets":
             seen = set()
-            active_flags = chunk_flags
+            active_condition = chunk_condition
             for widget in portal_widgets(widgets):
                 portal = widget["portal"]
                 asset = portal.get(extension)
                 if not asset or asset in seen:
                     continue
                 seen.add(asset)
-                flags = list(dict.fromkeys(chunk_flags + portal.get("gates", [])))
-                if flags != active_flags:
+                condition = f"({chunk_condition}) && ({portal['condition']})"
+                if condition != active_condition:
                     if chunk_name is None:
                         raise ValueError("Gated widget assets require a chunked bundle")
                     serial += 1
-                    lines.append(f"# [chunk:{chunk_name}_widgets_{serial} {' '.join(flags)}]")
-                    active_flags = flags
+                    lines.append(f"# [chunk:{chunk_name}_widgets_{serial} {condition}]")
+                    active_condition = condition
                 lines.append(asset)
-            restore_chunk = active_flags != chunk_flags
+            restore_chunk = active_condition != chunk_condition
         else:
             if restore_chunk and line.strip() and not line.lstrip().startswith("#"):
                 serial += 1
-                suffix = " " + " ".join(chunk_flags) if chunk_flags else ""
+                suffix = " " + chunk_condition if chunk_condition != "1" else ""
                 lines.append(f"# [chunk:{chunk_name}_widgets_{serial}{suffix}]")
                 restore_chunk = False
             lines.append(line)
@@ -151,7 +162,8 @@ def main():
     args = parser.parse_args()
     if args.portal_gates:
         print("\n".join(dict.fromkeys(gate for widget in portal_widgets(load_widgets())
-                                     for gate in widget["portal"].get("gates", []))))
+                                     for gate in re.findall(r"\b(?:HAS|IS)_[A-Z0-9_]+\b",
+                                                            widget["portal"]["condition"]))))
     elif args.validate_editors:
         validate_editors(load_widgets())
     elif args.bundle:

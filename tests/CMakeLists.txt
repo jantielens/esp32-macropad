@@ -1533,7 +1533,7 @@ add_host_compile_check(check_mcp_press_button_no_mcp ${PROJECT_SOURCE_DIR}/src/a
 add_host_compile_check(check_mcp_device_identity_no_mcp ${PROJECT_SOURCE_DIR}/src/app/mcp_device_identity.cpp)
 
 foreach(script
-    test_brew_storage_and_tare_guards.sh test_branding_mirror.sh test_asset_variant_matrix.sh test_word_clock_logic.sh
+    test_brew_storage_and_tare_guards.sh test_branding_mirror.sh test_portal_asset_config.sh test_word_clock_logic.sh
     test_extension_config_contracts.sh
     test_camera_preview_widget.sh test_camera_motion.sh test_mcp_scheme_parity.sh
     test_action_catalog_completeness.sh test_mcp_storage_parity.sh test_display_safe_telemetry.sh

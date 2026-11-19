@@ -3,8 +3,10 @@
 // Bundled into portal_pad_editor.js during minification.
 
 var padImageLibraryFiles = [];
+// @portal-if HAS_IMAGE_LIBRARY
 let padImageLibraryCache = null;
 let padDialogSelectionGeneration = 0;
+// @portal-endif
 
 function padPopulateLocalImageOptions(selected) {
     var select = document.getElementById('pad-edit-bg-image-path');
@@ -23,6 +25,7 @@ function padPopulateLocalImageOptions(selected) {
     select.value = selected || '';
 }
 
+// @portal-if HAS_IMAGE_LIBRARY
 function padLoadLocalImageOptions(selected, refresh = false) {
     if (!deviceInfoCache || deviceInfoCache.has_image_library !== true) return Promise.resolve();
     const section = document.getElementById('pad-config-section');
@@ -64,6 +67,7 @@ function padLoadLocalImageOptions(selected, refresh = false) {
             if (group) group.style.display = 'none';
         });
 }
+// @portal-endif
 
 function padConfirmChanged() {
     var enabled = document.getElementById('pad-edit-confirm').checked;
@@ -71,7 +75,9 @@ function padConfirmChanged() {
 }
 
 function padDialogOpen(col, row) {
+    // @portal-if HAS_IMAGE_LIBRARY
     padDialogSelectionGeneration++;
+    // @portal-endif
     padPvHide();
     if (typeof padWorkspaceBeforeSelect === 'function') padWorkspaceBeforeSelect(col, row);
     padState.editCol = col;
@@ -79,7 +85,9 @@ function padDialogOpen(col, row) {
 
     // Refresh target screen dropdowns so pad names are current
     padPopulateScreenDropdown();
+    // @portal-if HAS_SOUND_PLAYER
     padPopulateSoundDropdown();
+    // @portal-endif
 
     // Sync device-level pad and button defaults from the DOM into padState so placeholders
     // are current. The Pad and Button Defaults form may live on a separate page; only
@@ -170,8 +178,12 @@ function padDialogOpen(col, row) {
 
     // Image background
     var localImageGroup = document.getElementById('pad-edit-local-image-group');
-    if (localImageGroup) localImageGroup.style.display = '';
+    if (localImageGroup) localImageGroup.style.display = 'none';
+    padPopulateLocalImageOptions(btn.bg_image_path || '');
+    // @portal-if HAS_IMAGE_LIBRARY
+    if (localImageGroup && deviceInfoCache.has_image_library === true) localImageGroup.style.display = '';
     padLoadLocalImageOptions(btn.bg_image_path || '');
+    // @portal-endif
     document.getElementById('pad-edit-bg-image-binding').value =
         btn.bg_image_path && btn.bg_image_path.indexOf('[') !== -1 ? btn.bg_image_path : '';
     document.getElementById('pad-edit-bg-image-url').value = btn.bg_image_url || '';
@@ -200,7 +212,7 @@ function padDialogOpen(col, row) {
         btn.icon_position || padGetEffectiveDefault('icon_position') || 'left';
 
     // Widget type
-    document.getElementById('pad-edit-widget-type').value = btn.widget_type || '';
+    padWidgetSelectType(document.getElementById('pad-edit-widget-type'), btn.widget_type);
     document.getElementById('pad-edit-content-layout').value = btn.widget_position || 'right';
     document.getElementById('pad-edit-rocker-group-layout').value = btn.rocker_group_layout || 'center';
     document.getElementById('pad-edit-group-width').value = btn.group_size_pct || 0;
@@ -356,7 +368,7 @@ function padDialogBuildButton() {
     // Tap actions (array)
     const selectedType = document.getElementById('pad-edit-widget-type').value;
     const widgetEditor = padWidgetEditor(selectedType);
-    if (widgetEditor && widgetEditor.supported === false) {
+    if (selectedType && (!widgetEditor || widgetEditor.supported === false)) {
         throw Object.assign(new Error('This widget is not supported on this device. Choose a supported widget or remove it before editing this button.'), {
             fieldIds: ['pad-edit-widget-type']
         });

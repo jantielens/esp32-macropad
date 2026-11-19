@@ -212,15 +212,12 @@ build_board() {
     echo "Output:    $board_build_path"
 
     # Regenerate web assets per board so the embedded shell.html carries the
-    # device-class-specific PROJECT_DISPLAY_NAME (e.g. "ESP32 Macropad",
-    # "ESP32-MP E-Paper", "ESP32-MP Headless"). web_assets.h, project_branding.h
-    # and the resulting binary are all per-board, so this is safe to overwrite
-    # between builds.
+    # device-class-specific PROJECT_DISPLAY_NAME. Generated asset and branding
+    # headers live in the board's build directory.
     local board_display_name
     board_display_name="$(project_display_name_for_board "$board_name")"
     echo "Brand:     $board_display_name"
     python3 "$SCRIPT_DIR/tools/widget_manifest.py" --firmware "$SCRIPT_DIR/src/app/widget_modules.h"
-    "$SCRIPT_DIR/tools/minify-web-assets.sh" "$PROJECT_NAME" "$board_display_name" >/dev/null
     
     # Check for board-specific configuration overrides
     EXTRA_FLAGS=()
@@ -296,7 +293,8 @@ build_board() {
     # relative parent paths used in app.ino and a few helpers. Always add the
     # project's src/ directory as an explicit include path so version.h resolves
     # regardless of staging behavior.
-    local PROJECT_INCLUDE="-I$SCRIPT_DIR/src -I$SCRIPT_DIR/src/app"
+    local portal_assets_path="$board_build_path/web-assets"
+    local PROJECT_INCLUDE="-I$portal_assets_path -I$SCRIPT_DIR/src -I$SCRIPT_DIR/src/app"
 
     EXTRA_GLOBAL_FLAGS+=" -include $SCRIPT_DIR/src/app/ble_build_config.h"
 
@@ -344,6 +342,13 @@ build_board() {
     # shared arduino-cli sketch cache (see GitHub issue #25).
     local board_intermediate_path="$board_build_path/intermediate"
     mkdir -p "$board_intermediate_path"
+
+    local portal_properties="$board_build_path/portal-build.properties"
+    "$ARDUINO_CLI" compile --fqbn "$fqbn" --build-path "$board_intermediate_path" \
+        "${EXTRA_FLAGS[@]}" "${BUILD_PROPS_ARR[@]}" --show-properties=expanded \
+        "$SKETCH_PATH" > "$portal_properties"
+    "$SCRIPT_DIR/tools/minify-web-assets.sh" "$PROJECT_NAME" "$board_display_name" \
+        --properties "$portal_properties" --output-dir "$portal_assets_path"
 
     # Compile the sketch with optional board-specific includes and build props
     # Run compile and capture exit code (disable set -e temporarily to capture output even on failure)

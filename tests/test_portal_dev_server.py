@@ -22,7 +22,7 @@ SPEC = importlib.util.spec_from_file_location("portal_dev_server", ROOT / "tools
 PORTAL = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PORTAL)
 
-from widget_manifest import load_widgets, firmware_includes, portal_assets, validate_editors
+from widget_manifest import load_widgets, firmware_includes, portal_assets, portal_widgets, validate_editors
 
 
 class PortalDevServerTest(unittest.TestCase):
@@ -580,7 +580,9 @@ class PortalDevServerTest(unittest.TestCase):
 
         parser = WidgetParser()
         parser.feed(self.request("/api/section/pad-editor", raw=True)[1])
-        widgets = [widget for widget in load_widgets() if "portal" in widget]
+        widgets = portal_widgets(load_widgets(), {
+            "HAS_DISPLAY", "HAS_TOUCH", "HAS_PSRAM", "HAS_FACE_WIDGET", "HAS_NATIVE_EXTENSIONS", "HAS_USB_HID"
+        })
         self.assertEqual(parser.types, [widget["type"] for widget in widgets])
         self.assertEqual(len(parser.ids), len(set(parser.ids)), "Duplicate mounted control IDs")
         for widget in widgets:
@@ -588,6 +590,10 @@ class PortalDevServerTest(unittest.TestCase):
             partial.feed((ROOT / "src/app/web" / widget["portal"]["html"]).read_text())
             for identifier in partial.ids:
                 self.assertIn(identifier, parser.ids)
+
+        no_touch = self.request("/api/section/pad-editor", profile="crowpanel-4.2-interactive", raw=True)[1]
+        self.assertNotIn('id="pad-edit-mousepad-widget-option"', no_touch)
+        self.assertNotIn('id="pad-edit-gamepad_stick-widget-option"', no_touch)
 
     def test_audio_amplifier_config(self):
         previous = copy.deepcopy(self.server.mock_config)

@@ -634,13 +634,16 @@ See the [Face user guide](../user/widgets/README.md#face)
 for configuration and a numeric-to-emotion example.
 
 Shared assets are included once, at their first manifest position. Put dependencies
-before consumers. Both bundles expand `@widgets` in their existing `HAS_DISPLAY`
-chunk, with gated subchunks generated from `portal.gates`; additional runtime
-capability checks stay in owner `available()` callbacks. Shared assets must
-declare identical portal gates in every owner. The minifier emits one combined
-gzip blob per distinct chunk selection, merging equivalent flag assignments
-without increasing the 512-variant limit. HTML variants use the same portal
-gates. Device-free template rendering includes all widget editors by default.
+before consumers. Both bundles expand `@widgets` in their `HAS_DISPLAY` chunk.
+Portal predicates inherit the widget's native `gates` and `any_gates`, including
+touch, HID, camera, extension, and device-class requirements. A narrower portal
+gate list requires a nonempty `portal.gate_exception` explaining intentional
+cross-board authoring. Shared assets must declare identical predicates in every
+owner. JavaScript, CSS, selector options, and editor HTML use the same compiler
+selection. Each bundle produces one combined gzip stream for the current build,
+without enumerating variants. The device-free server selects widgets using its
+mock profile capabilities; direct template rendering includes all editors unless
+flags or exact widget types are supplied.
 The selector ID is `pad-edit-<type>-widget-option`, not an owner descriptor field.
 Do not edit bundle lists, template mappings, selector markup, or generic
 orchestration to add a widget.
@@ -655,7 +658,7 @@ prefixes; asset generation executes JS owners to verify exact manifest parity.
 Waveform's owned portal editor is included through the manifest and available
 only when the device's `widget_catalog` contains `waveform`. Its firmware
 implementation remains gated by `HAS_DISPLAY` and `IS_SHUTTER_TESTER`. Portal
-owners without `portal.gates` are packaged in the existing display bundle;
+owners without explicit portal gates inherit their complete native predicates;
 runtime availability alone is not a JavaScript size gate. No persisted JSON, firmware interaction, or
 native ABI changes are part of this wiring.
 
@@ -4495,7 +4498,7 @@ DNS server redirects all requests to device IP in AP mode:
 
 2. Rebuild to embed assets:
    ```bash
-   ./build.sh
+   ./build.sh <board>
    ```
    
    This automatically:
@@ -4505,17 +4508,14 @@ DNS server redirects all requests to device IP in AP mode:
   - Concatenates JS modules per `portal.js.bundle` chunk, then minifies using pinned Terser
    - Concatenates CSS fragments per `*.css.bundle` manifests (if present), then minifies using `csscompressor`
    - Gzip compresses all assets (level 9)
-  - Generates `src/app/web_assets.h` with embedded byte arrays
-  - Generates `src/app/project_branding.h` with `PROJECT_NAME` / `PROJECT_DISPLAY_NAME` defines
+  - Generates `build/<board>/web-assets/web_assets.h` with selected embedded byte arrays
+  - Generates `project_branding.h` and `repo_slug_config.h` in that output directory
    
    The build script shows compression statistics:
    ```
-   Asset Summary (Original → Minified → Gzipped):
-     HTML home.html:     5234 → 3891 → 1256 bytes (-76% total)
-     HTML network.html:  8912 → 6543 → 1987 bytes (-78% total)
-     HTML firmware.html: 4231 → 3124 → 1098 bytes (-74% total)
-     CSS  portal-all.css:      287228 → 274208 → 38475 bytes (-87% total)
-     JS   portal.js:   329575 → 220746 → 50066 bytes (-85% total)
+   Portal assets: one bundle per configuration, <total> gzip bytes
+     portal_js_gz: <javascript> bytes
+     portal_all_css_gz: <stylesheet> bytes
    ```
 
 3. Upload and test:
@@ -4535,14 +4535,67 @@ The shared bundle excludes binding-editor modules when `HAS_DISPLAY` is false
 and extension-manager code when `HAS_NATIVE_EXTENSIONS` is false. Fragment arrays
 and their lookup entries use the same feature conditions as the owning components,
 including MCP, music, recipes, hardware buttons, and camera motion. Each board
-links one selected gzip stream rather than all generated variants.
+embeds one selected gzip stream per bundle, with no generated variant matrix.
 
 The minifier supports `.bundle` manifests for both JavaScript and CSS. A bundle manifest lists source files that should be concatenated into a single asset at build time, reducing HTTP requests, route handlers, and flash usage on the ESP32.
 
 Manifest parsing trims leading and trailing whitespace without interpreting
 shell quoting or escapes. Comments may contain apostrophes and quotation marks.
 
-The same three shared functions (`discover_bundle_manifests`, `filter_bundle_fragments`, `concatenate_bundle`) handle both JS and CSS bundles in `tools/minify-web-assets.sh`.
+`tools/portal_assets.py` shares discovery, predicate resolution, filtering, and
+compression for JavaScript and CSS. Duplicate basenames across asset roots are
+errors rather than implicit shadowing.
+
+#### Feature Ownership And Selection
+
+`build.sh` supplies the fully expanded Arduino compiler recipe after applying
+board and profile flags. The asset builder preprocesses `board_config.h` with
+that recipe, including inherited board overrides and target/PSRAM defines.
+It does not infer feature values from board names or regex-parsed defines.
+Outputs live in `build/<board>/web-assets/`; compile-time guards reject stale
+headers whose feature selection differs from the firmware.
+
+Use these ownership mechanisms:
+
+- Bundle modules inherit the current `# [chunk:NAME EXPRESSION]` predicate.
+  Expressions support C-preprocessor `&&`, `||`, `!`, and parentheses. Keep
+  providers and shared helpers before consumers.
+- Standalone scripts, styles, and fragments require an explicit entry in
+  `tools/portal_assets.py`'s `OWNERS` map, matching their native route/component
+  condition. Adding an unowned standalone asset fails generation.
+- Widget assets inherit native predicates from the
+  [widget manifest](../../src/app/widgets/manifest.json). Keep runtime availability checks for
+  capabilities that can also disappear after compilation.
+- Mixed shared modules use balanced `// @portal-if EXPRESSION` and
+  `// @portal-endif` lines. Nested blocks are supported. Filtering occurs before
+  syntax checking and minification; keep each selected result valid JavaScript.
+  Raw sources remain valid JavaScript for device-free development and tests.
+
+For example:
+
+```javascript
+// @portal-if HAS_MQTT
+function init_mqtt_fragment() {
+    loadMqttConfig();
+}
+// @portal-endif
+```
+
+Unknown predicates and malformed blocks fail generation, including blocks in
+unselected modules. `tests/test_portal_asset_gates.js` preprocesses the generated
+headers, decompresses selected payloads, and checks widget/fragment parity,
+helper ordering, syntax, and absent disabled-feature symbols across headless,
+display, opt-out, and device-class profiles. Existing behavior tests exercise
+enabled editors and unsupported-configuration safety. The generated
+`portal-assets.json` records the actual decisions and compressed payload sizes.
+
+Generic catalog-driven action controls, ordinary field/layout helpers, and
+existing image-path selection stay shared intentionally. They support multiple
+features or preserve configuration, rather than implement a disabled device
+feature. Imported unsupported widgets retain their selected type and data;
+saving an edit requires clearing or replacing an unsupported widget, matching
+the existing unsupported-action recovery behavior. Do not silently drop fields
+or repopulate unavailable editors just to support cross-board import.
 
 #### Shared JavaScript Bundle
 
@@ -4551,8 +4604,8 @@ Shared JavaScript source files are concatenated into a single `portal.js` asset 
 **How it works:**
 
 1. `src/app/web/portal.js.bundle` lists every JS module in dependency order (one filename per line, `#` comments ignored)
-2. `tools/minify-web-assets.sh` resolves each manifest entry by checking `src/app/web/` first, then `src/app/device_classes/*/web/`
-3. The minifier concatenates the resolved files, minifies the result, and gzip-compresses it into `web_assets.h`
+2. `tools/portal_assets.py` resolves each manifest entry across `src/app/web/` and `src/app/device_classes/*/web/`, rejecting collisions
+3. The builder selects matching chunks and feature blocks, concatenates their files, minifies the result, and gzip-compresses it into `web_assets.h`
 4. Every HTML page loads a single `<script src="/portal.js"></script>`
 5. One C++ handler (`handleJS`) serves the bundled asset
 
@@ -4595,14 +4648,14 @@ updates stay in that script rather than the shared configuration bundle.
   - Shared module: `src/app/web/portal_myfeature.js`
   - Device-class module: `src/app/device_classes/<class>/web/portal_myfeature.js`
 2. Add the filename (basename only) to `portal.js.bundle` in the correct dependency position (before any file that calls its functions, after any file it depends on)
-3. Run `./build.sh` - the module is automatically included in the bundle
+3. Use a matching feature predicate for feature-only code, then run `./build.sh <board>`
 
 **Fragment pattern:** Large modules are split into a main file and one or more fragment files. Fragments are listed before the main file in the bundle manifest so their functions are available when the main file executes. For example, `portal_health_sparkline.js` (fragment) appears before `portal_health.js` (main).
 
 **Build-time validation:** The build automatically validates the bundle before minification:
 
 - **Manifest check** — every file listed in the `.js.bundle` manifest must exist; missing files cause a hard build error
-- **Syntax check** — every `.js` file is checked with `node --check` to catch missing braces, unterminated strings, and other parse errors before minification
+- Selected JavaScript is checked with `node --check` after filtering, before minification
 
 > **Feature branches** may add additional modules such as `portal_brews.js`. These follow the same pattern: add the file, add it to the bundle manifest, no C++ changes needed.
 
@@ -4622,7 +4675,7 @@ CSS files can also be bundled using the same manifest pattern. This allows featu
 
 1. Create `src/app/web/_portal_myfeature.css` (underscore prefix excludes it from individual serving)
 2. Create or update `portal-all.css.bundle` with the filename before the primary CSS file
-3. Run `./build.sh` — the feature CSS is automatically included in the bundle
+3. Use a matching feature predicate, then run `./build.sh <board>`
 
 **Build-time validation:** Every file listed in a `.css.bundle` manifest must exist; missing files cause a hard build error.
 

@@ -27,15 +27,21 @@ Same aggregation pattern applies to `widgets.cpp`, `screens.cpp`, `display_drive
 
 ## Asset Bundles
 
-* `portal.js.bundle` lists JavaScript modules in dependency order, grouped by `# [chunk:NAME]` or feature-gated `# [chunk:NAME HAS_FLAG]` markers. The build emits compile-time-selected, pre-gzipped variants; `handlePortalJS` serves the matching combined `/portal.js` in one response. Keep dependencies before their consumers, and keep `portal.js` last in the shell chunk.
+* `portal.js.bundle` lists JavaScript modules in dependency order, grouped by `# [chunk:NAME]` or `# [chunk:NAME EXPRESSION]` markers (`&&`, `||`, `!`, parentheses). `tools/portal_assets.py` evaluates predicates with the actual Arduino compiler configuration and emits one gzip stream per bundle, never a variant matrix. Outputs live in `build/<board>/web-assets/` and reject mismatched firmware predicates at compile time. Keep dependencies before consumers and `portal.js` last in the shell chunk.
 * `shell.html` loads `/portal-all.css` and `/portal.js` once. `portal-all.css.bundle` assembles the shared styles. Components may advertise `portal_script` and `portal_style` assets through the nav API; `portal_nav.js` loads those separately. Do not assume every script or stylesheet belongs in the shared bundle.
 * For a shared JS module, add it to `portal.js.bundle` in the appropriate chunk. For a device-class module, place it in that class's `web/` directory and reference it from the manifest. The minifier checks missing manifest entries and JavaScript syntax. Run focused asset checks after edits; a firmware build follows the build verification policy.
+* Standalone assets require an explicit native feature owner in `tools/portal_assets.py`'s `OWNERS` map. Mixed shared modules use balanced `// @portal-if EXPRESSION` and `// @portal-endif` lines; gate both feature helpers and their calls. Keep filtered JavaScript valid, and preserve unsupported configuration instead of silently dropping it. Generic catalog-driven action controls and configuration-preserving helpers may remain shared intentionally.
 * Widget packaging is the exception to manual bundle entries: add one entry to
 	`src/app/widgets/manifest.json` with explicit firmware/portal paths, compile
 	gates, and selector label. The bundles expand `@widgets` in `HAS_DISPLAY`;
 	the renderer expands `WIDGET_OPTIONS` and `WIDGET_EDITORS`. Keep C++ and JS
 	behavior registration local. Do not add widget-specific bundle entries,
 	template mappings, selector options, or orchestration branches.
+	Portal gates inherit native `gates` and `any_gates`; deviations require
+	`portal.gate_exception` explaining cross-board authoring. Keep JS, CSS,
+	selector options, and editor HTML under the same predicate. Run
+	`bash tests/test_portal_asset_config.sh` and
+	`node tests/test_portal_asset_gates.js` for ownership or predicate changes.
 
 ## Portal Modes
 
