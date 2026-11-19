@@ -433,7 +433,7 @@ function isInCaptivePortal() {
 /**
  * Unified reconnection logic for all reboot scenarios
  * @param {Object} options - Reconnection options
- * @param {string} options.context - Context: 'save', 'ota', 'reboot'
+ * @param {string} options.context - Context: 'save', 'ota', 'ota-mode', 'reboot'
  * @param {string} options.newDeviceName - Optional new device name if changed
  * @param {HTMLElement} options.statusElement - Status message element
  * @param {HTMLElement} options.messageElement - Main message element
@@ -480,7 +480,12 @@ async function startReconnection(options) {
                     statusElement.textContent = 'Redirecting...';
                     const redirectUrl = targetUrl || window.location.origin;
                     setTimeout(() => {
-                        window.location.href = redirectUrl;
+                        if (context === 'ota-mode') {
+                            window.location.hash = '#manual-upload';
+                            window.location.reload();
+                        } else {
+                            window.location.href = redirectUrl;
+                        }
                     }, 1000);
                     return;
                 }
@@ -495,7 +500,8 @@ async function startReconnection(options) {
             setTimeout(checkConnection, checkInterval);
         } else {
             // Timeout - provide manual fallback
-            const fallbackUrl = targetUrl || window.location.origin;
+            const fallbackUrl = (targetUrl || window.location.origin) +
+                (context === 'ota-mode' ? '/#manual-upload' : '');
             messageElement.textContent = 'Automatic reconnection failed';
             statusElement.innerHTML = 
                 `<div style="color:#e74c3c; margin-bottom: 10px;">Could not reconnect after ${2 + (maxAttempts * 3)} seconds.</div>` +

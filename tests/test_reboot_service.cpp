@@ -14,9 +14,11 @@ static uint32_t clock_ms = 0;
 static unsigned restarts = 0;
 static unsigned audio_requests = 0;
 static AudioRebootStatus audio_status = AUDIO_REBOOT_PENDING;
+static esp_reset_reason_t reset_reason = ESP_RST_POWERON;
 
 unsigned long millis() { return clock_ms; }
 void esp_restart() { ++restarts; }
+esp_reset_reason_t esp_reset_reason() { return reset_reason; }
 void audio_request_reboot() { ++audio_requests; }
 AudioRebootStatus audio_reboot_status() { return audio_status; }
 bool portal_auth_gate(AsyncWebServerRequest* request) { return request->authorized; }
@@ -32,6 +34,10 @@ static void reset_test() {
     reboot_not_before = 0;
     reboot_shutdown_started = false;
     reboot_shutdown_at = 0;
+    reboot_into_ota_mode = false;
+    ota_mode = false;
+    ota_mode_marker = 0;
+    reset_reason = ESP_RST_POWERON;
 #if HAS_VOICE_NOTES
     reboot_recorder_wait_reported = false;
     recorder_status = VoiceNoteCancelStatus::Ready;
@@ -44,6 +50,27 @@ static void reset_test() {
 }
 
 int main() {
+    reset_test();
+    assert(ota_activity_try_begin());
+    assert(!reboot_request_ota_mode(100));
+    ota_activity_finish();
+    assert(reboot_request_ota_mode(100));
+    assert(!ota_activity_try_begin());
+    audio_status = AUDIO_REBOOT_COMPLETE;
+    reboot_service_loop();
+    clock_ms = 100;
+    reboot_service_loop();
+    assert(restarts == 1 && ota_mode_marker == OTA_MODE_MARKER);
+    reset_reason = ESP_RST_SW;
+    reboot_service_boot_init();
+    assert(reboot_is_ota_mode() && ota_mode_marker == 0);
+    reboot_service_boot_init();
+    assert(!reboot_is_ota_mode());
+    ota_mode_marker = OTA_MODE_MARKER;
+    reset_reason = ESP_RST_POWERON;
+    reboot_service_boot_init();
+    assert(!reboot_is_ota_mode() && ota_mode_marker == 0);
+
 #if HAS_VOICE_NOTES
     reset_test();
     recorder_status = VoiceNoteCancelStatus::Pending;

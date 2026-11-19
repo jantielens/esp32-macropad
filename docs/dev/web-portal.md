@@ -1366,6 +1366,7 @@ not every authentication failure, redirect, or early error response is instrumen
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/reboot` | Reboots without saving configuration. |
+| `POST` | `/api/reboot/ota` | Requests a one-shot reboot with Bluetooth and MQTT disabled. |
 | `POST` | `/api/sleep?seconds=N` | Requests one timed deep sleep, without saving configuration or changing the stored mode or cadence. |
 | `POST` | `/api/component/power-savings/activity` | Authenticated user-activity notification; `204`, available only with `HAS_AUTO_SHUTDOWN`. |
 
@@ -1373,6 +1374,14 @@ These routes use portal authentication. Sleep requires an ASCII decimal integer
 from 1 to 65535 seconds. It returns `400` for a missing or invalid duration,
 `409` when an update, configuration upload/write, or network transition prevents
 sleep, and `503` when main-loop dispatch cannot confirm admission.
+
+The OTA-mode reboot returns `409` if an update, configuration write, or network
+transition is active. The next software boot disables Bluetooth and MQTT without
+changing settings, using saved Wi-Fi or the setup network. If saved Wi-Fi fails,
+OTA mode starts the setup network even when the saved failure policy is offline.
+The request is consumed at boot; the following reboot returns to the saved
+operating mode. `/api/info` reports the mode in `ota_mode`. Manual firmware
+upload pauses health polling in the uploading portal tab and resumes it on failure.
 
 An accepted request returns `200 {"success":true,"message":"Entering deep sleep"}`.
 The main loop reserves the shared network transition before confirming sleep;

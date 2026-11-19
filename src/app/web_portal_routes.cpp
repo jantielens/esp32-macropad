@@ -77,6 +77,7 @@ static const char* const core_preflight_paths[] = {
 #endif
 	"/api/health",
 	"/api/reboot",
+	"/api/reboot/ota",
 	"/api/sleep",
 	"/api/firmware/update/status",
 	"/api/firmware/update",
@@ -233,6 +234,7 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		server->on("/api/health", HTTP_GET, handleGetHealth);
 
 		server->on("/api/reboot", HTTP_POST, handleReboot);
+		server->on("/api/reboot/ota", HTTP_POST, handleRebootOtaMode);
 		server->on("/api/sleep", HTTP_POST, handleSleep);
 
 		// GitHub Pages-based firmware updates (URL-driven)

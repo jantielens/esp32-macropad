@@ -291,7 +291,7 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 	#endif
 
 	#if HAS_BLE_HID
-	if (keyboard_hid_transport() == KeyboardTransport::Ble) {
+	if (!reboot_is_ota_mode() && keyboard_hid_transport() == KeyboardTransport::Ble) {
 		ble_hid_init(device_config.device_name, false);
 	} else {
 		LOGI("Main", "BLE Keyboard disabled (saves ~70 KB RAM)");
@@ -399,6 +399,7 @@ bool app_continue_offline_from_setup() {
 
 void setup()
 {
+	reboot_service_boot_init();
 	#ifdef BOARD_EARLY_POWER_INIT
 	const bool board_power_ready = BOARD_EARLY_POWER_INIT();
 	#endif
@@ -602,6 +603,10 @@ void setup()
 	if (power_manager_should_force_setup_ap()) {
 		boot_mode = PowerMode::Ap;
 	}
+	if (reboot_is_ota_mode()) {
+		if (boot_mode != PowerMode::Ap) boot_mode = PowerMode::AlwaysOn;
+		LOGI("OTA", "One-shot OTA mode: Bluetooth and MQTT disabled");
+	}
 	power_manager_set_current_mode(boot_mode);
 	power_manager_led_set_mode(boot_mode);
 
@@ -611,7 +616,7 @@ void setup()
 
 	#if (HAS_BLE || HAS_BLE_HID) && BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
 	// Reserve BLE's internal RAM before WiFi and normal-runtime allocations.
-	if (boot_mode == PowerMode::AlwaysOn || boot_mode == PowerMode::Offline) {
+	if (!reboot_is_ota_mode() && (boot_mode == PowerMode::AlwaysOn || boot_mode == PowerMode::Offline)) {
 		bthome_events_configure(device_config.device_name, device_config.bthome_event);
 		bthome_events_prepare();
 	}
@@ -819,7 +824,7 @@ void setup()
 			#if HAS_DISPLAY
 			time_binding_start_ntp();
 			#endif
-		} else if (boot_mode == PowerMode::AlwaysOn &&
+		} else if (!reboot_is_ota_mode() && boot_mode == PowerMode::AlwaysOn &&
 				strcmp(device_config.wifi_failure_mode, "offline") == 0) {
 			LOGW("Main", "Saved Wi-Fi failed; continuing offline");
 			wifi_manager_enter_offline();

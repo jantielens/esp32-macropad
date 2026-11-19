@@ -22,8 +22,10 @@ unsigned long millis() { return TestBle::clock_ms; }
 void net_activity_mark(net_channel_t) {}
 #endif
 static bool ota_active = false;
+static bool ota_mode = false;
 static uint32_t ota_epoch = 1;
 bool ota_activity_is_active() { return ota_active; }
+bool reboot_is_ota_mode() { return ota_mode; }
 uint32_t ota_activity_epoch() { return ota_epoch; }
 uint32_t gamepad_hid_submission_generation() { return 1; }
 
@@ -35,6 +37,7 @@ protected:
         BLEDevice::initialized = false;
         BLEDevice::init_succeeds = true;
         ota_active = false;
+        ota_mode = false;
         ota_epoch = 1;
 #if HAS_BLE_HID
         protocolMode = 1;
@@ -101,6 +104,18 @@ protected:
     }
 #endif
 };
+
+TEST_F(BleHid, OtaModeBlocksBluetoothStartupAndEvents) {
+    ota_mode = true;
+    BLEDevice::initialized = false;
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+    NimBLEDevice::initialized = false;
+#endif
+    const unsigned inits = TestBle::host_inits;
+    EXPECT_FALSE(ble_backend_prepare("Test"));
+    EXPECT_FALSE(bthome_events_send(1, bthome::press));
+    EXPECT_EQ(TestBle::host_inits, inits);
+}
 
 TEST_F(BleHid, BthomeOperationQueuesNormalizedEventsAndReportsRejection) {
     ActionResolvedArgument arguments[] = {{nullptr, 10, 0}, {"press", 0, 0}};

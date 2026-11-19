@@ -1,6 +1,21 @@
 // portal_firmware.js - Firmware file selection and OTA upload
 // Part of the ESP32 Macropad configuration portal.
 
+async function bootIntoOtaMode() {
+    if (!confirm('Reboot into OTA mode? Bluetooth and MQTT will be disabled until the next reboot.')) return;
+    const button = document.getElementById('ota-mode-btn');
+    button.disabled = true;
+    try {
+        const response = await fetch('/api/reboot/ota', { method: 'POST' });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || 'Reboot request failed');
+        showRebootDialog({ title: 'OTA Mode', message: 'Rebooting into OTA mode...', context: 'ota-mode' });
+    } catch (error) {
+        button.disabled = false;
+        showMessage('Could not start OTA mode: ' + error.message, 'error');
+    }
+}
+
 /**
  * Handle firmware file selection
  * @param {Event} event - File input change event
@@ -34,6 +49,7 @@ async function uploadFirmware() {
     
     uploadBtn.disabled = true;
     fileInput.disabled = true;
+    stopHealthPolling();
     
     // Show unified reboot dialog with progress bar
     showRebootDialog({
@@ -62,6 +78,7 @@ async function uploadFirmware() {
         progressContainer.style.display = 'none';
         uploadBtn.disabled = false;
         fileInput.disabled = false;
+        resumeHealthPolling();
         setTimeout(() => { overlay.style.display = 'none'; }, 3000);
     }
 

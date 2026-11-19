@@ -9,4 +9,7 @@ enum RebootOwnership : uint8_t {
 };
 
 void reboot_request(uint32_t grace_ms, RebootOwnership ownership = REBOOT_NORMAL);
+bool reboot_request_ota_mode(uint32_t grace_ms);
+void reboot_service_boot_init();
+bool reboot_is_ota_mode();
 void reboot_service_loop();

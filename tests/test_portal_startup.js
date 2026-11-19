@@ -2,12 +2,78 @@ const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
 
+async function testOtaModeReboot() {
+    for (const outcome of ['success', 'rejected']) {
+        const button = { disabled: false };
+        let url, method, dialog, message;
+        const context = {
+            confirm: () => true,
+            document: { getElementById: () => button },
+            fetch: async (target, options) => {
+                url = target;
+                method = options.method;
+                return { ok: outcome === 'success', json: async () => ({
+                    success: outcome === 'success', message: 'Activity in progress'
+                }) };
+            },
+            showRebootDialog: value => { dialog = value; },
+            showMessage: value => { message = value; }
+        };
+        vm.createContext(context);
+        vm.runInContext(fs.readFileSync('src/app/web/portal_firmware.js', 'utf8'), context);
+        await context.bootIntoOtaMode();
+        assert.strictEqual(url, '/api/reboot/ota');
+        assert.strictEqual(method, 'POST');
+        assert.strictEqual(button.disabled, outcome === 'success');
+        if (outcome === 'success') assert.strictEqual(dialog.context, 'ota-mode');
+        else assert.match(message, /Activity in progress/);
+    }
+}
+
+async function testRebootRedirect() {
+    for (const contextName of ['ota-mode', 'reboot']) {
+        const timers = [];
+        let reloads = 0;
+        const location = {
+            origin: 'http://device',
+            hash: '#manual-upload',
+            reload() { ++reloads; }
+        };
+        const fetch = async () => ({ ok: true });
+        const context = {
+            window: { location, fetch },
+            document: { getElementById: () => null },
+            fetch,
+            setTimeout(callback) { timers.push(callback); },
+            AbortSignal,
+            console
+        };
+        vm.createContext(context);
+        vm.runInContext(fs.readFileSync('src/app/web/portal_core.js', 'utf8'), context);
+        const pending = context.startReconnection({
+            context: contextName, statusElement: {}, messageElement: {}
+        });
+        timers.shift()();
+        await pending;
+        await new Promise(resolve => setImmediate(resolve));
+        timers.shift()();
+        if (contextName === 'ota-mode') {
+            assert.strictEqual(location.hash, '#manual-upload');
+            assert.strictEqual(reloads, 1, 'reload even when the fragment is already selected');
+        } else {
+            assert.strictEqual(location.href, 'http://device');
+            assert.strictEqual(reloads, 0);
+        }
+    }
+}
+
 async function testFirmwareUploadResponses() {
     for (const outcome of ['success', 'rejected', 'disconnect']) {
         const nodes = new Map();
         const timers = [];
         let request;
         let reconnects = 0;
+        let pollingPaused = false;
         class FakeRequest {
             constructor() {
                 request = this;
@@ -29,6 +95,8 @@ async function testFirmwareUploadResponses() {
             FormData: class { append() {} },
             API_UPDATE: '/api/update',
             showRebootDialog() {},
+            stopHealthPolling() { pollingPaused = true; },
+            resumeHealthPolling() { pollingPaused = false; },
             startReconnection() { ++reconnects; },
             setTimeout(callback) { timers.push(callback); },
             console
@@ -36,6 +104,7 @@ async function testFirmwareUploadResponses() {
         vm.createContext(context);
         vm.runInContext(fs.readFileSync('src/app/web/portal_firmware.js', 'utf8'), context);
         await context.uploadFirmware();
+        assert(pollingPaused, 'upload must pause health polling');
         request.progress({ lengthComputable: true, loaded: 98, total: 100 });
         if (outcome === 'disconnect') {
             request.handlers.error();
@@ -45,6 +114,7 @@ async function testFirmwareUploadResponses() {
             request.handlers.load();
         }
         if (outcome === 'rejected') {
+            assert(!pollingPaused, 'failed upload must resume health polling');
             assert.match(nodes.get('reboot-message').textContent, /retry update/);
             assert.strictEqual(nodes.get('upload-btn').disabled, false);
             assert.strictEqual(nodes.get('firmware-file').disabled, false);
@@ -112,6 +182,8 @@ async function testFetchConcurrency() {
 }
 
 async function main() {
+    await testOtaModeReboot();
+    await testRebootRedirect();
     await testFirmwareUploadResponses();
     await testFetchConcurrency();
     const listeners = new Map();

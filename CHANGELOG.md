@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add **Boot into OTA Mode** under **Firmware > Manual Upload** for devices
+  experiencing unreliable uploads. Bluetooth and MQTT are disabled for one boot
+  without changing saved settings; the next reboot restores normal operation.
+  The portal returns to Manual Upload after reconnecting.
+  See [firmware updates and recovery](docs/user/device/updates-and-recovery.md#upload-a-firmware-application-file).
 * Add searchable actions with familiar fixed controls and a **Dynamic** option
   per eligible argument. Use widget values, List items, live bindings, or
   expressions to choose what an action does. For example, open the pad tapped

@@ -6,6 +6,7 @@
 #include "voice_notes.h"
 #endif
 #include <Arduino.h>
+#include <esp_attr.h>
 #include <esp_system.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/portmacro.h>
@@ -17,11 +18,33 @@ static bool reboot_owns_transition = false;
 static uint32_t reboot_not_before = 0;
 static bool reboot_shutdown_started = false;
 static uint32_t reboot_shutdown_at = 0;
+static bool reboot_into_ota_mode = false;
+static bool ota_mode = false;
+RTC_NOINIT_ATTR static uint32_t ota_mode_marker;
+static constexpr uint32_t OTA_MODE_MARKER = 0x4f54414d;
 static constexpr uint32_t REBOOT_AUDIO_TIMEOUT_MS = 1000;
 #if HAS_VOICE_NOTES
 static constexpr uint32_t REBOOT_RECORDER_TIMEOUT_MS = 5000;
 static bool reboot_recorder_wait_reported = false;
 #endif
+
+void reboot_service_boot_init() {
+    ota_mode = esp_reset_reason() == ESP_RST_SW && ota_mode_marker == OTA_MODE_MARKER;
+    ota_mode_marker = 0;
+}
+
+bool reboot_is_ota_mode() {
+    return ota_mode;
+}
+
+bool reboot_request_ota_mode(uint32_t grace_ms) {
+    if (!ota_activity_try_begin_network_transition()) return false;
+    portENTER_CRITICAL(&reboot_mux);
+    reboot_into_ota_mode = true;
+    portEXIT_CRITICAL(&reboot_mux);
+    reboot_request(grace_ms, REBOOT_NETWORK_TRANSITION);
+    return true;
+}
 
 void reboot_request(uint32_t grace_ms, RebootOwnership ownership) {
     const uint32_t not_before = millis() + grace_ms;
@@ -75,6 +98,7 @@ void reboot_service_loop() {
 #endif
     portENTER_CRITICAL(&reboot_mux);
     const bool grace_elapsed = (int32_t)(millis() - reboot_not_before) >= 0;
+    const bool enter_ota_mode = reboot_into_ota_mode;
     portEXIT_CRITICAL(&reboot_mux);
     if (!grace_elapsed) return;
 #if HAS_AUDIO
@@ -82,5 +106,6 @@ void reboot_service_loop() {
     else if (status == AUDIO_REBOOT_ERROR) LOGW("Reboot", "Audio shutdown failed");
 #endif
     LOGI("Reboot", "Restarting device");
+    if (enter_ota_mode) ota_mode_marker = OTA_MODE_MARKER;
     esp_restart();
 }

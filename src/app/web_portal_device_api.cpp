@@ -201,6 +201,8 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 
 		// Close board_name string value
 		response->print("\"");
+		response->print(",\"ota_mode\":");
+		response->print(reboot_is_ota_mode() ? "true" : "false");
 
 		// Health widget client tuning (sparklines + polling cadence)
 		response->print(",\"health_poll_interval_ms\":");
@@ -657,6 +659,15 @@ void handleReboot(AsyncWebServerRequest *request) {
 		request->send(200, "application/json", "{\"success\":true,\"message\":\"Rebooting device...\"}");
 
 		reboot_request(100);
+}
+
+void handleRebootOtaMode(AsyncWebServerRequest *request) {
+		if (!portal_auth_gate(request)) return;
+		if (!reboot_request_ota_mode(500)) {
+				request->send(409, "application/json", "{\"success\":false,\"message\":\"Update, configuration write, or network transition in progress\"}");
+				return;
+		}
+		request->send(200, "application/json", "{\"success\":true,\"message\":\"Rebooting into OTA mode\"}");
 }
 
 static void request_sleep_on_main_loop(const void* context, bool* ok, char*, size_t) {

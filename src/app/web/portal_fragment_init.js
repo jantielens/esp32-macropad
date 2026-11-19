@@ -1038,6 +1038,15 @@ window.init_manual_upload_fragment = function () {
     if (fileInput) fileInput.addEventListener('change', handleFileSelect);
     var uploadBtn = document.getElementById('upload-btn');
     if (uploadBtn) uploadBtn.addEventListener('click', uploadFirmware);
+    var modeBtn = document.getElementById('ota-mode-btn');
+    if (modeBtn) modeBtn.addEventListener('click', bootIntoOtaMode);
+    getDeviceInfo().then(function (info) {
+        if (!info || !info.ota_mode) return;
+        var control = document.getElementById('ota-mode-control');
+        var active = document.getElementById('ota-mode-active');
+        if (control) control.style.display = 'none';
+        if (active) active.style.display = '';
+    });
 };
 
 // ============================================================================
