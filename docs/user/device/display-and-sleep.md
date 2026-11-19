@@ -38,6 +38,11 @@ Save and reboot to apply the choice to display and touch together.
 
 Open **Display > Screen Saver** when available.
 
+On a fresh non-e-paper device, automatic display sleep is enabled with the
+board's default timeout (normally five minutes). E-paper devices do not
+automatically enter display sleep by default. Existing saved choices are
+preserved.
+
 1. Enable **Show an idle screen** if you want a temporary pad after inactivity.
    Select the pad and its delay.
 2. Enable automatic display/backlight shutoff if you also want a second stage.

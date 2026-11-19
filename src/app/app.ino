@@ -498,19 +498,6 @@ void setup()
 	device_config.backlight_brightness = 100;  // Default to full brightness
 	device_config.mqtt_port = 0;
 
-	#if HAS_DISPLAY
-	// Screen saver defaults (v1)
-	device_config.screen_saver_enabled = false;
-	device_config.screen_saver_timeout_seconds = 300;
-	device_config.screen_saver_fade_out_ms = 800;
-	device_config.screen_saver_fade_in_ms = 400;
-	#if HAS_TOUCH
-	device_config.screen_saver_wake_on_touch = true;
-	#else
-	device_config.screen_saver_wake_on_touch = false;
-	#endif
-	#endif
-
 	#if HAS_TOUCH || HAS_CAMERA || HAS_AUDIO || HAS_RTC || defined(BOARD_HARDWARE_SOURCE)
 	i2c_bus_init();
 	#endif

@@ -1503,7 +1503,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/confirm_action.cpp
   - src/app/app.ino
   - src/app/board_config.h
-  - src/app/config_manager.cpp
   - src/app/device_dialog.cpp
   - src/app/display_manager.cpp
   - src/app/display_manager.h

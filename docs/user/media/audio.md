@@ -63,6 +63,8 @@ may take longer than closing the browser normally.
 Open **Audio > Volume** and adjust the slider from 0-100%. The change applies
 immediately; select **Save** to retain the current volume across reboots.
 The device volume applies to feedback, alerts, and Music.
+On a fresh device, volume starts at 50% unless the board defines another
+default. Existing saved volume settings, including 0%, are preserved.
 Volume actions and MQTT volume commands change the current volume without
 saving it. Add a **Save volume** action to retain it across reboots. Each save
 action stores only its own level.
@@ -95,6 +97,8 @@ Bindable tone fields can resolve a pattern from live data.
 
 In **Audio > Button Feedback**, enter Tap Feedback and Long-Press Feedback
 patterns, then **Save**. Empty disables that feedback.
+Fresh devices use `500:40` for taps and `500:40 60 1000:40` for long presses.
+Saved patterns, including disabled feedback, are preserved across restarts.
 Feedback is limited to one second total, including gaps; longer patterns are
 truncated. Explicit tone alerts do not use this feedback limit.
 

@@ -65,6 +65,80 @@ bool time_service_timezone_valid(const char*) { return true; }
 bool time_service_set_timezone(const char*) { return true; }
 bool wifi_ap_password_is_valid(const char* password) { return password && !password[0]; }
 
+#if HAS_DISPLAY
+void device_dialog_set_templates(const DialogTemplates&) {}
+#endif
+
+static void assert_config_defaults(const DeviceConfig& config) {
+#if HAS_AUDIO
+    assert(config.audio_volume == AUDIO_DEFAULT_VOLUME);
+    assert(strcmp(config.tap_beep, "500:40") == 0);
+    assert(strcmp(config.lp_beep, "500:40 60 1000:40") == 0);
+#endif
+#if HAS_DISPLAY
+    assert(config.screen_saver_enabled == (!HAS_EPAPER_PANEL || SCREENSAVER_BACKLIGHT_ONLY));
+    assert(config.screen_saver_timeout_seconds == SCREENSAVER_DEFAULT_TIMEOUT_SECONDS);
+    assert(config.screen_saver_fade_out_ms == SCREENSAVER_DEFAULT_FADE_OUT_MS);
+    assert(config.screen_saver_fade_in_ms == SCREENSAVER_DEFAULT_FADE_IN_MS);
+    assert(config.screen_saver_wake_on_touch == HAS_TOUCH);
+#endif
+    assert(strcmp(config.operating_mode, "always_on") == 0);
+}
+
+static void test_config_defaults_before_nvs_read() {
+    for (bool namespace_exists : {false, true}) {
+        Preferences::begin_ok = namespace_exists;
+        DeviceConfig config = {};
+        assert(!config_manager_load(&config));
+        assert_config_defaults(config);
+    }
+    Preferences::begin_ok = true;
+}
+
+static void test_config_missing_keys_and_saved_choices() {
+    Preferences::magic = CONFIG_MAGIC;
+    Preferences::strings = {{"device_name", "remote"}, {"wifi_ssid", "configured"},
+                            {"wifi_fail", "ap"}};
+    DeviceConfig config = {};
+    assert(config_manager_load(&config));
+    assert_config_defaults(config);
+
+#if HAS_AUDIO
+    Preferences::levels["audio_vol"] = 0;
+    Preferences::strings["tap_beep"] = "";
+    Preferences::strings["lp_beep"] = "none";
+#endif
+#if HAS_DISPLAY
+    Preferences::bools["ss_en"] = false;
+#endif
+    assert(config_manager_load(&config));
+#if HAS_AUDIO
+    assert(config.audio_volume == 0);
+    assert(config.tap_beep[0] == '\0');
+    assert(strcmp(config.lp_beep, "none") == 0);
+    Preferences::levels["audio_vol"] = 73;
+    Preferences::strings["tap_beep"] = "880:20";
+    Preferences::strings["lp_beep"] = "990:30";
+#endif
+#if HAS_DISPLAY
+    assert(config.screen_saver_enabled == bool(SCREENSAVER_BACKLIGHT_ONLY));
+    Preferences::bools["ss_en"] = true;
+#endif
+    assert(config_manager_load(&config));
+#if HAS_AUDIO
+    assert(config.audio_volume == 73);
+    assert(strcmp(config.tap_beep, "880:20") == 0);
+    assert(strcmp(config.lp_beep, "990:30") == 0);
+#endif
+#if HAS_DISPLAY
+    assert(config.screen_saver_enabled);
+#endif
+    Preferences::magic = 0;
+    Preferences::strings.clear();
+    Preferences::levels.clear();
+    Preferences::bools.clear();
+}
+
 static void test_offline_config_without_ssid() {
     DeviceConfig config = {};
     config.magic = CONFIG_MAGIC;
@@ -222,6 +296,8 @@ static void test_rmdir_failure_fails_reset() {
 #endif
 
 int main() {
+    test_config_defaults_before_nvs_read();
+    test_config_missing_keys_and_saved_choices();
     test_offline_config_without_ssid();
 #if HAS_AUDIO
     test_save_current_volume();

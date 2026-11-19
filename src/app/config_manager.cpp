@@ -422,8 +422,11 @@ bool config_manager_load(DeviceConfig *config) {
 		#endif
 
 		#if HAS_AUDIO
+		config->audio_volume = AUDIO_DEFAULT_VOLUME;
 		config->audio_idle_mute = true;
 		config->audio_wake_delay_ms = AUDIO_WAKE_DELAY_DEFAULT_MS;
+		strlcpy(config->tap_beep, "500:40", CONFIG_BEEP_PATTERN_MAX_LEN);
+		strlcpy(config->lp_beep, "500:40 60 1000:40", CONFIG_BEEP_PATTERN_MAX_LEN);
 		#endif
 
 		#if HAS_LVGL_EPAPER
@@ -432,96 +435,77 @@ bool config_manager_load(DeviceConfig *config) {
 		config_manager_publish_epaper_refresh_settings(config);
 		#endif
 
+		// Defaults must also apply when the NVS namespace does not exist yet.
+		config->backlight_brightness = 100;
+		config->mqtt_port = 0;
+
+		strlcpy(config->operating_mode, "always_on", CONFIG_OPERATING_MODE_MAX_LEN);
+		config->duty_cycle_wake_seconds = 120;
+		config->mqtt_publish_interval_seconds = 120;
+		config->portal_idle_timeout_seconds = CONFIG_DEFAULT_PORTAL_IDLE_SECONDS;
+#if HAS_AUTO_SHUTDOWN
+		config->auto_shutdown_timeout_seconds = AUTO_SHUTDOWN_DEFAULT_SECONDS;
+#endif
+		config->wifi_backoff_max_seconds = 900;
+
+		strlcpy(config->mqtt_publish_scope, "sensors_only", CONFIG_MQTT_SCOPE_MAX_LEN);
+
+		config->basic_auth_enabled = false;
+		config->basic_auth_username[0] = '\0';
+		config->basic_auth_password[0] = '\0';
+
+#if HAS_MCP
+		config->mcp_enabled = false;
+		config->mcp_control_enabled = false;
+		config->mcp_authoring_enabled = false;
+		config->mcp_token[0] = '\0';
+#endif
+
+		#if HAS_DISPLAY
+		config->dialog_appearance = DialogTemplates{};
+		device_dialog_set_templates(config->dialog_appearance);
+		config->screen_saver_enabled = !HAS_EPAPER_PANEL || SCREENSAVER_BACKLIGHT_ONLY;
+		config->screen_saver_timeout_seconds = SCREENSAVER_DEFAULT_TIMEOUT_SECONDS;
+		config->screen_saver_fade_out_ms = SCREENSAVER_DEFAULT_FADE_OUT_MS;
+		config->screen_saver_fade_in_ms = SCREENSAVER_DEFAULT_FADE_IN_MS;
+		config->screen_saver_wake_on_touch = HAS_TOUCH;
+		config->screen_saver_wake_binding[0] = '\0';
+		config->idle_screen_enabled = false;
+		config->idle_screen_timeout_seconds = 300;
+		config->idle_screen_pad[0] = '\0';
+		#endif
+
+		#if HAS_CAMERA
+		config->camera_jpeg_quality = CAMERA_JPEG_QUALITY_DEFAULT;
+		config->camera_feed_target_fps = CAMERA_FEED_TARGET_FPS_DEFAULT;
+		config->camera_motion_enabled = false;
+		config->camera_motion_analyze_every_nth_frame = CAMERA_MOTION_ANALYZE_EVERY_DEFAULT;
+		config->camera_motion_sensitivity = CAMERA_MOTION_SENSITIVITY_DEFAULT;
+		config->camera_presence_hold_seconds = CAMERA_PRESENCE_HOLD_SECONDS_DEFAULT;
+		#if HAS_DISPLAY
+		config->camera_motion_keep_display_awake = false;
+		#endif
+		config->camera_rotation = CAMERA_ROTATION_DEFAULT;
+		config->camera_output_width = CAMERA_OUTPUT_WIDTH_DEFAULT;
+		config->camera_output_height = CAMERA_OUTPUT_HEIGHT_DEFAULT;
+		config->camera_exposure_lines = CAMERA_EXPOSURE_LINES_DEFAULT;
+		config->camera_white_balance_red_q8 = CAMERA_WHITE_BALANCE_Q8_DEFAULT;
+		config->camera_white_balance_blue_q8 = CAMERA_WHITE_BALANCE_Q8_DEFAULT;
+		#endif
+
+		device_class_dispatch_config_defaults(config);
+
 		LOGT("Config", "Load start");
 
 		if (!preferences.begin(CONFIG_NAMESPACE, true)) { // Read-only mode
 				LOGE("Config", "Preferences begin failed");
 				return false;
 		}
-		
-		// Check magic number first
+
 		uint32_t magic = preferences.getUInt(KEY_MAGIC, 0);
 		if (magic != CONFIG_MAGIC) {
 				preferences.end();
 				LOGW("Config", "No config found");
-				
-				// Initialize defaults for fields that need sensible values even when no config exists
-				config->backlight_brightness = 100;  // Default to full brightness
-				config->mqtt_port = 0;
-
-				strlcpy(config->operating_mode, "always_on", CONFIG_OPERATING_MODE_MAX_LEN);
-				config->duty_cycle_wake_seconds = 120;
-				config->mqtt_publish_interval_seconds = 120;
-				config->portal_idle_timeout_seconds = CONFIG_DEFAULT_PORTAL_IDLE_SECONDS;
-#if HAS_AUTO_SHUTDOWN
-				config->auto_shutdown_timeout_seconds = AUTO_SHUTDOWN_DEFAULT_SECONDS;
-#endif
-				config->wifi_backoff_max_seconds = 900;
-
-				strlcpy(config->mqtt_publish_scope, "sensors_only", CONFIG_MQTT_SCOPE_MAX_LEN);
-
-				// Basic Auth defaults
-				config->basic_auth_enabled = false;
-				config->basic_auth_username[0] = '\0';
-				config->basic_auth_password[0] = '\0';
-
-				// MCP server defaults (off, no token)
-#if HAS_MCP
-				config->mcp_enabled = false;
-				config->mcp_control_enabled = false;
-				config->mcp_authoring_enabled = false;
-				config->mcp_token[0] = '\0';
-#endif
-
-				#if HAS_BLE_HID || HAS_USB_HID
-				config->keyboard_transport = keyboard_transport_default(HAS_BLE_HID, HAS_USB_HID);
-				#endif
-
-				#if HAS_DISPLAY
-				config->dialog_appearance = DialogTemplates{};
-				device_dialog_set_templates(config->dialog_appearance);
-				// Screen saver defaults
-				config->screen_saver_enabled = true;
-				config->screen_saver_timeout_seconds = SCREENSAVER_DEFAULT_TIMEOUT_SECONDS;
-				config->screen_saver_fade_out_ms = SCREENSAVER_DEFAULT_FADE_OUT_MS;
-				config->screen_saver_fade_in_ms = SCREENSAVER_DEFAULT_FADE_IN_MS;
-				#if HAS_TOUCH
-				config->screen_saver_wake_on_touch = true;
-				#else
-				config->screen_saver_wake_on_touch = false;
-				#endif
-				config->screen_saver_wake_binding[0] = '\0';
-				config->idle_screen_enabled = false;
-				config->idle_screen_timeout_seconds = 300;
-				config->idle_screen_pad[0] = '\0';
-				#endif
-
-				#if HAS_LVGL_EPAPER
-				config_manager_apply_epaper_refresh_defaults(config);
-				config_manager_publish_epaper_refresh_settings(config);
-				#endif
-
-				#if HAS_CAMERA
-				config->camera_jpeg_quality = CAMERA_JPEG_QUALITY_DEFAULT;
-				config->camera_feed_target_fps = CAMERA_FEED_TARGET_FPS_DEFAULT;
-				config->camera_motion_enabled = false;
-				config->camera_motion_analyze_every_nth_frame = CAMERA_MOTION_ANALYZE_EVERY_DEFAULT;
-				config->camera_motion_sensitivity = CAMERA_MOTION_SENSITIVITY_DEFAULT;
-				config->camera_presence_hold_seconds = CAMERA_PRESENCE_HOLD_SECONDS_DEFAULT;
-				#if HAS_DISPLAY
-				config->camera_motion_keep_display_awake = false;
-				#endif
-				config->camera_rotation = CAMERA_ROTATION_DEFAULT;
-				config->camera_output_width = CAMERA_OUTPUT_WIDTH_DEFAULT;
-				config->camera_output_height = CAMERA_OUTPUT_HEIGHT_DEFAULT;
-				config->camera_exposure_lines = CAMERA_EXPOSURE_LINES_DEFAULT;
-				config->camera_white_balance_red_q8 = CAMERA_WHITE_BALANCE_Q8_DEFAULT;
-				config->camera_white_balance_blue_q8 = CAMERA_WHITE_BALANCE_Q8_DEFAULT;
-				#endif
-
-				// Let registered device classes seed their own defaults.
-				device_class_dispatch_config_defaults(config);
-				
 				return false;
 		}
 		
@@ -677,17 +661,15 @@ bool config_manager_load(DeviceConfig *config) {
 		#endif
 
 		#if HAS_AUDIO
-		config->audio_volume = preferences.getUChar(KEY_AUDIO_VOLUME, AUDIO_DEFAULT_VOLUME);
-		config->audio_idle_mute = preferences.getBool(KEY_AUDIO_IDLE_MUTE, true);
-		config->audio_wake_delay_ms = preferences.getUShort(KEY_AUDIO_WAKE_DELAY, AUDIO_WAKE_DELAY_DEFAULT_MS);
+		config->audio_volume = preferences.getUChar(KEY_AUDIO_VOLUME, config->audio_volume);
+		config->audio_idle_mute = preferences.getBool(KEY_AUDIO_IDLE_MUTE, config->audio_idle_mute);
+		config->audio_wake_delay_ms = preferences.getUShort(KEY_AUDIO_WAKE_DELAY, config->audio_wake_delay_ms);
 		if (config->audio_wake_delay_ms > AUDIO_WAKE_DELAY_MAX_MS) config->audio_wake_delay_ms = AUDIO_WAKE_DELAY_MAX_MS;
-		{
-			size_t n = preferences.getString(KEY_TAP_BEEP, config->tap_beep, CONFIG_BEEP_PATTERN_MAX_LEN);
-			if (n == 0) strlcpy(config->tap_beep, "500:40", CONFIG_BEEP_PATTERN_MAX_LEN);
+		if (preferences.isKey(KEY_TAP_BEEP)) {
+			preferences.getString(KEY_TAP_BEEP, config->tap_beep, CONFIG_BEEP_PATTERN_MAX_LEN);
 		}
-		{
-			size_t n = preferences.getString(KEY_LP_BEEP, config->lp_beep, CONFIG_BEEP_PATTERN_MAX_LEN);
-			if (n == 0) strlcpy(config->lp_beep, "500:40 60 1000:40", CONFIG_BEEP_PATTERN_MAX_LEN);
+		if (preferences.isKey(KEY_LP_BEEP)) {
+			preferences.getString(KEY_LP_BEEP, config->lp_beep, CONFIG_BEEP_PATTERN_MAX_LEN);
 		}
 		#endif
 
@@ -708,16 +690,12 @@ bool config_manager_load(DeviceConfig *config) {
 		#if SCREENSAVER_BACKLIGHT_ONLY
 		config->screen_saver_enabled = true;
 		#else
-		config->screen_saver_enabled = preferences.getBool(KEY_SCREEN_SAVER_ENABLED, true);
+		config->screen_saver_enabled = preferences.getBool(KEY_SCREEN_SAVER_ENABLED, config->screen_saver_enabled);
 		#endif
-		config->screen_saver_timeout_seconds = preferences.getUShort(KEY_SCREEN_SAVER_TIMEOUT, SCREENSAVER_DEFAULT_TIMEOUT_SECONDS);
-		config->screen_saver_fade_out_ms = preferences.getUShort(KEY_SCREEN_SAVER_FADE_OUT, SCREENSAVER_DEFAULT_FADE_OUT_MS);
-		config->screen_saver_fade_in_ms = preferences.getUShort(KEY_SCREEN_SAVER_FADE_IN, SCREENSAVER_DEFAULT_FADE_IN_MS);
-		#if HAS_TOUCH
-		config->screen_saver_wake_on_touch = preferences.getBool(KEY_SCREEN_SAVER_WAKE_TOUCH, true);
-		#else
-		config->screen_saver_wake_on_touch = preferences.getBool(KEY_SCREEN_SAVER_WAKE_TOUCH, false);
-		#endif
+		config->screen_saver_timeout_seconds = preferences.getUShort(KEY_SCREEN_SAVER_TIMEOUT, config->screen_saver_timeout_seconds);
+		config->screen_saver_fade_out_ms = preferences.getUShort(KEY_SCREEN_SAVER_FADE_OUT, config->screen_saver_fade_out_ms);
+		config->screen_saver_fade_in_ms = preferences.getUShort(KEY_SCREEN_SAVER_FADE_IN, config->screen_saver_fade_in_ms);
+		config->screen_saver_wake_on_touch = preferences.getBool(KEY_SCREEN_SAVER_WAKE_TOUCH, config->screen_saver_wake_on_touch);
 		preferences.getString(KEY_SCREEN_SAVER_WAKE_BINDING, config->screen_saver_wake_binding, CONFIG_SS_WAKE_BINDING_MAX_LEN);
 		config->idle_screen_enabled = preferences.getBool(KEY_IDLE_SCREEN_ENABLED, false);
 		config->idle_screen_timeout_seconds = preferences.getUShort(KEY_IDLE_SCREEN_TIMEOUT, 300);

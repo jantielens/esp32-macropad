@@ -196,6 +196,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Apply board-defined volume and default button feedback beeps on fresh devices,
+  even when no saved configuration exists. Enable automatic display sleep by
+  default on non-e-paper displays, but leave it disabled on e-paper. Preserve
+  saved preferences, audio-disabled boards, and manual frontlight-only behavior.
 * Leave remote-image letterbox bars transparent when the button background is
   `transparent`, so overlay buttons reveal the buttons underneath. Preserve
   opaque letterbox backgrounds and Fill modes.

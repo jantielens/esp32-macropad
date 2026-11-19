@@ -201,7 +201,7 @@ struct DeviceConfig {
 
 #if HAS_DISPLAY
 		// Screen saver: optional Idle Screen followed by Display Sleep on inactivity.
-		bool screen_saver_enabled;               // default true
+		bool screen_saver_enabled;               // default off on e-paper, except manual backlight-only mode
 		uint16_t screen_saver_timeout_seconds;   // default 300 (5 min)
 		uint16_t screen_saver_fade_out_ms;       // default 800
 		uint16_t screen_saver_fade_in_ms;        // default 400

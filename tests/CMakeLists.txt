@@ -1456,6 +1456,24 @@ add_host_legacy_test(test_sd_storage_spi_shared SOURCES test_sd_storage_spi.cpp 
 add_host_legacy_test(test_factory_reset_storage SOURCES test_factory_reset_storage.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides OPTIONS -ffunction-sections -fdata-sections LIBRARIES -Wl,--gc-sections)
 add_host_legacy_test(test_config_level_save SOURCES test_factory_reset_storage.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides DEFINITIONS HAS_AUDIO=1 OPTIONS -ffunction-sections -fdata-sections LIBRARIES -Wl,--gc-sections)
 add_host_legacy_test(test_config_microphone_save SOURCES test_factory_reset_storage.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides ${HOST_ARDUINOJSON_DIR} DEFINITIONS HAS_AUDIO=1 HAS_AUDIO_INPUT=1 OPTIONS -ffunction-sections -fdata-sections LIBRARIES -Wl,--gc-sections)
+foreach(profile lcd epaper epaper_backlight)
+    set(config_defaults_definitions HAS_DISPLAY=1 ARDUINOJSON_ENABLE_ARDUINO_STRING=1)
+    if(profile STREQUAL "lcd")
+        list(APPEND config_defaults_definitions HAS_AUDIO=1 AUDIO_DEFAULT_VOLUME=40)
+    else()
+        list(APPEND config_defaults_definitions HAS_EPAPER_PANEL=1)
+        if(profile STREQUAL "epaper_backlight")
+            list(APPEND config_defaults_definitions SCREENSAVER_BACKLIGHT_ONLY=1 SCREENSAVER_DEFAULT_TIMEOUT_SECONDS=0)
+        endif()
+    endif()
+    add_host_legacy_test(test_config_defaults_${profile}
+        SOURCES test_factory_reset_storage.cpp ${PROJECT_SOURCE_DIR}/src/app/dialog_appearance.cpp
+        INCLUDES ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides ${HOST_ARDUINOJSON_DIR}
+        DEFINITIONS ${config_defaults_definitions}
+        PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides/board_config.h
+        OPTIONS -ffunction-sections -fdata-sections -Wno-deprecated-declarations
+        LIBRARIES -Wl,--gc-sections)
+endforeach()
 add_host_legacy_test(test_factory_reset_no_filesystem SOURCES test_factory_reset_storage.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides
     DEFINITIONS HAS_FILESYSTEM=0 USE_SD_STORAGE=0
