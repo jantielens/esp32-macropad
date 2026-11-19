@@ -29,6 +29,7 @@ static BootActionsConfig* g_config = nullptr;
 static ActionStorage g_storage = {};
 static SemaphoreHandle_t g_lock = nullptr;
 static bool g_config_valid = false;
+static bool g_config_reset = false;
 
 static bool parse_config(JsonDocument& doc, BootActionsConfig& cfg, ActionStorage& storage,
                          bool validate_bindings) {
@@ -70,6 +71,7 @@ static bool parse_config(JsonDocument& doc, BootActionsConfig& cfg, ActionStorag
 
 static bool load_from_flash(BootActionsConfig* cfg) {
     if (!cfg) return false;
+    g_config_reset = false;
 
     if (!Storage.exists(BOOT_ACTIONS_PATH)) {
         LOGD(TAG, "No boot actions file, using defaults");
@@ -105,9 +107,13 @@ static bool load_from_flash(BootActionsConfig* cfg) {
 
     ActionStorage storage = {};
     if (!parse_config(doc, *cfg, storage, false)) {
+        const bool allocation_failed = storage.failed;
         action_storage_clear(storage);
         memset(cfg, 0, sizeof(*cfg));
-        return false;
+        if (allocation_failed) return false;
+        g_config_reset = true;
+        LOGW(TAG, "Unsupported boot actions cleared in memory; save to replace stored config");
+        return true;
     }
     action_storage_move(g_storage, storage);
 
@@ -129,13 +135,14 @@ void boot_actions_init() {
     g_config_valid = load_from_flash(g_config);
 }
 
-bool boot_actions_to_json(JsonArray actions) {
+bool boot_actions_to_json(JsonArray actions, bool* config_reset) {
     if (!g_config || !g_lock || actions.isNull()) return false;
     if (xSemaphoreTake(g_lock, portMAX_DELAY) != pdTRUE) return false;
     if (!g_config_valid) {
         xSemaphoreGive(g_lock);
         return false;
     }
+    if (config_reset) *config_reset = g_config_reset;
     for (uint8_t index = 0; index < g_config->action_count; ++index) {
         JsonObject action = actions.createNestedObject();
         action_to_json(g_config->actions[index], action);
@@ -183,6 +190,7 @@ bool boot_actions_save_raw(const uint8_t* json, size_t len) {
         *g_config = *replacement;
         action_storage_move(g_storage, storage);
         g_config_valid = true;
+        g_config_reset = false;
     }
     xSemaphoreGive(g_lock);
     action_storage_clear(storage);

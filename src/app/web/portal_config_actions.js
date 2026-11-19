@@ -2,6 +2,11 @@
 // Part of the ESP32 Macropad configuration portal.
 // Bundled into portal_config.js during minification.
 
+function actionConfigShowReset(data) {
+    if (data.config_reset)
+        showMessage('Unsupported action configuration was cleared. Save to replace the saved configuration.', 'info');
+}
+
 // ============================================================================
 // Swipe Actions (uses shared portal_action_editor.js)
 // ============================================================================
@@ -42,6 +47,7 @@ async function loadSwipeActions() {
         actionEditorLoad('swipe-up', data.swipe_up);
         actionEditorLoad('swipe-down', data.swipe_down);
         swipeActionsLoaded = true;
+        actionConfigShowReset(data);
     } catch (err) {
         console.error('Failed to load swipe actions:', err);
         showMessage('Could not load swipe actions: ' + err.message, 'error');
@@ -203,6 +209,7 @@ async function loadBootActions() {
         const data = await response.json();
         actionEditorListLoad(BOOT_ACTION_PREFIXES, data.actions || []);
         bootActionsLoaded = true;
+        actionConfigShowReset(data);
     } catch (err) {
         console.error('Failed to load boot actions:', err);
         showMessage('Could not load boot actions: ' + err.message, 'error');
@@ -545,6 +552,7 @@ async function initHwButtons() {
 
     actionEditorWireFragment(HW_BUTTON_PREFIXES);
     hwButtonsLoaded = true;
+    actionConfigShowReset(data);
 }
 
 async function saveHwButtons() {
@@ -554,7 +562,7 @@ async function saveHwButtons() {
         showMessage('Load hardware button actions before saving.', 'error');
         return;
     }
-    var groupCount = container.querySelectorAll('details.editor-group').length;
+    var groupCount = container.children.length;
     try {
         var buttons = [];
         for (var n = 1; n <= groupCount; n++) {
@@ -656,6 +664,7 @@ async function initMqttTriggers() {
 
     actionEditorWireFragment(MQTT_TRIGGER_PREFIXES);
     mqttTriggersLoaded = true;
+    actionConfigShowReset(data);
 }
 
 async function saveMqttTriggers() {
@@ -665,7 +674,7 @@ async function saveMqttTriggers() {
         showMessage('Load MQTT triggers before saving.', 'error');
         return;
     }
-    var groupCount = container.querySelectorAll('details.editor-group').length;
+    var groupCount = container.children.length;
     try {
         var triggers = [];
         for (var n = 1; n <= groupCount; n++) {
@@ -754,6 +763,7 @@ async function loadTimerConfig() {
             actionEditorListLoad(timerExpirePrefixes(tid), tcfg.expire_actions || []);
         });
         if (saveButton) saveButton.disabled = false;
+        actionConfigShowReset(data);
     } catch (err) {
         console.error('Failed to load timer config:', err);
         showMessage('Failed to load timer config: ' + err.message, 'error');

@@ -61,7 +61,7 @@ void mqtt_triggers_loop();
 // Returns true on success. Used by the portal component POST handler.
 bool mqtt_triggers_save_raw(const uint8_t* json, size_t len);
 
-// Serialize a consistent snapshot while the cache is protected.
-bool mqtt_triggers_to_json(JsonArray triggers);
+// Serialize under the cache lock, optionally reporting an unsaved config reset.
+bool mqtt_triggers_to_json(JsonArray triggers, bool* config_reset = nullptr);
 
 #endif  // MQTT_TRIGGERS_ENABLED

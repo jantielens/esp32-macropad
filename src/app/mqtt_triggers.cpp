@@ -34,6 +34,7 @@ static_assert(MAX_MQTT_TRIGGERS <= 32, "MAX_MQTT_TRIGGERS must be <= 32 (pending
 static MqttTriggerConfig* g_triggers = nullptr;
 static ActionStorage g_action_storage = {};
 static bool g_config_valid = false;
+static bool g_config_reset = false;
 struct MqttTriggerStorage {
     MqttTriggerConfig triggers[MAX_MQTT_TRIGGERS];
     char registered_topics[MAX_MQTT_TRIGGERS][CONFIG_MQTT_TOPIC_MAX_LEN];
@@ -135,13 +136,21 @@ static bool load_from_flash() {
         config_psram_alloc(MAX_MQTT_TRIGGERS * sizeof(MqttTriggerConfig), "mqtt_trigger_load"));
     if (!replacement) return false;
     ActionStorage storage = {};
-    const bool parsed = parse_config(doc, replacement, storage, false);
+    bool parsed = parse_config(doc, replacement, storage, false);
+    const bool config_reset = !parsed && !storage.failed;
+    if (config_reset) {
+        action_storage_clear(storage);
+        memset(replacement, 0, MAX_MQTT_TRIGGERS * sizeof(MqttTriggerConfig));
+        parsed = true;
+        LOGW(TAG, "Unsupported MQTT triggers cleared in memory; save to replace stored config");
+    }
     if (parsed) {
         triggers_lock();
         action_storage_clear(g_action_storage);
         memcpy(g_triggers, replacement, MAX_MQTT_TRIGGERS * sizeof(MqttTriggerConfig));
         action_storage_move(g_action_storage, storage);
         g_config_valid = true;
+        g_config_reset = config_reset;
         portENTER_CRITICAL(&g_mux);
         g_pending_mask = 0;
         ++g_generation;
@@ -173,19 +182,21 @@ void mqtt_triggers_init() {
     if (!Storage.exists(MQTT_TRIGGERS_PATH)) {
         triggers_lock();
         g_config_valid = true;
+        g_config_reset = false;
         triggers_unlock();
     } else if (!load_from_flash()) {
         LOGW(TAG, "MQTT triggers unavailable or incompatible");
     }
 }
 
-bool mqtt_triggers_to_json(JsonArray triggers) {
+bool mqtt_triggers_to_json(JsonArray triggers, bool* config_reset) {
     if (!g_triggers || !g_lock || triggers.isNull()) return false;
     triggers_lock();
     if (!g_config_valid) {
         triggers_unlock();
         return false;
     }
+    if (config_reset) *config_reset = g_config_reset;
     for (uint8_t i = 0; i < MAX_MQTT_TRIGGERS; ++i) {
         const MqttTriggerConfig& cfg = g_triggers[i];
         if (!cfg.topic[0]) continue;
@@ -224,6 +235,7 @@ bool mqtt_triggers_save_raw(const uint8_t* json, size_t len) {
         memcpy(g_triggers, replacement, MAX_MQTT_TRIGGERS * sizeof(MqttTriggerConfig));
         action_storage_move(g_action_storage, storage);
         g_config_valid = true;
+        g_config_reset = false;
         portENTER_CRITICAL(&g_mux);
         g_pending_mask = 0;
         ++g_generation;

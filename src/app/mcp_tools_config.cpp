@@ -449,7 +449,9 @@ static bool tool_get_component_config(const JsonObject& args, JsonObject& result
             ok = swipe_config_to_json(config);
         } else {
             config["action_format_version"] = 1;
-            ok = boot_actions_to_json(config.createNestedArray("actions"));
+            bool config_reset = false;
+            ok = boot_actions_to_json(config.createNestedArray("actions"), &config_reset);
+            config["config_reset"] = config_reset;
         }
         if (!ok) return cfg_fail(result, err, CFG_ERR_INTERNAL, "Action configuration unavailable or incompatible; saved settings are protected");
         return true;
@@ -460,11 +462,12 @@ static bool tool_get_component_config(const JsonObject& args, JsonObject& result
         JsonObject config;
         bool handled = false;
         bool ok = false;
+        bool config_reset = false;
 #if HAS_BUTTON
         if (strcmp(entry->name, "hw-buttons") == 0) {
             config = result.createNestedObject("config");
             config["action_format_version"] = 1;
-            ok = hw_button_config_to_json(config.createNestedArray("buttons"));
+            ok = hw_button_config_to_json(config.createNestedArray("buttons"), &config_reset);
             handled = true;
         }
 #endif
@@ -472,11 +475,12 @@ static bool tool_get_component_config(const JsonObject& args, JsonObject& result
         if (strcmp(entry->name, "mqtt-triggers") == 0) {
             config = result.createNestedObject("config");
             config["action_format_version"] = 1;
-            ok = mqtt_triggers_to_json(config.createNestedArray("triggers"));
+            ok = mqtt_triggers_to_json(config.createNestedArray("triggers"), &config_reset);
             handled = true;
         }
 #endif
         if (handled) {
+            config["config_reset"] = config_reset;
             result["exists"] = Storage.exists(entry->path);
             if (!ok) return cfg_fail(result, err, CFG_ERR_INTERNAL, "Action configuration unavailable or incompatible; saved settings are protected");
             return true;

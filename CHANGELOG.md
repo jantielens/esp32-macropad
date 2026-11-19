@@ -135,8 +135,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   [expression guide](docs/user/pads/expressions.md#show-a-value-and-unit-only-when-a-condition-is-true).
 * Replace legacy action documents with versioned typed operations. Existing
   actions are not converted and must be recreated using the operation picker;
-  back up configurations before upgrading. Numeric Rocker adjustments use a
-  Dynamic argument with `[event:step]` instead of `{step}` substitution.
+  back up configurations before upgrading. Opening or importing older pads
+  clears their actions while preserving the rest of the pad. Unsupported swipe,
+  boot, hardware-button, MQTT-trigger, and timer-expiry configurations reset
+  in memory to empty, saveable settings, including MQTT topics and filters.
+  Show a reset notification and replace stored configurations only on explicit
+  Save. Fix hardware-button and MQTT-trigger saves counting nested action panels
+  as extra entries. Numeric Rocker adjustments use a Dynamic argument with
+  `[event:step]` instead of `{step}` substitution.
   See [actions](docs/user/pads/actions.md).
 * Standardize timestamp bindings on Unix seconds and return unavailable when
   the timestamp is unknown. Replace `[alarm:1_once_epoch]` and

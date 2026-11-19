@@ -32,6 +32,7 @@ static bool g_loaded = false;
 static SemaphoreHandle_t g_config_mutex = nullptr;
 static SemaphoreHandle_t g_save_mutex = nullptr;
 static bool g_config_ready = false;
+static bool g_config_reset = false;
 
 static inline void config_lock() {
     xSemaphoreTake(g_config_mutex, portMAX_DELAY);
@@ -89,16 +90,19 @@ static bool load_from_flash(TimerConfig* cfg, ActionStorage& storage) {
         LOGE(TAG, "Invalid timer config JSON: %s", err.c_str());
         return false;
     }
-    if (!doc["action_format_version"].is<int>() || doc["action_format_version"].as<int>() != 1) {
-        LOGE(TAG, "Incompatible timer action format; recreate timer configuration");
-        return false;
+    if (!parse_timer_document(doc.as<JsonObject>(), cfg, storage)) {
+        if (storage.failed) return false;
+        action_storage_clear(storage);
+        apply_defaults(cfg);
+        g_config_reset = true;
+        LOGW(TAG, "Unsupported timer actions cleared in memory; save to replace stored config");
     }
-
-    return parse_timer_document(doc.as<JsonObject>(), cfg, storage);
+    return true;
 }
 
 void timer_config_init() {
     g_config_ready = false;
+    g_config_reset = false;
     g_loaded = false;
     if (!g_config_mutex) g_config_mutex = xSemaphoreCreateMutex();
     if (!g_config_mutex) {
@@ -147,6 +151,7 @@ bool timer_config_to_json(JsonObject root) {
     if (!g_config_ready) return false;
     config_lock();
     root["action_format_version"] = 1;
+    root["config_reset"] = g_config_reset;
     for (uint8_t i = 0; i < TIMER_COUNT; i++) {
         char key[4];
         snprintf(key, sizeof(key), "%u", i + 1);
@@ -311,6 +316,7 @@ bool timer_config_save_raw(const uint8_t* json, size_t len) {
         memcpy(g_config, candidate, sizeof(TimerConfig));
         action_storage_move(g_actions, candidate_actions);
         g_loaded = true;
+        g_config_reset = false;
     }
     config_unlock();
     action_storage_clear(candidate_actions);

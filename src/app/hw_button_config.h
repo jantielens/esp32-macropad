@@ -33,8 +33,8 @@ void hw_button_config_init();
 bool hw_button_config_snapshot(uint8_t index, bool hold, ButtonAction* actions,
                                uint8_t* count, ActionStorage& storage);
 
-// Serialize all buttons while holding the cache lock.
-bool hw_button_config_to_json(JsonArray buttons);
+// Serialize under the cache lock, optionally reporting an unsaved config reset.
+bool hw_button_config_to_json(JsonArray buttons, bool* config_reset = nullptr);
 
 // Save raw JSON to LittleFS and reload the RAM cache. Returns true on success.
 bool hw_button_config_save_raw(const uint8_t* json, size_t len);

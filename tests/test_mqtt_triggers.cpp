@@ -181,6 +181,7 @@ protected:
         free(hw_host::g_config);
         hw_host::g_config = nullptr;
         hw_host::g_config_valid = false;
+        hw_host::g_config_reset = false;
         delete hw_host::g_lock;
         hw_host::g_lock = nullptr;
         action_storage_clear(g_action_storage);
@@ -192,6 +193,7 @@ protected:
         g_pending_mask = 0;
         g_generation = 0;
         g_config_valid = false;
+        g_config_reset = false;
     }
     static void seed(const char* json) {
         LittleFS.files[MQTT_TRIGGERS_PATH] = std::vector<uint8_t>(json, json + strlen(json));
@@ -239,12 +241,89 @@ TEST_F(MqttTriggers, IncompatibleSavedDocumentIsRetainedAndNotExecuted) {
     seed(legacy);
     mqtt_triggers_init();
     DynamicJsonDocument response(MQTT_TRIGGERS_JSON_CAP);
-    EXPECT_FALSE(mqtt_triggers_to_json(response.to<JsonArray>()));
+    bool config_reset = false;
+    ASSERT_TRUE(mqtt_triggers_to_json(response.to<JsonArray>(), &config_reset));
+    EXPECT_TRUE(config_reset);
+    EXPECT_EQ(response.size(), 0U);
+    mqtt_triggers_on_connected();
+    EXPECT_TRUE(owner_calls.empty());
     mqtt_triggers_on_message("event", nullptr, 0);
     mqtt_triggers_loop();
     EXPECT_EQ(dispatches, 0U);
     EXPECT_EQ(std::string(LittleFS.files[MQTT_TRIGGERS_PATH].begin(),
                           LittleFS.files[MQTT_TRIGGERS_PATH].end()), legacy);
+    atomic_write_fails = true;
+    EXPECT_FALSE(save(R"({"action_format_version":1,"triggers":[]})"));
+    ASSERT_TRUE(mqtt_triggers_to_json(response.to<JsonArray>(), &config_reset));
+    EXPECT_TRUE(config_reset);
+    atomic_write_fails = false;
+    ASSERT_TRUE(save(R"({"action_format_version":1,"triggers":[]})"));
+    ASSERT_TRUE(mqtt_triggers_to_json(response.to<JsonArray>(), &config_reset));
+    EXPECT_FALSE(config_reset);
+    mqtt_triggers_init();
+    ASSERT_TRUE(mqtt_triggers_to_json(response.to<JsonArray>(), &config_reset));
+    EXPECT_FALSE(config_reset);
+}
+
+TEST_F(MqttTriggers, UnsupportedOperationClearsWholeDocumentIncludingParsedActionsAndTopics) {
+    seed(R"({"action_format_version":1,"triggers":[{"topic":"first","actions":[{"op":"test.set","args":{"value":"parsed"}}]},{"topic":"second","actions":[{"op":"unknown","args":{}}]}]})");
+    const auto original = LittleFS.files[MQTT_TRIGGERS_PATH];
+    mqtt_triggers_init();
+    JsonDocument response;
+    bool config_reset = false;
+    ASSERT_TRUE(mqtt_triggers_to_json(response.to<JsonArray>(), &config_reset));
+    EXPECT_TRUE(config_reset);
+    EXPECT_EQ(response.size(), 0U);
+    EXPECT_EQ(g_action_storage.blocks, nullptr);
+    EXPECT_EQ(LittleFS.files[MQTT_TRIGGERS_PATH], original);
+}
+
+TEST_F(MqttTriggers, ReadFailureDoesNotResetConfiguration) {
+    seed(R"({"triggers":[{"topic":"event","actions":[{"type":"screen"}]}]})");
+    LittleFS.short_read = true;
+    mqtt_triggers_init();
+    JsonDocument response;
+    EXPECT_FALSE(mqtt_triggers_to_json(response.to<JsonArray>()));
+    EXPECT_FALSE(g_config_reset);
+}
+
+TEST_F(MqttTriggers, HardwareLegacyConfigIsEmptyAndSaveableWithoutBoardDefaults) {
+    mqtt_triggers_init();
+    const char* legacy = R"({"buttons":[{"tap_actions":[{"type":"screen"}]}]})";
+    LittleFS.files[hw_host::HW_BUTTONS_PATH] = std::vector<uint8_t>(legacy, legacy + strlen(legacy));
+    hw_host::hw_button_config_init();
+    JsonDocument response;
+    bool config_reset = false;
+    ASSERT_TRUE(hw_host::hw_button_config_to_json(response.to<JsonArray>(), &config_reset));
+    EXPECT_TRUE(config_reset);
+    ASSERT_EQ(response.size(), NUM_HW_BUTTONS);
+    EXPECT_STREQ(response[0]["label"], "First");
+    EXPECT_EQ(response[0]["pin"], 1);
+    for (JsonObject button : response.as<JsonArray>()) {
+        EXPECT_EQ(button["tap_actions"].as<JsonArray>().size(), 0U);
+        EXPECT_EQ(button["hold_actions"].as<JsonArray>().size(), 0U);
+    }
+    EXPECT_EQ(std::string(LittleFS.files[hw_host::HW_BUTTONS_PATH].begin(),
+                          LittleFS.files[hw_host::HW_BUTTONS_PATH].end()), legacy);
+    const char* empty = R"({"action_format_version":1,"buttons":[{"tap_actions":[],"hold_actions":[]},{"tap_actions":[],"hold_actions":[]}]})";
+    ASSERT_TRUE(hw_host::hw_button_config_save_raw(reinterpret_cast<const uint8_t*>(empty), strlen(empty)));
+    ASSERT_TRUE(hw_host::hw_button_config_to_json(response.to<JsonArray>(), &config_reset));
+    EXPECT_FALSE(config_reset);
+    hw_host::hw_button_config_init();
+    ASSERT_TRUE(hw_host::hw_button_config_to_json(response.to<JsonArray>(), &config_reset));
+    EXPECT_FALSE(config_reset);
+    EXPECT_EQ(response[0]["hold_actions"].as<JsonArray>().size(), 0U);
+}
+
+TEST_F(MqttTriggers, HardwareReadFailureDoesNotResetConfiguration) {
+    mqtt_triggers_init();
+    const char* legacy = R"({"buttons":[]})";
+    LittleFS.files[hw_host::HW_BUTTONS_PATH] = std::vector<uint8_t>(legacy, legacy + strlen(legacy));
+    LittleFS.short_read = true;
+    hw_host::hw_button_config_init();
+    JsonDocument response;
+    EXPECT_FALSE(hw_host::hw_button_config_to_json(response.to<JsonArray>(), nullptr));
+    EXPECT_FALSE(hw_host::g_config_reset);
 }
 
 TEST_F(MqttTriggers, RejectsLegacyTriggerActions) {
@@ -397,7 +476,7 @@ TEST_F(MqttTriggers, HardwareTypedSaveReloadAndDispatchUsesOwnedSnapshots) {
     ASSERT_TRUE(hw_host::hw_button_config_save_raw(reinterpret_cast<const uint8_t*>(config), strlen(config)));
     hw_host::hw_button_config_init();
     DynamicJsonDocument response(4096);
-    ASSERT_TRUE(hw_host::hw_button_config_to_json(response.to<JsonArray>()));
+    ASSERT_TRUE(hw_host::hw_button_config_to_json(response.to<JsonArray>(), nullptr));
     ASSERT_STREQ(response[0]["tap_actions"][0]["args"]["value"]["$template"], "[var:tap]");
     ASSERT_STREQ(response[0]["hold_actions"][0]["args"]["value"], "hold");
 
@@ -446,7 +525,7 @@ TEST_F(MqttTriggers, HardwareInvalidOrFailedWritePreservesFileAndCache) {
     EXPECT_FALSE(save_hw(R"({"action_format_version":1,"buttons":[]})"));
     EXPECT_EQ(LittleFS.files[hw_host::HW_BUTTONS_PATH], original);
     DynamicJsonDocument response(4096);
-    ASSERT_TRUE(hw_host::hw_button_config_to_json(response.to<JsonArray>()));
+    ASSERT_TRUE(hw_host::hw_button_config_to_json(response.to<JsonArray>(), nullptr));
     EXPECT_STREQ(response[0]["tap_actions"][0]["args"]["value"], "kept");
     EXPECT_STREQ(response[0]["hold_actions"][0]["args"]["value"], "default");
 }

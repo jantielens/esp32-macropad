@@ -16,8 +16,10 @@ static void mqtt_triggers_get_config(AsyncWebServerRequest *request) {
     (*doc)["action_format_version"] = 1;
     (*doc)["max"] = MAX_MQTT_TRIGGERS;
     JsonArray triggers = doc->createNestedArray("triggers");
-
-    if (!mqtt_triggers_to_json(triggers) || doc->overflowed()) {
+    bool config_reset = false;
+    const bool available = mqtt_triggers_to_json(triggers, &config_reset);
+    (*doc)["config_reset"] = config_reset;
+    if (!available || doc->overflowed()) {
         web_portal_send_json_error(request, 409, "MQTT triggers unavailable or incompatible; recreate the document");
         return;
     }

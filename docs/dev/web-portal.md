@@ -1980,6 +1980,17 @@ notification and keeps the draft unsaved. Current-format validation failures
 and newer or invalid versions remain blocked; recovery never writes a file
 until the user saves.
 
+The five shared action configuration hosts (swipes, boot actions, hardware
+buttons, MQTT triggers, and timer expiry) recover unsupported saved documents
+in their firmware loaders. After successful JSON decoding, a configuration
+validation failure clears the whole host configuration in memory, including
+MQTT topics and filters, without writing storage. Hardware button identities
+still come from the board. Allocation, storage, and JSON decoding failures
+remain errors. GET responses include read-only `config_reset` metadata; when
+true, the portal shows a bubble notification and permits editing and saving.
+A successful save clears the flag. POST validation stays strict; omit this
+read-only flag from submitted configuration.
+
 Action selectors opt into the shared dropdown's searchable mode with
 `data-search-placeholder`. The original select remains the source of truth
 for loading, validation, and change events. Search only filters the visible
@@ -3670,7 +3681,7 @@ All swipe endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabl
 
 Returns the current swipe action configuration.
 
-- **Response:** JSON object with `action_format_version: 1` and `swipe_left`,
+- **Response:** JSON object with `action_format_version: 1`, `config_reset`, and `swipe_left`,
   `swipe_right`, `swipe_up`, and `swipe_down` keys. Each direction contains a
   typed operation envelope or an empty object.
 - Default: `swipe_right` is `{"op":"screen.back","args":{}}`; all others are empty.
@@ -3679,7 +3690,8 @@ Returns the current swipe action configuration.
 
 Save swipe action configuration to the selected storage backend.
 
-- **Body:** JSON object with the same structure as the GET response.
+- **Body:** JSON object with the same structure as the GET response, omitting
+  read-only `config_reset`.
 - **Response:** `{"success": true}` on success; JSON error on failure.
 - Actions are applied immediately without reboot.
 
@@ -3737,9 +3749,9 @@ All boot-actions endpoints require `HAS_DISPLAY` and are gated by Basic Auth whe
 
 Returns the current boot action configuration.
 
-- **Response:** JSON object with `action_format_version: 1` and an `actions`
+- **Response:** JSON object with `action_format_version: 1`, `config_reset`, and an `actions`
   array containing up to three typed operation envelopes.
-- Default (no file saved): `{"action_format_version":1,"actions":[]}`.
+- Default (no file saved): `{"action_format_version":1,"config_reset":false,"actions":[]}`.
 
 #### `POST /api/boot-actions`
 
@@ -3760,7 +3772,7 @@ Available when the board declares physical buttons. The board's `board_overrides
 
 Returns the declared buttons and their configured action lists.
 
-- **Response:** JSON object with `action_format_version: 1` and a `buttons` array, one entry per declared button (in `HW_BUTTON_DEFS[]` order), each containing `label` (string), `pin` (GPIO number), `tap_actions` (array of up to 3 typed operations), and `hold_actions` (array of up to 3 typed operations).
+- **Response:** JSON object with `action_format_version: 1`, `config_reset`, and a `buttons` array, one entry per declared button (in `HW_BUTTON_DEFS[]` order), each containing `label` (string), `pin` (GPIO number), `tap_actions` (array of up to 3 typed operations), and `hold_actions` (array of up to 3 typed operations).
 - Default (no file saved): each button reports empty `tap_actions` and `hold_actions`.
 
 #### `POST /api/component/hw-buttons/config`
@@ -3784,7 +3796,7 @@ A trigger pairs a topic with an optional exact-value filter and up to 3 sequenti
 
 Returns the configured triggers and the device's capacity.
 
-- **Response:** JSON object with `action_format_version: 1`, `max` (number, `MAX_MQTT_TRIGGERS`) and a `triggers` array. Each entry contains `topic` (string), `value` (string, exact-match filter; empty = match any), and `actions` (array of up to 3 typed operations). Empty (unconfigured) slots are omitted.
+- **Response:** JSON object with `action_format_version: 1`, `config_reset`, `max` (number, `MAX_MQTT_TRIGGERS`) and a `triggers` array. Each entry contains `topic` (string), `value` (string, exact-match filter; empty = match any), and `actions` (array of up to 3 typed operations). Empty (unconfigured) slots are omitted.
 - Default (no file saved): `max` with an empty `triggers` array.
 
 #### `POST /api/component/mqtt-triggers/config`
@@ -3851,13 +3863,14 @@ Device-level timer configuration. Compile-time gated by `HAS_DISPLAY`.
 
 Returns the current timer configuration for all 3 timers.
 
-- **Response:** JSON object with `action_format_version` and keys `"1"`, `"2"`,
+- **Response:** JSON object with `action_format_version`, `config_reset`, and keys `"1"`, `"2"`,
   `"3"`. Each timer object contains an `expire_actions` array with zero
   through three typed operations.
 
 ```json
 {
   "action_format_version": 1,
+  "config_reset": false,
   "1": { "expire_actions": [{ "op": "audio.alert.mp3", "args": { "file": "alarm.mp3", "volume": 0 } }] },
   "2": { "expire_actions": [] },
   "3": { "expire_actions": [{ "op": "audio.alert.tone", "args": { "pattern": "1000:500", "volume": 0 } }] }
@@ -3870,7 +3883,7 @@ The MP3 operation requires a sound player. Volume `0` uses the device volume.
 
 Save timer configuration to the selected storage backend and apply immediately.
 
-- **Body:** Same JSON format as GET response.
+- **Body:** Same JSON format as GET response, omitting read-only `config_reset`.
 - **Response:** `{"ok": true}` on success; JSON error on failure.
 - Unknown timer keys, slot fields, malformed actions, and lists over three actions reject the complete write.
 - Saving replaces the persistent source for future countdown starts. Active runs keep their existing expiry snapshot; stop and start a running countdown to apply the saved list.

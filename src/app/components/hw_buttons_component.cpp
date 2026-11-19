@@ -17,8 +17,10 @@ static void hw_buttons_get_config(AsyncWebServerRequest *request) {
     auto doc = make_psram_json_doc(4096);
     (*doc)["action_format_version"] = 1;
     JsonArray buttons = doc->createNestedArray("buttons");
-
-    if (!hw_button_config_to_json(buttons) || doc->overflowed()) {
+    bool config_reset = false;
+    const bool available = hw_button_config_to_json(buttons, &config_reset);
+    (*doc)["config_reset"] = config_reset;
+    if (!available || doc->overflowed()) {
         web_portal_send_json_error(request, 409, "Hardware button actions unavailable or incompatible; recreate the document");
         return;
     }

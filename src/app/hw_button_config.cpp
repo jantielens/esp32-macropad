@@ -24,6 +24,7 @@ static HwButtonConfig* g_config = nullptr;
 static ActionStorage g_storage = {};
 static SemaphoreHandle_t g_lock = nullptr;
 static bool g_config_valid = false;
+static bool g_config_reset = false;
 
 static bool parse_list(JsonVariant value, ButtonAction* actions, uint8_t& count,
                        ActionStorage& storage, bool validate_bindings) {
@@ -115,32 +116,39 @@ void hw_button_config_init() {
     }
     storage_mount();
     bool config_valid = true;
+    bool config_reset = false;
     if (Storage.exists(HW_BUTTONS_PATH)) {
         File f = Storage.open(HW_BUTTONS_PATH, "r");
         bool valid = false;
+        bool readable = false;
         if (f) {
             const size_t size = f.size();
             BasicJsonDocument<PsramJsonAllocator> doc(4096);
-            valid = size && size <= 4096 && json_stream_scan_keys(f) == JsonKeyScanResult::Valid &&
-                    !deserializeJson(doc, f) && !doc.overflowed() &&
-                    parse_config(doc, replacement, storage, false);
+            readable = size && size <= 4096 && json_stream_scan_keys(f) == JsonKeyScanResult::Valid &&
+                       !deserializeJson(doc, f) && !doc.overflowed();
+            valid = readable && parse_config(doc, replacement, storage, false);
             f.close();
         }
         if (!valid) {
-            config_valid = false;
-            LOGW(TAG, "Invalid button config; using board defaults");
+            config_reset = readable && !storage.failed;
+            config_valid = config_reset;
             action_storage_clear(storage);
             memset(replacement, 0, NUM_HW_BUTTONS * sizeof(HwButtonConfig));
-            if (!apply_defaults(replacement, storage)) {
+            if (config_reset) {
+                LOGW(TAG, "Unsupported button actions cleared in memory; save to replace stored config");
+            } else if (!apply_defaults(replacement, storage)) {
                 action_storage_clear(storage);
                 free(replacement);
                 return;
+            } else {
+                LOGW(TAG, "Button config unavailable; using board defaults");
             }
         }
     }
     if (xSemaphoreTake(g_lock, portMAX_DELAY) == pdTRUE) {
         replace_config(replacement, storage);
         g_config_valid = config_valid;
+        g_config_reset = config_reset;
         xSemaphoreGive(g_lock);
     }
     action_storage_clear(storage);
@@ -159,13 +167,14 @@ bool hw_button_config_snapshot(uint8_t index, bool hold, ButtonAction* actions,
     return copied;
 }
 
-bool hw_button_config_to_json(JsonArray buttons) {
+bool hw_button_config_to_json(JsonArray buttons, bool* config_reset) {
     if (!g_config || !g_lock || buttons.isNull()) return false;
     if (xSemaphoreTake(g_lock, portMAX_DELAY) != pdTRUE) return false;
     if (!g_config_valid) {
         xSemaphoreGive(g_lock);
         return false;
     }
+    if (config_reset) *config_reset = g_config_reset;
     for (uint8_t index = 0; index < NUM_HW_BUTTONS; ++index) {
         const HwButtonConfig& config = g_config[index];
         JsonObject button = buttons.createNestedObject();
@@ -209,6 +218,7 @@ bool hw_button_config_save_raw(const uint8_t* json, size_t len) {
     if (saved) {
         replace_config(replacement, storage);
         g_config_valid = true;
+        g_config_reset = false;
     }
     xSemaphoreGive(g_lock);
     action_storage_clear(storage);

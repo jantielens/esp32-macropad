@@ -135,6 +135,19 @@ static void test_swipe_action_ownership_and_atomic_save() {
     storage_test_files[path] = invalid[5];
     swipe_config_reload();
     assert(swipe_json() == after_reload && storage_test_files[path] == invalid[5]);
+
+    const char* unsupported = R"({"action_format_version":1,"swipe_left":{"op":"test.boot","args":{"value":"partial"}},"swipe_right":{"op":"unknown","args":{}}})";
+    storage_test_files[path] = unsupported;
+    swipe_config_reload();
+    JsonDocument reset;
+    assert(!deserializeJson(reset, swipe_json()));
+    assert(reset["config_reset"] == true);
+    assert(reset["swipe_left"].as<JsonObject>().size() == 0);
+    assert(reset["swipe_right"].as<JsonObject>().size() == 0);
+    assert(storage_test_files[path] == unsupported);
+    assert(swipe_config_save_raw(reinterpret_cast<const uint8_t*>(second), strlen(second)));
+    assert(!deserializeJson(reset, swipe_json()));
+    assert(reset["config_reset"] == false);
 }
 static std::string dispatched_boot;
 void action_list_dispatch(const ButtonAction* actions, uint8_t count, const char*,
@@ -157,11 +170,19 @@ static std::string boot_json() {
 
 static void test_boot_action_ownership_and_atomic_save() {
     const char* path = "/config/boot_actions.json";
-    storage_test_files.erase(path);
+    const char* legacy = R"({"actions":[{"type":"screen"}]})";
+    storage_test_files[path] = legacy;
     boot_actions_init();
+    JsonDocument reset;
+    bool config_reset = false;
+    assert(boot_actions_to_json(reset.to<JsonArray>(), &config_reset));
+    assert(config_reset && reset.size() == 0);
+    assert(storage_test_files[path] == legacy);
     const char* first = R"({"action_format_version":1,"actions":[{"op":"test.boot","args":{"value":"first"}}]})";
     const char* second = R"({"action_format_version":1,"actions":[{"op":"test.boot","args":{"value":"second"}}]})";
     assert(boot_actions_save_raw(reinterpret_cast<const uint8_t*>(first), strlen(first)));
+    assert(boot_actions_to_json(reset.to<JsonArray>(), &config_reset));
+    assert(!config_reset);
     const std::string before = boot_json();
     assert(before.find("first") != std::string::npos);
     JsonDocument retained;
@@ -296,6 +317,15 @@ static void test_missing_and_malformed_exists_semantics() {
     assert(snapshot(2).count == 0);
     assert(snapshot(3).count == 0);
 
+    const char* readable = R"({"action_format_version":1,"1":{"expire_actions":[]}})";
+    storage_test_files["/config/timers.json"] = readable;
+    storage_test_fail_open = true;
+    timer_config_init();
+    JsonDocument unreadable;
+    assert(!timer_config_to_json(unreadable.to<JsonObject>()));
+    assert(storage_test_files["/config/timers.json"] == readable);
+    storage_test_fail_open = false;
+
     storage_test_files["/config/timers.json"] = "{malformed";
     timer_config_init();
     assert(timer_config_exists());
@@ -307,7 +337,7 @@ static void test_missing_and_malformed_exists_semantics() {
     assert(storage_test_files["/config/timers.json"] == "{malformed");
 }
 
-static void test_legacy_load_rejected() {
+static void test_legacy_load_is_saveable() {
     storage_test_files["/config/timers.json"] = R"({
         "1":{"mode":"down","countdown":30,"expire_actions":[
             {"type":"test_boot"},{"type":"test_boot"}]},
@@ -316,13 +346,22 @@ static void test_legacy_load_rejected() {
     })";
     timer_config_init();
     assert(timer_config_exists());
-    TimerExpirySnapshot unavailable;
     JsonDocument document;
-    assert(!timer_config_snapshot_expiry(1, &unavailable));
-    assert(!timer_config_to_json(document.to<JsonObject>()));
+    assert(timer_config_to_json(document.to<JsonObject>()));
+    assert(document["config_reset"] == true);
+    for (uint8_t id = 1; id <= 3; ++id) assert(snapshot(id).count == 0);
     assert(storage_test_files["/config/timers.json"].find("\"type\":\"test_boot\"") != std::string::npos);
-    storage_test_files.erase("/config/timers.json");
+    boot_write_fail = true;
+    assert(!save(R"({"action_format_version":1,"1":{"expire_actions":[]}})"));
+    boot_write_fail = false;
+    assert(timer_config_to_json(document.to<JsonObject>()));
+    assert(document["config_reset"] == true);
+    assert(save(R"({"action_format_version":1,"1":{"expire_actions":[]}})"));
+    assert(timer_config_to_json(document.to<JsonObject>()));
+    assert(document["config_reset"] == false);
     timer_config_init();
+    assert(timer_config_to_json(document.to<JsonObject>()));
+    assert(document["config_reset"] == false);
 }
 
 static void test_strict_writes_and_atomic_cache() {
@@ -443,8 +482,10 @@ static void test_incompatible_startup_preserves_config() {
         timer_config_init();
         TimerExpirySnapshot result;
         JsonDocument document;
-        assert(!timer_config_snapshot_expiry(1, &result));
-        assert(!timer_config_to_json(document.to<JsonObject>()));
+        assert(timer_config_snapshot_expiry(1, &result));
+        assert(result.count == 0);
+        assert(timer_config_to_json(document.to<JsonObject>()));
+        assert(document["config_reset"] == true);
         assert(!save(R"({"1":{"expire_actions":[]}})"));
         assert(storage_test_files[path] == json);
     }
@@ -492,7 +533,7 @@ int main(int argc, char** argv) {
         return 0;
     }
     test_missing_and_malformed_exists_semantics();
-    test_legacy_load_rejected();
+    test_legacy_load_is_saveable();
     test_strict_writes_and_atomic_cache();
     test_concurrent_save_and_snapshot();
     test_typed_expiry_ownership_and_rejection();

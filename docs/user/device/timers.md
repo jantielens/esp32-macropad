@@ -55,10 +55,12 @@ it when Toggle or Resume starts it. Editing the list does not change an
 already running or paused run. Stop and start the timer to use the new list.
 There is no reboot requirement for saving expiry settings.
 
-If saved expiry actions are invalid or unavailable on this firmware, timer
-settings cannot be loaded or saved, and countdowns needing those actions cannot
-start. The saved file is protected. Back it up from [Storage](storage.md), then
-restore compatible firmware or a compatible configuration and reboot.
+If saved expiry actions are unsupported on this firmware, all three expiry
+lists are cleared in memory and the portal shows a notification. Timers can
+start without expiry actions, and you can edit and save the empty configuration
+normally. Recreate any needed actions before saving; only saving replaces the
+stored file. Storage, unreadable JSON, and allocation errors still block loading
+and saving. Back up or repair the file through [Storage](storage.md) if needed.
 
 The timer continues below zero after expiry, showing overtime rather than
 stopping automatically. Use Stop or Reset when that is not desired.

@@ -11,6 +11,13 @@ The portal's **Actions** category offers the hosts supported by your firmware.
 They use the same action editor as pad buttons, but each event has its own
 context. An action is not automatically meaningful on every host.
 
+If saved action configuration is unsupported, the firmware clears that host's
+settings in memory and the portal shows a notification. You can edit and save
+the empty configuration normally. For MQTT triggers, this also clears topics
+and value filters. Recreate any needed settings before saving; the stored file
+is replaced only when you save. Storage, unreadable JSON, and allocation errors
+still block loading rather than clearing configuration.
+
 ## Swipe actions
 
 Open **Actions > Swipes**, choose one action for each direction, and

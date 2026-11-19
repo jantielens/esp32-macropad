@@ -549,7 +549,7 @@ async function main() {
     const screenLookup = context.document.getElementById;
     vm.runInContext(fs.readFileSync('src/app/web/portal_config_actions.js', 'utf8'), context);
     context.document.getElementById = id => {
-        if (['hw-button-editors', 'mqtt-trigger-editors'].includes(id)) return { querySelectorAll: () => [{}] };
+        if (['hw-button-editors', 'mqtt-trigger-editors'].includes(id)) return { children: [{}] };
         if (id === 'mqtttrig-1-topic') return { value: 'test/topic' };
         if (id === 'timer-config-save') return { disabled: false };
         if (id.endsWith('-type')) return { value: 'screen', getAttribute: () => null };

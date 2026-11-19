@@ -177,7 +177,7 @@ async function checkIndependentBootSaves() {
             return {
                 ok: !fail,
                 json: async () => options ? { success: !fail, message: 'Save failed' } :
-                    url.includes('boot-actions') ? { action_format_version: 1, actions: [] } : {
+                    url.includes('boot-actions') ? { action_format_version: 1, config_reset: true, actions: [] } : {
                     caps: { boot_appearance: true, boot_logo: false },
                     boot_appearance_font_size: 18,
                     boot_appearance_text_color: 4294967295,
@@ -193,6 +193,7 @@ async function checkIndependentBootSaves() {
     await ctx.saveBootActions();
     assert.strictEqual(requests.length, 0);
     await ctx.loadBootActions();
+    assert(messages.some(message => message.kind === 'info' && /cleared.*Save/.test(message.text)));
     requests.length = 0;
     await ctx.saveBootActions();
     assert.strictEqual(requests.length, 1);
@@ -239,6 +240,8 @@ async function checkSwipeActions() {
     };
     const requests = [];
     const options = [];
+    const messages = [];
+    let configReset = false;
     const ctx = {
         console,
         document: { getElementById: id => id === 'swipe-editors' ? node : null },
@@ -250,11 +253,14 @@ async function checkSwipeActions() {
         },
         actionEditorLoad: (prefix, action) => { loaded[prefix] = action; },
         actionEditorBuild: prefix => loaded[prefix],
-        showMessage() {},
+        showMessage: (text, kind) => messages.push({ text, kind }),
         actionEditorHandleError: () => false,
         fetch: async (url, request) => {
             requests.push({ url, request });
-            return { ok: true, json: async () => first };
+            return { ok: true, json: async () => configReset
+                ? { action_format_version: 1, config_reset: true,
+                    swipe_left: {}, swipe_right: {}, swipe_up: {}, swipe_down: {} }
+                : first };
         }
     };
     vm.createContext(ctx);
@@ -283,6 +289,13 @@ async function checkSwipeActions() {
     await ctx.saveSwipeActions();
     assert.strictEqual(requests[1].url, '/api/component/swipe-actions/config');
     assert.deepStrictEqual(JSON.parse(requests[1].request.body), first);
+    configReset = true;
+    await ctx.loadSwipeActions();
+    assert(messages.some(message => message.kind === 'info' && /cleared.*Save/.test(message.text)));
+    await ctx.saveSwipeActions();
+    assert.deepStrictEqual(JSON.parse(requests.at(-1).request.body), {
+        action_format_version: 1, swipe_left: {}, swipe_right: {}, swipe_up: {}, swipe_down: {},
+    });
 }
 
 async function checkTriggerHosts() {
@@ -291,11 +304,15 @@ async function checkTriggerHosts() {
         if (!nodes.has(id)) nodes.set(id, new Element());
         return nodes.get(id);
     };
-    getNode('hw-button-editors').querySelectorAll = () => [{}];
-    getNode('mqtt-trigger-editors').querySelectorAll = () => [{}];
+    getNode('hw-button-editors').children = [new Element('DETAILS')];
+    getNode('hw-button-editors').querySelectorAll = () => Array(7).fill(new Element('DETAILS'));
+    getNode('mqtt-trigger-editors').children = [new Element('DETAILS')];
+    getNode('mqtt-trigger-editors').querySelectorAll = () => Array(4).fill(new Element('DETAILS'));
     const drafts = new Map();
     const rendered = [];
     const requests = [];
+    const messages = [];
+    let configReset = false;
     const tap = { op: 'screen.open', args: { target: { $template: '[var:target]' } } };
     const hold = { op: 'screen.back', args: {} };
     const mqtt = { op: 'screen.back', args: {} };
@@ -313,12 +330,14 @@ async function checkTriggerHosts() {
         actionEditorListBuild: prefixes => drafts.get(prefixes[0]) || [],
         actionEditorWireFragment() {},
         actionEditorHandleError: () => false,
-        showMessage() {},
+        showMessage: (text, kind) => messages.push({ text, kind }),
         fetch: async (url, request) => {
             requests.push({ url, request });
             return { ok: true, json: async () => url.includes('hw-buttons')
-                ? { action_format_version: 1, buttons: [{ label: 'Key', pin: 1, tap_actions: [tap], hold_actions: [hold] }] }
-                : { max: 1, triggers: [{ topic: 'event', value: 'on', actions: [mqtt] }] } };
+                ? { action_format_version: 1, config_reset: configReset,
+                    buttons: [{ label: 'Key', pin: 1, tap_actions: configReset ? [] : [tap], hold_actions: configReset ? [] : [hold] }] }
+                : { max: 1, config_reset: configReset,
+                    triggers: configReset ? [] : [{ topic: 'event', value: 'on', actions: [mqtt] }] } };
         }
     };
     vm.createContext(ctx);
@@ -335,6 +354,18 @@ async function checkTriggerHosts() {
         { action_format_version: 1, buttons: [{ tap_actions: [tap], hold_actions: [hold] }] });
     assert.deepStrictEqual(JSON.parse(requests[3].request.body),
         { action_format_version: 1, triggers: [{ topic: 'event', value: 'on', actions: [mqtt] }] });
+    configReset = true;
+    getNode('mqtttrig-1-topic').value = '';
+    getNode('mqtttrig-1-value').value = '';
+    await ctx.initHwButtons();
+    await ctx.initMqttTriggers();
+    assert.strictEqual(messages.filter(message => message.kind === 'info' && /cleared.*Save/.test(message.text)).length, 2);
+    await ctx.saveHwButtons();
+    assert.deepStrictEqual(JSON.parse(requests.at(-1).request.body),
+        { action_format_version: 1, buttons: [{ tap_actions: [], hold_actions: [] }] });
+    await ctx.saveMqttTriggers();
+    assert.deepStrictEqual(JSON.parse(requests.at(-1).request.body),
+        { action_format_version: 1, triggers: [] });
 }
 
 async function checkTimerLoadFailure() {
@@ -342,6 +373,7 @@ async function checkTimerLoadFailure() {
     const messages = [];
     const requests = [];
     let ok = false;
+    let configReset = false;
     const ctx = {
         console: {error() {}},
         document: {getElementById: id => id === 'timer-config-save' ? button : null},
@@ -352,7 +384,7 @@ async function checkTimerLoadFailure() {
         showMessage: (text, kind) => messages.push({text, kind}),
         fetch: async (url, options) => {
             requests.push({url, options});
-            return {ok, json: async () => ({action_format_version: 1})};
+            return {ok, json: async () => ({action_format_version: 1, config_reset: configReset})};
         }
     };
     vm.createContext(ctx);
@@ -369,6 +401,16 @@ async function checkTimerLoadFailure() {
     assert.strictEqual(requests.length, 3);
     assert.strictEqual(requests[2].options.method, 'POST');
     assert.strictEqual(JSON.parse(requests[2].options.body).action_format_version, 1);
+    configReset = true;
+    await ctx.loadTimerConfig();
+    assert(!button.disabled);
+    assert.strictEqual(messages.at(-1).kind, 'info');
+    assert.match(messages.at(-1).text, /cleared.*Save/);
+    await ctx.saveTimerConfig();
+    assert.deepStrictEqual(JSON.parse(requests.at(-1).options.body), {
+        action_format_version: 1,
+        1: { expire_actions: [] }, 2: { expire_actions: [] }, 3: { expire_actions: [] },
+    });
 }
 
 async function checkShutterSessionActions() {

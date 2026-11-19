@@ -25,6 +25,7 @@ static SwipeConfig* g_config = nullptr;
 static ActionStorage g_storage = {};
 static SemaphoreHandle_t g_lock = nullptr;
 static bool g_config_valid = false;
+static bool g_config_reset = false;
 
 static ButtonAction* direction_action(SwipeConfig& cfg, SwipeDirection direction) {
     switch (direction) {
@@ -78,7 +79,8 @@ static bool apply_defaults(SwipeConfig& cfg, ActionStorage& storage) {
 }
 
 // Called with g_lock held after initialization.
-static bool load_from_flash(SwipeConfig& cfg, ActionStorage& storage) {
+static bool load_from_flash(SwipeConfig& cfg, ActionStorage& storage, bool& config_reset) {
+    config_reset = false;
     if (!Storage.exists(SWIPE_CONFIG_PATH)) return apply_defaults(cfg, storage);
     File f = Storage.open(SWIPE_CONFIG_PATH, "r");
     if (!f) return false;
@@ -96,7 +98,14 @@ static bool load_from_flash(SwipeConfig& cfg, ActionStorage& storage) {
     const DeserializationError error = deserializeJson(doc, f);
     f.close();
     if (error || doc.overflowed()) return false;
-    return parse_config(doc, cfg, storage, false);
+    if (!parse_config(doc, cfg, storage, false)) {
+        if (storage.failed) return false;
+        action_storage_clear(storage);
+        memset(&cfg, 0, sizeof(cfg));
+        config_reset = true;
+        LOGW(TAG, "Unsupported swipe actions cleared in memory; save to replace stored config");
+    }
+    return true;
 }
 
 void swipe_config_init() {
@@ -110,7 +119,7 @@ void swipe_config_init() {
         LOGE(TAG, "Failed to allocate swipe config");
         return;
     }
-    g_config_valid = load_from_flash(*g_config, g_storage);
+    g_config_valid = load_from_flash(*g_config, g_storage, g_config_reset);
     if (!g_config_valid) {
         LOGW(TAG, "Swipe config unavailable; using navigation defaults");
         action_storage_clear(g_storage);
@@ -128,6 +137,7 @@ bool swipe_config_to_json(JsonObject object) {
         return false;
     }
     object["action_format_version"] = 1;
+    object["config_reset"] = g_config_reset;
     const char* names[] = {"swipe_left", "swipe_right", "swipe_up", "swipe_down"};
     for (unsigned index = 0; index < 4; ++index) {
         JsonObject action = object.createNestedObject(names[index]);
@@ -178,6 +188,7 @@ bool swipe_config_save_raw(const uint8_t* json, size_t len) {
             *g_config = *replacement;
             action_storage_move(g_storage, storage);
             g_config_valid = true;
+            g_config_reset = false;
         } else {
             LOGE(TAG, "Atomic swipe config write failed");
         }
@@ -195,11 +206,13 @@ void swipe_config_reload() {
     if (!replacement) return;
     ActionStorage storage = {};
     if (xSemaphoreTake(g_lock, portMAX_DELAY) == pdTRUE) {
-        if (load_from_flash(*replacement, storage)) {
+        bool config_reset = false;
+        if (load_from_flash(*replacement, storage, config_reset)) {
             action_storage_clear(g_storage);
             *g_config = *replacement;
             action_storage_move(g_storage, storage);
             g_config_valid = true;
+            g_config_reset = config_reset;
         } else {
             LOGW(TAG, "Failed to reload swipe config");
         }
