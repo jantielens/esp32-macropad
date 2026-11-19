@@ -577,6 +577,12 @@ int main(int argc, char** argv) {
 #endif
         binding_template_resolve("[expr:duration(65000,\"ms\")]", value, sizeof(value));
         expect(!std::strcmp(value, "1:05"), "duration expression resolves");
+        binding_template_resolve("[expr:1 ? 12 : \"\";%.0f s]", value, sizeof(value));
+        expect(!std::strcmp(value, "12 s"), "conditional number includes formatted unit");
+        binding_template_resolve("[expr:1 ? 0 : \"\";%.0f s]", value, sizeof(value));
+        expect(!std::strcmp(value, "0 s"), "conditional zero retains formatted unit");
+        binding_template_resolve("[expr:0 ? 12 : \"\";%.0f s]", value, sizeof(value));
+        expect(!std::strcmp(value, ""), "empty conditional result hides number and unit");
     }
 
     expect(binding_template_scheme_count() > 0, "production profile registered binding schemes");

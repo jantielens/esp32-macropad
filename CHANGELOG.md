@@ -125,6 +125,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Clarify conditional text and units in the Expression builder with a quoted
+  **if / then / else** template and a **Numeric formatting** hint. Return `""`
+  to hide a value and its unit without repeating the condition or changing
+  expression syntax. Find examples in Binding Reference and the
+  [expression guide](docs/user/pads/expressions.md#show-a-value-and-unit-only-when-a-condition-is-true).
 * Replace legacy action documents with versioned typed operations. Existing
   actions are not converted and must be recreated using the operation picker;
   back up configurations before upgrading. Numeric Rocker adjustments use a

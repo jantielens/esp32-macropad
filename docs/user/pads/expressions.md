@@ -71,6 +71,42 @@ Expressions support up to 12 nested groups/unary/conditional/function levels.
 [expr:[mqtt:device;state]=="ON"?"Running":"Stopped"]
 ```
 
+## Show a value and unit only when a condition is true
+
+Return a number when you want to display a value, or `""` to show nothing.
+Put the unit inside the format suffix so an empty result hides both the
+number and its unit. A unit written outside the binding remains visible.
+
+For example, on a device with Voice Notes, show the duration only while
+recording:
+
+```text
+[expr:[voice_note:recording.state]=="recording" ? [voice_note:recording.duration_s] : "";%.0f s]
+```
+
+While recording, a duration of 12 seconds displays `12 s`; zero displays
+`0 s`. When not recording, the result is empty, with no stray space or unit.
+
+To build this in the portal:
+
+1. Open a field's **Binding tools** and choose **Build an expression**.
+2. Under **Insert function**, choose **if / then / else**.
+3. Replace the comparison and both results so the Expression reads:
+
+   ```text
+   [voice_note:recording.state]=="recording" ? [voice_note:recording.duration_s] : ""
+   ```
+
+4. Enable **Numeric formatting**, set **Decimals** to **0**, and **Unit suffix**
+   to `s`.
+5. Check **Resulting field value** and the live **Result**, then choose
+   **Replace field** (or **Replace expression** when editing an existing
+   expression). Choose **Save Pad** to persist the change.
+
+The empty branch hides a known value; it does not protect against unavailable
+inner bindings. Both branches still evaluate, as explained under
+[unavailable and invalid inputs](#handle-unavailable-and-invalid-inputs).
+
 ## Update runtime state
 
 The **Set variable** action can use an expression as its Value. A counter

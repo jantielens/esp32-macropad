@@ -15,7 +15,7 @@ const EXPRESSION_BUILDER_FUNCTIONS = [
     { label: 'datetime(epoch, format, timezone)', text: 'datetime(value)', operand: 'value' },
     { label: 'duration(value, unit, format)', text: 'duration(value, "ms")', operand: 'value' },
     { label: 'threshold(value, below, boundary, above)', text: 'threshold(value, below, boundary, above)', operand: 'value' },
-    { label: 'if / then / else', text: 'condition\n  ? then_value\n  : else_value', operand: 'condition' }
+    { label: 'if / then / else', text: 'value == "expected_value"\n  ? "then_value"\n  : "else_value"', operand: 'value' }
 ];
 
 const EXPRESSION_BUILDER_PLACEHOLDERS = new Set([
@@ -219,14 +219,15 @@ function expressionBuilderDialogHTML() {
                 </label>
                 <div class="expression-builder-format-controls" id="expression-builder-format-controls" hidden>
                     <label class="expression-builder-format-control" for="expression-builder-decimals">Decimals
-                        <select class="form-select" id="expression-builder-decimals" data-expression-decimals disabled>
+                        <select class="form-select" id="expression-builder-decimals" data-expression-decimals aria-describedby="expression-builder-format-hint" disabled>
                             <option>0</option><option selected>1</option><option>2</option><option>3</option>
                             <option>4</option><option>5</option><option>6</option>
                         </select>
                     </label>
                     <label class="expression-builder-format-control" for="expression-builder-unit">Unit suffix
-                        <input class="form-control" type="text" id="expression-builder-unit" maxlength="60" data-expression-unit disabled>
+                        <input class="form-control" type="text" id="expression-builder-unit" maxlength="60" data-expression-unit aria-describedby="expression-builder-format-hint" disabled>
                     </label>
+                    <small class="expression-builder-format-hint" id="expression-builder-format-hint">Conditional units: return a number to show the formatted value and unit, or <code>""</code> to show nothing.</small>
                 </div>
             </div>
             <section class="expression-builder-generated" data-expression-field-section aria-label="Resulting field value">

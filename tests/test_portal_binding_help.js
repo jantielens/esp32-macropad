@@ -560,6 +560,23 @@ delete context.testHelpSchemes;
         'datetime(value)');
     assert.strictEqual(context.expressionBuilderSnippet('duration(value, unit, format)').text,
         'duration(value, "ms")');
+    const conditionalSnippet = context.expressionBuilderSnippet('if / then / else');
+    assert.strictEqual(conditionalSnippet.text.slice(
+        conditionalSnippet.selectionStart, conditionalSnippet.selectionEnd), 'value');
+    assert.strictEqual(conditionalSnippet.text,
+        'value == "expected_value"\n  ? "then_value"\n  : "else_value"');
+    assert.strictEqual(expressionGenerate(conditionalSnippet.text, {}).valid, false);
+    const conditionalBody = conditionalSnippet.text
+        .replace('value', '[health:wifi_connected]').replace('"expected_value"', '"ON"');
+    assert.strictEqual(expressionGenerate(conditionalBody, {}).valid, true);
+    const conditionalNumber = conditionalBody
+        .replace('"then_value"', '[health:cpu]').replace('"else_value"', '""');
+    const conditionalBinding = expressionGenerate(conditionalNumber, { enabled: true, decimals: 0, unit: '%' });
+    assert.strictEqual(conditionalBinding.valid, true);
+    assert.strictEqual(conditionalBinding.binding, '[expr:[health:wifi_connected] == "ON" ? [health:cpu] : "";%.0f %%]');
+    const conditionalLoaded = expressionLoad(conditionalBinding.binding);
+    assert.strictEqual(conditionalLoaded.expression, '[health:wifi_connected] == "ON" ? [health:cpu] : ""');
+    assert.strictEqual(conditionalLoaded.formatting.unit, '%');
     const tooLong = expressionGenerate('"' + 'é'.repeat(100) + '"', {});
     assert.strictEqual(tooLong.valid, false);
     assert.strictEqual(tooLong.bytes, new TextEncoder().encode(tooLong.binding).length);

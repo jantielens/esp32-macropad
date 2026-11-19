@@ -1805,7 +1805,7 @@
         },
         {
           "name": "format",
-          "desc": "printf format applied to the result, e.g. %.1f.",
+          "desc": "printf format applied to the result, e.g. %.1f. An empty result stays empty, including any unit suffix.",
           "required": false
         }
       ],
@@ -1817,6 +1817,10 @@
         {
           "code": "[expr:([health:heap_free] / 1024);%.0f KB]",
           "desc": "Derived number with a unit."
+        },
+        {
+          "code": "[expr:[health:cpu] > 80 ? [health:cpu] : \"\";%.0f%%]",
+          "desc": "Show a CPU value with its percent unit only above 80%; otherwise show nothing."
         },
         {
           "code": "[expr:abs([health:wifi_rssi])]",
@@ -1892,6 +1896,15 @@
             "syntax": "c ? x : y",
             "desc": "Ternary; branches can be numbers or \"strings\" and can be chained",
             "example": "[expr:[health:cpu] > 80 ? \"High\" : \"OK\"]"
+          },
+          {
+            "group": "Conditional",
+            "syntax": "Conditional value with unit",
+            "sample": "92%",
+            "desc": "Return a number to show the formatted value and unit, or \"\" to show nothing. In Expression builder, use if / then / else and Numeric formatting. Keep the unit inside the format suffix.",
+            "example": "[expr:[health:cpu] > 80 ? [health:cpu] : \"\";%.0f%%]",
+            "unit": "",
+            "kind": "text"
           },
           {
             "group": "Functions",
