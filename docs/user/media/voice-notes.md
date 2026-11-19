@@ -165,10 +165,11 @@ formats, and the [List guide](../widgets/list.md) for row layout and item action
    again to save. Open **Notes**, then tap the new row. The detail pad opens
    while loading continues: status changes from `loading` to `ready` or `error`.
 
-The Load action captures the row's ID before navigation; `[item:id]` is only
-available during the row's immediate action. Missing titles, summaries, or
-transcripts use the configured fallbacks. For playback, seeking, and reading
-in the portal, use **Voice Notes > Notes > View details**.
+The Load action captures the row's ID before navigation. The row's `[item:id]`
+remains available throughout its action sequence, including after a pause or
+navigation. Missing titles, summaries, or transcripts use the configured
+fallbacks. For playback, seeking, and reading in the portal, use **Voice Notes >
+Notes > View details**.
 
 ## Show a loaded voice note on a pad
 
@@ -196,10 +197,9 @@ truncated prefix.
 Add **Voice notes > Delete saved note** to a List item action and set **Note ID**
 to `[item:id]`. Deletion is permanent and also removes the note's transcript
 and enrichment. The action waits for deletion to finish; if the note is busy
-or deletion fails, later actions do not run. To ask for confirmation, capture
-`[item:id]` with **Set variable**, then add **Ask for confirmation** and
-**Delete saved note** using `[var:name]`. The List refreshes after deletion.
-See [runtime variables](../pads/actions.md#set-a-runtime-variable).
+or deletion fails, later actions do not run. To ask for confirmation, add
+**Ask for confirmation** before **Delete saved note**; `[item:id]` remains
+available when the sequence resumes. The List refreshes after deletion.
 
 When the action deletes the loaded note, its details clear and loaded status
 returns to `idle`. Deleting a different note leaves the loaded details unchanged.
@@ -239,8 +239,8 @@ In a bindable field, open **fx** and search the **Binding Reference** for
 
 `[voice_note:recent_notes]` is a List source, not a scalar binding. Its row
 fields are `id`, `title`, `created_at`, `duration_ms`, `has_transcript`, and
-`has_enrichment`; use them as `[item:field]` in row labels or immediate item
-actions. The [recent-notes example](#configure-the-recent-notes-pad) explains
+`has_enrichment`; use them as `[item:field]` in row labels or item action
+sequences. The [recent-notes example](#configure-the-recent-notes-pad) explains
 the optional fields and timestamp format.
 
 [Media tasks](README.md) | [User guides](../README.md)

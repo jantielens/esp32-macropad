@@ -14,185 +14,109 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.49.0] - 2026-11-19
+
 ### Breaking changes
 
-* Replace legacy action configurations with typed operations. Legacy actions
-  are not converted automatically; recreate them in the editor or update the
-  configuration to the [new action format](docs/user/pads/actions.md).
-* Remove full-device configuration import. Device exports are reference-only.
-  Compatible, separately exported pads can still be imported as drafts and saved.
+* Replace legacy actions with typed operations. Back up configurations before
+  upgrading and recreate actions using the [action picker](docs/user/pads/actions.md);
+  they are not converted automatically. Opening or importing older pads clears
+  their actions in the draft while preserving other pad settings. Unsupported
+  swipe, boot, hardware-button, MQTT-trigger, and timer-expiry configurations
+  reset in memory to empty, saveable settings, including MQTT topics and filters.
+  A notification identifies the reset; stored configurations are replaced only
+  on explicit Save. Numeric Rocker adjustments use a Dynamic argument with
+  `[event:step]` instead of `{step}` substitution.
+* Replace Voice Clips with **Voice Notes**. Existing `voice_clip` actions,
+  `[recorder:...]` bindings, endpoints, and recording folders are not migrated.
+  Download recordings you want to keep before updating, and recreate affected
+  pads and integrations. Voice Notes requires SD-primary storage: the
+  flash-backed LCD4B and reTerminal Sticky targets no longer include it. Back
+  up recordings before switching variants; files are not migrated.
+* Replace legacy provider/filter Lists and `[list:...]` selection bindings.
+  Existing Lists are not migrated; choose a typed source and assign a unique
+  List ID within each pad. Replace health Table buttons using `[health:table]`
+  or `[health:extended_table]` with Lists.
+* Standardize timestamp bindings on Unix seconds and return unavailable when
+  the timestamp is unknown. Replace `[alarm:1_once_epoch]` and
+  `[alarm:1_next_epoch]` with `[alarm:1_once_at]` and `[alarm:1_next_at]`,
+  and replace alarm `*_local` bindings with `datetime()` expressions. Rename
+  `[camera:last_motion]` to `[camera:last_motion_at]` and the sensor field
+  `camera_last_motion` to `camera_last_motion_at`. Replace `[brew:timer]` with
+  `[brew:timer_ms]` and duration format parameters on timer, exposure, and
+  test-strip bindings with `duration()` expressions. Update affected pads;
+  these binding changes are not migrated automatically.
+* Remove full-device configuration import. Device exports are reference-only;
+  compatible, separately exported pads can still be imported as drafts and
+  saved.
 
 ### Added
 
-* Add **Boot into OTA Mode** under **Firmware > Manual Upload** for devices
-  experiencing unreliable uploads. Bluetooth and MQTT are disabled for one boot
-  without changing saved settings; the next reboot restores normal operation.
-  The portal returns to Manual Upload after reconnecting.
-  See [firmware updates and recovery](docs/user/device/updates-and-recovery.md#upload-a-firmware-application-file).
 * Add searchable actions with familiar fixed controls and a **Dynamic** option
-  per eligible argument. Use widget values, List items, live bindings, or
-  expressions to choose what an action does. For example, open the pad tapped
-  in a List or set Wi-Fi station mode from an Option Selector.
-* Add **Capsule**, a chunky arcade-style Face widget option with all eight
-  expressions. Choose it under **Style** when editing a Face button.
-* Add **Audio > Microphone** for shared digital input gain, rumble reduction,
-  a full-width level meter, and optional listening within one microphone test
-  in a desktop Chrome browser. Input changes apply immediately; save them as
-  defaults for future restarts or undo them to return to saved settings.
-  One listener can stream at a time; capture uses PSRAM and
-  stops on disconnect or firmware update. Audio is not saved or encrypted, and
-  listening is indicated in the browser only. Use a trusted network and enable
-  portal authentication when needed. See [Microphone](docs/user/media/audio.md#configure-and-test-the-microphone).
+  for eligible arguments. Use widget values, List items, live bindings, or
+  expressions to decide what an action does when it runs. For example, open
+  the pad tapped in a List or set Wi-Fi station mode from an Option Selector.
+  See [actions](docs/user/pads/actions.md).
+* Add Voice Notes processing through configured Azure transcription and LLM
+  deployments. Record locally, process a note manually or enable background
+  processing, and browse saved transcripts, titles, and summaries. Recording
+  works offline; processing requires Wi-Fi and sends audio or transcripts to
+  Azure. Failed attempts preserve saved results. Automatic retries use bounded
+  backoff, respect provider cooldowns, and do not connect Wi-Fi or keep the
+  device awake. A **Process saved notes** action and status bindings are also
+  available. See [Voice Notes](docs/user/media/voice-notes.md).
+* Add configurable List and Text reader widgets for display devices with PSRAM.
+  Lists show up to 20 items with styled labels, colors, tap and long-press
+  actions, optional selection, and scrolling or paged navigation. Sources
+  include saved pads, recent Voice Notes, shutter tests, and health metrics.
+  Use `[item:field]` in row content and supported action arguments; item context
+  remains available throughout the activated action sequence. The Text reader
+  offers scrolling or paging and can display complete loaded Voice Notes text.
+  See [Lists](docs/user/widgets/list.md) and the
+  [Text reader](docs/user/widgets/README.md#text-reader).
+* Add **Load saved note** and **Delete saved note** actions for custom Voice
+  Notes pads. Load a List item without waiting for storage I/O before navigating,
+  and use `[voice_note:loaded.*]` bindings for metadata and text previews.
+  Loaded details remain unchanged until another load, a matching action deletion,
+  or reboot, including after edits or deletion through the portal.
+  See [loaded Voice Notes](docs/user/media/voice-notes.md#show-a-loaded-voice-note-on-a-pad).
+* Add **Audio > Microphone** for digital input gain, rumble reduction, a level
+  meter, and optional listening in desktop Chrome. Changes apply immediately and
+  can be saved as defaults or undone. One listener can stream at a time; capture
+  uses PSRAM and stops on disconnect or firmware update. Audio is not saved or
+  encrypted, and listening is indicated in the browser only. Use a trusted
+  network and enable portal authentication when needed.
+  See [Microphone](docs/user/media/audio.md#configure-and-test-the-microphone).
+* Add **Boot into OTA Mode** under **Firmware > Manual Upload** for unreliable
+  uploads. Bluetooth and MQTT are disabled for one boot without changing saved
+  settings; the next reboot restores normal operation. The portal returns to
+  Manual Upload after reconnecting.
+  See [firmware updates and recovery](docs/user/device/updates-and-recovery.md#upload-a-firmware-application-file).
+* Add the `esp32-p4-lcd4b-sd` board variant with SD-primary storage. A readable
+  FAT32 card is required at boot; existing files are not migrated from internal
+  flash. See [LCD4B SD storage](src/boards/esp32-p4-lcd4b-sd/README.md).
 * Add `datetime()` and `duration()` expression functions for formatting Unix
   timestamps and durations. Choose a timezone and date format or a compact
-  duration format, and use numeric expressions with literal unit labels for
-  custom text. Find examples in the Binding Reference, Expression Builder, and
+  duration format. See the
   [expression guide](docs/user/pads/expressions.md#format-dates-and-durations).
-* Add the `esp32-p4-lcd4b-sd` board variant with SD-primary storage.
-  A readable FAT32 card is required at boot; existing files are not migrated
-  from internal flash. See [LCD4B SD storage](src/boards/esp32-p4-lcd4b-sd/README.md).
 * Create an editable Welcome pad during initial setup on pad-capable displays.
-  Three centered, tap-free buttons show setup guidance and live portal URLs,
-  using device-default colors and a 5-column layout shaped for round displays.
-  Preserve existing configurations
-  and do not recreate the pad after deletion.
-* Add a generic Text reader widget for display devices with PSRAM, independent
-  of Voice Notes. Read wrapped text with vertical touch scrolling or whole-line,
-  non-animated paging, half-surface page taps, optional up/down controls, and a
-  List-style position indicator with bindable track/thumb colors. Exact loaded Voice Note
-  text bindings display full transcripts, summaries, and titles without copying
-  them into ordinary label buffers. See the
-  [Text reader guide](docs/user/widgets/README.md#text-reader).
-* Add a configuration-driven List widget for display devices with PSRAM.
-  Show up to 20 items with two styled labels, item-bound colors, tap and
-  long-press actions, optional persistent selection, and scrolling or paged
-  viewports. Lists share source data but keep independent interaction state.
-  Paged viewports include optional up/down controls with normal tap feedback;
-  external **Navigate List** actions remain available.
-  See [List configuration](docs/user/widgets/list.md).
-* Add typed List sources for recent Voice Notes (`[voice_note:recent_notes]`),
-  saved pads (`[pad:pads]`), and shutter test definitions (`[shutter:tests]`).
-  Bind row content and supported action fields with `[item:field]`; capture
-  `[item:id]` using **Set variable** before navigation or a pause.
-* Add `[health:metrics]` as a shared, demand-loaded List source with raw values,
-  units, and optional severity. List labels and styles control presentation.
-* Add on-device Voice Notes transcription through a configured Azure
-  transcription deployment. Select **Process note** under **Voice Notes >
-  Notes**, view the saved transcript alongside playback in **View details**,
-  and configure the endpoint, deployment, and API key under **Voice Notes >
-  Settings** without rebooting. Recording remains local and works offline;
-  transcription sends the selected recording to Azure and requires Wi-Fi.
-  Failed attempts preserve the recording and any previous transcript.
-  See [Voice Notes](docs/user/media/voice-notes.md#record-and-manage-voice-notes).
-* Add title and summary generation from saved Voice Notes transcripts through
-  a separately configured Azure LLM deployment supporting strict structured
-  outputs. Generate both fields in one request, show titles in the catalog,
-  and show summaries above transcripts in details. Use **More actions** to
-  transcribe again or regenerate title and summary; each replaces only its
-  selected result and preserves previous content on failure.
-* Add **Automatically process saved notes** under **Voice Notes > Settings**,
-  disabled by default. Process missing transcripts and enrichment one at a
-  time when Wi-Fi is available. Retry each failing service after 30 seconds,
-  1 minute, and 5 minutes, then halt automatic retries until a new recording
-  is saved, manual processing starts, or that service's settings change.
-  Honor provider cooldowns and allow independent services to continue.
-  Recording takes priority; two-second gaps between operations give other
-  device tasks time to run. Processing does not connect Wi-Fi or keep the
-  device awake; retry history resets on reboot.
-* Add a **Voice notes > Process saved notes** action for a best-effort processing
-  pass without enabling automation. Offline or busy presses schedule nothing.
-  Show background processing status in the portal and through
-  `[voice_note:processing.state]` (`idle`, `waiting`, `running`, or `blocked`).
-* Add recording and transcription status through `[voice_note:...]` bindings,
-  including a latest-saved note ID that remains available until restart.
-  Add enrichment state, note ID, and error bindings, plus
-  `[voice_note:transcription.retry_status]` and
-  `[voice_note:enrichment.retry_status]` showing **Retry 1 of 3** through
-  **Retry 3 of 3**, or **Retries halted**. Keep service buffers and portal
-  catalog/details documents in PSRAM,
-  and exclude Voice Notes code, settings, actions, bindings, routes, and assets
-  from firmware that does not enable the feature.
-* Add **Load saved note** for configurable on-device detail pads on display
-  devices with PSRAM. Pass `[item:id]` from a List, then navigate without
-  waiting for storage I/O. Use `[voice_note:loaded.summary]` and related bindings
-  for saved metadata, title, summary and transcript previews, with loading/error
-  status. Reusable loaded-data snapshots keep full saved text in PSRAM while
-  scalar bindings expose bounded previews. **Delete saved note** accepts a
-  note ID or binding and clears matching loaded details after successful
-  deletion. Loaded data otherwise remains unchanged until another load or
-  reboot, including after source edits or portal deletion.
-  See [loaded Voice Notes](docs/user/media/voice-notes.md#show-a-loaded-voice-note-on-a-pad).
+  Three tap-free buttons show setup guidance and live portal URLs. Existing
+  configurations are preserved, and a deleted Welcome pad is not recreated.
+* Add **Capsule**, an arcade-style Face widget option with all eight expressions.
 
 ### Changed
 
 * Build portal assets for each firmware configuration, excluding disabled
-  features without enumerating bundle variants. Preserve unavailable widget
-  data when opening pads, and prevent edits that would discard it.
+  features. Preserve unavailable widget data when opening pads and prevent edits
+  that would discard it.
+* Open the first available portal section when selecting a sidebar category.
+  Use the chevron to browse another category without leaving the current
+  section; selecting a section closes the other categories.
 * Clarify conditional text and units in the Expression builder with a quoted
   **if / then / else** template and a **Numeric formatting** hint. Return `""`
   to hide a value and its unit without repeating the condition or changing
   expression syntax. Find examples in Binding Reference and the
   [expression guide](docs/user/pads/expressions.md#show-a-value-and-unit-only-when-a-condition-is-true).
-* Replace legacy action documents with versioned typed operations. Existing
-  actions are not converted and must be recreated using the operation picker;
-  back up configurations before upgrading. Opening or importing older pads
-  clears their actions while preserving the rest of the pad. Unsupported swipe,
-  boot, hardware-button, MQTT-trigger, and timer-expiry configurations reset
-  in memory to empty, saveable settings, including MQTT topics and filters.
-  Show a reset notification and replace stored configurations only on explicit
-  Save. Fix hardware-button and MQTT-trigger saves counting nested action panels
-  as extra entries. Numeric Rocker adjustments use a Dynamic argument with
-  `[event:step]` instead of `{step}` substitution.
-  See [actions](docs/user/pads/actions.md).
-* Standardize timestamp bindings on Unix seconds and return unavailable when
-  the timestamp is unknown. Replace `[alarm:1_once_epoch]` and
-  `[alarm:1_next_epoch]` with `[alarm:1_once_at]` and `[alarm:1_next_at]`;
-  replace the alarm `*_local` bindings with `datetime()` expressions. Rename
-  `[camera:last_motion]` to `[camera:last_motion_at]` and the sensor field
-  `camera_last_motion` to `camera_last_motion_at`.
-* Replace `[brew:timer]` with `[brew:timer_ms]` and remove duration format
-  parameters from timer, exposure, and test-strip bindings. Use `duration()`
-  expressions for formatted output. Update affected pad configurations;
-  these binding changes are not migrated automatically.
-* Require SD-primary storage for Voice Notes. The flash-backed LCD4B and
-  reTerminal Sticky targets no longer include Voice Notes; use their SD variants
-  instead. Back up recordings before switching because files are not migrated.
-* Open the first available portal section when selecting a sidebar category.
-  Use the chevron to browse another category without leaving the current
-  section; selecting a section closes the other categories.
-* Group Voice Notes actions under **Voice notes**: Recording
-  (`vnote_record`), Process saved notes (`vnote_process`),
-  Load saved note (`vnote_load`), and Delete saved note
-  (`vnote_delete`). Recording defaults to **Toggle recording
-  (start/save)**, which starts when idle or saves an active or paused recording.
-  Replace the old `voice_note`, `voice_note_load`, and `voice_note_del` action types and remove the
-  action-level `scenario` field without migration. Recreate affected actions.
-* Replace the legacy provider/filter List implementation and `[list:...]`
-  selection bindings. Existing List configurations are not migrated; choose
-  a typed source, configure row labels and actions, and assign a unique List
-  ID within each pad. Remove `[health:table]` and `[health:extended_table]`;
-  existing health Table buttons must be reconfigured as Lists.
-* Share template composition rules between pad loading and contextual
-  validation, and use declared action-field identities instead of parser
-  probing. Reuse streamed template documents during pad saves to reduce
-  repeated parsing and temporary allocations. Clarify unsupported List
-  label-style properties in the editor.
-* Replace transcription-only Voice Notes settings with separate transcription
-  and LLM endpoint, deployment, and API key settings. Use **Process saved notes**
-  for background processing and replace the POST `transcribe` endpoint with
-  `process`, `retranscribe`, and `regenerate`. Existing service settings and
-  command/endpoint names are not migrated; reconfigure Voice Notes services
-  and update affected actions and integrations.
-* Treat an empty transcription response as successful **No speech detected**
-  content. Continue through normal enrichment, allow an empty summary, and
-  avoid automatically retrying completed silent recordings.
-* Replace Voice Clips with **Voice Notes**, including dedicated Voice Notes actions,
-  `[voice_note:...]` bindings, `/api/component/voice-notes/...` endpoints,
-  `HAS_VOICE_NOTES`, and the `/storage/voice-notes/` directory. This is a
-  breaking replacement: existing `voice_clip` actions, `[recorder:...]`
-  bindings, old endpoints, and recording folders are not migrated. Update
-  pads and integrations and download recordings you want to keep before
-  updating; old recordings do not appear in the new Notes list.
 
 ### Fixed
 
@@ -210,17 +134,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   negative values and zero crossings. Clip off-screen zero baselines to the
   chart edge without changing the scale.
 * Preserve specific binding syntax errors in the widget editor. List item-context
-  errors identify the List and field, with action positions and guidance for
-  bindings used after a pause or navigation.
-* Use the shared PSRAM-first LVGL allocator for List visuals, retaining
-  internal-RAM fallback when PSRAM allocation fails. Batch List row geometry
-  updates before recalculating the scrolling layout and position indicator.
-* Clear a previous note's summary when opening another note, show active
-  enrichment progress and failures without masking them behind older
-  transcription errors, and report unreadable saved enrichment instead of
-  labeling it ready.
-* Resolve accepted processing attempts abandoned before execution rather than
-  leaving their status permanently **Preparing**.
+  errors identify the List, field, and action position.
+* Fix hardware-button and MQTT-trigger saves counting nested action panels as
+  extra entries.
 
 ## [1.48.0] - 2026-11-14
 

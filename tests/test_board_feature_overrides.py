@@ -402,6 +402,7 @@ runtime_source = '''#include <cassert>
 #include <cstddef>
 static bool psram_present = false;
 static unsigned policy_calls = 0;
+void reboot_service_boot_init() {}
 bool psramFound() { return psram_present; }
 void heap_caps_malloc_extmem_enable(size_t threshold) {
     assert(threshold == 512);
