@@ -12,14 +12,14 @@ namespace {
 const char* const buttonNavigationCommands[] = {"previous", "next", "tap", "tap_hold"};
 const char* const buttonNavigationLabels[] = {"Previous", "Next", "Tap", "Tap & Hold"};
 
-ActionResult dispatch_button_navigation(const ButtonAction& act, const char*, uint32_t) {
+ActionResult dispatch_button_navigation(const ButtonNavigationPayload& navigation, const char*, uint32_t) {
 #if defined(ARDUINO) && HAS_DISPLAY
     if (!displayManager) return ACTION_FAILED;
     struct NavigationRequest {
         ButtonNavigationPayload navigation;
         uint32_t generation;
     };
-    const NavigationRequest request{act.payload.button_navigation, device_dialog_input_generation()};
+    const NavigationRequest request{navigation, device_dialog_input_generation()};
     bool ok = false;
     const auto exec = [](const void* context, bool* success, char*, size_t) {
         const auto& request = *static_cast<const NavigationRequest*>(context);
@@ -30,7 +30,7 @@ ActionResult dispatch_button_navigation(const ButtonAction& act, const char*, ui
         sizeof(request), 1000, &ok, nullptr, 0);
     return result == DISPLAY_TASK_DISPATCH_OK && ok ? ACTION_COMPLETE : ACTION_FAILED;
 #else
-    (void)act;
+    (void)navigation;
     return ACTION_FAILED;
 #endif
 }
@@ -40,10 +40,9 @@ ActionResult dispatch_button_navigation_operation(const ActionResolvedArgument* 
     if (!strcmp(arguments[0].text, "tap") || !strcmp(arguments[0].text, "tap_hold"))
         ItemBindingScope::end_current();
 #endif
-    ButtonAction action = {};
-    strlcpy(action.payload.button_navigation.command, arguments[0].text,
-            sizeof(action.payload.button_navigation.command));
-    return dispatch_button_navigation(action, label, token);
+    ButtonNavigationPayload navigation = {};
+    strlcpy(navigation.command, arguments[0].text, sizeof(navigation.command));
+    return dispatch_button_navigation(navigation, label, token);
 }
 
 const ActionArgumentDef kButtonNavigationArguments[] = {

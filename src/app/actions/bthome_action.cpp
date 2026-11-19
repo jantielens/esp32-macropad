@@ -21,12 +21,12 @@ const BthomeEventOption* bthome_event_option(const char* id) {
     return nullptr;
 }
 
-ActionResult dispatch_bthome(const ButtonAction& act, const char* label, uint32_t) {
+ActionResult dispatch_bthome(const BthomePayload& payload, const char* label, uint32_t) {
 #if defined(ARDUINO) && (HAS_BLE || HAS_BLE_HID)
-    if (bthome_events_send(act.payload.bthome.button, act.payload.bthome.event))
+    if (bthome_events_send(payload.button, payload.event))
         return ACTION_COMPLETE;
 #else
-    (void)act;
+    (void)payload;
 #endif
     LOGW("Action", "%s bthome: event not queued", label);
     return ACTION_FAILED;
@@ -48,10 +48,8 @@ ActionResult dispatch_bthome_send(const ActionResolvedArgument* arguments, const
                                   uint32_t token) {
     const BthomeEventOption* option = bthome_event_option(arguments[1].text);
     if (!option) return ACTION_FAILED;
-    ButtonAction act = {};
-    act.payload.bthome.button = static_cast<uint8_t>(arguments[0].integer);
-    act.payload.bthome.event = option->value;
-    return dispatch_bthome(act, label, token);
+    BthomePayload payload = {static_cast<uint8_t>(arguments[0].integer), option->value};
+    return dispatch_bthome(payload, label, token);
 }
 const ActionOperationDef kBthomeOperations[] = {
     {"bthome.send", "Send BTHome event", kBthomeSendArguments, 2, dispatch_bthome_send},

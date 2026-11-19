@@ -16,7 +16,7 @@ ActionResult action_list_dispatch_result(const ButtonAction* actions, uint8_t co
                                          const PadBinding* bindings, uint8_t binding_count) {
     dispatch_bindings = bindings;
     dispatch_binding_count = binding_count;
-    if (count) { ++dispatches; dispatched = actions[0].payload.ha_service.data_json; }
+    if (count) { ++dispatches; dispatched = actions[0].type; }
     if (during_dispatch) during_dispatch();
     return dispatch_result;
 }
@@ -41,8 +41,8 @@ protected:
         dispatched.clear();
         dispatch_result = ACTION_COMPLETE;
         during_dispatch = {};
-        strlcpy(on_action.payload.ha_service.data_json, "{\"temperature\": 21}", sizeof(on_action.payload.ha_service.data_json));
-        strlcpy(off_action.payload.ha_service.data_json, "{\"temperature\": 10}", sizeof(off_action.payload.ha_service.data_json));
+        strlcpy(on_action.type, "on", sizeof(on_action.type));
+        strlcpy(off_action.type, "off", sizeof(off_action.type));
     }
     void TearDown() override { during_dispatch = {}; lv_display_delete(display); }
     ToggleState& state() { return *reinterpret_cast<ToggleState*>(runtime.data); }
@@ -62,8 +62,8 @@ TEST_F(ToggleWidget, LocalAlternatesActionsAndResetsOnHide) {
     create();
     EXPECT_FALSE(state().value);
     EXPECT_EQ(dispatches, 0u);
-    tap(); EXPECT_TRUE(state().value); EXPECT_EQ(dispatched, "{\"temperature\": 21}");
-    tap(); EXPECT_FALSE(state().value); EXPECT_EQ(dispatched, "{\"temperature\": 10}");
+    tap(); EXPECT_TRUE(state().value); EXPECT_EQ(dispatched, "on");
+    tap(); EXPECT_FALSE(state().value); EXPECT_EQ(dispatched, "off");
     dispatch_result = ACTION_FAILED;
     tap(); EXPECT_TRUE(state().value);
     EXPECT_EQ(dispatches, 3u);
@@ -90,7 +90,7 @@ TEST_F(ToggleWidget, BoundReportsConfirmCategoriesNotExactTemperatureCommands) {
     tap(); EXPECT_EQ(dispatches, 1u);
     report("off"); EXPECT_TRUE(state().pending);
     report("on"); EXPECT_FALSE(state().pending); EXPECT_TRUE(state().value);
-    tap(); EXPECT_EQ(dispatched, "{\"temperature\": 10}");
+    tap(); EXPECT_EQ(dispatched, "off");
     report("off"); EXPECT_FALSE(state().pending); EXPECT_FALSE(state().value);
     EXPECT_EQ(dispatches, 2u);
 }
@@ -251,12 +251,12 @@ TEST_F(ToggleWidget, BureauExpressionReportsConfirmRequestedCategoryAndRejectInv
     thermostat_value = "10";
     toggle_tick(button, &config, &runtime);
     EXPECT_FALSE(state().value); EXPECT_TRUE(state().available);
-    tap(); EXPECT_TRUE(state().pending); EXPECT_EQ(dispatched, "{\"temperature\": 21}");
+    tap(); EXPECT_TRUE(state().pending); EXPECT_EQ(dispatched, "on");
     thermostat_value = "22";
     toggle_tick(button, &config, &runtime);
     EXPECT_TRUE(state().value); EXPECT_FALSE(state().pending);
     EXPECT_EQ(dispatches, 1u);
-    tap(); EXPECT_TRUE(state().pending); EXPECT_EQ(dispatched, "{\"temperature\": 10}");
+    tap(); EXPECT_TRUE(state().pending); EXPECT_EQ(dispatched, "off");
     thermostat_value = "20";
     toggle_tick(button, &config, &runtime);
     EXPECT_FALSE(state().value); EXPECT_FALSE(state().pending);

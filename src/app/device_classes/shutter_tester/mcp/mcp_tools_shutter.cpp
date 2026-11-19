@@ -39,7 +39,7 @@
 #include "../shutter_measure.h"
 #include "../shutter_session.h"
 #include "../shutter_test_scripts.h"
-#include "../shutter_payload.h"   // ShutterPayload, ACTION_TYPE_SHUTTER
+#include "../shutter_payload.h"
 #include "control_mapping.h"
 
 #include "action_dispatch.h"

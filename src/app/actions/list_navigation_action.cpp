@@ -13,7 +13,7 @@ namespace {
 const char* const commands[] = {"previous_page", "next_page"};
 const char* const labels[] = {"Previous page", "Next page"};
 
-ActionResult dispatch_list_navigation(const ButtonAction& action, const char*, uint32_t) {
+ActionResult dispatch_list_navigation(const ListNavigationPayload& navigation, const char*, uint32_t) {
 #if defined(ARDUINO)
     if (!displayManager) {
         LOGW("ListNav", "Display unavailable");
@@ -25,7 +25,7 @@ ActionResult dispatch_list_navigation(const ButtonAction& action, const char*, u
         uint32_t input_generation;
         uint32_t pad_generation;
     };
-    Request request{action.payload.list_navigation, 0, device_dialog_input_generation(),
+    Request request{navigation, 0, device_dialog_input_generation(),
                     pad_config_get_generation()};
     if (!displayManager->captureListNavigation(&request.screen_generation)) {
         LOGW("ListNav", "No active pad available for List navigation");
@@ -52,7 +52,7 @@ ActionResult dispatch_list_navigation(const ButtonAction& action, const char*, u
     if (!ok) LOGW("ListNav", "List navigation rejected for target '%s'", request.navigation.target);
     return ok ? ACTION_COMPLETE : ACTION_FAILED;
 #else
-    (void)action;
+    (void)navigation;
     return ACTION_FAILED;
 #endif
 }
@@ -69,12 +69,10 @@ const ActionArgumentDef kListNavigationArguments[] = {
 };
 
 ActionResult dispatch_list_navigation_operation(const ActionResolvedArgument* arguments, const char* label, uint32_t token) {
-    ButtonAction action = {};
-    strlcpy(action.payload.list_navigation.target, arguments[0].text,
-            sizeof(action.payload.list_navigation.target));
-    strlcpy(action.payload.list_navigation.command, arguments[1].text,
-            sizeof(action.payload.list_navigation.command));
-    return dispatch_list_navigation(action, label, token);
+    ListNavigationPayload navigation = {};
+    strlcpy(navigation.target, arguments[0].text, sizeof(navigation.target));
+    strlcpy(navigation.command, arguments[1].text, sizeof(navigation.command));
+    return dispatch_list_navigation(navigation, label, token);
 }
 
 const ActionOperationDef kListNavigationOperations[] = {

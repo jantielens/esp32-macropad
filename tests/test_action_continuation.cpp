@@ -61,7 +61,6 @@ static uint32_t g_pending_token = 0;
 static char g_dispatched[4][CONFIG_ACTION_TYPE_MAX_LEN] = {};
 static uint8_t g_dispatched_count = 0;
 static bool g_interactive[4] = {};
-static char g_notification[CONFIG_DIALOG_MESSAGE_MAX_LEN] = {};
 static ActionResolvedArgument g_mqtt_arguments[] = {{"home/room", 0, 0}, {"on", 0, 0}};
 
 #define TEST(name) static void test_##name()
@@ -91,8 +90,6 @@ ActionResult action_dispatch(const ButtonAction& action, const char*,
     g_interactive[g_dispatched_count] = interactive;
     strlcpy(g_dispatched[g_dispatched_count++], action.type,
             sizeof(g_dispatched[0]));
-    if (!strcmp(action.type, ACTION_TYPE_NOTIFY))
-        strlcpy(g_notification, action.payload.notify.message, sizeof(g_notification));
     if (!strcmp(action.type, "mqtt_op_test"))
         return kMqttOperations[0].dispatch(g_mqtt_arguments, "Test", continuation_token);
     if (!strcmp(action.type, "failed")) return ACTION_FAILED;
@@ -295,8 +292,7 @@ TEST(pending_action_pauses_and_resumes_copied_suffix) {
     ButtonAction actions[3] = {};
     strlcpy(actions[0].type, "pending", sizeof(actions[0].type));
     strlcpy(actions[1].type, ACTION_TYPE_MQTT, sizeof(actions[1].type));
-    strlcpy(actions[2].type, ACTION_TYPE_NOTIFY, sizeof(actions[2].type));
-    strlcpy(actions[2].payload.notify.message, "Brightness set to 20%", sizeof(actions[2].payload.notify.message));
+    strlcpy(actions[2].type, "notify20", sizeof(actions[2].type));
 
     action_list_dispatch(actions, 3, "Test");
     ASSERT_EQ(g_dispatched_count, 1);
@@ -304,14 +300,13 @@ TEST(pending_action_pauses_and_resumes_copied_suffix) {
 
     // The continuation must not observe mutable source storage after dispatch.
     strlcpy(actions[1].type, ACTION_TYPE_KEY, sizeof(actions[1].type));
-    strlcpy(actions[2].payload.notify.message, "Brightness set to 80%", sizeof(actions[2].payload.notify.message));
+    strlcpy(actions[2].type, "notify80", sizeof(actions[2].type));
     ASSERT_TRUE(action_continuation_complete(g_pending_token, true));
     action_list_dispatch_continuation();
 
     ASSERT_EQ(g_dispatched_count, 3);
     ASSERT_TRUE(strcmp(g_dispatched[1], ACTION_TYPE_MQTT) == 0);
-    ASSERT_TRUE(strcmp(g_dispatched[2], ACTION_TYPE_NOTIFY) == 0);
-    ASSERT_TRUE(strcmp(g_notification, "Brightness set to 20%") == 0);
+    ASSERT_TRUE(strcmp(g_dispatched[2], "notify20") == 0);
 }
 
 TEST(failed_pending_action_does_not_resume_suffix) {

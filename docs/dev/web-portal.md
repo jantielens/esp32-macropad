@@ -4584,7 +4584,7 @@ updates stay in that script rather than the shared configuration bundle.
 - **Manifest check** — every file listed in the `.js.bundle` manifest must exist; missing files cause a hard build error
 - **Syntax check** — every `.js` file is checked with `node --check` to catch missing braces, unterminated strings, and other parse errors before minification
 
-> **Feature branches** may add additional modules (e.g., `portal_action_editor_darkroom.js`, `portal_brews.js`). These follow the same pattern: add the file, add it to the bundle manifest, no C++ changes needed.
+> **Feature branches** may add additional modules such as `portal_brews.js`. These follow the same pattern: add the file, add it to the bundle manifest, no C++ changes needed.
 
 #### CSS Bundle
 

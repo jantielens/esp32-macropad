@@ -63,7 +63,7 @@ void ItemBindingScope::end_current() {}
 
 class ListNavigationAction : public testing::Test {
 protected:
-    ButtonAction action{};
+    ListNavigationPayload action{};
     void SetUp() override {
         on_lvgl_task = false;
         capture_ok = navigation_ok = true;
@@ -71,8 +71,8 @@ protected:
         dispatches = navigations = button_navigations = 0;
         change_generation = change_dialog_generation = false;
         displayManager = &manager;
-        strlcpy(action.payload.list_navigation.target, "notes", sizeof(action.payload.list_navigation.target));
-        strlcpy(action.payload.list_navigation.command, "next_page", sizeof(action.payload.list_navigation.command));
+        strlcpy(action.target, "notes", sizeof(action.target));
+        strlcpy(action.command, "next_page", sizeof(action.command));
     }
 };
 

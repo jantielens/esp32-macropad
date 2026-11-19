@@ -8,12 +8,12 @@
 #endif
 
 namespace {
-ActionResult dispatch_notify(const ButtonAction& act, const char* label, uint32_t) {
+ActionResult dispatch_notify(const NotifyPayload& payload, const char* label, uint32_t) {
 #if defined(ARDUINO) && HAS_DISPLAY
-    if (dialog_action::timing_valid(act.payload.notify.duration_ms) &&
-        device_dialog_notify(act.payload.notify.message, act.payload.notify.duration_ms)) return ACTION_COMPLETE;
+    if (dialog_action::timing_valid(payload.duration_ms) &&
+        device_dialog_notify(payload.message, payload.duration_ms)) return ACTION_COMPLETE;
 #else
-    (void)act;
+    (void)payload;
 #endif
     LOGW("Action", "%s notification could not be displayed", label);
     return ACTION_FAILED;
@@ -31,10 +31,10 @@ ActionResult dispatch_notify_operation(const ActionResolvedArgument* arguments, 
         LOGW("Action", "%s notification duration must be 0 or 1000-300000 ms", label);
         return ACTION_FAILED;
     }
-    ButtonAction act = {};
-    strlcpy(act.payload.notify.message, arguments[0].text, sizeof(act.payload.notify.message));
-    act.payload.notify.duration_ms = static_cast<uint32_t>(arguments[1].integer);
-    return dispatch_notify(act, label, token);
+    NotifyPayload payload = {};
+    strlcpy(payload.message, arguments[0].text, sizeof(payload.message));
+    payload.duration_ms = static_cast<uint32_t>(arguments[1].integer);
+    return dispatch_notify(payload, label, token);
 }
 const ActionOperationDef kNotifyOperations[] = {
     {"dialog.notify", "Show notification", kNotifyArguments, 2, dispatch_notify_operation},

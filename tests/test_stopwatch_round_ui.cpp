@@ -398,9 +398,6 @@ static void dialog_hardware_navigation_checks() {
     tap.value.dynamic = true;
     assert(!confirmation_input_available());
     tap.value.dynamic = false;
-    strcpy(first.type, ACTION_TYPE_BUTTON_NAVIGATION);
-    strcpy(first.payload.button_navigation.command, "next");
-    assert(confirmation_input_available());
     memset(dialog_buttons, 0, sizeof(dialog_buttons));
     touchManager = &touch;
 }

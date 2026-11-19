@@ -47,7 +47,7 @@
 
 #include "../scale_hal.h"
 #include "../coffee_scale_config.h"
-#include "../coffee_scale_payload.h"   // ScalePayload/BrewPayload, ACTION_TYPE_SCALE/BREW
+#include "../coffee_scale_payload.h"
 #include "../sensors/scale_smoothing.h"  // scale_smoothing_preset_name
 #include "../brew/brew_manager.h"
 #include "../brew/brew_templates.h"
@@ -419,7 +419,7 @@ static bool tool_get_brew_template(const JsonObject& args, JsonObject& result, S
 
 struct CsCtrlCtx {
     char type[8];                       // ACTION_TYPE_SCALE or ACTION_TYPE_BREW
-    char command[SCALE_CMD_MAX_LEN];    // widest of the two command fields
+    char command[SCALE_CMD_MAX_LEN];
     char value[CONFIG_BINDABLE_SHORT_LEN];
 };
 

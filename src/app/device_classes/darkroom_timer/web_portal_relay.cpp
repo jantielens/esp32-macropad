@@ -33,7 +33,7 @@ static void handleGetRelayConfig(AsyncWebServerRequest* request) {
     }
 }
 
-// Maximum accepted relay-config body. 4 relay slots of ShellyPayload plus JSON
+// Maximum accepted relay-config body. Four relay slots plus JSON
 // overhead stays well under this; anything larger is rejected.
 #define RELAY_POST_MAX_BYTES 4096
 

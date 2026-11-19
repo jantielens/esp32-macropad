@@ -9,13 +9,13 @@
 #endif
 
 namespace {
-ActionResult dispatch_confirm(const ButtonAction& act, const char* label, uint32_t token) {
+ActionResult dispatch_confirm(const ConfirmPayload& payload, const char* label, uint32_t token) {
 #if defined(ARDUINO) && HAS_DISPLAY
-    if (token && dialog_action::timing_valid(act.payload.confirm.timeout_ms) &&
+    if (token && dialog_action::timing_valid(payload.timeout_ms) &&
         action_continuation_set_timeout(token, 0) &&
-        device_dialog_confirm(act.payload.confirm, token)) return ACTION_PENDING;
+        device_dialog_confirm(payload, token)) return ACTION_PENDING;
 #else
-    (void)act;
+    (void)payload;
     (void)token;
 #endif
     LOGW("Action", "%s confirmation unavailable; remaining actions discarded", label);
@@ -38,13 +38,12 @@ ActionResult dispatch_confirm_operation(const ActionResolvedArgument* arguments,
         LOGW("Action", "%s confirmation timeout must be 0 or 1000-300000 ms", label);
         return ACTION_FAILED;
     }
-    ButtonAction act = {};
-    auto& payload = act.payload.confirm;
+    ConfirmPayload payload = {};
     strlcpy(payload.message, arguments[0].text, sizeof(payload.message));
     strlcpy(payload.approve_text, arguments[1].text, sizeof(payload.approve_text));
     strlcpy(payload.cancel_text, arguments[2].text, sizeof(payload.cancel_text));
     payload.timeout_ms = static_cast<uint32_t>(arguments[3].integer);
-    return dispatch_confirm(act, label, token);
+    return dispatch_confirm(payload, label, token);
 }
 const ActionOperationDef kConfirmOperations[] = {
     {"dialog.confirm", "Ask for confirmation", kConfirmArguments, 4,

@@ -10,8 +10,7 @@
 namespace {
 constexpr const char* kVisualAlertActionTag = "Action";
 #if defined(ARDUINO) && HAS_DISPLAY
-ActionResult dispatch_visual_alert(const ButtonAction& act, const char* label, uint32_t) {
-    const auto& alert = act.payload.visual_alert;
+ActionResult dispatch_visual_alert(const VisualAlertPayload& alert, const char* label, uint32_t) {
     if (!strcmp(alert.va_op, "stop")) { visual_alert_stop(); LOGI(kVisualAlertActionTag, "%s visual_alert: stop", label); }
     else { screen_saver_manager_notify_activity(true); VisualAlertParams params = {}; if (!parse_hex_color(alert.va_color[0] ? alert.va_color : "#FF0000", &params.color)) params.color = 0xFF0000; params.pattern = visual_alert_pattern_from_str(alert.va_pattern); params.period_ms = alert.va_period_ms ? alert.va_period_ms : VA_DEFAULT_PERIOD_MS; params.intensity = alert.va_intensity ? alert.va_intensity : VA_DEFAULT_INTENSITY; params.duration_ms = alert.va_duration_ms; visual_alert_show(&params); LOGI(kVisualAlertActionTag, "%s visual_alert: start pat=%u per=%u int=%u dur=%u", label, params.pattern, params.period_ms, params.intensity, params.duration_ms); }
     return ACTION_COMPLETE;
@@ -38,15 +37,14 @@ const ActionArgumentDef kVisualAlertArguments[] = {
 ActionResult dispatch_visual_alert_start(const ActionResolvedArgument* arguments, const char* label,
                                          uint32_t token) {
 #if defined(ARDUINO) && HAS_DISPLAY
-    ButtonAction act = {};
-    auto& alert = act.payload.visual_alert;
+    VisualAlertPayload alert = {};
     strlcpy(alert.va_op, "start", sizeof(alert.va_op));
     strlcpy(alert.va_color, arguments[0].text, sizeof(alert.va_color));
     strlcpy(alert.va_pattern, arguments[1].text, sizeof(alert.va_pattern));
     alert.va_period_ms = static_cast<uint16_t>(arguments[2].integer);
     alert.va_intensity = static_cast<uint16_t>(arguments[3].integer);
     alert.va_duration_ms = static_cast<uint32_t>(arguments[4].integer);
-    return dispatch_visual_alert(act, label, token);
+    return dispatch_visual_alert(alert, label, token);
 #else
     (void)arguments;
     (void)token;
@@ -56,9 +54,9 @@ ActionResult dispatch_visual_alert_start(const ActionResolvedArgument* arguments
 }
 ActionResult dispatch_visual_alert_stop(const ActionResolvedArgument*, const char* label, uint32_t token) {
 #if defined(ARDUINO) && HAS_DISPLAY
-    ButtonAction act = {};
-    strlcpy(act.payload.visual_alert.va_op, "stop", sizeof(act.payload.visual_alert.va_op));
-    return dispatch_visual_alert(act, label, token);
+    VisualAlertPayload alert = {};
+    strlcpy(alert.va_op, "stop", sizeof(alert.va_op));
+    return dispatch_visual_alert(alert, label, token);
 #else
     (void)token;
     LOGW(kVisualAlertActionTag, "%s visual_alert: no display", label);

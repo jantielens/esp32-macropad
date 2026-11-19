@@ -9,8 +9,7 @@
 namespace {
 constexpr const char* kSoundAlertActionTag = "Action";
 #if defined(ARDUINO) && HAS_AUDIO
-ActionResult dispatch_sound_alert(const ButtonAction& act, const char* label, uint32_t) {
-    const auto& alert = act.payload.sound_alert;
+ActionResult dispatch_sound_alert(const SoundAlertPayload& alert, const char* label, uint32_t) {
     const ActionDispatchContext context = action_dispatch_context();
     bool accepted = true;
     if (!strcmp(alert.sound_alert_kind, "stop_all")) audio_stop_all();
@@ -50,15 +49,14 @@ const ActionArgumentDef kSoundFileArguments[] = {
 ActionResult run_sound_operation(const ActionResolvedArgument* arguments, const char* label,
                                  uint32_t token, const char* kind, bool file) {
 #if defined(ARDUINO) && HAS_AUDIO
-    ButtonAction action = {};
-    auto& alert = action.payload.sound_alert;
+    SoundAlertPayload alert = {};
     strlcpy(alert.sound_alert_kind, kind, sizeof(alert.sound_alert_kind));
     if (arguments) {
         if (file) strlcpy(alert.sound_alert_file, arguments[0].text, sizeof(alert.sound_alert_file));
         else strlcpy(alert.sound_alert_pattern, arguments[0].text, sizeof(alert.sound_alert_pattern));
         alert.sound_alert_volume = static_cast<uint8_t>(arguments[1].integer);
     }
-    return dispatch_sound_alert(action, label, token);
+    return dispatch_sound_alert(alert, label, token);
 #else
     (void)arguments; (void)label; (void)token; (void)kind; (void)file;
     return ACTION_FAILED;

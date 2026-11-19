@@ -16,8 +16,7 @@ constexpr const char* kHaServiceActionTag = "Action";
 const char* validate_ha_entity(const char* entity);
 const char* validate_ha_service_name(const char* service);
 const char* validate_ha_service_data(const char* data);
-ActionResult dispatch_ha_service(const ButtonAction& act, const char* label, uint32_t) {
-    const HaServicePayload& payload = act.payload.ha_service;
+ActionResult dispatch_ha_service(const HaServicePayload& payload, const char* label, uint32_t) {
     const char* error = validate_ha_entity(payload.entity_id);
     if (!error) error = validate_ha_service_name(payload.service);
     if (!error) error = validate_ha_service_data(payload.data_json);
@@ -26,7 +25,7 @@ ActionResult dispatch_ha_service(const ButtonAction& act, const char* label, uin
         return ACTION_FAILED;
     }
 #if defined(ARDUINO)
-    const auto& service = act.payload.ha_service;
+    const auto& service = payload;
 #if HAS_MCP
     ActionResult tracked_result;
     if (action_run_dispatch_ha(service, &tracked_result)) return tracked_result;
@@ -70,11 +69,11 @@ const ActionArgumentDef kHaServiceCallArguments[] = {
 };
 ActionResult dispatch_ha_service_call(const ActionResolvedArgument* arguments, const char* label,
                                       uint32_t token) {
-    ButtonAction act = {};
-    strlcpy(act.payload.ha_service.entity_id, arguments[0].text, sizeof(act.payload.ha_service.entity_id));
-    strlcpy(act.payload.ha_service.service, arguments[1].text, sizeof(act.payload.ha_service.service));
-    strlcpy(act.payload.ha_service.data_json, arguments[2].text, sizeof(act.payload.ha_service.data_json));
-    return dispatch_ha_service(act, label, token);
+    HaServicePayload payload = {};
+    strlcpy(payload.entity_id, arguments[0].text, sizeof(payload.entity_id));
+    strlcpy(payload.service, arguments[1].text, sizeof(payload.service));
+    strlcpy(payload.data_json, arguments[2].text, sizeof(payload.data_json));
+    return dispatch_ha_service(payload, label, token);
 }
 const ActionOperationDef kHaServiceOperations[] = {
     {"ha.service.call", "Call Home Assistant service", kHaServiceCallArguments, 3,

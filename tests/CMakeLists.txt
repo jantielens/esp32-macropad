@@ -1430,7 +1430,6 @@ add_host_legacy_test(test_list_source_shutter
 add_host_legacy_test(test_net_activity SOURCES test_net_activity.cpp ${PROJECT_SOURCE_DIR}/src/app/net_activity.cpp)
 add_host_legacy_test(test_epaper_frame_battery SOURCES test_epaper_frame_battery.cpp)
 add_host_legacy_test(test_epaper_frame_media_conformance SOURCES test_epaper_frame_media_conformance.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper_frame/epaper_frame_media_validation.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper_frame/epaper_frame_transport_crc32.cpp LIBRARIES z)
-add_host_legacy_test(test_coffee_scale_cmd_len SOURCES test_coffee_scale_cmd_len.cpp DEFINITIONS IS_COFFEE_SCALE=true PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_expose_dry_down SOURCES test_expose_dry_down.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer DEFINITIONS IS_DARKROOM_TIMER=1 HAS_AUDIO=0 LIBRARIES m)
 add_host_legacy_test(test_meter_mag SOURCES test_meter_mag.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer DEFINITIONS IS_DARKROOM_TIMER=1 LIBRARIES m)
 add_host_legacy_test(test_print_log SOURCES test_print_log.cpp ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/print_log_overrides ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer ${HOST_ARDUINOJSON_DIR} DEFINITIONS IS_DARKROOM_TIMER=1 HAS_FILESYSTEM=1 HAS_PSRAM=1 LIBRARIES m pthread)

@@ -421,9 +421,8 @@ These mistakes silently break the class without producing a build error:
   the class folder and the aggregators listed in this document is debt.
   Push the logic into the device class and call it through a registered
   hook.
-- **Raising `ACTION_PAYLOAD_DEVICE_CLASS_BYTES` in `pad_config.h`** — the
-  default lives there for sizing canaries; per-class overrides belong in
-  `board_overrides.h` of the boards that need them.
+- **Adding inline device-class action payloads** — register typed operations
+  and use the shared action argument storage instead.
 - **Reusing another class's `IS_*` flag** — each class must have its own
   flag so detection precedence in `device_class_detect()` is unambiguous
   and so boards can ship them independently.

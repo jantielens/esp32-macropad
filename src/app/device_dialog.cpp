@@ -78,19 +78,14 @@ bool confirmation_input_available() {
                 continue;
             }
             for (uint8_t index = 0; index < count; ++index) {
+                const ActionOperationDef* operation = action_operation_for_action(actions[index]);
+                if (!operation || strcmp(operation->id, "button.navigate")) continue;
                 const char* command = nullptr;
-                if (!strcmp(actions[index].type, ACTION_TYPE_BUTTON_NAVIGATION)) {
-                    command = actions[index].payload.button_navigation.command;
-                } else {
-                    const ActionOperationDef* operation = action_operation_for_action(actions[index]);
-                    if (!operation || strcmp(operation->id, "button.navigate")) continue;
-                    const ActionArgumentBlock* block = actions[index].payload.operation.arguments;
-                    if (block && block->count == 1) {
-                        const ActionStoredArgument& argument = action_storage_arguments(block)[0];
-                        // A dynamic command may change before the button is pressed,
-                        // so it cannot guarantee input for an untimed confirmation.
-                        if (!argument.dynamic) command = action_storage_text(block, argument);
-                    }
+                const ActionArgumentBlock* block = actions[index].payload.operation.arguments;
+                if (block && block->count == 1) {
+                    const ActionStoredArgument& argument = action_storage_arguments(block)[0];
+                    // A dynamic command cannot guarantee input for an untimed confirmation.
+                    if (!argument.dynamic) command = action_storage_text(block, argument);
                 }
                 if (command) {
                     select |= !strcmp(command, "next") || !strcmp(command, "previous");

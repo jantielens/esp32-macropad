@@ -1176,11 +1176,11 @@ asset_feature_flag() {
             echo "HAS_AUTO_SHUTDOWN" ;;
         shutter|shutter_tests|shutter_sessions|shutter_session_actions)
             echo "IS_SHUTTER_TESTER" ;;
-        scale|brews|brew_templates|portal_action_editor_scale|portal_brews|portal_brews_charts|portal_brews_init|portal_brews_templates)
+        scale|brews|brew_templates|portal_brews|portal_brews_charts|portal_brews_init|portal_brews_templates)
             echo "IS_COFFEE_SCALE" ;;
-        darkroom|prints|portal_action_editor_darkroom|portal_darkroom_init|portal_prints|portal_darkroom)
+        darkroom|prints|portal_darkroom_init|portal_prints|portal_darkroom)
             echo "IS_DARKROOM_TIMER" ;;
-        voice|portal_action_editor_voice|portal_voice)
+        voice|portal_voice)
             echo "IS_VOICE_ASSISTANT" ;;
         *)
             echo "" ;;
