@@ -378,6 +378,8 @@ For portable settings and pad backups, see
 Building firmware requires Node.js 18 or newer and npm for the pinned Terser
 asset minifier, alongside the Arduino and Python tooling. Run `npm ci --prefix tools`
 before building offline. See the [build guide](docs/dev/build-and-release-process.md).
+`build.sh` selects C++17 for the Inkplate platform, whose default C++11 mode
+cannot compile the shared action descriptors. Other platforms retain their defaults.
 The compile-time `BLE_BACKEND` selector supports the pinned NimBLE-Arduino
 [broadcast profile](docs/dev/build-and-release-process.md#ble-backend-and-broadcast-profile),
 initially selected only by Sticky; other boards retain their core BLE backend.

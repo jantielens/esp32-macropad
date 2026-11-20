@@ -295,6 +295,11 @@ build_board() {
     # regardless of staging behavior.
     local portal_assets_path="$board_build_path/web-assets"
     local PROJECT_INCLUDE="-I$portal_assets_path -I$SCRIPT_DIR/src -I$SCRIPT_DIR/src/app"
+    local cpp_standard_flags=""
+    # Inkplate defaults to C++11, but shared firmware uses C++17 features.
+    if [[ "$fqbn" == Inkplate_Boards:* ]]; then
+        cpp_standard_flags=" -std=gnu++17"
+    fi
 
     EXTRA_GLOBAL_FLAGS+=" -include $SCRIPT_DIR/src/app/ble_build_config.h"
 
@@ -305,7 +310,7 @@ build_board() {
         # Sanitize board name for valid C++ macro (alphanumeric + underscore only)
         board_macro="BOARD_${board_name^^}"
         board_macro="${board_macro//[^A-Z0-9_]/_}"
-        EXTRA_FLAGS+=(--build-property "compiler.cpp.extra_flags=$PROJECT_INCLUDE -I$board_override_dir -D$board_macro -DBOARD_HAS_OVERRIDE=1 $BOARD_NAME_DEFINE$EXTRA_GLOBAL_DEFINES$EXTRA_GLOBAL_FLAGS")
+        EXTRA_FLAGS+=(--build-property "compiler.cpp.extra_flags=$PROJECT_INCLUDE -I$board_override_dir -D$board_macro -DBOARD_HAS_OVERRIDE=1 $BOARD_NAME_DEFINE$EXTRA_GLOBAL_DEFINES$EXTRA_GLOBAL_FLAGS$cpp_standard_flags")
         EXTRA_FLAGS+=(--build-property "compiler.c.extra_flags=$PROJECT_INCLUDE -I$board_override_dir -D$board_macro -DBOARD_HAS_OVERRIDE=1 $BOARD_NAME_DEFINE$EXTRA_GLOBAL_DEFINES$EXTRA_GLOBAL_FLAGS")
         # Some library .S files (e.g. lvgl's helium assembly stubs) preprocess
         # `#include "../../lv_conf.h"` and need the project src/app path even
@@ -313,7 +318,7 @@ build_board() {
         EXTRA_FLAGS+=(--build-property "compiler.S.extra_flags=$PROJECT_INCLUDE -I$board_override_dir -D$board_macro -DBOARD_HAS_OVERRIDE=1")
     else
         echo "Config:    Using default configuration"
-        EXTRA_FLAGS+=(--build-property "compiler.cpp.extra_flags=$PROJECT_INCLUDE $BOARD_NAME_DEFINE$EXTRA_GLOBAL_DEFINES$EXTRA_GLOBAL_FLAGS")
+        EXTRA_FLAGS+=(--build-property "compiler.cpp.extra_flags=$PROJECT_INCLUDE $BOARD_NAME_DEFINE$EXTRA_GLOBAL_DEFINES$EXTRA_GLOBAL_FLAGS$cpp_standard_flags")
         EXTRA_FLAGS+=(--build-property "compiler.c.extra_flags=$PROJECT_INCLUDE $BOARD_NAME_DEFINE$EXTRA_GLOBAL_DEFINES$EXTRA_GLOBAL_FLAGS")
         EXTRA_FLAGS+=(--build-property "compiler.S.extra_flags=$PROJECT_INCLUDE")
     fi

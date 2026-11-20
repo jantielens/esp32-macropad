@@ -201,6 +201,12 @@ The build system automatically applies project branding during compilation:
 6. `build.sh` also embeds the board name as a compile-time string define (`BUILD_BOARD_NAME`) so the portal can report the active board
 7. Firmware compiles with branded values embedded
 
+For `Inkplate_Boards` targets, `build.sh` appends `-std=gnu++17` to
+`compiler.cpp.extra_flags`, overriding the platform's C++11 default while
+preserving its other compiler flags. Shared action descriptors use default
+member initializers with aggregate initialization, and execution context uses
+C++17 inline variables. C compilation and other platforms retain their defaults.
+
 Firmware builds require Node.js 18 or newer and npm for JavaScript minification.
 The asset generator installs the pinned Terser dependency with `npm ci --prefix tools`
 when it is missing. For an offline build, run that command beforehand. The version
