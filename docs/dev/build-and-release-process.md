@@ -1257,6 +1257,7 @@ Follow [Semantic Versioning](https://semver.org/):
 
 **Notes**:
 - The board build matrix order is deterministic (board names are sorted) so CI output is stable.
+- The host-test job installs `csscompressor` for portal asset tests and Pillow for photoframe vector tests.
 - CI regenerates `docs/compile-time-flags.md` and fails if the generated output differs (keeps the report in sync with code).
 
 ### Release Workflow (`.github/workflows/release.yml`)

@@ -408,6 +408,8 @@ The [device power API](docs/dev/web-portal.md#device-power-control) includes:
 
 Host-native unit and integration tests run on the development machine (no ESP32 needed). They require CMake 3.20 or later. If CMake is installed through ESP-IDF but is not on `PATH`, use its toolchain directory for the commands below:
 
+The portal asset tests also require Python's `csscompressor` package.
+
 ```bash
 export PATH="$HOME/.espressif/tools/cmake/<version>/bin:$PATH"
 ```

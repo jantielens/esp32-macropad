@@ -135,8 +135,8 @@ jobs:
         git clone --depth 1 --branch v7.2.1 https://github.com/bblanchon/ArduinoJson.git ~/Arduino/libraries/ArduinoJson
         git clone --depth 1 --branch v9.6.0 https://github.com/lvgl/lvgl.git ~/Arduino/libraries/lvgl
 
-    - name: Install photoframe vector dependencies
-      run: python3 -m pip install pillow==12.2.0
+    - name: Install host-test Python dependencies
+      run: python3 -m pip install pillow==12.2.0 csscompressor==0.9.5
 
     - name: Configure host-native tests
       run: |
