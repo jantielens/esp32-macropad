@@ -9,7 +9,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 def production(path):
-    return re.sub(r"^\s*#include[^\n]*", "", (ROOT / path).read_text(), flags=re.M)
+    return re.sub(r"^\s*#include[^\n]*", "", (ROOT / path).read_text(), flags=re.M) + "\n"
 
 
 PRELUDE = (
