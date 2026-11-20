@@ -725,6 +725,17 @@ int main() {
         CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
     }
 
+    {
+        JsonDocument doc;
+        make_button(doc);
+        JsonObject bindings = doc["bindings"].to<JsonObject>();
+        bindings["power"] = "[mqtt:home/solar/power;watts;%.0f]";
+        bindings["hot"] = "[expr:[mqtt:home/solar/power;watts]>3000?1:0]";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        bindings["hot"] = "[expr:[pad:power]>3000?1:0]";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+    }
+
     if (g_failures) {
         std::printf("%d test(s) failed\n", g_failures);
         return 1;

@@ -1663,6 +1663,19 @@ the MCP capability manifest. Each entry contains `name`, `min_params`,
 literal first-parameter validation rule with portal authoring. Finite schemes
 also include their current `keys` array.
 
+Schemes with saved named definitions expose `authoring.definitions`, even
+without `docs=1`. For `pad`, this contains `max_count` (16), `name_max_bytes`
+(31), `template_max_bytes` (191), `name_pattern`
+(`^[A-Za-z][A-Za-z0-9_]*$`), `context` (`same_pad`), and
+`composition_supported` (`false`). Composition means using a `[pad:...]`
+reference inside another named binding's saved value; button-field expressions
+may still reference named bindings. The byte limits measure UTF-8 input after
+JSON decoding, excluding the terminating NUL. They are not resolved-output or
+destination-field capacities. Ordinary scalar token resolution has a 127-byte
+payload buffer; destination fields and individual resolvers may impose
+additional limits. These constraints also appear in full and scheme-filtered
+MCP capabilities, from the same registration metadata.
+
 The response is board-aware: device-class and feature-gated schemes appear
 only when registered by the running firmware. Clients should fetch this endpoint
 instead of maintaining a static binding scheme or key list.

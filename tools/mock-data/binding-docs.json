@@ -2291,7 +2291,7 @@
       "free_form": true,
       "category": "Logic",
       "summary": "Reuse a binding defined once in the pad's Bindings list.",
-      "note": "Pads only. Use it to shorten long tokens in fields with a smaller length limit.",
+      "note": "Requires the same pad's binding context; not available in shared device defaults or context-free hosts. Up to 16 definitions; names use an ASCII letter followed by ASCII letters, digits or underscores (max 31 bytes). Each saved value is limited to 191 UTF-8 bytes and must not contain any [pad:...] reference, even without a cycle. Inline the underlying source instead. Expressions in button fields may use [pad:name]. Named bindings shorten references in smaller fields; they do not increase template, resolved-output or destination-field limits.",
       "params": [
         {
           "name": "name",
@@ -2317,7 +2317,17 @@
           "code": "[expr:[pad:power] > 3000 ? \"High\" : \"Low\"]",
           "desc": "Reuse a named value inside an expression."
         }
-      ]
+      ],
+      "authoring": {
+        "definitions": {
+          "max_count": 16,
+          "name_max_bytes": 31,
+          "template_max_bytes": 191,
+          "name_pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+          "context": "same_pad",
+          "composition_supported": false
+        }
+      }
     },
     {
       "name": "timer",

@@ -73,12 +73,25 @@ static const char* authoring_kind_name(BindingAuthoringValueKind kind) {
     }
 }
 
-static void emit_authoring(JsonObject scheme, const BindingSchemeSpec& spec) {
+static void emit_authoring(JsonObject scheme, const BindingSchemeSpec& spec, bool include_docs) {
     const BindingAuthoringSpec* authoring = spec.authoring;
-    if (!authoring || !authoring->keys || !authoring->key_count ||
+    if (!authoring) return;
+
+    if (authoring->definitions) {
+        const auto& constraints = *authoring->definitions;
+        JsonObject definitions = scheme["authoring"]["definitions"].to<JsonObject>();
+        definitions["max_count"] = constraints.max_count;
+        definitions["name_max_bytes"] = constraints.name_max_bytes;
+        definitions["template_max_bytes"] = constraints.template_max_bytes;
+        set_text(definitions, "name_pattern", constraints.name_pattern);
+        set_text(definitions, "context", constraints.context);
+        definitions["composition_supported"] = constraints.composition_supported;
+    }
+    if (!include_docs || !authoring->keys || !authoring->key_count ||
         (!spec.free_form && (!spec.key_count || !spec.key_at))) return;
 
-    JsonObject authoring_json = scheme["authoring"].to<JsonObject>();
+    JsonObject authoring_json = scheme["authoring"].as<JsonObject>();
+    if (authoring_json.isNull()) authoring_json = scheme["authoring"].to<JsonObject>();
     JsonArray keys = authoring_json["keys"].to<JsonArray>();
     const uint8_t count = spec.free_form ? authoring->key_count : spec.key_count();
     for (uint8_t i = 0; i < count; ++i) {
@@ -120,7 +133,10 @@ static void emit_authoring(JsonObject scheme, const BindingSchemeSpec& spec) {
         }
         key["read_only"] = metadata.read_only;
     }
-    if (keys.size() == 0) scheme.remove("authoring");
+    if (keys.size() == 0) {
+        authoring_json.remove("keys");
+        if (authoring_json.size() == 0) scheme.remove("authoring");
+    }
 }
 
 bool binding_schema_emit(void* out_json, bool include_docs, const char* scheme_filter) {
@@ -152,8 +168,8 @@ bool binding_schema_emit(void* out_json, bool include_docs, const char* scheme_f
         }
         if (include_docs) {
             emit_doc(scheme, *spec);
-            emit_authoring(scheme, *spec);
         }
+        emit_authoring(scheme, *spec, include_docs);
         if (scheme_filter) break;
     }
     return !scheme_filter || found;

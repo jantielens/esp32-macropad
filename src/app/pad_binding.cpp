@@ -324,6 +324,15 @@ static const BindingParamDoc kPadParams[] = {
     {"format", "printf float format such as %.1f, or %s for text."},
 };
 
+static const BindingDefinitionConstraints kPadDefinitionConstraints = {
+    PAD_MAX_BINDINGS, PAD_BINDING_NAME_MAX_LEN - 1, CONFIG_LABEL_MAX_LEN - 1,
+    "^[A-Za-z][A-Za-z0-9_]*$", "same_pad", false,
+};
+
+static const BindingAuthoringSpec kPadAuthoring = {
+    nullptr, 0, &kPadDefinitionConstraints,
+};
+
 static const BindingExampleDoc kPadExamples[] = {
     {"[pad:power]", "Raw value of the named pad binding."},
     {"[pad:power;%.0f W]", "Local format without redefining the source."},
@@ -334,13 +343,17 @@ static const BindingSchemeDoc kPadDoc = {
     "Logic", "Reuse a binding defined once in the pad's Bindings list.",
     BINDING_DOC_LIST(kPadParams), BINDING_DOC_NONE, BINDING_DOC_LIST(kPadExamples),
     nullptr, false, BINDING_DOC_NONE,
-    "Pads only. Use it to shorten long tokens in fields with a smaller length limit.", nullptr,
+    "Requires the same pad's binding context; not available in shared device defaults or context-free hosts. "
+    "Up to 16 definitions; names use an ASCII letter followed by ASCII letters, digits or underscores (max 31 bytes). "
+    "Each saved value is limited to 191 UTF-8 bytes and must not contain any [pad:...] reference, even without a cycle. "
+    "Inline the underlying source instead. Expressions in button fields may use [pad:name]. "
+    "Named bindings shorten references in smaller fields; they do not increase template, resolved-output or destination-field limits.", nullptr,
 };
 
 void pad_binding_init() {
     if (!binding_template_register("pad", pad_binding_resolve, pad_binding_collect,
                                    {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr,
-                                    &kPadDoc, nullptr, nullptr, nullptr, pad_binding_value_kind})) {
+                                    &kPadDoc, &kPadAuthoring, nullptr, nullptr, pad_binding_value_kind})) {
         LOGE(TAG, "Failed to register pad binding scheme");
     }
 }

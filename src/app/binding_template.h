@@ -215,9 +215,20 @@ constexpr BindingAuthoringKey binding_authoring_number(
             true, example};
 }
 
+// Limits apply to saved definitions, not resolved output or destination fields.
+struct BindingDefinitionConstraints {
+    uint8_t max_count;
+    uint16_t name_max_bytes;
+    uint16_t template_max_bytes;
+    const char* name_pattern;
+    const char* context;
+    bool composition_supported;
+};
+
 struct BindingAuthoringSpec {
     const BindingAuthoringKey* keys;
     uint8_t key_count;
+    const BindingDefinitionConstraints* definitions = nullptr;
 };
 
 #define BINDING_DOC_LIST(array) (array), (uint8_t)(sizeof(array) / sizeof((array)[0]))

@@ -181,11 +181,31 @@ Open Pad **Bindings**, select Add, and enter a Name and Binding.
 For example, name `power` with `[mqtt:home/solar;power]`.
 Reference it as `[pad:power]`, `[pad:power;%.0f W]`, or inside an expression.
 
-Names start with a letter and contain letters, digits, or underscores, up to
-31 characters. A pad supports up to 16 names.
-Avoid circular definitions and references that rely on a different pad's context.
+Names start with an ASCII letter and contain only ASCII letters, digits, or
+underscores, up to 31 characters. A pad supports up to 16 names. Each saved
+Binding value is limited to **191 UTF-8 bytes**, not 191 characters.
+
+A named binding's value **cannot contain any `[pad:...]` reference**, even
+when there is no cycle. To calculate `hot` from the same source as `power`,
+inline the source in its definition:
+
+```text
+[expr:[mqtt:home/solar;power]>3000?1:0]
+```
+
+In a button field, `[expr:[pad:power]>3000?1:0]` is allowed.
+The name must exist in the same pad's effective bindings; references cannot
+look up a different pad.
 Template bindings merge with local bindings; the local name wins.
 Use globals, not `[pad:name]`, in shared device defaults or context-free hosts.
+For previews, select that pad's context and save its definitions first.
+
+Named bindings let a short reference fit a smaller field, such as a widget
+caption. They do not allow a definition longer than 191 bytes. The saved
+template limit is separate from resolved-output and destination-field limits:
+ordinary token resolution can return up to 127 bytes, and the receiving field
+or widget can impose a smaller limit. A short reference does not guarantee
+that a long resolved value fits.
 
 For calculations and conditional colors, continue to [expressions](expressions.md).
 

@@ -42,6 +42,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   preserving binding formatting. Actions and other settings remain unchanged.
   See [copying buttons](docs/user/pads/reuse.md#copy-fill-and-clear).
 
+### Fixed
+
+* Correct unsupported named pad-binding composition examples and publish
+  machine-readable authoring restrictions in the binding API and MCP
+  capabilities. Clarify same-pad context, name/count limits, and the 191-byte
+  UTF-8 template limit in the portal reference and user guide. Existing limits
+  and the prohibition on pad-to-pad references are unchanged.
+  See [#148](https://github.com/jantielens/esp32-macropad/issues/148).
+
 ## [1.49.0] - 2026-11-19
 
 ### Breaking changes
