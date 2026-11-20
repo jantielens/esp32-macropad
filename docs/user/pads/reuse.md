@@ -47,8 +47,36 @@ Save Pad to apply.
 
 ## Copy, fill, and clear
 
-Copy a button and paste into the intended destination in the selected layer.
-Fill Pad repeats the selected configuration; check which existing content it
+Select a configured button and choose **Copy**, then select a destination in
+the same or another pad and choose **Paste**. A dialog offers prefilled sources,
+plain-text labels, and explicit color badges. Leave values unchanged to keep
+them, or edit the values you want to replace. Choose **Paste** or **Paste with
+changes**, then review the button in the normal inspector and **Save Pad**.
+**Cancel** leaves the destination unchanged.
+
+Home Assistant entity replacements update matching references in labels,
+widget inputs, expressions, and sparkline history settings while retaining each
+binding's formatting and fallback. MQTT and other bindings use complete-token
+textboxes: replace the brackets and contents together. Identical tokens share
+one replacement; different paths or formatting remain separate. For example,
+replace `[health:cpu]` with `[health:wifi_rssi]` to display Wi-Fi signal strength.
+Review fixed widget ranges and units when changing the type of value.
+
+Matching explicit colors share a picker, including literal label-style colors.
+Colors for unconfigured sparkline series and reference lines are omitted;
+their settings are still copied unchanged.
+Inherited colors and color constants inside expressions are not offered.
+Identical plain-text labels share one replacement field.
+Mixed labels expose their bindings rather than a second whole-label editor.
+Hover a row's label to see which configuration fields it changes.
+
+This is an independent copy, not a linked template. Actions and their control
+targets, extension-specific configuration, and other settings remain unchanged.
+Named pad bindings use the destination pad's definitions; copying a button does
+not copy those definitions. Appearance can change when the destination has
+different inherited defaults.
+
+Fill Pad repeats the copied configuration; check which existing content it
 will replace before saving. Copy/Paste Pad transfers the layout and settings
 including both button layers into the current draft. Export/import also retain
 both layers. Review template references and bindings afterward.

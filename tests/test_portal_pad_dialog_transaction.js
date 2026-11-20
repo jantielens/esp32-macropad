@@ -1533,6 +1533,162 @@ function checkContentLayoutDraft() {
     context.padIconEditorReadDraft = savedIconReader;
 }
 
+function checkPasteChanges() {
+    const paste = vm.createContext({
+        console, TextEncoder, PAD_PV_FIELDS: context.PAD_PV_FIELDS,
+        document: { getElementById() { return null; } },
+        padCloneJson: value => JSON.parse(JSON.stringify(value))
+    });
+    for (const file of ['portal_binding_validator', 'portal_pad_colors', 'portal_widget_editor',
+        'portal_widget_sparkline', 'portal_widget_gauge', 'portal_widget_option_selector',
+        'portal_widget_list', 'portal_pad_paste']) {
+        vm.runInContext(fs.readFileSync('src/app/web/' + file + '.js', 'utf8'), paste);
+    }
+    paste.bindingRegisterSchema(JSON.parse(fs.readFileSync('tools/mock-data/binding-docs.json', 'utf8')).schemes);
+    const source = {
+        widget_type: 'sparkline', label_top: 'Room\nTemperature',
+        label_center: '[ha:sensor.room_temperature;;%.1f C|---]',
+        label_bottom: 'Outside [mqtt:house;outside.temperature;%.1f]',
+        label_center_style: 'align:left;color: #2196f3 ;font_size:24',
+        widget_data_binding: '[ha:sensor.room_temperature]',
+        widget_data_binding_2: '[mqtt:house;inside.temperature]',
+        widget_data_binding_3: '[mqtt:house;outside.temperature]',
+        widget_sparkline_ha_entity: 'sensor.room_temperature',
+        widget_sparkline_line_color: '#2196F3', icon_color: '2196f3',
+        bg_color: '[expr:[ha:sensor.room_temperature]>20?"#2196F3":"#000000"]',
+        widget_sparkline_min: '[health:cpu]',
+        widget_sparkline_max: '[health:cpu]',
+        actions: [{ op: 'ha.service.call', args: { entity_id: 'sensor.room_temperature' } }],
+        extension_config: '{"binding":"[health:cpu]","color":"#2196F3"}',
+        icon: { source_id: 'keep-artwork' }, bg_image_password: '[health:cpu]',
+        widget_sparkline_window: 21600, col_span: 3
+    };
+    const before = JSON.stringify(source);
+    const rows = paste.padPasteChanges(source);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(paste.padPasteApplyChanges(source, rows))), source,
+        'Unchanged paste preserves configuration exactly');
+    const entity = rows.find(row => row.kind === 'entity');
+    assert.strictEqual(entity.uses.length, 4, 'Entity grouping includes formatted, raw, nested, and history uses');
+    const color = rows.find(row => row.kind === 'color');
+    assert.strictEqual(color.uses.length, 3, 'Equivalent field and label-style colors share one replacement');
+    assert.strictEqual(rows.filter(row => row.kind === 'binding' && row.original.startsWith('[mqtt:')).length, 3,
+        'Different paths and formatting remain independent MQTT bindings');
+    assert.strictEqual(rows.filter(row => row.kind === 'label').length, 1, 'Mixed labels have no overlapping text editor');
+    const health = rows.find(row => row.original === '[health:cpu]');
+    assert.strictEqual(health.uses.length, 2, 'Opaque config and credentials are not inspected');
+    entity.value = 'sensor.living_room_temperature';
+    color.value = '#ff9800';
+    health.value = '[health:wifi_rssi]';
+    rows.find(row => row.kind === 'label').value = 'Living room\nTemperature';
+    rows.find(row => row.original === '[mqtt:house;inside.temperature]').value = '[mqtt:other;inside.temperature]';
+    const changed = paste.padPasteApplyChanges(source, rows);
+    assert.strictEqual(changed.label_center, '[ha:sensor.living_room_temperature;;%.1f C|---]');
+    assert.strictEqual(changed.widget_sparkline_ha_entity, 'sensor.living_room_temperature');
+    assert.strictEqual(changed.bg_color, '[expr:[ha:sensor.living_room_temperature]>20?"#2196F3":"#000000"]');
+    assert.strictEqual(changed.label_center_style, 'align:left;color: #FF9800 ;font_size:24');
+    assert.strictEqual(changed.icon_color, '#FF9800');
+    assert.strictEqual(changed.widget_data_binding_2, '[mqtt:other;inside.temperature]');
+    assert.strictEqual(changed.widget_data_binding_3, source.widget_data_binding_3);
+    assert.strictEqual(changed.label_bottom, source.label_bottom);
+    assert.strictEqual(changed.widget_sparkline_min, '[health:wifi_rssi]');
+    assert.strictEqual(changed.widget_sparkline_max, '[health:wifi_rssi]');
+    assert.strictEqual(changed.label_top, 'Living room\nTemperature');
+    assert.deepStrictEqual(changed.actions, source.actions);
+    assert.strictEqual(JSON.stringify(source), before, 'Replacements never mutate the clipboard');
+    assert.strictEqual(changed.extension_config, source.extension_config);
+    assert.strictEqual(changed.bg_image_password, source.bg_image_password);
+    health.value = '[health:not_a_key]';
+    assert.throws(() => paste.padPasteApplyChanges(source, rows), /Unknown binding key/);
+    health.value = '[health:cpu;%.1f]';
+    assert.throws(() => paste.padPasteApplyChanges(source, rows), /Widget data bindings/);
+    health.value = 'not a binding';
+    assert.throws(() => paste.padPasteApplyChanges(source, rows), /complete binding/);
+    health.value = health.original;
+    entity.value = 'invalid entity';
+    assert.throws(() => paste.padPasteApplyChanges(source, rows), /entity ID/);
+    entity.value = entity.original;
+    color.value = 'invalid color';
+    assert.throws(() => paste.padPasteApplyChanges(source, rows), /literal color/);
+
+    const simple = { label_center: '[health:cpu]', label_top: 'CPU', icon_color: 'auto' };
+    const simpleRows = paste.padPasteChanges(simple);
+    simpleRows.find(row => row.kind === 'binding').value = '[health:wifi_rssi]';
+    assert.strictEqual(paste.padPasteApplyChanges(simple, simpleRows).label_center, '[health:wifi_rssi]');
+    simpleRows.find(row => row.kind === 'label').value = '\u00e9'.repeat(96);
+    assert.throws(() => paste.padPasteApplyChanges(simple, simpleRows), /191-byte limit/);
+
+    const independent = { label_center: '[health:cpu] [health:wifi_rssi]' };
+    const independentRows = paste.padPasteChanges(independent);
+    independentRows[0].value = '[health:wifi_rssi]';
+    independentRows[1].value = '[health:cpu]';
+    assert.strictEqual(paste.padPasteApplyChanges(independent, independentRows).label_center,
+        '[health:wifi_rssi] [health:cpu]', 'Replacements are simultaneous, not cascading');
+    const named = { label_center: '[pad:missing]' };
+    assert.strictEqual(paste.padPasteApplyChanges(named, paste.padPasteChanges(named)).label_center,
+        '[pad:missing]', 'Cross-pad dependencies do not block an unchanged paste');
+    const options = {
+        widget_type: 'option_selector', widget_data_binding: '[ha:input_select.room]',
+        widget_option_label_2: '[health:cpu]', widget_option_state_2: '[pad:available]',
+        widget_option_fg_color_2: '#2196F3'
+    };
+    const optionRows = paste.padPasteChanges(options);
+    optionRows.find(row => row.original === '[health:cpu]').value = '[health:wifi_rssi]';
+    optionRows.find(row => row.kind === 'color').value = '#999999';
+    const changedOptions = paste.padPasteApplyChanges(options, optionRows);
+    assert.strictEqual(changedOptions.widget_option_label_2, '[health:wifi_rssi]');
+    assert.strictEqual(changedOptions.widget_option_fg_color_2, '#999999');
+    assert.strictEqual(changedOptions.widget_option_state_2, '[pad:available]');
+    const repeatedLabels = { label_top: 'Test', label_center: 'Test', label_bottom: 'Different' };
+    const labelRows = paste.padPasteChanges(repeatedLabels);
+    assert.strictEqual(labelRows.length, 2, 'Identical plain labels share one replacement');
+    const repeated = labelRows.find(row => row.original === 'Test');
+    assert.strictEqual(repeated.uses.length, 2);
+    repeated.value = 'Updated';
+    const updatedLabels = paste.padPasteApplyChanges(repeatedLabels, labelRows);
+    assert.strictEqual(updatedLabels.label_top, 'Updated');
+    assert.strictEqual(updatedLabels.label_center, 'Updated');
+    assert.strictEqual(updatedLabels.label_bottom, 'Different');
+
+    const list = {
+        widget_type: 'list', label_top: 'Metrics', widget_data_binding: '[health:metrics]',
+        widget_list_label_top: '[item:title|Untitled]', widget_list_label_bottom: 'Metrics'
+    };
+    const listRows = paste.padPasteChanges(list);
+    const listLabel = listRows.find(row => row.original === 'Metrics');
+    assert.strictEqual(listLabel.uses.length, 2, 'List row labels group with matching button labels');
+    listLabel.value = 'Device metrics';
+    const updatedList = paste.padPasteApplyChanges(list, listRows);
+    assert.strictEqual(updatedList.label_top, 'Device metrics');
+    assert.strictEqual(updatedList.widget_list_label_bottom, 'Device metrics');
+    assert.strictEqual(updatedList.widget_list_label_top, list.widget_list_label_top);
+    assert.strictEqual(updatedList.widget_data_binding, list.widget_data_binding);
+
+    const singleSeries = {
+        widget_type: 'sparkline', widget_data_binding: '[health:cpu]',
+        widget_sparkline_line_color: '#4CAF50',
+        widget_sparkline_line_color_2: '#2196F3', widget_sparkline_line_color_3: '#9C27B0',
+        widget_sparkline_ref_1_color: '#888888', widget_sparkline_ref_2_color: '#888888',
+        widget_sparkline_ref_3_color: '#888888'
+    };
+    const seriesRows = paste.padPasteChanges(singleSeries);
+    assert.deepStrictEqual(Array.from(seriesRows.filter(row => row.kind === 'color'), row => row.original),
+        ['#4CAF50'], 'Unconfigured sparkline series and reference lines do not offer colors');
+    seriesRows.find(row => row.kind === 'color').value = '#FF9800';
+    const recoloredSeries = paste.padPasteApplyChanges(singleSeries, seriesRows);
+    assert.strictEqual(recoloredSeries.widget_sparkline_line_color, '#FF9800');
+    assert.strictEqual(recoloredSeries.widget_sparkline_line_color_2, '#2196F3');
+    assert.strictEqual(recoloredSeries.widget_sparkline_ref_1_color, '#888888',
+        'Inactive settings are preserved, not removed or recolored');
+    singleSeries.widget_data_binding_2 = '[health:wifi_rssi]';
+    singleSeries.widget_sparkline_ref_2_y = 0;
+    const activeColors = paste.padPasteChanges(singleSeries).filter(row => row.kind === 'color');
+    assert.deepStrictEqual(new Set(Array.from(activeColors, row => row.original)),
+        new Set(['#4CAF50', '#888888', '#2196F3']),
+        'A configured second series and a reference line at zero retain their colors');
+    assert.strictEqual(activeColors.find(row => row.original === '#888888').uses.length, 1);
+}
+
+checkPasteChanges();
 checkContentLayoutControls();
 checkContentLayoutDraft();
 checkSourceColors().then(checkBindingPreviewPlacement).then(checkInspectorRequests).then(() => console.log('portal_pad_dialog_transaction: PASS')).catch(error => {

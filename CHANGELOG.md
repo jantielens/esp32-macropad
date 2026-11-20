@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-11-19
+ms.date: 2026-11-20
 ms.topic: reference
 ---
 
@@ -13,6 +13,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Added
+
+* Add a customization dialog when pasting copied buttons and widgets. Replace
+  Home Assistant entities, other binding tokens, matching plain-text labels,
+  and explicit colors, or paste unchanged. Matching values share one control;
+  Home Assistant replacements also update sparkline history references while
+  preserving binding formatting. Actions and other settings remain unchanged.
+  See [copying buttons](docs/user/pads/reuse.md#copy-fill-and-clear).
 
 ## [1.49.0] - 2026-11-19
 

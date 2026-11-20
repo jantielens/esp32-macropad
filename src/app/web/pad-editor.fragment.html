@@ -545,6 +545,18 @@
         </div>
     </div>
 
+    <dialog id="pad-paste-dialog" class="pad-workspace-discard pad-paste-dialog" aria-labelledby="pad-paste-title">
+        <h3 id="pad-paste-title">Paste button</h3>
+        <p>Change sources, text, or colors below, or leave them unchanged. Other settings, including actions, are copied unchanged.</p>
+        <p id="pad-paste-empty" hidden>No editable sources, text, or colors found. Paste the button unchanged.</p>
+        <div id="pad-paste-fields"></div>
+        <p id="pad-paste-error" role="alert"></p>
+        <div class="d-flex gap-2">
+            <button type="button" id="pad-paste-cancel" class="btn btn-secondary">Cancel</button>
+            <button type="button" id="pad-paste-confirm" class="btn btn-primary">Paste</button>
+        </div>
+    </dialog>
+
     <dialog id="pad-workspace-discard" class="pad-workspace-discard">
         <h3>Unsaved pad edits</h3>
         <p id="pad-workspace-discard-message">Discard edits and switch pads?</p>

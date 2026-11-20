@@ -2525,6 +2525,11 @@ body:has(#pad-editor-root) #toast-container {
 #pad-block-banner { position: absolute; top: 0; left: 0; right: 0; z-index: 2; }
 #pad-editor-root .pad-workspace-discard { max-width: min(440px, calc(100vw - 32px)); padding: 24px; border: 1px solid var(--pad-workspace-line); border-radius: 6px; background: var(--portal-surface); color: var(--portal-text); }
 #pad-editor-root .pad-workspace-discard::backdrop { background: #0008; }
+#pad-editor-root .pad-paste-dialog { width: 580px; max-width: calc(100vw - 32px); max-height: 85vh; overflow-y: auto; box-sizing: border-box; }
+.pad-paste-dialog .form-group { margin-bottom: 16px; }
+.pad-paste-dialog label { display: block; margin-bottom: 6px; }
+.pad-paste-dialog input { width: 100%; min-width: 0; box-sizing: border-box; }
+#pad-paste-error { color: var(--portal-danger, #c62828); }
 @media (max-width: 1200px) {
   #pad-editor-root { --pad-inspector-width: 340px; }
   #pad-editor-root .pad-workspace { grid-template-columns: 110px minmax(160px, 1fr) var(--pad-inspector-width); }

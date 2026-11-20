@@ -48,12 +48,16 @@ function padDialogCopyBtn() {
 
 function padDialogPasteBtn() {
     if (!padState.btnClipboard) return;
+    padPasteDialogOpen();
+}
+
+function padDialogPasteButton(source) {
     const col = padState.editCol;
     const row = padState.editRow;
     const existing = padFindButton(col, row);
     if (!existing && padState.mainButtons.length + padState.overlayButtons.length >= padMaxButtons()) {
         showMessage('Combined Main and Overlay button limit reached (' + padMaxButtons() + ')', 'error');
-        return;
+        return false;
     }
     if (typeof padWorkspaceClearButton === 'function') padWorkspaceClearButton(col, row);
 
@@ -61,7 +65,7 @@ function padDialogPasteBtn() {
     padState.buttons = padState.buttons.filter(b => !(b.col === col && b.row === row));
 
     // Paste clipboard with new position — best-effort span fitting
-    const btn = Object.assign(padCloneJson(padState.btnClipboard), { col: col, row: row });
+    const btn = Object.assign(padCloneJson(source), { col: col, row: row });
     const srcCs = btn.col_span || 1;
     const srcRs = btn.row_span || 1;
     if (srcCs > 1 || srcRs > 1) {
@@ -77,6 +81,7 @@ function padDialogPasteBtn() {
 
     // Reopen dialog to show pasted content
     padDialogOpen(col, row);
+    return true;
 }
 
 // --- Fill pad with clipboard ---
