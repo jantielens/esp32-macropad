@@ -3851,7 +3851,7 @@ All pad-and-button-defaults endpoints require `HAS_DISPLAY` and are gated by Bas
 
 Returns saved device-level pad and button overrides and the board-selected firmware defaults.
 
-- **Response:** JSON object with explicitly saved fields and a read-only `firmware_defaults` object. Possible override fields: `default_pad_bg_color`, `button_spacing_px`, `pixel_shift_distance_px`, `pad_inset_top_px`, `pad_inset_right_px`, `pad_inset_bottom_px`, `pad_inset_left_px`, `bg_color`, `fg_color`, `icon_color`, `icon_badge_padding`, `icon_badge_color`, `border_color`, `border_width`, `corner_radius`, `content_pad`, `label_top_style`, `label_center_style`, `label_bottom_style`, `button_shadow_enabled`, `button_shadow_type`, `button_shadow_color_mode`, `button_shadow_color`, `button_shadow_darken_pct`, `button_shadow_offset_x_px`, `button_shadow_offset_y_px`, and `button_shadow_drop_blur_px`.
+- **Response:** JSON object with explicitly saved fields and a read-only `firmware_defaults` object. Possible override fields: `default_pad_bg_color`, `button_spacing_px`, `pixel_shift_distance_px`, `pad_inset_top_px`, `pad_inset_right_px`, `pad_inset_bottom_px`, `pad_inset_left_px`, `bg_color`, `bg_opacity`, `fg_color`, `icon_color`, `icon_badge_padding`, `icon_badge_color`, `border_color`, `border_width`, `corner_radius`, `content_pad`, `label_top_style`, `label_center_style`, `label_bottom_style`, `button_shadow_enabled`, `button_shadow_type`, `button_shadow_color_mode`, `button_shadow_color`, `button_shadow_darken_pct`, `button_shadow_offset_x_px`, `button_shadow_offset_y_px`, and `button_shadow_drop_blur_px`.
 - `firmware_defaults` contains the board's appearance, layout, and shadow defaults plus widget palette fields: `widget_series_color` (and `_2`, `_3`, `_4`), `widget_track_color`, `widget_indicator_color`, `widget_tick_color`, `widget_zone_color`, `widget_reference_color`, `widget_table_bg_color`, `widget_table_fg_color`, and `widget_table_header_color`.
 - Typography overrides are `default_font` (`@builtin` or a valid uploaded ID) and `base_text_size` (`0` for Automatic, or an integer from 1 to 65535). Defaults are `@builtin` and `0`. Unavailable IDs remain saved and fall back to bitmap text.
 - Read-only `typography_status` contains `active_font`, `active_base_text_size`, `board_medium_size`, `ttf_supported`, and `reboot_required`. It describes the boot snapshot, not whether every requested font instance loaded successfully.
@@ -4318,12 +4318,23 @@ Resolve `[scheme:params]` binding tokens against the device's **live** data and 
 
 > **Pad save validation.** `POST /api/pad` validates the submitted pad through the shared `pad_validate()` (the same validator the MCP write tools use): grid bounds, span overflow, widget types/config caps, colors, action arrays, binding tokens (unknown scheme, bad health key, …), and the one-level `[pad:name]` rule. Grid pads may include `column_widths_px` and `row_heights_px` integer arrays, one value per track, with `0` representing Auto. Each configured axis must retain at least one Auto track, and fixed sizes must fit the active display after spacing and insets while leaving at least one pixel for every Auto track. Buttons that fall outside a shrunken grid are tolerated (hidden, and reappear when the grid grows).
 
-> **Button background transparency.** A button's `bg_color` accepts the literal
-> `transparent` on both `buttons` (Main) and `overlay_buttons` (Overlay).
-> Background bindings can also resolve to `transparent`; invalid results restore
-> the opaque fallback. This changes only the background fill, not input blocking,
-> content opacity, or other color fields. The portal offers this choice only in
-> the button Background picker and preserves it through save/import/export.
+> **Button background opacity.** Both `buttons` (Main) and `overlay_buttons`
+> (Overlay) accept an optional static integer `bg_opacity`, 0-100 percent.
+> Omit both `bg_color` and `bg_opacity` to inherit the device background from
+> `GET/POST /api/component/button-defaults/config`; firmware opacity is 100.
+> A background override contains both fields. A color supplied without opacity
+> is opaque; opacity without a color is rejected.
+> Explicit 0 is fully transparent. `bg_color` requires a normal color or binding,
+> not the literal `transparent`. Invalid color binding results restore the fallback
+> color without changing opacity. Only the base background color fill changes,
+> not input blocking, content, patterns, shadows, images, or widget fills.
+> The Background picker stages color and opacity together, shows alpha over a
+> checkerboard in its preview and badge, and preserves overrides through
+> save/import/export. Its opacity slider has a read-only percentage.
+> Resetting Background clears both overrides.
+> On load and import, unsupported saved button background overrides clear both
+> fields from the draft, with a notification. Loading marks the cleanup unsaved;
+> only Save Pad persists it. Bindings remain intact for runtime resolution.
 
 > **Image credentials.** `GET /api/pad` never returns a button's
 > `bg_image_password`. It supplies `bg_image_password_set` instead. On a later

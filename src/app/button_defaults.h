@@ -10,7 +10,7 @@
 // Load device-level pad and button defaults after storage mounts, before caching pads.
 void button_defaults_init();
 
-// Get the current device-level pad and button defaults (never null, all-empty if file missing).
+// Get device defaults (never null; unset numeric settings use firmware defaults).
 const ButtonDefaults* button_defaults_get();
 
 // Device-wide burn-in pixel shift distance. Zero disables shifting.

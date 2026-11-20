@@ -62,6 +62,8 @@ const context = {
 };
 
 vm.createContext(context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_pad_colors.js', 'utf8'), context);
+context.padFillBuild = () => {};
 const bindingContext = vm.createContext({ console });
 vm.runInContext(fs.readFileSync('src/app/web/portal_binding_validator.js', 'utf8'), bindingContext);
 context.bindingTokenize = bindingContext.bindingTokenize;
@@ -923,6 +925,30 @@ document.getElementById('pad-edit-sparkline-height-pct').value = '100';
 document.getElementById('pad-edit-sparkline-line-width-2').value = '1.5';
 assert.throws(() => context.padDialogBuildButton(), /whole number from 1 to 10/);
 document.getElementById('pad-edit-sparkline-line-width-2').value = '';
+{
+    const opacity = document.getElementById('pad-edit-bg-opacity');
+    const background = document.getElementById('pad-edit-bg-color');
+    const originalBackground = background.value;
+    const defaultGetter = context.padGetEffectiveDefault;
+    context.padGetEffectiveDefault = key => key === 'bg_color' ? '#123456' :
+        key === 'bg_opacity' ? 60 : defaultGetter(key);
+    background.value = '#123456';
+    for (const value of ['0', '50', '100']) {
+        opacity.value = value;
+        const override = context.padDialogBuildButton();
+        assert.strictEqual(override.bg_opacity, Number(value));
+        assert.strictEqual(override.bg_color, '#123456', 'Opacity override must capture the background color');
+    }
+    opacity.value = '101';
+    assert.throws(() => context.padDialogBuildButton(), /whole percentage from 0 to 100/);
+    opacity.value = '';
+    assert.strictEqual(context.padDialogBuildButton().bg_opacity, undefined, 'Empty opacity remains inherited');
+    assert.strictEqual(context.padDialogBuildButton().bg_color, undefined, 'Inherited background omits both fields');
+    background.value = '#ABCDEF';
+    assert.strictEqual(context.padDialogBuildButton().bg_opacity, 60, 'Color override must capture the effective opacity');
+    context.padGetEffectiveDefault = defaultGetter;
+    background.value = originalBackground;
+}
 {
     const defaultGetter = context.padGetEffectiveDefault;
     const colorGetter = context.padGetBindableColor;

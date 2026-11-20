@@ -80,7 +80,7 @@ function padIconEditorSetDraft(icon) {
 }
 
 function padIconEditorColors() {
-    const background = padColorToHex(padGetBindableColor('pad-edit-bg-color'), padGetEffectiveDefault('bg_color'), true);
+    const background = padColorToHex(padGetBindableColor('pad-edit-bg-color'), padGetEffectiveDefault('bg_color'));
     const text = padColorToHex(padGetBindableColor('pad-edit-fg-color'), padGetEffectiveDefault('fg_color'));
     const foreground = padIconPreviewColor(padGetBindableColor('pad-edit-icon-color'), text);
     return { background: background || '#ffffff', foreground };
@@ -175,7 +175,7 @@ function padWidgetPreviewSymbol(preview) {
 
 // Shared semantic overview for grid buttons and the button builder.
 const PAD_CELL_PREVIEW_PROPERTIES = [
-    'label_top', 'label_center', 'label_bottom', 'bg_color', 'fg_color', 'icon_color', 'icon',
+    'label_top', 'label_center', 'label_bottom', 'bg_color', 'bg_opacity', 'fg_color', 'icon_color', 'icon',
     'bg_image_url', 'bg_image_path', 'widget_type',
     'widget_rocker_axis'
 ];
@@ -263,16 +263,16 @@ function padRenderCellContent(cell, btn, existingIcon) {
     const description = [btn.label_top, btn.label_center, btn.label_bottom, ...indicators].filter(Boolean).join('\n');
     if (description) cell.setAttribute('aria-description', description);
     else cell.removeAttribute('aria-description');
-    const background = padColorToHex(btn.bg_color, padGetEffectiveDefault('bg_color'), true);
-    const bg = background === 'transparent' ? background :
-        padColorNormalizeLiteral(background) || padGetEffectiveDefault('bg_color');
+    const background = padColorToHex(btn.bg_color, padGetEffectiveDefault('bg_color'));
+    const bg = padColorNormalizeLiteral(background) || padGetEffectiveDefault('bg_color');
+    const opacity = padButtonBgOpacity(btn);
     const fg = padColorToHex(btn.fg_color, padGetEffectiveDefault('fg_color'));
-    cell.style.background = bg;
+    cell.style.background = padColorWithOpacity(bg, opacity);
     cell.style.color = fg;
-    const luminance = padPreviewLuminance(bg === 'transparent' ? padGetEffectiveDefault('default_pad_bg_color') : bg);
+    const luminance = padPreviewLuminance(opacity === 0 ? padGetEffectiveDefault('default_pad_bg_color') : bg);
     cell.style.setProperty('--pad-resize-grip-color', luminance > 0.5 ? '#17212b' : '#ffffff');
-    cell.dataset.previewEdgeColor = bg;
-    cell.dataset.previewFillColor = bg;
+    cell.dataset.previewEdgeColor = opacity === 0 ? 'transparent' : bg;
+    cell.dataset.previewFillColor = opacity === 0 ? 'transparent' : bg;
     padUpdateCellBoundaryGuide(cell);
     cell.classList.remove('pad-cell-has-widget');
     if (widget) cell.classList.add('pad-cell-has-widget');

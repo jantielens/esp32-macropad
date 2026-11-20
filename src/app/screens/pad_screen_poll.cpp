@@ -206,16 +206,12 @@ void PadScreen::pollColorBindings() {
         } else {
             cb.active = false; // static value won't change; stop polling
         }
-        const bool transparent = cb.target == 0 && cb.tileIndex != 0xFF &&
-            strcmp(value, "transparent") == 0;
         uint32_t parsed;
         if (parse_hex_color(value, &parsed)) color = parsed;
-        // Unresolved / error — keep the opaque default.
+        // Unresolved / error — keep the default color.
 
-        // Opacity can change even when RGB stays at the fallback color.
-        if (color == cb.lastApplied && transparent == cb.lastTransparent) continue;
+        if (color == cb.lastApplied) continue;
         cb.lastApplied = color;
-        cb.lastTransparent = transparent;
 
         // Page background (sentinel tileIndex=0xFF)
         if (cb.tileIndex == 0xFF) {
@@ -230,7 +226,6 @@ void PadScreen::pollColorBindings() {
         switch (cb.target) {
         case 0: { // bg
             lv_obj_set_style_bg_color(tile.obj, rgb_to_lv(color), 0);
-            lv_obj_set_style_bg_opa(tile.obj, transparent ? LV_OPA_TRANSP : LV_OPA_COVER, 0);
             if (tile.content_layout.widget_region)
                 lv_obj_set_style_bg_color(tile.content_layout.widget_region, rgb_to_lv(color), 0);
             if (tile.content_layout.backdrop_region)

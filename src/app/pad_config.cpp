@@ -187,6 +187,7 @@ static void init_button_defaults(ScreenButtonConfig* btn) {
     btn->col_span = 1;
     btn->row_span = 1;
     strlcpy(btn->bg_color, DEFAULT_BUTTON_BG_COLOR, CONFIG_COLOR_MAX_LEN);
+    btn->bg_opacity = 100;
     strlcpy(btn->fg_color, DEFAULT_BUTTON_FG_COLOR, CONFIG_COLOR_MAX_LEN);
     strlcpy(btn->border_color, DEFAULT_BUTTON_BORDER_COLOR, CONFIG_COLOR_MAX_LEN);
     strlcpy(btn->border_width, DEFAULT_BUTTON_BORDER_WIDTH, CONFIG_BINDABLE_SHORT_LEN);
@@ -389,6 +390,10 @@ static bool parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
     // Appearance fields: button JSON → device button_defaults → hardcoded default
     parse_bindable_field(obj["bg_color"], btn->bg_color, CONFIG_COLOR_MAX_LEN,
                          btn_default(defs ? defs->bg_color : nullptr, DEFAULT_BUTTON_BG_COLOR));
+    const bool background_override = obj["bg_color"].is<const char*>()
+        ? obj["bg_color"].as<const char*>()[0] != '\0' : !obj["bg_color"].isNull();
+    btn->bg_opacity = background_override
+        ? (obj["bg_opacity"] | uint8_t(100)) : (defs ? defs->bg_opacity : uint8_t(100));
     parse_bindable_field(obj["fg_color"], btn->fg_color, CONFIG_COLOR_MAX_LEN,
                          btn_default(defs ? defs->fg_color : nullptr, DEFAULT_BUTTON_FG_COLOR));
     parse_bindable_field(obj["border_color"], btn->border_color, CONFIG_COLOR_MAX_LEN,

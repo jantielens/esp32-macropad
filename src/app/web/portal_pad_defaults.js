@@ -91,6 +91,8 @@ function padLoadButtonDefaults(defs) {
         var el = document.getElementById(id);
         if (el) padInitBindableColor(el);
     });
+    var opacity = document.getElementById('pad-def-bg-opacity');
+    if (opacity) opacity.value = defs.bg_opacity ?? '';
     padSetBindableColor('pad-def-pad-bg-color', defs.default_pad_bg_color || '', PAD_FIRMWARE_DEFAULTS.default_pad_bg_color);
     padSetBindableColor('pad-def-bg-color', defs.bg_color || '', PAD_FIRMWARE_DEFAULTS.bg_color);
     padSetBindableColor('pad-def-fg-color', defs.fg_color || '', PAD_FIRMWARE_DEFAULTS.fg_color);
@@ -142,6 +144,11 @@ function padCollectButtonDefaults() {
     var bdc = padGetBindableColor('pad-def-border-color');
     if (pbc) d.default_pad_bg_color = pbc;
     if (bgc) d.bg_color = bgc;
+    var opacityInput = document.getElementById('pad-def-bg-opacity');
+    if (opacityInput) {
+        var opacity = padOpacityCheck(opacityInput.value);
+        if (opacity.error) throw new Error(opacity.error);
+    }
     if (fgc) d.fg_color = fgc;
     var iconColor = padGetBindableColor('pad-def-icon-color');
     if (iconColor) d.icon_color = iconColor;
@@ -190,6 +197,10 @@ function padCollectButtonDefaults() {
             delete d[field];
         }
     });
+    if (opacityInput && bgc && (opacity.value !== null || d.bg_color)) {
+        d.bg_color = bgc;
+        d.bg_opacity = opacity.value === null ? 100 : opacity.value;
+    }
     return d;
 }
 
@@ -329,6 +340,7 @@ function padResetAppearance(inputId, defaultKey) {
     var eff = padGetEffectiveDefault(defaultKey);
     var el = document.getElementById(inputId);
     if (!el) return;
+    if (defaultKey === 'bg_color') document.getElementById('pad-edit-bg-opacity').value = '';
     // Color fields use the bindable-color component
     if (el.classList.contains('bc-input')) {
         padSetBindableColor(inputId, eff);
@@ -358,7 +370,8 @@ function padUpdateResetHints() {
         if (!el || !resetEl) return;
         var val = el.value.trim().toLowerCase();
         var eff = (padGetEffectiveDefault(f.key) || '').toLowerCase();
-        resetEl.style.display = (val && val !== eff) ? 'inline' : 'none';
+        var backgroundOverride = f.key === 'bg_color' && document.getElementById('pad-edit-bg-opacity').value !== '';
+        resetEl.style.display = (backgroundOverride || (val && val !== eff)) ? 'inline' : 'none';
     });
 }
 

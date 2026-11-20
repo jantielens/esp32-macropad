@@ -764,6 +764,7 @@ function padWidgetTypeChanged() {
 async function padLoadPage(page, defaultsReady, selectedLayer, throwOnError = false) {
     const generation = ++padLoadGeneration;
     let actionsReset = false;
+    let backgroundsReset = false;
     const section = document.getElementById('pad-config-section');
     const current = () => generation === padLoadGeneration && document.getElementById('pad-config-section') === section;
     if (typeof padWorkspaceReset === 'function') padWorkspaceReset();
@@ -828,6 +829,7 @@ async function padLoadPage(page, defaultsReady, selectedLayer, throwOnError = fa
         padCheckImportedKeys(json);
         actionsReset = padResetOlderActions(json);
         padCheckImportedActionFormat(json);
+        backgroundsReset = padResetUnsupportedBackgrounds(json);
         padState.rawJson = json;
         const maxCols = (deviceInfoCache && deviceInfoCache.max_grid_cols) || 8;
         const maxRows = (deviceInfoCache && deviceInfoCache.max_grid_rows) || 8;
@@ -874,7 +876,9 @@ async function padLoadPage(page, defaultsReady, selectedLayer, throwOnError = fa
                    padColorToHex(json.bg_color || padGetEffectiveDefault('default_pad_bg_color'), padGetEffectiveDefault('default_pad_bg_color')));
         padRenderGrid();
         padState.loadError = null;
-        if (actionsReset) showMessage(PAD_ACTION_RESET_WARNING, 'info');
+        if (actionsReset || backgroundsReset) showMessage([
+            actionsReset && PAD_ACTION_RESET_WARNING, backgroundsReset && PAD_BACKGROUND_RESET_WARNING,
+        ].filter(Boolean).join(' '), 'info');
     } catch (err) {
         if (!current()) return;
         console.error('padLoadPage error:', err);
@@ -885,11 +889,11 @@ async function padLoadPage(page, defaultsReady, selectedLayer, throwOnError = fa
     } finally {
         // Loading action lists, bindings, and template buttons can update
         // controls after the initial reset. A settled page is the clean
-        // baseline, except when older actions were removed from the draft.
+        // baseline, except when unsupported values were removed from the draft.
         if (current()) {
             padState.loadPending = false;
             if (typeof padWorkspace !== 'undefined' && padWorkspace) padWorkspace.loading = false;
-            if (actionsReset && !padState.loadError) padMarkDirty();
+            if ((actionsReset || backgroundsReset) && !padState.loadError) padMarkDirty();
             else padClearDirty();
         }
     }

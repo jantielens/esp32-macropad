@@ -73,7 +73,8 @@ Choose one intended source rather than leaving competing source settings.
 * Set **Image fit** to a Fill position or Letterbox and **Save Pad**.
 
 For remote images, Letterbox leaves the bars transparent when the button's
-background is `transparent`. On an overlay button, the underlying buttons
+[background opacity](../pads/editing.md#use-a-transparent-button-background)
+is 0%. On an overlay button, the underlying buttons
 remain visible through those bars. The image itself remains opaque; PNG
 transparency is not preserved.
 

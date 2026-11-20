@@ -14,12 +14,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking changes
+
+* Replace the `transparent` button background color with Background opacity.
+  Opening or importing a pad clears unsupported background overrides from
+  Main and Overlay drafts, with a notification. Stored pads change only on
+  **Save Pad**. Reapply transparent backgrounds with 0% opacity.
+
 ### Added
 
 * Add optional local-image pad backgrounds with a Pad Appearance selector and
   editor preview. Images fill the screen with centered cropping. Consecutive
   pads sharing a file reuse one decoded background; other images load on demand.
   See [pad background images](docs/user/pads/appearance.md#set-a-pad-background-image).
+* Add 0-100% button background opacity in the Background color picker, with a
+  slider and checkerboard preview. Background color and opacity inherit together
+  from Pad and Button Defaults; resetting Background clears both overrides.
+  Labels, icons, borders, patterns, images, and widget fills retain their own
+  appearance. See [transparent button backgrounds](docs/user/pads/editing.md#use-a-transparent-button-background).
 * Add a customization dialog when pasting copied buttons and widgets. Replace
   Home Assistant entities, other binding tokens, matching plain-text labels,
   and explicit colors, or paste unchanged. Matching values share one control;

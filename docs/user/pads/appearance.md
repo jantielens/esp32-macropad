@@ -184,7 +184,8 @@ Choose **None** and save to remove it.
 The editor recommends the current screen resolution. Prepare artwork at that
 size to reduce decode memory; other sizes are scaled proportionally and
 center-cropped to fill the screen. There are no fit or positioning settings.
-Opaque buttons hide the image; use existing transparent button backgrounds
+Opaque buttons hide the image; reduce
+[button background opacity](editing.md#use-a-transparent-button-background)
 where you want it visible.
 
 The background color remains visible while loading or if loading fails.
@@ -204,8 +205,8 @@ Dots use stroke as diameter; Checkerboard uses spacing and ignores stroke.
 Geometry is static while supported colors can be live-bound.
 
 Images normally cover these fills, including letterbox bands; do not assume PNG
-transparency reveals a pattern. Remote images with a `transparent` button
-background leave letterbox bands undrawn, revealing the content underneath.
+transparency reveals a pattern. Remote images with button background opacity
+set to 0% leave letterbox bands undrawn, revealing the content underneath.
 See [remote images](../media/images.md#fetch-a-snapshot-or-stream).
 Gauge fills are unpatterned.
 Track outlines and bar corner radius belong to their widget's Content controls.

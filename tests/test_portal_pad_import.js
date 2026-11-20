@@ -69,6 +69,9 @@ function makeDocument() {
 function loadPortal(context) {
     context.padWorkspaceRefresh = () => {};
     vm.createContext(context);
+    const providedGlobals = { ...context };
+    vm.runInContext(fs.readFileSync('src/app/web/portal_pad_colors.js', 'utf8'), context);
+    Object.assign(context, providedGlobals);
     for (const file of [
         'src/app/web/portal_widget_editor.js',
         'src/app/web/portal_widget_gauge.js',
@@ -469,6 +472,24 @@ async function testClearPad() {
     assert.strictEqual(vm.runInContext('padState.padActions.length', success.context), 0);
     assert.strictEqual(success.context.document.getElementById('pad-name').value, 'Legacy import');
     assert(success.messages.some(message => /older action format.*draft/i.test(message.message)));
+    const oldBackgroundPad = {
+        action_format_version: 1, cols: 10, rows: 10,
+        buttons: [{ col: 0, row: 0, label: 'Keep me', bg_color: 'transparent', bg_opacity: 25,
+            fg_color: 'ffffff', actions: [{ op: 'screen.open', args: { target: 'pad_1' } }] }],
+        overlay_buttons: [{ col: 1, row: 1, label: 'Overlay', bg_color: 'not-a-color', bg_opacity: 0 }],
+    };
+    const writesBeforeCleanup = success.requests.filter(request => request.kind === 'pad-save').length;
+    await importPad(oldBackgroundPad);
+    const cleanedBackgrounds = JSON.parse(success.context.padBuildSaveContext().body);
+    assert.deepStrictEqual(cleanedBackgrounds.buttons, [{
+        col: 0, row: 0, label: 'Keep me', fg_color: 'ffffff',
+        actions: [{ op: 'screen.open', args: { target: 'pad_1' } }],
+    }]);
+    assert.deepStrictEqual(cleanedBackgrounds.overlay_buttons, [{ col: 1, row: 1, label: 'Overlay' }]);
+    assert.strictEqual(success.requests.filter(request => request.kind === 'pad-save').length, writesBeforeCleanup,
+        'Import cleanup must not write the pad');
+    assert(success.messages.some(message => /unsupported button backgrounds.*draft/i.test(message.message)));
+    assert.strictEqual(oldBackgroundPad.buttons[0].bg_color, 'transparent', 'Import must not alter the original input');
     await importPad({ action_format_version: 2, cols: 1, rows: 1, buttons: [] });
     assert.strictEqual(vm.runInContext('padState.cols', success.context), 10, 'A newer format must not replace the draft');
     await importPad({ action_format_version: 1, cols: 1, rows: 1,

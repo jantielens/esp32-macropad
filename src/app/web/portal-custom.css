@@ -1997,12 +1997,10 @@ body {
   flex: 0 0 34px; width: 34px; height: 34px; border-radius: 6px; box-sizing: border-box;
   border: 2px solid var(--portal-border);
 }
-.color-popover-swatch.cp-transparent,
-.bindable-color .bc-swatch.bc-transparent,
-.cp-preview.bc-transparent {
-    background-image: repeating-conic-gradient(#ddd 0 25%, #fff 0 50%);
-    background-size: 8px 8px;
-}
+#cp-opacity-wrap { margin-top: 12px; }
+.cp-opacity-row { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+#cp-opacity { flex: 1; min-width: 0; width: 100%; accent-color: var(--portal-link-blue); }
+#cp-opacity-value { min-width: 4ch; text-align: right; font-variant-numeric: tabular-nums; }
 .cp-preview.cp-preview-none {
   background: repeating-conic-gradient(var(--portal-border) 0 25%, transparent 0 50%) 0 0 / 10px 10px;
 }
@@ -2200,6 +2198,9 @@ body {
   background: var(--portal-surface); color: var(--portal-text);
   border: 1px solid var(--portal-border); border-radius: 3px;
   font-size: 9px; font-weight: 600; line-height: 12px; padding: 0 2px;
+}
+.bindable-color .bc-swatch.bc-opacity {
+  background: var(--opacity-preview) !important;
 }
 
 /* Binding input: flex row with ? help button */

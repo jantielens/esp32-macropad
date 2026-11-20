@@ -238,14 +238,31 @@ int main() {
         button["col"] = 0;
         button["row"] = 0;
         button["bg_color"] = "transparent";
-        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["bg_color"] = "#333333";
+        for (unsigned opacity : {0u, 50u, 100u}) {
+            button["bg_opacity"] = opacity;
+            CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        }
+        button.remove("bg_color");
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["bg_color"] = "#333333";
+        for (int opacity : {-1, 101}) {
+            button["bg_opacity"] = opacity;
+            CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        }
+        button["bg_opacity"] = 50.5;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button["bg_opacity"] = "[mqtt:opacity]";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        button.remove("bg_opacity");
         for (const char* field : {"fg_color", "border_color", "icon_color",
                                   "icon_badge_color", "bg_pattern_color"}) {
             button[field] = "transparent";
             CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
             button.remove(field);
         }
-        button["bg_color"] = "[mqtt:background|transparent]";
+        button["bg_color"] = "[mqtt:background|#333333]";
         CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
         button["bg_color"] = "translucent";
         CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);

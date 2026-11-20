@@ -53,6 +53,20 @@ int main() {
     auto save_defaults = [](const char* text) {
         return button_defaults_save_raw(reinterpret_cast<const uint8_t*>(text), strlen(text));
     };
+    assert(button_defaults_get()->bg_opacity == 100);
+    assert(save_defaults("{\"bg_opacity\":0}"));
+    button_defaults_init();
+    assert(button_defaults_get()->bg_opacity == 0);
+    assert(save_defaults("{\"bg_opacity\":60}"));
+    assert(button_defaults_get()->bg_opacity == 60);
+    assert(!save_defaults("{\"bg_opacity\":101}"));
+    assert(!save_defaults("{\"bg_opacity\":-1}"));
+    assert(!save_defaults("{\"bg_opacity\":50.5}"));
+    assert(!save_defaults("{\"bg_opacity\":\"50\"}"));
+    assert(!save_defaults("{\"bg_color\":\"transparent\"}"));
+    assert(button_defaults_get()->bg_opacity == 60);
+    assert(save_defaults("{}"));
+    assert(button_defaults_get()->bg_opacity == 100);
     assert(button_defaults_get()->icon_badge_padding == 0);
     assert(save_defaults("{\"icon_position\":\"above\"}"));
     button_defaults_init();

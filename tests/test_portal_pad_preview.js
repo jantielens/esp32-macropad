@@ -160,9 +160,11 @@ for (const [background, gripColor] of [
 for (const layer of ['main', 'overlay']) {
     const cell = createElement();
     cell.dataset.layer = layer;
-    context.padRenderCellContent(cell, { bg_color: 'transparent', label_center: 'Visible content' });
-    assert.strictEqual(cell.style.background, 'transparent');
+    context.padRenderCellContent(cell, { bg_color: '#333333', bg_opacity: 0, label_center: 'Visible content' });
+    assert.strictEqual(cell.style.background, 'rgba(51,51,51,0)');
     assert(descendants(cell).some(child => child.textContent === 'Visible content'));
+    context.padRenderCellContent(cell, { bg_color: '#333333', bg_opacity: 50 });
+    assert.strictEqual(cell.style.background, 'rgba(51,51,51,0.5)');
     context.padRenderCellContent(cell, { bg_color: '[mqtt:background]' });
     assert.strictEqual(cell.style.background, '#333333', 'Unresolved preview must not retain stale transparency');
     context.padRenderCellContent(cell, { bg_color: '#333333' });
@@ -171,6 +173,16 @@ for (const layer of ['main', 'overlay']) {
     assert.strictEqual(cell.style.background, '#FFFFFF', 'Short hex backgrounds remain supported');
     context.padRenderCellContent(cell, {});
     assert.strictEqual(cell.style.background, '#333333', 'Unset backgrounds remain opaque');
+}
+{
+    const defaults = context.padGetEffectiveDefault;
+    context.padGetEffectiveDefault = key => key === 'bg_opacity' ? 60 : defaults(key);
+    const cell = createElement();
+    context.padRenderCellContent(cell, {});
+    assert.strictEqual(cell.style.background, 'rgba(51,51,51,0.6)', 'Unset background inherits color and opacity');
+    context.padRenderCellContent(cell, { bg_color: '#FFFFFF' });
+    assert.strictEqual(cell.style.background, '#FFFFFF', 'A color override without opacity is opaque, not independently inherited');
+    context.padGetEffectiveDefault = defaults;
 }
 context.deviceInfoCache.widget_catalog.push({ type: 'future_widget', name: 'Future Widget', icon: 'list',
     axis_field: 'custom_axis', horizontal_icon: 'swap_horiz', vertical_icon: 'swap_vert', default_axis: 'vertical' });

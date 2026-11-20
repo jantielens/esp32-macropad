@@ -137,6 +137,8 @@ function padDialogOpen(col, row) {
     var effBg = padGetEffectiveDefault('bg_color');
     var effFg = padGetEffectiveDefault('fg_color');
     var effBorder = padGetEffectiveDefault('border_color');
+    document.getElementById('pad-edit-bg-opacity').value =
+        btn.bg_color === undefined || btn.bg_color === null || btn.bg_color === '' ? '' : padButtonBgOpacity(btn);
     padSetBindableColor('pad-edit-bg-color', btn.bg_color || effBg);
     padSetBindableColor('pad-edit-fg-color', btn.fg_color || effFg);
     padSetBindableColor('pad-edit-border-color', btn.border_color || effBorder);
@@ -356,7 +358,12 @@ function padDialogBuildButton() {
     // Only store appearance values that differ from the effective device default,
     // so that changing device-level pad and button defaults propagates to existing buttons.
     var _bg = padGetBindableColor('pad-edit-bg-color');
-    if (_bg && _bg !== padGetEffectiveDefault('bg_color')) btn.bg_color = _bg;
+    var opacity = padOpacityCheck(document.getElementById('pad-edit-bg-opacity').value);
+    if (opacity.error) throw Object.assign(new Error(opacity.error), { fieldIds: ['pad-edit-bg-color'] });
+    if (opacity.value !== null || (_bg && _bg !== padGetEffectiveDefault('bg_color'))) {
+        btn.bg_color = _bg || padGetEffectiveDefault('bg_color');
+        btn.bg_opacity = opacity.value === null ? padEffectiveBgOpacity() : opacity.value;
+    }
     var _fg = padGetBindableColor('pad-edit-fg-color');
     if (_fg && _fg !== padGetEffectiveDefault('fg_color')) btn.fg_color = _fg;
     var _bc = padGetBindableColor('pad-edit-border-color');
