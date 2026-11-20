@@ -1240,8 +1240,9 @@ add_host_legacy_test(test_action_sizes
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
 )
 add_host_legacy_test(test_pad_confirmation
-    SOURCES test_pad_confirmation.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_validate.cpp ${PROJECT_SOURCE_DIR}/src/app/action_validate.cpp stubs.cpp
+    SOURCES test_pad_confirmation.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_validate.cpp ${PROJECT_SOURCE_DIR}/src/app/action_validate.cpp ${PROJECT_SOURCE_DIR}/src/app/image_library.cpp stubs.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS HAS_IMAGE_LIBRARY=1
     OPTIONS -Wno-deprecated-declarations
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
 )
@@ -1275,6 +1276,13 @@ target_compile_options(test_option_selector_config PRIVATE -Wno-deprecated-decla
 add_host_legacy_test(test_pad_overlay_input
     SOURCES test_pad_overlay_input.cpp
     INCLUDES ${HOST_LVGL_DIR}
+    LIBRARIES host_lvgl
+)
+add_host_legacy_test(test_pad_background
+    SOURCES test_pad_background.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_background.cpp
+    INCLUDES ${HOST_LVGL_DIR}
+    DEFINITIONS HAS_IMAGE_LIBRARY=1
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
     LIBRARIES host_lvgl
 )
 add_host_legacy_test(test_parse_hex_color SOURCES test_parse_hex_color.cpp PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)

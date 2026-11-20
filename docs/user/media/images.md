@@ -11,6 +11,9 @@ Local image storage, remote fetching, and the attached
 [camera](camera.md) are separate firmware capabilities.
 Use the controls available on your device.
 
+For one static image behind the entire pad, use
+[pad background images](../pads/appearance.md#set-a-pad-background-image).
+
 ## Upload a local background
 
 1. Open **Display > Image Library**.

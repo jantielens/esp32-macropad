@@ -959,6 +959,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mqtt_wake.h
   - src/app/music_binding.cpp
   - src/app/net_binding.cpp
+  - src/app/pad_background.cpp
+  - src/app/pad_background.h
   - src/app/pad_binding.cpp
   - src/app/pad_binding.h
   - src/app/pad_block.cpp
@@ -1191,6 +1193,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/binding_builtin_schemes.cpp
   - src/app/board_config.h
   - src/app/components/image_library_component.cpp
+  - src/app/display_manager.cpp
+  - src/app/display_screen_nav.cpp
+  - src/app/display_task.cpp
   - src/app/image_binding.cpp
   - src/app/image_binding.h
   - src/app/image_decoder.cpp
@@ -1202,6 +1207,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/local_image_loader.cpp
   - src/app/local_image_loader.h
   - src/app/lv_conf.h
+  - src/app/mcp_tools_pads.cpp
+  - src/app/pad_background.cpp
+  - src/app/pad_background.h
   - src/app/pad_validate.cpp
   - src/app/portal_components.cpp
   - src/app/screens/pad_screen.cpp

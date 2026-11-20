@@ -3,6 +3,7 @@
 #if HAS_DISPLAY
 #include "device_dialog.h"
 #include "display_manager.h"
+#include "pad_background.h"
 #include "screen_saver_manager.h"
 #endif
 #if HAS_DISPLAY
@@ -40,6 +41,9 @@ void DisplayManager::showSplash() {
 				currentScreen->hide();
 		}
 		currentScreen = &splashScreen;
+#if HAS_IMAGE_LIBRARY
+		pad_background_release();
+#endif
 		currentScreen->show();
 		unlock();
 		LOGI("Display", "Switched to SplashScreen");

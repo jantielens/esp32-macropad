@@ -16,6 +16,7 @@ ImageLibrarySnapshot* g_snapshot = nullptr;
 ImageLibraryCursor g_cursor;
 SemaphoreHandle_t g_mutex = nullptr;
 uint32_t g_generation = 0;
+uint32_t g_content_generation = 0;
 uint32_t g_last_advance_ms = 0;
 
 ImageLibrarySnapshot* allocate_snapshot() {
@@ -89,6 +90,7 @@ bool image_library_runtime_reload() {
     xSemaphoreTake(g_mutex, portMAX_DELAY);
     g_cursor.configure(config.directory);
     memcpy(g_snapshot, snapshot, sizeof(*g_snapshot));
+    ++g_content_generation;
     g_last_advance_ms = millis();
     ++g_generation;
     xSemaphoreGive(g_mutex);
@@ -115,6 +117,14 @@ uint32_t image_library_runtime_generation() {
     if (!g_mutex) return 0;
     xSemaphoreTake(g_mutex, portMAX_DELAY);
     const uint32_t generation = g_generation;
+    xSemaphoreGive(g_mutex);
+    return generation;
+}
+
+uint32_t image_library_runtime_content_generation() {
+    if (!g_mutex) return 0;
+    xSemaphoreTake(g_mutex, portMAX_DELAY);
+    const uint32_t generation = g_content_generation;
     xSemaphoreGive(g_mutex);
     return generation;
 }

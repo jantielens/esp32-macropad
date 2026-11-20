@@ -1447,6 +1447,29 @@ async function checkInspectorRequests() {
     assert.strictEqual(requests.length, 7, 'Selection resolves once immediately instead of also resolving on a stale timer');
     requests[6].resolve({ ok: true, json: () => ({ resolved: [{ value: '42' }] }) });
     await new Promise(resolve => setImmediate(resolve));
+
+    const background = getElementById('pad-background-image');
+    background.children = [];
+    background.replaceChildren = () => { background.children = []; background.value = ''; };
+    background.appendChild = option => { background.children.push(option); };
+    const backgroundLoad = requestContext.padLoadLocalImageOptions('/images/background.png', true, 'pad-background-image');
+    requestContext.padState.editCol++;
+    vm.runInContext('padDialogSelectionGeneration++;', requestContext);
+    requests[7].resolve({ ok: true, json: () => ({ files: ['/images/background.png'] }) });
+    await backgroundLoad;
+    assert.strictEqual(background.value, '/images/background.png',
+        'Button selection changes must not cancel pad background catalog updates');
+    await requestContext.padLoadLocalImageOptions('/images/missing.png', false, 'pad-background-image');
+    assert.strictEqual(background.value, '/images/missing.png');
+    assert(background.children.some(option => option.value === '/images/missing.png' &&
+        option.textContent.includes('unavailable')), 'Missing persisted selections stay visible');
+    const errors = [];
+    requestContext.showMessage = (message, type) => errors.push({ message, type });
+    const failedBackground = requestContext.padLoadLocalImageOptions(background.value, true, 'pad-background-image');
+    requests[8].reject(new Error('Disconnected'));
+    await failedBackground;
+    assert.deepStrictEqual(errors, [{ message: 'Disconnected', type: 'error' }]);
+    assert.strictEqual(background.value, '/images/missing.png', 'Catalog failures must preserve the selection');
 }
 
 function checkContentLayoutControls() {

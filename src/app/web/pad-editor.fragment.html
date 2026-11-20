@@ -85,6 +85,17 @@
                     </div>
                 </div>
             </div>
+            <div class="form-group" id="pad-background-image-group" style="margin:8px 0 0; display:none;">
+                <label for="pad-background-image" style="font-weight:600; font-size:13px; display:block; margin-bottom:4px;">Background Image</label>
+                <div style="display:flex; gap:8px;">
+                    <select id="pad-background-image" class="form-select form-select-sm" style="flex:1;"><option value="">None</option></select>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="pad-background-image-refresh" title="Refresh image library" aria-label="Refresh image library">
+                        <span class="material-symbols-outlined">refresh</span>
+                    </button>
+                </div>
+                <small class="form-text" id="pad-background-image-hint"></small>
+                <small class="form-text">Images are centered and cropped to fill the screen. Upload files in <a href="#image-library">Image Library</a>.</small>
+            </div>
             <div class="form-group" style="margin:8px 0 0;">
                 <label for="pad-button-shadow" style="font-weight:600; font-size:13px; display:block; margin-bottom:4px;">Button Shadow</label>
                 <select id="pad-button-shadow" class="form-select form-select-sm">

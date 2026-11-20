@@ -219,6 +219,9 @@ private:
     char wakeScreen[CONFIG_SCREEN_ID_MAX_LEN]; // Cached wake_screen from config
     char pageBgTemplate[CONFIG_COLOR_MAX_LEN];     // Page background color/binding
     uint32_t pageBgDefault;                        // Fallback page bg color
+#if HAS_IMAGE_LIBRARY
+    char backgroundPath[CONFIG_BG_IMAGE_PATH_MAX_LEN] = {};
+#endif
 
     // Allocate / free the heavy binding arrays (PSRAM preferred)
     bool allocateArrays();

@@ -689,6 +689,7 @@ static PadConfig* pad_config_parse(uint8_t page, JsonDocument& doc, bool* owned_
     for (uint8_t i = 0; i < row_heights.size() && i < MAX_GRID_ROWS; i++)
         out->row_heights_px[i] = parse_track_size(row_heights[i]);
     strlcpy(out->wake_screen, doc["wake_screen"] | "", CONFIG_SCREEN_ID_MAX_LEN);
+    strlcpy(out->bg_image_path, doc["bg_image_path"] | "", sizeof(out->bg_image_path));
     parse_bindable_field(doc["bg_color"], out->bg_color, CONFIG_COLOR_MAX_LEN,
                          btn_default(button_defaults_get()->default_pad_bg_color, DEFAULT_PAD_BG_COLOR));
     out->button_shadow = parse_button_shadow_mode(doc["button_shadow"]);

@@ -9,6 +9,7 @@
 #include "device_telemetry.h"
 #include "log_manager.h"
 #include "pad_config.h"
+#include "pad_background.h"
 #include "rtos_task_utils.h"
 #include "screen_saver_manager.h"
 
@@ -180,6 +181,9 @@ DisplayManager::~DisplayManager() {
 		if (currentScreen) {
 				currentScreen->hide();
 		}
+#if HAS_IMAGE_LIBRARY
+		pad_background_release();
+#endif
 		
 		infoScreen.destroy();
 		wifiSetupScreen.destroy();

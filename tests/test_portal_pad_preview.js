@@ -353,6 +353,15 @@ vm.runInContext(grid, context);
     background.value = '#ffffff';
     context.padUpdateGridBackground();
     assert(!cell.classes.has('pad-cell-boundary-guide'), 'Pad background changes must refresh existing guides');
+    context.deviceInfoCache.has_image_library = true;
+    context.padState.backgroundImagePath = '/images/a photo.png';
+    context.padUpdateGridBackground();
+    assert(gridElement.style.backgroundImage.includes(encodeURIComponent('/images/a photo.png')));
+    assert.strictEqual(gridElement.style.backgroundSize, 'cover');
+    assert.strictEqual(gridElement.style.backgroundPosition, 'center');
+    context.padState.backgroundImagePath = '';
+    context.padUpdateGridBackground();
+    assert.strictEqual(gridElement.style.backgroundImage, 'none', 'Clearing the selection removes its preview');
     gridElement.querySelectorAll = () => [];
     context.document.getElementById = id => id === 'pad-grid' ? gridElement : null;
 }

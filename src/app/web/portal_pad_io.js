@@ -139,6 +139,7 @@ function padCopyPad() {
         name: document.getElementById('pad-name').value.trim(),
         wake_screen: document.getElementById('pad-wake-screen').value,
         bg_color: padGetBindableColor('pad-edit-page-bg-color') || padGetEffectiveDefault('default_pad_bg_color'),
+        bg_image_path: padState.backgroundImagePath,
         buttons: padCloneJson(padState.mainButtons),
         overlay_buttons: padCloneJson(padState.overlayButtons),
         bindings: padState.bindings ? padState.bindings.map(b => Object.assign({}, b)) : [],
@@ -164,6 +165,7 @@ function padPastePad() {
     document.getElementById('pad-rows').value = padState.rows;
     document.getElementById('pad-name').value = padState.padClipboard.name || '';
     document.getElementById('pad-wake-screen').value = padState.padClipboard.wake_screen || '';
+    padLoadBackgroundImage(padState.padClipboard.bg_image_path);
     padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
     padSetBindableColor('pad-edit-page-bg-color', padState.padClipboard.bg_color, padGetEffectiveDefault('default_pad_bg_color'));
     document.getElementById('pad-page-bg-mode').value = padState.padClipboard.bg_color ? 'override' : 'inherit';
@@ -317,6 +319,7 @@ async function padExportPad() {
     if (padName) payload.name = padName;
     const wakeScreen = document.getElementById('pad-wake-screen').value;
     if (wakeScreen) payload.wake_screen = wakeScreen;
+    if (padState.backgroundImagePath) payload.bg_image_path = padState.backgroundImagePath;
     const expBgC = padGetBindableColor('pad-edit-page-bg-color');
     if (document.getElementById('pad-page-bg-mode').value === 'override' && expBgC) {
         payload.bg_color = expBgC.startsWith('#') ? expBgC.slice(1) : expBgC;
@@ -401,6 +404,7 @@ async function padImportPad(evt) {
         document.getElementById('pad-rows').value = padState.rows;
         document.getElementById('pad-name').value = json.name || '';
         document.getElementById('pad-wake-screen').value = json.wake_screen || '';
+        padLoadBackgroundImage(json.bg_image_path);
         padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
         padSetBindableColor('pad-edit-page-bg-color', json.bg_color || padGetEffectiveDefault('default_pad_bg_color'));
         document.getElementById('pad-page-bg-mode').value = json.bg_color ? 'override' : 'inherit';
@@ -518,6 +522,7 @@ async function padDeletePage() {
         document.getElementById('pad-rows').value = padState.rows;
         document.getElementById('pad-name').value = '';
         document.getElementById('pad-wake-screen').value = '';
+        padLoadBackgroundImage('');
         padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
         padSetBindableColor('pad-edit-page-bg-color', padGetEffectiveDefault('default_pad_bg_color'));
         padState.bindings = [];

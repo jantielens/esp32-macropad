@@ -125,6 +125,23 @@ int main() {
     std::printf("=== pad confirmation validation tests ===\n");
 
     {
+        JsonDocument doc;
+        doc["cols"] = 1;
+        doc["rows"] = 1;
+        doc["bg_image_path"] = "/images/background.jpg";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        for (const char* path : {"[image:current]", "https://example.test/background.jpg",
+                                 "/images/../secret.png"}) {
+            doc["bg_image_path"] = path;
+            CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        }
+        doc["bg_image_path"] = 42;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        doc["bg_image_path"] = "";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+    }
+
+    {
         std::ifstream file("docs/samples/action-framework-gate1.json");
         CHECK(file.is_open());
         std::string source((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());

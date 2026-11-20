@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add optional local-image pad backgrounds with a Pad Appearance selector and
+  editor preview. Images fill the screen with centered cropping. Consecutive
+  pads sharing a file reuse one decoded background; other images load on demand.
+  See [pad background images](docs/user/pads/appearance.md#set-a-pad-background-image).
 * Add a customization dialog when pasting copied buttons and widgets. Replace
   Home Assistant entities, other binding tokens, matching plain-text labels,
   and explicit colors, or paste unchanged. Matching values share one control;

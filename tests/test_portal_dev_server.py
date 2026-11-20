@@ -1022,6 +1022,17 @@ class PortalDevServerTest(unittest.TestCase):
         pad["overlay_buttons"] = []
         self.assertEqual(self.request("/api/pad?page=0", "POST", pad)[0], 200)
 
+    def test_pad_background_image_preview(self):
+        image_path = "/images/background.png"
+        self.assertIn(image_path, self.request("/api/images")[1]["files"])
+        status, image = self.request("/api/images?" + urlencode({"file": image_path}))
+        self.assertEqual(status, 200)
+        self.assertEqual(image, self.server.mock_images[image_path])
+        self.assertEqual(self.request("/api/images?file=/images/missing.png")[0], 404)
+        pad = {"cols": 1, "rows": 1, "buttons": [], "bg_image_path": image_path}
+        self.assertEqual(self.request("/api/pad?page=0", "POST", pad)[0], 200)
+        self.assertEqual(self.request("/api/pad?page=0")[1]["bg_image_path"], image_path)
+
     def test_screensaver_panel_policy_and_save(self):
         for profile, keep_panel in (("esp32-p4-lcd4b", False), ("jc3248w535", True)):
             config = self.request("/api/config", profile=profile)[1]

@@ -8,8 +8,8 @@ let padImageLibraryCache = null;
 let padDialogSelectionGeneration = 0;
 // @portal-endif
 
-function padPopulateLocalImageOptions(selected) {
-    var select = document.getElementById('pad-edit-bg-image-path');
+function padPopulateLocalImageOptions(selected, selectId = 'pad-edit-bg-image-path') {
+    var select = document.getElementById(selectId);
     if (!select) return;
     select.replaceChildren();
     var empty = document.createElement('option');
@@ -20,13 +20,15 @@ function padPopulateLocalImageOptions(selected) {
     });
     if (selected && !padImageLibraryFiles.includes(selected)) {
         const option = document.createElement('option');
-        option.value = selected; option.textContent = selected; select.appendChild(option);
+        option.value = selected;
+        option.textContent = selected + (selectId === 'pad-background-image' ? ' (unavailable)' : '');
+        select.appendChild(option);
     }
     select.value = selected || '';
 }
 
 // @portal-if HAS_IMAGE_LIBRARY
-function padLoadLocalImageOptions(selected, refresh = false) {
+function padLoadLocalImageOptions(selected, refresh = false, selectId = 'pad-edit-bg-image-path') {
     if (!deviceInfoCache || deviceInfoCache.has_image_library !== true) return Promise.resolve();
     const section = document.getElementById('pad-config-section');
     if (!padImageLibraryCache || padImageLibraryCache.section !== section)
@@ -34,7 +36,7 @@ function padLoadLocalImageOptions(selected, refresh = false) {
     const cache = padImageLibraryCache;
     if (refresh) cache.files = null;
     if (cache.files) padImageLibraryFiles = cache.files;
-    padPopulateLocalImageOptions(selected);
+    padPopulateLocalImageOptions(selected, selectId);
     if (cache.files) return Promise.resolve();
     if (!cache.request) {
         cache.request = fetch('/api/images?directory=' + encodeURIComponent('/images'))
@@ -53,16 +55,25 @@ function padLoadLocalImageOptions(selected, refresh = false) {
     const col = padState.editCol;
     const row = padState.editRow;
     const generation = padDialogSelectionGeneration;
-    const input = document.getElementById('pad-edit-bg-image-path');
+    const input = document.getElementById(selectId);
     const before = input ? input.value : '';
+    const current = () => padImageLibraryCache === cache &&
+        document.getElementById('pad-config-section') === section && padState.page === page &&
+        (selectId === 'pad-background-image' ||
+         (generation === padDialogSelectionGeneration && padState.selectedLayer === layer &&
+          padState.editCol === col && padState.editRow === row));
     return cache.request
         .then(function (files) {
-            if (padImageLibraryCache !== cache || generation !== padDialogSelectionGeneration || document.getElementById('pad-config-section') !== section || padState.page !== page || padState.selectedLayer !== layer || padState.editCol !== col || padState.editRow !== row) return;
+            if (!current()) return;
             padImageLibraryFiles = files;
-            padPopulateLocalImageOptions(input.value !== before ? input.value : selected);
+            padPopulateLocalImageOptions(input.value !== before ? input.value : selected, selectId);
         })
-        .catch(function () {
-            if (padImageLibraryCache !== cache || generation !== padDialogSelectionGeneration || document.getElementById('pad-config-section') !== section || padState.page !== page || padState.selectedLayer !== layer || padState.editCol !== col || padState.editRow !== row) return;
+        .catch(function (error) {
+            if (!current()) return;
+            if (selectId === 'pad-background-image') {
+                showMessage(error.message, 'error');
+                return;
+            }
             var group = document.getElementById('pad-edit-local-image-group');
             if (group) group.style.display = 'none';
         });

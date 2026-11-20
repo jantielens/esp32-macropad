@@ -473,6 +473,7 @@ struct PadConfig {
     uint16_t row_heights_px[MAX_GRID_ROWS];   // 0 = Auto
     char wake_screen[CONFIG_SCREEN_ID_MAX_LEN]; // screen to navigate to on screensaver sleep (empty = stay)
     char bg_color[CONFIG_COLOR_MAX_LEN];         // pad background color (default "#000000")
+    char bg_image_path[CONFIG_BG_IMAGE_PATH_MAX_LEN]; // Optional static local background
     uint8_t button_shadow;                        // ButtonShadowMode override
     ButtonShadowSettings shadow;                  // resolved device-wide settings
     PadLayoutSettings layout_settings;            // resolved device-wide settings

@@ -716,6 +716,17 @@ retain the existing icon element when its artwork and foreground color match.
 Selection changes update styling and the inspector without rebuilding the grid.
 Pad background changes update the existing grid background in place.
 
+Pad Appearance includes an optional static `bg_image_path`, selected from the
+local image library. The editor uses the device's active coordinate dimensions
+for its size hint and previews the file through authenticated
+`GET /api/images?file=...`, with centered CSS `cover`. Pad copy/paste and
+exports preserve the path; image file contents remain separate.
+Firmware uses one shared local-loader slot, keyed by path, active dimensions,
+and library-content generation. Pad switches detach the LVGL image before
+releasing its buffer; matching destinations reuse ready or pending loads.
+Non-pad navigation releases the slot. Slideshow cursor changes do not
+invalidate static backgrounds.
+
 The image-library list is cached for the mounted editor, with concurrent loads
 sharing one request. Explicit Refresh bypasses settled cached data; failures
 remain retryable, and disposal clears the cache. Live binding previews resolve
@@ -1608,6 +1619,7 @@ directory. It does not recurse into nested directories.
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/api/images?directory=/images[/album]` | Lists up to 128 supported files in one canonical image directory and immediate child directories when browsing `/images` |
+| `GET` | `/api/images?file=/images[/album]/name.png` | Streams one canonical local JPEG/PNG for editor previews with portal authentication and `Cache-Control: no-store`; missing files return `404` |
 | `POST` | `/api/images?path=/images[/album]/name.png` | Streams a JPEG or PNG up to 4 MiB to a temporary file, rejects PNG sources above 2 million pixels, then atomically renames it and rebuilds the runtime catalog |
 | `DELETE` | `/api/images?path=/images[/album]/name.png` | Deletes one canonical local image and rebuilds the runtime catalog |
 

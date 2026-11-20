@@ -200,6 +200,10 @@ void PadScreen::buildTiles() {
 
     const PadConfig* cfg = pad_config_acquire(pageIndex);
     if (!cfg) {
+#if HAS_IMAGE_LIBRARY
+        backgroundPath[0] = '\0';
+        pad_background_release();
+#endif
         LOGE(TAG, "Pad %u config unavailable", pageIndex);
         configError = lv_label_create(container);
         lv_label_set_text(configError, "Pad configuration unavailable");
@@ -215,6 +219,10 @@ void PadScreen::buildTiles() {
 
     // Cache page-level settings
     strlcpy(wakeScreen, cfg->wake_screen, sizeof(wakeScreen));
+#if HAS_IMAGE_LIBRARY
+    strlcpy(backgroundPath, cfg->bg_image_path, sizeof(backgroundPath));
+    pad_background_update(screen, backgroundPath, displayMgr->getActiveWidth(), displayMgr->getActiveHeight());
+#endif
     strlcpy(pageBgTemplate, cfg->bg_color, sizeof(pageBgTemplate));
     { uint32_t bg = widget_default_rgb(DEFAULT_PAD_BG_COLOR); parse_hex_color(cfg->bg_color, &bg); pageBgDefault = bg; }
     if (screen) lv_obj_set_style_bg_color(screen, rgb_to_lv(pageBgDefault), 0);

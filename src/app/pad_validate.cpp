@@ -508,6 +508,15 @@ const char* pad_validate_context(JsonObjectConst pad, JsonObjectConst template_p
 // Validate a complete pad JSON (grid + buttons + collisions). nullptr = ok.
 const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid,
                          const PadValidationGeometry* geometry, JsonObjectConst template_pad) {
+    if (!pad["bg_image_path"].isNull()) {
+        if (!pad["bg_image_path"].is<const char*>()) return "bg_image_path must be a string";
+        const char* path = pad["bg_image_path"];
+        if (strlen(path) >= CONFIG_BG_IMAGE_PATH_MAX_LEN) return "bg_image_path too long";
+#if HAS_IMAGE_LIBRARY
+        if (path[0] && !ImageLibraryCatalog::is_image_path(path))
+            return "pad bg_image_path must be a canonical image library path";
+#endif
+    }
     const char* shadow = pad["button_shadow"] | "";
     if (shadow[0] && strcmp(shadow, "enabled") != 0 && strcmp(shadow, "disabled") != 0)
         return "bad button_shadow";

@@ -265,6 +265,15 @@ function padUpdateGridBackground() {
     const input = document.getElementById('pad-edit-page-bg-color');
     grid.style.background = input && /^#[0-9a-fA-F]{6}$/.test(input.value.trim())
         ? input.value.trim() : padGetEffectiveDefault('default_pad_bg_color');
+    // @portal-if HAS_IMAGE_LIBRARY
+    grid.style.backgroundImage = 'none';
+    if (deviceInfoCache && deviceInfoCache.has_image_library === true && padState.backgroundImagePath) {
+        grid.style.backgroundImage = 'url("/api/images?file=' + encodeURIComponent(padState.backgroundImagePath) + '")';
+        grid.style.backgroundSize = 'cover';
+        grid.style.backgroundPosition = 'center';
+        grid.style.backgroundRepeat = 'no-repeat';
+    }
+    // @portal-endif
     grid.querySelectorAll('.pad-cell-btn').forEach(padUpdateCellBoundaryGuide);
 }
 

@@ -352,6 +352,7 @@ async function testClearPad() {
         padState.overlayButtons = [{ col: 1, row: 1 }];
         padState.bindings = [{ name: 'color', value: '#ffffff' }];
         padState.templatePad = 1; padState.templateButtons = [{ col: 2, row: 0 }];
+        padState.backgroundImagePath = '/images/old.png';
         padState.trackValidationError = true;
         padState.importedIconSources = { stale: {} };
         padState.importedIconSourceIds = { stale: 'source' };
@@ -439,14 +440,18 @@ async function testClearPad() {
     const importPad = async pad => success.context.padImportPad({
         target: { files: [{ text: async () => JSON.stringify(pad) }], value: 'pad.json' },
     });
-    await importPad({ cols: 10, rows: 10, buttons: [{ col: 9, row: 9 }] });
+    await importPad({ cols: 10, rows: 10, bg_image_path: '/images/background.png', buttons: [{ col: 9, row: 9 }] });
     assert(success.messages.some(message => message.type === 'success' && message.message.includes('Pad imported')));
     assert.strictEqual(vm.runInContext('padState.cols', success.context), 10);
+    assert.strictEqual(JSON.parse(success.context.padBuildSaveContext().body).bg_image_path,
+        '/images/background.png', 'Imported pad background references must survive saving');
     const unpackagedWidget = {
         col: 0, row: 0, widget_type: 'external', extension_id: 'other-board-widget',
         extension_config: { source: 'sensor' }, extension_tick_interval_ms: 750,
     };
     await importPad({ action_format_version: 1, cols: 1, rows: 1, buttons: [unpackagedWidget] });
+    assert.strictEqual(JSON.parse(success.context.padBuildSaveContext().body).bg_image_path, undefined,
+        'Importing a pad without a background must clear the previous selection');
     assert.deepStrictEqual(JSON.parse(vm.runInContext('JSON.stringify(padState.buttons)', success.context)),
         [unpackagedWidget], 'Import must retain widgets whose editor is not packaged');
     assert.deepStrictEqual(JSON.parse(success.context.padBuildSaveContext().body).buttons,
