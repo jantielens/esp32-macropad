@@ -787,6 +787,11 @@ async function testClearPad() {
     };
     await optionSizing({}, 82);
     await optionSizing({ widget_option_height_pct: 50 }, 37);
+    await optionSizing({ widget_option_weight: 1, widget_option_weight_2: 9 }, 1);
+    await optionSizing({ widget_option_weight: 2, widget_option_label_2: 'Other',
+        widget_option_weight_2: 3 }, 28);
+    await optionSizing({ widget_option_weight: 3, widget_option_label_2: 'Other',
+        widget_option_weight_2: 2 }, 46);
     await optionSizing({ label_top: 'Title', widget_position: 'right', group_size_pct: 75 }, 14);
     await optionSizing({ reserve_label_slots: true, widget_position: 'right', group_size_pct: 75 }, 14);
     await optionSizing({ label_bottom: 'Title', widget_position: 'above', group_size_pct: 75 }, 14);
@@ -800,6 +805,17 @@ async function testClearPad() {
         { ...optionIcons.buttons[0], widget_option_inset: 0 }, 1), defaultInsetKey);
     assert.notStrictEqual(reuse.context.padOptionIconRenderKey(optionIcons,
         { ...optionIcons.buttons[0], widget_option_height_pct: 50 }, 1), defaultInsetKey);
+    assert.notStrictEqual(reuse.context.padOptionIconRenderKey(optionIcons,
+        { ...optionIcons.buttons[0], widget_option_weight: 2 }, 1), defaultInsetKey);
+    assert.strictEqual(reuse.context.padOptionIconRenderKey({
+        cols: 3, rows: 2, column_widths_px: [0, 40, 0]
+    }, {
+        col: 1, row: 0, col_span: 2, widget_type: 'option_selector',
+        widget_option_label: 'Cool', widget_option_icon_5: { kind: 'mono' },
+        widget_option_icon_size_pct: 75, widget_option_icon_badge_padding: 4,
+        widget_option_inset: 0, widget_option_height_pct: 50,
+        widget_option_weight: 2, widget_option_weight_3: 7
+    }, 5), '2a6ad685');
 
     const templatePayload = { ...reusePayload, template_pad: 1 };
     const requestsBeforeTemplate = reuse.requests.length;

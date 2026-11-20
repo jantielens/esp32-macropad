@@ -845,6 +845,14 @@ function padIconRenderKey(payload, button) {
     return (hash || 1).toString(16).padStart(8, '0');
 }
 
+function padOptionWeights(button) {
+    return Array.from({ length: 5 }, (_, index) => {
+        const suffix = index ? '_' + (index + 1) : '';
+        const hasContent = button['widget_option_label' + suffix] || button['widget_option_icon' + suffix];
+        return Number(button['widget_option_weight' + suffix] ?? (hasContent ? 1 : 0));
+    });
+}
+
 function padOptionIconRenderKey(payload, button, slot) {
     let hash = parseInt(padIconRenderKey(payload, button), 16);
     const values = [slot, button.widget_option_icon_size_pct ?? 0,
@@ -852,10 +860,7 @@ function padOptionIconRenderKey(payload, button, slot) {
         button.label_center ? 1 : 0, button.icon ? 1 : 0,
         button.widget_position ?? '', button.icon_position ?? ''];
     if (button.reserve_label_slots) values.push('reserve_label_slots');
-    for (let index = 1; index <= 5; index++) {
-        const suffix = index === 1 ? '' : '_' + index;
-        values.push(button['widget_option_label' + suffix] || button['widget_option_icon' + suffix] ? 1 : 0);
-    }
+    values.push(...padOptionWeights(button));
     if (Number(button.widget_option_inset ?? 4) !== 4)
         values.push('inset', button.widget_option_inset);
     if (Number(button.widget_option_height_pct ?? 100) !== 100)
@@ -1123,9 +1128,8 @@ async function padPreparePageSave(context) {
             let iconWidth = fullWidth;
             let iconHeight = fullHeight - (button.label_top ? labelHeight : 0) - (button.label_bottom ? labelHeight : 0);
             if (entry.slot) {
-                const count = padButtonIconUses(button).filter(use => use.slot).length +
-                    Array.from({ length: 5 }, (_, i) => button['widget_option_label' + (i ? '_' + (i + 1) : '')] ? 1 : 0)
-                        .reduce((a, b) => a + b, 0);
+                const weights = padOptionWeights(button);
+                const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
                 const contentPad = Math.min(50, Math.max(0, parseInt(
                     button.content_pad ?? layout.content_pad ?? padding, 10) || 0));
                 const border = Math.max(0, parseInt(button.border_width ?? layout.border_width ?? 1, 10) || 0);
@@ -1144,7 +1148,7 @@ async function padPreparePageSave(context) {
                     if (horizontal) iconWidth = widgetSize;
                     else iconHeight = widgetSize;
                 }
-                iconWidth = Math.ceil(iconWidth / Math.max(1, count));
+                iconWidth = Math.ceil(iconWidth * weights[entry.slot - 1] / totalWeight);
                 iconHeight = Math.max(1, Math.floor(iconHeight * Number(button.widget_option_height_pct ?? 100) / 100));
                 const inset = Number(button.widget_option_inset ?? 4);
                 iconWidth -= 2 * Math.min(inset, Math.floor(Math.max(0, iconWidth - 1) / 2));

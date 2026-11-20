@@ -2149,6 +2149,8 @@ body {
 .widget-caption-row { grid-template-columns: minmax(0, 1fr) auto; }
 .widget-caption-row .bindable-color { width: auto; }
 #pad-edit-option-slots > .editor-group { margin-left: 0; }
+.style-overrides { margin: 8px 0 0 12px; }
+.style-overrides > summary { cursor: pointer; padding: 6px 0; font-size: 12px; }
 .option-selector-row { grid-template-columns: repeat(auto-fit, minmax(min(100%, 125px), 1fr)); }
 #pad-editor-root .option-selector-row label:has(> .pad-pv-val) { flex-wrap: wrap; }
 #pad-editor-root .option-selector-row label > .pad-pv-val { min-width: 0; max-width: 100%; }

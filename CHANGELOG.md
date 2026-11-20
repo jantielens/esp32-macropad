@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add optional relative widths to Option selector options. Set Weight on an
+  empty option to reserve space and push status labels or icons toward an edge.
+  See [option widths and spacers](docs/user/widgets/option-selector.md#set-widths-and-reserve-empty-space).
 * Add optional local-image pad backgrounds with a Pad Appearance selector and
   editor preview. Images fill the screen with centered cropping. Consecutive
   pads sharing a file reuse one decoded background; other images load on demand.

@@ -94,15 +94,18 @@ uint32_t pad_option_icon_render_key(JsonObjectConst pad, JsonObjectConst button,
     text(button["icon_position"] | "");
     if (button["reserve_label_slots"] | false) text("reserve_label_slots");
     for (unsigned index = 0; index < 5; ++index) {
-        char label[32], icon[32];
+        char label[32], icon[32], weight[32];
         if (index == 0) {
             snprintf(label, sizeof(label), "widget_option_label");
             snprintf(icon, sizeof(icon), "widget_option_icon");
+            snprintf(weight, sizeof(weight), "widget_option_weight");
         } else {
             snprintf(label, sizeof(label), "widget_option_label_%u", index + 1);
             snprintf(icon, sizeof(icon), "widget_option_icon_%u", index + 1);
+            snprintf(weight, sizeof(weight), "widget_option_weight_%u", index + 1);
         }
-        number((button[label] | "")[0] || button[icon].is<JsonObjectConst>() ? 1 : 0);
+        const int default_weight = (button[label] | "")[0] || button[icon].is<JsonObjectConst>() ? 1 : 0;
+        number(button[weight] | default_weight);
     }
     const int inset = button["widget_option_inset"] | 4;
     if (inset != 4) {

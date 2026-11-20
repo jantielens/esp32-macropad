@@ -111,6 +111,11 @@ const char* option_selector_validate_config(JsonObjectConst button) {
         const char* value = button[field] | "";
         if ((label[0] != '\0') + has_icon > 1) return "an option cannot have both a label and an icon";
         const bool has_content = label[0] || has_icon;
+        slot_field(field, sizeof(field), "weight", index);
+        if (button.containsKey(field) &&
+            (!button[field].is<unsigned>() || button[field].as<unsigned>() < 1 ||
+             button[field].as<unsigned>() > OPTION_SELECTOR_MAX_WEIGHT))
+            return "option weight must be an integer from 1 to 1000";
         if (value[0] && (!has_content || !valid_id(value)))
             return "option values require content and may contain only ASCII letters, digits, _ or -";
         if (has_content && !value[0] && !strcmp(mode, "bound"))
@@ -170,6 +175,8 @@ bool option_selector_parse_config(const JsonObject& button, uint8_t* data) {
             copy_field(button, field, slot.content.label, sizeof(slot.content.label));
             slot.kind = slot.content.label[0] ? OptionSelectorContent::Label : OptionSelectorContent::None;
         }
+        slot_field(field, sizeof(field), "weight", index);
+        slot.weight = button[field] | (slot.kind == OptionSelectorContent::None ? 0U : 1U);
         slot_field(field, sizeof(field), "fg_color", index);
         copy_field(button, field, slot.foreground, sizeof(slot.foreground));
         slot_field(field, sizeof(field), "bg_color", index);

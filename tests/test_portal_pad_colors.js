@@ -541,6 +541,28 @@ assert.strictEqual(backgroundReset.style.display, 'none');
     assert.strictEqual(inputs.get('pad-edit-option-selected-fg').value, '');
     assert.strictEqual(inputs.get('pad-edit-option-1-bg_color').swatch.style.background, '#111111');
 
+    assert.strictEqual(result.widget_option_weight, undefined);
+    inputs.get('pad-edit-option-1-weight').value = '7';
+    inputs.get('pad-edit-option-2-label').value = 'Battery';
+    inputs.get('pad-edit-option-2-weight').value = '2';
+    const weighted = {};
+    selectorContext.padWidgetEditorBuild(weighted, editor);
+    assert.strictEqual(weighted.widget_option_weight, 7, 'Empty weighted slots must survive saving');
+    assert.strictEqual(weighted.widget_option_weight_2, 2);
+    assert.strictEqual(weighted.widget_option_weight_3, undefined);
+    selectorContext.padWidgetEditorsLoad({ widget_type: 'option_selector', ...weighted });
+    assert.strictEqual(inputs.get('pad-edit-option-1-weight').value, '7');
+    assert.strictEqual(inputs.get('pad-edit-option-2-weight').value, '2');
+    assert.strictEqual(inputs.get('pad-edit-option-3-weight').value, '');
+    for (const invalid of ['0', '-1', '1001', '1.5', 'not-a-number']) {
+        inputs.get('pad-edit-option-1-weight').value = invalid;
+        assert.throws(() => selectorContext.padWidgetEditorBuild({}, editor), /Weight must be an integer/);
+    }
+    inputs.get('pad-edit-option-1-weight').value = '';
+    const clearedWeight = {};
+    selectorContext.padWidgetEditorBuild(clearedWeight, editor);
+    assert.strictEqual(clearedWeight.widget_option_weight, undefined);
+
     const mode = inputs.get('pad-edit-option-mode');
     const source = inputs.get('pad-edit-option-source');
     const sourceGroup = inputs.get('pad-edit-option-source-group');

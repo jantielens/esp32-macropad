@@ -694,6 +694,9 @@ int main() {
         CHECK(pad_option_icon_render_key(doc.as<JsonObjectConst>(), doc["buttons"][0], 5) == 0x3cf96935u);
         doc["buttons"][0]["widget_option_height_pct"] = 50;
         CHECK(pad_option_icon_render_key(doc.as<JsonObjectConst>(), doc["buttons"][0], 5) == 0xf09f7bd1u);
+        doc["buttons"][0]["widget_option_weight"] = 2;
+        doc["buttons"][0]["widget_option_weight_3"] = 7;
+        CHECK(pad_option_icon_render_key(doc.as<JsonObjectConst>(), doc["buttons"][0], 5) == 0x2a6ad685u);
     }
 
     for (const char* field : {"actions", "lp_actions"}) {

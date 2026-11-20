@@ -93,7 +93,8 @@ colors for the selected option. Enable **Group background** or **Option
 backgrounds** to show the corresponding fill. A selected option has a
 background even when option backgrounds are off.
 
-Under each option, **Foreground** affects its label or monochrome icon, and
+Under each option's **Style overrides (optional)**, **Foreground** affects its
+label or monochrome icon, and
 **Background** colors its fill. Individual option colors override the shared
 and selected colors. Reset a color to its automatic default with the reset
 icon. Group and option background colors, individual colors, and labels can
@@ -109,10 +110,42 @@ button's center-label font size. **Icon size (%)** scales icons within the
 available area, with 0 fitting the area. **Icon badge padding** adds space
 around an icon and reduces its available size.
 
-Each option also has an optional **State**: `enabled`, `disabled`, `hidden`,
+### Set widths and reserve empty space
+
+Each option has an optional **Weight** under **Style overrides (optional)**, from 1
+to 1000 using whole numbers.
+The selector divides its available width in proportion to these weights.
+Leave Weight blank for a label or icon to use 1. Weights of 1, 1, and 2 give
+the first two options a quarter of the width each and the last option half.
+Equal weights give equal widths.
+
+An option without a label or icon is ignored unless you set its Weight.
+Setting a weight on an empty option creates an invisible spacer. It has no
+individual background, touch target, value, or selection. The group background,
+if enabled, still covers the spacer.
+
+For a status row toward the right, leave Option 1 empty and set its Weight to 7.
+Add Wi-Fi, signal, and battery labels or icons in Options 2-4, leaving their
+weights blank. The spacer takes 70% of the width and each indicator takes 10%.
+Use a trailing spacer to push content left, or matching spacers at both ends
+to center it. Spacers count toward the five-option limit.
+
+Clear a spacer's Weight to stop reserving space. To turn an existing option
+into a spacer, clear its label or icon and its Value, and keep an explicit
+weight. A bound label that currently resolves to empty remains a normal option.
+
+Widths are proportional, not fitted to content. Large weight differences can
+make an option too narrow to read or tap; test the result on your device.
+
+### Hide or disable an option
+
+Each option also has an optional **State** under **Style overrides (optional)**:
+`enabled`, `disabled`, `hidden`,
 or a binding that resolves to one of these. Use it when an individual choice
 should be unavailable or hidden independently of the selector's reported
 selection. Leave it empty for an enabled option.
+Hidden options keep their allocated space rather than moving neighboring
+options.
 
 ## Keep a temporary local choice
 

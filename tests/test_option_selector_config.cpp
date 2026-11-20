@@ -137,6 +137,38 @@ TEST(OptionSelectorConfig, ParsesInsetAndRejectsOutOfRange) {
     EXPECT_NE(option_selector_validate_config(doc.as<JsonObjectConst>()), nullptr);
 }
 
+TEST(OptionSelectorConfig, WeightsDistinguishAutomaticOptionsSpacersAndUnusedSlots) {
+    JsonDocument doc;
+    doc["widget_option_mode"] = "bound";
+    doc["widget_option_label"] = "[var:status]";
+    doc["widget_option_value"] = "status";
+    doc["widget_option_weight_2"] = 7;
+    doc["widget_option_label_4"] = "Battery";
+    doc["widget_option_value_4"] = "battery";
+    doc["widget_option_weight_4"] = 1000;
+    uint8_t data[WIDGET_CONFIG_MAX_BYTES] = {};
+    ASSERT_TRUE(option_selector_parse_config(doc.as<JsonObject>(), data));
+    const auto* config = option_selector_config(data);
+    EXPECT_EQ(config->slots[0].weight, 1);
+    EXPECT_EQ(config->slots[1].weight, 7);
+    EXPECT_EQ(config->slots[1].kind, OptionSelectorContent::None);
+    EXPECT_EQ(config->slots[2].weight, 0);
+    EXPECT_EQ(config->slots[3].weight, 1000);
+    option_selector_release_config(data);
+    doc["widget_option_value_2"] = "spacer";
+    EXPECT_NE(option_selector_validate_config(doc.as<JsonObjectConst>()), nullptr);
+}
+
+TEST(OptionSelectorConfig, RejectsInvalidExplicitWeights) {
+    JsonDocument doc;
+    for (const char* json : {"0", "-1", "1001", "1.5", "\"2\"", "true", "null"}) {
+        JsonDocument value;
+        ASSERT_FALSE(deserializeJson(value, json));
+        doc["widget_option_weight_5"] = value.as<JsonVariantConst>();
+        EXPECT_NE(option_selector_validate_config(doc.as<JsonObjectConst>()), nullptr) << json;
+    }
+}
+
 TEST(OptionSelectorConfig, ParsesAndValidatesSelectorHeight) {
     StaticJsonDocument<512> doc;
     uint8_t data[WIDGET_CONFIG_MAX_BYTES] = {};

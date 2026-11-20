@@ -81,18 +81,18 @@ void layout(State* state) {
     const int group_height = height > 0 ? LV_MAX(1, height * state->config->height_pct / 100) : 0;
     lv_obj_set_pos(group, 0, (height - group_height) / 2);
     lv_obj_set_size(group, width, group_height);
-    unsigned count = 0;
+    unsigned total_weight = 0;
     for (const auto& slot : state->config->slots)
-        if (slot.kind != OptionSelectorContent::None) ++count;
+        total_weight += slot.weight;
     unsigned position = 0;
     int group_radius = LV_RADIUS_CIRCLE;
     for (unsigned index = 0; index < OPTION_SELECTOR_SLOTS; ++index) {
         const auto& config = state->config->slots[index];
         SlotState& slot = state->slots[index];
+        const int start = total_weight && width > 0 ? width * position / total_weight : 0;
+        position += config.weight;
+        const int end = total_weight && width > 0 ? width * position / total_weight : 0;
         if (!slot.hit || config.kind == OptionSelectorContent::None) continue;
-        const int start = count && width > 0 ? width * position / count : 0;
-        const int end = count && width > 0 ? width * (position + 1) / count : 0;
-        ++position;
         const int cell_width = end - start;
         slot.layout_visible = cell_width > 0 && height > 0;
         if (cell_width <= 0 || height <= 0) {
@@ -454,8 +454,14 @@ void describe(JsonObject& out) {
         else snprintf(icon, sizeof(icon), "widget_option_icon_%u", index + 1);
         JsonObject entry = fields.createNestedObject();
         entry["name"] = icon; entry["type"] = "object";
+        char weight[48];
+        if (index == 0) snprintf(weight, sizeof(weight), "widget_option_weight");
+        else snprintf(weight, sizeof(weight), "widget_option_weight_%u", index + 1);
+        JsonObject weight_field = fields.createNestedObject();
+        weight_field["name"] = weight; weight_field["type"] = "number";
+        weight_field["minimum"] = 1; weight_field["maximum"] = OPTION_SELECTOR_MAX_WEIGHT;
     }
-    out["note"] = "Five optional touch targets; use [event:value] in a dynamic action argument for the selected option's value, not its label. Bound mode follows the reported selection.";
+    out["note"] = "Five optional slots; label/icon options default to weight 1. An empty slot with an explicit weight reserves space without a touch target or selection. Weights are integers from 1 to 1000. Use [event:value] in a dynamic action argument for the selected option's value, not its label. Bound mode follows the reported selection.";
 }
 #endif
 
