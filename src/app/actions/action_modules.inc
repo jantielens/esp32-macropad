@@ -14,6 +14,9 @@
 #include "ble_pair_action.cpp"
 #include "cycle_pad_action.cpp"
 #include "button_navigation_action.cpp"
+#if HAS_DISPLAY && HAS_PSRAM
+#include "list_navigation_action.cpp"
+#endif
 #include "mqtt_action.cpp"
 #include "bthome_action.cpp"
 #include "ha_service_action.cpp"
@@ -37,6 +40,11 @@
 #if HAS_CAMERA
 #include "camera_capture_action.cpp"
 #endif
-#if HAS_VOICE_CLIPS
-#include "voice_clip_action.cpp"
+#if HAS_VOICE_NOTES
+#include "voice_note_record_action.cpp"
+#include "voice_note_process_action.cpp"
+#include "voice_note_delete_action.cpp"
+#if HAS_DISPLAY && HAS_PSRAM
+#include "voice_note_load_action.cpp"
+#endif
 #endif

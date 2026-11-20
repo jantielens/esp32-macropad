@@ -35,6 +35,7 @@
 #include "hw_button_config.h"
 #if HAS_DISPLAY || HAS_BUTTON
 #include "action_dispatch.h"
+#include "action_registry.h"
 #endif
 #if HAS_BLE
 #include "ble_telemetry.h"
@@ -59,7 +60,10 @@
 #include "sound_store.h"
 #include "boot_actions.h"
 #include "pad_block.h"
-#include "list_provider.h"
+#include "list_source.h"
+#include "list_source_health.h"
+#include "list_source_pads.h"
+#include "list_source_voice_notes.h"
 #include "time_binding.h"
 #include "timer_config.h"
 #include "pad_config.h"
@@ -68,6 +72,7 @@
 #include "visual_alert.h"
 #include "swipe_config.h"
 #include "button_defaults.h"
+#include "welcome_pad.h"
 #endif
 
 #if HAS_IMAGE_FETCH
@@ -102,8 +107,12 @@
 #include "audio_input.h"
 #endif
 
-#if HAS_VOICE_CLIPS
-#include "voice_clips.h"
+#if HAS_VOICE_NOTES
+#include "voice_notes.h"
+#include "voice_notes_processing.h"
+#if HAS_DISPLAY && HAS_PSRAM
+#include "voice_notes_loaded.h"
+#endif
 #endif
 
 #include "i2c_bus.h"
@@ -242,6 +251,13 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 	#if HAS_DISPLAY
 	set_boot_splash_status("Preparing device...");
 	screen_saver_manager_init(&device_config);
+	#if HAS_PSRAM
+	if (!list_source_health_init()) LOGE("ListSource", "Cannot register health source");
+	if (!list_source_pads_init()) LOGE("ListSource", "Cannot register pad source");
+	#if HAS_VOICE_NOTES
+	list_source_voice_notes_init();
+	#endif
+	#endif
 	pad_config_init();
 	#if HAS_NATIVE_EXTENSIONS
 	native_extension_init();
@@ -253,7 +269,6 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 	}
 	boot_actions_init();
 	pad_block_init();
-	list_provider_pads_init();
 	icon_store_init();
 	set_boot_splash_status("Loading icons...");
 	icon_store_preload_pad_pages();
@@ -276,7 +291,7 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 	#endif
 
 	#if HAS_BLE_HID
-	if (keyboard_hid_transport() == KeyboardTransport::Ble) {
+	if (!reboot_is_ota_mode() && keyboard_hid_transport() == KeyboardTransport::Ble) {
 		ble_hid_init(device_config.device_name, false);
 	} else {
 		LOGI("Main", "BLE Keyboard disabled (saves ~70 KB RAM)");
@@ -384,6 +399,7 @@ bool app_continue_offline_from_setup() {
 
 void setup()
 {
+	reboot_service_boot_init();
 	#ifdef BOARD_EARLY_POWER_INIT
 	const bool board_power_ready = BOARD_EARLY_POWER_INIT();
 	#endif
@@ -411,6 +427,9 @@ void setup()
 
 	// Initialize logger (wraps Serial for web streaming)
 	log_init(115200);
+	#if HAS_DISPLAY || HAS_BUTTON
+	action_registry_logging_ready();
+	#endif
 	#ifdef BOARD_EARLY_POWER_INIT
 	if (!board_power_ready) LOGE("Board", "Early power latch initialization failed");
 	#endif
@@ -479,19 +498,6 @@ void setup()
 	device_config.backlight_brightness = 100;  // Default to full brightness
 	device_config.mqtt_port = 0;
 
-	#if HAS_DISPLAY
-	// Screen saver defaults (v1)
-	device_config.screen_saver_enabled = false;
-	device_config.screen_saver_timeout_seconds = 300;
-	device_config.screen_saver_fade_out_ms = 800;
-	device_config.screen_saver_fade_in_ms = 400;
-	#if HAS_TOUCH
-	device_config.screen_saver_wake_on_touch = true;
-	#else
-	device_config.screen_saver_wake_on_touch = false;
-	#endif
-	#endif
-
 	#if HAS_TOUCH || HAS_CAMERA || HAS_AUDIO || HAS_RTC || defined(BOARD_HARDWARE_SOURCE)
 	i2c_bus_init();
 	#endif
@@ -514,8 +520,16 @@ void setup()
 
 	// Load persisted settings before creating the display. The Inkplate driver
 	// samples its panel mode during initialization and never changes it live.
-	config_manager_init();
-	config_loaded = config_manager_load(&device_config);
+	const bool config_store_ready = config_manager_init();
+	config_loaded = config_store_ready && config_manager_load(&device_config);
+	#if HAS_AUDIO_INPUT
+	if (!audio_input_set_processing({device_config.microphone_gain_db, device_config.microphone_reduce_rumble}))
+		LOGE("Main", "Invalid microphone processing settings");
+	#endif
+	#if HAS_VOICE_NOTES
+	if (!voice_notes_processing_configure(device_config.voice_notes))
+		LOGE("Main", "Voice Notes transcription configuration unavailable");
+	#endif
 	if (!device_config.timezone[0]) strlcpy(device_config.timezone, "UTC0", sizeof(device_config.timezone));
 	time_service_set_timezone(device_config.timezone);
 	#if HAS_RTC
@@ -558,6 +572,12 @@ void setup()
 	// Load best-effort once the splash and required storage are ready.
 	load_boot_logo();
 
+	#if HAS_DISPLAY && HAS_FILESYSTEM && !IS_EPAPER_FRAME
+	if (!welcome_pad_provision(config_loaded)) {
+		LOGW("Main", "Welcome pad provisioning incomplete; continuing setup");
+	}
+	#endif
+
 	const bool force_config_mode_burst = power_manager_should_force_config_mode();
 	if (force_config_mode_burst) {
 		LOGI("Power", "Reset burst detected - entering Config Mode");
@@ -570,6 +590,10 @@ void setup()
 	if (power_manager_should_force_setup_ap()) {
 		boot_mode = PowerMode::Ap;
 	}
+	if (reboot_is_ota_mode()) {
+		if (boot_mode != PowerMode::Ap) boot_mode = PowerMode::AlwaysOn;
+		LOGI("OTA", "One-shot OTA mode: Bluetooth and MQTT disabled");
+	}
 	power_manager_set_current_mode(boot_mode);
 	power_manager_led_set_mode(boot_mode);
 
@@ -579,7 +603,7 @@ void setup()
 
 	#if (HAS_BLE || HAS_BLE_HID) && BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
 	// Reserve BLE's internal RAM before WiFi and normal-runtime allocations.
-	if (boot_mode == PowerMode::AlwaysOn || boot_mode == PowerMode::Offline) {
+	if (!reboot_is_ota_mode() && (boot_mode == PowerMode::AlwaysOn || boot_mode == PowerMode::Offline)) {
 		bthome_events_configure(device_config.device_name, device_config.bthome_event);
 		bthome_events_prepare();
 	}
@@ -738,8 +762,9 @@ void setup()
 		}
 	}
 
-	#if HAS_VOICE_CLIPS
-	if (!voice_clips_init()) LOGE("Main", "Voice clips initialization failed");
+	#if HAS_VOICE_NOTES
+	if (!voice_notes_init()) LOGE("Main", "Voice Notes initialization failed");
+	else if (!voice_notes_processing_init()) LOGE("Main", "Voice Notes processing initialization failed");
 	#endif
 
 	bool enter_setup_ap = (boot_mode == PowerMode::Ap);
@@ -786,7 +811,7 @@ void setup()
 			#if HAS_DISPLAY
 			time_binding_start_ntp();
 			#endif
-		} else if (boot_mode == PowerMode::AlwaysOn &&
+		} else if (!reboot_is_ota_mode() && boot_mode == PowerMode::AlwaysOn &&
 				strcmp(device_config.wifi_failure_mode, "offline") == 0) {
 			LOGW("Main", "Saved Wi-Fi failed; continuing offline");
 			wifi_manager_enter_offline();
@@ -866,6 +891,13 @@ void loop()
 	action_dispatch_loop();
 	#endif
 
+	#if HAS_DISPLAY && HAS_PSRAM
+	list_source_loop();
+	#if HAS_VOICE_NOTES
+	voice_notes_loaded_loop();
+	#endif
+	#endif
+
 	#if HAS_CAMERA
 	device_telemetry_mark_main_loop(DEVICE_RUNTIME_PHASE_MAIN_CAMERA_FEED);
 	camera_feed_loop();
@@ -932,9 +964,9 @@ void loop()
 	hw_buttons_loop();
 
 #if HAS_AUTO_SHUTDOWN
-	#if HAS_VOICE_CLIPS
-	VoiceClipSnapshot voice_snapshot;
-	voice_clips_snapshot(&voice_snapshot);
+	#if HAS_VOICE_NOTES
+	VoiceNoteSnapshot voice_snapshot;
+	voice_notes_snapshot(&voice_snapshot);
 	if (voice_snapshot.session_active) auto_shutdown_notify_activity();
 	#endif
 	auto_shutdown_loop();

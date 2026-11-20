@@ -33,9 +33,7 @@
 //   [strip:segment]          — current segment number (1-based)
 //   [strip:segments]         — total segment count
 //   [strip:remaining]        — current phase remaining (seconds, 1 decimal)
-//   [strip:remaining;fmt]    — with format override (mm:ss, ss.d, etc.)
 //   [strip:elapsed]          — current phase elapsed (seconds, 1 decimal)
-//   [strip:elapsed;fmt]      — with format override
 //   [strip:seg_time:N]       — cumulative time for segment N (seconds, 1 decimal)
 //   [strip:seg_offset:N]     — f-stop offset for segment N (e.g. "-0.3")
 //   [strip:seg_inc:N]        — incremental time for segment N (seconds, 1 decimal)

@@ -11,10 +11,12 @@ Usage:
 """
 
 import argparse
+import ast
 import base64
 import copy
 import time
 import json
+import math
 import os
 import re
 import struct
@@ -33,9 +35,30 @@ PROTO_DIR = SCRIPT_DIR / "portal-prototype"
 MOCK_DIR = SCRIPT_DIR / "mock-data"
 APP_WEB_DIR = SCRIPT_DIR.parent / "src" / "app" / "web"
 EPAPER_WEB_DIR = SCRIPT_DIR.parent / "src" / "app" / "device_classes" / "epaper_frame" / "web"
+SD_PROFILE_BASES = {
+    "esp32-p4-lcd4b-sd": "esp32-p4-lcd4b",
+    "reterminal-sticky-interactive-sd": "reterminal-sticky-interactive",
+}
 PROFILES = ("esp32-p4-lcd4b", "jc3248w535", "reterminal-e1003-frame", "crowpanel-4.2-interactive",
-            "reterminal-sticky-interactive")
+            "reterminal-sticky-interactive", *SD_PROFILE_BASES)
 SCENARIOS = ("normal", "load-error", "save-error", "invalid-bindings")
+
+
+def parse_microphone_settings(update):
+    if not isinstance(update, dict):
+        raise ValueError("Microphone settings must be an object")
+    if "microphone_gain_db" in update:
+        value = update["microphone_gain_db"]
+        if isinstance(value, str) and re.fullmatch(r"[+-]?[0-9]+", value):
+            value = int(value)
+        if type(value) is not int or not -12 <= value <= 24:
+            raise ValueError("Invalid microphone gain")
+        update["microphone_gain_db"] = value
+    if "microphone_reduce_rumble" in update and type(update["microphone_reduce_rumble"]) is not bool:
+        raise ValueError("Invalid microphone rumble setting")
+    return update
+
+
 HA_ENTITIES = {
     "sensor.living_room_temperature": {
         "name": "Living room temperature", "state": "21.37", "unit": "\u00b0C",
@@ -118,49 +141,35 @@ def reset_pad_fixtures(server, scenario="normal"):
     samples = b"\0\0" * (16000 * 3)
     wav = struct.pack("<4sI4s4sIHHIIHH4sI", b"RIFF", 36 + len(samples), b"WAVE",
                       b"fmt ", 16, 1, 1, 16000, 32000, 2, 16, b"data", len(samples)) + samples
-    server.mock_voice_clips = {
+    server.mock_voice_notes = {
         "0000000100000002": wav,
         "0000000100000003": wav,
         "0000000100000004": wav,
     }
-    server.mock_voice_clip_times = {
+    server.mock_voice_note_times = {
         "0000000100000002": MOCK_NOW_EPOCH,
         "0000000100000003": MOCK_NOW_EPOCH - 3600,
         "0000000100000004": MOCK_NOW_EPOCH - 86400,
     }
+    server.mock_voice_transcripts = {}
+    server.mock_voice_enrichments = {}
+    server.mock_voice_transcription = {"state": "idle", "note_id": "", "error": ""}
+    server.mock_voice_enrichment = {"state": "idle", "note_id": "", "error": ""}
+    server.mock_voice_transcription_started = 0
+    server.mock_voice_chain = False
+    server.mock_voice_automatic_active = False
+    server.mock_voice_online = True
+    server.mock_voice_recording = False
+    server.mock_voice_resource_available = True
+    server.mock_voice_retry = False
+    server.mock_voice_cooldown = False
     server.mock_recipe_catalog = json.loads((SCRIPT_DIR.parent / "docs/samples/recipe-catalog.json").read_text(encoding="utf-8"))
-    server.mock_alarms = {"lateness_minutes": 360, "1": {"enabled": False, "hour": 7, "minute": 0, "weekdays": 62,
+    server.mock_alarms = {"action_format_version": 1, "lateness_minutes": 360, "1": {"enabled": False, "hour": 7, "minute": 0, "weekdays": 62,
                                "snooze_minutes": 9, "auto_dismiss_minutes": 30,
                                "on_ring": [], "on_stop": []}}
     server.mock_alarm_status = {"active_id": 0, "state": "idle", "ready": True,
                                "ota_deferred": False, "storage_error": False, "hook_error": False,
                                "enabled": False, "once_epoch": 0, "once_local": "", "lateness_minutes": 360}
-    for action in fixture["catalog"]:
-        action["alarm_hook_allowed"] = action["type"] not in ("confirm", "delay", "key", "gamepad", "camera_capture", "voice_assistant")
-        if action["type"] == "sound_alert":
-            action["label"] = "Sound alert"
-    fixture["catalog"].append({"type": "alarm", "group": "Alarm", "label": "Alarm Control", "alarm_hook_allowed": True,
-        "commands": [{"id": command, "label": label} for command, label in (
-            ("cancel", "Dismiss alarm"), ("snooze", "Snooze"), ("set_time", "Set time"), ("adjust_minutes", "Adjust time"),
-            ("enable", "Enable alarm"), ("disable", "Disable alarm"), ("toggle", "Toggle alarm"),
-            ("weekday_enable", "Enable day"), ("weekday_disable", "Disable day"), ("weekday_toggle", "Toggle day"))],
-        "editor_fields": [{"name": "alarm_id", "label": "Target alarm", "type": "select", "default": "1", "numeric": True,
-                           "help": "Active alarm works only with Snooze and Dismiss alarm. Dismiss alarm ends ringing or snoozing without disabling the weekly schedule.",
-                           "options": [{"id": "0", "label": "Active alarm"}, {"id": "1", "label": "Alarm 1"}]},
-                          {"name": "alarm_command", "label": "Command", "type": "select", "default": "snooze", "command_options": True},
-                          {"name": "alarm_value", "label": "Adjustment (minutes)", "type": "text", "bindable": True},
-                          {"name": "alarm_day", "label": "Day", "type": "select", "numeric": True, "default": "1",
-                           "options": [{"id": day, "label": name} for day, name in enumerate(("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"))]}]})
-    for action_type, label, source in (("alarm_tone", "Loop Tone", "sound_alert_pattern"),
-                                      ("alarm_mp3", "Loop MP3", "sound_alert_file")):
-        field = {"name": source, "label": "MP3 file" if action_type == "alarm_mp3" else "Tone pattern",
-                 "type": "select" if action_type == "alarm_mp3" else "text",
-                 "help": "Repeats until stopped. Stop audio stops playback; Dismiss alarm ends the alarm session."}
-        field.update({"options_source": "sounds"} if action_type == "alarm_mp3" else {"bindable": True})
-        fixture["catalog"].append({"type": action_type, "group": "Alarm", "label": label,
-            "alarm_hook_allowed": True, "editor_fields": [field,
-                {"name": "sound_alert_volume", "label": "Volume override (%)", "type": "number",
-                 "min": 0, "max": 100, "default": "0", "help": "0 = use device volume; 1-100 overrides it."}]})
     fixture["binding_schema"]["schemes"].append({"name": "ha", "min_params": 1, "max_params": 3,
         "widget_max_params": 2, "format_param": 2, "validation_mode": 0, "free_form": True, "keys": []})
     fixture["binding_schema"]["schemes"].append({"name": "ext", "min_params": 1, "max_params": 3,
@@ -169,8 +178,8 @@ def reset_pad_fixtures(server, scenario="normal"):
         "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": False,
         "keys": ["1_time", "1_enabled", "1_state", "1_ready", "active_id", "1_hour", "1_minute", "1_minutes",
              "1_weekdays", "1_day_0", "1_day_1", "1_day_2", "1_day_3", "1_day_4", "1_day_5", "1_day_6",
-             "1_repeat", "1_snooze_minutes", "1_auto_dismiss_minutes", "1_once_epoch", "1_once_local", "1_once_available",
-             "1_next_epoch", "1_next_local", "1_next_seconds", "1_next_available", "1_snooze_seconds", "1_snooze_available",
+             "1_repeat", "1_snooze_minutes", "1_auto_dismiss_minutes", "1_once_at", "1_once_available",
+             "1_next_at", "1_next_seconds", "1_next_available", "1_snooze_seconds", "1_snooze_available",
              "1_dismiss_seconds", "1_dismiss_available", "1_next_ring_seconds", "1_next_ring_available",
              "1_ota_deferred", "1_storage_error", "1_hook_error", "1_command_error", "1_command_message",
              "1_pending_commands", "1_completed_commands", "1_save_state"]})
@@ -181,6 +190,47 @@ def reset_pad_fixtures(server, scenario="normal"):
     ]
     if scenario == "invalid-bindings":
         server.mock_pads["0"]["buttons"][0]["label_center"] = "[pad:]"
+
+
+def valid_alarm_hook(action, catalog):
+    if not isinstance(action, dict):
+        return False
+    operation = next((op for item in catalog for op in item.get("operations", [])
+                      if op["id"] == action.get("op")), None)
+    if not operation or not operation["alarm_hook_allowed"] or set(action) != {"op", "args"}:
+        return False
+    args = action["args"]
+    definitions = operation["arguments"]
+    if not isinstance(args, dict) or set(args) != {arg["name"] for arg in definitions}:
+        return False
+    for arg in definitions:
+        value = args[arg["name"]]
+        if isinstance(value, dict):
+            template = value.get("$template")
+            if (not arg["dynamic"] or set(value) != {"$template"} or not isinstance(template, str)
+                    or not 0 < len(template.encode("utf-8")) < 192 or "\0" in template):
+                return False
+        elif arg["type"] in ("string", "enum"):
+            if (not isinstance(value, str) or "\0" in value
+                    or (not value and not arg.get("allow_empty"))
+                    or len(value.encode("utf-8")) > arg["max_length"]
+                    or (arg["type"] == "enum" and value not in arg["choices"])):
+                return False
+        elif arg["type"] == "integer":
+            if (type(value) is not int or not arg["min"] <= value <= arg["max"]
+                    or (value != 0 and value < arg.get("nonzero_min", arg["min"]))):
+                return False
+        elif arg["type"] == "number":
+            if (type(value) not in (int, float) or not arg["min"] <= value <= arg["max"]
+                    or not math.isfinite(value)):
+                return False
+        elif arg["type"] == "boolean":
+            if type(value) is not bool:
+                return False
+        else:
+            return False
+    return True
+
 
 CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -193,14 +243,25 @@ CONTENT_TYPES = {
 class PortalHandler(SimpleHTTPRequestHandler):
     """Route portal assets and emulate the device API locally."""
 
-    def _profile(self):
+    def _selected_profile(self):
         cookie = SimpleCookie(self.headers.get("Cookie", ""))
         selected = cookie.get("portal_mock_profile")
         profile = selected.value if selected else self.server.profile
         return profile if profile in PROFILES else self.server.profile
 
+    def _profile(self):
+        profile = self._selected_profile()
+        return SD_PROFILE_BASES.get(profile, profile)
+
     def _bthome_capable(self):
         return self._profile() == "reterminal-sticky-interactive"
+
+    def _voice_notes_capable(self):
+        return self._selected_profile() in SD_PROFILE_BASES
+
+    def _alarm_capable(self):
+        return self._profile() in ("esp32-p4-lcd4b", "crowpanel-4.2-interactive",
+                                   "reterminal-sticky-interactive")
 
     def _fonts_available(self):
         return self._profile() in ("esp32-p4-lcd4b", "jc3248w535")
@@ -302,11 +363,21 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 self._serve_file(APP_WEB_DIR / "portal_power_savings.js")
             else:
                 self._serve_json({"error": "Power savings is unavailable"}, 404)
-        elif path == "/portal-voice-clips.js":
-            if self._profile() == "reterminal-sticky-interactive":
-                self._serve_file(APP_WEB_DIR / "portal_voice_clips.js")
+        elif path == "/portal-live-microphone.js":
+            if self._profile() in ("esp32-p4-lcd4b", "reterminal-sticky-interactive"):
+                self._serve_file(APP_WEB_DIR / "portal_live_microphone.js")
             else:
-                self._serve_json({"error": "Voice clips unavailable"}, 404)
+                self._serve_json({"error": "Live Microphone is unavailable"}, 404)
+        elif path == "/portal-microphone.js":
+            if self._profile() in ("esp32-p4-lcd4b", "reterminal-sticky-interactive"):
+                self._serve_file(APP_WEB_DIR / "portal_microphone.js")
+            else:
+                self._serve_json({"error": "Microphone unavailable"}, 404)
+        elif path == "/portal-voice-notes.js":
+            if self._voice_notes_capable():
+                self._serve_file(APP_WEB_DIR / "portal_voice_notes.js")
+            else:
+                self._serve_json({"error": "Voice notes unavailable"}, 404)
         elif path == "/portal-bluetooth.js":
             if self._profile() == "reterminal-sticky-interactive":
                 self._serve_file(APP_WEB_DIR / "portal_bluetooth.js")
@@ -332,7 +403,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             else:
                 self.send_error(404, "Fonts unavailable")
         elif path == "/portal_alarms.js":
-            if self._profile() == "reterminal-e1003-frame":
+            if not self._alarm_capable():
                 self.send_error(404, "Alarm unavailable")
             else:
                 self._serve_file(APP_WEB_DIR / "portal_alarms.js")
@@ -351,10 +422,31 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 self._serve_json({"success": False, "message": "Mock configuration load failed"}, 503)
                 return
             config = copy.deepcopy(self.server.mock_config)
+            if self._profile() in ("esp32-p4-lcd4b", "reterminal-sticky-interactive"):
+                config.setdefault("microphone_gain_db", 0)
+                config.setdefault("microphone_reduce_rumble", False)
+                config.setdefault("current_microphone_gain_db", config["microphone_gain_db"])
+                config.setdefault("current_microphone_reduce_rumble", config["microphone_reduce_rumble"])
+            else:
+                config.pop("microphone_gain_db", None)
+                config.pop("microphone_reduce_rumble", None)
+                config.pop("current_microphone_gain_db", None)
+                config.pop("current_microphone_reduce_rumble", None)
             if self._profile() == "reterminal-sticky-interactive":
                 config["auto_shutdown_timeout_seconds"] = config.get("auto_shutdown_timeout_seconds", 300)
             else:
                 config.pop("auto_shutdown_timeout_seconds", None)
+            if self._voice_notes_capable():
+                config.setdefault("voice_notes_auto_process", False)
+                for service in ("transcription", "llm"):
+                    prefix = f"voice_notes_{service}_"
+                    config.setdefault(prefix + "endpoint", "")
+                    config.setdefault(prefix + "deployment", "")
+                    config[prefix + "api_key_set"] = bool(config.get(prefix + "api_key"))
+                    config[prefix + "api_key"] = ""
+            else:
+                for key in [key for key in config if key.startswith("voice_notes_")]:
+                    config.pop(key, None)
             config["caps"]["ha_live"] = self._profile() == "esp32-p4-lcd4b"
             if self._profile() in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
                 config.setdefault("external_data", [])
@@ -583,7 +675,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                                                     "reboot_required": active["default_font"] != saved.get("default_font", "@builtin") or
                                                     active["base_text_size"] != saved.get("base_text_size", 0)}})
         elif path in ("/api/component/alarms/config", "/api/component/alarms/status"):
-            if self._profile() not in ("esp32-p4-lcd4b", "jc3248w535"):
+            if not self._alarm_capable():
                 self._serve_json({"error": "Alarm unavailable"}, 404)
             else:
                 self._serve_json(self.server.mock_alarms if path.endswith("/config") else self.server.mock_alarm_status)
@@ -591,7 +683,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             if self._profile() not in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
                 self._serve_json({"error": "Boot actions unavailable"}, 404)
             else:
-                self._serve_json({"actions": self.server.mock_boot_actions})
+                self._serve_json({"action_format_version": 1, "actions": self.server.mock_boot_actions})
         elif path == "/api/boot-logo":
             if self._profile() not in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
                 self._serve_json({"error": "Startup logo unavailable"}, 404)
@@ -614,10 +706,14 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 self._serve_bytes(data, content_type)
         elif path == "/api/bindings":
             schema = copy.deepcopy(self.server.pad_fixture["binding_schema"])
-            if self._profile() == "reterminal-sticky-interactive":
-                schema["schemes"].append({"name": "recorder", "min_params": 1, "max_params": 1,
+            # Generated by: build/host-tests/tests/test_binding_schema_full --emit-json
+            docs = json.loads((MOCK_DIR / "binding-docs.json").read_text(encoding="utf-8"))
+            if self._voice_notes_capable():
+                voice_keys = next(scheme["keys"] for scheme in docs["schemes"]
+                                  if scheme["name"] == "voice_note")
+                schema["schemes"].append({"name": "voice_note", "min_params": 1, "max_params": 1,
                     "widget_max_params": 1, "format_param": -1, "validation_mode": 0,
-                    "free_form": False, "keys": ["state", "duration_s", "last_clip", "error"]})
+                    "free_form": False, "keys": voice_keys})
             if not self._mqtt_capable():
                 schema["schemes"] = [scheme for scheme in schema["schemes"] if scheme["name"] != "mqtt"]
             if self._profile() != "esp32-p4-lcd4b":
@@ -625,10 +721,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
             if self._profile() == "reterminal-e1003-frame":
                 schema["schemes"] = [scheme for scheme in schema["schemes"] if scheme["name"] != "ext"]
             if "docs" in query:
-                # Generated by: build/host-tests/tests/test_binding_schema_full --emit-json
-                docs = json.loads((MOCK_DIR / "binding-docs.json").read_text(encoding="utf-8"))
                 available = {scheme["name"] for scheme in schema["schemes"]}
-                docs["schemes"] = [s for s in docs["schemes"] if s["name"] not in ("alarm", "ha", "ext", "recorder") or s["name"] in available]
+                docs["schemes"] = [s for s in docs["schemes"] if s["name"] not in ("alarm", "ha", "ext", "voice_note") or s["name"] in available]
                 mqtt_scheme = next((scheme for scheme in docs["schemes"] if scheme["name"] == "mqtt"), None)
                 if mqtt_scheme:
                     if not self._mqtt_configured():
@@ -692,27 +786,112 @@ class PortalHandler(SimpleHTTPRequestHandler):
             self._serve_json(self._epaper_status())
 
         # Fragment API — production fragments take precedence.
-        elif path.startswith("/api/component/voice-clips/"):
-            if self._profile() != "reterminal-sticky-interactive":
-                self._serve_json({"error": "Voice clips unavailable"}, 404)
+        elif path.startswith("/api/component/voice-notes/"):
+            if not self._voice_notes_capable():
+                self._serve_json({"error": "Voice notes unavailable"}, 404)
             elif path.endswith("/status"):
-                self._serve_json({"state": "idle", "error": "", "duration_ms": 0,
-                                  "backend": "littlefs", "total_bytes": 4 * 1024 * 1024,
+                job = self.server.mock_voice_transcription
+                if job["state"] == "preparing" and (self.server.mock_voice_automatic_active or
+                        time.monotonic() - self.server.mock_voice_transcription_started >= 1):
+                    if job["note_id"] in self.server.mock_voice_notes:
+                        self.server.mock_voice_transcripts[job["note_id"]] = {
+                            "text": "A sample transcript for local development.",
+                            "model": self.server.mock_config.get("voice_notes_transcription_deployment", ""), "created_at": MOCK_NOW_EPOCH}
+                    job["state"] = "ready"
+                    if (self.server.mock_voice_chain and
+                            all(self.server.mock_config.get("voice_notes_llm_" + key)
+                                for key in ("endpoint", "deployment", "api_key")) and
+                            job["note_id"] not in self.server.mock_voice_enrichments and
+                            not self.server.mock_voice_recording):
+                        self.server.mock_voice_enrichment = {
+                            "state": "preparing", "note_id": job["note_id"], "error": ""}
+                        self.server.mock_voice_transcription_started = time.monotonic()
+                    self.server.mock_voice_chain = False
+                    self.server.mock_voice_automatic_active = False
+                config = self.server.mock_config
+                configured = all(config.get("voice_notes_transcription_" + key)
+                                 for key in ("endpoint", "deployment", "api_key"))
+                llm_configured = all(config.get("voice_notes_llm_" + key)
+                                     for key in ("endpoint", "deployment", "api_key"))
+                enrichment = self.server.mock_voice_enrichment
+                if enrichment["state"] == "preparing" and time.monotonic() - self.server.mock_voice_transcription_started >= 1:
+                    note_id = enrichment["note_id"]
+                    if note_id in self.server.mock_voice_notes:
+                        self.server.mock_voice_enrichments[note_id] = {
+                            "title": "Sample voice note", "summary": "A sample summary for local development.",
+                            "model": config.get("voice_notes_llm_deployment", ""), "created_at": MOCK_NOW_EPOCH}
+                    enrichment["state"] = "ready"
+                pending = sorted((self.server.mock_voice_note_times[note_id], note_id,
+                                  "transcription" if note_id not in self.server.mock_voice_transcripts else "enrichment")
+                                 for note_id in self.server.mock_voice_notes
+                                 if note_id not in self.server.mock_voice_transcripts or
+                                 (llm_configured and note_id not in self.server.mock_voice_enrichments))
+                processing = {"state": "idle", "reason": "none", "service": "none"}
+                if job["state"] == "preparing" or enrichment["state"] == "preparing":
+                    processing["state"] = "running"
+                    processing["service"] = "transcription" if job["state"] == "preparing" else "enrichment"
+                elif config.get("voice_notes_auto_process", False) and pending:
+                    pending_service = pending[0][2]
+                    if pending_service == "transcription" and not configured:
+                        processing = {"state": "blocked", "reason": "configuration"}
+                    elif self.server.mock_voice_recording:
+                        processing = {"state": "waiting", "reason": "recording"}
+                    elif not self.server.mock_voice_resource_available:
+                        processing = {"state": "waiting", "reason": "update"}
+                    elif not self.server.mock_voice_online:
+                        processing = {"state": "waiting", "reason": "offline"}
+                    elif self.server.mock_voice_retry or self.server.mock_voice_cooldown:
+                        processing = {"state": "waiting", "reason": "retry"}
+                    else:
+                        if pending_service == "transcription":
+                            job = {"state": "preparing", "note_id": pending[0][1], "error": ""}
+                            self.server.mock_voice_transcription = job
+                            self.server.mock_voice_automatic_active = True
+                            self.server.mock_voice_chain = bool(llm_configured)
+                        else:
+                            enrichment = {"state": "preparing", "note_id": pending[0][1], "error": ""}
+                            self.server.mock_voice_enrichment = enrichment
+                            self.server.mock_voice_transcription_started = time.monotonic()
+                        processing["state"] = "running"
+                processing.setdefault("service", "transcription" if processing["state"] != "idle" else "none")
+                self._serve_json({"recording": {"state": "idle", "session_active": self.server.mock_voice_recording, "duration_ms": 0, "scenario": None, "error": ""},
+                                  "last_saved": {"id": ""}, "transcription": {**job, "retry_status": ""},
+                                  "processing": processing, "transcription_configured": bool(configured),
+                                  "enrichment": {**enrichment, "retry_status": ""}, "enrichment_configured": bool(llm_configured),
+                                  "backend": "sd_spi" if self._profile() == "reterminal-sticky-interactive" else "sdmmc",
+                                  "total_bytes": 4 * 1024 * 1024,
                                   "free_bytes": 3 * 1024 * 1024})
             elif path.endswith("/list"):
                 self._serve_json({"entries": [
-                    {"id": clip_id, "created_at": self.server.mock_voice_clip_times[clip_id],
+                    {"id": clip_id, "created_at": self.server.mock_voice_note_times[clip_id],
                      "size_bytes": len(data), "duration_ms": (len(data) - 44) // 32,
-                     "sample_rate": 16000, "channels": 1}
-                    for clip_id, data in self.server.mock_voice_clips.items()]})
+                     "sample_rate": 16000, "channels": 1,
+                     "has_transcript": clip_id in self.server.mock_voice_transcripts,
+                     "has_enrichment": clip_id in self.server.mock_voice_enrichments,
+                     "title": self.server.mock_voice_enrichments.get(clip_id, {}).get("title"),
+                     "enrichment_error": ""}
+                    for clip_id, data in self.server.mock_voice_notes.items()]})
+            elif path.endswith("/detail"):
+                clip_id = query.get("id", [""])[0]
+                if not re.fullmatch(r"[0-9a-f]{16}", clip_id):
+                    self._serve_json({"message": "Invalid note ID"}, 400)
+                elif clip_id not in self.server.mock_voice_notes:
+                    self._serve_json({"message": "Note not found"}, 404)
+                else:
+                    data = self.server.mock_voice_notes[clip_id]
+                    self._serve_json({"note": {"id": clip_id, "created_at": self.server.mock_voice_note_times[clip_id],
+                        "size_bytes": len(data), "duration_ms": (len(data) - 44) // 32,
+                        "sample_rate": 16000, "channels": 1},
+                        "transcript": self.server.mock_voice_transcripts.get(clip_id),
+                        "enrichment": self.server.mock_voice_enrichments.get(clip_id), "enrichment_error": ""})
             elif path.endswith("/file"):
                 clip_id = query.get("id", [""])[0]
                 if not re.fullmatch(r"[0-9a-f]{16}", clip_id):
-                    self._serve_json({"message": "Invalid clip ID"}, 400)
-                elif clip_id not in self.server.mock_voice_clips:
-                    self._serve_json({"message": "Clip not found"}, 404)
+                    self._serve_json({"message": "Invalid note ID"}, 400)
+                elif clip_id not in self.server.mock_voice_notes:
+                    self._serve_json({"message": "Note not found"}, 404)
                 else:
-                    data = self.server.mock_voice_clips[clip_id]
+                    data = self.server.mock_voice_notes[clip_id]
                     range_header = self.headers.get("Range")
                     headers = {"Accept-Ranges": "bytes", "X-Content-Type-Options": "nosniff"}
                     if "download" in query:
@@ -739,11 +918,34 @@ class PortalHandler(SimpleHTTPRequestHandler):
                     else:
                         self._serve_bytes(data, "audio/wav", 200, headers)
             else:
-                self._serve_json({"error": "Unknown voice clips action"}, 404)
+                self._serve_json({"error": "Unknown voice notes action"}, 404)
+        elif path == "/api/component/microphone/levels":
+            if self._profile() not in ("esp32-p4-lcd4b", "reterminal-sticky-interactive"):
+                self._serve_json({"error": "Microphone unavailable"}, 404)
+            elif not self.headers.get("X-Microphone-Test"):
+                self._serve_json({"error": "Browser request required"}, 403)
+            else:
+                state = query.get("state", ["normal"])[0]
+                gain = self.server.mock_config.get("current_microphone_gain_db",
+                                                  self.server.mock_config.get("microphone_gain_db", 0))
+                amplitude = 10 ** (gain / 20)
+                payload = {"available": state != "unavailable", "ota": state == "ota", "sampled": True,
+                           "in_use": state == "busy", "fresh": state not in ("stale", "unavailable", "ota"),
+                           "rms": min(32768, round(7500 * amplitude)),
+                           "peak": 32768 if state == "clipped" else min(32767, round(18000 * amplitude)),
+                           "input_full_scale": state == "clipped",
+                           "gain_clipped": state == "clipped" or 18000 * amplitude > 32767}
+                self._serve_bytes(json.dumps(payload).encode("utf-8"), "application/json",
+                                  headers={"Cache-Control": "no-store"})
+        elif path == "/api/component/microphone/stream":
+            self._serve_json({"error": "Live audio is unavailable in the development server"}, 503)
         elif path.startswith("/api/section/"):
             fragment = path[len("/api/section/"):]
-            if fragment == "voice-clips" and self._profile() != "reterminal-sticky-interactive":
-                self.send_error(404, "Voice clips unavailable")
+            if fragment == "microphone" and self._profile() not in ("esp32-p4-lcd4b", "reterminal-sticky-interactive"):
+                self.send_error(404, "Microphone unavailable")
+                return
+            if fragment in ("voice-notes", "voice-notes-settings") and not self._voice_notes_capable():
+                self.send_error(404, "Voice notes unavailable")
                 return
             if fragment == "bluetooth" and not self._bthome_capable():
                 self.send_error(404, "BTHome events unavailable")
@@ -757,7 +959,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             if fragment == "fonts" and not self._fonts_available():
                 self.send_error(404, "Fonts unavailable")
                 return
-            if fragment in ("alarm-schedule", "alarm-behavior") and self._profile() == "reterminal-e1003-frame":
+            if fragment in ("alarm-schedule", "alarm-behavior") and not self._alarm_capable():
                 self.send_error(404, "Alarm unavailable")
                 return
             if not all(c.isalnum() or c in "-_" for c in fragment) or not fragment:
@@ -772,7 +974,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 if frag.is_file():
                     html = render(frag, APP_WEB_DIR, "esp32-macropad", "ESP32 Macropad (Local Mock)",
                                   "dev-mock", self._profile() != "esp32-p4-lcd4b",
-                                  has_binding_help=False)
+                                  has_binding_help=False,
+                                  widget_flags=self._portal_flags(),
+                                  has_microphone_streaming=self._profile() in ("esp32-p4-lcd4b", "reterminal-sticky-interactive"))
                     self._serve_bytes(html.encode("utf-8"), "text/html; charset=utf-8")
                     return
             self.send_error(404, f"Fragment not found: {fragment}")
@@ -786,6 +990,47 @@ class PortalHandler(SimpleHTTPRequestHandler):
         query = parse_qs(parsed.query)
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length) if length else b""
+
+        if path in ("/api/component/voice-notes/process", "/api/component/voice-notes/retranscribe",
+                    "/api/component/voice-notes/regenerate"):
+            if not self._voice_notes_capable():
+                self._serve_json({"message": "Voice Notes unavailable"}, 404)
+                return
+            clip_id = query.get("id", [""])[0]
+            config = self.server.mock_config
+            if not re.fullmatch(r"[0-9a-f]{16}", clip_id):
+                self._serve_json({"message": "Invalid note ID"}, 400)
+            elif clip_id not in self.server.mock_voice_notes:
+                self._serve_json({"message": "Note not found"}, 404)
+            elif (self.server.mock_voice_transcription["state"] == "preparing" or
+                  self.server.mock_voice_enrichment["state"] == "preparing"):
+                self._serve_json({"message": "Device is busy"}, 409)
+            elif path.endswith("/retranscribe") and clip_id not in self.server.mock_voice_transcripts:
+                self._serve_json({"message": "Required saved result is missing"}, 409)
+            elif path.endswith("/regenerate") and (clip_id not in self.server.mock_voice_transcripts or
+                                                    clip_id not in self.server.mock_voice_enrichments):
+                self._serve_json({"message": "Required saved result is missing"}, 409)
+            elif path.endswith("/process") and clip_id in self.server.mock_voice_transcripts and clip_id in self.server.mock_voice_enrichments:
+                self._serve_json({"success": True, "note_id": clip_id, "state": "unchanged"})
+            elif self.server.mock_voice_cooldown:
+                self._serve_json({"message": "Rate limited. Please try again later."}, 429)
+            elif not all(config.get("voice_notes_" + ("llm_" if path.endswith("/regenerate") or
+                    (path.endswith("/process") and clip_id in self.server.mock_voice_transcripts) else "transcription_") + key)
+                    for key in ("endpoint", "deployment", "api_key")):
+                self._serve_json({"message": "Processing service is not configured"}, 400)
+            elif self.server.mock_voice_recording or not self.server.mock_voice_resource_available:
+                self._serve_json({"message": "Device is busy"}, 409)
+            elif not self.server.mock_voice_online:
+                self._serve_json({"message": "Wi-Fi disconnected"}, 503)
+            else:
+                if path.endswith("/regenerate") or (path.endswith("/process") and clip_id in self.server.mock_voice_transcripts):
+                    self.server.mock_voice_enrichment = {"state": "preparing", "note_id": clip_id, "error": ""}
+                else:
+                    self.server.mock_voice_transcription = {"state": "preparing", "note_id": clip_id, "error": ""}
+                    self.server.mock_voice_chain = path.endswith("/process")
+                self.server.mock_voice_transcription_started = time.monotonic()
+                self._serve_json({"success": True, "note_id": clip_id, "state": "accepted"}, 202)
+            return
 
         if path == "/api/mqtt/inspect":
             if not self._mqtt_capable():
@@ -897,7 +1142,12 @@ class PortalHandler(SimpleHTTPRequestHandler):
             try:
                 data = json.loads(body.decode("utf-8")) if body else {}
                 actions = data["actions"]
-                if not isinstance(actions, list) or len(actions) > 3 or not all(isinstance(action, dict) for action in actions):
+                if type(data.get("action_format_version")) is not int or data["action_format_version"] != 1:
+                    raise ValueError()
+                if (not isinstance(actions, list) or len(actions) > 3 or
+                    not all(isinstance(action, dict) and isinstance(action.get("op"), str) and
+                            action["op"] and isinstance(action.get("args"), dict) and "type" not in action
+                            for action in actions)):
                     raise ValueError()
             except (UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError, ValueError):
                 self._serve_json({"error": "Invalid boot actions"}, 400)
@@ -967,7 +1217,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             return
 
         if path.startswith("/api/component/alarms/") or path == "/__mock/alarm":
-            if self._profile() not in ("esp32-p4-lcd4b", "jc3248w535"):
+            if not self._alarm_capable():
                 self._serve_json({"error": "Alarm unavailable"}, 404)
                 return
             try:
@@ -981,25 +1231,27 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 if not path.endswith("/config"):
                     section = path.rsplit("/", 1)[1]
                     fields = {"enabled", "hour", "minute", "weekdays"} if section == "schedule" else {
-                        "lateness_minutes", "snooze_minutes", "auto_dismiss_minutes", "on_ring", "on_stop"}
+                        "action_format_version", "lateness_minutes", "snooze_minutes", "auto_dismiss_minutes", "on_ring", "on_stop"}
                     if set(data) != fields:
                         self._serve_json({"error": "Alarm section requires exactly its own fields"}, 400)
                         return
                     merged = json.loads(json.dumps(self.server.mock_alarms))
                     for key, value in data.items():
-                        if key == "lateness_minutes":
+                        if key in ("action_format_version", "lateness_minutes"):
                             merged[key] = value
                         else:
                             merged["1"][key] = value
                     data = merged
                 slot = data.get("1", {})
-                allowed = {action["type"] for action in self.server.pad_fixture["catalog"] if action["alarm_hook_allowed"]}
-                if (set(data) != {"1", "lateness_minutes"} or type(data.get("lateness_minutes")) is not int
+                catalog = self._device_info(include_catalog=True)["catalog"]
+                if (set(data) != {"1", "lateness_minutes", "action_format_version"}
+                    or type(data.get("action_format_version")) is not int or data["action_format_version"] != 1
+                    or type(data.get("lateness_minutes")) is not int
                     or not 0 <= data["lateness_minutes"] <= 10080 or type(slot.get("enabled")) is not bool
                         or any(type(slot.get(key)) is not int or not minimum <= slot[key] <= maximum for key, minimum, maximum in
                                (("hour", 0, 23), ("minute", 0, 59), ("weekdays", 0, 127), ("snooze_minutes", 1, 1440), ("auto_dismiss_minutes", 1, 1440)))
                         or any(not isinstance(slot.get(key), list) or len(slot[key]) > 3
-                               or any(not isinstance(action, dict) or action.get("type") not in allowed for action in slot[key]) for key in ("on_ring", "on_stop"))):
+                               or any(not valid_alarm_hook(action, catalog) for action in slot[key]) for key in ("on_ring", "on_stop"))):
                     self._serve_json({"error": "Invalid alarm config"}, 400)
                     return
                 if self.server.scenario == "save-error":
@@ -1166,6 +1418,46 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 if not isinstance(update, dict):
                     self._serve_json({"success": False, "message": "Configuration must be an object"}, 400)
                     return
+                try:
+                    parse_microphone_settings(update)
+                except ValueError:
+                    self._serve_json({"success": False, "message": "Invalid microphone settings"}, 400)
+                    return
+                voice_keys = tuple("voice_notes_" + service + "_" + field for service in ("transcription", "llm")
+                                   for field in ("endpoint", "api_key", "deployment"))
+                auto_key = "voice_notes_auto_process"
+                if auto_key in update:
+                    if not self._voice_notes_capable():
+                        update.pop(auto_key)
+                    elif type(update[auto_key]) is not bool:
+                        self._serve_json({"success": False, "message": "Invalid Voice Notes settings"}, 400)
+                        return
+                if any(key in update for key in voice_keys):
+                    if not self._voice_notes_capable():
+                        for key in voice_keys:
+                            update.pop(key, None)
+                    else:
+                        for key, limit in zip(voice_keys, (512, 256, 128) * 2):
+                            if key in update and (not isinstance(update[key], str) or
+                                    len(update[key].encode("utf-8")) >= limit or
+                                    "\0" in update[key] or
+                                    (not key.endswith("_endpoint") and any(c in update[key] for c in "\r\n"))):
+                                self._serve_json({"success": False, "message": "Invalid Voice Notes settings"}, 400)
+                                return
+                        for service in ("transcription", "llm"):
+                            endpoint_key = f"voice_notes_{service}_endpoint"
+                            key_key = f"voice_notes_{service}_api_key"
+                            endpoint = update.get(endpoint_key, "")
+                            if endpoint:
+                                parts = urlparse(endpoint)
+                                if (parts.scheme != "https" or not parts.netloc or parts.path not in ("", "/") or
+                                        parts.username or parts.password or parts.query or parts.fragment or
+                                        any(c.isspace() for c in endpoint)):
+                                    self._serve_json({"success": False, "message": "Invalid Voice Notes settings"}, 400)
+                                    return
+                                update[endpoint_key] = endpoint.rstrip("/") + "/"
+                            if not update.get(key_key):
+                                update.pop(key_key, None)
                 if "auto_shutdown_timeout_seconds" in update:
                     seconds = update["auto_shutdown_timeout_seconds"]
                     if isinstance(seconds, str) and re.fullmatch(r"[0-9]+", seconds):
@@ -1244,6 +1536,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 if "backlight_brightness" in update and "current_backlight_brightness" not in update:
                     self.server.mock_config["current_backlight_brightness"] = update["backlight_brightness"]
                 self.server.mock_config.update(update)
+                for field in ("microphone_gain_db", "microphone_reduce_rumble"):
+                    if field in update:
+                        self.server.mock_config["current_" + field] = update[field]
             except (UnicodeDecodeError, json.JSONDecodeError):
                 self.send_error(400, "Invalid JSON")
                 return
@@ -1275,6 +1570,23 @@ class PortalHandler(SimpleHTTPRequestHandler):
 
     def do_PUT(self):
         path = urlparse(self.path).path
+        if path == "/api/component/microphone/settings":
+            if self._profile() not in ("esp32-p4-lcd4b", "reterminal-sticky-interactive"):
+                self._serve_json({"success": False, "message": "Microphone unavailable"}, 404)
+                return
+            try:
+                data = parse_microphone_settings(json.loads(
+                    self.rfile.read(int(self.headers.get("Content-Length", "0")))))
+                if not any(field in data for field in ("microphone_gain_db", "microphone_reduce_rumble")):
+                    raise ValueError()
+            except ValueError:
+                self._serve_json({"success": False, "message": "Invalid microphone settings"}, 400)
+                return
+            for field in ("microphone_gain_db", "microphone_reduce_rumble"):
+                if field in data:
+                    self.server.mock_config["current_" + field] = data[field]
+            self._serve_json({"success": True})
+            return
         if path not in ("/api/component/display/brightness", "/api/component/display/screen", "/api/component/volume/level"):
             self.send_error(404, "Not found")
             return
@@ -1300,18 +1612,20 @@ class PortalHandler(SimpleHTTPRequestHandler):
 
     def do_DELETE(self):
         parsed = urlparse(self.path)
-        if parsed.path == "/api/component/voice-clips/delete":
-            if self._profile() != "reterminal-sticky-interactive":
-                self._serve_json({"error": "Voice clips unavailable"}, 404)
+        if parsed.path == "/api/component/voice-notes/delete":
+            if not self._voice_notes_capable():
+                self._serve_json({"error": "Voice notes unavailable"}, 404)
                 return
             clip_id = parse_qs(parsed.query).get("id", [""])[0]
             if not re.fullmatch(r"[0-9a-f]{16}", clip_id):
-                self._serve_json({"message": "Invalid clip ID"}, 400)
-            elif clip_id not in self.server.mock_voice_clips:
-                self._serve_json({"message": "Clip not found"}, 404)
+                self._serve_json({"message": "Invalid note ID"}, 400)
+            elif clip_id not in self.server.mock_voice_notes:
+                self._serve_json({"message": "Note not found"}, 404)
             else:
-                del self.server.mock_voice_clips[clip_id]
-                del self.server.mock_voice_clip_times[clip_id]
+                del self.server.mock_voice_notes[clip_id]
+                del self.server.mock_voice_note_times[clip_id]
+                self.server.mock_voice_transcripts.pop(clip_id, None)
+                self.server.mock_voice_enrichments.pop(clip_id, None)
                 self._serve_json({"success": True})
             return
         if parsed.path == "/api/mqtt/inspect":
@@ -1419,6 +1733,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             self._serve_json({"error": "Unknown mock profile"}, 400)
             return
         self.profile_cookie = "portal_mock_profile=" + profile + "; Path=/; SameSite=Lax"
+        profile = SD_PROFILE_BASES.get(profile, profile)
         shell = (APP_WEB_DIR / "shell.html").read_text(encoding="utf-8")
         replacements = {
             "{{PROJECT_DISPLAY_NAME}}": "ESP32 Macropad (Local Mock)",
@@ -1430,6 +1745,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
             "{{POWER_SAVINGS_SCRIPT}}":
                 '<script src="/portal_power_savings.js?v=dev-mock"></script>'
                 if profile == "reterminal-sticky-interactive" else "",
+            "{{LIVE_MICROPHONE_SCRIPT}}":
+                '<script src="/portal-live-microphone.js?v=dev-mock"></script>'
+                if profile in ("esp32-p4-lcd4b", "reterminal-sticky-interactive") else "",
         }
         for marker, value in replacements.items():
             shell = shell.replace(marker, value)
@@ -1444,9 +1762,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
     def _serve_production_bundle(self):
         self._serve_bundle("portal.js.bundle", "application/javascript; charset=utf-8")
 
-    def _serve_bundle(self, manifest, content_type):
-        files = []
-        enabled = True
+    def _portal_flags(self):
         flags = {"HAS_DISPLAY", "HAS_STORAGE_BROWSER", "HAS_SOUND_PLAYER", "HAS_NATIVE_EXTENSIONS", "HAS_MQTT"} if self._profile() in ("esp32-p4-lcd4b", "jc3248w535") else {"IS_EPAPER_FRAME", "HAS_MQTT"}
         if self._profile() == "esp32-p4-lcd4b":
             flags.add("HAS_HA_LIVE")
@@ -1456,13 +1772,42 @@ class PortalHandler(SimpleHTTPRequestHandler):
             flags = {"HAS_DISPLAY", "HAS_MQTT", "HAS_AUTO_SHUTDOWN"}
         if "HAS_DISPLAY" in flags:
             flags.add("HAS_FACE_WIDGET")
+            info = self._device_info()
+            if info.get("psram_size", 0) > 0:
+                flags.add("HAS_PSRAM")
+            flags.update(gate for gate in ("HAS_TOUCH", "HAS_USB_HID", "HAS_BLE_HID")
+                         if info.get(gate.lower()) is True)
         if self._profile() == "jc3248w535":
             flags.discard("HAS_SOUND_PLAYER")
+        return flags
+
+    def _serve_bundle(self, manifest, content_type):
+        files = []
+        enabled = True
+        flags = self._portal_flags()
+
+        def condition(expression):
+            expression = re.sub(r"\b[A-Z_][A-Z0-9_]*\b",
+                                lambda match: str(match[0] in flags), expression)
+            expression = expression.replace("&&", " and ").replace("||", " or ").replace("!", " not ")
+
+            def evaluate(node):
+                if isinstance(node, ast.Constant):
+                    return bool(node.value)
+                if isinstance(node, ast.BoolOp) and isinstance(node.op, (ast.And, ast.Or)):
+                    values = [evaluate(value) for value in node.values]
+                    return all(values) if isinstance(node.op, ast.And) else any(values)
+                if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+                    return not evaluate(node.operand)
+                raise ValueError("Invalid mock portal gate")
+
+            return evaluate(ast.parse(expression.strip(), mode="eval").body)
+
         for line in expand_bundle(APP_WEB_DIR / manifest).splitlines():
             line = line.strip()
             if line.startswith("# [chunk:"):
-                chunk = line.removeprefix("# [chunk:").removesuffix("]").split()
-                enabled = all(flag in flags for flag in chunk[1:])
+                chunk = line.removeprefix("# [chunk:").removesuffix("]").split(maxsplit=1)
+                enabled = condition(chunk[1]) if len(chunk) > 1 else True
             elif enabled and line and not line.startswith("#"):
                 source = APP_WEB_DIR / line
                 files.append(source if source.is_file() else EPAPER_WEB_DIR / line)
@@ -1505,12 +1850,15 @@ class PortalHandler(SimpleHTTPRequestHandler):
 
     def _navigation(self, profile):
         nav = json.loads((MOCK_DIR / "nav.json").read_text(encoding="utf-8"))
-        if profile in ("esp32-p4-lcd4b", "jc3248w535"):
+        if self._alarm_capable():
             actions_index = next(index for index, category in enumerate(nav["categories"]) if category["id"] == "actions")
             nav["categories"].insert(actions_index + 1, {"id": "alarm", "display_name": "Alarm", "icon": "\u23f0", "items": [
                 {"id": "alarm-schedule", "display_name": "Schedule", "portal_script": "/portal_alarms.js"},
                 {"id": "alarm-behavior", "display_name": "Behavior", "portal_script": "/portal_alarms.js"}]})
         for category in nav["categories"]:
+            if category["id"] == "audio" and profile in ("esp32-p4-lcd4b", "reterminal-sticky-interactive"):
+                category["items"].append({"id": "microphone", "display_name": "Microphone",
+                                          "portal_script": "/portal-microphone.js"})
             if category["id"] == "pads":
                 if profile in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
                     next(item for item in category["items"] if item["id"] == "pad-editor")["portal_script"] = "/portal-external-data.js"
@@ -1521,9 +1869,6 @@ class PortalHandler(SimpleHTTPRequestHandler):
             if category["id"] == "connectivity" and profile == "reterminal-sticky-interactive":
                 category["items"].append({"id": "bluetooth", "display_name": "Bluetooth",
                                           "portal_script": "/portal-bluetooth.js"})
-            if category["id"] == "audio" and profile == "reterminal-sticky-interactive":
-                category["items"].append({"id": "voice-clips", "display_name": "Voice clips",
-                                          "portal_script": "/portal-voice-clips.js"})
             if category["id"] == "display" and profile == "crowpanel-4.2-interactive":
                 category["items"].append({"id": "epaper-refresh", "display_name": "E-paper Presentation",
                                           "portal_script": "/portal-epaper-refresh.js"})
@@ -1542,6 +1887,11 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 if item["id"] == "ble":
                     item["id"] = "hid"
                     item["display_name"] = "Keyboard, Mouse & Gamepad"
+        if self._voice_notes_capable():
+            audio_index = next(index for index, category in enumerate(nav["categories"]) if category["id"] == "audio")
+            nav["categories"].insert(audio_index, {"id": "voice-notes", "display_name": "Voice Notes", "icon": "voice",
+                "items": [{"id": "voice-notes", "display_name": "Notes", "portal_script": "/portal-voice-notes.js"},
+                          {"id": "voice-notes-settings", "display_name": "Settings", "portal_script": "/portal-voice-notes.js"}]})
         if profile in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive", "reterminal-sticky-interactive"):
             nav["primary"] = {"fragment": "pad-editor", "label": "Pad Editor", "icon": ""}
             nav["categories"] = [category for category in nav["categories"] if category["id"] != "sensors"]
@@ -1571,7 +1921,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             "has_audio_amplifier_mute": self._profile() == "esp32-p4-lcd4b",
             "has_touch": True, "has_usb_hid": True, "has_ttf_fonts": self._fonts_available()}
         if self._profile() in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive", "reterminal-sticky-interactive"):
-            info.update(device_class="Macropad", board=self._profile(), has_display=True,
+            info.update(device_class="Macropad", board=self._selected_profile(), has_display=True,
                         has_backlight=True, has_audio=True, has_sound_player=True, has_alarm=True,
                         has_native_extensions=True, has_camera=False, has_image_fetch=True,
                         has_image_library=True, has_ble=False, has_ble_hid=False,
@@ -1583,29 +1933,51 @@ class PortalHandler(SimpleHTTPRequestHandler):
                                            for page in range(16)] + [{"id": "info", "name": "Device Info"}])
             if self._profile() == "jc3248w535":
                 info.update(chip_model="ESP32-S3", has_audio=False, has_sound_player=False,
-                            has_image_fetch=False, has_image_library=False,
+                            has_alarm=False, has_image_fetch=False, has_image_library=False,
                             display_coord_width=480, display_coord_height=320)
             if self._profile() == "crowpanel-4.2-interactive":
                 info.update(chip_model="ESP32-S3", has_touch=False, has_audio=False, has_sound_player=False,
-                            has_backlight=False, has_alarm=False, has_native_extensions=False,
+                            has_backlight=False, has_usb_hid=False, has_native_extensions=False,
                             has_image_fetch=False, has_image_library=False,
                             display_coord_width=400, display_coord_height=300)
             if self._profile() == "reterminal-sticky-interactive":
                 info.update(chip_model="ESP32-S3", has_ble=True, has_ble_hid=False, has_usb_hid=False,
-                            has_audio=False, has_sound_player=False, has_backlight=False, has_alarm=False,
+                            has_audio=True, has_sound_player=False, has_backlight=False,
                             has_native_extensions=False, has_image_fetch=False, has_image_library=False,
                             display_coord_width=384, display_coord_height=472)
             if include_catalog:
-                info["catalog"] = copy.deepcopy(self.server.pad_fixture["catalog"])
-                if self._profile() == "reterminal-sticky-interactive":
-                    info["catalog"].append({"type": "voice_clip", "group": "Audio", "label": "Voice clip",
-                        "editor_fields": [{"name": "command", "label": "Command", "type": "select",
-                                           "default": "start", "options": [
-                                               {"id": command, "label": command.capitalize()}
-                                               for command in ("start", "pause", "resume", "save", "discard")]}]})
+                enabled = {
+                    "alarm": info["has_alarm"], "alarm_tone": info["has_alarm"] and info["has_audio"],
+                    "alarm_mp3": info["has_alarm"] and info["has_sound_player"],
+                    "volume": info["has_audio"], "save_volume": info["has_audio"],
+                    "sound_alert": info["has_audio"], "music": info["has_sound_player"],
+                    "key": info["has_usb_hid"] or info["has_ble_hid"],
+                    "mouse_button": info["has_usb_hid"] or info["has_ble_hid"],
+                    "gamepad": info["has_usb_hid"] or info["has_ble_hid"],
+                    "ble_pair": info["has_ble_hid"], "bthome": info["has_ble"] or info["has_ble_hid"],
+                    "image_next": info["has_image_library"], "image_previous": info["has_image_library"],
+                    "camera_capture": info["has_camera"],
+                    "display_refresh": self._profile() in ("crowpanel-4.2-interactive",
+                                                             "reterminal-sticky-interactive"),
+                }
+                info["catalog"] = [
+                    copy.deepcopy(action) for action in self.server.pad_fixture["catalog"]
+                    if enabled.get(action["type"], self._voice_notes_capable()
+                                   if action["type"].startswith("vnote_") else True)
+                ]
+                if not info["has_sound_player"]:
+                    for action in info["catalog"]:
+                        if action["type"] == "sound_alert":
+                            action["operations"] = [op for op in action["operations"]
+                                                    if op["id"] != "audio.alert.mp3"]
                 info["widget_catalog"] = [
                     widget for widget in self.server.pad_fixture["widget_catalog"]
                     if widget.get("type") != "slider" or info["has_touch"]
+                ]
+                info["list_sources"] = [
+                    source for source in self.server.pad_fixture["list_sources"]
+                    if source["token"] != "[voice_note:recent_notes]"
+                    or self._voice_notes_capable()
                 ]
         return info
 
@@ -1765,7 +2137,8 @@ def main():
     }
     print(f"Portal dev server running at http://localhost:{args.port}")
     print(f"Serving production assets from: {APP_WEB_DIR}")
-    fragment = "screensaver" if args.profile == "jc3248w535" else "pad-editor" if args.profile == "esp32-p4-lcd4b" else "epaper-image"
+    base_profile = SD_PROFILE_BASES.get(args.profile, args.profile)
+    fragment = "screensaver" if base_profile == "jc3248w535" else "pad-editor" if base_profile == "esp32-p4-lcd4b" else "epaper-image"
     print(f"Example: http://localhost:{args.port}/?profile={args.profile}&fragment={fragment}")
     print("Press Ctrl+C to stop.\n")
 

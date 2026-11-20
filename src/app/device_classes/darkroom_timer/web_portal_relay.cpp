@@ -25,15 +25,15 @@
 
 static void handleGetRelayConfig(AsyncWebServerRequest* request) {
     if (!portal_auth_gate(request)) return;
-    String output;
+    std::string output;
     if (relay_get_config_json(output)) {
-        request->send(200, "application/json", output);
+        request->send(200, "application/json", output.c_str());
     } else {
-        request->send(500, "application/json", "{\"error\":\"failed to serialize\"}");
+        request->send(409, "application/json", "{\"error\":\"Relay configuration is unavailable or incompatible; recreate it\"}");
     }
 }
 
-// Maximum accepted relay-config body. 4 relay slots of ShellyPayload plus JSON
+// Maximum accepted relay-config body. Four relay slots plus JSON
 // overhead stays well under this; anything larger is rejected.
 #define RELAY_POST_MAX_BYTES 4096
 
@@ -81,8 +81,8 @@ static void handlePutRelayConfigBody(AsyncWebServerRequest* request, uint8_t* da
 
     state->buf[state->received] = '\0';
     bool ok = relay_save_config_from_json(state->buf, state->received);
-    request->send(ok ? 200 : 500, "application/json",
-                  ok ? "{\"ok\":true}" : "{\"error\":\"save failed\"}");
+    request->send(ok ? 200 : 400, "application/json",
+                  ok ? "{\"ok\":true}" : "{\"error\":\"Invalid relay configuration or save failed; existing configuration was retained\"}");
 }
 
 static void relay_register(AsyncWebServer* server) {

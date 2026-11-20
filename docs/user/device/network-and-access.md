@@ -69,31 +69,31 @@ restore it during Offline boot after an initial network synchronization;
 without RTC support, this boot needs network synchronization first.
 See [time without Wi-Fi](time.md#time-without-wi-fi).
 
-Before rebooting, configure a local pad or physical-button **Device command >
-Enable AP** action so you can reopen the portal. Use the existing physical
+Before rebooting, configure a local pad or physical-button **Set access point**
+action with **Access point** enabled so you can reopen the portal. Use the existing physical
 recovery procedure if no such action is available. Configure initial actions
 over station Wi-Fi or preload configuration; the first-time AP wizard remains
 limited and does not offer full pad authoring without a Wi-Fi network.
 
 Saved Wi-Fi credentials are optional in Offline mode. Keep them if you want
-**Connect to Wi-Fi** to use that network later. Configure an **AP password** under
+**Set Wi-Fi station mode** to use that network later. Configure an **AP password** under
 **Device > WiFi** if you want to protect direct AP access. See the
 [BTHome remote workflow](../integrations/home-assistant.md#use-bthome-with-offline-boot)
 for controls that need no device Wi-Fi connection.
 
 ## Enable network access from an action
 
-Use **Device > Device command** in a pad or physical-button action list:
+Choose these operations in a pad or physical-button action list:
 
-* **Connect to Wi-Fi** turns Wi-Fi on, tries saved credentials, and replaces an active AP. The device
+* **Set Wi-Fi station mode**, enabled, turns Wi-Fi on, tries saved credentials, and replaces an active AP. The device
   remains interactive while connecting; failure turns Wi-Fi off.
-* **Disconnect from Wi-Fi** suppresses reconnection and turns station Wi-Fi off. It
+* **Set Wi-Fi station mode**, disabled, suppresses reconnection and turns station Wi-Fi off. It
   does not stop an AP.
 * **Turn off Wi-Fi** stops network and AP access and suppresses reconnection,
   regardless of which is active. Supported Bluetooth controls remain available.
-* **Enable AP** replaces station Wi-Fi with the device's AP and captive DNS,
+* **Set access point**, enabled, replaces station Wi-Fi with the device's AP and captive DNS,
   keeps the current pad active, and exposes the normal full portal.
-* **Disable AP** stops AP access without reconnecting station Wi-Fi.
+* **Set access point**, disabled, stops AP access without reconnecting station Wi-Fi.
 * **Restart into AP** reboots into restricted configuration/recovery, rather
   than keeping the interactive runtime.
 

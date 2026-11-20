@@ -73,7 +73,7 @@ bool alarm_config_save_raw(const uint8_t* data, size_t length);
 enum class AlarmConfigSection { Schedule, Behavior };
 bool alarm_config_save_section_raw(const uint8_t* data, size_t length, AlarmConfigSection section);
 const char* alarm_last_error();
-void alarm_config_to_json(JsonObject root);
+bool alarm_config_to_json(JsonObject root);
 void alarm_status_to_json(JsonObject root);
 AlarmSnapshot alarm_snapshot();
 void alarm_command_report_error(const char* message);

@@ -90,6 +90,7 @@
 .expression-builder-format-toggle input { flex: 0 0 auto; accent-color: var(--portal-primary); }
 .expression-builder-format-control :is(input, select) { min-width: 0; }
 .expression-builder-format-control :disabled { opacity: .65; }
+.expression-builder-format-hint { grid-column: 1 / -1; color: var(--portal-text-muted); }
 .expression-builder-generated { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 6px 10px; padding: 10px 12px; border: 1px solid var(--portal-docs-border); border-radius: 6px; background: var(--portal-docs-code-bg); }
 .expression-builder-generated[hidden] { display: none; }
 .expression-builder-generated > .binding-builder-code-label,

@@ -16,6 +16,11 @@ function stopHealthPolling() {
     healthPollTimer = null;
 }
 
+function resumeHealthPolling() {
+    healthPollingStopped = false;
+    initHealthWidget();
+}
+
 // Most recent /api/health snapshot, updated by every successful poll inside
 // updateHealth(). Other portal fragments (welcome, version-info) read this
 // instead of issuing their own /api/health requests — see fetchHealthOnce().
@@ -38,6 +43,7 @@ function getLatestHealth() {
  * their own /api/health request during portal boot.
  */
 function fetchHealthOnce(forceRefresh) {
+    if (healthPollingStopped) return Promise.resolve(latestHealth);
     if (healthFetchInflight) return healthFetchInflight;
     if (!forceRefresh && latestHealth) return Promise.resolve(latestHealth);
     healthFetchInflight = fetch(API_HEALTH)
@@ -177,6 +183,7 @@ function healthReplaceArray(dst, src) {
 }
 
 async function updateHealthHistory({ hasPsram = null } = {}) {
+    if (healthPollingStopped) return;
     if (!healthDeviceHistoryAvailable) return;
     if (!healthExpanded) return;
 
@@ -550,6 +557,7 @@ function healthIntegerValue(value) {
 }
 
 async function updateHealth() {
+    if (healthPollingStopped) return;
     try {
         const health = await fetchHealthOnce(true);
         if (!health) return;
@@ -596,7 +604,7 @@ async function updateHealth() {
         renderHealth(health);
         renderSensorsSection(health);
         renderHidSection(health);
-        if (healthExpanded) {
+        if (healthExpanded && !healthPollingStopped) {
             await updateHealthHistory({ hasPsram });
         }
     } catch (error) {

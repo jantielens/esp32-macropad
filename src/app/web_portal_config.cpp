@@ -5,8 +5,13 @@
 #include "portal_idle.h"
 #include "ota_activity.h"
 #include "reboot_service.h"
-#if HAS_VOICE_CLIPS
-#include "voice_clips.h"
+#if HAS_VOICE_NOTES
+#include "voice_notes.h"
+#include "voice_notes_processing.h"
+#include <esp_heap_caps.h>
+#include <memory>
+#include <new>
+#include <utility>
 #endif
 
 #include "board_config.h"
@@ -31,6 +36,7 @@
 #include "device_telemetry.h"
 #include "log_manager.h"
 #include "psram_json_allocator.h"
+#include "json_key_validation.h"
 #include "web_portal_json.h"
 #include "web_mcp.h"
 #include "ha_live.h"
@@ -51,6 +57,10 @@
 #if HAS_AUDIO
 #include "audio.h"
 #endif
+#if HAS_AUDIO_INPUT
+#include "audio_input.h"
+#include "microphone_config_json.h"
+#endif
 
 #include <ArduinoJson.h>
 #include <WiFi.h>
@@ -58,6 +68,7 @@
 
 #include <esp_heap_caps.h>
 #include <errno.h>
+#include <memory>
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -184,6 +195,13 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["ap_password"] = current_config->ap_password;
 				(*doc)["device_name"] = current_config->device_name;
 				(*doc)["timezone"] = current_config->timezone;
+#if HAS_AUDIO_INPUT
+				(*doc)["microphone_gain_db"] = current_config->microphone_gain_db;
+				(*doc)["microphone_reduce_rumble"] = current_config->microphone_reduce_rumble;
+				const auto microphone_current = audio_input_get_processing();
+				(*doc)["current_microphone_gain_db"] = microphone_current.gain_db;
+				(*doc)["current_microphone_reduce_rumble"] = microphone_current.reduce_rumble;
+#endif
 
 				// Sanitized name for display
 				char sanitized[CONFIG_DEVICE_NAME_MAX_LEN];
@@ -208,6 +226,17 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["ha_url"] = current_config->ha_url;
 				(*doc)["ha_token"] = "";
 				(*doc)["ha_token_set"] = (strlen(current_config->ha_token) > 0);
+#if HAS_VOICE_NOTES
+				(*doc)["voice_notes_transcription_endpoint"] = current_config->voice_notes.transcription.endpoint;
+				(*doc)["voice_notes_transcription_api_key"] = "";
+				(*doc)["voice_notes_transcription_api_key_set"] = current_config->voice_notes.transcription.api_key[0] != '\0';
+				(*doc)["voice_notes_transcription_deployment"] = current_config->voice_notes.transcription.deployment;
+				(*doc)["voice_notes_llm_endpoint"] = current_config->voice_notes.llm.endpoint;
+				(*doc)["voice_notes_llm_api_key"] = "";
+				(*doc)["voice_notes_llm_api_key_set"] = current_config->voice_notes.llm.api_key[0] != '\0';
+				(*doc)["voice_notes_llm_deployment"] = current_config->voice_notes.llm.deployment;
+				(*doc)["voice_notes_auto_process"] = current_config->voice_notes.auto_process;
+#endif
 
 #if HAS_EXTERNAL_DATA
 				external_data_write_status((*doc)["external_data"].to<JsonArray>(), current_config->external_data);
@@ -357,148 +386,89 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 		web_portal_send_json_chunked(request, doc, 200, &timing);
 }
 
-void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-		if (!portal_auth_gate(request)) return;
+static void process_config_update(AsyncWebServerRequest* request, DeviceConfig* current_config, JsonDocument& doc,
+                                  bool reboot_after_save) {
+#if HAS_AUDIO_INPUT
+		const int8_t previous_mic_gain = current_config->microphone_gain_db;
+		const bool previous_mic_rumble = current_config->microphone_reduce_rumble;
+		const bool microphone_update = doc.containsKey("microphone_gain_db") ||
+				doc.containsKey("microphone_reduce_rumble");
+		int8_t mic_gain = previous_mic_gain;
+		bool mic_rumble = previous_mic_rumble;
+		if (!microphone_parse_settings(doc.as<JsonObjectConst>(), &mic_gain, &mic_rumble)) {
+				request->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid microphone settings\"}");
 
-		DeviceConfig *current_config = web_portal_get_current_config();
-		if (!current_config) {
-				request->send(500, "application/json", "{\"success\":false,\"message\":\"Config not initialized\"}");
 				return;
 		}
+#endif
 
-		// Accumulate the full body (chunk-safe) then parse once.
-		if (index == 0) {
-				// If a previous upload got stuck, reset it.
-				const uint32_t now = millis();
-				portENTER_CRITICAL(&g_config_post_mux);
-				const bool stale = g_config_post.in_progress && g_config_post.started_ms && (now - g_config_post.started_ms > WEB_PORTAL_CONFIG_BODY_TIMEOUT_MS);
-				portEXIT_CRITICAL(&g_config_post_mux);
-				if (stale) {
-						LOGW("Portal", "Config upload timed out; resetting state");
-						portENTER_CRITICAL(&g_config_post_mux);
-						config_post_reset();
-						portEXIT_CRITICAL(&g_config_post_mux);
-				}
+#if HAS_VOICE_NOTES
+		struct VoiceNotesConfigUpdate {
+				VoiceNotesConfig previous;
+				VoiceNotesConfig candidate;
+		};
+		const bool voice_notes_update = doc.containsKey("voice_notes_transcription_endpoint") ||
+				doc.containsKey("voice_notes_transcription_api_key") || doc.containsKey("voice_notes_transcription_deployment") ||
+				doc.containsKey("voice_notes_llm_endpoint") || doc.containsKey("voice_notes_llm_api_key") ||
+				doc.containsKey("voice_notes_llm_deployment") || doc.containsKey("voice_notes_auto_process");
+		std::unique_ptr<VoiceNotesConfigUpdate, decltype(&free)> voice_notes_candidate(nullptr, &free);
+		if (voice_notes_update) {
+				voice_notes_candidate.reset(static_cast<VoiceNotesConfigUpdate*>(
+						heap_caps_malloc(sizeof(VoiceNotesConfigUpdate), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)));
+				if (!voice_notes_candidate) {
+						request->send(503, "application/json", "{\"success\":false,\"message\":\"Voice Notes settings memory unavailable\"}");
 
-				portENTER_CRITICAL(&g_config_post_mux);
-				if (g_config_post.in_progress) {
-						portEXIT_CRITICAL(&g_config_post_mux);
-						request->send(409, "application/json", "{\"success\":false,\"message\":\"Config update already in progress\"}");
 						return;
 				}
-				g_config_post.in_progress = true;
-				g_config_post.started_ms = now;
-				g_config_post.total = total;
-				g_config_post.received = 0;
-				g_config_post.buf = nullptr;
-				portal_idle_set_config_upload_in_progress(true);
-				portEXIT_CRITICAL(&g_config_post_mux);
+				new (voice_notes_candidate.get()) VoiceNotesConfigUpdate{};
+				voice_notes_candidate->previous = current_config->voice_notes;
+				voice_notes_candidate->candidate = voice_notes_candidate->previous;
+				auto& candidate = voice_notes_candidate->candidate;
+				bool valid = true;
+				if (doc.containsKey("voice_notes_auto_process")) {
+						if (!doc["voice_notes_auto_process"].is<bool>()) valid = false;
+						else candidate.auto_process = doc["voice_notes_auto_process"].as<bool>();
+				}
+				auto update_service = [&](VoiceNotesServiceConfig& service, const char* endpoint,
+						const char* deployment, const char* key) {
+						if (doc.containsKey(endpoint)) {
+								JsonString value = doc[endpoint].as<JsonString>();
+								if (!doc[endpoint].is<const char*>() || !value.c_str() ||
+										strlen(value.c_str()) != value.size() ||
+										!voice_notes_normalize_endpoint(value.c_str(), service.endpoint, sizeof(service.endpoint)))
+										valid = false;
+						}
+						for (const auto& field : {std::pair<const char*, bool>{deployment, false},
+								 std::pair<const char*, bool>{key, true}}) {
+								if (!doc.containsKey(field.first)) continue;
+								const JsonVariantConst input = doc[field.first];
+								JsonString value = input.as<JsonString>();
+								char* target = field.second ? service.api_key : service.deployment;
+								const size_t size = field.second ? sizeof(service.api_key) : sizeof(service.deployment);
+								if (!input.is<const char*>() || !value.c_str() ||
+										strlen(value.c_str()) != value.size() || value.size() >= size ||
+										strpbrk(value.c_str(), "\r\n")) valid = false;
+								else if (!field.second || value.size()) strlcpy(target, value.c_str(), size);
+						}
+				};
+				update_service(candidate.transcription, "voice_notes_transcription_endpoint",
+						"voice_notes_transcription_deployment", "voice_notes_transcription_api_key");
+				update_service(candidate.llm, "voice_notes_llm_endpoint",
+						"voice_notes_llm_deployment", "voice_notes_llm_api_key");
+				if (!valid) {
+						request->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid Voice Notes settings\"}");
 
-				if (total == 0 || total > WEB_PORTAL_CONFIG_MAX_JSON_BYTES) {
-						portENTER_CRITICAL(&g_config_post_mux);
-						config_post_reset();
-						portEXIT_CRITICAL(&g_config_post_mux);
-						request->send(413, "application/json", "{\"success\":false,\"message\":\"JSON body too large\"}");
 						return;
 				}
-
-				uint8_t* buf = nullptr;
-				if (psramFound()) {
-						buf = (uint8_t*)heap_caps_malloc(total + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-				}
-				if (!buf) {
-						buf = (uint8_t*)heap_caps_malloc(total + 1, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-				}
-				if (!buf) {
-						portENTER_CRITICAL(&g_config_post_mux);
-						config_post_reset();
-						portEXIT_CRITICAL(&g_config_post_mux);
-						request->send(503, "application/json", "{\"success\":false,\"message\":\"Out of memory\"}");
-						return;
-				}
-
-				portENTER_CRITICAL(&g_config_post_mux);
-				g_config_post.buf = buf;
-				portEXIT_CRITICAL(&g_config_post_mux);
 		}
-
-		// Copy this chunk.
-		portENTER_CRITICAL(&g_config_post_mux);
-		const bool ok = g_config_post.in_progress && g_config_post.buf && g_config_post.total == total && (index + len) <= total;
-		uint8_t* dst = g_config_post.buf;
-		portEXIT_CRITICAL(&g_config_post_mux);
-
-		if (!ok) {
-				request->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid upload state\"}");
-				portENTER_CRITICAL(&g_config_post_mux);
-				config_post_reset();
-				portEXIT_CRITICAL(&g_config_post_mux);
-				return;
-		}
-
-		memcpy(dst + index, data, len);
-
-		portENTER_CRITICAL(&g_config_post_mux);
-		const size_t new_received = index + len;
-		if (new_received > g_config_post.received) {
-				g_config_post.received = new_received;
-		}
-		const bool done = (g_config_post.received >= g_config_post.total);
-		portEXIT_CRITICAL(&g_config_post_mux);
-
-		if (!done) {
-				// More chunks to come.
-				return;
-		}
-
-		if (!ota_activity_try_begin_config_write()) {
-				LOGW("Portal", "Config update rejected: update or network transition is active");
-				request->send(409, "application/json", "{\"success\":false,\"message\":\"Update or network transition in progress\"}");
-				portENTER_CRITICAL(&g_config_post_mux);
-				config_post_reset();
-				portEXIT_CRITICAL(&g_config_post_mux);
-				return;
-		}
-		struct ConfigUpdateGuard {
-				~ConfigUpdateGuard() { ota_activity_finish_config_write(); }
-		} config_update_guard;
-
-		// Finalize buffer and parse.
-		uint8_t* body = nullptr;
-		size_t body_len = 0;
-		portENTER_CRITICAL(&g_config_post_mux);
-		body = g_config_post.buf;
-		body_len = g_config_post.total;
-		if (body) body[body_len] = 0;
-		portEXIT_CRITICAL(&g_config_post_mux);
-
-		BasicJsonDocument<PsramJsonAllocator> doc(HAS_DISPLAY ? 6144 : 2560);
-		DeserializationError error = deserializeJson(doc, body, body_len);
-
-		if (error) {
-				LOGE("Portal", "JSON parse error: %s", error.c_str());
-				if (error == DeserializationError::NoMemory) {
-						request->send(413, "application/json", "{\"success\":false,\"message\":\"JSON body too large\"}");
-						portENTER_CRITICAL(&g_config_post_mux);
-						config_post_reset();
-						portEXIT_CRITICAL(&g_config_post_mux);
-						return;
-				}
-				request->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid JSON\"}");
-				portENTER_CRITICAL(&g_config_post_mux);
-				config_post_reset();
-				portEXIT_CRITICAL(&g_config_post_mux);
-				return;
-		}
+#endif
 
 		#if IS_EPAPER_FRAME
 		if (doc.containsKey("operating_mode") &&
 				strcasecmp(doc["operating_mode"] | "", "offline") == 0) {
 				request->send(400, "application/json",
 						"{\"success\":false,\"message\":\"Offline operating mode is unavailable on E-Paper Frame devices\"}");
-				portENTER_CRITICAL(&g_config_post_mux);
-				config_post_reset();
-				portEXIT_CRITICAL(&g_config_post_mux);
+
 				return;
 		}
 		#endif
@@ -511,7 +481,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				 auto_shutdown_candidate > UINT16_MAX)) {
 				request->send(400, "application/json",
 						"{\"success\":false,\"message\":\"Auto-shutdown timeout must be an integer from 0 to 65535 seconds\"}");
-				portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+
 				return;
 		}
 #endif
@@ -543,7 +513,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				String response_body;
 				serializeJson(response, response_body);
 				request->send(400, "application/json", response_body);
-				portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+
 				return;
 		}
 
@@ -553,13 +523,13 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				void* memory = heap_caps_malloc(sizeof(ExternalDataConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 				if (!memory) {
 						request->send(503, "application/json", "{\"success\":false,\"message\":\"External data configuration allocation failed\"}");
-						portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+
 						return;
 				}
 				external_candidate.reset(new (memory) ExternalDataConfig{});
 				if (!external_data_parse_config(doc["external_data"], *external_candidate)) {
 						request->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid external data sources\"}");
-						portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+
 						return;
 				}
 		}
@@ -594,9 +564,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		if (!wifi_setup_fields_valid) {
 				request->send(400, "application/json",
 						"{\"success\":false,\"message\":\"Wi-Fi fallback must be ap or offline; AP password must be empty or 8-63 printable ASCII characters\"}");
-				portENTER_CRITICAL(&g_config_post_mux);
-				config_post_reset();
-				portEXIT_CRITICAL(&g_config_post_mux);
+
 				return;
 		}
 
@@ -635,9 +603,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		if (!boot_appearance_valid) {
 				request->send(400, "application/json",
 						"{\"success\":false,\"message\":\"Invalid boot appearance settings\"}");
-				portENTER_CRITICAL(&g_config_post_mux);
-				config_post_reset();
-				portEXIT_CRITICAL(&g_config_post_mux);
+
 				return;
 		}
 		#endif
@@ -652,9 +618,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				power_config_parse_power_mode(current_config) != PowerMode::Offline);
 		if (web_portal_is_recovery_ap_active() && !first_boot && (doc.containsKey("basic_auth_enabled") || doc.containsKey("basic_auth_username") || doc.containsKey("basic_auth_password"))) {
 				request->send(403, "application/json", "{\"success\":false,\"message\":\"Basic Auth settings cannot be changed in recovery AP mode\"}");
-				portENTER_CRITICAL(&g_config_post_mux);
-				config_post_reset();
-				portEXIT_CRITICAL(&g_config_post_mux);
+
 				return;
 		}
 
@@ -679,9 +643,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 						String response_body;
 						serializeJson(response, response_body);
 						request->send(400, "application/json", response_body);
-						portENTER_CRITICAL(&g_config_post_mux);
-						config_post_reset();
-						portEXIT_CRITICAL(&g_config_post_mux);
+
 						return;
 				}
 		}
@@ -700,7 +662,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				}
 				if (magnitude > EPAPER_VCOM_MAX_MV) {
 						request->send(400, "application/json", "{\"success\":false,\"message\":\"epaper_vcom_mv must be an integer magnitude from 0 to 5000; 0 uses the board default\"}");
-						portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+
 						return;
 				}
 				epaper_vcom_mv = uint16_t(magnitude);
@@ -724,9 +686,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				}
 				if (!valid || audio_wake_delay_ms < 0 || audio_wake_delay_ms > AUDIO_WAKE_DELAY_MAX_MS) {
 						request->send(400, "application/json", "{\"success\":false,\"message\":\"Amplifier wake delay must be an integer from 0 to 1000 ms\"}");
-						portENTER_CRITICAL(&g_config_post_mux);
-						config_post_reset();
-						portEXIT_CRITICAL(&g_config_post_mux);
+
 						return;
 				}
 		}
@@ -742,9 +702,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 						request->send(busy_change ? 409 : 400, "application/json", busy_change ?
 								"{\"success\":false,\"message\":\"Keyboard is busy; try again when the macro finishes\"}" :
 								"{\"success\":false,\"message\":\"Keyboard transport must be none or an available usb or ble backend\"}");
-						portENTER_CRITICAL(&g_config_post_mux);
-						config_post_reset();
-						portEXIT_CRITICAL(&g_config_post_mux);
+
 						return;
 				}
 		}
@@ -753,9 +711,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		strlcpy(previous_timezone, current_config->timezone, sizeof(previous_timezone));
 		if (doc.containsKey("timezone") && (!doc["timezone"].is<const char*>() || !time_service_timezone_valid(doc["timezone"].as<const char*>()))) {
 				request->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid timezone\"}");
-				portENTER_CRITICAL(&g_config_post_mux);
-				config_post_reset();
-				portEXIT_CRITICAL(&g_config_post_mux);
+
 				return;
 		}
 		// Partial update: only update fields that are present in the request
@@ -772,9 +728,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				}
 				if (rotation < 0 || rotation > 3) {
 						request->send(400, "application/json", "{\"success\":false,\"message\":\"display_rotation must be 0-3\"}");
-						portENTER_CRITICAL(&g_config_post_mux);
-						config_post_reset();
-						portEXIT_CRITICAL(&g_config_post_mux);
+
 						return;
 				}
 				current_config->display_rotation = (uint8_t)rotation;
@@ -1054,7 +1008,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 			else if (!strcmp(mode, "grayscale")) current_config->epaper_render_mode = EPAPER_RENDER_MODE_GRAYSCALE;
 			else {
 				request->send(400, "application/json", "{\"success\":false,\"message\":\"epaper_render_mode must be grayscale or bw\"}");
-				portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+
 				return;
 			}
 		}
@@ -1100,7 +1054,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 			current_config->epaper_bw_conversion = previous_presentation_settings.epaper_bw_conversion;
 			current_config->epaper_bw_threshold = previous_presentation_settings.epaper_bw_threshold;
 			request->send(400, "application/json", "{\"success\":false,\"message\":\"invalid e-paper presentation settings\"}");
-			portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+
 			return;
 		}
 		config_manager_publish_epaper_refresh_settings(current_config);
@@ -1182,9 +1136,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 					(current_config->screen_saver_enabled &&
 						current_config->idle_screen_timeout_seconds >= current_config->screen_saver_timeout_seconds))) {
 			request->send(400, "application/json", "{\"success\":false,\"message\":\"Idle Screen requires a pad, a positive timeout, and a shorter timeout than Display Sleep when it is enabled\"}");
-			portENTER_CRITICAL(&g_config_post_mux);
-			config_post_reset();
-			portEXIT_CRITICAL(&g_config_post_mux);
+
 			return;
 		}
 		#endif
@@ -1212,9 +1164,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 #endif
 #endif
 				request->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid configuration\"}");
-				portENTER_CRITICAL(&g_config_post_mux);
-				config_post_reset();
-				portEXIT_CRITICAL(&g_config_post_mux);
+
 				return;
 		}
 
@@ -1225,7 +1175,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				const uint8_t brightness = screen_saver_manager_get_brightness();
 				if (brightness < MIN_USER_BRIGHTNESS) {
 						request->send(400, "application/json", "{\"success\":false,\"message\":\"Current brightness is below the allowed minimum\"}");
-						portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+
 						return;
 				}
 				current_config->backlight_brightness = brightness;
@@ -1248,10 +1198,29 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		const uint16_t previous_auto_shutdown = current_config->auto_shutdown_timeout_seconds;
 		current_config->auto_shutdown_timeout_seconds = static_cast<uint16_t>(auto_shutdown_candidate);
 #endif
+#if HAS_VOICE_NOTES
+		if (voice_notes_update) current_config->voice_notes = voice_notes_candidate->candidate;
+#endif
+#if HAS_AUDIO_INPUT
+		current_config->microphone_gain_db = mic_gain;
+		current_config->microphone_reduce_rumble = mic_rumble;
+#endif
 #if HAS_EXTERNAL_DATA
 		if (config_manager_save(current_config, external_candidate.get())) {
 #else
 		if (config_manager_save(current_config)) {
+#endif
+#if HAS_AUDIO_INPUT
+				if (microphone_update)
+						audio_input_set_processing({current_config->microphone_gain_db, current_config->microphone_reduce_rumble});
+#endif
+#if HAS_VOICE_NOTES
+				if (voice_notes_update && !voice_notes_processing_configure(current_config->voice_notes)) {
+						LOGE("Portal", "Voice Notes settings persisted but could not be applied");
+						request->send(503, "application/json", "{\"success\":false,\"message\":\"Settings saved but Voice Notes is unavailable\"}");
+
+						return;
+				}
 #endif
 #if HAS_BLE || HAS_BLE_HID
 				if (bthome_update) bthome_events_apply_settings(bthome_candidate);
@@ -1282,17 +1251,21 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 						request->send(200, "application/json", "{\"success\":true,\"message\":\"Configuration saved\"}");
 				}
 
-				portENTER_CRITICAL(&g_config_post_mux);
-				config_post_reset();
-				portEXIT_CRITICAL(&g_config_post_mux);
 
 				// Check for no_reboot parameter
-				if (!request->hasParam("no_reboot")) {
+				if (reboot_after_save) {
 						LOGI("Portal", "Rebooting device");
 						reboot_request(100);
 				}
 		} else {
 				LOGE("Portal", "Config save failed");
+#if HAS_AUDIO_INPUT
+				current_config->microphone_gain_db = previous_mic_gain;
+				current_config->microphone_reduce_rumble = previous_mic_rumble;
+#endif
+#if HAS_VOICE_NOTES
+				if (voice_notes_update) current_config->voice_notes = voice_notes_candidate->previous;
+#endif
 #if HAS_AUTO_SHUTDOWN
 				current_config->auto_shutdown_timeout_seconds = previous_auto_shutdown;
 #endif
@@ -1318,10 +1291,159 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 #endif
 				request->send(500, "application/json", "{\"success\":false,\"message\":\"Failed to save\"}");
 
+		}
+}
+
+void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+		if (!portal_auth_gate(request)) return;
+
+		DeviceConfig *current_config = web_portal_get_current_config();
+		if (!current_config) {
+				request->send(500, "application/json", "{\"success\":false,\"message\":\"Config not initialized\"}");
+				return;
+		}
+
+		// Accumulate the full body (chunk-safe) then parse once.
+		if (index == 0) {
+				// If a previous upload got stuck, reset it.
+				const uint32_t now = millis();
+				portENTER_CRITICAL(&g_config_post_mux);
+				const bool stale = g_config_post.in_progress && g_config_post.started_ms && (now - g_config_post.started_ms > WEB_PORTAL_CONFIG_BODY_TIMEOUT_MS);
+				portEXIT_CRITICAL(&g_config_post_mux);
+				if (stale) {
+						LOGW("Portal", "Config upload timed out; resetting state");
+						portENTER_CRITICAL(&g_config_post_mux);
+						config_post_reset();
+						portEXIT_CRITICAL(&g_config_post_mux);
+				}
+
+				portENTER_CRITICAL(&g_config_post_mux);
+				if (g_config_post.in_progress) {
+						portEXIT_CRITICAL(&g_config_post_mux);
+						request->send(409, "application/json", "{\"success\":false,\"message\":\"Config update already in progress\"}");
+						return;
+				}
+				g_config_post.in_progress = true;
+				g_config_post.started_ms = now;
+				g_config_post.total = total;
+				g_config_post.received = 0;
+				g_config_post.buf = nullptr;
+				portal_idle_set_config_upload_in_progress(true);
+				portEXIT_CRITICAL(&g_config_post_mux);
+
+				if (total == 0 || total > WEB_PORTAL_CONFIG_MAX_JSON_BYTES) {
+						portENTER_CRITICAL(&g_config_post_mux);
+						config_post_reset();
+						portEXIT_CRITICAL(&g_config_post_mux);
+						request->send(413, "application/json", "{\"success\":false,\"message\":\"JSON body too large\"}");
+						return;
+				}
+
+				uint8_t* buf = nullptr;
+				if (psramFound()) {
+						buf = (uint8_t*)heap_caps_malloc(total + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+				}
+				if (!buf) {
+						buf = (uint8_t*)heap_caps_malloc(total + 1, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+				}
+				if (!buf) {
+						portENTER_CRITICAL(&g_config_post_mux);
+						config_post_reset();
+						portEXIT_CRITICAL(&g_config_post_mux);
+						request->send(503, "application/json", "{\"success\":false,\"message\":\"Out of memory\"}");
+						return;
+				}
+
+				portENTER_CRITICAL(&g_config_post_mux);
+				g_config_post.buf = buf;
+				portEXIT_CRITICAL(&g_config_post_mux);
+		}
+
+		// Copy this chunk.
+		portENTER_CRITICAL(&g_config_post_mux);
+		const bool ok = g_config_post.in_progress && g_config_post.buf && g_config_post.total == total && (index + len) <= total;
+		uint8_t* dst = g_config_post.buf;
+		portEXIT_CRITICAL(&g_config_post_mux);
+
+		if (!ok) {
+				request->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid upload state\"}");
 				portENTER_CRITICAL(&g_config_post_mux);
 				config_post_reset();
 				portEXIT_CRITICAL(&g_config_post_mux);
+				return;
 		}
+
+		memcpy(dst + index, data, len);
+
+		portENTER_CRITICAL(&g_config_post_mux);
+		const size_t new_received = index + len;
+		if (new_received > g_config_post.received) {
+				g_config_post.received = new_received;
+		}
+		const bool done = (g_config_post.received >= g_config_post.total);
+		portEXIT_CRITICAL(&g_config_post_mux);
+
+		if (!done) {
+				// More chunks to come.
+				return;
+		}
+
+		if (!ota_activity_try_begin_config_write()) {
+				LOGW("Portal", "Config update rejected: update or network transition is active");
+				request->send(409, "application/json", "{\"success\":false,\"message\":\"Update or network transition in progress\"}");
+				portENTER_CRITICAL(&g_config_post_mux);
+				config_post_reset();
+				portEXIT_CRITICAL(&g_config_post_mux);
+				return;
+		}
+		struct ConfigUpdateGuard {
+				~ConfigUpdateGuard() { ota_activity_finish_config_write(); }
+		} config_update_guard;
+
+		// Finalize buffer and parse.
+		uint8_t* body = nullptr;
+		size_t body_len = 0;
+		portENTER_CRITICAL(&g_config_post_mux);
+		body = g_config_post.buf;
+		body_len = g_config_post.total;
+		if (body) body[body_len] = 0;
+		portEXIT_CRITICAL(&g_config_post_mux);
+
+		if (!json_keys_valid(body, body_len)) {
+				LOGW("Portal", "Config JSON contains an invalid NUL");
+				request->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid JSON NUL\"}");
+				portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+				return;
+		}
+
+		BasicJsonDocument<PsramJsonAllocator> doc(HAS_DISPLAY ? 6144 : 2560);
+		DeserializationError error = deserializeJson(doc, body, body_len);
+
+		if (error) {
+				LOGE("Portal", "JSON parse error: %s", error.c_str());
+				if (error == DeserializationError::NoMemory) {
+						request->send(413, "application/json", "{\"success\":false,\"message\":\"JSON body too large\"}");
+						portENTER_CRITICAL(&g_config_post_mux);
+						config_post_reset();
+						portEXIT_CRITICAL(&g_config_post_mux);
+						return;
+				}
+				request->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid JSON\"}");
+				portENTER_CRITICAL(&g_config_post_mux);
+				config_post_reset();
+				portEXIT_CRITICAL(&g_config_post_mux);
+				return;
+		}
+		if (!doc.is<JsonObject>()) {
+				request->send(400, "application/json", "{\"success\":false,\"message\":\"Config must be an object\"}");
+				portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+				return;
+		}
+
+		process_config_update(request, current_config, doc, !request->hasParam("no_reboot"));
+		portENTER_CRITICAL(&g_config_post_mux);
+		config_post_reset();
+		portEXIT_CRITICAL(&g_config_post_mux);
 }
 
 void handleDeleteConfig(AsyncWebServerRequest *request) {
@@ -1331,11 +1453,11 @@ void handleDeleteConfig(AsyncWebServerRequest *request) {
 				return;
 		}
 
-#if HAS_VOICE_CLIPS
-		const VoiceClipCancelStatus recorder = voice_clips_cancel();
-		if (recorder != VoiceClipCancelStatus::Ready) {
-				request->send(recorder == VoiceClipCancelStatus::Pending ? 409 : 503,
-						"application/json", recorder == VoiceClipCancelStatus::Pending
+#if HAS_VOICE_NOTES
+		const VoiceNoteCancelStatus recorder = voice_notes_cancel();
+		if (recorder != VoiceNoteCancelStatus::Ready) {
+				request->send(recorder == VoiceNoteCancelStatus::Pending ? 409 : 503,
+						"application/json", recorder == VoiceNoteCancelStatus::Pending
 						? "{\"success\":false,\"message\":\"Stopping voice recording; retry reset\"}"
 						: "{\"success\":false,\"message\":\"Voice recorder could not stop safely\"}");
 				ota_activity_finish_config_write();

@@ -28,11 +28,11 @@ PRELUDE = r'''
 #define HAS_MQTT 1
 #include "pad_config.h"
 #include "action_list.h"
-#include "list_provider.h"
 #include "binding_template.h"
 #include "binding_value.h"
 #include "mqtt_sub_store.h"
 #include "psram_json_allocator.h"
+#include "json_key_validation.h"
 #include "LittleFS.h"
 #define Storage LittleFS
 #include "storage.h"
@@ -56,20 +56,8 @@ void* config_psram_alloc(size_t size, const char*) {
 static unsigned rebuilds = 0;
 void pad_config_rebuild_all_caches() { ++rebuilds; }
 void storage_publish_usage(bool) {}
-bool pad_config_exists(uint8_t id) { return id == 0 || id == 2; }
-static unsigned pad_reads = 0;
-char* pad_config_read_raw(uint8_t id, size_t* length) {
-    ++pad_reads;
-    const char* json = id == 0 ? "{\"name\":\"Home\"}" : "{}";
-    *length = strlen(json);
-    return strdup(json);
-}
-static PadConfig cached_pad = {};
-const PadConfig* pad_config_acquire(uint8_t) { return &cached_pad; }
-void pad_config_release(const PadConfig*) {}
-static const ListProvider* registered_provider = nullptr;
-bool list_provider_register(const ListProvider* provider) {
-    registered_provider = provider;
+bool storage_write_atomic(const char* path, const uint8_t* data, size_t length) {
+    storage_test_files[path] = std::string(reinterpret_cast<const char*>(data), length);
     return true;
 }
 bool binding_template_register(const char*, binding_resolver_fn, binding_topic_collector_fn,
@@ -110,10 +98,6 @@ int main() {
     char output[128] = {};
     mqtt_binding_init();
     assert(mqtt_binding_resolve("topic", output, sizeof(output)) == BINDING_RESOLVER_UNAVAILABLE);
-    list_provider_pads_init();
-    ListItem items[LIST_MAX_ITEMS] = {};
-    assert(registered_provider && registered_provider->provide(items, LIST_MAX_ITEMS) == 0);
-
     button_defaults_init();
     const ButtonDefaults* fallback = button_defaults_get();
     assert(fallback && fallback->bg_color[0] == '\0');
@@ -137,36 +121,9 @@ int main() {
     mqtt_binding_init();
     assert(mqtt_binding_resolve("topic;value", output, sizeof(output)) == BINDING_RESOLVER_RESOLVED);
     assert(!strcmp(output, "42"));
-    list_provider_pads_update(0, true);
-    assert(registered_provider->provide(items, LIST_MAX_ITEMS) == 2);
-    assert(!strcmp(items[0].id, "pad_0") && !strcmp(items[0].label, "Pad 0: Home"));
-    assert(!strcmp(items[1].label, "Pad 2"));
-    assert(registered_provider->provide(nullptr, LIST_MAX_ITEMS) == 0);
-    assert(registered_provider->provide(items, 0) == 0);
-    assert(registered_provider->provide(items, 1) == 1);
-
-    const unsigned reads = pad_reads;
-    cached_pad.name = "Renamed";
-    list_provider_pads_update(2, true);
-    cached_pad.name = "New";
-    list_provider_pads_update(1, true);
-    assert(registered_provider->provide(items, LIST_MAX_ITEMS) == 3);
-    assert(!strcmp(items[0].label, "Pad 0: Home"));
-    assert(!strcmp(items[1].id, "pad_1") && !strcmp(items[1].label, "Pad 1: New"));
-    assert(!strcmp(items[2].id, "pad_2") && !strcmp(items[2].label, "Pad 2: Renamed"));
-    cached_pad.name = "";
-    list_provider_pads_update(1, true);
-    assert(registered_provider->provide(items, LIST_MAX_ITEMS) == 3);
-    assert(!strcmp(items[1].label, "Pad 1"));
-    list_provider_pads_update(0, false);
-    assert(registered_provider->provide(items, LIST_MAX_ITEMS) == 2);
-    assert(!strcmp(items[0].id, "pad_1") && !strcmp(items[1].id, "pad_2"));
-    assert(pad_reads == reads);
-
     const unsigned allocated = allocations;
     allocation_fail = true;
     mqtt_binding_init();
-    list_provider_pads_update(2, true);
     button_defaults_init();
     assert(allocations == allocated);
     assert(button_defaults_get() == defaults);
@@ -222,7 +179,7 @@ def main():
     if not compiler:
         raise SystemExit("g++ is required")
     json_headers = pathlib.Path.home() / "Arduino/libraries/ArduinoJson/src"
-    sources = ["button_defaults.cpp", "list_provider_pads.cpp", "mqtt_binding.cpp"]
+    sources = ["button_defaults.cpp", "mqtt_binding.cpp"]
     with tempfile.TemporaryDirectory(prefix="static-state-") as directory:
         source = pathlib.Path(directory) / "test.cpp"
         executable = pathlib.Path(directory) / "test"

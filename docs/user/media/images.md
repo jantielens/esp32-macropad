@@ -69,6 +69,11 @@ Choose one intended source rather than leaving competing source settings.
   `multipart/x-mixed-replace`. For a static image, zero means fetch once.
 * Set **Image fit** to a Fill position or Letterbox and **Save Pad**.
 
+For remote images, Letterbox leaves the bars transparent when the button's
+background is `transparent`. On an overlay button, the underlying buttons
+remain visible through those bars. The image itself remains opaque; PNG
+transparency is not preserved.
+
 The device, not just your browser, must be able to reach and authenticate to
 the URL. An RTSP camera can need an external image/MJPEG relay.
 Start with a small snapshot and a moderate interval before enabling streams.

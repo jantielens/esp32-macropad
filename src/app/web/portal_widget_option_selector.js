@@ -39,11 +39,6 @@
     function fail(slot, name, message) {
         throw Object.assign(new Error('Option ' + slot + ': ' + message), { fieldIds: [id(slot, name)] });
     }
-    function values() {
-        return Array.from({ length: 5 }, (_, index) => index + 1)
-            .filter(slot => input(slot, 'label').value.trim() || input(slot, 'icon').value)
-            .map(slot => input(slot, 'value').value.trim());
-    }
     function syncMode() {
         document.getElementById(prefix + 'source-group').hidden =
             document.getElementById(prefix + 'mode').value !== 'bound' &&
@@ -80,7 +75,7 @@
         actions: {
             tap: true, longPress: false,
             labels: () => ['Option action', 'Long-press action'],
-            buildTap: () => actionEditorListBuild(padActionPrefixes('tap'), '{value}', values())
+            buildTap: () => actionEditorListBuild(padActionPrefixes('tap'))
         },
         init() {
             const container = document.getElementById('pad-edit-option-slots');
@@ -100,7 +95,7 @@
                     '"><span id="' + id(slot, 'icon-name') + '">Choose icon</span></button> ' +
                     '<button type="button" class="btn btn-outline-secondary" id="' + id(slot, 'icon-remove') + '">Remove icon</button>' +
                     '<input type="hidden" id="' + id(slot, 'icon') + '"><small>Choose a label or an icon.</small></div>' +
-                    text('value', 'Value', false, 'Use {value} in an action to insert this value. Required in Bound mode; otherwise optional. If set, use 1–63 ASCII letters, digits, _ or -. Nonempty values must be distinct in Local and Bound modes.') +
+                    text('value', 'Value', false, 'Use [event:value] in a dynamic action argument to insert this value. Required in Bound mode; otherwise optional. If set, use 1–63 ASCII letters, digits, _ or -. Nonempty values must be distinct in Local and Bound modes.') +
                     text('state', 'State', true, 'Optional: enabled, disabled, hidden, or a binding.') +
                     '<div class="widget-row option-selector-row">' + color('fg_color', 'Foreground') +
                     color('bg_color', 'Background') + '</div>' +

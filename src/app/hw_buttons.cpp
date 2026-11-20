@@ -4,6 +4,8 @@
 
 #include "action_dispatch.h"
 #include "action_list.h"
+#include "action_registry.h"
+#include "action_storage.h"
 #include "hw_button_config.h"
 #include "log_manager.h"
 #if HAS_AUTO_SHUTDOWN
@@ -71,23 +73,39 @@ static void dispatch_event(uint8_t index, bool is_hold) {
 #if HAS_DISPLAY
     if (s_rt[index].dialog_generation != device_dialog_input_generation()) return;
 #endif
-    const HwButtonConfig* cfg = hw_button_config_get(index);
-    if (!cfg) return;
-    const ButtonAction* actions = is_hold ? cfg->hold_actions : cfg->tap_actions;
-    uint8_t count = is_hold ? cfg->hold_count : cfg->tap_count;
+    auto* actions = static_cast<ButtonAction*>(action_storage_allocate(MAX_BUTTON_ACTIONS * sizeof(ButtonAction)));
+    if (!actions) {
+        LOGE(TAG, "Cannot allocate hardware button action snapshot");
+        return;
+    }
+    ActionStorage storage = {};
+    uint8_t count = 0;
+    if (!hw_button_config_snapshot(index, is_hold, actions, &count, storage)) {
+        LOGE(TAG, "Cannot copy hardware button %u actions", index);
+        action_storage_clear(storage);
+        action_storage_free(actions);
+        return;
+    }
 #if HAS_DISPLAY
     if (device_dialog_active()) {
         for (uint8_t i = 0; i < count; ++i) {
-            if (!strcmp(actions[i].type, ACTION_TYPE_BUTTON_NAVIGATION)) {
+            const ActionOperationDef* operation = action_operation_for_action(actions[i]);
+            if (operation && !strcmp(operation->id, "button.navigate")) {
                 action_dispatch(actions[i], "Dialog navigation");
                 break;
             }
         }
+        action_storage_clear(storage);
+        action_storage_free(actions);
         return;
     }
 #endif
     LOGI(TAG, "HW btn %u %s: dispatching %u action(s)", index, is_hold ? "hold" : "tap", count);
-    if (count == 0) return;
+    if (count == 0) {
+        action_storage_clear(storage);
+        action_storage_free(actions);
+        return;
+    }
 #if HAS_AUDIO
     // tap_beep is the tap feedback cue only; hold events do not beep.
     if (!is_hold) maybe_beep(actions, count);
@@ -95,6 +113,8 @@ static void dispatch_event(uint8_t index, bool is_hold) {
     char label[16];
     snprintf(label, sizeof(label), "HWBtn%u%s", index, is_hold ? "H" : "T");
     action_list_dispatch(actions, count, label, ACTION_CONTINUATION_OWNER_LOOP, true);
+    action_storage_clear(storage);
+    action_storage_free(actions);
 }
 
 void hw_buttons_init() {

@@ -23,6 +23,7 @@
 #if MQTT_TRIGGERS_ENABLED
 
 #include "pad_config.h"  // ButtonAction, MAX_BUTTON_ACTIONS
+#include <ArduinoJson.h>
 
 // Shared JSON document capacity for the trigger config (parse + serialize), used
 // by both the storage layer and the portal component. Each trigger needs a
@@ -53,16 +54,14 @@ void mqtt_triggers_on_connected();
 void mqtt_triggers_on_message(const char* topic, const uint8_t* payload, unsigned int length);
 
 // Main-loop drain: snapshots/clears the pending bitmask under spinlock, then
-// dispatches matched triggers' actions from a stack copy. Call from loop().
+// dispatches matched triggers from owned action snapshots. Call from loop().
 void mqtt_triggers_loop();
 
-// Save raw JSON config to LittleFS, reload the RAM cache, publish storage usage.
+// Validate and atomically save raw JSON config, replace the cache, publish usage.
 // Returns true on success. Used by the portal component POST handler.
 bool mqtt_triggers_save_raw(const uint8_t* json, size_t len);
 
-// Read-only access to the cached trigger at `index` (bounds-checked). Returns
-// nullptr if index >= MAX_MQTT_TRIGGERS or the cache failed to allocate. Used by
-// the portal component GET handler.
-const MqttTriggerConfig* mqtt_triggers_get(uint8_t index);
+// Serialize under the cache lock, optionally reporting an unsaved config reset.
+bool mqtt_triggers_to_json(JsonArray triggers, bool* config_reset = nullptr);
 
 #endif  // MQTT_TRIGGERS_ENABLED

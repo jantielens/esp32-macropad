@@ -116,8 +116,12 @@
 #include "components/music_component.cpp"
 #endif // HAS_SOUND_PLAYER
 
-#if HAS_VOICE_CLIPS
-#include "components/voice_clips_component.cpp"
+#if HAS_AUDIO_INPUT
+#include "components/microphone_component.cpp"
+#endif
+
+#if HAS_VOICE_NOTES
+#include "components/voice_notes_component.cpp"
 #endif
 
 #if HAS_TTF_FONTS

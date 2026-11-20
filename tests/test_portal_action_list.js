@@ -17,6 +17,8 @@ class Element {
         this.style = { display: 'none' };
         this.dataset = {};
         this.attributes = {};
+        this.options = [];
+        this.children = [];
         this.textContent = '';
         var classes = new Set();
         this.classList = {
@@ -73,74 +75,27 @@ const context = {
     TextEncoder,
     deviceInfoCache: {
         catalog: [
-            { type: 'mqtt', group: 'Connectivity', label: 'Publish MQTT message' },
-            { type: 'screen', group: 'Navigation', label: 'Navigate to screen' },
-            { type: 'alarm', group: 'Alarm', label: 'Alarm Control',
-              commands: [{id:'cancel', label:'Cancel'}, {id:'snooze', label:'Snooze'}],
-              editor_fields: [
-                  {name:'alarm_id', label:'Alarm', type:'select', default:'1', numeric:true,
-                   options:[{id:'0', label:'Active alarm'}, {id:'1', label:'Alarm 1'}]},
-                  {name:'alarm_command', label:'Command', type:'select', default:'snooze', command_options:true},
-                  {name:'alarm_value', label:'Minutes', type:'text', bindable:true},
-                  {name:'alarm_day', label:'Weekday', type:'select', numeric:true, default:'1', options:[{id:'1', label:'Monday'}]}
-              ] }
+            { type: 'mqtt', group: 'Connectivity', operations: [
+                {id:'mqtt.publish', label:'Publish MQTT message', arguments:[
+                    {name:'topic', label:'Topic', type:'string', max_length:64},
+                    {name:'payload', label:'Payload', type:'string', max_length:64, allow_empty:true}
+                ]}
+            ] },
+            { type: 'screen', group: 'Navigation', operations: [
+                {id:'screen.open', label:'Navigate to screen', arguments:[
+                    {name:'target', label:'Target', type:'string', max_length:31}
+                ]}
+            ] }
         ]
     },
     padInitBindableColor() {},
+    escAttr(value) { return value || ''; },
     padSetBindableColor() {},
     padGetBindableColor() { return ''; }
 };
 vm.createContext(context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_screen.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_cycle_pad.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_mqtt.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_key.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_sound_alert.js', 'utf8'), context);
-const soundEditor = context._actionEditorExtensions.find(extension => extension.type === 'sound_alert');
-assert(!soundEditor.groups('beep-only', {has_sound_player: false}).includes('value="mp3"'));
-assert(soundEditor.groups('mp3-capable', {has_sound_player: true}).includes('value="mp3"'));
-for (const kind of ['stop', 'stop_all']) {
-    soundEditor.load('sound-test', {sound_alert_kind: kind});
-    context.actionEditorSoundAlertChanged('sound-test');
-    assert.strictEqual(document.getElementById('sound-test-sound-alert-tone-group').style.display, 'none');
-    const action = soundEditor.build('sound-test', 'sound_alert');
-    assert.strictEqual(action.sound_alert_kind, kind);
-    assert.strictEqual(Object.prototype.hasOwnProperty.call(action, 'sound_alert_pattern'), false);
-    assert.strictEqual(Object.prototype.hasOwnProperty.call(action, 'sound_alert_file'), false);
-}
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_timer.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_notify.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_visual_alert.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_delay.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_gamepad.js', 'utf8'), context);
-const genericHTML = context.actionEditorGenericFieldsHTML('defaults');
-assert(genericHTML.includes('<option value="1" selected>Alarm 1</option>'));
-assert(genericHTML.includes('<option value="snooze" selected>Snooze</option>'));
-
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_alarm.js', 'utf8'), context);
-const alarmEditor = context._actionEditorExtensions.find(extension => extension.type === 'alarm');
-assert(alarmEditor);
-assert.strictEqual(context.actionEditorGenericFields('alarm').length, 0);
-assert(!context.actionEditorGenericFieldsHTML('extension').includes('generic-alarm'));
-assert(alarmEditor.groups('extension').includes('<option value="1" selected>Alarm 1</option>'));
-assert(!fs.readFileSync('src/app/web/portal_action_editor.js', 'utf8').includes('actionEditorAlarm'));
-
-for (const command of ['set_time', 'adjust_minutes', 'weekday_enable', 'weekday_disable', 'weekday_toggle', 'enable', 'disable', 'toggle', 'cancel', 'snooze']) {
-    alarmEditor.load('alarm-test', {type:'alarm', alarm_id:1, alarm_command:command, alarm_value:'{step}', alarm_day:6});
-    const timeCommand = ['set_time', 'adjust_minutes'].includes(command);
-    const weekdayCommand = command.startsWith('weekday_');
-    assert.strictEqual(document.getElementById('alarm-test-generic-alarm-alarm_value-field').style.display, timeCommand ? '' : 'none');
-    assert.strictEqual(document.getElementById('alarm-test-generic-alarm-alarm_day-field').style.display, weekdayCommand ? '' : 'none');
-    assert.strictEqual(document.getElementById('alarm-test-generic-alarm-alarm_value-label').textContent, command === 'set_time' ? 'Time (minutes since midnight)' : 'Adjustment (minutes)');
-    const action = alarmEditor.build('alarm-test', 'alarm');
-    assert.strictEqual(Object.prototype.hasOwnProperty.call(action, 'alarm_value'), timeCommand);
-    assert.strictEqual(Object.prototype.hasOwnProperty.call(action, 'alarm_day'), weekdayCommand);
-}
-document.getElementById('alarm-test-generic-alarm-alarm_command').value = 'adjust_minutes';
-context.actionEditorAlarmChanged('alarm-test');
-assert.strictEqual(document.getElementById('alarm-test-generic-alarm-alarm_value').value, '{step}');
-assert.strictEqual(document.getElementById('alarm-test-generic-alarm-alarm_value-field').style.display, '');
 
 // --- Default slot labels ---
 context.actionEditorListRender('container-a', ['a0', 'a1', 'a2']);
@@ -160,7 +115,7 @@ assert.strictEqual(document.getElementById('b1-group')._summary.textContent, 'Ad
 
 // --- Loading a slot reveals the host label and opens the slot; an empty
 //     slot stays collapsed with its own "Add <slot>" placeholder ---
-context.actionEditorListLoad(['b0', 'b1', 'b2'], [{ type: 'mqtt', topic: 't', payload: 'p' }]);
+context.actionEditorListLoad(['b0', 'b1', 'b2'], [{ op: 'mqtt.publish', args: {topic:'t', payload:'p'} }]);
 assert.strictEqual(document.getElementById('b0-group')._summary.textContent, 'Left action 1');
 assert.strictEqual(document.getElementById('b0-group').open, true);
 assert.strictEqual(document.getElementById('b1-group')._summary.textContent, 'Add left action');
@@ -177,16 +132,16 @@ assert.strictEqual(document.getElementById('b1-group')._summary.textContent, 'Ad
 // --- Empty-slot omission (not just trailing) + order preservation ---
 context.actionEditorListRender('container-c', ['c0', 'c1', 'c2']);
 context.actionEditorListLoad(['c0', 'c1', 'c2'], [
-    { type: 'mqtt', topic: 'first', payload: '' },
+    { op: 'mqtt.publish', args: {topic:'first', payload:''} },
     {}, // empty middle slot
-    { type: 'screen', target: 'pad_2' }
+    { op: 'screen.open', args: {target:'pad_2'} }
 ]);
 var built = context.actionEditorListBuild(['c0', 'c1', 'c2']);
 assert.strictEqual(built.length, 2);
-assert.strictEqual(built[0].type, 'mqtt');
-assert.strictEqual(built[0].topic, 'first');
-assert.strictEqual(built[1].type, 'screen');
-assert.strictEqual(built[1].target, 'pad_2');
+assert.strictEqual(built[0].op, 'mqtt.publish');
+assert.strictEqual(built[0].args.topic, 'first');
+assert.strictEqual(built[1].op, 'screen.open');
+assert.strictEqual(built[1].args.target, 'pad_2');
 
 // Clearing a slot back to "(none)" collapses it back to its "Add <slot>"
 // placeholder without requiring a re-render.
@@ -211,7 +166,8 @@ async function checkIndependentBootSaves() {
         console: { error() {} },
         document: { getElementById: id => nodes.get(id) || null },
         actionEditorSlotPrefixes: context.actionEditorSlotPrefixes,
-        actionEditorListBuild: () => [{ type: 'notify', message: 'Hello' }],
+        actionEditorListBuild: () => [{ op: 'screen.back', args: {} }],
+        actionEditorListLoad() {},
         actionEditorHandleError: () => false,
         padInitBindableColor() {},
         setPendingReboot() { reboot = true; },
@@ -220,7 +176,8 @@ async function checkIndependentBootSaves() {
             requests.push({ url, options });
             return {
                 ok: !fail,
-                json: async () => options ? { success: !fail, message: 'Save failed' } : {
+                json: async () => options ? { success: !fail, message: 'Save failed' } :
+                    url.includes('boot-actions') ? { action_format_version: 1, config_reset: true, actions: [] } : {
                     caps: { boot_appearance: true, boot_logo: false },
                     boot_appearance_font_size: 18,
                     boot_appearance_text_color: 4294967295,
@@ -234,10 +191,16 @@ async function checkIndependentBootSaves() {
     vm.createContext(ctx);
     vm.runInContext(fs.readFileSync('src/app/web/portal_config_actions.js', 'utf8'), ctx);
     await ctx.saveBootActions();
+    assert.strictEqual(requests.length, 0);
+    await ctx.loadBootActions();
+    assert(messages.some(message => message.kind === 'info' && /cleared.*Save/.test(message.text)));
+    requests.length = 0;
+    await ctx.saveBootActions();
     assert.strictEqual(requests.length, 1);
     assert.strictEqual(requests[0].url, '/api/component/boot-actions/config');
     assert.deepStrictEqual(JSON.parse(requests[0].options.body), {
-        actions: [{ type: 'notify', message: 'Hello' }]
+        action_format_version: 1,
+        actions: [{ op: 'screen.back', args: {} }]
     });
     await ctx.bootAppearanceInit();
     assert.strictEqual(nodes.get('system-screens-save').disabled, false);
@@ -265,7 +228,227 @@ async function checkIndependentBootSaves() {
     console.log('independent boot actions / appearance saves: PASS');
 }
 
-checkIndependentBootSaves().catch(error => {
+async function checkSwipeActions() {
+    const node = new Element();
+    const loaded = {};
+    const first = {
+        action_format_version: 1,
+        swipe_left: { op: 'screen.open', args: { target: 'pad_2' } },
+        swipe_right: { op: 'screen.back', args: {} },
+        swipe_up: { op: 'shutter.session.start', args: { camera: '' } },
+        swipe_down: {}
+    };
+    const requests = [];
+    const options = [];
+    const messages = [];
+    let configReset = false;
+    const ctx = {
+        console,
+        document: { getElementById: id => id === 'swipe-editors' ? node : null },
+        actionEditorSlotPrefixes: context.actionEditorSlotPrefixes,
+        getDeviceInfo: async () => {},
+        actionEditorHTML: (prefix, label, opts) => {
+            options.push({ prefix, operations: opts.operations, mixed: opts.mixed });
+            return context.actionEditorHTML(prefix, label, opts);
+        },
+        actionEditorLoad: (prefix, action) => { loaded[prefix] = action; },
+        actionEditorBuild: prefix => loaded[prefix],
+        showMessage: (text, kind) => messages.push({ text, kind }),
+        actionEditorHandleError: () => false,
+        fetch: async (url, request) => {
+            requests.push({ url, request });
+            return { ok: true, json: async () => configReset
+                ? { action_format_version: 1, config_reset: true,
+                    swipe_left: {}, swipe_right: {}, swipe_up: {}, swipe_down: {} }
+                : first };
+        }
+    };
+    vm.createContext(ctx);
+    vm.runInContext(fs.readFileSync('src/app/web/portal_config_actions.js', 'utf8'), ctx);
+    const screen = context.deviceInfoCache.catalog.find(entry => entry.type === 'screen');
+    const previousOperations = screen.operations;
+    context.escAttr = value => String(value || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    screen.operations = [
+        { id: 'screen.open', label: 'Open screen', arguments: [
+            { name: 'target', label: 'Screen', type: 'screen', dynamic: true, max_length: 31 }
+        ] },
+        { id: 'screen.back', label: 'Back', arguments: [] }
+    ];
+    context.deviceInfoCache.catalog.push({ type: 'shutter', group: 'Shutter', label: 'Shutter' });
+    await ctx.swipeInitEditors();
+    screen.operations = previousOperations;
+    context.deviceInfoCache.catalog.pop();
+    assert.deepStrictEqual(options.map(x => x.prefix),
+        ['swipe-left', 'swipe-right', 'swipe-up', 'swipe-down']);
+    assert(options.every(x => x.operations && !x.mixed));
+    assert(node.innerHTML.includes('data-search-placeholder="Search actions..."'));
+    assert(node.innerHTML.includes('value="@screen.open"'));
+    assert(node.innerHTML.includes('value="@screen.back"'));
+    assert(!node.innerHTML.includes('value="shutter"'));
+    await ctx.loadSwipeActions();
+    await ctx.saveSwipeActions();
+    assert.strictEqual(requests[1].url, '/api/component/swipe-actions/config');
+    assert.deepStrictEqual(JSON.parse(requests[1].request.body), first);
+    configReset = true;
+    await ctx.loadSwipeActions();
+    assert(messages.some(message => message.kind === 'info' && /cleared.*Save/.test(message.text)));
+    await ctx.saveSwipeActions();
+    assert.deepStrictEqual(JSON.parse(requests.at(-1).request.body), {
+        action_format_version: 1, swipe_left: {}, swipe_right: {}, swipe_up: {}, swipe_down: {},
+    });
+}
+
+async function checkTriggerHosts() {
+    const nodes = new Map();
+    const getNode = id => {
+        if (!nodes.has(id)) nodes.set(id, new Element());
+        return nodes.get(id);
+    };
+    getNode('hw-button-editors').children = [new Element('DETAILS')];
+    getNode('hw-button-editors').querySelectorAll = () => Array(7).fill(new Element('DETAILS'));
+    getNode('mqtt-trigger-editors').children = [new Element('DETAILS')];
+    getNode('mqtt-trigger-editors').querySelectorAll = () => Array(4).fill(new Element('DETAILS'));
+    const drafts = new Map();
+    const rendered = [];
+    const requests = [];
+    const messages = [];
+    let configReset = false;
+    const tap = { op: 'screen.open', args: { target: { $template: '[var:target]' } } };
+    const hold = { op: 'screen.back', args: {} };
+    const mqtt = { op: 'screen.back', args: {} };
+    const ctx = {
+        console,
+        document: { getElementById: getNode },
+        actionEditorSlotPrefixes: context.actionEditorSlotPrefixes,
+        getDeviceInfo: async () => ({ has_display: true }),
+        actionEditorListRender: (container, prefixes, labels, options) => {
+            rendered.push({ container, options: options.actionOptions });
+            const html = context.actionEditorHTML(prefixes[0], '', options.actionOptions);
+            assert(html.includes('data-search-placeholder="Search actions..."'));
+        },
+        actionEditorListLoad: (prefixes, actions) => drafts.set(prefixes[0], actions),
+        actionEditorListBuild: prefixes => drafts.get(prefixes[0]) || [],
+        actionEditorWireFragment() {},
+        actionEditorHandleError: () => false,
+        showMessage: (text, kind) => messages.push({ text, kind }),
+        fetch: async (url, request) => {
+            requests.push({ url, request });
+            return { ok: true, json: async () => url.includes('hw-buttons')
+                ? { action_format_version: 1, config_reset: configReset,
+                    buttons: [{ label: 'Key', pin: 1, tap_actions: configReset ? [] : [tap], hold_actions: configReset ? [] : [hold] }] }
+                : { max: 1, config_reset: configReset,
+                    triggers: configReset ? [] : [{ topic: 'event', value: 'on', actions: [mqtt] }] } };
+        }
+    };
+    vm.createContext(ctx);
+    vm.runInContext(fs.readFileSync('src/app/web/portal_config_actions.js', 'utf8'), ctx);
+    await ctx.initHwButtons();
+    await ctx.initMqttTriggers();
+    assert.deepStrictEqual(rendered.map(entry => entry.container),
+        ['hwbtn-1-tap-editors', 'hwbtn-1-hold-editors', 'mqtttrig-1-editors']);
+    assert(rendered.every(entry => entry.options.operations));
+    assert(rendered.every(entry => !entry.options.mixed));
+    await ctx.saveHwButtons();
+    await ctx.saveMqttTriggers();
+    assert.deepStrictEqual(JSON.parse(requests[2].request.body),
+        { action_format_version: 1, buttons: [{ tap_actions: [tap], hold_actions: [hold] }] });
+    assert.deepStrictEqual(JSON.parse(requests[3].request.body),
+        { action_format_version: 1, triggers: [{ topic: 'event', value: 'on', actions: [mqtt] }] });
+    configReset = true;
+    getNode('mqtttrig-1-topic').value = '';
+    getNode('mqtttrig-1-value').value = '';
+    await ctx.initHwButtons();
+    await ctx.initMqttTriggers();
+    assert.strictEqual(messages.filter(message => message.kind === 'info' && /cleared.*Save/.test(message.text)).length, 2);
+    await ctx.saveHwButtons();
+    assert.deepStrictEqual(JSON.parse(requests.at(-1).request.body),
+        { action_format_version: 1, buttons: [{ tap_actions: [], hold_actions: [] }] });
+    await ctx.saveMqttTriggers();
+    assert.deepStrictEqual(JSON.parse(requests.at(-1).request.body),
+        { action_format_version: 1, triggers: [] });
+}
+
+async function checkTimerLoadFailure() {
+    const button = new Element();
+    const messages = [];
+    const requests = [];
+    let ok = false;
+    let configReset = false;
+    const ctx = {
+        console: {error() {}},
+        document: {getElementById: id => id === 'timer-config-save' ? button : null},
+        actionEditorSlotPrefixes: context.actionEditorSlotPrefixes,
+        actionEditorListLoad() {},
+        actionEditorListBuild: () => [],
+        actionEditorHandleError: () => false,
+        showMessage: (text, kind) => messages.push({text, kind}),
+        fetch: async (url, options) => {
+            requests.push({url, options});
+            return {ok, json: async () => ({action_format_version: 1, config_reset: configReset})};
+        }
+    };
+    vm.createContext(ctx);
+    vm.runInContext(fs.readFileSync('src/app/web/portal_config_actions.js', 'utf8'), ctx);
+    await ctx.loadTimerConfig();
+    assert(button.disabled);
+    assert.strictEqual(messages.at(-1).kind, 'error');
+    await ctx.saveTimerConfig();
+    assert.strictEqual(requests.length, 1);
+    ok = true;
+    await ctx.loadTimerConfig();
+    assert(!button.disabled);
+    await ctx.saveTimerConfig();
+    assert.strictEqual(requests.length, 3);
+    assert.strictEqual(requests[2].options.method, 'POST');
+    assert.strictEqual(JSON.parse(requests[2].options.body).action_format_version, 1);
+    configReset = true;
+    await ctx.loadTimerConfig();
+    assert(!button.disabled);
+    assert.strictEqual(messages.at(-1).kind, 'info');
+    assert.match(messages.at(-1).text, /cleared.*Save/);
+    await ctx.saveTimerConfig();
+    assert.deepStrictEqual(JSON.parse(requests.at(-1).options.body), {
+        action_format_version: 1,
+        1: { expire_actions: [] }, 2: { expire_actions: [] }, 3: { expire_actions: [] },
+    });
+}
+
+async function checkShutterSessionActions() {
+    const requests = [];
+    const drafts = new Map();
+    const messages = [];
+    let available = false;
+    const started = [{ op: 'shutter.session.start', args: { camera: { $template: '[var:camera]' } } }];
+    const completed = [{ op: 'screen.back', args: {} }];
+    const ctx = {
+        window: {}, console: { error() {} },
+        actionEditorSlotPrefixes: context.actionEditorSlotPrefixes,
+        actionEditorListLoad: (prefixes, actions) => drafts.set(prefixes[0], actions),
+        actionEditorListBuild: prefixes => drafts.get(prefixes[0]) || [],
+        actionEditorHandleError: () => false,
+        showMessage: (text, kind) => messages.push({ text, kind }),
+        fetch: async (url, options) => {
+            requests.push({ url, options });
+            return { ok: available, json: async () => available
+                ? { action_format_version: 1, save_start_actions: started, save_complete_actions: completed }
+                : { error: 'unavailable' } };
+        },
+    };
+    vm.createContext(ctx);
+    vm.runInContext(fs.readFileSync('src/app/device_classes/shutter_tester/web/portal_shutter_config.js', 'utf8'), ctx);
+    await ctx.loadShutterSessionActions();
+    await ctx.saveShutterSessionActions();
+    assert.strictEqual(requests.length, 1, 'A failed load must not overwrite session actions');
+    assert(messages.some(message => message.kind === 'error'));
+    available = true;
+    await ctx.loadShutterSessionActions();
+    await ctx.saveShutterSessionActions();
+    assert.deepStrictEqual(JSON.parse(requests[2].options.body), {
+        action_format_version: 1, save_start_actions: started, save_complete_actions: completed,
+    });
+}
+
+Promise.all([checkIndependentBootSaves(), checkSwipeActions(), checkTriggerHosts(), checkTimerLoadFailure(), checkShutterSessionActions()]).catch(error => {
     console.error(error);
     process.exitCode = 1;
 });

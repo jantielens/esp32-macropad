@@ -156,12 +156,6 @@ void StickyEpaperDriver::beginFrame() {
     if (!mutex) return;
     xSemaphoreTake(mutex, portMAX_DELAY);
     schedule.begin();
-#if HAS_DISPLAY_DIAGNOSTICS
-    frameConversionStart = stats.conversion_us;
-    frameWaitStart = stats.framebuffer_wait_us;
-    framePixelsStart = stats.flush_pixels;
-    frameFlushesStart = stats.flush_calls;
-#endif
     xSemaphoreGive(mutex);
 }
 
@@ -180,20 +174,8 @@ void StickyEpaperDriver::commitFrame(const DisplayFrame& frame) {
         }
     }
 #endif
-#if HAS_DISPLAY_DIAGNOSTICS
-    const uint64_t conversion = stats.conversion_us - frameConversionStart;
-    const uint64_t wait = stats.framebuffer_wait_us - frameWaitStart;
-    const uint64_t pixels = stats.flush_pixels - framePixelsStart;
-    const uint64_t flushes = stats.flush_calls - frameFlushesStart;
-#endif
     xSemaphoreGive(mutex);
     xSemaphoreGive(wake);
-#if HAS_DISPLAY_DIAGNOSTICS
-    if (flushes) LOGD("Sticky", "frame=%lu convert=%llu fb_wait=%llu pixels=%llu flushes=%llu",
-        static_cast<unsigned long>(frame.sequence), static_cast<unsigned long long>(conversion),
-        static_cast<unsigned long long>(wait), static_cast<unsigned long long>(pixels),
-        static_cast<unsigned long long>(flushes));
-#endif
 }
 
 void StickyEpaperDriver::stopPresentation() {
@@ -331,24 +313,6 @@ void StickyEpaperDriver::present() {
         stats.add(sample);
 #endif
         xSemaphoreGive(mutex);
-#if HAS_DISPLAY_DIAGNOSTICS
-        LOGD("Sticky", "frame=%lu request_seq=%lu request=%llu ready=%llu eligible=%llu snapshot=%llu",
-            static_cast<unsigned long>(sample.frame_sequence),
-            static_cast<unsigned long>(sample.request_sequence),
-            static_cast<unsigned long long>(sample.requested_us), static_cast<unsigned long long>(sample.ready_us),
-            static_cast<unsigned long long>(sample.eligible_us),
-            static_cast<unsigned long long>(sample.snapshot_us));
-        LOGD("Sticky", "frame=%lu prep=%lu upload=%lu trigger=%llu busy_done=%llu published=%llu ok=%d",
-            static_cast<unsigned long>(sample.frame_sequence), static_cast<unsigned long>(sample.controller_us),
-            static_cast<unsigned long>(sample.upload_us), static_cast<unsigned long long>(sample.trigger_us),
-            static_cast<unsigned long long>(sample.waveform_done_us), static_cast<unsigned long long>(sample.published_us),
-            sample.success);
-        LOGD("Sticky", "frame=%lu pack=%lu spi=%lu yield=%lu bytes=%lu packed_bytes=%lu",
-            static_cast<unsigned long>(sample.frame_sequence),
-            static_cast<unsigned long>(panel.timing.pack_us), static_cast<unsigned long>(panel.timing.spi_us),
-            static_cast<unsigned long>(panel.timing.yield_us), static_cast<unsigned long>(sample.uploaded_bytes),
-            static_cast<unsigned long>(panel.timing.packed_bytes));
-#endif
         if (result != sticky_epaper::Result::Success) return;
     }
 }

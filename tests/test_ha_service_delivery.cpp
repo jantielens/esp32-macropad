@@ -5,6 +5,74 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "action_registry.h"
+#include "action_dispatch.h"
+#include "action_validate.h"
+#define ARDUINO 1
+#include "../src/app/actions/ha_service_action.cpp"
+#undef ARDUINO
+
+static HaServiceDelivery operation_delivery;
+static ActionDispatchContext operation_context;
+static HaServicePayload immediate_payload;
+static bool immediate_result = true;
+static unsigned immediate_calls = 0;
+
+void action_type_register(const ActionTypeDef*) {}
+bool action_run_dispatch_ha(const HaServicePayload&, ActionResult*) { return false; }
+ActionDispatchContext action_dispatch_context() { return operation_context; }
+bool action_json_object_valid(const char* value) {
+    JsonDocument document;
+    return !deserializeJson(document, value) && document.is<JsonObject>();
+}
+HaServiceEnqueueResult ha_service_enqueue(const HaServicePayload& value, uint32_t execution_id,
+                                          uint8_t action_index) {
+    return operation_delivery.enqueue(value, execution_id, action_index);
+}
+bool ha_service_execute_immediate(const HaServicePayload& value) {
+    immediate_payload = value;
+    ++immediate_calls;
+    return immediate_result;
+}
+
+static void test_operation_dispatch() {
+    ActionResolvedArgument arguments[] = {
+        {"light.kitchen", 0, 0}, {"turn_on", 0, 0}, {"{\"brightness_pct\":80}", 0, 0}
+    };
+    const ActionOperationDef& operation = kHaServiceOperations[0];
+    assert(operation.dispatch(arguments, "test", 0) == ACTION_COMPLETE);
+    HaServiceRequest request = {};
+    assert(operation_delivery.dequeue(request));
+    assert(strcmp(request.payload.entity_id, arguments[0].text) == 0);
+    assert(strcmp(request.payload.service, arguments[1].text) == 0);
+    assert(strcmp(request.payload.data_json, arguments[2].text) == 0);
+
+    arguments[0].text = "missing_domain";
+    assert(operation.dispatch(arguments, "test", 0) == ACTION_FAILED);
+    arguments[0].text = "light.kitchen";
+    arguments[2].text = "[]";
+    assert(operation.dispatch(arguments, "test", 0) == ACTION_FAILED);
+    assert(!operation_delivery.dequeue(request));
+    arguments[2].text = "{\"brightness_pct\":80}";
+
+    for (unsigned index = 0; index < HA_SERVICE_QUEUE_CAPACITY; ++index)
+        assert(operation.dispatch(arguments, "test", 0) == ACTION_COMPLETE);
+    assert(operation.dispatch(arguments, "test", 0) == ACTION_FAILED);
+    while (operation_delivery.dequeue(request)) {}
+
+    operation_context.synchronous = true;
+    assert(operation.dispatch(arguments, "test", 0) == ACTION_COMPLETE);
+    assert(immediate_calls == 1);
+    assert(strcmp(immediate_payload.entity_id, arguments[0].text) == 0);
+    assert(strcmp(immediate_payload.service, arguments[1].text) == 0);
+    assert(strcmp(immediate_payload.data_json, arguments[2].text) == 0);
+    immediate_result = false;
+    assert(operation.dispatch(arguments, "test", 0) == ACTION_FAILED);
+    assert(immediate_calls == 2);
+    assert(!operation_delivery.dequeue(request));
+    operation_context.synchronous = false;
+}
+
 static HaServicePayload payload(const char* entity, const char* service) {
     HaServicePayload value = {};
     strncpy(value.entity_id, entity, sizeof(value.entity_id) - 1);
@@ -81,6 +149,29 @@ static void test_registry() {
                                        snapshot) == HA_EXECUTION_NOT_FOUND);
 }
 
+static void test_cancelled_suffix_preserves_pending_delivery() {
+    HaServiceDelivery delivery;
+    uint32_t execution_id = 0;
+    assert(delivery.execution_reserve(2, 100, execution_id));
+    assert(delivery.execution_set_action(execution_id, 0, 1, payload("light.one", "turn_on")));
+    assert(delivery.execution_set_action(execution_id, 1, 2, payload("", "")));
+    assert(delivery.execution_complete(terminal(execution_id, 2, HA_STATUS_CANCELLED), 101));
+    HaExecutionSnapshot snapshot = {};
+    assert(delivery.execution_snapshot(execution_id, 102, snapshot) == HA_EXECUTION_FOUND);
+    assert(snapshot.state == HA_EXECUTION_PENDING &&
+           snapshot.actions[0].status == HA_STATUS_PENDING &&
+           snapshot.actions[1].status == HA_STATUS_CANCELLED);
+    HaServiceResult delivered = terminal(execution_id, 1, HA_STATUS_SUCCESS, 200);
+    strcpy(delivered.entity_id, "light.one");
+    strcpy(delivered.service, "turn_on");
+    assert(delivery.execution_complete(delivered, 103));
+    assert(delivery.execution_snapshot(execution_id, 104, snapshot) == HA_EXECUTION_FOUND);
+    assert(snapshot.state == HA_EXECUTION_COMPLETED);
+    JsonDocument document;
+    ha_service_serialize_snapshot(snapshot, document.to<JsonObject>());
+    assert(strcmp(document["actions"][1]["status"], "cancelled") == 0);
+}
+
 static void test_slot_exhaustion_and_wraparound_expiry() {
     HaServiceDelivery delivery;
     uint32_t ids[HA_SERVICE_EXECUTION_SLOTS] = {};
@@ -151,8 +242,10 @@ static void test_serializer() {
 int main() {
     static_assert(sizeof(HaServiceDelivery) < 2040,
                   "delivery state leaves no room for the firmware lock");
+    test_operation_dispatch();
     test_fifo();
     test_registry();
+    test_cancelled_suffix_preserves_pending_delivery();
     test_slot_exhaustion_and_wraparound_expiry();
     test_serializer();
     printf("HA delivery state: %zu bytes\n", sizeof(HaServiceDelivery));

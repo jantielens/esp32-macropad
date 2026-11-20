@@ -1,5 +1,6 @@
 // Production-helper parity and unsafe printf regression coverage.
 #include "binding_value.h"
+#include "binding_value_json.h"
 #include "external_data.h"
 
 #include <cassert>
@@ -107,6 +108,21 @@ static void test_select_json() {
     char small[4];
     assert(!binding_value_select_json(doc.as<JsonVariantConst>(), "object", small, sizeof(small)));
     assert(!binding_value_select_json(doc.as<JsonVariantConst>(), "0", small, sizeof(small)));
+}
+
+static void test_scalar_preview() {
+    JsonDocument doc;
+    doc["text"] = "A\xe2\x82\xac[item:id]";
+    char out[5];
+    assert(binding_value_scalar_json_preview(doc["text"], out, sizeof(out)));
+    assert(std::strcmp(out, "A\xe2\x82\xac") == 0);
+    assert(binding_value_scalar_json_preview(doc["text"], out, 4));
+    assert(std::strcmp(out, "A") == 0);
+    assert(!binding_value_scalar_json(doc["text"], out, sizeof(out)));
+    doc["text"] = "[item:id]";
+    char full[32];
+    assert(binding_value_scalar_json(doc["text"], full, sizeof(full)));
+    assert(std::strcmp(full, "[item:id]") == 0);
 }
 
 static void test_external_config() {
@@ -359,6 +375,7 @@ static void test_params() {
 int main() {
     test_extract();
     test_select_json();
+    test_scalar_preview();
     test_external_config();
     test_external_source_update();
     test_external_inspection();

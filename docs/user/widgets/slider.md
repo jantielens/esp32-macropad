@@ -34,8 +34,8 @@ after changing the selection.
    minimum and remains interactive with a dimmed track.
 6. Optionally configure up to three **Value set actions** under **Actions**.
    All actions available on the device can be selected, including navigation
-   and delays. Use `{value}` in a supported text field when the action needs
-   the selected number; the token is optional. The list runs once on a changed
+   and delays. When an action needs the selected number, enable **Dynamic**
+   on the argument and use `[event:value]`. The list runs once on a changed
    release. Without actions, a local slider keeps its value and a bound slider
    follows its source. Ordinary tap and long-press actions are not available.
 7. Select **Save Pad**. No reboot is needed.
@@ -79,45 +79,39 @@ existing label bindings for values that should remain visible after release.
 
 ## Use value actions
 
-`{value}` is replaced with the selected absolute number, formatted without
-exponent notation or unnecessary trailing zeroes. Supported text fields include
-notification messages, variable values, MQTT topics and payloads, Home Assistant
-entity IDs, service names and data, volume and brightness values, timer values,
-and key sequences. Tokens can appear inside surrounding text or quoted JSON
-strings. Fixed commands, variable names, action field names, and native numeric
-properties such as a delay's duration do not accept tokens.
+`[event:value]` resolves to the selected absolute number, formatted without
+exponent notation or unnecessary trailing zeroes. Enable **Dynamic** on each
+argument that needs it. You can use the token on its own or within a text
+template. The operation itself stays fixed.
 
-* To set device volume, select **Volume**, choose **Set volume**, and enter
-   `{value}` in **Value (%)**. Use a range from 0 to 100.
-* To set brightness, select **Brightness**, choose **Set brightness**, and enter
-   `{value}` in **Value (%)**. Keep the minimum at or above the device's minimum
+* To set device volume, choose **Set volume** and enter `[event:value]` in
+   **Volume (%)**. Use a range from 0 to 100.
+* To set brightness, choose **Set brightness** and enter `[event:value]` in
+   **Brightness (%)**. Keep the minimum at or above the device's minimum
    user brightness, normally 5.
 * To publish a numeric MQTT command, select **Publish MQTT message**, enter a
-   topic such as `home/level/set`, and enter `{value}` as the payload.
+   topic such as `home/level/set`, and enter `[event:value]` as the payload.
 * To report the selection, use a notification message
-   `Brightness set to {value}%`. A selection of 20 displays
+   `Brightness set to [event:value]%`. A selection of 20 displays
    `Brightness set to 20%`.
-* To save the selection, set variable `a` to `{value}` for text `20`, or
-   `{value}%` for text `20%`. The variable name stays fixed.
+* To save the selection, set variable `a` to `[event:value]` for text `20`, or
+   `[event:value]%` for text `20%`. Leave the variable name fixed in this example.
 * To set a Home Assistant light, choose **Call Home Assistant service**, use
-   entity `light.kitchen`, service `turn_on`, and data `{"brightness":{value}}`.
+   entity `light.kitchen`, service `turn_on`, and data `{"brightness":[event:value]}`.
    Set the range to 0 through 255.
 * For media volume, use entity `media_player.living_room`, service `volume_set`,
-   and data `{"volume_level":{value}}`. Set the range to 0 through 1 with step
+   and data `{"volume_level":[event:value]}`. Set the range to 0 through 1 with step
    `0.01`.
 
 Every action in the list receives the same release-time value, even when a
-delay or confirmation pauses the list. `{step}` remains the numeric rocker's
-signed adjustment token, not the slider's absolute selection. The editor rejects
-the wrong token, unsupported fields, and substitutions that exceed a field's
-byte capacity. Event tokens are unavailable in ordinary button actions.
+delay or confirmation pauses the list. `[event:step]` is the Numeric Rocker's
+signed adjustment, not the slider's absolute selection. Ordinary button taps
+do not supply either value.
 
 Integer-only actions still require whole numbers after substitution. Use a
-whole-number range and step for alarm minutes. Home Assistant data must expand
-to a valid JSON object: `{"brightness":{value}}` preserves the selected number,
-whereas adding numeric suffixes can make fractional selections invalid. An
-invalid expanded action is rejected before sending a request and stops the
-remaining actions in that list.
+whole-number range and step for alarm minutes. Home Assistant data must resolve
+to a valid JSON object. Leave the token unquoted to send a JSON number.
+An invalid result stops the remaining actions without sending the request.
 
 ## Source and feedback behavior
 

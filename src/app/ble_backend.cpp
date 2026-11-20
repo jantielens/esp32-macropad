@@ -2,6 +2,7 @@
 
 #if HAS_BLE || HAS_BLE_HID
 #include "log_manager.h"
+#include "reboot_service.h"
 static constexpr uint8_t kBackendLogLevel = LOG_LEVEL;
 #if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
 #include <NimBLEDevice.h>
@@ -100,6 +101,10 @@ int8_t ble_backend_tx_power_dbm() {
 }
 
 bool ble_backend_prepare(const char* device_name) {
+    if (reboot_is_ota_mode()) {
+        LOGW("BLE", "Bluetooth unavailable in OTA mode");
+        return false;
+    }
     if (ble_backend_initialized()) {
         if (!ble_backend_power_supported()) return true;
         if (!power_applied) power_applied = apply_power();

@@ -5,6 +5,7 @@
 #if HAS_DISPLAY
 
 #include "pad_config.h"  // ButtonAction, MAX_BUTTON_ACTIONS
+#include <ArduinoJson.h>
 
 // Boot actions configuration — up to MAX_BUTTON_ACTIONS sequential actions
 // dispatched once when the first screen is shown after boot.
@@ -16,8 +17,8 @@ struct BootActionsConfig {
 // Load boot actions from LittleFS. Call after pad_config_init().
 void boot_actions_init();
 
-// Get the current boot actions config (never null, returns empty if file missing).
-const BootActionsConfig* boot_actions_get();
+// Serialize under the cache lock, optionally reporting an unsaved config reset.
+bool boot_actions_to_json(JsonArray actions, bool* config_reset = nullptr);
 
 // Save raw JSON to LittleFS and update RAM cache. Returns true on success.
 bool boot_actions_save_raw(const uint8_t* json, size_t len);

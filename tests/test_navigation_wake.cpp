@@ -19,6 +19,7 @@ static bool confirmation_open = false;
 bool screen_saver_manager_is_asleep() { return asleep; }
 bool screen_saver_manager_input_ready() { return input_ready; }
 bool device_dialog_navigate(const char*) { return confirmation_open; }
+bool device_dialog_active() { return confirmation_open; }
 void device_dialog_close() { confirmation_open = false; }
 void screen_saver_manager_notify_activity(bool wake) {
     assert(wake);
@@ -30,7 +31,9 @@ extern "C" uint32_t pad_config_get_eligible_mask() { return eligible_mask; }
 
 struct Screen {
     unsigned navigation_calls = 0;
+    unsigned list_navigation_calls = 0;
     bool navigateButtons(const char*) { ++navigation_calls; return true; }
+    bool navigateList(const char*, const char*) { ++list_navigation_calls; return true; }
     void show() {}
     void hide() {}
     void setStatus(const char*) {}
@@ -47,12 +50,14 @@ static TaskHandle_t xSemaphoreGetMutexHolder(TestMutex* mutex) { return mutex->o
 class DisplayManager {
 public:
     Screen splashScreen, infoScreen, wifiSetupScreen, testScreen, firstPad, secondPad, idlePad;
-    Screen* padScreens[MAX_PADS] = {&firstPad, &secondPad, &idlePad};
+    Screen* padScreenStorage[MAX_PADS] = {&firstPad, &secondPad, &idlePad};
+    Screen** padScreens = padScreenStorage;
     ScreenInfo availableScreens[3] = {{"pad_0", &firstPad}, {"pad_1", &secondPad}, {"pad_2", &idlePad}};
     size_t screenCount = 3;
     Screen* currentScreen = &firstPad;
     Screen* pendingScreen = nullptr;
     bool pendingScreenInteractive = false;
+    uint32_t screenIntentGeneration = 0;
     Screen* screenHistory[8] = {};
     size_t screenHistoryCount = 0;
     bool skipHistoryPush = false;
@@ -70,6 +75,7 @@ public:
     unsigned render_wakes = 0;
     void wakeRenderTask() { ++render_wakes; }
     void queueScreenIntent(bool interactive) {
+        ++screenIntentGeneration;
         pendingScreenInteractive = interactive;
         wakeRenderTask();
     }
@@ -98,6 +104,8 @@ public:
     void setSplashStatus(const char* text);
     void prepareNavigationWake();
     bool navigateButtons(const char* command);
+    bool captureListNavigation(uint32_t* generation);
+    bool navigateList(const char* target, const char* command, uint32_t generation);
     bool showScreen(const char* id, bool wake = false);
     bool showTransientScreen(const char* id);
     bool restoreTransientScreen();
@@ -144,6 +152,16 @@ int main() {
         assert(manager.firstPad.navigation_calls == 1);
         manager.currentScreen = &manager.infoScreen;
         assert(!manager.navigateButtons("next"));
+    }
+    {
+        DisplayManager manager;
+        manager.lvglTaskHandle = current_task;
+        uint32_t generation = 0;
+        assert(manager.captureListNavigation(&generation));
+        assert(manager.navigateList("list", "next_page", generation));
+        assert(manager.firstPad.list_navigation_calls == 1);
+        assert(manager.showScreen("pad_1"));
+        assert(!manager.navigateList("list", "next_page", generation));
     }
     {
         DisplayManager manager;

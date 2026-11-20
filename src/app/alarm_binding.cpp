@@ -3,14 +3,13 @@
 #if ALARM_ENABLED
 #include "alarm_manager.h"
 #include "binding_template.h"
-#include "time_service.h"
 #include <stdio.h>
 #include <string.h>
 static const char* const alarm_keys[] = {
     "1_time", "1_enabled", "1_state", "1_ready", "active_id", "1_hour", "1_minute", "1_minutes",
     "1_weekdays", "1_day_0", "1_day_1", "1_day_2", "1_day_3", "1_day_4", "1_day_5", "1_day_6",
-    "1_repeat", "1_snooze_minutes", "1_auto_dismiss_minutes", "1_once_epoch", "1_once_local", "1_once_available",
-    "1_next_epoch", "1_next_local", "1_next_seconds", "1_next_available", "1_snooze_seconds", "1_snooze_available",
+    "1_repeat", "1_snooze_minutes", "1_auto_dismiss_minutes", "1_once_at", "1_once_available",
+    "1_next_at", "1_next_seconds", "1_next_available", "1_snooze_seconds", "1_snooze_available",
     "1_dismiss_seconds", "1_dismiss_available", "1_next_ring_seconds", "1_next_ring_available",
     "1_ota_deferred", "1_storage_error", "1_hook_error", "1_command_error", "1_command_message",
     "1_pending_commands", "1_completed_commands", "1_save_state"
@@ -40,12 +39,10 @@ static BindingResolverStatus alarm_resolve(const char* key, char* output, size_t
     else if (!strcmp(key, "1_snooze_available")) snprintf(output, length, "%s", value.state == ALARM_SNOOZED ? "ON" : "OFF");
     else if (!strcmp(key, "1_dismiss_available")) snprintf(output, length, "%s", value.state == ALARM_RINGING ? "ON" : "OFF");
     else if (!strcmp(key, "1_next_ring_available")) snprintf(output, length, "%s", value.state != ALARM_IDLE || value.next_epoch ? "ON" : "OFF");
-    else if (!strcmp(key, "1_once_epoch") || !strcmp(key, "1_next_epoch")) {
-        const time_t epoch = !strcmp(key, "1_once_epoch") ? value.once_epoch : value.next_epoch;
-        if (epoch) snprintf(output, length, "%lld", static_cast<long long>(epoch));
-    } else if (!strcmp(key, "1_once_local") || !strcmp(key, "1_next_local")) {
-        const time_t epoch = !strcmp(key, "1_once_local") ? value.once_epoch : value.next_epoch;
-        if (epoch) time_service_format(epoch, "%Y-%m-%d %H:%M", nullptr, output, length);
+    else if (!strcmp(key, "1_once_at") || !strcmp(key, "1_next_at")) {
+        const time_t epoch = !strcmp(key, "1_once_at") ? value.once_epoch : value.next_epoch;
+        if (!epoch) return BINDING_RESOLVER_UNAVAILABLE;
+        snprintf(output, length, "%lld", static_cast<long long>(epoch));
     } else if (!strcmp(key, "1_next_seconds")) {
         if (value.next_epoch) snprintf(output, length, "%u", value.next_seconds);
     } else if (!strcmp(key, "1_snooze_seconds")) {
@@ -81,13 +78,11 @@ static const BindingKeyDoc kAlarmKeyDocs[] = {
     {"1_day_#", "ON when weekday 0-6 (Sunday-Saturday) repeats", "Schedule"},
     {"1_snooze_minutes", "Snooze length in minutes", "Schedule"},
     {"1_auto_dismiss_minutes", "Minutes until a ringing alarm stops", "Schedule"},
-    {"1_once_epoch", "One-time alarm as epoch seconds; empty if none", "Schedule"},
-    {"1_once_local", "One-time alarm as YYYY-MM-DD HH:MM; empty if none", "Schedule"},
+    {"1_once_at", "One-time alarm as Unix seconds; unavailable if none", "Schedule"},
     {"1_once_available", "ON when a one-time alarm is set", "Schedule"},
     {"1_state", "idle, ringing, or snoozed", "Now"},
     {"active_id", "1 while ringing or snoozed, else 0", "Now"},
-    {"1_next_epoch", "Next scheduled alarm as epoch seconds; empty if none", "Now"},
-    {"1_next_local", "Next scheduled alarm as YYYY-MM-DD HH:MM", "Now"},
+    {"1_next_at", "Next scheduled alarm as Unix seconds; unavailable if none", "Now"},
     {"1_next_seconds", "Seconds until the next scheduled alarm, excluding snooze", "Now"},
     {"1_next_available", "ON when 1_next_seconds has a value", "Now"},
     {"1_next_ring_seconds", "Seconds until the next ring, including snooze", "Now"},
@@ -130,11 +125,9 @@ static const BindingAuthoringKey kAlarmAuthoringKeys[] = {
     binding_authoring_text("1_repeat", "weekly"),
     binding_authoring_integer("1_snooze_minutes", "min", "9"),
     binding_authoring_integer("1_auto_dismiss_minutes", "min", "30"),
-    binding_authoring_integer("1_once_epoch", "s", "1791360000"),
-    binding_authoring_text("1_once_local", "2026-10-07 07:30"),
+    binding_authoring_integer("1_once_at", "s", "1791360000"),
     binding_authoring_text("1_once_available", "ON"),
-    binding_authoring_integer("1_next_epoch", "s", "1791360000"),
-    binding_authoring_text("1_next_local", "2026-10-07 07:30"),
+    binding_authoring_integer("1_next_at", "s", "1791360000"),
     binding_authoring_integer("1_next_seconds", "s", "3600"),
     binding_authoring_text("1_next_available", "ON"),
     binding_authoring_integer("1_snooze_seconds", "s", "540"),

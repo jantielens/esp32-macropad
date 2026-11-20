@@ -44,6 +44,7 @@ const char* ha_service_status_name(HaServiceStatus status) {
         case HA_STATUS_TRANSPORT_ERROR: return "transport_error";
         case HA_STATUS_HTTP_ERROR: return "http_error";
         case HA_STATUS_QUEUE_FULL: return "queue_full";
+        case HA_STATUS_CANCELLED: return "cancelled";
     }
     return "transport_error";
 }

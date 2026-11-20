@@ -1,4 +1,5 @@
 #include "shutter_config.h"
+#include "config_nvs_write.h"
 
 #if IS_SHUTTER_TESTER
 
@@ -35,10 +36,12 @@ void shutter_config_load(Preferences& prefs) {
         prefs.getFloat(KEY_OFFSET_Y, SHUTTER_DEFAULT_OFFSET_Y_MM);
 }
 
-void shutter_config_save(Preferences& prefs) {
-    prefs.putString(KEY_PRESET, shutter_config.preset_id);
-    prefs.putFloat(KEY_OFFSET_X, shutter_config.sensor_offset_x_mm);
-    prefs.putFloat(KEY_OFFSET_Y, shutter_config.sensor_offset_y_mm);
+bool shutter_config_save(Preferences& prefs) {
+    bool saved_ok = true;
+    saved_ok = (config_nvs_put_string(prefs, KEY_PRESET, shutter_config.preset_id)) && saved_ok;
+    saved_ok = (prefs.putFloat(KEY_OFFSET_X, shutter_config.sensor_offset_x_mm) == sizeof(shutter_config.sensor_offset_x_mm)) && saved_ok;
+    saved_ok = (prefs.putFloat(KEY_OFFSET_Y, shutter_config.sensor_offset_y_mm) == sizeof(shutter_config.sensor_offset_y_mm)) && saved_ok;
+    return saved_ok;
 }
 
 #endif // IS_SHUTTER_TESTER

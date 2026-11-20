@@ -206,7 +206,7 @@ void brew_hint_template(const char* template_name);
 
 // Format timer into buffer. fmt: "mm:ss", "hh:mm:ss", "ss", "mm:ss.d"
 // Returns number of chars written (excl NUL).
-int brew_format_timer(const char* fmt, char* out, size_t out_len);
+int brew_format_timer(char* out, size_t out_len);
 
 // ---- Series access ----
 

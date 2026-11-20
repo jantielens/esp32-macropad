@@ -6,9 +6,49 @@
 #include "log_manager.h"
 
 #include "storage.h"
+#if HAS_DISPLAY && HAS_PSRAM
+#include "list_source.h"
+#endif
+#include <atomic>
+#include <esp_heap_caps.h>
+#include <new>
 #include <string.h>
 
 #define TAG "TestScripts"
+
+namespace {
+std::atomic<uint32_t> scripts_revision{0};
+std::atomic<bool> scripts_writer{false};
+}
+
+bool shutter_test_scripts_write_begin() {
+    bool expected = false;
+    if (!scripts_writer.compare_exchange_strong(expected, true)) return false;
+    scripts_revision.fetch_add(1);
+    return true;
+}
+
+void shutter_test_scripts_write_end() {
+    scripts_revision.fetch_add(1);
+    scripts_writer.store(false);
+}
+
+bool shutter_test_scripts_write_active() { return scripts_writer.load(); }
+uint32_t shutter_test_scripts_revision() { return scripts_revision.load(); }
+
+bool shutter_test_scripts_write(const uint8_t* content, size_t length) {
+    if (length > SHUTTER_TEST_FILE_MAX_BYTES || (length && !content)) return false;
+    const StorageMutationGuard guard;
+    if (!guard || !shutter_test_scripts_write_begin()) return false;
+    File file = Storage.open(SHUTTER_TEST_FILE_PATH, "w");
+    bool ok = false;
+    if (file) {
+        ok = !length || file.write(content, length) == length;
+        file.close();
+    }
+    shutter_test_scripts_write_end();
+    return ok;
+}
 
 // ============================================================================
 // Speed validation
@@ -44,17 +84,21 @@ static bool starts_with(const char* line, const char* prefix) {
 // ============================================================================
 
 static bool finalize_script(ShutterTestParseResult* result, ShutterTestScript* current,
-                            int line_num) {
-    if (!current->id[0]) return false;  // no script started
+                            int line_num, bool bounded) {
+    if (!current->id[0]) return true;
 
     if (current->speed_count == 0) {
         LOGW(TAG, "Line %d: test '%s' has no valid speeds, skipping", line_num, current->id);
-        return false;
+        return true;
     }
 
     // Check for duplicate id — last definition wins
     for (int i = 0; i < result->count; i++) {
         if (strcmp(result->scripts[i].id, current->id) == 0) {
+            if (bounded) {
+                LOGW(TAG, "Line %d: duplicate test id '%s'", line_num, current->id);
+                return false;
+            }
             result->scripts[i] = *current;
             return true;
         }
@@ -63,7 +107,7 @@ static bool finalize_script(ShutterTestParseResult* result, ShutterTestScript* c
     if (result->count >= SHUTTER_TEST_MAX_SCRIPTS) {
         LOGW(TAG, "Line %d: max %d test scripts reached, skipping '%s'",
              line_num, SHUTTER_TEST_MAX_SCRIPTS, current->id);
-        return false;
+        return !bounded;
     }
 
     result->scripts[result->count] = *current;
@@ -75,28 +119,52 @@ static bool finalize_script(ShutterTestParseResult* result, ShutterTestScript* c
 // Public API
 // ============================================================================
 
-uint8_t shutter_test_scripts_parse(ShutterTestParseResult* result) {
+static bool parse_scripts(ShutterTestParseResult* result, ShutterTestScript& current, bool bounded) {
     memset(result, 0, sizeof(ShutterTestParseResult));
 
     File f = Storage.open(SHUTTER_TEST_FILE_PATH, "r");
     if (!f) {
         LOGI(TAG, "No test script file at %s", SHUTTER_TEST_FILE_PATH);
-        return 0;
+        return !bounded || !Storage.exists(SHUTTER_TEST_FILE_PATH);
+    }
+    const size_t file_size = bounded ? f.size() : 0;
+    if (bounded && file_size > SHUTTER_TEST_FILE_MAX_BYTES) {
+        f.close();
+        return false;
     }
 
     char line_buf[256];
     int line_num = 0;
-    ShutterTestScript current;
     memset(&current, 0, sizeof(current));
     current.shots_per_speed = 1;
     bool have_current = false;
 
     while (f.available()) {
         // Read one line
+        const size_t position = bounded ? f.position() : 0;
         size_t len = f.readBytesUntil('\n', line_buf, sizeof(line_buf) - 1);
+        if (bounded && (len == sizeof(line_buf) - 1 || f.position() <= position ||
+                        f.position() > SHUTTER_TEST_FILE_MAX_BYTES)) {
+            f.close();
+            return false;
+        }
         line_buf[len] = '\0';
         line_num++;
 
+        bool invalid_name = false;
+        if (bounded) {
+            char* nul = static_cast<char*>(memchr(line_buf, '\0', len));
+            if (nul) {
+                char* line = line_buf;
+                while (*line == ' ' || *line == '\t') ++line;
+                char* pipe = static_cast<char*>(memchr(line, '|', nul - line));
+                if (!starts_with(line, "name:") || !pipe) {
+                    f.close();
+                    return false;
+                }
+                invalid_name = true;
+            }
+        }
         char* trimmed = trim(line_buf);
 
         // Skip empty lines and comments
@@ -106,7 +174,10 @@ uint8_t shutter_test_scripts_parse(ShutterTestParseResult* result) {
         if (starts_with(trimmed, "name:")) {
             // Finalize previous script if any
             if (have_current) {
-                finalize_script(result, &current, line_num);
+                if (!finalize_script(result, &current, line_num, bounded)) {
+                    f.close();
+                    return false;
+                }
             }
 
             // Start new script
@@ -123,13 +194,39 @@ uint8_t shutter_test_scripts_parse(ShutterTestParseResult* result) {
                 *pipe = '\0';
                 char* id_str = trim(value);
                 char* name_str = trim(pipe + 1);
+                if (bounded && strlen(id_str) >= sizeof(current.id)) {
+                    LOGW(TAG, "Line %d: test id exceeds %u bytes", line_num,
+                         (unsigned)(sizeof(current.id) - 1));
+                    f.close();
+                    return false;
+                }
                 strlcpy(current.id, id_str, sizeof(current.id));
-                strlcpy(current.name, name_str, sizeof(current.name));
+                if (!invalid_name) {
+#if HAS_DISPLAY && HAS_PSRAM
+                    if (bounded) {
+                        size_t preview_length;
+                        if (list_source_preview_length(name_str, strlen(name_str),
+                                                       sizeof(current.name) - 1, &preview_length)) {
+                            memcpy(current.name, name_str, preview_length);
+                            current.name[preview_length] = '\0';
+                        } else {
+                            LOGW(TAG, "Line %d: test name is invalid UTF-8", line_num);
+                        }
+                    } else
+#endif
+                    strlcpy(current.name, name_str, sizeof(current.name));
+                } else LOGW(TAG, "Line %d: test name contains a NUL byte", line_num);
                 if (strlen(id_str) > SHUTTER_TEST_ID_MAX_LEN - 1) {
                     LOGW(TAG, "Line %d: test id '%s' truncated to %d chars",
                          line_num, id_str, SHUTTER_TEST_ID_MAX_LEN - 1);
                 }
             } else {
+                if (bounded && strlen(value) >= sizeof(current.id)) {
+                    LOGW(TAG, "Line %d: test id exceeds %u bytes", line_num,
+                         (unsigned)(sizeof(current.id) - 1));
+                    f.close();
+                    return false;
+                }
                 strlcpy(current.id, value, sizeof(current.id));
                 strlcpy(current.name, value, sizeof(current.name));
             }
@@ -189,15 +286,33 @@ uint8_t shutter_test_scripts_parse(ShutterTestParseResult* result) {
         current.speed_count++;
     }
 
+    const bool complete = !bounded || f.position() >= file_size;
     f.close();
+    if (!complete) return false;
 
     // Finalize last script
     if (have_current) {
-        finalize_script(result, &current, line_num);
+        if (!finalize_script(result, &current, line_num, bounded)) return false;
     }
 
     LOGI(TAG, "Parsed %d test script(s) from %s", result->count, SHUTTER_TEST_FILE_PATH);
+    return true;
+}
+
+uint8_t shutter_test_scripts_parse(ShutterTestParseResult* result) {
+    ShutterTestScript current;
+    parse_scripts(result, current, false);
     return result->count;
+}
+
+bool shutter_test_scripts_parse_bounded(ShutterTestParseResult* result) {
+    void* memory = heap_caps_malloc(sizeof(ShutterTestScript), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!memory) return false;
+    auto* current = new (memory) ShutterTestScript;
+    const bool success = parse_scripts(result, *current, true);
+    current->~ShutterTestScript();
+    heap_caps_free(current);
+    return success;
 }
 
 const ShutterTestScript* shutter_test_scripts_find(const ShutterTestParseResult* result,

@@ -45,6 +45,15 @@ enum BindingResolverStatus : uint8_t {
 typedef BindingResolverStatus (*binding_resolver_fn)(const char* params, char* out,
                                                       size_t out_len);
 
+// Immutable full text, borrowed until release(owner). Consumers must release
+// each successful acquisition, even when it matches their current view.
+struct BindingTextView {
+    const char* text = nullptr;
+    void* owner = nullptr;
+    void (*release)(void*) = nullptr;
+};
+typedef BindingResolverStatus (*binding_text_resolver_fn)(const char* params, BindingTextView* out);
+
 // ----------------------------------------------------------------------------
 // Topic collector callback
 // ----------------------------------------------------------------------------
@@ -58,6 +67,13 @@ typedef void (*binding_topic_collector_fn)(const char* params, void* user_data);
 typedef uint8_t (*binding_key_count_fn)(void);
 typedef const char* (*binding_key_at_fn)(uint8_t index);
 typedef bool (*binding_first_param_validator_fn)(const char* value, size_t length);
+
+enum BindingResolvedValueKind : uint8_t {
+    BINDING_VALUE_KIND_UNKNOWN,
+    BINDING_VALUE_KIND_TEXT,
+    BINDING_VALUE_KIND_NUMBER,
+};
+typedef BindingResolvedValueKind (*binding_value_kind_fn)(const char* params);
 
 enum BindingValidationMode : uint8_t {
     BINDING_VALIDATION_STANDARD,
@@ -222,6 +238,8 @@ struct BindingSchemeSpec {
     const BindingSchemeDoc* doc;
     const BindingAuthoringSpec* authoring;
     binding_first_param_validator_fn validate_first_param;
+    binding_text_resolver_fn acquire_text;
+    binding_value_kind_fn value_kind;
 
     constexpr BindingSchemeSpec(uint8_t minimum_params = 0, uint8_t maximum_params = 0,
                                 uint8_t widget_params = 0, int8_t format_index = 0,
@@ -231,12 +249,19 @@ struct BindingSchemeSpec {
                                 binding_key_at_fn key_at_index = nullptr,
                                                                 const BindingSchemeDoc* documentation = nullptr,
                                                                 const BindingAuthoringSpec* authoring_spec = nullptr,
-                                                                binding_first_param_validator_fn first_parameter_validator = nullptr)
+                                                                binding_first_param_validator_fn first_parameter_validator = nullptr,
+                                                                binding_text_resolver_fn text_resolver = nullptr,
+                                                                binding_value_kind_fn resolved_value_kind = nullptr)
         : min_params(minimum_params), max_params(maximum_params), widget_max_params(widget_params),
           format_param(format_index), validation_mode(validation), free_form(is_free_form),
                     key_count(count_keys), key_at(key_at_index), doc(documentation), authoring(authoring_spec),
-          validate_first_param(first_parameter_validator) {}
+          validate_first_param(first_parameter_validator), acquire_text(text_resolver),
+          value_kind(resolved_value_kind) {}
 };
+
+// Exact single tokens only; unsupported schemes/keys return UNKNOWN so callers
+// can use ordinary scalar resolution, including its normal pipe fallback.
+BindingResolverStatus binding_template_acquire_text(const char* templ, BindingTextView* out);
 
 // Register a scheme resolver and its complete metadata contract. The metadata
 // is consumed by firmware validation, the portal API, and MCP capabilities.
@@ -274,6 +299,9 @@ const char* binding_template_validate_params(const char* scheme, size_t name_len
 // Check if a label string contains any binding tokens [xxx:...]
 bool binding_template_has_bindings(const char* label);
 
+// Reject incomplete binding-shaped tokens while allowing literal text.
+bool binding_template_well_formed(const char* templ);
+
 // Resolve all binding tokens in a template string.
 // Static text is preserved. Binding tokens are replaced with resolver output.
 // On resolver failure or unknown scheme, the token is replaced with "---".
@@ -282,6 +310,8 @@ bool binding_template_has_bindings(const char* label);
 bool binding_template_resolve(const char* templ, char* out, size_t out_len);
 // Dialog/action safety path: reject resolver failures and truncated output.
 bool binding_template_resolve_checked(const char* templ, char* out, size_t out_len);
+// True while resolving a checked action or dialog parameter, including aliases.
+bool binding_template_checked_resolution_active();
 
 // Resolve all tokens and report the aggregate resolver outcome. Output uses the
 // same fallback rules as binding_template_resolve().
@@ -289,23 +319,40 @@ BindingResolverStatus binding_template_resolve_status(const char* templ, char* o
                                                       size_t out_len);
 
 // Resolve a template only when it is exactly one binding token with no
-// surrounding static text, e.g. "[health:table]".
+// surrounding static text, e.g. "[mqtt:devices/table;.]".
 // This bypasses the small internal token scratch buffer used by the generic
 // resolver and forwards out_len directly to the scheme resolver.
 // Returns true when templ matched the exact single-token shape. Output is
 // always populated with either resolved content, a fallback, or an error.
 bool binding_template_resolve_single_token(const char* templ, char* out, size_t out_len);
 
+struct BindingTokenView {
+    const char* scheme;
+    size_t scheme_len;
+    const char* params;
+    size_t params_len;
+};
+
+// Inspect one complete token without resolving it. The view borrows templ.
+bool binding_template_single_token(const char* templ, BindingTokenView* token);
+
+// Report source identity when the scheme can distinguish text from numbers.
+// Unknown preserves the normal expression resolver's numeric inference.
+BindingResolvedValueKind binding_template_value_kind(const char* templ);
+
 // Scan a template string and call the collector for each binding token.
 // Used by mqtt_sub_store to discover topics to subscribe.
 void binding_template_collect_topics(const char* templ, void* user_data);
 
 // Visit tokens (including expression children) without invoking transport-owned
-// collectors. Runs on the binding/LVGL task like resolution.
+// collectors. The scan has no shared state; callbacks must be thread-safe.
 typedef void (*binding_token_visitor_fn)(const char* scheme, size_t scheme_len,
                                          const char* params, void* context);
 void binding_template_visit_tokens(const char* templ, binding_token_visitor_fn visitor,
                                    void* context);
+// Returns false if a parameter or nesting depth exceeds the scan limits.
+bool binding_template_visit_tokens_checked(const char* templ, binding_token_visitor_fn visitor,
+                                           void* context);
 
 #ifdef __cplusplus
 }

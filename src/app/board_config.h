@@ -490,9 +490,18 @@ struct HwButtonDef {
 #define HAS_AUDIO_INPUT false
 #endif
 
-// Enable local voice clip recording and management.
-#ifndef HAS_VOICE_CLIPS
-#define HAS_VOICE_CLIPS false
+// Enable live microphone listening in the web portal.
+#ifndef HAS_MICROPHONE_STREAMING
+#define HAS_MICROPHONE_STREAMING HAS_AUDIO_INPUT
+#endif
+
+#if HAS_MICROPHONE_STREAMING && !HAS_AUDIO_INPUT
+#error "HAS_MICROPHONE_STREAMING requires HAS_AUDIO_INPUT."
+#endif
+
+// Enable local Voice Notes recording and management with SD-primary storage.
+#ifndef HAS_VOICE_NOTES
+#define HAS_VOICE_NOTES false
 #endif
 
 // Enable ES7210 microphone ADC initialization on the shared I2S transport.
@@ -744,12 +753,16 @@ struct HwButtonDef {
 #define HAS_BUTTON false
 #endif
 
-#if HAS_VOICE_CLIPS && IS_VOICE_ASSISTANT
-#error "HAS_VOICE_CLIPS and IS_VOICE_ASSISTANT cannot be enabled together."
+#if HAS_VOICE_NOTES && IS_VOICE_ASSISTANT
+#error "HAS_VOICE_NOTES and IS_VOICE_ASSISTANT cannot be enabled together."
 #endif
 
-#if HAS_VOICE_CLIPS && (!HAS_AUDIO_INPUT || !HAS_FILESYSTEM || !(HAS_DISPLAY || HAS_BUTTON))
-#error "HAS_VOICE_CLIPS requires audio input, persistent storage, and an action host."
+#if HAS_VOICE_NOTES && !USE_SD_STORAGE
+#error "HAS_VOICE_NOTES requires SD-primary storage."
+#endif
+
+#if HAS_VOICE_NOTES && (!HAS_AUDIO_INPUT || !HAS_FILESYSTEM || !(HAS_DISPLAY || HAS_BUTTON))
+#error "HAS_VOICE_NOTES requires audio input, persistent storage, and an action host."
 #endif
 
 // GPIO pin for the optional user button (active level defined below).

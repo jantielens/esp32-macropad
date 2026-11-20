@@ -27,6 +27,8 @@ widgets, template inheritance, a dense grid, and input controls. Save, reload,
 delete, defaults, icon uploads, pad-editor previews, and Show on Device run
 against memory-backed APIs. Show on Device records the chosen screen without
 rendering or executing actions on hardware.
+The mock import preflight checks the pad request envelope and basic defaults
+typography only. It does not run the firmware's complete validators.
 
 The existing E-Paper Frame image workflow remains available at:
 
@@ -41,8 +43,9 @@ physical device. The server binds to localhost. Pad-editor previews keep raw
 bindings abbreviated; they do not resolve or simulate values.
 
 See the [script reference](scripts.md#toolsportal-dev-serverpy) for reset
-commands, failure scenarios, and focused regression tests. The P4 profile is the
-only pad-editor fixture target; this mock does not replace hardware verification.
+commands, failure scenarios, and focused regression tests. Interactive profiles
+share the pad fixtures but expose profile-specific action catalogs; the mock does
+not replace hardware verification.
 
 ## Overview
 
@@ -65,6 +68,53 @@ release the slot. Callers receive the response only after downloading completes.
 This reduces overlapping transfers but does not guarantee DMA-memory headroom.
 Native script, stylesheet, and image requests bypass the queue, as do other
 tabs and clients. The limiter is not a device-wide admission control.
+When enabled, live listening loads its gated script before the shared portal
+bundle and captures the native fetch for its ongoing stream. The stream bypasses
+the queue, and the feature limits capture to one listener.
+
+### Microphone API
+
+`HAS_AUDIO_INPUT` enables **Audio > Microphone**, the
+`microphone_gain_db` and `microphone_reduce_rumble` configuration fields, and
+the current runtime fields `current_microphone_gain_db` and
+`current_microphone_reduce_rumble` in `GET /api/config`.
+`PUT /api/component/microphone/settings` accepts a JSON object with either or
+both settings, validates them, and applies them without writing NVS.
+Gain accepts integer values or strict integer strings from -12 to +24;
+rumble reduction must be a boolean. Request bodies are limited to 256 bytes,
+assembled in PSRAM, and parsed with a bounded PSRAM allocator.
+Runtime changes remain active after leaving the fragment; reboot restores the
+saved defaults. `POST /api/config?no_reboot=1` persists explicitly supplied
+microphone settings and applies them. Saving unrelated settings does not
+replace the current microphone settings with their saved defaults.
+
+`GET /api/component/microphone/levels` requires the
+`X-Microphone-Test` header, renews a short meter lease, and returns a no-store
+JSON object with `available`, `ota`, `in_use`, `fresh`, `sampled`, `rms`, `peak`,
+`input_full_scale`, and `gain_clipped`. RMS and peak are unsigned post-processing
+PCM amplitudes from 0 to 32768; they are valid only when `fresh` is true.
+Clipping flags retain recent events. Microphone endpoints require portal
+authentication and are unavailable in recovery mode.
+Runtime updates are rejected during OTA.
+
+The fragment presents one Test microphone switch. Its optional Hear microphone
+checkbox controls streaming within that test; stopping the test stops both
+polling and streaming. Live slider/checkbox adjustments update runtime settings;
+Save settings persists them, and Revert to saved reapplies the saved settings.
+Reset to factory values applies 0 dB and disables the low-cut filter without
+persisting. The API field remains `microphone_reduce_rumble`.
+
+`GET /api/component/microphone/stream` requires the `X-Microphone-Stream`
+request header and is included when `HAS_MICROPHONE_STREAMING` is enabled. A single
+listener receives an `application/octet-stream` response. The first
+12 bytes contain `LM`, protocol version `1`, status (`1` streaming, `2` busy
+or unable to start, `3` unavailable), a little-endian 32-bit sample rate, channel count, sample
+width in bits, and two reserved bytes. The rest is interleaved little-endian
+signed 16-bit PCM. The stream ends on disconnect, capture failure, or OTA.
+Audio and HTTP Basic Auth are unencrypted on the device's HTTP portal.
+The session allocates one second of native PCM, capture scratch, and the send
+buffer in PSRAM. Its capture worker also uses a PSRAM stack; a failed PSRAM
+allocation rejects the session rather than consuming internal RAM.
 
 ### Remote Logs
 
@@ -304,7 +354,7 @@ rejection policy or increase any buffer capacity.
 - WiFi credentials not configured
 - Configuration reset
 - WiFi connection failed
-- A live Enable AP action requests direct device access; this uses Full Mode
+- An enabled Set access point action requests direct device access; this uses Full Mode
   rather than the restricted recovery wizard below.
 
 **Access:**
@@ -584,13 +634,16 @@ See the [Face user guide](../user/widgets/README.md#face)
 for configuration and a numeric-to-emotion example.
 
 Shared assets are included once, at their first manifest position. Put dependencies
-before consumers. Both bundles expand `@widgets` in their existing `HAS_DISPLAY`
-chunk, with gated subchunks generated from `portal.gates`; additional runtime
-capability checks stay in owner `available()` callbacks. Shared assets must
-declare identical portal gates in every owner. The minifier emits one combined
-gzip blob per distinct chunk selection, merging equivalent flag assignments
-without increasing the 512-variant limit. HTML variants use the same portal
-gates. Device-free template rendering includes all widget editors by default.
+before consumers. Both bundles expand `@widgets` in their `HAS_DISPLAY` chunk.
+Portal predicates inherit the widget's native `gates` and `any_gates`, including
+touch, HID, camera, extension, and device-class requirements. A narrower portal
+gate list requires a nonempty `portal.gate_exception` explaining intentional
+cross-board authoring. Shared assets must declare identical predicates in every
+owner. JavaScript, CSS, selector options, and editor HTML use the same compiler
+selection. Each bundle produces one combined gzip stream for the current build,
+without enumerating variants. The device-free server selects widgets using its
+mock profile capabilities; direct template rendering includes all editors unless
+flags or exact widget types are supplied.
 The selector ID is `pad-edit-<type>-widget-option`, not an owner descriptor field.
 Do not edit bundle lists, template mappings, selector markup, or generic
 orchestration to add a widget.
@@ -605,7 +658,7 @@ prefixes; asset generation executes JS owners to verify exact manifest parity.
 Waveform's owned portal editor is included through the manifest and available
 only when the device's `widget_catalog` contains `waveform`. Its firmware
 implementation remains gated by `HAS_DISPLAY` and `IS_SHUTTER_TESTER`. Portal
-owners without `portal.gates` are packaged in the existing display bundle;
+owners without explicit portal gates inherit their complete native predicates;
 runtime availability alone is not a JavaScript size gate. No persisted JSON, firmware interaction, or
 native ABI changes are part of this wiring.
 
@@ -752,8 +805,8 @@ manual reconfiguration. Save the supported editor's configuration; unavailable
 widget settings may be omitted on edit, not proactively deleted on load.
 
 Rocker owns directional action labels. Numeric Rocker declares its adjustment
-section in Actions, preserves signed `{step}` payloads, and serializes tap plus
-optional adjustment, without long-press actions. Input editors declare their
+section in Actions, provides signed `[event:step]` to dynamic arguments, and
+serializes tap plus optional adjustment, without long-press actions. Input editors declare their
 action suppression and navigation policy. List labels its tap actions Select;
 Camera Preview owns its capability gate and image scale.
 
@@ -997,8 +1050,8 @@ every component in that custom section to the same category ID.
   - Board appearance defaults: `GET /api/component/button-defaults/config` returns saved device overrides plus a read-only `firmware_defaults` object containing the board-selected pad, button, layout, shadow, and widget palette defaults. `POST` accepts device overrides only. The portal uses the firmware defaults for controls, widget colors, previews, and appearance resets; unchanged inherited values are omitted from device-default saves. Device exports exclude `firmware_defaults`. E-paper interactive boards use high-contrast defaults and pixel shift distance 0; other boards retain their existing defaults.
   - **Building Blocks**: Pre-configured button groups available in the More ▾ menu under "━━ Blocks ━━". Select a block to enter placement mode; green/red ghost outlines show valid/invalid positions. Placement checks occupancy in the selected layer and enforces combined button capacity. Uses extensible registration API (`pad_block_register()`) so feature branches add blocks independently. Catalog served by `GET /api/pad/blocks`.
   - **Button copy/paste**: Copy button settings from one position and paste into another in the selected layer; position-independent.
-  - **Pad actions via "More ▾" menu**: Fill Pad operates on the selected layer. Copy/Paste Pad and Export/Import Pad preserve both layers and shared settings. Export/Import Device Config covers NVS and all pad configs; Clear Pad clears the whole draft.
-  - **Device config export/import**: Exports NVS settings (excluding network) plus all 16 pad pages to a single JSON file; import overwrites settings and reboots
+  - **Pad actions via "More ▾" menu**: Fill Pad operates on the selected layer. Copy/Paste Pad and Export/Import Pad preserve both layers and shared settings. Clear Pad clears the whole draft.
+  - **Device config export**: Exports portable settings, pad defaults, saved pads, and retained icon sources to JSON for reference. Device configuration import is not available.
 - **Recipes** (display boards): Installs a declared scenario into Main without changing Overlay buttons. Adaptive recipes use ordered row or column flow; each button declares a visual shape and size, and the portal selects spans from the target pad's actual rendered button dimensions. The clicked position is the recipe's top-left anchor. Recipe installation enforces the combined Main and Overlay button limit and refreshes layer-qualified icon IDs for both arrays. If an empty current grid cannot host a recipe, the portal offers the smallest supported rows/columns increase. If Main buttons block every placement, it offers a confirmed **Clear Main Buttons** action that retains Overlay and shared pad settings. The user can then select a placement and install the recipe separately. Optional parameter descriptions appear below their inputs. The portal derives an impact summary from the recipe, and unavailable recipes identify their missing device capability. A completed installation exposes **Show Pad** and **Navigate to Pad Editor** actions for the target pad. Recipes use declarative provisioning for pad bindings and existing component configuration, such as timer expiry actions. The **Recipe Catalog** page edits the device-persisted catalog served by `GET/POST /api/recipes/catalog`; a missing catalog is an empty valid envelope. The repository sample is [docs/samples/recipe-catalog.json](../samples/recipe-catalog.json).
 - **Unsaved-changes protection**: Confirm dialog on page/pad switch and `beforeunload` event when edits are pending
 - Pad save controls: A workspace toolbar labels the pad list with Pads and provides pending-edit or saving status, Save Pad, Show on Device, and More. Clean drafts have no status label. The current pad is highlighted in the list, which shares navigation row styles with the shell. The Pad inspector scope opens pad settings. Clicking a selected button again deselects it without discarding its draft. The canvas has no dimensions toolbar or footer. Pad and button action slots share the same accented group styles. Save Pad is also available in the mobile inspector header.
@@ -1039,7 +1092,7 @@ storage, multi-pad drafts, undo history, or new continuous polling is added.
 The guarded pad switch and fragment departure use a native dialog with Keep
 Editing and Discard and Switch. Disposal clears listeners, observers, preview
 callbacks, and editor-only state. Clear Pad and pad-file import edit the draft;
-device defaults and explicitly confirmed device import remain separate writes.
+device defaults remain a separate write.
 
 ##### Workspace Acceptance Checklist
 
@@ -1059,7 +1112,7 @@ do not verify on-device rendering, input dispatch, or physical device behavior.
 | Pad scope | Name, dimensions, wake screen, template, background, shadow inheritance, bindings, and full-screen actions |
 | Inheritance | Selecting or copying a ghost creates no override; editing does; clearing the override restores the inherited button |
 | Operations | Copy/paste button, fill, copy/paste pad, pad import/export, draft-only clear, blocks and cancellation; no unintended persistence |
-| Separate writes | Defaults save independently; device import retains its explicit confirmation, complete pad persistence, and reboot behavior; Show on Device does not save |
+| Separate writes | Defaults save independently; Show on Device does not save |
 | Responsive layout | Desktop/tablet canvas stays mounted; mobile inspector has save/return; no horizontal overflow or overlapping persistent controls |
 
 Run the focused Node portal tests through CTest, including the dev server,
@@ -1316,6 +1369,7 @@ not every authentication failure, redirect, or early error response is instrumen
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/reboot` | Reboots without saving configuration. |
+| `POST` | `/api/reboot/ota` | Requests a one-shot reboot with Bluetooth and MQTT disabled. |
 | `POST` | `/api/sleep?seconds=N` | Requests one timed deep sleep, without saving configuration or changing the stored mode or cadence. |
 | `POST` | `/api/component/power-savings/activity` | Authenticated user-activity notification; `204`, available only with `HAS_AUTO_SHUTDOWN`. |
 
@@ -1323,6 +1377,14 @@ These routes use portal authentication. Sleep requires an ASCII decimal integer
 from 1 to 65535 seconds. It returns `400` for a missing or invalid duration,
 `409` when an update, configuration upload/write, or network transition prevents
 sleep, and `503` when main-loop dispatch cannot confirm admission.
+
+The OTA-mode reboot returns `409` if an update, configuration write, or network
+transition is active. The next software boot disables Bluetooth and MQTT without
+changing settings, using saved Wi-Fi or the setup network. If saved Wi-Fi fails,
+OTA mode starts the setup network even when the saved failure policy is offline.
+The request is consumed at boot; the following reboot returns to the saved
+operating mode. `/api/info` reports the mode in `ota_mode`. Manual firmware
+upload pauses health polling in the uploading portal tab and resumes it on failure.
 
 An accepted request returns `200 {"success":true,"message":"Entering deep sleep"}`.
 The main loop reserves the shared network transition before confirming sleep;
@@ -1362,7 +1424,7 @@ E-Paper Frame firmware cannot enable this policy.
 |--------|------|-------------|
 | `GET` | `/api/pad?page=N` | Returns one pad's stored JSON. `bg_image_password` is redacted in both button arrays and reported through `bg_image_password_set`. |
 | `GET` | `/api/pad/icon_context?page=N` | Returns local layout context for pads directly referencing template pad N, without fetching their complete configurations. |
-| `POST` | `/api/pad?page=N` | Validates and saves one complete pad object. `buttons` is Main; optional `overlay_buttons` is Overlay. Both share grid settings and `max_pad_buttons`. |
+| `POST` | `/api/pad?page=N` | Validates and saves one complete pad object. `buttons` is Main; optional `overlay_buttons` is Overlay. Both share grid settings and `max_pad_buttons`. Action-bearing pads require `action_format_version: 1` and operation envelopes; incompatible actions are rejected before writing. |
 | `DELETE` | `/api/pad?page=N` | Deletes the pad configuration. |
 
 Button backgrounds use `bg_image_fit`: `fill-center` (default when omitted),
@@ -1376,6 +1438,15 @@ Button positions are local to their layer. Grid coordinates may overlap between
 layers, but button rectangles may not overlap within one layer. The shared
 validator rejects malformed collections and combined-capacity overflow before
 the portal or MCP authoring tools save a pad.
+
+Pad-owned composition shares template occupancy and binding precedence rules
+with runtime loading. Widget contextual validators receive the composed button
+and binding views rather than independently reconstructing inheritance. A
+collection-valued widget declares that capability separately from validation.
+The portal passes display geometry to the save path, which validates its parsed
+document and reuses one streamed template document for contextual checks,
+inherited icons, and the runtime merge. MCP still validates before queueing a
+save; the save path rechecks context under the pad mutation guard.
 
 `GET /api/pad/icon_context?page=N` returns `{"dependents":[]}` when no saved pad
 directly references N. Otherwise, each dependent has its zero-based `page`,
@@ -1757,9 +1828,16 @@ Returns comprehensive device information.
       "type": "timer",
       "group": "Timer",
       "label": "Timer",
-      "commands": [
-        {"id": "start", "label": "Start"},
-        {"id": "set", "label": "Set countdown"}
+      "alarm_hook_allowed": true,
+      "pausable": false,
+      "operations": [
+        {"id": "timer.start_up", "label": "Start count-up timer",
+         "execution": "sync", "pausable": false, "alarm_hook_allowed": true,
+         "arguments": [
+           {"name": "timer", "label": "Timer", "type": "integer",
+            "dynamic": true, "example": "[var:timer]", "control": "timers",
+            "min": 1, "max": 3}
+         ]}
       ]
     }
   ],
@@ -1804,13 +1882,21 @@ Returns comprehensive device information.
 
 **Action Catalog:**
 - Add `?catalog=1` to request the optional `catalog` array. The bare `/api/info` response omits it to keep startup and polling responses small.
-- The catalog is generated by enumerating registered `ActionTypeDef` descriptors. An action module's `describe()` callback supplies its portal and MCP presentation metadata and documented fields; `available()` controls support and `validate()` defines authoring validation.
-- Each catalog entry contains `type`, `group`, and `label`. Multi-command entries also contain `commands`, an array of `{id, label}` objects; device-class entries may additionally contain `command_families`.
+- Display builds with PSRAM also return `list_sources` for catalog requests.
+  Each source has a `token`, `title`, and `fields` array describing field
+  names, types, descriptions, and whether they are optional. The List editor
+  uses this metadata to offer sources available on that device.
+  Field types are `string`, `number`, `boolean`, or `scalar` for mixed scalar
+  values. `[health:metrics]` supplies raw health values and optional severity
+  through this collection metadata, not the scalar health-key catalog.
+- The catalog is generated by enumerating registered `ActionTypeDef` descriptors.
+  An owner's `describe()` supplies group and label, and `available()` controls
+  support. Each operation describes its ID, execution policy, and typed arguments.
 - `bthome` is available with `HAS_BLE || HAS_BLE_HID`, independently of MQTT
-  and keyboard transport. **Connectivity > Send BTHome event** uses flat JSON
-  `{"type":"bthome","button":4,"event":"long_press"}`. `button` is a literal
-  integer from 1 to 10 (default 1); `event` is `press` (default),
-  `double_press`, or `long_press`. Both selectors use registry-authored generic
+  and keyboard transport. **Connectivity > Send BTHome event** uses
+  `{"op":"bthome.send","args":{"button":4,"event":"long_press"}}`. `button` is an
+  integer from 1 to 10; `event` is `press`, `double_press`, or `long_press`.
+  Both selectors use registry-authored generic
   editor metadata shared with MCP. The main-loop-owned `bthome_events.cpp`
   sends unencrypted BTHome v2 advertisements with all ten button positions,
   a per-activation packet ID, and device-wide configurable bursts (defaults:
@@ -1823,9 +1909,9 @@ Returns comprehensive device information.
   connection slots are full. Its four-entry waiting FIFO rejects newest on
   overflow; queue admission is synchronous, not remote completion. OTA activity
   and epoch changes cancel pending work.
-- Device commands `wifi_connect`, `wifi_disconnect`, `wifi_off`, `ap_enable`, and `ap_disable`
-  are registered by `system_action.cpp` and exposed through MCP's
-  `system_command`. They replace `wifi_reconnect` without an alias. Admission
+- MCP's `system_command` maps `wifi_connect`, `wifi_disconnect`, `wifi_off`,
+  `ap_enable`, and `ap_disable` to the typed Wi-Fi operations registered by
+  `system_action.cpp`. It does not provide a `wifi_reconnect` alias. Admission
   holds the existing network-transition guard, excluding OTA/config writes;
   duplicates are no-ops and conflicts fail without cancelling the current work.
   The main-loop Wi-Fi owner starts one transient FreeRTOS worker for radio
@@ -1868,61 +1954,47 @@ Returns comprehensive device information.
   have no health-binding aliases; HTTP telemetry field names are unchanged.
   AP passwords are not included. Builder titles stay short; value semantics
   live in the generated reference's Wi-Fi states and details section.
-- Actions declare named text fields through `ActionTypeDef::fields` and
-  `action_visit_field()`. Flags independently enable live bindings, event tokens,
-  and binding-overflow rejection. Event-capable fields are projected as
-  `template_fields`, for example `{"message":{"max":191}}`, using each buffer's
-  usable byte capacity. No second token-field registry is maintained.
-- Slider release actions use the normal three-action list and optional `{value}`;
-  Numeric Rocker adjustment actions supply signed `{step}`. Shared firmware and
-  portal validation check the supplied context, declared fields, expanded byte
-  lengths, and action-owned payload rules. Fixed properties do not become
-  templateable. Home Assistant data is validated as a JSON object after token
-  substitution, including tokens in quoted strings.
-- Firmware preflights every declared field before replacing any event token.
-  Substitution is bounded and allocation-free, and overflow rejects the action
-  rather than truncating it. Event values are frozen before action-list dispatch,
-  including delayed or confirmed suffixes. Existing live-binding timing and
-  transactional variable updates remain unchanged.
-- Simple actions can additionally provide `editor_fields`, with a small field vocabulary: `text`, `number`, `select`, `toggle`, and `color`. `select` fields can reuse the entry's `commands` through `command_options`. Actions with conditional or specialized behavior keep their dedicated portal editor code.
-- The portal uses this projection to populate action type, command, and simple field controls. MCP capability metadata uses the same catalog source with field documentation included.
-- StopWatch builds add the **M5Stack StopWatch** group: `charging_mode` (**Set charging mode**, `mode`: `off`, `low`, `high`), `status_led` (**Status LED**, `mode`: `on`, `off`), `vibrate` (**Vibrate**, `pattern`: comma-separated vibrate/pause durations such as `20,100,20`, 1-15 positive steps with an odd count and total at most 5000 ms; default `200`, standalone `0` stops), and fieldless `shutdown` (**Shutdown**). Vibration has one text field; `duration_ms` is not supported. Charging and LED overrides reset at boot; vibration does not pause the action list, and shutdown never resumes its remaining actions. Shutdown excludes OTA but does not save unsaved edits or flush uploads. The board-local `BOARD_ACTION_SOURCE` module supplies catalog metadata and validation; no board-specific JS, HTML, or configuration API fields are included in other firmware variants.
-- Voice Assistant builds add the `Audio` / `Voice Assistant` catalog type with `record_start`, `record_stop_transcribe`, `record_until_silence`, `record_cancel`, and `speak` commands. `record_until_silence` exposes trailing-silence and speech-level threshold fields and returns pending until transcription completes, then resumes the remaining action list. Azure transcription has a 30-second limit and no automatic retry. Failure sets `[stt:status]` to `error`, puts the reason in `[stt:text]`, and stops the remaining action list. During automatic recording, `record_stop_transcribe` stops capture immediately while the original automatic action retains the remaining action list. `record_cancel` discards the active recording and any pending automatic continuation. `speak` resolves its text field as a binding template, then queues best-effort Azure TTS with optional voice and volume overrides; it does not pause the action list, and provider failures are logged without changing the STT bindings. The Text-to-Speech settings also expose optional ISO-639-1 language guidance and verbatim Azure instructions. A newer speech request replaces active or queued speech.
+- Actions register typed operation and argument descriptors with their owner.
+  The shared parser, validator, portal picker, and MCP catalog use those
+  descriptors. Fixed arguments are literal; eligible dynamic arguments contain
+  a `$template` expression that is resolved and checked before dispatch.
+- Slider release actions use the normal three-action list and expose
+  `[event:value]`; Numeric Rocker adjustment actions expose signed
+  `[event:step]`. Event and item context is retained for delayed or confirmed
+  suffixes. Home Assistant data is validated as a JSON object after resolution.
+- StopWatch builds add the **M5Stack StopWatch** group: `power.charging.set_mode` (`mode`: `off`, `low`, `high`), `device.status_led.set` (`mode`: `on`, `off`), `device.vibrate` (`pattern`: comma-separated vibrate/pause durations such as `20,100,20`, 1-15 positive steps with an odd count and total at most 5000 ms; standalone `0` stops), and `device.shutdown` (no arguments). Vibration has one text field; `duration_ms` is not supported. Charging and LED overrides reset at boot; vibration does not pause the action list, and shutdown never resumes its remaining actions. Shutdown excludes OTA but does not save unsaved edits or flush uploads. The board-local `BOARD_ACTION_SOURCE` module supplies catalog metadata and validation; no board-specific JS, HTML, or configuration API fields are included in other firmware variants.
+- Voice Assistant builds add `voice.record.start`, `voice.record.stop_transcribe`, `voice.record.until_silence`, `voice.record.cancel`, and `voice.speak`. `voice.record.until_silence` exposes trailing-silence and speech-level threshold fields and returns pending until transcription completes, then resumes the remaining action list. Azure transcription has a 30-second limit and no automatic retry. Failure sets `[stt:status]` to `error`, puts the reason in `[stt:text]`, and stops the remaining action list. During automatic recording, `voice.record.stop_transcribe` stops capture immediately while the original automatic action retains the remaining action list. `voice.record.cancel` discards the active recording and any pending automatic continuation and stops its own action suffix. `voice.speak` resolves its text field as a binding template, then queues best-effort Azure TTS with optional voice and volume overrides; it does not pause the action list, and provider failures are logged without changing the STT bindings. The Text-to-Speech settings also expose optional ISO-639-1 language guidance and verbatim Azure instructions. A newer speech request replaces active or queued speech.
 
 **Action Editor Ownership:**
 
-The shared `portal_action_editor.js` owns catalog access, common field rendering,
-extension dispatch, unsupported-action preservation, and fixed action-list slots.
-It does not own built-in action forms or command-specific payload rules.
-Specialized actions use `portal_action_editor_<type>.js` extensions registered in
-`_actionEditorExtensions`; simple actions continue using firmware `editor_fields`
-without a JavaScript extension or a second command catalog.
+The shared `portal_action_editor.js` owns operation discovery, typed argument
+rendering and validation, dynamic input, and action-list slots. Catalog
+controls provide resource selectors such as screens and sounds. Ordinary new
+operations are authored by registering descriptors, not by adding an editor
+extension. Unsupported or incompatible action documents are rejected rather
+than translated. The Pad Editor makes one exception for opening and importing
+older pads: `padResetOlderActions()` removes all action fields from the draft
+and stamps `PAD_ACTION_FORMAT_VERSION` before normal validation and the
+merge-on-save snapshot. If action fields were removed, the editor shows a
+notification and keeps the draft unsaved. Current-format validation failures
+and newer or invalid versions remain blocked; recovery never writes a file
+until the user saves.
 
-Each specialized extension keeps its rendering (`groups`), visibility and command
-handling (`typeChanged`), defaults (`load`), and validation/payload construction
-(`build`) together. Build hooks return `null` for other types.
-Extensions can declare `bindingSuffixes`
-and `colorSuffixes` for shared, idempotent binding setup. Dialog validation uses
-these declarations and catalog bindable fields for the selected action only.
-An optional `wireFragment(prefixes, info)` hook supplies asynchronous options;
-shared wiring awaits all hooks after fetching device info once.
+The five shared action configuration hosts (swipes, boot actions, hardware
+buttons, MQTT triggers, and timer expiry) recover unsupported saved documents
+in their firmware loaders. After successful JSON decoding, a configuration
+validation failure clears the whole host configuration in memory, including
+MQTT topics and filters, without writing storage. Hardware button identities
+still come from the board. Allocation, storage, and JSON decoding failures
+remain errors. GET responses include read-only `config_reset` metadata; when
+true, the portal shows a bubble notification and permits editing and saving.
+A successful save clears the flag. POST validation stays strict; omit this
+read-only flag from submitted configuration.
 
-The Screen extension owns available-screen selection and an explicit **Binding
-value** mode. It stores the actual target string, never the mode sentinel, and
-uses shared binding validation/tokenization. Targets exceeding 31 UTF-8 bytes
-are rejected without truncation. Catalog loading preserves pending literal
-selections and active binding drafts; unavailable literal IDs are not added to
-the dropdown. After `(none)`, options appear as numerically ordered pads,
-**Binding value**, then built-in screens. Custom pad names include their
-one-based index, for example `Pad 1: Living Room`.
-The editor does not inspect List widget fields or action-host IDs.
-Inactive binding inputs are disabled and excluded from dialog validation.
-Sound Alert owns sound-list population, including catalog-backed sound
-selectors. Gamepad owns the helpers also consumed by the held-control widget;
-widget markup remains in the pad editor. Register extensions after the shared
-editor and before consumers in the existing feature-gated bundle chunks.
-Unsupported actions retain their loaded payloads unchanged. This portal refactor
-does not alter firmware rejection of retired audio aliases or invalid loop kinds.
+Action selectors opt into the shared dropdown's searchable mode with
+`data-search-placeholder`. The original select remains the source of truth
+for loading, validation, and change events. Search only filters the visible
+choices; it does not change action values or become part of a pad draft.
 
 Run the action picker, action-list, cycle, timer, and startup host regressions after
 action editor changes, followed by asset minification and desktop/mobile checks. The
@@ -2249,6 +2321,7 @@ Phase 3 accepts exactly slot `1` and a device-wide lateness setting:
 
 ```json
 {
+  "action_format_version": 1,
   "lateness_minutes": 360,
   "1": {
     "enabled": false,
@@ -2281,16 +2354,10 @@ Synchronous hook failures do not prevent attempts of subsequent hooks. Alarm
 Home Assistant hooks execute bounded HTTP requests directly; ordinary button
 actions retain queued delivery.
 
-The registered `alarm` action also supports slot-1 `set_time`, `adjust_minutes`,
-`enable`/`disable`/`toggle`, and weekday enable/disable/toggle. Its generic editor
-metadata exposes `alarm_id`, `alarm_command`, bindable `alarm_value` (minutes,
-including Numeric Rocker `{step}`), and `alarm_day` (Sunday=0).
-`portal_action_editor_alarm.js` owns command-specific rendering, loading,
-binding setup, and payload building through `_actionEditorExtensions`. Its
-`type` registration excludes Alarm fields from the generic renderer. It shows
-the value only for time commands and the weekday only for weekday commands;
-unused fields are omitted from saved actions. MCP uses the same
-command validation and queue, with integer `value` and `day` arguments. Config
+Alarm operations include setting and adjusting time, enabling, disabling,
+toggling, and weekday controls. Their typed arguments appear in the shared
+operation picker; a Numeric Rocker can provide `[event:step]` dynamically for
+an adjustment. MCP uses the same command validation and queue. Config
 commands default to ID 1; ID 0 is reserved for active-session controls.
 Queued mutations serialize the current definition, alter only the selected
 fields, and use shared validation/apply logic with portal edits. The four-entry
@@ -2775,10 +2842,11 @@ non-finite acceleration/inertia defaults to 0, and finite values are clamped
 to 0-5. Neither feature adds an enable toggle or changes USB descriptors.
 
 The self-registering `mouse_button` action module is available with
-`HAS_USB_HID || HAS_BLE_HID` and uses flat JSON `{"type":"mouse_button","button":"right"}`.
-The `button` field accepts `left`, `right`, or `middle` (default `left` when
-omitted); validation rejects invalid names and non-string values. This fixed
-option set is not bindable. Its catalog metadata drives the shared portal
+`HAS_USB_HID || HAS_BLE_HID` and uses
+`{"op":"mouse.click","args":{"button":"right"}}`.
+The `button` argument accepts `left`, `right`, or `middle`, either as a fixed
+selection or a dynamic value. Validation rejects invalid values. Its catalog
+metadata drives the shared portal
 selector and MCP action schema. Dispatch returns complete when a click is
 accepted by the queue, or failed if unavailable, disconnected, full, in OTA,
 or overlapping a drag-owned button. Other-button click releases preserve drag
@@ -3289,13 +3357,14 @@ off to on.
 
 ```json
 {
+  "action_format_version": 1,
   "motion_enabled": true,
   "motion_analyze_every_nth_frame": 2,
   "motion_sensitivity": 5,
   "presence_hold_seconds": 60,
   "motion_keep_display_awake": false,
   "actions": [
-    {"type": "system", "system_command": "wake_display"}
+    {"op": "display.wake", "args": {}}
   ]
 }
 ```
@@ -3422,26 +3491,63 @@ root (`/`) cannot be deleted. Returns `404` for a missing path and
 uses this endpoint for individual images, a dated camera-roll folder, and the
 latest snapshot copy.
 
-### Voice Clips API
+### Voice Notes API
 
-The `voice-clips` component and its fragment and script require
-`HAS_VOICE_CLIPS`. The normal portal authentication applies.
+The `voice-notes` component and its fragment and script require
+`HAS_VOICE_NOTES`. The normal portal authentication applies.
 
-* `GET /api/component/voice-clips/list` returns cached indexed clip metadata.
-* `GET /api/component/voice-clips/status` returns recorder state, error,
-  duration, backend, and cached total/free capacity.
-* `GET /api/component/voice-clips/file?id=<id>` streams an indexed WAV.
+* `GET /api/component/voice-notes/list` returns indexed note metadata,
+  `has_transcript`, `has_enrichment`, `title`, and `enrichment_error`, without
+  transcript or summary text.
+* `GET /api/component/voice-notes/status` returns recording and service attempt
+  snapshots, setup status, backend, cached total/free capacity, and a
+  `processing` object. Its `state` is `idle`, `waiting`, `running`, or
+  `blocked`; its `reason` is `none`, `offline`, `recording`, `update`,
+  `retry`, `configuration`, or `retries_exhausted`; `service` identifies the
+  affected service. Transcription and enrichment snapshots include
+  `retry_status`: empty, `Retry 1 of 3`, `Retry 2 of 3`, `Retry 3 of 3`, or
+  `Retries halted`. These describe per-service cycles, not per-note attempts.
+* `GET /api/component/voice-notes/detail?id=<id>` returns note metadata and its
+  saved transcript and enrichment, or `null` for missing results. An
+  `enrichment_error` reports an unreadable saved enrichment.
+  An enrichment summary may be an empty string; the title remains nonblank.
+* `POST /api/component/voice-notes/process?id=<id>` accepts missing work with
+  HTTP `202`, or returns `200` with `unchanged` if both results exist.
+  `retranscribe` replaces only a transcript and `regenerate` replaces only a
+  title and summary. Poll status for completion or failure; an applicable
+  service cooldown returns `429`.
+* `GET /api/component/voice-notes/file?id=<id>` streams an indexed WAV.
   Add `download=1` for an attachment. A single closed, open-ended, or suffix
   byte range returns `206` with `Content-Range`; an invalid or unsatisfiable
   range returns `416`. Responses advertise `Accept-Ranges: bytes`.
-* `DELETE /api/component/voice-clips/delete?id=<id>` removes an indexed clip.
-  An active reader returns `409`; missing clips return `404`.
+* `DELETE /api/component/voice-notes/delete?id=<id>` removes the recording and
+  its results. An active reader returns `409`; missing notes return `404`.
 
 IDs are 16 lowercase hexadecimal characters. Generic Storage and MCP access
 can browse the directory and read its files. Generic Storage deletion does not
 coordinate with the recorder or update its index. Manual firmware upload and
 factory reset return a retryable `409` while recorder cancellation is pending,
 or `503` if it cannot stop safely.
+
+Feature-gated `/api/config` fields are `voice_notes_auto_process` and, for each
+of `transcription` and `llm`, `voice_notes_<service>_endpoint`,
+`voice_notes_<service>_deployment`, and write-only
+`voice_notes_<service>_api_key`. GET returns empty keys and separate
+`voice_notes_<service>_api_key_set` indicators. An omitted or empty key preserves
+that service's saved secret. Settings changes apply without rebooting; automatic
+processing includes existing notes with missing results.
+
+Automatic failures allow three retries after 30 seconds, 1 minute, and 5
+minutes, then pause the affected service. A newly saved recording resets both
+ordinary retry budgets; accepted manual processing resets requested runnable
+services; changed service settings reset that service. None bypass provider
+cooldowns. New recordings do not clear setup blocks. Reboot resets in-memory
+retry history. Independent eligible services can continue while another is
+paused.
+
+An owned pass remains `running` during the fixed two-second gap after an
+operation; `processing.service` is `none` while the worker waits. Completed
+service attempt snapshots retain their terminal state during the gap.
 
 ---
 
@@ -3575,37 +3681,34 @@ All swipe endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabl
 
 Returns the current swipe action configuration.
 
-- **Response:** JSON object with `swipe_left`, `swipe_right`, `swipe_up`, `swipe_down` keys, each containing a `ButtonAction` object (`type`, `screen_id`, `mqtt_topic`, `mqtt_payload`, `key_sequence`).
-- Default: `swipe_right` has `type: "back"`, all others are empty.
+- **Response:** JSON object with `action_format_version: 1`, `config_reset`, and `swipe_left`,
+  `swipe_right`, `swipe_up`, and `swipe_down` keys. Each direction contains a
+  typed operation envelope or an empty object.
+- Default: `swipe_right` is `{"op":"screen.back","args":{}}`; all others are empty.
 
 #### `POST /api/swipe-actions`
 
-Save swipe action configuration to LittleFS.
+Save swipe action configuration to the selected storage backend.
 
-- **Body:** JSON object with the same structure as the GET response.
+- **Body:** JSON object with the same structure as the GET response, omitting
+  read-only `config_reset`.
 - **Response:** `{"success": true}` on success; JSON error on failure.
 - Actions are applied immediately without reboot.
 
 #### Navigate Pad Sequence action contract
 
-`cycle_pad` uses the same flat `ButtonAction` JSON shape as every other shared
-action surface:
+`pad.cycle` uses the same typed operation shape as other action surfaces:
 
 ```json
 {
-  "type": "cycle_pad",
-  "direction": "next",
-  "wrap": true,
-  "excluded_pads": "1,5"
+  "op": "pad.cycle",
+  "args": {"direction": "next", "wrap": true, "excluded_pads": "1,5"}
 }
 ```
 
-`direction` defaults to `next` when omitted and accepts `next` or `previous`.
-`wrap` defaults to `true`. `excluded_pads` is an optional comma-separated list
-of 1-based pad numbers. The shared editor normalizes exclusions on load and save
-using the board's reported `max_pads`: valid values are deduplicated and sorted,
-while malformed and out-of-range tokens are ignored. Parsed firmware reads emit
-the same canonical form.
+`direction` accepts `next` or `previous`; `wrap` is a boolean.
+`excluded_pads` is an empty string or a comma-separated list of 1-based pad
+numbers. Malformed or out-of-range entries fail validation.
 
 Cycle eligibility comes from an atomic 32-bit snapshot owned by `pad_config`.
 Each bit reflects a successfully parsed cache entry with a post-template
@@ -3616,8 +3719,8 @@ copy pad configurations, or access persistent storage from the display task.
 
 #### Full-screen pad actions
 
-Pad JSON can include a local `pad_actions` array containing up to three flat
-`ButtonAction` objects. The portal exposes these below Pad Bindings as
+Pad JSON can include a local `pad_actions` array containing up to three typed
+operation envelopes. The portal exposes these below Pad Bindings as
 **Full-Screen Tap Actions**, using the shared action editor. A nonempty list
 creates a transparent full-pad input layer above Main and Overlay buttons:
 normal taps dispatch the ordered list instead of button or widget actions,
@@ -3626,11 +3729,10 @@ list. The field is deliberately excluded from `template_pad` inheritance.
 
 The save API preserves an omitted `pad_actions` field. An empty array explicitly
 clears the list. Pad validation rejects non-array values, more than three
-entries, entries without `type`, unknown action types, and malformed
-action-specific payloads. The literal `"none"` type is accepted for compatibility
-but is removed during parsing and has no runtime effect.
+entries, missing or unavailable operations, and malformed arguments. Action-bearing
+pads require `action_format_version: 1`; legacy action shapes are rejected.
 
-The built-in `delay` action uses `{ "type": "delay", "duration_ms": 3000 }`.
+The built-in delay uses `{"op":"delay.wait","args":{"duration_ms":3000}}`.
 `duration_ms` must be a whole number from 1 to 55,000. It pauses the current
 ordered action list and resumes remaining actions after the duration elapses.
 Up to three pausable actions can be pending device-wide at a time by default.
@@ -3641,20 +3743,22 @@ limit from the action catalog.
 
 ### Boot Actions API
 
-All boot-actions endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabled. Boot actions are stored on LittleFS at `/config/boot_actions.json` and dispatched once after the first screen is shown during boot.
+All boot-actions endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabled. Boot actions are stored on the selected storage backend at `/config/boot_actions.json` and dispatched once after the first screen is shown during boot.
 
 #### `GET /api/boot-actions`
 
 Returns the current boot action configuration.
 
-- **Response:** JSON object with an `actions` array containing up to 3 `ButtonAction` objects (same schema as button/swipe actions: `type`, `target`, `topic`, `payload`, `sequence`, `beep_pattern`, `beep_volume`, `sound_file`, `sound_volume`, `notify_text`, `notify_duration_ms`, `notify_text_color`, `notify_bg_color`, `notify_border_color`, `notify_opacity`, `notify_font_size`, `notify_location`, `system_command`, `volume_mode`, `volume_value`, `brightness_mode`, `brightness_value`, `timer_id`, `timer_command`, `timer_mode`, `timer_value`, etc.).
-- Default (no file saved): `{"actions": []}`.
+- **Response:** JSON object with `action_format_version: 1`, `config_reset`, and an `actions`
+  array containing up to three typed operation envelopes.
+- Default (no file saved): `{"action_format_version":1,"config_reset":false,"actions":[]}`.
 
 #### `POST /api/boot-actions`
 
-Save boot action configuration to LittleFS.
+Save boot action configuration to the selected storage backend.
 
-- **Body:** JSON object with an `actions` array of `ButtonAction` objects. Trailing empty actions are trimmed by the web UI.
+- **Body:** JSON object with `action_format_version: 1` and an `actions` array
+  of typed operation envelopes.
 - **Response:** `{"ok": true}` on success; JSON error on failure.
 - Changes take effect on next boot.
 
@@ -3668,16 +3772,17 @@ Available when the board declares physical buttons. The board's `board_overrides
 
 Returns the declared buttons and their configured action lists.
 
-- **Response:** JSON object with a `buttons` array, one entry per declared button (in `HW_BUTTON_DEFS[]` order), each containing `label` (string), `pin` (GPIO number), `tap_actions` (array of up to 3 `ButtonAction` objects), and `hold_actions` (array of up to 3 `ButtonAction` objects). `ButtonAction` uses the same schema as button/swipe/boot actions.
+- **Response:** JSON object with `action_format_version: 1`, `config_reset`, and a `buttons` array, one entry per declared button (in `HW_BUTTON_DEFS[]` order), each containing `label` (string), `pin` (GPIO number), `tap_actions` (array of up to 3 typed operations), and `hold_actions` (array of up to 3 typed operations).
 - Default (no file saved): each button reports empty `tap_actions` and `hold_actions`.
 
 #### `POST /api/component/hw-buttons/config`
 
 Save hardware button action configuration.
 
-- **Body:** JSON object with a `buttons` array of `{ tap_actions, hold_actions }` objects, positional by button index. Entries beyond `NUM_HW_BUTTONS` are ignored.
+- **Body:** JSON object with `action_format_version: 1` and a `buttons` array
+  of `{ tap_actions, hold_actions }` objects, positional by button index.
 - **Response:** standard component save response on success; JSON error on failure.
-- On screenless boards, display-only action types (screen, brightness, notify, visual_alert, timer) parse and store normally but log a no-op when dispatched.
+- Unavailable operations are rejected during validation.
 
 ---
 
@@ -3691,16 +3796,16 @@ A trigger pairs a topic with an optional exact-value filter and up to 3 sequenti
 
 Returns the configured triggers and the device's capacity.
 
-- **Response:** JSON object with `max` (number, `MAX_MQTT_TRIGGERS`) and a `triggers` array. Each entry contains `topic` (string), `value` (string, exact-match filter; empty = match any), and `actions` (array of up to 3 `ButtonAction` objects using the same schema as button/swipe/boot actions). Empty (unconfigured) slots are omitted.
+- **Response:** JSON object with `action_format_version: 1`, `config_reset`, `max` (number, `MAX_MQTT_TRIGGERS`) and a `triggers` array. Each entry contains `topic` (string), `value` (string, exact-match filter; empty = match any), and `actions` (array of up to 3 typed operations). Empty (unconfigured) slots are omitted.
 - Default (no file saved): `max` with an empty `triggers` array.
 
 #### `POST /api/component/mqtt-triggers/config`
 
 Save the MQTT trigger configuration.
 
-- **Body:** JSON object with a `triggers` array of `{ topic, value, actions }` objects. At most `MAX_MQTT_TRIGGERS` entries are accepted. Wildcard topics (containing `#` or `+`) are rejected with an error — use exact topic names.
+- **Body:** JSON object with `action_format_version: 1` and a `triggers` array of `{ topic, value, actions }` objects. At most `MAX_MQTT_TRIGGERS` entries are accepted. Wildcard topics (containing `#` or `+`) are rejected with an error. Use exact topic names.
 - **Response:** standard component save response on success; JSON error on failure (e.g. wildcard topic, too many triggers, payload too large).
-- On screenless boards (with a button), display-only action types parse and store normally but log a no-op when dispatched.
+- Operations unavailable on the target board are rejected during validation.
 
 ### MQTT Topic Inspection API
 
@@ -3758,21 +3863,27 @@ Device-level timer configuration. Compile-time gated by `HAS_DISPLAY`.
 
 Returns the current timer configuration for all 3 timers.
 
-- **Response:** JSON object with keys `"1"`, `"2"`, `"3"`. Each timer object contains an `expire_actions` array with zero through three ButtonAction objects.
+- **Response:** JSON object with `action_format_version`, `config_reset`, and keys `"1"`, `"2"`,
+  `"3"`. Each timer object contains an `expire_actions` array with zero
+  through three typed operations.
 
 ```json
 {
-  "1": { "expire_actions": [{ "type": "sound_alert", "sound_alert_kind": "mp3", "sound_alert_file": "alarm" }] },
+  "action_format_version": 1,
+  "config_reset": false,
+  "1": { "expire_actions": [{ "op": "audio.alert.mp3", "args": { "file": "alarm.mp3", "volume": 0 } }] },
   "2": { "expire_actions": [] },
-  "3": { "expire_actions": [{ "type": "sound_alert", "sound_alert_kind": "tone", "sound_alert_pattern": "1000:500" }] }
+  "3": { "expire_actions": [{ "op": "audio.alert.tone", "args": { "pattern": "1000:500", "volume": 0 } }] }
 }
 ```
 
+The MP3 operation requires a sound player. Volume `0` uses the device volume.
+
 #### `POST /api/component/timers/config`
 
-Save timer configuration to LittleFS and apply immediately.
+Save timer configuration to the selected storage backend and apply immediately.
 
-- **Body:** Same JSON format as GET response.
+- **Body:** Same JSON format as GET response, omitting read-only `config_reset`.
 - **Response:** `{"ok": true}` on success; JSON error on failure.
 - Unknown timer keys, slot fields, malformed actions, and lists over three actions reject the complete write.
 - Saving replaces the persistent source for future countdown starts. Active runs keep their existing expiry snapshot; stop and start a running countdown to apply the saved list.
@@ -4400,7 +4511,7 @@ DNS server redirects all requests to device IP in AP mode:
 
 2. Rebuild to embed assets:
    ```bash
-   ./build.sh
+   ./build.sh <board>
    ```
    
    This automatically:
@@ -4410,17 +4521,14 @@ DNS server redirects all requests to device IP in AP mode:
   - Concatenates JS modules per `portal.js.bundle` chunk, then minifies using pinned Terser
    - Concatenates CSS fragments per `*.css.bundle` manifests (if present), then minifies using `csscompressor`
    - Gzip compresses all assets (level 9)
-  - Generates `src/app/web_assets.h` with embedded byte arrays
-  - Generates `src/app/project_branding.h` with `PROJECT_NAME` / `PROJECT_DISPLAY_NAME` defines
+  - Generates `build/<board>/web-assets/web_assets.h` with selected embedded byte arrays
+  - Generates `project_branding.h` and `repo_slug_config.h` in that output directory
    
    The build script shows compression statistics:
    ```
-   Asset Summary (Original → Minified → Gzipped):
-     HTML home.html:     5234 → 3891 → 1256 bytes (-76% total)
-     HTML network.html:  8912 → 6543 → 1987 bytes (-78% total)
-     HTML firmware.html: 4231 → 3124 → 1098 bytes (-74% total)
-     CSS  portal-all.css:      287228 → 274208 → 38475 bytes (-87% total)
-     JS   portal.js:   329575 → 220746 → 50066 bytes (-85% total)
+   Portal assets: one bundle per configuration, <total> gzip bytes
+     portal_js_gz: <javascript> bytes
+     portal_all_css_gz: <stylesheet> bytes
    ```
 
 3. Upload and test:
@@ -4440,14 +4548,67 @@ The shared bundle excludes binding-editor modules when `HAS_DISPLAY` is false
 and extension-manager code when `HAS_NATIVE_EXTENSIONS` is false. Fragment arrays
 and their lookup entries use the same feature conditions as the owning components,
 including MCP, music, recipes, hardware buttons, and camera motion. Each board
-links one selected gzip stream rather than all generated variants.
+embeds one selected gzip stream per bundle, with no generated variant matrix.
 
 The minifier supports `.bundle` manifests for both JavaScript and CSS. A bundle manifest lists source files that should be concatenated into a single asset at build time, reducing HTTP requests, route handlers, and flash usage on the ESP32.
 
 Manifest parsing trims leading and trailing whitespace without interpreting
 shell quoting or escapes. Comments may contain apostrophes and quotation marks.
 
-The same three shared functions (`discover_bundle_manifests`, `filter_bundle_fragments`, `concatenate_bundle`) handle both JS and CSS bundles in `tools/minify-web-assets.sh`.
+`tools/portal_assets.py` shares discovery, predicate resolution, filtering, and
+compression for JavaScript and CSS. Duplicate basenames across asset roots are
+errors rather than implicit shadowing.
+
+#### Feature Ownership And Selection
+
+`build.sh` supplies the fully expanded Arduino compiler recipe after applying
+board and profile flags. The asset builder preprocesses `board_config.h` with
+that recipe, including inherited board overrides and target/PSRAM defines.
+It does not infer feature values from board names or regex-parsed defines.
+Outputs live in `build/<board>/web-assets/`; compile-time guards reject stale
+headers whose feature selection differs from the firmware.
+
+Use these ownership mechanisms:
+
+- Bundle modules inherit the current `# [chunk:NAME EXPRESSION]` predicate.
+  Expressions support C-preprocessor `&&`, `||`, `!`, and parentheses. Keep
+  providers and shared helpers before consumers.
+- Standalone scripts, styles, and fragments require an explicit entry in
+  `tools/portal_assets.py`'s `OWNERS` map, matching their native route/component
+  condition. Adding an unowned standalone asset fails generation.
+- Widget assets inherit native predicates from the
+  [widget manifest](../../src/app/widgets/manifest.json). Keep runtime availability checks for
+  capabilities that can also disappear after compilation.
+- Mixed shared modules use balanced `// @portal-if EXPRESSION` and
+  `// @portal-endif` lines. Nested blocks are supported. Filtering occurs before
+  syntax checking and minification; keep each selected result valid JavaScript.
+  Raw sources remain valid JavaScript for device-free development and tests.
+
+For example:
+
+```javascript
+// @portal-if HAS_MQTT
+function init_mqtt_fragment() {
+    loadMqttConfig();
+}
+// @portal-endif
+```
+
+Unknown predicates and malformed blocks fail generation, including blocks in
+unselected modules. `tests/test_portal_asset_gates.js` preprocesses the generated
+headers, decompresses selected payloads, and checks widget/fragment parity,
+helper ordering, syntax, and absent disabled-feature symbols across headless,
+display, opt-out, and device-class profiles. Existing behavior tests exercise
+enabled editors and unsupported-configuration safety. The generated
+`portal-assets.json` records the actual decisions and compressed payload sizes.
+
+Generic catalog-driven action controls, ordinary field/layout helpers, and
+existing image-path selection stay shared intentionally. They support multiple
+features or preserve configuration, rather than implement a disabled device
+feature. Imported unsupported widgets retain their selected type and data;
+saving an edit requires clearing or replacing an unsupported widget, matching
+the existing unsupported-action recovery behavior. Do not silently drop fields
+or repopulate unavailable editors just to support cross-board import.
 
 #### Shared JavaScript Bundle
 
@@ -4456,8 +4617,8 @@ Shared JavaScript source files are concatenated into a single `portal.js` asset 
 **How it works:**
 
 1. `src/app/web/portal.js.bundle` lists every JS module in dependency order (one filename per line, `#` comments ignored)
-2. `tools/minify-web-assets.sh` resolves each manifest entry by checking `src/app/web/` first, then `src/app/device_classes/*/web/`
-3. The minifier concatenates the resolved files, minifies the result, and gzip-compresses it into `web_assets.h`
+2. `tools/portal_assets.py` resolves each manifest entry across `src/app/web/` and `src/app/device_classes/*/web/`, rejecting collisions
+3. The builder selects matching chunks and feature blocks, concatenates their files, minifies the result, and gzip-compresses it into `web_assets.h`
 4. Every HTML page loads a single `<script src="/portal.js"></script>`
 5. One C++ handler (`handleJS`) serves the bundled asset
 
@@ -4500,16 +4661,16 @@ updates stay in that script rather than the shared configuration bundle.
   - Shared module: `src/app/web/portal_myfeature.js`
   - Device-class module: `src/app/device_classes/<class>/web/portal_myfeature.js`
 2. Add the filename (basename only) to `portal.js.bundle` in the correct dependency position (before any file that calls its functions, after any file it depends on)
-3. Run `./build.sh` - the module is automatically included in the bundle
+3. Use a matching feature predicate for feature-only code, then run `./build.sh <board>`
 
 **Fragment pattern:** Large modules are split into a main file and one or more fragment files. Fragments are listed before the main file in the bundle manifest so their functions are available when the main file executes. For example, `portal_health_sparkline.js` (fragment) appears before `portal_health.js` (main).
 
 **Build-time validation:** The build automatically validates the bundle before minification:
 
 - **Manifest check** — every file listed in the `.js.bundle` manifest must exist; missing files cause a hard build error
-- **Syntax check** — every `.js` file is checked with `node --check` to catch missing braces, unterminated strings, and other parse errors before minification
+- Selected JavaScript is checked with `node --check` after filtering, before minification
 
-> **Feature branches** may add additional modules (e.g., `portal_action_editor_darkroom.js`, `portal_brews.js`). These follow the same pattern: add the file, add it to the bundle manifest, no C++ changes needed.
+> **Feature branches** may add additional modules such as `portal_brews.js`. These follow the same pattern: add the file, add it to the bundle manifest, no C++ changes needed.
 
 #### CSS Bundle
 
@@ -4527,7 +4688,7 @@ CSS files can also be bundled using the same manifest pattern. This allows featu
 
 1. Create `src/app/web/_portal_myfeature.css` (underscore prefix excludes it from individual serving)
 2. Create or update `portal-all.css.bundle` with the filename before the primary CSS file
-3. Run `./build.sh` — the feature CSS is automatically included in the bundle
+3. Use a matching feature predicate, then run `./build.sh <board>`
 
 **Build-time validation:** Every file listed in a `.css.bundle` manifest must exist; missing files cause a hard build error.
 

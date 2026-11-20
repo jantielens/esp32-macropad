@@ -23,6 +23,7 @@ const RELAY_SLOT_LABELS = {
     'relay-safelight-on':  'Safelight ON',
     'relay-safelight-off': 'Safelight OFF'
 };
+var relayConfigLoaded = false;
 
 async function relayConfigInitEditors() {
     var container = document.getElementById('relay-config-editors');
@@ -35,31 +36,41 @@ async function relayConfigInitEditors() {
         html += '<details class="editor-group" id="' + prefix + '-group">';
         html += '<summary>' + RELAY_SLOT_LABELS[prefix] + '</summary>';
         html += '<div class="editor-group-body">';
-        html += actionEditorHTML(prefix);
+        html += actionEditorHTML(prefix, '', { operations: true });
         html += '</div></details>';
     });
     container.innerHTML = html;
 }
 
 async function loadRelayConfig() {
+    relayConfigLoaded = false;
     try {
         const response = await fetch('/api/relay');
-        if (!response.ok) return;
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Relay configuration is unavailable');
+        }
         const data = await response.json();
         RELAY_SLOT_PREFIXES.forEach(function(prefix, i) {
             actionEditorLoad(prefix, data[RELAY_SLOT_KEYS[i]] || {});
         });
+        relayConfigLoaded = true;
     } catch (err) {
         console.error('Failed to load relay config:', err);
+        showMessage('Could not load relay configuration: ' + err.message, 'error');
     }
 }
 
 async function saveRelayConfig() {
-    var payload = {};
-    RELAY_SLOT_PREFIXES.forEach(function(prefix, i) {
-        payload[RELAY_SLOT_KEYS[i]] = actionEditorBuild(prefix);
-    });
+    if (!relayConfigLoaded) {
+        showMessage('Load relay configuration before saving.', 'error');
+        return;
+    }
     try {
+        var payload = { action_format_version: 1 };
+        RELAY_SLOT_PREFIXES.forEach(function(prefix, i) {
+            payload[RELAY_SLOT_KEYS[i]] = actionEditorBuild(prefix);
+        });
         const response = await fetch('/api/relay', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -68,9 +79,11 @@ async function saveRelayConfig() {
         if (response.ok) {
             showMessage('Relay config saved', 'success');
         } else {
-            showMessage('Failed to save relay config', 'error');
+            const error = await response.json();
+            showMessage(error.error || 'Failed to save relay config', 'error');
         }
     } catch (err) {
+        if (actionEditorHandleError(err)) return;
         console.error('Error saving relay config:', err);
         showMessage('Error saving relay config: ' + err.message, 'error');
     }
@@ -82,7 +95,8 @@ async function saveRelayConfig() {
 
 window.init_darkroom_fragment = async function () {
     if (typeof relayConfigInitEditors === 'function') await relayConfigInitEditors();
-    if (typeof loadRelayConfig === 'function') loadRelayConfig();
+    if (typeof loadRelayConfig === 'function') await loadRelayConfig();
+    if (typeof actionEditorWireFragment === 'function') actionEditorWireFragment(RELAY_SLOT_PREFIXES);
 
     // Populate screen options for relay action slots. getDeviceInfo() is
     // cached (relayConfigInitEditors already awaited it above), so this

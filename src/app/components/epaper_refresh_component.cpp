@@ -2,7 +2,6 @@
 // the persisted presentation settings contract.
 #include "component_registry.h"
 
-#include "action_dispatch.h"
 #include "board_config.h"
 #include "display_manager.h"
 #include "version.h"
@@ -13,11 +12,7 @@ constexpr const char* kEpaperRefreshPortalScript =
     "/portal-epaper-refresh.js?v=" FIRMWARE_VERSION;
 
 void epaper_refresh_full_refresh_post(AsyncWebServerRequest* request) {
-    ButtonAction action = {};
-    strlcpy(action.type, ACTION_TYPE_DISPLAY_REFRESH, sizeof(action.type));
-    strlcpy(action.payload.display_refresh.mode, "full", sizeof(action.payload.display_refresh.mode));
-    const ActionResult result = action_dispatch(action, "Portal", 0);
-    if (result == ACTION_COMPLETE) {
+    if (display_manager_request_full_refresh() == DISPLAY_REFRESH_QUEUED) {
         request->send(202, "application/json", "{\"success\":true,\"message\":\"Full refresh queued\"}");
     } else {
         request->send(503, "application/json", "{\"success\":false,\"message\":\"Full refresh unavailable\"}");

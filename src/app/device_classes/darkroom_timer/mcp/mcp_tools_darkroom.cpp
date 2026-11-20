@@ -20,10 +20,8 @@
 //     print read tools (list_prints / get_print) are plain Storage I/O, the same
 //     way the existing GET /api/prints handlers run on the web task.
 //   - CONTROL tools (expose_control / strip_control / meter_control /
-//     print_control) build a ButtonAction and defer to the main loop via
-//     mcp_control_dispatch() (exactly like the coffee-scale tools) — engine
-//     command dispatch runs through action_dispatch(), which may touch
-//     LVGL/audio and must not run on the web task. relay_control calls
+//     print_control) defer typed operations to the main loop because they may
+//     touch LVGL/audio and must not run on the web task. relay_control calls
 //     relay_request(), which is documented safe from any task (it sets a bitmask
 //     and signals the relay task), so it runs inline.
 //   - delete_print / delete_all_prints / set_relay_config are plain Storage I/O
@@ -49,8 +47,14 @@
 #include "../relay_controller.h"
 #include "../print_log.h"
 #include "../darkroom_timer_payload.h"  // ACTION_TYPE_* + payload accessors
+#include "control_mapping.h"
 
 #include "action_dispatch.h"
+#include "action_parse.h"
+#include "action_storage.h"
+#include "binding_template.h"
+#include "display_manager_lock.h"
+#include "runtime_variables.h"
 #include "storage.h"
 #include "web_portal_json.h"   // make_psram_json_doc
 #include "log_manager.h"
@@ -181,7 +185,7 @@ static bool tool_get_meter_status(const JsonObject& args, JsonObject& result, St
 
 static bool tool_get_relay_config(const JsonObject& args, JsonObject& result, String& err) {
     (void)args;
-    String cfg;
+    std::string cfg;
     if (!relay_get_config_json(cfg)) return dr_fail(result, err, DR_ERR_INTERNAL, "failed to serialize relay config");
 
     auto doc = make_psram_json_doc(cfg.length() + 256);
@@ -306,35 +310,58 @@ struct DrCtrlCtx {
 
 static void exec_dr_control(const void* ctx, bool* ok, char* msg, size_t msg_len) {
     const DrCtrlCtx* c = (const DrCtrlCtx*)ctx;
-    ButtonAction act;
-    memset(&act, 0, sizeof(act));
-    strlcpy(act.type, c->type, sizeof(act.type));
-    if (strcmp(c->type, ACTION_TYPE_EXPOSE) == 0) {
-        ExposePayload& p = expose_payload(act);
-        strlcpy(p.command, c->command, sizeof(p.command));
-        strlcpy(p.value,   c->value,   sizeof(p.value));
-    } else if (strcmp(c->type, ACTION_TYPE_STRIP) == 0) {
-        StripPayload& p = strip_payload(act);
-        strlcpy(p.command, c->command, sizeof(p.command));
-        strlcpy(p.value,   c->value,   sizeof(p.value));
-    } else if (strcmp(c->type, ACTION_TYPE_METER) == 0) {
-        MeterPayload& p = meter_payload(act);
-        strlcpy(p.command, c->command, sizeof(p.command));
-        strlcpy(p.value,   c->value,   sizeof(p.value));
-    } else {
-        PrintPayload& p = print_payload(act);
-        strlcpy(p.command, c->command, sizeof(p.command));
-        strlcpy(p.value,   c->value,   sizeof(p.value));
+    const DrControlMapping* selected = dr_control_mapping(c->type, c->command);
+    if (!selected) {
+        *ok = false;
+        snprintf(msg, msg_len, "unknown control command");
+        return;
     }
-    action_dispatch(act, "MCP");
-    *ok = true;
-    snprintf(msg, msg_len, "dispatched %s", c->command);
+    auto doc = make_psram_json_doc(512);
+    if (!doc || doc->capacity() == 0) {
+        *ok = false;
+        snprintf(msg, msg_len, "cannot allocate control request");
+        return;
+    }
+    char value[BINDING_TEMPLATE_MAX_LEN];
+    const char* request_value = c->value;
+    if (selected->argument && selected->boolean) {
+        bool did_lock = false;
+        display_manager_lock_if_needed(&did_lock);
+        runtime_variable_transaction_lock();
+        const bool resolved = binding_template_resolve_checked(c->value, value, sizeof(value));
+        runtime_variable_transaction_unlock();
+        display_manager_unlock_if_needed(did_lock);
+        if (!resolved) {
+            *ok = false;
+            snprintf(msg, msg_len, "invalid value for %s", c->command);
+            return;
+        }
+        request_value = value;
+    }
+    if (!dr_control_request(doc->to<JsonObject>(), *selected, request_value)) {
+        *ok = false;
+        snprintf(msg, msg_len, "invalid value for %s", c->command);
+        return;
+    }
+    ActionStorage storage = {};
+    ButtonAction act = {};
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(doc->as<JsonObject>(), act);
+    }
+    *ok = !doc->overflowed() && !storage.failed && act.type[0] == '@' &&
+          action_dispatch(act, "MCP") == ACTION_COMPLETE;
+    action_storage_clear(storage);
+    snprintf(msg, msg_len, *ok ? "dispatched %s" : "failed to dispatch %s", c->command);
 }
 
 static bool dispatch_dr_control(const char* type, const char* cmd, const char* value,
                                 JsonObject& result, String& err) {
     DrCtrlCtx ctx;
     memset(&ctx, 0, sizeof(ctx));
+    if (strlen(type) >= sizeof(ctx.type) || strlen(cmd) >= sizeof(ctx.command) ||
+        (value && strlen(value) >= sizeof(ctx.value)))
+        return dr_fail(result, err, DR_ERR_PARAMS, "control argument is too long");
     strlcpy(ctx.type, type, sizeof(ctx.type));
     strlcpy(ctx.command, cmd, sizeof(ctx.command));
     strlcpy(ctx.value, value ? value : "", sizeof(ctx.value));
@@ -644,7 +671,7 @@ REGISTER_MCP_TOOL(s_tool_get_meter_status);
 
 static const McpTool s_tool_get_relay_config = {
     "get_relay_config",
-    "Get the enlarger/safelight relay action configuration: a JSON object with four ButtonAction slots keyed enlarger_on, enlarger_off, safelight_on, safelight_off (each typically type=shelly with host + relay index + on/off).",
+    "Get the versioned enlarger/safelight relay operation configuration. Shelly relay slots use the slot's on/off state, not the operation's enabled argument.",
     "{\"type\":\"object\",\"properties\":{}}",
     tool_get_relay_config, true, false, false, false
 };
@@ -735,7 +762,7 @@ REGISTER_MCP_TOOL(s_tool_set_print);
 
 static const McpTool s_tool_set_relay_config = {
     "set_relay_config",
-    "Create or replace the enlarger/safelight relay action configuration. Use this tool directly; do not POST to any HTTP endpoint. content is the relay-config JSON (the same shape get_relay_config returns): a JSON object with four ButtonAction slots keyed enlarger_on, enlarger_off, safelight_on, safelight_off. For Shelly relays each slot is {\"type\":\"shelly\",\"host\":\"192.168.1.x\",\"relay\":0,\"on\":true}. Call get_relay_config afterward to confirm.",
+    "Create or replace the relay configuration using action_format_version 1 and four operation slots keyed enlarger_on, enlarger_off, safelight_on, safelight_off. Each slot is an empty object or a typed operation. Shelly relay slots use the slot's on/off state regardless of enabled. Call get_relay_config afterward to confirm.",
     "{\"type\":\"object\",\"properties\":{\"content\":{\"type\":\"string\",\"description\":\"Full relay-config JSON object (keys enlarger_on/enlarger_off/safelight_on/safelight_off) in the shape get_relay_config returns.\"}},\"required\":[\"content\"]}",
     tool_set_relay_config, false, false, false, true
 };

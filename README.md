@@ -353,6 +353,9 @@ HID hosts or multiple power sources.
 
 [Follow the first-time setup guide](docs/user/getting-started.md).
 
+For portable settings and pad backups, see
+[Back up and restore configuration](docs/user/device/backup-and-restore.md).
+
 ## 📚 Documentation
 
 | Guide | Description |
@@ -375,6 +378,8 @@ HID hosts or multiple power sources.
 Building firmware requires Node.js 18 or newer and npm for the pinned Terser
 asset minifier, alongside the Arduino and Python tooling. Run `npm ci --prefix tools`
 before building offline. See the [build guide](docs/dev/build-and-release-process.md).
+`build.sh` selects C++17 for the Inkplate platform, whose default C++11 mode
+cannot compile the shared action descriptors. Other platforms retain their defaults.
 The compile-time `BLE_BACKEND` selector supports the pinned NimBLE-Arduino
 [broadcast profile](docs/dev/build-and-release-process.md#ble-backend-and-broadcast-profile),
 initially selected only by Sticky; other boards retain their core BLE backend.
@@ -386,17 +391,27 @@ For portal-only UI work, use the [device-free portal development server](docs/de
 Widget firmware and portal packaging share one explicit manifest; see the
 [widget manifest generator](docs/dev/scripts.md#toolswidget_manifestpy) and
 [editor extension contract](docs/dev/web-portal.md).
+Portal assets are resolved with the firmware compiler for each build, without
+enumerating feature combinations. See the
+[asset builder](docs/dev/scripts.md#toolsportal_assetspy) for generated paths
+and focused regeneration.
 
 The [device power API](docs/dev/web-portal.md#device-power-control) includes:
 
 | Method | Path | Description |
 |--------|------|-------------|
+| `POST` | `/api/reboot/ota` | One-shot reboot with Bluetooth and MQTT disabled for firmware upload. |
 | `POST` | `/api/sleep?seconds=N` | One-shot deep sleep for 1 to 65535 seconds, using portal authentication; does not save or change operating mode. |
 | `POST` | `/api/component/power-savings/activity` | Authenticated user-activity notification on firmware with battery inactivity shutdown. |
+| `GET`, `PUT` | `/api/component/microphone/...` | Test microphone levels, optionally hear input, and adjust input settings without saving; see the [microphone API](docs/dev/web-portal.md#microphone-api). |
+| `GET`, `POST`, `DELETE` | `/api/component/voice-notes/...` | Manage recordings, transcripts, and summaries when Voice Notes is enabled; see the [portal API](docs/dev/web-portal.md#voice-notes-api). |
 
 ### Running Tests
 
 Host-native unit and integration tests run on the development machine (no ESP32 needed). They require CMake 3.20 or later. If CMake is installed through ESP-IDF but is not on `PATH`, use its toolchain directory for the commands below:
+
+The portal asset tests also require Python's `csscompressor` package and the
+locked Node.js dependencies. Install those with `npm ci --prefix tools`.
 
 ```bash
 export PATH="$HOME/.espressif/tools/cmake/<version>/bin:$PATH"
@@ -404,9 +419,19 @@ export PATH="$HOME/.espressif/tools/cmake/<version>/bin:$PATH"
 
 ```bash
 cmake -S . -B build/host-tests
-cmake --build build/host-tests --parallel
-ctest --test-dir build/host-tests --output-on-failure
+cmake --build build/host-tests --parallel 4
+ctest --test-dir build/host-tests --output-on-failure --parallel 4
 ```
+
+The host build limits compiler concurrency to four jobs, matching CI. Omitting
+the number after `--parallel` allows unlimited jobs with GNU Make and can
+exhaust runner resources.
+
+CTest runs up to four tests at once. Explicit scheduling costs prioritize both
+Voice Notes storage profiles and the portal asset matrix, including on the first
+run. Checks that modify the shared build tree use a resource lock; other tests
+can continue alongside them. Use `--parallel 1` for a serial troubleshooting run.
+Do not run separate builds or test suites concurrently in the same build tree.
 
 ## 📄 License
 

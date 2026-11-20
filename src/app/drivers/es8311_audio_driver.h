@@ -7,7 +7,7 @@
 
 #if HAS_AUDIO_INPUT && AUDIO_INPUT_DRIVER == AUDIO_INPUT_DRIVER_ES8311
 #include "audio_input_driver.h"
-#if HAS_VOICE_CLIPS
+#if HAS_VOICE_NOTES
 #include <freertos/FreeRTOS.h>
 #include <esp_attr.h>
 #endif
@@ -49,7 +49,7 @@ private:
     uint32_t sample_rate = 0;
     bool capture_active = false;
     bool capture_failed = false;
-#if HAS_VOICE_CLIPS
+#if HAS_VOICE_NOTES
     static bool IRAM_ATTR onRxOverrun(i2s_chan_handle_t, i2s_event_data_t*, void*);
     portMUX_TYPE rx_mux = portMUX_INITIALIZER_UNLOCKED;
     bool rx_overrun = false;

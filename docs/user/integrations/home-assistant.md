@@ -93,8 +93,9 @@ network requirements are separate. Input feedback or event queue acceptance
 does not confirm that HA received or executed an automation. BTHome supplies
 remote-control events, not acknowledgement or the actual state of the target.
 
-Configure an **Enable AP** action before switching modes if you want direct
-portal access for maintenance. Wi-Fi and AP commands leave BTHome publishing
+Configure a **Set access point** action with **Access point** enabled before
+switching modes if you want direct portal access for maintenance. Wi-Fi and AP
+commands leave BTHome publishing
 available and do not change the saved boot mode. See
 [network access](../device/network-and-access.md#enable-network-access-from-an-action)
 for password, login, and recovery behavior.

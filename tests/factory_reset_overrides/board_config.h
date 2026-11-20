@@ -8,7 +8,9 @@
 #endif
 #define HAS_BLE 0
 #define HAS_BLE_HID 0
+#ifndef HAS_DISPLAY
 #define HAS_DISPLAY 0
+#endif
 #define HAS_MCP 0
 #define HAS_MQTT 0
 #define HAS_TOUCH 0

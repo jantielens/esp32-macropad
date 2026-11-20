@@ -1,6 +1,8 @@
 const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
+const path = require('path');
+const { execFileSync } = require('child_process');
 
 const context = { console, Blob, Set, URL };
 context.window = context;
@@ -28,22 +30,40 @@ assert.deepStrictEqual(padOptions.map(option => option.textContent), ['Pad 1: Ki
 assert.deepStrictEqual(padOptions.map(option => option.value), ['0', '1', '2', '3']);
 context.recipeLoadPad = originalLoadPad;
 const catalog = context.recipeLoadCatalogJson(fixture);
+const recipeOperations = [];
+function collectOperations(value) {
+    if (!value || typeof value !== 'object') return;
+    if (value.op && value.args) recipeOperations.push(value);
+    Object.values(value).forEach(collectOperations);
+}
+catalog.recipes.forEach(recipe => {
+    const parameters = Object.fromEntries((recipe.parameters || []).map(parameter => [parameter.id, parameter.default]));
+    parameters.target_pad = 'pad_1';
+    collectOperations(context.recipeExpand(recipe, parameters));
+});
+assert(recipeOperations.length > 0);
+const actionBinary = process.env.ACTION_CATALOG_BINARY || path.resolve('build/host-tests/tests/test_action_parse');
+execFileSync(actionBinary, ['--validate-operations', JSON.stringify(recipeOperations)]);
 assert.strictEqual(catalog.recipes.length, 3);
 assert.strictEqual(catalog.recipes[0].id, 'pomodoro');
+context.deviceInfoCache = { has_display: true, has_audio: false };
+assert.strictEqual(context.recipeSupports(catalog.recipes[0]), false);
+context.deviceInfoCache.has_audio = true;
+assert.strictEqual(context.recipeSupports(catalog.recipes[0]), true);
 assert.strictEqual(catalog.recipes[0].layout.buttons.length, 1);
 assert.strictEqual(catalog.recipes[0].layout.flow, 'row');
 assert.strictEqual(catalog.recipes[0].layout.buttons[0].size, 'M');
 assert.strictEqual(catalog.recipes[0].layout.buttons[0].shape, 'wide');
-assert.strictEqual(catalog.recipes[0].layout.buttons[0].label_center, '[timer:1;mm:ss]');
+assert.strictEqual(catalog.recipes[0].layout.buttons[0].label_center, '[expr:duration([timer:1],"s")]');
 assert.deepStrictEqual(JSON.parse(JSON.stringify(catalog.recipes[0].layout.buttons[0].icon)),
     { catalog_id: 'material-symbols:timer', kind: 'mono' });
 assert.strictEqual(catalog.recipes[0].layout.buttons[0].icon_scale_pct, 50);
 assert.strictEqual(catalog.recipes[0].layout.buttons[0].icon_position, 'left');
-assert.strictEqual(catalog.recipes[0].layout.buttons[0].actions[0].timer_command, 'toggle');
-assert.strictEqual(catalog.recipes[0].layout.buttons[0].lp_actions[0].timer_command, 'reset');
-assert.strictEqual(catalog.recipes[0].provision.components.timers['1'].expire_actions[0].type, 'sound_alert');
-assert.strictEqual(catalog.recipes[0].provision.components.timers['1'].expire_actions[0].sound_alert_pattern, '880:200;0:100;880:200');
-assert.strictEqual(catalog.recipes[0].provision.components.timers['1'].expire_actions[1].message, 'Focus session complete');
+assert.strictEqual(catalog.recipes[0].layout.buttons[0].actions[0].op, 'timer.toggle_down');
+assert.strictEqual(catalog.recipes[0].layout.buttons[0].lp_actions[0].op, 'timer.reset');
+assert.strictEqual(catalog.recipes[0].provision.components.timers['1'].expire_actions[0].op, 'audio.alert.tone');
+assert.strictEqual(catalog.recipes[0].provision.components.timers['1'].expire_actions[0].args.pattern, '880:200;0:100;880:200');
+assert.strictEqual(catalog.recipes[0].provision.components.timers['1'].expire_actions[1].args.message, 'Focus session complete');
 
 const energyRecipe = catalog.recipes.find(recipe => recipe.id === 'home-energy');
 const energy = context.recipeExpand(energyRecipe, {
@@ -60,12 +80,12 @@ assert.strictEqual(energyRecipe.parameters[0].description, 'MQTT value for impor
 assert.strictEqual(context.recipeImpactSummary(energyRecipe), 'Adds 5 buttons | needs a 3x4 free area | adds 3 named bindings');
 const clockRecipe = catalog.recipes.find(recipe => recipe.id === 'alarm-clock');
 assert.strictEqual(clockRecipe.layout.buttons[0].fg_color, '333333');
-assert.strictEqual(clockRecipe.layout.buttons[2].actions[0].type, 'confirm');
-assert.strictEqual(clockRecipe.layout.buttons[2].actions[0].message, 'Dismiss the alarm?');
+assert.strictEqual(clockRecipe.layout.buttons[2].actions[0].op, 'dialog.confirm');
+assert.strictEqual(clockRecipe.layout.buttons[2].actions[0].args.message, 'Dismiss the alarm?');
 assert.strictEqual(clockRecipe.layout.buttons[2].label_bottom, 'Dismiss alarm');
 assert.strictEqual(clockRecipe.provision.components.alarms['1'].enabled, false);
 assert.strictEqual(clockRecipe.provision.components.alarms['1'].hour, undefined);
-assert.strictEqual(context.recipeExpand(clockRecipe, { target_pad: 'pad_12' }).provision.components.alarms['1'].on_ring[1].target, 'pad_12');
+assert.strictEqual(context.recipeExpand(clockRecipe, { target_pad: 'pad_12' }).provision.components.alarms['1'].on_ring[1].args.target, 'pad_12');
 assert.strictEqual(clockRecipe.post_install.links[0].fragment, 'alarm-schedule');
 assert.strictEqual(clockRecipe.fonts[0].name, 'dseg7-classic');
 assert.strictEqual(clockRecipe.layout.buttons[1].label_center_style, 'font:dseg7-classic;font_size:96');
@@ -154,7 +174,7 @@ const alarmRecipe = {
     confirmation: 'Replace Alarm 1 actions and disable its schedule?',
     post_install: { message: 'Configure your alarm.', links: [{ label: 'Open alarm schedule', fragment: 'alarm-schedule' }] },
     layout: { buttons: [{ col_offset: 0, row_offset: 0 }] },
-    provision: { components: { alarms: { '1': { enabled: false, on_ring: [{ type: 'screen', target: '${target_pad}' }] } } } },
+    provision: { components: { alarms: { '1': { enabled: false, on_ring: [{ op: 'screen.open', args: { target: '${target_pad}' } }] } } } },
 };
 const alarmCatalog = { schema: 1, catalog_version: 'test', recipes: [alarmRecipe] };
 assert.doesNotThrow(() => context.recipeLoadCatalogJson(JSON.stringify(alarmCatalog)));
@@ -165,7 +185,7 @@ alarmRecipe.layout.buttons[0].col_offset = 10;
 assert.throws(() => context.recipeLoadCatalogJson(JSON.stringify(alarmCatalog)), /10x10/);
 alarmRecipe.layout.buttons[0].col_offset = 0;
 alarmRecipe.layout.buttons[0].row_offset = 0;
-assert.strictEqual(context.recipeExpand(alarmRecipe, { target_pad: 'pad_7' }).provision.components.alarms['1'].on_ring[0].target, 'pad_7');
+assert.strictEqual(context.recipeExpand(alarmRecipe, { target_pad: 'pad_7' }).provision.components.alarms['1'].on_ring[0].args.target, 'pad_7');
 alarmRecipe.parameters = [{ id: 'target_pad', label: 'Target', type: 'string', default: 'pad_1' }];
 assert.throws(() => context.recipeLoadCatalogJson(JSON.stringify(alarmCatalog)), /reserved/);
 delete alarmRecipe.parameters;
@@ -197,7 +217,7 @@ context.recipeFindMinimumResize({
 });
 
 async function testInstallation() {
-    for (const outcome of ['success', 'cancel', 'pad-failure', 'component-failure', 'unsupported', 'capacity-exceeded',
+    for (const outcome of ['success', 'cancel', 'pad-failure', 'component-failure', 'component-unavailable', 'unsupported', 'capacity-exceeded', 'invalid-recipe-action', 'invalid-component-action', 'pausable-alarm-action', 'too-many-alarm-actions',
         'font-success', 'font-existing', 'font-list-failure', 'font-download-failure',
         'font-network-failure', 'font-upload-failure', 'font-unsupported', 'font-prepare-failure']) {
         const elements = new Map();
@@ -213,10 +233,18 @@ async function testInstallation() {
         const success = ['success', 'font-success', 'font-existing'].includes(outcome);
         const fontData = new Blob([new Uint8Array([0, 1, 0, 0])]);
         const install = {
-            console, Blob, Set, URL, deviceInfoCache: { has_alarm: outcome !== 'unsupported', has_sound_player: true,
+            console, Blob, Set, URL, MAX_ACTIONS: 3,
+            actionEditorOperation: id => ({ alarm_hook_allowed: id !== 'delay.wait' }),
+            deviceInfoCache: { has_alarm: outcome !== 'unsupported', has_sound_player: true,
                 has_ttf_fonts: outcome !== 'font-unsupported', max_pad_buttons: outcome === 'capacity-exceeded' ? 1 : 64 },
             confirm: () => outcome !== 'cancel',
             showMessage: (message) => messages.push(message),
+            padCheckImportedActionFormat: pad => {
+                if (outcome === 'invalid-recipe-action' && pad.buttons && pad.buttons.length)
+                    throw new Error('Unsupported recipe action');
+                if (outcome === 'invalid-component-action' && pad.pad_actions)
+                    throw new Error('Unsupported component action');
+            },
             padCaptureIconLayout: () => ({}),
             padPreparePageSave: async context => {
                 if (outcome === 'font-prepare-failure') throw new Error('Icon preparation failed');
@@ -262,7 +290,8 @@ async function testInstallation() {
                         outcome === 'component-failure' && url.includes('/component/');
                     return { ok: !failed, status: failed ? 503 : 200, json: async () => ({ error: 'Save failed' }) };
                 }
-                return { ok: true, json: async () => ({ lateness_minutes: 360, '1': { enabled: true, hour: 8, minute: 30, weekdays: 62, snooze_minutes: 9, on_stop: [] } }) };
+                return { ok: outcome !== 'component-unavailable', status: 409,
+                    json: async () => ({ action_format_version: 1, lateness_minutes: 360, '1': { enabled: true, hour: 8, minute: 30, weekdays: 62, snooze_minutes: 9, on_stop: [] } }) };
             },
         };
         install.window = install;
@@ -272,6 +301,11 @@ async function testInstallation() {
         install.recipeLoadPad = async () => {};
         install.state.selected = JSON.parse(JSON.stringify(alarmCatalog.recipes[0]));
         install.state.selected.confirmation = 'Replace Alarm 1 actions and disable its schedule?';
+        if (outcome === 'pausable-alarm-action')
+            install.state.selected.provision.components.alarms['1'].on_ring[0].op = 'delay.wait';
+        if (outcome === 'too-many-alarm-actions')
+            install.state.selected.provision.components.alarms['1'].on_ring =
+                Array(4).fill({ op: 'screen.open', args: { target: 'pad_1' } });
         if (usesFont) install.state.selected.fonts = [{ name: 'digital', url: 'https://example.org/digital.ttf' }];
         install.state.pad = { page: 6, cols: 2, rows: 2, buttons: [],
             overlay_buttons: [{ col: 0, row: 0, icon: { source_id: 's_000000000000000000000001',
@@ -287,11 +321,22 @@ async function testInstallation() {
             assert(messages.some(message => message.includes('combined Main and Overlay button limit')));
             continue;
         }
-        if (outcome === 'cancel' || outcome === 'unsupported' || usesFont && !success) {
+        if (outcome === 'cancel' || outcome === 'unsupported' || outcome === 'component-unavailable' ||
+            outcome === 'invalid-recipe-action' || outcome === 'invalid-component-action' ||
+            outcome === 'pausable-alarm-action' || outcome === 'too-many-alarm-actions' || usesFont && !success) {
             assert.strictEqual(configWrites.length, 0);
             assert.strictEqual(iconsUploaded, false);
+            if (outcome === 'invalid-recipe-action')
+                assert(messages.some(message => message.includes('Unsupported recipe action')));
+            if (outcome === 'invalid-component-action')
+                assert(messages.some(message => message.includes('Unsupported component action')));
+            if (outcome === 'pausable-alarm-action')
+                assert(messages.some(message => message.includes('Alarm hooks cannot use pausable operations')));
+            if (outcome === 'too-many-alarm-actions')
+                assert(messages.some(message => message.includes('too many actions')));
         } else {
             assert.strictEqual(configWrites[0].url, '/api/pad?page=6');
+            assert.strictEqual(configWrites[0].body.action_format_version, 1);
             assert.strictEqual(configWrites.length, outcome === 'pad-failure' ? 1 : 2);
             assert.deepStrictEqual(configWrites[0].body.overlay_buttons, [
                 { col: 0, row: 0, icon: { source_id: 's_000000000000000000000001', catalog_id: 'noto:house', kind: 'color' } },
@@ -308,9 +353,10 @@ async function testInstallation() {
         }
         if (outcome === 'font-prepare-failure') assert.strictEqual(downloads.length, 0);
         if (success) {
+            assert.strictEqual(configWrites[1].body.action_format_version, 1);
             assert.strictEqual(configWrites[1].body['1'].enabled, false);
             assert.strictEqual(configWrites[1].body['1'].hour, 8);
-            assert.strictEqual(configWrites[1].body['1'].on_ring[0].target, 'pad_6');
+            assert.strictEqual(configWrites[1].body['1'].on_ring[0].args.target, 'pad_6');
             assert.strictEqual(install.state.installationComplete, true);
             assert.strictEqual(elements.get('recipe-followup').hidden, false);
             assert.strictEqual(elements.get('recipe-followup-links').children[0].href, '#alarm-schedule');

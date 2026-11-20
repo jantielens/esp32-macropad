@@ -296,6 +296,88 @@ TEST_F(SparklineOverrides, OverridesAffectOnlySelectedLinesAndFillPixels) {
     EXPECT_EQ(pixel(area.x1 + 20, area.y2 - 3), lv_color_to_u16(lv_color_white()));
 }
 
+TEST_F(SparklineOverrides, FillTracksZeroAcrossPositiveAndNegativeSegments) {
+    auto* cfg = reinterpret_cast<SparklineConfig*>(config.data);
+    cfg->smooth_factor = 0;
+    bindings["[test:min]"] = "-100";
+    bindings["[test:max]"] = "100";
+    lv_obj_set_style_bg_color(tile, lv_color_white(), 0);
+    for (unsigned line = 0; line < 3; ++line) {
+        for (unsigned i = 0; i < 4; ++i)
+            samples[line][i] = line == 0 ? (i < 2 ? 60 : -60) : NAN;
+        ++streams[line].rev;
+    }
+    update();
+    settle();
+    lv_area_t area;
+    lv_obj_get_coords(lv_obj_get_parent(chart()->lines[0]), &area);
+    const int height = lv_area_get_height(&area) - 1;
+    const uint16_t fill = lv_color_to_u16(lv_color_hex(0x123456));
+    const uint16_t background = lv_color_to_u16(lv_color_white());
+    const int above = area.y1 + height * 35 / 100;
+    const int below = area.y1 + height * 65 / 100;
+    const auto* points = chart()->points[0];
+    const int positive_x = area.x1 + (points[0].x + points[1].x) / 2;
+    const int negative_x = area.x1 + (points[2].x + points[3].x) / 2;
+    const int crossing_x = area.x1 + (points[1].x + points[2].x) / 2;
+    EXPECT_EQ(pixel(positive_x, above), fill);
+    EXPECT_EQ(pixel(positive_x, below), background);
+    EXPECT_EQ(pixel(negative_x, above), background);
+    EXPECT_EQ(pixel(negative_x, below), fill);
+    EXPECT_EQ(pixel(crossing_x, above), background);
+    EXPECT_EQ(pixel(crossing_x, below), background);
+    EXPECT_EQ(pixel(positive_x, area.y2 - 3), background);
+    EXPECT_EQ(pixel(negative_x, area.y2 - 3), background);
+}
+
+TEST_F(SparklineOverrides, FillRepaintsWhenOnlyZeroBaselineMovesAndClipsOutsideScale) {
+    lv_obj_set_style_bg_color(tile, lv_color_white(), 0);
+    const uint16_t fill = lv_color_to_u16(lv_color_hex(0x123456));
+    const uint16_t background = lv_color_to_u16(lv_color_white());
+    // Each range keeps the curve at 70% while moving zero to a different edge.
+    for (int minimum : {0, -100, 50, -150}) {
+        bindings["[test:min]"] = std::to_string(minimum);
+        bindings["[test:max]"] = std::to_string(minimum + 100);
+        for (unsigned line = 0; line < 3; ++line) {
+            for (float& sample : samples[line]) sample = line == 0 ? minimum + 70 : NAN;
+            ++streams[line].rev;
+        }
+        update();
+        settle();
+        lv_area_t area;
+        lv_obj_get_coords(lv_obj_get_parent(chart()->lines[0]), &area);
+        const int x = area.x1 + 20;
+        EXPECT_EQ(pixel(x, area.y1 + 10), minimum < 0 ? fill : background)
+            << "minimum=" << minimum;
+        EXPECT_EQ(pixel(x, area.y2 - 10), minimum < 0 ? background : fill)
+            << "minimum=" << minimum;
+    }
+}
+
+TEST_F(SparklineFilled, SecondaryFillUsesItsOwnAutomaticScale) {
+    auto* cfg = reinterpret_cast<SparklineConfig*>(config.data);
+    cfg->min_val[0] = cfg->max_val[0] = '\0';
+    cfg->unified_autoscale = false;
+    lv_obj_set_style_bg_color(tile, lv_color_white(), 0);
+    for (unsigned line = 0; line < 3; ++line) {
+        for (float& sample : samples[line]) sample = line == 1 ? -30 : NAN;
+        streams[line].auto_min = line == 1 ? -80 : 0;
+        streams[line].auto_max = line == 1 ? 20 : 100;
+        ++streams[line].rev;
+    }
+    update();
+    settle();
+    lv_area_t area;
+    lv_obj_get_coords(lv_obj_get_parent(chart()->lines[1]), &area);
+    const int height = lv_area_get_height(&area) - 1;
+    const int x = area.x1 + 20;
+    const uint16_t fill = lv_color_to_u16(lv_obj_get_style_line_color(chart()->lines[1], LV_PART_MAIN));
+    const uint16_t background = lv_color_to_u16(lv_color_white());
+    EXPECT_EQ(pixel(x, area.y1 + height * 35 / 100), fill);
+    EXPECT_EQ(pixel(x, area.y1 + height * 10 / 100), background);
+    EXPECT_EQ(pixel(x, area.y1 + height * 75 / 100), background);
+}
+
 TEST_F(SparklineOverrides, ReducedHeightStaysCenteredAndDotsTrackOnResize) {
     lv_obj_t* area = lv_obj_get_parent(chart()->lines[0]);
     auto* cfg = reinterpret_cast<SparklineConfig*>(config.data);

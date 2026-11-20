@@ -65,6 +65,22 @@ Secrets, notification text, key sequences, MQTT payloads, and source URLs
 must not be dumped into routine logs. Use byte counts, slots, entity names,
 HTTP status, error codes, and recovery counts instead.
 
+Sticky and shared display frame/interaction timing traces are not emitted to
+serial. Display diagnostics still collect the counters and last/slowest samples
+exposed as `display_perf` and `display_presentation` in API telemetry. Use those
+samples first when investigating display performance; no periodic serial summary
+or additional logging flag is required.
+
+Voice Notes reports recording start, pause, resume, save, discard, and cancellation
+milestones with note IDs. Save outcomes include captured duration, bytes, total
+elapsed time, and cleanup status; publication and cleanup are distinct outcomes.
+Processing logs identify automatic/manual modes, changed waiting/blocking reasons,
+service results, and service-wide retry delays or exhaustion. Successful service
+results mean the artifact was saved, not merely that HTTP returned 200.
+Recording/update interruptions are expected INFO events. Transient service
+failures are WARN events; capture and persistence failures remain ERROR events.
+Do not log audio, transcripts, titles, summaries, credentials, or service payloads.
+
 NVS initialization stages, individual brightness/rotation values, GT911 reset
 steps, and cached RSSI are targeted details under `Config`, `Main`, `GT911`,
 and `Telemetry`. The loaded-configuration summary, completed touch

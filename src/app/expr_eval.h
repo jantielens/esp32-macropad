@@ -34,6 +34,14 @@ extern "C" {
 
 bool expr_eval(const char* expression, char* out, size_t out_len);
 
+typedef bool (*expr_datetime_format_fn)(double epoch, const char* format,
+                                        const char* timezone, char* out, size_t out_len);
+bool expr_eval_with_datetime(const char* expression, char* out, size_t out_len,
+                             expr_datetime_format_fn datetime_format);
+// Reject truncated strings and output when evaluating action parameters.
+bool expr_eval_checked_with_datetime(const char* expression, char* out, size_t out_len,
+                                     expr_datetime_format_fn datetime_format);
+
 #ifdef __cplusplus
 }
 #endif

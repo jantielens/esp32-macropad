@@ -79,6 +79,9 @@ bool display_manager_get_stack_watermark(uint32_t* minimum_free_bytes, uint32_t*
 volatile bool g_displayFlushBusy = false;
 
 void DisplayManager::queueScreenIntent(bool interactive) {
+#if HAS_PSRAM
+		++screenIntentGeneration;
+#endif
 		pendingScreenInteractive = interactive;
 		pendingScreenRequestedUs = interactive ? esp_timer_get_time() : 0;
 		wakeRenderTask();
@@ -102,14 +105,6 @@ uint32_t DisplayManager::interactionChanged(uint64_t requestedUs) {
 		if (!driver || !driver->coherentFrames()) return 0;
 		const uint64_t changedUs = esp_timer_get_time();
 		const uint32_t requestSequence = framePublisher.interactionChanged(requestedUs ? requestedUs : changedUs);
-#if HAS_DISPLAY_DIAGNOSTICS
-		LOGD("Display", "interaction request_seq=%lu requested=%llu changed=%llu",
-				static_cast<unsigned long>(requestSequence),
-				static_cast<unsigned long long>(requestedUs ? requestedUs : changedUs),
-				static_cast<unsigned long long>(changedUs));
-#else
-		(void)requestSequence;
-#endif
 		wakeRenderTask();
 		return requestSequence;
 }
@@ -155,17 +150,6 @@ void DisplayManager::displayEventCallback(lv_event_t* event) {
 			}
 		};
 		if (mgr->invalidationSource == DisplayInvalidationSource::Timer) record(mgr->cycleRefresh);
-		if (coherent) {
-			if (code == LV_EVENT_REFR_START) mgr->frameRefresh = {};
-			record(mgr->frameRefresh);
-			const auto& stats = mgr->frameRefresh.stats;
-			if (code == LV_EVENT_REFR_READY && stats.render_calls)
-				LOGD("Display", "frame=%lu refresh=%lu render=%lu flush=%lu glyph=%llu",
-					static_cast<unsigned long>(mgr->framePublisher.renderingFrame().sequence),
-					static_cast<unsigned long>(stats.refresh_us), static_cast<unsigned long>(stats.render_us),
-					static_cast<unsigned long>(stats.render_flush_us),
-					static_cast<unsigned long long>(stats.render_glyph_miss_us));
-		}
 #endif
 }
 

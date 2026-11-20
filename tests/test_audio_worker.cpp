@@ -5,9 +5,31 @@
 #include <functional>
 #include <string>
 #include <vector>
+#include "freertos/FreeRTOS.h"
+using AudioWorkerStackType_t = uint8_t;
+#define StackType_t AudioWorkerStackType_t
 #include "../src/app/audio.cpp"
+#undef StackType_t
 
 #if HAS_AUDIO
+#include "../src/app/action_registry.h"
+#include "../src/app/action_dispatch.h"
+
+static ActionDispatchContext operation_context = {};
+ActionDispatchContext action_dispatch_context() { return operation_context; }
+void action_type_register(const ActionTypeDef*) {}
+
+#define ARDUINO 10819
+#define ALARM_ENABLED 1
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#include "../src/app/actions/sound_alert_action.cpp"
+#include "../src/app/actions/alarm_tone_action.cpp"
+#include "../src/app/actions/alarm_mp3_action.cpp"
+#pragma GCC diagnostic pop
+#undef ALARM_ENABLED
+#undef ARDUINO
+
 struct WorkerIdle {};
 static TaskFunction_t worker = nullptr;
 static std::function<void()> idle_hook;
@@ -221,9 +243,78 @@ static void reset() {
 #endif
 }
 
+static ActionResult dispatch_sound_operation(const char* id, const ActionResolvedArgument* args) {
+    const ActionTypeDef* owners[] = {&kSoundAlertActionType, &kAlarmToneActionType, &kAlarmMp3ActionType};
+    for (const auto* owner : owners) {
+        if (owner->available && !owner->available()) continue;
+        for (uint8_t index = 0; index < owner->operation_count; ++index)
+            if (!strcmp(owner->operations[index].id, id))
+                return owner->operations[index].dispatch(args, "test", 0);
+    }
+    return ACTION_FAILED;
+}
+
+static void test_sound_operations() {
+    operation_context = {true, owner_guard, owner_generation, true, false};
+    ActionResolvedArgument args[] = {{"400:20", 0, 0}, {nullptr, 75, 0}};
+    assert(dispatch_sound_operation("audio.alert.tone", args) == ACTION_COMPLETE);
+    assert(audio_queue->items.size() == 1);
+    AudioCommand command = {};
+    assert(xQueueReceive(audio_queue, &command, 0) == pdTRUE);
+    assert(!strcmp(command.pattern, "400:20") && command.volume_override == 75 &&
+           !command.loop && command.guard == owner_guard &&
+           command.generation == owner_generation && command.alarm);
+
+    args[0].text = "800:30";
+    assert(dispatch_sound_operation("alarm.tone", args) == ACTION_COMPLETE);
+    assert(xQueueReceive(audio_queue, &command, 0) == pdTRUE);
+    assert(!strcmp(command.pattern, "800:30") && command.loop && command.alarm);
+    args[0].text = "broken";
+    assert(dispatch_sound_operation("alarm.tone", args) == ACTION_FAILED && audio_queue->items.empty());
+    ota = true;
+    args[0].text = "400:20";
+    assert(dispatch_sound_operation("audio.alert.tone", args) == ACTION_FAILED && audio_queue->items.empty());
+    ota = false;
+    AudioCommand filler = {};
+    for (size_t index = 0; index < audio_queue->capacity; ++index)
+        assert(xQueueSend(audio_queue, &filler, 0) == pdTRUE);
+    assert(dispatch_sound_operation("audio.alert.tone", args) == ACTION_FAILED);
+    while (xQueueReceive(audio_queue, &command, 0) == pdTRUE) {}
+
+#if HAS_SOUND_PLAYER
+    args[0].text = "wake";
+    assert(dispatch_sound_operation("audio.alert.mp3", args) == ACTION_COMPLETE);
+    assert(xQueueReceive(audio_queue, &command, 0) == pdTRUE);
+    assert(command.is_sound && !command.loop && !strcmp(command.pattern, "wake") &&
+           command.volume_override == 75 && command.guard == owner_guard &&
+           command.generation == owner_generation && command.alarm);
+    assert(dispatch_sound_operation("alarm.mp3", args) == ACTION_COMPLETE);
+    assert(xQueueReceive(audio_queue, &command, 0) == pdTRUE);
+    assert(command.is_sound && command.loop && command.alarm);
+    args[0].text = "";
+    assert(dispatch_sound_operation("audio.alert.mp3", args) == ACTION_FAILED && audio_queue->items.empty());
+#else
+    assert(dispatch_sound_operation("audio.alert.mp3", args) == ACTION_FAILED);
+    assert(dispatch_sound_operation("alarm.mp3", args) == ACTION_FAILED);
+#endif
+
+    const uint32_t alert_epoch = g_alert_stop_epoch.load();
+    assert(dispatch_sound_operation("audio.alert.stop", nullptr) == ACTION_COMPLETE);
+    assert(xQueueReceive(audio_queue, &command, 0) == pdTRUE);
+    assert(command.kind == AUDIO_COMMAND_STOP_OWNED && command.guard == owner_guard &&
+           command.generation == owner_generation && g_alert_stop_epoch.load() == alert_epoch);
+    operation_context = {};
+    assert(dispatch_sound_operation("audio.alert.stop", nullptr) == ACTION_COMPLETE);
+    assert(g_alert_stop_epoch.load() == alert_epoch + 1);
+    const uint32_t all_epoch = g_all_stop_epoch.load();
+    assert(dispatch_sound_operation("audio.stop_all", nullptr) == ACTION_COMPLETE);
+    assert(g_alert_stop_epoch.load() == alert_epoch + 2 && g_all_stop_epoch.load() == all_epoch + 1);
+}
+
 int main() {
     audio_init(70);
     assert(output.muted && output.mute_changes.empty());
+    test_sound_operations();
     run_worker();
     assert(output.writes == 0 && output.muted);
     reset();

@@ -30,6 +30,7 @@ var SSA_GROUPS = [
     { field: 'save_start_actions',    label: 'On Save Started',   prefix: 'ssa-start' },
     { field: 'save_complete_actions', label: 'On Save Completed', prefix: 'ssa-complete' }
 ];
+var ssaLoaded = false;
 
 function ssaGroupPrefixes(g) {
     return actionEditorSlotPrefixes(g.prefix + '-');
@@ -55,29 +56,40 @@ async function shutterSessionActionsInitEditors() {
     });
     container.innerHTML = html;
     SSA_GROUPS.forEach(function (g) {
-        actionEditorListRender(g.prefix + '-editors', ssaGroupPrefixes(g));
+        actionEditorListRender(g.prefix + '-editors', ssaGroupPrefixes(g), null,
+            { actionOptions: { operations: true } });
     });
 }
 
 async function loadShutterSessionActions() {
+    ssaLoaded = false;
     try {
         const response = await fetch('/api/component/shutter-session-actions/config');
-        if (!response.ok) return;
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Shutter session actions are unavailable');
+        }
         const data = await response.json();
         SSA_GROUPS.forEach(function (g) {
             actionEditorListLoad(ssaGroupPrefixes(g), data[g.field] || []);
         });
+        ssaLoaded = true;
     } catch (err) {
         console.error('Failed to load shutter session actions:', err);
+        showMessage('Could not load shutter session actions: ' + err.message, 'error');
     }
 }
 
 async function saveShutterSessionActions() {
-    var payload = {};
-    SSA_GROUPS.forEach(function (g) {
-        payload[g.field] = actionEditorListBuild(ssaGroupPrefixes(g));
-    });
+    if (!ssaLoaded) {
+        showMessage('Load shutter session actions before saving.', 'error');
+        return;
+    }
     try {
+        var payload = { action_format_version: 1 };
+        SSA_GROUPS.forEach(function (g) {
+            payload[g.field] = actionEditorListBuild(ssaGroupPrefixes(g));
+        });
         const response = await fetch('/api/component/shutter-session-actions/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -86,9 +98,11 @@ async function saveShutterSessionActions() {
         if (response.ok) {
             showMessage('Shutter session actions saved', 'success');
         } else {
-            showMessage('Failed to save shutter session actions', 'error');
+            const error = await response.json();
+            showMessage(error.error || 'Failed to save shutter session actions', 'error');
         }
     } catch (err) {
+        if (actionEditorHandleError(err)) return;
         console.error('Error saving shutter session actions:', err);
         showMessage('Error saving shutter session actions: ' + err.message, 'error');
     }

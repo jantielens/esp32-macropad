@@ -82,13 +82,22 @@ void camera_get_config(AsyncWebServerRequest* request) {
     (*doc)["last_motion"] = motion_status.has_last_motion ? motion_status.last_motion_epoch : 0;
 #if CAMERA_MOTION_ACTIONS_ENABLED
     JsonArray actions = doc->createNestedArray("actions");
-    camera_motion_actions_to_json(actions);
+    if (!camera_motion_actions_to_json(actions)) {
+        doc->remove("actions");
+        (*doc)["actions_error"] = "Motion actions unavailable or incompatible; recreate the document";
+    } else {
+        (*doc)["action_format_version"] = 1;
+    }
 #endif
     JsonArray output_dimensions = doc->createNestedArray("output_dimensions");
     for (size_t index = 0; index < capabilities->output_dimensions_count; ++index) {
         JsonObject dimensions = output_dimensions.createNestedObject();
         dimensions["width"] = capabilities->output_dimensions[index].width;
         dimensions["height"] = capabilities->output_dimensions[index].height;
+    }
+    if (doc->overflowed()) {
+        web_portal_send_json_error(request, 503, "Camera configuration unavailable");
+        return;
     }
     web_portal_send_json_chunked(request, doc);
 }
@@ -204,7 +213,10 @@ bool camera_save_config_raw(const uint8_t* data, size_t len) {
         return false;
     }
 #if CAMERA_MOTION_ACTIONS_ENABLED
-    if (motion_actions && !doc["actions"].is<JsonArray>()) return false;
+    if (motion_actions && (!doc["action_format_version"].is<int>() ||
+                           doc["action_format_version"].as<int>() != 1 ||
+                           !doc["actions"].is<JsonArray>() ||
+                           !camera_motion_actions_validate(doc["actions"].as<JsonArray>()))) return false;
 #else
     if (motion_actions) return false;
 #endif

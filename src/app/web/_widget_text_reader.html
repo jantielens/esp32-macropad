@@ -1,0 +1,51 @@
+                <div id="pad-edit-text-reader-section" style="display:none;">
+                    <details class="editor-group" open>
+                        <summary>Text reader</summary>
+                        <div class="editor-group-body">
+                            <div class="form-group">
+                                <label for="pad-edit-text-reader-source">Text <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="binding-input-wrap">
+                                    <textarea id="pad-edit-text-reader-source" class="binding-mono" maxlength="191" rows="3" placeholder="Text or a binding"></textarea>
+                                </div>
+                                <small>Enter text or a binding. To read full text from a source that supports it, use its binding token alone, with an optional fallback. Mixed text and other bindings use normal short values.</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="pad-edit-text-reader-style">Text style</label>
+                                <div class="label-style-wrap">
+                                    <input type="text" id="pad-edit-text-reader-style" class="label-style-input" maxlength="127" placeholder="font_size:18;align:left">
+                                    <button type="button" class="binding-help-btn" onclick="showStyleHelp()" title="Style reference">?</button>
+                                </div>
+                                <small>Font, size, metrics, alignment, and color. Always wraps; offsets and bitmap upscaling are not supported. Only color accepts bindings.</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="pad-edit-text-reader-viewport">Viewport</label>
+                                <select id="pad-edit-text-reader-viewport">
+                                    <option value="">Board default</option>
+                                    <option value="scroll">Scroll</option>
+                                    <option value="paged">Paged</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label><input type="checkbox" id="pad-edit-text-reader-navigation" checked> Show navigation buttons</label>
+                                <small>Paged only, when text overflows. Tap the upper/lower text half for the previous/next page, or swipe up/down, with or without these controls. There are no external navigation actions.</small>
+                            </div>
+                            <small>The reader owns touch input. Use separate buttons for actions. New text resets the reading position. Scrolling and paging are manual.</small>
+                        </div>
+                    </details>
+                    <details class="editor-group">
+                        <summary>Position indicator</summary>
+                        <div class="editor-group-body">
+                            <div class="widget-row">
+                                <div class="form-group">
+                                    <label for="pad-edit-text-reader-indicator-track">Track color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                    <div class="bindable-color"><div class="bc-swatch"></div><input id="pad-edit-text-reader-indicator-track" class="bc-input" type="text" maxlength="191" placeholder="Button background"></div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="pad-edit-text-reader-indicator-color">Indicator color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                    <div class="bindable-color"><div class="bc-swatch"></div><input id="pad-edit-text-reader-indicator-color" class="bc-input" type="text" maxlength="191" placeholder="Button foreground"></div>
+                                </div>
+                            </div>
+                            <small>Shown when text extends beyond the viewport. Colors accept scalar bindings. Empty values use the device button background and foreground defaults.</small>
+                        </div>
+                    </details>
+                </div>

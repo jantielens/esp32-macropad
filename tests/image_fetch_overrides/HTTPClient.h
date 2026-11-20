@@ -7,9 +7,6 @@
 #include <string>
 #include <vector>
 
-using UBaseType_t = unsigned;
-using StackType_t = uint8_t;
-using TaskFunction_t = void (*)(void*);
 constexpr int HTTPC_STRICT_FOLLOW_REDIRECTS = 1;
 constexpr int WL_CONNECTED = 3;
 

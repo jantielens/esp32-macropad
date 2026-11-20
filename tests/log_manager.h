@@ -29,6 +29,10 @@ inline void log_noop(Args&&...) {}
 #define LOGI(module, format, ...) log_noop(module, format, ##__VA_ARGS__)
 #define LOGD(module, format, ...) log_noop(module, format, ##__VA_ARGS__)
 #define LOGT(module, format, ...) log_noop(module, format, ##__VA_ARGS__)
+#define LOG_AT(level, module, format, ...) do { \
+    (void)(level); \
+    log_noop(module, format, ##__VA_ARGS__); \
+} while (0)
 #ifndef LOG_SHUTTER_CSV
 #define LOG_SHUTTER_CSV 1
 #endif

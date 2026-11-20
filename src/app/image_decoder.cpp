@@ -350,7 +350,8 @@ static bool ppa_letterbox_scale(
 // on most aspect ratios, producing unwanted padding on both axes.
 static bool letterbox_scale_rgb565_to_565(
     const uint16_t* src, int src_w, int src_h, int src_stride,
-    uint16_t* dst, int dst_w, int dst_h, uint16_t letterbox_color)
+    uint16_t* dst, int dst_w, int dst_h, uint16_t letterbox_color,
+    ImageContentBounds* out_content)
 {
     if (!src || !dst || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) return false;
 
@@ -364,8 +365,12 @@ static bool letterbox_scale_rgb565_to_565(
     int scaled_h = (int)(src_h * scale + 0.5f);
     if (scaled_w > dst_w) scaled_w = dst_w;
     if (scaled_h > dst_h) scaled_h = dst_h;
+    if (scaled_w < 1) scaled_w = 1;
+    if (scaled_h < 1) scaled_h = 1;
     int offset_x = (dst_w - scaled_w) / 2;
     int offset_y = (dst_h - scaled_h) / 2;
+    if (out_content) *out_content = {(uint16_t)offset_x, (uint16_t)offset_y,
+                                    (uint16_t)scaled_w, (uint16_t)scaled_h};
 
     for (int dy = 0; dy < scaled_h; dy++) {
         float src_yf = (float)dy / scale;
@@ -420,7 +425,8 @@ static bool hw_decode_and_scale(
     const uint8_t* data, size_t len,
     uint16_t target_w, uint16_t target_h,
     ImageScaleMode scale_mode,
-    uint16_t* out, size_t out_aligned_size, uint16_t letterbox_color)
+    uint16_t* out, size_t out_aligned_size, uint16_t letterbox_color,
+    ImageContentBounds* out_content)
 {
     if (!hw_init_once()) return false;
 
@@ -438,7 +444,7 @@ static bool hw_decode_and_scale(
         // CPU bilinear for letterbox — PPA's m/16 quantisation undershoots
         // on most aspect ratios, producing unwanted bars on both axes.
         ok = letterbox_scale_rgb565_to_565(decoded, actual_w, actual_h, decoded_w,
-                                           out, target_w, target_h, letterbox_color);
+                                           out, target_w, target_h, letterbox_color, out_content);
     } else {
         ok = ppa_cover_scale(decoded, actual_w, actual_h, decoded_w,
                               out, out_aligned_size, target_w, target_h, scale_mode);
@@ -610,7 +616,8 @@ static bool cover_scale_rgba8888_to_565(
 
 static bool letterbox_scale_rgb888_to_565(
     const uint8_t* src, int src_w, int src_h,
-    uint16_t* dst, int dst_w, int dst_h, uint16_t letterbox_color)
+    uint16_t* dst, int dst_w, int dst_h, uint16_t letterbox_color,
+    ImageContentBounds* out_content = nullptr)
 {
     if (!src || !dst || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) return false;
 
@@ -626,8 +633,12 @@ static bool letterbox_scale_rgb888_to_565(
     // Clamp: rounding can push scaled dims 1 px past target
     if (scaled_w > dst_w) scaled_w = dst_w;
     if (scaled_h > dst_h) scaled_h = dst_h;
+    if (scaled_w < 1) scaled_w = 1;
+    if (scaled_h < 1) scaled_h = 1;
     int offset_x = (dst_w - scaled_w) / 2;
     int offset_y = (dst_h - scaled_h) / 2;
+    if (out_content) *out_content = {(uint16_t)offset_x, (uint16_t)offset_y,
+                                    (uint16_t)scaled_w, (uint16_t)scaled_h};
 
     for (int dy = 0; dy < scaled_h; dy++) {
         float src_yf = (float)dy / scale;
@@ -674,7 +685,7 @@ static bool letterbox_scale_rgb888_to_565(
 static bool letterbox_scale_rgba8888_to_565(
     const uint8_t* src, int src_w, int src_h, size_t src_stride,
     uint16_t* dst, int dst_w, int dst_h, uint16_t letterbox_color,
-    bool composite_alpha = false)
+    bool composite_alpha = false, ImageContentBounds* out_content = nullptr)
 {
     if (!src || !dst || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) return false;
 
@@ -689,8 +700,12 @@ static bool letterbox_scale_rgba8888_to_565(
     // Clamp: rounding can push scaled dims 1 px past target
     if (scaled_w > dst_w) scaled_w = dst_w;
     if (scaled_h > dst_h) scaled_h = dst_h;
+    if (scaled_w < 1) scaled_w = 1;
+    if (scaled_h < 1) scaled_h = 1;
     int offset_x = (dst_w - scaled_w) / 2;
     int offset_y = (dst_h - scaled_h) / 2;
+    if (out_content) *out_content = {(uint16_t)offset_x, (uint16_t)offset_y,
+                                    (uint16_t)scaled_w, (uint16_t)scaled_h};
 
     for (int dy = 0; dy < scaled_h; dy++) {
         float src_yf = (float)dy / scale;
@@ -970,10 +985,12 @@ static bool image_decode_to_rgb565_impl(
     const uint8_t* data, size_t len,
     uint16_t target_w, uint16_t target_h,
     ImageScaleMode scale_mode,
-    uint16_t** out_pixels, size_t* out_size, uint16_t letterbox_color)
+    uint16_t** out_pixels, size_t* out_size, uint16_t letterbox_color,
+    ImageContentBounds* out_content)
 {
     if (out_pixels) *out_pixels = nullptr;
     if (out_size) *out_size = 0;
+    if (out_content) *out_content = {};
     if (!data || len < 4 || target_w == 0 || target_h == 0) return false;
 
     ImageFormat fmt = image_detect_format(data, len);
@@ -1002,14 +1019,16 @@ static bool image_decode_to_rgb565_impl(
     }
 
     bool ok = false;
+    ImageContentBounds content = {0, 0, target_w, target_h};
 
     if (fmt == IMAGE_FORMAT_JPEG) {
 #ifdef CONFIG_IDF_TARGET_ESP32P4
         // Try hardware decode + PPA scale first; fall through to SW on failure.
         if (hw_decode_and_scale(data, len, target_w, target_h, scale_mode,
-                                out, out_aligned_size, letterbox_color)) {
+                                out, out_aligned_size, letterbox_color, &content)) {
             if (out_pixels) *out_pixels = out;
             if (out_size)   *out_size   = out_bytes;
+            if (out_content) *out_content = content;
             return true;
         }
         LOGT(TAG, "JPEG software fallback selected");
@@ -1019,7 +1038,7 @@ static bool image_decode_to_rgb565_impl(
         if (decode_jpeg(data, len, &rgb888, &src_w, &src_h, UINT32_MAX)) {
             if (scale_mode == IMAGE_SCALE_LETTERBOX) {
                 ok = letterbox_scale_rgb888_to_565(
-                    rgb888, src_w, src_h, out, target_w, target_h, letterbox_color);
+                    rgb888, src_w, src_h, out, target_w, target_h, letterbox_color, &content);
             } else {
                 ok = cover_scale_rgb888_to_565(rgb888, src_w, src_h, out, target_w, target_h, scale_mode);
             }
@@ -1032,7 +1051,7 @@ static bool image_decode_to_rgb565_impl(
             if (scale_mode == IMAGE_SCALE_LETTERBOX) {
                 ok = letterbox_scale_rgba8888_to_565(
                     draw_buf->data, src_w, src_h, draw_buf->header.stride,
-                    out, target_w, target_h, letterbox_color);
+                    out, target_w, target_h, letterbox_color, false, &content);
             } else {
                 ok = cover_scale_rgba8888_to_565(
                     draw_buf->data, src_w, src_h, draw_buf->header.stride,
@@ -1049,6 +1068,7 @@ static bool image_decode_to_rgb565_impl(
 
     if (out_pixels) *out_pixels = out;
     if (out_size) *out_size = out_bytes;
+    if (out_content) *out_content = content;
     return true;
 }
 
@@ -1056,11 +1076,12 @@ bool image_decode_to_rgb565(
     const uint8_t* data, size_t len,
     uint16_t target_w, uint16_t target_h,
     ImageScaleMode scale_mode,
-    uint16_t** out_pixels, size_t* out_size, uint16_t letterbox_color)
+    uint16_t** out_pixels, size_t* out_size, uint16_t letterbox_color,
+    ImageContentBounds* out_content)
 {
     std::lock_guard<std::mutex> lock(g_image_decoder_mutex);
     return image_decode_to_rgb565_impl(data, len, target_w, target_h, scale_mode,
-                                       out_pixels, out_size, letterbox_color);
+                                       out_pixels, out_size, letterbox_color, out_content);
 }
 
 #if HAS_BOOT_LOGO

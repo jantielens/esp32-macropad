@@ -4,6 +4,7 @@
 
 #include "log_manager.h"
 #include "fs_health.h"
+#include "json_key_validation.h"
 #include "pad_config.h"
 #include "psram_json_allocator.h"
 #include "config_psram.h"
@@ -13,6 +14,7 @@
 #include <ArduinoJson.h>
 #include "storage.h"
 #include <string.h>
+#include <memory>
 
 #define TAG "BtnDef"
 
@@ -61,7 +63,8 @@ static void parse_bindable(JsonVariant v, char* out, size_t out_len, const char*
 bool button_defaults_load_overrides(JsonDocument& doc) {
     if (!Storage.exists(BTN_DEFAULTS_PATH)) {
         LOGD(TAG, "No pad and button defaults file, using empty defaults");
-        return false;
+        doc.to<JsonObject>();
+        return !doc.overflowed();
     }
 
     File f = Storage.open(BTN_DEFAULTS_PATH, "r");
@@ -77,6 +80,11 @@ bool button_defaults_load_overrides(JsonDocument& doc) {
         return false;
     }
 
+    if (json_stream_scan_keys(f) != JsonKeyScanResult::Valid) {
+        LOGW(TAG, "Pad and button defaults contain an invalid JSON NUL or could not be read");
+        f.close();
+        return false;
+    }
     DeserializationError err = deserializeJson(doc, f);
     f.close();
 
@@ -85,14 +93,15 @@ bool button_defaults_load_overrides(JsonDocument& doc) {
         doc.clear();
         return false;
     }
-    return doc.is<JsonObject>();
+    if (!doc.is<JsonObject>()) {
+        LOGE(TAG, "Pad and button defaults must be a JSON object");
+        return false;
+    }
+    return true;
 }
 
-static bool load_from_flash(ButtonDefaults* d) {
+static void parse_defaults(JsonDocument& doc, ButtonDefaults* d) {
     *d = g_empty_defaults;
-    BasicJsonDocument<PsramJsonAllocator> doc(2048);
-    if (!button_defaults_load_overrides(doc)) return false;
-
     const char* font = doc["default_font"] | "@builtin";
     if (strcmp(font, "@builtin") == 0 || font_store_validate_name(font))
         strlcpy(d->default_font, font, sizeof(d->default_font));
@@ -142,6 +151,13 @@ static bool load_from_flash(ButtonDefaults* d) {
         else d->icon_position = DEFAULT_ICON_POSITION;
     }
 
+}
+
+static bool load_from_flash(ButtonDefaults* d) {
+    *d = g_empty_defaults;
+    BasicJsonDocument<PsramJsonAllocator> doc(2048);
+    if (!button_defaults_load_overrides(doc)) return false;
+    parse_defaults(doc, d);
     LOGI(TAG, "Loaded device pad and button defaults");
     return true;
 }
@@ -197,31 +213,43 @@ void button_defaults_typography_status(JsonObject status) {
     status["reboot_required"] = strcmp(active_font, saved->default_font) != 0 || active.base_size != saved->base_text_size;
 }
 
+static bool parse_validated_defaults(const uint8_t* json, size_t len, JsonDocument& document) {
+    if (!json || len == 0 || len > 4096) return false;
+    if (!json_keys_valid(json, len)) {
+        LOGW(TAG, "Pad and button defaults JSON contains an invalid NUL");
+        return false;
+    }
+    if (deserializeJson(document, json, len) || document.overflowed() || !document.is<JsonObject>()) {
+        LOGW(TAG, "Invalid pad and button defaults JSON");
+        return false;
+    }
+    const char* error = button_defaults_validate(document.as<JsonObjectConst>());
+    if (error) {
+        LOGW(TAG, "Invalid pad and button defaults: %s", error);
+        return false;
+    }
+    return true;
+}
+
 bool button_defaults_save_raw(const uint8_t* json, size_t len) {
     const StorageMutationGuard guard;
     if (!guard) return false;
-    if (!json || len == 0 || len > 4096) return false;
     BasicJsonDocument<PsramJsonAllocator> document(2048);
-    if (deserializeJson(document, json, len) || !document.is<JsonObject>() ||
-        button_defaults_validate(document.as<JsonObjectConst>())) return false;
+    if (!parse_validated_defaults(json, len, document)) return false;
     if (!ensure_defaults()) return false;
 
-    File f = Storage.open(BTN_DEFAULTS_PATH, "w");
-    if (!f) {
-        LOGE(TAG, "Failed to open for write");
+    auto* replacement = static_cast<ButtonDefaults*>(
+        config_psram_alloc(sizeof(ButtonDefaults), "button_defaults_save"));
+    if (!replacement) return false;
+    parse_defaults(document, replacement);
+    if (!storage_write_atomic(BTN_DEFAULTS_PATH, json, len)) {
+        LOGE(TAG, "Failed to save pad and button defaults");
+        free(replacement);
         return false;
     }
 
-    size_t written = f.write(json, len);
-    f.close();
-
-    if (written != len) {
-        LOGE(TAG, "Write failed (%u of %u)", (unsigned)written, (unsigned)len);
-        return false;
-    }
-
-    // Update RAM cache
-    load_from_flash(g_defaults);
+    *g_defaults = *replacement;
+    free(replacement);
     storage_publish_usage(false);
 
     // Rebuild all pad caches so they pick up the new defaults

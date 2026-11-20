@@ -30,7 +30,8 @@ Two widgets targeting one stick use first-owner-wins until release.
 
 Choose Gamepad Button, then a button 1-16, hat direction, or left/right trigger.
 Touch holds it; release is automatic. This is not an ordinary tap action list
-and needs no separate Up action.
+and needs no separate Up action. Choose a fixed control; dynamic bindings
+are not supported for held controls.
 Four hat controls compose diagonals; opposing directions cancel independently.
 Triggers are binary 255/0, not pressure-sensitive.
 

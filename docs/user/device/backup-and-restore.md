@@ -18,6 +18,7 @@ controls and separate file backups; this menu is not a universal backup service.
 > **Export Device Config is not a full-device backup.** It contains the main
 > exported settings, saved pads, and device-wide pad/button defaults. It does
 > not archive all stored files, every feature's configuration, or saved secrets.
+> Device configuration exports cannot be imported back into the device.
 
 Keep a separate backup of assets, packages, and instrument records you need.
 Record critical feature settings before an erase, reset, or layout change.
@@ -55,6 +56,15 @@ Import replaces the editor's current pad draft. Save or export work you want
 to keep first. Files are supported import/export artifacts; you do not need
 to edit their persisted schema by hand.
 
+If a saved pad cannot be loaded, the editor blocks saving to protect its
+contents. Reload it after correcting the error. Opening or importing a pad
+with an older action format removes its actions from the draft and shows a
+notification; other settings are retained. Save only after reviewing the draft.
+Newer action formats remain blocked. To replace an incompatible saved pad,
+choose **Import Pad** with a supported file or **Clear Pad**, confirm the
+replacement warning, and save the new draft. If the device cannot read the
+saved pad, repair storage or restore the file from a backup first.
+
 ## Export saved device configuration
 
 Save each changed portal section and pad first. In **Pads > Pad Editor >
@@ -62,35 +72,9 @@ More**, choose **Export Device Config**.
 Store the file alongside your separate asset/feature backups and note the
 firmware version and target.
 
-Pad reads that fail during export can become empty entries in the file, and
-failed default-setting reads can leave those settings empty.
-Inspect important saved pads/defaults and keep individual pad exports as well;
-do not assume a downloaded file is proof that every read succeeded.
-
-## Import device configuration
-
-> [!WARNING]
-> **Import Device Config** writes settings and pad files immediately and reboots.
-> It can overwrite current pads or delete slots represented as empty in the
-> export. It is not a reversible preview or an all-or-nothing transaction.
-
-1. Export the destination's current configuration and preserve any unsaved drafts.
-2. Check that the destination firmware supports the source's widgets/actions
-   and layout limits.
-3. Use **Import Device Config**, choose the file, and confirm the overwrite.
-4. Wait for completion and reboot. Do not interrupt power.
-5. Reopen the portal. Check each important pad and feature, re-enter missing
-   credentials, and restore required assets/packages.
-
-Network identity settings are excluded from normal device export, so an
-ordinary import is not a Wi-Fi-provisioning tool.
-On a different device, enabled integrations can need credentials even when
-their non-secret settings were imported.
-
-If import fails partway through, earlier writes can remain. The error can name
-the failed pad. Inspect current state before retrying; restore from the
-destination backup where necessary. Unsaved pad drafts are not protected by
-device import.
+Export reports a failure if it cannot read a pad or the device-wide defaults.
+Keep individual pad exports for restoring pads. Device configuration exports
+are for reference; they cannot be imported as device configurations or pads.
 
 ## Preserve data before destructive operations
 

@@ -1093,15 +1093,16 @@ async function padPreparePageSave(context) {
                 buttonSizeCache.set(dimensionsKey, buttonSizes);
             }
             const gap = Number(buttonSizes.gap) || 0;
+            const pixelShift = buttonSizes.pixel_shift_margin;
             const displayWidth = Number(buttonSizes.display_w) ||
                 (Number(buttonSizes.button_w) || 0) * cols + gap * (cols - 1);
             const displayHeight = Number(buttonSizes.display_h) ||
                 (Number(buttonSizes.button_h) || 0) * rows + gap * (rows - 1);
             const columnSizing = padComputeAxisTrackSizes(cols,
-                padGetTrackAvailableSize('columns', displayWidth, buttonSizes.pixel_shift_margin, layout),
+                padGetTrackAvailableSize('columns', displayWidth, pixelShift, layout),
                 gap, targetPayload.column_widths_px);
             const rowSizing = padComputeAxisTrackSizes(rows,
-                padGetTrackAvailableSize('rows', displayHeight, buttonSizes.pixel_shift_margin, layout),
+                padGetTrackAvailableSize('rows', displayHeight, pixelShift, layout),
                 gap, targetPayload.row_heights_px);
             if (!columnSizing.valid || !rowSizing.valid) throw new Error('Pad track sizes do not fit the display.');
             const col = Number(button.col);
@@ -1114,7 +1115,7 @@ async function padPreparePageSave(context) {
             const key = 'pad_' + entry.targetPage + '_' + entry.layer + '_' + col + '_' + row +
                 (entry.slot ? '_opt_' + entry.slot : '');
             if (col + colSpan > cols || row + rowSpan > rows) continue;
-            const borderWidth = button.border_width !== undefined ? Number(button.border_width) : 1;
+            const borderWidth = Number(button.border_width ?? 1);
             const padding = Number(buttonSizes.padding) || 0;
             const fullWidth = padTrackSpanSize(columnSizing.sizes, col, colSpan, gap) - padding * 2 - borderWidth * 2;
             const fullHeight = padTrackSpanSize(rowSizing.sizes, row, rowSpan, gap) - padding * 2 - borderWidth * 2;
@@ -1253,6 +1254,10 @@ async function padUploadIconSources(prepared) {
         if (sourceKey.startsWith('import:'))
             prepared.iconSources.sourceIdMap[sourceKey.slice(7)] = result.id;
     }
+    padApplyPreparedSourceIds(prepared, sourceIds);
+}
+
+function padApplyPreparedSourceIds(prepared, sourceIds) {
     for (const group of [prepared.payload.buttons, prepared.payload.overlay_buttons || []]) {
         for (const button of group) {
             for (const { icon } of padButtonIconUses(button)) {

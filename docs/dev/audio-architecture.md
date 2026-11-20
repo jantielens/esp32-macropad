@@ -124,6 +124,15 @@ retains ownership until cleanup succeeds. A later start by the same owner retrie
 cleanup. Only one FreeRTOS task can own a capture session at a time. The input
 layer does not resample, create WAV files, retain audio, or make network requests.
 
+Shared input processing runs in place in the capture owner's read path: an
+optional approximately 80 Hz low-cut filter, followed by digital gain and
+16-bit saturation. Settings apply at audio-block boundaries to all consumers.
+The filter keeps separate channel history; processing adds no task or PCM
+buffer. Defaults of 0 dB and filter off preserve samples unchanged.
+**Audio > Microphone** applies adjustments without saving; **Save settings**
+persists them for restart. Runtime and saved settings are reported separately
+by the [microphone API](web-portal.md#microphone-api).
+
 `esp32-p4-lcd4b` combines the ES8311 output codec with an ES7210 microphone ADC
 on the same 48 kHz I2S clock. The ES8311 driver owns both channels and exposes
 the existing RX channel through `AudioInputDriver`; input capture neither
@@ -140,16 +149,17 @@ Pads can display these read-only microphone bindings:
 * `[audio:input.active]` returns `true` while the meter is sampling and `false`
     after its short resolver-driven sampling lease expires.
 
-The meter task remains asleep and does not read I2S data unless one of these
-bindings is actively resolved. It yields to another capture owner and during
-firmware updates. Its task stack and sample buffer prefer PSRAM, with internal
-RAM fallback.
+The meter task remains asleep unless a binding or the portal microphone test
+renews its sampling lease. It yields to another capture owner and during
+firmware updates. Portal diagnostics can observe processed blocks from another
+capture owner without opening a second session. Its task stack and sample
+buffer prefer PSRAM, with internal RAM fallback.
 
-## Local Voice Clips
+## Local Voice Notes
 
-`HAS_VOICE_CLIPS` enables an independent local recorder and is mutually
-exclusive with `IS_VOICE_ASSISTANT`. One worker owns capture, using a PSRAM-first
-stack. Another uses an internal stack to own the unfinished file and write
+`HAS_VOICE_NOTES` enables an independent local recorder, requires SD-primary
+storage, and is mutually exclusive with `IS_VOICE_ASSISTANT`. One worker owns
+capture, using a PSRAM-first stack. Another uses an internal stack to own the unfinished file and write
 native 16-bit PCM through `Storage`.
 They exchange bounded audio batches through a PSRAM-first queue, with an internal
 RAM fallback. The storage worker publishes a finalized WAV only after indexed
@@ -158,16 +168,28 @@ to the capture owner.
 
 The recorder reserves filesystem headroom and checks capacity during capture.
 Overrun, input stall, write, and finalization failures are reported without
-publishing an unfinished clip. OTA, reboot, factory reset, and Sticky shutdown
+publishing an unfinished note. OTA, reboot, factory reset, and Sticky shutdown
 request cancellation and wait or defer until both workers have stopped safely.
 Boot cleanup removes stale temporary recordings. Portal readers stream indexed
-clips with bounded buffers; an active reader makes deletion return busy.
+notes with bounded buffers; an active reader makes deletion return busy.
 The Sticky driver targets 16 kHz mono with 16 DMA buffers of 512 frames. The
 queue holds 16 batches of 1024 frames, or 32 KiB at this format. A device
 reported a 210 ms write and a 569 ms capacity check with the single-worker
 design. Capture can now continue while the storage worker is blocked, but flash
 cache stalls still require DMA buffering. Longer recordings, memory headroom,
 and worst-case stalls need device validation.
+
+Voice Notes transcription has its own single-job worker and settings; it does
+not use the Voice Assistant. The worker holds a WAV reader lease while streaming
+the recording to the configured Azure deployment over verified TLS. Transcript
+JSON is stored separately through atomic replacement, leaving the WAV and any
+previous transcript intact on failure. Recording and OTA checkpoints abandon
+processing when they take priority. The worker uses an internal RAM stack for
+storage access and PSRAM for job and transcript buffers.
+Catalog and details responses use strict PSRAM-backed documents and stream JSON
+without intermediate catalog strings. Details copies only the requested index
+entry. The one-shot transcription connection is closed before response parsing
+and the TCP close-settling delay.
 
 ## Voice Assistant
 

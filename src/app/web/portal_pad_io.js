@@ -1,6 +1,8 @@
 // portal_pad_io.js - Pad clipboard, import/export, and device config I/O
 // Part of the ESP32 Macropad configuration portal.
 
+const PAD_ACTION_RESET_WARNING = 'This pad uses an older action format. Actions were removed from this draft; other settings are retained. Save Pad to apply, or leave without saving to keep the original.';
+
 function padStripPosition(btn) {
     const copy = padCloneJson(btn);
     delete copy.col;
@@ -186,7 +188,95 @@ function padPastePad() {
 
 // --- Export/import single pad ---
 
+function padCheckImportedKeys(value) {
+    const pending = [value];
+    while (pending.length) {
+        const current = pending.pop();
+        if (!current || typeof current !== 'object') continue;
+        for (const [key, child] of Object.entries(current)) {
+            if (key.includes('\0')) throw new Error('JSON field names must not contain NUL characters.');
+            if (child && typeof child === 'object') pending.push(child);
+        }
+    }
+}
+
+function padResetOlderActions(pad) {
+    const version = pad.action_format_version === undefined ? 0 : pad.action_format_version;
+    if (!Number.isInteger(version) || version < 0 || version > PAD_ACTION_FORMAT_VERSION)
+        throw new Error('Unsupported action format version.');
+    if (version === PAD_ACTION_FORMAT_VERSION) return false;
+    let removed = Object.prototype.hasOwnProperty.call(pad, 'pad_actions');
+    delete pad.pad_actions;
+    for (const button of (pad.buttons || []).concat(pad.overlay_buttons || [])) {
+        for (const key of ['actions', 'lp_actions', 'action', 'lp_action',
+            'action_screen', 'lp_action_screen', 'widget_numericrocker_action']) {
+            if (Object.prototype.hasOwnProperty.call(button, key)) {
+                delete button[key];
+                removed = true;
+            }
+        }
+    }
+    pad.action_format_version = PAD_ACTION_FORMAT_VERSION;
+    return removed;
+}
+
+function padCheckImportedActionFormat(pad) {
+    if (pad.action_format_version !== undefined && pad.action_format_version !== PAD_ACTION_FORMAT_VERSION)
+        throw new Error('Unsupported action format version.');
+    const buttons = (pad.buttons || []).concat(pad.overlay_buttons || []);
+    const arrays = [pad.pad_actions];
+    for (const button of buttons) {
+        if (['action', 'lp_action', 'action_screen', 'lp_action_screen'].some(key => Object.prototype.hasOwnProperty.call(button, key)))
+            throw new Error('Legacy pad actions are not supported.');
+        arrays.push(button.actions, button.lp_actions);
+        if (button.widget_numericrocker_action !== undefined) arrays.push([button.widget_numericrocker_action]);
+    }
+    for (const actions of arrays) {
+        if (actions === undefined || actions === null) continue;
+        if (!Array.isArray(actions)) throw new Error('Pad actions must be arrays.');
+        if (actions.length > MAX_ACTIONS) throw new Error('Pad action limit exceeded (' + MAX_ACTIONS + ').');
+        for (const action of actions) {
+            if (pad.action_format_version !== PAD_ACTION_FORMAT_VERSION || !action || typeof action !== 'object' ||
+                Array.isArray(action) || Object.keys(action).some(key => key !== 'op' && key !== 'args') ||
+                typeof action.op !== 'string' || !action.args || typeof action.args !== 'object' ||
+                Array.isArray(action.args) || !actionEditorOperation(action.op))
+                throw new Error('Pad actions require action format version ' + PAD_ACTION_FORMAT_VERSION + ' and supported operation envelopes.');
+            const operation = actionEditorOperation(action.op);
+            if (!Array.isArray(operation.arguments))
+                throw new Error('Operation argument information is unavailable: ' + action.op);
+            const argumentsByName = new Map(operation.arguments.map(argument => [argument.name, argument]));
+            if (Object.keys(action.args).some(name => !argumentsByName.has(name)) ||
+                operation.arguments.some(argument => !Object.prototype.hasOwnProperty.call(action.args, argument.name)))
+                throw new Error('Operation arguments do not match ' + action.op + '.');
+            for (const argument of operation.arguments) {
+                const value = action.args[argument.name];
+                if (value && typeof value === 'object' && !Array.isArray(value)) {
+                    if (!argument.dynamic || Object.keys(value).length !== 1 ||
+                        typeof value.$template !== 'string' || !value.$template ||
+                        value.$template.includes('\0') || new TextEncoder().encode(value.$template).length >= 192 ||
+                        !validateBinding(value.$template, { requireKnownScheme: true }).valid)
+                        throw new Error('Invalid dynamic argument for ' + action.op + '.');
+                } else if (argument.type === 'boolean' ? typeof value !== 'boolean'
+                    : argument.type === 'integer' ? !Number.isInteger(value) || value < argument.min || value > argument.max ||
+                        (argument.nonzero_min && value !== 0 && value < argument.nonzero_min)
+                    : argument.type === 'number' ? typeof value !== 'number' || !Number.isFinite(value) ||
+                        value < argument.min || value > argument.max ||
+                        !Number.isFinite(Math.fround(value)) || Math.fround(value) < argument.min || Math.fround(value) > argument.max
+                    : typeof value !== 'string' || value.includes('\0') ||
+                        (!value && !argument.allow_empty) || new TextEncoder().encode(value).length > argument.max_length ||
+                        (argument.type === 'enum' && !(argument.choices || []).includes(value))) {
+                    throw new Error('Invalid argument for ' + action.op + '.');
+                }
+            }
+        }
+    }
+}
+
 async function padExportPad() {
+    if (padState.loadError) {
+        showMessage(padState.loadError, 'error');
+        return;
+    }
     const tracks = padTrackValidate(true);
     if (!tracks.valid) {
         const axis = tracks.rows.status !== 'valid' ? 'rows' : 'columns';
@@ -201,6 +291,7 @@ async function padExportPad() {
     catch (error) { showMessage(error.message, 'error'); return; }
     padCollectButtonDefaults();
     const payload = {
+        action_format_version: PAD_ACTION_FORMAT_VERSION,
         layout: 'grid',
         cols: padState.cols,
         rows: padState.rows,
@@ -263,15 +354,19 @@ async function padImportPad(evt) {
     const section = document.getElementById('pad-config-section');
 
     try {
+        if (padState.loadPending) throw new Error('Pad is still loading. Wait before importing.');
         if (Number(file.size) > 16 * 1024 * 1024) throw new Error('Import file exceeds the 16 MiB limit.');
         const text = await file.text();
         const json = JSON.parse(text);
         if (padState.page !== page || document.getElementById('pad-config-section') !== section) return;
 
+        padCheckImportedKeys(json);
         if (!json.cols || !json.rows || !Array.isArray(json.buttons) ||
             (json.overlay_buttons !== undefined && !Array.isArray(json.overlay_buttons))) {
             throw new Error('Invalid pad JSON: missing cols, rows, or buttons');
         }
+        const actionsReset = padResetOlderActions(json);
+        padCheckImportedActionFormat(json);
         const importedSources = padValidateImportedIconSources([json], json._icon_sources);
         if (json.buttons.length + (json.overlay_buttons || []).length > padMaxButtons())
             throw new Error('Combined Main and Overlay button limit exceeded (' + padMaxButtons() + ')');
@@ -280,6 +375,8 @@ async function padImportPad(evt) {
         if (json.cols < 1 || json.cols > maxCols || json.rows < 1 || json.rows > maxRows) {
             throw new Error('Invalid grid size (maximum ' + maxCols + ' columns and ' + maxRows + ' rows)');
         }
+        if (padState.loadError &&
+            !confirm('The saved pad could not be loaded. Importing and saving this draft will replace its settings. Continue?')) return;
 
         // Load into editor
         if (typeof padWorkspaceReset === 'function') padWorkspaceReset();
@@ -288,7 +385,6 @@ async function padImportPad(evt) {
         padState.importedIconSources = importedSources;
         padState.importedIconSourceIds = {};
         padState.draftIconSources = {};
-        padState.importedPadConfigs = null;
         padState.rawJson = null;
         padState.cols = json.cols;
         padState.rows = json.rows;
@@ -318,14 +414,24 @@ async function padImportPad(evt) {
         if (padState.page !== page || document.getElementById('pad-config-section') !== section) return;
 
         padRenderGrid();
+        padState.loadError = null;
         padMarkDirty();
-        showMessage('Pad imported (unsaved) — click Save Pad to apply', 'success');
+        if (actionsReset) showMessage(PAD_ACTION_RESET_WARNING, 'info');
+        else showMessage('Pad imported (unsaved) — click Save Pad to apply', 'success');
     } catch (err) {
         showMessage('Import failed: ' + err.message, 'error');
     }
 }
 
-// --- Export/import full device config ---
+// --- Export device config ---
+
+function devicePortableSettings(config) {
+    const omitted = new Set(['device_name', 'device_name_sanitized', 'wifi_ssid', 'fixed_ip',
+        'subnet_mask', 'gateway', 'dns1', 'dns2', 'basic_auth_username', 'basic_auth_enabled', 'mqtt_username',
+        'save_current_brightness', 'save_current_volume']);
+    return Object.fromEntries(Object.entries(config).filter(([key]) =>
+        !omitted.has(key) && !/password|token|api_key/.test(key)));
+}
 
 async function deviceExportConfig() {
     try {
@@ -334,18 +440,7 @@ async function deviceExportConfig() {
         // Fetch device config
         const cfgResp = await fetch('/api/config');
         if (!cfgResp.ok) throw new Error('Failed to fetch device config');
-        const config = await cfgResp.json();
-
-        // Remove fields we don't want to export (network-specific)
-        delete config.device_name;
-        delete config.device_name_sanitized;
-        delete config.fixed_ip;
-        delete config.subnet_mask;
-        delete config.gateway;
-        delete config.dns1;
-        delete config.dns2;
-        delete config.wifi_ssid;
-        delete config.wifi_password;
+        const config = devicePortableSettings(await cfgResp.json());
 
         // Fetch all pad configs
         const maxPads = (deviceInfoCache && deviceInfoCache.max_pads) || 8;
@@ -358,14 +453,13 @@ async function deviceExportConfig() {
         }
 
         // Fetch device-level pad and button defaults
-        let buttonDefaults = {};
-        try {
-            const bdResp = await fetch('/api/component/button-defaults/config');
-            if (bdResp.ok) {
-                buttonDefaults = await bdResp.json();
-                delete buttonDefaults.firmware_defaults;
-            }
-        } catch (e) {}
+        const bdResp = await fetch('/api/component/button-defaults/config');
+        if (!bdResp.ok) throw new Error('Failed to fetch pad and button defaults: HTTP ' + bdResp.status);
+        const buttonDefaults = await bdResp.json();
+        if (!buttonDefaults || typeof buttonDefaults !== 'object' || Array.isArray(buttonDefaults))
+            throw new Error('Invalid pad and button defaults response');
+        delete buttonDefaults.firmware_defaults;
+        delete buttonDefaults.typography_status;
 
         const exportData = {
             _format: DEVICE_CONFIG_FORMAT,
@@ -390,116 +484,15 @@ async function deviceExportConfig() {
     }
 }
 
-async function deviceImportConfig(evt) {
-    const file = evt.target.files[0];
-    const originalPage = padState.page;
-    evt.target.value = '';
-    if (!file) return;
-
-    let failedPage = null;
-    try {
-        if (Number(file.size) > 16 * 1024 * 1024) throw new Error('Import file exceeds the 16 MiB limit.');
-        const text = await file.text();
-        const data = JSON.parse(text);
-
-        if (data._format !== DEVICE_CONFIG_FORMAT || data._version !== DEVICE_CONFIG_VERSION) {
-            throw new Error('Unrecognized file format');
-        }
-        if (!Array.isArray(data.pads)) throw new Error('Device config must contain a pad list.');
-        const importedSources = padValidateImportedIconSources(data.pads, data._icon_sources);
-
-        if (!confirm('Import device configuration? This will overwrite current settings and all pad configs. The device will reboot.')) return;
-
-        if (typeof padWorkspaceReset === 'function') padWorkspaceReset();
-        padState.importedIconSources = importedSources;
-        padState.importedIconSourceIds = {};
-        padState.draftIconSources = {};
-        padState.importedPadConfigs = data.pads;
-
-        showMessage('Importing device config...', 'info');
-
-        // Step 1: Import device settings (excl. network fields which were stripped on export)
-        if (data.config && typeof data.config === 'object') {
-            const resp = await fetch('/api/config?no_reboot=1', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data.config),
-            });
-            if (!resp.ok) throw new Error('Config import failed: HTTP ' + resp.status);
-        }
-
-        // Step 2: Import device-level pad and button defaults
-        if (data.button_defaults && typeof data.button_defaults === 'object') {
-            const response = await fetch('/api/component/button-defaults/config', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data.button_defaults),
-            });
-            if (!response.ok) throw new Error('Pad and button defaults import failed: HTTP ' + response.status);
-        }
-
-        // Step 3: Import all pad configs (save each to trigger icon rendering)
-        if (Array.isArray(data.pads)) {
-            const maxPads = (deviceInfoCache && deviceInfoCache.max_pads) || 8;
-            for (let i = 0; i < data.pads.length && i < maxPads; i++) {
-                const padJson = data.pads[i];
-                failedPage = i;
-                if (!padJson) {
-                    // Delete pad if it was null in export
-                    const iconResponse = await fetch('/api/icons/page?page=' + i, { method: 'DELETE' });
-                    if (!iconResponse.ok) throw new Error('Icon delete failed: HTTP ' + iconResponse.status);
-                    const padResponse = await fetch('/api/pad?page=' + i, { method: 'DELETE' });
-                    if (!padResponse.ok) throw new Error('Pad delete failed: HTTP ' + padResponse.status);
-                    continue;
-                }
-
-                // Load pad into editor state, save it (which triggers icon upload)
-                padState.page = i;
-                padState.selectedLayer = 'main';
-                padState.importedIconSources = importedSources;
-                padState.rawJson = null;
-                padState.cols = padJson.cols || 3;
-                padState.rows = padJson.rows || 2;
-                padState.mainButtons = (padJson.buttons || []).map(b => Object.assign({}, b));
-                padState.overlayButtons = (padJson.overlay_buttons || []).map(b => Object.assign({}, b));
-                padState.bindings = padBindingsFromJson(padJson.bindings);
-                padRenderBindings();
-                padLoadLevelActions(padJson.pad_actions);
-                padState.templatePad = (padJson.template_pad !== undefined &&
-                    padJson.template_pad !== null && padJson.template_pad !== i)
-                    ? padJson.template_pad : -1;
-                document.getElementById('pad-cols').value = padState.cols;
-                document.getElementById('pad-rows').value = padState.rows;
-                document.getElementById('pad-name').value = padJson.name || '';
-                document.getElementById('pad-wake-screen').value = padJson.wake_screen || '';
-                padPopulateTemplateDropdown(i);
-                document.getElementById('pad-template-pad').value = padState.templatePad;
-                padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
-                padSetBindableColor('pad-edit-page-bg-color', padJson.bg_color, padGetEffectiveDefault('default_pad_bg_color'));
-                const backgroundMode = document.getElementById('pad-page-bg-mode');
-                if (backgroundMode) backgroundMode.value = padJson.bg_color !== undefined ? 'override' : 'inherit';
-                document.getElementById('pad-button-shadow').value = padJson.button_shadow || 'inherit';
-
-                // Save pad through the shared icon and pad persistence path.
-                await padSavePage({ bulk: true });
-            }
-        }
-
-        await getDeviceInfo(true);
-        await padLoadPage(originalPage);
-
-        // Reboot to apply NVS config
-        setTimeout(() => {
-            fetch('/api/reboot', { method: 'POST' }).catch(() => {});
-        }, 500);
-    } catch (err) {
-        const pageSuffix = failedPage === null ? '' : ' on Pad ' + (failedPage + 1);
-        showMessage('Import failed' + pageSuffix + ': ' + err.message, 'error');
-    }
-}
-
 async function padDeletePage() {
-    if (!confirm('Clear Pad ' + (padState.page + 1) + ' in the editor? Save Pad to apply.')) return;
+    if (padState.loadPending) {
+        showMessage('Pad is still loading. Wait before clearing it.', 'error');
+        return;
+    }
+    const prompt = padState.loadError
+        ? 'The saved pad could not be loaded. Clearing and saving will replace its settings. Continue?'
+        : 'Clear Pad ' + (padState.page + 1) + ' in the editor? Save Pad to apply.';
+    if (!confirm(prompt)) return;
 
     try {
         if (typeof padWorkspaceReset === 'function') padWorkspaceReset();
@@ -510,7 +503,6 @@ async function padDeletePage() {
         padState.overlayButtons = [];
         padState.importedIconSources = {};
         padState.importedIconSourceIds = {};
-        padState.importedPadConfigs = null;
         padState.dragSource = null;
         padState.cols = 3;
         padState.rows = 2;
@@ -536,6 +528,7 @@ async function padDeletePage() {
         if (padState.placingBlock) padExitPlacementMode();
         if (typeof padWorkspaceRefresh === 'function') padWorkspaceRefresh();
         padRenderGrid();
+        padState.loadError = null;
         padMarkDirty();
         showMessage('Pad cleared (unsaved)', 'success');
     } catch (err) {

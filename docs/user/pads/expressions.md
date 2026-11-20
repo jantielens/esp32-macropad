@@ -71,6 +71,42 @@ Expressions support up to 12 nested groups/unary/conditional/function levels.
 [expr:[mqtt:device;state]=="ON"?"Running":"Stopped"]
 ```
 
+## Show a value and unit only when a condition is true
+
+Return a number when you want to display a value, or `""` to show nothing.
+Put the unit inside the format suffix so an empty result hides both the
+number and its unit. A unit written outside the binding remains visible.
+
+For example, on a device with Voice Notes, show the duration only while
+recording:
+
+```text
+[expr:[voice_note:recording.state]=="recording" ? [voice_note:recording.duration_s] : "";%.0f s]
+```
+
+While recording, a duration of 12 seconds displays `12 s`; zero displays
+`0 s`. When not recording, the result is empty, with no stray space or unit.
+
+To build this in the portal:
+
+1. Open a field's **Binding tools** and choose **Build an expression**.
+2. Under **Insert function**, choose **if / then / else**.
+3. Replace the comparison and both results so the Expression reads:
+
+   ```text
+   [voice_note:recording.state]=="recording" ? [voice_note:recording.duration_s] : ""
+   ```
+
+4. Enable **Numeric formatting**, set **Decimals** to **0**, and **Unit suffix**
+   to `s`.
+5. Check **Resulting field value** and the live **Result**, then choose
+   **Replace field** (or **Replace expression** when editing an existing
+   expression). Choose **Save Pad** to persist the change.
+
+The empty branch hides a known value; it does not protect against unavailable
+inner bindings. Both branches still evaluate, as explained under
+[unavailable and invalid inputs](#handle-unavailable-and-invalid-inputs).
+
 ## Update runtime state
 
 The **Set variable** action can use an expression as its Value. A counter
@@ -113,6 +149,42 @@ equal to `high`.
 [expr:abs([mqtt:solar;power]-[mqtt:grid;power]);%.0f W]
 [expr:clamp([mqtt:room;humidity],0,100);%.0f%%]
 [expr:floor([mqtt:room;temp])]
+```
+
+## Format dates and durations
+
+`datetime(timestamp, format, timezone)` formats Unix seconds. The optional
+format defaults to `%Y-%m-%d %H:%M`; the optional timezone defaults to the
+device timezone. Use standard `strftime` codes and a supported timezone name
+or POSIX rule. Whole-second timestamps display zeros for `%ms`, `%cs`, and
+`%ds`; `%ums` is not supported. An unknown timestamp, fractional timestamp,
+invalid timezone, or failed formatting makes the expression unavailable.
+Formatting a known timestamp does not require the current clock to be synced.
+
+```text
+[expr:datetime([item:created_at])|Time unavailable]
+[expr:datetime([voice_note:loaded.created_at],"%d %b %Y %H:%M")]
+[expr:datetime([alarm:1_next_at],"%H:%M","Europe/Amsterdam")|No alarm]
+```
+
+`duration(value, unit, format)` formats a duration. Choose `"s"` or `"ms"`
+explicitly. The default format is `mm:ss`; other formats are `hh:mm:ss`,
+`mm:ss.d`, `ss`, and `ss.d`. Values can be fractional or negative. Results
+truncate to the displayed precision; `mm:ss` counts total minutes.
+
+```text
+[expr:duration([item:duration_ms],"ms")|Unknown]
+[expr:duration([timer:1],"s","hh:mm:ss")]
+[expr:duration([timer:1],"s","mm:ss.d")]
+```
+
+For manual suffixes, calculate whole units with existing numeric formatting.
+These examples assume a nonnegative duration:
+
+```text
+[expr:floor([item:duration_ms]/60000);%.0f] minute(s)
+[expr:floor([item:duration_ms]/60000);%.0f] min and [expr:floor([item:duration_ms]/1000)%60;%.0f] sec
+[expr:floor([item:duration_ms]/3600000);%.0f] hour(s) and [expr:floor([item:duration_ms]/60000)%60;%.0f] minute(s)
 ```
 
 ## Map thresholds to colors

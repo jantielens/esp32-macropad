@@ -39,11 +39,12 @@ int main() {
     check_resolves("[timer:1_target]", "125");
     assert(std::fabs(resolve_number("[timer:1_target]", -1.0f) - 125.0f) < 0.001f);
 
-    const char* valid_params[] = {"1", "1;ss", "1_state", "1_mode", "1_expired", "1_target"};
+    const char* valid_params[] = {"1", "1_state", "1_mode", "1_expired", "1_target"};
     for (const char* params : valid_params) {
         assert(binding_template_validate_params("timer", 5, params) == nullptr);
     }
     assert(binding_template_validate_params("timer", 5, "1_unknown") != nullptr);
+    assert(binding_template_validate_params("timer", 5, "1;ss") != nullptr);
 
     int timer_scheme = -1;
     for (uint8_t index = 0; index < binding_template_scheme_count(); index++) {

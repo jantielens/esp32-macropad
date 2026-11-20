@@ -2,7 +2,7 @@
 #if HAS_DISPLAY && (HAS_MQTT || HAS_HA_LIVE)
 #include "pad_config.h"
 #include "pad_binding.h"
-#include "display_manager.h"
+#include "display_manager_lock.h"
 #include "fill_pattern.h"
 #include "action_registry.h"
 #include "widgets/widget_registry.h"
@@ -10,26 +10,21 @@
 struct SourceContext { BindingSourceVisitor visitor; void* user; };
 
 static void visit_action(const ButtonAction& action, SourceContext& context) {
-    action_type_visit_bindable_fields(action_type_find(action.type),
-        const_cast<ButtonAction&>(action),
-        [](char* field, size_t, bool, void* argument) {
+    action_visit_templates(action,
+        [](const char* field, void* argument) {
             auto& source = *static_cast<SourceContext*>(argument);
             source.visitor(field, source.user);
-            return true;
         }, &context);
 }
 
 void binding_sources_visit(BindingSourceVisitor visitor, void* user) {
     bool did_lock = false;
     display_manager_lock_if_needed(&did_lock);
-    const PadBinding* previous = nullptr;
-    uint8_t previous_count = 0;
-    pad_binding_get_bindings(&previous, &previous_count);
     SourceContext context{visitor, user};
     for (uint8_t index = 0; index < MAX_PADS; ++index) {
         const PadConfig* pad = pad_config_acquire(index);
         if (!pad) continue;
-        pad_binding_set_page(pad);
+        PadBindingScope binding_scope(pad->bindings, pad->binding_count);
         visitor(pad->bg_color, user);
         for (uint8_t a = 0; a < pad->pad_action_count; ++a) visit_action(pad->pad_actions[a], context);
         for (uint8_t b = 0; b < pad->button_count; ++b) {
@@ -58,7 +53,6 @@ void binding_sources_visit(BindingSourceVisitor visitor, void* user) {
         }
         pad_config_release(pad);
     }
-    pad_binding_set_bindings(previous, previous_count);
     display_manager_unlock_if_needed(did_lock);
 }
 #endif

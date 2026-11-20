@@ -11,6 +11,13 @@ The portal's **Actions** category offers the hosts supported by your firmware.
 They use the same action editor as pad buttons, but each event has its own
 context. An action is not automatically meaningful on every host.
 
+If saved action configuration is unsupported, the firmware clears that host's
+settings in memory and the portal shows a notification. You can edit and save
+the empty configuration normally. For MQTT triggers, this also clears topics
+and value filters. Recreate any needed settings before saving; the stored file
+is replaced only when you save. Storage, unreadable JSON, and allocation errors
+still block loading rather than clearing configuration.
+
 ## Swipe actions
 
 Open **Actions > Swipes**, choose one action for each direction, and
@@ -40,6 +47,8 @@ background color. Uploading stages the image but does not select it. Choose
 to save the selected logo, appearance, and up to three sequential boot actions.
 The action list runs after the first screen appears; saving does not execute it
 now. Appearance settings take effect on the next boot.
+Use **Search actions** to filter the available choices. Unsupported or invalid
+actions are rejected without replacing the saved list.
 
 The settings and action list are saved independently. If one save fails, the
 portal reports which part did not save. Select **Save Boot Settings** again to

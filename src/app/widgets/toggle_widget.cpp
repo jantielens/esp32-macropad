@@ -2,6 +2,7 @@
 
 #if HAS_DISPLAY
 #include "../action_list.h"
+#include "../event_binding.h"
 #include "widget_value.h"
 #include <new>
 #include <string.h>
@@ -136,9 +137,10 @@ bool toggle_interactive(const WidgetState* runtime) {
     return !state->read_only && state->available && !state->pending;
 }
 
-void toggle_tap(const WidgetConfig*, WidgetState* runtime,
+void toggle_tap(const WidgetConfig* config, WidgetState* runtime,
                 const ButtonAction* on_actions, uint8_t on_count,
-                const ButtonAction* off_actions, uint8_t off_count) {
+                const ButtonAction* off_actions, uint8_t off_count,
+                const PadBinding* bindings, uint8_t binding_count) {
     if (!toggle_interactive(runtime)) return;
     auto* state = reinterpret_cast<ToggleState*>(runtime->data);
     const bool target = !state->value;
@@ -157,7 +159,13 @@ void toggle_tap(const WidgetConfig*, WidgetState* runtime,
         *static_cast<bool*>(lv_event_get_user_data(event)) = true;
     };
     lv_obj_add_event_cb(button, delete_callback, LV_EVENT_DELETE, &deleted);
-    const ActionResult result = action_list_dispatch_result(actions, count, target ? "ToggleOn" : "ToggleOff", ACTION_CONTINUATION_OWNER_LVGL, true);
+    const auto* toggle_config = reinterpret_cast<const ToggleConfig*>(config->data);
+    const ActionEventData event = {target ? toggle_config->on_value : toggle_config->off_value,
+                                   nullptr, BINDING_VALUE_KIND_TEXT};
+    EventBindingScope event_scope(&event);
+    const ActionResult result = action_list_dispatch_result(actions, count, target ? "ToggleOn" : "ToggleOff",
+                                                             ACTION_CONTINUATION_OWNER_LVGL, true,
+                                                             bindings, binding_count);
     if (deleted) return;
     lv_obj_remove_event_cb_with_user_data(button, delete_callback, &deleted);
     if (result == ACTION_FAILED) {

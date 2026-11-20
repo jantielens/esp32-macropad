@@ -46,7 +46,7 @@ public:
         if (bus == 0) {
             if (address != 0x55 || writes != 0 ||
                 (value != 0x08 && value != 0x2c && value != 0x0a && value != 0x0c &&
-                 value != 0x16 && value != 0x18))
+                 value != 0x16 && value != 0x18 && value != 0x3c))
                 sticky_test_invalid_gauge_transaction = true;
             reg = value; ++writes; return 1;
         }

@@ -711,6 +711,27 @@ function recipeProvision(recipe) {
     return recipe.provision || { components: recipe.components || {} };
 }
 
+function recipeValidateComponentActions(components) {
+    for (const [id, fields] of [['timers', ['expire_actions']], ['alarms', ['on_ring', 'on_stop']]]) {
+        const slots = components && components[id];
+        if (!recipeIsObject(slots)) continue;
+        for (const slot of Object.values(slots)) {
+            if (!recipeIsObject(slot)) continue;
+            for (const field of fields) {
+                if (Object.prototype.hasOwnProperty.call(slot, field)) {
+                    if (!Array.isArray(slot[field])) recipeError(id + ' ' + field + ' must be an array.');
+                    if (slot[field].length > MAX_ACTIONS) recipeError(id + ' ' + field + ' has too many actions.');
+                    padCheckImportedActionFormat({ action_format_version: 1, pad_actions: slot[field] });
+                    if (id === 'alarms' && slot[field].some(function (action) {
+                        const operation = actionEditorOperation(action.op);
+                        return !operation || operation.alarm_hook_allowed !== true;
+                    })) recipeError('Alarm hooks cannot use pausable operations.');
+                }
+            }
+        }
+    }
+}
+
 function recipeSetProgress(steps) {
     const section = document.getElementById('recipe-progress');
     const list = document.getElementById('recipe-progress-list');
@@ -800,6 +821,7 @@ async function recipeInstall() {
         const recipe = recipeExpand(recipeState.selected, parameters);
         const provision = recipeProvision(recipe);
         const target = recipeState.pad;
+        padCheckImportedActionFormat(target);
         const placement = recipeState.placement;
         const resolved = recipeResolveLayout(recipe.layout, target, placement.col, placement.row, recipeState.buttonSizes);
         if (!resolved) recipeError('The recipe no longer fits at the selected position.');
@@ -821,6 +843,10 @@ async function recipeInstall() {
         if (totalButtons > maxButtons)
             recipeError('This recipe would exceed the combined Main and Overlay button limit of ' + maxButtons + '.');
         const componentIds = Object.keys(provision.components || {});
+        for (const id of componentIds) {
+            const response = await fetch('/api/component/' + encodeURIComponent(id) + '/config');
+            if (!response.ok) throw new Error('Failed to read ' + id + ': HTTP ' + response.status);
+        }
         const progress = recipeSetProgress([
             'Adding ' + buttons.length + ' buttons...', 'Generating button icons...'
         ].concat(recipe.fonts && recipe.fonts.length ? ['Installing fonts...'] : []).concat([
@@ -829,10 +855,13 @@ async function recipeInstall() {
         let progressIndex = 0;
         progress[progressIndex++].classList.add('complete');
         const savedPad = Object.assign({}, target, {
+            action_format_version: 1,
             buttons: (target.buttons || []).concat(buttons),
             bindings: recipeMergeBindings(target.bindings, provision.pad && provision.pad.bindings),
         });
         delete savedPad.page;
+        padCheckImportedActionFormat(savedPad);
+        recipeValidateComponentActions(provision.components);
         const persistenceContext = {
             page: target.page,
             body: JSON.stringify(savedPad),
@@ -851,8 +880,7 @@ async function recipeInstall() {
         for (const id of componentIds) {
             const currentResponse = await fetch('/api/component/' + encodeURIComponent(id) + '/config');
             if (!currentResponse.ok) throw new Error('Failed to read ' + id + ': HTTP ' + currentResponse.status);
-            const currentConfig = await currentResponse.json();
-            const componentConfig = recipeDeepMerge(currentConfig, provision.components[id]);
+            const componentConfig = recipeDeepMerge(await currentResponse.json(), provision.components[id]);
             const response = await fetch('/api/component/' + encodeURIComponent(id) + '/config', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(componentConfig),
             });

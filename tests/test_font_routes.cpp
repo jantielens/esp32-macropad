@@ -18,6 +18,12 @@ FakeFontStorage LittleFS;
 FakeFontStorage SD_MMC;
 bool storage_mount() { return true; }
 void storage_publish_usage(bool) {}
+static bool defaults_write_fails = false;
+bool storage_write_atomic(const char* path, const uint8_t* data, size_t length) {
+    if (defaults_write_fails) return false;
+    Storage.files[path] = std::vector<uint8_t>(data, data + length);
+    return true;
+}
 bool ota_activity_is_active() { return false; }
 static bool psram_available = true;
 size_t heap_caps_get_total_size(uint32_t) { return psram_available ? 1024 * 1024 : 0; }
@@ -38,6 +44,9 @@ static AsyncWebServerRequest upload_request(const char* name) {
 }
 int main() {
     lv_init();
+    JsonDocument overrides;
+    assert(button_defaults_load_overrides(overrides));
+    assert(overrides.is<JsonObject>() && overrides.size() == 0);
     button_defaults_init();
     assert(strcmp(button_defaults_get()->default_font, "@builtin") == 0);
     assert(button_defaults_get()->icon_position == ICON_POS_LEFT);
@@ -59,6 +68,18 @@ int main() {
     assert(!save_defaults("{\"icon_badge_padding\":1.5}"));
     assert(!save_defaults("{\"icon_badge_color\":\"red\"}"));
     assert(!save_defaults("{\"icon_color\":\"red\"}"));
+    const auto saved_defaults = Storage.files["/config/button_defaults.json"];
+    assert(!save_defaults(R"({"icon_badge_padding":12,"icon_badge_padding\u0000x":65})"));
+    defaults_write_fails = true;
+    assert(!save_defaults("{\"icon_badge_padding\":1}"));
+    defaults_write_fails = false;
+    assert(Storage.files["/config/button_defaults.json"] == saved_defaults);
+    assert(button_defaults_get()->icon_badge_padding == 12);
+    Storage.short_read_path = "/config/button_defaults.json";
+    assert(!button_defaults_load_overrides(overrides));
+    assert(save_defaults("{\"icon_badge_padding\":7}"));
+    assert(button_defaults_get()->icon_badge_padding == 7);
+    Storage.short_read_path.clear();
     assert(save_defaults("{\"icon_badge_padding\":0,\"icon_badge_color\":\"auto\"}"));
     button_defaults_init();
     assert(button_defaults_get()->icon_badge_padding == 0);

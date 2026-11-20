@@ -2,6 +2,9 @@
 
 #define HAS_SD_CARD true
 #define USE_SD_STORAGE true
+#ifndef HAS_VOICE_NOTES
+#define HAS_VOICE_NOTES true
+#endif
 #define SD_STORAGE_SPI true
 #define SD_SPI_CS_PIN 8
 #define SD_SPI_SCK_PIN 13

@@ -33,7 +33,7 @@ bool binding_value_format_valid(const char* format, unsigned max_width, unsigned
 
 #include "board_config.h"
 #if HAS_EXTERNAL_DATA
-#include <ArduinoJson.h>
+#include "binding_value_json.h"
 
 // Select a value in an already-parsed document, including array indices.
 // Returns false for missing/null values, invalid paths or truncated output.

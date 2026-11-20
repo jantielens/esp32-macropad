@@ -60,6 +60,7 @@ private:
 class FakeLittleFS {
 public:
     bool exists(const char* path) const { return storage_test_files.count(path) != 0; }
+    bool remove(const char* path) { return storage_test_files.erase(path) != 0; }
     File open(const char* path, const char* mode = "r") {
         if (storage_test_fail_open) return File();
         auto state = std::make_shared<FakeFileState>();

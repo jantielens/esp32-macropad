@@ -7,10 +7,10 @@
 #include "../src/app/auto_shutdown.h"
 #include "../src/app/device_dialog.h"
 #include "../src/app/power_manager.h"
-#if HAS_VOICE_CLIPS
-#include "../src/app/voice_clips.h"
-static VoiceClipCancelStatus recorderStatus = VoiceClipCancelStatus::Ready;
-VoiceClipCancelStatus voice_clips_cancel() { return recorderStatus; }
+#if HAS_VOICE_NOTES
+#include "../src/app/voice_notes.h"
+static VoiceNoteCancelStatus recorderStatus = VoiceNoteCancelStatus::Ready;
+VoiceNoteCancelStatus voice_notes_cancel() { return recorderStatus; }
 #endif
 #include <SPI.h>
 #include <driver/gpio.h>
@@ -19,6 +19,20 @@ VoiceClipCancelStatus voice_clips_cancel() { return recorderStatus; }
 #include <utility>
 #include <cmath>
 #include <string>
+#include "../src/app/component_registry.h"
+#define DISPLAY_MANAGER_H
+enum DisplayRefreshRequestResult : uint8_t {
+    DISPLAY_REFRESH_QUEUED, DISPLAY_REFRESH_UNAVAILABLE, DISPLAY_REFRESH_FAILED
+};
+static DisplayRefreshRequestResult refreshResult = DISPLAY_REFRESH_QUEUED;
+static unsigned refreshRequests = 0;
+DisplayRefreshRequestResult display_manager_request_full_refresh() {
+    ++refreshRequests;
+    return refreshResult;
+}
+bool component_registry_add(ComponentDef*) { return true; }
+#include "../src/app/components/epaper_refresh_component.cpp"
+#undef DISPLAY_MANAGER_H
 #include "../src/boards/reterminal-sticky-interactive/drivers/sticky_sensors.cpp"
 #define MQTT_MANAGER_H
 class MqttManager {
@@ -91,7 +105,7 @@ void device_dialog_dismiss_notification(uint32_t generation) {
     }
 }
 bool action_continuation_begin(const ButtonAction*, uint8_t, const char*, uint32_t* token,
-                              ActionContinuationOwner, bool) {
+                              ActionContinuationOwner, bool, ActionContinuationContext) {
     *token = 100 + ++automaticRequests;
     actionBusy = true;
     if (activityDuringBegin) {
@@ -233,6 +247,17 @@ int main() {
 #ifdef HW_BUTTON_DEFAULTS_JSON
 #error Sticky runtime button assignments must remain empty
 #endif
+    AsyncWebServerRequest refreshRequest;
+    epaper_refresh_full_refresh_post(&refreshRequest);
+    CHECK(refreshRequest.response_code == 202 && refreshRequests == 1);
+    refreshResult = DISPLAY_REFRESH_UNAVAILABLE;
+    AsyncWebServerRequest unavailableRequest;
+    epaper_refresh_full_refresh_post(&unavailableRequest);
+    CHECK(unavailableRequest.response_code == 503 && refreshRequests == 2);
+    refreshResult = DISPLAY_REFRESH_FAILED;
+    AsyncWebServerRequest failedRequest;
+    epaper_refresh_full_refresh_post(&failedRequest);
+    CHECK(failedRequest.response_code == 503 && refreshRequests == 3);
     AudioOutputDriver* buzzer = audio_output_driver_create();
     CHECK(buzzer->begin(48000) && buzzerDuty == 0 && buzzer->supportsNativeTone());
     CHECK(!buzzer->supportsMute() && buzzer->needsRebootShutdown());
@@ -339,6 +364,7 @@ int main() {
     Wire.registers[0x0a] = 0x09; Wire.registers[0x0b] = 0;
     Wire.registers[0x16] = 120; Wire.registers[0x17] = 0;
     Wire.registers[0x18] = 0xff; Wire.registers[0x19] = 0xff;
+    Wire.registers[0x3c] = 0x4c; Wire.registers[0x3d] = 0x1d;
     shtTestError = 0;
     externalPower = 1;
     clockMs += 5000;
@@ -346,14 +372,40 @@ int main() {
     sensor_manager_append_api(sensorObject);
     CHECK(std::fabs(sensorJson["battery_voltage"].as<double>() - 3.801) < 0.001);
     CHECK(sensorJson["battery_percentage"].as<int>() == 73);
-    CHECK(sensorJson["battery_current"].as<float>() == -0.25f);
-    CHECK(std::fabs(sensorJson["battery_power"].as<float>() + 0.95025f) < 0.0001f);
-    CHECK(sensorJson["battery_discharge_power"].as<float>() > 0.95f);
+    CHECK(std::fabs(sensorJson["battery_current"].as<float>() + 0.025f) < 0.00001f);
+    CHECK(std::fabs(sensorJson["battery_power"].as<float>() + 0.095025f) < 0.0001f);
+    CHECK(std::fabs(sensorJson["battery_discharge_power"].as<float>() - 0.095025f) < 0.0001f);
     CHECK(std::string(sensorJson["battery_status"].as<const char *>()) == "Discharging");
     CHECK(sensorJson["battery_time_remaining"].as<int>() == 120);
     CHECK(sensorJson["battery_time_to_full"].isNull());
     CHECK(sensorJson["temperature"].as<float>() == 21.5f && sensorJson["humidity"].as<float>() == 50);
     CHECK(sensorJson["external_power_present"].as<bool>());
+    Wire.registers[0x3c] = 0;
+    Wire.nackRegister = 0x08;
+    clockMs += 2000;
+    sensor_manager_loop();
+    sensor_manager_append_api(sensorObject);
+    CHECK(sensorJson["battery_current"].isNull() && sensorJson["battery_power"].isNull());
+    CHECK(sensorJson["battery_discharge_power"].isNull());
+    CHECK(sensorJson["battery_percentage"].as<int>() == 73);
+    CHECK(sensorJson["battery_time_remaining"].as<int>() == 120);
+    Wire.nackRegister = -1;
+    Wire.registers[0x3c] = 0x4c;
+    clockMs += 2000;
+    sensor_manager_loop();
+    sensor_manager_append_api(sensorObject);
+    CHECK(std::fabs(sensorJson["battery_current"].as<float>() + 0.025f) < 0.00001f);
+    Wire.nackRegister = 0x3c;
+    clockMs += 2000;
+    sensor_manager_loop();
+    sensor_manager_append_api(sensorObject);
+    CHECK(sensorJson["battery_current"].isNull() && sensorJson["battery_power"].isNull());
+    CHECK(sensorJson["battery_discharge_power"].isNull());
+    Wire.nackRegister = -1;
+    clockMs += 2000;
+    sensor_manager_loop();
+    sensor_manager_append_api(sensorObject);
+    CHECK(std::fabs(sensorJson["battery_current"].as<float>() + 0.025f) < 0.00001f);
     const unsigned transactions = Wire.transactions, samples = shtTestSamples;
     sensor_manager_append_api(sensorObject);
     sensor_manager_append_mqtt(sensorObject);
@@ -431,6 +483,7 @@ int main() {
     sensor_manager_loop();
     sensor_manager_append_api(sensorObject);
     CHECK(std::string(sensorJson["battery_status"].as<const char *>()) == "Charging");
+    CHECK(std::fabs(sensorJson["battery_current"].as<float>() - 0.02f) < 0.00001f);
     CHECK(sensorJson["battery_time_remaining"].isNull());
     CHECK(sensorJson["battery_time_to_full"].as<int>() == 45);
     CHECK(sensorJson["battery_discharge_power"].as<float>() == 0);
@@ -523,9 +576,12 @@ int main() {
     JsonObject actionObject = actionDoc.to<JsonObject>();
     shutdownAction->describe(actionObject);
     CHECK(actionDoc["label"] == "Shutdown" && actionDoc["fields"].size() == 0);
-    ButtonAction shutdown{};
+    CHECK(shutdownAction->operation_count == 1);
+    const ActionOperationDef& shutdown = shutdownAction->operations[0];
+    CHECK(std::string(shutdown.id) == "device.shutdown");
+    CHECK(shutdown.execution == ACTION_EXECUTION_PAUSABLE);
     const auto requestShutdown = [&](uint32_t token) {
-        return shutdownAction->dispatch(shutdown, "test", token);
+        return shutdown.dispatch(nullptr, "test", token);
     };
     outputs.clear();
     CHECK(requestShutdown(0) == ACTION_FAILED);
@@ -571,24 +627,24 @@ int main() {
         failPin = -1;
         CHECK(sticky_early_power_init());
     }
-#if HAS_VOICE_CLIPS
+#if HAS_VOICE_NOTES
     outputs.clear();
-    recorderStatus = VoiceClipCancelStatus::Pending;
+    recorderStatus = VoiceNoteCancelStatus::Pending;
     CHECK(requestShutdown(50) == ACTION_PENDING);
     BOARD_HARDWARE_LOOP();
     CHECK(otaActive && outputs.empty() && powerLatched);
     clockMs += 5000;
     BOARD_HARDWARE_LOOP();
     CHECK(!otaActive && outputs.empty() && powerLatched && failedShutdowns.back() == 50);
-    recorderStatus = VoiceClipCancelStatus::Error;
+    recorderStatus = VoiceNoteCancelStatus::Error;
     CHECK(requestShutdown(51) == ACTION_PENDING);
     BOARD_HARDWARE_LOOP();
     CHECK(!otaActive && outputs.empty() && powerLatched && failedShutdowns.back() == 51);
-    recorderStatus = VoiceClipCancelStatus::Pending;
+    recorderStatus = VoiceNoteCancelStatus::Pending;
     CHECK(requestShutdown(52) == ACTION_PENDING);
     BOARD_HARDWARE_LOOP();
     CHECK(otaActive && outputs.empty() && powerLatched);
-    recorderStatus = VoiceClipCancelStatus::Ready;
+    recorderStatus = VoiceNoteCancelStatus::Ready;
     BOARD_HARDWARE_LOOP();
     CHECK(otaActive && !powerLatched);
     clockMs += 500;

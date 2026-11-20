@@ -30,6 +30,14 @@ constexpr unsigned widget_default_rgb(const char* color) {
 #include <lvgl.h>
 #include <stdint.h>
 
+struct WidgetPressFeedback {
+    lv_event_code_t event;
+    lv_obj_t* object;
+    uint32_t background;
+    bool has_background;
+    bool use_default_tap_audio = false;
+};
+
 inline lv_area_t widget_content_bounds(lv_obj_t* object) {
     if (!object) return {0, 0, -1, -1};
     const int width = lv_obj_get_width(object), height = lv_obj_get_height(object);
@@ -130,6 +138,47 @@ inline lv_color_t resolve_lv_color(const char* s, uint32_t def) {
     return lv_color_make((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
 }
 
+constexpr int32_t widget_indicator_width = 4;
+constexpr int32_t widget_indicator_gap = 2;
+constexpr int32_t widget_indicator_range = 10000;
+
+inline lv_obj_t* widget_create_position_indicator(lv_obj_t* parent) {
+    lv_obj_t* indicator = lv_bar_create(parent);
+    if (!indicator) return nullptr;
+    lv_obj_remove_style_all(indicator);
+    lv_obj_set_clickable(indicator, false);
+    lv_obj_set_scrollable(indicator, false);
+    lv_obj_set_style_bg_opa(indicator, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(indicator, LV_OPA_COVER, LV_PART_INDICATOR);
+    lv_bar_set_orientation(indicator, LV_BAR_ORIENTATION_VERTICAL);
+    lv_bar_set_mode(indicator, LV_BAR_MODE_RANGE);
+    lv_bar_set_range(indicator, 0, widget_indicator_range);
+    lv_obj_set_hidden(indicator, true);
+    return indicator;
+}
+
+inline void widget_update_position_indicator(lv_obj_t* indicator, int32_t start,
+                                             int32_t end, int32_t total, int32_t height) {
+    if (!indicator || lv_obj_is_hidden(indicator) || total <= 0) return;
+    start = clamp_val<int32_t>(start, 0, total);
+    end = clamp_val(end, start, total);
+    int32_t lower = widget_indicator_range -
+        static_cast<int64_t>(end) * widget_indicator_range / total;
+    int32_t upper = widget_indicator_range -
+        static_cast<int64_t>(start) * widget_indicator_range / total;
+    const int32_t minimum = height > 1
+        ? (2 * widget_indicator_range + height - 1) / height : widget_indicator_range;
+    if (upper - lower < minimum) {
+        lower = upper - minimum;
+        if (lower < 0) { lower = 0; upper = minimum; }
+    }
+    // Range endpoints clamp to one another; lower the start first when moving down.
+    if (upper < lv_bar_get_start_value(indicator))
+        lv_bar_set_start_value(indicator, lower, LV_ANIM_OFF);
+    lv_bar_set_value(indicator, upper, LV_ANIM_OFF);
+    lv_bar_set_start_value(indicator, lower, LV_ANIM_OFF);
+}
+
 // Cached variant: resolve color, skip LVGL setter if unchanged.
 // `cache` must be initialized to UINT32_MAX (invalid sentinel) before first use.
 // Returns true if the color changed (setter should be called).
@@ -196,7 +245,7 @@ inline void widget_describe_fill_fields(JsonArray fields, bool bar_patterns) {
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
         prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \
         nullptr, nullptr, nullptr, nullptr, &prefix##_preview, nullptr,        \
-        nullptr, nullptr, nullptr, nullptr, nullptr                            \
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, false            \
     };                                                                         \
     static struct prefix##AutoReg {                                            \
         prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \
@@ -215,7 +264,7 @@ inline void widget_describe_fill_fields(JsonArray fields, bool bar_patterns) {
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
         prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \
         prefix##_describe, nullptr, nullptr, nullptr, &prefix##_preview, nullptr, \
-        nullptr, nullptr, nullptr, nullptr, nullptr                            \
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, false            \
     };                                                                         \
     static struct prefix##AutoReg {                                            \
         prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \
@@ -228,7 +277,7 @@ inline void widget_describe_fill_fields(JsonArray fields, bool bar_patterns) {
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
         prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \
         prefix##_describe, prefix##_show, prefix##_hide, validate_fn, &prefix##_preview, cancel_fn, \
-        nullptr, nullptr, nullptr, nullptr, nullptr                            \
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, false            \
     };                                                                         \
     static struct prefix##AutoReg {                                            \
         prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \
@@ -241,7 +290,7 @@ inline void widget_describe_fill_fields(JsonArray fields, bool bar_patterns) {
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
         prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,     \
         nullptr, nullptr, nullptr, nullptr, &prefix##_preview, nullptr,        \
-        nullptr, nullptr, nullptr, nullptr, nullptr                            \
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, false            \
     };                                                                         \
     static struct prefix##AutoReg {                                            \
         prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \
@@ -254,7 +303,7 @@ inline void widget_describe_fill_fields(JsonArray fields, bool bar_patterns) {
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
         prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \
         nullptr, prefix##_show, prefix##_hide, validate_fn, &prefix##_preview, cancel_fn, \
-        nullptr, nullptr, nullptr, nullptr, nullptr                            \
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, false            \
     };                                                                         \
     static struct prefix##AutoReg {                                            \
         prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \

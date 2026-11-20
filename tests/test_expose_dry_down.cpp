@@ -307,7 +307,7 @@ TEST(effective_time_15_percent_max) {
 }
 
 // ============================================================================
-// Tests: AC7 — effective_time with format suffix
+// Tests: old format suffixes are no longer accepted
 // ============================================================================
 
 TEST(effective_time_formatted) {
@@ -315,15 +315,14 @@ TEST(effective_time_formatted) {
     expose_timer_dispatch("set_time", "10.0");
     expose_timer_dispatch("set_dry_down", "8.0");
     // effective = 9.2s → mm:ss.d = 0:09.2
-    ASSERT_STR_EQ(resolve("effective_time;mm:ss.d"), "0:09.2");
+    ASSERT_STR_EQ(resolve("effective_time;mm:ss.d"), "ERR:bad_key");
 }
 
 TEST(effective_time_formatted_ss) {
     reset_timer();
     expose_timer_dispatch("set_time", "10.0");
     expose_timer_dispatch("set_dry_down", "8.0");
-    // effective = 9.2s → ss = 9
-    ASSERT_STR_EQ(resolve("effective_time;ss"), "9");
+    ASSERT_STR_EQ(resolve("effective_time;ss"), "ERR:bad_key");
 }
 
 // ============================================================================
@@ -342,8 +341,7 @@ TEST(time_binding_formatted_unaffected_by_dry_down) {
     reset_timer();
     expose_timer_dispatch("set_time", "10.0");
     expose_timer_dispatch("set_dry_down", "8.0");
-    // [expose:time;ss.d] must show "10.0", not "9.2"
-    ASSERT_STR_EQ(resolve("time;ss.d"), "10.0");
+    ASSERT_STR_EQ(resolve("time;ss.d"), "ERR:bad_key");
 }
 
 // ============================================================================

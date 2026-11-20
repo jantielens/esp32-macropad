@@ -202,6 +202,7 @@ static void publish_network_snapshot() {
 		wifi_manager_get_network_snapshot(&snapshot);
 		const WifiNetworkState previous_state = snapshot.state;
 		snapshot.ap_active = web_portal_is_ap_mode();
+		snapshot.station_enabled = (WiFi.getMode() & WIFI_STA) != 0;
 		snapshot.recovery_ap = false;
 		if (snapshot.ap_active) {
 				snapshot.recovery_ap = web_portal_is_recovery_ap();

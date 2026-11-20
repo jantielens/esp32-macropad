@@ -9,32 +9,39 @@
 #if HAS_DISPLAY || HAS_BUTTON
 namespace {
 constexpr const char* kMusicActionTag = "Action";
-void parse_music(const JsonObject& action, ButtonAction& act) {
-    const char* command = action["music_command"] | "";
-    MusicCommand parsed;
-    if (!music_command_parse(command, &parsed)) { memset(&act, 0, sizeof(act)); return; }
-    strlcpy(act.payload.music.music_command, command, sizeof(act.payload.music.music_command));
-}
-void serialize_music(const ButtonAction& act, JsonObject action) {
-    if (act.payload.music.music_command[0]) action["music_command"] = act.payload.music.music_command;
-}
-ActionResult dispatch_music(const ButtonAction& act, const char* label, uint32_t) {
+
+ActionResult submit_music_command(MusicCommand command, const char* label) {
 #if defined(ARDUINO) && HAS_SOUND_PLAYER
-    MusicCommand command;
-    if (!music_command_parse(act.payload.music.music_command, &command)) LOGW(kMusicActionTag, "%s music: invalid command", label);
-    else {
-        const ActionDispatchContext context = action_dispatch_context();
-        if (audio_music_command(command, context.work_guard, context.generation) != AUDIO_MUSIC_SUBMIT_QUEUED) {
-            LOGW(kMusicActionTag, "%s music: audio worker busy", label);
-            return ACTION_FAILED;
-        }
-    }
+    const ActionDispatchContext context = action_dispatch_context();
+    if (audio_music_command(command, context.work_guard, context.generation) == AUDIO_MUSIC_SUBMIT_QUEUED)
+        return ACTION_COMPLETE;
+    LOGW(kMusicActionTag, "%s music: audio worker rejected command", label);
 #else
-    (void)act;
+    (void)command;
     LOGW(kMusicActionTag, "%s music: not compiled", label);
 #endif
-    return ACTION_COMPLETE;
+    return ACTION_FAILED;
 }
+
+ActionResult dispatch_music_play_pause(const ActionResolvedArgument*, const char* label, uint32_t) {
+    return submit_music_command(MUSIC_COMMAND_PLAY_PAUSE, label);
+}
+ActionResult dispatch_music_next(const ActionResolvedArgument*, const char* label, uint32_t) {
+    return submit_music_command(MUSIC_COMMAND_NEXT, label);
+}
+ActionResult dispatch_music_previous(const ActionResolvedArgument*, const char* label, uint32_t) {
+    return submit_music_command(MUSIC_COMMAND_PREVIOUS, label);
+}
+ActionResult dispatch_music_stop(const ActionResolvedArgument*, const char* label, uint32_t) {
+    return submit_music_command(MUSIC_COMMAND_STOP, label);
+}
+const ActionOperationDef kMusicOperations[] = {
+    {"music.play_pause", "Play/Pause", nullptr, 0, dispatch_music_play_pause},
+    {"music.next", "Next track", nullptr, 0, dispatch_music_next},
+    {"music.previous", "Previous track", nullptr, 0, dispatch_music_previous},
+    {"music.stop", "Stop music", nullptr, 0, dispatch_music_stop},
+};
+
 bool music_available() {
 #if HAS_SOUND_PLAYER
     return true;
@@ -42,21 +49,10 @@ bool music_available() {
     return false;
 #endif
 }
-const char* validate_music(const JsonObjectConst action) {
-    if (!action.containsKey("music_command")) return "music missing music_command";
-    if (!action["music_command"].is<const char*>()) return "music_command must be a string";
-    MusicCommand command;
-    return music_command_parse(action["music_command"].as<const char*>(), &command) ? nullptr : "music_command must be play_pause, next, previous, or stop";
-}
 void describe_music(JsonObject& action) {
     action["group"] = "Audio"; action["label"] = "Music";
-    const MusicCommand values[] = { MUSIC_COMMAND_PLAY_PAUSE, MUSIC_COMMAND_NEXT, MUSIC_COMMAND_PREVIOUS, MUSIC_COMMAND_STOP };
-    const char* labels[] = { "Play/Pause", "Next track", "Previous track", "Stop" };
-    JsonArray commands = action.createNestedArray("commands");
-    for (size_t index = 0; index < 4; ++index) { JsonObject command = commands.createNestedObject(); command["id"] = music_command_name(values[index]); command["label"] = labels[index]; }
-    JsonArray editor_fields = action.createNestedArray("editor_fields");
-    JsonObject command = editor_fields.createNestedObject(); command["name"] = "music_command"; command["label"] = "Command"; command["type"] = "select"; command["command_options"] = true;
 }
-DEFINE_AND_REGISTER_ACTION_TYPE(kMusicActionType, ACTION_TYPE_MUSIC, parse_music, serialize_music, dispatch_music, nullptr, describe_music, music_available, validate_music, ACTION_EXECUTION_SYNC);
+DEFINE_AND_REGISTER_ACTION_TYPE(kMusicActionType, ACTION_TYPE_MUSIC, describe_music, music_available, ACTION_EXECUTION_SYNC, true, false,
+    kMusicOperations, sizeof(kMusicOperations) / sizeof(kMusicOperations[0]));
 } // namespace
 #endif // HAS_DISPLAY || HAS_BUTTON

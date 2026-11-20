@@ -16,7 +16,7 @@
 #include "log_manager.h"
 #include "board_config.h"
 #include "device_telemetry.h"
-#include "project_branding.h"
+#include <project_branding.h>
 #include "version.h"
 #include "psram_json_allocator.h"
 #include "web_portal_routes.h"

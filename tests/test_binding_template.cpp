@@ -36,6 +36,15 @@ static BindingResolverStatus mock_nested_resolve(const char*, char* out, size_t 
     return BINDING_RESOLVER_RESOLVED;
 }
 
+static BindingResolverStatus mock_utf8_resolve(const char*, char* out, size_t out_len) {
+    std::snprintf(out, out_len, "A\xe2\x82\xacZ");
+    return BINDING_RESOLVER_RESOLVED;
+}
+
+static BindingResolverStatus mock_nested_fail(const char*, char* out, size_t out_len) {
+    return binding_template_resolve_status("[fail:any]", out, out_len);
+}
+
 static void mock_collect(const char* params, void* user_data) {
     (void)params;
     (void)user_data;
@@ -85,6 +94,17 @@ static void test_single_token_shape_rejection() {
     bool matched = binding_template_resolve_single_token("Value: [big:any]", out, sizeof(out));
     check_true(!matched, "non-exact token rejected");
     check_eq(out, "", "output cleared for non-match");
+
+    BindingTokenView token = {};
+    check_true(binding_template_single_token("[voice_note:recent_notes]", &token),
+               "token view accepts exact token");
+    check_true(std::string(token.scheme, token.scheme_len) == "voice_note" &&
+               std::string(token.params, token.params_len) == "recent_notes",
+               "token view exposes exact scheme and parameter spans");
+    check_true(!binding_template_single_token("[big:any]suffix", &token),
+               "token view rejects suffix");
+    check_true(!binding_template_single_token("prefix[big:any]", &token),
+               "token view rejects prefix");
 }
 
 static void test_single_token_fallback() {
@@ -158,6 +178,8 @@ int main() {
     binding_template_register("big", mock_big_resolve, mock_collect, kMockFiniteSpec);
     binding_template_register("fail", mock_fail_resolve, mock_collect, kMockFiniteSpec);
     binding_template_register("nested", mock_nested_resolve, mock_collect, kMockFiniteSpec);
+    binding_template_register("utf8", mock_utf8_resolve, mock_collect, kMockFiniteSpec);
+    binding_template_register("nestedfail", mock_nested_fail, mock_collect, kMockFiniteSpec);
 
     char checked[256];
     check_true(binding_template_resolve_checked("https://host/image.jpg", checked, sizeof(checked)),
@@ -171,6 +193,12 @@ int main() {
                "checked source accepts an explicit fallback for an unavailable binding");
     check_true(binding_template_resolve_checked("https://host/restored.jpg", checked, sizeof(checked)),
                "checked failure does not leak into the next resolution");
+    check_true(binding_template_resolve_checked("[nestedfail:any|safe]", checked, sizeof(checked)) &&
+                   std::strcmp(checked, "safe") == 0,
+               "outer fallback satisfies a failed nested checked resolution");
+    char clipped[5];
+    binding_template_resolve("X[utf8:any]", clipped, sizeof(clipped));
+    check_eq(clipped, "XA", "composed preview does not split a multibyte character");
 
     test_single_token_large_output();
     test_single_token_shape_rejection();

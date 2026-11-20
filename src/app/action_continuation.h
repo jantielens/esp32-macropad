@@ -23,16 +23,25 @@ enum ActionContinuationOwner : uint8_t {
     ACTION_CONTINUATION_OWNER_LVGL,
 };
 
-// Reserve a continuation slot and copy an action suffix. The caller must
-// release it unless the dispatched action returns ACTION_PENDING.
+struct ActionContinuationContext {
+    void* value;
+    void (*retain)(void*);
+    void (*release)(void*);
+};
+
+// Reserve a continuation slot and copy its bounded suffix into PSRAM, or into
+// internal memory on boards without PSRAM. The caller must release it unless
+// the dispatched action returns ACTION_PENDING.
 bool action_continuation_begin(const ButtonAction* remaining, uint8_t remaining_count,
                                const char* label, uint32_t* token,
                                ActionContinuationOwner owner = ACTION_CONTINUATION_OWNER_LOOP,
-                               bool interactive = false);
+                               bool interactive = false,
+                               ActionContinuationContext context = {});
 void action_continuation_release(uint32_t token);
 void action_continuation_mark_pending(uint32_t token);
 // Override only this reservation's watchdog. Zero disables it for an explicit
-// user-input wait; all other reservations keep the default 60-second deadline.
+// user-input wait or an irreversible operation that must report completion;
+// all other reservations keep the default 60-second deadline.
 bool action_continuation_set_timeout(uint32_t token, uint32_t timeout_ms);
 
 // Thread-safe completion hook for asynchronous workers. It records the result;
@@ -59,6 +68,8 @@ ActionContinuationTakeResult action_continuation_take(
     ButtonAction* out_actions, uint8_t* out_count,
     char* out_label, uint8_t out_label_len,
     ActionContinuationOwner owner = ACTION_CONTINUATION_OWNER_LOOP,
-    bool* out_interactive = nullptr);
+    bool* out_interactive = nullptr,
+    ActionStorage* out_storage = nullptr,
+    ActionContinuationContext* out_context = nullptr);
 
 #endif // HAS_DISPLAY || HAS_BUTTON

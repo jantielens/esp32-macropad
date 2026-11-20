@@ -109,6 +109,7 @@ TEST_F(WifiLifecycle, AdmissionSerializesCommandsAgainstOtaAndConfigWrites) {
     ASSERT_TRUE(wifi_manager_request_network_command(WifiNetworkCommand::Connect));
     EXPECT_TRUE(wifi_manager_request_network_command(WifiNetworkCommand::Connect));
     EXPECT_FALSE(wifi_manager_request_network_command(WifiNetworkCommand::Disconnect));
+    EXPECT_FALSE(snapshot().station_enabled);
     EXPECT_FALSE(ota_activity_try_begin());
     EXPECT_FALSE(ota_activity_try_begin_config_write());
     EXPECT_EQ(WiFi.begins, 0U);
@@ -120,6 +121,8 @@ TEST_F(WifiLifecycle, AdmissionSerializesCommandsAgainstOtaAndConfigWrites) {
     ASSERT_TRUE(test_wifi_run_worker());
     tick();
     EXPECT_TRUE(wifi_manager_network_transition_pending());
+    EXPECT_TRUE(snapshot().station_enabled);
+    EXPECT_EQ(snapshot().state, WifiNetworkState::Connecting);
     EXPECT_FALSE(ota_activity_try_begin());
     WiFi.association = WL_CONNECTED;
     const unsigned mutations = WiFi.disconnects + WiFi.modes;
@@ -303,6 +306,7 @@ TEST_F(WifiLifecycle, CrossSwitchesAndInactiveTransportCommandsRetainTheOtherTra
     EXPECT_EQ(snapshot().state, WifiNetworkState::Connected);
     enable_ap();
     EXPECT_EQ(snapshot().state, WifiNetworkState::Ap);
+    EXPECT_FALSE(snapshot().station_enabled);
     EXPECT_EQ(WiFi.getMode(), WIFI_AP);
     EXPECT_FALSE(WiFi.auto_reconnect);
     EXPECT_STREQ(snapshot().ip, "192.168.4.1");

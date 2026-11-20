@@ -42,6 +42,10 @@ void pad_binding_set_bindings(const PadBinding* bindings, uint8_t count);
 // Read the active binding context so a temporary resolver can restore it.
 void pad_binding_get_bindings(const PadBinding** bindings, uint8_t* count);
 
+// Find an alias in an explicit binding array without using the live pad context.
+const char* pad_binding_find_template(const PadBinding* bindings, uint8_t count,
+                                      const char* name, size_t name_len);
+
 // Expand all [pad:name] tokens in a template string to their underlying
 // binding templates (text substitution, NOT value resolution).
 // Used by data_stream_rebuild() to pre-expand before storing in streams.
@@ -67,6 +71,20 @@ void pad_resolve(const char* const* inputs, size_t count,
 
 #ifdef __cplusplus
 }
+
+class PadBindingScope {
+public:
+    PadBindingScope(const PadBinding* bindings, uint8_t count, bool enabled = true);
+    ~PadBindingScope();
+    PadBindingScope(const PadBindingScope&) = delete;
+    PadBindingScope& operator=(const PadBindingScope&) = delete;
+private:
+    const PadBinding* bindings_;
+    uint8_t count_;
+    bool enabled_;
+    const PadBindingScope* previous_;
+    friend void pad_binding_effective(const PadBinding**, uint8_t*);
+};
 #endif
 
 #endif // HAS_DISPLAY

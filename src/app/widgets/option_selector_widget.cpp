@@ -5,9 +5,8 @@
 #include "option_selector_config.h"
 #include "widget_value.h"
 #include "../action_list.h"
-#include "../action_registry.h"
-#include "../action_validate.h"
 #include "../device_dialog.h"
+#include "../event_binding.h"
 #include "../icon_store.h"
 #include "../log_manager.h"
 #include "../pad_binding.h"
@@ -61,34 +60,6 @@ const char* validate(JsonObjectConst button) {
     if (button.containsKey("lp_actions") &&
         (!button["lp_actions"].is<JsonArrayConst>() || button["lp_actions"].size()))
         return "option selector does not support long-press actions";
-    return nullptr;
-}
-
-const char* validate_actions(JsonObjectConst button, JsonArrayConst actions) {
-    bool any_option = false;
-    for (unsigned index = 0; index < OPTION_SELECTOR_SLOTS; ++index) {
-        char field[40];
-        if (index == 0) snprintf(field, sizeof(field), "widget_option_label");
-        else snprintf(field, sizeof(field), "widget_option_label_%u", index + 1);
-        const char* label = button[field] | "";
-        if (index == 0) snprintf(field, sizeof(field), "widget_option_icon");
-        else snprintf(field, sizeof(field), "widget_option_icon_%u", index + 1);
-        if (!label[0] && button[field].isNull()) continue;
-        any_option = true;
-        if (index == 0) snprintf(field, sizeof(field), "widget_option_value");
-        else snprintf(field, sizeof(field), "widget_option_value_%u", index + 1);
-        const char* value = button[field] | "";
-        for (JsonObjectConst action : actions) {
-            const char* error = action_validate_json(action, true, "{value}", value);
-            if (error) return error;
-        }
-    }
-    if (!any_option) {
-        for (JsonObjectConst action : actions) {
-            const char* error = action_validate_json(action, true, "{value}", "value");
-            if (error) return error;
-        }
-    }
     return nullptr;
 }
 
@@ -165,7 +136,7 @@ void layout(State* state) {
 
 void feedback(State* state, uint8_t index, lv_event_code_t event) {
     const SlotState& slot = state->slots[index];
-    OptionSelectorFeedback message{
+    WidgetPressFeedback message{
         event, slot.hit,
         slot.background_visible ? slot.background : state->group_color,
         slot.background_visible || state->config->group_background
@@ -268,14 +239,8 @@ void activate(State* state, uint8_t index) {
     const auto mode = state->config->mode;
     if (mode == OptionSelectorMode::Bound && (state->selected == index || !state->action_count)) return;
     ButtonAction actions[MAX_BUTTON_ACTIONS];
-    for (uint8_t action = 0; action < state->action_count; ++action) {
+    for (uint8_t action = 0; action < state->action_count; ++action)
         actions[action] = state->actions[action];
-        if (!action_type_substitute_token(action_type_find(actions[action].type), actions[action],
-                                          "{value}", state->config->slots[index].value)) {
-            device_dialog_notify("Option action is too long", 3000);
-            return;
-        }
-    }
     const bool local_change = mode == OptionSelectorMode::Local && state->selected != index;
     if (mode == OptionSelectorMode::Local) state->selected = index;
     if (mode == OptionSelectorMode::Bound) {
@@ -288,8 +253,11 @@ void activate(State* state, uint8_t index) {
     lv_obj_t* parent = state->parent;
     bool deleted = false;
     lv_obj_add_event_cb(parent, delete_guard, LV_EVENT_DELETE, &deleted);
+    const ActionEventData event = {state->config->slots[index].value, nullptr, BINDING_VALUE_KIND_TEXT};
+    EventBindingScope event_scope(&event);
     const ActionResult result = action_list_dispatch_result(actions, state->action_count,
-                                                           "OptionValue", ACTION_CONTINUATION_OWNER_LVGL, true);
+                                                           "OptionValue", ACTION_CONTINUATION_OWNER_LVGL, true,
+                                                           state->bindings, state->binding_count);
     if (deleted) return;
     lv_obj_remove_event_cb_with_user_data(parent, delete_guard, &deleted);
     if (result == ACTION_FAILED) {
@@ -487,7 +455,7 @@ void describe(JsonObject& out) {
         JsonObject entry = fields.createNestedObject();
         entry["name"] = icon; entry["type"] = "object";
     }
-    out["note"] = "Five optional touch targets; use {value} in shared actions. Bound mode follows the reported selection.";
+    out["note"] = "Five optional touch targets; use [event:value] in a dynamic action argument for the selected option's value, not its label. Bound mode follows the reported selection.";
 }
 #endif
 
@@ -506,7 +474,7 @@ static const WidgetType option_selector_widget_type{
     option_selector_widget_impl::show, option_selector_widget_impl::hide, option_selector_widget_impl::validate,
     &option_selector_widget_impl::preview, option_selector_widget_impl::cancel_input, option_selector_parse_config,
     option_selector_retain_config, option_selector_release_config, option_selector_visit_resources,
-    option_selector_widget_impl::validate_actions
+    nullptr, nullptr, false
 };
 static struct OptionSelectorRegistration {
     OptionSelectorRegistration() { widget_register(&option_selector_widget_type); }

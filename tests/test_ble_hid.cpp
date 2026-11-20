@@ -7,15 +7,25 @@
 #include "../src/app/bthome_events.cpp"
 #include "../src/app/bthome_event_settings.cpp"
 #include "../src/app/bthome_event_json.h"
+#include "action_registry.h"
+#define ARDUINO 1
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#include "../src/app/actions/bthome_action.cpp"
+#pragma GCC diagnostic pop
+#undef ARDUINO
 #include <gtest/gtest.h>
 
+void action_type_register(const ActionTypeDef*) {}
 unsigned long millis() { return TestBle::clock_ms; }
 #if HAS_BLE_HID
 void net_activity_mark(net_channel_t) {}
 #endif
 static bool ota_active = false;
+static bool ota_mode = false;
 static uint32_t ota_epoch = 1;
 bool ota_activity_is_active() { return ota_active; }
+bool reboot_is_ota_mode() { return ota_mode; }
 uint32_t ota_activity_epoch() { return ota_epoch; }
 uint32_t gamepad_hid_submission_generation() { return 1; }
 
@@ -27,6 +37,7 @@ protected:
         BLEDevice::initialized = false;
         BLEDevice::init_succeeds = true;
         ota_active = false;
+        ota_mode = false;
         ota_epoch = 1;
 #if HAS_BLE_HID
         protocolMode = 1;
@@ -93,6 +104,41 @@ protected:
     }
 #endif
 };
+
+TEST_F(BleHid, OtaModeBlocksBluetoothStartupAndEvents) {
+    ota_mode = true;
+    BLEDevice::initialized = false;
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+    NimBLEDevice::initialized = false;
+#endif
+    const unsigned inits = TestBle::host_inits;
+    EXPECT_FALSE(ble_backend_prepare("Test"));
+    EXPECT_FALSE(bthome_events_send(1, bthome::press));
+    EXPECT_EQ(TestBle::host_inits, inits);
+}
+
+TEST_F(BleHid, BthomeOperationQueuesNormalizedEventsAndReportsRejection) {
+    ActionResolvedArgument arguments[] = {{nullptr, 10, 0}, {"press", 0, 0}};
+    const char* names[] = {"press", "double_press", "long_press"};
+    const uint8_t values[] = {bthome::press, bthome::double_press, bthome::long_press};
+    for (unsigned index = 0; index < 3; ++index) {
+        arguments[1].text = names[index];
+        EXPECT_EQ(kBthomeOperations[0].dispatch(arguments, "test", 0), ACTION_COMPLETE);
+        EXPECT_EQ(event_queue[index].button, 10);
+        EXPECT_EQ(event_queue[index].event, values[index]);
+    }
+    arguments[1].text = "unknown";
+    EXPECT_EQ(kBthomeOperations[0].dispatch(arguments, "test", 0), ACTION_FAILED);
+    EXPECT_EQ(queue_count, 3u);
+    arguments[1].text = "long_press";
+    EXPECT_EQ(kBthomeOperations[0].dispatch(arguments, "test", 0), ACTION_COMPLETE);
+    EXPECT_EQ(kBthomeOperations[0].dispatch(arguments, "test", 0), ACTION_FAILED);
+    EXPECT_EQ(queue_count, kEventQueueSize);
+    queue_count = 0;
+    ota_active = true;
+    EXPECT_EQ(kBthomeOperations[0].dispatch(arguments, "test", 0), ACTION_FAILED);
+    EXPECT_EQ(queue_count, 0u);
+}
 
 TEST_F(BleHid, BthomeUsesStableTenButtonPositionsAndDistinctPackets) {
     ASSERT_TRUE(bthome_events_send(1, bthome::press));

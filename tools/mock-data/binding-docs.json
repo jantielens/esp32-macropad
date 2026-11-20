@@ -108,6 +108,7 @@
         "psram_largest",
         "wifi_state",
         "wifi_connected",
+        "wifi_station_enabled",
         "wifi_ssid",
         "wifi_ip",
         "wifi_rssi",
@@ -124,9 +125,7 @@
         "ble_bonded",
         "ble_encrypted",
         "ble_peer_addr",
-        "ble_peer_id_addr",
-        "table",
-        "extended_table"
+        "ble_peer_id_addr"
       ],
       "category": "Device",
       "summary": "Local device telemetry. Works without a network.",
@@ -280,6 +279,11 @@
           "group": "WiFi"
         },
         {
+          "key": "wifi_station_enabled",
+          "desc": "Applied Wi-Fi station mode",
+          "group": "WiFi"
+        },
+        {
           "key": "wifi_ssid",
           "desc": "Wi-Fi network name",
           "group": "WiFi"
@@ -363,16 +367,6 @@
           "key": "ble_peer_id_addr",
           "desc": "Connected peer identity address",
           "group": "USB & BLE"
-        },
-        {
-          "key": "table",
-          "desc": "Device summary table for the Table widget",
-          "group": "Tables"
-        },
-        {
-          "key": "extended_table",
-          "desc": "Extended device table for the Table widget",
-          "group": "Tables"
         }
       ],
       "examples": [
@@ -399,10 +393,6 @@
         {
           "code": "[expr:[health:wifi_connected]==\"ON\"?\"#16a34a\":\"#dc2626\"]",
           "desc": "Green or red color for WiFi state."
-        },
-        {
-          "code": "[health:table]",
-          "desc": "Exact single token for a Table widget."
         }
       ],
       "reference": {
@@ -454,6 +444,14 @@
             "syntax": "wifi_connected",
             "sample": "ON / OFF",
             "desc": "ON only while connected to a network, not while serving an AP.",
+            "unit": "",
+            "kind": "text"
+          },
+          {
+            "group": "Wi-Fi details",
+            "syntax": "wifi_station_enabled",
+            "sample": "ON / OFF",
+            "desc": "Applied station mode, not connection status. Pending requests may show the previous state.",
             "unit": "",
             "kind": "text"
           },
@@ -931,6 +929,19 @@
             "read_only": true
           },
           {
+            "key": "wifi_station_enabled",
+            "kind": "text",
+            "unit": "",
+            "example_value": "ON",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
             "key": "wifi_ssid",
             "kind": "text",
             "unit": "",
@@ -1155,32 +1166,6 @@
             "kind": "text",
             "unit": "",
             "example_value": "02:00:00:65:43:21",
-            "formats": [
-              "raw"
-            ],
-            "capabilities": [
-              "display"
-            ],
-            "read_only": true
-          },
-          {
-            "key": "table",
-            "kind": "text",
-            "unit": "",
-            "example_value": "[{\"label\":\"CPU\",\"value\":\"42\",\"unit\":\"%\"}]",
-            "formats": [
-              "raw"
-            ],
-            "capabilities": [
-              "display"
-            ],
-            "read_only": true
-          },
-          {
-            "key": "extended_table",
-            "kind": "text",
-            "unit": "",
-            "example_value": "[{\"label\":\"Free heap\",\"value\":\"245760\",\"unit\":\"B\"}]",
             "formats": [
               "raw"
             ],
@@ -1815,12 +1800,12 @@
       "params": [
         {
           "name": "expression",
-          "desc": "Arithmetic, comparisons, ternaries, numeric functions, and threshold(); inner tokens resolve first.",
+          "desc": "Arithmetic, comparisons, ternaries, numeric functions, datetime(), duration(), and threshold(); inner tokens resolve first.",
           "required": true
         },
         {
           "name": "format",
-          "desc": "printf format applied to the result, e.g. %.1f.",
+          "desc": "printf format applied to the result, e.g. %.1f. An empty result stays empty, including any unit suffix.",
           "required": false
         }
       ],
@@ -1834,12 +1819,28 @@
           "desc": "Derived number with a unit."
         },
         {
+          "code": "[expr:[health:cpu] > 80 ? [health:cpu] : \"\";%.0f%%]",
+          "desc": "Show a CPU value with its percent unit only above 80%; otherwise show nothing."
+        },
+        {
           "code": "[expr:abs([health:wifi_rssi])]",
           "desc": "Show the magnitude of a signed value."
         },
         {
           "code": "[expr:clamp([health:cpu],0,100)]",
           "desc": "Keep a value within a range."
+        },
+        {
+          "code": "[expr:datetime(1700000000)]",
+          "desc": "Format Unix seconds in the device timezone."
+        },
+        {
+          "code": "[expr:duration(65000,\"ms\")]",
+          "desc": "Format milliseconds as minutes and seconds."
+        },
+        {
+          "code": "[expr:floor(4920000/60000);%.0f] minute(s)",
+          "desc": "Show total minutes with a manual suffix."
         },
         {
           "code": "[expr:threshold([health:cpu],\"#16a34a\",50,\"#f59e0b\",80,\"#dc2626\")]",
@@ -1897,6 +1898,15 @@
             "example": "[expr:[health:cpu] > 80 ? \"High\" : \"OK\"]"
           },
           {
+            "group": "Conditional",
+            "syntax": "Conditional value with unit",
+            "sample": "92%",
+            "desc": "Return a number to show the formatted value and unit, or \"\" to show nothing. In Expression builder, use if / then / else and Numeric formatting. Keep the unit inside the format suffix.",
+            "example": "[expr:[health:cpu] > 80 ? [health:cpu] : \"\";%.0f%%]",
+            "unit": "",
+            "kind": "text"
+          },
+          {
             "group": "Functions",
             "syntax": "abs(x)",
             "desc": "Absolute value",
@@ -1943,6 +1953,126 @@
             "syntax": "threshold(v, c0, t1, c1, ...)",
             "desc": "c0 below t1, c1 below t2, ..., else the last value; thresholds ascend",
             "example": "[expr:threshold([health:cpu],\"#16a34a\",50,\"#dc2626\")]"
+          },
+          {
+            "group": "Date & duration",
+            "syntax": "datetime(epoch, format, timezone)",
+            "sample": "Device-local time",
+            "desc": "Integer Unix seconds; format and timezone are optional. Defaults to device timezone and %Y-%m-%d %H:%M.",
+            "example": "[expr:datetime(1700000000)]",
+            "unit": "",
+            "kind": "text"
+          },
+          {
+            "group": "Date & duration",
+            "syntax": "duration(value, unit, format)",
+            "sample": "1:05",
+            "desc": "Unit is s or ms; format defaults to mm:ss. Also supports hh:mm:ss, mm:ss.d, ss, and ss.d. Negative values are supported; precision is truncated.",
+            "example": "[expr:duration(65000,\"ms\")]",
+            "unit": "",
+            "kind": "text"
+          },
+          {
+            "group": "Date & duration",
+            "syntax": "Manual suffix",
+            "sample": "82 minute(s)",
+            "desc": "Use arithmetic and a literal suffix for total minutes.",
+            "example": "[expr:floor(4920000/60000);%.0f] minute(s)",
+            "unit": "",
+            "kind": "text"
+          },
+          {
+            "group": "Date & duration",
+            "syntax": "Minutes and seconds",
+            "sample": "5 min and 3 sec",
+            "desc": "Combine expressions and literal suffixes for custom units.",
+            "example": "[expr:floor(303000/60000);%.0f] min and [expr:floor(303000/1000)%60;%.0f] sec",
+            "unit": "",
+            "kind": "text"
+          },
+          {
+            "group": "Date & duration",
+            "syntax": "Hours and minutes",
+            "sample": "1 hour(s) and 5 minute(s)",
+            "desc": "For nonnegative durations, divide into whole units and add literal suffixes.",
+            "example": "[expr:floor(3900000/3600000);%.0f] hour(s) and [expr:floor(3900000/60000)%60;%.0f] minute(s)",
+            "unit": "",
+            "kind": "text"
+          }
+        ]
+      }
+    },
+    {
+      "name": "event",
+      "min_params": 1,
+      "max_params": 1,
+      "widget_max_params": 1,
+      "format_param": -1,
+      "validation_mode": 0,
+      "free_form": false,
+      "keys": [
+        "value",
+        "step"
+      ],
+      "category": "Logic",
+      "summary": "Read a value captured when an action is activated.",
+      "note": "Available only in an action triggered by a control that supplies the value.",
+      "params": [
+        {
+          "name": "key",
+          "desc": "Event value or Numeric Rocker step.",
+          "required": true
+        }
+      ],
+      "key_docs": [
+        {
+          "key": "value",
+          "desc": "Value supplied by the activating control."
+        },
+        {
+          "key": "step",
+          "desc": "Signed Numeric Rocker adjustment."
+        }
+      ],
+      "examples": [
+        {
+          "code": "[event:value]",
+          "desc": "Use the activating control's value."
+        },
+        {
+          "code": "[event:step]",
+          "desc": "Use the Numeric Rocker's signed step."
+        }
+      ],
+      "authoring": {
+        "keys": [
+          {
+            "key": "value",
+            "kind": "text",
+            "unit": "",
+            "example_value": "value",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "step",
+            "kind": "number",
+            "unit": "",
+            "example_value": "1",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
           }
         ]
       }
@@ -2192,9 +2322,9 @@
     {
       "name": "timer",
       "min_params": 1,
-      "max_params": 2,
+      "max_params": 1,
       "widget_max_params": 1,
-      "format_param": 1,
+      "format_param": -1,
       "validation_mode": 0,
       "free_form": false,
       "keys": [
@@ -2216,23 +2346,18 @@
       ],
       "category": "Device",
       "summary": "Value and state of the 3 on-device timers.",
-      "note": "Countdowns that run past zero show negative values, e.g. -0:05.",
+      "note": "Countdowns that run past zero show negative seconds, e.g. -5.0.",
       "params": [
         {
           "name": "key",
           "desc": "Timer number 1-3, or N_state, N_mode, N_expired, N_target.",
           "required": true
-        },
-        {
-          "name": "format",
-          "desc": "Duration format for the timer value, see Format strings.",
-          "required": false
         }
       ],
       "key_docs": [
         {
           "key": "#",
-          "desc": "Timer value; default 245.3 (seconds with tenths)"
+          "desc": "Timer value in seconds with tenths, e.g. 245.3"
         },
         {
           "key": "#_state",
@@ -2253,7 +2378,7 @@
       ],
       "examples": [
         {
-          "code": "[timer:1;mm:ss]",
+          "code": "[expr:duration([timer:1],\"s\")]",
           "desc": "Timer 1 as minutes and seconds."
         },
         {
@@ -2265,44 +2390,6 @@
           "desc": "Red once the countdown expires."
         }
       ],
-      "reference": {
-        "title": "Timer durations",
-        "formats": true,
-        "rows": [
-          {
-            "syntax": "mm:ss",
-            "sample": "4:05",
-            "desc": "Minutes and seconds",
-            "example": "[timer:1;mm:ss]",
-            "unit": "",
-            "kind": "text"
-          },
-          {
-            "syntax": "hh:mm:ss",
-            "sample": "0:04:05",
-            "desc": "With hours",
-            "example": "[timer:1;hh:mm:ss]",
-            "unit": "",
-            "kind": "text"
-          },
-          {
-            "syntax": "mm:ss.d",
-            "sample": "4:05.3",
-            "desc": "With tenths",
-            "example": "[timer:1;mm:ss.d]",
-            "unit": "",
-            "kind": "text"
-          },
-          {
-            "syntax": "ss",
-            "sample": "245",
-            "desc": "Whole seconds",
-            "example": "[timer:1;ss]",
-            "unit": "s",
-            "kind": "integer"
-          }
-        ]
-      },
       "authoring": {
         "keys": [
           {
@@ -2549,11 +2636,9 @@
         "1_repeat",
         "1_snooze_minutes",
         "1_auto_dismiss_minutes",
-        "1_once_epoch",
-        "1_once_local",
+        "1_once_at",
         "1_once_available",
-        "1_next_epoch",
-        "1_next_local",
+        "1_next_at",
         "1_next_seconds",
         "1_next_available",
         "1_snooze_seconds",
@@ -2638,13 +2723,8 @@
           "group": "Schedule"
         },
         {
-          "key": "1_once_epoch",
-          "desc": "One-time alarm as epoch seconds; empty if none",
-          "group": "Schedule"
-        },
-        {
-          "key": "1_once_local",
-          "desc": "One-time alarm as YYYY-MM-DD HH:MM; empty if none",
+          "key": "1_once_at",
+          "desc": "One-time alarm as Unix seconds; unavailable if none",
           "group": "Schedule"
         },
         {
@@ -2663,13 +2743,8 @@
           "group": "Now"
         },
         {
-          "key": "1_next_epoch",
-          "desc": "Next scheduled alarm as epoch seconds; empty if none",
-          "group": "Now"
-        },
-        {
-          "key": "1_next_local",
-          "desc": "Next scheduled alarm as YYYY-MM-DD HH:MM",
+          "key": "1_next_at",
+          "desc": "Next scheduled alarm as Unix seconds; unavailable if none",
           "group": "Now"
         },
         {
@@ -3045,7 +3120,7 @@
             "read_only": true
           },
           {
-            "key": "1_once_epoch",
+            "key": "1_once_at",
             "kind": "integer",
             "unit": "s",
             "example_value": "1791360000",
@@ -3058,19 +3133,6 @@
               "display",
               "numeric_widget",
               "live_sampling"
-            ],
-            "read_only": true
-          },
-          {
-            "key": "1_once_local",
-            "kind": "text",
-            "unit": "",
-            "example_value": "2026-10-07 07:30",
-            "formats": [
-              "raw"
-            ],
-            "capabilities": [
-              "display"
             ],
             "read_only": true
           },
@@ -3088,7 +3150,7 @@
             "read_only": true
           },
           {
-            "key": "1_next_epoch",
+            "key": "1_next_at",
             "kind": "integer",
             "unit": "s",
             "example_value": "1791360000",
@@ -3101,19 +3163,6 @@
               "display",
               "numeric_widget",
               "live_sampling"
-            ],
-            "read_only": true
-          },
-          {
-            "key": "1_next_local",
-            "kind": "text",
-            "unit": "",
-            "example_value": "2026-10-07 07:30",
-            "formats": [
-              "raw"
-            ],
-            "capabilities": [
-              "display"
             ],
             "read_only": true
           },
@@ -3911,7 +3960,7 @@
       }
     },
     {
-      "name": "recorder",
+      "name": "voice_note",
       "min_params": 1,
       "max_params": 1,
       "widget_max_params": 1,
@@ -3919,13 +3968,33 @@
       "validation_mode": 0,
       "free_form": false,
       "keys": [
-        "state",
-        "duration_s",
-        "last_clip",
-        "error"
+        "recording.state",
+        "recording.duration_s",
+        "recording.scenario",
+        "recording.error",
+        "last_saved.id",
+        "transcription.state",
+        "transcription.note_id",
+        "transcription.error",
+        "enrichment.state",
+        "enrichment.note_id",
+        "enrichment.error",
+        "processing.state",
+        "transcription.retry_status",
+        "enrichment.retry_status",
+        "loaded.status",
+        "loaded.error",
+        "loaded.id",
+        "loaded.title",
+        "loaded.summary",
+        "loaded.transcript",
+        "loaded.created_at",
+        "loaded.duration_ms",
+        "loaded.has_transcript",
+        "loaded.has_enrichment"
       ],
       "category": "Device",
-      "summary": "Local voice clip recorder status.",
+      "summary": "Local voice note recorder status and explicitly loaded note data.",
       "params": [
         {
           "name": "key",
@@ -3935,36 +4004,140 @@
       ],
       "key_docs": [
         {
-          "key": "state",
+          "key": "recording.state",
           "desc": "Current recording state"
         },
         {
-          "key": "duration_s",
+          "key": "recording.duration_s",
           "desc": "Captured duration in seconds, excluding pauses"
         },
         {
-          "key": "last_clip",
-          "desc": "ID of the last successfully saved clip"
+          "key": "recording.scenario",
+          "desc": "Active recording scenario"
         },
         {
-          "key": "error",
+          "key": "recording.error",
           "desc": "Most recent recorder error"
+        },
+        {
+          "key": "last_saved.id",
+          "desc": "ID of the last successfully saved note since boot"
+        },
+        {
+          "key": "transcription.state",
+          "desc": "Current transcription state"
+        },
+        {
+          "key": "transcription.note_id",
+          "desc": "Note ID of the latest transcription attempt"
+        },
+        {
+          "key": "transcription.error",
+          "desc": "Most recent transcription error"
+        },
+        {
+          "key": "transcription.retry_status",
+          "desc": "Service retry cycle: empty, Retry 1/2/3 of 3, or Retries halted; not per-note"
+        },
+        {
+          "key": "enrichment.state",
+          "desc": "Current title and summary generation state"
+        },
+        {
+          "key": "enrichment.note_id",
+          "desc": "Note ID of the latest enrichment attempt"
+        },
+        {
+          "key": "enrichment.error",
+          "desc": "Most recent enrichment error"
+        },
+        {
+          "key": "enrichment.retry_status",
+          "desc": "Service retry cycle: empty, Retry 1/2/3 of 3, or Retries halted; not per-note"
+        },
+        {
+          "key": "processing.state",
+          "desc": "Background processing state"
+        },
+        {
+          "key": "loaded.status",
+          "desc": "Explicitly loaded note: idle, loading, ready, or error"
+        },
+        {
+          "key": "loaded.error",
+          "desc": "Most recent load failure"
+        },
+        {
+          "key": "loaded.id",
+          "desc": "ID of the loaded note"
+        },
+        {
+          "key": "loaded.title",
+          "desc": "Saved title: short scalar preview, or full text in a Text reader"
+        },
+        {
+          "key": "loaded.summary",
+          "desc": "Saved summary: short scalar preview, or full text in a Text reader"
+        },
+        {
+          "key": "loaded.transcript",
+          "desc": "Saved transcript: short scalar preview, or full text in a Text reader"
+        },
+        {
+          "key": "loaded.created_at",
+          "desc": "Note creation timestamp when known"
+        },
+        {
+          "key": "loaded.duration_ms",
+          "desc": "Note duration in milliseconds"
+        },
+        {
+          "key": "loaded.has_transcript",
+          "desc": "Whether the loaded note has a transcript"
+        },
+        {
+          "key": "loaded.has_enrichment",
+          "desc": "Whether the loaded note has title and summary data"
         }
       ],
       "examples": [
         {
-          "code": "[recorder:state]",
+          "code": "[voice_note:recording.state]",
           "desc": "Show the recorder state."
         },
         {
-          "code": "[recorder:duration_s]",
+          "code": "[voice_note:recording.duration_s]",
           "desc": "Show the captured duration."
+        },
+        {
+          "code": "[voice_note:processing.state]",
+          "desc": "Show background processing state."
+        },
+        {
+          "code": "[voice_note:enrichment.state]",
+          "desc": "Show title and summary generation state."
+        },
+        {
+          "code": "[voice_note:transcription.retry_status]",
+          "desc": "Show the transcription service retry cycle."
+        },
+        {
+          "code": "[voice_note:loaded.status]",
+          "desc": "Show the explicit load state."
+        },
+        {
+          "code": "[voice_note:loaded.title|Untitled]",
+          "desc": "Show a preview of the loaded note title."
+        },
+        {
+          "code": "[voice_note:loaded.transcript|No transcript]",
+          "desc": "Show a preview of the loaded transcript."
         }
       ],
       "authoring": {
         "keys": [
           {
-            "key": "state",
+            "key": "recording.state",
             "kind": "text",
             "unit": "",
             "example_value": "idle",
@@ -3977,7 +4150,7 @@
             "read_only": true
           },
           {
-            "key": "duration_s",
+            "key": "recording.duration_s",
             "kind": "integer",
             "unit": "s",
             "example_value": "0",
@@ -3994,7 +4167,33 @@
             "read_only": true
           },
           {
-            "key": "last_clip",
+            "key": "recording.scenario",
+            "kind": "text",
+            "unit": "",
+            "example_value": "general",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "recording.error",
+            "kind": "text",
+            "unit": "",
+            "example_value": "No audio captured",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "last_saved.id",
             "kind": "text",
             "unit": "",
             "example_value": "0000000100000002",
@@ -4007,10 +4206,252 @@
             "read_only": true
           },
           {
-            "key": "error",
+            "key": "transcription.state",
             "kind": "text",
             "unit": "",
-            "example_value": "No audio captured",
+            "example_value": "idle",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "transcription.note_id",
+            "kind": "text",
+            "unit": "",
+            "example_value": "0000000100000002",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "transcription.error",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Transcription request failed",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "enrichment.state",
+            "kind": "text",
+            "unit": "",
+            "example_value": "idle",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "enrichment.note_id",
+            "kind": "text",
+            "unit": "",
+            "example_value": "0000000100000002",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "enrichment.error",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Enrichment request failed",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "processing.state",
+            "kind": "text",
+            "unit": "",
+            "example_value": "idle",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "transcription.retry_status",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Retry 1 of 3",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "enrichment.retry_status",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Retries halted",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "loaded.status",
+            "kind": "text",
+            "unit": "",
+            "example_value": "ready",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "loaded.error",
+            "kind": "text",
+            "unit": "",
+            "example_value": "note not found",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "loaded.id",
+            "kind": "text",
+            "unit": "",
+            "example_value": "0000000100000002",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "loaded.title",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Meeting notes",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "loaded.summary",
+            "kind": "text",
+            "unit": "",
+            "example_value": "A short summary",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "loaded.transcript",
+            "kind": "text",
+            "unit": "",
+            "example_value": "A recorded conversation",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "loaded.created_at",
+            "kind": "integer",
+            "unit": "s",
+            "example_value": "1700000000",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "loaded.duration_ms",
+            "kind": "integer",
+            "unit": "ms",
+            "example_value": "12500",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "loaded.has_transcript",
+            "kind": "text",
+            "unit": "",
+            "example_value": "true",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "loaded.has_enrichment",
+            "kind": "text",
+            "unit": "",
+            "example_value": "true",
             "formats": [
               "raw"
             ],
@@ -4023,45 +4464,43 @@
       }
     },
     {
-      "name": "list",
+      "name": "item",
       "min_params": 1,
       "max_params": 1,
       "widget_max_params": 1,
       "format_param": -1,
       "validation_mode": 0,
-      "free_form": false,
-      "keys": [
-        "fixture.selected"
-      ],
+      "free_form": true,
+      "first_param_pattern": "^[A-Za-z0-9_]{1,32}$",
       "category": "Data",
-      "summary": "The item selected in a List widget, per list provider.",
-      "note": "Available providers are listed under Keys.",
+      "summary": "Read a field of the current List item.",
+      "note": "Available only while rendering a List row or immediately activating it.",
       "params": [
         {
-          "name": "key",
-          "desc": "provider.selected for a List widget provider.",
+          "name": "field",
+          "desc": "Field defined by the List's collection source.",
           "required": true
         }
       ],
       "key_docs": [
         {
-          "key": "*.selected",
-          "desc": "Item id last selected in a List widget for that provider"
+          "key": "*",
+          "desc": "A field of the current List item."
         }
       ],
       "examples": [
         {
-          "code": "[list:pads.selected|none]",
-          "desc": "Selected pad with a fallback before any selection."
+          "code": "[item:id]",
+          "desc": "The activated or rendered item's stable ID."
         }
       ],
       "authoring": {
         "keys": [
           {
-            "key": "fixture.selected",
+            "key": "*",
             "kind": "text",
             "unit": "",
-            "example_value": "selected-item",
+            "example_value": "item",
             "formats": [
               "raw"
             ],

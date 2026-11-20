@@ -4,6 +4,7 @@
 #if HAS_DISPLAY
 
 #include "action_list.h"
+#include "action_storage.h"
 #include "pad_config.h"
 #include "config_psram.h"
 
@@ -24,6 +25,7 @@ struct TimerInstance {
     uint32_t   countdown_ms;    // preset for countdown mode
     // Expire actions (dispatched once on countdown reaching 0)
     ButtonAction expire_actions[TIMER_MAX_EXPIRE_ACTIONS];
+    ActionStorage expire_storage;
     uint8_t    expire_action_count;
     bool       expire_fired;    // edge detector: true once actions have fired
     bool       expiry_snapshot_pending;
@@ -62,10 +64,26 @@ static uint32_t raw_elapsed(const TimerInstance& t) {
     return total;
 }
 
-static void configure_and_start_locked(TimerInstance& t, TimerMode mode,
+static bool replace_expiry_actions(TimerInstance& t, const ButtonAction* actions, uint8_t count) {
+    ButtonAction copy[TIMER_MAX_EXPIRE_ACTIONS] = {};
+    ActionStorage storage = {};
+    if (!action_storage_copy_actions(storage, copy, actions, count)) {
+        action_storage_clear(storage);
+        return false;
+    }
+    action_storage_clear(t.expire_storage);
+    memcpy(t.expire_actions, copy, sizeof(copy));
+    t.expire_action_count = count;
+    action_storage_move(t.expire_storage, storage);
+    return true;
+}
+
+static bool configure_and_start_locked(TimerInstance& t, TimerMode mode,
                                        uint32_t countdown_ms,
                                        const ButtonAction* expire_actions,
                                        uint8_t expire_action_count) {
+    if (!replace_expiry_actions(t, expire_actions,
+                                mode == TIMER_MODE_DOWN ? expire_action_count : 0)) return false;
     t.mode = mode;
     t.countdown_ms = mode == TIMER_MODE_DOWN ? countdown_ms : 0;
     t.accumulated_ms = 0;
@@ -73,15 +91,7 @@ static void configure_and_start_locked(TimerInstance& t, TimerMode mode,
     t.state = TIMER_RUNNING;
     t.expire_fired = false;
     t.expiry_snapshot_pending = false;
-    t.expire_action_count = mode == TIMER_MODE_DOWN
-        ? (expire_action_count > TIMER_MAX_EXPIRE_ACTIONS
-            ? TIMER_MAX_EXPIRE_ACTIONS : expire_action_count)
-        : 0;
-    memset(t.expire_actions, 0, sizeof(t.expire_actions));
-    if (t.expire_action_count > 0 && expire_actions) {
-        memcpy(t.expire_actions, expire_actions,
-               t.expire_action_count * sizeof(ButtonAction));
-    }
+    return true;
 }
 
 // ============================================================================
@@ -98,6 +108,9 @@ void timer_engine_init() {
     if (!s_timers) {
         s_timers = static_cast<TimerInstance*>(config_psram_alloc(
             sizeof(TimerInstance) * TIMER_COUNT, "timer_state"));
+    } else {
+        for (uint8_t i = 0; i < TIMER_COUNT; ++i)
+            action_storage_clear(s_timers[i].expire_storage);
     }
     if (!s_timers) {
         s_timer_ready = false;
@@ -121,10 +134,10 @@ bool timer_configure_and_start(uint8_t id, TimerMode mode, uint32_t countdown_ms
         return false;
     }
     timer_lock();
-    configure_and_start_locked(get(id), mode, countdown_ms,
-                               expire_actions, expire_action_count);
+    const bool success = configure_and_start_locked(get(id), mode, countdown_ms,
+                                                    expire_actions, expire_action_count);
     timer_unlock();
-    return true;
+    return success;
 }
 
 bool timer_toggle_prepared(uint8_t id, TimerState expected_state, TimerMode mode,
@@ -145,8 +158,11 @@ bool timer_toggle_prepared(uint8_t id, TimerState expected_state, TimerMode mode
         return false;
     }
     if (t.state == TIMER_STOPPED) {
-        configure_and_start_locked(t, mode, countdown_ms,
-                                   expire_actions, expire_action_count);
+        if (!configure_and_start_locked(t, mode, countdown_ms,
+                                        expire_actions, expire_action_count)) {
+            timer_unlock();
+            return false;
+        }
     } else if (t.state == TIMER_RUNNING) {
         t.accumulated_ms += millis() - t.start_ms;
         t.state = TIMER_PAUSED;
@@ -156,11 +172,9 @@ bool timer_toggle_prepared(uint8_t id, TimerState expected_state, TimerMode mode
                 timer_unlock();
                 return false;
             }
-            t.expire_action_count = expire_action_count;
-            memset(t.expire_actions, 0, sizeof(t.expire_actions));
-            if (expire_action_count > 0) {
-                memcpy(t.expire_actions, expire_actions,
-                       expire_action_count * sizeof(ButtonAction));
+            if (!replace_expiry_actions(t, expire_actions, expire_action_count)) {
+                timer_unlock();
+                return false;
             }
             t.expiry_snapshot_pending = false;
         }
@@ -187,8 +201,7 @@ bool timer_prepare_countdown(uint8_t id, TimerState expected_state,
     t.start_ms = 0;
     t.state = TIMER_PAUSED;
     t.expire_fired = false;
-    t.expire_action_count = 0;
-    memset(t.expire_actions, 0, sizeof(t.expire_actions));
+    replace_expiry_actions(t, nullptr, 0);
     t.expiry_snapshot_pending = true;
     timer_unlock();
     return true;
@@ -201,6 +214,7 @@ bool timer_stop(uint8_t id) {
     t.accumulated_ms = 0;
     t.state = TIMER_STOPPED;
     t.expire_fired = false;
+    replace_expiry_actions(t, nullptr, 0);
     timer_unlock();
     return true;
 }
@@ -248,11 +262,9 @@ bool timer_resume_prepared(uint8_t id, TimerState expected_state,
             timer_unlock();
             return false;
         }
-        t.expire_action_count = expire_action_count;
-        memset(t.expire_actions, 0, sizeof(t.expire_actions));
-        if (expire_action_count > 0) {
-            memcpy(t.expire_actions, expire_actions,
-                   expire_action_count * sizeof(ButtonAction));
+        if (!replace_expiry_actions(t, expire_actions, expire_action_count)) {
+            timer_unlock();
+            return false;
         }
         t.expiry_snapshot_pending = false;
     }
@@ -384,7 +396,7 @@ bool timer_is_overtime(uint8_t id) {
     return overtime;
 }
 
-int timer_format(uint8_t id, const char* fmt, char* out, size_t out_len) {
+int timer_format(uint8_t id, char* out, size_t out_len) {
     if (!out || out_len == 0) return 0;
     if (!s_timer_ready || !valid_id(id)) return snprintf(out, out_len, "0.0");
     timer_lock();
@@ -398,32 +410,16 @@ int timer_format(uint8_t id, const char* fmt, char* out, size_t out_len) {
         : elapsed;
     timer_unlock();
     uint32_t total_s = ms / 1000;
-    uint32_t h = total_s / 3600;
-    uint32_t m = (total_s % 3600) / 60;
-    uint32_t s = total_s % 60;
     uint32_t ds = (ms % 1000) / 100;  // deciseconds
     const char* sign = overtime ? "-" : "";
-
-    if (!fmt || !fmt[0]) {
-        // Raw numeric default: seconds with decisecond precision
-        return snprintf(out, out_len, "%s%u.%u", sign, (unsigned)total_s, (unsigned)ds);
-    } else if (strcmp(fmt, "mm:ss") == 0) {
-        return snprintf(out, out_len, "%s%u:%02u", sign, (unsigned)(h * 60 + m), (unsigned)s);
-    } else if (strcmp(fmt, "hh:mm:ss") == 0) {
-        return snprintf(out, out_len, "%s%u:%02u:%02u", sign, (unsigned)h, (unsigned)m, (unsigned)s);
-    } else if (strcmp(fmt, "ss") == 0) {
-        return snprintf(out, out_len, "%s%u", sign, (unsigned)total_s);
-    } else if (strcmp(fmt, "mm:ss.d") == 0) {
-        return snprintf(out, out_len, "%s%u:%02u.%u", sign, (unsigned)(h * 60 + m), (unsigned)s, (unsigned)ds);
-    }
-    // Unknown format — fall back to mm:ss
-    return snprintf(out, out_len, "%s%u:%02u", sign, (unsigned)(h * 60 + m), (unsigned)s);
+    return snprintf(out, out_len, "%s%u.%u", sign, (unsigned)total_s, (unsigned)ds);
 }
 
 void timer_engine_tick() {
     if (!s_timer_ready) return;
     for (uint8_t i = 0; i < TIMER_COUNT; i++) {
         ButtonAction actions[TIMER_MAX_EXPIRE_ACTIONS] = {};
+        ActionStorage storage = {};
         uint8_t action_count = 0;
         timer_lock();
         auto& t = s_timers[i];
@@ -431,11 +427,10 @@ void timer_engine_tick() {
                 && t.state == TIMER_RUNNING
                 && !t.expire_fired
                 && raw_elapsed(t) >= t.countdown_ms) {
-            t.expire_fired = true;
-            action_count = t.expire_action_count;
-            if (action_count > 0) {
-                memcpy(actions, t.expire_actions,
-                       action_count * sizeof(ButtonAction));
+            if (action_storage_copy_actions(storage, actions, t.expire_actions,
+                                            t.expire_action_count)) {
+                t.expire_fired = true;
+                action_count = t.expire_action_count;
             }
         }
         timer_unlock();
@@ -444,6 +439,7 @@ void timer_engine_tick() {
             snprintf(label, sizeof(label), "T%u Expire", i + 1);
             action_list_dispatch(actions, action_count, label);
         }
+        action_storage_clear(storage);
     }
 }
 

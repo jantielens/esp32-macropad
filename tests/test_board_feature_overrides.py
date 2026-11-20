@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import csv
 import json
 import pathlib
 import subprocess
@@ -71,21 +72,23 @@ print("PASS: RTC supports interactive firmware and rejects the unintegrated slee
 
 for overrides, expected_error in (
     ({}, None),
-    ({"HAS_VOICE_CLIPS": 1}, None),
-    ({"HAS_VOICE_CLIPS": 1, "IS_VOICE_ASSISTANT": 1}, "cannot be enabled together"),
-    ({"HAS_VOICE_CLIPS": 1, "HAS_AUDIO_INPUT": 0}, "requires audio input"),
-    ({"HAS_VOICE_CLIPS": 1, "HAS_FILESYSTEM": 0}, "requires audio input"),
-    ({"HAS_VOICE_CLIPS": 1, "HAS_DISPLAY": 0, "HAS_BUTTON": 0}, "requires audio input"),
+    ({"HAS_VOICE_NOTES": 1}, None),
+    ({"HAS_VOICE_NOTES": 1, "IS_VOICE_ASSISTANT": 1}, "cannot be enabled together"),
+    ({"HAS_VOICE_NOTES": 1, "USE_SD_STORAGE": 0}, "requires SD-primary storage"),
+    ({"HAS_VOICE_NOTES": 1, "HAS_AUDIO_INPUT": 0}, "requires audio input"),
+    ({"HAS_VOICE_NOTES": 1, "HAS_FILESYSTEM": 0}, "requires audio input"),
+    ({"HAS_VOICE_NOTES": 1, "HAS_DISPLAY": 0, "HAS_BUTTON": 0}, "requires audio input"),
 ):
     flags = {
         "IS_VOICE_ASSISTANT": 0, "HAS_AUDIO": 1,
         "HAS_AUDIO_INPUT": 1, "HAS_FILESYSTEM": 1, "HAS_DISPLAY": 1,
         "HAS_BUTTON": 0, "HAS_PSRAM": 1, "HAS_MQTT": 1,
+        "HAS_SD_CARD": 1, "USE_SD_STORAGE": 1,
     }
     flags.update(overrides)
     source = '#include "src/app/board_config.h"\n'
-    if "HAS_VOICE_CLIPS" not in overrides:
-        source += 'static_assert(!HAS_VOICE_CLIPS, "Voice clips must be disabled by default");\n'
+    if "HAS_VOICE_NOTES" not in overrides:
+        source += 'static_assert(!HAS_VOICE_NOTES, "Voice clips must be disabled by default");\n'
     result = subprocess.run(
         ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
          "-x", "c++", "-", "-I", str(root)]
@@ -97,6 +100,22 @@ for overrides, expected_error in (
     else:
         assert result.returncode == 0, result.stderr
 print("PASS: Voice clips feature prerequisites and Voice Assistant exclusion")
+
+for board, expected, sd in (("esp32-p4-lcd4b", 0, 0), ("esp32-p4-lcd4b-sd", 1, 1),
+                            ("esp32-p4-lcd4b-voice", 0, 0)):
+    subprocess.run(
+        ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+         "-x", "c++", "-", "-I", str(root), "-I", str(root / "src/boards" / board),
+         "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM", "-DCONFIG_IDF_TARGET_ESP32P4=1"],
+        input=f'''#include "src/app/board_config.h"
+static_assert(HAS_VOICE_NOTES == {expected}, "Voice Notes profile");
+static_assert(HAS_SD_CARD == {sd} && USE_SD_STORAGE == {sd}, "LCD4B storage selection");
+''' + ('''static_assert(SDMMC_BUS_WIDTH == 4 && SDMMC_POWER_PIN == 45 &&
+              SDMMC_POWER_ACTIVE_LOW && SDMMC_LDO_CHANNEL == 4, "LCD4B SD wiring");
+''' if sd else ""),
+        text=True, check=True,
+    )
+print("PASS: LCD4B Voice Notes and Voice Assistant profiles")
 
 for defines, expected_error in (
     (["-DHAS_AUDIO_INPUT=1", "-DHAS_AUDIO=1"], None),
@@ -140,7 +159,7 @@ with tempfile.TemporaryDirectory() as directory:
         subprocess.run(
             ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
              "-include", str(root / "tests/board_config.h"),
-             f"-DIS_VOICE_ASSISTANT={assistant}", f"-DHAS_VOICE_CLIPS={clips}",
+             f"-DIS_VOICE_ASSISTANT={assistant}", f"-DHAS_VOICE_NOTES={clips}",
              "-c", str(root / "src/app/voice_wav.cpp"), "-o", str(obj)],
             check=True,
         )
@@ -209,16 +228,58 @@ with tempfile.TemporaryDirectory() as directory:
 int main() { std::puts(HW_BUTTON_DEFAULTS_JSON); }
 ''', text=True, check=True,
     )
-    defaults = json.loads(subprocess.check_output([str(executable)], text=True))["buttons"]
-    assert defaults == [
+    defaults = json.loads(subprocess.check_output([str(executable)], text=True))
+    assert defaults["action_format_version"] == 1
+    assert defaults["buttons"] == [
         {}, {},
-        {"tap_actions": [{"type": "button_nav", "command": "previous"}]},
-        {"tap_actions": [{"type": "button_nav", "command": "next"}]},
-        {"tap_actions": [{"type": "button_nav", "command": "tap"}],
-         "hold_actions": [{"type": "button_nav", "command": "tap_hold"}]},
-        {"tap_actions": [{"type": "display_refresh", "mode": "full"}]},
+        {"tap_actions": [{"op": "button.navigate", "args": {"command": "previous"}}]},
+        {"tap_actions": [{"op": "button.navigate", "args": {"command": "next"}}]},
+        {"tap_actions": [{"op": "button.navigate", "args": {"command": "tap"}}],
+         "hold_actions": [{"op": "button.navigate", "args": {"command": "tap_hold"}}]},
+        {"tap_actions": [{"op": "display.refresh_full", "args": {}}]},
     ]
 print("PASS: CrowPanel generic hardware action defaults")
+
+fqbn_line = next(line for line in (root / "config.sh").read_text().splitlines()
+                 if '["crowpanel-4.2-interactive"]=' in line)
+scheme = fqbn_line.split("PartitionScheme=", 1)[1].split(",", 1)[0]
+with (root / "partitions" / f"partitions_{scheme}.csv").open() as partition_file:
+    partitions = list(csv.reader(line for line in partition_file
+                                 if line.strip() and not line.startswith("#")))
+partition_end = 0x9000
+partition_by_name = {}
+for name, kind, subtype, offset, size, _ in partitions:
+    offset, size = int(offset.strip(), 0), int(size.strip(), 0)
+    assert offset == partition_end and offset % 0x1000 == 0 and size % 0x1000 == 0
+    if kind.strip() == "app":
+        assert offset % 0x10000 == 0 and size == 0x380000
+    partition_by_name[name.strip()] = (subtype.strip(), offset, size)
+    partition_end = offset + size
+assert partition_end == 8 * 1024 * 1024
+assert partition_by_name["app0"] == ("ota_0", 0x10000, 0x380000)
+assert partition_by_name["app1"] == ("ota_1", 0x390000, 0x380000)
+assert partition_by_name["storage"] == ("spiffs", 0x710000, 896 * 1024)
+assert partition_by_name["nvs"] == ("nvs", 0x9000, 0x5000)
+assert partition_by_name["otadata"] == ("ota", 0xE000, 0x2000)
+assert partition_by_name["coredump"] == ("coredump", 0x7F0000, 0x10000)
+print("PASS: CrowPanel 3.5 MiB OTA slots fit 8 MiB flash with 896 KiB storage")
+
+with tempfile.TemporaryDirectory() as directory:
+    for header in ("action_registry.h", "action_storage.h"):
+        copied_header = pathlib.Path(directory) / header
+        copied_header.write_text((root / "src/app" / header).read_text())
+    subprocess.run(
+        ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+         "-x", "c++", "-", "-I", str(root), "-I", str(root / "src/app"),
+         "-I", str(arduinojson), "-DHAS_DISPLAY=1"],
+        input=f'''#include "src/app/action_registry.h"
+#include "src/app/action_storage.h"
+#include "{directory}/action_registry.h"
+#include "{directory}/action_storage.h"
+''', text=True, check=True,
+    )
+print("PASS: action headers tolerate Arduino staging duplicate copies")
+
 for grayscale in (0, 1):
     subprocess.run(
         ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
@@ -383,6 +444,7 @@ runtime_source = '''#include <cassert>
 #include <cstddef>
 static bool psram_present = false;
 static unsigned policy_calls = 0;
+void reboot_service_boot_init() {}
 bool psramFound() { return psram_present; }
 void heap_caps_malloc_extmem_enable(size_t threshold) {
     assert(threshold == 512);
@@ -417,7 +479,8 @@ for board, sd in (("reterminal-sticky-interactive", 0), ("reterminal-sticky-inte
          "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM", "-DCONFIG_IDF_TARGET_ESP32S3=1"],
         input=f'''#include "src/app/board_config.h"
 static_assert(HAS_SD_CARD == {sd} && USE_SD_STORAGE == {sd}, "Sticky storage selection");
-static_assert(HAS_DISPLAY && HAS_TOUCH && HAS_AUDIO_INPUT && HAS_VOICE_CLIPS && HAS_RTC && HAS_BLE, "Sticky capabilities");
+static_assert(HAS_VOICE_NOTES == {sd}, "Sticky Voice Notes selection");
+static_assert(HAS_DISPLAY && HAS_TOUCH && HAS_AUDIO_INPUT && HAS_RTC && HAS_BLE, "Sticky capabilities");
 static_assert(BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO, "Sticky BLE backend");
 ''' + ('''static_assert(SD_STORAGE_SPI && SD_SPI_CS_PIN == 8 && SD_SPI_SCK_PIN == 13 &&
     SD_SPI_MISO_PIN == 12 && SD_SPI_MOSI_PIN == 14 && SD_SPI_FREQUENCY_HZ == 1000000, "Sticky SD wiring");
@@ -442,6 +505,7 @@ for override in sorted((root / "src/boards").glob("*/board_overrides.h")):
         + (["-DCONFIG_IDF_TARGET_ESP32S3=1"] if board.startswith("reterminal-sticky-interactive") else []),
         input=f'''#include "src/app/board_config.h"
 static_assert(HAS_BATTERY_INFO == {int(board in battery_boards)}, "Battery provider gate mismatch");
+static_assert(!HAS_VOICE_NOTES || USE_SD_STORAGE, "Voice Notes requires SD-primary storage");
 ''', text=True, check=True,
     )
 print("PASS: battery info enabled only on existing provider boards and inherited variants")

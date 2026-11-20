@@ -12,6 +12,9 @@
 
 #include "widgets/widget.cpp"
 #include "widgets/option_selector_config.cpp"
+#if HAS_PSRAM
+#include "widgets/list_config.cpp"
+#endif
 #include "widget_modules.h"
 
 #endif // HAS_DISPLAY

@@ -36,6 +36,11 @@ Select **Save behavior**. Schedule and Behavior save independently and apply
 without reboot. Ring/stop lists allow synchronous actions; actions that suspend
 execution, such as Delay or key sequences, are not offered.
 
+If a saved alarm snapshot contains invalid or unavailable actions, the alarm
+is disabled and its settings cannot be saved. Both snapshots are protected.
+Back them up from [Storage](storage.md), then restore compatible firmware or
+compatible snapshots and reboot.
+
 For sound-capable firmware, choose **Alarm > Loop Tone** or **Loop MP3** in
 the ringing action list. A useful stop action is **Sound alert > Stop alerts**.
 Tone patterns and sound files are covered in [audio](../media/audio.md).
@@ -66,7 +71,7 @@ Other Alarm Control commands configure slot 1:
 | Command                         | User-entered value                                                   |
 | ------------------------------- | -------------------------------------------------------------------- |
 | Set Time                        | Whole minutes since midnight, 0-1439                                 |
-| Adjust Time                     | Signed whole minutes, such as `60`, `-1`, or Numeric Rocker `{step}` |
+| Adjust Time                     | Signed whole minutes, such as `60`, `-1`, or `[event:step]` in a Dynamic Numeric Rocker argument |
 | Enable, Disable, Toggle         | No value                                                             |
 | Weekday enable, disable, toggle | Select the weekday                                                   |
 

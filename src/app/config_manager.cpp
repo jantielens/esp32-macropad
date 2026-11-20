@@ -16,6 +16,9 @@
 #include "ota_activity.h"
 #include "wifi_manager.h"
 #include "ble_backend.h"
+#if HAS_VOICE_NOTES
+#include <esp_heap_caps.h>
+#endif
 #if HAS_EXTERNAL_DATA
 #include "external_data.h"
 #endif
@@ -31,6 +34,7 @@
 #include "camera_motion.h"
 #endif
 #include <Preferences.h>
+#include "config_nvs_write.h"
 #include <nvs_flash.h>
 #include <atomic>
 
@@ -40,6 +44,19 @@
 // Preferences keys
 #if HAS_EXTERNAL_DATA
 #define KEY_EXTERNAL_DATA  "external_data"
+#endif
+#if HAS_VOICE_NOTES
+#define KEY_VN_TX_URL "vn_tx_url"
+#define KEY_VN_TX_KEY "vn_tx_key"
+#define KEY_VN_TX_DEPLOY "vn_tx_deploy"
+#define KEY_VN_LLM_URL "vn_llm_url"
+#define KEY_VN_LLM_KEY "vn_llm_key"
+#define KEY_VN_LLM_DEPLOY "vn_llm_deploy"
+#define KEY_VN_AUTO_PROCESS "vn_auto_proc"
+#endif
+#if HAS_AUDIO_INPUT
+#define KEY_MIC_GAIN "mic_gain"
+#define KEY_MIC_RUMBLE "mic_rumble"
 #endif
 #define KEY_WIFI_SSID      "wifi_ssid"
 #define KEY_WIFI_PASS      "wifi_pass"
@@ -299,21 +316,24 @@ EpaperRefreshSettings config_manager_get_epaper_refresh_settings() {
 #endif
 
 // Initialize NVS
-void config_manager_init() {
+bool config_manager_init() {
 		LOGT("Config", "NVS init start");
 		esp_err_t err = nvs_flash_init();
+#if !(HAS_DISPLAY && HAS_FILESYSTEM)
 		if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
 				LOGW("Config", "NVS init error (%d) - erasing NVS", (int)err);
 				nvs_flash_erase();
 				err = nvs_flash_init();
 		}
+#endif
 
 		if (err != ESP_OK) {
 				LOGE("Config", "NVS init FAILED (%d)", (int)err);
-				return;
+				return false;
 		}
 
 		LOGT("Config", "NVS init OK");
+		return true;
 }
 
 // Get default device name with unique chip ID
@@ -368,6 +388,13 @@ bool config_manager_load(DeviceConfig *config) {
 
 		strlcpy(config->wifi_failure_mode, "ap", sizeof(config->wifi_failure_mode));
 		config->ap_password[0] = '\0';
+#if HAS_AUDIO_INPUT
+		config->microphone_gain_db = 0;
+		config->microphone_reduce_rumble = false;
+#endif
+#if HAS_VOICE_NOTES
+		config->voice_notes = {};
+#endif
 #if HAS_EXTERNAL_DATA
 		config->external_data = {};
 #endif
@@ -395,8 +422,11 @@ bool config_manager_load(DeviceConfig *config) {
 		#endif
 
 		#if HAS_AUDIO
+		config->audio_volume = AUDIO_DEFAULT_VOLUME;
 		config->audio_idle_mute = true;
 		config->audio_wake_delay_ms = AUDIO_WAKE_DELAY_DEFAULT_MS;
+		strlcpy(config->tap_beep, "500:40", CONFIG_BEEP_PATTERN_MAX_LEN);
+		strlcpy(config->lp_beep, "500:40 60 1000:40", CONFIG_BEEP_PATTERN_MAX_LEN);
 		#endif
 
 		#if HAS_LVGL_EPAPER
@@ -405,100 +435,104 @@ bool config_manager_load(DeviceConfig *config) {
 		config_manager_publish_epaper_refresh_settings(config);
 		#endif
 
+		// Defaults must also apply when the NVS namespace does not exist yet.
+		config->backlight_brightness = 100;
+		config->mqtt_port = 0;
+
+		strlcpy(config->operating_mode, "always_on", CONFIG_OPERATING_MODE_MAX_LEN);
+		config->duty_cycle_wake_seconds = 120;
+		config->mqtt_publish_interval_seconds = 120;
+		config->portal_idle_timeout_seconds = CONFIG_DEFAULT_PORTAL_IDLE_SECONDS;
+#if HAS_AUTO_SHUTDOWN
+		config->auto_shutdown_timeout_seconds = AUTO_SHUTDOWN_DEFAULT_SECONDS;
+#endif
+		config->wifi_backoff_max_seconds = 900;
+
+		strlcpy(config->mqtt_publish_scope, "sensors_only", CONFIG_MQTT_SCOPE_MAX_LEN);
+
+		config->basic_auth_enabled = false;
+		config->basic_auth_username[0] = '\0';
+		config->basic_auth_password[0] = '\0';
+
+#if HAS_MCP
+		config->mcp_enabled = false;
+		config->mcp_control_enabled = false;
+		config->mcp_authoring_enabled = false;
+		config->mcp_token[0] = '\0';
+#endif
+
+		#if HAS_DISPLAY
+		config->dialog_appearance = DialogTemplates{};
+		device_dialog_set_templates(config->dialog_appearance);
+		config->screen_saver_enabled = !HAS_EPAPER_PANEL || SCREENSAVER_BACKLIGHT_ONLY;
+		config->screen_saver_timeout_seconds = SCREENSAVER_DEFAULT_TIMEOUT_SECONDS;
+		config->screen_saver_fade_out_ms = SCREENSAVER_DEFAULT_FADE_OUT_MS;
+		config->screen_saver_fade_in_ms = SCREENSAVER_DEFAULT_FADE_IN_MS;
+		config->screen_saver_wake_on_touch = HAS_TOUCH;
+		config->screen_saver_wake_binding[0] = '\0';
+		config->idle_screen_enabled = false;
+		config->idle_screen_timeout_seconds = 300;
+		config->idle_screen_pad[0] = '\0';
+		#endif
+
+		#if HAS_CAMERA
+		config->camera_jpeg_quality = CAMERA_JPEG_QUALITY_DEFAULT;
+		config->camera_feed_target_fps = CAMERA_FEED_TARGET_FPS_DEFAULT;
+		config->camera_motion_enabled = false;
+		config->camera_motion_analyze_every_nth_frame = CAMERA_MOTION_ANALYZE_EVERY_DEFAULT;
+		config->camera_motion_sensitivity = CAMERA_MOTION_SENSITIVITY_DEFAULT;
+		config->camera_presence_hold_seconds = CAMERA_PRESENCE_HOLD_SECONDS_DEFAULT;
+		#if HAS_DISPLAY
+		config->camera_motion_keep_display_awake = false;
+		#endif
+		config->camera_rotation = CAMERA_ROTATION_DEFAULT;
+		config->camera_output_width = CAMERA_OUTPUT_WIDTH_DEFAULT;
+		config->camera_output_height = CAMERA_OUTPUT_HEIGHT_DEFAULT;
+		config->camera_exposure_lines = CAMERA_EXPOSURE_LINES_DEFAULT;
+		config->camera_white_balance_red_q8 = CAMERA_WHITE_BALANCE_Q8_DEFAULT;
+		config->camera_white_balance_blue_q8 = CAMERA_WHITE_BALANCE_Q8_DEFAULT;
+		#endif
+
+		device_class_dispatch_config_defaults(config);
+
 		LOGT("Config", "Load start");
 
 		if (!preferences.begin(CONFIG_NAMESPACE, true)) { // Read-only mode
 				LOGE("Config", "Preferences begin failed");
 				return false;
 		}
-		
-		// Check magic number first
+
 		uint32_t magic = preferences.getUInt(KEY_MAGIC, 0);
 		if (magic != CONFIG_MAGIC) {
 				preferences.end();
 				LOGW("Config", "No config found");
-				
-				// Initialize defaults for fields that need sensible values even when no config exists
-				config->backlight_brightness = 100;  // Default to full brightness
-				config->mqtt_port = 0;
-
-				strlcpy(config->operating_mode, "always_on", CONFIG_OPERATING_MODE_MAX_LEN);
-				config->duty_cycle_wake_seconds = 120;
-				config->mqtt_publish_interval_seconds = 120;
-				config->portal_idle_timeout_seconds = CONFIG_DEFAULT_PORTAL_IDLE_SECONDS;
-#if HAS_AUTO_SHUTDOWN
-				config->auto_shutdown_timeout_seconds = AUTO_SHUTDOWN_DEFAULT_SECONDS;
-#endif
-				config->wifi_backoff_max_seconds = 900;
-
-				strlcpy(config->mqtt_publish_scope, "sensors_only", CONFIG_MQTT_SCOPE_MAX_LEN);
-
-				// Basic Auth defaults
-				config->basic_auth_enabled = false;
-				config->basic_auth_username[0] = '\0';
-				config->basic_auth_password[0] = '\0';
-
-				// MCP server defaults (off, no token)
-#if HAS_MCP
-				config->mcp_enabled = false;
-				config->mcp_control_enabled = false;
-				config->mcp_authoring_enabled = false;
-				config->mcp_token[0] = '\0';
-#endif
-
-				#if HAS_BLE_HID || HAS_USB_HID
-				config->keyboard_transport = keyboard_transport_default(HAS_BLE_HID, HAS_USB_HID);
-				#endif
-
-				#if HAS_DISPLAY
-				config->dialog_appearance = DialogTemplates{};
-				device_dialog_set_templates(config->dialog_appearance);
-				// Screen saver defaults
-				config->screen_saver_enabled = true;
-				config->screen_saver_timeout_seconds = SCREENSAVER_DEFAULT_TIMEOUT_SECONDS;
-				config->screen_saver_fade_out_ms = SCREENSAVER_DEFAULT_FADE_OUT_MS;
-				config->screen_saver_fade_in_ms = SCREENSAVER_DEFAULT_FADE_IN_MS;
-				#if HAS_TOUCH
-				config->screen_saver_wake_on_touch = true;
-				#else
-				config->screen_saver_wake_on_touch = false;
-				#endif
-				config->screen_saver_wake_binding[0] = '\0';
-				config->idle_screen_enabled = false;
-				config->idle_screen_timeout_seconds = 300;
-				config->idle_screen_pad[0] = '\0';
-				#endif
-
-				#if HAS_LVGL_EPAPER
-				config_manager_apply_epaper_refresh_defaults(config);
-				config_manager_publish_epaper_refresh_settings(config);
-				#endif
-
-				#if HAS_CAMERA
-				config->camera_jpeg_quality = CAMERA_JPEG_QUALITY_DEFAULT;
-				config->camera_feed_target_fps = CAMERA_FEED_TARGET_FPS_DEFAULT;
-				config->camera_motion_enabled = false;
-				config->camera_motion_analyze_every_nth_frame = CAMERA_MOTION_ANALYZE_EVERY_DEFAULT;
-				config->camera_motion_sensitivity = CAMERA_MOTION_SENSITIVITY_DEFAULT;
-				config->camera_presence_hold_seconds = CAMERA_PRESENCE_HOLD_SECONDS_DEFAULT;
-				#if HAS_DISPLAY
-				config->camera_motion_keep_display_awake = false;
-				#endif
-				config->camera_rotation = CAMERA_ROTATION_DEFAULT;
-				config->camera_output_width = CAMERA_OUTPUT_WIDTH_DEFAULT;
-				config->camera_output_height = CAMERA_OUTPUT_HEIGHT_DEFAULT;
-				config->camera_exposure_lines = CAMERA_EXPOSURE_LINES_DEFAULT;
-				config->camera_white_balance_red_q8 = CAMERA_WHITE_BALANCE_Q8_DEFAULT;
-				config->camera_white_balance_blue_q8 = CAMERA_WHITE_BALANCE_Q8_DEFAULT;
-				#endif
-
-				// Let registered device classes seed their own defaults.
-				device_class_dispatch_config_defaults(config);
-				
 				return false;
 		}
 		
 		// Load WiFi settings
+#if HAS_AUDIO_INPUT
+		config->microphone_gain_db = preferences.getChar(KEY_MIC_GAIN, 0);
+		config->microphone_reduce_rumble = preferences.getBool(KEY_MIC_RUMBLE, false);
+		if (config->microphone_gain_db < -12 || config->microphone_gain_db > 24) {
+				LOGW("Config", "Invalid stored microphone gain; using 0 dB");
+				config->microphone_gain_db = 0;
+		}
+#endif
+#if HAS_VOICE_NOTES
+		preferences.getString(KEY_VN_TX_URL, config->voice_notes.transcription.endpoint,
+				sizeof(config->voice_notes.transcription.endpoint));
+		preferences.getString(KEY_VN_TX_KEY, config->voice_notes.transcription.api_key,
+				sizeof(config->voice_notes.transcription.api_key));
+		preferences.getString(KEY_VN_TX_DEPLOY, config->voice_notes.transcription.deployment,
+				sizeof(config->voice_notes.transcription.deployment));
+		preferences.getString(KEY_VN_LLM_URL, config->voice_notes.llm.endpoint,
+				sizeof(config->voice_notes.llm.endpoint));
+		preferences.getString(KEY_VN_LLM_KEY, config->voice_notes.llm.api_key,
+				sizeof(config->voice_notes.llm.api_key));
+		preferences.getString(KEY_VN_LLM_DEPLOY, config->voice_notes.llm.deployment,
+				sizeof(config->voice_notes.llm.deployment));
+		config->voice_notes.auto_process = preferences.getBool(KEY_VN_AUTO_PROCESS, false);
+#endif
 #if HAS_EXTERNAL_DATA
 		if (preferences.isKey(KEY_EXTERNAL_DATA)) {
 				if (preferences.getBytesLength(KEY_EXTERNAL_DATA) != sizeof(config->external_data) ||
@@ -627,17 +661,15 @@ bool config_manager_load(DeviceConfig *config) {
 		#endif
 
 		#if HAS_AUDIO
-		config->audio_volume = preferences.getUChar(KEY_AUDIO_VOLUME, AUDIO_DEFAULT_VOLUME);
-		config->audio_idle_mute = preferences.getBool(KEY_AUDIO_IDLE_MUTE, true);
-		config->audio_wake_delay_ms = preferences.getUShort(KEY_AUDIO_WAKE_DELAY, AUDIO_WAKE_DELAY_DEFAULT_MS);
+		config->audio_volume = preferences.getUChar(KEY_AUDIO_VOLUME, config->audio_volume);
+		config->audio_idle_mute = preferences.getBool(KEY_AUDIO_IDLE_MUTE, config->audio_idle_mute);
+		config->audio_wake_delay_ms = preferences.getUShort(KEY_AUDIO_WAKE_DELAY, config->audio_wake_delay_ms);
 		if (config->audio_wake_delay_ms > AUDIO_WAKE_DELAY_MAX_MS) config->audio_wake_delay_ms = AUDIO_WAKE_DELAY_MAX_MS;
-		{
-			size_t n = preferences.getString(KEY_TAP_BEEP, config->tap_beep, CONFIG_BEEP_PATTERN_MAX_LEN);
-			if (n == 0) strlcpy(config->tap_beep, "500:40", CONFIG_BEEP_PATTERN_MAX_LEN);
+		if (preferences.isKey(KEY_TAP_BEEP)) {
+			preferences.getString(KEY_TAP_BEEP, config->tap_beep, CONFIG_BEEP_PATTERN_MAX_LEN);
 		}
-		{
-			size_t n = preferences.getString(KEY_LP_BEEP, config->lp_beep, CONFIG_BEEP_PATTERN_MAX_LEN);
-			if (n == 0) strlcpy(config->lp_beep, "500:40 60 1000:40", CONFIG_BEEP_PATTERN_MAX_LEN);
+		if (preferences.isKey(KEY_LP_BEEP)) {
+			preferences.getString(KEY_LP_BEEP, config->lp_beep, CONFIG_BEEP_PATTERN_MAX_LEN);
 		}
 		#endif
 
@@ -658,16 +690,12 @@ bool config_manager_load(DeviceConfig *config) {
 		#if SCREENSAVER_BACKLIGHT_ONLY
 		config->screen_saver_enabled = true;
 		#else
-		config->screen_saver_enabled = preferences.getBool(KEY_SCREEN_SAVER_ENABLED, true);
+		config->screen_saver_enabled = preferences.getBool(KEY_SCREEN_SAVER_ENABLED, config->screen_saver_enabled);
 		#endif
-		config->screen_saver_timeout_seconds = preferences.getUShort(KEY_SCREEN_SAVER_TIMEOUT, SCREENSAVER_DEFAULT_TIMEOUT_SECONDS);
-		config->screen_saver_fade_out_ms = preferences.getUShort(KEY_SCREEN_SAVER_FADE_OUT, SCREENSAVER_DEFAULT_FADE_OUT_MS);
-		config->screen_saver_fade_in_ms = preferences.getUShort(KEY_SCREEN_SAVER_FADE_IN, SCREENSAVER_DEFAULT_FADE_IN_MS);
-		#if HAS_TOUCH
-		config->screen_saver_wake_on_touch = preferences.getBool(KEY_SCREEN_SAVER_WAKE_TOUCH, true);
-		#else
-		config->screen_saver_wake_on_touch = preferences.getBool(KEY_SCREEN_SAVER_WAKE_TOUCH, false);
-		#endif
+		config->screen_saver_timeout_seconds = preferences.getUShort(KEY_SCREEN_SAVER_TIMEOUT, config->screen_saver_timeout_seconds);
+		config->screen_saver_fade_out_ms = preferences.getUShort(KEY_SCREEN_SAVER_FADE_OUT, config->screen_saver_fade_out_ms);
+		config->screen_saver_fade_in_ms = preferences.getUShort(KEY_SCREEN_SAVER_FADE_IN, config->screen_saver_fade_in_ms);
+		config->screen_saver_wake_on_touch = preferences.getBool(KEY_SCREEN_SAVER_WAKE_TOUCH, config->screen_saver_wake_on_touch);
 		preferences.getString(KEY_SCREEN_SAVER_WAKE_BINDING, config->screen_saver_wake_binding, CONFIG_SS_WAKE_BINDING_MAX_LEN);
 		config->idle_screen_enabled = preferences.getBool(KEY_IDLE_SCREEN_ENABLED, false);
 		config->idle_screen_timeout_seconds = preferences.getUShort(KEY_IDLE_SCREEN_TIMEOUT, 300);
@@ -779,6 +807,39 @@ static bool save_config_locked(const DeviceConfig *config) {
 				LOGE("Config", "Save failed: could not open NVS namespace");
 				return false;
 		}
+#if HAS_VOICE_NOTES
+		{
+				const auto& vn = config->voice_notes;
+				char* verify = static_cast<char*>(heap_caps_malloc(sizeof(vn.transcription.endpoint), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+				if (!verify) {
+						LOGE("Config", "Voice Notes settings verification memory unavailable");
+						preferences.end();
+						return false;
+				}
+				const char* keys[] = {KEY_VN_TX_URL, KEY_VN_TX_KEY, KEY_VN_TX_DEPLOY,
+						KEY_VN_LLM_URL, KEY_VN_LLM_KEY, KEY_VN_LLM_DEPLOY};
+				const char* values[] = {vn.transcription.endpoint, vn.transcription.api_key,
+						vn.transcription.deployment, vn.llm.endpoint, vn.llm.api_key, vn.llm.deployment};
+				bool saved = true;
+				for (size_t i = 0; i < 6; ++i) {
+						preferences.putString(keys[i], values[i]);
+						if (!preferences.getString(keys[i], verify, sizeof(vn.transcription.endpoint)) ||
+								strcmp(verify, values[i]) != 0) {
+								saved = false;
+								break;
+						}
+				}
+				if (preferences.putBool(KEY_VN_AUTO_PROCESS, vn.auto_process) != sizeof(uint8_t) ||
+						preferences.getBool(KEY_VN_AUTO_PROCESS, !vn.auto_process) != vn.auto_process)
+						saved = false;
+				free(verify);
+				if (!saved) {
+						LOGE("Config", "Failed to persist Voice Notes settings");
+						preferences.end();
+						return false;
+				}
+		}
+#endif
 #if HAS_DISPLAY
 		{
 				BasicJsonDocument<PsramJsonAllocator> dialog_doc(4096);
@@ -793,17 +854,31 @@ static bool save_config_locked(const DeviceConfig *config) {
 		}
 #endif
 		
+		bool writes_ok = true;
+		const auto save_String = [](const char* key, const char* value) {
+				return config_nvs_put_string(preferences, key, value);
+		};
+		const auto save_UChar = [](const char* key, uint8_t value) {
+				return preferences.putUChar(key, value) == sizeof(value);
+		};
+		const auto save_UShort = [](const char* key, uint16_t value) {
+				return preferences.putUShort(key, value) == sizeof(value);
+		};
+		const auto save_UInt = [](const char* key, uint32_t value) {
+				return preferences.putUInt(key, value) == sizeof(value);
+		};
+		const auto save_Bool = [](const char* key, bool value) {
+				return preferences.putBool(key, value) == sizeof(uint8_t);
+		};
 		// Save WiFi settings
-		preferences.putString(KEY_WIFI_SSID, config->wifi_ssid);
-		preferences.putString(KEY_WIFI_PASS, config->wifi_password);
-		const bool wifi_failure_saved =
-				preferences.putString(KEY_WIFI_FAILURE, config->wifi_failure_mode) == strlen(config->wifi_failure_mode);
+		writes_ok = save_String(KEY_WIFI_SSID, config->wifi_ssid) && writes_ok;
+		writes_ok = save_String(KEY_WIFI_PASS, config->wifi_password) && writes_ok;
+		const bool wifi_failure_saved = save_String(KEY_WIFI_FAILURE, config->wifi_failure_mode);
 		// putString() returns 0 for a successfully stored empty string, so
 		// verify by read-back. getString() returns 0 on failure.
 		preferences.putString(KEY_AP_PASSWORD, config->ap_password);
 		char stored_ap_password[CONFIG_AP_PASSWORD_MAX_LEN] = {};
-		const bool ap_password_saved =
-				preferences.getString(KEY_AP_PASSWORD, stored_ap_password, sizeof(stored_ap_password)) > 0 &&
+		const bool ap_password_saved = preferences.getString(KEY_AP_PASSWORD, stored_ap_password, sizeof(stored_ap_password)) > 0 &&
 				strcmp(stored_ap_password, config->ap_password) == 0;
 		if (!wifi_failure_saved || !ap_password_saved) {
 				LOGE("Config", "Failed to persist Wi-Fi setup settings");
@@ -812,30 +887,30 @@ static bool save_config_locked(const DeviceConfig *config) {
 		}
 		
 		// Save device settings
-		preferences.putString(KEY_DEVICE_NAME, config->device_name);
+		writes_ok = save_String(KEY_DEVICE_NAME, config->device_name) && writes_ok;
 		
 		// Save fixed IP settings
-		preferences.putString(KEY_FIXED_IP, config->fixed_ip);
-		preferences.putString(KEY_SUBNET_MASK, config->subnet_mask);
-		preferences.putString(KEY_GATEWAY, config->gateway);
-		preferences.putString(KEY_DNS1, config->dns1);
-		preferences.putString(KEY_DNS2, config->dns2);
+		writes_ok = save_String(KEY_FIXED_IP, config->fixed_ip) && writes_ok;
+		writes_ok = save_String(KEY_SUBNET_MASK, config->subnet_mask) && writes_ok;
+		writes_ok = save_String(KEY_GATEWAY, config->gateway) && writes_ok;
+		writes_ok = save_String(KEY_DNS1, config->dns1) && writes_ok;
+		writes_ok = save_String(KEY_DNS2, config->dns2) && writes_ok;
 
 		// Save MQTT settings
-		preferences.putString(KEY_MQTT_HOST, config->mqtt_host);
-		preferences.putUShort(KEY_MQTT_PORT, config->mqtt_port);
-		preferences.putString(KEY_MQTT_USER, config->mqtt_username);
-		preferences.putString(KEY_MQTT_PASS, config->mqtt_password);
+		writes_ok = save_String(KEY_MQTT_HOST, config->mqtt_host) && writes_ok;
+		writes_ok = save_UShort(KEY_MQTT_PORT, config->mqtt_port) && writes_ok;
+		writes_ok = save_String(KEY_MQTT_USER, config->mqtt_username) && writes_ok;
+		writes_ok = save_String(KEY_MQTT_PASS, config->mqtt_password) && writes_ok;
 
 		// Save Home Assistant REST API settings
-		preferences.putString(KEY_HA_URL, config->ha_url);
-		preferences.putString(KEY_HA_TOKEN, config->ha_token);
+		writes_ok = save_String(KEY_HA_URL, config->ha_url) && writes_ok;
+		writes_ok = save_String(KEY_HA_TOKEN, config->ha_token) && writes_ok;
 
 		// Save power settings
-		preferences.putString(KEY_OPERATING_MODE, config->operating_mode);
-		preferences.putUShort(KEY_DC_WAKE, config->duty_cycle_wake_seconds);
-		preferences.putUShort(KEY_MQTT_PUB, config->mqtt_publish_interval_seconds);
-		preferences.putUShort(KEY_PORTAL_IDLE, config->portal_idle_timeout_seconds);
+		writes_ok = save_String(KEY_OPERATING_MODE, config->operating_mode) && writes_ok;
+		writes_ok = save_UShort(KEY_DC_WAKE, config->duty_cycle_wake_seconds) && writes_ok;
+		writes_ok = save_UShort(KEY_MQTT_PUB, config->mqtt_publish_interval_seconds) && writes_ok;
+		writes_ok = save_UShort(KEY_PORTAL_IDLE, config->portal_idle_timeout_seconds) && writes_ok;
 #if HAS_AUTO_SHUTDOWN
 		if (preferences.putUShort(KEY_AUTO_SHUTDOWN, config->auto_shutdown_timeout_seconds) != sizeof(uint16_t)) {
 				LOGE("Config", "Failed to persist auto-shutdown timeout");
@@ -843,19 +918,19 @@ static bool save_config_locked(const DeviceConfig *config) {
 				return false;
 		}
 #endif
-		preferences.putUShort(KEY_WIFI_BACKOFF_MAX, config->wifi_backoff_max_seconds);
+		writes_ok = save_UShort(KEY_WIFI_BACKOFF_MAX, config->wifi_backoff_max_seconds) && writes_ok;
 
-		preferences.putString(KEY_MQTT_SCOPE, config->mqtt_publish_scope);
+		writes_ok = save_String(KEY_MQTT_SCOPE, config->mqtt_publish_scope) && writes_ok;
 
 		#if HAS_BLE
-		preferences.putUChar(KEY_BLE_BURST_COUNT, config->ble_burst_count);
-		preferences.putUShort(KEY_BLE_ADV_INTERVAL_MS, config->ble_adv_interval_ms);
+		writes_ok = save_UChar(KEY_BLE_BURST_COUNT, config->ble_burst_count) && writes_ok;
+		writes_ok = save_UShort(KEY_BLE_ADV_INTERVAL_MS, config->ble_adv_interval_ms) && writes_ok;
 		#endif
 
 		// Save display settings
 		LOGI("Config", "Saving brightness: %d%%", config->backlight_brightness);
 		const bool brightness_saved = preferences.putUChar(KEY_BACKLIGHT_BRIGHTNESS, config->backlight_brightness) == sizeof(uint8_t);
-		preferences.putUChar(KEY_DISPLAY_ROTATION, config->display_rotation);
+		writes_ok = save_UChar(KEY_DISPLAY_ROTATION, config->display_rotation) && writes_ok;
 #if HAS_DISPLAY
 		const bool boot_font_saved = preferences.putUChar(
 				KEY_BOOT_APPEARANCE_FONT, config->boot_appearance_font_size) == sizeof(uint8_t);
@@ -881,83 +956,81 @@ static bool save_config_locked(const DeviceConfig *config) {
 #endif
 
 		// Save Basic Auth settings
-		preferences.putBool(KEY_BASIC_AUTH_ENABLED, config->basic_auth_enabled);
-		preferences.putString(KEY_BASIC_AUTH_USER, config->basic_auth_username);
-		preferences.putString(KEY_BASIC_AUTH_PASS, config->basic_auth_password);
+		writes_ok = save_Bool(KEY_BASIC_AUTH_ENABLED, config->basic_auth_enabled) && writes_ok;
+		writes_ok = save_String(KEY_BASIC_AUTH_USER, config->basic_auth_username) && writes_ok;
+		writes_ok = save_String(KEY_BASIC_AUTH_PASS, config->basic_auth_password) && writes_ok;
 
 		// Save MCP server settings
 #if HAS_MCP
-		preferences.putBool(KEY_MCP_ENABLED, config->mcp_enabled);
-		preferences.putBool(KEY_MCP_CTRL_EN, config->mcp_control_enabled);
-		preferences.putBool(KEY_MCP_AUTH_EN, config->mcp_authoring_enabled);
-		preferences.putString(KEY_MCP_TOKEN, config->mcp_token);
+		writes_ok = save_Bool(KEY_MCP_ENABLED, config->mcp_enabled) && writes_ok;
+		writes_ok = save_Bool(KEY_MCP_CTRL_EN, config->mcp_control_enabled) && writes_ok;
+		writes_ok = save_Bool(KEY_MCP_AUTH_EN, config->mcp_authoring_enabled) && writes_ok;
+		writes_ok = save_String(KEY_MCP_TOKEN, config->mcp_token) && writes_ok;
 #endif
 
 		#if HAS_BLE_HID || HAS_USB_HID
-		preferences.putUChar(KEY_KEYBOARD_TRANSPORT, static_cast<uint8_t>(config->keyboard_transport));
+		writes_ok = save_UChar(KEY_KEYBOARD_TRANSPORT, static_cast<uint8_t>(config->keyboard_transport)) && writes_ok;
 		#endif
 
 		#if HAS_AUDIO
 		const bool volume_saved = preferences.putUChar(KEY_AUDIO_VOLUME, config->audio_volume) == sizeof(uint8_t);
-		preferences.putBool(KEY_AUDIO_IDLE_MUTE, config->audio_idle_mute);
-		preferences.putUShort(KEY_AUDIO_WAKE_DELAY, config->audio_wake_delay_ms);
-		preferences.putString(KEY_TAP_BEEP, config->tap_beep);
-		preferences.putString(KEY_LP_BEEP, config->lp_beep);
+		writes_ok = save_Bool(KEY_AUDIO_IDLE_MUTE, config->audio_idle_mute) && writes_ok;
+		writes_ok = save_UShort(KEY_AUDIO_WAKE_DELAY, config->audio_wake_delay_ms) && writes_ok;
+		writes_ok = save_String(KEY_TAP_BEEP, config->tap_beep) && writes_ok;
+		writes_ok = save_String(KEY_LP_BEEP, config->lp_beep) && writes_ok;
 		#endif
 
 		#if HAS_DISPLAY
 		// Save screen saver settings
-		preferences.putBool(KEY_SCREEN_SAVER_ENABLED, config->screen_saver_enabled);
-		preferences.putUShort(KEY_SCREEN_SAVER_TIMEOUT, config->screen_saver_timeout_seconds);
-		preferences.putUShort(KEY_SCREEN_SAVER_FADE_OUT, config->screen_saver_fade_out_ms);
-		preferences.putUShort(KEY_SCREEN_SAVER_FADE_IN, config->screen_saver_fade_in_ms);
-		preferences.putBool(KEY_SCREEN_SAVER_WAKE_TOUCH, config->screen_saver_wake_on_touch);
-		preferences.putString(KEY_SCREEN_SAVER_WAKE_BINDING, config->screen_saver_wake_binding);
-		preferences.putBool(KEY_IDLE_SCREEN_ENABLED, config->idle_screen_enabled);
-		preferences.putUShort(KEY_IDLE_SCREEN_TIMEOUT, config->idle_screen_timeout_seconds);
-		preferences.putString(KEY_IDLE_SCREEN_PAD, config->idle_screen_pad);
+		writes_ok = save_Bool(KEY_SCREEN_SAVER_ENABLED, config->screen_saver_enabled) && writes_ok;
+		writes_ok = save_UShort(KEY_SCREEN_SAVER_TIMEOUT, config->screen_saver_timeout_seconds) && writes_ok;
+		writes_ok = save_UShort(KEY_SCREEN_SAVER_FADE_OUT, config->screen_saver_fade_out_ms) && writes_ok;
+		writes_ok = save_UShort(KEY_SCREEN_SAVER_FADE_IN, config->screen_saver_fade_in_ms) && writes_ok;
+		writes_ok = save_Bool(KEY_SCREEN_SAVER_WAKE_TOUCH, config->screen_saver_wake_on_touch) && writes_ok;
+		writes_ok = save_String(KEY_SCREEN_SAVER_WAKE_BINDING, config->screen_saver_wake_binding) && writes_ok;
+		writes_ok = save_Bool(KEY_IDLE_SCREEN_ENABLED, config->idle_screen_enabled) && writes_ok;
+		writes_ok = save_UShort(KEY_IDLE_SCREEN_TIMEOUT, config->idle_screen_timeout_seconds) && writes_ok;
+		writes_ok = save_String(KEY_IDLE_SCREEN_PAD, config->idle_screen_pad) && writes_ok;
 		#endif
 
 		#if HAS_LVGL_EPAPER
-		preferences.putUChar(KEY_EPAPER_PANEL_MODE, config->epaper_render_mode);
-		preferences.putUInt(KEY_EPAPER_BIND, config->epaper_binding_refresh_interval_ms);
-		preferences.putUInt(KEY_EPAPER_MIN, config->epaper_min_refresh_interval_ms);
-		preferences.putBool(KEY_EPAPER_CLOCK_MINUTE, config->epaper_refresh_clock_on_minute_boundary);
-		preferences.putUShort(KEY_EPAPER_THRESHOLD, config->epaper_full_refresh_threshold);
-		preferences.putUChar(KEY_EPAPER_BW_CONVERSION, config->epaper_bw_conversion);
-		preferences.putUChar(KEY_EPAPER_BW_THRESHOLD, config->epaper_bw_threshold);
-		preferences.putUShort(KEY_EPAPER_VCOM, config->epaper_vcom_mv);
+		writes_ok = save_UChar(KEY_EPAPER_PANEL_MODE, config->epaper_render_mode) && writes_ok;
+		writes_ok = save_UInt(KEY_EPAPER_BIND, config->epaper_binding_refresh_interval_ms) && writes_ok;
+		writes_ok = save_UInt(KEY_EPAPER_MIN, config->epaper_min_refresh_interval_ms) && writes_ok;
+		writes_ok = save_Bool(KEY_EPAPER_CLOCK_MINUTE, config->epaper_refresh_clock_on_minute_boundary) && writes_ok;
+		writes_ok = save_UShort(KEY_EPAPER_THRESHOLD, config->epaper_full_refresh_threshold) && writes_ok;
+		writes_ok = save_UChar(KEY_EPAPER_BW_CONVERSION, config->epaper_bw_conversion) && writes_ok;
+		writes_ok = save_UChar(KEY_EPAPER_BW_THRESHOLD, config->epaper_bw_threshold) && writes_ok;
+		writes_ok = save_UShort(KEY_EPAPER_VCOM, config->epaper_vcom_mv) && writes_ok;
 		#endif
 
 		#if HAS_CAMERA
-		preferences.putUChar(KEY_CAMERA_JPEG_QUALITY, config->camera_jpeg_quality);
-		preferences.putUChar(KEY_CAMERA_FEED_TARGET_FPS, config->camera_feed_target_fps);
-		preferences.putBool(KEY_CAMERA_MOTION_ENABLED, config->camera_motion_enabled);
-		preferences.putUChar(KEY_CAMERA_MOTION_ANALYZE_EVERY, config->camera_motion_analyze_every_nth_frame);
-		preferences.putUChar(KEY_CAMERA_MOTION_SENSITIVITY, config->camera_motion_sensitivity);
-		preferences.putUShort(KEY_CAMERA_PRESENCE_HOLD, config->camera_presence_hold_seconds);
+		writes_ok = save_UChar(KEY_CAMERA_JPEG_QUALITY, config->camera_jpeg_quality) && writes_ok;
+		writes_ok = save_UChar(KEY_CAMERA_FEED_TARGET_FPS, config->camera_feed_target_fps) && writes_ok;
+		writes_ok = save_Bool(KEY_CAMERA_MOTION_ENABLED, config->camera_motion_enabled) && writes_ok;
+		writes_ok = save_UChar(KEY_CAMERA_MOTION_ANALYZE_EVERY, config->camera_motion_analyze_every_nth_frame) && writes_ok;
+		writes_ok = save_UChar(KEY_CAMERA_MOTION_SENSITIVITY, config->camera_motion_sensitivity) && writes_ok;
+		writes_ok = save_UShort(KEY_CAMERA_PRESENCE_HOLD, config->camera_presence_hold_seconds) && writes_ok;
 		#if HAS_DISPLAY
-		preferences.putBool(KEY_CAMERA_MOTION_KEEP_DISPLAY_AWAKE, config->camera_motion_keep_display_awake);
+		writes_ok = save_Bool(KEY_CAMERA_MOTION_KEEP_DISPLAY_AWAKE, config->camera_motion_keep_display_awake) && writes_ok;
 		#endif
-		preferences.putUShort(KEY_CAMERA_ROTATION, config->camera_rotation);
-		preferences.putUShort(KEY_CAMERA_OUTPUT_WIDTH, config->camera_output_width);
-		preferences.putUShort(KEY_CAMERA_OUTPUT_HEIGHT, config->camera_output_height);
-		preferences.putUShort(KEY_CAMERA_EXPOSURE_LINES, config->camera_exposure_lines);
-		preferences.putUShort(KEY_CAMERA_WHITE_BALANCE_RED, config->camera_white_balance_red_q8);
-		preferences.putUShort(KEY_CAMERA_WHITE_BALANCE_BLUE, config->camera_white_balance_blue_q8);
+		writes_ok = save_UShort(KEY_CAMERA_ROTATION, config->camera_rotation) && writes_ok;
+		writes_ok = save_UShort(KEY_CAMERA_OUTPUT_WIDTH, config->camera_output_width) && writes_ok;
+		writes_ok = save_UShort(KEY_CAMERA_OUTPUT_HEIGHT, config->camera_output_height) && writes_ok;
+		writes_ok = save_UShort(KEY_CAMERA_EXPOSURE_LINES, config->camera_exposure_lines) && writes_ok;
+		writes_ok = save_UShort(KEY_CAMERA_WHITE_BALANCE_RED, config->camera_white_balance_red_q8) && writes_ok;
+		writes_ok = save_UShort(KEY_CAMERA_WHITE_BALANCE_BLUE, config->camera_white_balance_blue_q8) && writes_ok;
 		#endif
 
 		// Let registered device classes persist their own fields.
-		device_class_dispatch_config_save(config, preferences);
+		writes_ok = device_class_dispatch_config_save(config, preferences) && writes_ok;
 		
-		// Save magic number last (indicates valid config)
-		preferences.putUInt(KEY_MAGIC, CONFIG_MAGIC);
 		const char* timezone = config->timezone[0] ? config->timezone : "UTC0";
 		const bool timezone_saved = preferences.putString(KEY_TIMEZONE, timezone) == strlen(timezone);
 		#if !HAS_AUDIO
 		const bool volume_saved = true;
 		#endif
-		if (!timezone_saved || !boot_font_saved || !boot_text_saved ||
+		if (!writes_ok || !timezone_saved || !boot_font_saved || !boot_text_saved ||
 				!boot_background_saved || !boot_logo_saved || !brightness_saved || !volume_saved) {
 				LOGE("Config", "Save failed: one or more configuration fields were not persisted");
 				preferences.end();
@@ -977,6 +1050,18 @@ static bool save_config_locked(const DeviceConfig *config) {
 				return false;
 		}
 #endif
+#if HAS_AUDIO_INPUT
+		if (preferences.putChar(KEY_MIC_GAIN, config->microphone_gain_db) != sizeof(int8_t) ||
+				preferences.putBool(KEY_MIC_RUMBLE, config->microphone_reduce_rumble) != sizeof(uint8_t)) {
+				LOGE("Config", "Failed to persist microphone settings");
+				preferences.end();
+				return false;
+		}
+#endif
+		if (!save_UInt(KEY_MAGIC, CONFIG_MAGIC)) {
+				preferences.end();
+				return false;
+		}
 		preferences.end();
 #if HAS_EXTERNAL_DATA
 		if (external_override) {
@@ -1147,6 +1232,8 @@ bool config_manager_get_ble_owner_claimed() {
 }
 
 bool config_manager_set_ble_owner_claimed(bool claimed) {
+		ConfigSaveGuard guard;
+		if (!guard.begin()) return false;
 		if (!preferences.begin(CONFIG_NAMESPACE, false)) {
 				LOGE("Config", "Failed to open NVS for BLE owner write");
 				return false;
@@ -1169,6 +1256,8 @@ bool config_manager_get_ble_owner_addr(char* out, size_t out_len) {
 }
 
 bool config_manager_set_ble_owner_addr(const char* addr) {
+		ConfigSaveGuard guard;
+		if (!guard.begin()) return false;
 		if (!preferences.begin(CONFIG_NAMESPACE, false)) {
 				LOGE("Config", "Failed to open NVS for BLE owner addr write");
 				return false;
@@ -1189,6 +1278,9 @@ bool config_manager_is_valid(const DeviceConfig *config) {
 		if (strcmp(config->wifi_failure_mode, "ap") != 0 &&
 				strcmp(config->wifi_failure_mode, "offline") != 0) return false;
 		if (!wifi_ap_password_is_valid(config->ap_password)) return false;
+#if HAS_AUDIO_INPUT
+		if (config->microphone_gain_db < -12 || config->microphone_gain_db > 24) return false;
+#endif
 #if HAS_BLE || HAS_BLE_HID
 		if (!bthome::valid_event_settings(config->bthome_event)) return false;
 		if (!bluetooth_power_valid(config->bluetooth_tx_power_dbm)) return false;

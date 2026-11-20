@@ -173,28 +173,6 @@ static void recalculate_segments() {
 // Timer format helper
 // ============================================================================
 
-static int strip_format_ms(uint32_t ms, const char* fmt, char* out, size_t out_len) {
-    if (!fmt || !fmt[0]) fmt = "mm:ss";
-
-    uint32_t total_sec = ms / 1000;
-    uint32_t frac_ms   = ms % 1000;
-    uint32_t h = total_sec / 3600;
-    uint32_t m = (total_sec % 3600) / 60;
-    uint32_t sec = total_sec % 60;
-    uint32_t deci = frac_ms / 100;
-
-    if (strcmp(fmt, "hh:mm:ss") == 0)
-        return snprintf(out, out_len, "%u:%02u:%02u", h, m, sec);
-    if (strcmp(fmt, "ss") == 0)
-        return snprintf(out, out_len, "%u", (unsigned)(ms / 1000));
-    if (strcmp(fmt, "mm:ss.d") == 0)
-        return snprintf(out, out_len, "%u:%02u.%u", m, sec, deci);
-    if (strcmp(fmt, "ss.d") == 0)
-        return snprintf(out, out_len, "%u.%u", (unsigned)total_sec, deci);
-    // default mm:ss
-    return snprintf(out, out_len, "%u:%02u", m, sec);
-}
-
 // ============================================================================
 // Phase elapsed/remaining helpers
 // ============================================================================
@@ -423,26 +401,6 @@ static bool strip_resolve_value(const char* params, char* out, size_t out_len) {
         return false;
     }
 
-    // Split key;format at first ';' (bracket-depth-aware)
-    char key_buf[32];
-    const char* format = NULL;
-    {
-        int depth = 0;
-        for (const char* p = params; *p; ++p) {
-            if (*p == '[') depth++;
-            else if (*p == ']') depth--;
-            else if (*p == ';' && depth == 0) {
-                size_t klen = p - params;
-                if (klen >= sizeof(key_buf)) klen = sizeof(key_buf) - 1;
-                memcpy(key_buf, params, klen);
-                key_buf[klen] = '\0';
-                params = key_buf;
-                format = p + 1;
-                break;
-            }
-        }
-    }
-
     // state
     if (strcmp(params, "state") == 0) {
         const char* st;
@@ -472,22 +430,14 @@ static bool strip_resolve_value(const char* params, char* out, size_t out_len) {
     // remaining (current phase)
     if (strcmp(params, "remaining") == 0) {
         uint32_t rem = phase_remaining_ms();
-        if (format) {
-            strip_format_ms(rem, format, out, out_len);
-        } else {
-            snprintf(out, out_len, "%.1f", rem / 1000.0f);
-        }
+        snprintf(out, out_len, "%.1f", rem / 1000.0f);
         return true;
     }
 
     // elapsed (current phase)
     if (strcmp(params, "elapsed") == 0) {
         uint32_t el = phase_elapsed_ms();
-        if (format) {
-            strip_format_ms(el, format, out, out_len);
-        } else {
-            snprintf(out, out_len, "%.1f", el / 1000.0f);
-        }
+        snprintf(out, out_len, "%.1f", el / 1000.0f);
         return true;
     }
 
@@ -573,11 +523,7 @@ static bool strip_resolve_value(const char* params, char* out, size_t out_len) {
     // total_time
     if (strcmp(params, "total_time") == 0) {
         float total = estimate_total_time_s();
-        if (format) {
-            strip_format_ms((uint32_t)(total * 1000.0f), format, out, out_len);
-        } else {
-            snprintf(out, out_len, "%.0f", total);
-        }
+        snprintf(out, out_len, "%.0f", total);
         return true;
     }
 
@@ -669,7 +615,6 @@ static const char* strip_binding_key_at(uint8_t index) {
 
 static const BindingParamDoc kStripParams[] = {
     {"key", "Test strip key, see below."},
-    {"format", "Duration format for remaining, elapsed, total_time: mm:ss, ss.d, ..."},
 };
 
 static const BindingKeyDoc kStripKeyDocs[] = {
@@ -695,24 +640,15 @@ static const BindingKeyDoc kStripKeyDocs[] = {
 };
 
 static const BindingExampleDoc kStripExamples[] = {
-    {"[strip:progress] [strip:remaining;ss.d]", "Segment progress and phase countdown."},
+    {"[strip:progress] [expr:duration([strip:remaining],\"s\",\"ss.d\")]", "Segment progress and phase countdown."},
     {"[strip:seg_time:1]", "Cumulative time of the first segment."},
     {"[strip:table]", "Exact single token for a Table widget."},
-};
-
-static const BindingReferenceDoc kStripFormats[] = {
-    {nullptr, "mm:ss", "1:05", "Phase countdown as minutes and seconds", "[strip:remaining;mm:ss]"},
-    {nullptr, "hh:mm:ss", "0:01:05", "Phase countdown with hours", "[strip:remaining;hh:mm:ss]"},
-    {nullptr, "mm:ss.d", "1:05.3", "Phase countdown with tenths", "[strip:remaining;mm:ss.d]"},
-    {nullptr, "ss", "65", "Phase countdown in whole seconds", "[strip:remaining;ss]", "s", BINDING_AUTHORING_KIND_INTEGER},
-    {nullptr, "ss.d", "65.3", "Phase countdown in seconds with tenths", "[strip:remaining;ss.d]", "s", BINDING_AUTHORING_KIND_NUMBER},
 };
 
 static const BindingSchemeDoc kStripDoc = {
     "Darkroom", "Test strip sequence state, timing, and per-segment times.",
     BINDING_DOC_LIST(kStripParams), BINDING_DOC_LIST(kStripKeyDocs), BINDING_DOC_LIST(kStripExamples),
-    "Test strip durations", true, BINDING_DOC_LIST(kStripFormats),
-    "Duration formats match the expose scheme.", nullptr,
+    nullptr, false, BINDING_DOC_NONE, nullptr, nullptr,
 };
 static const BindingAuthoringKey kStripAuthoringKeys[] = {
     binding_authoring_text("state", "exposing"),
@@ -888,7 +824,7 @@ void test_strip_tick() {
 void test_strip_init() {
     recalculate_segments();
     if (!binding_template_register("strip", strip_resolve, strip_collect,
-                                   {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
+                                   {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, false,
                                     strip_binding_key_count, strip_binding_key_at, &kStripDoc,
                                     &kStripAuthoring})) {
         LOGE(TAG, "Failed to register strip binding scheme");

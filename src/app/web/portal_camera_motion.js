@@ -11,15 +11,20 @@ window.init_camera_motion_fragment = function () {
     var holdSecondsValue = document.getElementById('camera-presence-hold-seconds-value');
     var saveButton = document.getElementById('camera-motion-save-btn');
     var actionPrefixes = actionEditorSlotPrefixes('camera-motion-action-');
+    var actionsLoaded = false;
+    saveButton.disabled = true;
 
     async function saveSettings() {
         var payload = {
             motion_enabled: enabled.checked,
             motion_analyze_every_nth_frame: Number(analyzeEvery.value),
             motion_sensitivity: Number(sensitivity.value),
-            presence_hold_seconds: Number(holdSeconds.value),
-            actions: actionEditorListBuild(actionPrefixes)
+            presence_hold_seconds: Number(holdSeconds.value)
         };
+        if (actionsLoaded) {
+            payload.action_format_version = 1;
+            payload.actions = actionEditorListBuild(actionPrefixes);
+        }
         if (!keepDisplayAwake.closest('.form-check').hidden) {
             payload.motion_keep_display_awake = keepDisplayAwake.checked;
         }
@@ -69,10 +74,18 @@ window.init_camera_motion_fragment = function () {
         holdSeconds.max = config.presence_hold_seconds_max;
         holdSeconds.value = config.presence_hold_seconds;
         holdSecondsValue.textContent = config.presence_hold_seconds;
-        getDeviceInfo().then(function () {
-            actionEditorListRender('camera-motion-action-editors', actionPrefixes);
+        if (config.actions_error) {
+            document.getElementById('camera-motion-action-editors').textContent = config.actions_error;
+            saveButton.disabled = false;
+            return;
+        }
+        return getDeviceInfo().then(function () {
+            actionEditorListRender('camera-motion-action-editors', actionPrefixes, null,
+                { actionOptions: { operations: true } });
             actionEditorListLoad(actionPrefixes, config.actions || []);
             actionEditorWireFragment(actionPrefixes);
+            actionsLoaded = true;
+            saveButton.disabled = false;
         });
     }).catch(function (error) {
         alert(error.message);

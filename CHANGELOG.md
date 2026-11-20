@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-11-14
+ms.date: 2026-11-19
 ms.topic: reference
 ---
 
@@ -13,6 +13,135 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [1.49.0] - 2026-11-19
+
+### Breaking changes
+
+* Increase CrowPanel 4.2 Interactive OTA slots to 3.5 MiB each, reducing
+  LittleFS storage to 896 KiB. Back up settings/files before upgrading from
+  the 3 MiB-slot layout, perform a full USB flash, reinitialize file storage,
+  and restore files. Firmware-only OTA cannot migrate the partition table.
+  See the [CrowPanel board guide](src/boards/crowpanel-4.2-interactive/README.md#display-and-firmware-limits).
+* Replace legacy actions with typed operations. Back up configurations before
+  upgrading and recreate actions using the [action picker](docs/user/pads/actions.md);
+  they are not converted automatically. Opening or importing older pads clears
+  their actions in the draft while preserving other pad settings. Unsupported
+  swipe, boot, hardware-button, MQTT-trigger, and timer-expiry configurations
+  reset in memory to empty, saveable settings, including MQTT topics and filters.
+  A notification identifies the reset; stored configurations are replaced only
+  on explicit Save. Numeric Rocker adjustments use a Dynamic argument with
+  `[event:step]` instead of `{step}` substitution.
+* Replace Voice Clips with **Voice Notes**. Existing `voice_clip` actions,
+  `[recorder:...]` bindings, endpoints, and recording folders are not migrated.
+  Download recordings you want to keep before updating, and recreate affected
+  pads and integrations. Voice Notes requires SD-primary storage: the
+  flash-backed LCD4B and reTerminal Sticky targets no longer include it. Back
+  up recordings before switching variants; files are not migrated.
+* Replace legacy provider/filter Lists and `[list:...]` selection bindings.
+  Existing Lists are not migrated; choose a typed source and assign a unique
+  List ID within each pad. Replace health Table buttons using `[health:table]`
+  or `[health:extended_table]` with Lists.
+* Standardize timestamp bindings on Unix seconds and return unavailable when
+  the timestamp is unknown. Replace `[alarm:1_once_epoch]` and
+  `[alarm:1_next_epoch]` with `[alarm:1_once_at]` and `[alarm:1_next_at]`,
+  and replace alarm `*_local` bindings with `datetime()` expressions. Rename
+  `[camera:last_motion]` to `[camera:last_motion_at]` and the sensor field
+  `camera_last_motion` to `camera_last_motion_at`. Replace `[brew:timer]` with
+  `[brew:timer_ms]` and duration format parameters on timer, exposure, and
+  test-strip bindings with `duration()` expressions. Update affected pads;
+  these binding changes are not migrated automatically.
+* Remove full-device configuration import. Device exports are reference-only;
+  compatible, separately exported pads can still be imported as drafts and
+  saved.
+
+### Added
+
+* Add searchable actions with familiar fixed controls and a **Dynamic** option
+  for eligible arguments. Use widget values, List items, live bindings, or
+  expressions to decide what an action does when it runs. For example, open
+  the pad tapped in a List or set Wi-Fi station mode from an Option Selector.
+  See [actions](docs/user/pads/actions.md).
+* Add Voice Notes processing through configured Azure transcription and LLM
+  deployments. Record locally, process a note manually or enable background
+  processing, and browse saved transcripts, titles, and summaries. Recording
+  works offline; processing requires Wi-Fi and sends audio or transcripts to
+  Azure. Failed attempts preserve saved results. Automatic retries use bounded
+  backoff, respect provider cooldowns, and do not connect Wi-Fi or keep the
+  device awake. A **Process saved notes** action and status bindings are also
+  available. See [Voice Notes](docs/user/media/voice-notes.md).
+* Add configurable List and Text reader widgets for display devices with PSRAM.
+  Lists show up to 20 items with styled labels, colors, tap and long-press
+  actions, optional selection, and scrolling or paged navigation. Sources
+  include saved pads, recent Voice Notes, shutter tests, and health metrics.
+  Use `[item:field]` in row content and supported action arguments; item context
+  remains available throughout the activated action sequence. The Text reader
+  offers scrolling or paging and can display complete loaded Voice Notes text.
+  See [Lists](docs/user/widgets/list.md) and the
+  [Text reader](docs/user/widgets/README.md#text-reader).
+* Add **Load saved note** and **Delete saved note** actions for custom Voice
+  Notes pads. Load a List item without waiting for storage I/O before navigating,
+  and use `[voice_note:loaded.*]` bindings for metadata and text previews.
+  Loaded details remain unchanged until another load, a matching action deletion,
+  or reboot, including after edits or deletion through the portal.
+  See [loaded Voice Notes](docs/user/media/voice-notes.md#show-a-loaded-voice-note-on-a-pad).
+* Add **Audio > Microphone** for digital input gain, rumble reduction, a level
+  meter, and optional listening in desktop Chrome. Changes apply immediately and
+  can be saved as defaults or undone. One listener can stream at a time; capture
+  uses PSRAM and stops on disconnect or firmware update. Audio is not saved or
+  encrypted, and listening is indicated in the browser only. Use a trusted
+  network and enable portal authentication when needed.
+  See [Microphone](docs/user/media/audio.md#configure-and-test-the-microphone).
+* Add **Boot into OTA Mode** under **Firmware > Manual Upload** for unreliable
+  uploads. Bluetooth and MQTT are disabled for one boot without changing saved
+  settings; the next reboot restores normal operation. The portal returns to
+  Manual Upload after reconnecting.
+  See [firmware updates and recovery](docs/user/device/updates-and-recovery.md#upload-a-firmware-application-file).
+* Add the `esp32-p4-lcd4b-sd` board variant with SD-primary storage. A readable
+  FAT32 card is required at boot; existing files are not migrated from internal
+  flash. See [LCD4B SD storage](src/boards/esp32-p4-lcd4b-sd/README.md).
+* Add `datetime()` and `duration()` expression functions for formatting Unix
+  timestamps and durations. Choose a timezone and date format or a compact
+  duration format. See the
+  [expression guide](docs/user/pads/expressions.md#format-dates-and-durations).
+* Create an editable Welcome pad during initial setup on pad-capable displays.
+  Three tap-free buttons show setup guidance and live portal URLs. Existing
+  configurations are preserved, and a deleted Welcome pad is not recreated.
+* Add **Capsule**, an arcade-style Face widget option with all eight expressions.
+
+### Changed
+
+* Build portal assets for each firmware configuration, excluding disabled
+  features. Preserve unavailable widget data when opening pads and prevent edits
+  that would discard it.
+* Open the first available portal section when selecting a sidebar category.
+  Use the chevron to browse another category without leaving the current
+  section; selecting a section closes the other categories.
+* Clarify conditional text and units in the Expression builder with a quoted
+  **if / then / else** template and a **Numeric formatting** hint. Return `""`
+  to hide a value and its unit without repeating the condition or changing
+  expression syntax. Find examples in Binding Reference and the
+  [expression guide](docs/user/pads/expressions.md#show-a-value-and-unit-only-when-a-condition-is-true).
+
+### Fixed
+
+* Apply board-defined volume and default button feedback beeps on fresh devices,
+  even when no saved configuration exists. Enable automatic display sleep by
+  default on non-e-paper displays, but leave it disabled on e-paper. Preserve
+  saved preferences, audio-disabled boards, and manual frontlight-only behavior.
+* Leave remote-image letterbox bars transparent when the button background is
+  `transparent`, so overlay buttons reveal the buttons underneath. Preserve
+  opaque letterbox backgrounds and Fill modes.
+* Correct reTerminal Sticky battery current and power for the stock gauge
+  profile. Current and power are unavailable if the profile cannot be
+  confirmed; voltage, percentage, and runtime estimates are unchanged.
+* Fill Sparkline areas toward zero instead of the chart bottom, including
+  negative values and zero crossings. Clip off-screen zero baselines to the
+  chart edge without changing the scale.
+* Preserve specific binding syntax errors in the widget editor. List item-context
+  errors identify the List, field, and action position.
+* Fix hardware-button and MQTT-trigger saves counting nested action panels as
+  extra entries.
 
 ## [1.48.0] - 2026-11-14
 

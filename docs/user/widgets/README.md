@@ -19,7 +19,7 @@ collapsing a section does not disable it.
 * [Slider](slider.md) for touch-based numeric value setting
 * [Option selector](option-selector.md) for choosing one of several named values
 * [Rocker and Numeric Rocker](rockers.md) for adjustments
-* [List](list.md) for provider items and selection actions
+* [List](list.md) for browsing collection items and running item actions
 * [Toggle switch](#toggle-switch) for local state or a reported on/off category
 
 ## Visualize
@@ -29,6 +29,7 @@ collapsing a section does not disable it.
 * [Gauge](gauge.md) for rings, signed balance, needle, and targets
 * [Sparkline](sparkline.md) for sampled history
 * [Table](table.md) for structured rows
+* [Text reader](#text-reader) for manually scrolling or paging through text
 * [Camera Preview](../media/camera.md#put-a-preview-on-a-pad) for an attached camera
 * [Extension](../media/extensions.md) for installed native content
 * [Shutter Waveform](../specialized/shutter-tester/display.md) for optical captures
@@ -40,11 +41,61 @@ can suppress ordinary tap/hold/swipe behavior.
 All widgets use the shared [labels and icon layout](../pads/appearance.md#arrange-button-content).
 Touch widgets keep their own input behavior.
 
+## Text reader
+
+A Text reader shows wrapped text inside a button, with manual scrolling or
+non-animated paging for longer content. It requires a display and PSRAM and
+works with literal text and supported bindings.
+
+1. In **Pads > Pad Editor**, select a button and choose **Text reader** in
+   **Content**.
+2. Enter **Text** as literal text or a binding. The configuration accepts up to
+   191 bytes; ordinary bindings retain their normal short-value limits.
+3. Optionally enter a **Text style**, such as `font_size:18;align:left`.
+   Font, size, metrics, alignment, and color follow
+   [label style syntax](../pads/appearance.md#use-label-style-syntax).
+   Only color accepts bindings. Text always wraps; offsets, marquee modes,
+   and bitmap upscaling are not supported.
+4. Choose **Scroll** for vertical touch scrolling, or **Paged** for whole-line,
+   non-animated page turns. **Board default** uses Paged on e-paper and Scroll
+   on other displays.
+5. In Paged mode, tap the upper text half for the previous page or the lower
+   half for the next page. Vertical swipes also turn pages. **Show navigation
+   buttons** adds optional up/down controls when text overflows. They are
+   disabled at the beginning/end and disappear when all text fits. Half-surface
+   taps and swipes work with or without these controls. There are no external
+   navigation actions.
+6. Under **Position indicator**, optionally set **Track color** and
+   **Indicator color** as hex colors or scalar bindings. Empty values use the
+   device button background and foreground defaults. The thin, non-interactive
+   indicator shows your position and the visible fraction of the text in both
+   viewport modes, and disappears when all text fits.
+7. Select **Save Pad**. No reboot is needed. Inspect the result on the device;
+   the editor grid shows a widget symbol, not a document preview.
+
+Give the widget enough space for its text and optional controls. If it shows
+`Reader needs more height`, enlarge the button, reduce the font size, or hide
+navigation controls. Existing button labels and icons remain available around
+the widget through the shared content layout.
+
+The reader owns touch input and does not run button tap or hold actions.
+Use separate buttons for playback or navigation. New content resets the reading
+position; unchanged content preserves it. Leaving the pad releases the text and
+resets the reader. Scrolling and paging are manual.
+
+Some sources provide full text rather than a short scalar preview. Use their
+binding token alone, with an optional pipe fallback. Adding prefix/suffix text
+or wrapping the token in an expression uses the normal short scalar path
+instead. See [loaded Voice Notes](../media/voice-notes.md#configure-the-detail-pad)
+for one example of a full-text source.
+
 ## Face
 
 A Face adds personality to a button rather than showing a measurement. On
-animated LCD/OLED displays, it blinks, looks around at irregular intervals, and
-transitions smoothly between emotions. Interactive e-paper displays also allow
+animated LCD/OLED displays, it blinks and looks around at irregular intervals.
+Robot Eyes and Doodle Buddy transition smoothly between emotions. Capsule
+switches expressions in a single step and shifts its eyes in whole pixels.
+Interactive e-paper displays also allow
 face motion, with a roughly one-second closed-eye hold instead of a quick blink.
 Updates still follow the device's binding and e-paper refresh settings, so gaze
 and emotion changes can appear as discrete steps. Long refresh or binding
@@ -53,14 +104,15 @@ when your installed firmware includes it; E-Paper Frame firmware does not offer
 pad widgets.
 
 1. Select a button in **Pads**, then choose **Face** in **Content**.
-2. Choose **Style**: **Robot Eyes** for an eyes-only face, or **Doodle Buddy**
- for eyes, eyebrows, and a mouth.
+2. Choose **Style**: **Robot Eyes** for an eyes-only face, **Doodle Buddy**
+ for eyes, eyebrows, and a mouth, or **Capsule** for a round arcade face
+ with chunky pixels.
 3. Set **Emotion** to `content`, `relaxed`, `happy`, `worried`, `angry`, `sad`,
  `surprised`, or `sleepy`. You can choose a suggested value or enter a binding
  that returns one of these lowercase names. Blank means `content`.
 4. Choose **Liveliness**: **Still**, **Calm**, **Normal**, or **Lively**.
  **Still** disables blinking and gaze movement, keeps the gaze centered, and
- only animates emotion changes. The other options change idle activity, not the
+ still shows emotion changes. The other options change idle activity, not the
  emotion source. **Normal** is the default.
 5. Use the existing button text color for the face and background color for its
  background. Labels and icons remain available in the shared content group.

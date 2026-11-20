@@ -81,16 +81,17 @@ struct ShutterSessionMeasurement {
 void shutter_session_init();
 
 // Start a new session. camera may be nullptr or empty.
-// No-op if a session is already active.
-void shutter_session_start(const char* camera);
+// Returns false if the session cannot be started or one is already active.
+bool shutter_session_start(const char* camera);
 
 // Stop the current session: persists it through FsIndexedStore, then clears state.
 // No-op if no session is active.
 void shutter_session_stop();
 
 // Toggle: start if inactive, stop if active.
-// camera is used only when starting; ignored when stopping.
-void shutter_session_toggle(const char* camera);
+// camera is used only when starting; ignored when stopping. Returns false if
+// the toggle cannot be admitted.
+bool shutter_session_toggle(const char* camera);
 
 // Remove the last measurement from the in-progress session.
 // No-op if no session is active or session is empty.
@@ -111,9 +112,10 @@ uint32_t shutter_session_get_id();
 // ============================================================================
 
 // Start a guided session from a test script id.
-// Parses the test file, finds the test, starts a session, locks first speed.
-// No-op if a session is already active or test id not found.
-void shutter_session_guide_start(const char* test_id);
+// Returns whether the start task was queued, not whether the session started.
+// The task parses the test file, starts the session, and locks the first speed.
+// A stop or a new freeform start cancels a queued guide start.
+bool shutter_session_guide_start(const char* test_id);
 
 // Stop a guided session (saves whatever measurements collected so far).
 // Alias for shutter_session_stop().

@@ -3,6 +3,8 @@
 #include <cstring>
 #include <limits.h>
 #include <thread>
+#include <string>
+#include <vector>
 #include <freertos/semphr.h>
 #include <ArduinoJson.h>
 
@@ -26,11 +28,15 @@ static int g_dispatched = 0;
 static bool g_restart_on_first = false;
 static bool g_snapshot_ok = false;
 static TimerExpirySnapshot g_snapshot = {};
+static std::vector<std::string> g_operation_values;
 
 void action_list_dispatch(const ButtonAction* actions, uint8_t count, const char*,
                           ActionContinuationOwner, bool) {
     for (uint8_t index = 0; index < count; index++) {
-        (void)actions[index];
+        if (actions[index].type[0] == '@') {
+            const ActionArgumentBlock* block = actions[index].payload.operation.arguments;
+            g_operation_values.emplace_back(action_storage_text(block, action_storage_arguments(block)[0]));
+        }
         g_dispatched++;
         if (g_restart_on_first && index == 0) {
             timer_configure_and_start(1, TIMER_MODE_UP, 0, nullptr, 0);
@@ -40,8 +46,9 @@ void action_list_dispatch(const ButtonAction* actions, uint8_t count, const char
 
 bool timer_config_snapshot_expiry(uint8_t, TimerExpirySnapshot* out) {
     if (!g_snapshot_ok || !out) return false;
-    *out = g_snapshot;
-    return true;
+    *out = TimerExpirySnapshot{};
+    out->count = g_snapshot.count;
+    return action_storage_copy_actions(out->storage, out->actions, g_snapshot.actions, out->count);
 }
 
 static TimerPayload payload(uint8_t id, const char* command,
@@ -182,7 +189,7 @@ static void test_set_adjust_and_expiry() {
                 sizeof(snapshot.actions[index].type));
     }
     execute_ok(prepare_ok(payload(1, "start", "down", "1")), &snapshot);
-    memset(&snapshot, 0, sizeof(snapshot));
+    snapshot = {};
     g_dispatched = 0;
     g_restart_on_first = true;
     g_now = 1000;
@@ -331,7 +338,7 @@ static void test_run_entry_point() {
     assert(timer_command_run(payload(1, "start", "down", "2"),
                              error, sizeof(error)));
     g_snapshot_ok = false;
-    memset(&g_snapshot, 0, sizeof(g_snapshot));
+    g_snapshot = {};
     g_dispatched = 0;
     g_now += 2000;
     timer_engine_tick();
@@ -356,7 +363,7 @@ static void test_concurrent_engine_access() {
             (void)timer_get_ms(1);
             (void)timer_is_expired(1);
             char formatted[24];
-            timer_format(1, "mm:ss", formatted, sizeof(formatted));
+            timer_format(1, formatted, sizeof(formatted));
         }
     });
     writer.join();
@@ -447,6 +454,55 @@ static void test_state_allocation_failure() {
     assert(timer_configure_and_start(1, TIMER_MODE_UP, 0, nullptr, 0));
 }
 
+static void add_typed_expiry(TimerExpirySnapshot& snapshot, const char* text) {
+    const size_t offset = sizeof(ActionArgumentBlock) + sizeof(ActionStoredArgument);
+    const size_t size = offset + strlen(text) + 1;
+    auto* block = static_cast<ActionArgumentBlock*>(action_storage_allocate(size));
+    assert(block);
+    memset(block, 0, size);
+    block->next = snapshot.storage.blocks;
+    block->bytes = static_cast<uint16_t>(size);
+    block->count = 1;
+    snapshot.storage.blocks = block;
+    auto* argument = reinterpret_cast<ActionStoredArgument*>(block + 1);
+    argument->offset = static_cast<uint16_t>(offset);
+    memcpy(reinterpret_cast<char*>(block) + offset, text, strlen(text) + 1);
+    ButtonAction& action = snapshot.actions[snapshot.count++];
+    action.type[0] = '@';
+    action.payload.operation.arguments = block;
+}
+
+static void test_typed_expiry_ownership() {
+    timer_engine_init();
+    g_now = 0;
+    g_snapshot = {};
+    add_typed_expiry(g_snapshot, "original-1");
+    add_typed_expiry(g_snapshot, "original-2");
+    g_snapshot_ok = true;
+    char error[96] = {};
+    assert(timer_command_run(payload(1, "start", "down", "1"), error, sizeof(error)));
+    g_snapshot = {};
+    add_typed_expiry(g_snapshot, "replacement");
+    TimerExpirySnapshot invalid;
+    ActionArgumentBlock corrupt = {};
+    invalid.count = 1;
+    invalid.actions[0].type[0] = '@';
+    invalid.actions[0].payload.operation.arguments = &corrupt;
+    assert(!timer_configure_and_start(1, TIMER_MODE_DOWN, 5000, invalid.actions, invalid.count));
+    assert(timer_get_state(1) == TIMER_RUNNING && timer_get_ms(1) == 1000);
+    g_operation_values.clear();
+    g_dispatched = 0;
+    g_restart_on_first = true;
+    g_now = 1000;
+    timer_engine_tick();
+    assert(g_operation_values.size() == 2);
+    assert(g_operation_values[0] == "original-1" && g_operation_values[1] == "original-2");
+    assert(timer_get_mode(1) == TIMER_MODE_UP);
+    g_restart_on_first = false;
+    g_snapshot_ok = false;
+    g_snapshot = {};
+}
+
 int main(int argc, char** argv) {
     if (argc > 1 && strcmp(argv[1], "allocation-failure") == 0) {
         test_state_allocation_failure();
@@ -472,6 +528,7 @@ int main(int argc, char** argv) {
     test_run_entry_point();
     test_concurrent_engine_access();
     test_mcp_adapter_and_execution();
+    test_typed_expiry_ownership();
     std::puts("timer_commands: PASS");
     return 0;
 }

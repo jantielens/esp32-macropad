@@ -70,13 +70,13 @@
 #define NUM_HW_BUTTONS 6
 #define MAX_HW_BUTTONS 6
 // Optional board-default hardware tap/hold actions in the configuration JSON format.
-#define HW_BUTTON_DEFAULTS_JSON "{\"buttons\":[" \
+#define HW_BUTTON_DEFAULTS_JSON "{\"action_format_version\":1,\"buttons\":[" \
         "{}, {}," \
-        "{\"tap_actions\":[{\"type\":\"button_nav\",\"command\":\"previous\"}]}," \
-        "{\"tap_actions\":[{\"type\":\"button_nav\",\"command\":\"next\"}]}," \
-        "{\"tap_actions\":[{\"type\":\"button_nav\",\"command\":\"tap\"}]," \
-            "\"hold_actions\":[{\"type\":\"button_nav\",\"command\":\"tap_hold\"}]}," \
-        "{\"tap_actions\":[{\"type\":\"display_refresh\",\"mode\":\"full\"}]}]}"
+        "{\"tap_actions\":[{\"op\":\"button.navigate\",\"args\":{\"command\":\"previous\"}}]}," \
+        "{\"tap_actions\":[{\"op\":\"button.navigate\",\"args\":{\"command\":\"next\"}}]}," \
+        "{\"tap_actions\":[{\"op\":\"button.navigate\",\"args\":{\"command\":\"tap\"}}]," \
+            "\"hold_actions\":[{\"op\":\"button.navigate\",\"args\":{\"command\":\"tap_hold\"}}]}," \
+        "{\"tap_actions\":[{\"op\":\"display.refresh_full\",\"args\":{}}]}]}"
 #ifdef __cplusplus
 static constexpr HwButtonDef HW_BUTTON_DEFS[NUM_HW_BUTTONS] = {
     {2, true, "Menu"},

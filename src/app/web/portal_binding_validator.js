@@ -683,33 +683,6 @@ function bindingValidateDialog() {
     var fieldIds = [];
     var count = _bvCount(_BV_STD, null, false, fieldIds);
 
-    var wtype = document.getElementById('pad-edit-widget-type');
-    var activeType = wtype ? wtype.value : '';
-
-    var actionPrefixes = [
-        'pad-edit-action-0', 'pad-edit-action-1', 'pad-edit-action-2',
-        'pad-edit-lp-action-0', 'pad-edit-lp-action-1', 'pad-edit-lp-action-2'
-    ];
-    var editor = typeof padWidgetEditor === 'function' && padWidgetEditor(activeType);
-    if (editor) actionPrefixes = actionPrefixes.filter(function(prefix) {
-        if (prefix.startsWith('pad-edit-action-')) return editor.actions.tap;
-        if (prefix.startsWith('pad-edit-lp-action-')) return editor.actions.longPress;
-        return false;
-    });
-    if (editor) actionPrefixes.push(...(editor.actions.prefixes || []));
-    for (var ai = 0; ai < actionPrefixes.length; ai++) {
-        var typeInput = document.getElementById(actionPrefixes[ai] + '-type');
-        var actionSuffixes = typeof actionEditorBindingSuffixes === 'function'
-            ? actionEditorBindingSuffixes(typeInput ? typeInput.value : '') : [];
-        for (var si = 0; si < actionSuffixes.length; si++) {
-            var el = document.getElementById(actionPrefixes[ai] + actionSuffixes[si]);
-            if (el && !el.disabled && el.value.trim() && !bindingValidateInput(el)) {
-                count++;
-                fieldIds.push(el.id);
-            }
-        }
-    }
-
     return { valid: count === 0, count: count, fieldIds: fieldIds };
 }
 

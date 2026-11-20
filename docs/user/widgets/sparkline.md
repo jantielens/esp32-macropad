@@ -44,8 +44,10 @@ Line width 1-10 px, smoothing 0-8, and separation 0-6 px affect presentation.
 Smoothing also moves extrema markers/current dot to the smoothed curve.
 Separation shifts pixels away from exact values; leave it 0 for precise readout.
 
-**Shared fill opacity (%)** in **Line style** adds a solid area from each curve to
-the bottom of the chart. Use a whole percentage from 0 to 100; 0 disables
+**Shared fill opacity (%)** in **Line style** adds a solid area between each curve
+and zero: positive values fill downward to zero, negative values upward.
+If zero is outside the visible range, the fill stops at the nearest chart edge
+without changing the scale. Use a whole percentage from 0 to 100; 0 disables
 fills. Each fill follows its own line color, including color bindings.
 Fills use the same smoothed, scaled points as the lines and never bridge
 missing-history gaps. Extra series fill first, the primary series fills last,

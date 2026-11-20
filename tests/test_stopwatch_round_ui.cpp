@@ -84,6 +84,25 @@ void wifi_manager_get_mdns_hostname(char* hostname, size_t size) {
 void swipe_actions_register(lv_obj_t*, bool) {}
 class AsyncWebServer;
 #include "../src/app/screens/wifi_setup_screen.cpp"
+#undef HAS_BUTTON
+#define HAS_BUTTON 1
+#undef NUM_HW_BUTTONS
+#define NUM_HW_BUTTONS 2
+#include "../src/app/action_registry.h"
+#include "../src/app/action_storage.h"
+#include "../src/app/hw_button_config.h"
+static HwButtonConfig dialog_buttons[NUM_HW_BUTTONS]{};
+bool hw_button_config_snapshot(uint8_t index, bool hold, ButtonAction* actions,
+                               uint8_t* count, ActionStorage& storage) {
+    if (index >= NUM_HW_BUTTONS) return false;
+    const auto& config = dialog_buttons[index];
+    *count = hold ? config.hold_count : config.tap_count;
+    return action_storage_copy_actions(storage, actions,
+        hold ? config.hold_actions : config.tap_actions, *count);
+}
+const ActionOperationDef* action_operation_for_action(const ButtonAction& action, const ActionTypeDef**) {
+    return action.type[0] == '@' ? action.payload.operation.descriptor : nullptr;
+}
 #include "../src/app/device_dialog.cpp"
 #include "../src/app/dialog_appearance.cpp"
 #include "../src/app/components/dialog_appearance_component.cpp"
@@ -348,7 +367,43 @@ static void assert_dialog_selection(bool cancel, bool approve) {
 }
 static uint32_t pixels[720 * 720];
 
+static void dialog_hardware_navigation_checks() {
+    struct Arguments {
+        ActionArgumentBlock block;
+        ActionStoredArgument value;
+        char text[16];
+    };
+    const ActionOperationDef navigation{"button.navigate", "Navigate buttons", nullptr, 1, nullptr};
+    Arguments previous{};
+    previous.block.bytes = sizeof(previous);
+    previous.block.count = 1;
+    previous.value.offset = offsetof(Arguments, text);
+    strcpy(previous.text, "previous");
+    Arguments tap = previous;
+    strcpy(tap.text, "tap");
+    auto& first = dialog_buttons[0].tap_actions[0];
+    first.type[0] = '@';
+    first.payload.operation = {&navigation, &previous.block};
+    dialog_buttons[0].tap_count = 1;
+    auto& second = dialog_buttons[1].tap_actions[0];
+    second.type[0] = '@';
+    second.payload.operation = {&navigation, &tap.block};
+    dialog_buttons[1].tap_count = 1;
+
+    touchManager = nullptr;
+    assert(confirmation_input_available());
+    strcpy(tap.text, "tap_hold");
+    assert(!confirmation_input_available());
+    strcpy(tap.text, "tap");
+    tap.value.dynamic = true;
+    assert(!confirmation_input_available());
+    tap.value.dynamic = false;
+    memset(dialog_buttons, 0, sizeof(dialog_buttons));
+    touchManager = &touch;
+}
+
 static void dialog_lifecycle_checks() {
+    dialog_hardware_navigation_checks();
     auto content = confirmation();
     uint32_t token = reserve(ACTION_CONTINUATION_OWNER_LVGL);
     assert(device_dialog_confirm(content, token));

@@ -4,9 +4,6 @@
  * The actual symbols (lv_malloc_core, lv_free_core, lv_realloc_core, etc.)
  * are defined in lvgl_heap.cpp and linked directly — no header inclusion
  * needed by LVGL since v9 discovers them at link time.
- *
- * This header is retained ONLY so existing #include "lvgl_heap.h" sites
- * continue to compile without changes.
  */
 
 #pragma once
@@ -25,4 +22,5 @@ void  lv_free_core(void* ptr);
 
 #ifdef __cplusplus
 }
+
 #endif

@@ -341,7 +341,7 @@ bool ES8311AudioDriver::begin(uint32_t sample_rate) {
         cleanup();
         return false;
     }
-#if HAS_VOICE_CLIPS
+#if HAS_VOICE_NOTES
     i2s_event_callbacks_t callbacks = {};
     callbacks.on_recv_q_ovf = onRxOverrun;
     err = i2s_channel_register_event_callback(rx_handle, &callbacks, this);
@@ -435,7 +435,7 @@ bool ES8311AudioDriver::captureStart() {
     if (!inputAvailable()) return false;
     if (capture_active) return true;
     capture_failed = false;
-#if HAS_VOICE_CLIPS
+#if HAS_VOICE_NOTES
     portENTER_CRITICAL(&rx_mux);
     rx_overrun = false;
     portEXIT_CRITICAL(&rx_mux);
@@ -469,7 +469,7 @@ AudioInputReadResult ES8311AudioDriver::readFrames(int16_t* frames, size_t frame
 }
 
 AudioInputReadStatus ES8311AudioDriver::captureStatus() {
-#if HAS_VOICE_CLIPS
+#if HAS_VOICE_NOTES
     portENTER_CRITICAL(&rx_mux);
     const bool overrun = rx_overrun;
     portEXIT_CRITICAL(&rx_mux);
@@ -478,7 +478,7 @@ AudioInputReadStatus ES8311AudioDriver::captureStatus() {
     return capture_failed ? AudioInputReadStatus::Error : AudioInputReadStatus::Ok;
 }
 
-#if HAS_VOICE_CLIPS
+#if HAS_VOICE_NOTES
 bool IRAM_ATTR ES8311AudioDriver::onRxOverrun(i2s_chan_handle_t, i2s_event_data_t*, void* context) {
     auto* self = static_cast<ES8311AudioDriver*>(context);
     portENTER_CRITICAL_ISR(&self->rx_mux);

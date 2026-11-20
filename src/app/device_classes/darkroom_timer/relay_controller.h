@@ -1,7 +1,7 @@
 #pragma once
 
-#include <Arduino.h>
 #include <cstdint>
+#include <string>
 
 // ============================================================================
 // Relay Controller — action-based enlarger/safelight relay control
@@ -16,7 +16,8 @@
 //   slot 2: safelight ON
 //   slot 3: safelight OFF
 //
-// For type="shelly", the relay FreeRTOS task executes HTTP directly.
+// For shelly.relay.set, the relay FreeRTOS task executes HTTP directly.
+// The slot determines the on/off state, regardless of the enabled argument.
 // For all other action types, execution is deferred to relay_loop()
 // on the main loop() via action_dispatch().
 //
@@ -51,7 +52,7 @@ void relay_controller_clear_config();
 void relay_queue_shelly(const char* host, uint8_t relay_index, bool on);
 
 // Serialize current relay config as JSON into `out`.
-bool relay_get_config_json(String& out);
+bool relay_get_config_json(std::string& out);
 
 // Write raw JSON to config file and hot-reload.
 bool relay_save_config_from_json(const uint8_t* json, size_t len);

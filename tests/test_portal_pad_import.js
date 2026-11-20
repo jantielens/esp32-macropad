@@ -7,7 +7,10 @@ class Element {
         this.value = '';
         this.options = [];
         this.style = {};
+        this.classList = { toggle() {} };
     }
+
+    setAttribute() {}
 
     appendChild(child) {
         this.options.push(child);
@@ -127,7 +130,7 @@ const pngSource = {
     data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=',
 };
 
-async function runImport(options = {}) {
+async function setupPadTest(options = {}) {
     const requests = [];
     const messages = [];
     const reloads = [];
@@ -145,6 +148,7 @@ async function runImport(options = {}) {
     const renderedSizes = document.renderedSizes;
     const context = {
         Blob,
+        crypto: require('crypto').webcrypto,
         atob,
         btoa,
         TextEncoder,
@@ -162,12 +166,21 @@ async function runImport(options = {}) {
         padRenderBindings() { context.importedBindingsRendered = true; },
         actionEditorBuild() { return {}; },
         actionEditorLoad() {},
+        actionEditorOperation(id) {
+            if (id === 'screen.open') return { id, arguments: [{ name: 'target', type: 'screen', max_length: 31, dynamic: true }] };
+            if (id === 'timer.adjust') return { id, arguments: [
+                { name: 'timer', type: 'integer', min: 1, max: 4, dynamic: true },
+                { name: 'seconds', type: 'integer', min: -86400, max: 86400, dynamic: true },
+            ] };
+            return null;
+        },
+        validateBinding(value) { return { valid: value !== '[invalid' }; },
         actionEditorListLoad(prefixes, actions) {
             (actions || []).forEach(function(a, i) { context.actionEditorLoad(prefixes[i], a); });
         },
         actionEditorListBuild(prefixes) {
             return prefixes.map(function(p) { return context.actionEditorBuild(p); })
-                .filter(function(a) { return a && a.type; });
+                .filter(function(a) { return a && a.op; });
         },
         padColorsToHex() {},
         padGetEffectiveDefault() { return '#000000'; },
@@ -190,7 +203,7 @@ async function runImport(options = {}) {
             requests.push(entry);
             await Promise.resolve();
 
-            if (corruptState && kind === 'config-read') {
+            if (corruptState && kind === 'config-read' && !options.keepEditor) {
                 corruptState = false;
                 vm.runInContext('padState.page = 7; padState.cols = 8; padState.rows = 8; padState.buttons = [{ col: 7, row: 7, icon_id: "emoji_wrong" }];', context);
             }
@@ -234,6 +247,7 @@ async function runImport(options = {}) {
         },
     };
     loadPortal(context);
+    context.padDialogShowValidationError = () => {};
     const normalizeProductionIconSource = context.padNormalizeIconSource;
     context.padNormalizeIconSource = function(record, expected) {
         if (record.catalog_id !== expected.catalog_id || record.kind !== expected.kind) throw new Error('Source mismatch');
@@ -243,7 +257,10 @@ async function runImport(options = {}) {
         renderedSizes.push(size);
         return new Blob(['icon'], { type: 'image/png' });
     };
-    context.padLoadPage = async function(page) { reloads.push(page); };
+    context.padLoadPage = async function(page) {
+        reloads.push(page);
+        vm.runInContext('padState.loadError = null;', context);
+    };
     context.padBuildLevelActions = function() {
         return vm.runInContext('padState.padActions.map(function(action) { return Object.assign({}, action); })', context);
     };
@@ -252,38 +269,50 @@ async function runImport(options = {}) {
         rows: 2,
         buttons: [],
     });
+    vm.runInContext('padState.loadError = null;', context);
 
-    const pads = options.pads || [
-        { cols: 2, rows: 3, template_pad: 1, buttons: [{ col: 0, row: 0, bg_color: 'transparent', icon: { source_id: sourceId(1), catalog_id: 'material-symbols:home', kind: 'mono' } }],
-            overlay_buttons: [{ col: 0, row: 0, bg_color: 'transparent', icon: { source_id: sourceId(2), catalog_id: 'noto:house', kind: 'color' } }] },
-        {
-            cols: 4,
-            rows: 1,
-            template_pad: 0,
-            pad_actions: [{ type: 'sound_alert', sound_alert_kind: 'tone', sound_alert_pattern: '1' }],
-            buttons: [{ col: 1, row: 0, icon: { source_id: sourceId(1), catalog_id: 'material-symbols:home', kind: 'mono' } }],
-        },
-    ];
-    await context.deviceImportConfig({
-        target: {
-            files: [{ text: async () => JSON.stringify({
-                _format: 'esp32-macropad-config',
-                    _version: 2,
-                    _icon_sources: Object.fromEntries(sourceRecords),
-                config: { mqtt_enabled: true },
-                button_defaults: { bg_color: '101010' },
-                pads,
-            }) }],
-            value: 'import.json',
-        },
-    });
-    await Promise.resolve();
     return { context, requests, messages, reloads, canvasSizes: document.canvasSizes, renderedSizes,
         normalizeProductionIconSource, validateImportedIconSources: context.padValidateImportedIconSources };
 }
 
-function pageRequests(result, page) {
-    return result.requests.filter(request => request.page === page);
+async function testDeviceExportDefaults() {
+    let download;
+    let fail = false;
+    const messages = [];
+    const context = {
+        Blob,
+        TextEncoder,
+        console,
+        deviceInfoCache: { max_pads: 1 },
+        window: {},
+        document: { createElement: () => ({ click() {} }) },
+        URL: {
+            createObjectURL(blob) { download = blob; return 'blob:export'; },
+            revokeObjectURL() {},
+        },
+        showMessage(message, type) { messages.push({ message, type }); },
+        fetch: async url => {
+            if (url === '/api/config') return response(true, { mqtt_enabled: true });
+            if (url.startsWith('/api/pad?')) return { ok: false, status: 404 };
+            if (url === '/api/component/button-defaults/config')
+                return fail ? response(false) : response(true, {
+                    icon_badge_padding: 7, firmware_defaults: {}, typography_status: { reboot_required: true },
+                });
+            throw new Error('Unexpected request: ' + url);
+        },
+        padCollectExportIconSources: async () => ({}),
+        DEVICE_CONFIG_FORMAT: 'esp32-macropad-config',
+        DEVICE_CONFIG_VERSION: 2,
+    };
+    vm.createContext(context);
+    vm.runInContext(fs.readFileSync('src/app/web/portal_pad_io.js', 'utf8'), context);
+    await context.deviceExportConfig();
+    assert.deepStrictEqual(JSON.parse(await download.text()).button_defaults, { icon_badge_padding: 7 });
+    download = null;
+    fail = true;
+    await context.deviceExportConfig();
+    assert.strictEqual(download, null, 'A failed defaults read must not produce an incomplete backup');
+    assert(messages.some(message => message.type === 'error' && message.message.includes('Failed to fetch pad and button defaults')));
 }
 
 async function testClearPad() {
@@ -326,7 +355,6 @@ async function testClearPad() {
         padState.trackValidationError = true;
         padState.importedIconSources = { stale: {} };
         padState.importedIconSourceIds = { stale: 'source' };
-        padState.importedPadConfigs = [{ cols: 5 }];
         padState.placingBlock = {}; padState.dragSource = { col: 1, row: 1 };
         padState.btnClipboard = { icon: { draft_source_id: 'clipboard', kind: 'color' } };
         padState.padClipboard = { buttons: [], overlay_buttons: [] };
@@ -350,9 +378,11 @@ async function testClearPad() {
     confirmed = true;
     await context.padDeletePage();
     assert.deepStrictEqual(messages, [{ message: 'Pad cleared (unsaved)', type: 'success' }]);
+    assert.strictEqual(vm.runInContext('padState.loadError', context), null,
+        'Confirming Clear Pad permits an intentional replacement');
     const saved = context.padBuildSaveContext();
     assert.strictEqual(saved.page, 4);
-    assert.deepStrictEqual(JSON.parse(saved.body), { layout: 'grid', cols: 3, rows: 2, buttons: [] },
+    assert.deepStrictEqual(JSON.parse(saved.body), { action_format_version: 1, layout: 'grid', cols: 3, rows: 2, buttons: [] },
         'Clearing a customized pad must produce a saveable empty pad without old settings');
     for (const id of ['pad-row-heights', 'pad-column-widths']) {
         const field = document.getElementById(id);
@@ -369,7 +399,6 @@ async function testClearPad() {
     assert.strictEqual(vm.runInContext('padState.trackValidationError', context), false);
     assert.strictEqual(vm.runInContext('padState.placingBlock', context), null);
     assert.strictEqual(vm.runInContext('padState.dragSource', context), null);
-    assert.strictEqual(vm.runInContext('padState.importedPadConfigs', context), null);
     assert.strictEqual(vm.runInContext('JSON.stringify(padState.layerSelections)', context), '{"main":null,"overlay":null}');
     for (const key of ['importedIconSources', 'importedIconSourceIds']) {
         assert.strictEqual(vm.runInContext('JSON.stringify(padState.' + key + ')', context), '{}');
@@ -382,23 +411,25 @@ async function testClearPad() {
 }
 
 (async function() {
+    await testDeviceExportDefaults();
     await testClearPad();
-    const layoutImport = await runImport({
-        pads: [{ cols: 1, rows: 1, buttons: [{
-            col: 0, row: 0, widget_type: 'sparkline', widget_position: 'left',
-            icon_position: 'left', group_size_pct: 65,
-            icon_color: '[health:color]', icon_badge_padding: 0, icon_badge_color: '[health:color]', widget_sparkline_fill_opacity: 35
-        }] }]
-    });
-    const layoutBody = JSON.parse(layoutImport.requests.find(request => request.kind === 'pad-save').options.body);
-    assert.strictEqual(layoutBody.buttons[0].widget_position, 'left');
-    assert.strictEqual(layoutBody.buttons[0].icon_position, 'left');
-    assert.strictEqual(layoutBody.buttons[0].group_size_pct, 65);
-    assert.strictEqual(layoutBody.buttons[0].icon_badge_padding, 0);
-    assert.strictEqual(layoutBody.buttons[0].icon_badge_color, '[health:color]');
-    assert.strictEqual(layoutBody.buttons[0].icon_color, '[health:color]');
-    assert.strictEqual(layoutBody.buttons[0].widget_sparkline_fill_opacity, 35);
-    const success = await runImport();
+    const success = await setupPadTest();
+    for (const invalid of [
+        { action_format_version: 2, buttons: [] },
+        { buttons: [{ actions: [{ op: 'screen.open', args: { target: 'pad_0' } }] }] },
+        { action_format_version: 1, buttons: [{ actions: [{ type: 'screen', target: 'pad_0' }] }] },
+        { action_format_version: 1, buttons: [{ actions: [{ type: '', op: 'screen.open', args: {} }] }] },
+        { action_format_version: 1, buttons: [{ actions: [{ op: 'unknown', args: {} }] }] },
+        { action_format_version: 1, buttons: [{ actions: [{ op: 'screen.open', args: {} }] }] },
+        { action_format_version: 1, buttons: [{ actions: [{ op: 'screen.open', args: { target: 'pad_0', extra: 1 } }] }] },
+        { action_format_version: 1, buttons: [{ actions: [{ op: 'screen.open', args: { target: { $template: '[var:screen]', extra: 1 } } }] }] },
+        { action_format_version: 1, buttons: [{ actions: [{ op: 'screen.open', args: { target: { $template: '[invalid' } } }] }] },
+        { action_format_version: 1, buttons: [{ actions: [{ op: 'screen.open', args: { target: '' } }] }] },
+        { action_format_version: 1, buttons: [{ actions: [{ op: 'timer.adjust', args: { timer: 1.5, seconds: 1 } }] }] },
+    ]) {
+        assert.throws(() => success.context.padCheckImportedActionFormat(
+            Object.assign({ cols: 1, rows: 1 }, invalid)));
+    }
     success.context.deviceInfoCache.max_grid_cols = 10;
     success.context.deviceInfoCache.max_grid_rows = 10;
     success.context.padPageBackgroundModeChanged = () => {};
@@ -411,9 +442,47 @@ async function testClearPad() {
     await importPad({ cols: 10, rows: 10, buttons: [{ col: 9, row: 9 }] });
     assert(success.messages.some(message => message.type === 'success' && message.message.includes('Pad imported')));
     assert.strictEqual(vm.runInContext('padState.cols', success.context), 10);
+    const unpackagedWidget = {
+        col: 0, row: 0, widget_type: 'external', extension_id: 'other-board-widget',
+        extension_config: { source: 'sensor' }, extension_tick_interval_ms: 750,
+    };
+    await importPad({ action_format_version: 1, cols: 1, rows: 1, buttons: [unpackagedWidget] });
+    assert.deepStrictEqual(JSON.parse(vm.runInContext('JSON.stringify(padState.buttons)', success.context)),
+        [unpackagedWidget], 'Import must retain widgets whose editor is not packaged');
+    assert.deepStrictEqual(JSON.parse(success.context.padBuildSaveContext().body).buttons,
+        [unpackagedWidget], 'Saving an unedited imported widget must preserve its complete configuration');
+    await importPad({
+        action_format_version: 0, cols: 10, rows: 10, name: 'Legacy import',
+        pad_actions: [{ type: 'screen' }],
+        buttons: [{ col: 0, row: 0, label: 'Retained', actions: [{ type: 'mqtt' }] }],
+        overlay_buttons: [{ col: 1, row: 1, label: 'Overlay', lp_action: 'screen' }],
+    });
+    assert.deepStrictEqual(JSON.parse(vm.runInContext('JSON.stringify(padState.mainButtons)', success.context)),
+        [{ col: 0, row: 0, label: 'Retained' }]);
+    assert.deepStrictEqual(JSON.parse(vm.runInContext('JSON.stringify(padState.overlayButtons)', success.context)),
+        [{ col: 1, row: 1, label: 'Overlay' }]);
+    assert.strictEqual(vm.runInContext('padState.padActions.length', success.context), 0);
+    assert.strictEqual(success.context.document.getElementById('pad-name').value, 'Legacy import');
+    assert(success.messages.some(message => /older action format.*draft/i.test(message.message)));
+    await importPad({ action_format_version: 2, cols: 1, rows: 1, buttons: [] });
+    assert.strictEqual(vm.runInContext('padState.cols', success.context), 10, 'A newer format must not replace the draft');
+    await importPad({ action_format_version: 1, cols: 1, rows: 1,
+        buttons: [{ actions: [{ type: 'mqtt' }] }] });
+    assert.strictEqual(vm.runInContext('padState.cols', success.context), 10, 'Invalid current-format actions must not be discarded');
     success.context.deviceInfoCache.max_grid_cols = 5;
     await importPad({ cols: 10, rows: 10, buttons: [] });
     assert(success.messages.some(message => message.type === 'error' && message.message.includes('maximum 5 columns')));
+    vm.runInContext("padState.loadError = 'Load failed';", success.context);
+    let replacementPrompt = '';
+    success.context.confirm = message => { replacementPrompt = message; return false; };
+    await importPad({ cols: 2, rows: 2, buttons: [] });
+    assert.match(replacementPrompt, /replace its settings/i);
+    assert.strictEqual(vm.runInContext('padState.cols', success.context), 10,
+        'Declining replacement preserves the existing editor state');
+    success.context.confirm = () => true;
+    await importPad({ cols: 2, rows: 2, buttons: [] });
+    assert.strictEqual(vm.runInContext('padState.loadError', success.context), null,
+        'A confirmed compatible import permits an intentional replacement');
     const uploadFetch = success.context.fetch;
     success.context.fetch = async () => response(false, { success: false, message: 'Invalid icon source or PNG' });
     await assert.rejects(success.context.padUploadIconSources({ sourceUploads: [['draft:test', pngSource]] }),
@@ -448,79 +517,12 @@ async function testClearPad() {
         { [localSourceId]: largeLocalPng });
     assert.strictEqual(validatedSources[localSourceId].data, largeLocalPng.data,
         'Import accepts normalized local PNG sources above the catalog SVG limit');
-    const padSaves = success.requests.filter(request => request.kind === 'pad-save');
-    assert.deepStrictEqual(padSaves.map(request => request.page), [0, 1], JSON.stringify(success.messages));
-    assert.deepStrictEqual(success.requests.map(request => request.kind), [
-        'config-save', 'button-defaults', 'icon-context', 'icon-metadata', 'icon-metadata',
-        'icon-metadata', 'icon-metadata', 'icon-metadata',
-        'button-sizes', 'icon-source-upload', 'icon-source-upload', 'config-read', 'brightness-0',
-        'icon-install', 'icon-install', 'icon-install', 'pad-save', 'brightness-42',
-        'icon-context', 'icon-source-read', 'icon-metadata', 'icon-metadata', 'icon-metadata', 'icon-metadata',
-        'button-sizes', 'config-read', 'brightness-0', 'icon-install', 'icon-install',
-        'pad-save', 'brightness-42',
-        'device-info', 'reboot',
-    ]);
-    const installs = success.requests.filter(request => request.kind === 'icon-install');
-    assert.ok(installs[0].url.includes('id=pad_0_main_0_0'));
-    assert.ok(installs[1].url.includes('id=pad_0_overlay_0_0'));
-    assert.ok(installs[2].url.includes('id=pad_0_main_1_0'));
-    assert.ok(installs[3].url.includes('id=pad_1_main_1_0'));
-    assert.ok(installs[4].url.includes('id=pad_1_main_0_0'));
-    assert.strictEqual(success.requests.filter(request => request.kind === 'pad-read').length, 0,
-        'Save must not fetch full pads to discover dependents');
-    assert.strictEqual(success.requests.filter(request => request.kind === 'icon-context').length, 2,
-        'Each icon-bearing pad save must fetch dependency context once');
-    assert.strictEqual(JSON.parse(padSaves[0].options.body).cols, 2);
-    assert.strictEqual(JSON.parse(padSaves[0].options.body).rows, 3);
-    assert.strictEqual(JSON.parse(padSaves[0].options.body).buttons[0].icon.source_id, sourceId(100));
-    assert.strictEqual(JSON.parse(padSaves[0].options.body).overlay_buttons[0].icon.source_id, sourceId(101));
-    assert.strictEqual(JSON.parse(padSaves[0].options.body).buttons[0].bg_color, 'transparent');
-    assert.strictEqual(JSON.parse(padSaves[0].options.body).overlay_buttons[0].bg_color, 'transparent');
-    assert.strictEqual(JSON.parse(padSaves[1].options.body).cols, 4);
-    assert.strictEqual(JSON.parse(padSaves[1].options.body).rows, 1);
-    assert.strictEqual(JSON.parse(padSaves[1].options.body).buttons[0].icon.source_id, sourceId(100));
-    assert.strictEqual(JSON.parse(padSaves[0].options.body).template_pad, 1);
-    assert.strictEqual(JSON.parse(padSaves[1].options.body).template_pad, 0);
-    assert.ok(!Object.hasOwn(JSON.parse(padSaves[0].options.body), 'pad_actions'));
-    assert.deepStrictEqual(JSON.parse(padSaves[1].options.body).pad_actions, [
-        { type: 'sound_alert', sound_alert_kind: 'tone', sound_alert_pattern: '1' },
-    ]);
-    assert.deepStrictEqual(success.reloads, [1]);
-    assert.strictEqual(success.requests.filter(request => request.kind === 'device-info').length, 1);
-    assert.strictEqual(success.requests.filter(request => request.kind === 'reboot').length, 1);
-
-    const localImport = await runImport({
+    const localImport = await setupPadTest({
         sources: [[localSourceId, largeLocalPng]],
-        pads: [{ cols: 1, rows: 1, buttons: [{ col: 0, row: 0,
-            icon: { source_id: localSourceId, kind: 'color' } }] }],
     });
-    const localUpload = localImport.requests.find(request => request.kind === 'icon-source-upload');
-    assert.ok(localUpload, JSON.stringify(localImport.messages));
-    assert.strictEqual(localUpload.options.headers['Content-Type'], 'image/png');
-    assert.deepStrictEqual(Buffer.from(localUpload.options.body), Buffer.from(largeLocalPng.data, 'base64'));
-    const retained = await localImport.context.padLoadRetainedIconSource(sourceId(100), { kind: 'color' });
-    assert.strictEqual(retained.data, largeLocalPng.data, 'Regeneration reads binary retained sources without JSON parsing');
-    const localExport = await localImport.context.padCollectExportIconSources([{
-        page: 0, payload: { buttons: [{ icon: { source_id: sourceId(100), kind: 'color' } }] },
-    }], [0], 1);
-    assert.strictEqual(localExport[sourceId(100)].data, largeLocalPng.data,
-        'Export restores the portable base64 envelope without changing retained PNG bytes');
-    const selectorImport = await runImport({
-        sources: [[localSourceId, largeLocalPng]],
-        pads: [{ cols: 1, rows: 1, buttons: [{ col: 0, row: 0, widget_type: 'option_selector',
-            widget_option_icon_5: { source_id: localSourceId, kind: 'color' },
-            widget_option_value_5: 'cool' }] }],
-    });
-    const selectorSave = selectorImport.requests.find(request => request.kind === 'pad-save');
-    assert.ok(selectorSave, JSON.stringify(selectorImport.messages));
-    assert.strictEqual(JSON.parse(selectorSave.options.body).buttons[0].widget_option_icon_5.source_id, sourceId(100));
-    assert.ok(selectorImport.requests.some(request => request.kind === 'icon-install' &&
-        request.url.includes('id=pad_0_main_0_0_opt_5')));
-    const selectorExport = await selectorImport.context.padCollectExportIconSources([{
-        page: 0, payload: { buttons: [{ widget_type: 'option_selector',
-            widget_option_icon_5: { source_id: sourceId(100), kind: 'color' } }] },
-    }], [0], 1);
-    assert.strictEqual(selectorExport[sourceId(100)].data, largeLocalPng.data);
+    const retained = await localImport.context.padLoadRetainedIconSource(localSourceId, { kind: 'color' });
+    assert.strictEqual(retained.data, largeLocalPng.data);
+    const selectorImport = localImport;
     assert.strictEqual(selectorImport.context.padOptionIconRenderKey(
         { cols: 3, rows: 2, column_widths_px: [0, 40, 0] },
         { col: 1, row: 0, col_span: 2, widget_type: 'option_selector',
@@ -664,37 +666,24 @@ async function testClearPad() {
     assert.deepStrictEqual(success.renderedSizes.slice(-2), [86, 86],
         'Updated default padding must size parent and inherited child variants');
 
-    for (const failure of ['config-save', 'button-defaults', 'icon-context', 'icon-metadata', 'icon-source-upload', 'button-sizes', 'brightness-0', 'icon-install', 'pad-save', 'brightness-42']) {
-        const result = await runImport({ fetchFailure: failure });
-        assert.strictEqual(result.requests.filter(request => request.kind === 'reboot').length, 0, failure);
-        assert.strictEqual(result.requests.filter(request => request.kind === 'pad-save' && request.page === 1).length, 0, failure);
-        assert.deepStrictEqual(result.reloads, [], failure);
-        assert.ok(result.messages.some(message => message.type === 'error'), failure);
-        if (['icon-install', 'pad-save', 'brightness-42'].includes(failure)) {
-            assert.ok(result.requests.some(request => request.kind === 'brightness-42'), failure);
-        }
-    }
-
-    assert(!success.requests.some(request => ['icon-inventory', 'icon-file-delete'].includes(request.kind)),
-        'Firmware owns orphan cleanup; saves must not depend on browser pruning requests');
-
-    for (const failure of ['icon-delete', 'pad-delete']) {
-        const result = await runImport({
-            fetchFailure: failure,
-            pads: [null, { cols: 2, rows: 2, buttons: [] }],
-        });
-        assert.strictEqual(result.requests.filter(request => request.kind === 'reboot').length, 0, failure);
-        assert.strictEqual(result.requests.filter(request => request.page === 1).length, 0, failure);
-        assert.deepStrictEqual(result.reloads, [], failure);
-    }
-
-    const emptyActions = await runImport({
-        pads: [{ cols: 2, rows: 2, pad_actions: [], buttons: [] }],
+    const concurrent = await setupPadTest({ keepEditor: true });
+    vm.runInContext('padState.loadError = null;', concurrent.context);
+    concurrent.context.padBuildSaveContext = () => ({
+        page: 1, blankOnSave: true,
+        payload: { cols: 4, rows: 1, template_pad: 0,
+            buttons: [{ col: 1, row: 0, icon: {
+                source_id: sourceId(1), catalog_id: 'material-symbols:home', kind: 'mono',
+            } }] },
+        templatePage: 0, templateButtons: [{ col: 0, row: 0, icon: {
+            source_id: sourceId(1), catalog_id: 'material-symbols:home', kind: 'mono',
+        } }],
     });
-    const emptyActionsBody = JSON.parse(emptyActions.requests.find(request => request.kind === 'pad-save').options.body);
-    assert.ok(!Object.hasOwn(emptyActionsBody, 'pad_actions'));
-
-    const concurrent = await runImport();
+    const ordinaryContext = concurrent.context.padBuildSaveContext;
+    concurrent.context.padBuildSaveContext = () => {
+        const context = ordinaryContext();
+        context.payload.buttons[0].icon.source_id = sourceId(1);
+        return context;
+    };
     const firstConcurrentRequest = concurrent.requests.length;
     await Promise.all([
         concurrent.context.padSavePage(),
@@ -702,7 +691,7 @@ async function testClearPad() {
     ]);
     assert.deepStrictEqual(
         concurrent.requests.slice(firstConcurrentRequest).map(request => request.kind)
-            .filter(kind => kind !== 'icon-metadata'),
+            .filter(kind => kind !== 'icon-metadata' && kind !== 'icon-source-read' && kind !== 'button-sizes'),
         [
             'icon-context', 'config-read', 'brightness-0', 'icon-install', 'icon-install', 'pad-save', 'brightness-42',
             'device-info',
@@ -712,7 +701,7 @@ async function testClearPad() {
         'concurrent saves must not overlap display blanking'
     );
 
-    const reuse = await runImport();
+    const reuse = await setupPadTest();
     const reusePayload = {
         cols: 2, rows: 2,
         buttons: [{ col: 0, row: 0, icon: {
@@ -818,12 +807,16 @@ async function testClearPad() {
     assert(stages.some(([stage]) => stage === 'Saving configuration'));
     assert.strictEqual(preparedWithProgress.saveState.committed, true);
 
-    const refreshFailure = await runImport();
+    const refreshFailure = await setupPadTest({ keepEditor: true });
+    vm.runInContext('padState.loadError = null;', refreshFailure.context);
+    refreshFailure.context.padBuildSaveContext = concurrent.context.padBuildSaveContext;
     refreshFailure.context.padLoadPage = async () => { throw new Error('Refresh unavailable'); };
     await assert.rejects(refreshFailure.context.padSavePage({ operation }),
         /Pad saved, but finishing the save failed: Refresh unavailable/);
 
-    const validationFailure = await runImport();
+    const validationFailure = await setupPadTest({ keepEditor: true });
+    vm.runInContext('padState.loadError = null;', validationFailure.context);
+    validationFailure.context.padBuildSaveContext = concurrent.context.padBuildSaveContext;
     const validationFetch = validationFailure.context.fetch;
     for (const [body, expected] of [
         [{ success: false, message: 'dialog message must be nonempty text' }, /dialog message must be nonempty text/],
@@ -837,7 +830,9 @@ async function testClearPad() {
         await assert.rejects(validationFailure.context.padSavePage({ operation }), expected);
     }
 
-    const restoreFailure = await runImport();
+    const restoreFailure = await setupPadTest({ keepEditor: true });
+    vm.runInContext('padState.loadError = null;', restoreFailure.context);
+    restoreFailure.context.padBuildSaveContext = concurrent.context.padBuildSaveContext;
     const restoreFetch = restoreFailure.context.fetch;
     restoreFailure.context.fetch = async (url, options = {}) => {
         if (requestKind(url, options) === 'brightness-42') return response(false);

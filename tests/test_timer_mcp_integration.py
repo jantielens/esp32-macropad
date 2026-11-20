@@ -2,6 +2,7 @@
 import pathlib
 import re
 import subprocess
+import sys
 
 SOURCE = pathlib.Path("src/app/mcp_tools_config.cpp").read_text()
 ADAPTER = pathlib.Path("src/app/timer_mcp_adapter.cpp").read_text()
@@ -87,11 +88,10 @@ for enabled in (False, True):
     if ('"components/alarms_component.cpp"' in components) != enabled:
         raise AssertionError(f"Alarm portal component feature gate mismatch: enabled={enabled}")
 
-assets = pathlib.Path("tools/minify-web-assets.sh").read_text()
-if not re.search(r'alarm_schedule\|alarm_behavior\|portal_alarms\)\s*echo "ALARM_ENABLED"', assets):
-    raise AssertionError("Both alarm fragments and standalone script must share the alarm feature gate")
-table = assets[assets.index("static const FragmentAsset fragment_assets[]"):]
-if 'flag=$(asset_feature_flag "$filename")' not in table or 'echo "#if $flag"' not in table:
-    raise AssertionError("Fragment lookup entries must use their asset feature gate")
+sys.path.insert(0, str(pathlib.Path("tools").resolve()))
+from portal_assets import ASSET_GATES
+for asset in ("alarm_schedule", "alarm_behavior", "portal_alarms"):
+    if ASSET_GATES[asset] != "ALARM_ENABLED":
+        raise AssertionError("Alarm fragments and script must share the alarm feature gate")
 
 print("timer_mcp_integration: PASS (timers, alarms, enabled/disabled portal and MCP profiles)")

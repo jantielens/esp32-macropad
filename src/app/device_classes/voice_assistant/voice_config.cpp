@@ -1,4 +1,5 @@
 #include "voice_config.h"
+#include "config_nvs_write.h"
 #include "voice_tts_request.h"
 
 #if IS_VOICE_ASSISTANT
@@ -58,19 +59,21 @@ void voice_config_load(Preferences& prefs) {
     portEXIT_CRITICAL(&voice_config_mux);
 }
 
-void voice_config_save(Preferences& prefs) {
+bool voice_config_save(Preferences& prefs) {
+    bool saved_ok = true;
     VoiceConfig saved = {};
     voice_config_snapshot(&saved);
-    prefs.putString(KEY_AZURE_HOST, saved.azure_host);
-    prefs.putString(KEY_AZURE_MODEL, saved.azure_deployment);
-    prefs.putString(KEY_AZURE_API_KEY, saved.azure_api_key);
-    prefs.putString(KEY_AZURE_LANGUAGE, saved.azure_language);
-    prefs.putString(KEY_TTS_HOST, saved.tts_host);
-    prefs.putString(KEY_TTS_MODEL, saved.tts_deployment);
-    prefs.putString(KEY_TTS_API_KEY, saved.tts_api_key);
-    prefs.putString(KEY_TTS_LANGUAGE, saved.tts_language);
-    prefs.putString(KEY_TTS_VOICE, saved.tts_voice);
-    prefs.putString(KEY_TTS_INSTRUCTIONS, saved.tts_instructions);
+    saved_ok = (config_nvs_put_string(prefs, KEY_AZURE_HOST, saved.azure_host)) && saved_ok;
+    saved_ok = (config_nvs_put_string(prefs, KEY_AZURE_MODEL, saved.azure_deployment)) && saved_ok;
+    saved_ok = (config_nvs_put_string(prefs, KEY_AZURE_API_KEY, saved.azure_api_key)) && saved_ok;
+    saved_ok = (config_nvs_put_string(prefs, KEY_AZURE_LANGUAGE, saved.azure_language)) && saved_ok;
+    saved_ok = (config_nvs_put_string(prefs, KEY_TTS_HOST, saved.tts_host)) && saved_ok;
+    saved_ok = (config_nvs_put_string(prefs, KEY_TTS_MODEL, saved.tts_deployment)) && saved_ok;
+    saved_ok = (config_nvs_put_string(prefs, KEY_TTS_API_KEY, saved.tts_api_key)) && saved_ok;
+    saved_ok = (config_nvs_put_string(prefs, KEY_TTS_LANGUAGE, saved.tts_language)) && saved_ok;
+    saved_ok = (config_nvs_put_string(prefs, KEY_TTS_VOICE, saved.tts_voice)) && saved_ok;
+    saved_ok = (config_nvs_put_string(prefs, KEY_TTS_INSTRUCTIONS, saved.tts_instructions)) && saved_ok;
+    return saved_ok;
 }
 
 void voice_config_snapshot(VoiceConfig* out) {

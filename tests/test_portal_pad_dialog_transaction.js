@@ -29,11 +29,13 @@ class Element {
 const elements = new Map();
 elements.set('pad-edit-icon-badge-padding', Object.assign(new Element('pad-edit-icon-badge-padding'), { value: '8' }));
 const document = {
+    createElement() { return new Element(''); },
     getElementById(id) {
         if (!elements.has(id)) elements.set(id, new Element(id));
         return elements.get(id);
     }
 };
+document.getElementById('pad-edit-list-source').querySelectorAll = () => [];
 
 const originalButton = { col: 1, row: 2, label_center: 'Keep me' };
 const originalButtons = [originalButton];
@@ -42,9 +44,11 @@ const context = {
     TextEncoder,
     document,
     MAX_ACTIONS: 3,
-    padState: { editCol: 1, editRow: 2, selectedLayer: 'main', buttons: originalButtons },
+    deviceInfoCache: null,
+    padState: { editCol: 1, editRow: 2, selectedLayer: 'main', buttons: originalButtons,
+        mainButtons: originalButtons, overlayButtons: [], templateButtons: [] },
     padLabelFromInput() { return ''; },
-    padGetBindableColor() { return ''; },
+    padGetBindableColor(id) { return document.getElementById(id).value.trim(); },
     padGetEffectiveDefault() { return ''; },
     padContentLayouts() { return []; },
     padContentFitWarning() {},
@@ -53,7 +57,7 @@ const context = {
     padActionPrefixes(gesture) { return [gesture + '-0', gesture + '-1', gesture + '-2']; },
     actionEditorListBuild(prefixes) {
         return prefixes.map(function(p) { return context.actionEditorBuild(p); })
-            .filter(function(a) { return a && a.type; });
+            .filter(function(a) { return a && (a.op || a.type); });
     }
 };
 
@@ -62,6 +66,16 @@ const bindingContext = vm.createContext({ console });
 vm.runInContext(fs.readFileSync('src/app/web/portal_binding_validator.js', 'utf8'), bindingContext);
 context.bindingTokenize = bindingContext.bindingTokenize;
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_editor.js', 'utf8'), context);
+{
+    const select = { options: [{ value: '' }], appendChild(option) { this.options.push(option); } };
+    context.padWidgetSelectType(select, 'unpackaged_widget');
+    assert.strictEqual(select.value, 'unpackaged_widget');
+    assert.strictEqual(select.options[1].disabled, true);
+    context.padWidgetSelectType(select, 'unpackaged_widget');
+    assert.strictEqual(select.options.length, 2);
+    context.padWidgetSelectType(select, '');
+    assert.strictEqual(select.value, '');
+}
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_table.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_gamepad_button.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_rocker.js', 'utf8'), context);
@@ -69,6 +83,70 @@ vm.runInContext(fs.readFileSync('src/app/web/portal_widget_toggle.js', 'utf8'), 
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_numericrocker.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_inputs.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_list.js', 'utf8'), context);
+{
+    const editor = context.padWidgetEditor('list');
+    editor.fields.forEach(field => {
+        const fallback = typeof field.default === 'function' ? field.default() : field.default;
+        if (field.kind === 'checkbox') document.getElementById(field.id).checked = fallback;
+        else document.getElementById(field.id).value = String(fallback);
+    });
+    document.getElementById('pad-edit-list-selected-background').value = '#000000';
+    document.getElementById('pad-edit-list-selected-border-width').value = '0';
+    document.getElementById('pad-edit-list-selected-top-color').value = '#ffffff';
+    document.getElementById('pad-edit-list-indicator-track').value = '#ffffff';
+    document.getElementById('pad-edit-list-indicator-color').value = '#000000';
+    const draft = {};
+    context.padWidgetEditorBuild(draft, editor);
+    assert.strictEqual(draft.widget_list_label_top, '[item:title|Untitled]');
+    assert.strictEqual(draft.widget_list_allow_selection, true);
+    assert.strictEqual(draft.widget_list_selected_bg_color, '#000000');
+    assert.strictEqual(draft.widget_list_selected_border_width, 0);
+    assert.strictEqual(draft.widget_list_selected_top_color, '#ffffff');
+    assert.strictEqual(draft.widget_list_indicator_track_color, '#ffffff');
+    assert.strictEqual(draft.widget_list_indicator_color, '#000000');
+    assert.strictEqual(draft.widget_list_border_width, undefined);
+    assert.strictEqual(draft.widget_list_bg_color, undefined);
+    assert.strictEqual(draft.widget_list_visible_items, 0);
+    bindingContext.bindingRegisterSchema(JSON.parse(fs.readFileSync('tools/mock-data/pad-editor.json', 'utf8')).binding_schema.schemes);
+    context.validateBinding = bindingContext.validateBinding;
+    context.bindingValidateInput = (input, options) => bindingContext.validateBinding(input.value, options).valid;
+    const topLabel = document.getElementById('pad-edit-list-top');
+    topLabel.value = '[item:title;extra]';
+    assert.throws(() => context.padWidgetEditorBuild({}, editor), error =>
+        /Too many parameters/.test(error.message) && error.fieldIds[0] === topLabel.id);
+    topLabel.value = '[item:title';
+    assert.throws(() => context.padWidgetEditorBuild({}, editor), /missing.*closing bracket/);
+    topLabel.value = '[item:missing|Untitled]';
+    context.padWidgetEditorBuild({}, editor);
+    topLabel.value = draft.widget_list_label_top;
+    delete context.bindingValidateInput;
+    document.getElementById('pad-edit-list-visible-items').value = '5';
+    const explicitDraft = {};
+    context.padWidgetEditorBuild(explicitDraft, editor);
+    assert.strictEqual(explicitDraft.widget_list_visible_items, 5);
+    document.getElementById('pad-edit-list-background').value = '[item:color|#FFFFFF]';
+    const bindingDraft = {};
+    context.padWidgetEditorBuild(bindingDraft, editor);
+    assert.strictEqual(bindingDraft.widget_list_bg_color, '[item:color|#FFFFFF]');
+    document.getElementById('pad-edit-list-viewport').value = 'paged';
+    document.getElementById('pad-edit-list-visible-items').value = '2';
+    assert.throws(() => context.padWidgetEditorBuild({}, editor), /at least 3/);
+    document.getElementById('pad-edit-list-show-navigation').checked = false;
+    const externalNavigation = {};
+    context.padWidgetEditorBuild(externalNavigation, editor);
+    assert.strictEqual(externalNavigation.widget_list_show_navigation, false);
+    document.getElementById('pad-edit-list-show-navigation').checked = true;
+    document.getElementById('pad-edit-list-viewport').value = 'scroll';
+    const scrollNavigation = {};
+    context.padWidgetEditorBuild(scrollNavigation, editor);
+    assert.strictEqual(scrollNavigation.widget_list_visible_items, 2);
+    document.getElementById('pad-edit-list-viewport').value = 'paged';
+    document.getElementById('pad-edit-list-visible-items').value = '0';
+    const autoNavigation = {};
+    context.padWidgetEditorBuild(autoNavigation, editor);
+    assert.strictEqual(autoNavigation.widget_list_show_navigation, true);
+    document.getElementById('pad-edit-list-viewport').value = '';
+}
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_camera.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_dialog.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_workspace.js', 'utf8'), context);
@@ -125,6 +203,11 @@ context.padGetBindableColor = id => id === 'pad-edit-bg-color' ? '#03A9F4' : '';
 context.padWorkspaceEdit();
 assert.strictEqual(context.padState.buttons[0], unavailableWidget, 'An unrelated edit must not discard an unavailable widget');
 assert.match(validationErrors.get('main:1,2').message, /not supported/);
+document.getElementById('pad-edit-widget-type').value = 'unpackaged-widget';
+context.padWorkspaceEdit();
+assert.strictEqual(context.padState.buttons[0], unavailableWidget,
+    'A widget with no packaged editor must not be silently removed or rewritten');
+assert.match(validationErrors.get('main:1,2').message, /not supported/);
 document.getElementById('pad-edit-widget-type').value = '';
 context.padWorkspaceEdit();
 assert.strictEqual(context.padState.buttons[0].widget_type, undefined, 'Explicitly removing the widget permits editing');
@@ -167,12 +250,101 @@ context.PAD_FIRMWARE_DEFAULTS = { widget_indicator_color: '#FFFFFF', widget_seri
 context.padSetBindableColor = function(id, value, fallback) { document.getElementById(id).value = value || fallback; };
 context.padWidgetEditorsLoad({ widget_type: 'table', widget_table_scrollable: false });
 assert.strictEqual(document.getElementById('pad-edit-table-scrollable').value, 'false');
+context.padWidgetEditorsLoad({ widget_type: 'list', widget_list_style_top: 'font_size:24',
+    widget_list_selected_bg_color: '[item:color|#FFFFFF]' });
+assert.strictEqual(document.getElementById('pad-edit-list-top-style-wrap').style.display, 'flex');
+assert.strictEqual(document.getElementById('pad-edit-list-bottom-style-wrap').style.display, 'none');
+assert.strictEqual(document.getElementById('pad-edit-list-top-style-toggle').attributes['aria-expanded'], 'true');
+assert.strictEqual(document.getElementById('pad-edit-list-selected-background').value, '[item:color|#FFFFFF]');
+context.padWidgetEditorsLoad({ widget_type: 'list' });
+assert.strictEqual(document.getElementById('pad-edit-list-top-style-wrap').style.display, 'none');
+assert.strictEqual(document.getElementById('pad-edit-list-allow-selection').checked, true);
+context.padWidgetEditorsLoad({ widget_type: 'list', widget_list_allow_selection: false });
+assert.strictEqual(document.getElementById('pad-edit-list-allow-selection').checked, false);
+const navigationList = {};
+context.padWidgetEditorBuild(navigationList, context.padWidgetEditor('list'));
+assert.strictEqual(navigationList.widget_list_allow_selection, false);
+context.padWidgetEditorsLoad({ widget_type: 'list' });
+assert.strictEqual(document.getElementById('pad-edit-list-allow-selection').checked, true);
+{
+    const savedSetColor = context.padSetBindableColor;
+    const savedGetColor = context.padGetBindableColor;
+    const savedDefault = context.padGetEffectiveDefault;
+    const defaults = { bg_color: '#123456', border_color: '#234567', fg_color: '#345678', border_width: '1' };
+    const swatches = new Map();
+    const labels = new Map();
+    document.createElement = () => new Element('');
+    document.querySelector = selector => {
+        if (!labels.has(selector)) labels.set(selector, {
+            textContent: 'Color',
+            appendChild(child) { elements.set(child.id, child); }
+        });
+        return labels.get(selector);
+    };
+    const select = document.getElementById('pad-edit-list-source');
+    select.replaceChildren = () => {};
+    select.appendChild = () => {};
+    const editor = context.padWidgetEditor('list');
+    editor.fields.filter(field => field.kind === 'color').forEach(field => {
+        const input = document.getElementById(field.id);
+        const swatch = new Element(field.id + '-swatch');
+        swatch.classList.add = name => swatch.classList.toggle(name, true);
+        swatches.set(field.id, swatch);
+        input.closest = selector => selector === 'details'
+            ? { querySelector: () => ({ textContent: 'Appearance' }) }
+            : { querySelector: () => swatch };
+    });
+    context.bindingSplitParams = bindingContext.bindingSplitParams;
+    context.padColorNormalizeLiteral = value => /^#[0-9a-f]{6}$/i.test(value || '') ? value : null;
+    context.padColorValue = value => value || '';
+    context.padGetEffectiveDefault = key => defaults[key] || '';
+    context.padGetBindableColor = id => document.getElementById(id).value.trim();
+    context.padRefreshBindableColor = input => {
+        const swatch = swatches.get(input.id);
+        const value = input.value.trim() || input.dataset.colorFallback || '';
+        swatch.style.background = value.startsWith('#') ? value : '';
+        swatch.classList.toggle('bc-binding', !!value && !value.startsWith('#'));
+    };
+    context.padInitBindableColor = () => {};
+    context.padSetBindableColor = (id, value, fallback) => {
+        const input = document.getElementById(id);
+        input.value = value || fallback || '';
+        (input.listeners.input || []).forEach(listener => listener());
+    };
+    editor.init();
+    context.padWidgetEditorsLoad({ widget_type: 'list' });
+    const get = name => document.getElementById('pad-edit-list-' + name);
+    assert.strictEqual(get('background').value, '');
+    assert.strictEqual(get('background').dataset.colorFallback, '#123456');
+    assert.strictEqual(get('selected-border-color').dataset.colorFallback, '#234567');
+    assert.strictEqual(get('background-reset').style.display, 'none');
+    context.padSetBindableColor('pad-edit-list-background', '[item:color|#FFFFFF]');
+    assert.strictEqual(get('selected-background').dataset.colorFallback, '[item:color|#FFFFFF]');
+    assert.strictEqual(get('background-reset').style.display, 'inline');
+    context.padSetBindableColor('pad-edit-list-background', '');
+    assert.strictEqual(get('selected-background').dataset.colorFallback, '#123456');
+    get('top-style').value = 'color:[expr:1;"#123456";"#abcdef"];font_size:24';
+    get('top-style').listeners.input.forEach(listener => listener());
+    assert.strictEqual(get('selected-top-color').dataset.colorFallback, '[expr:1;"#123456";"#abcdef"]');
+    defaults.border_width = '0';
+    context.padSetBindableColor('pad-edit-list-border-color', '');
+    assert.strictEqual(get('selected-border-color').dataset.colorFallback, '#345678');
+    defaults.border_width = '[var:width]';
+    context.padSetBindableColor('pad-edit-list-selected-border-color', '');
+    assert.strictEqual(get('selected-border-color').dataset.colorFallback, '');
+    assert.strictEqual(swatches.get('pad-edit-list-selected-border-color').classList.contains('bc-binding'), true);
+    context.padSetBindableColor = savedSetColor;
+    context.padGetBindableColor = savedGetColor;
+    context.padGetEffectiveDefault = savedDefault;
+    delete document.createElement;
+    delete document.querySelector;
+}
 document.getElementById('pad-edit-widget-type').value = 'table';
 document.getElementById('pad-edit-table-scrollable').value = 'false';
-document.getElementById('pad-edit-table-data-binding').value = ' [health:table] ';
+document.getElementById('pad-edit-table-data-binding').value = ' [mqtt:devices/table;.] ';
 document.getElementById('pad-edit-table-style').value = ' font_size:14 ';
 context.padWorkspaceEdit();
-assert.strictEqual(context.padState.buttons[0].widget_data_binding, '[health:table]');
+assert.strictEqual(context.padState.buttons[0].widget_data_binding, '[mqtt:devices/table;.]');
 assert.strictEqual(context.padState.buttons[0].widget_table_style, 'font_size:14');
 assert.strictEqual(context.padState.buttons[0].widget_table_scrollable, false);
 document.getElementById('pad-edit-table-data-binding').value = '';
@@ -231,13 +403,13 @@ assert.strictEqual(context.padState.buttons[0].widget_gamepad_dead_zone, .2);
 assert.strictEqual(context.padState.buttons[0].widget_gamepad_invert_x, true);
 assert.strictEqual(context.padState.buttons[0].actions, undefined);
 document.getElementById('pad-edit-widget-type').value = 'gamepad_button';
-context.actionEditorBuildGamepad = function(prefix, held) {
-    assert.strictEqual(held, true);
-    return { type: 'gamepad', control: 'trigger', trigger: 'left', operation: 'down' };
+context.actionEditorBuildGamepad = function() {
+    return { op: 'gamepad.trigger.down', args: { trigger: 'left' } };
 };
 context.padWorkspaceEdit();
 assert.strictEqual(context.padState.buttons[0].actions.length, 1);
-assert.strictEqual(context.padState.buttons[0].actions[0].trigger, 'left');
+assert.strictEqual(context.padState.buttons[0].actions[0].op, 'gamepad.trigger.down');
+assert.strictEqual(context.padState.buttons[0].actions[0].args.trigger, 'left');
 assert.strictEqual(context.padState.buttons[0].lp_actions, undefined);
 document.getElementById('pad-edit-widget-type').value = '';
 context.actionEditorBuild = function() { return {}; };
@@ -568,6 +740,10 @@ for (const liveliness of ['still', 'calm', 'normal', 'lively']) {
         widget_face_liveliness: liveliness });
     assert.strictEqual(context.padDialogBuildButton().widget_face_liveliness, liveliness);
 }
+context.padWidgetEditorsLoad({ widget_type: 'face', widget_face_style: 'arcade', widget_data_binding: '[pad:mood]' });
+const capsule = context.padDialogBuildButton();
+assert.strictEqual(capsule.widget_face_style, 'arcade');
+assert.strictEqual(capsule.widget_data_binding, '[pad:mood]');
 context.padWidgetEditorsLoad({ widget_type: 'face', widget_face_emotion: 'happy' });
 assert.strictEqual(context.padDialogBuildButton().widget_data_binding, 'happy', 'Load renderer-only fixed emotion settings');
 context.padWidgetEditorsLoad({ widget_type: 'face' });
@@ -592,6 +768,34 @@ delete context.bindingValidateInput;
 document.getElementById('pad-edit-widget-type').value = 'gamepad_button';
 assert.strictEqual(gamepadEditor.available({ has_touch: true, has_usb_hid: true }), true);
 assert.strictEqual(gamepadEditor.available({ has_touch: true, has_usb_hid: false }), false);
+context.actionEditorOperation = id => id === 'gamepad.button.down'
+    ? { arguments: [{ name: 'button', max: 16 }] } : null;
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_gamepad.js', 'utf8'), context);
+gamepadEditor.init();
+gamepadEditor.supported = true;
+for (const action of [
+    { op: 'gamepad.button.down', args: { button: 16 } },
+    { op: 'gamepad.hat.down', args: { direction: 'right' } },
+    { op: 'gamepad.trigger.down', args: { trigger: 'left' } }
+]) {
+    context.padWidgetEditorsLoad({ widget_type: 'gamepad_button', actions: [action] });
+    const result = context.padDialogBuildButton();
+    assert.strictEqual(JSON.stringify(result.actions), JSON.stringify([action]));
+    assert.strictEqual(result.lp_actions, undefined);
+}
+context.padWidgetEditorsLoad({ widget_type: 'gamepad_button',
+    actions: [{ op: 'gamepad.button.down', args: { button: { $template: '[var:button]' } } }] });
+assert.throws(() => context.padDialogBuildButton(), /literal Gamepad held control/);
+const heldControl = document.getElementById('pad-edit-gamepad-hold-gamepad-control');
+heldControl.value = 'button';
+heldControl.listeners.change[0]();
+assert.strictEqual(context.padDialogBuildButton().actions[0].op, 'gamepad.button.down');
+context.padWidgetEditorsLoad({ widget_type: 'gamepad_button',
+    actions: [{ op: 'gamepad.button.tap', args: { button: 1 } }] });
+assert.throws(() => context.padDialogBuildButton(), /literal Gamepad held control/);
+context.padWidgetEditorsLoad({ widget_type: 'gamepad_button',
+    actions: [{ type: 'gamepad', control: 'button', button: 1, operation: 'down' }] });
+assert.throws(() => context.padDialogBuildButton(), /literal Gamepad held control/);
 document.getElementById('pad-edit-widget-type').value = 'gamepad_button';
 gamepadEditor.supported = false;
 assert.throws(() => context.padDialogBuildButton(), /not supported/);
@@ -599,10 +803,11 @@ assert.throws(() => context.padDialogBuildButton(), /not supported/);
 context.padWidgetEditorsLoad({ widget_type: 'numericrocker', widget_numericrocker_small_step: 0.25 });
 document.getElementById('pad-edit-widget-type').value = 'numericrocker';
 context.actionEditorBuild = prefix => prefix === 'pad-edit-nr-adjust'
-    ? { type: 'mqtt', payload: '{step}' } : { type: 'screen', target: 'info' };
+    ? { op: 'mqtt.publish', args: { topic: 'device/adjust', payload: { $template: '[event:step]' } } }
+    : { op: 'screen.open', args: { target: 'info' } };
 let numericRocker = context.padDialogBuildButton();
 assert.strictEqual(numericRocker.widget_numericrocker_small_step, 0.25);
-assert.strictEqual(numericRocker.widget_numericrocker_action.payload, '{step}');
+assert.strictEqual(numericRocker.widget_numericrocker_action.args.payload.$template, '[event:step]');
 assert.strictEqual(numericRocker.actions.length, 3);
 assert.strictEqual(numericRocker.lp_actions, undefined);
 context.actionEditorBuild = () => ({});
@@ -858,24 +1063,12 @@ assert.strictEqual(sliderEditor.available({ has_display: true, has_touch: false 
 const sliderAxis = document.getElementById('pad-edit-slider-axis');
 context.actionEditorHTML = () => '<div></div>';
 context.actionEditorLoad = () => {};
-context.actionEditorCatalogEntry = type => ({
-    type,
-    template_fields: ({ mqtt: { topic: { max: 127 }, payload: { max: 127 } },
-        ha_service: { entity_id: { max: 47 }, service: { max: 63 }, data_json: { max: 63 } }, volume: { volume_value: { max: 15 } },
-        brightness: { brightness_value: { max: 15 } }, notify: { message: { max: 191 } },
-        set_var: { var_value: { max: 191 } } })[type]
-});
-vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_ha.js', 'utf8'), context);
-const buildActions = actions => (prefix, token) => {
-    const action = actions[Number(prefix.slice(-1))] || {};
-    context.actionEditorValidateEventTokens(action, token, prefix);
-    return action;
-};
+const buildActions = actions => prefix => actions[Number(prefix.slice(-1))] || {};
 context.padGetBindableColor = id => document.getElementById(id).value;
 const sliderActions = [
-    { type: 'mqtt', topic: 'device/set', payload: '{value}' },
-    { type: 'screen', target: 'info' },
-    { type: 'volume', volume_mode: 'adjust', volume_value: '1' }
+    { op: 'mqtt.publish', args: { topic: 'device/set', payload: { $template: '[event:value]' } } },
+    { op: 'screen.open', args: { target: 'info' } },
+    { op: 'audio.volume.adjust', args: { percent: 1 } }
 ];
 context.actionEditorBuild = buildActions(sliderActions);
 const sliderButton = { widget_type: 'slider', widget_data_binding: '[mqtt:device/level]',
@@ -945,45 +1138,11 @@ context.actionEditorBuild = () => ({});
 const noActionSlider = context.padDialogBuildButton();
 assert.strictEqual(noActionSlider.actions, undefined);
 
-context.actionEditorBuild = buildActions([{ type: 'ha_service', entity_id: 'light.room', service: 'turn_on',
-    data_json: '{"brightness":{value}}' }]);
+context.actionEditorBuild = buildActions([{ op: 'ha.service.call', args: {
+    entity_id: 'light.room', service: 'turn_on', data_json: { $template: '{"brightness":[event:value]}' }
+} }]);
 const haSlider = context.padDialogBuildButton();
-assert.strictEqual(haSlider.actions[0].data_json, '{"brightness":{value}}');
-context.actionEditorBuild = buildActions([{ type: 'ha_service', entity_id: 'light.room', service: 'turn_on',
-    data_json: '{"brightness":{value}.0}' }]);
-assert.doesNotThrow(() => context.padDialogBuildButton());
-context.actionEditorBuild = buildActions([{ type: 'ha_service', entity_id: 'light.lamp_{value}', service: 'scene_{value}',
-    data_json: '{"brightness":{value}0}' }]);
-assert.throws(() => context.padDialogBuildButton(), /JSON object/);
-context.actionEditorBuild = buildActions([
-    { type: 'notify', message: 'Brightness set to {value}%' },
-    { type: 'set_var', var_name: 'a', var_value: '{value}%' },
-    { type: 'mqtt', topic: 'device/{value}', payload: '{value}' }
-]);
-assert.strictEqual(context.padDialogBuildButton().actions[1].var_value, '{value}%');
-for (const token of ['{value}', '{step}']) {
-    assert.doesNotThrow(() => context.actionEditorValidateEventTokens({ type: 'notify', message: token + '%' }, token, 'test'));
-    assert.doesNotThrow(() => context.actionEditorValidateEventTokens({ type: 'set_var', var_name: 'a', var_value: token }, token, 'test'));
-    assert.throws(() => context.actionEditorValidateEventTokens({ type: 'set_var', var_name: token, var_value: '1' }, token, 'test'), /var_name.*does not support/);
-    assert.throws(() => context.actionEditorValidateEventTokens({ type: 'notify', message: token }, undefined, 'test'), /message.*unavailable/);
-    assert.throws(() => context.actionEditorValidateEventTokens({ type: 'notify', message: 'x'.repeat(185) + token }, token, 'test'), /message.*exceeds/);
-}
-assert.throws(() => context.actionEditorValidateEventTokens({ type: 'notify', message: '{step}' }, '{value}', 'test'), /use \{value\}/);
-assert.doesNotThrow(() => context.actionEditorValidateEventTokens({
-    type: 'ha_service', entity_id: 'climate.room', service: 'set_mode', data_json: '{"mode":"{value}"}'
-}, '{value}', 'test', ['cool', 'heat']));
-assert.doesNotThrow(() => context.actionEditorValidateEventTokens({
-    type: 'ha_service', entity_id: 'climate.room', service: 'set_mode', data_json: '{"mode":"{value}"}'
-}, '{value}', 'test', ['']));
-assert.throws(() => context.actionEditorValidateEventTokens({
-    type: 'ha_service', entity_id: 'climate.room', service: 'set_mode', data_json: '{"mode":{value}}'
-}, '{value}', 'test', ['cool']), /JSON object/);
-assert.throws(() => context.actionEditorValidateEventTokens({
-    type: 'ha_service', entity_id: 'climate.room', service: 'set_mode', data_json: '{"mode":{value}}'
-}, '{value}', 'test', ['']), /JSON object/);
-assert.throws(() => context.actionEditorValidateEventTokens({
-    type: 'notify', message: 'x'.repeat(150) + '{value}'
-}, '{value}', 'test', ['a'.repeat(63)]), /exceeds/);
+assert.strictEqual(haSlider.actions[0].args.data_json.$template, '{"brightness":[event:value]}');
 
 async function checkSourceColors() {
     document.querySelector = () => null;
@@ -1074,8 +1233,9 @@ async function checkSourceColors() {
     const source = '[expr:[ha:climate.bureau_boven_thermostaat;attributes.temperature]>20?"on":"off"]';
     const bottom = '[ha:climate.bureau_boven_thermostaat;attributes.temperature;%.1f \u00b0C]';
     const foreground = '[expr:[ha:climate.bureau_boven_thermostaat;attributes.temperature]>20?"#FF0000":"#FFFFFF"]';
-    const on = { type: 'ha_service', entity_id: 'climate.bureau_boven_thermostaat', service: 'set_temperature', data_json: '{"temperature": 21}' };
-    const off = { ...on, data_json: '{"temperature": 10}' };
+    const on = { op: 'ha.service.call', args: {entity_id:'climate.bureau_boven_thermostaat',
+        service:'set_temperature', data_json:'{"temperature": 21}'} };
+    const off = { ...on, args: {...on.args, data_json:'{"temperature": 10}'} };
     context.padLabelFromInput = id => document.getElementById(id).value;
     document.getElementById('pad-edit-label-top').value = 'Bureau';
     document.getElementById('pad-edit-label-bottom').value = bottom;

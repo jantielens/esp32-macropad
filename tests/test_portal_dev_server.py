@@ -22,7 +22,7 @@ SPEC = importlib.util.spec_from_file_location("portal_dev_server", ROOT / "tools
 PORTAL = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PORTAL)
 
-from widget_manifest import load_widgets, firmware_includes, portal_assets, validate_editors
+from widget_manifest import load_widgets, firmware_includes, portal_assets, portal_widgets, validate_editors
 
 
 class PortalDevServerTest(unittest.TestCase):
@@ -55,10 +55,17 @@ class PortalDevServerTest(unittest.TestCase):
         PORTAL.reset_pad_fixtures(self.server)
         self.server.mock_fonts = {}
         self.server.mock_config.pop("external_data", None)
+        for key in [key for key in self.server.mock_config if key.startswith("voice_notes_")]:
+            self.server.mock_config.pop(key, None)
+        self.server.mock_config.pop("microphone_gain_db", None)
+        self.server.mock_config.pop("microphone_reduce_rumble", None)
+        self.server.mock_config.pop("current_microphone_gain_db", None)
+        self.server.mock_config.pop("current_microphone_reduce_rumble", None)
 
     def request(self, path, method="GET", body=None, profile="esp32-p4-lcd4b", raw=False,
-                content_type="application/json"):
+                content_type="application/json", extra_headers=None):
         headers = {"Cookie": "portal_mock_profile=" + profile, "Content-Type": content_type}
+        headers.update(extra_headers or {})
         data = body if isinstance(body, bytes) else json.dumps(body).encode() if body is not None else None
         request = Request(self.base + path, data=data, headers=headers, method=method)
         try:
@@ -116,26 +123,191 @@ class PortalDevServerTest(unittest.TestCase):
                                           profile=selected, raw=True)[0], 204 if enabled else 404)
         self.server.mock_config.pop("auto_shutdown_timeout_seconds", None)
 
-    def test_voice_clips_fixture_and_profile_isolation(self):
-        profile = "reterminal-sticky-interactive"
-        base = "/api/component/voice-clips/"
+    def test_live_microphone_shell_asset(self):
+        for profile, enabled in (("esp32-p4-lcd4b", True), ("reterminal-sticky-interactive-sd", True),
+                                 ("reterminal-e1003-frame", False)):
+            shell = self.request("/?profile=" + profile, profile=profile, raw=True)[1]
+            script = 'src="/portal-live-microphone.js'
+            self.assertEqual(script in shell, enabled)
+            if enabled:
+                self.assertLess(shell.index(script), shell.index('src="/portal.js'))
+            self.assertEqual(self.request("/portal-live-microphone.js", profile=profile, raw=True)[0],
+                             200 if enabled else 404)
+
+    def test_microphone_settings_and_levels_fixture(self):
+        config_path = "/api/config?no_reboot=1"
+        nav = self.request("/api/portal/nav")[1]
+        audio = next(category for category in nav["categories"] if category["id"] == "audio")
+        self.assertIn("microphone", [item["id"] for item in audio["items"]])
+        self.assertEqual(self.request("/api/section/microphone", raw=True)[0], 200)
+        self.assertEqual(self.request("/api/section/microphone", profile="jc3248w535", raw=True)[0], 404)
+        self.assertEqual(self.request("/api/section/live-microphone", raw=True)[0], 404)
+        self.assertEqual(self.request("/api/config")[1]["microphone_gain_db"], 0)
+        self.assertEqual(self.request(config_path, "POST", {"microphone_gain_db": "-12",
+                         "microphone_reduce_rumble": True})[0], 200)
+        current = self.request("/api/config")[1]
+        self.assertEqual(current["microphone_gain_db"], -12)
+        self.assertIs(current["microphone_reduce_rumble"], True)
+        for invalid in ("1.5", "1x", 25, -13, True):
+            self.assertEqual(self.request(config_path, "POST", {"microphone_gain_db": invalid})[0], 400)
+        self.assertEqual(self.request(config_path, "POST", {"microphone_reduce_rumble": "true"})[0], 400)
+        self.assertEqual(self.request("/api/component/microphone/levels")[0], 403)
+        status, data = self.request("/api/component/microphone/levels?state=clipped",
+                                    extra_headers={"X-Microphone-Test": "1"})
+        self.assertEqual(status, 200)
+        self.assertTrue(data["fresh"] and data["input_full_scale"] and data["gain_clipped"])
+        self.assertEqual(data["peak"], 32768)
+
+    def test_microphone_live_settings_do_not_persist(self):
+        endpoint = "/api/component/microphone/settings"
+        self.assertEqual(self.request(endpoint, "PUT", {"microphone_gain_db": 6,
+                         "microphone_reduce_rumble": True})[0], 200)
+        config = self.request("/api/config")[1]
+        self.assertEqual(config["current_microphone_gain_db"], 6)
+        self.assertIs(config["current_microphone_reduce_rumble"], True)
+        self.assertEqual(config["microphone_gain_db"], 0)
+        self.assertIs(config["microphone_reduce_rumble"], False)
+        status, levels = self.request("/api/component/microphone/levels",
+                                      extra_headers={"X-Microphone-Test": "1"})
+        self.assertEqual(status, 200)
+        self.assertGreater(levels["peak"], 18000)
+        self.assertTrue(levels["gain_clipped"])
+        self.assertEqual(self.request("/api/config?no_reboot=1", "POST", {"device_name": "Mock"})[0], 200)
+        self.assertEqual(self.request("/api/config")[1]["current_microphone_gain_db"], 6)
+        for invalid in ({}, [], {"microphone_gain_db": 25}, {"microphone_reduce_rumble": "true"}):
+            self.assertEqual(self.request(endpoint, "PUT", invalid)[0], 400)
+        self.assertEqual(self.request("/api/config")[1]["current_microphone_gain_db"], 6)
+        self.assertEqual(self.request(endpoint, "PUT", {"microphone_gain_db": 0,
+                         "microphone_reduce_rumble": False})[0], 200)
+        self.assertEqual(self.request("/api/config")[1]["current_microphone_gain_db"], 0)
+        self.assertEqual(self.request(endpoint, "PUT", {"microphone_gain_db": 6},
+                                      profile="jc3248w535")[0], 404)
+
+    def test_voice_notes_automatic_processing_fixture(self):
+        profile = "reterminal-sticky-interactive-sd"
+        base = "/api/component/voice-notes/"
+        config_path = "/api/config?no_reboot=1"
+        field = "voice_notes_auto_process"
+        self.assertNotIn(field, self.request("/api/config", profile="jc3248w535")[1])
+        self.assertIs(self.request("/api/config", profile=profile)[1][field], False)
+        self.assertEqual(self.request(config_path, "POST", {field: True}, profile=profile)[0], 200)
+        self.assertIs(self.request("/api/config", profile=profile)[1][field], True)
+        for invalid in ("true", 1, None):
+            self.assertEqual(self.request(config_path, "POST", {field: invalid}, profile=profile)[0], 400)
+            self.assertIs(self.request("/api/config", profile=profile)[1][field], True)
+        status = self.request(base + "status", profile=profile)[1]
+        self.assertEqual(status["processing"], {"state": "blocked", "reason": "configuration", "service": "transcription"})
+        self.assertEqual(status["transcription"]["retry_status"], "")
+        self.assertEqual(status["enrichment"]["retry_status"], "")
+        settings = {"voice_notes_transcription_endpoint": "https://example.test", "voice_notes_transcription_deployment": "deployment",
+                    "voice_notes_transcription_api_key": "test-key"}
+        self.assertEqual(self.request(config_path, "POST", settings, profile=profile)[0], 200)
+        self.assertIs(self.request("/api/config", profile=profile)[1][field], True)
+        for attribute, value, reason in (
+                ("mock_voice_recording", True, "recording"),
+                ("mock_voice_resource_available", False, "update"),
+                ("mock_voice_online", False, "offline"),
+                ("mock_voice_retry", True, "retry")):
+            original = getattr(self.server, attribute)
+            setattr(self.server, attribute, value)
+            self.assertEqual(self.request(base + "status", profile=profile)[1]["processing"],
+                             {"state": "waiting", "reason": reason, "service": "transcription"})
+            if reason == "offline":
+                self.assertEqual(self.request(base + "process?id=0000000100000002", "POST",
+                                              profile=profile)[0], 503)
+            setattr(self.server, attribute, original)
+        self.server.mock_voice_cooldown = True
+        self.assertEqual(self.request(base + "process?id=0000000100000002", "POST", profile=profile)[0], 429)
+        self.server.mock_voice_cooldown = False
+        # Each status poll completes the preceding operation and starts the next oldest note.
+        seen = []
+        for _ in range(4):
+            result = self.request(base + "status", profile=profile)[1]
+            seen.append((result["processing"]["state"], result["transcription"]["note_id"]))
+        self.assertEqual(seen, [("running", "0000000100000004"), ("running", "0000000100000003"),
+                                ("running", "0000000100000002"), ("idle", "0000000100000002")])
+        self.assertTrue(all(entry["has_transcript"] for entry in self.request(base + "list", profile=profile)[1]["entries"]))
+        self.assertEqual(self.request(config_path, "POST", {field: False, "voice_notes_transcription_api_key": ""},
+                                      profile=profile)[0], 200)
+        saved = self.request("/api/config", profile=profile)[1]
+        self.assertIs(saved[field], False)
+        self.assertTrue(saved["voice_notes_transcription_api_key_set"])
+
+    def test_voice_notes_fixture_and_profile_isolation(self):
+        profile = "reterminal-sticky-interactive-sd"
+        base = "/api/component/voice-notes/"
         clip_id = "0000000100000002"
-        for selected, enabled in ((profile, True), ("esp32-p4-lcd4b", False)):
+        for selected, enabled in ((profile, True), ("esp32-p4-lcd4b-sd", True),
+                                  ("reterminal-sticky-interactive", False), ("esp32-p4-lcd4b", False),
+                                  ("jc3248w535", False)):
             nav = self.request("/api/portal/nav", profile=selected)[1]
             entries = {item["id"] for category in nav["categories"] for item in category["items"]}
-            self.assertEqual("voice-clips" in entries, enabled)
+            self.assertEqual("voice-notes" in entries, enabled)
             for suffix in ("", "?docs=1"):
                 schemes = self.request("/api/bindings" + suffix, profile=selected)[1]["schemes"]
-                self.assertEqual(any(scheme["name"] == "recorder" for scheme in schemes), enabled)
+                self.assertEqual(any(scheme["name"] == "voice_note" for scheme in schemes), enabled)
+                if enabled:
+                    voice = next(scheme for scheme in schemes if scheme["name"] == "voice_note")
+                    self.assertTrue({"loaded.transcript", "loaded.summary", "loaded.title"} <= set(voice["keys"]))
             catalog = self.request("/api/info?catalog=1", profile=selected)[1]["catalog"]
-            self.assertEqual(any(action["type"] == "voice_clip" for action in catalog), enabled)
-            for path in ("/portal-voice-clips.js", "/api/section/voice-clips"):
+            for action_type in ("vnote_record", "vnote_process", "vnote_load", "vnote_delete"):
+                self.assertEqual(any(action["type"] == action_type for action in catalog), enabled)
+            sources = self.request("/api/info?catalog=1", profile=selected)[1]["list_sources"]
+            self.assertEqual(any(source["token"] == "[voice_note:recent_notes]" for source in sources), enabled)
+            for path in ("/portal-voice-notes.js", "/api/section/voice-notes",
+                         "/api/section/voice-notes-settings"):
                 self.assertEqual(self.request(path, profile=selected, raw=True)[0], 200 if enabled else 404)
             self.assertEqual(self.request(base + "list", profile=selected)[0], 200 if enabled else 404)
+            config = self.request("/api/config", profile=selected)[1]
+            self.assertEqual("voice_notes_auto_process" in config, enabled)
+            if enabled:
+                status = self.request(base + "status", profile=selected)[1]
+                self.assertEqual(status["backend"], "sd_spi" if selected == profile else "sdmmc")
+        self.assertEqual(self.request("/api/config?no_reboot=1", "POST",
+                                      {"voice_notes_auto_process": True}, profile="esp32-p4-lcd4b-sd")[0], 200)
+        self.assertIs(self.request("/api/config", profile="esp32-p4-lcd4b-sd")[1]["voice_notes_auto_process"], True)
+        self.assertEqual(self.request("/api/config?no_reboot=1", "POST",
+                                      {"voice_notes_auto_process": False}, profile="esp32-p4-lcd4b-sd")[0], 200)
 
         listing = self.request(base + "list", profile=profile)[1]
         self.assertEqual(listing["entries"][0]["id"], clip_id)
         self.assertEqual(listing["entries"][0]["created_at"], PORTAL.MOCK_NOW_EPOCH)
+        self.assertFalse(listing["entries"][0]["has_transcript"])
+        self.assertIsNone(self.request(base + "detail?id=" + clip_id, profile=profile)[1]["transcript"])
+        self.assertEqual(self.request(base + "process?id=" + clip_id, "POST", profile=profile)[0], 400)
+        settings = {"voice_notes_transcription_endpoint": "https://example.test", "voice_notes_transcription_deployment": "deployment",
+                    "voice_notes_transcription_api_key": "test-key"}
+        self.assertEqual(self.request("/api/config?no_reboot=1", "POST", settings, profile=profile)[0], 200)
+        saved = self.request("/api/config", profile=profile)[1]
+        self.assertEqual(saved["voice_notes_transcription_endpoint"], "https://example.test/")
+        self.assertEqual(saved["voice_notes_transcription_api_key"], "")
+        self.assertTrue(saved["voice_notes_transcription_api_key_set"])
+        self.assertEqual(self.request("/api/config?no_reboot=1", "POST",
+                                     {"voice_notes_transcription_api_key": ""}, profile=profile)[0], 200)
+        self.assertTrue(self.request("/api/config", profile=profile)[1]["voice_notes_transcription_api_key_set"])
+        self.assertEqual(self.request(base + "process?id=" + clip_id, "POST", profile=profile)[0], 202)
+        self.assertEqual(self.request(base + "process?id=" + clip_id, "POST", profile=profile)[0], 409)
+        self.server.mock_voice_transcription_started -= 2
+        self.assertEqual(self.request(base + "status", profile=profile)[1]["transcription"]["state"], "ready")
+        self.assertTrue(self.request(base + "list", profile=profile)[1]["entries"][0]["has_transcript"])
+        self.assertTrue(self.request(base + "detail?id=" + clip_id, profile=profile)[1]["transcript"]["text"])
+        llm = {"voice_notes_llm_endpoint": "https://llm.example.test", "voice_notes_llm_deployment": "llm",
+               "voice_notes_llm_api_key": "llm-test-key"}
+        self.assertEqual(self.request("/api/config?no_reboot=1", "POST", llm, profile=profile)[0], 200)
+        self.assertEqual(self.request("/api/config?no_reboot=1", "POST",
+                                     {"voice_notes_llm_api_key": ""}, profile=profile)[0], 200)
+        saved = self.request("/api/config", profile=profile)[1]
+        self.assertTrue(saved["voice_notes_llm_api_key_set"])
+        self.assertTrue(saved["voice_notes_transcription_api_key_set"])
+        self.assertEqual(self.request(base + "process?id=" + clip_id, "POST", profile=profile)[0], 202)
+        self.server.mock_voice_transcription_started -= 2
+        self.assertEqual(self.request(base + "status", profile=profile)[1]["enrichment"]["state"], "ready")
+        detail = self.request(base + "detail?id=" + clip_id, profile=profile)[1]
+        self.assertEqual(detail["enrichment"]["title"], "Sample voice note")
+        self.assertEqual(self.request(base + "process?id=" + clip_id, "POST", profile=profile)[1]["state"], "unchanged")
+        self.assertEqual(self.request(base + "regenerate?id=" + clip_id, "POST", profile=profile)[0], 202)
+        self.server.mock_voice_transcription_started -= 2
+        self.request(base + "status", profile=profile)
         url = self.base + base + "file?id=" + clip_id
         cookie = {"Cookie": "portal_mock_profile=" + profile}
         with urlopen(Request(url, headers=cookie)) as response:
@@ -408,7 +580,9 @@ class PortalDevServerTest(unittest.TestCase):
 
         parser = WidgetParser()
         parser.feed(self.request("/api/section/pad-editor", raw=True)[1])
-        widgets = [widget for widget in load_widgets() if "portal" in widget]
+        widgets = portal_widgets(load_widgets(), {
+            "HAS_DISPLAY", "HAS_TOUCH", "HAS_PSRAM", "HAS_FACE_WIDGET", "HAS_NATIVE_EXTENSIONS", "HAS_USB_HID"
+        })
         self.assertEqual(parser.types, [widget["type"] for widget in widgets])
         self.assertEqual(len(parser.ids), len(set(parser.ids)), "Duplicate mounted control IDs")
         for widget in widgets:
@@ -416,6 +590,10 @@ class PortalDevServerTest(unittest.TestCase):
             partial.feed((ROOT / "src/app/web" / widget["portal"]["html"]).read_text())
             for identifier in partial.ids:
                 self.assertIn(identifier, parser.ids)
+
+        no_touch = self.request("/api/section/pad-editor", profile="crowpanel-4.2-interactive", raw=True)[1]
+        self.assertNotIn('id="pad-edit-mousepad-widget-option"', no_touch)
+        self.assertNotIn('id="pad-edit-gamepad_stick-widget-option"', no_touch)
 
     def test_audio_amplifier_config(self):
         previous = copy.deepcopy(self.server.mock_config)
@@ -584,7 +762,7 @@ class PortalDevServerTest(unittest.TestCase):
             invalid["lateness_minutes"] = minutes
             self.assertEqual(self.request("/api/component/alarms/config", "POST", invalid)[0], 400)
         alarm["lateness_minutes"] = 360
-        alarm["1"].update(enabled=True, hour=8, on_ring=[{"type": "alarm_tone"}])
+        alarm["1"].update(enabled=True, hour=8, on_ring=[{"op": "alarm.tone", "args": {"pattern": "", "volume": 0}}])
         self.assertEqual(self.request("/api/component/alarms/config", "POST", alarm)[0], 200)
         self.assertEqual(self.request("/api/component/alarms/config")[1], alarm)
         invalid = copy.deepcopy(alarm)
@@ -647,8 +825,8 @@ class PortalDevServerTest(unittest.TestCase):
         for key in ("snooze_minutes", "auto_dismiss_minutes", "on_ring", "on_stop"):
             self.assertEqual(current["1"][key], config["1"][key])
         self.assertEqual(current["lateness_minutes"], config["lateness_minutes"])
-        behavior = {"lateness_minutes": 12, "snooze_minutes": 4, "auto_dismiss_minutes": 15,
-                    "on_ring": [{"type": "alarm_tone"}], "on_stop": []}
+        behavior = {"action_format_version": 1, "lateness_minutes": 12, "snooze_minutes": 4, "auto_dismiss_minutes": 15,
+                    "on_ring": [{"op": "alarm.tone", "args": {"pattern": "", "volume": 0}}], "on_stop": []}
         self.assertEqual(self.request("/api/component/alarms/behavior", "POST", behavior)[0], 200)
         current = self.request("/api/component/alarms/config")[1]
         for key, value in schedule.items():
@@ -663,11 +841,15 @@ class PortalDevServerTest(unittest.TestCase):
         action = next(item for item in catalog if item["type"] == "alarm")
         header = (ROOT / "src/app/alarm_manager.h").read_text()
         commands = re.search(r'alarm_command_names\[\].*?\{(.*?)\}', header, re.S).group(1)
-        self.assertEqual([item["id"] for item in action["commands"]], [item for item in re.findall(r'"([^"]*)"', commands) if item])
-        fields = {field["name"]: field for field in action["editor_fields"]}
-        self.assertTrue(fields["alarm_value"]["bindable"])
-        self.assertEqual(fields["alarm_id"]["default"], "1")
-        self.assertEqual([item["id"] for item in fields["alarm_day"]["options"]], list(range(7)))
+        operations = {item["id"]: item for item in action["operations"]}
+        self.assertEqual(set(operations), {"alarm." + item for item in re.findall(r'"([^"]*)"', commands) if item})
+        minutes = operations["alarm.adjust_minutes"]["arguments"][0]
+        self.assertTrue(minutes["dynamic"])
+        self.assertEqual(minutes["example"], "[event:step]")
+        target = operations["alarm.cancel"]["arguments"][0]
+        self.assertEqual(target["choices"], ["0", "1"])
+        day = operations["alarm.weekday_toggle"]["arguments"][0]
+        self.assertEqual(day["choices"], [str(value) for value in range(7)])
         schema = self.request("/api/bindings")[1]
         alarm = next(item for item in schema["schemes"] if item["name"] == "alarm")
         source = (ROOT / "src/app/alarm_binding.cpp").read_text()
@@ -767,11 +949,15 @@ class PortalDevServerTest(unittest.TestCase):
             self.assertIn('onclick="deleteBootLogo()"', fragment)
             self.assertIn('baseline (non-progressive) JPEG', fragment)
 
-            self.assertEqual(self.request("/api/component/boot-actions/config")[1], {"actions": []})
-            actions = [{"type": "notify", "message": "Local mock"}]
+            self.assertEqual(self.request("/api/component/boot-actions/config")[1],
+                             {"action_format_version": 1, "actions": []})
+            actions = [{"op": "screen.back", "args": {}}]
             self.assertEqual(self.request("/api/component/boot-actions/config", "POST",
-                                          {"actions": actions})[0], 200)
-            self.assertEqual(self.request("/api/component/boot-actions/config")[1], {"actions": actions})
+                                          {"action_format_version": 1, "actions": actions})[0], 200)
+            self.assertEqual(self.request("/api/component/boot-actions/config", "POST",
+                                          {"actions": [{"type": "screen"}]})[0], 400)
+            self.assertEqual(self.request("/api/component/boot-actions/config")[1],
+                             {"action_format_version": 1, "actions": actions})
 
             png = base64.b64decode(
                 "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p2cAAAAASUVORK5CYII=")
@@ -1094,6 +1280,7 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(self.request("/api/pad/button_sizes?cols=0&rows=3")[0], 400)
         self.assertEqual(self.request("/api/component/button-defaults/config", "POST", {"corner_radius": "4"})[0], 200)
         self.assertEqual(self.request("/api/component/button-defaults/config")[1]["corner_radius"], "4")
+        self.assertEqual(self.request("/api/component/button-defaults/config", "POST", {"base_text_size": -1})[0], 400)
         defaults = self.request("/api/component/button-defaults/config")[1]
         self.assertEqual(defaults["firmware_defaults"]["bg_color"], "#333333")
         self.assertEqual(defaults["firmware_defaults"]["pixel_shift_distance_px"], 4)
@@ -1158,41 +1345,86 @@ class PortalDevServerTest(unittest.TestCase):
     def test_catalog_source_parity(self):
         actions_dir = ROOT / "src/app/actions"
         manifest = (actions_dir / "action_modules.inc").read_text()
-        unavailable = {"ble_pair", "display_refresh", "camera_capture", "voice_clip"}
-        expected = set(re.findall(r'#include "([^"/]+)_action.cpp"', manifest)) - unavailable
+        action_files = {"list_nav": "list_navigation", "button_nav": "button_navigation",
+                        **{"vnote_" + command: "voice_note_" + command
+                           for command in ("record", "process", "load", "delete")}}
+        expected = {next((key for key, value in action_files.items() if value == name), name)
+                    for name in re.findall(r'#include "([^"/]+)_action.cpp"', manifest)}
         catalog = self.server.pad_fixture["catalog"]
         self.assertEqual({action["type"] for action in catalog}, expected)
+        self.assertEqual(len(catalog), len(expected))
         for action in catalog:
-            source = (actions_dir / (action["type"] + "_action.cpp")).read_text()
-            if action["type"] in {"notify", "confirm"}:
-                source += (actions_dir / "dialog_action.h").read_text()
-                self.assertIn(json.dumps(action["label"]), source)
-            else:
-                self.assertIn('action["label"] = ' + json.dumps(action["label"]), source)
-            self.assertIn('action["group"] = ' + json.dumps(action["group"]), source)
-        sticky_catalog = self.request("/api/info?catalog=1", profile="reterminal-sticky-interactive")[1]["catalog"]
-        recorder = next(action for action in sticky_catalog if action["type"] == "voice_clip")
-        recorder_source = (actions_dir / "voice_clip_action.cpp").read_text()
-        self.assertIn('action["label"] = ' + json.dumps(recorder["label"]), recorder_source)
-        self.assertIn('action["group"] = ' + json.dumps(recorder["group"]), recorder_source)
+            self.assertTrue(action["operations"], action["type"])
+            for operation in action["operations"]:
+                self.assertIn(operation["execution"], ("sync", "pausable"))
+                self.assertEqual(operation["pausable"], operation["execution"] == "pausable")
         fields = ("name", "icon", "second_icon", "axis_field", "horizontal_icon", "vertical_icon", "default_axis")
         widgets = {widget["type"]: widget for widget in self.server.pad_fixture["widget_catalog"]}
         for path in (ROOT / "src/app/widgets").glob("*_widget.cpp"):
-            match = re.search(r'static const WidgetPreview (\w+)_preview = \{([^}]+)\};', path.read_text())
+            source = path.read_text()
+            match = re.search(r'static const WidgetPreview (\w+)_preview = \{([^}]+)\};', source)
+            if path.name == "list_widget.cpp":
+                match = re.search(r'const WidgetPreview (preview)\{([^}]+)\};', source)
             if not match or match[1] == "camera_preview":
                 continue
             values = json.loads("[" + match[2].replace("nullptr", "null") + "]")
-            expected = {"type": match[1]}
+            widget_type = "list" if path.name == "list_widget.cpp" else match[1]
+            expected = {"type": widget_type}
             expected.update({field: value for field, value in zip(fields, values) if value is not None})
-            self.assertEqual(widgets.pop(match[1]), expected)
+            self.assertEqual(widgets.pop(widget_type), expected)
         self.assertEqual(widgets, {})
+
+    def test_action_catalog_capability_projection(self):
+        cases = (
+            ("esp32-p4-lcd4b", {"alarm", "alarm_tone", "alarm_mp3", "image_next", "key"},
+             {"display_refresh", "vnote_record", "camera_capture", "bthome"}),
+            ("jc3248w535", {"key"}, {"alarm", "alarm_tone", "image_next", "display_refresh"}),
+            ("crowpanel-4.2-interactive", {"alarm", "display_refresh"},
+             {"alarm_tone", "key", "image_next", "vnote_record"}),
+            ("reterminal-sticky-interactive", {"alarm", "alarm_tone", "display_refresh", "bthome"},
+             {"alarm_mp3", "key", "image_next", "vnote_record"}),
+            ("reterminal-sticky-interactive-sd", {"vnote_record", "vnote_load", "display_refresh"},
+             {"alarm_mp3", "key", "camera_capture"}),
+        )
+        for profile, present, absent in cases:
+            with self.subTest(profile=profile):
+                info = self.request("/api/info?catalog=1", profile=profile)[1]
+                types = {action["type"] for action in info["catalog"]}
+                self.assertTrue(present <= types, present - types)
+                self.assertFalse(absent & types, absent & types)
+                sound = next((action for action in info["catalog"] if action["type"] == "sound_alert"), None)
+                if sound:
+                    self.assertEqual(any(op["id"] == "audio.alert.mp3" for op in sound["operations"]),
+                                     info["has_sound_player"])
+                self.assertEqual(info["has_alarm"], "alarm" in types)
+
+    def test_alarm_typed_hook_validation(self):
+        config = self.request("/api/component/alarms/config")[1]
+        for hook in (
+                {"op": "alarm.enable", "args": {}},
+                {"op": "dialog.notify", "args": {"message": "Hello", "duration_ms": 1000}},
+                {"op": "dialog.notify", "args": {"message": {"$template": "[var:message]"}, "duration_ms": 0}}):
+            config["1"]["on_ring"] = [hook]
+            self.assertEqual(self.request("/api/component/alarms/config", "POST", config)[0], 200)
+        for hook in (
+                {"op": "delay.wait", "args": {"duration_ms": 1000}},
+                {"op": "camera.capture", "args": {"save_to": "both"}},
+                {"op": "alarm.enable", "args": {"extra": 1}},
+                {"op": "dialog.notify", "args": {"message": "Hello", "duration_ms": 999}},
+                {"op": "dialog.notify", "args": {"message": "Hello"}},
+                {"op": "dialog.notify", "args": {"message": {"$template": ""}, "duration_ms": 1000}}):
+            config["1"]["on_ring"] = [hook]
+            self.assertEqual(self.request("/api/component/alarms/config", "POST", config)[0], 400, hook)
+        self.assertEqual(self.request("/api/component/alarms/config", profile="jc3248w535")[0], 404)
 
     def test_slider_catalog_requires_touch(self):
         _, touch_info = self.request("/api/info?catalog=1", profile="esp32-p4-lcd4b")
         slider = next(widget for widget in touch_info["widget_catalog"] if widget["type"] == "slider")
         self.assertEqual(slider["axis_field"], "widget_slider_axis")
-        self.assertTrue(any(action.get("template_fields", {}).get("data_json", {}).get("max") == 63
-                            for action in touch_info["catalog"] if action["type"] == "ha_service"))
+        ha = next(action for action in touch_info["catalog"] if action["type"] == "ha_service")
+        call = next(operation for operation in ha["operations"] if operation["id"] == "ha.service.call")
+        data = next(argument for argument in call["arguments"] if argument["name"] == "data_json")
+        self.assertEqual(data["max_length"], 63)
 
         _, non_touch_info = self.request("/api/info?catalog=1", profile="crowpanel-4.2-interactive")
         self.assertFalse(any(widget["type"] == "slider" for widget in non_touch_info["widget_catalog"]))
@@ -1205,7 +1437,8 @@ class PortalDevServerTest(unittest.TestCase):
         schema = self.server.pad_fixture["binding_schema"]["schemes"]
         fields = ("min_params", "max_params", "widget_max_params", "format_param", "validation_mode", "free_form")
         for scheme in schema:
-            source = (ROOT / "src/app" / (scheme["name"] + "_binding.cpp")).read_text()
+            filename = "item_binding_scheme.cpp" if scheme["name"] == "item" else scheme["name"] + "_binding.cpp"
+            source = (ROOT / "src/app" / filename).read_text()
             match = re.search(r'binding_template_register\("' + scheme["name"] + r'"[^{}]+\{([^}]+)\}', source)
             self.assertIsNotNone(match)
             parts = match[1].split(",")[:6]

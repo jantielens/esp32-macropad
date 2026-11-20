@@ -3,11 +3,23 @@
   <p>Upload a firmware .bin file directly to the device.</p>
 </div>
 <div class="card mb-3">
+  <div class="card-header"><h5 class="mb-0">Upload Firmware</h5></div>
   <div class="card-body">
     <div class="mb-3">
       <label class="form-label" for="firmware-file">Firmware File (.bin)</label>
       <input type="file" class="form-control" id="firmware-file" accept=".bin">
     </div>
     <button type="button" class="btn btn-primary btn-sm" id="upload-btn" disabled>Upload Firmware</button>
+  </div>
+</div>
+<div class="card mb-3">
+  <div class="card-header"><h5 class="mb-0">Boot into OTA Mode</h5></div>
+  <div class="card-body">
+    <p class="text-muted small">If firmware uploads are unreliable, use OTA mode to reboot with Bluetooth and MQTT temporarily disabled, freeing resources for the update. Bluetooth clients will disconnect and MQTT features will be unavailable.</p>
+    <p class="text-muted small">After the device reconnects, return to this screen and upload the firmware. Your saved settings are unchanged. Reboot again to return to normal mode, even if the upload fails.</p>
+    <p id="ota-mode-active" class="form-text" role="status" style="display:none;">OTA mode is active. Bluetooth and MQTT will return after reboot.</p>
+    <div id="ota-mode-control">
+      <button type="button" class="btn btn-primary btn-sm" id="ota-mode-btn">Boot into OTA Mode</button>
+    </div>
   </div>
 </div>

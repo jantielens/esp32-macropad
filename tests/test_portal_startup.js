@@ -2,12 +2,78 @@ const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
 
+async function testOtaModeReboot() {
+    for (const outcome of ['success', 'rejected']) {
+        const button = { disabled: false };
+        let url, method, dialog, message;
+        const context = {
+            confirm: () => true,
+            document: { getElementById: () => button },
+            fetch: async (target, options) => {
+                url = target;
+                method = options.method;
+                return { ok: outcome === 'success', json: async () => ({
+                    success: outcome === 'success', message: 'Activity in progress'
+                }) };
+            },
+            showRebootDialog: value => { dialog = value; },
+            showMessage: value => { message = value; }
+        };
+        vm.createContext(context);
+        vm.runInContext(fs.readFileSync('src/app/web/portal_firmware.js', 'utf8'), context);
+        await context.bootIntoOtaMode();
+        assert.strictEqual(url, '/api/reboot/ota');
+        assert.strictEqual(method, 'POST');
+        assert.strictEqual(button.disabled, outcome === 'success');
+        if (outcome === 'success') assert.strictEqual(dialog.context, 'ota-mode');
+        else assert.match(message, /Activity in progress/);
+    }
+}
+
+async function testRebootRedirect() {
+    for (const contextName of ['ota-mode', 'reboot']) {
+        const timers = [];
+        let reloads = 0;
+        const location = {
+            origin: 'http://device',
+            hash: '#manual-upload',
+            reload() { ++reloads; }
+        };
+        const fetch = async () => ({ ok: true });
+        const context = {
+            window: { location, fetch },
+            document: { getElementById: () => null },
+            fetch,
+            setTimeout(callback) { timers.push(callback); },
+            AbortSignal,
+            console
+        };
+        vm.createContext(context);
+        vm.runInContext(fs.readFileSync('src/app/web/portal_core.js', 'utf8'), context);
+        const pending = context.startReconnection({
+            context: contextName, statusElement: {}, messageElement: {}
+        });
+        timers.shift()();
+        await pending;
+        await new Promise(resolve => setImmediate(resolve));
+        timers.shift()();
+        if (contextName === 'ota-mode') {
+            assert.strictEqual(location.hash, '#manual-upload');
+            assert.strictEqual(reloads, 1, 'reload even when the fragment is already selected');
+        } else {
+            assert.strictEqual(location.href, 'http://device');
+            assert.strictEqual(reloads, 0);
+        }
+    }
+}
+
 async function testFirmwareUploadResponses() {
     for (const outcome of ['success', 'rejected', 'disconnect']) {
         const nodes = new Map();
         const timers = [];
         let request;
         let reconnects = 0;
+        let pollingPaused = false;
         class FakeRequest {
             constructor() {
                 request = this;
@@ -29,6 +95,8 @@ async function testFirmwareUploadResponses() {
             FormData: class { append() {} },
             API_UPDATE: '/api/update',
             showRebootDialog() {},
+            stopHealthPolling() { pollingPaused = true; },
+            resumeHealthPolling() { pollingPaused = false; },
             startReconnection() { ++reconnects; },
             setTimeout(callback) { timers.push(callback); },
             console
@@ -36,6 +104,7 @@ async function testFirmwareUploadResponses() {
         vm.createContext(context);
         vm.runInContext(fs.readFileSync('src/app/web/portal_firmware.js', 'utf8'), context);
         await context.uploadFirmware();
+        assert(pollingPaused, 'upload must pause health polling');
         request.progress({ lengthComputable: true, loaded: 98, total: 100 });
         if (outcome === 'disconnect') {
             request.handlers.error();
@@ -45,6 +114,7 @@ async function testFirmwareUploadResponses() {
             request.handlers.load();
         }
         if (outcome === 'rejected') {
+            assert(!pollingPaused, 'failed upload must resume health polling');
             assert.match(nodes.get('reboot-message').textContent, /retry update/);
             assert.strictEqual(nodes.get('upload-btn').disabled, false);
             assert.strictEqual(nodes.get('firmware-file').disabled, false);
@@ -112,6 +182,8 @@ async function testFetchConcurrency() {
 }
 
 async function main() {
+    await testOtaModeReboot();
+    await testRebootRedirect();
     await testFirmwareUploadResponses();
     await testFetchConcurrency();
     const listeners = new Map();
@@ -335,6 +407,12 @@ async function main() {
     };
     const soundSelect = selectNode();
     const screenSelect = selectNode();
+    const operationScreenSelect = selectNode();
+    operationScreenSelect.strict = true;
+    operationScreenSelect.attributes = {};
+    operationScreenSelect.getAttribute = name => operationScreenSelect.attributes[name];
+    operationScreenSelect.setAttribute = (name, value) => { operationScreenSelect.attributes[name] = value; };
+    operationScreenSelect.removeAttribute = name => { delete operationScreenSelect.attributes[name]; };
     screenSelect.strict = true;
     screenSelect.id = 'test-target';
     const screenBinding = { id: 'test-target-binding', value: '', focus() {} };
@@ -350,9 +428,10 @@ async function main() {
     };
     context.document.createElement = () => ({ value: '', textContent: '' });
     context.document.getElementById = id => id === 'pad-edit-extension-id' ? extensionSelect :
-        id === 'test-sound-alert-file' ? soundSelect : id === 'test-target' ? screenSelect :
+        id === 'test-op-audio.alert.mp3-file-fixed' ? soundSelect : id === 'test-target' ? screenSelect :
+        id === 'test-op-screen.open-target-fixed' ? operationScreenSelect :
         id === 'test-target-binding' ? screenBinding : id === 'test-target-binding-group' ? screenBindingGroup : extensionInputs[id] || null;
-    for (const module of ['portal_pad_dialog', 'portal_action_editor', 'portal_action_editor_screen', 'portal_action_editor_sound_alert']) {
+    for (const module of ['portal_pad_dialog', 'portal_action_editor', 'portal_action_editor_screen']) {
         vm.runInContext(fs.readFileSync('src/app/web/' + module + '.js', 'utf8'), context);
     }
     vm.runInContext(fs.readFileSync('src/app/web/portal_widget_editor.js', 'utf8'), context);
@@ -413,6 +492,9 @@ async function main() {
     assert(!extensionSelect.options.some(option => option.value === 'missing'));
     assert.throws(() => extensionEditor.build({}), /installed enabled/);
 
+    vm.runInContext(`deviceInfoCache.catalog = [{ operations: [
+        { id:'audio.alert.mp3', arguments:[{name:'file', control:'sounds'}] }
+    ] }];`, context);
     soundSelect.value = 'saved.mp3';
     context.actionEditorPopulateSounds(['test'], ['other.mp3']);
     assert.strictEqual(soundSelect.value, 'saved.mp3');
@@ -424,19 +506,37 @@ async function main() {
         {id:'info', name:'Device Info'}, {id:'pad_2', name:'Pad 3'},
         {id:'pad_0', name:'Living Room'}, {id:'pad_1', name:'Pad 2'}
     ];
+    vm.runInContext(`deviceInfoCache.catalog = [{ operations: [
+        { id: 'screen.open', arguments: [{ name: 'target', control: 'screens' }] },
+        { id: 'test.navigate', arguments: [{ name: 'destination', control: 'screens' }] }
+    ] }];`, context);
+    const secondScreenSelect = selectNode();
+    secondScreenSelect.strict = true;
+    secondScreenSelect.attributes = {};
+    secondScreenSelect.getAttribute = name => secondScreenSelect.attributes[name];
+    secondScreenSelect.setAttribute = (name, value) => { secondScreenSelect.attributes[name] = value; };
+    secondScreenSelect.removeAttribute = name => { delete secondScreenSelect.attributes[name]; };
+    const getElement = context.document.getElementById;
+    context.document.getElementById = id => id === 'test-op-test.navigate-destination-fixed'
+        ? secondScreenSelect : getElement(id);
     context.actionEditorPopulateScreens(['test'], screens);
-    assert.deepStrictEqual(Array.from(screenSelect.options, option => [option.value, option.textContent]), [
-        ['', '(none)'], ['pad_0', 'Pad 1: Living Room'], ['pad_1', 'Pad 2'],
-        ['pad_2', 'Pad 3'], ['__binding__', 'Binding value'], ['info', 'Device Info']
+    assert.strictEqual(operationScreenSelect.value, 'pad_0', 'new operation selects first available screen');
+    assert.strictEqual(secondScreenSelect.value, 'pad_0', 'screen pickers work for any operation descriptor');
+    assert.deepStrictEqual(Array.from(operationScreenSelect.options, option => [option.value, option.textContent]), [
+        ['pad_0', 'Pad 1: Living Room'], ['pad_1', 'Pad 2'],
+        ['pad_2', 'Pad 3'], ['info', 'Device Info']
     ]);
-    screenSelect.value = 'pad_2';
+    operationScreenSelect.value = 'pad_2';
     context.actionEditorPopulateScreens(['test'], screens);
-    assert.strictEqual(screenSelect.value, 'pad_2', 'refresh must retain a selected screen');
-    screenSelect.setAttribute('data-pending-value', 'pad_1');
+    assert.strictEqual(operationScreenSelect.value, 'pad_2', 'refresh retains the selected operation screen');
+    operationScreenSelect.setAttribute('data-pending-value', 'pad_1');
     context.actionEditorPopulateScreens(['test'], screens);
-    assert.strictEqual(screenSelect.value, 'pad_1', 'refresh must restore a deferred target');
-    assert(!screenSelect.hasAttribute('data-pending-value'));
-    const screenEditor = context._actionEditorExtensions.find(extension => extension.type === 'screen');
+    assert.strictEqual(operationScreenSelect.value, 'pad_1', 'late screen list restores the saved operation target');
+    operationScreenSelect.value = '';
+    context.actionEditorPopulateScreens(['test'], []);
+    assert.strictEqual(operationScreenSelect.value, '', 'empty screen list does not invent a target');
+    context.actionEditorPopulateScreens(['test'], screens);
+    assert.strictEqual(operationScreenSelect.value, 'pad_0', 'first screen is selected after a delayed list');
     vm.runInContext(fs.readFileSync('src/app/web/portal_binding_validator.js', 'utf8'), context);
     context.bindingClearError = () => {};
     context.bindingShowError = () => {};
@@ -446,54 +546,12 @@ async function main() {
     screenBinding.parentElement = actionGroup;
     screenBinding.focus = () => { actionFocused = true; };
     context.showMessage = (message, type) => actionMessages.push({ message, type });
-    screenEditor.load('test', { target: '[list:pads.selected]' });
-    assert.strictEqual(screenSelect.value, '__binding__');
-    assert.strictEqual(screenBindingGroup.style.display, '');
-    assert.strictEqual(screenEditor.build('test', 'screen').target, '[list:pads.selected]');
-    context.actionEditorPopulateScreens(['test'], screens);
-    assert.strictEqual(screenEditor.build('test', 'screen').target, '[list:pads.selected]');
-    screenBinding.value = '[list:pads.selected';
-    assert.throws(() => screenEditor.build('test', 'screen'), error => error.fieldIds[0] === screenBinding.id);
-    screenBinding.value = 'pad_1';
-    assert.throws(() => screenEditor.build('test', 'screen'), /binding/);
-    screenBinding.value = '[bad]';
-    assert.throws(() => screenEditor.build('test', 'screen'), /binding/);
-    screenBinding.value = '[pad:' + 'a'.repeat(25) + ']';
-    assert.strictEqual(screenEditor.build('test', 'screen').target.length, 31);
-    screenBinding.value = '[pad:' + 'a'.repeat(26) + ']';
-    assert.throws(() => screenEditor.build('test', 'screen'), /31 UTF-8 bytes/);
-    screenBinding.value = '[pad:' + 'é'.repeat(13) + ']';
-    assert.throws(() => screenEditor.build('test', 'screen'), /31 UTF-8 bytes/);
-    context.padWorkspace = {};
-    assert.throws(() => screenEditor.build('test', 'screen'), /31 UTF-8 bytes/);
-    delete context.padWorkspace;
-    assert.strictEqual(actionMessages.length, 0, 'building reports errors without presenting host messages');
-    assert.strictEqual(actionFocused, false, 'building must not steal focus, with or without a pad workspace');
-    screenEditor.load('test', { target: 'missing_screen' });
-    assert.strictEqual(screenEditor.build('test', 'screen').target, '');
-    screenSelect.removeAttribute('data-screens-loaded');
-    screenEditor.load('test', { target: 'pad_2' });
-    screenSelect.setAttribute('data-pending-value', 'pad_2');
-    screenSelect.value = '__binding__';
-    screenBinding.value = '[list:pads.selected]';
-    context.actionEditorScreenTargetChanged('test');
-    context.actionEditorPopulateScreens(['test'], screens);
-    assert.strictEqual(screenEditor.build('test', 'screen').target, '[list:pads.selected]', 'catalog loading must not overwrite a newer mode');
     const screenLookup = context.document.getElementById;
-    context.document.getElementById = id => id === 'pad-edit-action-0-type' ? { value: 'screen' } :
-        screenLookup(id.replace(/^pad-edit-action-0/, 'test'));
-    screenBinding.value = '[list:pads.selected';
-    assert.strictEqual(context.bindingValidateDialog().valid, false);
-    screenSelect.value = 'pad_1';
-    context.actionEditorScreenTargetChanged('test');
-    assert.strictEqual(context.bindingValidateDialog().valid, true, 'inactive binding drafts must not block literal targets');
-    screenSelect.value = '__binding__';
-    context.actionEditorScreenTargetChanged('test');
-    assert.strictEqual(context.bindingValidateDialog().valid, false, 'switching back must validate the retained binding draft');
     vm.runInContext(fs.readFileSync('src/app/web/portal_config_actions.js', 'utf8'), context);
     context.document.getElementById = id => {
-        if (['hw-button-editors', 'mqtt-trigger-editors'].includes(id)) return { querySelectorAll: () => [{}] };
+        if (['hw-button-editors', 'mqtt-trigger-editors'].includes(id)) return { children: [{}] };
         if (id === 'mqtttrig-1-topic') return { value: 'test/topic' };
+        if (id === 'timer-config-save') return { disabled: false };
         if (id.endsWith('-type')) return { value: 'screen', getAttribute: () => null };
         if (id.endsWith('-target-binding')) return screenBinding;
         if (id.endsWith('-target-binding-group')) return screenBindingGroup;
@@ -505,6 +563,16 @@ async function main() {
         actionWrites.push({ url, payload: JSON.parse(options.body) });
         return { ok: true };
     };
+    context.bootActionsLoaded = true;
+    context.swipeActionsLoaded = true;
+    context.hwButtonsLoaded = true;
+    context.mqttTriggersLoaded = true;
+    const originalBuild = context.actionEditorBuild;
+    let invalidAction = true;
+    context.actionEditorBuild = () => {
+        if (invalidAction) throw Object.assign(new Error('Invalid dynamic screen target'), {fieldIds: [screenBinding.id]});
+        return {op: 'screen.open', args: {target: {$template: screenBinding.value}}};
+    };
     screenBinding.value = '[pad:' + 'a'.repeat(26) + ']';
     for (const save of ['saveBootActions', 'saveSwipeActions', 'saveHwButtons', 'saveMqttTriggers', 'saveTimerConfig']) {
         actionFocused = false;
@@ -512,30 +580,76 @@ async function main() {
         actionMessages.length = 0;
         await context[save]();
         assert(actionFocused && actionGroup.open, save + ' must reveal and focus the invalid action');
-        assert.match(actionMessages[0].message, /31 UTF-8 bytes/);
+        assert.match(actionMessages[0].message, /Invalid dynamic screen target/);
         assert.strictEqual(actionMessages[0].type, 'error');
         assert.strictEqual(actionWrites.length, 0, save + ' must not write invalid actions');
     }
-    screenBinding.value = '[list:pads.selected]';
+    screenBinding.value = '[var:selected_pad]';
+    invalidAction = false;
     await context.saveBootActions();
     assert.strictEqual(actionWrites.length, 1);
-    assert.strictEqual(actionWrites[0].payload.actions[0].target, screenBinding.value);
+    assert.strictEqual(actionWrites[0].payload.actions[0].args.target.$template, screenBinding.value);
+    assert.strictEqual(actionWrites[0].payload.action_format_version, 1);
+    context.actionEditorBuild = originalBuild;
     context.document.getElementById = screenLookup;
-    let soundRequests = 0;
-    context.getDeviceInfo = async () => ({ has_sound_player:false });
-    context.fetch = async url => {
-        assert.strictEqual(url, '/api/sounds/list');
-        soundRequests++;
-        return {ok:true, json:async () => ['new.mp3']};
-    };
+    context.getDeviceInfo = async () => ({ available_screens:screens });
     await context.actionEditorWireFragment(['test']);
-    assert.strictEqual(soundRequests, 0, 'unsupported audio must not fetch sounds');
-    context.getDeviceInfo = async () => ({ has_sound_player:true });
-    await context.actionEditorWireFragment(['test']);
-    assert.strictEqual(soundRequests, 1, 'fragment wiring fetches sounds once for every editor prefix');
-    assert(soundSelect.options.some(option => option.value === 'new.mp3'));
-    assert.strictEqual(soundSelect.value, 'saved.mp3');
+    assert.strictEqual(operationScreenSelect.value, 'pad_0');
     const navSource = fs.readFileSync('src/app/web/portal_nav.js', 'utf8');
+    const navClassList = () => {
+        const values = new Set();
+        return {
+            contains: name => values.has(name),
+            toggle: (name, enabled) => enabled ? values.add(name) : values.delete(name)
+        };
+    };
+    const navHeaders = ['a', 'b', 'c'].map(id => {
+        const toggle = { attrs: {}, setAttribute(name, value) { this.attrs[name] = value; } };
+        return {
+            classList: navClassList(),
+            getAttribute: () => id,
+            querySelector: selector => selector === '.nav-category-toggle' ? toggle : {textContent: id},
+            toggle
+        };
+    });
+    const navItems = navHeaders.map(() => ({classList: navClassList()}));
+    const navState = {
+        navEl: {
+            querySelector: () => null,
+            querySelectorAll: selector => selector === '.nav-category-header' ? navHeaders :
+                selector === '.nav-category-items' ? navItems : []
+        },
+        itemMap: {first: {cat: {id: 'a'}}, third: {cat: {id: 'c'}}},
+        currentItem: 'first'
+    };
+    vm.createContext(navState);
+    vm.runInContext(navSource.slice(navSource.indexOf('  function setActive('),
+        navSource.indexOf('  // ---------- Fragment loading')), navState);
+    const expanded = () => navHeaders.filter(header => header.classList.contains('expanded'))
+        .map(header => header.getAttribute('data-category'));
+    navState.setActive('first');
+    navState.expandCategoryFor('first');
+    navState.toggleExpandedCategory(navHeaders[1]);
+    assert.deepStrictEqual(expanded(), ['a', 'b'], 'browsing keeps the active category open');
+    navState.toggleExpandedCategory(navHeaders[2]);
+    assert.deepStrictEqual(expanded(), ['a', 'c'], 'a third category replaces the browsed category');
+    navState.toggleExpandedCategory(navHeaders[0]);
+    assert.deepStrictEqual(expanded(), ['c'], 'the active category can be collapsed');
+    assert(navHeaders[0].classList.contains('active'), 'the collapsed active category stays marked');
+    assert.strictEqual(navHeaders[0].toggle.attrs['aria-expanded'], 'false');
+    navState.toggleExpandedCategory(navHeaders[0]);
+    assert.deepStrictEqual(expanded(), ['a', 'c'], 'reopening the active category preserves the browsed category');
+    navState.currentItem = 'third';
+    navState.setActive('third');
+    navState.expandCategoryFor('third');
+    assert.deepStrictEqual(expanded(), ['c'], 'selecting an item closes the previous category');
+    assert(navHeaders[2].classList.contains('active'));
+    navState.currentItem = 'welcome';
+    navState.setActive('welcome');
+    navState.expandCategoryFor('welcome');
+    navState.toggleExpandedCategory(navHeaders[0]);
+    navState.toggleExpandedCategory(navHeaders[1]);
+    assert.deepStrictEqual(expanded(), ['b'], 'without an active category only the browsed category stays open');
     const navInit = navSource.slice(navSource.indexOf('  function init()'),
         navSource.indexOf("  if (document.readyState === 'loading')"));
     const headerLookup = context.document.getElementById;

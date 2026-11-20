@@ -84,7 +84,7 @@ Disabled sensing does not perform motion analysis.
 > the hold time. Do not use it as proof that a room is empty.
 
 Actions run on the transition from absent to present, once per presence episode.
-A Device command **Wake display** is a one-time wake. The keep-awake option
+A **Wake display** action is a one-time wake. The keep-awake option
 resets inactivity on each confirmed motion sample; the presence hold time alone
 does not hold the display on after movement stops.
 

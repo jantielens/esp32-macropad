@@ -5,6 +5,7 @@
 #include "../display_driver.h"
 #if HAS_IMAGE_FETCH
 #include "../image_fetch.h"
+#include "pad_image_frame.h"
 #endif
 #if HAS_IMAGE_LIBRARY
 #include "../local_image_loader.h"
@@ -37,7 +38,7 @@ static void poll_remote_image_source(ButtonTile& tile) {
 // MQTT Label Binding Polling
 // ============================================================================
 
-void PadScreen::pollMqttBindings(bool refreshPassive) {
+void PadScreen::pollMqttBindings(bool refreshPassive, bool force) {
 #if HAS_DISPLAY
     char resolved[BINDING_TEMPLATE_MAX_LEN];
     for (uint16_t i = 0; refreshPassive && i < bindingCount; i++) {
@@ -47,7 +48,7 @@ void PadScreen::pollMqttBindings(bool refreshPassive) {
         binding_template_resolve(rb.templ, resolved, sizeof(resolved));
 
         // Only update LVGL label if text changed
-        if (strcmp(resolved, rb.last) == 0) continue;
+        if (!force && strcmp(resolved, rb.last) == 0) continue;
         strlcpy(rb.last, resolved, sizeof(rb.last));
         ButtonTile& tile = tiles[rb.tileIndex];
         pad_set_content_label_text(tile.content_layout, rb.labelIndex, resolved);
@@ -113,7 +114,7 @@ void PadScreen::pollMqttBindings(bool refreshPassive) {
             }
 
             // Only update widget if any resolved value changed
-            if (strcmp(widget_combined, tile.widget_last) != 0) {
+            if (force || strcmp(widget_combined, tile.widget_last) != 0) {
                 strlcpy(tile.widget_last, widget_combined, sizeof(tile.widget_last));
                 lv_obj_t* widget_parent = tile.content_layout.widget_region
                     ? tile.content_layout.widget_region : tile.obj;
@@ -259,6 +260,7 @@ void PadScreen::pollColorBindings() {
 
 #if HAS_IMAGE_FETCH
 			if (tile.image_slot != IMAGE_SLOT_INVALID) {
+                tile.image_presentation_dirty = true;
 				image_fetch_set_letterbox_color(tile.image_slot, letterbox_color);
 			}
 #endif
@@ -504,22 +506,15 @@ void PadScreen::pollImageFrames() {
         ButtonTile& tile = tiles[i];
 #if HAS_IMAGE_FETCH
         if (tile.image_slot != IMAGE_SLOT_INVALID && tile.bg_image &&
-            image_fetch_has_new_frame(tile.image_slot)) {
+            (tile.image_presentation_dirty || image_fetch_has_new_frame(tile.image_slot))) {
             uint16_t fw = 0, fh = 0;
-            const uint16_t* pixels = image_fetch_get_frame(tile.image_slot, &fw, &fh);
+            ImageContentBounds content = {};
+            const uint16_t* pixels = image_fetch_get_frame(tile.image_slot, &fw, &fh, &content);
+            tile.image_presentation_dirty = false;
             if (pixels && fw && fh) {
-                lv_image_dsc_t& dsc = tile.img_dsc;
-                dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
-                dsc.header.cf = LV_COLOR_FORMAT_RGB565;
-                dsc.header.flags = 0;
-                dsc.header.w = fw;
-                dsc.header.h = fh;
-                dsc.header.stride = fw * 2;
-                dsc.data_size = (uint32_t)fw * fh * 2;
-                dsc.data = (const uint8_t*)pixels;
-                lv_image_set_src(tile.bg_image, &dsc);
+                const bool transparent = lv_obj_get_style_bg_opa(tile.obj, LV_PART_MAIN) == LV_OPA_TRANSP;
+                pad_set_image_frame(tile.bg_image, tile.img_dsc, pixels, fw, fh, content, transparent);
                 lv_obj_remove_flag(tile.bg_image, LV_OBJ_FLAG_HIDDEN);
-                lv_obj_invalidate(tile.bg_image);
             }
         }
 #endif

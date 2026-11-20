@@ -13,6 +13,7 @@ This document describes the display and touch subsystem architecture, design pat
 - [Touch Driver HAL](#touch-driver-hal)
 - [Screen Management](#screen-management)
 - [Rendering System](#rendering-system)
+  - [Explicitly Loaded Provider Data](#explicitly-loaded-provider-data)
 - [Adding New Display Drivers](#adding-new-display-drivers)
 - [Adding New Touch Drivers](#adding-new-touch-drivers)
 - [Adding New Screens](#adding-new-screens)
@@ -308,8 +309,8 @@ selects the boot policy: `0` off, `1` low (default, nominal 185 mA, CHG_PROG hig
 `2` high (nominal 425 mA, CHG_PROG low). Change this board-local setting
 and rebuild StopWatch to select another default. Invalid values fail compilation.
 Startup disables retained charging before configuring CHG_PROG; an off boot
-never deliberately enables charging. The board-local `charging_mode` action
-uses flat JSON such as `{"type":"charging_mode","mode":"low"}`; its mode is
+never deliberately enables charging. The board-local charging operation
+uses `{"op":"power.charging.set_mode","args":{"mode":"low"}}`; its mode is
 `off`, `low`, or `high`. Runtime changes are not persisted: reboot applies the
 boot setting again, before any configured boot actions.
 
@@ -323,29 +324,28 @@ USB operation with charging off remains required.
 `BOARD_ACTION_SOURCE` selects the board-local action module through `actions.cpp`.
 `stopwatch_actions.cpp` registers `charging_mode`, `status_led`, `vibrate`, and
 `shutdown` under **M5Stack StopWatch**. Their payloads use the existing opaque
-action storage. The board raises `ACTION_TYPE_REGISTRY_MAX_TYPES` to 28 to fit
-the built-in catalog and four board actions. Other boards do not compile this
+action storage. Other boards do not compile this
 module, its metadata, or the StopWatch hardware implementation. The generic
 catalog-driven editor supplies the controls; there are no board-specific portal
 assets or generic configuration settings.
 
-`status_led` uses `{"type":"status_led","mode":"on"}` or `"off"` and changes
+`device.status_led.set` uses `{"op":"device.status_led.set","args":{"mode":"on"}}`
+or `"off"` and changes
 only PWR_CFG bit 4 (LED_EN). No preference is persisted. Every firmware boot
 explicitly restores LED_EN high before boot actions, including ESP32-only
 restarts that do not reset the PMIC. This controls the PMIC's LED enable level;
 its proprietary status/download signalling may override the visible state.
 Physical on/off behavior still needs hardware validation.
 
-`vibrate` accepts `{"type":"vibrate","pattern":"200"}` (default `200`);
+`device.vibrate` accepts `{"op":"device.vibrate","args":{"pattern":"200"}}`;
 `pattern: "0"` stops vibration. IO9 is driven
 through the expander GPIO latch without changing shared PWM frequency or other
-channels. `{"type":"vibrate","pattern":"20,100,20"}` runs
+channels. `{"op":"device.vibrate","args":{"pattern":"20,100,20"}}` runs
 20 ms on, 100 ms off, and 20 ms on. Patterns accept whitespace around commas,
 1-15 positive whole-millisecond steps with an odd count, and at most 5000 ms
 total including pauses. A standalone `0` is the only zero-duration pattern.
 `pattern` is the sole action field; `duration_ms` is not supported.
-The action payload stores compiled durations without growing the existing
-96-byte allocation; the driver copies them into a fixed array without heap
+The driver copies compiled durations into a fixed array without heap
 allocation. Pulses and patterns are nonblocking; a new request replaces the
 active sequence, and a successful `0` pattern cancels it.
 `BOARD_HARDWARE_LOOP` selects the board-only main-loop hook, which checks motor
@@ -356,7 +356,7 @@ actual transition, so delayed servicing does not skip pulses. Timing depends on 
 service and I2C availability, so the deadline is not a hardware timer guarantee.
 Startup disables retained motor PWM and clears its output.
 
-`{"type":"shutdown"}` is a terminal pausable action. A nonzero continuation
+`{"op":"device.shutdown","args":{}}` is a terminal pausable action. A nonzero continuation
 token is required; the action reserves the existing OTA activity gate before
 queueing power-off, so an active update rejects it and a new update cannot race
 the power cut. The main-loop hook stops audio outside the I2C lock, clears motor
@@ -1050,11 +1050,12 @@ Sparkline uses shared fill opacity, line width, and current dot size with
 optional per-line overrides. The chart height is a centered percentage of its
 available height after annotation margins. A chart draw callback renders fills
 before child lines and annotations, reusing cached plotted points and their
-missing-data sentinels.
+missing-data sentinels. Each fill extends to zero on its line's effective scale,
+clipped to the chart edge when zero is outside the visible range.
 Non-overlapping vertical strips avoid translucent tessellation seams;
 equal-height columns share rectangles, clipped work is bounded by visible
 width, and no additional sample or full-chart buffer is allocated.
-Point or line-color changes invalidate the filled chart bounds; unchanged
+Point, zero-baseline, or line-color changes invalidate the filled chart bounds; unchanged
 output retains the existing revision/throttle behavior.
 
 `WidgetType.createUI` receives the widget region, configuration, button
@@ -1084,7 +1085,7 @@ or a separately implemented approximation.
 The existing [Face fixture](../../tests/test_face_widget.cpp) includes the
 production implementation, creates an off-screen 192x160 RGB888 LVGL display,
 and captures its flush output. Setting `FACE_WIDGET_PREVIEW_DIR` exports PPM
-images. The expression test exports both styles across all eight emotions;
+images. The expression test exports all three styles across all eight emotions;
 the sequence test exports 180 frames per style, advancing the animation clock
 by 66 ms per frame and changing target emotion every 20 frames through the
 eight emotions.
@@ -1106,8 +1107,10 @@ Use `test_face_widget_0`, the animation-enabled LCD profile. Profile `_1`
 disables animations and capture export; `_2` exercises interactive e-paper
 animation behavior, rather than simulating a physical panel. The destination
 directory must already exist. Output names include `robot_content.ppm`,
-`doodle_happy.ppm`, and `robot_frame_0.ppm` through `robot_frame_179.ppm`
-(with equivalent `doodle` frames). Outputs stay under ignored `build/`.
+`doodle_happy.ppm`, `arcade_sleepy.ppm`, and `robot_frame_0.ppm` through
+`robot_frame_179.ppm` (with equivalent `doodle` and `arcade` frames). Outputs
+stay under ignored `build/`. Capsule uses a 15x11 sprite grid. Its expression
+changes are discrete, and its gaze and blink use the same grid.
 
 #### Make an Expression Sheet and Animation
 
@@ -1122,7 +1125,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 directory = Path("build/face-previews")
-styles = ("robot", "doodle")
+styles = ("robot", "doodle", "arcade")
 emotions = "content relaxed happy worried angry sad surprised sleepy".split()
 tiles = []
 for style in styles:
@@ -1218,7 +1221,7 @@ content remain subject to button clipping.
 The table widget consumes a structured JSON payload, not plain formatted text.
 
 **Binding constraints:**
-- Use an exact single-token data binding template such as `[health:table]` or `[health:extended_table]`
+- Use an exact single-token data binding template such as `[mqtt:devices/table;.]`
 - Do not add static prefix or suffix text around the token
 - Do not add a format parameter in the binding token
 
@@ -1250,10 +1253,17 @@ Contract semantics:
 - a cell may be a primitive value or an object with `text`, `bg`, and `color`
 - if `columns` is absent, the widget derives columns from the first non-meta row keys
 
-Current built-in sources:
-- `health:table` returns the standard status table schema
-- `health:extended_table` returns the standard schema plus extra static device rows
-- both payloads are built in `health_table_builder.cpp` and routed from `health_binding.cpp`
+Local device health uses the typed `[health:metrics]` List source instead.
+Its main-loop adapter reads telemetry only while demanded and publishes shared
+strict-PSRAM snapshots at approximately two-second intervals. Items contain raw
+values, units, and optional severity, not Table payloads or colors. The generic
+List reuses row objects when ordered item IDs are unchanged and only updates
+changed text/styles; an identical snapshot does not cancel a press.
+
+List-owned configurations, snapshots, row bookkeeping, and text caches use
+PSRAM-only storage. List visuals use the shared LVGL allocator, which prefers
+PSRAM and falls back to internal RAM on allocation failure. Row geometry is
+updated as a batch before recalculating the scrolling layout and indicator.
 
 ## Rendering System
 
@@ -1524,6 +1534,21 @@ automated actions and non-opted-in drivers retain their previous behavior.
 No-change render generations consume intent without a physical presentation;
 the passive polling period and panel waveform remain unchanged.
 
+Explicit Voice Notes loads use the
+[loaded-data provider pattern](#explicitly-loaded-provider-data) and request a
+binding refresh when their shared snapshot changes state. Cached pads force a
+binding poll on show before the next paint, including labels and widgets whose
+new value is empty. A widget may
+retain or animate from its previous value, and history-based widgets retain
+shared stream samples; this poll does not clear widget-owned state. Snapshot
+loading and storage reads stay on the main loop, outside the display lock.
+
+List sources also request a coalesced binding refresh when an initial load
+publishes ready data or an error. This lets the widget consume the result without
+waiting for the next passive e-paper polling boundary. Subsequent source updates
+retain passive polling. The notification adds no presentation delay: a loading
+message already presented on the panel still requires a later refresh for rows.
+
 With `HAS_DISPLAY_DIAGNOSTICS`, bounded per-interaction/presentation debug logs
 carry request/frame sequences and microsecond timestamps for UI-owner entry,
 mutation, committed readiness, hardware eligibility, snapshot, waveform trigger,
@@ -1571,6 +1596,72 @@ DisplayManager uses a deferred pattern for screen navigation (`showScreen()`, `g
 5. Screens switch within 1 frame (~10ms), imperceptible to users
 
 Direct LVGL operations still require manual locking.
+
+### Explicitly Loaded Provider Data
+
+Use an explicit load action when several bindings need a shared record without
+performing I/O in the display task. The
+[`LoadedDataSnapshot` and `LoadedDataSlot` API](../../src/app/loaded_data.h)
+provides PSRAM-backed storage, request identities and snapshot lifetime management
+on `HAS_DISPLAY && HAS_PSRAM` builds. Each provider owns its schema, storage access,
+amount of data and loading policy; keep that knowledge out of widgets.
+
+To add another provider, follow the
+[Voice Notes adapter](../../src/app/voice_notes_loaded.cpp) and its
+[load action](../../src/app/actions/voice_note_load_action.cpp):
+
+1. Validate the ID and call `begin()` under `LoadedDataLock`, saving the returned
+   request identity with the provider's pending work. This hides the previous
+   snapshot immediately, even for a repeated ID. The action returns
+   `ACTION_COMPLETE` when accepted, not when loading finishes; reject invalid
+   requests with `ACTION_FAILED`.
+2. Build a private snapshot on the Arduino main loop, outside the display lock.
+   Keep bulk text, JSON, jobs and read buffers in strict PSRAM. Reuse storage
+   leases and OTA/recording checkpoints as appropriate. Check allocation,
+   document overflow and I/O failures before publication; the slot does not
+   validate provider data.
+3. Use a short `LoadedDataLock` scope to `publish()` or `fail()` the saved request.
+   Obsolete requests cannot replace newer state. Successful publication consumes
+   the producer's reference; on rejection, the producer still owns and must
+   release it. Never mutate a published snapshot. Error strings are borrowed,
+   so keep their storage valid until the next `begin()`. Request a binding refresh
+   after accepting a request or publishing a state change.
+4. In binding callbacks, `acquire()` under the lock, then read the immutable
+   snapshot and `release()` the retained reference. JSON views and string pointers
+   must not outlive that reference. Callbacks read cached data only. Keep scalar
+   previews bounded and reject overflow in checked action resolution rather than
+   enlarging binding or runtime-variable buffers to carry full text.
+5. On the main loop, call `take_unused()` under the lock and release each returned
+   retired reference after unlocking. Keep slots alive until reboot; slot
+   destruction does not reclaim snapshots.
+
+Voice Notes retains the loaded data until another load or reboot, including
+after source edits or deletion. Its full text remains available in the snapshot;
+ordinary bindings expose previews. See the
+[user workflow](../user/media/voice-notes.md#show-a-loaded-voice-note-on-a-pad).
+
+The generic `text_reader` widget is gated by display and PSRAM, independently
+of Voice Notes. A scheme can supply `BindingSchemeSpec::acquire_text` to return
+an immutable `BindingTextView` for an exact single-token source. A successful
+acquisition carries a retained owner and release callback; the reader detaches
+LVGL's static text pointer before releasing it. Unsupported sources and mixed
+templates use ordinary bounded scalar resolution, including pipe fallbacks.
+The Voice Notes adapter supplies full loaded title, summary, and transcript
+strings without copying them or reading files from the LVGL task.
+
+Reader state uses strict PSRAM; it adds no task, display buffer, or global
+binding-buffer enlargement. LVGL objects still use the existing PSRAM-first
+allocator with internal-RAM fallback. Layout measures text only when content or
+viewport size changes. Paged rendering clips a borrowed wrapped label to a
+whole-line viewport and moves it in page-height steps. Upper/lower text-half
+taps, optional controls, and vertical swipes never dispatch containing-button
+actions; drag, cancelled, and outside-release input cannot become a tap.
+The reader and List share the non-animated range-bar position indicator,
+including the minimum thumb size and narrow right gutter. Reader indicator
+colors accept scalar bindings and inherit device button defaults when empty.
+Scroll events move the indicator in Scroll mode; Paged mode updates it on page
+or layout changes. No external reader navigation action is registered. Hiding
+the reader releases its retained source.
 
 ## Touch Driver HAL
 
@@ -2713,7 +2804,7 @@ setter: LVGL applies layout changes lazily, so immediate getters can return the
 previous zone and cause cumulative drift. Repeated flashes cancel the pending
 timer and restore this fixed rectangle before choosing a new zone. Teardown
 deletes the timer before deleting the owning objects. List rows remain generic
-objects with background-aware pressed recoloring and 30/80 ms transitions.
+objects and use configured selected-row styling rather than these press transitions.
 
 ### Mousepad And Scrollpad Touch Ownership
 

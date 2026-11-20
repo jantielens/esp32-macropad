@@ -81,7 +81,8 @@ const char* binding_template_validate_params(const char* scheme, size_t name_len
             bool in_quotes = false;
             int bracket_depth = 0;
             for (const char* p = params; *p; ++p) {
-                if (*p == '"') in_quotes = !in_quotes;
+                if (in_quotes && *p == '\\' && p[1]) ++p;
+                else if (*p == '"') in_quotes = !in_quotes;
                 else if (!in_quotes) {
                     if (*p == '[') ++bracket_depth;
                     else if (*p == ']' && bracket_depth > 0) --bracket_depth;
@@ -117,6 +118,21 @@ static const SchemeEntry* find_scheme(const char* name, size_t name_len) {
     return nullptr;
 }
 
+static char* split_pipe_fallback(char* buf);
+
+BindingResolvedValueKind binding_template_value_kind(const char* templ) {
+    BindingTokenView token;
+    if (!binding_template_single_token(templ, &token) ||
+        token.params_len >= BINDING_TEMPLATE_MAX_LEN) return BINDING_VALUE_KIND_UNKNOWN;
+    const SchemeEntry* entry = find_scheme(token.scheme, token.scheme_len);
+    if (!entry || !entry->spec.value_kind) return BINDING_VALUE_KIND_UNKNOWN;
+    char params[BINDING_TEMPLATE_MAX_LEN];
+    memcpy(params, token.params, token.params_len);
+    params[token.params_len] = '\0';
+    split_pipe_fallback(params);
+    return entry->spec.value_kind(params);
+}
+
 BindingResolverStatus binding_template_resolve_registered(const char* scheme, size_t name_len,
                                                           const char* params, char* out,
                                                           size_t out_len) {
@@ -138,7 +154,7 @@ BindingResolverStatus binding_template_resolve_registered(const char* scheme, si
 static bool find_next_token(const char* templ, const char** out_token_start,
                             const char** out_scheme, size_t* out_scheme_len,
                             const char** out_params, size_t* out_params_len,
-                            const char** out_token_end) {
+                            const char** out_token_end, bool* malformed = nullptr) {
     const char* p = templ;
     while (*p) {
         if (*p != '[') { p++; continue; }
@@ -169,6 +185,10 @@ static bool find_next_token(const char* templ, const char** out_token_start,
             p++;
         }
         if (depth != 0) {
+            if (malformed) {
+                *malformed = true;
+                return false;
+            }
             // Unclosed bracket — skip
             p = token_start + 1;
             continue;
@@ -195,7 +215,8 @@ static char* split_pipe_fallback(char* buf) {
     bool in_quotes = false;
     int bracket_depth = 0;
     for (char* p = buf; *p; p++) {
-        if (*p == '"') in_quotes = !in_quotes;
+        if (in_quotes && *p == '\\' && p[1]) p++;
+        else if (*p == '"') in_quotes = !in_quotes;
         else if (!in_quotes) {
             if (*p == '[') bracket_depth++;
             else if (*p == ']') { if (bracket_depth > 0) bracket_depth--; }
@@ -218,8 +239,29 @@ bool binding_template_has_bindings(const char* label) {
     return find_next_token(label, &ts, &sc, &sl, &pm, &pl, &te);
 }
 
+bool binding_template_well_formed(const char* templ) {
+    if (!templ) return false;
+    const char* p = templ;
+    const char *start, *scheme, *params, *end;
+    size_t scheme_len, params_len;
+    bool malformed = false;
+    while (find_next_token(p, &start, &scheme, &scheme_len, &params, &params_len, &end, &malformed))
+        p = end;
+    return !malformed;
+}
+
 static bool checked_resolution_active = false;
 static bool checked_resolution_complete = true;
+
+bool binding_template_checked_resolution_active() {
+    return checked_resolution_active;
+}
+
+static size_t utf8_copy_length(const char* text, size_t length, size_t space) {
+    if (length <= space) return length;
+    while (space && (static_cast<unsigned char>(text[space]) & 0xc0) == 0x80) --space;
+    return space;
+}
 
 static bool resolve_template(const char* templ, char* out, size_t out_len,
                              BindingResolverStatus* status, bool* complete = nullptr) {
@@ -249,7 +291,7 @@ static bool resolve_template(const char* templ, char* out, size_t out_len,
             // No more tokens — copy remaining static text
             size_t remain = strlen(p);
             size_t space = out_len - 1 - written;
-            size_t copy = remain < space ? remain : space;
+            size_t copy = utf8_copy_length(p, remain, space);
             if (copy != remain) fits = false;
             memcpy(out + written, p, copy);
             written += copy;
@@ -261,10 +303,13 @@ static bool resolve_template(const char* templ, char* out, size_t out_len,
         size_t prefix_len = (size_t)(token_start - p);
         if (prefix_len > 0) {
             size_t space = out_len - 1 - written;
-            size_t copy = prefix_len < space ? prefix_len : space;
-            if (copy != prefix_len) fits = false;
+            size_t copy = utf8_copy_length(p, prefix_len, space);
             memcpy(out + written, p, copy);
             written += copy;
+            if (copy != prefix_len) {
+                fits = false;
+                break;
+            }
         }
 
         // Resolve the token
@@ -289,13 +334,14 @@ static bool resolve_template(const char* templ, char* out, size_t out_len,
             char* fallback = split_pipe_fallback(params_buf);
 
             char resolved[BINDING_TEMPLATE_MAX_LEN + 1];
+            const bool previous_complete = checked_resolution_complete;
             BindingResolverStatus resolved_status = binding_template_resolve_registered(
                 scheme, scheme_len, params_buf, resolved, checked_resolution_active ? sizeof(resolved) : 128);
             if (resolved_status == BINDING_RESOLVER_RESOLVED) {
                 any_resolved = true;
                 size_t rlen = strlen(resolved);
                 size_t space = out_len - 1 - written;
-                size_t copy = rlen < space ? rlen : space;
+                size_t copy = utf8_copy_length(resolved, rlen, space);
                 if (copy != rlen || (checked_resolution_active && rlen == sizeof(resolved) - 1)) fits = false;
                 memcpy(out + written, resolved, copy);
                 written += copy;
@@ -303,6 +349,7 @@ static bool resolve_template(const char* templ, char* out, size_t out_len,
                 if (fallback) {
                     // A supplied fallback fulfills the token even when its source
                     // is unavailable; checked callers may safely use that value.
+                    checked_resolution_complete = previous_complete;
                 } else if (resolved_status == BINDING_RESOLVER_UNKNOWN) {
                     outcome = BINDING_RESOLVER_UNKNOWN;
                 } else if (outcome == BINDING_RESOLVER_RESOLVED) {
@@ -312,7 +359,7 @@ static bool resolve_template(const char* templ, char* out, size_t out_len,
                 const char* ph = fallback ? fallback : "---";
                 size_t phlen = strlen(ph);
                 size_t space = out_len - 1 - written;
-                size_t copy = phlen < space ? phlen : space;
+                size_t copy = utf8_copy_length(ph, phlen, space);
                 if (copy != phlen) fits = false;
                 memcpy(out + written, ph, copy);
                 written += copy;
@@ -355,43 +402,59 @@ BindingResolverStatus binding_template_resolve_status(const char* templ, char* o
     return status;
 }
 
+bool binding_template_single_token(const char* templ, BindingTokenView* token) {
+    if (!templ || !token) return false;
+    const char *token_start, *token_end;
+    BindingTokenView result;
+    if (!find_next_token(templ, &token_start, &result.scheme, &result.scheme_len,
+                         &result.params, &result.params_len, &token_end) ||
+        token_start != templ || *token_end != '\0') return false;
+    *token = result;
+    return true;
+}
+
 bool binding_template_resolve_single_token(const char* templ, char* out, size_t out_len) {
-    if (!templ || !out || out_len == 0) {
-        if (out && out_len > 0) out[0] = '\0';
-        return false;
-    }
-
-    const char *token_start, *scheme, *params, *token_end;
-    size_t scheme_len, params_len;
-    if (!find_next_token(templ, &token_start, &scheme, &scheme_len,
-                         &params, &params_len, &token_end)) {
-        out[0] = '\0';
-        return false;
-    }
-    if (token_start != templ || *token_end != '\0') {
+    if (!out || out_len == 0) return false;
+    BindingTokenView token;
+    if (!binding_template_single_token(templ, &token)) {
         out[0] = '\0';
         return false;
     }
 
-    const SchemeEntry* entry = find_scheme(scheme, scheme_len);
+    const SchemeEntry* entry = find_scheme(token.scheme, token.scheme_len);
     if (!entry || !entry->resolver) {
         strlcpy(out, "ERR:unknown", out_len);
         return true;
     }
 
     char params_buf[BINDING_TEMPLATE_MAX_LEN];
-    size_t plen = params_len < sizeof(params_buf) - 1 ? params_len : sizeof(params_buf) - 1;
-    memcpy(params_buf, params, plen);
+    size_t plen = token.params_len < sizeof(params_buf) - 1 ? token.params_len : sizeof(params_buf) - 1;
+    memcpy(params_buf, token.params, plen);
     params_buf[plen] = '\0';
 
     char* fallback = split_pipe_fallback(params_buf);
-    if (binding_template_resolve_registered(scheme, scheme_len, params_buf, out, out_len) ==
+    if (binding_template_resolve_registered(token.scheme, token.scheme_len, params_buf, out, out_len) ==
         BINDING_RESOLVER_RESOLVED) {
         return true;
     }
 
     strlcpy(out, fallback ? fallback : "---", out_len);
     return true;
+}
+
+BindingResolverStatus binding_template_acquire_text(const char* templ, BindingTextView* out) {
+    if (!out) return BINDING_RESOLVER_UNKNOWN;
+    *out = {};
+    BindingTokenView token;
+    if (!binding_template_single_token(templ, &token) ||
+        token.params_len >= BINDING_TEMPLATE_MAX_LEN) return BINDING_RESOLVER_UNKNOWN;
+    const SchemeEntry* entry = find_scheme(token.scheme, token.scheme_len);
+    if (!entry || !entry->spec.acquire_text) return BINDING_RESOLVER_UNKNOWN;
+    char params[BINDING_TEMPLATE_MAX_LEN];
+    memcpy(params, token.params, token.params_len);
+    params[token.params_len] = '\0';
+    split_pipe_fallback(params);
+    return entry->spec.acquire_text(params, out);
 }
 
 void binding_template_collect_topics(const char* templ, void* user_data) {
@@ -422,27 +485,37 @@ void binding_template_collect_topics(const char* templ, void* user_data) {
     }
 }
 
-static void visit_tokens(const char* templ, binding_token_visitor_fn visitor,
-                          void* context, unsigned depth) {
-    if (!templ || !visitor || depth >= 8) return;
+static bool visit_tokens(const char* templ, binding_token_visitor_fn visitor,
+                         void* context, unsigned depth) {
+    if (!templ || !visitor) return false;
     const char* p = templ;
+    bool complete = true;
     while (*p) {
         const char *start, *scheme, *params, *end;
         size_t scheme_len, params_len;
         if (!find_next_token(p, &start, &scheme, &scheme_len, &params, &params_len, &end)) break;
+        if (depth >= 8) return false;
         char buffer[BINDING_TEMPLATE_MAX_LEN];
         if (params_len < sizeof(buffer)) {
             memcpy(buffer, params, params_len);
             buffer[params_len] = '\0';
             split_pipe_fallback(buffer);
             visitor(scheme, scheme_len, buffer, context);
-            visit_tokens(buffer, visitor, context, depth + 1);
+            if (!visit_tokens(buffer, visitor, context, depth + 1)) complete = false;
+        } else {
+            complete = false;
         }
         p = end;
     }
+    return complete;
 }
 
 void binding_template_visit_tokens(const char* templ, binding_token_visitor_fn visitor,
                                    void* context) {
     visit_tokens(templ, visitor, context, 0);
+}
+
+bool binding_template_visit_tokens_checked(const char* templ, binding_token_visitor_fn visitor,
+                                           void* context) {
+    return visit_tokens(templ, visitor, context, 0);
 }

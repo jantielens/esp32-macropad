@@ -7,26 +7,42 @@ Actions tell the device what to do when a button or another event is activated.
 They can change a screen, send a command, adjust a feature, or show feedback,
 and several actions can form an ordered sequence.
 
+> [!WARNING]
+> Action configuration uses the versioned operation format. Older actions
+> cannot run or be saved in this format and are not converted automatically.
+> Back up your configuration and recreate affected actions using the action
+> picker. If the pad cannot load, see
+> [pad replacement guidance](../device/backup-and-restore.md#export-and-restore-one-pad).
+> Available operations depend on the installed firmware.
+
 ## Configure one interaction
 
 In Button **Actions**, choose an unused Tap or Long-press slot.
 Ordinary buttons support up to three ordered actions for each gesture.
-Set a slot to **(none)** to remove it, then **Save Pad**.
+Choose the delete icon (**Remove action**) to clear a slot, then **Save Pad**.
 Holding an ordinary button for about 500 ms invokes its long-press list.
 Touch-owning [widgets](../widgets/README.md) can replace these interaction rules.
 
-The dropdown groups supported actions by category. Use its current fields/help
+Open **Choose an action...** to browse supported actions by category, or use
+**Search actions** inside the picker to filter by name, category, or operation
+ID. Choosing a result shows its settings below the picker. Searching does not
+change the selected action; press Escape to close without choosing.
+Use the current fields and help
 instead of assuming another firmware's action catalog applies.
 An action that queues network work is not proof its external effect completed.
+**Load saved note** also returns after accepting a request, so a following
+navigation action does not wait for storage. See
+[loaded note details](../media/voice-notes.md#show-a-loaded-voice-note-on-a-pad).
 
 ## Set a runtime variable
 
-Choose **Set variable** and enter a literal **Name** and a **Value**. The Value
-can contain binding tokens or an expression; it is resolved once when the
-action runs. The action does not require MQTT or Home Assistant.
+Choose **Set variable** and enter a **Name** and a **Value**. Fixed values
+are stored literally; choose **Dynamic** beside an argument to resolve its
+binding or expression when the action runs. The action does not require MQTT
+or Home Assistant.
 
 1. Add **Set variable** to a button's Tap actions. Set **Name** to `counter`
-	and **Value** to `[expr:[var:counter|0] + 1]`.
+	and select **Dynamic** for **Value**. Enter `[expr:[var:counter|0] + 1]`.
 2. Set a button label to `[var:counter|0]`. Add a reset button with **Set
 	variable**, **Name** `counter`, and **Value** `0`.
 3. Choose **Save Pad**, activate the counter button, and observe the label
@@ -58,10 +74,14 @@ can interrupt UI/work; do not sequence them as though they were a save barrier.
 
 ## Navigate between screens
 
-**Navigate to screen** offers currently available screens. Choose **Binding
-value** for a dynamic target such as `[list:pads.selected]`.
+**Navigate to screen** offers currently available screens. Choose **Dynamic**
+for a target such as `[item:id]` in a List item action.
 The result must be a valid screen ID within 31 UTF-8 bytes.
-A List selection target only resolves with the appropriate selection context.
+The activated List row and originating pad bindings remain available throughout
+the action sequence, including after a pause or navigation.
+The [sample pad](../../samples/action-framework-gate1.json) includes a fixed
+screen choice, a List target, and a Numeric Rocker timer adjustment. Create Pad 2
+before using its fixed screen action.
 
 Successful Navigate to screen/back/pad sequence wakes the display and resets
 inactivity without disabling the screensaver. Failed navigation does not wake it.
@@ -71,7 +91,7 @@ Automated repeated navigation can keep it awake.
 Inherited, disabled, or dynamically hidden buttons count; a local full-screen
 tap action also makes a pad eligible. Choose Next/Previous, optional Wrap, and
 comma-separated 1-based exclusions such as `2,5,8`.
-Empty pads are skipped; without Wrap, a boundary is a no-op.
+Empty pads are skipped; the action fails if no destination is available.
 
 ## Use full-screen tap actions
 
@@ -87,7 +107,7 @@ check both layers before investigating an unreachable control.
 
 ## Restart into setup AP
 
-The **Device command** action includes **Restart into setup AP**. It restarts
+The **Restart into AP** action restarts
 the device into its setup network without clearing saved Wi-Fi settings or the
 AP password. The active button action ends when the device restarts. If the
 device is already in setup mode, use its displayed credentials and portal URL.

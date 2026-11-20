@@ -185,14 +185,27 @@ The build system automatically applies project branding during compilation:
 
 1. `build.sh` sources `config.sh` to get `PROJECT_NAME` and `PROJECT_DISPLAY_NAME` (and `config.sh` will also source `config.project.sh` if present)
 2. (Optional) If `assets/png/*.png` exists and you are building a display-enabled board, `build.sh` generates LVGL image assets into `src/app/png_assets.cpp` and `src/app/png_assets.h`
-3. `tools/minify-web-assets.sh` performs template substitution in HTML files
-   and emits feature-gated shell, JavaScript, and CSS variants. Binding reference
-   HTML/styles follow `HAS_DISPLAY`; HA builder assets follow `HAS_HA_LIVE`.
-   Each firmware selects one variant, excluding unsupported binding UI from flash.
-4. Branding C++ `#define` statements are generated in `src/app/project_branding.h` (and `web_assets.h` includes it)
-5. If the repo was built from a GitHub checkout with a detectable `remote.origin.url`, the repo slug is generated into `src/app/repo_slug_config.h` (used to construct GitHub Pages links)
+3. After assembling FQBN, board overrides, profile properties, and compiler flags,
+   `build.sh` captures Arduino's expanded compiler recipe in
+   `build/<board>/portal-build.properties`. `tools/minify-web-assets.sh` invokes
+   `tools/portal_assets.py`, which evaluates feature predicates using that
+   compiler configuration. Only selected HTML, JavaScript, CSS, and widget
+   editors are rendered and compressed. Each bundle has exactly one gzip stream;
+   the generator does not enumerate feature combinations.
+4. Asset and branding headers (`web_assets.h`, `project_branding.h`) are generated
+   in `build/<board>/web-assets/`, first on the compiler include path. The asset
+   header rejects a mismatched feature configuration at compile time.
+5. A detectable GitHub `remote.origin.url` supplies `repo_slug_config.h` in the
+   same output directory, for GitHub Pages links. A missing slug produces a
+   diagnostic and empty owner/name strings, as before.
 6. `build.sh` also embeds the board name as a compile-time string define (`BUILD_BOARD_NAME`) so the portal can report the active board
 7. Firmware compiles with branded values embedded
+
+For `Inkplate_Boards` targets, `build.sh` appends `-std=gnu++17` to
+`compiler.cpp.extra_flags`, overriding the platform's C++11 default while
+preserving its other compiler flags. Shared action descriptors use default
+member initializers with aggregate initialization, and execution context uses
+C++17 inline variables. C compilation and other platforms retain their defaults.
 
 Firmware builds require Node.js 18 or newer and npm for JavaScript minification.
 The asset generator installs the pinned Terser dependency with `npm ci --prefix tools`
@@ -200,6 +213,10 @@ when it is missing. For an offline build, run that command beforehand. The versi
 and dependency graph are recorded in `tools/package.json` and `tools/package-lock.json`.
 Terser compresses code and mangles local names, but preserves top-level names and
 properties used by HTML handlers and dynamically loaded portal scripts.
+`web-assets/portal-assets.json` records resolved predicates and compressed array
+sizes for inspection. These sizes describe embedded asset payloads, not measured
+whole-firmware flash savings. See the
+[ownership convention](web-portal.md#feature-ownership-and-selection).
 
 Component, indexed-store, and shutter-session routes use prefix matchers with
 explicit segment validation, not `ASYNCWEBSERVER_REGEX`. This avoids linking the
@@ -611,6 +628,21 @@ This template automates the installation:
 - The **first flash after changing a partition table should be done over serial** (USB). OTA updates will work normally afterwards.
 - For boards using `PartitionScheme=...`, `upload.sh` defaults to a full flash (`--full`) to ensure the partition layout on the device matches what was built.
 - If you see errors like “offset not aligned” or “sketch too big”, verify your offsets are 0x10000-aligned (except NVS/otadata) and that your firmware fits in the configured app partition size.
+
+### CrowPanel 4.2 Interactive OTA Layout
+
+`crowpanel-4.2-interactive` uses `ota_3_5mb_8MB` with two 3.5 MiB OTA
+application slots and 896 KiB of LittleFS storage within its 8 MiB flash.
+NVS, OTA metadata, and the 64 KiB coredump partition retain their existing
+locations. Other boards keep their selected partition schemes.
+Run `./tools/install-custom-partitions.sh` before building on an existing
+development machine.
+
+Migration from `ota_3mb_8MB` moves the second application slot and filesystem.
+Back up settings/files first, perform a full serial flash with the new partition
+table, reinitialize file storage, and restore the files. A firmware-only OTA
+update cannot install the new layout. See the
+[board guide](../../src/boards/crowpanel-4.2-interactive/README.md#display-and-firmware-limits).
 
 ### ESP32-S3 4 MiB OTA Layout
 
@@ -1246,6 +1278,9 @@ Follow [Semantic Versioning](https://semver.org/):
 
 **Notes**:
 - The board build matrix order is deterministic (board names are sorted) so CI output is stable.
+- The host-test job installs the locked Node.js dependencies and `csscompressor` for portal asset tests, plus Pillow for photoframe vector tests.
+- Host builds use `cmake --build build/host-tests --parallel 4` to bound compiler concurrency. A bare `--parallel` enables unlimited jobs with GNU Make and can exhaust runner resources.
+- Host tests use `ctest --parallel 4`. Explicit `COST` estimates prioritize both Voice Notes storage profiles and the portal asset matrix on fresh and existing build trees. A shared `RESOURCE_LOCK` serializes build-invoking checks and the camera widget manifest check without blocking unrelated tests.
 - CI regenerates `docs/compile-time-flags.md` and fails if the generated output differs (keeps the report in sync with code).
 
 ### Release Workflow (`.github/workflows/release.yml`)

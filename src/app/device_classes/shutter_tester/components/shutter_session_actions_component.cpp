@@ -12,26 +12,17 @@
 #include <ArduinoJson.h>
 
 static void shutter_session_actions_get_config(AsyncWebServerRequest *request) {
-    const ShutterSessionActionsConfig* cfg = shutter_session_actions_get();
-
-    auto doc = make_psram_json_doc(2048);
-    JsonArray start_arr    = doc->createNestedArray("save_start_actions");
-    JsonArray complete_arr = doc->createNestedArray("save_complete_actions");
-
-    for (uint8_t i = 0; i < cfg->save_start_count; i++) {
-        JsonObject obj = start_arr.createNestedObject();
-        action_to_json(cfg->save_start_actions[i], obj);
+    std::string json;
+    if (!shutter_session_actions_to_json(json)) {
+        web_portal_send_json_error(request, 409, "Shutter session actions unavailable or incompatible; recreate the document");
+        return;
     }
-    for (uint8_t i = 0; i < cfg->save_complete_count; i++) {
-        JsonObject obj = complete_arr.createNestedObject();
-        action_to_json(cfg->save_complete_actions[i], obj);
-    }
-
-    web_portal_send_json_chunked(request, doc);
+    request->send(200, "application/json", json.c_str());
 }
 
 static void shutter_session_actions_save_config(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-    component_handle_save_body(request, data, len, index, total, shutter_session_actions_save_raw);
+    component_handle_save_body(request, data, len, index, total, shutter_session_actions_save_raw, 4096,
+        "{\"success\":false,\"error\":\"Invalid or incompatible shutter session actions, or storage write failed\"}");
 }
 
 static ComponentDef shutter_session_actions_component = {

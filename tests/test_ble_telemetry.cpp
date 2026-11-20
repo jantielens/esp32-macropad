@@ -16,6 +16,8 @@ public:
 #include "../src/app/ble_telemetry.cpp"
 #include <gtest/gtest.h>
 
+bool reboot_is_ota_mode() { return false; }
+
 class BleTelemetry : public testing::Test {
 protected:
     void SetUp() override {

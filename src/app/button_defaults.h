@@ -16,6 +16,7 @@ const ButtonDefaults* button_defaults_get();
 // Device-wide burn-in pixel shift distance. Zero disables shifting.
 uint8_t button_defaults_get_pixel_shift_distance();
 
+// Missing overrides are an empty object; read or parse errors return false.
 bool button_defaults_load_overrides(JsonDocument& doc);
 const char* button_defaults_validate(JsonObjectConst config);
 void button_defaults_typography_status(JsonObject status);

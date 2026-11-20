@@ -11,13 +11,7 @@
 // (get_capabilities). Registered types use the same availability predicate as
 // authoring validation, so an entry appears exactly when this build supports it.
 //
-// Each emitted entry carries "type", "group", "label", an optional
-// "commands" array of {id, label} for multi-command types, an optional
-// "command_families" array grouping commands, and — when include_field_docs
-// is set — a "fields" array of {name, description} describing the flat JSON
-// keys an MCP client would author. The portal projection omits field docs;
-// group/label/commands/command_families are all it needs to render pickers,
-// and dropping the prose keeps the /api/info payload small.
-void action_catalog_emit(JsonArray out, bool include_field_docs);
+// Entries describe their typed operations and arguments for both consumers.
+void action_catalog_emit(JsonArray out);
 
 #endif // HAS_DISPLAY || HAS_BUTTON

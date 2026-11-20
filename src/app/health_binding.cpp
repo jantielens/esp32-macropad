@@ -4,9 +4,9 @@
 #if HAS_DISPLAY
 
 #include "binding_template.h"
+#include "binding_value.h"
 #include "device_telemetry.h"
 #include "display_manager.h"
-#include "health_table_builder.h"
 #include "log_manager.h"
 #include "wifi_manager.h"
 
@@ -137,9 +137,7 @@ static bool health_key_requires_memory_snapshot(const char* key) {
 #if TELEMETRY_ALLOW_PSRAM_POOL_WALK
            strcmp(key, "psram_largest") == 0 ||
 #endif
-           strcmp(key, "psram_used") == 0 ||
-           strcmp(key, "table") == 0 ||
-           strcmp(key, "extended_table") == 0;
+           strcmp(key, "psram_used") == 0;
 }
 
 // ============================================================================
@@ -295,6 +293,10 @@ static bool lookup_value(const char* key, char* out, size_t out_len) {
         strlcpy(out, s_network.state == WifiNetworkState::Connected ? "ON" : "OFF", out_len);
         return true;
     }
+    if (strcmp(key, "wifi_station_enabled") == 0) {
+        strlcpy(out, s_network.station_enabled ? "ON" : "OFF", out_len);
+        return true;
+    }
     if (strcmp(key, "wifi_ssid") == 0 || strcmp(key, "wifi_ip") == 0) {
         if (s_network.state != WifiNetworkState::Connected && s_network.state != WifiNetworkState::Ap)
             return false;
@@ -423,26 +425,13 @@ static BindingResolverStatus health_binding_resolve(const char* params, char* ou
         refresh_memory_if_stale();
     }
 
-    if (strcmp(key, "table") == 0 || strcmp(key, "extended_table") == 0) {
-        bool extended = (strcmp(key, "extended_table") == 0);
-        return health_table_build(extended, lookup_value, out, out_len)
-               ? BINDING_RESOLVER_RESOLVED : BINDING_RESOLVER_UNAVAILABLE;
-    }
-
     char raw[64];
     if (!lookup_value(key, raw, sizeof(raw))) {
         return BINDING_RESOLVER_UNAVAILABLE;
     }
 
     if (fmt[0]) {
-        // Best-effort printf format: try int first, fall back to string
-        char* end = nullptr;
-        long lval = strtol(raw, &end, 10);
-        if (end && *end == '\0') {
-            snprintf(out, out_len, fmt, lval);
-        } else {
-            snprintf(out, out_len, fmt, raw);
-        }
+        binding_value_format(raw, fmt, out, out_len);
     } else {
         strlcpy(out, raw, out_len);
     }
@@ -494,6 +483,7 @@ static const BindingKeyDoc HEALTH_KEYS[] = {
 #endif
     {"wifi_state",          "Wi-Fi state", "WiFi"},
     {"wifi_connected",      "Wi-Fi network connection", "WiFi"},
+    {"wifi_station_enabled", "Applied Wi-Fi station mode", "WiFi"},
     {"wifi_ssid",           "Wi-Fi network name", "WiFi"},
     {"wifi_ip",             "Wi-Fi IP address", "WiFi"},
     {"wifi_rssi",           "Wi-Fi signal strength", "WiFi"},
@@ -518,8 +508,6 @@ static const BindingKeyDoc HEALTH_KEYS[] = {
     {"ble_peer_addr",       "Connected peer Bluetooth address", "USB & BLE"},
     {"ble_peer_id_addr",    "Connected peer identity address", "USB & BLE"},
 #endif
-    {"table",               "Device summary table for the Table widget", "Tables"},
-    {"extended_table",      "Extended device table for the Table widget", "Tables"},
 };
 
 static const BindingParamDoc kHealthParams[] = {
@@ -534,7 +522,6 @@ static const BindingExampleDoc kHealthExamples[] = {
     {"[health:wifi_state]", "Overall Wi-Fi state, including AP operation; not internet or MQTT readiness."},
     {"[health:wifi_ip|off]", "Active network or AP address with an explicit inactive fallback."},
     {"[expr:[health:wifi_connected]==\"ON\"?\"#16a34a\":\"#dc2626\"]", "Green or red color for WiFi state."},
-    {"[health:table]", "Exact single token for a Table widget."},
 };
 
 static const BindingReferenceDoc kHealthWifiReference[] = {
@@ -547,6 +534,7 @@ static const BindingReferenceDoc kHealthWifiReference[] = {
     {"Wi-Fi states", "STOPPING", nullptr, "Wi-Fi transport shutdown is underway."},
     {"Wi-Fi states", "ERROR", nullptr, "Radio shutdown failed; Wi-Fi-off cannot be confirmed."},
     {"Wi-Fi details", "wifi_connected", "ON / OFF", "ON only while connected to a network, not while serving an AP."},
+    {"Wi-Fi details", "wifi_station_enabled", "ON / OFF", "Applied station mode, not connection status. Pending requests may show the previous state."},
     {"Wi-Fi details", "wifi_ssid / wifi_ip", nullptr, "Name and address of the active network or AP. Unavailable otherwise; use a |fallback."},
     {"Wi-Fi details", "wifi_rssi", "-62", "Signal strength in dBm while connected to a network. Unavailable otherwise; use a |fallback."},
     {"Wi-Fi details", "wifi_hostname", "kitchen-pad", "Configured Wi-Fi hostname, including while Wi-Fi is off."},
@@ -569,6 +557,7 @@ static const BindingAuthoringKey kHealthAuthoringKeys[] = {
     binding_authoring_integer("heap_free", "B", "245760", "%ld"),
     binding_authoring_text("wifi_ssid", "Home WiFi"),
     binding_authoring_text("wifi_connected", "ON"),
+    binding_authoring_text("wifi_station_enabled", "ON"),
     binding_authoring_text("wifi_state", "CONNECTED"),
     binding_authoring_text("wifi_last_error", "Connection timed out"),
     binding_authoring_text("wifi_ap_active", "ON"),
@@ -618,8 +607,6 @@ static const BindingAuthoringKey kHealthAuthoringKeys[] = {
     binding_authoring_text("ble_peer_addr", "02:00:00:65:43:21"),
     binding_authoring_text("ble_peer_id_addr", "02:00:00:65:43:21"),
 #endif
-    binding_authoring_text("table", "[{\"label\":\"CPU\",\"value\":\"42\",\"unit\":\"%\"}]"),
-    binding_authoring_text("extended_table", "[{\"label\":\"Free heap\",\"value\":\"245760\",\"unit\":\"B\"}]"),
 };
 static const BindingAuthoringSpec kHealthAuthoring = {
     kHealthAuthoringKeys,

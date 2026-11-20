@@ -135,20 +135,23 @@ jobs:
         git clone --depth 1 --branch v7.2.1 https://github.com/bblanchon/ArduinoJson.git ~/Arduino/libraries/ArduinoJson
         git clone --depth 1 --branch v9.6.0 https://github.com/lvgl/lvgl.git ~/Arduino/libraries/lvgl
 
-    - name: Install photoframe vector dependencies
-      run: python3 -m pip install pillow==12.2.0
+    - name: Install host-test Python dependencies
+      run: python3 -m pip install pillow==12.2.0 csscompressor==0.9.5
+
+    - name: Install host-test portal dependencies
+      run: npm ci --prefix tools --no-audit --no-fund
 
     - name: Configure host-native tests
       run: |
         cmake -S . -B build/host-tests
 
     - name: Build host-native tests
-      run: cmake --build build/host-tests --parallel
+      run: cmake --build build/host-tests --parallel 4
 
     - name: Run host-native tests
       run: |
         mkdir -p "$GITHUB_WORKSPACE/test-results"
-        ctest --test-dir build/host-tests --output-on-failure \
+        ctest --test-dir build/host-tests --output-on-failure --parallel 4 \
           --output-junit "$GITHUB_WORKSPACE/test-results/host-tests.xml"
 
     - name: Publish host-test results

@@ -105,13 +105,13 @@ static void on_config_load_hook(DeviceConfig * /*config*/, Preferences& prefs) {
     coffee_scale_config_load(prefs);
 }
 
-static void on_config_save_hook(const DeviceConfig * /*config*/, Preferences& prefs) {
-    coffee_scale_config_save(prefs);
+static bool on_config_save_hook(const DeviceConfig * /*config*/, Preferences& prefs) {
+    return coffee_scale_config_save(prefs);
 }
 
 // Expose coffee_scale_config fields on GET /api/config so the portal
 // Sensor Configuration fragment can load them. Matches the field names
-// registered via window.registerConfigFields() in portal_action_editor_scale.js.
+// registered via window.registerConfigFields() in portal_brews_init.js.
 static void config_api_get_hook(const DeviceConfig * /*config*/, JsonObject& root) {
     root["scale_cal_factor"] = coffee_scale_config.scale_cal_factor;
     root["scale_offset"]     = coffee_scale_config.scale_offset;

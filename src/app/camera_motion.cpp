@@ -4,6 +4,7 @@
 
 #include "camera.h"
 #include "log_manager.h"
+#include "time_service.h"
 #include <esp_heap_caps.h>
 #include <time.h>
 
@@ -168,7 +169,7 @@ void camera_motion_process_raw(const CameraRawFrame& raw, uint32_t now) {
     if (s_active_frames < kConfirmFrames) return;
 
     s_last_motion_ms = now;
-    const time_t epoch = time(nullptr);
+    const time_t epoch = time_service_ready() ? time(nullptr) : 0;
     portENTER_CRITICAL(&s_mux);
     s_status.has_last_motion = true;
     s_status.last_motion_epoch = epoch > 0 ? static_cast<uint32_t>(epoch) : 0;

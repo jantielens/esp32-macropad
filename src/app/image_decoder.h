@@ -40,6 +40,13 @@ enum ImageFormat : uint8_t {
     IMAGE_FORMAT_PNG     = 2,
 };
 
+struct ImageContentBounds {
+    uint16_t x;
+    uint16_t y;
+    uint16_t width;
+    uint16_t height;
+};
+
 // PNG decoding expands the entire source image to RGBA8888 before scaling.
 // Keep this bounded so source, decode, and display buffers fit in PSRAM together.
 #define IMAGE_LIBRARY_MAX_PNG_PIXELS 2000000UL
@@ -56,13 +63,15 @@ ImageFormat image_detect_format(const uint8_t* data, size_t len);
 //   out_pixels       — receives heap_caps_malloc'd RGB565 buffer (PSRAM)
 //   out_size         — receives byte count of the output buffer
 //   letterbox_color  — RGB565 color for letterbox padding (defaults to black)
+//   out_content      — optional bounds excluding letterbox padding; full frame for cover
 //
 // Returns true on success.  On failure, *out_pixels is NULL.
 bool image_decode_to_rgb565(
     const uint8_t* data, size_t len,
     uint16_t target_w, uint16_t target_h,
     ImageScaleMode scale_mode,
-    uint16_t** out_pixels, size_t* out_size, uint16_t letterbox_color = 0);
+    uint16_t** out_pixels, size_t* out_size, uint16_t letterbox_color = 0,
+    ImageContentBounds* out_content = nullptr);
 
 #if HAS_BOOT_LOGO
 // Decode a bounded logo source to RGB565, fitting without cropping or

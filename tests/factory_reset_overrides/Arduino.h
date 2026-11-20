@@ -20,6 +20,11 @@ public:
         return *this;
     }
     const char* c_str() const { return value_.c_str(); }
+    size_t length() const { return value_.size(); }
+    bool concat(const char* value) {
+        value_ += value;
+        return true;
+    }
 
 private:
     std::string value_;

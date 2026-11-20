@@ -10,8 +10,10 @@ validation.
 
 ## Storage
 
-Pad files, icons, voice clips, and other persistent files use microSD instead
+Pad files, icons, voice notes, and other persistent files use microSD instead
 of internal flash. Device settings in NVS remain in flash.
+The onboard microphone can record [Voice Notes](../../../docs/user/media/voice-notes.md)
+as 16 kHz mono PCM.
 
 > [!IMPORTANT]
 > Insert a readable FAT32 card before boot. An MBR partition scheme is

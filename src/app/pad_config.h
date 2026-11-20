@@ -10,6 +10,7 @@
 #include "image_library.h"
 #include "image_decoder.h"
 #include "button_content_layout.h"
+#include "action_storage.h"
 
 // ============================================================================
 // Pad Config — per-pad button configuration stored on LittleFS
@@ -186,9 +187,15 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_IMAGE_PREVIOUS "image_previous"
 #define ACTION_TYPE_DISPLAY_REFRESH "display_refresh"
 #define ACTION_TYPE_BUTTON_NAVIGATION "button_nav"
+#define ACTION_TYPE_LIST_NAVIGATION "list_nav"
 #define ACTION_TYPE_SET_VAR "set_var"
-#if HAS_VOICE_CLIPS
-#define ACTION_TYPE_VOICE_CLIP "voice_clip"
+#if HAS_VOICE_NOTES
+#define ACTION_TYPE_VOICE_NOTE_RECORD "vnote_record"
+#define ACTION_TYPE_VOICE_NOTE_PROCESS "vnote_process"
+#define ACTION_TYPE_VOICE_NOTE_DELETE "vnote_delete"
+#if HAS_DISPLAY && HAS_PSRAM
+#define ACTION_TYPE_VOICE_NOTE_LOAD "vnote_load"
+#endif
 #endif
 
 #define ACTION_DELAY_MAX_DURATION_MS 55000U
@@ -203,43 +210,12 @@ inline bool action_delay_duration_is_valid(uint32_t duration_ms) {
 // ============================================================================
 // ButtonAction — typed tap / long-press action
 // ============================================================================
-// Storage is a discriminated union: ButtonAction::type names the active arm
-// of ActionPayload. Only the active arm is valid; reading or writing a
-// non-active arm is undefined behavior.
-//
-// All built-in action arms live here in common code so every device-class
-// build pays the same per-action memory cost (the canary is
-// tests/test_action_sizes.cpp). Device-class arms are added by conditionally
-// including their header below.
-//
-// JSON wire format is intentionally *flat* (e.g. `{"type":"mqtt","topic":...,
-// "payload":...}`) — see action_parse.cpp for the type-dispatched mapping
-// between flat JSON keys and the active union arm.
+// The JSON wire format uses typed operation envelopes. Parsed operations use
+// the operation payload arm and own their arguments through ActionStorage.
 
-struct ScreenPayload {
-    char screen_id[CONFIG_SCREEN_ID_MAX_LEN];        // target screen
-};
-struct MqttPayload {
-    char mqtt_topic[CONFIG_MQTT_TOPIC_MAX_LEN];      // publish topic
-    char mqtt_payload[CONFIG_MQTT_PAYLOAD_MAX_LEN];  // publish payload
-};
 struct BthomePayload {
     uint8_t button;
     uint8_t event;
-};
-struct KeyPayload {
-    char key_sequence[CONFIG_KEY_SEQ_MAX_LEN];       // DSL key sequence
-};
-struct MouseButtonPayload {
-    char button[7];
-};
-struct GamepadPayload {
-    uint8_t control;
-    uint8_t index;
-    uint8_t operation;
-};
-struct MusicPayload {
-    char music_command[12];
 };
 struct SoundAlertPayload {
     char sound_alert_kind[10];
@@ -247,25 +223,11 @@ struct SoundAlertPayload {
     char sound_alert_file[32];
     uint8_t sound_alert_volume;
 };
-struct VolumePayload {
-    char volume_mode[CONFIG_VOLUME_MODE_MAX_LEN];    // "set" or "adjust"
-    char volume_value[CONFIG_VALUE_MAX_LEN];         // absolute 0-100, signed delta, or {step}
-};
-struct BrightnessPayload {
-    char brightness_mode[CONFIG_VOLUME_MODE_MAX_LEN]; // "set" or "adjust"
-    char brightness_value[CONFIG_VALUE_MAX_LEN];      // absolute 5-100, signed delta, or {step}
-};
-struct AlarmPayload {
-    uint8_t alarm_id;
-    char alarm_command[17];
-    uint8_t alarm_day;
-    char alarm_value[CONFIG_VALUE_MAX_LEN];
-};
 struct TimerPayload {
     uint8_t timer_id;                                 // 1-3
     char timer_command[CONFIG_TIMER_CMD_MAX_LEN];     // "toggle", "start", "stop", "adjust", "set", etc.
     char timer_mode[5];                               // "up" or "down" for start/toggle
-    char timer_value[CONFIG_VALUE_MAX_LEN];           // seconds for set/adjust (supports {step})
+    char timer_value[CONFIG_VALUE_MAX_LEN];           // seconds for set/adjust
 };
 struct NotifyPayload {
     char message[CONFIG_DIALOG_MESSAGE_MAX_LEN];
@@ -276,11 +238,6 @@ struct ConfirmPayload {
     char approve_text[CONFIG_DIALOG_CAPTION_MAX_LEN];
     char cancel_text[CONFIG_DIALOG_CAPTION_MAX_LEN];
     uint32_t timeout_ms; // 0 = no timeout
-};
-static_assert(sizeof(NotifyPayload) <= 256 && sizeof(ConfirmPayload) <= 256,
-              "Dialog payloads must fit the MQTT/key payload budget");
-struct SystemPayload {
-    char system_command[CONFIG_ACTION_TYPE_MAX_LEN];      // Device command ID
 };
 struct HaServicePayload {
     char entity_id[48];   // e.g. "light.living_room" (domain = text before first '.')
@@ -295,81 +252,25 @@ struct VisualAlertPayload {
     uint16_t va_intensity;                        // max overlay opacity 0-100%, 0 = default 100
     uint32_t va_duration_ms;                       // 0 = persist until stopped
 };
-struct CyclePadPayload {
-    int8_t direction;                              // +1 = next, -1 = previous
-    bool wrap;                                     // wrap at the numeric boundary
-    uint32_t excluded_mask;                        // bit N excludes user-visible Pad N+1
-};
-struct DelayPayload {
-    uint32_t duration_ms;                          // 1-55000 ms
-};
-struct CameraCapturePayload {
-    char save_to[7];                               // "latest", "roll", or "both"
-};
-struct DisplayRefreshPayload {
-    char mode[5];                                  // "full"
-};
 struct ButtonNavigationPayload {
     char command[9];
 };
-struct SetVariablePayload {
-    char var_name[33];
-    char var_value[192];
+struct ListNavigationPayload {
+    char target[33];
+    char command[14];
 };
-#if HAS_VOICE_CLIPS
-struct VoiceClipPayload {
-    char command[8];
+#if HAS_DISPLAY || HAS_BUTTON
+struct OperationPayload {
+    const ActionOperationDef* descriptor;
+    ActionArgumentBlock* arguments;
 };
 #endif
-static_assert(sizeof(SetVariablePayload) <= 256,
-              "Set variable payload must remain within the shared action payload budget");
-
-// Opaque slot reserved for device-class action payloads. Each device class
-// registers its own ActionTypeDef (via REGISTER_ACTION_TYPE) and casts the
-// raw bytes to its payload struct at the parse/serialize/dispatch boundary —
-// see device_classes/shutter_tester/shutter_payload.h for the reference
-// pattern (struct + static_assert + inline accessor).
-//
-// Sized to fit today's largest device-class payload with headroom (today:
-// ShutterPayload at 76 B = CONFIG_TIMER_CMD_MAX_LEN(12) + CONFIG_BINDABLE_SHORT_LEN(64)).
-// Stays well under the dominant built-in arms (MQTT/key at 256 B), so
-// this slot does not currently move sizeof(ActionPayload). A board that
-// needs more can raise this via board_overrides.h; never raise the default
-// to fit a single class — that would push cost onto every board.
-#ifndef ACTION_PAYLOAD_DEVICE_CLASS_BYTES
-#define ACTION_PAYLOAD_DEVICE_CLASS_BYTES 96
-#endif
-
 union ActionPayload {
-    ScreenPayload     screen;       // type == ACTION_TYPE_SCREEN
-    MqttPayload       mqtt;         // type == ACTION_TYPE_MQTT
-    BthomePayload     bthome;       // type == ACTION_TYPE_BTHOME
-    KeyPayload        key;          // type == ACTION_TYPE_KEY
-    MouseButtonPayload mouse_button;
-    GamepadPayload    gamepad;
-    MusicPayload      music;        // type == ACTION_TYPE_MUSIC
-    SoundAlertPayload sound_alert;  // type == ACTION_TYPE_SOUND_ALERT
-    VolumePayload     volume;       // type == ACTION_TYPE_VOLUME
-    BrightnessPayload brightness;   // type == ACTION_TYPE_BRIGHTNESS
-    TimerPayload      timer;        // type == ACTION_TYPE_TIMER
-    AlarmPayload      alarm;
-    NotifyPayload     notify;       // type == ACTION_TYPE_NOTIFY
-    ConfirmPayload    confirm;      // type == ACTION_TYPE_CONFIRM
-    SystemPayload     system;       // type == ACTION_TYPE_SYSTEM
-    HaServicePayload  ha_service;   // type == ACTION_TYPE_HA_SERVICE
-    VisualAlertPayload visual_alert; // type == ACTION_TYPE_VISUAL_ALERT
-    CyclePadPayload   cycle_pad;    // type == ACTION_TYPE_CYCLE_PAD
-    DelayPayload      delay;        // type == ACTION_TYPE_DELAY
-    CameraCapturePayload camera_capture; // type == ACTION_TYPE_CAMERA_CAPTURE
-    DisplayRefreshPayload display_refresh; // type == ACTION_TYPE_DISPLAY_REFRESH
-    ButtonNavigationPayload button_navigation;
-    SetVariablePayload set_var;
-#if HAS_VOICE_CLIPS
-    VoiceClipPayload voice_clip;
+#if HAS_DISPLAY || HAS_BUTTON
+    OperationPayload operation;
+#else
+    uint8_t unused;
 #endif
-    uint8_t           device_class[ACTION_PAYLOAD_DEVICE_CLASS_BYTES];
-                                    // opaque; owned by a registered ActionTypeDef
-    // back, ble_pair, and "" (none) carry no payload data — only the type tag.
 };
 
 struct ButtonAction {
@@ -380,32 +281,13 @@ struct ButtonAction {
 // Sentinel for host-native size-budget tests + tooling.
 #define ACTION_PAYLOAD_PRESENT 1
 
-// Measured host layout: 16-byte discriminator plus the 256-byte MQTT/key union.
-static_assert(sizeof(ButtonAction) <= 272,
-              "ButtonAction size budget exceeded (>272 bytes)");
+// Host layout: 16-byte discriminator plus two pointers.
+static_assert(sizeof(ButtonAction) <= 32,
+              "ButtonAction size budget exceeded (>32 bytes)");
 
-// Per-arm size dump for size-canary tests. Lists built-in arms only;
-// device-class payloads share the opaque ACTION_PAYLOAD_DEVICE_CLASS_BYTES
-// slot and their static_asserts live in their own headers.
 #define ACTION_PAYLOAD_DUMP_ARMS(printf_fn) do { \
     printf_fn("  ButtonAction      = %zu\n", sizeof(ButtonAction));      \
     printf_fn("  ActionPayload     = %zu\n", sizeof(ActionPayload));     \
-    printf_fn("  ScreenPayload     = %zu\n", sizeof(ScreenPayload));     \
-    printf_fn("  MqttPayload       = %zu\n", sizeof(MqttPayload));       \
-    printf_fn("  KeyPayload        = %zu\n", sizeof(KeyPayload));        \
-    printf_fn("  MouseButtonPayload= %zu\n", sizeof(MouseButtonPayload)); \
-    printf_fn("  MusicPayload      = %zu\n", sizeof(MusicPayload));      \
-    printf_fn("  SoundAlertPayload = %zu\n", sizeof(SoundAlertPayload)); \
-    printf_fn("  VolumePayload     = %zu\n", sizeof(VolumePayload));     \
-    printf_fn("  BrightnessPayload = %zu\n", sizeof(BrightnessPayload)); \
-    printf_fn("  TimerPayload      = %zu\n", sizeof(TimerPayload));      \
-    printf_fn("  NotifyPayload     = %zu\n", sizeof(NotifyPayload));     \
-    printf_fn("  ConfirmPayload    = %zu\n", sizeof(ConfirmPayload));    \
-    printf_fn("  SystemPayload     = %zu\n", sizeof(SystemPayload));     \
-    printf_fn("  HaServicePayload  = %zu\n", sizeof(HaServicePayload));  \
-    printf_fn("  VisualAlertPayload= %zu\n", sizeof(VisualAlertPayload)); \
-    printf_fn("  CyclePadPayload   = %zu\n", sizeof(CyclePadPayload));    \
-    printf_fn("  DelayPayload      = %zu\n", sizeof(DelayPayload));       \
 } while (0)
 
 // LabelBinding removed — MQTT bindings are now inline in label text.
@@ -579,6 +461,9 @@ struct ButtonDefaults {
 // Per-pad config
 struct PadConfig {
     uint16_t ref_count;                    // cache/readers; managed by pad_config_acquire/release
+#if HAS_DISPLAY || HAS_BUTTON
+    ActionStorage action_storage;
+#endif
     uint8_t button_capacity;               // allocated entries in buttons
     const char* name;
     char layout[CONFIG_LAYOUT_NAME_MAX_LEN]; // "grid" or curated layout name
@@ -646,8 +531,10 @@ bool pad_config_get_data_stream_snapshot(uint8_t page,
                                          PadDataStreamSnapshot* out);
 
 // Save raw JSON bytes to LittleFS. Preserves all fields including future/unknown ones.
+struct PadValidationGeometry;
 bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
-                         const char** error = nullptr);
+                         const char** error = nullptr,
+                         const PadValidationGeometry* geometry = nullptr);
 
 // Delete page config file from LittleFS.
 bool pad_config_delete(uint8_t page);
@@ -655,9 +542,14 @@ bool pad_config_delete(uint8_t page);
 // Check if page config file exists on LittleFS.
 bool pad_config_exists(uint8_t page);
 
+// Format the persistent path for a pad.
+void pad_config_path(uint8_t page, char* out, size_t out_len);
+
 // Read raw JSON from LittleFS. Caller must free() the returned buffer.
 // Returns NULL on failure. *out_len is set to the file size.
 char* pad_config_read_raw(uint8_t page, size_t* out_len);
+// Recovery may read persisted JSON before the pad cache is initialized.
+char* pad_config_read_raw_mounted(uint8_t page, size_t* out_len);
 
 // Read just the pad's optional friendly "name" label into `out` (empty when
 // unset). Returns true when a non-empty name was found in the RAM cache.
@@ -676,6 +568,13 @@ void pad_config_rebuild_all_caches();
 // Generation counter — incremented on every save/delete. PadScreen uses this
 // to detect config changes and rebuild tiles.
 uint32_t pad_config_get_generation();
+
+#if HAS_DISPLAY && HAS_PSRAM
+enum class PadListReadResult : uint8_t { Missing, Present, Error };
+// Main-loop/internal-stack only. Copies a bounded name; errors are static strings.
+PadListReadResult pad_config_list_read(uint8_t page, char* name, size_t name_size,
+                                       const char** error);
+#endif
 
 // Atomic snapshot of configured pads with at least one post-template button or
 // an effective full-screen pad action.

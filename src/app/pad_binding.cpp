@@ -21,6 +21,19 @@
 
 static const PadBinding* g_bindings = nullptr;
 static uint8_t g_binding_count = 0;
+static thread_local const PadBindingScope* s_override = nullptr;
+
+PadBindingScope::PadBindingScope(const PadBinding* bindings, uint8_t count, bool enabled)
+    : bindings_(bindings), count_(bindings ? count : 0), enabled_(enabled), previous_(s_override) {
+    if (enabled_) s_override = this;
+}
+
+PadBindingScope::~PadBindingScope() { if (enabled_) s_override = previous_; }
+
+void pad_binding_effective(const PadBinding** bindings, uint8_t* count) {
+    if (bindings) *bindings = s_override ? s_override->bindings_ : g_bindings;
+    if (count) *count = s_override ? s_override->count_ : g_binding_count;
+}
 
 void pad_binding_set_page(const PadConfig* page) {
     if (page) {
@@ -38,8 +51,7 @@ void pad_binding_set_bindings(const PadBinding* bindings, uint8_t count) {
 }
 
 void pad_binding_get_bindings(const PadBinding** bindings, uint8_t* count) {
-    if (bindings) *bindings = g_bindings;
-    if (count) *count = g_binding_count;
+    pad_binding_effective(bindings, count);
 }
 
 // ============================================================================
@@ -47,8 +59,8 @@ void pad_binding_get_bindings(const PadBinding** bindings, uint8_t* count) {
 // ============================================================================
 
 // Look up a named binding in a bindings array. Returns the template string or NULL.
-static const char* find_binding(const PadBinding* bindings, uint8_t count,
-                                const char* name, size_t name_len) {
+const char* pad_binding_find_template(const PadBinding* bindings, uint8_t count,
+                                      const char* name, size_t name_len) {
     if (!bindings) return nullptr;
     for (uint8_t i = 0; i < count; i++) {
         if (strlen(bindings[i].name) == name_len &&
@@ -72,6 +84,16 @@ static const char* split_name_format(const char* params, size_t* name_len) {
     return nullptr;
 }
 
+static BindingResolvedValueKind pad_binding_value_kind(const char* params) {
+    if (!params || strchr(params, ';')) return BINDING_VALUE_KIND_UNKNOWN;
+    const PadBinding* bindings = nullptr;
+    uint8_t count = 0;
+    pad_binding_effective(&bindings, &count);
+    const char* templ = pad_binding_find_template(bindings, count, params, strlen(params));
+    if (!templ || strstr(templ, "[pad:")) return BINDING_VALUE_KIND_UNKNOWN;
+    return binding_template_value_kind(templ);
+}
+
 // ============================================================================
 // Scheme resolver — called by binding_template_resolve() for [pad:...]
 // ============================================================================
@@ -82,7 +104,10 @@ static BindingResolverStatus pad_binding_resolve(const char* params, char* out, 
         return BINDING_RESOLVER_UNAVAILABLE;
     }
 
-    if (!g_bindings) {
+    const PadBinding* bindings = nullptr;
+    uint8_t count = 0;
+    pad_binding_effective(&bindings, &count);
+    if (!bindings) {
         strlcpy(out, "ERR:no_page", out_len);  // debug only — engine overwrites with "---"
         return BINDING_RESOLVER_UNAVAILABLE;
     }
@@ -92,7 +117,7 @@ static BindingResolverStatus pad_binding_resolve(const char* params, char* out, 
     const char* fmt = split_name_format(params, &name_len);
 
     // Look up the binding
-    const char* tmpl = find_binding(g_bindings, g_binding_count, params, name_len);
+    const char* tmpl = pad_binding_find_template(bindings, count, params, name_len);
     if (!tmpl) {
         strlcpy(out, "ERR:not_found", out_len);  // debug only — engine overwrites with "---"
         return BINDING_RESOLVER_UNAVAILABLE;
@@ -125,12 +150,15 @@ static BindingResolverStatus pad_binding_resolve(const char* params, char* out, 
 // ============================================================================
 
 static void pad_binding_collect(const char* params, void* user_data) {
-    if (!params || !params[0] || !g_bindings) return;
+    const PadBinding* bindings = nullptr;
+    uint8_t count = 0;
+    pad_binding_effective(&bindings, &count);
+    if (!params || !params[0] || !bindings) return;
 
     size_t name_len = 0;
     split_name_format(params, &name_len);
 
-    const char* tmpl = find_binding(g_bindings, g_binding_count, params, name_len);
+    const char* tmpl = pad_binding_find_template(bindings, count, params, name_len);
     if (!tmpl || !tmpl[0]) return;
 
     // Guard against recursive [pad:] in underlying template
@@ -211,7 +239,7 @@ bool pad_binding_expand_bindings(const PadBinding* bindings, uint8_t count,
         if (semi) name_len = (size_t)(semi - params_start);
 
         // Look up binding
-        const char* binding_tmpl = find_binding(bindings, count, params_start, name_len);
+        const char* binding_tmpl = pad_binding_find_template(bindings, count, params_start, name_len);
         if (binding_tmpl && !strstr(binding_tmpl, "[pad:")) {
             // If there's a format suffix, we can't simply substitute the template —
             // the format applies to the resolved value, not the template text.
@@ -312,7 +340,7 @@ static const BindingSchemeDoc kPadDoc = {
 void pad_binding_init() {
     if (!binding_template_register("pad", pad_binding_resolve, pad_binding_collect,
                                    {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr,
-                                    &kPadDoc})) {
+                                    &kPadDoc, nullptr, nullptr, nullptr, pad_binding_value_kind})) {
         LOGE(TAG, "Failed to register pad binding scheme");
     }
 }

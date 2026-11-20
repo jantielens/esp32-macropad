@@ -23,6 +23,9 @@
 #include "keyboard_transport.h"
 #include "external_data_config.h"
 #include "bthome_event_settings.h"
+#if HAS_VOICE_NOTES
+#include "voice_notes_processing.h"
+#endif
 #if HAS_CAMERA
 #include "camera_motion.h"
 #endif
@@ -97,6 +100,13 @@ struct EpaperRefreshSettings {
 #endif
 
 struct DeviceConfig {
+#if HAS_AUDIO_INPUT
+		int8_t microphone_gain_db;
+		bool microphone_reduce_rumble;
+#endif
+#if HAS_VOICE_NOTES
+		VoiceNotesConfig voice_notes;
+#endif
 #if HAS_EXTERNAL_DATA
 		ExternalDataConfig external_data;
 #endif
@@ -191,7 +201,7 @@ struct DeviceConfig {
 
 #if HAS_DISPLAY
 		// Screen saver: optional Idle Screen followed by Display Sleep on inactivity.
-		bool screen_saver_enabled;               // default true
+		bool screen_saver_enabled;               // default off on e-paper, except manual backlight-only mode
 		uint16_t screen_saver_timeout_seconds;   // default 300 (5 min)
 		uint16_t screen_saver_fade_out_ms;       // default 800
 		uint16_t screen_saver_fade_in_ms;        // default 400
@@ -241,7 +251,7 @@ struct DeviceConfig {
 #define CONFIG_MAGIC 0xDEADBEEF
 
 // API Functions
-void config_manager_init();                           // Initialize NVS
+bool config_manager_init();                           // Initialize NVS
 bool config_manager_load(DeviceConfig *config);       // Load config from NVS
 #if HAS_EXTERNAL_DATA
 bool config_manager_save(DeviceConfig *config, const ExternalDataConfig* external_override = nullptr);

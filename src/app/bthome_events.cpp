@@ -5,6 +5,7 @@
 #include "ble_hid.h"
 #include "ble_backend.h"
 #include "ota_activity.h"
+#include "reboot_service.h"
 #include "log_manager.h"
 static constexpr uint8_t kBthomeLogLevel = LOG_LEVEL;
 #include <Arduino.h>
@@ -170,8 +171,8 @@ bool bthome_events_prepare() {
 }
 
 bool bthome_events_send(uint8_t button, uint8_t event) {
-    if (!bthome::valid_button_event(button, event) || ota_activity_is_active()) {
-        LOGW(kBthomeTag, "Event rejected (invalid button/event or OTA active)");
+    if (!bthome::valid_button_event(button, event) || ota_activity_is_active() || reboot_is_ota_mode()) {
+        LOGW(kBthomeTag, "Event rejected (invalid button/event or OTA active or mode)");
         return false;
     }
     const ButtonEvent pending{button, event, ota_activity_epoch()};

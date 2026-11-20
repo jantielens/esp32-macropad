@@ -5,6 +5,9 @@
 #if HAS_BUTTON
 
 #include "pad_config.h"  // ButtonAction, MAX_BUTTON_ACTIONS
+#include <ArduinoJson.h>
+
+struct ActionStorage;
 
 // ============================================================================
 // Hardware Button Config — per-button tap/hold action lists
@@ -25,9 +28,13 @@ struct HwButtonConfig {
 // Call after pad_config_init() / storage mount.
 void hw_button_config_init();
 
-// Get the cached config for button `index` (bounds-checked, returns nullptr if
-// index >= NUM_HW_BUTTONS).
-const HwButtonConfig* hw_button_config_get(uint8_t index);
+// Copy an event's actions and their argument storage under the cache lock.
+// The caller must clear `storage` when finished.
+bool hw_button_config_snapshot(uint8_t index, bool hold, ButtonAction* actions,
+                               uint8_t* count, ActionStorage& storage);
+
+// Serialize under the cache lock, optionally reporting an unsaved config reset.
+bool hw_button_config_to_json(JsonArray buttons, bool* config_reset = nullptr);
 
 // Save raw JSON to LittleFS and reload the RAM cache. Returns true on success.
 bool hw_button_config_save_raw(const uint8_t* json, size_t len);

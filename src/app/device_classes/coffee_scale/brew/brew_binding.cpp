@@ -85,10 +85,8 @@ static bool lookup_value(const char* key, const char* fmt,
         return format_float(fmt, "%.1f", brew_get_weight(), out, out_len);
     if (strcmp(key, "flow_rate") == 0)
         return format_float(fmt, "%.1f", brew_get_flow_rate(), out, out_len);
-    if (strcmp(key, "timer") == 0) {
-        brew_format_timer(fmt, out, out_len);
-        return true;
-    }
+    if (strcmp(key, "timer_ms") == 0)
+        return format_uint(fmt, "%u", (unsigned)brew_get_timer_ms(), out, out_len);
     if (strcmp(key, "stage") == 0) {
         strlcpy(out, brew_get_stage_name(), out_len);
         return true;
@@ -227,7 +225,7 @@ static bool lookup_value(const char* key, const char* fmt,
         float dose  = brew_get_dose_weight();
         float water = brew_get_water_weight();
         char timer_buf[16];
-        brew_format_timer(nullptr, timer_buf, sizeof(timer_buf));
+        brew_format_timer(timer_buf, sizeof(timer_buf));
         size_t pos = 0;
         if (pos < out_len) out[pos++] = '[';
         // Dose
@@ -342,7 +340,7 @@ static void brew_binding_collect(const char* params, void* user_data) {
 }
 
 static const char* const kBrewBindingKeys[] = {
-    "weight", "flow_rate", "timer", "stage", "active", "template", "dose", "water", "ratio",
+    "weight", "flow_rate", "timer_ms", "stage", "active", "template", "dose", "water", "ratio",
     "instruction", "next_label", "advance_state", "stage_status", "stage_weight_target",
     "stage_weight_current", "stage_weight_remaining", "stage_weight_pct", "stage_time_target",
     "stage_time_current", "stage_time_remaining", "stage_time_pct", "stage_flow_target",
@@ -378,13 +376,13 @@ static const char* brew_binding_key_at(uint8_t index) {
 
 static const BindingParamDoc kBrewParams[] = {
     {"key", "Brew key, see below."},
-    {"format", "printf float format such as %.1f; timer takes mm:ss, hh:mm:ss, ss, or mm:ss.d."},
+    {"format", "printf format such as %.1f."},
 };
 
 static const BindingKeyDoc kBrewKeyDocs[] = {
     {"weight", "Current weight, grams", "Live"},
     {"flow_rate", "Flow rate, g/s", "Live"},
-    {"timer", "Elapsed brew time, default mm:ss", "Live"},
+    {"timer_ms", "Elapsed brew time in milliseconds", "Live"},
     {"active", "1 while a brew runs, else 0", "Live"},
     {"stage", "Current stage name", "Stage"},
     {"stage_status", "Stage progress summary text", "Stage"},
@@ -418,26 +416,19 @@ static const BindingKeyDoc kBrewKeyDocs[] = {
 
 static const BindingExampleDoc kBrewExamples[] = {
     {"[brew:weight;%.1f g]", "Current weight with a unit."},
-    {"[brew:timer;mm:ss]", "Brew time as minutes and seconds."},
+    {"[expr:duration([brew:timer_ms],\"ms\")]", "Brew time as minutes and seconds."},
     {"[brew:stages_json]", "Exact single token for a Table widget."},
-};
-
-static const BindingReferenceDoc kBrewFormats[] = {
-    {nullptr, "mm:ss", "2:15", "Elapsed brew time as minutes and seconds", "[brew:timer;mm:ss]"},
-    {nullptr, "hh:mm:ss", "0:02:15", "Elapsed brew time with hours", "[brew:timer;hh:mm:ss]"},
-    {nullptr, "mm:ss.d", "2:15.3", "Elapsed brew time with tenths", "[brew:timer;mm:ss.d]"},
-    {nullptr, "ss", "135", "Elapsed brew time in whole seconds", "[brew:timer;ss]", "s", BINDING_AUTHORING_KIND_INTEGER},
 };
 
 static const BindingSchemeDoc kBrewDoc = {
     "Coffee scale", "Guided brew state: weight, flow, timer, and stage progress.",
     BINDING_DOC_LIST(kBrewParams), BINDING_DOC_LIST(kBrewKeyDocs), BINDING_DOC_LIST(kBrewExamples),
-    "Brew durations", true, BINDING_DOC_LIST(kBrewFormats), nullptr, nullptr,
+    nullptr, false, BINDING_DOC_NONE, nullptr, nullptr,
 };
 static const BindingAuthoringKey kBrewAuthoringKeys[] = {
     binding_authoring_number("weight", "g", "250.5"),
     binding_authoring_number("flow_rate", "g/s", "4.2"),
-    binding_authoring_text("timer", "2:15"),
+    binding_authoring_integer("timer_ms", "ms", "135000"),
     binding_authoring_text("stage", "Pour"),
     binding_authoring_integer("active", "", "1"),
     binding_authoring_text("template", "Pour over"),

@@ -31,5 +31,6 @@ struct ToggleState {
 bool toggle_interactive(const WidgetState* state);
 void toggle_tap(const WidgetConfig* config, WidgetState* state,
                 const ButtonAction* on_actions, uint8_t on_count,
-                const ButtonAction* off_actions, uint8_t off_count);
+                const ButtonAction* off_actions, uint8_t off_count,
+                const PadBinding* bindings = nullptr, uint8_t binding_count = 0);
 #endif

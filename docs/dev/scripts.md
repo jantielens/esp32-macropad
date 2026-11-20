@@ -251,6 +251,38 @@ To view a downloaded report, extract the ZIP into a directory and serve it with
 `python3 -m http.server 8768 --bind 127.0.0.1 --directory <directory>`.
 Opening its HTML directly with a `file:` URL can block the JSON fetch.
 
+## tools/portal_assets.py
+
+Build portal assets for one compiler-resolved firmware configuration.
+`build.sh <board>` normally invokes this through `tools/minify-web-assets.sh`,
+which ensures the pinned Terser and existing CSS compressor are available.
+The builder uses Arduino's expanded C++ recipe to evaluate board, FQBN, PSRAM,
+profile, and override-dependent feature expressions. It emits one gzip stream
+per selected bundle rather than enumerating variants.
+
+To regenerate after a build has produced its properties file:
+
+```bash
+./tools/minify-web-assets.sh esp32-macropad "ESP32 Macropad" \
+  --properties build/jc1060p470c-sd/portal-build.properties \
+  --output-dir build/jc1060p470c-sd/web-assets
+```
+
+Use the same project and display names as that build. The output contains
+`web_assets.h`, `project_branding.h`, `repo_slug_config.h`, and
+`portal-assets.json` (resolved conditions and gzip byte counts).
+For host-only tests, `--cpp-command` accepts a JSON compiler argument array
+instead of `--properties`. Unknown gates, unowned standalone assets, missing
+bundle members, malformed feature blocks, and selected JavaScript syntax errors
+fail generation. See [feature ownership](web-portal.md#feature-ownership-and-selection).
+
+Focused checks:
+
+```bash
+bash tests/test_portal_asset_config.sh
+node tests/test_portal_asset_gates.js
+```
+
 ## tools/widget_manifest.py
 
 Generate guarded firmware includes and expand widget assets from
@@ -311,6 +343,9 @@ http://localhost:8765/?profile=jc3248w535&fragment=screensaver
 * The server binds to `127.0.0.1`. Mock writes are process-local and never contact a device.
 * Pad edits, defaults, icon uploads, brightness, and screen commands are retained in memory.
 * Fixtures include populated, empty, widget, template, inherited, dense 8x8, and input-control pads.
+* The action catalog includes typed operation metadata and is filtered by the
+  selected profile's capabilities. Alarm hooks accept legacy actions and typed
+  synchronous operations; the mock does not execute them or resolve bindings.
 * In Button Builder, use MQTT topic `sensors/room/state` (or `mock/received`)
   for JSON with `temperature: 21.37`, `active: true`, and `nested.value: "ok"`.
   Use `mock/zero` for a scalar numeric value.

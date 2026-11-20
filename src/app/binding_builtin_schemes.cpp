@@ -2,17 +2,22 @@
 #include "board_config.h"
 
 #include "audio_input_binding.h"
-#include "voice_clips_binding.h"
+#include "voice_notes_binding.h"
 #if HAS_BATTERY_INFO
 #include "battery_binding.h"
 #endif
 #include "camera_binding.h"
 #include "expr_binding.h"
+#if HAS_DISPLAY || HAS_BUTTON
+#include "event_binding.h"
+#endif
 #include "ext_binding.h"
 #include "health_binding.h"
 #include "sensor_binding.h"
 #include "image_binding.h"
-#include "list_binding.h"
+#if HAS_DISPLAY && HAS_PSRAM
+#include "item_binding_scheme.h"
+#endif
 #include "music_binding.h"
 #include "mqtt_binding.h"
 #include "ha_binding.h"
@@ -37,6 +42,9 @@ void binding_builtin_schemes_init() {
     sensor_binding_init();
     time_binding_init();
     expr_binding_init();
+#if HAS_DISPLAY || HAS_BUTTON
+    event_binding_init();
+#endif
 #if HAS_EXTERNAL_DATA
     external_binding_init();
 #endif
@@ -57,10 +65,12 @@ void binding_builtin_schemes_init() {
 #if HAS_AUDIO_INPUT && HAS_DISPLAY
     audio_input_binding_init();
 #endif
-#if HAS_VOICE_CLIPS && HAS_DISPLAY
-    voice_clips_binding_init();
+#if HAS_VOICE_NOTES && HAS_DISPLAY
+    voice_notes_binding_init();
 #endif
-    list_binding_init();
+#if HAS_DISPLAY && HAS_PSRAM
+    item_binding_init();
+#endif
     net_binding_init();
 #if HAS_DISPLAY || HAS_BUTTON
     var_binding_init();

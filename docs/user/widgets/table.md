@@ -3,23 +3,24 @@ title: Structured Table
 description: Display a structured table source with exact-token binding, typography, and optional scrolling.
 ---
 
-A Table presents rows and columns supplied by a structured binding source,
-such as the device's health table. Use it to show several related values in
-one button instead of arranging each value in a separate label.
+A Table presents rows and columns supplied by a structured JSON binding source.
+For local device health, use the [List widget](list.md#display-device-health)
+instead.
 
-## Display a health table
+## Display structured data
 
 1. Select Table in Button Content.
-2. Set Data binding to `[health:table]` or `[health:extended_table]`.
+2. Set Data binding to a source that supplies the Table payload contract,
+   for example `[mqtt:devices/table;.]` for a compatible MQTT payload.
 3. Give the button enough span for the rows/columns.
 4. Optionally set Font style override and Scroll.
 5. Save Pad and inspect the device.
 
 The entire input must be one token with no text prefix/suffix and no format
-parameter. For example, `Status: [health:table]` is not a table input even if
+parameter. For example, `Status: [mqtt:devices/table;.]` is not a table input even if
 generic token validation accepts it.
 The source must return the structured table contract, not arbitrary JSON.
-The live Binding reference identifies supported structured sources.
+There is no built-in health Table source.
 
 ## Style and scroll
 
@@ -29,7 +30,7 @@ Empty inherits the button's label size.
 Uploaded fonts have the normal [trust/memory limits](../media/fonts.md).
 
 Scroll defaults on; turn it off for a fixed visible subset.
-An optional `[health:table|{}]` startup fallback is an empty payload, not
+An optional `[mqtt:devices/table;.|{}]` startup fallback is an empty payload, not
 fabricated measurements.
 Do not use ordinary numeric formatting on structured rows.
 

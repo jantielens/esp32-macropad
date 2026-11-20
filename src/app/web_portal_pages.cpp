@@ -6,7 +6,7 @@
 #include "web_portal_timing.h"
 #include "web_portal_logs.h"
 
-#include "web_assets.h"
+#include <web_assets.h>
 
 #include <string.h>
 
@@ -167,11 +167,26 @@ void handlePortalAlarmsJS(AsyncWebServerRequest *request) {
 }
 #endif
 
-#if HAS_VOICE_CLIPS
-void handlePortalVoiceClipsJS(AsyncWebServerRequest *request) {
+#if HAS_VOICE_NOTES
+void handlePortalVoiceNotesJS(AsyncWebServerRequest *request) {
 	if (!portal_auth_gate(request)) return;
 	request->send(begin_gzipped_asset_response(request, "application/javascript",
-		portal_voice_clips_js_gz, portal_voice_clips_js_gz_len, "no-store"));
+		portal_voice_notes_js_gz, portal_voice_notes_js_gz_len, "no-store"));
+}
+#endif
+
+#if HAS_MICROPHONE_STREAMING
+void handlePortalLiveMicrophoneJS(AsyncWebServerRequest *request) {
+	if (!portal_auth_gate(request)) return;
+	request->send(begin_gzipped_asset_response(request, "application/javascript",
+		portal_live_microphone_js_gz, portal_live_microphone_js_gz_len, "no-store"));
+}
+#endif
+#if HAS_AUDIO_INPUT
+void handlePortalMicrophoneJS(AsyncWebServerRequest *request) {
+	if (!portal_auth_gate(request)) return;
+	request->send(begin_gzipped_asset_response(request, "application/javascript",
+		portal_microphone_js_gz, portal_microphone_js_gz_len, "no-store"));
 }
 #endif
 

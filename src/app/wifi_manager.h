@@ -59,6 +59,7 @@ struct WifiNetworkSnapshot {
     WifiNetworkState state;
     bool ap_active;
     bool recovery_ap;
+    bool station_enabled;
     char ssid[33];
     char ip[16];
     char hostname[32];

@@ -32,8 +32,8 @@ static void config_load_hook(DeviceConfig*, Preferences& prefs) {
     voice_config_load(prefs);
 }
 
-static void config_save_hook(const DeviceConfig*, Preferences& prefs) {
-    voice_config_save(prefs);
+static bool config_save_hook(const DeviceConfig*, Preferences& prefs) {
+    return voice_config_save(prefs);
 }
 
 static void config_api_get_hook(const DeviceConfig*, JsonObject& root) {

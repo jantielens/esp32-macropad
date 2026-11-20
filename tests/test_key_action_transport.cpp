@@ -9,6 +9,8 @@
 #include "esp_heap_caps.h"
 #include "../src/app/actions/key_action.cpp"
 #include "../src/app/actions/mouse_button_action.cpp"
+#include "../src/app/actions/gamepad_action.cpp"
+#include "../src/app/actions/ble_pair_action.cpp"
 #include "../src/app/keyboard_hid.cpp"
 #include "../src/app/key_sequence.h"
 #include <mutex>
@@ -27,6 +29,10 @@ namespace {
 uint32_t clock_ms = 0;
 bool backend_connected = true;
 bool backend_encrypted = true;
+bool ble_initialized = true;
+#if TEST_BLE_TRANSPORT
+unsigned pairing_requests = 0;
+#endif
 bool report_succeeds = true;
 bool ota_active = false;
 bool psram_available = true;
@@ -80,7 +86,10 @@ bool usb_hid_send_report(KsUsageType, uint16_t usage, uint8_t) {
     return report_succeeds;
 }
 
-bool ble_hid_is_initialized() { return true; }
+bool ble_hid_is_initialized() { return ble_initialized; }
+#if TEST_BLE_TRANSPORT
+void ble_hid_request_pairing() { ++pairing_requests; }
+#endif
 bool ble_hid_is_connected() { return backend_connected; }
 bool ble_hid_is_encrypted() { return backend_encrypted; }
 uint32_t ble_hid_epoch() { return test_epoch; }
@@ -118,22 +127,49 @@ void check_pointer_transport(KeyboardTransport transport) {
     gamepad_hid_loop();
     usb_mouse_calls = ble_mouse_calls = usb_gamepad_calls = ble_gamepad_calls = 0;
     assert(mouse_hid_is_ready() && gamepad_hid_is_ready());
-    ButtonAction click = {};
     const char* buttons[] = {"left", "right", "middle"};
     for (unsigned index = 0; index < 3; ++index) {
-        strlcpy(click.payload.mouse_button.button, buttons[index], sizeof(click.payload.mouse_button.button));
-        assert(dispatch_mouse_button(click, "click", 0) == ACTION_COMPLETE);
+        const ActionResolvedArgument argument{buttons[index], 0, 0};
+        assert(kMouseOperations[0].dispatch(&argument, "click operation", 0) == ACTION_COMPLETE);
         mouse_hid_loop();
         assert(last_mouse.buttons == (1 << index));
         mouse_hid_loop();
         assert(last_mouse.buttons == 0);
     }
+
+    const ActionResolvedArgument controls[] = {{nullptr, 16, 0}, {"right", 0, 0}, {"right", 0, 0}};
+    for (unsigned family = 0; family < 3; ++family) {
+        const ActionOperationDef* operations = kGamepadOperations + family * 3;
+        const ActionResolvedArgument* argument = &controls[family];
+        assert(operations[1].dispatch(argument, "hold", 0) == ACTION_COMPLETE);
+        gamepad_hid_loop();
+        if (family == 0) assert(last_gamepad.buttons == 0x8000);
+        else if (family == 1) assert(last_gamepad.hat == 3);
+        else assert(last_gamepad.right_trigger == 255 && last_gamepad.left_trigger == 0);
+        assert(operations[0].dispatch(argument, "held tap", 90 + family) == ACTION_FAILED);
+        assert(operations[2].dispatch(argument, "release", 0) == ACTION_COMPLETE);
+        gamepad_hid_loop();
+        assert(!last_gamepad.buttons && !last_gamepad.hat && !last_gamepad.right_trigger);
+        assert(operations[0].dispatch(argument, "no token", 0) == ACTION_FAILED);
+        assert(operations[0].dispatch(argument, "tap", 100 + family) == ACTION_PENDING);
+        gamepad_hid_loop();
+        if (family == 0) assert(last_gamepad.buttons == 0x8000);
+        else if (family == 1) assert(last_gamepad.hat == 3);
+        else assert(last_gamepad.right_trigger == 255);
+        clock_ms += GamepadHidState::tap_duration_ms;
+        gamepad_hid_loop();
+        assert(!last_gamepad.buttons && !last_gamepad.hat && !last_gamepad.right_trigger);
+        assert(finished_token == 100 + family && finished_success);
+    }
+
     const uint32_t pointer_epoch = mouse_hid_epoch();
     const uint32_t pointer_generation = mouse_hid_generation();
     const uint32_t controller_generation = gamepad_hid_generation();
     const uint32_t pointer_owner = mouse_hid_acquire(pointer_epoch, 1);
     const uint32_t controller_owner = gamepad_hid_acquire_stick(0, controller_generation);
     assert(pointer_owner && controller_owner);
+    const ActionResolvedArgument left_button{"left", 0, 0};
+    assert(kMouseOperations[0].dispatch(&left_button, "owned click", 0) == ACTION_FAILED);
     mouse_hid_move(12, -9, pointer_epoch);
     assert(gamepad_hid_move(controller_owner, 1234, -2345, controller_generation));
     mouse_hid_loop();
@@ -196,24 +232,25 @@ void poll_until_ready() {
 int main() {
     keyboard_hid_init(KeyboardTransport::None);
     keyboard_hid_loop();
-    assert(registered_actions == 1 + unsigned(TEST_USB_TRANSPORT || TEST_BLE_TRANSPORT));
+    assert(registered_actions == 3 + unsigned(TEST_USB_TRANSPORT || TEST_BLE_TRANSPORT));
     assert(mouse_button_available() == bool(TEST_USB_TRANSPORT || TEST_BLE_TRANSPORT));
-    ButtonAction mouse_action = {};
     const char* buttons[] = { "left", "right", "middle" };
     for (unsigned index = 0; index < 3; ++index) {
-        strlcpy(mouse_action.payload.mouse_button.button, buttons[index], sizeof(mouse_action.payload.mouse_button.button));
-        const ActionResult result = dispatch_mouse_button(mouse_action, "mouse test", 0);
+        const ActionResolvedArgument argument{buttons[index], 0, 0};
+        const ActionResult result = kMouseOperations[0].dispatch(&argument, "mouse test", 0);
         assert(result == ACTION_FAILED);
     }
     assert(keyboard_hid_transport() == keyboard_transport_default(TEST_BLE_TRANSPORT, TEST_USB_TRANSPORT));
-    ButtonAction action = {};
-    strlcpy(action.payload.key.key_sequence, "a 100ms b", sizeof(action.payload.key.key_sequence));
+#if TEST_USB_TRANSPORT || TEST_BLE_TRANSPORT
+    char action_sequence[] = "a 100ms b";
+    ActionResolvedArgument arguments[] = {{action_sequence, 0, 0}};
+#endif
     assert(!keyboard_hid_is_ready());
     assert(!keyboard_hid_is_busy());
     assert(!keyboard_hid_request_sequence("a", 40));
 #if TEST_USB_TRANSPORT || TEST_BLE_TRANSPORT
     assert(key_available());
-    assert(dispatch_key(action, "disabled", 40) == ACTION_FAILED);
+    assert(dispatch_key_operation(arguments, "disabled", 40) == ACTION_FAILED);
 #endif
     assert(usb_calls == 0 && ble_calls == 0);
     assert(strcmp(keyboard_hid_status(), TEST_USB_TRANSPORT || TEST_BLE_TRANSPORT ? "disabled" : "unavailable") == 0);
@@ -238,9 +275,9 @@ int main() {
     keyboard_hid_loop();
     assert(finished_token == 0 && usb_calls == 0 && ble_calls == 0);
     allocation_succeeds = true;
-    assert(dispatch_key(action, "test", 42) == ACTION_PENDING);
+    assert(dispatch_key_operation(arguments, "test", 42) == ACTION_PENDING);
     assert(allocation_calls == 2 && allocation_caps == (MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-    action.payload.key.key_sequence[0] = '\0';
+    action_sequence[0] = '\0';
     assert(!keyboard_hid_request_sequence("c", 43));
     assert(keyboard_hid_is_busy());
     run_until_idle();
@@ -248,7 +285,7 @@ int main() {
     assert(free_calls == 0 && workspace != nullptr);
     assert(usages.size() == 4 && usages[0] == 4 && usages[1] == 0 && usages[2] == 5 && usages[3] == 0);
     assert(TEST_USB_TRANSPORT ? usb_calls == 4 && ble_calls == 0 : ble_calls == 4 && usb_calls == 0);
-    assert(dispatch_key(action, "test", 44) == ACTION_FAILED);
+    assert(dispatch_key_operation(arguments, "test", 44) == ACTION_FAILED);
     assert(!keyboard_hid_request_sequence("a", 0));
     assert(keyboard_hid_request_sequence("\"unterminated", 55));
     keyboard_hid_loop();
@@ -361,9 +398,60 @@ int main() {
 #if TEST_BLE_TRANSPORT
     check_pointer_transport(KeyboardTransport::Ble);
 #endif
+#if TEST_USB_TRANSPORT || TEST_BLE_TRANSPORT
+    keyboard_hid_init(TEST_BLE_TRANSPORT ? KeyboardTransport::Ble : KeyboardTransport::Usb);
+    poll_until_ready();
+    char sequence[] = "a";
+    const ActionResolvedArgument key_argument{sequence, 0, 0};
+    assert(kKeyOperations[0].dispatch(&key_argument, "no token", 0) == ACTION_FAILED);
+    assert(kKeyOperations[0].dispatch(&key_argument, "keys", 130) == ACTION_PENDING);
+    sequence[0] = 'b';
+    assert(kKeyOperations[0].dispatch(&key_argument, "busy", 131) == ACTION_FAILED);
+#if TEST_BLE_TRANSPORT
+    assert(kBlePairOperations[0].dispatch(nullptr, "busy", 0) == ACTION_FAILED);
+    assert(pairing_requests == 0);
+#endif
+    usages.clear();
+    run_until_idle();
+    assert(finished_token == 130 && finished_success);
+    assert(usages.size() >= 2 && usages[usages.size() - 2] == 4 && usages.back() == 0);
+    char max_sequence[CONFIG_KEY_SEQ_MAX_LEN];
+    memset(max_sequence, 'a', sizeof(max_sequence) - 1);
+    max_sequence[sizeof(max_sequence) - 1] = '\0';
+    const ActionResolvedArgument max_key_argument{max_sequence, 0, 0};
+    assert(kKeyOperations[0].dispatch(&max_key_argument, "max sequence", 132) == ACTION_PENDING);
+    assert(workspace && strcmp(workspace->sequence, max_sequence) == 0);
+    ota_active = true;
+    keyboard_hid_loop();
+    assert(finished_token == 132 && !finished_success);
+    ota_active = false;
+    poll_until_ready();
+    char too_long[CONFIG_KEY_SEQ_MAX_LEN + 1];
+    memset(too_long, 'a', sizeof(too_long) - 1);
+    too_long[sizeof(too_long) - 1] = '\0';
+    const ActionResolvedArgument too_long_argument{too_long, 0, 0};
+    assert(kKeyOperations[0].dispatch(&too_long_argument, "oversized sequence", 133) == ACTION_FAILED);
+#endif
+#if TEST_BLE_TRANSPORT
+    ble_initialized = false;
+    assert(kBlePairOperations[0].dispatch(nullptr, "uninitialized", 0) == ACTION_FAILED);
+    ble_initialized = true;
+    assert(kBlePairOperations[0].dispatch(nullptr, "pair", 0) == ACTION_COMPLETE);
+    assert(pairing_requests == 1);
+    keyboard_hid_init(KeyboardTransport::None);
+    assert(kBlePairOperations[0].dispatch(nullptr, "wrong transport", 0) == ACTION_FAILED);
+    assert(pairing_requests == 1);
+#else
+    assert(kBlePairOperations[0].dispatch(nullptr, "unavailable", 0) == ACTION_FAILED);
+#endif
 #if !TEST_USB_TRANSPORT && !TEST_BLE_TRANSPORT
     assert(usb_mouse_calls + ble_mouse_calls == 0);
     assert(usb_gamepad_calls + ble_gamepad_calls == 0);
+    const ActionResolvedArgument button{"left", 0, 0};
+    const ActionResolvedArgument gamepad_button{nullptr, 1, 0};
+    assert(kMouseOperations[0].dispatch(&button, "unavailable", 0) == ACTION_FAILED);
+    assert(kGamepadOperations[0].dispatch(&gamepad_button, "unavailable", 140) == ACTION_FAILED);
+    assert(kGamepadOperations[1].dispatch(&gamepad_button, "unavailable", 0) == ACTION_FAILED);
 #endif
     return 0;
 }

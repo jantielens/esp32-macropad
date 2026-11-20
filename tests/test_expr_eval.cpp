@@ -109,6 +109,23 @@ static void test_numeric_function_errors() {
     check_err("clamp(1, 3, 0)",     "ERR:", "clamp reversed bounds");
 }
 
+static void test_duration() {
+    check_ok("duration(65000,\"ms\")", "1:05", "milliseconds");
+    check_ok("duration(0,\"s\",\"hh:mm:ss\")", "0:00:00", "zero duration");
+    check_ok("duration(3661,\"s\",\"hh:mm:ss\")", "1:01:01", "hours");
+    check_ok("duration(-65.39,\"s\",\"mm:ss.d\")", "-1:05.3", "negative tenths");
+    check_ok("duration(5.3,\"s\",\"ss.d\")", "5.3", "decimal seconds");
+    check_ok("duration(32.3,\"s\",\"ss.d\")", "32.3", "decimal tenth boundary");
+    check_ok("duration(1.001,\"s\",\"mm:ss.d\")", "0:01.0", "millisecond boundary");
+    check_ok("duration(3661,\"s\",\"mm:ss\")", "61:01", "total minutes");
+    check_ok("duration(1.9,\"s\",\"ss\")", "1", "truncate");
+    check_ok("duration(90700,\"ms\",\"mm:ss.d\")", "1:30.7", "milliseconds tenths");
+    check_ok("duration(1,\"s\") == \"0:01\"", "1", "formatted string comparison");
+    check_err("duration(1)", "ERR:", "missing unit");
+    check_err("duration(1,\"minutes\")", "ERR:", "unknown unit");
+    check_err("duration(1,\"s\",\"long\")", "ERR:", "unknown format");
+}
+
 static void test_comparisons() {
     printf("--- Comparisons ---\n");
     check_ok("5 > 3",           "1",      "gt true");
@@ -337,6 +354,7 @@ int main() {
     test_unary();
     test_numeric_functions();
     test_numeric_function_errors();
+    test_duration();
     test_comparisons();
     test_ternary();
     test_string_equality();

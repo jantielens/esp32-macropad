@@ -6,13 +6,14 @@
 #include "button_defaults.h"
 #include "display_manager.h"
 #include "icon_store.h"
-#include "list_provider.h"
+#include "json_key_validation.h"
 #include "log_manager.h"
 #include "pad_block.h"
 #include "pad_config.h"
 #include "pad_resolve_request.h"
 #include "pad_validate.h"
 #include "psram_json_allocator.h"
+#include "storage.h"
 #include "web_portal_auth.h"
 #include "web_portal_json.h"
 #if HAS_MQTT
@@ -63,17 +64,7 @@ static int parse_page_param(AsyncWebServerRequest *request) {
     return page;
 }
 
-// Validate a pad JSON body before saving. Delegates to the shared pad_validate
-// (single source of truth, identical to the MCP write/validate tools) so the
-// portal rejects the same invalid pads MCP does — binding tokens, widget
-// fields, colors, action arrays, length caps, and the one-level [pad:] rule.
-// tolerate_offgrid=true preserves the portal's feature of keeping buttons that
-// fall outside a shrunken grid (they are hidden and reappear when it grows).
-// Returns error message or nullptr on success.
-static const char* validate_pad_json(const uint8_t* json, size_t len) {
-    BasicJsonDocument<PsramJsonAllocator> doc(len * 2 + 512);
-    DeserializationError err = deserializeJson(doc, json, len);
-    if (err) return "Invalid JSON";
+static PadValidationGeometry current_pad_validation_geometry() {
     const PadLayoutSettings& layout = button_defaults_get()->layout;
     const PadValidationGeometry geometry = {
         (uint16_t)(displayManager ? displayManager->getActiveWidth() : DISPLAY_WIDTH),
@@ -83,7 +74,7 @@ static const char* validate_pad_json(const uint8_t* json, size_t len) {
         layout.inset_top_px, layout.inset_bottom_px,
         layout.pixel_shift_distance_px,
     };
-    return pad_validate(doc.as<JsonObjectConst>(), /*tolerate_offgrid=*/true, &geometry);
+    return geometry;
 }
 
 static uint8_t* allocate_pad_json_buffer(size_t len) {
@@ -180,7 +171,8 @@ static void preserve_pad_image_passwords(JsonArray submitted_buttons,
                                         JsonArrayConst existing_buttons) {
     for (JsonObject button : submitted_buttons) {
         const char* submitted_password = button["bg_image_password"] | "";
-        const bool preserve_password = (button["bg_image_password_set"] | false) && submitted_password[0] == '\0';
+        const bool preserve_password = (button["bg_image_password_set"] | false) &&
+            submitted_password[0] == '\0';
         button.remove("bg_image_password_set");
         if (!preserve_password) continue;
 
@@ -202,9 +194,22 @@ static uint8_t* prepare_pad_save_json(uint8_t page, const uint8_t* json, size_t 
     if (deserializeJson(submitted, json, len)) return nullptr;
 
     size_t existing_len = 0;
-    char* existing_json = pad_config_read_raw(page, &existing_len);
+    char path[40];
+    pad_config_path(page, path, sizeof(path));
+    char* existing_json = pad_config_read_raw_mounted(page, &existing_len);
+    if (!existing_json && Storage.exists(path)) {
+        LOGE(TAG, "Pad %u: existing configuration could not be read", page);
+        return nullptr;
+    }
     BasicJsonDocument<PsramJsonAllocator> existing(existing_len * 2 + 512);
-    const bool have_existing = existing_json && !deserializeJson(existing, existing_json, existing_len);
+    const bool have_existing = existing_json &&
+        !deserializeJson(existing, static_cast<const char*>(existing_json), existing_len) &&
+        existing.is<JsonObjectConst>();
+    if (existing_json && !have_existing) {
+        LOGE(TAG, "Pad %u: existing configuration could not be parsed", page);
+        free(existing_json);
+        return nullptr;
+    }
 
     preserve_pad_image_passwords(submitted["buttons"].as<JsonArray>(),
         have_existing ? existing["buttons"].as<JsonArrayConst>() : JsonArrayConst());
@@ -212,12 +217,16 @@ static uint8_t* prepare_pad_save_json(uint8_t page, const uint8_t* json, size_t 
         have_existing ? existing["overlay_buttons"].as<JsonArrayConst>() : JsonArrayConst());
 
     if (existing_json) free(existing_json);
+    if (submitted.overflowed()) return nullptr;
 
     const size_t serialized_len = measureJson(submitted);
     uint8_t* prepared = allocate_pad_json_buffer(serialized_len);
     if (!prepared) return nullptr;
 
-    serializeJson(submitted, prepared, serialized_len + 1);
+    if (serializeJson(submitted, prepared, serialized_len + 1) != serialized_len) {
+        free(prepared);
+        return nullptr;
+    }
     *prepared_len = serialized_len;
     return prepared;
 }
@@ -337,32 +346,34 @@ void handlePostPadConfig(AsyncWebServerRequest *request, uint8_t *data, size_t l
 
     // All data received — validate and save
     g_pad_post.buf[g_pad_post.total] = '\0';
+    if (!json_keys_valid(g_pad_post.buf, g_pad_post.total)) {
+        web_portal_send_json_error(request, 400, "JSON contains an invalid NUL");
+        pad_post_reset();
+        return;
+    }
+    const StorageMutationGuard storage_guard;
+    if (!storage_guard) {
+        web_portal_send_json_error(request, 409, "Device is busy");
+        pad_post_reset();
+        return;
+    }
     const uint32_t save_started_ms = millis();
     LOGI(TAG, "Pad %u save processing started", g_pad_post.page);
 
     size_t prepared_len = 0;
     uint8_t* prepared_json = prepare_pad_save_json(g_pad_post.page, g_pad_post.buf, g_pad_post.total, &prepared_len);
     if (!prepared_json) {
-        web_portal_send_json_error(request, 400, "Invalid JSON");
+        web_portal_send_json_error(request, 400, "Invalid pad JSON or existing pad could not be read");
         pad_post_reset();
         return;
     }
     LOGI(TAG, "Pad %u save prepared at %lu ms", g_pad_post.page,
          (unsigned long)(millis() - save_started_ms));
 
-    const char* err = validate_pad_json(prepared_json, prepared_len);
-    if (err) {
-        LOGW(TAG, "Validation failed for page %u: %s", g_pad_post.page, err);
-        web_portal_send_json_error(request, 400, err);
-        heap_caps_free(prepared_json);
-        pad_post_reset();
-        return;
-    }
-    LOGI(TAG, "Pad %u save validated at %lu ms", g_pad_post.page,
-         (unsigned long)(millis() - save_started_ms));
-
+    const PadValidationGeometry geometry = current_pad_validation_geometry();
     const char* save_error = nullptr;
-    if (!pad_config_save_raw(g_pad_post.page, prepared_json, prepared_len, &save_error)) {
+    if (!pad_config_save_raw(g_pad_post.page, prepared_json, prepared_len, &save_error, &geometry)) {
+        LOGW(TAG, "Pad %u save failed: %s", g_pad_post.page, save_error ? save_error : "storage failure");
         web_portal_send_json_error(request, save_error ? 400 : 500,
                                    save_error ? save_error : "Failed to save config");
         heap_caps_free(prepared_json);
@@ -379,13 +390,6 @@ void handlePostPadConfig(AsyncWebServerRequest *request, uint8_t *data, size_t l
     LOGI(TAG, "Page %u config saved", saved_page);
     // Icons are already cached by icon_store_install() from the individual
     // icon uploads that the browser performs before POSTing the config.
-#if HAS_DISPLAY
-    // Refresh the built-in 'pads' list provider so newly added/renamed pads
-    // appear in list widgets without a reboot.
-    list_provider_pads_update(saved_page, true);
-    LOGI(TAG, "Pad %u list updated at %lu ms", saved_page,
-         (unsigned long)(millis() - save_started_ms));
-#endif
 #if HAS_MQTT
     mqtt_sub_store_subscribe_all();
     LOGI(TAG, "Pad %u subscriptions updated at %lu ms", saved_page,
@@ -411,9 +415,6 @@ void handleDeletePadConfig(AsyncWebServerRequest *request) {
         return;
     }
 
-#if HAS_DISPLAY
-    list_provider_pads_update((uint8_t)page, false);
-#endif
 #if HAS_MQTT
     mqtt_sub_store_subscribe_all();
 #endif

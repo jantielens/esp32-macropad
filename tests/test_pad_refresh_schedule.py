@@ -6,6 +6,9 @@ import tempfile
 
 root = pathlib.Path(__file__).resolve().parents[1]
 source = (root / "src/app/screens/pad_screen.cpp").read_text()
+update_start = source.index("void PadScreen::update()")
+update_end = source.index("\nvoid PadScreen::pollLiveData(", update_start)
+update = source[update_start:update_end]
 start = source.index("void PadScreen::pollLiveData(")
 end = source.index("\nstatic bool widget_has_scheme", start)
 poll = source[start:end]
@@ -29,6 +32,7 @@ harness = r'''
 #include <sys/time.h>
 #define HAS_MQTT 1
 #define HAS_DISPLAY 1
+#define HAS_PSRAM 1
 #define HAS_IMAGE_LIBRARY 1
 #define HAS_IMAGE_FETCH 1
 #define millis test_millis
@@ -37,6 +41,8 @@ static uint64_t now_ms = 1000;
 static bool synced = false;
 static bool minute_refresh = true;
 static uint32_t interval_ms = 100;
+static uint32_t generation = 1;
+static uint32_t pad_config_get_generation() { return generation; }
 enum BtnState { BTN_STATE_ENABLED, BTN_STATE_DISABLED, BTN_STATE_HIDDEN };
 constexpr unsigned LV_OBJ_FLAG_HIDDEN = 1;
 constexpr unsigned LV_STATE_DISABLED = 2;
@@ -50,7 +56,11 @@ static void lv_obj_clear_state(lv_obj_t* obj, unsigned state) { obj->states &= ~
 static void lv_obj_add_state(lv_obj_t* obj, unsigned state) { obj->states |= state; }
 static void lv_obj_remove_state(lv_obj_t* obj, unsigned state) { obj->states &= ~state; }
 struct WidgetState { lv_obj_t* obj; unsigned shows = 0; unsigned hides = 0; };
-struct WidgetType { void (*onShow)(WidgetState*); void (*onHide)(WidgetState*); };
+struct WidgetType {
+    void (*onShow)(WidgetState*);
+    void (*onHide)(WidgetState*);
+    const char* name = "";
+};
 struct lv_timer_t { bool deleted = false; };
 struct ButtonTile {
     lv_obj_t* obj;
@@ -100,6 +110,12 @@ static bool context_active = false;
 static void pad_binding_set_bindings(const void* bindings, uint8_t) { context_active = bindings; }
 static void mqtt_sub_store_clear_dirty() { assert(context_active); }
 struct PadScreen {
+    lv_obj_t screen_object;
+    lv_obj_t* screen = &screen_object;
+    bool tilesBuilt = false;
+    uint32_t cachedGeneration = 0;
+    uint8_t tileCount = 0;
+    ButtonTile tiles[4]{};
     uint64_t lastPassiveBindingSlot = UINT64_MAX;
     uint64_t lastTimeBindingMinute = UINT64_MAX;
     bool clockWasSynced = false;
@@ -112,15 +128,26 @@ struct PadScreen {
     int colors = 0;
     int numbers = 0;
     int images = 0;
+    unsigned reader_shows_at_poll = 0;
+    void update();
+    void buildTiles() { tilesBuilt = true; }
+    void reconcilePadHold(const char*) {}
+    void refreshNavigationFocus() {}
     void pollLiveData(bool force = false);
     static void onWidgetPressFeedback(lv_event_t* event);
     void pollBtnStateBindings() { assert(context_active); ++visibility; }
-    void pollMqttBindings(bool refresh) { assert(context_active); ++live; if (refresh) ++passive; }
+    void pollMqttBindings(bool refresh, bool = false) {
+        assert(context_active);
+        if (tileCount) reader_shows_at_poll = tiles[0].widget_state.shows;
+        ++live;
+        if (refresh) ++passive;
+    }
     void pollColorBindings() { assert(context_active); ++colors; }
     void pollNumberBindings() { assert(context_active); ++numbers; }
     void pollImageFrames() { assert(!context_active); ++images; }
 };
 '''
+harness += update
 harness += poll
 harness += apply_state
 harness += fade_helper
@@ -172,6 +199,31 @@ int main() {
         },
         [](WidgetState* state) { ++state->hides; }
     };
+    const WidgetType reader = {widget.onShow, widget.onHide, "text_reader"};
+    const WidgetType list = {widget.onShow, widget.onHide, "list"};
+    lv_obj_t fresh_button, disabled_button, hidden_button, list_button;
+    disabled_button.states = LV_STATE_DISABLED;
+    hidden_button.flags = LV_OBJ_FLAG_HIDDEN;
+    PadScreen rebuilt;
+    rebuilt.tileCount = 4;
+    rebuilt.tiles[0] = {&fresh_button, &reader, {&fresh_button}};
+    rebuilt.tiles[1] = {&disabled_button, &reader, {&disabled_button}};
+    rebuilt.tiles[2] = {&hidden_button, &reader, {&hidden_button}};
+    rebuilt.tiles[3] = {&list_button, &list, {&list_button}};
+    rebuilt.update();
+    assert(rebuilt.tiles[0].widget_state.shows == 1);
+    assert(rebuilt.reader_shows_at_poll == 1);
+    assert(rebuilt.tiles[1].widget_state.shows == 0);
+    assert(rebuilt.tiles[2].widget_state.shows == 0);
+    assert(rebuilt.tiles[3].widget_state.shows == 1);
+    rebuilt.update();
+    assert(rebuilt.tiles[0].widget_state.shows == 1);
+    ++generation;
+    rebuilt.update();
+    assert(rebuilt.tiles[0].widget_state.shows == 2);
+    assert(rebuilt.tiles[1].widget_state.shows == 0);
+    assert(rebuilt.tiles[2].widget_state.shows == 0);
+    assert(rebuilt.tiles[3].widget_state.shows == 2);
     ButtonTile tile{&button, &widget, {&button}};
     apply_btn_state(tile, BTN_STATE_ENABLED);
     assert(tile.widget_state.shows == 0);

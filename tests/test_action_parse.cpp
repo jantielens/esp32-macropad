@@ -1,9 +1,4 @@
-// ============================================================================
-// Unit tests for action_parse() and action_to_json() round-trip
-// ============================================================================
-// Verifies that all ButtonAction fields survive a parse→serialize→parse cycle
-// and that edge cases (empty actions, missing fields, timer_command mapping)
-// are handled correctly.
+// Typed operation parsing, validation, serialization, and catalog tests.
 
 #include <cstdio>
 #include <cstring>
@@ -16,15 +11,55 @@
 #include "action_registry.h"
 #include "action_catalog.h"
 #include "action_validate.h"
+#include "binding_template.h"
+#include "voice_notes.h"
+#include "voice_notes_processing.h"
+#include "action_continuation.h"
+#include "main_loop_bridge.h"
 #include <string>
 
-static unsigned g_followup_dispatches = 0;
+#if HAS_VOICE_NOTES
+#include "voice_notes_file.h"
+static VoiceNoteCommand record_command = VoiceNoteCommand::Start;
+static uint32_t record_token = 0;
+static bool record_accepted = true;
+bool voice_notes_command(VoiceNoteCommand command, uint32_t token) {
+    record_command = command;
+    record_token = token;
+    return record_accepted;
+}
+static VoiceNotesProcessingStart processing_start_result = VoiceNotesProcessingStart::Accepted;
+VoiceNotesProcessingStart voice_notes_processing_start() { return processing_start_result; }
+static LoopBridgeExec delete_exec = nullptr;
+alignas(uint32_t) static unsigned char delete_job[LOOP_BRIDGE_CTX_BYTES];
+static bool delete_queue_busy = false;
+static VoiceNoteFileStatus delete_result = VoiceNoteFileStatus::Ready;
+static char deleted_id[17] = {};
+LoopBridgeResult loop_bridge_enqueue(LoopBridgeExec exec, const void* context, size_t size) {
+    if (delete_queue_busy) return LOOP_BRIDGE_BUSY;
+    if (!exec || !context || size > sizeof(delete_job)) return LOOP_BRIDGE_INVALID;
+    delete_exec = exec;
+    memcpy(delete_job, context, size);
+    return LOOP_BRIDGE_OK;
+}
+VoiceNoteFileStatus voice_notes_remove(const char* id) {
+    strlcpy(deleted_id, id, sizeof(deleted_id));
+    return delete_result;
+}
+#if HAS_DISPLAY && HAS_PSRAM
+bool voice_notes_load_request(const char*) { return true; }
+static unsigned cleared_notes = 0;
+static char cleared_id[17] = {};
+void voice_notes_loaded_clear_if_matches(const char* id) {
+    ++cleared_notes;
+    strlcpy(cleared_id, id, sizeof(cleared_id));
+}
+#endif
+#endif
+
 ActionDispatchContext action_dispatch_context() { return {}; }
 void display_manager_request_binding_refresh() {}
-ActionResult action_dispatch(const ButtonAction& action, const char* label, uint32_t token, bool) {
-    if (!strcmp(action.type, ACTION_TYPE_HA_SERVICE))
-        return action_type_find(action.type)->dispatch(action, label, token);
-    ++g_followup_dispatches;
+ActionResult action_dispatch(const ButtonAction&, const char*, uint32_t, bool) {
     return ACTION_COMPLETE;
 }
 
@@ -36,9 +71,9 @@ static int g_fail = 0;
 #define TEST(name) static void test_##name()
 #define RUN(name)  do { \
     printf("  %-50s ", #name); \
+    const int failures_before = g_fail; \
     test_##name(); \
-    printf("PASS\n"); \
-    g_pass++; \
+    if (g_fail == failures_before) { printf("PASS\n"); g_pass++; } \
 } while(0)
 
 #define ASSERT_STR(field, expected) do { \
@@ -62,39 +97,6 @@ static int g_fail = 0;
     } \
 } while(0)
 
-// Helper: parse JSON string into a ButtonAction
-static ButtonAction parse_from_string(const char* json_str) {
-    StaticJsonDocument<1024> doc;
-    deserializeJson(doc, json_str);
-    ButtonAction act;
-    action_parse(doc.as<JsonObject>(), act);
-    return act;
-}
-
-// Helper: round-trip parse→serialize→parse and return the final action
-static ButtonAction round_trip(const char* json_str) {
-    ButtonAction first = parse_from_string(json_str);
-    // Serialize
-    StaticJsonDocument<1024> doc;
-    JsonObject obj = doc.to<JsonObject>();
-    action_to_json(first, obj);
-    // Re-parse
-    ButtonAction second;
-    action_parse(obj, second);
-    return second;
-}
-
-// ============================================================================
-// Empty / minimal actions
-// ============================================================================
-
-TEST(empty_json) {
-    ButtonAction act = parse_from_string("{}");
-    ASSERT_STR(act.type, "");
-    // With type=="" no arm is active; spot-check zero-init of a couple arms.
-    ASSERT_EQ(act.payload.sound_alert.sound_alert_volume, 0);
-}
-
 TEST(empty_to_json_produces_empty_object) {
     ButtonAction act;
     memset(&act, 0, sizeof(act));
@@ -104,813 +106,53 @@ TEST(empty_to_json_produces_empty_object) {
     ASSERT_EQ(obj.size(), 0);  // empty action → no keys
 }
 
-TEST(action_list_filters_literal_none_for_pad_callers) {
-    StaticJsonDocument<512> doc;
-    deserializeJson(doc, "[{\"type\":\"none\"},{\"type\":\"back\"},{},null]");
-    ButtonAction actions[MAX_BUTTON_ACTIONS];
-
-    uint8_t count = action_list_parse(doc.as<JsonVariant>(), actions,
-                                      MAX_BUTTON_ACTIONS, true);
-    ASSERT_EQ(count, 1);
-    ASSERT_STR(actions[0].type, "back");
-    ASSERT_STR(actions[1].type, "");
-}
-
-TEST(action_list_retains_literal_none_for_existing_callers) {
-    StaticJsonDocument<256> doc;
-    deserializeJson(doc, "[{\"type\":\"none\"}]");
-    ButtonAction actions[MAX_BUTTON_ACTIONS];
-
-    uint8_t count = action_list_parse(doc.as<JsonVariant>(), actions,
-                                      MAX_BUTTON_ACTIONS);
-    ASSERT_EQ(count, 1);
-    ASSERT_STR(actions[0].type, "none");
-}
-
-TEST(type_only) {
-    ButtonAction act = parse_from_string("{\"type\":\"back\"}");
-    ASSERT_STR(act.type, "back");
-    // back carries no payload
-#if HAS_DISPLAY
-    ButtonAction navigation = round_trip("{\"type\":\"button_nav\",\"command\":\"previous\"}");
-    ASSERT_STR(navigation.type, ACTION_TYPE_BUTTON_NAVIGATION);
-    ASSERT_STR(navigation.payload.button_navigation.command, "previous");
-    ASSERT_TRUE(!action_type_find(ACTION_TYPE_BUTTON_NAVIGATION)->display_lock_required);
-    navigation = round_trip("{\"type\":\"button_nav\",\"command\":\"tap\"}");
-    ASSERT_STR(navigation.payload.button_navigation.command, "tap");
-    navigation = round_trip("{\"type\":\"button_nav\",\"command\":\"tap_hold\"}");
-    ASSERT_STR(navigation.payload.button_navigation.command, "tap_hold");
-    StaticJsonDocument<2048> metadata;
-    JsonObject catalog = metadata.to<JsonObject>();
-    action_type_find(ACTION_TYPE_BUTTON_NAVIGATION)->describe(catalog);
-    ASSERT_EQ(catalog["commands"].size(), 4);
-    const char* ids[] = {"previous", "next", "tap", "tap_hold"};
-    const char* labels[] = {"Previous", "Next", "Tap", "Tap & Hold"};
-    for (size_t index = 0; index < 4; ++index) {
-        ASSERT_STR(catalog["commands"][index]["id"].as<const char*>(), ids[index]);
-        ASSERT_STR(catalog["commands"][index]["label"].as<const char*>(), labels[index]);
+TEST(typed_audio_actions_suppress_feedback) {
+#if HAS_AUDIO
+    for (const char* id : {"audio.alert.tone", "audio.alert.stop"}) {
+        JsonDocument input;
+        input["op"] = id;
+        JsonObject args = input["args"].to<JsonObject>();
+        if (!strcmp(id, "audio.alert.tone")) {
+            args["pattern"] = "1000:200";
+            args["volume"] = 0;
+        }
+        ActionStorage storage = {};
+        ButtonAction action = {};
+        {
+            ActionStorageScope scope(&storage);
+            action_parse(input.as<JsonObject>(), action);
+        }
+        ASSERT_TRUE(!storage.failed && action_list_has_audio(&action, 1));
+        action_storage_clear(storage);
     }
-    for (const char* json : {
-            "{\"type\":\"button_nav\",\"command\":\"activate\"}",
-            "{\"type\":\"button_nav\",\"command\":\"hold\"}",
-            "{\"type\":\"button_nav\",\"command\":\"menu\"}",
-            "{\"type\":\"button_nav\",\"command\":\"cancel\"}"}) {
-        navigation = parse_from_string(json);
-        ASSERT_STR(navigation.type, "");
-    }
-    navigation = parse_from_string("{\"type\":\"button_nav\",\"command\":\"unknown\"}");
-    ASSERT_STR(navigation.type, "");
+    ButtonAction legacy = {};
+    strlcpy(legacy.type, ACTION_TYPE_SOUND_ALERT, sizeof(legacy.type));
+    ASSERT_TRUE(!action_list_has_audio(&legacy, 1));
 #endif
 }
 
-TEST(bthome_round_trip_and_validation) {
-    const auto defaults = round_trip("{\"type\":\"bthome\"}");
-    ASSERT_EQ(defaults.payload.bthome.button, 1);
-    ASSERT_EQ(defaults.payload.bthome.event, 1);
-    for (const char* json : {
-            "{\"type\":\"bthome\",\"button\":1,\"event\":\"press\"}",
-            "{\"type\":\"bthome\",\"button\":4,\"event\":\"double_press\"}",
-            "{\"type\":\"bthome\",\"button\":10,\"event\":\"long_press\"}"}) {
-        JsonDocument original;
-        deserializeJson(original, json);
-        ASSERT_TRUE(action_validate_json(original.as<JsonObjectConst>()) == nullptr);
-        const auto action = round_trip(json);
-        JsonDocument output;
-        action_to_json(action, output.to<JsonObject>());
-        ASSERT_EQ(output["button"].as<int>(), original["button"].as<int>());
-        ASSERT_STR(output["event"].as<const char*>(), original["event"].as<const char*>());
-    }
-    for (const char* json : {
-            "{\"type\":\"bthome\",\"button\":0}",
-            "{\"type\":\"bthome\",\"button\":11}",
-            "{\"type\":\"bthome\",\"button\":1.5}",
-            "{\"type\":\"bthome\",\"button\":\"4\"}",
-            "{\"type\":\"bthome\",\"event\":\"triple_press\"}",
-            "{\"type\":\"bthome\",\"event\":1}"}) {
-        JsonDocument invalid;
-        deserializeJson(invalid, json);
-        ASSERT_TRUE(action_validate_json(invalid.as<JsonObjectConst>()) != nullptr);
-        const auto parsed = parse_from_string(json);
-        ASSERT_STR(parsed.type, "");
-    }
-    ASSERT_TRUE(!action_type_find(ACTION_TYPE_BTHOME)->display_lock_required);
-}
-
-TEST(set_var_round_trip_and_validation) {
-    ButtonAction act = round_trip(
-        "{\"type\":\"set_var\",\"var_name\":\"counter\",\"var_value\":\"[expr:[var:counter|0] + 1]\"}");
-    ASSERT_STR(act.type, ACTION_TYPE_SET_VAR);
-    ASSERT_STR(act.payload.set_var.var_name, "counter");
-    ASSERT_STR(act.payload.set_var.var_value, "[expr:[var:counter|0] + 1]");
-
-    const ActionTypeDef* type = action_type_find(ACTION_TYPE_SET_VAR);
-    ASSERT_TRUE(type != nullptr);
-    JsonDocument valid;
-    deserializeJson(valid, "{\"type\":\"set_var\",\"var_name\":\"counter\",\"var_value\":\"\"}");
-    ASSERT_TRUE(action_type_validate(type, valid.as<JsonObjectConst>()) == nullptr);
-
-    for (const char* json : {
-            "{\"type\":\"set_var\",\"var_name\":\"bad/name\",\"var_value\":\"x\"}",
-            "{\"type\":\"set_var\",\"var_name\":\"counter\",\"var_value\":1}",
-            "{\"type\":\"set_var\",\"var_name\":\"counter\"}",
-            "{\"type\":\"set_var\",\"var_name\":\"counter\\u0000suffix\",\"var_value\":\"x\"}",
-            "{\"type\":\"set_var\",\"var_name\":\"counter\",\"var_value\":\"prefix\\u0000suffix\"}"}) {
-        JsonDocument invalid;
-        deserializeJson(invalid, json);
-        ASSERT_TRUE(action_type_validate(type, invalid.as<JsonObjectConst>()) != nullptr);
-        act = parse_from_string(json);
-        ASSERT_TRUE(act.payload.set_var.var_name[0] == '\0' &&
-                    act.payload.set_var.var_value[0] == '\0');
-    }
-
-    const std::string oversized_value(192, 'x');
-    const std::string oversized_json = "{\"type\":\"set_var\",\"var_name\":\"counter\",\"var_value\":\"" +
-        oversized_value + "\"}";
-    JsonDocument oversized;
-    deserializeJson(oversized, oversized_json);
-    ASSERT_TRUE(action_type_validate(type, oversized.as<JsonObjectConst>()) != nullptr);
-
-    size_t input_length = 0;
-    const auto count_value_field = [](char*, size_t, bool, void* context) {
-        ++*static_cast<size_t*>(context);
-        return true;
-    };
-    ASSERT_TRUE(action_type_visit_bindable_fields(type, act, count_value_field, &input_length));
-    ASSERT_EQ(input_length, 1);
-
-    JsonDocument metadata;
-    JsonObject metadata_object = metadata.to<JsonObject>();
-    type->describe(metadata_object);
-    ASSERT_STR(metadata["label"].as<const char*>(), "Set variable");
-    ASSERT_STR(metadata["editor_fields"][0]["label"].as<const char*>(), "Name");
-    ASSERT_STR(metadata["editor_fields"][1]["label"].as<const char*>(), "Value");
-    ASSERT_TRUE(!metadata["editor_fields"][0]["bindable"].as<bool>());
-    ASSERT_TRUE(metadata["editor_fields"][1]["bindable"].as<bool>());
-}
-
-TEST(gamepad_round_trip_and_validation) {
-    ButtonAction act = round_trip("{\"type\":\"gamepad\",\"control\":\"button\",\"button\":16,\"operation\":\"down\"}");
-    ASSERT_STR(act.type, "gamepad");
-    ASSERT_EQ(act.payload.gamepad.index, 15);
-    ASSERT_EQ(act.payload.gamepad.operation, 1);
-    act = round_trip("{\"type\":\"gamepad\",\"control\":\"hat\",\"direction\":\"right\",\"operation\":\"up\"}");
-    ASSERT_EQ(act.payload.gamepad.control, 1);
-    ASSERT_EQ(act.payload.gamepad.index, 3);
-    act = round_trip("{\"type\":\"gamepad\",\"control\":\"trigger\",\"trigger\":\"left\"}");
-    ASSERT_EQ(act.payload.gamepad.control, 2);
-    ASSERT_EQ(act.payload.gamepad.operation, 0);
-    act = parse_from_string("{\"type\":\"gamepad\",\"button\":17}");
-    ASSERT_STR(act.type, "");
-    act = parse_from_string("{\"type\":\"gamepad\",\"control\":\"hat\",\"direction\":\"up\",\"button\":1}");
-    ASSERT_STR(act.type, "");
-    act = parse_from_string("{\"type\":\"gamepad\",\"control\":\"trigger\",\"trigger\":\"invalid\"}");
-    ASSERT_STR(act.type, "");
-}
-
-// ============================================================================
-// Screen action
-// ============================================================================
-
-TEST(screen_action_parse) {
-    ButtonAction act = parse_from_string("{\"type\":\"screen\",\"target\":\"pad_3\"}");
-    ASSERT_STR(act.type, "screen");
-    ASSERT_STR(act.payload.screen.screen_id, "pad_3");
-}
-
-TEST(screen_action_round_trip) {
-    ButtonAction act = round_trip("{\"type\":\"screen\",\"target\":\"pad_0\"}");
-    ASSERT_STR(act.type, "screen");
-    ASSERT_STR(act.payload.screen.screen_id, "pad_0");
-}
-
-// ============================================================================
-// MQTT action
-// ============================================================================
-
-TEST(mqtt_action_parse) {
-    ButtonAction act = parse_from_string(
-        "{\"type\":\"mqtt\",\"topic\":\"home/light\",\"payload\":\"ON\"}");
-    ASSERT_STR(act.type, "mqtt");
-    ASSERT_STR(act.payload.mqtt.mqtt_topic, "home/light");
-    ASSERT_STR(act.payload.mqtt.mqtt_payload, "ON");
-}
-
-TEST(mqtt_action_round_trip) {
-    ButtonAction act = round_trip(
-        "{\"type\":\"mqtt\",\"topic\":\"home/light\",\"payload\":\"toggle\"}");
-    ASSERT_STR(act.type, "mqtt");
-    ASSERT_STR(act.payload.mqtt.mqtt_topic, "home/light");
-    ASSERT_STR(act.payload.mqtt.mqtt_payload, "toggle");
-}
-
-// ============================================================================
-// Key action
-// ============================================================================
-
-TEST(key_action_parse) {
-    ButtonAction act = parse_from_string(
-        "{\"type\":\"key\",\"sequence\":\"Ctrl+C\"}");
-    ASSERT_STR(act.type, "key");
-    ASSERT_STR(act.payload.key.key_sequence, "Ctrl+C");
-}
-
-TEST(key_action_round_trip) {
-    ButtonAction act = round_trip("{\"type\":\"key\",\"sequence\":\"Alt+Tab\"}");
-    ASSERT_STR(act.type, "key");
-    ASSERT_STR(act.payload.key.key_sequence, "Alt+Tab");
-}
-
-TEST(mouse_button_action_round_trip) {
-    for (const char* button : {"left", "right", "middle"}) {
-        char json[100];
-        snprintf(json, sizeof(json), "{\"type\":\"mouse_button\",\"button\":\"%s\"}", button);
-        ButtonAction act = round_trip(json);
-        ASSERT_STR(act.type, "mouse_button");
-        ASSERT_STR(act.payload.mouse_button.button, button);
-    }
-    ButtonAction act = round_trip("{\"type\":\"mouse_button\"}");
-    ASSERT_STR(act.payload.mouse_button.button, "left");
-}
-
-TEST(mouse_button_validation_and_catalog) {
-    const ActionTypeDef* type = action_type_find(ACTION_TYPE_MOUSE_BUTTON);
-    ASSERT_TRUE(type != nullptr);
-    ASSERT_EQ(type->available(), HAS_USB_HID || HAS_BLE_HID);
-    ASSERT_TRUE(type->fields == nullptr);
-    for (const char* value : {"\"invalid\"", "\"\"", "3", "null", "true"}) {
-        char json[100];
-        snprintf(json, sizeof(json), "{\"type\":\"mouse_button\",\"button\":%s}", value);
-        JsonDocument doc;
-        deserializeJson(doc, json);
-        ASSERT_TRUE(action_type_validate(type, doc.as<JsonObjectConst>()) != nullptr);
-        ButtonAction act = parse_from_string(json);
-        ASSERT_STR(act.type, "");
-    }
-    JsonDocument doc;
-    JsonObject catalog = doc.to<JsonObject>();
-    type->describe(catalog);
-    ASSERT_EQ(catalog["commands"].size(), 3);
-    ASSERT_STR(catalog["commands"][0]["id"].as<const char*>(), "left");
-    ASSERT_STR(catalog["commands"][1]["id"].as<const char*>(), "right");
-    ASSERT_STR(catalog["commands"][2]["id"].as<const char*>(), "middle");
-    ASSERT_STR(catalog["editor_fields"][0]["name"].as<const char*>(), "button");
-    ASSERT_TRUE(catalog["editor_fields"][0]["command_options"].as<bool>());
-}
-
-// ============================================================================
-// Music action
-// ============================================================================
-
-TEST(music_action_parse) {
-    ButtonAction act = parse_from_string(
-        "{\"type\":\"music\",\"music_command\":\"play_pause\"}");
-    ASSERT_STR(act.type, "music");
-    ASSERT_STR(act.payload.music.music_command, "play_pause");
-}
-
-TEST(music_action_round_trip) {
-    ButtonAction act = round_trip(
-        "{\"type\":\"music\",\"music_command\":\"previous\"}");
-    ASSERT_STR(act.type, "music");
-    ASSERT_STR(act.payload.music.music_command, "previous");
-}
-
-// Sound Alert action
-// ============================================================================
-
-TEST(sound_alert_tone_parse) {
-    ButtonAction act = parse_from_string(
-        "{\"type\":\"sound_alert\",\"sound_alert_kind\":\"tone\",\"sound_alert_pattern\":\"1000:200\",\"sound_alert_volume\":80}");
-    ASSERT_STR(act.type, "sound_alert");
-    ASSERT_STR(act.payload.sound_alert.sound_alert_kind, "tone");
-    ASSERT_STR(act.payload.sound_alert.sound_alert_pattern, "1000:200");
-    ASSERT_EQ(act.payload.sound_alert.sound_alert_volume, 80);
-}
-
-TEST(sound_alert_mp3_round_trip) {
-    ButtonAction act = round_trip(
-        "{\"type\":\"sound_alert\",\"sound_alert_kind\":\"mp3\",\"sound_alert_file\":\"startup\",\"sound_alert_volume\":100}");
-    ASSERT_STR(act.type, "sound_alert");
-    ASSERT_STR(act.payload.sound_alert.sound_alert_kind, "mp3");
-    ASSERT_STR(act.payload.sound_alert.sound_alert_file, "startup");
-    ASSERT_EQ(act.payload.sound_alert.sound_alert_volume, 100);
-}
-
-TEST(sound_alert_stop_choices) {
-    ButtonAction stop = round_trip("{\"type\":\"sound_alert\",\"sound_alert_kind\":\"stop\"}");
-    ASSERT_STR(stop.payload.sound_alert.sound_alert_kind, "stop");
-    stop = round_trip("{\"type\":\"sound_alert\",\"sound_alert_kind\":\"stop_all\"}");
-    ASSERT_STR(stop.payload.sound_alert.sound_alert_kind, "stop_all");
-    ASSERT_STR(parse_from_string("{\"type\":\"sound_alert\",\"sound_alert_kind\":\"stop_all\",\"sound_alert_pattern\":\"1000:200\"}").type, "");
-}
-
-TEST(legacy_alert_aliases_are_rejected) {
-    ButtonAction act = parse_from_string(
-        "{\"type\":\"beep\",\"beep_pattern\":\"1000:100\"}");
-    ASSERT_STR(act.type, "");
-    act = parse_from_string("{\"type\":\"sound\",\"sound_file\":\"chime\"}");
-    ASSERT_STR(act.type, "");
-}
-
-TEST(alarm_audio_round_trip) {
-#if ALARM_ENABLED
-    ButtonAction control = round_trip("{\"type\":\"alarm\",\"alarm_command\":\"adjust_minutes\",\"alarm_value\":\"{step}\"}");
-    ASSERT_STR(control.type, "alarm");
-    ASSERT_EQ(control.payload.alarm.alarm_id, 1);
-    action_type_substitute_step(action_type_find("alarm"), control, -60);
-    ASSERT_STR(control.payload.alarm.alarm_value, "-60");
-    control = round_trip("{\"type\":\"alarm\",\"alarm_command\":\"weekday_toggle\",\"alarm_day\":6}");
-    ASSERT_EQ(control.payload.alarm.alarm_day, 6);
-    ASSERT_STR(parse_from_string("{\"type\":\"alarm\",\"alarm_command\":\"bad\"}").type, "");
-    ASSERT_STR(parse_from_string("{\"type\":\"alarm\",\"alarm_command\":\"set_time\",\"alarm_value\":\"1440\"}").type, "");
-    ASSERT_STR(parse_from_string("{\"type\":\"alarm\",\"alarm_command\":\"adjust_minutes\",\"alarm_value\":\"1.5\"}").type, "");
-    ASSERT_STR(parse_from_string("{\"type\":\"alarm\",\"alarm_command\":\"toggle\",\"alarm_id\":0}").type, "");
-    ASSERT_STR(parse_from_string("{\"type\":\"alarm\",\"alarm_command\":\"weekday_toggle\"}").type, "");
-    ButtonAction tone = round_trip("{\"type\":\"alarm_tone\",\"sound_alert_pattern\":\"1000:200 800\",\"sound_alert_volume\":55}");
-    ASSERT_STR(tone.type, "alarm_tone");
-    ASSERT_STR(tone.payload.sound_alert.sound_alert_kind, "tone_loop");
-    ASSERT_STR(tone.payload.sound_alert.sound_alert_pattern, "1000:200 800");
-    ASSERT_EQ(tone.payload.sound_alert.sound_alert_volume, 55);
-    ButtonAction mp3 = round_trip("{\"type\":\"alarm_mp3\",\"sound_alert_file\":\"wake-up\",\"sound_alert_volume\":60}");
-    ASSERT_STR(mp3.type, "alarm_mp3");
-    ASSERT_STR(mp3.payload.sound_alert.sound_alert_kind, "mp3_loop");
-    ASSERT_STR(mp3.payload.sound_alert.sound_alert_file, "wake-up");
-    ASSERT_EQ(mp3.payload.sound_alert.sound_alert_volume, 60);
-    ASSERT_STR(parse_from_string("{\"type\":\"alarm_mp3\"}").type, "");
-    ASSERT_STR(parse_from_string("{\"type\":\"alarm_tone\",\"sound_alert_file\":\"wake-up\"}").type, "");
-    ASSERT_STR(parse_from_string("{\"type\":\"alarm_mp3\",\"sound_alert_file\":\"wake-up\",\"sound_alert_volume\":101}").type, "");
-    ASSERT_STR(parse_from_string("{\"type\":\"alarm_tone\",\"sound_alert_kind\":\"stop\"}").type, "");
-    StaticJsonDocument<1024> description;
-    JsonObject metadata = description.to<JsonObject>();
-    action_type_find("alarm_mp3")->describe(metadata);
-    ASSERT_STR(metadata["group"] | "", "Alarm");
-    ASSERT_STR(metadata["label"] | "", "Loop MP3");
-    ASSERT_EQ(action_type_find("alarm_tone")->execution, ACTION_EXECUTION_SYNC);
-    ButtonAction legacy = round_trip("{\"type\":\"sound_alert\",\"sound_alert_kind\":\"tone_loop\",\"sound_alert_pattern\":\"1000:200 800\"}");
-    ASSERT_STR(legacy.type, "");
-    ASSERT_STR(parse_from_string("{\"type\":\"sound_alert\",\"sound_alert_kind\":\"mp3_loop\",\"sound_alert_file\":\"wake-up\"}").type, "");
-#else
-    for (const char* type : {"alarm", "alarm_tone", "alarm_mp3"}) {
-        ASSERT_TRUE(action_type_find(type) == nullptr);
-        ASSERT_TRUE(!action_type_is_supported(type));
-    }
-#endif
-}
-
-// ============================================================================
-// Volume action
-// ============================================================================
-
-TEST(volume_set_action_parse) {
-    ButtonAction act = parse_from_string(
-        "{\"type\":\"volume\",\"volume_mode\":\"set\",\"volume_value\":\"60\"}");
-    ASSERT_STR(act.type, "volume");
-    ASSERT_STR(act.payload.volume.volume_mode, "set");
-    ASSERT_STR(act.payload.volume.volume_value, "60");
-}
-
-TEST(volume_adjust_action_round_trip) {
-    ButtonAction act = round_trip(
-        "{\"type\":\"volume\",\"volume_mode\":\"adjust\",\"volume_value\":\"-10\"}");
-    ASSERT_STR(act.type, "volume");
-    ASSERT_STR(act.payload.volume.volume_mode, "adjust");
-    ASSERT_STR(act.payload.volume.volume_value, "-10");
-}
-
-TEST(volume_adjust_step_placeholder) {
-    ButtonAction act = parse_from_string(
-        "{\"type\":\"volume\",\"volume_mode\":\"adjust\",\"volume_value\":\"{step}\"}");
-    ASSERT_STR(act.payload.volume.volume_value, "{step}");
-}
-
-TEST(save_level_actions_round_trip) {
-    ASSERT_STR(round_trip("{\"type\":\"save_volume\"}").type, "save_volume");
-    ASSERT_STR(round_trip("{\"type\":\"save_brightness\"}").type, "save_brightness");
-}
-
-// ============================================================================
-// Brightness action
-// ============================================================================
-
-TEST(brightness_set_action_parse) {
-    ButtonAction act = parse_from_string(
-        "{\"type\":\"brightness\",\"brightness_mode\":\"set\",\"brightness_value\":\"75\"}");
-    ASSERT_STR(act.type, "brightness");
-    ASSERT_STR(act.payload.brightness.brightness_mode, "set");
-    ASSERT_STR(act.payload.brightness.brightness_value, "75");
-}
-
-TEST(brightness_adjust_action_round_trip) {
-    ButtonAction act = round_trip(
-        "{\"type\":\"brightness\",\"brightness_mode\":\"adjust\",\"brightness_value\":\"-5\"}");
-    ASSERT_STR(act.type, "brightness");
-    ASSERT_STR(act.payload.brightness.brightness_mode, "adjust");
-    ASSERT_STR(act.payload.brightness.brightness_value, "-5");
-}
-
-TEST(brightness_empty_value_not_serialized) {
-    ButtonAction act = parse_from_string(
-        "{\"type\":\"brightness\",\"brightness_mode\":\"set\"}");
-    StaticJsonDocument<256> doc;
-    JsonObject obj = doc.to<JsonObject>();
-    action_to_json(act, obj);
-    ASSERT_TRUE(!obj.containsKey("brightness_value"));
-    ASSERT_TRUE(obj.containsKey("brightness_mode"));
-}
-
-#if HAS_LVGL_EPAPER
-TEST(display_refresh_action_round_trip) {
-    ButtonAction act = round_trip("{\"type\":\"display_refresh\",\"mode\":\"full\"}");
-    ASSERT_STR(act.type, "display_refresh");
-    ASSERT_STR(act.payload.display_refresh.mode, "full");
-}
-#endif
-
-// ============================================================================
-// Timer action
-// ============================================================================
-
-TEST(timer_action_parse) {
-    ButtonAction act = parse_from_string(
-        "{\"type\":\"timer\",\"timer_id\":1,\"timer_command\":\"toggle\",\"timer_mode\":\"up\"}");
-    ASSERT_STR(act.type, "timer");
-    ASSERT_EQ(act.payload.timer.timer_id, 1);
-    ASSERT_STR(act.payload.timer.timer_command, "toggle");
-    ASSERT_STR(act.payload.timer.timer_mode, "up");
-}
-
-TEST(timer_countdown_start_action_round_trip) {
-    ButtonAction act = round_trip(
-        "{\"type\":\"timer\",\"timer_id\":3,\"timer_command\":\"start\",\"timer_mode\":\"down\",\"timer_value\":\"300\"}");
-    ASSERT_STR(act.type, "timer");
-    ASSERT_EQ(act.payload.timer.timer_id, 3);
-    ASSERT_STR(act.payload.timer.timer_command, "start");
-    ASSERT_STR(act.payload.timer.timer_mode, "down");
-    ASSERT_STR(act.payload.timer.timer_value, "300");
-}
-
-TEST(timer_oversized_wire_fields_rejected_before_copy) {
-    ButtonAction value = parse_from_string(
-        "{\"type\":\"timer\",\"timer_id\":1,\"timer_command\":\"start\","
-        "\"timer_mode\":\"down\",\"timer_value\":\"1234567890123456\"}");
-    ASSERT_TRUE(value.type[0] == '\0');
-
-    ButtonAction mode = parse_from_string(
-        "{\"type\":\"timer\",\"timer_id\":1,\"timer_command\":\"start\","
-        "\"timer_mode\":\"downx\",\"timer_value\":\"1\"}");
-    ASSERT_TRUE(mode.type[0] == '\0');
-}
-
-TEST(timer_adjust_action_round_trip) {
-    ButtonAction act = round_trip(
-        "{\"type\":\"timer\",\"timer_id\":2,\"timer_command\":\"adjust\",\"timer_value\":\"30\"}");
-    ASSERT_STR(act.type, "timer");
-    ASSERT_EQ(act.payload.timer.timer_id, 2);
-    ASSERT_STR(act.payload.timer.timer_command, "adjust");
-    ASSERT_STR(act.payload.timer.timer_value, "30");
-}
-
-TEST(timer_set_action_round_trip) {
-    ButtonAction act = round_trip(
-        "{\"type\":\"timer\",\"timer_id\":1,\"timer_command\":\"set\",\"timer_value\":\"300\"}");
-    ASSERT_STR(act.type, "timer");
-    ASSERT_EQ(act.payload.timer.timer_id, 1);
-    ASSERT_STR(act.payload.timer.timer_command, "set");
-    ASSERT_STR(act.payload.timer.timer_value, "300");
-}
-
-TEST(timer_fields_serialized_properly) {
-    ButtonAction act = parse_from_string(
-        "{\"type\":\"timer\",\"timer_id\":3,\"timer_command\":\"start\",\"timer_mode\":\"up\"}");
-    StaticJsonDocument<256> doc;
-    JsonObject obj = doc.to<JsonObject>();
-    action_to_json(act, obj);
-    ASSERT_TRUE(obj.containsKey("timer_id"));
-    ASSERT_TRUE(obj.containsKey("timer_command"));
-    ASSERT_TRUE(obj.containsKey("timer_mode"));
-    ASSERT_EQ(obj["timer_id"].as<int>(), 3);
-    ASSERT_STR(obj["timer_command"].as<const char*>(), "start");
-    ASSERT_STR(obj["timer_mode"].as<const char*>(), "up");
-}
-
-TEST(mqtt_payload_serialized_as_payload_not_timer_command) {
-    ButtonAction act = parse_from_string(
-        "{\"type\":\"mqtt\",\"topic\":\"test\",\"payload\":\"ON\"}");
-    StaticJsonDocument<256> doc;
-    JsonObject obj = doc.to<JsonObject>();
-    action_to_json(act, obj);
-    ASSERT_TRUE(obj.containsKey("payload"));
-    ASSERT_TRUE(!obj.containsKey("timer_command"));
-}
-
-// ============================================================================
-// BLE pair action
-// ============================================================================
-
-TEST(ble_pair_action_parse) {
-    ButtonAction act = parse_from_string("{\"type\":\"ble_pair\"}");
-    ASSERT_STR(act.type, "ble_pair");
-}
-
-TEST(ble_pair_action_round_trip) {
-    ButtonAction act = round_trip("{\"type\":\"ble_pair\"}");
-    ASSERT_STR(act.type, "ble_pair");
-}
-
-// ============================================================================
-// Back action
-// ============================================================================
-
-TEST(back_action_round_trip) {
-    ButtonAction act = round_trip("{\"type\":\"back\"}");
-    ASSERT_STR(act.type, "back");
-}
-
-// ============================================================================
-// Missing fields default to zero/empty
-// ============================================================================
-
-TEST(missing_optional_fields) {
-    ButtonAction act = parse_from_string("{\"type\":\"sound_alert\",\"sound_alert_kind\":\"tone\"}");
-    ASSERT_STR(act.payload.sound_alert.sound_alert_pattern, "");
-    ASSERT_EQ(act.payload.sound_alert.sound_alert_volume, 0);
-}
-
-// ============================================================================
-// Compact serialization: zero/empty fields are omitted
-// ============================================================================
-
-TEST(compact_serialization) {
-    ButtonAction act = parse_from_string("{\"type\":\"back\"}");
-    StaticJsonDocument<256> doc;
-    JsonObject obj = doc.to<JsonObject>();
-    action_to_json(act, obj);
-    ASSERT_EQ(obj.size(), 1);  // only "type"
-    ASSERT_STR(obj["type"].as<const char*>(), "back");
-}
-
-TEST(per_type_round_trips_cover_all_arms) {
-    // ButtonAction is a discriminated union — only one arm is valid at a time,
-    // so the previous "all fields at once" test no longer makes sense. This
-    // test instead round-trips one action of each type and asserts the active
-    // arm survives parse→serialize→parse.
-    {
-        ButtonAction a = round_trip("{\"type\":\"screen\",\"target\":\"pad_1\"}");
-        ASSERT_STR(a.payload.screen.screen_id, "pad_1");
-    }
-    {
-        ButtonAction a = round_trip("{\"type\":\"mqtt\",\"topic\":\"t\",\"payload\":\"p\"}");
-        ASSERT_STR(a.payload.mqtt.mqtt_topic, "t");
-        ASSERT_STR(a.payload.mqtt.mqtt_payload, "p");
-    }
-    {
-        ButtonAction a = round_trip("{\"type\":\"key\",\"sequence\":\"Ctrl+A\"}");
-        ASSERT_STR(a.payload.key.key_sequence, "Ctrl+A");
-    }
-    {
-        ButtonAction a = round_trip("{\"type\":\"music\",\"music_command\":\"next\"}");
-        ASSERT_STR(a.payload.music.music_command, "next");
-    }
-    {
-        ButtonAction a = round_trip("{\"type\":\"volume\",\"volume_mode\":\"set\",\"volume_value\":\"55\"}");
-        ASSERT_STR(a.payload.volume.volume_mode, "set");
-        ASSERT_STR(a.payload.volume.volume_value, "55");
-    }
-    {
-        ButtonAction a = round_trip("{\"type\":\"brightness\",\"brightness_mode\":\"adjust\",\"brightness_value\":\"-15\"}");
-        ASSERT_STR(a.payload.brightness.brightness_mode, "adjust");
-        ASSERT_STR(a.payload.brightness.brightness_value, "-15");
-    }
-    {
-        ButtonAction a = round_trip("{\"type\":\"timer\",\"timer_id\":2,\"timer_command\":\"adjust\",\"timer_value\":\"30\"}");
-        ASSERT_EQ(a.payload.timer.timer_id, 2);
-        ASSERT_STR(a.payload.timer.timer_command, "adjust");
-        ASSERT_STR(a.payload.timer.timer_value, "30");
-    }
-    {
-        ButtonAction a = round_trip("{\"type\":\"sound_alert\",\"sound_alert_kind\":\"mp3\",\"sound_alert_file\":\"alert\",\"sound_alert_volume\":90}");
-        ASSERT_STR(a.payload.sound_alert.sound_alert_file, "alert");
-        ASSERT_EQ(a.payload.sound_alert.sound_alert_volume, 90);
-    }
-    {
-        ButtonAction a = round_trip("{\"type\":\"notify\",\"message\":\"hello\",\"duration_ms\":5000}");
-        ASSERT_STR(a.payload.notify.message, "hello");
-        ASSERT_EQ(a.payload.notify.duration_ms, 5000);
-    }
-    {
-        ButtonAction a = round_trip("{\"type\":\"system\",\"system_command\":\"reboot\"}");
-        ASSERT_STR(a.payload.system.system_command, "reboot");
-    }
-}
-
-// ============================================================================
-// Notify action
-// ============================================================================
-
-TEST(notify_action_parse) {
-    ButtonAction act = parse_from_string(
-        "{\"type\":\"notify\",\"message\":\"Power high!\\nCheck device.\",\"duration_ms\":300000}");
-    ASSERT_STR(act.type, "notify");
-    ASSERT_STR(act.payload.notify.message, "Power high!\nCheck device.");
-    ASSERT_EQ(act.payload.notify.duration_ms, 300000);
-}
-
-TEST(notify_action_round_trip) {
-    ButtonAction act = round_trip(
-        "{\"type\":\"notify\",\"message\":\"Test msg\",\"duration_ms\":0}");
-    ASSERT_STR(act.type, "notify");
-    ASSERT_STR(act.payload.notify.message, "Test msg");
-    ASSERT_EQ(act.payload.notify.duration_ms, 0);
-}
-
-TEST(confirm_round_trip_and_defaults) {
-    ButtonAction act = parse_from_string(
-        "{\"type\":\"confirm\",\"message\":\"Restart?\",\"approve_text\":\"Restart\",\"cancel_text\":\"Not now\",\"timeout_ms\":0}");
-    StaticJsonDocument<512> doc;
-    JsonObject obj = doc.to<JsonObject>();
-    action_to_json(act, obj);
-    ASSERT_EQ(obj.size(), 5);
-    ASSERT_STR(act.payload.confirm.message, "Restart?");
-    ASSERT_STR(act.payload.confirm.approve_text, "Restart");
-    ASSERT_STR(act.payload.confirm.cancel_text, "Not now");
-    ASSERT_EQ(obj["timeout_ms"].as<uint32_t>(), 0);
-    ASSERT_TRUE(!obj.containsKey("notify_opacity"));
-}
-
-TEST(notify_minimal_only_text) {
-    ButtonAction act = round_trip("{\"type\":\"notify\",\"message\":\"hello\"}");
-    ASSERT_STR(act.type, "notify");
-    ASSERT_STR(act.payload.notify.message, "hello");
-    ASSERT_EQ(act.payload.notify.duration_ms, 3000);
-    act = round_trip("{\"type\":\"confirm\",\"message\":\"Proceed?\"}");
-    ASSERT_STR(act.payload.confirm.approve_text, "Continue");
-    ASSERT_STR(act.payload.confirm.cancel_text, "Cancel");
-    ASSERT_EQ(act.payload.confirm.timeout_ms, 10000);
-}
-
-// ============================================================================
-
-// ============================================================================
-// System action
-// ============================================================================
-
-TEST(system_action_parse) {
-    ButtonAction act = parse_from_string("{\"type\":\"system\",\"system_command\":\"reboot\"}");
-    ASSERT_STR(act.type, "system");
-    ASSERT_STR(act.payload.system.system_command, "reboot");
-}
-
-TEST(system_action_round_trip) {
-    for (const char* command : {"wifi_connect", "wifi_disconnect", "wifi_off", "ap_enable", "ap_disable"}) {
-        char json[128];
-        snprintf(json, sizeof(json), "{\"type\":\"system\",\"system_command\":\"%s\"}", command);
-        ButtonAction act = round_trip(json);
-        ASSERT_STR(act.type, "system");
-        ASSERT_STR(act.payload.system.system_command, command);
-    }
-}
-
-TEST(system_command_not_serialized_when_empty) {
-    ButtonAction act;
-    memset(&act, 0, sizeof(act));
-    strlcpy(act.type, "system", CONFIG_ACTION_TYPE_MAX_LEN);
-    // system_command is empty
-    StaticJsonDocument<256> doc;
-    JsonObject obj = doc.to<JsonObject>();
-    action_to_json(act, obj);
-    ASSERT_TRUE(obj.containsKey("type"));
-    ASSERT_TRUE(!obj.containsKey("system_command"));
-}
-
-TEST(system_action_screensaver) {
-    ButtonAction act = round_trip("{\"type\":\"system\",\"system_command\":\"screensaver\"}");
-    ASSERT_STR(act.type, "system");
-    ASSERT_STR(act.payload.system.system_command, "screensaver");
-}
-
-TEST(system_action_wake_display) {
-    ButtonAction act = round_trip("{\"type\":\"system\",\"system_command\":\"wake_display\"}");
-    ASSERT_STR(act.type, "system");
-    ASSERT_STR(act.payload.system.system_command, "wake_display");
-}
-
-// ============================================================================
-// Visual alert action
-// ============================================================================
-
-TEST(visual_alert_action_parse) {
-    ButtonAction act = parse_from_string(
-        "{\"type\":\"visual_alert\",\"op\":\"start\",\"color\":\"#FF0000\","
-        "\"pattern\":\"blink\",\"period_ms\":600,\"intensity\":80,\"duration_ms\":30000}");
-    ASSERT_STR(act.type, "visual_alert");
-    ASSERT_STR(act.payload.visual_alert.va_op, "start");
-    ASSERT_STR(act.payload.visual_alert.va_color, "#FF0000");
-    ASSERT_STR(act.payload.visual_alert.va_pattern, "blink");
-    ASSERT_EQ(act.payload.visual_alert.va_period_ms, 600);
-    ASSERT_EQ(act.payload.visual_alert.va_intensity, 80);
-    ASSERT_TRUE(act.payload.visual_alert.va_duration_ms == 30000u);
-}
-
-TEST(visual_alert_action_round_trip) {
-    ButtonAction act = round_trip(
-        "{\"type\":\"visual_alert\",\"op\":\"stop\",\"pattern\":\"breathe\","
-        "\"color\":\"[expr:...]\",\"duration_ms\":0}");
-    ASSERT_STR(act.type, "visual_alert");
-    ASSERT_STR(act.payload.visual_alert.va_op, "stop");
-    ASSERT_STR(act.payload.visual_alert.va_pattern, "breathe");
-    ASSERT_STR(act.payload.visual_alert.va_color, "[expr:...]");
-    ASSERT_TRUE(act.payload.visual_alert.va_duration_ms == 0u);
-}
-
-TEST(visual_alert_zero_fields_not_serialized) {
-    ButtonAction act = parse_from_string(
-        "{\"type\":\"visual_alert\",\"op\":\"start\",\"period_ms\":0,\"intensity\":0,\"duration_ms\":0}");
-    StaticJsonDocument<512> doc;
-    JsonObject obj = doc.to<JsonObject>();
-    action_to_json(act, obj);
-    ASSERT_TRUE(obj.containsKey("op"));
-    ASSERT_TRUE(!obj.containsKey("period_ms"));
-    ASSERT_TRUE(!obj.containsKey("intensity"));
-    ASSERT_TRUE(!obj.containsKey("duration_ms"));
-}
-
-// ============================================================================
-// Cycle pad action
-// ============================================================================
-
-TEST(cycle_pad_defaults) {
-    ButtonAction act = parse_from_string("{\"type\":\"cycle_pad\"}");
-    ASSERT_STR(act.type, "cycle_pad");
-    ASSERT_EQ(act.payload.cycle_pad.direction, 1);
-    ASSERT_TRUE(act.payload.cycle_pad.wrap);
-    ASSERT_TRUE(act.payload.cycle_pad.excluded_mask == 0u);
-}
-
-TEST(cycle_pad_previous_no_wrap) {
-    ButtonAction act = parse_from_string(
-        "{\"type\":\"cycle_pad\",\"direction\":\"previous\",\"wrap\":false}");
-    ASSERT_EQ(act.payload.cycle_pad.direction, -1);
-    ASSERT_TRUE(!act.payload.cycle_pad.wrap);
-}
-
-TEST(cycle_pad_canonical_exclusions) {
-    ButtonAction act = parse_from_string(
-        "{\"type\":\"cycle_pad\",\"excluded_pads\":\"5, 1,5,bad,99,+2,-3\"}");
-    ASSERT_TRUE(act.payload.cycle_pad.excluded_mask == ((1u << 0) | (1u << 4)));
-
-    StaticJsonDocument<256> doc;
-    JsonObject obj = doc.to<JsonObject>();
-    action_to_json(act, obj);
-    ASSERT_STR(obj["direction"].as<const char*>(), "next");
-    ASSERT_TRUE(obj["wrap"].as<bool>());
-    ASSERT_STR(obj["excluded_pads"].as<const char*>(), "1,5");
-}
-
-TEST(cycle_pad_round_trip) {
-    ButtonAction act = round_trip(
-        "{\"type\":\"cycle_pad\",\"direction\":\"previous\",\"wrap\":false,"
-        "\"excluded_pads\":\"7,2,7\"}");
-    ASSERT_STR(act.type, "cycle_pad");
-    ASSERT_EQ(act.payload.cycle_pad.direction, -1);
-    ASSERT_TRUE(!act.payload.cycle_pad.wrap);
-    ASSERT_TRUE(act.payload.cycle_pad.excluded_mask == ((1u << 1) | (1u << 6)));
-}
-
-TEST(cycle_pad_invalid_explicit_fields_clear_action) {
-    const char* invalid[] = {
-        "{\"type\":\"cycle_pad\",\"direction\":\"sideways\"}",
-        "{\"type\":\"cycle_pad\",\"direction\":4}",
-        "{\"type\":\"cycle_pad\",\"wrap\":\"true\"}",
-        "{\"type\":\"cycle_pad\",\"excluded_pads\":[1,2]}"
-    };
-    for (const char* json : invalid) {
-        ButtonAction act = parse_from_string(json);
-        ASSERT_STR(act.type, "");
-    }
-}
-
-// ============================================================================
-// Delay action
-// ============================================================================
-
-TEST(delay_action_round_trip) {
-    ButtonAction act = round_trip("{\"type\":\"delay\",\"duration_ms\":3000}");
-    ASSERT_STR(act.type, "delay");
-    ASSERT_EQ(act.payload.delay.duration_ms, 3000);
-}
-
-TEST(delay_invalid_duration_clears_action) {
-    const char* invalid[] = {
-        "{\"type\":\"delay\"}",
-        "{\"type\":\"delay\",\"duration_ms\":0}",
-        "{\"type\":\"delay\",\"duration_ms\":55001}",
-        "{\"type\":\"delay\",\"duration_ms\":\"3000\"}",
-        "{\"type\":\"delay\",\"duration_ms\":3.5}"
-    };
-    for (const char* json : invalid) {
-        ButtonAction act = parse_from_string(json);
-        ASSERT_STR(act.type, "");
-    }
+TEST(cycle_pad_operation_defaults_and_validation) {
+    JsonDocument document;
+    JsonArray catalog = document.to<JsonArray>();
+    action_catalog_emit(catalog);
+    JsonObjectConst operation;
+    for (JsonObjectConst owner : catalog)
+        if (!strcmp(owner["type"] | "", ACTION_TYPE_CYCLE_PAD))
+            operation = owner["operations"][0];
+    ASSERT_TRUE(!operation.isNull());
+    ASSERT_TRUE(operation["arguments"][1]["default"].is<bool>());
+    ASSERT_TRUE(operation["arguments"][1]["default"].as<bool>());
+    ASSERT_STR(operation["arguments"][2]["control"].as<const char*>(), "pad_exclusions");
+
+    document.clear();
+    ASSERT_TRUE(!deserializeJson(document, R"({"op":"pad.cycle","args":{"direction":"next","wrap":true,"excluded_pads":"1, 3"}})"));
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()) == nullptr);
+    document["args"]["excluded_pads"] = "";
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()) == nullptr);
+    document["args"]["excluded_pads"] = "1,bad";
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()) != nullptr);
+    document["args"]["excluded_pads"] = "0";
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()) != nullptr);
 }
 
 TEST(registered_identifiers_survive_storage) {
@@ -928,9 +170,9 @@ TEST(registered_identifiers_survive_storage) {
 TEST(catalog_feature_gates_and_metadata_parity) {
     ASSERT_TRUE(!action_type_is_supported("shutdown"));
     JsonDocument portal;
-    action_catalog_emit(portal.to<JsonArray>(), false);
+    action_catalog_emit(portal.to<JsonArray>());
     JsonDocument mcp;
-    action_catalog_emit(mcp.to<JsonArray>(), true);
+    action_catalog_emit(mcp.to<JsonArray>());
     unsigned alarm_count = 0;
     for (JsonObject entry : mcp.as<JsonArray>()) {
         const char* name = entry["type"];
@@ -938,40 +180,26 @@ TEST(catalog_feature_gates_and_metadata_parity) {
         const ActionTypeDef* type = action_type_find(name);
         ASSERT_TRUE(type != nullptr);
         ASSERT_EQ(entry["alarm_hook_allowed"].as<bool>(), type->execution == ACTION_EXECUTION_SYNC);
+        JsonArrayConst operations = entry["operations"];
+        ASSERT_EQ(operations.size(), type->operation_count);
+        for (uint8_t index = 0; index < type->operation_count; ++index) {
+            const ActionOperationDef& operation = type->operations[index];
+            JsonObjectConst metadata = operations[index];
+            ASSERT_TRUE(metadata["alarm_hook_allowed"].is<bool>());
+            ASSERT_TRUE(metadata["pausable"].is<bool>());
+            ASSERT_EQ(metadata["alarm_hook_allowed"].as<bool>(), operation.execution == ACTION_EXECUTION_SYNC);
+            ASSERT_EQ(metadata["pausable"].as<bool>(), operation.execution == ACTION_EXECUTION_PAUSABLE);
+            ASSERT_TRUE(!strcmp(metadata["execution"] | "",
+                operation.execution == ACTION_EXECUTION_SYNC ? "sync"
+                : operation.execution == ACTION_EXECUTION_PAUSABLE ? "pausable" : "unknown"));
+        }
         if (!strcmp(name, "alarm") || !strcmp(name, "alarm_tone") || !strcmp(name, "alarm_mp3")) ++alarm_count;
-        entry.remove("fields");
     }
     ASSERT_EQ(alarm_count, ALARM_ENABLED ? 3 : 0);
     ASSERT_TRUE(action_type_find("screen")->display_lock_required);
     ASSERT_TRUE(!action_type_find("ha_service")->display_lock_required);
     for (JsonObjectConst entry : portal.as<JsonArray>()) {
-        const char* type = entry["type"];
-        JsonObjectConst fields = entry["template_fields"];
-        if (!strcmp(type, "volume")) {
-            ASSERT_EQ(fields["volume_value"]["max"].as<unsigned>(), CONFIG_VALUE_MAX_LEN - 1);
-        }
-        if (!strcmp(type, "brightness")) {
-            ASSERT_EQ(fields["brightness_value"]["max"].as<unsigned>(), CONFIG_VALUE_MAX_LEN - 1);
-        }
-        if (!strcmp(type, "mqtt")) {
-            ASSERT_EQ(fields["payload"]["max"].as<unsigned>(), CONFIG_MQTT_PAYLOAD_MAX_LEN - 1);
-            ASSERT_EQ(fields["topic"]["max"].as<unsigned>(), CONFIG_MQTT_TOPIC_MAX_LEN - 1);
-        }
-        if (!strcmp(type, "ha_service")) {
-            ASSERT_EQ(fields["data_json"]["max"].as<unsigned>(), sizeof(HaServicePayload::data_json) - 1);
-        }
-        if (!strcmp(type, "key")) {
-            ASSERT_EQ(fields["sequence"]["max"].as<unsigned>(), CONFIG_KEY_SEQ_MAX_LEN - 1);
-        }
-        if (!strcmp(type, "timer")) {
-            ASSERT_EQ(fields["timer_value"]["max"].as<unsigned>(), CONFIG_VALUE_MAX_LEN - 1);
-        }
-        if (!strcmp(type, "notify")) {
-            ASSERT_EQ(fields["message"]["max"].as<unsigned>(), CONFIG_DIALOG_MESSAGE_MAX_LEN - 1);
-        }
-        if (!strcmp(type, "set_var")) {
-            ASSERT_EQ(fields["var_value"]["max"].as<unsigned>(), CONFIG_LABEL_MAX_LEN - 1);
-        }
+        ASSERT_TRUE(!entry.containsKey("template_fields"));
     }
     std::string portal_json, mcp_json;
     serializeJson(portal, portal_json);
@@ -979,236 +207,402 @@ TEST(catalog_feature_gates_and_metadata_parity) {
     ASSERT_TRUE(portal_json == mcp_json);
 }
 
-TEST(slider_value_action_validation) {
-    StaticJsonDocument<512> doc;
-#if ALARM_ENABLED
-    for (const char* token : {"{step}", "{value}"}) {
-        doc.clear();
-        doc["type"] = "alarm";
-        doc["alarm_command"] = "adjust_minutes";
-        doc["alarm_value"] = token;
-        ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, token) == nullptr);
-        ButtonAction alarm = {};
-        action_parse(doc.as<JsonObject>(), alarm);
-        ASSERT_STR(alarm.type, "alarm");
-        ASSERT_STR(alarm.payload.alarm.alarm_value, token);
-        const ActionTypeDef* alarm_type = action_type_find(alarm.type);
-        ASSERT_TRUE(action_type_substitute_token(alarm_type, alarm, token, "-60"));
-        ASSERT_STR(alarm.payload.alarm.alarm_value, "-60");
+TEST(typed_operation_descriptors_and_arguments) {
+    const ActionTypeDef* owner = nullptr;
+    const ActionOperationDef* screen = action_operation_find("screen.open", &owner);
+    ASSERT_TRUE(screen != nullptr && owner == action_type_find(ACTION_TYPE_SCREEN));
+    const ActionOperationDef* timer = action_operation_find("timer.adjust", &owner);
+    ASSERT_TRUE(timer != nullptr && owner == action_type_find(ACTION_TYPE_TIMER));
+    const ActionOperationDef* wifi = action_operation_find("wifi.station.set_enabled", &owner);
+    ASSERT_TRUE(wifi != nullptr && owner == action_type_find(ACTION_TYPE_SYSTEM));
+    ASSERT_TRUE(action_operation_find("screen.unknown") == nullptr);
+
+    JsonDocument document;
+    ASSERT_TRUE(!deserializeJson(document, R"({"op":"screen.open","args":{"target":"[item:id]"}})"));
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()) == nullptr);
+    document.clear();
+    ASSERT_TRUE(!deserializeJson(document, R"({"op":"screen.open\u0000other","args":{"target":"pad_0"}})"));
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()) != nullptr);
+    document.clear();
+    ASSERT_TRUE(!deserializeJson(document, R"({"op":"timer.adjust","args":{"timer":1,"seconds":{"$template":"-15"}}})"));
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()) == nullptr);
+    ActionStorage storage = {};
+    ButtonAction parsed = {};
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(document.as<JsonObject>(), parsed);
     }
-    doc.clear();
+    ASSERT_TRUE(!storage.failed && parsed.payload.operation.arguments);
+    JsonDocument round_trip;
+    action_to_json(parsed, round_trip.to<JsonObject>());
+    ASSERT_STR(round_trip["op"].as<const char*>(), "timer.adjust");
+    ASSERT_EQ(round_trip["args"]["timer"].as<int>(), 1);
+    ASSERT_STR(round_trip["args"]["seconds"]["$template"].as<const char*>(), "-15");
+    action_storage_clear(storage);
+    document["args"]["timer"] = 4;
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()) != nullptr);
+    document["args"]["timer"] = 1;
+    document["args"]["extra"] = true;
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()) != nullptr);
+    document["args"].as<JsonObject>().remove("extra");
+    document["args"].as<JsonObject>().remove("seconds");
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()) != nullptr);
+    document.clear();
+    ASSERT_TRUE(!deserializeJson(document, R"({"op":"wifi.station.set_enabled","args":{"enabled":true}})"));
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()) == nullptr);
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(document.as<JsonObject>(), parsed);
+    }
+    ASSERT_TRUE(!storage.failed && action_operation_for_action(parsed) == wifi);
+    round_trip.clear();
+    action_to_json(parsed, round_trip.to<JsonObject>());
+    ASSERT_STR(round_trip["op"].as<const char*>(), "wifi.station.set_enabled");
+    ASSERT_TRUE(round_trip["args"]["enabled"].is<bool>());
+    ASSERT_TRUE(round_trip["args"]["enabled"].as<bool>());
+    action_storage_clear(storage);
+    document["args"]["enabled"] = "true";
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()) != nullptr);
+    document["args"]["enabled"].to<JsonObject>()["$template"] = "[event:value]";
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>(), false) == nullptr);
+}
+
+TEST(dialog_operation_timing_and_color_validation) {
+#if HAS_DISPLAY && (HAS_TOUCH || HAS_BUTTON)
+    for (const char* id : {"dialog.notify", "dialog.confirm"}) {
+        const ActionOperationDef* operation = action_operation_find(id);
+        ASSERT_TRUE(operation != nullptr);
+        const ActionArgumentDef& timing = operation->arguments[operation->argument_count - 1];
+        ASSERT_TRUE(!action_operation_validate_descriptor(*operation));
+        ASSERT_EQ(operation->execution, !strcmp(id, "dialog.confirm")
+            ? ACTION_EXECUTION_PAUSABLE : ACTION_EXECUTION_SYNC);
+        ASSERT_TRUE(timing.has_default_integer);
+        ASSERT_EQ(timing.default_integer, !strcmp(id, "dialog.notify") ? 3000 : 10000);
+        JsonDocument document;
+        document["op"] = id;
+        JsonObject args = document["args"].to<JsonObject>();
+        args["message"] = "Continue?";
+        if (!strcmp(id, "dialog.confirm")) {
+            args["approve_text"] = "Continue";
+            args["cancel_text"] = "Cancel";
+        }
+        for (int32_t value : {0, 1000, 300000}) {
+            args[timing.name] = value;
+            ASSERT_TRUE(!action_operation_validate_json(document.as<JsonObjectConst>()));
+            char text[16];
+            snprintf(text, sizeof(text), "%ld", static_cast<long>(value));
+            int32_t normalized = -1;
+            ASSERT_TRUE(!action_argument_normalize_text(timing, text, nullptr, &normalized));
+            ASSERT_EQ(normalized, value);
+        }
+        for (int32_t value : {-1, 1, 999, 300001}) {
+            args[timing.name] = value;
+            ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()));
+            char text[16];
+            snprintf(text, sizeof(text), "%ld", static_cast<long>(value));
+            int32_t normalized = 0;
+            ASSERT_TRUE(action_argument_normalize_text(timing, text, nullptr, &normalized));
+        }
+        args[timing.name] = 0;
+        char message[CONFIG_DIALOG_MESSAGE_MAX_LEN + 1];
+        memset(message, 'a', sizeof(message) - 1);
+        message[sizeof(message) - 1] = '\0';
+        args["message"] = message;
+        ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()));
+        message[CONFIG_DIALOG_MESSAGE_MAX_LEN - 1] = '\0';
+        args["message"] = message;
+        ASSERT_TRUE(!action_operation_validate_json(document.as<JsonObjectConst>()));
+        if (!strcmp(id, "dialog.confirm")) {
+            args["approve_text"] = "";
+            ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()));
+            args["approve_text"] = "[literal:caption]";
+            ASSERT_TRUE(!action_operation_validate_json(document.as<JsonObjectConst>()));
+        }
+    }
+    const ActionOperationDef* alert = action_operation_find("visual_alert.start");
+    ASSERT_TRUE(alert != nullptr);
+    const ActionArgumentDef& color = alert->arguments[0];
+    const char* normalized = nullptr;
+    for (const char* value : {"", "#abc", "0x123456"})
+        ASSERT_TRUE(!action_argument_normalize_text(color, value, &normalized, nullptr));
+    ASSERT_TRUE(action_argument_normalize_text(color, "#not-color", &normalized, nullptr));
 #endif
-    ASSERT_TRUE(deserializeJson(doc, R"({"type":"volume","volume_mode":"set","volume_value":"{value}"})") == DeserializationError::Ok);
-    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}") == nullptr);
-    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>()) != nullptr);
-    doc["volume_mode"] = "adjust";
-    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}") == nullptr);
-    doc["volume_mode"] = "set";
-    doc["volume_value"] = "1";
-    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}") == nullptr);
+}
 
-    doc.clear();
-    ASSERT_TRUE(deserializeJson(doc, R"({"type":"mqtt","topic":"device/set","payload":"{value}"})") == DeserializationError::Ok);
-    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}") == nullptr);
-    doc["topic"] = "device/{value}";
-    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}") == nullptr);
-    doc["topic"] = "device/set";
-    std::string oversized_payload(CONFIG_MQTT_PAYLOAD_MAX_LEN, 'x');
-    oversized_payload += "{value}";
-    doc["payload"] = oversized_payload;
-    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}") != nullptr);
-    for (const char* token : {"{value}", "{step}"}) {
-        doc.clear();
-        doc["type"] = "notify";
-        doc["message"] = std::string("Brightness set to ") + token + "%";
-        ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, token) == nullptr);
-        ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>()) != nullptr);
-        ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, !strcmp(token, "{value}") ? "{step}" : "{value}") != nullptr);
-        doc.clear();
-        doc["type"] = "set_var";
-        doc["var_name"] = "a";
-        doc["var_value"] = std::string(token) + "%";
-        ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, token) == nullptr);
-        doc["var_name"] = token;
-        ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, token) != nullptr);
+TEST(key_operation_literal_and_template_boundaries) {
+#if HAS_BLE_HID || HAS_USB_HID
+    const ActionOperationDef* key = action_operation_find("keyboard.send");
+    ASSERT_TRUE(key != nullptr);
+    ActionArgumentDef oversized = key->arguments[0];
+    oversized.max_length = ACTION_OPERATION_MAX_TEXT_LENGTH + 1;
+    ActionOperationDef invalid = *key;
+    invalid.arguments = &oversized;
+    ASSERT_TRUE(action_operation_validate_descriptor(invalid));
+    JsonDocument document;
+    document["op"] = "keyboard.send";
+    JsonObject args = document["args"].to<JsonObject>();
+    std::string literal(CONFIG_KEY_SEQ_MAX_LEN - 1, 'a');
+    args["sequence"] = literal.c_str();
+    ASSERT_TRUE(!action_operation_validate_json(document.as<JsonObjectConst>()));
+    ActionStorage storage = {};
+    ButtonAction action = {};
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(document.as<JsonObject>(), action);
+    }
+    ASSERT_TRUE(!storage.failed && action.payload.operation.arguments);
+    JsonDocument output;
+    action_to_json(action, output.to<JsonObject>());
+    action_storage_clear(storage);
+    ASSERT_TRUE(literal == output["args"]["sequence"].as<const char*>());
+    literal.push_back('a');
+    args["sequence"] = literal.c_str();
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()));
+    std::string templ(BINDING_TEMPLATE_MAX_LEN - 1, 'a');
+    args["sequence"].to<JsonObject>()["$template"] = templ.c_str();
+    ASSERT_TRUE(!action_operation_validate_json(document.as<JsonObjectConst>(), false));
+    templ.push_back('a');
+    args["sequence"]["$template"] = templ.c_str();
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>(), false));
+#endif
+}
+
+TEST(typed_operation_round_trips) {
+    const char* examples[] = {
+        R"({"op":"delay.wait","args":{"duration_ms":1000}})",
+        R"({"op":"variable.set","args":{"name":"counter","value":{"$template":"[event:value]"}}})",
+        R"({"op":"screen.back","args":{}})",
+        R"({"op":"screen.open","args":{"target":"pad_1"}})",
+        R"({"op":"audio.volume.set","args":{"percent":30}})",
+        R"({"op":"audio.volume.adjust","args":{"percent":-5}})",
+        R"({"op":"display.brightness.set","args":{"percent":50}})",
+        R"({"op":"display.brightness.adjust","args":{"percent":10}})",
+        R"({"op":"audio.volume.save","args":{}})",
+        R"({"op":"display.brightness.save","args":{}})",
+        R"({"op":"wifi.station.set_enabled","args":{"enabled":true}})",
+        R"({"op":"wifi.ap.set_enabled","args":{"enabled":{"$template":"[var:enabled]"}}})",
+        R"({"op":"device.restart","args":{}})",
+        R"({"op":"music.next","args":{}})",
+        R"({"op":"mouse.click","args":{"button":"left"}})",
+        R"({"op":"gamepad.button.tap","args":{"button":1}})",
+        R"({"op":"gamepad.hat.down","args":{"direction":"up"}})",
+        R"({"op":"gamepad.trigger.up","args":{"trigger":"left"}})",
+        R"({"op":"ble.pair","args":{}})",
+        R"({"op":"pad.cycle","args":{"direction":"previous","wrap":false,"excluded_pads":"1,5"}})",
+        R"({"op":"button.navigate","args":{"command":"tap"}})",
+        R"({"op":"list.navigate","args":{"target":"items","command":"next_page"}})",
+        R"({"op":"mqtt.publish","args":{"topic":"test/topic","payload":"hello"}})",
+        R"({"op":"bthome.send","args":{"button":1,"event":"press"}})",
+        R"({"op":"ha.service.call","args":{"entity_id":"light.kitchen","service":"toggle","data_json":"{}"}})",
+        R"({"op":"audio.alert.tone","args":{"pattern":"100","volume":50}})",
+        R"({"op":"audio.alert.mp3","args":{"file":"alert.mp3","volume":50}})",
+        R"({"op":"audio.alert.stop","args":{}})",
+        R"({"op":"dialog.notify","args":{"message":"Hello","duration_ms":1000}})",
+        R"({"op":"dialog.confirm","args":{"message":"Continue?","approve_text":"Yes","cancel_text":"No","timeout_ms":0}})",
+        R"({"op":"visual_alert.start","args":{"color":"#ff0000","pattern":"blink","period_ms":1000,"intensity":50,"duration_ms":2000}})",
+        R"({"op":"visual_alert.stop","args":{}})",
+        R"({"op":"timer.adjust","args":{"timer":1,"seconds":-15}})",
+        R"({"op":"timer.set","args":{"timer":1,"seconds":60}})",
+        R"({"op":"timer.start_down","args":{"timer":1,"seconds":60}})",
+        R"({"op":"timer.stop","args":{"timer":1}})",
+        R"({"op":"alarm.cancel","args":{"alarm":"0"}})",
+        R"({"op":"alarm.set_time","args":{"minutes":60}})",
+        R"({"op":"alarm.weekday_enable","args":{"day":"0"}})",
+        R"({"op":"alarm.tone","args":{"pattern":"100","volume":50}})",
+        R"({"op":"voice_note.record.start","args":{}})",
+        R"({"op":"voice_note.process","args":{}})",
+        R"({"op":"voice_note.load","args":{"id":"0123456789abcdef"}})",
+        R"({"op":"voice_note.delete","args":{"id":{"$template":"[item:id]"}}})",
+    };
+    unsigned tested = 0;
+    for (const char* json : examples) {
+        JsonDocument document;
+        ASSERT_TRUE(!deserializeJson(document, json));
+        if (!action_operation_find(document["op"])) continue;
+        if (const char* error = action_operation_validate_json(document.as<JsonObjectConst>(), false)) {
+            std::printf("invalid round-trip example %s: %s\n", json, error);
+            ASSERT_TRUE(false);
+        }
+        ActionStorage storage = {};
+        ButtonAction action = {};
+        {
+            ActionStorageScope scope(&storage);
+            action_parse(document.as<JsonObject>(), action);
+        }
+        ASSERT_TRUE(!storage.failed && action_operation_for_action(action));
+        JsonDocument output;
+        action_to_json(action, output.to<JsonObject>());
+        std::string expected, actual;
+        serializeJson(document, expected);
+        serializeJson(output, actual);
+        ASSERT_TRUE(actual == expected);
+        action_storage_clear(storage);
+        ++tested;
+    }
+    ASSERT_TRUE(tested >= 25);
+}
+
+TEST(incompatible_action_documents_are_rejected) {
+    for (const char* json : {
+            R"({})",
+            R"({"type":"back"})",
+            R"({"type":"none"})",
+            R"({"op":"@screen.back","args":{}})",
+            R"({"op":"screen.back","args":{},"type":"back"})",
+            R"({"op":"screen.open"})",
+            R"({"op":"screen.open","args":{"target":"pad_1","extra":true}})",
+            R"({"op":"screen.open","args":{"target":{"$template":"[event:value","extra":1}}})",
+            R"({"op":"unknown.operation","args":{}})"}) {
+        JsonDocument document;
+        ASSERT_TRUE(!deserializeJson(document, json));
+        ASSERT_TRUE(action_validate_json(document.as<JsonObjectConst>()));
+        ActionStorage storage = {};
+        ButtonAction action = {};
+        {
+            ActionStorageScope scope(&storage);
+            action_parse(document.as<JsonObject>(), action);
+        }
+        ASSERT_TRUE(storage.failed && !action.type[0]);
+        action_storage_clear(storage);
     }
 }
 
-TEST(option_id_action_validation) {
-    StaticJsonDocument<512> doc;
-    ASSERT_TRUE(deserializeJson(doc, R"({"type":"ha_service","entity_id":"fan.room","service":"set_fan_mode","data_json":"{\"fan_mode\":\"{value}\"}"})") == DeserializationError::Ok);
-    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}", "high") == nullptr);
-    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}", "") == nullptr);
-    doc["data_json"] = "{\"fan_mode\":{value}}";
-    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}", "high") != nullptr);
-    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}", "") != nullptr);
-
-    doc.clear();
-    doc["type"] = "mqtt";
-    doc["topic"] = "device/set";
-    doc["payload"] = std::string(120, 'x') + "{value}";
-    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}", "1234567") == nullptr);
-    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}", "12345678") != nullptr);
+TEST(typed_home_assistant_validation) {
+    JsonDocument document;
+    document["op"] = "ha.service.call";
+    JsonObject args = document["args"].to<JsonObject>();
+    args["entity_id"] = "light.kitchen";
+    args["service"] = "turn_on";
+    args["data_json"] = "{}";
+    for (const char* data : {"", "{}", "{\"brightness_pct\":80}"}) {
+        args["data_json"] = data;
+        ASSERT_TRUE(!action_operation_validate_json(document.as<JsonObjectConst>(), false));
+    }
+    for (const char* data : {"{", "[]", "42", "true", "null", "{\"x\":1,}"}) {
+        args["data_json"] = data;
+        ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>(), false));
+    }
+    args["data_json"] = "{}";
+    for (const char* entity : {"light", ".kitchen", "light.", "light.kitchen.extra", "light. kitchen", ""}) {
+        args["entity_id"] = entity;
+        ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>(), false));
+    }
+    args["entity_id"] = "light.kitchen";
+    for (const char* service : {"light.toggle", "MediaStop", "media-stop", ""}) {
+        args["service"] = service;
+        ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>(), false));
+    }
+    args["service"] = "toggle";
+    for (const char* name : {"entity_id", "service", "data_json"}) {
+        JsonVariant value = args[name];
+        const std::string original = value.as<const char*>();
+        value.set(42);
+        ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>(), false));
+        value.set(original);
+        args.remove(name);
+        ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>(), false));
+        args[name] = original;
+    }
+    args["entity_id"] = std::string(sizeof(HaServicePayload::entity_id), 'x');
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>(), false));
+    args["entity_id"] = "light.kitchen";
+    args["service"] = std::string(sizeof(HaServicePayload::service), 'x');
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>(), false));
+    args["service"] = "toggle";
+    args["data_json"] = std::string(sizeof(HaServicePayload::data_json), ' ');
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>(), false));
 }
 
-TEST(slider_ha_json_template_validation) {
-    StaticJsonDocument<512> doc;
-    ASSERT_TRUE(deserializeJson(doc, R"({"type":"ha_service","entity_id":"light.room","service":"turn_on","data_json":"{\"brightness\":{value}}"})") == DeserializationError::Ok);
-    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}") == nullptr);
-    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>()) != nullptr);
-    const char* ha_template = R"({"type":"ha_service","entity_id":"light.room","service":"turn_on","data_json":"{\"brightness\":{value}}"})";
-    ButtonAction parsed = parse_from_string(ha_template);
-    const ActionTypeDef* type = action_type_find(parsed.type);
-    ASSERT_TRUE(action_type_substitute_token(type, parsed, "{value}", "42.5"));
-    ASSERT_STR(parsed.payload.ha_service.data_json, "{\"brightness\":42.5}");
-    for (const char* data : {"{\"brightness\":{value}", "{\"brightness\":{value}0}"}) {
-        doc["data_json"] = data;
-        ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}") != nullptr);
+TEST(typed_operation_boundaries_and_capabilities) {
+    const char* invalid[] = {
+        R"({"op":"delay.wait","args":{"duration_ms":0}})",
+        R"({"op":"delay.wait","args":{"duration_ms":55001}})",
+        R"({"op":"delay.wait","args":{"duration_ms":3.5}})",
+        R"({"op":"delay.wait","args":{"duration_ms":"3000"}})",
+        R"({"op":"timer.adjust","args":{"timer":0,"seconds":1}})",
+        R"({"op":"timer.adjust","args":{"timer":4,"seconds":1}})",
+        R"({"op":"timer.start_down","args":{"timer":1,"seconds":0}})",
+        R"({"op":"pad.cycle","args":{"direction":"sideways","wrap":true,"excluded_pads":""}})",
+        R"({"op":"pad.cycle","args":{"direction":"next","wrap":"true","excluded_pads":""}})",
+        R"({"op":"pad.cycle","args":{"direction":"next","wrap":true,"excluded_pads":"0"}})",
+        R"({"op":"wifi.station.set_enabled","args":{"enabled":"true"}})",
+        R"({"op":"screen.open","args":{"target":{"$template":""}}})",
+        R"({"op":"screen.open","args":{"target":{"$template":"[event:value","extra":1}}})",
+        R"({"op":"screen.open","args":{"target":"pad_1","extra":1}})",
+    };
+    for (const char* json : invalid) {
+        JsonDocument document;
+        ASSERT_TRUE(!deserializeJson(document, json));
+        ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>(), false));
+        ActionStorage storage = {};
+        ButtonAction action = {};
+        {
+            ActionStorageScope scope(&storage);
+            action_parse(document.as<JsonObject>(), action);
+        }
+        ASSERT_TRUE(storage.failed && !action.type[0]);
+        action_storage_clear(storage);
     }
-    doc["data_json"] = "{\"brightness\":{value}}";
-    doc["entity_id"] = "light.lamp_{value}";
-    doc["service"] = "scene_{value}";
-    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}") == nullptr);
-    action_parse(doc.as<JsonObject>(), parsed);
-    ASSERT_TRUE(action_type_substitute_token(type, parsed, "{value}", "2"));
-    ASSERT_STR(parsed.payload.ha_service.entity_id, "light.lamp_2");
-    ASSERT_STR(parsed.payload.ha_service.service, "scene_2");
-    ASSERT_EQ(type->dispatch(parsed, "test", 0), ACTION_COMPLETE);
-    for (const char* data : {"{\"brightness\":00}", "{\"brightness\":1.5.0}", "{'x':1}", "{x:1}", "{}junk", "[]", "{\"x\":1,}", "{\"x\":NaN}"}) {
-        strlcpy(parsed.payload.ha_service.data_json, data, sizeof(parsed.payload.ha_service.data_json));
-        ASSERT_EQ(type->dispatch(parsed, "test", 0), ACTION_FAILED);
-    }
-    for (const char* data : {"{}", " {\"x\":[true,false,null,-1.5e+2,\"a\\\"b\"]} \n"}) {
-        ASSERT_TRUE(action_json_object_valid(data));
-    }
-    doc["data_json"] = "{\"brightness\":{value}.0}";
-    ASSERT_TRUE(action_validate_json(doc.as<JsonObjectConst>(), true, "{value}") == nullptr);
-    action_parse(doc.as<JsonObject>(), parsed);
-    ASSERT_TRUE(action_type_substitute_token(type, parsed, "{value}", "1.5"));
-    ASSERT_EQ(type->dispatch(parsed, "test", 0), ACTION_FAILED);
-    ButtonAction actions[2] = {parsed, {}};
-    strlcpy(actions[1].type, ACTION_TYPE_SCREEN, sizeof(actions[1].type));
-    g_followup_dispatches = 0;
-    ASSERT_EQ(action_list_dispatch_result(actions, 2, "test"), ACTION_FAILED);
-    ASSERT_EQ(g_followup_dispatches, 0);
+
+#if HAS_VOICE_NOTES
+    ASSERT_TRUE(action_operation_find("voice_note.record.start"));
+    ASSERT_TRUE(action_operation_find("voice_note.process"));
+    ASSERT_TRUE(action_operation_find("voice_note.delete"));
+#else
+    ASSERT_TRUE(!action_operation_find("voice_note.record.start"));
+    ASSERT_TRUE(!action_operation_find("voice_note.process"));
+    ASSERT_TRUE(!action_operation_find("voice_note.delete"));
+#endif
+#if HAS_VOICE_NOTES && HAS_DISPLAY && HAS_PSRAM
+    ASSERT_TRUE(action_operation_find("voice_note.load"));
+#else
+    ASSERT_TRUE(!action_operation_find("voice_note.load"));
+#endif
+    ASSERT_EQ(action_operation_find("alarm.cancel") != nullptr, ALARM_ENABLED != 0);
+
+    JsonDocument document;
+    ASSERT_TRUE(!deserializeJson(document, R"({"op":"screen.back","args":{}})"));
+    ButtonAction action = {};
+    action_parse(document.as<JsonObject>(), action);
+    ASSERT_TRUE(!action.type[0]);
 }
 
 int main(int argc, char** argv) {
+    if (argc == 3 && !strcmp(argv[1], "--validate-operations")) {
+        JsonDocument input;
+        if (deserializeJson(input, argv[2]) || !input.is<JsonArray>()) return 1;
+        for (JsonVariantConst value : input.as<JsonArrayConst>()) {
+            if (!value.is<JsonObjectConst>()) return 1;
+            const char* error = action_operation_validate_json(value.as<JsonObjectConst>(), false);
+            if (error) {
+                std::fprintf(stderr, "Recipe operation invalid: %s\n", error);
+                return 1;
+            }
+        }
+        return 0;
+    }
     if (argc == 2 && !strcmp(argv[1], "--catalog")) {
         JsonDocument catalogs;
-        action_catalog_emit(catalogs["portal"].to<JsonArray>(), false);
-        action_catalog_emit(catalogs["mcp"].to<JsonArray>(), true);
+        action_catalog_emit(catalogs["portal"].to<JsonArray>());
+        action_catalog_emit(catalogs["mcp"].to<JsonArray>());
         std::string output;
         serializeJson(catalogs, output);
         std::puts(output.c_str());
         return 0;
     }
-    printf("=== ButtonAction Parse/Serialize Tests ===\n\n");
-
-    printf("--- Empty / minimal ---\n");
+    printf("=== Typed Action Parse/Serialize Tests ===\n\n");
+    RUN(empty_to_json_produces_empty_object);
+    RUN(typed_audio_actions_suppress_feedback);
+    RUN(cycle_pad_operation_defaults_and_validation);
     RUN(registered_identifiers_survive_storage);
     RUN(catalog_feature_gates_and_metadata_parity);
-    RUN(slider_value_action_validation);
-    RUN(option_id_action_validation);
-    RUN(slider_ha_json_template_validation);
-    RUN(empty_json);
-    RUN(empty_to_json_produces_empty_object);
-    RUN(action_list_filters_literal_none_for_pad_callers);
-    RUN(action_list_retains_literal_none_for_existing_callers);
-    RUN(type_only);
-    RUN(bthome_round_trip_and_validation);
-    RUN(set_var_round_trip_and_validation);
-    RUN(gamepad_round_trip_and_validation);
-
-    printf("\n--- Screen action ---\n");
-    RUN(screen_action_parse);
-    RUN(screen_action_round_trip);
-
-    printf("\n--- MQTT action ---\n");
-    RUN(mqtt_action_parse);
-    RUN(mqtt_action_round_trip);
-
-    printf("\n--- Key action ---\n");
-    RUN(key_action_parse);
-    RUN(key_action_round_trip);
-    RUN(mouse_button_action_round_trip);
-    RUN(mouse_button_validation_and_catalog);
-
-    printf("\n--- Music action ---\n");
-    RUN(music_action_parse);
-    RUN(music_action_round_trip);
-
-    printf("\n--- Sound Alert action ---\n");
-    RUN(sound_alert_tone_parse);
-    RUN(sound_alert_mp3_round_trip);
-    RUN(sound_alert_stop_choices);
-    RUN(legacy_alert_aliases_are_rejected);
-    RUN(alarm_audio_round_trip);
-
-    printf("\n--- Volume action ---\n");
-    RUN(volume_set_action_parse);
-    RUN(volume_adjust_action_round_trip);
-    RUN(volume_adjust_step_placeholder);
-    RUN(save_level_actions_round_trip);
-
-    printf("\n--- Brightness action ---\n");
-    RUN(brightness_set_action_parse);
-    RUN(brightness_adjust_action_round_trip);
-    RUN(brightness_empty_value_not_serialized);
-    #if HAS_LVGL_EPAPER
-    RUN(display_refresh_action_round_trip);
-    #endif
-
-    printf("\n--- Timer action ---\n");
-    RUN(timer_action_parse);
-    RUN(timer_countdown_start_action_round_trip);
-    RUN(timer_oversized_wire_fields_rejected_before_copy);
-    RUN(timer_adjust_action_round_trip);
-    RUN(timer_set_action_round_trip);
-    RUN(timer_fields_serialized_properly);
-    RUN(mqtt_payload_serialized_as_payload_not_timer_command);
-
-    printf("\n--- BLE pair action ---\n");
-    RUN(ble_pair_action_parse);
-    RUN(ble_pair_action_round_trip);
-
-    printf("\n--- Back action ---\n");
-    RUN(back_action_round_trip);
-
-    printf("\n--- Edge cases ---\n");
-    RUN(missing_optional_fields);
-    RUN(compact_serialization);
-    RUN(per_type_round_trips_cover_all_arms);
-
-    printf("\n--- Notify action ---\n");
-    RUN(notify_action_parse);
-    RUN(notify_action_round_trip);
-    RUN(confirm_round_trip_and_defaults);
-    RUN(notify_minimal_only_text);
-
-    printf("\n--- System action ---\n");
-    RUN(system_action_parse);
-    RUN(system_action_round_trip);
-    RUN(system_command_not_serialized_when_empty);
-    RUN(system_action_screensaver);
-    RUN(system_action_wake_display);
-
-    printf("\n--- Visual alert action ---\n");
-    RUN(visual_alert_action_parse);
-    RUN(visual_alert_action_round_trip);
-    RUN(visual_alert_zero_fields_not_serialized);
-
-    printf("\n--- Cycle pad action ---\n");
-    RUN(cycle_pad_defaults);
-    RUN(cycle_pad_previous_no_wrap);
-    RUN(cycle_pad_canonical_exclusions);
-    RUN(cycle_pad_round_trip);
-    RUN(cycle_pad_invalid_explicit_fields_clear_action);
-
-    printf("\n--- Delay action ---\n");
-    RUN(delay_action_round_trip);
-    RUN(delay_invalid_duration_clears_action);
-
+    RUN(typed_operation_descriptors_and_arguments);
+    RUN(dialog_operation_timing_and_color_validation);
+    RUN(key_operation_literal_and_template_boundaries);
+    RUN(typed_operation_round_trips);
+    RUN(incompatible_action_documents_are_rejected);
+    RUN(typed_home_assistant_validation);
+    RUN(typed_operation_boundaries_and_capabilities);
     printf("\n=== Results: %d passed, %d failed ===\n", g_pass, g_fail);
     return g_fail > 0 ? 1 : 0;
 }

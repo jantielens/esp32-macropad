@@ -1,21 +1,70 @@
 ---
-title: Audio and voice clips
-description: Configure audio feedback, manage sounds and music, and record local voice clips.
+title: Audio, alerts, and Music
+description: Configure audio feedback, manage sounds, and control Music playback.
 ---
 
-Audio provides button feedback, alerts, and Music playback, with microphone
-features available separately. These uses share audio resources, so playback
+Audio provides button feedback, alerts, and Music playback. These uses share
+audio resources, so playback
 priority matters when more than one feature requests sound.
+
+To record and browse microphone input, see [Voice Notes](voice-notes.md).
+Use **Audio > Microphone** to configure and test shared microphone input.
 
 Audio controls appear only when supported by the installed firmware.
 Speaker output, MP3 playback, microphone input, and music analysis are distinct
 capabilities. Check the [hardware reference](../hardware.md) for connections.
+
+## Configure and test the microphone
+
+On microphone-capable firmware, open **Audio > Microphone**. Set **Input gain
+(digital)** from -12 to +24 dB and optionally enable **Low-cut filter**. Select
+**Save settings** to retain the changes across restarts without rebooting.
+Gain applies when you release the slider; the filter applies when toggled.
+**Applied, not saved** means the current input differs from your saved settings.
+**Revert to saved** reapplies the saved settings. **Reset to factory values**
+applies 0 dB and disables the filter without saving. Select **Save settings**
+afterward to keep those factory values across restarts.
+
+Leaving the section does not undo applied changes. Restarting the device
+restores the saved settings. No settings are written to flash while dragging.
+
+The settings apply to all microphone capture, including a recording already in
+progress. Existing saved recordings do not change. Digital gain also amplifies
+noise and cannot recover input that is already clipped. The low-cut filter
+reduces rumble and handling noise below approximately 80 Hz but can reduce bass.
+
+Turn on **Test microphone**, speak normally at the intended distance, then speak
+loudly. The peak meter shows processed input on a logarithmic -60 to 0 dBFS
+scale. Red means peaks within 1 dB of full scale; reduce gain if peaks turn red.
+The peak number holds for two seconds. **Input reached full scale** signals a raw digital rail sample;
+**Digital gain clipped** indicates processing saturated. Neither warning detects
+every kind of distortion. When another feature owns the microphone, the test
+shows its current input if recent samples are available; it does not interrupt
+that feature. Turn off **Test microphone** or leave the section to stop testing.
+
+Where **Hear microphone** is available, enable it during the same test in a
+desktop Chrome browser to hear input without saving a recording. Use headphones
+to avoid feedback. Uncheck it to continue with metering only, or
+turn off **Test microphone** to stop both metering and listening. Leaving the section also
+stops the test.
+Only one browser can listen at a time. If another feature is using the
+microphone, stop that feature before trying to listen.
+
+The browser shows when listening is active; the device does not show a
+listening indicator. Audio is not saved by this feature and travels unencrypted.
+Use a trusted local network and enable portal authentication when needed.
+Listening requires available PSRAM and reports an error if it cannot
+allocate the stream buffers or capture task.
+A lost connection ends capture when the device detects the disconnect, which
+may take longer than closing the browser normally.
 
 ## Set volume and amplifier behavior
 
 Open **Audio > Volume** and adjust the slider from 0-100%. The change applies
 immediately; select **Save** to retain the current volume across reboots.
 The device volume applies to feedback, alerts, and Music.
+On a fresh device, volume starts at 50% unless the board defines another
+default. Existing saved volume settings, including 0%, are preserved.
 Volume actions and MQTT volume commands change the current volume without
 saving it. Add a **Save volume** action to retain it across reboots. Each save
 action stores only its own level.
@@ -48,6 +97,8 @@ Bindable tone fields can resolve a pattern from live data.
 
 In **Audio > Button Feedback**, enter Tap Feedback and Long-Press Feedback
 patterns, then **Save**. Empty disables that feedback.
+Fresh devices use `500:40` for taps and `500:40 60 1000:40` for long presses.
+Saved patterns, including disabled feedback, are preserved across restarts.
 Feedback is limited to one second total, including gaps; longer patterns are
 truncated. Explicit tone alerts do not use this feedback limit.
 
@@ -91,30 +142,6 @@ and Stop. Save the pad and test it on the device.
 Next/Previous change the selected track without forcing playback.
 After interruption, Music restarts the selected track from the beginning if
 its desired state is still Playing; it is not sample-accurate resume.
-
-## Record and manage voice clips
-
-On supported firmware, add **Voice clip** actions to buttons or other action
-hosts. Use **Start**, **Pause**, **Resume**, **Save**, and **Discard** to
-control one local recording. Save completes before subsequent actions run;
-failed commands stop the remaining actions. Pause retains the microphone and
-does not add silence to the clip. The microphone level meter is unavailable
-while recording or paused.
-
-Open **Audio > Voice clips** to play, seek, download, or delete saved WAV files
-in your browser. Clips are grouped by date; recordings made before the device
-clock is set appear under **Unknown date**. Delete requires confirmation.
-The portal does not use your browser's microphone. Clips use
-the device input's native 16-bit PCM format and stay on its selected storage
-backend. Free space limits recording time; the device saves captured audio when
-it reaches the storage reserve. Keep private recordings and downloads protected.
-
-Use `[recorder:state]`, `[recorder:duration_s]`, `[recorder:last_clip]`, and
-`[recorder:error]` on pads to show recording status and the latest result.
-Starting a new recording clears the previous result. A reboot, firmware update,
-factory reset, or device shutdown discards an unfinished recording. If a
-manual update or reset reports that recording is stopping, retry the operation.
-If microphone cleanup fails, retry **Start** after the issue clears.
 
 ## Understand sound priority
 

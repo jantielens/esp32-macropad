@@ -40,9 +40,23 @@ struct PadValidationGeometry {
 // off-grid buttons as a feature (they are hidden when the grid shrinks and
 // reappear when it grows back); MCP authoring leaves it false so a mis-placed
 // button is caught up front. All other checks are identical for both callers.
+//
+// When the active List opts into contextual validation, template_pad must be
+// the raw, unmerged immediate template object whenever one is referenced.
+// Pass an empty object for a resolved missing/self template. A null object
+// fails closed in that case; callers must resolve it before enabling List.
 // ============================================================================
 const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid = false,
-						 const PadValidationGeometry* geometry = nullptr);
+						 const PadValidationGeometry* geometry = nullptr,
+                         JsonObjectConst template_pad = JsonObjectConst());
+
+const char* pad_validate_with_template(JsonObjectConst pad, int page, bool tolerate_offgrid,
+                                       const PadValidationGeometry* geometry = nullptr);
+
+const char* pad_validate_action_version(JsonObjectConst pad, bool validate_bindings = true);
+
+bool pad_validation_needs_context();
+const char* pad_validate_context(JsonObjectConst pad, JsonObjectConst template_pad);
 
 inline bool pad_icon_source_id_valid(const char* source_id) {
     if (!source_id || strlen(source_id) != 26 || source_id[0] != 's' || source_id[1] != '_')

@@ -27,10 +27,10 @@
 #include "binding_schema.h"
 #include "config_manager.h"
 #include "device_telemetry.h"
-#include "repo_slug_config.h"
+#include <repo_slug_config.h>
 #include "log_manager.h"
 #include "psram_json_allocator.h"
-#include "project_branding.h"
+#include <project_branding.h>
 #include "class_branding.h"
 #include "web_portal_json.h"
 #if HEALTH_HISTORY_ENABLED
@@ -38,6 +38,9 @@
 #endif
 #include "version.h"
 #include "touch_manager.h"
+#if HAS_DISPLAY && HAS_PSRAM
+#include "list_source.h"
+#endif
 
 #include <ArduinoJson.h>
 #include <WiFi.h>
@@ -198,6 +201,8 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 
 		// Close board_name string value
 		response->print("\"");
+		response->print(",\"ota_mode\":");
+		response->print(reboot_is_ota_mode() ? "true" : "false");
 
 		// Health widget client tuning (sparklines + polling cadence)
 		response->print(",\"health_poll_interval_ms\":");
@@ -278,19 +283,24 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		#if HAS_DISPLAY || HAS_BUTTON
 				if (request->hasParam("catalog")) {
 						auto catalog_doc = make_psram_json_doc(6144);
+						if (!catalog_doc || !catalog_doc->capacity()) {
+								delete response;
+								web_portal_send_json_error(request, 503, "Action catalog unavailable", &timing);
+								return;
+						}
+						JsonArray actions = catalog_doc->to<JsonArray>();
+						action_catalog_emit(actions);
+						timing.mark("actions_build");
+						if (catalog_doc->overflowed()) {
+								delete response;
+								web_portal_send_json_error(request, 503, "Action catalog unavailable", &timing);
+								return;
+						}
 						response->print(",\"catalog\":");
-						if (catalog_doc && catalog_doc->capacity() > 0) {
-								JsonArray actions = catalog_doc->to<JsonArray>();
-								action_catalog_emit(actions, false);
-								timing.mark("actions_build");
-								if (!write_json_buffered(actions, *response)) {
-										delete response;
-										web_portal_send_json_error(request, 503, "Action catalog unavailable", &timing);
-										return;
-								}
-						} else {
-								timing.mark("actions_build");
-								response->print("[]");
+						if (!write_json_buffered(actions, *response)) {
+								delete response;
+								web_portal_send_json_error(request, 503, "Action catalog unavailable", &timing);
+								return;
 						}
 						timing.mark("actions_json");
 				}
@@ -298,6 +308,22 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 
 		#if HAS_DISPLAY
 				if (request->hasParam("catalog")) {
+#if HAS_PSRAM
+						auto list_doc = make_psram_json_doc(4096);
+						if (!list_doc || !list_doc->capacity()) {
+								delete response;
+								web_portal_send_json_error(request, 503, "List source catalog unavailable", &timing);
+								return;
+						}
+						JsonArray sources = list_doc->to<JsonArray>();
+						list_source_emit_metadata(sources);
+						response->print(",\"list_sources\":");
+						if (list_doc->overflowed() || !write_json_buffered(sources, *response)) {
+								delete response;
+								web_portal_send_json_error(request, 503, "List source catalog unavailable", &timing);
+								return;
+						}
+#endif
 						auto widget_doc = make_psram_json_doc(4096);
 						response->print(",\"widget_catalog\":");
 						if (widget_doc && widget_doc->capacity() > 0) {
@@ -633,6 +659,15 @@ void handleReboot(AsyncWebServerRequest *request) {
 		request->send(200, "application/json", "{\"success\":true,\"message\":\"Rebooting device...\"}");
 
 		reboot_request(100);
+}
+
+void handleRebootOtaMode(AsyncWebServerRequest *request) {
+		if (!portal_auth_gate(request)) return;
+		if (!reboot_request_ota_mode(500)) {
+				request->send(409, "application/json", "{\"success\":false,\"message\":\"Update, configuration write, or network transition in progress\"}");
+				return;
+		}
+		request->send(200, "application/json", "{\"success\":true,\"message\":\"Rebooting into OTA mode\"}");
 }
 
 static void request_sleep_on_main_loop(const void* context, bool* ok, char*, size_t) {

@@ -32,6 +32,9 @@ extern portMUX_TYPE g_splash_status_mux;
 void DisplayManager::showSplash() {
 		// Splash shown during init - can switch immediately (no task running yet)
 		lock();
+#if HAS_PSRAM
+		++screenIntentGeneration;
+#endif
 		device_dialog_close();
 		if (currentScreen) {
 				currentScreen->hide();
@@ -41,6 +44,31 @@ void DisplayManager::showSplash() {
 		unlock();
 		LOGI("Display", "Switched to SplashScreen");
 }
+
+#if HAS_PSRAM
+bool DisplayManager::captureListNavigation(uint32_t* generation) {
+		if (!generation) return false;
+		bool didLock = false;
+		lockIfNeeded(didLock);
+		bool active = false;
+		if (!pendingScreen && !device_dialog_active() && currentScreen && padScreens) {
+				for (uint8_t index = 0; index < MAX_PADS; ++index)
+						if (padScreens[index] && currentScreen == padScreens[index]) { active = true; break; }
+		}
+		if (active) *generation = screenIntentGeneration;
+		unlockIfNeeded(didLock);
+		return active;
+}
+
+bool DisplayManager::navigateList(const char* target, const char* command, uint32_t generation) {
+		if (!isInLvglTask() || generation != screenIntentGeneration || pendingScreen ||
+		    device_dialog_active() || !screen_saver_manager_input_ready() || !currentScreen || !padScreens) return false;
+		for (uint8_t index = 0; index < MAX_PADS; ++index)
+				if (padScreens[index] && currentScreen == padScreens[index])
+						return padScreens[index]->navigateList(target, command);
+		return false;
+}
+#endif
 
 void DisplayManager::showInfo() {
 		// Defer screen switch to lvglTask (non-blocking)

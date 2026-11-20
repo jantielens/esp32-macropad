@@ -49,8 +49,14 @@ hardware; host tests do not establish panel speed or quality.
 
 Wi-Fi/MQTT and MCP are enabled. Audio, USB/BLE keyboard output, native
 Extensions, remote image fetching, and the image library are disabled.
-Files use internal flash. The 8 MB layout supports OTA with two 3 MiB
-application slots.
+Files use internal flash. The 8 MB layout supports OTA with two 3.5 MiB
+application slots and 896 KiB of LittleFS file storage.
+
+When upgrading from the older 3 MiB-slot layout, back up settings/files first.
+The application and filesystem boundaries move: install the new layout with a
+full USB flash and reinitialize file storage before restoring files. A
+firmware-only OTA update cannot migrate the partition table. OTA updates work
+normally after the new layout is installed.
 
 For the first full USB flash or recovery, use this exact target in the
 [installer](https://jantielens.github.io/esp32-macropad/).

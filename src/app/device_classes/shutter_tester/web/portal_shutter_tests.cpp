@@ -11,6 +11,7 @@
 #include "storage.h"
 #include "psram_json_allocator.h"
 #include <ArduinoJson.h>
+#include <string.h>
 
 #define TAG "TestScriptsAPI"
 
@@ -61,49 +62,75 @@ static void handleGetTests(AsyncWebServerRequest* request) {
 // PUT /api/shutter/tests — write raw file content
 // ============================================================================
 
+struct ShutterTestsUpload {
+    size_t total;
+    size_t received;
+    bool invalid;
+    uint8_t data[1];
+};
+
+static void shutter_tests_upload_reset(AsyncWebServerRequest* request) {
+    auto* upload = static_cast<ShutterTestsUpload*>(request->_tempObject);
+    request->_tempObject = nullptr;
+    heap_caps_free(upload);
+}
+
 static void handlePutTestsBody(AsyncWebServerRequest* request,
                                 uint8_t* data, size_t len,
                                 size_t index, size_t total) {
-    // First chunk: open file
     if (index == 0) {
-        if (total > 8192) {
-            // Safety limit — test files should be small
+        if (!portal_auth_gate(request)) return;
+        if (total > SHUTTER_TEST_FILE_MAX_BYTES) {
             request->send(413, "application/json",
                           "{\"success\":false,\"message\":\"File too large\"}");
             return;
         }
-        File* f = new File(Storage.open(SHUTTER_TEST_FILE_PATH, "w"));
-        if (!*f) {
-            delete f;
+        auto* upload = static_cast<ShutterTestsUpload*>(heap_caps_malloc(
+            sizeof(ShutterTestsUpload) + total, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+        if (!upload) {
             request->send(500, "application/json",
-                          "{\"success\":false,\"message\":\"Failed to open file\"}");
+                          "{\"success\":false,\"message\":\"Out of memory\"}");
             return;
         }
-        request->_tempObject = f;
+        upload->total = total;
+        upload->received = 0;
+        upload->invalid = false;
+        request->_tempObject = upload;
+        request->onDisconnect([request]() { shutter_tests_upload_reset(request); });
     }
 
-    File* f = static_cast<File*>(request->_tempObject);
-    if (!f) return;
-
-    f->write(data, len);
+    auto* upload = static_cast<ShutterTestsUpload*>(request->_tempObject);
+    if (!upload || upload->invalid) return;
+    if (total != upload->total || index != upload->received ||
+        len > upload->total - upload->received || (len && !data)) {
+        upload->invalid = true;
+        return;
+    }
+    if (len) memcpy(upload->data + index, data, len);
+    upload->received += len;
 }
 
 static void handlePutTests(AsyncWebServerRequest* request) {
     if (!portal_auth_gate(request)) return;
 
-    File* f = static_cast<File*>(request->_tempObject);
-    if (f) {
-        f->close();
-        delete f;
-        request->_tempObject = nullptr;
+    auto* upload = static_cast<ShutterTestsUpload*>(request->_tempObject);
+    if (!upload && request->contentLength()) return; // body handler already responded
+    if (upload && (upload->invalid || upload->received != upload->total)) {
+        shutter_tests_upload_reset(request);
+        request->send(400, "application/json",
+                      "{\"success\":false,\"message\":\"Invalid upload\"}");
+        return;
     }
-
+    const bool saved = shutter_test_scripts_write(upload ? upload->data : nullptr,
+                                                   upload ? upload->total : 0);
+    shutter_tests_upload_reset(request);
+    if (!saved) {
+        request->send(500, "application/json",
+                      "{\"success\":false,\"message\":\"Failed to save file\"}");
+        return;
+    }
     request->send(200, "application/json", "{\"success\":true}");
     LOGI(TAG, "Guided test definitions saved");
-
-    // Refresh the list provider cache so list widgets pick up new tests
-    void list_provider_shutter_tests_refresh();
-    list_provider_shutter_tests_refresh();
 }
 
 // ============================================================================

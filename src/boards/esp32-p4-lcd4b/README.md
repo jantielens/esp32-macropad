@@ -7,7 +7,8 @@ Target `esp32-p4-lcd4b` runs the standard Macropad on a 4-inch, 720 x 720
 ST7703 MIPI-DSI display with GT911 touch. Hardware includes an ESP32-P4,
 an ESP32-C6 wireless companion, 32 MB flash, and 32 MB PSRAM.
 The [Voice Assistant variant](../esp32-p4-lcd4b-voice/README.md) shares this
-hardware.
+hardware. The [SD-primary variant](../esp32-p4-lcd4b-sd/README.md) uses the
+onboard MicroSD slot for persistent files.
 
 ## USB, power, and recovery
 
@@ -30,7 +31,8 @@ reset selects download mode.
 The standard firmware supports Wi-Fi/MQTT, USB/BLE keyboard output, MCP,
 remote images, native Extensions, ES8311 speaker/MP3 playback, and ES7210
 microphone input, including music analysis. It does not enable a camera.
-Persistent files use internal flash.
+Persistent files use internal flash. Voice Notes requires the
+[SD-primary variant](../esp32-p4-lcd4b-sd/README.md).
 
 > [!IMPORTANT]
 > This firmware deliberately uses only 16 MB of the physical 32 MB flash for

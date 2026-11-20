@@ -1,8 +1,8 @@
 #include <cassert>
-#if HAS_VOICE_CLIPS
-#include "../src/app/voice_clips.h"
-static VoiceClipCancelStatus recorder_status = VoiceClipCancelStatus::Ready;
-VoiceClipCancelStatus voice_clips_cancel() { return recorder_status; }
+#if HAS_VOICE_NOTES
+#include "../src/app/voice_notes.h"
+static VoiceNoteCancelStatus recorder_status = VoiceNoteCancelStatus::Ready;
+VoiceNoteCancelStatus voice_notes_cancel() { return recorder_status; }
 #endif
 #include "../src/app/reboot_service.cpp"
 
@@ -14,9 +14,11 @@ static uint32_t clock_ms = 0;
 static unsigned restarts = 0;
 static unsigned audio_requests = 0;
 static AudioRebootStatus audio_status = AUDIO_REBOOT_PENDING;
+static esp_reset_reason_t reset_reason = ESP_RST_POWERON;
 
 unsigned long millis() { return clock_ms; }
 void esp_restart() { ++restarts; }
+esp_reset_reason_t esp_reset_reason() { return reset_reason; }
 void audio_request_reboot() { ++audio_requests; }
 AudioRebootStatus audio_reboot_status() { return audio_status; }
 bool portal_auth_gate(AsyncWebServerRequest* request) { return request->authorized; }
@@ -32,9 +34,13 @@ static void reset_test() {
     reboot_not_before = 0;
     reboot_shutdown_started = false;
     reboot_shutdown_at = 0;
-#if HAS_VOICE_CLIPS
+    reboot_into_ota_mode = false;
+    ota_mode = false;
+    ota_mode_marker = 0;
+    reset_reason = ESP_RST_POWERON;
+#if HAS_VOICE_NOTES
     reboot_recorder_wait_reported = false;
-    recorder_status = VoiceClipCancelStatus::Ready;
+    recorder_status = VoiceNoteCancelStatus::Ready;
 #endif
     clock_ms = 0;
     restarts = 0;
@@ -44,9 +50,30 @@ static void reset_test() {
 }
 
 int main() {
-#if HAS_VOICE_CLIPS
     reset_test();
-    recorder_status = VoiceClipCancelStatus::Pending;
+    assert(ota_activity_try_begin());
+    assert(!reboot_request_ota_mode(100));
+    ota_activity_finish();
+    assert(reboot_request_ota_mode(100));
+    assert(!ota_activity_try_begin());
+    audio_status = AUDIO_REBOOT_COMPLETE;
+    reboot_service_loop();
+    clock_ms = 100;
+    reboot_service_loop();
+    assert(restarts == 1 && ota_mode_marker == OTA_MODE_MARKER);
+    reset_reason = ESP_RST_SW;
+    reboot_service_boot_init();
+    assert(reboot_is_ota_mode() && ota_mode_marker == 0);
+    reboot_service_boot_init();
+    assert(!reboot_is_ota_mode());
+    ota_mode_marker = OTA_MODE_MARKER;
+    reset_reason = ESP_RST_POWERON;
+    reboot_service_boot_init();
+    assert(!reboot_is_ota_mode() && ota_mode_marker == 0);
+
+#if HAS_VOICE_NOTES
+    reset_test();
+    recorder_status = VoiceNoteCancelStatus::Pending;
     audio_status = AUDIO_REBOOT_COMPLETE;
     reboot_request(0);
     reboot_service_loop();
@@ -54,10 +81,10 @@ int main() {
     clock_ms = REBOOT_RECORDER_TIMEOUT_MS;
     reboot_service_loop();
     assert(restarts == 0 && reboot_recorder_wait_reported);
-    recorder_status = VoiceClipCancelStatus::Error;
+    recorder_status = VoiceNoteCancelStatus::Error;
     reboot_service_loop();
     assert(restarts == 0);
-    recorder_status = VoiceClipCancelStatus::Ready;
+    recorder_status = VoiceNoteCancelStatus::Ready;
     reboot_service_loop();
     assert(restarts == 1);
 #endif
@@ -153,18 +180,18 @@ int main() {
     AsyncWebServerRequest interrupted;
     interrupted.body_length = 4;
     uint8_t bytes[4] = {};
-#if HAS_VOICE_CLIPS
-    recorder_status = VoiceClipCancelStatus::Pending;
+#if HAS_VOICE_NOTES
+    recorder_status = VoiceNoteCancelStatus::Pending;
     AsyncWebServerRequest deferred;
     deferred.body_length = 4;
     handleOTAUpload(&deferred, "test.bin", 0, bytes, 2, false);
     assert(deferred.response_code == 409 && Update.writes == 0 && !ota_activity_is_active());
-    recorder_status = VoiceClipCancelStatus::Error;
+    recorder_status = VoiceNoteCancelStatus::Error;
     AsyncWebServerRequest unsafe;
     unsafe.body_length = 4;
     handleOTAUpload(&unsafe, "test.bin", 0, bytes, 2, false);
     assert(unsafe.response_code == 503 && Update.writes == 0 && !ota_activity_is_active());
-    recorder_status = VoiceClipCancelStatus::Ready;
+    recorder_status = VoiceNoteCancelStatus::Ready;
     Update = TestFirmwareUpdate{};
 #endif
     handleOTAUpload(&interrupted, "test.bin", 0, bytes, 2, false);

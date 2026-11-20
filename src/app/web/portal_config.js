@@ -16,7 +16,7 @@ async function loadVersion() {
         healthConfigureFromDeviceInfo(deviceInfoCache);
         healthConfigureHistoryFromDeviceInfo(deviceInfoCache);
 
-        // Hide/disable MQTT settings if firmware was built without MQTT support
+        // @portal-if HAS_MQTT
         const mqttSection = document.getElementById('mqtt-settings-section');
         if (mqttSection && version.has_mqtt === false) {
             mqttSection.style.display = 'none';
@@ -24,6 +24,7 @@ async function loadVersion() {
                 el.disabled = true;
             });
         }
+        // @portal-endif
 
         document.getElementById('firmware-version').textContent = `Firmware v${version.version}`;
         const deviceName = version.device_name || version.project_display_name || version.wifi_hostname || 'Device';
@@ -92,6 +93,7 @@ function updateOnlineUpdateSection(info) {
 
 }
 
+// @portal-if HAS_AUDIO
 function updateAmplifierSettings() {
     var section = document.getElementById('amplifier-section');
     var idleMute = document.getElementById('audio_idle_mute');
@@ -103,6 +105,7 @@ function updateAmplifierSettings() {
     idleMute.disabled = !supported;
     delay.disabled = !supported || !idleMute.checked;
 }
+// @portal-endif
 
 function updateWriteOnlySecretField(fieldId, statusId, isSet, emptyMessage, valueName) {
     const name = valueName || 'value';
@@ -144,6 +147,7 @@ function updateWriteOnlySecretField(fieldId, statusId, isSet, emptyMessage, valu
 /**
  * Load current configuration from device
  */
+// @portal-if HAS_BLE_HID || HAS_USB_HID
 function keyboardTransportLabel(transport) {
     return transport === 'none' ? 'Off' : (transport || '').toUpperCase();
 }
@@ -162,6 +166,8 @@ function updateKeyboardTransportSetting() {
     }
 }
 
+// @portal-endif
+// @portal-if HAS_DISPLAY
 function updateScreenSaverMode(config) {
     const settings = document.getElementById('screensaver-sleep-settings');
     if (!settings) return;
@@ -180,6 +186,7 @@ function updateScreenSaverMode(config) {
         if (label) label.textContent = labels[id];
     }
 }
+// @portal-endif
 
 async function loadConfig() {
     try {
@@ -248,10 +255,14 @@ async function loadConfig() {
         setValueIfExists('dns1', config.dns1);
         setValueIfExists('dns2', config.dns2);
 
-        // MQTT settings
+        // @portal-if HAS_MQTT
         setValueIfExists('mqtt_host', config.mqtt_host);
         setValueIfExists('mqtt_port', config.mqtt_port);
         setValueIfExists('mqtt_username', config.mqtt_username);
+        updateWriteOnlySecretField('mqtt_password', 'mqtt_password_status', config.mqtt_password_set === true,
+            '', 'password');
+        setValueIfExists('mqtt_publish_scope', config.mqtt_publish_scope);
+        // @portal-endif
 
         // Power settings
         setRadioIfExists('operating_mode', config.operating_mode || 'always_on');
@@ -266,25 +277,21 @@ async function loadConfig() {
         setValueIfExists('portal_idle_timeout_seconds', config.portal_idle_timeout_seconds);
         setValueIfExists('wifi_backoff_max_seconds', config.wifi_backoff_max_seconds);
 
-        // BLE telemetry settings (only present when firmware has HAS_BLE)
+        // @portal-if HAS_BLE
         if (config.ble_burst_count !== undefined) {
             setValueIfExists('ble_burst_count', config.ble_burst_count);
         }
         if (config.ble_adv_interval_ms !== undefined) {
             setValueIfExists('ble_adv_interval_ms', config.ble_adv_interval_ms);
         }
-
-        // MQTT scope
-        setValueIfExists('mqtt_publish_scope', config.mqtt_publish_scope);
-
-        updateWriteOnlySecretField('mqtt_password', 'mqtt_password_status', config.mqtt_password_set === true,
-            '', 'password');
+        // @portal-endif
         updateWriteOnlySecretField('ha_token', 'ha_token_status', config.ha_token_set === true,
             '', 'token');
 
         // Basic Auth settings
         setCheckedIfExists('basic_auth_enabled', config.basic_auth_enabled);
 
+        // @portal-if HAS_BLE_HID || HAS_USB_HID
         if (config.keyboard_transport !== undefined) {
             const caps = config.caps || {};
             const selectable = !!(caps.ble_hid || caps.usb_hid);
@@ -315,8 +322,9 @@ async function loadConfig() {
             if (usbContent) usbContent.style.display = config.keyboard_active_transport === 'usb' ? 'block' : 'none';
             updateKeyboardTransportSetting();
         }
+        // @portal-endif
 
-        // Audio settings
+        // @portal-if HAS_AUDIO
         if (config.audio_volume !== undefined) {
             const vol = config.current_audio_volume ?? config.audio_volume;
             setValueIfExists('audio_volume', vol);
@@ -329,12 +337,13 @@ async function loadConfig() {
         setCheckedIfExists('audio_idle_mute', config.audio_idle_mute !== false);
         setValueIfExists('audio_wake_delay_ms', config.audio_wake_delay_ms === undefined ? 120 : config.audio_wake_delay_ms);
         updateAmplifierSettings();
+        // @portal-endif
 
         setValueIfExists('basic_auth_username', config.basic_auth_username);
         updateWriteOnlySecretField('basic_auth_password', 'basic_auth_password_status',
             config.basic_auth_password_set === true, '', 'password');
 
-        // MCP server settings
+        // @portal-if HAS_MCP
         var mcpCard = document.getElementById('mcp-card');
         if (mcpCard) {
             // Hide the whole card when the firmware was built without HAS_MCP.
@@ -353,8 +362,9 @@ async function loadConfig() {
                     : 'No token generated yet. Generate one to use the MCP server.';
             }
         }
+        // @portal-endif
         
-        // Display settings - backlight brightness
+        // @portal-if HAS_DISPLAY
         setValueIfExists('display_rotation', config.display_rotation !== undefined ? config.display_rotation : 0);
         const brightness = config.current_backlight_brightness ?? config.backlight_brightness ?? 100;
         const brightnessMin = config.backlight_brightness_min !== undefined ? config.backlight_brightness_min : 5;
@@ -377,8 +387,9 @@ async function loadConfig() {
         setValueIfExists('idle_screen_pad', config.idle_screen_pad);
         updateScreenSaverMode(config);
         if (typeof window.screensaverTimelineUpdate === 'function') window.screensaverTimelineUpdate();
+        // @portal-endif
 
-        // E-paper settings (only present when firmware has HAS_EPAPER_PANEL)
+        // @portal-if HAS_EPAPER_PANEL
         if (config.epaper_url !== undefined) {
             setValueIfExists('epaper_url', config.epaper_url);
         }
@@ -416,6 +427,7 @@ async function loadConfig() {
             var flCard = document.getElementById('epaper-frontlight-card');
             if (flCard) flCard.hidden = false;
         }
+        // @portal-endif
 
         // Device-class fields registered via window.registerConfigFields([...]).
         // Symmetric with saveFragmentConfig(): any name added to
@@ -436,6 +448,7 @@ async function loadConfig() {
                 }
             });
         }
+        return config;
     } catch (error) {
         showMessage('Error loading configuration: ' + error.message, 'error');
         console.error('Load error:', error);
@@ -493,6 +506,7 @@ function validateConfig(config) {
         }
     }
 
+    // @portal-if HAS_AUDIO
     if (config.audio_wake_delay_ms !== undefined) {
         const value = config.audio_wake_delay_ms;
         const delay = Number(value);
@@ -501,7 +515,9 @@ function validateConfig(config) {
             return { valid: false, message: 'Amplifier wake delay must be an integer from 0 to 1000 ms' };
         }
     }
+    // @portal-endif
 
+    // @portal-if IS_EPAPER_FRAME
     if (config.epaper_frame_offline_refreshes_between_syncs !== undefined) {
         const offlineRefreshes = Number(config.epaper_frame_offline_refreshes_between_syncs);
         if (!Number.isInteger(offlineRefreshes) || offlineRefreshes < 0 || offlineRefreshes > 16) {
@@ -513,6 +529,7 @@ function validateConfig(config) {
             return { valid: false, message: 'Offline refreshes require Service mode and SD image caching' };
         }
     }
+    // @portal-endif
     
     return { valid: true };
 }
@@ -594,6 +611,7 @@ function setLiveLevel(name, url, field, value) {
     return next;
 }
 
+// @portal-if HAS_DISPLAY
 function handleBrightnessChange(event) {
     const brightness = parseInt(event.target.value);
     
@@ -602,21 +620,24 @@ function handleBrightnessChange(event) {
     if (valueDisplay) {
         valueDisplay.textContent = brightness;
     }
-    
     return setLiveLevel('brightness', '/api/component/display/brightness', 'brightness', brightness);
 }
+// @portal-endif
 
+// @portal-if HAS_AUDIO
 function handleVolumeChange(event) {
     const volume = parseInt(event.target.value);
     const valueDisplay = document.getElementById('audio_volume_value');
     if (valueDisplay) valueDisplay.textContent = volume;
     return setLiveLevel('volume', '/api/component/volume/level', 'volume', volume);
 }
+// @portal-endif
 
 /**
  * Handle screen selection change - switch screens immediately
  * @param {Event} event - Change event from select dropdown
  */
+// @portal-if HAS_DISPLAY
 async function handleScreenChange(event) {
     const screenId = event.target.value;
     
@@ -643,3 +664,4 @@ async function handleScreenChange(event) {
         return false;
     }
 }
+// @portal-endif

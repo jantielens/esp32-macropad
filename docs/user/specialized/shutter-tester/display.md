@@ -37,7 +37,7 @@ Normal label bindings follow their own update behavior.
 Use Shutter actions for Calibrate, Align, target adjustment/lock,
 session control, and guided progression.
 The editor's current Action reference owns available commands.
-For a list-driven guided test, use the selected provider ID as described in
+For a List-driven guided test, use the activated item's ID as described in
 [sessions](sessions.md#write-a-guided-test).
 
 Portal orientation/sweep flipping is a viewing aid and does not change stored

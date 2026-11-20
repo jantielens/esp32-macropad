@@ -364,7 +364,8 @@ function _bhRenderGuide(id) {
         '<section><h5>Nesting</h5><p>Tokens can be nested inside <code>[expr:...]</code>, for example ' +
         '<code>[expr:[health:cpu] &gt; 80 ? "High" : "OK"]</code>. Inner tokens resolve first.</p></section>' +
         '<section><h5>Widget data</h5><p>Widget data fields need a number, so leave out the format parameter. ' +
-        'Table and List widgets take one structured token with no text around it, such as <code>[health:table]</code>.</p></section>';
+        'Table widgets take one token returning structured JSON, with no text around it. ' +
+        'List widgets use a collection source such as <code>[health:metrics]</code>; configure their row labels separately.</p></section>';
 }
 
 function _bhRenderSearch(query) {

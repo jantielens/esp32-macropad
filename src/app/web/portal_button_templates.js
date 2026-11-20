@@ -274,7 +274,7 @@ const padButtonBuilders = [
         preferred: true,
         available: ({ sources: [source] }) => !!source?.candidate.capabilities.control &&
             !!padButtonBuilderProvider(source.candidate).controlFields?.(source.candidate).length &&
-            !!actionEditorCatalogEntry(padButtonBuilderProvider(source.candidate).controlActionType),
+            !!actionEditorOperation(padButtonBuilderProvider(source.candidate).controlOperation),
         fields: ({ sources: [source] }) =>
             padButtonBuilderProvider(source.candidate).controlFields(source.candidate),
         build({ sources: [source], options }) {
@@ -288,7 +288,7 @@ const padButtonBuilders = [
         available: ({ sources: [source] }, runtime = deviceInfoCache) => {
             const provider = source && padButtonBuilderProvider(source.candidate);
             return !!source?.candidate.capabilities.control && !!provider?.buildToggleWidget &&
-                !!actionEditorCatalogEntry(provider.controlActionType) &&
+                !!actionEditorOperation(provider.controlOperation) &&
                 !!runtime?.widget_catalog?.some(widget => widget.type === 'toggle');
         },
         fields: () => [],

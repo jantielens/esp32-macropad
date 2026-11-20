@@ -66,20 +66,20 @@ assert.ok(!context.bindingHelpKeyMatches('*.selected', 'a.b.selected'));
 assert.strictEqual(context.bindingHelpDisplayKey('seg_time:#'), 'seg_time:N');
 
 assert.strictEqual(context.bindingHelpKeyToken(scheme('timer'), '#_state'), '[timer:1_state]');
-assert.strictEqual(context.bindingHelpKeyToken(scheme('list'), '*.selected'), '[list:fixture.selected]');
+assert.strictEqual(context.bindingHelpKeyToken(scheme('item'), '*'), '[item:id]');
 assert.strictEqual(context.bindingHelpKeyToken(scheme('health'), 'cpu'), '[health:cpu]');
 assert.strictEqual(context.bindingHelpSignature(scheme('mqtt')), '[mqtt:topic;path?;format?]');
 
 const categories = context.bindingHelpCategories(fixture.schemes).map(entry => entry[0]);
 assert.strictEqual(JSON.stringify(categories.slice(0, 4)), '["Data","Device","Time","Logic"]');
 
-// Key names outrank description matches: "ble" finds ble_* keys before "table".
+// Health search still finds scalar BLE keys after removing the Table bindings.
 const results = context.bindingHelpSearch(fixture.schemes, 'ble');
 const health = results.find(group => group.title === 'health');
 assert.ok(health, 'health has ble matches');
 assert.match(health.hits[0].doc.key, /^ble_/);
-assert.ok(health.hits.findIndex(hit => hit.doc && hit.doc.key === 'table') >
-          health.hits.findIndex(hit => hit.doc && hit.doc.key === 'ble_status'));
+assert.ok(!scheme('health').keys.includes('table'));
+assert.ok(!scheme('health').keys.includes('extended_table'));
 assert.ok(context.bindingHelpSearch(fixture.schemes, '%V').some(group => group.title === 'Format strings'));
 assert.ok(context.bindingHelpSearch(fixture.schemes, 'threshold').some(group => group.title === 'expr'));
 assert.strictEqual(context.bindingHelpSearch(fixture.schemes, 'zzzz-no-match').length, 0);
@@ -554,6 +554,29 @@ delete context.testHelpSchemes;
     assert.strictEqual(expressionGenerate('[health:cpu] + "value"', {}).valid, true);
     assert.strictEqual(expressionGenerate('abs(value)', {}).valid, false);
     assert.strictEqual(expressionGenerate('min(1, 2)', {}).valid, true);
+    assert.strictEqual(expressionGenerate('datetime(1700000000, "%Y-%m-%d")', {}).valid, true);
+    assert.strictEqual(expressionGenerate('duration(65000, "ms", "mm:ss")', {}).valid, true);
+    assert.strictEqual(context.expressionBuilderSnippet('datetime(epoch, format, timezone)').text,
+        'datetime(value)');
+    assert.strictEqual(context.expressionBuilderSnippet('duration(value, unit, format)').text,
+        'duration(value, "ms")');
+    const conditionalSnippet = context.expressionBuilderSnippet('if / then / else');
+    assert.strictEqual(conditionalSnippet.text.slice(
+        conditionalSnippet.selectionStart, conditionalSnippet.selectionEnd), 'value');
+    assert.strictEqual(conditionalSnippet.text,
+        'value == "expected_value"\n  ? "then_value"\n  : "else_value"');
+    assert.strictEqual(expressionGenerate(conditionalSnippet.text, {}).valid, false);
+    const conditionalBody = conditionalSnippet.text
+        .replace('value', '[health:wifi_connected]').replace('"expected_value"', '"ON"');
+    assert.strictEqual(expressionGenerate(conditionalBody, {}).valid, true);
+    const conditionalNumber = conditionalBody
+        .replace('"then_value"', '[health:cpu]').replace('"else_value"', '""');
+    const conditionalBinding = expressionGenerate(conditionalNumber, { enabled: true, decimals: 0, unit: '%' });
+    assert.strictEqual(conditionalBinding.valid, true);
+    assert.strictEqual(conditionalBinding.binding, '[expr:[health:wifi_connected] == "ON" ? [health:cpu] : "";%.0f %%]');
+    const conditionalLoaded = expressionLoad(conditionalBinding.binding);
+    assert.strictEqual(conditionalLoaded.expression, '[health:wifi_connected] == "ON" ? [health:cpu] : ""');
+    assert.strictEqual(conditionalLoaded.formatting.unit, '%');
     const tooLong = expressionGenerate('"' + 'é'.repeat(100) + '"', {});
     assert.strictEqual(tooLong.valid, false);
     assert.strictEqual(tooLong.bytes, new TextEncoder().encode(tooLong.binding).length);
@@ -746,7 +769,7 @@ delete context.testHelpSchemes;
     }
 
     // Whole-button generation must produce ordinary, valid bindings and literal service actions.
-    context.actionEditorCatalogEntry = type => type === 'ha_service' ? {} : null;
+    context.actionEditorOperation = id => id === 'ha.service.call' ? {} : null;
     context.padGetEffectiveDefault = () => '#000000';
     context.padColorNormalizeLiteral = color => color;
     const builders = vm.runInContext('padButtonBuilders', context);
@@ -874,7 +897,7 @@ delete context.testHelpSchemes;
     assert.strictEqual(generatedLight.label_top_style, 'color:#000000', 'Keep the title legible on light button backgrounds');
     assert.strictEqual(generatedLight.fg_color, '[expr:[ha:light.kitchen]=="on"?"#FFC857":"#64748B"|#EF6B73]');
     assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedLight.actions)), [
-        { type: 'ha_service', entity_id: 'light.kitchen', service: 'toggle' }
+        { op: 'ha.service.call', args: { entity_id: 'light.kitchen', service: 'toggle', data_json: '' } }
     ]);
     assert.strictEqual(toggleBuilder.available(makeDraft(temperature)), false);
     assert.strictEqual(toggleBuilder.available(makeDraft(light)), true);
@@ -888,7 +911,7 @@ delete context.testHelpSchemes;
     });
     assert.strictEqual(generatedSwitch.fg_color, '[expr:[ha:switch.desk_fan]=="on"?"#FFC857":"#64748B"|#EF6B73]');
     assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedSwitch.actions)), [
-        { type: 'ha_service', entity_id: 'switch.desk_fan', service: 'toggle' }
+        { op: 'ha.service.call', args: { entity_id: 'switch.desk_fan', service: 'toggle', data_json: '' } }
     ]);
     const toggleRuntime = { widget_catalog: [{ type: 'toggle' }] };
     assert.strictEqual(toggleWidgetBuilder.available(makeDraft(temperature), toggleRuntime), false);
@@ -898,17 +921,17 @@ delete context.testHelpSchemes;
     assert.strictEqual(generatedToggleWidget.widget_type, 'toggle');
     assert.strictEqual(generatedToggleWidget.widget_data_binding, '[ha:light.kitchen]');
     assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedToggleWidget.actions)), [
-        { type: 'ha_service', entity_id: 'light.kitchen', service: 'turn_on' }
+        { op: 'ha.service.call', args: { entity_id: 'light.kitchen', service: 'turn_on', data_json: '' } }
     ]);
     assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedToggleWidget.lp_actions)), [
-        { type: 'ha_service', entity_id: 'light.kitchen', service: 'turn_off' }
+        { op: 'ha.service.call', args: { entity_id: 'light.kitchen', service: 'turn_off', data_json: '' } }
     ]);
-    const catalogEntry = context.actionEditorCatalogEntry;
-    context.actionEditorCatalogEntry = () => null;
+    const catalogEntry = context.actionEditorOperation;
+    context.actionEditorOperation = () => null;
     assert.strictEqual(toggleBuilder.available(makeDraft(switchDetail)), false);
     assert.strictEqual(toggleBuilder.available(makeDraft(light)), false);
     assert.strictEqual(toggleWidgetBuilder.available(makeDraft(light), toggleRuntime), false);
-    context.actionEditorCatalogEntry = catalogEntry;
+    context.actionEditorOperation = catalogEntry;
     const longLight = { ...light, entity_id: 'light.' + 'a'.repeat(41) };
     assert.ok(context.padButtonBuilderBuild(buildSession(longLight, toggleBuilder)));
     assert.throws(() => context.padButtonBuilderBuild(buildSession({ ...longLight, entity_id: longLight.entity_id + 'a' }, toggleBuilder)), /48/);
@@ -1567,9 +1590,9 @@ delete context.testHelpSchemes;
                 scheme.name + ' format presets');
             continue;
         }
-        if (scheme.name === 'var') {
-            assert.ok(catalogKeys.some(candidate => candidate.reference.scheme === 'var' &&
-                candidate.reference.params[0] === 'id'), 'var exposes a dynamic-name placeholder');
+        if (scheme.name === 'var' || scheme.name === 'item') {
+            assert.ok(catalogKeys.some(candidate => candidate.reference.scheme === scheme.name &&
+                candidate.reference.params[0] === 'id'), scheme.name + ' exposes a dynamic-name placeholder');
             continue;
         }
         for (const key of scheme.free_form ? [''] : scheme.keys) {
@@ -1910,11 +1933,6 @@ delete context.testHelpSchemes;
     assert.strictEqual(duration.capabilities.numericWidget, true);
     assert.deepStrictEqual(Array.from(duration.formatModes), ['raw'],
         'Duration syntax must not be advertised as printf formatting');
-    const formattedDuration = catalogButtons.prepare(catalogReference('timer', '1', 'mm:ss'));
-    assert.strictEqual(formattedDuration.sample, '4:05');
-    assert.strictEqual(formattedDuration.valueKind, 'text');
-    assert.strictEqual(formattedDuration.unit, '');
-    assert.strictEqual(formattedDuration.capabilities.numericWidget, false);
     const activityAge = catalogButtons.prepare(catalogReference('net', 'mqtt_rx', 'age'));
     assert.strictEqual(activityAge.sample, '125');
     assert.strictEqual(activityAge.valueKind, 'integer');

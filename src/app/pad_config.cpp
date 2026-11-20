@@ -9,8 +9,10 @@
 #include "button_defaults.h"
 #include "fs_health.h"
 #include "icon_store.h"
+#include "json_key_validation.h"
 #include "log_manager.h"
 #include "pad_cycle.h"
+#include "pad_composition.h"
 #include "pad_validate.h"
 #include "widgets/widget.h"
 
@@ -27,12 +29,13 @@
 #include <atomic>
 #include <ctype.h>
 #include <string.h>
+#include <memory>
 
 #define TAG "PadCfg"
 
 static bool g_fs_mounted = false;
 static std::atomic<SemaphoreHandle_t> g_mutation_mutex{nullptr};
-static uint32_t g_generation = 0;
+static std::atomic<uint32_t> g_generation{0};
 static std::atomic<uint32_t> g_eligible_mask{0};
 
 // In-RAM cache so the LVGL render task (PSRAM stack) never touches flash.
@@ -66,7 +69,7 @@ static PadConfig* pad_config_load_from_flash(uint8_t page,
 // Helpers
 // ============================================================================
 
-static void pad_config_path(uint8_t page, char* buf, size_t buf_len) {
+void pad_config_path(uint8_t page, char* buf, size_t buf_len) {
     snprintf(buf, buf_len, "/config/pad_%u.json", page);
 }
 
@@ -116,6 +119,9 @@ static void pad_config_destroy(PadConfig* config) {
 #endif
         free(config->buttons[index].fill_style);
     }
+#if HAS_DISPLAY || HAS_BUTTON
+    action_storage_clear(config->action_storage);
+#endif
     free(config);
 }
 
@@ -138,6 +144,9 @@ static bool pad_config_resize(PadConfig** config_ptr, uint8_t button_capacity) {
     memcpy(replacement->buttons, config->buttons,
            (size_t)config->button_count * sizeof(ScreenButtonConfig));
     config->button_count = 0;
+#if HAS_DISPLAY || HAS_BUTTON
+    config->action_storage = {};
+#endif
     pad_config_destroy(config);
     *config_ptr = replacement;
     return true;
@@ -172,18 +181,6 @@ static bool cache_uses_template(uint8_t page, uint8_t template_page) {
 // label_style_parse() lives in label_style.cpp (extracted so host-native tests
 // can exercise the DSL tokenizer + binding-color capture without pulling in the
 // full pad_config translation unit).
-
-// Validate a pad binding name: [a-zA-Z][a-zA-Z0-9_]*, non-empty, max len.
-static bool is_valid_binding_name(const char* name) {
-    if (!name || !name[0]) return false;
-    if (!((name[0] >= 'a' && name[0] <= 'z') || (name[0] >= 'A' && name[0] <= 'Z'))) return false;
-    for (const char* p = name + 1; *p; p++) {
-        char c = *p;
-        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-              (c >= '0' && c <= '9') || c == '_')) return false;
-    }
-    return strlen(name) < PAD_BINDING_NAME_MAX_LEN;
-}
 
 static void init_button_defaults(ScreenButtonConfig* btn) {
     memset(btn, 0, sizeof(ScreenButtonConfig));
@@ -258,24 +255,13 @@ static void parse_bindable_field(JsonVariant v, char* out, size_t out_len, const
     strlcpy(out, default_str, out_len);
 }
 
-// Parse a typed action object, with legacy flat key fallback for old pad configs.
-static void parse_pad_action(JsonVariant v, ButtonAction* act, const char* legacy_screen_key, JsonObject obj) {
+static void parse_pad_action(JsonVariant v, ButtonAction* act) {
     memset(act, 0, sizeof(ButtonAction));
 
     if (v.is<JsonObject>()) {
 #if HAS_DISPLAY
         action_parse(v.as<JsonObject>(), *act);
 #endif
-        return;
-    }
-
-    // Legacy flat key fallback: "action_screen" / "lp_action_screen" → type=screen
-    if (legacy_screen_key) {
-        const char* screen = obj[legacy_screen_key] | "";
-        if (screen[0]) {
-            strlcpy(act->type, ACTION_TYPE_SCREEN, CONFIG_ACTION_TYPE_MAX_LEN);
-            strlcpy(act->payload.screen.screen_id, screen, CONFIG_SCREEN_ID_MAX_LEN);
-        }
     }
 }
 
@@ -415,8 +401,7 @@ static bool parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
                          btn_default(defs ? defs->content_pad : nullptr, DEFAULT_BUTTON_CONTENT_PAD), false);
     btn->button_shadow = parse_button_shadow_mode(obj["button_shadow"]);
 
-    // Typed actions — array of up to MAX_BUTTON_ACTIONS sequential actions per gesture.
-    // JSON: "actions": [ { "type": "mqtt", ... }, { "type": "sound_alert", ... } ]
+    // Up to MAX_BUTTON_ACTIONS sequential operations per gesture.
     btn->action_count = 0;
     btn->lp_action_count = 0;
     memset(btn->actions, 0, sizeof(btn->actions));
@@ -427,14 +412,9 @@ static bool parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
         if (v.is<JsonArray>()) {
             JsonArray arr = v.as<JsonArray>();
             for (size_t i = 0; i < arr.size() && btn->action_count < MAX_BUTTON_ACTIONS; i++) {
-                parse_pad_action(arr[i], &btn->actions[btn->action_count], nullptr, obj);
+                parse_pad_action(arr[i], &btn->actions[btn->action_count]);
                 if (btn->actions[btn->action_count].type[0]) btn->action_count++;
             }
-        } else {
-            // Legacy: try singular "action" key (old single-object format)
-            JsonVariant legacy = v.isNull() ? obj["action"].as<JsonVariant>() : v;
-            parse_pad_action(legacy, &btn->actions[0], "action_screen", obj);
-            if (btn->actions[0].type[0]) btn->action_count = 1;
         }
     }
     {
@@ -442,14 +422,9 @@ static bool parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
         if (v.is<JsonArray>()) {
             JsonArray arr = v.as<JsonArray>();
             for (size_t i = 0; i < arr.size() && btn->lp_action_count < MAX_BUTTON_ACTIONS; i++) {
-                parse_pad_action(arr[i], &btn->lp_actions[btn->lp_action_count], nullptr, obj);
+                parse_pad_action(arr[i], &btn->lp_actions[btn->lp_action_count]);
                 if (btn->lp_actions[btn->lp_action_count].type[0]) btn->lp_action_count++;
             }
-        } else {
-            // Legacy: try singular "lp_action" key (old single-object format)
-            JsonVariant legacy = v.isNull() ? obj["lp_action"].as<JsonVariant>() : v;
-            parse_pad_action(legacy, &btn->lp_actions[0], "lp_action_screen", obj);
-            if (btn->lp_actions[0].type[0]) btn->lp_action_count = 1;
         }
     }
 
@@ -564,8 +539,8 @@ bool pad_config_init() {
     // task may have already run data_stream_rebuild() before LittleFS was
     // mounted and found zero configs — this ensures it re-scans.
     if (any_loaded) {
-        g_generation++;
-        LOGI(TAG, "Configs cached, gen=%u", g_generation);
+        [[maybe_unused]] const uint32_t generation = g_generation.fetch_add(1, std::memory_order_release) + 1;
+        LOGI(TAG, "Configs cached, gen=%u", generation);
     }
 
     xSemaphoreGive(mutex);
@@ -596,59 +571,37 @@ void pad_config_unlock_mutations() {
 
 static int select_template_buttons(const PadConfig& out, const PadConfig& tpl,
                                    uint8_t* selected) {
-    bool occupied[MAX_GRID_COLS][MAX_GRID_ROWS] = {};
+    PadTemplateSelection selection(out.cols, out.rows, out.button_count);
     for (uint8_t i = 0; i < out.main_button_count; i++) {
         const ScreenButtonConfig& b = out.buttons[i];
-        uint8_t cs = b.col_span ? b.col_span : 1;
-        uint8_t rs = b.row_span ? b.row_span : 1;
-        for (uint8_t dc = 0; dc < cs; dc++) {
-            for (uint8_t dr = 0; dr < rs; dr++) {
-                uint8_t c = b.col + dc, r = b.row + dr;
-                if (c < MAX_GRID_COLS && r < MAX_GRID_ROWS)
-                    occupied[c][r] = true;
-            }
-        }
+        selection.occupy(b.col, b.row, b.col_span ? b.col_span : 1, b.row_span ? b.row_span : 1);
     }
 
     uint8_t merged = 0;
     for (uint8_t i = 0; i < tpl.main_button_count; i++) {
         const ScreenButtonConfig& tb = tpl.buttons[i];
-        // Skip template buttons outside target grid
-        if (tb.col >= out.cols || tb.row >= out.rows) continue;
-        // Check all cells the template button would occupy
-        uint8_t cs = tb.col_span ? tb.col_span : 1;
-        uint8_t rs = tb.row_span ? tb.row_span : 1;
-        bool conflict = false;
-        for (uint8_t dc = 0; dc < cs && !conflict; dc++) {
-            for (uint8_t dr = 0; dr < rs && !conflict; dr++) {
-                uint8_t c = tb.col + dc, r = tb.row + dr;
-                if (c >= out.cols || r >= out.rows || occupied[c][r])
-                    conflict = true;
-            }
-        }
-        if (conflict) continue;
-        if (out.button_count + merged >= MAX_PAD_BUTTONS) return -1;
+        const int result = selection.select(tb.col, tb.row, tb.col_span ? tb.col_span : 1,
+                                             tb.row_span ? tb.row_span : 1);
+        if (result < 0) return -1;
+        if (!result) continue;
         if (selected) selected[merged] = i;
         merged++;
-        for (uint8_t dc = 0; dc < cs; dc++) {
-            for (uint8_t dr = 0; dr < rs; dr++) {
-                uint8_t c = tb.col + dc, r = tb.row + dr;
-                if (c < MAX_GRID_COLS && r < MAX_GRID_ROWS)
-                    occupied[c][r] = true;
-            }
-        }
     }
     return merged;
 }
 
 // Merge buttons from a template pad into empty grid positions.
 // Target pad's own buttons always win on col/row conflict.
-static bool merge_template_buttons(uint8_t page, PadConfig** out_ptr, bool* owned_failure = nullptr) {
+static bool merge_template_buttons(uint8_t page, PadConfig** out_ptr, bool* owned_failure = nullptr,
+                                    PadConfig* loaded_template = nullptr) {
     PadConfig* out = *out_ptr;
     const int8_t tpl = out->template_pad;
     if (tpl < 0 || tpl >= MAX_PADS || tpl == (int8_t)page) return true;
 
-    PadConfig* tpl_cfg = pad_config_load_from_flash((uint8_t)tpl, true, owned_failure);
+    std::unique_ptr<PadConfig, decltype(&pad_config_release)> owner(
+        loaded_template ? nullptr : pad_config_load_from_flash((uint8_t)tpl, true, owned_failure),
+        pad_config_release);
+    PadConfig* tpl_cfg = loaded_template ? loaded_template : owner.get();
     if (!tpl_cfg) {
         if (!pad_config_exists((uint8_t)tpl)) return true;
         LOGE(TAG, "Pad %u: template pad %d could not be loaded", page, tpl);
@@ -658,7 +611,6 @@ static bool merge_template_buttons(uint8_t page, PadConfig** out_ptr, bool* owne
     const int merged = select_template_buttons(*out, *tpl_cfg, selected);
     if (merged < 0 || !pad_config_resize(out_ptr, out->button_count + merged)) {
         LOGW(TAG, "Pad %u: template merge exceeds capacity or allocation failed", page);
-        pad_config_release(tpl_cfg);
         return false;
     }
     out = *out_ptr;
@@ -678,35 +630,30 @@ static bool merge_template_buttons(uint8_t page, PadConfig** out_ptr, bool* owne
         }
         out->main_button_count += merged;
         out->button_count += merged;
+#if HAS_DISPLAY || HAS_BUTTON
+        action_storage_move(out->action_storage, tpl_cfg->action_storage);
+#endif
     }
 
     // Merge template bindings (target wins on name collision)
     for (uint8_t i = 0; i < tpl_cfg->binding_count; i++) {
-        if (out->binding_count >= PAD_MAX_BINDINGS) break;
         const PadBinding& tb = tpl_cfg->bindings[i];
-        bool exists = false;
-        for (uint8_t j = 0; j < out->binding_count; j++) {
-            if (strcmp(out->bindings[j].name, tb.name) == 0) {
-                exists = true;
-                break;
-            }
-        }
-        if (!exists) {
-            memcpy(&out->bindings[out->binding_count], &tb, sizeof(PadBinding));
-            out->binding_count++;
-        }
+        pad_binding_add(out->bindings, out->binding_count, tb.name, tb.value);
     }
 
     if (merged > 0) {
         LOGT(TAG, "Pad %u: merged %u buttons from template pad %d", page, merged, tpl);
     }
 
-    pad_config_release(tpl_cfg);
     return true;
 }
 
 static PadConfig* pad_config_parse(uint8_t page, JsonDocument& doc, bool* owned_failure = nullptr) {
-    (void)page;
+    const char* action_error = pad_validate_action_version(doc.as<JsonObjectConst>(), false);
+    if (action_error) {
+        LOGE(TAG, "Pad %u: %s", page, action_error);
+        return nullptr;
+    }
     JsonArray buttons = doc["buttons"].as<JsonArray>();
     JsonArray overlay_buttons = doc["overlay_buttons"].as<JsonArray>();
     if ((doc.containsKey("buttons") && buttons.isNull()) ||
@@ -721,6 +668,9 @@ static PadConfig* pad_config_parse(uint8_t page, JsonDocument& doc, bool* owned_
         LOGE(TAG, "Pad %u: OOM for %u buttons", page, button_capacity);
         return nullptr;
     }
+#if HAS_DISPLAY || HAS_BUTTON
+    ActionStorageScope action_storage_scope(&out->action_storage);
+#endif
     strlcpy(out->layout, "grid", CONFIG_LAYOUT_NAME_MAX_LEN);
     out->cols = 3;
     out->rows = 3;
@@ -757,14 +707,11 @@ static PadConfig* pad_config_parse(uint8_t page, JsonDocument& doc, bool* owned_
             const char* name = kv.key().c_str();
             const char* value = kv.value().as<const char*>();
             if (!name || !value) continue;
-            if (!is_valid_binding_name(name)) {
+            if (!pad_binding_name_valid(name)) {
                 LOGW(TAG, "Pad %u: skipping invalid binding name '%s'", page, name);
                 continue;
             }
-            PadBinding& b = out->bindings[out->binding_count];
-            strlcpy(b.name, name, PAD_BINDING_NAME_MAX_LEN);
-            strlcpy(b.value, value, CONFIG_LABEL_MAX_LEN);
-            out->binding_count++;
+            pad_binding_add(out->bindings, out->binding_count, name, value);
         }
         if (out->binding_count > 0) {
             LOGT(TAG, "Pad %u: %u named bindings loaded", page, out->binding_count);
@@ -779,7 +726,7 @@ static PadConfig* pad_config_parse(uint8_t page, JsonDocument& doc, bool* owned_
     // Full-screen actions are deliberately parsed before template buttons are
     // merged so template_pad contributes only buttons and named bindings.
     out->pad_action_count = action_list_parse(doc["pad_actions"], out->pad_actions,
-                                              MAX_BUTTON_ACTIONS, true);
+                                              MAX_BUTTON_ACTIONS);
 
     // Use device-level pad and button defaults for cascading to buttons
 #if HAS_DISPLAY
@@ -807,6 +754,13 @@ static PadConfig* pad_config_parse(uint8_t page, JsonDocument& doc, bool* owned_
         out->button_count++;
     }
 
+#if HAS_DISPLAY || HAS_BUTTON
+    if (out->action_storage.failed) {
+        LOGE(TAG, "Pad %u: failed to allocate or parse operation arguments", page);
+        pad_config_destroy(out);
+        return nullptr;
+    }
+#endif
     LOGT(TAG, "Pad %u loaded: layout=%s cols=%u rows=%u buttons=%u",
          page, out->layout, out->cols, out->rows, out->button_count);
     return out;
@@ -828,6 +782,11 @@ static PadConfig* pad_config_load_from_flash(uint8_t page, bool skip_template, b
     const size_t read = file.readBytes(buffer, size);
     file.close();
     buffer[read] = '\0';
+    if (!json_keys_valid(reinterpret_cast<const uint8_t*>(buffer), read)) {
+        LOGE(TAG, "Pad %u: JSON contains an invalid NUL", page);
+        free(buffer);
+        return nullptr;
+    }
     BasicJsonDocument<PsramJsonAllocator> doc(size * 2 + 256);
     const DeserializationError error = deserializeJson(doc, buffer, read);
     free(buffer);
@@ -870,7 +829,7 @@ void pad_config_rebuild_all_caches() {
         if (!pad_config_exists(i)) continue;
         if (!cache_update(i)) refresh_ok = false;
     }
-    g_generation++;
+    g_generation.fetch_add(1, std::memory_order_release);
     if (refresh_ok) {
         LOGI(TAG, "Rebuilt all pad caches");
     } else {
@@ -997,11 +956,52 @@ static const char* validate_inherited_icon_artifacts(JsonObjectConst pad, uint8_
     return nullptr;
 }
 
+static const char* read_pad_document(uint8_t page, JsonDocument& document) {
+    char path[32];
+    pad_config_path(page, path, sizeof(path));
+    File file = Storage.open(path, "r");
+    if (!file) return "could not read pad configuration";
+    if (!file.size() || file.size() > 64 * 1024) return "invalid pad configuration size";
+    const JsonKeyScanResult scan = json_stream_scan_keys(file);
+    if (scan == JsonKeyScanResult::InvalidNul) return "pad JSON contains an invalid NUL";
+    if (scan != JsonKeyScanResult::Valid) return "could not read pad configuration";
+    const auto error = deserializeJson(document, file);
+    if (error || !document.is<JsonObject>()) return "could not parse pad configuration";
+    return nullptr;
+}
+
+static const char* read_template_document(JsonObjectConst pad, int page, JsonDocument& document) {
+    document.to<JsonObject>();
+    const int template_page = pad["template_pad"] | -1;
+    if (template_page < 0 || template_page >= MAX_PADS || template_page == page ||
+        !pad_config_exists(template_page)) return nullptr;
+    return read_pad_document(template_page, document);
+}
+
+const char* pad_validate_with_template(JsonObjectConst pad, int page, bool tolerate_offgrid,
+                                       const PadValidationGeometry* geometry) {
+    const char* action_error = pad_validate_action_version(pad);
+    if (action_error) return action_error;
+    if (!pad_validation_needs_context())
+        return pad_validate(pad, tolerate_offgrid, geometry);
+
+    BasicJsonDocument<PsramJsonAllocator> template_doc(256);
+    const char* error = read_template_document(pad, page, template_doc);
+    if (error) return error;
+    return pad_validate(pad, tolerate_offgrid, geometry, template_doc.as<JsonObjectConst>());
+}
+
 bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
-                         const char** error) {
+                         const char** error, const PadValidationGeometry* geometry) {
     if (error) *error = nullptr;
+    const StorageMutationGuard storage_guard;
+    if (!storage_guard) return false;
     if (page >= MAX_PADS) return false;
     if (!json || len == 0 || len > 64 * 1024) return false;
+    if (!json_keys_valid(json, len)) {
+        if (error) *error = "pad JSON contains an invalid NUL";
+        return false;
+    }
     const PadConfigMutationGuard guard;
     if (!guard) {
         if (error) *error = "pad configuration unavailable";
@@ -1010,7 +1010,25 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
 
     [[maybe_unused]] const uint32_t started_ms = millis();
     BasicJsonDocument<PsramJsonAllocator> doc(len * 2 + 256);
-    if (deserializeJson(doc, json, len)) return false;
+    if (deserializeJson(doc, json, len)) {
+        if (error) *error = "Invalid JSON";
+        return false;
+    }
+    const char* action_error = pad_validate_action_version(doc.as<JsonObjectConst>());
+    if (action_error) {
+        if (error) *error = action_error;
+        return false;
+    }
+    BasicJsonDocument<PsramJsonAllocator> template_doc(256);
+    const char* validation_error = read_template_document(doc.as<JsonObjectConst>(), page, template_doc);
+    if (!validation_error) {
+        validation_error = pad_validate(doc.as<JsonObjectConst>(), true, geometry,
+                                         template_doc.as<JsonObjectConst>());
+    }
+    if (validation_error) {
+        if (error) *error = validation_error;
+        return false;
+    }
     PadConfig* replacement = pad_config_parse(page, doc);
     if (!replacement) return false;
     LOGI(TAG, "Pad %u save parsed at %lu ms", page, (unsigned long)(millis() - started_ms));
@@ -1026,43 +1044,36 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
             if (icon_error) return reject_icon_error(icon_error);
         }
     }
-    if (replacement->template_pad >= 0 && replacement->template_pad != page) {
-        PadConfig* template_config = pad_config_load_from_flash(replacement->template_pad, true);
-        if (!template_config && pad_config_exists(replacement->template_pad))
-            return reject_icon_error("could not load template pad");
-        if (template_config) {
-            size_t template_length = 0;
-            char* template_json = pad_config_read_raw(replacement->template_pad, &template_length);
-            BasicJsonDocument<PsramJsonAllocator> template_doc(template_length * 2 + 256);
-            const bool loaded = template_json && !deserializeJson(template_doc, template_json, template_length);
-            free(template_json);
-            const char* icon_error = loaded
-                ? validate_inherited_icon_artifacts(doc.as<JsonObjectConst>(), page, *replacement,
-                    template_doc.as<JsonObjectConst>(), *template_config)
-                : "could not validate template icons";
-            pad_config_release(template_config);
-            if (icon_error) return reject_icon_error(icon_error);
-        }
+    std::unique_ptr<PadConfig, decltype(&pad_config_release)> template_config(nullptr, pad_config_release);
+    if (replacement->template_pad >= 0 && replacement->template_pad != page &&
+        pad_config_exists(replacement->template_pad)) {
+        template_config.reset(pad_config_parse(replacement->template_pad, template_doc));
+        if (!template_config) return reject_icon_error("could not load template pad");
+        const char* icon_error = validate_inherited_icon_artifacts(
+            doc.as<JsonObjectConst>(), page, *replacement,
+            template_doc.as<JsonObjectConst>(), *template_config);
+        if (icon_error) return reject_icon_error(icon_error);
     }
     for (uint8_t dependent_page = 0; dependent_page < MAX_PADS; ++dependent_page) {
         if (dependent_page == page || !cache_uses_template(dependent_page, page)) continue;
-        PadConfig* dependent = pad_config_load_from_flash(dependent_page, true);
-        size_t dependent_length = 0;
-        char* dependent_json = dependent ? pad_config_read_raw(dependent_page, &dependent_length) : nullptr;
-        BasicJsonDocument<PsramJsonAllocator> dependent_doc(dependent_length * 2 + 256);
-        const bool loaded = dependent_json && !deserializeJson(dependent_doc, dependent_json, dependent_length);
-        free(dependent_json);
-        const char* icon_error = loaded
+        BasicJsonDocument<PsramJsonAllocator> dependent_doc(256);
+        const char* icon_error = read_pad_document(dependent_page, dependent_doc);
+        PadConfig* dependent = icon_error ? nullptr : pad_config_parse(dependent_page, dependent_doc);
+        if (!icon_error) icon_error = dependent
             ? validate_inherited_icon_artifacts(dependent_doc.as<JsonObjectConst>(), dependent_page,
                 *dependent, doc.as<JsonObjectConst>(), *replacement)
             : "could not validate dependent pad icons";
+        if (!icon_error)
+            icon_error = pad_validate_context(dependent_doc.as<JsonObjectConst>(), doc.as<JsonObjectConst>());
         pad_config_release(dependent);
         if (icon_error) return reject_icon_error(icon_error);
     }
-    if (!merge_template_buttons(page, &replacement)) {
+    if (!merge_template_buttons(page, &replacement, nullptr, template_config.get())) {
         pad_config_release(replacement);
         return false;
     }
+    template_config.reset();
+    template_doc.clear();
     LOGI(TAG, "Pad %u save icons validated at %lu ms", page, (unsigned long)(millis() - started_ms));
 
     char path[32];
@@ -1101,14 +1112,14 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len,
         }
     }
 
-    g_generation++;
+    [[maybe_unused]] const uint32_t generation = g_generation.fetch_add(1, std::memory_order_release) + 1;
     LOGI(TAG, "Pad %u save dependents refreshed at %lu ms", page, (unsigned long)(millis() - started_ms));
 
     // Update fs_health stats
     storage_publish_usage(false);
     LOGI(TAG, "Pad %u save storage usage updated at %lu ms", page, (unsigned long)(millis() - started_ms));
 
-    LOGI(TAG, "Pad %u saved (%u bytes, gen=%u)", page, (unsigned)len, g_generation);
+    LOGI(TAG, "Pad %u saved (%u bytes, gen=%u)", page, (unsigned)len, generation);
     if (!refresh_ok) {
         LOGE(TAG, "Pad %u: dependent cache refresh incomplete", page);
     }
@@ -1153,12 +1164,12 @@ bool pad_config_delete(uint8_t page) {
         }
     }
 
-    g_generation++;
+    [[maybe_unused]] const uint32_t generation = g_generation.fetch_add(1, std::memory_order_release) + 1;
 
     storage_publish_usage(false);
 
     LOGI(TAG, "Pad %u %s (gen=%u)", page,
-         existed ? "deleted" : "cache reconciled", g_generation);
+         existed ? "deleted" : "cache reconciled", generation);
     if (!refresh_ok) {
         LOGE(TAG, "Pad %u: dependent cache refresh incomplete", page);
     }
@@ -1175,9 +1186,16 @@ bool pad_config_exists(uint8_t page) {
 }
 
 char* pad_config_read_raw(uint8_t page, size_t* out_len) {
+    if (!g_fs_mounted) {
+        if (out_len) *out_len = 0;
+        return nullptr;
+    }
+    return pad_config_read_raw_mounted(page, out_len);
+}
+
+char* pad_config_read_raw_mounted(uint8_t page, size_t* out_len) {
     if (out_len) *out_len = 0;
     if (page >= MAX_PADS) return nullptr;
-    if (!g_fs_mounted) return nullptr;
 
     char path[32];
     pad_config_path(page, path, sizeof(path));
@@ -1205,6 +1223,16 @@ char* pad_config_read_raw(uint8_t page, size_t* out_len) {
 
     size_t read = f.readBytes(buf, file_size);
     f.close();
+    if (read != file_size) {
+        LOGE(TAG, "Pad %u: incomplete raw read", page);
+        free(buf);
+        return nullptr;
+    }
+    if (!json_keys_valid(reinterpret_cast<const uint8_t*>(buf), read)) {
+        LOGE(TAG, "Pad %u: stored JSON contains an invalid NUL", page);
+        free(buf);
+        return nullptr;
+    }
     buf[read] = '\0';
 
     if (out_len) *out_len = read;
@@ -1212,7 +1240,7 @@ char* pad_config_read_raw(uint8_t page, size_t* out_len) {
 }
 
 uint32_t pad_config_get_generation() {
-    return g_generation;
+    return g_generation.load(std::memory_order_acquire);
 }
 
 uint32_t pad_config_get_eligible_mask() {

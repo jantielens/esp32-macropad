@@ -55,6 +55,7 @@ Total flags: 394
 - **HAS_IMAGE_LIBRARY** default: `HAS_DISPLAY` — Enable local Storage-backed image loading for pad buttons and slideshows.
 - **HAS_LVGL_EPAPER** default: `false` — Enable the interactive LVGL e-paper refresh pipeline and portal controls.
 - **HAS_MCP** default: `true` — the feature out entirely (saves flash on constrained or locked-down builds).
+- **HAS_MICROPHONE_STREAMING** default: `HAS_AUDIO_INPUT` — Enable live microphone listening in the web portal.
 - **HAS_MQTT** default: `true` — Enable MQTT and Home Assistant integration.
 - **HAS_MUSIC_ANALYSIS** default: `false` — Demand-driven Music MP3 RMS, peak, and spectrum bindings.
 - **HAS_NATIVE_EXTENSIONS** default: `false` — ELF modules loaded from persistent storage at startup.
@@ -75,7 +76,7 @@ Total flags: 394
 - **HAS_TOUCH** default: `false` — Enable touch input support.
 - **HAS_TTF_FONTS** default: `(HAS_DISPLAY && HAS_FILESYSTEM && HAS_PSRAM)` — Uploaded static TrueType fonts require LVGL, persistent storage, and PSRAM.
 - **HAS_USB_HID** default: `false` — Enable native USB HID keyboard, consumer-control, mouse, and gamepad output.
-- **HAS_VOICE_CLIPS** default: `false` — Enable local voice clip recording and management.
+- **HAS_VOICE_NOTES** default: `false` — Enable local Voice Notes recording and management with SD-primary storage.
 
 ### Selectors (*_DRIVER)
 
@@ -171,7 +172,6 @@ Total flags: 394
 
 ### Limits & Tuning
 
-- **ACTION_TYPE_REGISTRY_MAX_TYPES** default: `(no default)` — Room for the built-in catalog and four board-local actions.
 - **AP_MAX_CONNECTIONS** default: `(no default)` — One client is sufficient for first-time provisioning.
 - **AUDIO_TASK_STACK_SIZE** default: `(no default)` — Audio worker stack bytes: 8 KB on ESP32/S3 with tones or PSRAM MP3 scratch; otherwise 24 KB.
 - **BOOT_APPEARANCE_DEFAULT_FONT_SIZE** default: `0` — Device-defined boot appearance defaults; boards may override these values.
@@ -441,37 +441,38 @@ Total flags: 394
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_AUDIO | HAS_AUDIO_INPUT | HAS_AUTO_SHUTDOWN | HAS_BACKLIGHT | HAS_BATTERY_INFO | HAS_BLE | HAS_BLE_HID | HAS_BOOT_LOGO | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CAMERA | HAS_CONFIG_MODE_BUTTON | HAS_DISPLAY | HAS_DISPLAY_DIAGNOSTICS | HAS_EPAPER_FRAME_WAKE_BUTTON | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_GRAYSCALE | HAS_EPAPER_PANEL | HAS_EPAPER_VCOM | HAS_ES7210_MIC | HAS_EXTERNAL_DATA | HAS_FACE_WIDGET | HAS_FILESYSTEM | HAS_FREETYPE_FONTS | HAS_HA_HISTORY | HAS_HA_LIVE | HAS_IMAGE_FETCH | HAS_IMAGE_LIBRARY | HAS_LVGL_EPAPER | HAS_MCP | HAS_MQTT | HAS_MUSIC_ANALYSIS | HAS_NATIVE_EXTENSIONS | HAS_REMOTE_LOG | HAS_RTC | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_AHT10 | HAS_SENSOR_BATTERY_ADC | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_STORAGE_BROWSER | HAS_TOUCH | HAS_TTF_FONTS | HAS_USB_HID | HAS_VOICE_CLIPS |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| waveshare-7.8-interactive |  |  |  |  |  |  |  | ? | ✅ | ✅ |  | ? | ✅ |  |  |  | ? | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ✅ |  | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |  |
-| crowpanel-4.2-interactive |  |  |  |  |  |  |  | ? |  | ✅ |  | ? | ✅ |  |  |  |  | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ✅ |  |  | ✅ |  | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |  |
-| esp32-4848S040 |  |  |  | ✅ |  |  |  | ? |  | ✅ |  | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ |  | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |  |
-| jc3248w535 |  |  |  | ✅ |  |  |  | ? |  | ✅ |  | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ |  | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |  |
-| jc3636w518 |  |  |  | ✅ |  |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? |  | ? |  |  | ✅ |  | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |  |
-| jc3636w518-sd |  |  |  | ✅ |  |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? |  | ? |  |  | ✅ |  | ✅ | ✅ |  | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |  |
-| m5stack-stopwatch | ✅ |  | ✅ | ✅ | ✅ |  |  | ? |  | ✅ |  | ✅ | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ✅ | ? | ✅ |  |  |  | ✅ |  |  | ✅ |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |  |
-| jc4827w543c |  |  |  | ✅ |  |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? |  | ? |  |  | ✅ |  |  |  |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |  |
-| esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  |  | ✅ | ? |  | ✅ |  | ? | ✅ |  |  |  | ? |  |  | ✅ | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |  |
-| esp32-p4-lcd4b-voice | ✅ | ✅ |  | ✅ |  |  | ✅ | ? |  | ✅ |  | ? | ✅ |  |  |  | ? |  |  | ✅ | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |  |
-| m5stack-tab5 | ✅ |  |  | ✅ | ✅ |  | ✅ | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ |  | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |  |
-| m5stack-tab5-sd | ✅ |  |  | ✅ | ✅ |  | ✅ | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ |  | ✅ | ✅ |  | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |  |
-| jc4880p433 | ✅ |  |  | ✅ |  |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |  |
-| jc4880p433-sd | ✅ |  |  | ✅ |  |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ |  | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |  |
-| jc4880p433-shutter | ✅ |  |  | ✅ |  |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? |  | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ |  | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |  |
-| jc4880p433-hx711 | ✅ |  |  | ✅ |  |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ |  | ? |  |  |  |  |  | ✅ |  |  |  | ? | ? | ✅ | ? |  |  |
-| jc4880p433-nau7802 | ✅ |  |  | ✅ |  |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ |  | ? |  |  |  |  |  |  |  | ✅ |  | ? | ? | ✅ | ? |  |  |
-| jc4880p433-darkroom | ✅ |  |  | ✅ |  |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  | ✅ | ? | ? | ✅ | ? |  |  |
-| jc1060p470c | ✅ |  |  | ✅ |  |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |  |
-| jc1060p470c-sd | ✅ |  |  | ✅ |  |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ |  | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |  |
-| esp32c3-withsensors |  |  |  |  |  | ✅ |  | ? |  |  |  | ✅ |  |  |  |  | ? |  |  |  | ? | ? |  | ? | ? | ? | ? | ? |  |  |  |  |  |  |  | ? |  |  |  |  | ✅ |  |  |  |  | ? |  |  | ? |  |  |
-| firebeetle2-esp32c6-aht10 |  |  |  |  | ✅ | ✅ |  | ? |  |  |  | ✅ |  |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ |  |  |  |  | ? |  | ✅ | ✅ |  |  |  |  |  |  | ? |  |  | ? |  |  |
-| inkplate5v2-frame |  |  |  |  | ✅ |  |  | ? |  |  |  | ? |  |  | ✅ |  | ? | ✅ | ✅ |  | ? | ? | ✅ | ? | ? | ? |  | ? |  | ✅ | ✅ |  |  |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |  |
-| inkplate6flick-frame |  |  |  |  | ✅ |  |  | ? |  |  |  | ? |  |  | ✅ |  | ? | ✅ | ✅ |  | ? | ? | ✅ | ? | ? | ? |  | ? |  | ✅ | ✅ |  |  |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |  |
-| inkplate6flick-interactive |  |  |  | ✅ |  |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  | ? | ? | ✅ | ? |  | ? |  |  | ✅ |  | ✅ |  | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |  |
-| reterminal-e1003-frame |  |  |  |  | ✅ |  |  | ? |  |  |  | ? |  |  | ✅ |  | ? | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  | ? |  | ✅ | ✅ |  |  |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |  |
-| reterminal-e1003-interactive |  |  |  |  |  |  | ✅ | ? |  |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ✅ |  | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |  |
-| reterminal-sticky-interactive | ✅ | ✅ | ✅ |  | ✅ | ✅ |  | ? |  | ✅ |  | ✅ | ✅ | ✅ |  |  | ✅ | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ✅ |  |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  | ✅ |
-| reterminal-sticky-interactive-sd | ✅ | ✅ | ✅ |  | ✅ | ✅ |  | ? |  | ✅ |  | ✅ | ✅ | ✅ |  |  | ✅ | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ✅ |  |  | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  | ✅ |
+| board-name | HAS_AUDIO | HAS_AUDIO_INPUT | HAS_AUTO_SHUTDOWN | HAS_BACKLIGHT | HAS_BATTERY_INFO | HAS_BLE | HAS_BLE_HID | HAS_BOOT_LOGO | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CAMERA | HAS_CONFIG_MODE_BUTTON | HAS_DISPLAY | HAS_DISPLAY_DIAGNOSTICS | HAS_EPAPER_FRAME_WAKE_BUTTON | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_GRAYSCALE | HAS_EPAPER_PANEL | HAS_EPAPER_VCOM | HAS_ES7210_MIC | HAS_EXTERNAL_DATA | HAS_FACE_WIDGET | HAS_FILESYSTEM | HAS_FREETYPE_FONTS | HAS_HA_HISTORY | HAS_HA_LIVE | HAS_IMAGE_FETCH | HAS_IMAGE_LIBRARY | HAS_LVGL_EPAPER | HAS_MCP | HAS_MICROPHONE_STREAMING | HAS_MQTT | HAS_MUSIC_ANALYSIS | HAS_NATIVE_EXTENSIONS | HAS_REMOTE_LOG | HAS_RTC | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_AHT10 | HAS_SENSOR_BATTERY_ADC | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_STORAGE_BROWSER | HAS_TOUCH | HAS_TTF_FONTS | HAS_USB_HID | HAS_VOICE_NOTES |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| waveshare-7.8-interactive |  |  |  |  |  |  |  | ? | ✅ | ✅ |  | ? | ✅ |  |  |  | ? | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ? | ✅ |  | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |  |
+| crowpanel-4.2-interactive |  |  |  |  |  |  |  | ? |  | ✅ |  | ? | ✅ |  |  |  |  | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ? | ✅ |  |  | ✅ |  | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |  |
+| esp32-4848S040 |  |  |  | ✅ |  |  |  | ? |  | ✅ |  | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ? | ✅ |  | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |  |
+| jc3248w535 |  |  |  | ✅ |  |  |  | ? |  | ✅ |  | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ? | ✅ |  | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |  |
+| jc3636w518 |  |  |  | ✅ |  |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? |  | ? |  |  | ? | ✅ |  | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |  |
+| jc3636w518-sd |  |  |  | ✅ |  |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? |  | ? |  |  | ? | ✅ |  | ✅ | ✅ |  | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |  |
+| m5stack-stopwatch | ✅ |  | ✅ | ✅ | ✅ |  |  | ? |  | ✅ |  | ✅ | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ✅ | ? | ✅ |  |  |  | ? | ✅ |  |  | ✅ |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |  |
+| jc4827w543c |  |  |  | ✅ |  |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? |  | ? |  |  | ? | ✅ |  |  |  |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |  |
+| esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  |  | ✅ | ? |  | ✅ |  | ? | ✅ |  |  |  | ? |  |  | ✅ | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ? | ✅ | ✅ | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |  |
+| esp32-p4-lcd4b-sd | ✅ | ✅ |  | ✅ |  |  | ✅ | ? |  | ✅ |  | ? | ✅ |  |  |  | ? |  |  | ✅ | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ? | ✅ | ✅ | ✅ | ✅ |  | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ | ✅ |
+| esp32-p4-lcd4b-voice | ✅ | ✅ |  | ✅ |  |  | ✅ | ? |  | ✅ |  | ? | ✅ |  |  |  | ? |  |  | ✅ | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ? | ✅ | ✅ | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |  |
+| m5stack-tab5 | ✅ |  |  | ✅ | ✅ |  | ✅ | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ? | ✅ |  | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |  |
+| m5stack-tab5-sd | ✅ |  |  | ✅ | ✅ |  | ✅ | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ? | ✅ |  | ✅ | ✅ |  | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |  |
+| jc4880p433 | ✅ |  |  | ✅ |  |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ? | ✅ | ✅ | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |  |
+| jc4880p433-sd | ✅ |  |  | ✅ |  |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ? | ✅ | ✅ | ✅ | ✅ |  | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |  |
+| jc4880p433-shutter | ✅ |  |  | ✅ |  |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? |  | ? |  | ✅ | ? | ✅ | ✅ | ✅ | ✅ |  | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |  |
+| jc4880p433-hx711 | ✅ |  |  | ✅ |  |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ? | ✅ | ✅ | ✅ | ✅ |  | ? |  |  |  |  |  | ✅ |  |  |  | ? | ? | ✅ | ? |  |  |
+| jc4880p433-nau7802 | ✅ |  |  | ✅ |  |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ? | ✅ | ✅ | ✅ | ✅ |  | ? |  |  |  |  |  |  |  | ✅ |  | ? | ? | ✅ | ? |  |  |
+| jc4880p433-darkroom | ✅ |  |  | ✅ |  |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ? | ✅ | ✅ | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  | ✅ | ? | ? | ✅ | ? |  |  |
+| jc1060p470c | ✅ |  |  | ✅ |  |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ? | ✅ | ✅ | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |  |
+| jc1060p470c-sd | ✅ |  |  | ✅ |  |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ? | ✅ | ✅ | ✅ | ✅ |  | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |  |
+| esp32c3-withsensors |  |  |  |  |  | ✅ |  | ? |  |  |  | ✅ |  |  |  |  | ? |  |  |  | ? | ? |  | ? | ? | ? | ? | ? |  |  | ? |  |  |  |  |  | ? |  |  |  |  | ✅ |  |  |  |  | ? |  |  | ? |  |  |
+| firebeetle2-esp32c6-aht10 |  |  |  |  | ✅ | ✅ |  | ? |  |  |  | ✅ |  |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ? | ✅ |  |  |  |  | ? |  | ✅ | ✅ |  |  |  |  |  |  | ? |  |  | ? |  |  |
+| inkplate5v2-frame |  |  |  |  | ✅ |  |  | ? |  |  |  | ? |  |  | ✅ |  | ? | ✅ | ✅ |  | ? | ? | ✅ | ? | ? | ? |  | ? |  | ✅ | ? | ✅ |  |  |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |  |
+| inkplate6flick-frame |  |  |  |  | ✅ |  |  | ? |  |  |  | ? |  |  | ✅ |  | ? | ✅ | ✅ |  | ? | ? | ✅ | ? | ? | ? |  | ? |  | ✅ | ? | ✅ |  |  |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |  |
+| inkplate6flick-interactive |  |  |  | ✅ |  |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  | ? | ? | ✅ | ? |  | ? |  |  | ✅ |  | ? | ✅ |  | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |  |
+| reterminal-e1003-frame |  |  |  |  | ✅ |  |  | ? |  |  |  | ? |  |  | ✅ |  | ? | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  | ? |  | ✅ | ? | ✅ |  |  |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |  |
+| reterminal-e1003-interactive |  |  |  |  |  |  | ✅ | ? |  |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ? | ✅ |  | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |  |
+| reterminal-sticky-interactive | ✅ | ✅ | ✅ |  | ✅ | ✅ |  | ? |  | ✅ |  | ✅ | ✅ | ✅ |  |  | ✅ | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ? | ✅ |  |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |  |
+| reterminal-sticky-interactive-sd | ✅ | ✅ | ✅ |  | ✅ | ✅ |  | ? |  | ✅ |  | ✅ | ✅ | ✅ |  |  | ✅ | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ? | ✅ |  |  | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -488,6 +489,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | m5stack-stopwatch | AUDIO_INPUT_DRIVER_ES8311 | AUDIO_OUTPUT_DRIVER_ES8311 | BLE_BACKEND_ARDUINO_CORE | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX_CO5300 | DISPLAY_SHAPE_ROUND | RTC_DRIVER_NONE | TOUCH_DRIVER_CST820B_WIRE |
 | jc4827w543c | AUDIO_INPUT_DRIVER_ES8311 | AUDIO_OUTPUT_DRIVER_ES8311 | BLE_BACKEND_ARDUINO_CORE | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX_NV3041A | DISPLAY_SHAPE_RECT | RTC_DRIVER_NONE | TOUCH_DRIVER_GT911 |
 | esp32-p4-lcd4b | AUDIO_INPUT_DRIVER_ES8311 | AUDIO_OUTPUT_DRIVER_ES8311 | BLE_BACKEND_ARDUINO_CORE | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ST7703_DSI | DISPLAY_SHAPE_SQUARE | RTC_DRIVER_NONE | TOUCH_DRIVER_GT911 |
+| esp32-p4-lcd4b-sd | AUDIO_INPUT_DRIVER_ES8311 | AUDIO_OUTPUT_DRIVER_ES8311 | BLE_BACKEND_ARDUINO_CORE | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ST7703_DSI | DISPLAY_SHAPE_SQUARE | RTC_DRIVER_NONE | TOUCH_DRIVER_GT911 |
 | esp32-p4-lcd4b-voice | AUDIO_INPUT_DRIVER_ES8311 | AUDIO_OUTPUT_DRIVER_ES8311 | BLE_BACKEND_ARDUINO_CORE | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ST7703_DSI | DISPLAY_SHAPE_SQUARE | RTC_DRIVER_NONE | TOUCH_DRIVER_GT911 |
 | m5stack-tab5 | AUDIO_INPUT_DRIVER_ES8311 | AUDIO_OUTPUT_DRIVER_ES8388 | BLE_BACKEND_ARDUINO_CORE | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_TAB5_DSI | DISPLAY_SHAPE_RECT | RTC_DRIVER_NONE | TOUCH_DRIVER_ST7123 |
 | m5stack-tab5-sd | AUDIO_INPUT_DRIVER_ES8311 | AUDIO_OUTPUT_DRIVER_ES8388 | BLE_BACKEND_ARDUINO_CORE | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_TAB5_DSI | DISPLAY_SHAPE_RECT | RTC_DRIVER_NONE | TOUCH_DRIVER_ST7123 |
@@ -532,6 +534,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/ha_discovery.cpp
   - src/app/health_binding.cpp
   - src/app/hw_buttons.cpp
+  - src/app/list_source_health.cpp
   - src/app/mcp_tools_config.cpp
   - src/app/mqtt_audio.cpp
   - src/app/mqtt_audio.h
@@ -553,11 +556,19 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/audio_input.h
   - src/app/audio_input_binding.cpp
   - src/app/audio_input_drivers.cpp
+  - src/app/audio_input_processing.h
   - src/app/binding_builtin_schemes.cpp
   - src/app/board_config.h
+  - src/app/config_manager.cpp
+  - src/app/config_manager.h
   - src/app/drivers/es8311_audio_driver.cpp
   - src/app/drivers/es8311_audio_driver.h
   - src/app/drivers/pcm510xa_audio_driver.cpp
+  - src/app/portal_components.cpp
+  - src/app/web_portal_config.cpp
+  - src/app/web_portal_pages.cpp
+  - src/app/web_portal_pages.h
+  - src/app/web_portal_routes.cpp
 - **HAS_AUTO_SHUTDOWN**
   - src/app/action_continuation.cpp
   - src/app/action_continuation.h
@@ -707,6 +718,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/action_parse.h
   - src/app/action_registry.cpp
   - src/app/action_registry.h
+  - src/app/action_run_context.cpp
+  - src/app/action_run_context.h
+  - src/app/action_storage.cpp
+  - src/app/action_storage.h
   - src/app/action_validate.cpp
   - src/app/action_validate.h
   - src/app/actions/alarm_mp3_action.cpp
@@ -739,6 +754,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/components/hw_buttons_component.cpp
   - src/app/device_dialog.cpp
+  - src/app/event_binding.cpp
+  - src/app/event_binding.h
   - src/app/expr_binding.cpp
   - src/app/gamepad_hid.cpp
   - src/app/ha_service.cpp
@@ -752,6 +769,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_press_button.h
   - src/app/mcp_tools_config.cpp
   - src/app/mcp_tools_core.cpp
+  - src/app/pad_config.cpp
+  - src/app/pad_config.h
   - src/app/portal_components.cpp
   - src/app/runtime_variables.cpp
   - src/app/var_binding.cpp
@@ -804,6 +823,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/action_parse.h
   - src/app/action_registry.cpp
   - src/app/action_registry.h
+  - src/app/action_run_context.cpp
+  - src/app/action_run_context.h
+  - src/app/action_storage.cpp
+  - src/app/action_storage.h
   - src/app/action_validate.cpp
   - src/app/action_validate.h
   - src/app/actions/alarm_mp3_action.cpp
@@ -820,6 +843,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/gamepad_action.cpp
   - src/app/actions/ha_service_action.cpp
   - src/app/actions/key_action.cpp
+  - src/app/actions/list_navigation_action.cpp
   - src/app/actions/mouse_button_action.cpp
   - src/app/actions/mqtt_action.cpp
   - src/app/actions/music_action.cpp
@@ -832,6 +856,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/system_action.cpp
   - src/app/actions/timer_action.cpp
   - src/app/actions/visual_alert_action.cpp
+  - src/app/actions/voice_note_delete_action.cpp
+  - src/app/actions/voice_note_load_action.cpp
   - src/app/actions/volume_action.cpp
   - src/app/app.ino
   - src/app/audio_input_binding.cpp
@@ -839,6 +865,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/binding_builtin_schemes.cpp
   - src/app/binding_sources.cpp
   - src/app/binding_sources.h
+  - src/app/binding_value.cpp
   - src/app/board_config.h
   - src/app/boot_actions.cpp
   - src/app/boot_actions.h
@@ -864,11 +891,12 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/darkroom_timer/shelly_actions.cpp
   - src/app/device_classes/darkroom_timer/test_strip_actions.cpp
   - src/app/device_classes/darkroom_timer/web_portal_prints.cpp
+  - src/app/device_classes/shutter_tester/list_source_shutter_tests.cpp
   - src/app/device_classes/shutter_tester/shutter_actions.cpp
   - src/app/device_classes/shutter_tester/shutter_align_binding.cpp
   - src/app/device_classes/shutter_tester/shutter_align_binding.h
   - src/app/device_classes/shutter_tester/shutter_binding.cpp
-  - src/app/device_classes/shutter_tester/web/list_provider_shutter_tests.cpp
+  - src/app/device_classes/shutter_tester/shutter_test_scripts.cpp
   - src/app/device_classes/shutter_tester/widgets/waveform_widget.cpp
   - src/app/device_classes/shutter_tester_device_class.cpp
   - src/app/device_dialog.cpp
@@ -880,6 +908,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/display_manager_api.cpp
   - src/app/display_screen_nav.cpp
   - src/app/display_task.cpp
+  - src/app/event_binding.cpp
+  - src/app/event_binding.h
   - src/app/expr_binding.cpp
   - src/app/freetype_mono_font.cpp
   - src/app/freetype_mono_font.h
@@ -889,16 +919,26 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/ha_service.cpp
   - src/app/ha_service.h
   - src/app/health_binding.cpp
-  - src/app/health_table_builder.cpp
   - src/app/hw_buttons.cpp
   - src/app/icon_store.cpp
   - src/app/icon_store.h
+  - src/app/item_binding.cpp
+  - src/app/item_binding.h
+  - src/app/item_binding_scheme.cpp
+  - src/app/item_binding_scheme.h
   - src/app/keyboard_hid.cpp
   - src/app/label_style.cpp
-  - src/app/list_binding.cpp
-  - src/app/list_provider.cpp
-  - src/app/list_provider.h
-  - src/app/list_provider_pads.cpp
+  - src/app/list_source.cpp
+  - src/app/list_source.h
+  - src/app/list_source_health.cpp
+  - src/app/list_source_health.h
+  - src/app/list_source_pads.cpp
+  - src/app/list_source_pads.h
+  - src/app/list_source_service.cpp
+  - src/app/list_source_voice_notes.cpp
+  - src/app/list_source_voice_notes.h
+  - src/app/loaded_data.cpp
+  - src/app/loaded_data.h
   - src/app/lv_conf.h
   - src/app/lvgl_heap.cpp
   - src/app/mcp_press_button.cpp
@@ -924,6 +964,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/pad_block.cpp
   - src/app/pad_block.h
   - src/app/pad_config.cpp
+  - src/app/pad_config.h
+  - src/app/pad_config_list.cpp
   - src/app/pad_font_cache.cpp
   - src/app/pad_resolve_request.cpp
   - src/app/pad_resolve_request.h
@@ -960,8 +1002,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/var_binding.cpp
   - src/app/visual_alert.cpp
   - src/app/visual_alert.h
-  - src/app/voice_clips_binding.cpp
-  - src/app/voice_clips_binding.h
+  - src/app/voice_notes_binding.cpp
+  - src/app/voice_notes_binding.h
+  - src/app/voice_notes_loaded.cpp
+  - src/app/voice_notes_loaded.h
   - src/app/web_mcp.cpp
   - src/app/web_portal.cpp
   - src/app/web_portal_config.cpp
@@ -976,6 +1020,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_routes.cpp
   - src/app/web_portal_screenshot.cpp
   - src/app/web_portal_screenshot.h
+  - src/app/welcome_pad.cpp
+  - src/app/welcome_pad.h
   - src/app/widgets.cpp
   - src/app/widgets/bar_chart_widget.cpp
   - src/app/widgets/camera_preview_widget.cpp
@@ -983,7 +1029,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/gamepad_button_widget.cpp
   - src/app/widgets/gamepad_joystick_widget.cpp
   - src/app/widgets/gauge_widget.cpp
+  - src/app/widgets/list_config.cpp
+  - src/app/widgets/list_config.h
   - src/app/widgets/list_widget.cpp
+  - src/app/widgets/list_widget.h
   - src/app/widgets/mousepad_widget.cpp
   - src/app/widgets/numericrocker_widget.cpp
   - src/app/widgets/option_selector_config.cpp
@@ -995,6 +1044,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/slider_widget.cpp
   - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/table_widget.cpp
+  - src/app/widgets/text_reader_widget.cpp
+  - src/app/widgets/text_reader_widget.h
   - src/app/widgets/toggle_widget.cpp
   - src/app/widgets/toggle_widget.h
   - src/app/widgets/widget.cpp
@@ -1069,11 +1120,14 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/widgets/face_widget.cpp
 - **HAS_FILESYSTEM**
+  - src/app/app.ino
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/storage.cpp
   - src/app/storage.h
   - src/app/web_portal_utils.cpp
+  - src/app/welcome_pad.cpp
+  - src/app/welcome_pad.h
 - **HAS_FREETYPE_FONTS**
   - src/app/board_config.h
   - src/app/display_task.cpp
@@ -1093,8 +1147,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HAS_HA_LIVE**
   - src/app/action_dispatch.cpp
   - src/app/action_dispatch.h
-  - src/app/action_registry.cpp
-  - src/app/action_registry.h
   - src/app/app.ino
   - src/app/binding_builtin_schemes.cpp
   - src/app/binding_sources.cpp
@@ -1170,7 +1222,15 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_pages.cpp
   - src/app/web_portal_pages.h
   - src/app/web_portal_routes.cpp
+  - src/app/widgets/list_config.cpp
+  - src/app/widgets/list_widget.cpp
+  - src/app/widgets/text_reader_widget.cpp
 - **HAS_MCP**
+  - src/app/action_list.cpp
+  - src/app/action_list.h
+  - src/app/action_run_context.cpp
+  - src/app/action_run_context.h
+  - src/app/actions/ha_service_action.cpp
   - src/app/binding_value.cpp
   - src/app/binding_value.h
   - src/app/board_config.h
@@ -1226,15 +1286,22 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/slider_widget.cpp
   - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/table_widget.cpp
+  - src/app/widgets/text_reader_widget.cpp
   - src/app/widgets/toggle_widget.cpp
   - src/app/widgets/widget.cpp
   - src/app/widgets/widget.h
   - src/app/widgets/widget_registry.h
+- **HAS_MICROPHONE_STREAMING**
+  - src/app/board_config.h
+  - src/app/components/microphone_component.cpp
+  - src/app/web_portal_live_microphone.cpp
+  - src/app/web_portal_live_microphone.h
+  - src/app/web_portal_pages.cpp
+  - src/app/web_portal_pages.h
+  - src/app/web_portal_routes.cpp
 - **HAS_MQTT**
   - src/app/action_dispatch.cpp
   - src/app/action_dispatch.h
-  - src/app/action_registry.cpp
-  - src/app/action_registry.h
   - src/app/actions/mqtt_action.cpp
   - src/app/app.ino
   - src/app/binding_builtin_schemes.cpp
@@ -1436,7 +1503,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/confirm_action.cpp
   - src/app/app.ino
   - src/app/board_config.h
-  - src/app/config_manager.cpp
   - src/app/device_dialog.cpp
   - src/app/display_manager.cpp
   - src/app/display_manager.h
@@ -1461,9 +1527,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_screenshot.h
   - src/app/widgets/gamepad_button_widget.cpp
   - src/app/widgets/gamepad_joystick_widget.cpp
+  - src/app/widgets/list_widget.cpp
   - src/app/widgets/mousepad_widget.cpp
   - src/app/widgets/scrollpad_widget.cpp
   - src/app/widgets/slider_widget.cpp
+  - src/app/widgets/text_reader_widget.cpp
 - **HAS_TTF_FONTS**
   - src/app/board_config.h
   - src/app/display_manager.cpp
@@ -1513,34 +1581,53 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/boards/esp32-p4-lcd4b/board_overrides.h
   - src/boards/jc1060p470c/board_overrides.h
   - src/boards/jc4880p433/board_overrides.h
-- **HAS_VOICE_CLIPS**
-  - src/app/action_registry.cpp
-  - src/app/actions/voice_clip_action.cpp
+- **HAS_VOICE_NOTES**
+  - src/app/actions/voice_note_delete_action.cpp
+  - src/app/actions/voice_note_load_action.cpp
+  - src/app/actions/voice_note_process_action.cpp
+  - src/app/actions/voice_note_record_action.cpp
   - src/app/app.ino
   - src/app/binding_builtin_schemes.cpp
   - src/app/board_config.h
+  - src/app/config_manager.cpp
+  - src/app/config_manager.h
   - src/app/drivers/es8311_audio_driver.cpp
   - src/app/drivers/es8311_audio_driver.h
   - src/app/fs_indexed_store.cpp
+  - src/app/list_source_voice_notes.cpp
+  - src/app/list_source_voice_notes.h
   - src/app/pad_config.h
   - src/app/portal_components.cpp
   - src/app/reboot_service.cpp
-  - src/app/voice_clip_range.cpp
-  - src/app/voice_clip_range.h
-  - src/app/voice_clips.cpp
-  - src/app/voice_clips.h
-  - src/app/voice_clips_binding.cpp
-  - src/app/voice_clips_binding.h
-  - src/app/voice_clips_file.h
+  - src/app/voice_note_range.cpp
+  - src/app/voice_note_range.h
+  - src/app/voice_notes.cpp
+  - src/app/voice_notes.h
+  - src/app/voice_notes_binding.cpp
+  - src/app/voice_notes_binding.h
+  - src/app/voice_notes_enrichment.cpp
+  - src/app/voice_notes_enrichment.h
+  - src/app/voice_notes_enrichment_request.cpp
+  - src/app/voice_notes_enrichment_request.h
+  - src/app/voice_notes_file.h
+  - src/app/voice_notes_loaded.cpp
+  - src/app/voice_notes_loaded.h
+  - src/app/voice_notes_metadata.cpp
+  - src/app/voice_notes_processing.cpp
+  - src/app/voice_notes_processing.h
+  - src/app/voice_notes_transcription_request.cpp
+  - src/app/voice_notes_transcription_request.h
+  - src/app/voice_notes_transport.h
   - src/app/voice_wav.cpp
-  - src/app/voice_wav_store.cpp
+  - src/app/web_portal_component_api.cpp
   - src/app/web_portal_config.cpp
   - src/app/web_portal_firmware.cpp
   - src/app/web_portal_ota.cpp
   - src/app/web_portal_pages.cpp
   - src/app/web_portal_pages.h
   - src/app/web_portal_routes.cpp
-  - src/boards/reterminal-sticky-interactive/board_overrides.h
+  - src/boards/esp32-p4-lcd4b-sd/board_overrides.h
+  - src/boards/reterminal-sticky-interactive-sd/board_overrides.h
   - src/boards/reterminal-sticky-interactive/sticky_hardware.cpp
 - **AUDIO_INPUT_DRIVER**
   - src/app/audio_input_drivers.cpp
@@ -1583,13 +1670,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/touch_manager.cpp
 - **ACTION_CONTINUATION_SLOTS**
   - src/app/board_config.h
-- **ACTION_TYPE_REGISTRY_MAX_TYPES**
-  - src/app/action_registry.cpp
 - **ALARM_ENABLED**
   - src/app/actions/alarm_action.cpp
   - src/app/actions/alarm_mp3_action.cpp
   - src/app/actions/alarm_tone_action.cpp
-  - src/app/actions/sound_alert_action.cpp
   - src/app/alarm_binding.cpp
   - src/app/alarm_manager.cpp
   - src/app/alarm_manager.h
@@ -1960,12 +2044,15 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sensors.cpp
   - src/app/time_service.cpp
   - src/app/web_portal_config.cpp
+  - src/app/welcome_pad.cpp
+  - src/app/welcome_pad.h
   - src/boards/reterminal-e1003-frame/drivers/reterminal_e1003_driver.cpp
 - **IS_SHUTTER_TESTER**
   - src/app/board_config.h
   - src/app/device_class_registry.cpp
   - src/app/device_classes.cpp
   - src/app/device_classes/shutter_tester/components/shutter_session_actions_component.cpp
+  - src/app/device_classes/shutter_tester/list_source_shutter_tests.cpp
   - src/app/device_classes/shutter_tester/mcp/mcp_tools_shutter.cpp
   - src/app/device_classes/shutter_tester/shutter_actions.cpp
   - src/app/device_classes/shutter_tester/shutter_adc.cpp
@@ -1987,7 +2074,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/shutter_tester/shutter_session_actions.h
   - src/app/device_classes/shutter_tester/shutter_test_scripts.cpp
   - src/app/device_classes/shutter_tester/shutter_test_scripts.h
-  - src/app/device_classes/shutter_tester/web/list_provider_shutter_tests.cpp
   - src/app/device_classes/shutter_tester/web/portal_shutter_sessions.cpp
   - src/app/device_classes/shutter_tester/web/portal_shutter_tests.cpp
   - src/app/device_classes/shutter_tester/widgets/waveform_widget.cpp
@@ -2188,7 +2274,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **SD_STORAGE_SPI**
   - src/app/board_config.h
-  - src/app/components/voice_clips_component.cpp
+  - src/app/components/voice_notes_component.cpp
   - src/app/fs_health.cpp
   - src/app/sd_storage.cpp
   - src/app/storage.h
@@ -2351,7 +2437,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **USE_SD_STORAGE**
   - src/app/app.ino
   - src/app/board_config.h
-  - src/app/components/voice_clips_component.cpp
+  - src/app/components/voice_notes_component.cpp
   - src/app/config_manager.cpp
   - src/app/display_manager.cpp
   - src/app/font_store.cpp

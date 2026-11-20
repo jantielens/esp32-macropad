@@ -38,6 +38,13 @@ this target, then **Upload Firmware**. This writes the OTA application slot.
 Do not upload a merged full-flash image, bootloader, or partition-table binary
 through the application uploader.
 
+If uploads are unreliable, select **Boot into OTA mode** first and wait for
+the device to reconnect. This one-shot mode disables Bluetooth and MQTT without
+changing their saved settings. The portal returns to **Firmware > Manual Upload**
+after reconnecting; upload the file there. If reconnection fails, reconnect
+manually and open the portal again. The next reboot, including one after a failed
+upload, returns the device to its normal operating mode.
+
 The progress/reconnection dialog is not proof of a successful new boot.
 After reconnection, check **Firmware > Version Info**, the header's firmware
 version, and one representative device function. A network error near upload

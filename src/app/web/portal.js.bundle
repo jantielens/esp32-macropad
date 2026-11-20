@@ -1,21 +1,16 @@
 # Bundle manifest for portal.js
 #
-# JS modules are concatenated (in order) into NAMED chunks. Each chunk is
-# independently minified + gzipped and emitted as its own PROGMEM array.
+# JS modules are selected in dependency order for the actual compiler config,
+# then concatenated, minified, and gzipped once.
 #
 # Chunk markers:
-#   # [chunk:NAME]            — always-on chunk
-#   # [chunk:NAME HAS_FLAG ...] — included only when every listed flag is true
+#   # [chunk:NAME]            - always-on chunk
+#   # [chunk:NAME EXPRESSION] - C-preprocessor feature predicate
 #
 # The first marker opens the first chunk; each subsequent marker closes the
-# previous one. Files before any marker are rejected. Disabled chunks are
-# compiled out via #if guards in web_assets.h, so they never reach flash.
-#
-# Build-time assembly: the minifier enumerates the unique HAS_* flag set
-# across chunks (bounded by the generator's variant limit), and for each reachable combination
-# concatenates the chunks whose flag is unset OR matches the combination,
-# then gzips ONCE. Each variant is emitted as an #if-guarded PROGMEM blob
-# under the same symbol name (portal_js_gz), so exactly one variant links.
+# previous one. Predicates support &&, ||, !, and parentheses. The generator
+# uses the firmware compiler to evaluate them, never enumerating combinations.
+# web_assets.h rejects compilation when its selection disagrees with firmware.
 #
 # Runtime loading: shell.html issues a single GET /portal.js, which returns
 # the one matching combined-gzip blob in a single HTTP response.
@@ -36,7 +31,7 @@ portal_expression_builder.js
 # [chunk:catalog_bindings HAS_DISPLAY]
 portal_binding_builder_catalog.js
 
-# [chunk:mqtt_bindings HAS_MQTT HAS_DISPLAY]
+# [chunk:mqtt_bindings HAS_MQTT && HAS_DISPLAY]
 portal_binding_builder_mqtt.js
 
 # [chunk:ha_bindings HAS_HA_LIVE]
@@ -46,37 +41,15 @@ portal_binding_builder_ha.js
 portal_button_templates.js
 portal_button_builder.js
 
-# [chunk:actions HAS_DISPLAY]
-# Action editor + config actions UI: only reachable from pad/swipe/boot/timer
-# editors, all of which are HAS_DISPLAY-gated fragments.
+# [chunk:actions HAS_DISPLAY || HAS_BUTTON]
+# Catalog-driven action editor shared by pad and hardware-button editors.
 portal_action_editor.js
+# [chunk:action_screens HAS_DISPLAY]
 portal_action_editor_screen.js
-portal_action_editor_cycle_pad.js
-portal_action_editor_mqtt.js
-portal_action_editor_key.js
-portal_action_editor_sound_alert.js
-portal_action_editor_timer.js
-portal_action_editor_notify.js
-portal_action_editor_visual_alert.js
-portal_action_editor_delay.js
+# [chunk:gamepad HAS_DISPLAY && HAS_TOUCH && (HAS_USB_HID || HAS_BLE_HID)]
 portal_action_editor_gamepad.js
+# [chunk:config_actions HAS_DISPLAY || HAS_BUTTON || HAS_SOUND_PLAYER]
 portal_config_actions.js
-
-# Home Assistant Service action-editor extension. Registers the "ha_service"
-# type with the shared editor via the _actionEditorExtensions hook array, so
-# it must come after portal_action_editor.js (which defines the hook). Core
-# feature (not device-class), so it lives under src/app/web/.
-portal_action_editor_ha.js
-portal_action_editor_alarm.js
-
-# [chunk:shutter_actions IS_SHUTTER_TESTER]
-# Shutter Tester action-editor extension. Registers the "shutter" action type
-# with the shared editor via the _actionEditorExtensions hook array, so only
-# shutter-tester builds pay the flash cost. Must come after the actions chunk
-# (which defines _actionEditorExtensions). Lives under
-# src/app/device_classes/shutter_tester/web/ — the asset bundler scans
-# device_classes/*/web/ for *.js files.
-portal_action_editor_shutter.js
 
 # [chunk:shutter_pages IS_SHUTTER_TESTER]
 # Shutter Tester portal pages: Sensor Configuration, Session Save Actions,
@@ -113,7 +86,9 @@ portal_extensions.js
 
 # [chunk:pad HAS_DISPLAY]
 # Pad editor — only consumed by the pad editor fragment on display boards.
+# [chunk:image_library HAS_IMAGE_LIBRARY]
 portal_image_library.js
+# [chunk:pad_editor HAS_DISPLAY]
 portal_pad_colors.js
 portal_pad_io.js
 portal_pad_blocks.js
@@ -143,12 +118,6 @@ portal.js
 # the shell chunk is immaterial.
 epaper_init.js
 
-# [chunk:coffee_scale_actions IS_COFFEE_SCALE]
-# Coffee Scale action-editor extensions. Registers "scale" + "brew" types
-# with the shared editor via the _actionEditorExtensions hook array. Must come
-# after the actions chunk (which defines _actionEditorExtensions).
-portal_action_editor_scale.js
-
 # [chunk:coffee_scale_pages IS_COFFEE_SCALE]
 # Coffee Scale portal pages: scale calibration, brew session list/detail, and
 # brew template editor. Each module installs its own init_<id>_fragment()
@@ -160,21 +129,12 @@ portal_brews.js
 portal_brews_charts.js
 portal_brews_templates.js
 
-# [chunk:darkroom_actions IS_DARKROOM_TIMER]
-# Darkroom Timer action-editor extension. Registers the expose/strip/meter/
-# print/shelly types with the shared editor via the _actionEditorExtensions
-# hook array. Must come after the actions chunk (which defines the hook).
-portal_action_editor_darkroom.js
-
 # [chunk:darkroom_pages IS_DARKROOM_TIMER]
 # Darkroom Timer portal pages: relay-config init + print session log viewer.
 # portal_darkroom_init.js owns the relay-slot editor helpers and the
 # init_<id>_fragment() handlers that portal_fragment_init.js invokes on load.
 portal_darkroom_init.js
 portal_prints.js
-
-# [chunk:voice_actions IS_VOICE_ASSISTANT]
-portal_action_editor_voice.js
 
 # [chunk:voice_pages IS_VOICE_ASSISTANT]
 portal_voice.js

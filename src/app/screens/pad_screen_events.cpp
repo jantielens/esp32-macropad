@@ -1,10 +1,16 @@
 #include "pad_screen.h"
 #include "../action_registry.h"
+#include "../event_binding.h"
 #include "../display_manager.h"
 #include "../touch_manager.h"
 #include "../widgets/numericrocker_zones.h"
 #include "../widgets/toggle_widget.h"
+#if HAS_PSRAM
+#include "../widgets/list_config.h"
+#include "../widgets/list_widget.h"
+#endif
 #include <core/lv_obj_event_private.h>
+#include <misc/lv_area_private.h>
 #include <cstring>
 #include <esp_timer.h>
 
@@ -90,6 +96,9 @@ uint8_t PadScreen::navigationZoneCount(const ButtonTile& tile) const {
     if ((padActionOverlay && padActionCount) ||
         !tile.obj || lv_obj_has_flag(tile.obj, LV_OBJ_FLAG_HIDDEN) ||
         lv_obj_has_state(tile.obj, LV_STATE_DISABLED) || coveredByOverlay(tile)) return 0;
+#if HAS_PSRAM
+    if (tile.widget_type && !strcmp(tile.widget_type->name, "list")) return 0;
+#endif
     if (tile.widget_type && strcmp(tile.widget_type->name, "toggle") == 0)
         return toggle_interactive(&tile.widget_state) ? 1 : 0;
     if (tile.widget_type && strcmp(tile.widget_type->name, "numericrocker") == 0) {
@@ -99,6 +108,26 @@ uint8_t PadScreen::navigationZoneCount(const ButtonTile& tile) const {
     if (!tile.action_count && !tile.lp_action_count) return 0;
     return tile.widget_type && strcmp(tile.widget_type->name, "rocker") == 0 ? 2 : 1;
 }
+
+#if HAS_PSRAM
+bool PadScreen::navigateList(const char* target, const char* command) {
+    if (!target || !command || !tiles || (padActionOverlay && padActionCount)) return false;
+    for (uint8_t index = 0; index < tileCount; ++index) {
+        ButtonTile& tile = tiles[index];
+        if (!tile.widget_type || strcmp(tile.widget_type->name, "list") || !tile.obj ||
+            lv_obj_has_flag(tile.obj, LV_OBJ_FLAG_HIDDEN) ||
+            lv_obj_has_state(tile.obj, LV_STATE_DISABLED) || coveredByOverlay(tile)) continue;
+        const ListConfig* config = list_config(tile.widget_cfg.data);
+        if (config && !strcmp(config->id, target)) {
+            const uint64_t started = esp_timer_get_time();
+            const bool result = list_widget_command(&tile.widget_state, command);
+            if (result && displayManager) displayManager->interactionChanged(started);
+            return result;
+        }
+    }
+    return false;
+}
+#endif
 
 lv_area_t PadScreen::navigationArea(const ButtonTile& tile, uint8_t zone) const {
     lv_area_t area;
@@ -350,24 +379,46 @@ void PadScreen::onWidgetPressFeedback(lv_event_t* event) {
     auto* tile = static_cast<ButtonTile*>(lv_event_get_user_data(event));
     if (!tile) return;
 #if HAS_TOUCH
-    if (strcmp(tile->widget_cfg.type, "option_selector") == 0) {
-        const auto* feedback = static_cast<const OptionSelectorFeedback*>(lv_event_get_param(event));
+    const bool list = strcmp(tile->widget_cfg.type, "list") == 0;
+    if (list || strcmp(tile->widget_cfg.type, "text_reader") == 0 ||
+        strcmp(tile->widget_cfg.type, "option_selector") == 0) {
+        const auto* feedback = static_cast<const WidgetPressFeedback*>(lv_event_get_param(event));
         if (!feedback) return;
+        const bool activated = feedback->event == LV_EVENT_CLICKED ||
+                               feedback->event == LV_EVENT_LONG_PRESSED;
 #if HAS_AUDIO
-        if (feedback->event == LV_EVENT_CLICKED && !has_audio_action(tile->actions, tile->action_count)) {
-            const char* pattern = device_config.tap_beep;
+        const bool hold = feedback->event == LV_EVENT_LONG_PRESSED;
+        const ButtonAction* actions = hold ? tile->lp_actions : tile->actions;
+        const uint8_t count = hold ? tile->lp_action_count : tile->action_count;
+        if (activated && (feedback->use_default_tap_audio || !has_audio_action(actions, count))) {
+            const char* pattern = hold ? device_config.lp_beep : device_config.tap_beep;
             if (pattern[0] && strcmp(pattern, "none") != 0) audio_feedback(pattern);
         }
 #endif
-        if (DISPLAY_DISABLE_ANIMATIONS || !tile->tap_overlay || feedback->event == LV_EVENT_CLICKED) return;
+        if (DISPLAY_DISABLE_ANIMATIONS || !tile->tap_overlay || activated) return;
         lv_obj_t* overlay = tile->tap_overlay;
+        if (list && feedback->event == LV_EVENT_PRESS_LOST) {
+            if (tile->tap_flash_timer) {
+                lv_timer_delete(tile->tap_flash_timer);
+                tile->tap_flash_timer = nullptr;
+            }
+            lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_remove_state(overlay, LV_STATE_USER_1);
+            restore_tap_overlay(tile);
+            return;
+        }
         if (feedback->event == LV_EVENT_PRESSED) {
             if (tile->tap_flash_timer) {
                 lv_timer_delete(tile->tap_flash_timer);
                 tile->tap_flash_timer = nullptr;
             }
             lv_area_t option, content;
-            lv_obj_get_coords(feedback->option, &option);
+            lv_obj_get_coords(feedback->object, &option);
+            if (list) {
+                lv_area_t viewport;
+                lv_obj_get_content_coords(lv_obj_get_parent(feedback->object), &viewport);
+                if (!lv_area_intersect(&option, &option, &viewport)) return;
+            }
             lv_obj_get_content_coords(tile->obj, &content);
             lv_obj_set_pos(overlay, option.x1 - content.x1, option.y1 - content.y1);
             lv_obj_set_size(overlay, option.x2 - option.x1 + 1, option.y2 - option.y1 + 1);
@@ -541,7 +592,7 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
         }
 #endif
         toggle_tap(&tile->widget_cfg, &tile->widget_state, tile->actions, tile->action_count,
-                    tile->lp_actions, tile->lp_action_count);
+                    tile->lp_actions, tile->lp_action_count, tile->pad_bindings, tile->pad_binding_count);
         return;
     }
 
@@ -589,7 +640,7 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
             flash_zone = 1;
         }
     } else if (tile->widget_type && strcmp(tile->widget_type->name, "numericrocker") == 0) {
-        // Numeric rocker: outer/inner zones use adjust_action with {step} substitution;
+        // Numeric rocker: outer/inner zones use adjust_action with [event:step];
         // center zone falls through to standard tap dispatch (actions[0-2]).
         auto* cfg = reinterpret_cast<const NumericRockerConfig*>(tile->widget_cfg.data);
 
@@ -607,7 +658,7 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
         float sign = cfg->horizontal ? 1.0f : -1.0f;
 
         if (rel < z.inner_end || rel >= z.inner2_start) {
-            // Outer or inner zone — dispatch adjust_action with {step}
+            // Outer or inner zone — dispatch the adjustment action.
             float step;
             int flash_start, flash_end;
             const char* nr_event;
@@ -636,7 +687,10 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
 
             ButtonAction local_nr;
             memcpy(&local_nr, &cfg->adjust_action, sizeof(ButtonAction));
-            if (!action_type_substitute_step(action_type_find(local_nr.type), local_nr, step)) return;
+            char step_text[24];
+            snprintf(step_text, sizeof(step_text), "%.9g", static_cast<double>(step));
+            const ActionEventData event = {nullptr, step_text, BINDING_VALUE_KIND_UNKNOWN};
+            EventBindingScope event_scope(&event);
 
             do_tap_flash_px(tile, flash_start, flash_end, cfg->horizontal);
 #if HAS_AUDIO
@@ -647,7 +701,8 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
                 }
             }
 #endif
-            action_list_dispatch(&local_nr, 1, nr_event, ACTION_CONTINUATION_OWNER_LVGL, true);
+            action_list_dispatch(&local_nr, 1, nr_event, ACTION_CONTINUATION_OWNER_LVGL, true,
+                                 tile->pad_bindings, tile->pad_binding_count);
 #if HAS_MQTT
             publish_button_event(tile, "press", overlay);
 #endif
@@ -681,10 +736,12 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
     }
 
     if (tile->widget_type) {
-        action_list_dispatch(local, count, event_label, ACTION_CONTINUATION_OWNER_LVGL, true);
+        action_list_dispatch(local, count, event_label, ACTION_CONTINUATION_OWNER_LVGL, true,
+                             tile->pad_bindings, tile->pad_binding_count);
     } else {
         if (!device_dialog_active())
-            action_list_dispatch(local, count, event_label, ACTION_CONTINUATION_OWNER_LVGL, true);
+            action_list_dispatch(local, count, event_label, ACTION_CONTINUATION_OWNER_LVGL, true,
+                                 tile->pad_bindings, tile->pad_binding_count);
     }
 
 #if HAS_MQTT
@@ -760,10 +817,12 @@ void PadScreen::longPressAt(ButtonTile* tile, const lv_point_t& point) {
     }
 
     if (tile->widget_type) {
-        action_list_dispatch(local, count, "LP", ACTION_CONTINUATION_OWNER_LVGL, true);
+        action_list_dispatch(local, count, "LP", ACTION_CONTINUATION_OWNER_LVGL, true,
+                             tile->pad_bindings, tile->pad_binding_count);
     } else {
         if (!device_dialog_active())
-            action_list_dispatch(local, count, "LP", ACTION_CONTINUATION_OWNER_LVGL, true);
+            action_list_dispatch(local, count, "LP", ACTION_CONTINUATION_OWNER_LVGL, true,
+                                 tile->pad_bindings, tile->pad_binding_count);
     }
 
 #if HAS_MQTT
@@ -832,7 +891,8 @@ void PadScreen::onPadActionTap(lv_event_t* e) {
         }
     }
 #endif
-    action_list_dispatch(local, count, "PadTap", ACTION_CONTINUATION_OWNER_LVGL, true);
+    action_list_dispatch(local, count, "PadTap", ACTION_CONTINUATION_OWNER_LVGL, true,
+                         pad->pageBindings, pad->pageBindingCount);
 }
 
 void PadScreen::onSwipeGuard(lv_event_t* event) {

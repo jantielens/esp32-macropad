@@ -1,12 +1,31 @@
 #include "platform_stubs.h"
+#include <cstring>
 
 #include <WiFi.h>
 #include "audio.h"
 #include "audio_input.h"
-#if HAS_VOICE_CLIPS
-#include "voice_clips.h"
-void voice_clips_snapshot(VoiceClipSnapshot* out) { *out = {}; }
-const char* voice_clips_state_name(VoiceClipState) { return "idle"; }
+#if HAS_VOICE_NOTES
+#include "voice_notes.h"
+#include "voice_notes_processing.h"
+#if HAS_PSRAM
+#include "voice_notes_loaded.h"
+BindingResolverStatus voice_notes_loaded_resolve(const char* key, char* out, size_t size) {
+    if (strcmp(key, "status") != 0) return BINDING_RESOLVER_UNAVAILABLE;
+    strlcpy(out, "idle", size);
+    return BINDING_RESOLVER_RESOLVED;
+}
+BindingResolverStatus voice_notes_loaded_acquire_text(const char*, BindingTextView*) {
+    return BINDING_RESOLVER_UNAVAILABLE;
+}
+#endif
+void voice_notes_snapshot(VoiceNoteSnapshot* out) { *out = {}; }
+const char* voice_notes_state_name(VoiceNoteState) { return "idle"; }
+void voice_notes_transcription_snapshot(VoiceNotesTranscriptionSnapshot* out) { *out = {}; }
+const char* voice_notes_transcription_state_name(VoiceNotesTranscriptionState) { return "idle"; }
+void voice_notes_enrichment_snapshot(VoiceNotesEnrichmentSnapshot* out) { *out = {}; }
+const char* voice_notes_enrichment_state_name(VoiceNotesEnrichmentState) { return "idle"; }
+void voice_notes_processing_snapshot(VoiceNotesProcessingSnapshot* out) { *out = {}; }
+const char* voice_notes_processing_state_name(VoiceNotesProcessingState) { return "idle"; }
 #endif
 #include "device_classes/voice_assistant/voice.h"
 #include "music_analysis.h"
@@ -147,7 +166,6 @@ uint8_t display_manager_get_backlight_brightness() { return 0; }
 void display_manager_set_backlight_brightness(uint8_t) {}
 lv_obj_t* lv_screen_active() { return nullptr; }
 void lv_obj_invalidate(lv_obj_t*) {}
-bool health_table_build(bool, HealthTableLookupFn, char*, size_t) { return false; }
 
 #if HAS_AUDIO
 uint8_t audio_get_volume() { return 0; }
@@ -204,7 +222,7 @@ BrewPhase brew_get_phase() { return BREW_ACTIVE; }
 uint8_t brew_get_stage_count() { return 1; }
 uint8_t brew_get_stage_index() { return 0; }
 const BrewStage* brew_get_stage(uint8_t index) { return index == 0 ? &kFixtureStage : nullptr; }
-int brew_format_timer(const char*, char* out, size_t out_len) { return std::snprintf(out, out_len, "00:12"); }
+int brew_format_timer(char* out, size_t out_len) { return std::snprintf(out, out_len, "00:12"); }
 uint8_t brew_template_count() { return 1; }
 const BrewTemplate* brew_template_get(uint8_t index) {
     static const BrewTemplate fixture = {
@@ -297,13 +315,14 @@ CameraMotionSettings camera_motion_get_settings() {
             .presence_hold_seconds = 60, .keep_display_awake = false};
 }
 CameraMotionThresholds camera_motion_get_thresholds(uint8_t) { return {}; }
-CameraMotionStatus camera_motion_get_status() { return {}; }
+CameraMotionStatus binding_test_camera{};
+CameraMotionStatus camera_motion_get_status() { return binding_test_camera; }
 #endif
 uint32_t timer_get_target_seconds(uint8_t) { return 0; }
 TimerState timer_get_state(uint8_t) { return TIMER_STOPPED; }
 TimerMode timer_get_mode(uint8_t) { return TIMER_MODE_UP; }
 bool timer_is_expired(uint8_t) { return false; }
-int timer_format(uint8_t, const char*, char* out, size_t out_len) {
+int timer_format(uint8_t, char* out, size_t out_len) {
     if (out_len) std::snprintf(out, out_len, "0");
     return 1;
 }
@@ -321,3 +340,13 @@ bool mqtt_sub_store_get(const char*, char* buf, size_t buf_len, bool* changed, b
 void mqtt_sub_store_collect_topic(void*, const char*) {}
 void mqtt_sub_store_ensure_binding_subscribed(const char*) {}
 uint32_t net_activity_age_mqtt_ms() { return NET_ACTIVITY_NEVER; }
+#include "../../src/app/item_binding_scheme.h"
+
+#if HAS_DISPLAY && HAS_PSRAM
+BindingResolverStatus item_binding_resolve(const char*, char*, size_t) {
+    return BINDING_RESOLVER_UNAVAILABLE;
+}
+BindingResolvedValueKind item_binding_value_kind(const char*) {
+    return BINDING_VALUE_KIND_UNKNOWN;
+}
+#endif

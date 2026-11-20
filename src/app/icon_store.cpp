@@ -3,6 +3,7 @@
 #if HAS_DISPLAY
 
 #include "log_manager.h"
+#include "json_key_validation.h"
 #include "pad_config.h"
 #include "pad_validate.h"
 #include "ota_activity.h"
@@ -710,9 +711,11 @@ static bool write_icon_pair(const char* png_path, const char* metadata_path,
         Storage.remove(metadata_tmp);
         return false;
     }
-    if (had_png) Storage.remove(png_backup);
-    if (had_metadata) Storage.remove(metadata_backup);
-    return true;
+    const bool png_cleaned = !had_png || Storage.remove(png_backup);
+    const bool metadata_cleaned = !had_metadata || Storage.remove(metadata_backup);
+    if (!png_cleaned || !metadata_cleaned)
+        LOGE(TAG, "Failed to clean up generated icon pair backups %s", png_path);
+    return png_cleaned && metadata_cleaned;
 }
 
 // lodepng outputs RGBA byte order; LVGL ARGB8888 expects BGRA. Swap R↔B.

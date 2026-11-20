@@ -188,11 +188,14 @@
  *==================*/
 
 #define LV_USE_ARC        1
-#if HAS_DISPLAY && HAS_TOUCH
+#if HAS_DISPLAY && (HAS_TOUCH || HAS_PSRAM)
     #define LV_USE_BAR        1
-    #define LV_USE_SLIDER     1
 #else
     #define LV_USE_BAR        0
+#endif
+#if HAS_DISPLAY && HAS_TOUCH
+    #define LV_USE_SLIDER     1
+#else
     #define LV_USE_SLIDER     0
 #endif
 #define LV_USE_BUTTON     1

@@ -2,9 +2,11 @@
 #if ALARM_ENABLED
 #include "action_parse.h"
 #include "action_registry.h"
+#include "action_storage.h"
 #include "action_validate.h"
 #include "action_dispatch.h"
 #include "config_psram.h"
+#include "json_key_validation.h"
 #include "psram_json_allocator.h"
 #include "storage.h"
 #include "time_service.h"
@@ -29,10 +31,14 @@ static constexpr size_t ALARM_JSON_MAX = 8192;
 static constexpr size_t ALARM_SNAPSHOT_MAX = 16384;
 static const char* const snapshot_paths[] = {"/config/alarm_a.json", "/config/alarm_b.json"};
 static std::mutex alarm_mutex;
+static std::mutex hook_dispatch_mutex;
 struct AlarmStorage {
     AlarmDefinition definition;
     AlarmDefinition session;
     ButtonAction pending_stop[MAX_BUTTON_ACTIONS];
+    ActionStorage definition_actions;
+    ActionStorage session_actions;
+    ActionStorage stop_actions;
 };
 static AlarmStorage* alarm_state = nullptr;
 static AlarmClockCore clock_core;
@@ -73,6 +79,10 @@ static bool session_work_valid(uint32_t value) { return value == session_generat
 
 using AlarmDocument = BasicJsonDocument<PsramJsonAllocator>;
 using DefinitionPtr = std::unique_ptr<AlarmDefinition, decltype(&free)>;
+struct OwnedActions {
+    ActionStorage storage = {};
+    ~OwnedActions() { action_storage_clear(storage); }
+};
 
 static bool fail(const char* message) {
     strlcpy(last_error, message, sizeof(last_error));
@@ -121,6 +131,7 @@ static uint32_t checksum(const std::string& text) {
 }
 
 static void definition_json(const AlarmDefinition& value, JsonObject root) {
+    root["action_format_version"] = 1;
     root["lateness_minutes"] = value.lateness_minutes;
     JsonObject slot = root.createNestedObject("1");
     slot["enabled"] = value.enabled;
@@ -143,16 +154,20 @@ static bool parse_hooks(JsonVariantConst input, ButtonAction* output, uint8_t* c
     for (JsonVariantConst item : input.as<JsonArrayConst>()) {
         if (!item.is<JsonObjectConst>()) return fail("Hook action must be an object");
         JsonObjectConst action = item.as<JsonObjectConst>();
-        const char* type_name = action["type"] | "";
-        const ActionTypeDef* type = action_type_find(type_name);
-        if (!type || !action_type_is_supported(type_name)) return fail("Hook action is unavailable");
-        if (type->execution != ACTION_EXECUTION_SYNC) return fail("Pausable or unclassified actions are not allowed in alarm hooks");
-        const char* error = action_validate_json(action);
+        if (action.containsKey("type") || !action["op"].is<const char*>())
+            return fail("Legacy alarm actions are not supported");
+        const char* error = action_operation_validate_json(action);
         if (error) return fail(error);
+        const ActionTypeDef* type = nullptr;
+        const ActionOperationDef* operation = action_operation_find(action["op"].as<const char*>(), &type);
+        if (!operation || !type || !action_type_is_supported(type->type_name)) return fail("Hook action is unavailable");
+        if (operation->execution != ACTION_EXECUTION_SYNC)
+            return fail("Pausable or unclassified actions are not allowed in alarm hooks");
         JsonDocument copy;
         copy.set(action);
         action_parse(copy.as<JsonObject>(), output[*count]);
-        if (!output[*count].type[0]) return fail("Invalid or oversized hook action");
+        if (!output[*count].type[0] || (action_storage_current() && action_storage_current()->failed))
+            return fail("Invalid or oversized hook action");
         JsonDocument normalized;
         action_to_json(output[*count], normalized.to<JsonObject>());
         for (JsonPairConst field : action) {
@@ -169,8 +184,12 @@ static bool parse_hooks(JsonVariantConst input, ButtonAction* output, uint8_t* c
     return true;
 }
 
-static bool parse_definition(JsonObjectConst root, AlarmDefinition* output) {
-    if (root.size() != 2 || !root["1"].is<JsonObjectConst>()) return fail("Alarm config requires lateness_minutes and exactly slot 1");
+static bool parse_definition(JsonObjectConst root, AlarmDefinition* output, bool* invalid_hooks = nullptr) {
+    if (!root["action_format_version"].is<int>() || root["action_format_version"].as<int>() != 1) {
+        if (invalid_hooks) *invalid_hooks = true;
+        return fail("Incompatible alarm action format; recreate alarm configuration");
+    }
+    if (root.size() != 3 || !root["1"].is<JsonObjectConst>()) return fail("Alarm config requires lateness_minutes and exactly slot 1");
     if (!root["lateness_minutes"].is<int>() || root["lateness_minutes"].as<int>() < 0
         || root["lateness_minutes"].as<int>() > 10080) return fail("lateness_minutes must be 0-10080 whole minutes");
     output->lateness_minutes = root["lateness_minutes"];
@@ -196,14 +215,19 @@ static bool parse_definition(JsonObjectConst root, AlarmDefinition* output) {
     output->weekdays = slot["weekdays"];
     output->snooze_minutes = slot["snooze_minutes"];
     output->dismiss_minutes = slot["auto_dismiss_minutes"];
-    return parse_hooks(slot["on_ring"], output->on_ring, &output->ring_count)
-        && parse_hooks(slot["on_stop"], output->on_stop, &output->stop_count);
+    if (!parse_hooks(slot["on_ring"], output->on_ring, &output->ring_count)
+        || !parse_hooks(slot["on_stop"], output->on_stop, &output->stop_count)) {
+        if (invalid_hooks) *invalid_hooks = true;
+        return false;
+    }
+    return true;
 }
 
 static bool read_snapshot(int index, AlarmDocument& document) {
     File file = Storage.open(snapshot_paths[index], "r");
     if (!file || !file.size() || file.size() > ALARM_SNAPSHOT_MAX) { file.close(); return false; }
-    const bool parsed = !deserializeJson(document, file);
+    const bool parsed = json_stream_scan_keys(file) == JsonKeyScanResult::Valid &&
+                        !deserializeJson(document, file);
     file.close();
     if (!parsed || document["schema"] != 3 || !document["generation"].is<uint64_t>()
         || !document["data"].is<JsonObject>()) return false;
@@ -255,27 +279,18 @@ static bool persist(const AlarmDefinition& candidate, time_t handled, time_t onc
     return true;
 }
 
-static uint8_t dispatch_hooks(const ButtonAction* actions, uint8_t count, const char* label, uint8_t index,
-                              bool alarm_audio = false) {
-    for (; index < count; ++index) {
-        if (ota_activity_is_active()) break;
-        LOGI("Alarm", "%s hook %u/%u: dispatch type=%s", label, unsigned(index + 1), unsigned(count), actions[index].type);
-        const ActionResult result = action_dispatch_synchronous(actions[index], label, session_work_valid, session_generation.load(), alarm_audio);
-        if (result != ACTION_COMPLETE) {
-            hook_error = true;
-            LOGW("Alarm", "%s hook %u/%u: failed result=%u", label, unsigned(index + 1), unsigned(count), unsigned(result));
-        } else {
-            LOGI("Alarm", "%s hook %u/%u: complete", label, unsigned(index + 1), unsigned(count));
-        }
-    }
-    return index;
-}
-
 static void stop_session() {
     session_generation.fetch_add(1);
     if (session_started) {
-        memcpy(alarm_state->pending_stop, alarm_state->session.on_stop, sizeof(alarm_state->pending_stop));
-        stop_count = alarm_state->session.stop_count;
+        action_storage_clear(alarm_state->stop_actions);
+        if (action_storage_copy_actions(alarm_state->stop_actions, alarm_state->pending_stop,
+                                        alarm_state->session.on_stop, alarm_state->session.stop_count)) {
+            stop_count = alarm_state->session.stop_count;
+        } else {
+            action_storage_clear(alarm_state->stop_actions);
+            stop_count = 0;
+            hook_error = true;
+        }
         stop_index = 0;
     }
     session_started = false;
@@ -283,20 +298,64 @@ static void stop_session() {
 }
 
 static void flush_hooks() {
-    const uint8_t stopped = dispatch_hooks(alarm_state->pending_stop, stop_count, "Alarm stop", stop_index);
-    {
-        std::lock_guard<std::mutex> lock(alarm_mutex);
-        stop_index = stopped;
-    }
-    if (stopped < stop_count || !ring_pending || ota_activity_is_active()) return;
+    std::unique_lock<std::mutex> dispatch_lock(hook_dispatch_mutex, std::try_to_lock);
+    if (!dispatch_lock.owns_lock()) return;
+    for (;;) {
+        ButtonAction action = {};
+        OwnedActions snapshot;
+        bool ring = false;
+        uint8_t index, count;
+        uint32_t generation_at_copy;
+        {
+            std::lock_guard<std::mutex> lock(alarm_mutex);
+            if (!alarm_state || ota_activity_is_active()) return;
+            ring = stop_index >= stop_count;
+            if (ring && (!ring_pending || ring_index >= alarm_state->session.ring_count)) {
+                if (ring_pending && !alarm_state->session.ring_count) {
+                    session_started = true;
+                    ring_pending = false;
+                }
+                return;
+            }
+            index = ring ? ring_index : stop_index;
+            count = ring ? alarm_state->session.ring_count : stop_count;
+            const ButtonAction& source = ring ? alarm_state->session.on_ring[ring_index]
+                                              : alarm_state->pending_stop[stop_index];
+            if (!action_storage_copy_actions(snapshot.storage, &action, &source, 1)) {
+                hook_error = true;
+                if (ring) ring_pending = false;
+                else stop_index = stop_count;
+                return;
+            }
+            generation_at_copy = session_generation.load();
+        }
 #if defined(ARDUINO) && HAS_AUDIO
-    if (!ring_index && !audio_alarm_session(session_work_valid, session_generation.load())) return;
+        if (ring && !index && !audio_alarm_session(session_work_valid, generation_at_copy)) return;
 #endif
-    const uint8_t next = dispatch_hooks(alarm_state->session.on_ring, alarm_state->session.ring_count, "Alarm ring", ring_index, true);
-    std::lock_guard<std::mutex> lock(alarm_mutex);
-    if (next > ring_index || !alarm_state->session.ring_count) session_started = true;
-    ring_index = next;
-    if (ring_index == alarm_state->session.ring_count) ring_pending = false;
+        if (ota_activity_is_active() || !session_work_valid(generation_at_copy)) return;
+        if (ring) {
+            std::lock_guard<std::mutex> lock(alarm_mutex);
+            if (!session_work_valid(generation_at_copy) || !ring_pending) return;
+            session_started = true;
+        }
+        const char* label = ring ? "Alarm ring" : "Alarm stop";
+        LOGI("Alarm", "%s hook %u/%u: dispatch type=%s", label, unsigned(index + 1), unsigned(count), action.type);
+        const ActionResult result = action_dispatch_synchronous(action, label,
+            session_work_valid, generation_at_copy, ring);
+        if (result != ACTION_COMPLETE)
+            LOGW("Alarm", "%s hook %u/%u: failed result=%u", label, unsigned(index + 1), unsigned(count), unsigned(result));
+        else LOGI("Alarm", "%s hook %u/%u: complete", label, unsigned(index + 1), unsigned(count));
+        std::lock_guard<std::mutex> lock(alarm_mutex);
+        if (!session_work_valid(generation_at_copy)) return;
+        if (result != ACTION_COMPLETE) hook_error = true;
+        if (ring) {
+            if (++ring_index == alarm_state->session.ring_count)
+                ring_pending = false;
+        } else {
+            ++stop_index;
+            if (stop_index == stop_count) action_storage_clear(alarm_state->stop_actions);
+        }
+    }
 }
 
 static uint64_t monotonic_ms() {
@@ -327,6 +386,10 @@ void alarm_manager_init() {
         void* memory = config_psram_alloc(sizeof(AlarmStorage), "alarm_state");
         if (!memory) { storage_error = true; fail("Alarm allocation failed"); return; }
         alarm_state = static_cast<AlarmStorage*>(memory);
+    } else {
+        action_storage_clear(alarm_state->definition_actions);
+        action_storage_clear(alarm_state->session_actions);
+        action_storage_clear(alarm_state->stop_actions);
     }
     new (alarm_state) AlarmStorage{};
     clock_core = AlarmClockCore{};
@@ -355,15 +418,19 @@ void alarm_manager_init() {
     DefinitionPtr candidate(static_cast<AlarmDefinition*>(config_psram_alloc(sizeof(AlarmDefinition), "alarm_load")), free);
     if (!candidate) { storage_error = true; fail("Alarm allocation failed"); return; }
     bool invalid_snapshot = false;
+    bool incompatible_hooks = false;
     char saved_timezone[64] = {};
     for (int index = 0; index < 2; ++index) {
+        OwnedActions candidate_actions;
         document.clear();
         if (!read_snapshot(index, document)) {
             invalid_snapshot |= Storage.exists(snapshot_paths[index]);
             continue;
         }
         *candidate = AlarmDefinition{};
-        if (!parse_definition(document["data"]["config"], candidate.get())
+        ActionStorageScope scope(&candidate_actions.storage);
+        bool invalid_hooks = false;
+        if (!parse_definition(document["data"]["config"], candidate.get(), &invalid_hooks)
             || !document["data"]["handled_epoch"].is<int64_t>()
             || document["data"]["handled_epoch"].as<int64_t>() < 0
             || !document["data"]["once_epoch"].is<int64_t>()
@@ -372,10 +439,16 @@ void alarm_manager_init() {
             || document["data"]["armed_from"].as<int64_t>() < -1
             || !document["data"]["timezone"].is<const char*>()
             || strlen(document["data"]["timezone"].as<const char*>()) >= sizeof(saved_timezone)
-            || ((!candidate->enabled || candidate->weekdays) && document["data"]["once_epoch"].as<int64_t>() != 0)) { invalid_snapshot = true; continue; }
+            || ((!candidate->enabled || candidate->weekdays) && document["data"]["once_epoch"].as<int64_t>() != 0)) {
+            invalid_snapshot = true;
+            incompatible_hooks |= invalid_hooks;
+            continue;
+        }
         const uint64_t stored_generation = document["generation"].as<uint64_t>();
         if (active_snapshot < 0 || stored_generation > generation) {
+            action_storage_clear(alarm_state->definition_actions);
             alarm_state->definition = *candidate;
+            action_storage_move(alarm_state->definition_actions, candidate_actions.storage);
             clock_core.handled_epoch = document["data"]["handled_epoch"].as<int64_t>();
             once_epoch = document["data"]["once_epoch"].as<int64_t>();
             clock_core.armed_from = document["data"]["armed_from"].as<int64_t>();
@@ -383,6 +456,14 @@ void alarm_manager_init() {
             generation = stored_generation;
             active_snapshot = index;
         }
+    }
+    if (incompatible_hooks) {
+        action_storage_clear(alarm_state->definition_actions);
+        alarm_state->definition = AlarmDefinition{};
+        storage_error = true;
+        fail("Alarm snapshot has invalid or unavailable actions; saved settings are protected");
+        LOGE("Alarm", "%s", last_error);
+        return;
     }
     if (invalid_snapshot) {
         storage_error = true;
@@ -407,13 +488,18 @@ void alarm_manager_init() {
 
 static bool alarm_config_apply_raw(const uint8_t* data, size_t length, bool deferred_save) {
     if (!initialized || !data || !length || length > ALARM_JSON_MAX) return fail("Alarm configuration unavailable or oversized");
+    if (!json_keys_valid(data, length)) return fail("Alarm JSON contains an invalid NUL");
     if (ota_activity_is_active()) return fail("Firmware update in progress");
     DefinitionPtr candidate(static_cast<AlarmDefinition*>(config_psram_alloc(sizeof(AlarmDefinition), "alarm_candidate")), free);
     if (!candidate) return fail("Alarm allocation failed");
     *candidate = AlarmDefinition{};
+    OwnedActions candidate_actions;
     AlarmDocument document(ALARM_JSON_MAX * 2);
     if (deserializeJson(document, data, length) || !document.is<JsonObject>()) return fail("Invalid alarm JSON");
-    if (!parse_definition(document.as<JsonObjectConst>(), candidate.get())) return false;
+    {
+        ActionStorageScope scope(&candidate_actions.storage);
+        if (!parse_definition(document.as<JsonObjectConst>(), candidate.get())) return false;
+    }
     {
         std::lock_guard<std::mutex> lock(alarm_mutex);
         AlarmDocument current(ALARM_JSON_MAX);
@@ -452,7 +538,9 @@ static bool alarm_config_apply_raw(const uint8_t* data, size_t length, bool defe
             stop_session();
             clock_core.rearm(time(nullptr), time_service_ready());
         }
+        action_storage_clear(alarm_state->definition_actions);
         alarm_state->definition = *candidate;
+        action_storage_move(alarm_state->definition_actions, candidate_actions.storage);
         once_epoch = next_once;
         clock_core.lateness_seconds = alarm_state->definition.lateness_minutes * 60U;
         update_forecast(time(nullptr));
@@ -472,20 +560,22 @@ bool alarm_config_save_raw(const uint8_t* data, size_t length) {
 }
 
 bool alarm_config_save_section_raw(const uint8_t* data, size_t length, AlarmConfigSection section) {
+    if (!data || !length || length > ALARM_JSON_MAX) return fail("Invalid alarm JSON size");
+    if (!json_keys_valid(data, length)) return fail("Alarm JSON contains an invalid NUL");
     AlarmDocument input(ALARM_JSON_MAX * 2);
     if (deserializeJson(input, data, length) || !input.is<JsonObject>()) return fail("Invalid alarm JSON");
     const char* schedule_fields[] = {"enabled", "hour", "minute", "weekdays"};
-    const char* behavior_fields[] = {"lateness_minutes", "snooze_minutes", "auto_dismiss_minutes", "on_ring", "on_stop"};
+    const char* behavior_fields[] = {"action_format_version", "lateness_minutes", "snooze_minutes", "auto_dismiss_minutes", "on_ring", "on_stop"};
     const bool behavior = section == AlarmConfigSection::Behavior;
     const char* const* fields = behavior ? behavior_fields : schedule_fields;
-    const size_t count = behavior ? 5 : 4;
+    const size_t count = behavior ? 6 : 4;
     if (input.size() != count) return fail("Alarm section requires exactly its own fields");
     AlarmDocument merged(ALARM_JSON_MAX * 2);
-    alarm_config_to_json(merged.to<JsonObject>());
+    if (!alarm_config_to_json(merged.to<JsonObject>())) return fail("Alarm configuration unavailable");
     for (size_t index = 0; index < count; ++index) {
         const char* name = fields[index];
         if (!input.containsKey(name)) return fail("Missing alarm section field");
-        if (!strcmp(name, "lateness_minutes")) merged[name].set(input[name]);
+        if (!strcmp(name, "action_format_version") || !strcmp(name, "lateness_minutes")) merged[name].set(input[name]);
         else merged["1"][name].set(input[name]);
     }
     if (merged.overflowed()) return fail("Alarm allocation failed");
@@ -496,10 +586,11 @@ bool alarm_config_save_section_raw(const uint8_t* data, size_t length, AlarmConf
 
 const char* alarm_last_error() { return last_error; }
 
-void alarm_config_to_json(JsonObject root) {
+bool alarm_config_to_json(JsonObject root) {
     std::lock_guard<std::mutex> lock(alarm_mutex);
-    static const AlarmDefinition empty{};
-    definition_json(alarm_state ? alarm_state->definition : empty, root);
+    if (!initialized || !alarm_state) return false;
+    definition_json(alarm_state->definition, root);
+    return true;
 }
 
 AlarmSnapshot alarm_snapshot() {
@@ -768,8 +859,19 @@ void alarm_manager_loop() {
                 settings_save_due_ms = monotonic + SETTINGS_SAVE_DELAY_MS;
                 LOGE("Alarm", "Occurrence recording failed; ringing with RAM-only duplicate prevention");
             }
-            alarm_state->session = alarm_state->definition;
+            OwnedActions session_actions;
+            AlarmDefinition& session = alarm_state->session;
+            session = alarm_state->definition;
             hook_error = false;
+            if (!action_storage_copy_actions(session_actions.storage, session.on_ring,
+                                             alarm_state->definition.on_ring, session.ring_count)
+                || !action_storage_copy_actions(session_actions.storage, session.on_stop,
+                                                alarm_state->definition.on_stop, session.stop_count)) {
+                session.ring_count = session.stop_count = 0;
+                hook_error = true;
+            }
+            action_storage_clear(alarm_state->session_actions);
+            action_storage_move(alarm_state->session_actions, session_actions.storage);
         }
         if (effects & ALARM_EFFECT_RING) {
             LOGI("Alarm", "Ring started: reason=%s occurrence=%lld late=%llds hooks=%u stop_hooks=%u deadline_ms=%llu",

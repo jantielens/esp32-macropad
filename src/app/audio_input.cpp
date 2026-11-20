@@ -20,6 +20,8 @@ constexpr uint32_t kMeterFrames = 960;
 constexpr uint32_t kMeterLeaseUs = 250000;
 constexpr uint32_t kMeterSnapshotMaxAgeUs = 100000;
 constexpr uint32_t kMeterHandoffUs = 300000;
+constexpr uint32_t kDiagnosticMaxAgeUs = 500000;
+constexpr uint32_t kClipHoldUs = 2000000;
 
 AudioInputDriver* g_driver = nullptr;
 TaskHandle_t g_capture_owner = nullptr;
@@ -35,6 +37,15 @@ AudioInputMeterSnapshot g_meter_snapshot = {};
 uint64_t g_meter_last_sample_us = 0;
 AudioInputFormat g_meter_format = {};
 int16_t* g_meter_samples = nullptr;
+AudioInputProcessingSettings g_requested_processing = {};
+uint32_t g_processing_generation = 1;
+AudioInputProcessing g_processing;
+uint32_t g_applied_processing_generation = 0;
+AudioInputFormat g_processing_format = {};
+AudioInputDiagnostics g_diagnostics = {};
+uint64_t g_diagnostic_sample_us = 0;
+uint64_t g_raw_clip_us = 0;
+uint64_t g_gain_clip_us = 0;
 
 bool owned_by_current_task() {
     const TaskHandle_t caller = xTaskGetCurrentTaskHandle();
@@ -182,6 +193,8 @@ bool audio_input_start_capture() {
     }
 
     if (g_driver->captureStart()) {
+        g_processing.reset();
+        g_applied_processing_generation = 0;
         portENTER_CRITICAL(&g_capture_mux);
         g_capture_running = true;
         portEXIT_CRITICAL(&g_capture_mux);
@@ -208,7 +221,61 @@ AudioInputReadResult audio_input_read_frames(int16_t* frames, size_t frame_count
     if (!frames || frame_count == 0 || !audio_input_available() || !owned_by_current_task()) {
         return {0, AudioInputReadStatus::Error};
     }
-    return g_driver->readFrames(frames, frame_count, timeout_ms);
+    const AudioInputReadResult result = g_driver->readFrames(frames, frame_count, timeout_ms);
+    if ((result.status == AudioInputReadStatus::Ok || result.status == AudioInputReadStatus::Timeout) &&
+        result.frames && result.frames <= frame_count) {
+        AudioInputProcessingSettings settings;
+        uint32_t generation;
+        portENTER_CRITICAL(&g_capture_mux);
+        settings = g_requested_processing;
+        generation = g_processing_generation;
+        portEXIT_CRITICAL(&g_capture_mux);
+        const AudioInputFormat format = g_driver->inputFormat();
+        if (generation != g_applied_processing_generation ||
+            format.sample_rate != g_processing_format.sample_rate ||
+            format.channels != g_processing_format.channels ||
+            format.bits_per_sample != g_processing_format.bits_per_sample) {
+            if (!format.sample_rate || !format.channels || format.channels > 2 || format.bits_per_sample != 16) {
+                LOGE(TAG, "Unsupported microphone processing format");
+                return {0, AudioInputReadStatus::Error};
+            }
+            g_processing.configure(settings, format.sample_rate, format.channels);
+            g_processing_format = format;
+            g_applied_processing_generation = generation;
+        }
+        const bool diagnose = meter_requested();
+        AudioInputBlockDiagnostics block = {};
+        g_processing.process(frames, result.frames, diagnose ? &block : nullptr);
+        if (diagnose) {
+            const uint64_t now = static_cast<uint64_t>(esp_timer_get_time());
+            const uint16_t rms = static_cast<uint16_t>(audio_pcm_isqrt_u64(
+                block.sum_squares / (result.frames * format.channels)));
+            portENTER_CRITICAL(&g_meter_mux);
+            g_diagnostics.rms = rms;
+            g_diagnostics.peak = block.peak;
+            g_diagnostic_sample_us = now;
+            if (block.input_full_scale) g_raw_clip_us = now;
+            if (block.gain_clipped) g_gain_clip_us = now;
+            portEXIT_CRITICAL(&g_meter_mux);
+        }
+    }
+    return result;
+}
+
+bool audio_input_set_processing(AudioInputProcessingSettings settings) {
+    if (settings.gain_db < -12 || settings.gain_db > 24) return false;
+    portENTER_CRITICAL(&g_capture_mux);
+    g_requested_processing = settings;
+    ++g_processing_generation;
+    portEXIT_CRITICAL(&g_capture_mux);
+    return true;
+}
+
+AudioInputProcessingSettings audio_input_get_processing() {
+    portENTER_CRITICAL(&g_capture_mux);
+    const AudioInputProcessingSettings settings = g_requested_processing;
+    portEXIT_CRITICAL(&g_capture_mux);
+    return settings;
 }
 
 AudioInputReadStatus audio_input_capture_status() {
@@ -306,6 +373,27 @@ bool audio_input_meter_get_snapshot(AudioInputMeterSnapshot* out) {
     portEXIT_CRITICAL(&g_meter_mux);
     portEXIT_CRITICAL(&g_capture_mux);
     return fresh;
+}
+
+AudioInputDiagnostics audio_input_diagnostics() {
+    const uint64_t now = static_cast<uint64_t>(esp_timer_get_time());
+    AudioInputDiagnostics result = {};
+    result.available = audio_input_available();
+    result.ota_active = ota_activity_is_active();
+    portENTER_CRITICAL(&g_capture_mux);
+    result.in_use = (g_capture_owner && g_capture_owner != g_meter_task) || g_capture_waiter;
+    portEXIT_CRITICAL(&g_capture_mux);
+    result.available = result.available && (g_meter_task || result.in_use);
+    portENTER_CRITICAL(&g_meter_mux);
+    result.rms = g_diagnostics.rms;
+    result.peak = g_diagnostics.peak;
+    result.sampled = g_diagnostic_sample_us != 0;
+    result.fresh = !result.ota_active && g_diagnostic_sample_us &&
+                   now - g_diagnostic_sample_us <= kDiagnosticMaxAgeUs;
+    result.input_full_scale = g_raw_clip_us && now - g_raw_clip_us <= kClipHoldUs;
+    result.gain_clipped = g_gain_clip_us && now - g_gain_clip_us <= kClipHoldUs;
+    portEXIT_CRITICAL(&g_meter_mux);
+    return result;
 }
 
 #endif // HAS_AUDIO_INPUT

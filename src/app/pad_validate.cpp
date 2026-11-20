@@ -11,6 +11,7 @@
 #if HAS_DISPLAY
 
 #include "pad_config.h"
+#include "pad_composition.h"
 #include "display_geometry.h"
 #include "pad_track_layout.h"
 #include "psram_json_allocator.h"
@@ -24,6 +25,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
+#include <new>
 
 uint32_t pad_icon_render_key(JsonObjectConst pad, JsonObjectConst button) {
     uint32_t hash = 2166136261u;
@@ -172,51 +174,58 @@ static const char* validate_track_sizes(JsonObjectConst pad, const char* field,
     return nullptr;
 }
 
-static const char* validate_exact_binding_token(const char* value) {
-    if (!value || value[0] != '[') return "timer value binding must use [scheme:params]";
-    const char* scheme = value + 1;
-    const char* colon = scheme;
-    while ((*colon >= 'a' && *colon <= 'z')
-            || (*colon >= 'A' && *colon <= 'Z')) colon++;
-    if (colon == scheme || *colon != ':') {
-        return "timer value binding must use [scheme:params]";
-    }
-    int depth = 1;
-    const char* cursor = colon + 1;
-    for (; *cursor && depth > 0; cursor++) {
-        if (*cursor == '[') depth++;
-        else if (*cursor == ']') depth--;
-    }
-    if (depth != 0) return "timer value binding has an unclosed bracket";
-    if (*cursor) return "timer value must be one complete binding token";
-    return action_validate_binding_tokens(value);
-}
-
-static const char* validate_action_constraints(JsonObjectConst action) {
-    const char* type = action["type"] | "";
-    if (strcmp(type, ACTION_TYPE_VISUAL_ALERT) == 0) {
-        const char* color = action["color"] | "";
-        if (strlen(color) >= CONFIG_BINDABLE_SHORT_LEN) return "visual_alert color too long (max 63 chars)";
-        if (!color_ok(color)) return "visual_alert color must be #RRGGBB or a binding";
-    }
-    if (strcmp(type, ACTION_TYPE_TIMER) == 0) {
-        if (strlen(action["timer_command"] | "") >= CONFIG_TIMER_CMD_MAX_LEN) return "timer command too long";
-        if (strlen(action["timer_mode"] | "") >= sizeof(((TimerPayload*)nullptr)->timer_mode)) return "timer mode too long";
-        const char* value = action["timer_value"] | "";
-        if (strlen(value) >= CONFIG_VALUE_MAX_LEN) return "timer value too long";
-        if (strchr(value, '[')) return validate_exact_binding_token(value);
+static const char* validate_action_array(JsonArrayConst arr) {
+    if (arr.size() > MAX_BUTTON_ACTIONS) return "too many actions (max 3)";
+    for (JsonObjectConst a : arr) {
+        const char* action_error = action_validate_json(a);
+        if (action_error) return action_error;
     }
     return nullptr;
 }
 
-static const char* validate_action_array(JsonArrayConst arr, bool require_known_type = true,
-                                         const char* value_token = nullptr) {
-    if (arr.size() > MAX_BUTTON_ACTIONS) return "too many actions (max 3)";
-    for (JsonObjectConst a : arr) {
-        const char* action_error = action_validate_json(a, require_known_type, value_token);
-        if (action_error) return action_error;
-        const char* constraint_error = validate_action_constraints(a);
-        if (constraint_error) return constraint_error;
+static const char* validate_versioned_action(JsonVariantConst value, bool versioned, bool validate_bindings) {
+    if (value.isNull()) return nullptr;
+    if (!value.is<JsonObjectConst>()) return "action must be an object";
+    if (!versioned) return "action_format_version is required for actions";
+    if (value.as<JsonObjectConst>().containsKey("type")) return "legacy actions are not supported in this format";
+    return action_operation_validate_json(value.as<JsonObjectConst>(), validate_bindings);
+}
+
+static const char* validate_versioned_actions(JsonVariantConst value, bool versioned, bool validate_bindings) {
+    if (value.isNull()) return nullptr;
+    if (!value.is<JsonArrayConst>()) return "actions must be an array";
+    if (value.as<JsonArrayConst>().size() > MAX_BUTTON_ACTIONS) return "too many actions (max 3)";
+    for (JsonVariantConst action : value.as<JsonArrayConst>()) {
+        if (action.isNull()) return "action must be an object";
+        const char* error = validate_versioned_action(action, versioned, validate_bindings);
+        if (error) return error;
+    }
+    return nullptr;
+}
+
+const char* pad_validate_action_version(JsonObjectConst pad, bool validate_bindings) {
+    const bool versioned = pad.containsKey("action_format_version");
+    if (versioned && (!pad["action_format_version"].is<int>() ||
+                      pad["action_format_version"].as<int>() != 1))
+        return "unsupported action_format_version";
+    const char* error = validate_versioned_actions(pad["pad_actions"], versioned, validate_bindings);
+    if (error) return error;
+    for (const char* layer : {"buttons", "overlay_buttons"}) {
+        JsonVariantConst collection = pad[layer];
+        if (!collection.isNull() && !collection.is<JsonArrayConst>()) return "buttons must be an array";
+        for (JsonVariantConst entry : collection.as<JsonArrayConst>()) {
+            if (!entry.is<JsonObjectConst>()) return "button must be an object";
+            JsonObjectConst button = entry.as<JsonObjectConst>();
+            if (button.containsKey("action") || button.containsKey("lp_action") ||
+                button.containsKey("action_screen") || button.containsKey("lp_action_screen"))
+                return "legacy action fields are not supported";
+            for (const char* field : {"actions", "lp_actions"}) {
+                error = validate_versioned_actions(button[field], versioned, validate_bindings);
+                if (error) return error;
+            }
+            error = validate_versioned_action(button["widget_numericrocker_action"], versioned, validate_bindings);
+            if (error) return error;
+        }
     }
     return nullptr;
 }
@@ -343,16 +352,15 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
                 if (!av.isNull()) {
                     if (!av.is<JsonObjectConst>()) {
                         snprintf(s_len_err, sizeof(s_len_err),
-                                 "widget field '%s' must be a nested action object {type,...}, not a bare value", fname);
+                                 "widget field '%s' must be a nested operation object, not a bare value", fname);
                         return s_len_err;
                     }
-                    const char* at = av["type"] | "";
-                    if (!at[0]) {
+                    if (!av["op"].is<const char*>()) {
                         snprintf(s_len_err, sizeof(s_len_err),
-                                 "widget field '%s' action is missing 'type'", fname);
+                                 "widget field '%s' action is missing 'op'", fname);
                         return s_len_err;
                     }
-                    const char* action_error = action_validate_json(av.as<JsonObjectConst>(), true, f["event_token"] | static_cast<const char*>(nullptr));
+                    const char* action_error = action_validate_json(av.as<JsonObjectConst>());
                     if (action_error) return action_error;
                 }
                 continue;  // action fields carry no length cap
@@ -425,12 +433,8 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
             if (actions.size() > MAX_BUTTON_ACTIONS) return "too many actions (max 3)";
             const char* error = wtype->validateActions(b, actions);
             if (error) return error;
-            for (JsonObjectConst action : actions) {
-                error = validate_action_constraints(action);
-                if (error) return error;
-            }
         } else {
-            const char* error = validate_action_array(actions, true, strcmp(wt, "slider") == 0 ? "{value}" : nullptr);
+            const char* error = validate_action_array(actions);
             if (error) return error;
         }
     }
@@ -439,6 +443,8 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
     // provider / timer id) in any string field (labels, widget bindings...).
     for (JsonPairConst kv : b) {
         if (strcmp(kv.key().c_str(), "extension_config") == 0) continue;
+        if (wtype && wtype->collectionBinding &&
+            strcmp(kv.key().c_str(), "widget_data_binding") == 0) continue;
         if (kv.value().is<const char*>()) {
             const char* he = action_validate_binding_tokens(kv.value().as<const char*>());
             if (he) return he;
@@ -475,9 +481,33 @@ static const char* validate_button_layer(JsonArrayConst buttons, int cols, int r
     return nullptr;
 }
 
+bool pad_validation_needs_context() {
+    for (uint8_t index = 0; index < widget_count(); ++index) {
+        const WidgetType* type = widget_at(index);
+        if (type && type->validatePadContext) return true;
+    }
+    return false;
+}
+
+const char* pad_validate_context(JsonObjectConst pad, JsonObjectConst template_pad) {
+    if (!pad_validation_needs_context()) return nullptr;
+    PsramJsonAllocator allocator;
+    void* memory = allocator.allocate(sizeof(PadComposedContext));
+    if (!memory) return "pad contextual validation allocation failed";
+    auto* context = new (memory) PadComposedContext;
+    const char* error = pad_compose_context(pad, template_pad, *context);
+    for (uint8_t index = 0; !error && index < widget_count(); ++index) {
+        const WidgetType* type = widget_at(index);
+        if (type && type->validatePadContext) error = type->validatePadContext(pad, *context);
+    }
+    context->~PadComposedContext();
+    allocator.deallocate(context);
+    return error;
+}
+
 // Validate a complete pad JSON (grid + buttons + collisions). nullptr = ok.
 const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid,
-                         const PadValidationGeometry* geometry) {
+                         const PadValidationGeometry* geometry, JsonObjectConst template_pad) {
     const char* shadow = pad["button_shadow"] | "";
     if (shadow[0] && strcmp(shadow, "enabled") != 0 && strcmp(shadow, "disabled") != 0)
         return "bad button_shadow";
@@ -522,8 +552,7 @@ const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid,
     }
     if (pad.containsKey("pad_actions")) {
         if (!pad["pad_actions"].is<JsonArrayConst>()) return "pad_actions must be an array";
-        const char* action_error = validate_action_array(
-            pad["pad_actions"].as<JsonArrayConst>(), true);
+        const char* action_error = validate_action_array(pad["pad_actions"].as<JsonArrayConst>());
         if (action_error) return action_error;
     }
     if (pad["bindings"].size() > PAD_MAX_BINDINGS) return "too many bindings";
@@ -556,6 +585,12 @@ const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid,
     if (button_error) return button_error;
     button_error = validate_button_layer(overlays, cols, rows, tolerate_offgrid);
     if (button_error) return button_error;
+    if (pad_validation_needs_context()) {
+        if ((pad["template_pad"] | -1) >= 0 && template_pad.isNull())
+            return "template pad is required for contextual validation";
+        const char* error = pad_validate_context(pad, template_pad);
+        if (error) return error;
+    }
     return nullptr;
 }
 

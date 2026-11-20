@@ -60,7 +60,7 @@ flag form `IS_FOO`, enum `FOO`):
 | 8 | `src/app/device_classes/foo/` | All feature code lives here | device_classes/shutter_tester/ |
 
 The next sections cover each touchpoint in detail, plus optional touchpoints
-(portal components, web routes, widgets, action types, list providers).
+(portal components, web routes, widgets, action types, List sources).
 
 ## 1. Register the Class Identity
 
@@ -222,7 +222,7 @@ fill in only what you need.
 | Hook | When called | Typical use |
 |---|---|---|
 | `on_setup_early` | After config load, before WiFi/portal | One-shot hardware init that the rest of setup depends on |
-| `on_setup_late` | After WiFi/AP/portal | Sensor/measurement init, binding/list-provider registration |
+| `on_setup_late` | After WiFi/AP/portal | Sensor/measurement init, binding/List source registration |
 | `on_normal_runtime` | Once in shared normal startup, including live Continue offline | Runtime workers that must not start while setup AP is active |
 | `on_loop` | Every `loop()` iteration | Drain queues, process captured data (must not block) |
 | `run_duty_cycle` | When `owned_mode` matches boot mode | Owns the entire duty cycle for the mode |
@@ -353,71 +353,25 @@ bundle.
 
 ### 4.6 Action Types
 
-If the class defines new button action types (e.g. `"foo_start"`), use the
-`ActionTypeDef` registry rather than editing the core `action_dispatch.cpp`
-strcmp ladder.
-
-The payload is stored in the opaque `ActionPayload::device_class` arm
-(see [src/app/pad_config.h](src/app/pad_config.h)). Mirror the shutter
-pattern in [src/app/device_classes/shutter_tester/shutter_payload.h](src/app/device_classes/shutter_tester/shutter_payload.h):
-
-```cpp
-#pragma once
-#if IS_FOO
-#include "../../pad_config.h"
-
-#define ACTION_TYPE_FOO "foo"
-
-struct FooPayload {
-    char command[CONFIG_TIMER_CMD_MAX_LEN];
-    char value[CONFIG_BINDABLE_SHORT_LEN];
-};
-
-static_assert(sizeof(FooPayload) <= ACTION_PAYLOAD_DEVICE_CLASS_BYTES,
-              "FooPayload exceeds ACTION_PAYLOAD_DEVICE_CLASS_BYTES "
-              "— raise it via board_overrides.h");
-
-inline FooPayload& foo_payload(ButtonAction& act) {
-    return *reinterpret_cast<FooPayload*>(act.payload.device_class);
-}
-inline const FooPayload& foo_payload(const ButtonAction& act) {
-    return *reinterpret_cast<const FooPayload*>(act.payload.device_class);
-}
-#endif
-```
-
-Keep parse, serialize, dispatch, validation, binding-field handling, and
-`describe()` metadata in the class's `foo_actions.cpp`. Define and register
-the descriptor together with one `DEFINE_AND_REGISTER_ACTION_TYPE(...)` call
-(see
-[src/app/device_classes/shutter_tester/shutter_actions.cpp](src/app/device_classes/shutter_tester/shutter_actions.cpp)).
+Define each operation's ID, argument descriptors, and normalized handler in
+the owning device-class module. Register its operation array with one
+`DEFINE_AND_REGISTER_ACTION_TYPE(...)` call, as in
+[shutter actions](../../src/app/device_classes/shutter_tester/shutter_actions.cpp).
+The shared parser, validator, dispatcher, and portal picker use these
+descriptors. Ordinary operations do not need a central parser or editor branch.
 
 Do not add a device-class action to `src/app/actions/action_modules.inc`.
 That manifest aggregates built-in actions only. Device-class action modules
 remain with their owner and are compiled by the existing feature-gated
 device-class aggregator.
 
-Declare eligible text buffers once through `ActionTypeDef::fields`, using
-`action_visit_field(visitor, context, "persisted_field_name", payload.field)`.
-The helper infers capacity from the array. Flags independently enable
-`ACTION_FIELD_BINDING`, `ACTION_FIELD_EVENT`, and binding-overflow rejection
-(`ACTION_FIELD_REJECT_OVERFLOW`); the default enables all three. Keep commands
-and other fixed properties out of the visitor. Use the persisted JSON field
-name, not an internal alias.
+Mark arguments dynamic only when they can be resolved at execution time.
+Handlers receive normalized values and must copy text needed by asynchronous
+work. Use `[event:step]` and `[event:value]` in dynamic arguments for widget
+events. See the [action authoring instructions](../../.github/instructions/action-types.instructions.md)
+for bounds and continuation ownership.
 
-Shared code uses this declaration for live-binding resolution and discovery,
-bounded `{step}` / `{value}` substitution, authoring validation, and catalog
-`template_fields` metadata. Event overflow always rejects, regardless of the
-binding-overflow policy. Types with no eligible text fields leave `fields`
-`nullptr`. Do not add per-type token substitution or a second field registry.
-
-**Size budget**: the default `ACTION_PAYLOAD_DEVICE_CLASS_BYTES` is 96 B.
-Today the dominant arm is `NotifyPayload` at 394 B, so the device-class slot
-does not move `sizeof(ActionPayload)`. If your payload exceeds 96 B, prefer
-raising it in `board_overrides.h` of the boards that ship the class rather
-than raising the default — that would cost every board.
-
-### 4.6 Bindings, List Providers, Pad Blocks
+### 4.6 Bindings, List Sources, Pad Blocks
 
 These all use registration-based APIs called from `on_setup_late`:
 
@@ -425,8 +379,11 @@ These all use registration-based APIs called from `on_setup_late`:
   collector, spec)` from the class's binding init function, then invoke that
   function from the class's `on_setup_late` hook. Device-class schemes remain
   with their owner and are not added to `binding_builtin_schemes.cpp`.
-- **List provider**: `list_provider_register(...)` exposes a `[list:foo.selected]`
-  data source.
+- **List source**: register a `ListSourceDescriptor` with `list_source_register`.
+  Its token, fields, revision, incremental loader, and cleanup callbacks define
+  a bounded collection. Prefer a string `title` field for the default row label;
+  it may be optional if an item has no title. See the shutter test source for
+  an implementation.
 - **Pad block**: `pad_block_register(...)` adds pre-configured button groups
   to the pad editor.
 
@@ -464,9 +421,8 @@ These mistakes silently break the class without producing a build error:
   the class folder and the aggregators listed in this document is debt.
   Push the logic into the device class and call it through a registered
   hook.
-- **Raising `ACTION_PAYLOAD_DEVICE_CLASS_BYTES` in `pad_config.h`** — the
-  default lives there for sizing canaries; per-class overrides belong in
-  `board_overrides.h` of the boards that need them.
+- **Adding inline device-class action payloads** — register typed operations
+  and use the shared action argument storage instead.
 - **Reusing another class's `IS_*` flag** — each class must have its own
   flag so detection precedence in `device_class_detect()` is unambiguous
   and so boards can ship them independently.

@@ -30,6 +30,7 @@
 
 #include <ArduinoJson.h>
 #include "../src/app/mcp_tool_response.h"
+#include "../src/app/mcp_control_number.h"
 
 #include <cstdio>
 #include <cstring>
@@ -239,6 +240,28 @@ static void test_tool_response_envelope_failure() {
     CHECK(response_frees == frees_before + 1, "failed envelope releases payload");
 }
 
+static void test_volume_numeric_input() {
+    int32_t value = 99;
+    for (const char* invalid : {"", " ", "garbage", "12dB", "nan", "inf", "1e9999"}) {
+        CHECK(!mcp_volume_percent(invalid, &value) && value == 99,
+              "invalid volume does not produce a value");
+    }
+    CHECK(mcp_volume_percent("12.6", &value) && value == 13, "decimal volume rounds");
+    CHECK(mcp_volume_percent(" -12.5 ", &value) && value == -13, "signed delta rounds");
+    CHECK(mcp_volume_percent("500", &value) && value == 100, "positive volume clamps");
+    CHECK(mcp_volume_percent("-500", &value) && value == -100, "negative delta clamps");
+}
+
+static void test_volume_json_input_types() {
+    JsonDocument document;
+    CHECK(!deserializeJson(document, R"([5,1.5,true,null,{},[]])"),
+          "volume JSON fixture parses");
+    CHECK(document[0].is<double>() && document[1].is<double>(),
+          "volume accepts JSON numbers");
+    for (int index = 2; index < 6; ++index)
+        CHECK(!document[index].is<double>(), "volume rejects nonnumeric JSON values");
+}
+
 int main() {
     test_control_status_copies_stack_buffer();
     test_read_field_copies_freed_heap();
@@ -249,6 +272,8 @@ int main() {
     test_large_async_tool_response();
     test_tool_response_allocation_failure();
     test_tool_response_envelope_failure();
+    test_volume_numeric_input();
+    test_volume_json_input_types();
 
     if (g_failures) {
         std::printf("\n%d check(s) failed\n", g_failures);

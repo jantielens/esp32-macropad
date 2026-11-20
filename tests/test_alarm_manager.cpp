@@ -9,6 +9,8 @@
 #include "../src/app/alarm_manager.h"
 #include "../src/app/action_dispatch.h"
 #include "../src/app/action_registry.h"
+#include "../src/app/action_parse.h"
+#include "../src/app/action_validate.h"
 
 std::map<std::string, std::string> storage_test_files;
 bool storage_test_fail_open = false;
@@ -28,6 +30,8 @@ static bool ota = false;
 static uint32_t timezone_revision = 0;
 static const char* timezone_name = "UTC0";
 static std::vector<std::string> dispatched;
+static std::vector<std::string> dispatched_json;
+static ActionResult dispatch_result = ACTION_FAILED;
 static size_t ota_after_dispatch = SIZE_MAX;
 static bool (*last_work_guard)(uint32_t) = nullptr;
 static uint32_t last_work_generation = 0;
@@ -86,8 +90,13 @@ ActionDispatchContext action_dispatch_context() { return {}; }
 void display_manager_request_binding_refresh() {}
 ActionResult action_dispatch(const ButtonAction& action, const char* label, uint32_t, bool) {
     dispatched.emplace_back(std::string(label) + ":" + action.type);
+    JsonDocument document;
+    action_to_json(action, document.to<JsonObject>());
+    std::string json;
+    serializeJson(document, json);
+    dispatched_json.push_back(json);
     if (dispatched.size() == ota_after_dispatch) ota = true;
-    return ACTION_FAILED;
+    return dispatch_result;
 }
 ActionResult action_dispatch_synchronous(const ButtonAction& action, const char* label,
                                          bool (*guard)(uint32_t), uint32_t generation, bool) {
@@ -97,7 +106,177 @@ ActionResult action_dispatch_synchronous(const ButtonAction& action, const char*
 }
 
 static bool save(const char* json) { return alarm_config_save_raw(reinterpret_cast<const uint8_t*>(json), strlen(json)); }
-static const char* config = R"({"lateness_minutes":5,"1":{"enabled":true,"hour":7,"minute":30,"weekdays":62,"snooze_minutes":9,"auto_dismiss_minutes":30,"on_ring":[{"type":"screen","target":"info"}],"on_stop":[]}})";
+static const char* config = R"({"action_format_version":1,"lateness_minutes":5,"1":{"enabled":true,"hour":7,"minute":30,"weekdays":62,"snooze_minutes":9,"auto_dismiss_minutes":30,"on_ring":[{"op":"screen.open","args":{"target":"info"}}],"on_stop":[]}})";
+
+static ActionResult test_operation(const ActionResolvedArgument*, const char*, uint32_t) { return ACTION_COMPLETE; }
+static const ActionOperationDef test_operations[] = {
+    {"test.sync", "Sync", nullptr, 0, test_operation, ACTION_EXECUTION_SYNC},
+    {"test.pause", "Pause", nullptr, 0, test_operation, ACTION_EXECUTION_PAUSABLE},
+};
+static const ActionTypeDef test_owner("test_owner", nullptr, nullptr, ACTION_EXECUTION_PAUSABLE, true, false, test_operations, 2);
+
+static ActionResult dispatch_alarm_operation(const char* json) {
+    JsonDocument document;
+    assert(!deserializeJson(document, json));
+    assert(!action_operation_validate_json(document.as<JsonObjectConst>(), false));
+    const ActionOperationDef* operation = action_operation_find(document["op"]);
+    assert(operation);
+    ActionResolvedArgument arguments[ACTION_OPERATION_MAX_ARGUMENTS] = {};
+    for (uint8_t index = 0; index < operation->argument_count; ++index) {
+        const auto& argument = operation->arguments[index];
+        JsonVariant value = document["args"][argument.name];
+        if (argument.type == ACTION_ARGUMENT_ENUM) arguments[index].text = value.as<const char*>();
+        else arguments[index].integer = value.as<int32_t>();
+    }
+    return operation->dispatch(arguments, "alarm test", 0);
+}
+
+static void test_alarm_operation_dispatch() {
+    const auto previous_dispatched = dispatched;
+    const auto previous_dispatched_json = dispatched_json;
+    const ActionResult previous_result = dispatch_result;
+    const auto previous_guard = last_work_guard;
+    const uint32_t previous_generation = last_work_generation;
+    storage_test_files.clear();
+    ready = true;
+    ota = false;
+    wall_clock = 1704094140;
+    monotonic_clock = 0;
+    alarm_manager_init();
+    assert(save(config));
+
+    assert(dispatch_alarm_operation(R"({"op":"alarm.set_time","args":{"minutes":1439}})") == ACTION_COMPLETE);
+    assert(alarm_snapshot().pending_commands == 1);
+    alarm_manager_loop();
+    assert(alarm_snapshot().hour == 23 && alarm_snapshot().minute == 59);
+    assert(dispatch_alarm_operation(R"({"op":"alarm.adjust_minutes","args":{"minutes":1}})") == ACTION_COMPLETE);
+    alarm_manager_loop();
+    assert(alarm_snapshot().hour == 0 && alarm_snapshot().minute == 0);
+    assert(dispatch_alarm_operation(R"({"op":"alarm.disable","args":{}})") == ACTION_COMPLETE);
+    alarm_manager_loop();
+    assert(!alarm_snapshot().enabled);
+    assert(dispatch_alarm_operation(R"({"op":"alarm.toggle","args":{}})") == ACTION_COMPLETE);
+    alarm_manager_loop();
+    assert(alarm_snapshot().enabled);
+    assert(dispatch_alarm_operation(R"({"op":"alarm.enable","args":{}})") == ACTION_COMPLETE);
+    alarm_manager_loop();
+    assert(alarm_snapshot().enabled);
+
+    assert(dispatch_alarm_operation(R"({"op":"alarm.weekday_enable","args":{"day":"0"}})") == ACTION_COMPLETE);
+    alarm_manager_loop();
+    assert(alarm_snapshot().weekdays == 63);
+    assert(dispatch_alarm_operation(R"({"op":"alarm.weekday_toggle","args":{"day":"6"}})") == ACTION_COMPLETE);
+    alarm_manager_loop();
+    assert(alarm_snapshot().weekdays == 127);
+    assert(dispatch_alarm_operation(R"({"op":"alarm.weekday_disable","args":{"day":"0"}})") == ACTION_COMPLETE);
+    alarm_manager_loop();
+    assert(alarm_snapshot().weekdays == 126);
+
+    JsonDocument invalid;
+    assert(!deserializeJson(invalid, R"({"op":"alarm.set_time","args":{"minutes":1440}})"));
+    assert(action_operation_validate_json(invalid.as<JsonObjectConst>(), false));
+    assert(!deserializeJson(invalid, R"({"op":"alarm.weekday_toggle","args":{"day":"7"}})"));
+    assert(action_operation_validate_json(invalid.as<JsonObjectConst>(), false));
+    assert(!deserializeJson(invalid, R"({"op":"alarm.cancel","args":{"alarm":"2"}})"));
+    assert(action_operation_validate_json(invalid.as<JsonObjectConst>(), false));
+    assert(alarm_snapshot().pending_commands == 0);
+    const ActionOperationDef* weekday = action_operation_find("alarm.weekday_toggle");
+    const char* text = nullptr;
+    assert(!action_argument_normalize_text(weekday->arguments[0], "6", &text, nullptr));
+    assert(!strcmp(text, "6"));
+    assert(action_argument_normalize_text(weekday->arguments[0], "7", &text, nullptr));
+    const ActionOperationDef* adjustment = action_operation_find("alarm.adjust_minutes");
+    int32_t minutes = 0;
+    assert(!action_argument_normalize_text(adjustment->arguments[0], "-10", nullptr, &minutes));
+    assert(minutes == -10);
+    assert(action_argument_normalize_text(adjustment->arguments[0], "1.5", nullptr, &minutes));
+
+    for (unsigned index = 0; index < 4; ++index)
+        assert(dispatch_alarm_operation(R"({"op":"alarm.snooze","args":{"alarm":"0"}})") == ACTION_COMPLETE);
+    assert(dispatch_alarm_operation(R"({"op":"alarm.cancel","args":{"alarm":"1"}})") == ACTION_FAILED);
+    assert(alarm_snapshot().pending_commands == 4 && alarm_snapshot().command_error);
+    for (unsigned index = 0; index < 4; ++index) alarm_manager_loop();
+    assert(dispatch_alarm_operation(R"({"op":"alarm.cancel","args":{"alarm":"1"}})") == ACTION_COMPLETE);
+    alarm_manager_loop();
+
+    storage_test_files.clear();
+    wall_clock = 1704094140;
+    alarm_manager_init();
+    dispatch_result = ACTION_COMPLETE;
+    assert(save(config));
+    wall_clock += 60;
+    alarm_manager_loop();
+    assert(alarm_snapshot().state == ALARM_RINGING);
+    assert(dispatch_alarm_operation(R"({"op":"alarm.snooze","args":{"alarm":"0"}})") == ACTION_COMPLETE);
+    alarm_manager_loop();
+    assert(alarm_snapshot().state == ALARM_SNOOZED);
+    assert(dispatch_alarm_operation(R"({"op":"alarm.cancel","args":{"alarm":"1"}})") == ACTION_COMPLETE);
+    alarm_manager_loop();
+    assert(alarm_snapshot().state == ALARM_IDLE);
+    dispatched = previous_dispatched;
+    dispatched_json = previous_dispatched_json;
+    dispatch_result = previous_result;
+    last_work_guard = previous_guard;
+    last_work_generation = previous_generation;
+}
+
+static void test_typed_hooks() {
+    action_type_register(&test_owner);
+    storage_test_files.clear();
+    ready = true;
+    ota = false;
+    wall_clock = 1704094140;
+    monotonic_clock = 0;
+    alarm_manager_init();
+    const char* typed = R"({"action_format_version":1,"lateness_minutes":5,"1":{"enabled":true,"hour":7,"minute":30,"weekdays":62,"snooze_minutes":9,"auto_dismiss_minutes":30,"on_ring":[{"op":"test.sync","args":{}},{"op":"screen.open","args":{"target":"info"}}],"on_stop":[{"op":"screen.open","args":{"target":"settings"}}]}})";
+    assert(save(typed));
+    const auto persisted = storage_test_files;
+    std::string invalid(typed);
+    invalid.replace(invalid.find("test.sync"), strlen("test.sync"), "test.pause");
+    assert(!save(invalid.c_str()) && storage_test_files == persisted);
+    invalid = typed;
+    invalid.replace(invalid.find("\"target\":\"info\""), strlen("\"target\":\"info\""), "\"target\":42");
+    assert(!save(invalid.c_str()) && storage_test_files == persisted);
+    invalid = typed;
+    invalid.insert(invalid.size() - 1, R"(,"1\u0000x":{"on_ring":[{"type":"legacy"}]})");
+    assert(!save(invalid.c_str()) && storage_test_files == persisted);
+    std::string replacement(typed);
+    replacement.replace(replacement.find("\"settings\""), strlen("\"settings\""), "\"new\"");
+    storage_test_write_limit = 8;
+    assert(!save(replacement.c_str()));
+    storage_test_write_limit = SIZE_MAX;
+    alarm_manager_init();
+    JsonDocument saved;
+    alarm_config_to_json(saved.to<JsonObject>());
+    assert(saved["1"]["on_ring"][0]["op"] == "test.sync");
+    assert(saved["1"]["on_stop"][0]["args"]["target"] == "settings");
+    dispatched.clear();
+    dispatched_json.clear();
+    dispatch_result = ACTION_COMPLETE;
+    ota_after_dispatch = 1;
+    wall_clock += 60;
+    alarm_manager_loop();
+    assert(ota && dispatched_json.size() == 1);
+    ota = false;
+    ota_after_dispatch = SIZE_MAX;
+    assert(save(replacement.c_str()));
+    assert(dispatched_json.size() == 2);
+    assert(dispatched_json.back().find("\"target\":\"settings\"") != std::string::npos);
+    assert(dispatched_json.back().find("\"target\":\"new\"") == std::string::npos);
+    alarm_config_to_json(saved.to<JsonObject>());
+    assert(saved["1"]["on_stop"][0]["args"]["target"] == "new");
+
+    storage_test_files.clear();
+    wall_clock = 1704094140;
+    alarm_manager_init();
+    assert(save(typed));
+    dispatched.clear();
+    dispatched_json.clear();
+    dispatch_result = ACTION_FAILED;
+    wall_clock += 60;
+    alarm_manager_loop();
+    assert(dispatched_json.size() == 2 && alarm_snapshot().hook_error);
+}
 
 static void test_scoped_saves() {
     storage_test_files.clear();
@@ -116,13 +295,16 @@ static void test_scoped_saves() {
     assert(current["lateness_minutes"] == 5);
     assert(current["1"]["snooze_minutes"] == 9);
     assert(current["1"]["on_ring"].size() == 1);
-    assert(save_section(R"({"lateness_minutes":12,"snooze_minutes":3,"auto_dismiss_minutes":20,"on_ring":[],"on_stop":[]})", AlarmConfigSection::Behavior));
+    assert(save_section(R"({"action_format_version":1,"lateness_minutes":12,"snooze_minutes":3,"auto_dismiss_minutes":20,"on_ring":[],"on_stop":[]})", AlarmConfigSection::Behavior));
     alarm_config_to_json(current.to<JsonObject>());
     assert(current["1"]["enabled"] == false);
     assert(current["1"]["hour"] == 8 && current["1"]["minute"] == 15);
     assert(current["1"]["weekdays"] == 31);
     assert(current["lateness_minutes"] == 12 && current["1"]["snooze_minutes"] == 3);
     assert(!save_section(R"({"enabled":true,"hour":9,"minute":0,"snooze_minutes":1})", AlarmConfigSection::Schedule));
+    const auto persisted = storage_test_files;
+    assert(!save_section(R"({"enabled":false,"hour":8,"minute":15,"weekdays":31,"hour\u0000x":9})", AlarmConfigSection::Schedule));
+    assert(storage_test_files == persisted);
     alarm_manager_init();
     alarm_config_to_json(current.to<JsonObject>());
     assert(current["1"]["hour"] == 8 && current["1"]["minute"] == 15);
@@ -199,13 +381,10 @@ static void test_once() {
     assert(!alarm_snapshot().enabled && alarm_snapshot().state == ALARM_IDLE && dispatched.empty());
     alarm_manager_init();
     assert(!alarm_snapshot().enabled);
-    ButtonAction invalid = {};
-    strlcpy(invalid.type, "alarm", sizeof(invalid.type));
-    strlcpy(invalid.payload.alarm.alarm_command, "adjust_minutes", sizeof(invalid.payload.alarm.alarm_command));
-    strlcpy(invalid.payload.alarm.alarm_value, "1.5", sizeof(invalid.payload.alarm.alarm_value));
-    invalid.payload.alarm.alarm_id = 1;
-    assert(action_type_find("alarm")->dispatch(invalid, "test", 0) == ACTION_FAILED);
-    assert(alarm_snapshot().command_error);
+    JsonDocument invalid_adjustment;
+    assert(!deserializeJson(invalid_adjustment, R"({"op":"alarm.adjust_minutes","args":{"minutes":"1.5"}})"));
+    assert(action_operation_validate_json(invalid_adjustment.as<JsonObjectConst>(), false));
+    assert(alarm_snapshot().pending_commands == 0);
     storage_test_files.clear();
     wall_clock = 1704094140;
     alarm_manager_init();
@@ -589,9 +768,7 @@ static void test_state_allocation_failure() {
     const AlarmSnapshot unavailable = alarm_snapshot();
     assert(!unavailable.ready && !unavailable.enabled && unavailable.storage_error);
     JsonDocument document;
-    alarm_config_to_json(document.to<JsonObject>());
-    assert(document["1"]["enabled"] == false);
-    assert(document["1"]["hour"] == 7);
+    assert(!alarm_config_to_json(document.to<JsonObject>()));
     assert(!alarm_command_submit("cancel"));
     assert(!save(config));
     alarm_manager_loop();
@@ -606,13 +783,85 @@ static void test_state_allocation_failure() {
     assert(save(config));
 }
 
+static void test_incompatible_hook_snapshot_is_protected() {
+    action_type_register(&test_owner);
+    const char* invalid_actions[] = {
+        R"({"op":"missing.operation","args":{}})",
+        R"({"type":"screen","op":"test.sync","args":{}})",
+        R"({"type":"screen","op":"test.sync"})",
+        R"({"op":"test.sync","args":{"extra":true}})",
+        R"({"type":"unknown","data":"preserve"})",
+        nullptr
+    };
+    for (const char* invalid : invalid_actions) {
+        for (bool older_snapshot : {false, true}) {
+            storage_test_files.clear();
+            ready = true;
+            ota = false;
+            timezone_name = "UTC0";
+            alarm_manager_init();
+            if (older_snapshot) assert(save(config));
+            std::string changed(config);
+            changed.replace(changed.find("30,"), 3, "31,");
+            assert(save(changed.c_str()));
+
+            const char* path = older_snapshot ? "/config/alarm_b.json" : "/config/alarm_a.json";
+            JsonDocument stored;
+            assert(!deserializeJson(stored, storage_test_files[path]));
+            if (invalid) {
+                JsonDocument action;
+                assert(!deserializeJson(action, invalid));
+                stored["data"]["config"]["1"]["on_ring"][0].set(action);
+            } else {
+                stored["data"]["config"].as<JsonObject>().remove("action_format_version");
+            }
+            stored.remove("checksum");
+            std::string payload;
+            serializeJson(stored, payload);
+            uint32_t crc = 0xffffffffU;
+            for (unsigned char byte : payload) {
+                crc ^= byte;
+                for (int bit = 0; bit < 8; ++bit)
+                    crc = (crc >> 1) ^ (0xedb88320U & (0U - (crc & 1U)));
+            }
+            stored["checksum"] = ~crc;
+            storage_test_files[path].clear();
+            serializeJson(stored, storage_test_files[path]);
+            const auto before = storage_test_files;
+            timezone_name = "changed";
+            alarm_manager_init();
+            assert(!alarm_snapshot().ready && alarm_snapshot().storage_error);
+            JsonDocument document;
+            assert(!alarm_config_to_json(document.to<JsonObject>()));
+            assert(!save(config));
+            assert(!alarm_command_submit("enable"));
+            alarm_manager_loop();
+            assert(storage_test_files == before);
+        }
+    }
+    storage_test_files.clear();
+    timezone_name = "UTC0";
+    alarm_manager_init();
+    assert(alarm_snapshot().ready);
+    std::string legacy(config);
+    legacy.replace(legacy.find("{\"op\":\"screen.open\",\"args\":{\"target\":\"info\"}}"),
+        strlen("{\"op\":\"screen.open\",\"args\":{\"target\":\"info\"}}"),
+        "{\"type\":\"visual_alert\",\"op\":\"start\",\"color\":\"#ff0000\"}");
+    const auto before = storage_test_files;
+    assert(!save(legacy.c_str()));
+    assert(storage_test_files == before);
+}
+
 int main(int argc, char** argv) {
     if (argc > 1 && !strcmp(argv[1], "allocation-failure")) {
         test_state_allocation_failure();
         std::puts("alarm manager allocation-failure: PASS");
         return 0;
     }
+    test_incompatible_hook_snapshot_is_protected();
     test_scoped_saves();
+    test_typed_hooks();
+    test_alarm_operation_dispatch();
     test_recovery();
     test_settings_debounce();
     test_once();
@@ -691,8 +940,8 @@ int main(int argc, char** argv) {
     assert(save(changed.c_str()));
     alarm_manager_init();
     assert(alarm_snapshot().minute == 31);
-    assert(!save(R"({"1":{"enabled":true,"hour":7,"minute":30,"weekdays":62,"snooze_minutes":9,"auto_dismiss_minutes":30,"on_ring":[{"type":"delay","duration_ms":10}],"on_stop":[]}})"));
-    assert(!save(R"({"1":{"enabled":true,"hour":7,"minute":30,"weekdays":62,"snooze_minutes":9,"auto_dismiss_minutes":30,"on_ring":[{"type":"key","key_sequence":"A"}],"on_stop":[]}})"));
+    assert(!save(R"({"action_format_version":1,"lateness_minutes":5,"1":{"enabled":true,"hour":7,"minute":30,"weekdays":62,"snooze_minutes":9,"auto_dismiss_minutes":30,"on_ring":[{"op":"test.pause","args":{}}],"on_stop":[]}})"));
+    assert(!save(R"({"action_format_version":1,"lateness_minutes":5,"1":{"enabled":true,"hour":7,"minute":30,"weekdays":62,"snooze_minutes":9,"auto_dismiss_minutes":30,"on_ring":[{"type":"key","key_sequence":"A"}],"on_stop":[]}})"));
     assert(!save("{}"));
     assert(!alarm_command_submit("cancel", 2));
     assert(alarm_command_submit("cancel"));
@@ -707,8 +956,8 @@ int main(int argc, char** argv) {
     wall_clock = 1704094140;
     alarm_manager_init();
     std::string hooked(config);
-    hooked.replace(hooked.find("\"on_stop\":[]"), strlen("\"on_stop\":[]"), "\"on_stop\":[{\"type\":\"screen\",\"target\":\"info\"}]");
-    hooked.replace(hooked.find("\"on_ring\":["), strlen("\"on_ring\":["), "\"on_ring\":[{\"type\":\"screen\",\"target\":\"info\"},");
+    hooked.replace(hooked.find("\"on_stop\":[]"), strlen("\"on_stop\":[]"), "\"on_stop\":[{\"op\":\"screen.open\",\"args\":{\"target\":\"info\"}}]");
+    hooked.replace(hooked.find("\"on_ring\":["), strlen("\"on_ring\":["), "\"on_ring\":[{\"op\":\"screen.open\",\"args\":{\"target\":\"info\"}},");
     assert(save(hooked.c_str()));
     wall_clock += 60;
     alarm_manager_loop();
@@ -739,7 +988,8 @@ int main(int argc, char** argv) {
     assert(alarm_command_submit("adjust_minutes", 1, 1));
     alarm_manager_loop();
     assert(alarm_snapshot().state == ALARM_IDLE && dispatched.size() == 6);
-    assert(dispatched.back() == "Alarm stop:screen");
+    assert(dispatched.back() == "Alarm stop:@");
+    assert(dispatched_json.back().find("\"op\":\"screen.open\"") != std::string::npos);
     const uint32_t cleanup_generation = last_work_generation;
     assert(last_work_guard(cleanup_generation));
     assert(alarm_command_submit("cancel"));
@@ -764,7 +1014,7 @@ int main(int argc, char** argv) {
     assert(alarm_snapshot().state == ALARM_IDLE && dispatched.size() == 8);
     ota = false;
     alarm_manager_loop();
-    assert(dispatched.size() == 9 && dispatched.back() == "Alarm stop:screen");
+    assert(dispatched.size() == 9 && dispatched.back() == "Alarm stop:@");
     wall_clock += 86400;
     ota_after_dispatch = dispatched.size() + 1;
     alarm_manager_loop();
@@ -801,7 +1051,7 @@ int main(int argc, char** argv) {
     ++timezone_revision;
     alarm_manager_loop();
     assert(alarm_snapshot().state == ALARM_IDLE && dispatched.size() == 3);
-    assert(dispatched.back() == "Alarm stop:screen");
+    assert(dispatched.back() == "Alarm stop:@");
     storage_test_files.clear();
     wall_clock = 1704094140;
     monotonic_clock = 0;
@@ -829,7 +1079,7 @@ int main(int argc, char** argv) {
     alarm_manager_loop();
     assert(alarm_snapshot().state == ALARM_RINGING);
     assert(has_log("Ring started: reason=schedule"));
-    assert(has_log("Alarm ring hook 1/1: dispatch type=screen"));
+    assert(has_log("Alarm ring hook 1/1: dispatch type=@"));
     assert(has_log("Alarm ring hook 1/1: failed result="));
     const size_t log_count = diagnostics.size();
     for (int tick = 0; tick < 100; ++tick) alarm_manager_loop();

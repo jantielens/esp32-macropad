@@ -28,7 +28,7 @@ window.registerConfigFields = function (names) {
 };
 
 let portalMaterialSymbolsPromise = null;
-function portalCategoryIcon(category) {
+function portalCategoryIcon(category, alias) {
     const icons = {
         device: 'settings', display: 'display_settings', camera: 'photo_camera',
         pads: 'grid_view', actions: 'bolt', alarm: 'alarm', connectivity: 'hub',
@@ -36,7 +36,7 @@ function portalCategoryIcon(category) {
         coffee: 'coffee', darkroom: 'dark_mode', voice: 'record_voice_over',
         epaper_frame: 'image', 'epaper-frame': 'image'
     };
-    return '<span class="portal-icon" aria-hidden="true">' + (icons[category] || 'settings') + '</span>';
+    return '<span class="portal-icon" aria-hidden="true">' + (icons[alias] || icons[category] || 'settings') + '</span>';
 }
 
 function portalEnsureMaterialSymbols() {
@@ -433,7 +433,7 @@ function isInCaptivePortal() {
 /**
  * Unified reconnection logic for all reboot scenarios
  * @param {Object} options - Reconnection options
- * @param {string} options.context - Context: 'save', 'ota', 'reboot'
+ * @param {string} options.context - Context: 'save', 'ota', 'ota-mode', 'reboot'
  * @param {string} options.newDeviceName - Optional new device name if changed
  * @param {HTMLElement} options.statusElement - Status message element
  * @param {HTMLElement} options.messageElement - Main message element
@@ -480,7 +480,12 @@ async function startReconnection(options) {
                     statusElement.textContent = 'Redirecting...';
                     const redirectUrl = targetUrl || window.location.origin;
                     setTimeout(() => {
-                        window.location.href = redirectUrl;
+                        if (context === 'ota-mode') {
+                            window.location.hash = '#manual-upload';
+                            window.location.reload();
+                        } else {
+                            window.location.href = redirectUrl;
+                        }
                     }, 1000);
                     return;
                 }
@@ -495,7 +500,8 @@ async function startReconnection(options) {
             setTimeout(checkConnection, checkInterval);
         } else {
             // Timeout - provide manual fallback
-            const fallbackUrl = targetUrl || window.location.origin;
+            const fallbackUrl = (targetUrl || window.location.origin) +
+                (context === 'ota-mode' ? '/#manual-upload' : '');
             messageElement.textContent = 'Automatic reconnection failed';
             statusElement.innerHTML = 
                 `<div style="color:#e74c3c; margin-bottom: 10px;">Could not reconnect after ${2 + (maxAttempts * 3)} seconds.</div>` +

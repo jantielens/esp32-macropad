@@ -41,16 +41,18 @@ the pad. HA/device permissions determine whether the request succeeds.
 
 ## Build the rocker
 
-Choose Numeric Rocker, Small Step 0.5/Large Step 2, and MQTT Adjustment Action:
+Choose Numeric Rocker, Small Step 0.5/Large Step 2, and **Publish MQTT message**
+as its **Adjustment Action**. Enable **Dynamic** for **Payload**:
 
 ```text
 Topic: house/climate/living_room/step
-Payload: {"delta":{step}}
+Payload: {"delta":[event:step]}
 ```
 
 Use supported step sizes; a whole-degree-only target needs different values.
 Save Pad and test both signs and the bounds.
-Do not put this template in a direct HA service action: those fields are literal.
+This payload is for the MQTT automation above. A direct Home Assistant service
+call would need the service's own data fields.
 
 ## Show confirmed state
 

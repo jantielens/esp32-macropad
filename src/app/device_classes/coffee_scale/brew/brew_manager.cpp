@@ -738,24 +738,11 @@ uint8_t brew_markers_copy(BrewMarker* dst, uint8_t dst_max) {
 // Timer formatting (same logic as timer_engine, self-contained)
 // ============================================================================
 
-int brew_format_timer(const char* fmt, char* out, size_t out_len) {
+int brew_format_timer(char* out, size_t out_len) {
     uint32_t ms = brew_get_timer_ms();
     uint32_t total_s = ms / 1000;
-    uint32_t h  = total_s / 3600;
-    uint32_t m  = (total_s % 3600) / 60;
     uint32_t s  = total_s % 60;
-    uint32_t ds = (ms % 1000) / 100;
-
-    if (!fmt || !fmt[0] || strcmp(fmt, "mm:ss") == 0) {
-        return snprintf(out, out_len, "%u:%02u", (unsigned)(h * 60 + m), (unsigned)s);
-    } else if (strcmp(fmt, "hh:mm:ss") == 0) {
-        return snprintf(out, out_len, "%u:%02u:%02u", (unsigned)h, (unsigned)m, (unsigned)s);
-    } else if (strcmp(fmt, "ss") == 0) {
-        return snprintf(out, out_len, "%u", (unsigned)total_s);
-    } else if (strcmp(fmt, "mm:ss.d") == 0) {
-        return snprintf(out, out_len, "%u:%02u.%u", (unsigned)(h * 60 + m), (unsigned)s, (unsigned)ds);
-    }
-    return snprintf(out, out_len, "%u:%02u", (unsigned)(h * 60 + m), (unsigned)s);
+    return snprintf(out, out_len, "%u:%02u", (unsigned)(total_s / 60), (unsigned)s);
 }
 
 // ============================================================================

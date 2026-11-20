@@ -15,7 +15,7 @@ struct NumericRockerConfig {
     uint8_t zone_scale_pct;    // 50-150, default 100
     char indicator_color[CONFIG_COLOR_MAX_LEN];
     uint8_t indicator_opa;     // default 80
-    ButtonAction adjust_action; // {step}-substituted action for outer/inner zones
+    ButtonAction adjust_action; // action for outer/inner zones
 };
 
 // Zone computation constants

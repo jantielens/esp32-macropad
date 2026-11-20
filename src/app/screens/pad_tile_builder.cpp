@@ -7,6 +7,7 @@
 #include "../button_content_lvgl.h"
 #include "../fill_style_runtime.h"
 #include "../widgets/option_selector_widget.h"
+#include "../widgets/text_reader_widget.h"
 #if HAS_TOUCH
 #include "../touch_manager.h"
 #include "../widgets/slider_widget.h"
@@ -19,6 +20,7 @@ static bool button_overlay_uses_fade(const char* widget_type) {
         (strcmp(widget_type, "rocker") == 0 ||
          strcmp(widget_type, "numericrocker") == 0 ||
          strcmp(widget_type, "gamepad_button") == 0 ||
+         strcmp(widget_type, "list") == 0 ||
          strcmp(widget_type, "option_selector") == 0);
 }
 
@@ -103,6 +105,8 @@ void PadScreen::clearTiles() {
     padActions = nullptr;
     padActionCount = 0;
     if (!tiles) {
+        pad_config_release(actionConfig);
+        actionConfig = nullptr;
         fontCache.clear();
         tileCount = 0;
             mainButtonCount = 0;
@@ -176,6 +180,8 @@ void PadScreen::clearTiles() {
     hasTimeBinding = false;
     tilesBuilt = false;
     fontCache.clear();
+    pad_config_release(actionConfig);
+    actionConfig = nullptr;
     icon_store_collect_retired(pageIndex);
 }
 
@@ -201,6 +207,7 @@ void PadScreen::buildTiles() {
         tilesBuilt = true; // Mark built (empty) to avoid retrying every frame
         return;
     }
+    actionConfig = cfg;
     mainButtonCount = cfg->main_button_count;
 
     const bool swipes_enabled = !pad_disables_swipes(*cfg);
@@ -229,7 +236,6 @@ void PadScreen::buildTiles() {
     // Only grid layout supported in v0
     if (strcmp(cfg->layout, "grid") != 0) {
         LOGW(TAG, "Pad %u: unsupported layout '%s', skipping", pageIndex, cfg->layout);
-        pad_config_release(cfg);
         tilesBuilt = true;
         return;
     }
@@ -470,6 +476,14 @@ void PadScreen::buildTiles() {
                             static_cast<lv_event_code_t>(LV_EVENT_ALL | LV_EVENT_PREPROCESS), &tile);
                     }
                     wt->createUI(widget_parent, &tile.widget_cfg, &bcfg, &r, &scale, &tile.widget_state);
+#if HAS_PSRAM
+                    if (strcmp(wt->name, "list") == 0) {
+                        lv_obj_clear_flag(widget_parent, LV_OBJ_FLAG_GESTURE_BUBBLE);
+                        list_widget_attach(&tile.widget_state, PadScreen::onPress, &tile);
+                    }
+                    if (strcmp(wt->name, "text_reader") == 0)
+                        text_reader_attach(&tile.widget_state, PadScreen::onPress, &tile);
+#endif
                     if (strcmp(wt->name, "option_selector") == 0)
                         option_selector_attach(&tile.widget_state, tile.actions, tile.action_count,
                                                pageIndex, i >= cfg->main_button_count, bcfg.col, bcfg.row,
@@ -477,7 +491,7 @@ void PadScreen::buildTiles() {
 #if HAS_TOUCH
                     if (strcmp(wt->name, "slider") == 0)
                         slider_attach(&tile.widget_state, tile.actions, tile.action_count,
-                                      PadScreen::onPress, &tile);
+                                      PadScreen::onPress, &tile, pageBindings, pageBindingCount);
 #endif
                 }
             }
@@ -595,6 +609,7 @@ void PadScreen::buildTiles() {
         tile.bg_image = nullptr;
         tile.image_slot = IMAGE_SLOT_INVALID;
         tile.image_url_template = nullptr;
+        tile.image_presentation_dirty = false;
 #endif
 #if HAS_IMAGE_LIBRARY
         tile.local_bg_image = nullptr;
@@ -703,6 +718,8 @@ void PadScreen::buildTiles() {
             }
         }
         if (strcmp(tile.widget_cfg.type, "slider") == 0 ||
+            strcmp(tile.widget_cfg.type, "list") == 0 ||
+            strcmp(tile.widget_cfg.type, "text_reader") == 0 ||
             strcmp(tile.widget_cfg.type, "option_selector") == 0) {
             lv_obj_add_event_cb(obj, onWidgetPressFeedback, LV_EVENT_VALUE_CHANGED, &tiles[i]);
         }
@@ -742,7 +759,6 @@ void PadScreen::buildTiles() {
     }
 #endif
 
-    pad_config_release(cfg);
 
     // Detect device-class engine-hold consumers: any registered device class
     // that declares a pad_hold_scheme (e.g. "[shutter:") whose binding token

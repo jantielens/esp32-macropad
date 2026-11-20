@@ -27,7 +27,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#if USE_SD_STORAGE && HAS_AUTO_SHUTDOWN
+#if (USE_SD_STORAGE && HAS_AUTO_SHUTDOWN) || defined(ARDUINO_ARCH_ESP32)
   #include "log_manager.h"
   #include "ota_activity.h"
 #endif
@@ -44,7 +44,7 @@
 #endif
 
 inline bool storage_mutation_begin() {
-#if USE_SD_STORAGE && HAS_AUTO_SHUTDOWN
+#if (USE_SD_STORAGE && HAS_AUTO_SHUTDOWN) || defined(ARDUINO_ARCH_ESP32)
   if (!ota_activity_try_begin_config_write()) {
     LOGW("Storage", "Write rejected: shutdown, update, or network transition is active");
     return false;
@@ -54,7 +54,7 @@ inline bool storage_mutation_begin() {
 }
 
 inline void storage_mutation_finish() {
-#if USE_SD_STORAGE && HAS_AUTO_SHUTDOWN
+#if (USE_SD_STORAGE && HAS_AUTO_SHUTDOWN) || defined(ARDUINO_ARCH_ESP32)
   ota_activity_finish_config_write();
 #endif
 }

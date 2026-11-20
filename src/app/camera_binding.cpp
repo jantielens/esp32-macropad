@@ -29,7 +29,7 @@ constexpr CameraBindingKey kCameraBindingKeys[] = {
     {"confirm_frames"},
     {"baseline_ready"},
     {"sample_age"},
-    {"last_motion"},
+    {"last_motion_at"},
     {"motion_age"},
 };
 
@@ -102,7 +102,8 @@ BindingResolverStatus camera_binding_resolve(const char* params, char* out, size
     } else if (strcmp(key, "sample_age") == 0) {
         write_unsigned(out, out_len, format,
                        status.has_last_sample ? (millis() - status.last_sample_ms) / 1000U : 0);
-    } else if (strcmp(key, "last_motion") == 0) {
+    } else if (strcmp(key, "last_motion_at") == 0) {
+        if (!status.last_motion_epoch) return BINDING_RESOLVER_UNAVAILABLE;
         write_unsigned(out, out_len, format, status.last_motion_epoch);
     } else if (strcmp(key, "motion_age") == 0) {
         write_unsigned(out, out_len, format,
@@ -134,7 +135,7 @@ static const BindingParamDoc kCameraParams[] = {
 static const BindingKeyDoc kCameraKeyDocs[] = {
     {"presence", "ON while motion is detected", "Motion"},
     {"motion_enabled", "ON when motion detection is enabled", "Motion"},
-    {"last_motion", "Epoch seconds of the last motion", "Motion"},
+    {"last_motion_at", "Unix seconds of the last motion when time was known", "Motion"},
     {"motion_age", "Seconds since the last motion", "Motion"},
     {"changed_tiles", "Tiles changed in the last sample", "Detector"},
     {"score", "Change score of the last sample", "Detector"},
@@ -168,7 +169,7 @@ static const BindingAuthoringKey kCameraAuthoringKeys[] = {
     binding_authoring_integer("confirm_frames", "", "3", "%lu"),
     binding_authoring_text("baseline_ready", "ON"),
     binding_authoring_integer("sample_age", "s", "2", "%lu"),
-    binding_authoring_integer("last_motion", "s", "1791360000", "%lu"),
+    binding_authoring_integer("last_motion_at", "s", "1791360000", "%lu"),
     binding_authoring_integer("motion_age", "s", "15", "%lu"),
 };
 static const BindingAuthoringSpec kCameraAuthoring = {BINDING_DOC_LIST(kCameraAuthoringKeys)};

@@ -59,6 +59,16 @@ behavior.
 
 For firmware with interactive pads:
 
+On a fresh device, setup creates a saved **Welcome** pad with three centered,
+non-interactive buttons using your device's default colors. After you connect
+to Wi-Fi, it shows the friendly
+`.local` URL and current IP URL for opening the portal. Offline, it shows
+Wi-Fi guidance instead. No tapping is required.
+
+Edit or delete this pad like any other pad. Deleting it does not recreate it,
+and existing configurations and saved pads are left unchanged during upgrades.
+The Wi-Fi setup screen still appears before initial network configuration.
+
 1. Open **Pads > Pad Editor** and select a pad.
 2. In the Pad inspector's **Layout** tab, choose a small grid, such as 2 x 2.
 3. Select a button on the canvas. In **Content**, give its center label a name

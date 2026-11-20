@@ -126,7 +126,7 @@ protected:
 };
 
 TEST_F(FaceWidget, EveryStyleAndEmotionProducesADistinctBoundedExpression) {
-    for (const char* style : {"robot", "doodle"}) {
+    for (const char* style : face_styles) {
         std::set<Pixels> expressions;
         for (const char* value : face_emotions) {
             create(style, value);
@@ -434,6 +434,9 @@ TEST_F(FaceWidget, FitsSmallAndWideButtonsAndReleasesObjectsAcrossRecreation) {
 TEST_F(FaceWidget, RejectsInvalidConfigurationAndDescribesEmotionSources) {
     JsonObject settings = json.to<JsonObject>();
     EXPECT_EQ(face_widget_type.validateConfig(settings), nullptr);
+    settings["widget_face_style"] = "arcade";
+    EXPECT_EQ(face_widget_type.validateConfig(settings), nullptr);
+    settings.remove("widget_face_style");
     for (const char* key : {"widget_face_style", "widget_face_emotion", "widget_face_liveliness"}) {
         settings[key] = "unknown";
         EXPECT_NE(face_widget_type.validateConfig(settings), nullptr);
@@ -460,6 +463,9 @@ TEST_F(FaceWidget, RejectsInvalidConfigurationAndDescribesEmotionSources) {
     JsonObject description = schema.to<JsonObject>();
     face_widget_type.describeSchema(description);
     EXPECT_EQ(description["config_fields"].size(), 4u);
+    const auto style = description["config_fields"][0];
+    EXPECT_STREQ(style["default"].as<const char*>(), "robot");
+    EXPECT_STREQ(style["enum"][2].as<const char*>(), "arcade");
     EXPECT_FALSE(face_widget_type.resolveInTick);
 }
 
@@ -520,7 +526,7 @@ TEST_F(FaceWidget, NumericExpressionAndExplicitFallbackUseStandardBindingSemanti
 
 TEST_F(FaceWidget, RetargetingSequenceRendersIntermediateExpressions) {
     if (static_face) GTEST_SKIP() << "Animated review is covered by the animation-enabled profile";
-    for (const char* style : {"robot", "doodle"}) {
+    for (const char* style : face_styles) {
         create(style);
         std::set<Pixels> frames;
         for (unsigned frame = 0; frame < 180; ++frame) {
@@ -531,13 +537,14 @@ TEST_F(FaceWidget, RetargetingSequenceRendersIntermediateExpressions) {
             save(std::string(style) + "_frame_" + std::to_string(frame));
         }
 
-        EXPECT_GT(frames.size(), 40u) << style;
+        if (strcmp(style, "arcade") == 0) EXPECT_GE(frames.size(), 8u);
+        else EXPECT_GT(frames.size(), 40u) << style;
     }
 }
 
 TEST_F(FaceWidget, EpaperBlinkSurvivesOneSecondPollingAndEmotionsStillChange) {
     if (!HAS_LVGL_EPAPER) GTEST_SKIP() << "E-paper-only blink timing";
-    for (const char* style : {"robot", "doodle"}) {
+    for (const char* style : face_styles) {
         SCOPED_TRACE(style);
         create(style);
         const auto open = render();
@@ -558,4 +565,41 @@ TEST_F(FaceWidget, EpaperBlinkSurvivesOneSecondPollingAndEmotionsStillChange) {
         EXPECT_NE(open, render());
         EXPECT_EQ(state.transition_ms, 0u);
     }
+}
+
+TEST_F(FaceWidget, CapsuleChangesExpressionWithoutStalePixelsOnSmallButtons) {
+    lv_obj_set_size(button, 48, 40);
+    json["widget_face_liveliness"] = "still";
+    create("arcade");
+    const auto content = render();
+    emotion("surprised");
+    const auto surprised = render();
+    EXPECT_NE(content, surprised);
+    lv_obj_invalidate(button);
+    EXPECT_EQ(surprised, render());
+    emotion("invalid");
+    EXPECT_EQ(content, render());
+    flushed_pixels = 0;
+    tick(5000);
+    EXPECT_EQ(content, render());
+    EXPECT_EQ(flushed_pixels, 0u);
+}
+
+TEST_F(FaceWidget, CapsuleGazeRedrawsOnlyWhenItMovesToAnotherSpriteColumn) {
+    if (static_face) GTEST_SKIP() << "Gaze requires animations";
+    create("arcade");
+    const auto centered = render();
+    auto& state = *reinterpret_cast<FaceState*>(runtime.data);
+    state.next_blink = state.next_gaze = lv_tick_get() + 10000;
+    state.gaze_to_x = 4;
+    flushed_pixels = 0;
+    tick(100);
+    EXPECT_EQ(centered, render());
+    EXPECT_EQ(flushed_pixels, 0u);
+    tick(300);
+    const auto sideways = render();
+    EXPECT_NE(centered, sideways);
+    EXPECT_LT(flushed_pixels, 176u * 144u);
+    lv_obj_invalidate(button);
+    EXPECT_EQ(sideways, render());
 }

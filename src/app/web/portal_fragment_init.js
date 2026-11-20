@@ -29,20 +29,31 @@ async function saveFragmentConfig(requiresReboot, fieldNames, validateFields) {
         'wifi_ssid', 'wifi_password', 'wifi_failure_mode', 'ap_password',
         'device_name', 'timezone', 'fixed_ip',
         'subnet_mask', 'gateway', 'dns1', 'dns2',
-        'mqtt_host', 'mqtt_port', 'mqtt_username', 'mqtt_password',
+        // @portal-if HAS_MQTT
+        'mqtt_host', 'mqtt_port', 'mqtt_username', 'mqtt_password', 'mqtt_publish_scope',
+        // @portal-endif
         'operating_mode', 'duty_cycle_wake_seconds', 'mqtt_publish_interval_seconds',
         'portal_idle_timeout_seconds', 'wifi_backoff_max_seconds',
+        // @portal-if HAS_BLE
         'ble_burst_count', 'ble_adv_interval_ms',
-        'mqtt_publish_scope',
+        // @portal-endif
         'basic_auth_enabled', 'basic_auth_username', 'basic_auth_password',
+        // @portal-if HAS_MCP
         'mcp_enabled', 'mcp_control_enabled', 'mcp_authoring_enabled',
+        // @portal-endif
+        // @portal-if HAS_USB_HID || HAS_BLE_HID
         'keyboard_transport',
+        // @portal-endif
+        // @portal-if HAS_AUDIO
         'audio_volume', 'audio_idle_mute', 'audio_wake_delay_ms', 'tap_beep', 'lp_beep',
+        // @portal-endif
+        // @portal-if HAS_DISPLAY
         'backlight_brightness', 'display_rotation',
         'screen_saver_enabled', 'screen_saver_timeout_seconds',
         'screen_saver_fade_out_ms', 'screen_saver_fade_in_ms',
         'screen_saver_wake_on_touch', 'screen_saver_wake_binding',
-        'idle_screen_enabled', 'idle_screen_timeout_seconds', 'idle_screen_pad'
+        'idle_screen_enabled', 'idle_screen_timeout_seconds', 'idle_screen_pad',
+        // @portal-endif
     ];
     // Merge any keys contributed by device-class modules (e.g. e-paper).
     if (window.__extra_config_fields && window.__extra_config_fields.length) {
@@ -128,10 +139,12 @@ async function saveFragmentConfig(requiresReboot, fieldNames, validateFields) {
             if (config.display_rotation !== undefined && window.deviceConfig) {
                 window.deviceConfig.display_rotation = Number(config.display_rotation);
             }
+            // @portal-if HAS_USB_HID || HAS_BLE_HID
             if (config.keyboard_transport !== undefined && window.deviceConfig) {
                 window.deviceConfig.keyboard_transport = config.keyboard_transport;
                 updateKeyboardTransportSetting();
             }
+            // @portal-endif
             if (needsReboot) {
                 // Banner is the user feedback — skip the toast so it doesn't
                 // cover the freshly-appeared "reboot required" banner.
@@ -139,6 +152,7 @@ async function saveFragmentConfig(requiresReboot, fieldNames, validateFields) {
             } else {
                 showMessage('Configuration saved', 'success');
             }
+            return true;
         } else {
             showMessage(result.message || 'Failed to save configuration', 'error');
         }
@@ -353,6 +367,7 @@ window.init_network_fragment = function () {
 // MCP Server (AI assistant)
 // ============================================================================
 
+// @portal-if HAS_MCP
 window.init_mcp_fragment = function () {
     // Loads config (populates the MCP fields + endpoint URL) and wires the
     // save button. MCP settings apply live (no reboot).
@@ -431,11 +446,13 @@ window.init_mcp_fragment = function () {
         }
     });
 };
+// @portal-endif
 
 // ============================================================================
 // Operating Mode
 // ============================================================================
 
+// @portal-if !IS_EPAPER_FRAME
 window.init_mode_fragment = function () {
     initConfigFragment('mode-save-btn', true);
 
@@ -532,6 +549,7 @@ window.init_mode_fragment = function () {
 // Factory Reset
 // ============================================================================
 
+// @portal-endif
 window.init_factory_reset_fragment = function () {
     var btn = document.getElementById('reset-btn');
     if (btn) btn.addEventListener('click', function () {
@@ -543,6 +561,7 @@ window.init_factory_reset_fragment = function () {
 // Brightness
 // ============================================================================
 
+// @portal-if HAS_DISPLAY
 window.init_brightness_fragment = function () {
     initConfigFragment('brightness-save-btn', false);
     var slider = document.getElementById('backlight_brightness');
@@ -748,6 +767,7 @@ window.init_screen_preview_fragment = function () {
 // Screen Saver
 // ============================================================================
 
+// @portal-if !SCREENSAVER_BACKLIGHT_ONLY
 window.init_screensaver_fragment = async function () {
     var saveButton = document.getElementById('screensaver-save-btn');
     var info = await getDeviceInfo();
@@ -821,6 +841,7 @@ window.init_screensaver_fragment = async function () {
     // Initialize binding validator on inputs
     if (typeof bindingInitStaticInputs === 'function') bindingInitStaticInputs();
 };
+// @portal-endif
 
 // ============================================================================
 // Swipe Actions
@@ -828,7 +849,7 @@ window.init_screensaver_fragment = async function () {
 
 window.init_swipe_actions_fragment = async function () {
     if (typeof swipeInitEditors === 'function') await swipeInitEditors();
-    if (typeof loadSwipeActions === 'function') loadSwipeActions();
+    if (typeof loadSwipeActions === 'function') await loadSwipeActions();
     actionEditorWireFragment(SWIPE_DIRECTIONS);
 };
 
@@ -845,58 +866,71 @@ window.init_boot_actions_fragment = async function () {
 window.init_system_screens_fragment = async function () {
     await bootAppearanceInit();
 };
+// @portal-endif
 
 // ============================================================================
 // Hardware Buttons
 // ============================================================================
 
+// @portal-if HAS_BUTTON
 window.init_hw_buttons_fragment = function () {
     if (typeof initHwButtons === 'function') initHwButtons();
 };
+// @portal-endif
 
 // ============================================================================
 // MQTT Triggers
 // ============================================================================
 
+// @portal-if HAS_MQTT && (HAS_DISPLAY || HAS_BUTTON)
 window.init_mqtt_triggers_fragment = function () {
     if (typeof initMqttTriggers === 'function') initMqttTriggers();
 };
+// @portal-endif
 
 // ============================================================================
 // Timers
 // ============================================================================
 
+// @portal-if HAS_DISPLAY
 window.init_timers_fragment = async function () {
     if (typeof timerConfigInitEditors === 'function') await timerConfigInitEditors();
     if (typeof loadTimerConfig === 'function') loadTimerConfig();
     actionEditorWireFragment(TIMER_EXPIRE_PREFIXES);
 };
+// @portal-endif
 
 // ============================================================================
 // MQTT
 // ============================================================================
 
+// @portal-if HAS_MQTT
 window.init_mqtt_fragment = function () {
     initConfigFragment('mqtt-save-btn', true);
 };
+// @portal-endif
 
 // ============================================================================
 // Keyboard
 // ============================================================================
 
+// @portal-if HAS_BLE_HID || HAS_USB_HID
 window.init_hid_fragment = function () {
     initConfigFragment('hid-save-btn', true);
 };
+// @portal-endif
 
 // ============================================================================
 // Home Assistant
 // ============================================================================
 
+// @portal-if HAS_MQTT || HAS_HA_LIVE || HAS_DISPLAY || HAS_BUTTON
 window.init_ha_discovery_fragment = function () {
     if (typeof registerConfigFields === 'function') {
         registerConfigFields(['ha_url', 'ha_token']);
     }
     initConfigFragment('ha-save-btn', false);
+    // @portal-if HAS_HA_LIVE
     var root = document.getElementById('ha-rest-section');
     var section = document.getElementById('ha-live-section');
     var status = document.getElementById('ha-live-status');
@@ -968,12 +1002,15 @@ window.init_ha_discovery_fragment = function () {
                 (err.name === 'AbortError' ? 'request timed out' : err.message), 'error');
         })
         .finally(function () { clearTimeout(configDeadline); });
+    // @portal-endif
 };
+// @portal-endif
 
 // ============================================================================
 // Volume
 // ============================================================================
 
+// @portal-if HAS_AUDIO
 window.init_volume_fragment = function () {
     var idleMute = document.getElementById('audio_idle_mute');
     if (idleMute) idleMute.addEventListener('change', updateAmplifierSettings);
@@ -989,14 +1026,17 @@ window.init_volume_fragment = function () {
 window.init_feedback_fragment = function () {
     initConfigFragment('feedback-save-btn', false);
 };
+// @portal-endif
 
 // ============================================================================
 // Alert Sounds
 // ============================================================================
 
+// @portal-if HAS_SOUND_PLAYER
 window.init_sounds_fragment = function () {
     if (typeof loadSoundList === 'function') loadSoundList();
 };
+// @portal-endif
 
 // ============================================================================
 // Sensor Data
@@ -1037,6 +1077,15 @@ window.init_manual_upload_fragment = function () {
     if (fileInput) fileInput.addEventListener('change', handleFileSelect);
     var uploadBtn = document.getElementById('upload-btn');
     if (uploadBtn) uploadBtn.addEventListener('click', uploadFirmware);
+    var modeBtn = document.getElementById('ota-mode-btn');
+    if (modeBtn) modeBtn.addEventListener('click', bootIntoOtaMode);
+    getDeviceInfo().then(function (info) {
+        if (!info || !info.ota_mode) return;
+        var control = document.getElementById('ota-mode-control');
+        var active = document.getElementById('ota-mode-active');
+        if (control) control.style.display = 'none';
+        if (active) active.style.display = '';
+    });
 };
 
 // ============================================================================
@@ -1069,6 +1118,7 @@ window.init_version_info_fragment = function () {
 // Pad Editor
 // ============================================================================
 
+// @portal-if HAS_DISPLAY
 window.init_pad_editor_fragment = function () {
     if (typeof loadConfig === 'function') loadConfig();
     if (typeof padInit === 'function') padInit();
@@ -1087,3 +1137,4 @@ window.init_button_defaults_fragment = function () {
         if (typeof padSaveButtonDefaults === 'function') padSaveButtonDefaults();
     });
 };
+// @portal-endif

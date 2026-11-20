@@ -9,12 +9,14 @@
 #include "runtime_variables.h"
 #include "var_binding.h"
 #include "pad_binding.h"
-#include "list_binding.h"
-#include "list_provider.h"
 #include "time_binding.h"
+#include "time_service.h"
 #include "alarm_manager.h"
 #include "psram_json_allocator.h"
 #include "wifi_manager.h"
+#if HAS_CAMERA
+#include "camera_motion.h"
+#endif
 
 extern unsigned long binding_test_now_ms;
 extern WifiNetworkSnapshot binding_test_network;
@@ -37,14 +39,6 @@ extern WifiNetworkSnapshot binding_test_network;
 #endif
 
 static int g_failures = 0;
-
-static uint8_t fixture_provider_items(ListItem*, uint8_t) { return 0; }
-
-static const ListProvider kFixtureProvider = {
-    "fixture",
-    "Fixture provider",
-    fixture_provider_items,
-};
 
 static void expect(bool condition, const char* label) {
     if (!condition) {
@@ -79,9 +73,11 @@ static void expect_structural_resolvers_are_invoked() {
     expect(binding_template_resolve_registered("time", 4, "%ums", resolved, sizeof(resolved))
                != BINDING_RESOLVER_UNKNOWN,
            "time resolver accepts a free-form format");
-    expect(binding_template_resolve_registered("list", 4, "fixture.selected", resolved, sizeof(resolved))
+#if HAS_DISPLAY && HAS_PSRAM
+    expect(binding_template_resolve_registered("item", 4, "id", resolved, sizeof(resolved))
                != BINDING_RESOLVER_UNKNOWN,
-           "list resolver accepts a fixture provider selection");
+           "item resolver accepts a structural field");
+#endif
 #if IS_SHUTTER_TESTER
     expect(binding_template_resolve_registered("shutter", 7, "available", resolved, sizeof(resolved))
                != BINDING_RESOLVER_UNKNOWN,
@@ -318,16 +314,24 @@ static void expect_health_authoring_contract() {
                BINDING_RESOLVER_UNAVAILABLE,
            "inactive AP purpose supports binding fallback");
     binding_test_network.state = WifiNetworkState::Connecting;
+    binding_test_network.station_enabled = true;
     std::strcpy(binding_test_network.last_error, "Connection timed out");
     binding_test_now_ms += 2000;
     expect(binding_template_resolve_registered("health", 6, "wifi_state", value, sizeof(value)) ==
                BINDING_RESOLVER_RESOLVED && std::strcmp(value, "CONNECTING") == 0,
            "station startup status resolves from the network snapshot");
+    expect(binding_template_resolve_registered("health", 6, "wifi_station_enabled", value, sizeof(value)) ==
+               BINDING_RESOLVER_RESOLVED && std::strcmp(value, "ON") == 0,
+           "station mode is enabled while not connected");
+    expect(binding_template_resolve_registered("health", 6, "wifi_connected", value, sizeof(value)) ==
+               BINDING_RESOLVER_RESOLVED && std::strcmp(value, "OFF") == 0,
+           "connecting is distinct from connected");
     expect(binding_template_resolve_registered("health", 6, "wifi_last_error", value, sizeof(value)) ==
                BINDING_RESOLVER_RESOLVED && std::strcmp(value, "Connection timed out") == 0,
            "failure diagnostics resolve separately from activity");
     binding_test_network.state = WifiNetworkState::Ap;
     binding_test_network.ap_active = true;
+    binding_test_network.station_enabled = false;
     std::strcpy(binding_test_network.ssid, "Remote-AP");
     std::strcpy(binding_test_network.ip, "192.168.4.1");
     binding_test_now_ms += 2000;
@@ -368,6 +372,33 @@ static void expect_health_authoring_contract() {
     expect(binding_template_resolve_registered("health", 6, "wifi_rssi;%ld dBm", value, sizeof(value)) ==
                BINDING_RESOLVER_RESOLVED && std::strcmp(value, "-55 dBm") == 0,
            "connected signal retains numeric formatting");
+    const char* welcome_url =
+        "[expr:[health:wifi_connected]==\"ON\"?[health:wifi_hostname;http://%s.local/|Hostname unavailable]:\"Connect to Wi-Fi\"]";
+    const char* welcome_intro =
+        "[expr:[health:wifi_connected]==\"ON\"?\"Make this display yours.\nOpen in your browser:\":\"Make this display yours.\"]";
+    const char* welcome_ip_heading =
+        "[expr:[health:wifi_connected]==\"ON\"?\"Or open:\":\"Portal addresses will\"]";
+    const char* welcome_ip =
+        "[expr:[health:wifi_connected]==\"ON\"?[health:wifi_ip;http://%s/|Address unavailable]:\"appear once connected.\"]";
+    binding_template_resolve(welcome_intro, value, sizeof(value));
+    expect(std::strcmp(value, "Make this display yours.\nOpen in your browser:") == 0,
+           "welcome introduces the portal addresses while connected");
+    binding_template_resolve(welcome_ip_heading, value, sizeof(value));
+    expect(std::strcmp(value, "Or open:") == 0,
+           "welcome introduces the alternative address while connected");
+    binding_template_resolve(welcome_url, value, sizeof(value));
+    expect(std::strcmp(value, "http://desk-device.local/") == 0,
+           "welcome friendly URL resolves through a conditional binding");
+    std::strcpy(binding_test_network.hostname, "123");
+    std::strcpy(binding_test_network.ip, "192.0.2.11");
+    binding_test_now_ms += 2000;
+    binding_template_resolve(welcome_url, value, sizeof(value));
+    expect(std::strcmp(value, "http://123.local/") == 0,
+           "numeric hostname is safely formatted as URL text");
+    binding_template_resolve(welcome_ip, value, sizeof(value));
+    expect(std::strcmp(value, "http://192.0.2.11/") == 0,
+           "welcome IP URL reflects network changes");
+    std::strcpy(binding_test_network.hostname, "desk-device");
     static const struct { WifiNetworkState state; const char* text; } states[] = {
         {WifiNetworkState::Off, "OFF"}, {WifiNetworkState::Starting, "STARTING"},
         {WifiNetworkState::Connecting, "CONNECTING"}, {WifiNetworkState::Connected, "CONNECTED"},
@@ -383,6 +414,18 @@ static void expect_health_authoring_contract() {
     }
     binding_test_network.state = WifiNetworkState::Off;
     binding_test_now_ms += 2000;
+    binding_template_resolve(welcome_url, value, sizeof(value));
+    expect(std::strcmp(value, "Connect to Wi-Fi") == 0,
+           "welcome hides the friendly URL while offline");
+    binding_template_resolve(welcome_intro, value, sizeof(value));
+    expect(std::strcmp(value, "Make this display yours.") == 0,
+           "welcome omits browser instructions while offline");
+    binding_template_resolve(welcome_ip_heading, value, sizeof(value));
+    expect(std::strcmp(value, "Portal addresses will") == 0,
+           "welcome explains the missing addresses while offline");
+    binding_template_resolve(welcome_ip, value, sizeof(value));
+    expect(std::strcmp(value, "appear once connected.") == 0,
+           "welcome explains when addresses become available");
     expect(binding_template_resolve_registered("health", 6, "wifi_hostname", value, sizeof(value)) ==
                BINDING_RESOLVER_RESOLVED && std::strcmp(value, "desk-device") == 0,
            "configured hostname remains available while off");
@@ -490,8 +533,6 @@ static void expect_static_authoring_complete() {
 void binding_schema_dump_json();
 
 int main(int argc, char** argv) {
-    list_provider_register(&kFixtureProvider);
-    list_binding_set_selected("fixture", "selected-item");
     binding_builtin_schemes_init();
 #if IS_VOICE_ASSISTANT
     voice_binding_init();
@@ -515,7 +556,54 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    {
+        char value[128];
+        expect(time_service_set_timezone("UTC"), "set device timezone");
+        binding_template_resolve("[expr:datetime(0)]", value, sizeof(value));
+        expect(!std::strcmp(value, "1970-01-01 00:00"), "epoch zero uses device timezone");
+        binding_template_resolve("[expr:datetime(1719835200,\"%H:%M\",\"Europe/Amsterdam\")]", value, sizeof(value));
+        expect(!std::strcmp(value, "14:00"), "datetime applies daylight saving");
+        binding_template_resolve("[expr:datetime(1704110400,\"%H:%M\",\"Europe/Amsterdam\")]", value, sizeof(value));
+        expect(!std::strcmp(value, "13:00"), "datetime applies winter timezone");
+        binding_template_resolve("[expr:datetime(0,\"%H:%M:%S.%ms\",\"UTC\")]", value, sizeof(value));
+        expect(!std::strcmp(value, "00:00:00.000"), "timestamp subsecond formats");
+        binding_template_resolve("[expr:datetime(1.5)|invalid]", value, sizeof(value));
+        expect(!std::strcmp(value, "invalid"), "fractional epoch uses fallback");
+        binding_template_resolve("[expr:datetime(0,\"%H:%M\",\"Not/AZone\")|invalid]", value, sizeof(value));
+        expect(!std::strcmp(value, "invalid"), "invalid timezone uses fallback");
+#if HAS_PSRAM
+        binding_template_resolve("[expr:datetime([item:created_at])|missing]", value, sizeof(value));
+        expect(!std::strcmp(value, "missing"), "unavailable nested timestamp uses fallback");
+#endif
+        binding_template_resolve("[expr:duration(65000,\"ms\")]", value, sizeof(value));
+        expect(!std::strcmp(value, "1:05"), "duration expression resolves");
+        binding_template_resolve("[expr:1 ? 12 : \"\";%.0f s]", value, sizeof(value));
+        expect(!std::strcmp(value, "12 s"), "conditional number includes formatted unit");
+        binding_template_resolve("[expr:1 ? 0 : \"\";%.0f s]", value, sizeof(value));
+        expect(!std::strcmp(value, "0 s"), "conditional zero retains formatted unit");
+        binding_template_resolve("[expr:0 ? 12 : \"\";%.0f s]", value, sizeof(value));
+        expect(!std::strcmp(value, ""), "empty conditional result hides number and unit");
+    }
+
     expect(binding_template_scheme_count() > 0, "production profile registered binding schemes");
+#if HAS_CAMERA
+    {
+        extern CameraMotionStatus binding_test_camera;
+        char value[64] = {};
+        binding_test_camera = {};
+        binding_template_resolve("[camera:last_motion_at|missing]", value, sizeof(value));
+        expect(!std::strcmp(value, "missing"), "missing camera timestamp uses fallback");
+        binding_test_camera.has_last_motion = true;
+        binding_test_camera.last_motion_epoch = 1704110400;
+        binding_template_resolve("[camera:last_motion_at]", value, sizeof(value));
+        expect(!std::strcmp(value, "1704110400"), "camera timestamp resolves as Unix seconds");
+        binding_test_camera = {};
+    }
+#endif
+    expect(binding_template_validate_params("health", 6, "table") != nullptr,
+           "removed health Table binding is rejected");
+    expect(binding_template_validate_params("health", 6, "extended_table") != nullptr,
+           "removed extended health Table binding is rejected");
     expect(scheme_is_registered("mqtt") == bool(HAS_MQTT), "MQTT registration matches gate");
     expect(scheme_is_registered("battery") == bool(HAS_BATTERY_INFO), "battery registration matches gate");
 #if !HAS_BATTERY_INFO
@@ -526,7 +614,7 @@ int main(int argc, char** argv) {
     }
 #endif
     expect(scheme_is_registered("ext") == bool(HAS_EXTERNAL_DATA), "external data registration matches gate");
-    expect(scheme_is_registered("recorder") == bool(HAS_VOICE_CLIPS),
+    expect(scheme_is_registered("voice_note") == bool(HAS_VOICE_NOTES),
            "voice recorder registration matches gate");
     expect(scheme_is_registered("pad") == bool(HAS_DISPLAY),
            "named bindings are registered whenever display is enabled");
@@ -704,6 +792,7 @@ int main(int argc, char** argv) {
     alarm_expect("1_day_0", "OFF");
     alarm_expect("1_day_1", "ON");
     alarm_expect("1_minutes", "450");
+    alarm_expect("1_next_at", "1704094200");
     alarm_expect("1_next_seconds", "60");
     alarm_expect("1_next_available", "ON");
     alarm_expect("1_next_ring_seconds", "0");
@@ -718,6 +807,11 @@ int main(int argc, char** argv) {
     alarm_expect("1_save_state", "saved");
     alarm_expect("1_snooze_seconds", "");
     binding_test_alarm = {false, 0, 5, ALARM_SNOOZED, false, false, false, false, 0};
+    {
+        char missing[32] = {};
+        binding_template_resolve("[alarm:1_next_at|missing]", missing, sizeof(missing));
+        expect(!std::strcmp(missing, "missing"), "missing alarm timestamp uses fallback");
+    }
     binding_test_alarm.snooze_remaining = 539;
     binding_test_alarm.next_ring_seconds = 539;
     alarm_expect("1_snooze_seconds", "539");

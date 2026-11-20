@@ -19,6 +19,7 @@
 #include "log_manager.h"
 #include "net_activity.h"
 #include "ota_activity.h"
+#include "reboot_service.h"
 #include <esp_heap_caps.h>
 #include <new>
 #if IS_EPAPER_FRAME
@@ -142,6 +143,7 @@ bool MqttManager::connectBlockingMinimal(uint32_t timeout_ms) {
 }
 
 bool MqttManager::connectEnabled() const {
+		if (reboot_is_ota_mode()) return false;
 		if (!_config) return false;
 		if (strlen(_config->mqtt_host) == 0) return false;
 		return true;

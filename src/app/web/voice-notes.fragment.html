@@ -1,0 +1,34 @@
+<div class="section-header d-flex flex-wrap align-items-center justify-content-between gap-3">
+  <div>
+    <h2><span class="portal-icon" aria-hidden="true">record_voice_over</span>Voice Notes</h2>
+    <p class="mb-0">Play recordings and read transcripts and summaries.</p>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    <button type="button" class="btn btn-outline-secondary text-body" id="voice-notes-back" hidden>Back to Notes</button>
+    <button type="button" class="btn btn-outline-secondary text-body" id="voice-notes-refresh">Refresh</button>
+  </div>
+</div>
+<div>
+  <div id="voice-notes-status" class="form-text mb-3" role="status">Loading voice notes...</div>
+  <div id="voice-notes-processing-status" class="form-text mb-3" role="status" hidden></div>
+  <div id="voice-notes-setup" class="alert alert-info" hidden>Set up transcription in <a href="#voice-notes-settings">Voice Notes Settings</a>.</div>
+  <div id="voice-notes-catalog"><div id="voice-notes-list"></div></div>
+  <div id="voice-notes-detail" hidden>
+    <section class="card mb-3" aria-labelledby="voice-notes-detail-title">
+      <div class="card-header"><h3 class="mb-0" id="voice-notes-detail-title">Voice note</h3></div>
+      <div class="card-body">
+        <p class="text-muted small" id="voice-notes-detail-meta"></p>
+        <div id="voice-notes-detail-player"></div>
+        <div id="voice-notes-detail-actions"></div>
+      </div>
+    </section>
+    <section class="card mb-3" id="voice-notes-summary-section" aria-labelledby="voice-notes-summary-title" hidden>
+      <div class="card-header"><h3 class="mb-0" id="voice-notes-summary-title">Summary</h3></div>
+      <div class="card-body" id="voice-notes-detail-summary" style="white-space: pre-wrap; overflow-wrap: anywhere"></div>
+    </section>
+    <section class="card mb-3" aria-labelledby="voice-notes-transcript-title">
+      <div class="card-header"><h3 class="mb-0" id="voice-notes-transcript-title">Transcript</h3></div>
+      <div class="card-body" id="voice-notes-detail-transcript" style="white-space: pre-wrap; overflow-wrap: anywhere"></div>
+    </section>
+  </div>
+</div>

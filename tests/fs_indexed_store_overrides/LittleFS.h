@@ -29,6 +29,17 @@ public:
     size_t readBytes(char* data, size_t length) {
         return read(reinterpret_cast<uint8_t*>(data), length);
     }
+    size_t position() const { return position_; }
+    int available() const { return valid_ && position_ < size() ? static_cast<int>(size() - position_) : 0; }
+    size_t readBytesUntil(char terminator, char* data, size_t length) {
+        size_t count = 0;
+        while (count < length) {
+            const int byte = read();
+            if (byte < 0 || byte == terminator) break;
+            data[count++] = static_cast<char>(byte);
+        }
+        return count;
+    }
     size_t write(uint8_t byte) { return write(&byte, 1); }
     size_t write(const uint8_t* data, size_t length);
     bool seek(size_t position) {
@@ -67,10 +78,15 @@ public:
     void (*remove_hook)(const char*) = nullptr;
     void (*usage_hook)() = nullptr;
     void (*write_hook)(const char*, size_t) = nullptr;
+    void (*read_hook)(const char*, size_t) = nullptr;
+    void (*exists_hook)(const char*) = nullptr;
     bool short_write = false;
     uint64_t capacity = 1024 * 1024;
 
-    bool exists(const char* path) const { return files.count(path) || directories.count(path); }
+    bool exists(const char* path) const {
+        if (exists_hook) exists_hook(path);
+        return files.count(path) || directories.count(path);
+    }
     uint64_t totalBytes() const { return capacity; }
     uint64_t usedBytes() const {
         if (usage_hook) usage_hook();
@@ -118,6 +134,7 @@ inline File::File(FakeIndexedStorage* storage, const std::string& path, bool dir
 inline size_t File::size() const { return valid_ ? storage_->files[path_].size() : 0; }
 inline size_t File::read(uint8_t* data, size_t length) {
     if (!valid_ || directory_) return 0;
+    if (storage_->read_hook) storage_->read_hook(path_.c_str(), length);
     const auto& bytes = storage_->files[path_];
     if (position_ >= bytes.size()) return 0;
     length = std::min(length, bytes.size() - position_);

@@ -34,20 +34,20 @@ Do not retain toggle commands.
 ## Add brightness steps
 
 Add Numeric Rocker with Small Step 10/Large Step 40.
-Choose MQTT as its Adjustment Action:
+Choose **Publish MQTT message** as its **Adjustment Action**. Enable
+**Dynamic** for **Payload**:
 
 ```text
 Topic: zigbee2mqtt/kitchen_light/set
-Payload: {"brightness_step":{step}}
+Payload: {"brightness_step":[event:step]}
 ```
 
 Use `[mqtt:zigbee2mqtt/kitchen_light;brightness]` as a feedback label.
 This is the integration's native brightness scale, not automatically percent.
 Save and test both directions at the light's limits.
 
-If using direct HA services instead, configure literal `light.turn_on` data
-through the [HA action fields](../integrations/home-assistant.md#add-a-service-action).
-Those fields do not support `{step}`/binding interpolation; do not copy the
-MQTT template into Service Data.
+If using direct HA services instead, configure `light.turn_on` data through
+the [HA action fields](../integrations/home-assistant.md#add-a-service-action).
+Use the fields your service expects rather than copying the MQTT payload.
 
 [Rocker setup](../widgets/rockers.md) | [Examples](README.md) | [User guides](../README.md)

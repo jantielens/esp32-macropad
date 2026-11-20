@@ -2,12 +2,19 @@
 // Part of the ESP32 Macropad configuration portal.
 // Bundled into portal_config.js during minification.
 
+function actionConfigShowReset(data) {
+    if (data.config_reset)
+        showMessage('Unsupported action configuration was cleared. Save to replace the saved configuration.', 'info');
+}
+
 // ============================================================================
 // Swipe Actions (uses shared portal_action_editor.js)
 // ============================================================================
 
+// @portal-if HAS_DISPLAY
 const SWIPE_DIRECTIONS = ['swipe-left', 'swipe-right', 'swipe-up', 'swipe-down'];
 const SWIPE_LABELS = { 'swipe-right': 'Swipe Right', 'swipe-left': 'Swipe Left', 'swipe-up': 'Swipe Up', 'swipe-down': 'Swipe Down' };
+var swipeActionsLoaded = false;
 
 async function swipeInitEditors() {
     var container = document.getElementById('swipe-editors');
@@ -20,29 +27,35 @@ async function swipeInitEditors() {
         html += '<details class="editor-group" id="' + dir + '-group">';
         html += '<summary>' + SWIPE_LABELS[dir] + '</summary>';
         html += '<div class="editor-group-body">';
-        html += actionEditorHTML(dir);
+        html += actionEditorHTML(dir, '', { operations: true });
         html += '</div></details>';
     });
     container.innerHTML = html;
 }
 
 async function loadSwipeActions() {
+    swipeActionsLoaded = false;
     try {
         const response = await fetch('/api/component/swipe-actions/config');
-        if (!response.ok) return;
+        if (!response.ok) {
+            const result = await response.json();
+            throw new Error(result.error || 'Swipe actions are unavailable');
+        }
         const data = await response.json();
         actionEditorLoad('swipe-left', data.swipe_left);
         actionEditorLoad('swipe-right', data.swipe_right);
         actionEditorLoad('swipe-up', data.swipe_up);
         actionEditorLoad('swipe-down', data.swipe_down);
+        swipeActionsLoaded = true;
+        actionConfigShowReset(data);
     } catch (err) {
         console.error('Failed to load swipe actions:', err);
+        showMessage('Could not load swipe actions: ' + err.message, 'error');
     }
 }
 
-// ---------------------------------------------------------------------------
-// Sound file management
-// ---------------------------------------------------------------------------
+// @portal-endif
+// @portal-if HAS_SOUND_PLAYER
 function soundEsc(s) {
     var d = document.createElement('span');
     d.textContent = s;
@@ -140,9 +153,16 @@ async function deleteSound(name) {
     } catch (err) { /* ignore */ }
 }
 
+// @portal-endif
+// @portal-if HAS_DISPLAY
 async function saveSwipeActions() {
+    if (!swipeActionsLoaded) {
+        showMessage('Load swipe actions before saving.', 'error');
+        return;
+    }
     try {
         const payload = {
+            action_format_version: 1,
             swipe_left: actionEditorBuild('swipe-left'),
             swipe_right: actionEditorBuild('swipe-right'),
             swipe_up: actionEditorBuild('swipe-up'),
@@ -170,20 +190,29 @@ async function saveSwipeActions() {
 // ============================================================================
 
 const BOOT_ACTION_PREFIXES = actionEditorSlotPrefixes('boot-action-');
+var bootActionsLoaded = false;
 
 async function bootActionsInitEditors() {
     await getDeviceInfo();
-    actionEditorListRender('boot-action-editors', BOOT_ACTION_PREFIXES);
+    actionEditorListRender('boot-action-editors', BOOT_ACTION_PREFIXES, null,
+        { actionOptions: { operations: true } });
 }
 
 async function loadBootActions() {
+    bootActionsLoaded = false;
     try {
         const response = await fetch('/api/component/boot-actions/config');
-        if (!response.ok) return;
+        if (!response.ok) {
+            const result = await response.json();
+            throw new Error(result.error || 'Boot actions are unavailable');
+        }
         const data = await response.json();
         actionEditorListLoad(BOOT_ACTION_PREFIXES, data.actions || []);
+        bootActionsLoaded = true;
+        actionConfigShowReset(data);
     } catch (err) {
         console.error('Failed to load boot actions:', err);
+        showMessage('Could not load boot actions: ' + err.message, 'error');
     }
 }
 
@@ -361,6 +390,10 @@ async function deleteBootLogo() {
 }
 
 async function saveBootActions() {
+    if (!bootActionsLoaded) {
+        showMessage('Load boot actions before saving.', 'error');
+        return;
+    }
     let actions;
     try {
         actions = actionEditorListBuild(BOOT_ACTION_PREFIXES);
@@ -374,7 +407,7 @@ async function saveBootActions() {
         const response = await fetch('/api/component/boot-actions/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ actions: actions })
+            body: JSON.stringify({ action_format_version: 1, actions: actions })
         });
         if (!response.ok) {
             const result = await response.json();
@@ -437,9 +470,12 @@ async function saveSystemScreenAppearance() {
 // Hardware Button Actions (uses shared portal_action_editor.js)
 // ============================================================================
 
+// @portal-endif
+// @portal-if HAS_BUTTON
 // Flat list of every action editor prefix currently rendered, used to wire
 // screen + sound dropdowns in one pass after the editors are built.
 var HW_BUTTON_PREFIXES = [];
+var hwButtonsLoaded = false;
 
 function hwButtonTapPrefixes(n) {
     return actionEditorSlotPrefixes('hwbtn-' + n + '-tap-');
@@ -452,6 +488,7 @@ async function initHwButtons() {
     var container = document.getElementById('hw-button-editors');
     if (!container) return;
     HW_BUTTON_PREFIXES = [];
+    hwButtonsLoaded = false;
     // The action-type picker renders from the firmware catalog cached on
     // deviceInfoCache; wait for it before building any action editor markup.
     await getDeviceInfo();
@@ -459,7 +496,8 @@ async function initHwButtons() {
     try {
         const response = await fetch('/api/component/hw-buttons/config');
         if (!response.ok) {
-            container.innerHTML = '<small style="color:#86868b;">Could not load hardware buttons.</small>';
+            const error = await response.json();
+            container.textContent = error.message || error.error || 'Could not load hardware buttons.';
             return;
         }
         data = await response.json();
@@ -503,20 +541,28 @@ async function initHwButtons() {
         var n = idx + 1;
         var tapPrefixes = hwButtonTapPrefixes(n);
         var holdPrefixes = hwButtonHoldPrefixes(n);
-        actionEditorListRender('hwbtn-' + n + '-tap-editors', tapPrefixes);
-        actionEditorListRender('hwbtn-' + n + '-hold-editors', holdPrefixes);
+        actionEditorListRender('hwbtn-' + n + '-tap-editors', tapPrefixes, null,
+            { actionOptions: { operations: true } });
+        actionEditorListRender('hwbtn-' + n + '-hold-editors', holdPrefixes, null,
+            { actionOptions: { operations: true } });
         actionEditorListLoad(tapPrefixes, btn.tap_actions || []);
         actionEditorListLoad(holdPrefixes, btn.hold_actions || []);
         HW_BUTTON_PREFIXES = HW_BUTTON_PREFIXES.concat(tapPrefixes, holdPrefixes);
     });
 
     actionEditorWireFragment(HW_BUTTON_PREFIXES);
+    hwButtonsLoaded = true;
+    actionConfigShowReset(data);
 }
 
 async function saveHwButtons() {
     var container = document.getElementById('hw-button-editors');
     if (!container) return;
-    var groupCount = container.querySelectorAll('details.editor-group').length;
+    if (!hwButtonsLoaded) {
+        showMessage('Load hardware button actions before saving.', 'error');
+        return;
+    }
+    var groupCount = container.children.length;
     try {
         var buttons = [];
         for (var n = 1; n <= groupCount; n++) {
@@ -528,7 +574,7 @@ async function saveHwButtons() {
         const response = await fetch('/api/component/hw-buttons/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ buttons: buttons })
+            body: JSON.stringify({ action_format_version: 1, buttons: buttons })
         });
         if (response.ok) {
             showMessage('Hardware button actions saved', 'success');
@@ -546,9 +592,12 @@ async function saveHwButtons() {
 // MQTT Triggers (uses shared portal_action_editor.js)
 // ============================================================================
 
+// @portal-endif
+// @portal-if HAS_MQTT && (HAS_DISPLAY || HAS_BUTTON)
 // Flat list of every action editor prefix currently rendered, used to wire
 // screen + sound dropdowns in one pass after the editors are built.
 var MQTT_TRIGGER_PREFIXES = [];
+var mqttTriggersLoaded = false;
 
 function mqttTriggerPrefixes(n) {
     return actionEditorSlotPrefixes('mqtttrig-' + n + '-');
@@ -558,6 +607,7 @@ async function initMqttTriggers() {
     var container = document.getElementById('mqtt-trigger-editors');
     if (!container) return;
     MQTT_TRIGGER_PREFIXES = [];
+    mqttTriggersLoaded = false;
     // The action-type picker renders from the firmware catalog cached on
     // deviceInfoCache; wait for it before building any action editor markup.
     await getDeviceInfo();
@@ -565,7 +615,8 @@ async function initMqttTriggers() {
     try {
         const response = await fetch('/api/component/mqtt-triggers/config');
         if (!response.ok) {
-            container.innerHTML = '<small style="color:#86868b;">Could not load MQTT triggers.</small>';
+            const error = await response.json();
+            container.textContent = error.message || error.error || 'Could not load MQTT triggers.';
             return;
         }
         data = await response.json();
@@ -595,7 +646,8 @@ async function initMqttTriggers() {
 
     for (var n = 1; n <= max; n++) {
         var prefixes = mqttTriggerPrefixes(n);
-        actionEditorListRender('mqtttrig-' + n + '-editors', prefixes);
+        actionEditorListRender('mqtttrig-' + n + '-editors', prefixes, null,
+            { actionOptions: { operations: true } });
         var trig = triggers[n - 1];
         if (trig) {
             var topicEl = document.getElementById('mqtttrig-' + n + '-topic');
@@ -611,12 +663,18 @@ async function initMqttTriggers() {
     }
 
     actionEditorWireFragment(MQTT_TRIGGER_PREFIXES);
+    mqttTriggersLoaded = true;
+    actionConfigShowReset(data);
 }
 
 async function saveMqttTriggers() {
     var container = document.getElementById('mqtt-trigger-editors');
     if (!container) return;
-    var groupCount = container.querySelectorAll('details.editor-group').length;
+    if (!mqttTriggersLoaded) {
+        showMessage('Load MQTT triggers before saving.', 'error');
+        return;
+    }
+    var groupCount = container.children.length;
     try {
         var triggers = [];
         for (var n = 1; n <= groupCount; n++) {
@@ -637,7 +695,7 @@ async function saveMqttTriggers() {
         const response = await fetch('/api/component/mqtt-triggers/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ triggers: triggers })
+            body: JSON.stringify({ action_format_version: 1, triggers: triggers })
         });
         if (response.ok) {
             showMessage('MQTT triggers saved', 'success');
@@ -657,6 +715,8 @@ async function saveMqttTriggers() {
 // Timer Config (device-level, uses shared portal_action_editor.js)
 // ============================================================================
 
+// @portal-endif
+// @portal-if HAS_DISPLAY
 const TIMER_IDS = [1, 2, 3];
 function timerExpirePrefixes(tid) {
     return actionEditorSlotPrefixes('timer-' + tid + '-expire-');
@@ -685,27 +745,36 @@ async function timerConfigInitEditors() {
     });
     container.innerHTML = html;
     TIMER_IDS.forEach(function(tid) {
-        actionEditorListRender('timer-' + tid + '-expire-editors', timerExpirePrefixes(tid));
+        actionEditorListRender('timer-' + tid + '-expire-editors', timerExpirePrefixes(tid), null,
+            { actionOptions: { operations: true } });
     });
 }
 
 async function loadTimerConfig() {
+    const saveButton = document.getElementById('timer-config-save');
+    if (saveButton) saveButton.disabled = true;
     try {
         const response = await fetch('/api/component/timers/config');
-        if (!response.ok) return;
+        if (!response.ok) throw new Error('Timer configuration unavailable; saved settings are protected');
         const data = await response.json();
+        if (data.action_format_version !== 1) throw new Error('Incompatible timer action format; recreate timer configuration');
         TIMER_IDS.forEach(function(tid) {
             var tcfg = data[String(tid)] || {};
             actionEditorListLoad(timerExpirePrefixes(tid), tcfg.expire_actions || []);
         });
+        if (saveButton) saveButton.disabled = false;
+        actionConfigShowReset(data);
     } catch (err) {
         console.error('Failed to load timer config:', err);
+        showMessage('Failed to load timer config: ' + err.message, 'error');
     }
 }
 
 async function saveTimerConfig() {
+    const saveButton = document.getElementById('timer-config-save');
+    if (!saveButton || saveButton.disabled) return;
     try {
-        var payload = {};
+        var payload = { action_format_version: 1 };
         TIMER_IDS.forEach(function(tid) {
             payload[String(tid)] = { expire_actions: actionEditorListBuild(timerExpirePrefixes(tid)) };
         });
@@ -725,3 +794,4 @@ async function saveTimerConfig() {
         showMessage('Error saving timer config: ' + err.message, 'error');
     }
 }
+// @portal-endif

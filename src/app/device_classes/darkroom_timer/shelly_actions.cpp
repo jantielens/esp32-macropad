@@ -1,72 +1,35 @@
-// Darkroom-timer ActionTypeDef — parse, serialize, dispatch for the "shelly"
-// action type. Registered via REGISTER_ACTION_TYPE so action_dispatch.cpp /
-// action_parse.cpp do not need to know about the shelly arm at compile time.
-//
-// Aggregated into the build via
-// device_classes/darkroom_timer/darkroom_timer_device_class.cpp
-// under #if IS_DARKROOM_TIMER.
+// Shelly operations, aggregated by darkroom_timer_device_class.cpp.
 
 #include "../../action_registry.h"
 
 #if HAS_DISPLAY && IS_DARKROOM_TIMER
 
-#include "../../log_manager.h"
 #include "darkroom_timer_payload.h"
 #include "relay_controller.h"
-
-#include <stdlib.h>
-#include <string.h>
-
-#define TAG "ShellyAction"
-
-// Wire format: typed JSON {shelly_host, shelly_relay, shelly_on} mapping
-// directly to ShellyPayload.
-static void shelly_parse(const JsonObject& a, ButtonAction& act) {
-    ShellyPayload& p = shelly_payload(act);
-    strlcpy(p.host, a["shelly_host"] | "", sizeof(p.host));
-    p.relay = a["shelly_relay"] | 0;
-    p.on    = a["shelly_on"] | true;
-}
-
-static void shelly_serialize(const ButtonAction& act, JsonObject obj) {
-    const ShellyPayload& p = shelly_payload(act);
-    if (p.host[0]) obj["shelly_host"] = p.host;
-    obj["shelly_relay"] = p.relay;
-    obj["shelly_on"]    = p.on;
-}
-
-static ActionResult shelly_dispatch(const ButtonAction& act, const char* label,
-                                    uint32_t /*continuation_token*/) {
-    const ShellyPayload& p = shelly_payload(act);
-    if (!p.host[0]) {
-        LOGW(TAG, "%s shelly: empty host", label);
-        return ACTION_COMPLETE;
-    }
-    LOGT(TAG, "%s shelly: %s relay %u %s", label, p.host, p.relay,
-         p.on ? "on" : "off");
-    relay_queue_shelly(p.host, p.relay, p.on);
+static const ActionArgumentDef shelly_arguments[] = {
+    {"host", "Shelly host", ACTION_ARGUMENT_STRING, 0, 0, SHELLY_HOST_MAX_LEN - 1,
+     true, "[var:shelly_host]", "text"},
+    {"relay", "Relay index", ACTION_ARGUMENT_INTEGER, 0, 3, 0,
+     true, "[var:relay]", "number"},
+    {"enabled", "Relay", ACTION_ARGUMENT_BOOLEAN, 0, 0, 0,
+     true, "[var:relay_enabled]", "boolean", nullptr, 0, false, nullptr, nullptr, 0,
+     nullptr, 1, true},
+};
+static ActionResult shelly_operation(const ActionResolvedArgument* args, const char*, uint32_t) {
+    relay_queue_shelly(args[0].text, static_cast<uint8_t>(args[1].integer), args[2].integer != 0);
     return ACTION_COMPLETE;
 }
+static const ActionOperationDef shelly_operations[] = {
+    {"shelly.relay.set", "Set Shelly relay", shelly_arguments, 3, shelly_operation},
+};
 
 static void shelly_describe(JsonObject& out) {
     out["group"] = "Darkroom Timer";
     out["label"] = "Shelly relay";
-    JsonArray fields = out.createNestedArray("fields");
-    JsonObject host_field = fields.createNestedObject();
-    host_field["name"] = "shelly_host";
-    host_field["description"] = "required Shelly hostname or IP address";
-    JsonObject relay_field = fields.createNestedObject();
-    relay_field["name"] = "shelly_relay";
-    relay_field["description"] = "relay output index, 0 through 3";
-    JsonObject on_field = fields.createNestedObject();
-    on_field["name"] = "shelly_on";
-    on_field["description"] = "true to turn on, false to turn off";
-    JsonArray commands = out.createNestedArray("commands");
-    JsonObject on = commands.createNestedObject(); on["id"] = "on"; on["label"] = "Turn on";
-    JsonObject off = commands.createNestedObject(); off["id"] = "off"; off["label"] = "Turn off";
+
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(shelly_action_type, ACTION_TYPE_SHELLY, shelly_parse, shelly_serialize, shelly_dispatch, nullptr,
-    shelly_describe, nullptr, nullptr, ACTION_EXECUTION_SYNC);
+DEFINE_AND_REGISTER_ACTION_TYPE(shelly_action_type, ACTION_TYPE_SHELLY, shelly_describe, nullptr, ACTION_EXECUTION_SYNC, true, false,
+    shelly_operations, sizeof(shelly_operations) / sizeof(shelly_operations[0]));
 
 #endif // HAS_DISPLAY && IS_DARKROOM_TIMER

@@ -77,6 +77,7 @@ static const char* const core_preflight_paths[] = {
 #endif
 	"/api/health",
 	"/api/reboot",
+	"/api/reboot/ota",
 	"/api/sleep",
 	"/api/firmware/update/status",
 	"/api/firmware/update",
@@ -175,8 +176,14 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		#if HAS_EXTERNAL_DATA
 		server->on("/portal-external-data.js", HTTP_GET, handlePortalExternalDataJS);
 		#endif
-		#if HAS_VOICE_CLIPS
-		server->on("/portal-voice-clips.js", HTTP_GET, handlePortalVoiceClipsJS);
+		#if HAS_VOICE_NOTES
+		server->on("/portal-voice-notes.js", HTTP_GET, handlePortalVoiceNotesJS);
+		#endif
+		#if HAS_MICROPHONE_STREAMING
+		server->on("/portal-live-microphone.js", HTTP_GET, handlePortalLiveMicrophoneJS);
+		#endif
+		#if HAS_AUDIO_INPUT
+		server->on("/portal-microphone.js", HTTP_GET, handlePortalMicrophoneJS);
 		#endif
 			 #if HAS_REMOTE_LOG
 		server->on("/portal-logs.js", HTTP_GET, handlePortalLogsJS);
@@ -227,6 +234,7 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		server->on("/api/health", HTTP_GET, handleGetHealth);
 
 		server->on("/api/reboot", HTTP_POST, handleReboot);
+		server->on("/api/reboot/ota", HTTP_POST, handleRebootOtaMode);
 		server->on("/api/sleep", HTTP_POST, handleSleep);
 
 		// GitHub Pages-based firmware updates (URL-driven)

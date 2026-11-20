@@ -23,7 +23,7 @@ enum class MqttPublishScope { SensorsOnly };
 const char* device_class_get_full_name() { return "ESP32 Macropad"; }
 void device_class_dispatch_config_defaults(DeviceConfig*) {}
 void device_class_dispatch_config_load(DeviceConfig*, Preferences&) {}
-void device_class_dispatch_config_save(const DeviceConfig*, Preferences&) {}
+bool device_class_dispatch_config_save(const DeviceConfig*, Preferences&) { return true; }
 PowerMode power_config_parse_power_mode(const DeviceConfig*);
 MqttPublishScope power_config_parse_mqtt_publish_scope(const DeviceConfig*) { return MqttPublishScope::SensorsOnly; }
 const char* power_config_power_mode_to_string(PowerMode) { return "always_on"; }
@@ -62,7 +62,82 @@ PowerMode power_config_parse_power_mode(const DeviceConfig* config) {
     return strcmp(config->operating_mode, "offline") == 0 ? PowerMode::Offline : PowerMode::AlwaysOn;
 }
 bool time_service_timezone_valid(const char*) { return true; }
+bool time_service_set_timezone(const char*) { return true; }
 bool wifi_ap_password_is_valid(const char* password) { return password && !password[0]; }
+
+#if HAS_DISPLAY
+void device_dialog_set_templates(const DialogTemplates&) {}
+#endif
+
+static void assert_config_defaults(const DeviceConfig& config) {
+#if HAS_AUDIO
+    assert(config.audio_volume == AUDIO_DEFAULT_VOLUME);
+    assert(strcmp(config.tap_beep, "500:40") == 0);
+    assert(strcmp(config.lp_beep, "500:40 60 1000:40") == 0);
+#endif
+#if HAS_DISPLAY
+    assert(config.screen_saver_enabled == (!HAS_EPAPER_PANEL || SCREENSAVER_BACKLIGHT_ONLY));
+    assert(config.screen_saver_timeout_seconds == SCREENSAVER_DEFAULT_TIMEOUT_SECONDS);
+    assert(config.screen_saver_fade_out_ms == SCREENSAVER_DEFAULT_FADE_OUT_MS);
+    assert(config.screen_saver_fade_in_ms == SCREENSAVER_DEFAULT_FADE_IN_MS);
+    assert(config.screen_saver_wake_on_touch == HAS_TOUCH);
+#endif
+    assert(strcmp(config.operating_mode, "always_on") == 0);
+}
+
+static void test_config_defaults_before_nvs_read() {
+    for (bool namespace_exists : {false, true}) {
+        Preferences::begin_ok = namespace_exists;
+        DeviceConfig config = {};
+        assert(!config_manager_load(&config));
+        assert_config_defaults(config);
+    }
+    Preferences::begin_ok = true;
+}
+
+static void test_config_missing_keys_and_saved_choices() {
+    Preferences::magic = CONFIG_MAGIC;
+    Preferences::strings = {{"device_name", "remote"}, {"wifi_ssid", "configured"},
+                            {"wifi_fail", "ap"}};
+    DeviceConfig config = {};
+    assert(config_manager_load(&config));
+    assert_config_defaults(config);
+
+#if HAS_AUDIO
+    Preferences::levels["audio_vol"] = 0;
+    Preferences::strings["tap_beep"] = "";
+    Preferences::strings["lp_beep"] = "none";
+#endif
+#if HAS_DISPLAY
+    Preferences::bools["ss_en"] = false;
+#endif
+    assert(config_manager_load(&config));
+#if HAS_AUDIO
+    assert(config.audio_volume == 0);
+    assert(config.tap_beep[0] == '\0');
+    assert(strcmp(config.lp_beep, "none") == 0);
+    Preferences::levels["audio_vol"] = 73;
+    Preferences::strings["tap_beep"] = "880:20";
+    Preferences::strings["lp_beep"] = "990:30";
+#endif
+#if HAS_DISPLAY
+    assert(config.screen_saver_enabled == bool(SCREENSAVER_BACKLIGHT_ONLY));
+    Preferences::bools["ss_en"] = true;
+#endif
+    assert(config_manager_load(&config));
+#if HAS_AUDIO
+    assert(config.audio_volume == 73);
+    assert(strcmp(config.tap_beep, "880:20") == 0);
+    assert(strcmp(config.lp_beep, "990:30") == 0);
+#endif
+#if HAS_DISPLAY
+    assert(config.screen_saver_enabled);
+#endif
+    Preferences::magic = 0;
+    Preferences::strings.clear();
+    Preferences::levels.clear();
+    Preferences::bools.clear();
+}
 
 static void test_offline_config_without_ssid() {
     DeviceConfig config = {};
@@ -109,6 +184,60 @@ static void test_save_current_volume() {
     config_write_allowed = true;
     assert(config_manager_save_current_volume(&config));
     assert(config.audio_volume == 60 && Preferences::saved_volume == 60);
+}
+#endif
+
+#if HAS_AUDIO_INPUT
+#include "microphone_config_json.h"
+
+static void test_microphone_config_persistence() {
+    DeviceConfig config = {};
+    assert(!config_manager_load(&config));
+    assert(config.microphone_gain_db == 0 && !config.microphone_reduce_rumble);
+    config.magic = CONFIG_MAGIC;
+    strcpy(config.device_name, "remote");
+    strcpy(config.wifi_failure_mode, "ap");
+    strcpy(config.operating_mode, "offline");
+    strcpy(config.timezone, "UTC0");
+    config.microphone_gain_db = -12;
+    config.microphone_reduce_rumble = true;
+    assert(config_manager_save(&config));
+    DeviceConfig loaded = {};
+    assert(config_manager_load(&loaded));
+    assert(loaded.microphone_gain_db == -12 && loaded.microphone_reduce_rumble);
+    config.microphone_gain_db = 25;
+    assert(!config_manager_save(&config));
+    config.microphone_gain_db = 24;
+    Preferences::mic_write_ok = false;
+    assert(!config_manager_save(&config));
+    Preferences::mic_write_ok = true;
+    Preferences::mic_gain = 100;
+    assert(config_manager_load(&loaded));
+    assert(loaded.microphone_gain_db == 0);
+}
+
+static void test_microphone_config_json() {
+    int8_t gain = 5;
+    bool rumble = false;
+    JsonDocument doc;
+    assert(!deserializeJson(doc, "{\"microphone_gain_db\":\"-12\",\"microphone_reduce_rumble\":true}"));
+    assert(microphone_parse_settings(doc.as<JsonObjectConst>(), &gain, &rumble));
+    assert(gain == -12 && rumble);
+    for (const char* json : {"{\"microphone_gain_db\":25}", "{\"microphone_gain_db\":1.0}",
+                             "{\"microphone_gain_db\":null}", "{\"microphone_reduce_rumble\":null}",
+                             "{\"microphone_gain_db\":true}", "{\"microphone_gain_db\":\"1x\"}",
+                             "{\"microphone_gain_db\":\"99999999999999999999999\"}",
+                             "{\"microphone_gain_db\":\"1\\u00002\"}",
+                             "{\"microphone_gain_db\":4,\"microphone_reduce_rumble\":\"true\"}"}) {
+        doc.clear();
+        assert(!deserializeJson(doc, json));
+        assert(!microphone_parse_settings(doc.as<JsonObjectConst>(), &gain, &rumble));
+        assert(gain == -12 && rumble);
+    }
+    doc.clear();
+    assert(!deserializeJson(doc, "{\"microphone_gain_db\":24}"));
+    assert(microphone_parse_settings(doc.as<JsonObjectConst>(), &gain, &rumble));
+    assert(gain == 24 && rumble);
 }
 #endif
 
@@ -167,9 +296,15 @@ static void test_rmdir_failure_fails_reset() {
 #endif
 
 int main() {
+    test_config_defaults_before_nvs_read();
+    test_config_missing_keys_and_saved_choices();
     test_offline_config_without_ssid();
 #if HAS_AUDIO
     test_save_current_volume();
+#endif
+#if HAS_AUDIO_INPUT
+    test_microphone_config_persistence();
+    test_microphone_config_json();
 #endif
 #if HAS_FILESYSTEM
     test_success_removes_owned_roots_only();

@@ -108,11 +108,6 @@ size_t strlcpy(char* output, const char* input, size_t capacity) {
     return size;
 }
 #include "portal_mcp_gate.inc"
-static int g_config_post_mux = 0;
-static unsigned config_post_resets = 0;
-void config_post_reset() { ++config_post_resets; }
-#define portENTER_CRITICAL(mux) ((void)(mux))
-#define portEXIT_CRITICAL(mux) ((void)(mux))
 #define IS_EPAPER_FRAME 1
 static void check_frame_mode(JsonDocument& doc, AsyncWebServerRequest* request) {
 #include "portal_frame_mode_guard.inc"
@@ -338,7 +333,6 @@ int main() {
         check_interactive_mode(update, &interactive_request);
         assert(interactive_request.status == 0);
     }
-    assert(config_post_resets == 2);
     ComponentDef setup, mode, pads, special;
     setup.id = "setup"; setup.category = "device";
     mode.id = "mode"; mode.category = "device";

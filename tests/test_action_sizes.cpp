@@ -1,22 +1,18 @@
 // ============================================================================
 // Host-side size regression guard for ButtonAction
 // ============================================================================
-// Prints sizeof(ButtonAction) and every per-type payload arm.
+// Prints the typed action storage size.
 // Asserts: sizeof(ButtonAction) <= ACTION_SIZEOF_BUDGET.
 //
-// Update the budget intentionally (with measurement notes) when adding a new
-// per-class payload. The intent is: shared embedded boards (macropad, e-paper,
-// headless) pay exactly the same per-action memory cost regardless of which
-// device-class flags are set. This file is the canary.
+// The budget allows two pointers and the discriminator on a 64-bit host.
 // ============================================================================
 
 #include "pad_config.h"
 #include <cassert>
 #include <cstdio>
 
-// Compact dialogs leave the 256-byte MQTT/key payloads as the union floor.
 #ifndef ACTION_SIZEOF_BUDGET
-#define ACTION_SIZEOF_BUDGET 272
+#define ACTION_SIZEOF_BUDGET 32
 #endif
 
 int main() {

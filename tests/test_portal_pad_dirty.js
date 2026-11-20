@@ -82,7 +82,6 @@ assert.strictEqual(context.padDirty, true);
 
 assert(source.includes('} finally {\n        // Loading action lists, bindings, and template buttons can update'));
 assert(source.includes('if (current()) {'));
-assert(source.includes('            padClearDirty();\n        }\n    }\n}\n\nfunction padCloneJson'));
 
 const loadingName = { value: 'Previous pad' };
 const loadingNames = [];
@@ -112,9 +111,12 @@ const target = {
 	remove(index) { this.options.splice(index, 1); this.value = ''; },
 	appendChild(option) { this.options.push(option); }
 };
-elements.set('pad-level-action-0-target', target);
+elements.set('pad-level-action-0-op-screen.open-target-fixed', target);
 context.deviceInfoCache = { available_screens: [{ id: 'pad_4', name: 'Pad 5' }] };
 context.document.createElement = () => ({ value: '', textContent: '' });
+context.actionEditorCatalog = () => [{ operations: [{
+	id: 'screen.open', arguments: [{ name: 'target', control: 'screens' }]
+}] }];
 context._actionEditorExtensions = [];
 vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_screen.js', 'utf8'), context);
 context.padPopulateScreenDropdown();
@@ -371,11 +373,12 @@ for (const type of ['mousepad', 'scrollpad']) {
 	assert.strictEqual(option.disabled, false);
 }
 
-const draftInput = { id: 'pad-edit-label-center', value: 'Original', checked: false };
+const draftInput = { id: 'pad-edit-label-center', value: 'Original', checked: false, classList: { contains() { return false; } } };
+const searchInput = { id: 'action-search', value: '', checked: false, classList: { contains(name) { return name === 'action-operation-search'; } } };
 const draftGroup = { open: false };
 const draftRoot = {
 	isConnected: true,
-	querySelectorAll(selector) { return selector.includes('input') ? [draftInput] : selector === '#pad-edit-overlay details' ? [draftGroup] : []; },
+	querySelectorAll(selector) { return selector.includes('input') ? [draftInput, searchInput] : selector === '#pad-edit-overlay details' ? [draftGroup] : []; },
 	querySelector() { return { scrollTop: 42 }; },
 	classList: { add() {}, remove() {}, toggle() {} }
 };
@@ -415,6 +418,9 @@ workspaceContext.padWorkspaceSummaries = () => {};
 const setWorkspaceScope = workspaceContext.padWorkspaceSetScope;
 workspaceContext.padWorkspaceSetScope = () => {};
 workspaceContext.padWorkspaceCapture();
+searchInput.value = 'timer';
+workspaceContext.padWorkspaceEdit();
+assert.strictEqual(workspaceContext.padDirty, false, 'Operation search must not change the saved draft');
 draftInput.value = '[unfinished';
 workspaceContext.padWorkspaceEdit();
 assert.strictEqual(workspaceContext.padState.buttons[0].label_center, 'Original');
@@ -660,7 +666,7 @@ async function checkSaveRaces() {
 	const saveContext = { console, MAX_ACTIONS: 3, padWorkspace: workspace, document: { getElementById() { return root; } } };
 	vm.createContext(saveContext);
 	vm.runInContext(source.replace('let padDirty = false;', 'var padDirty = false;'), saveContext);
-	vm.runInContext("padState.selectedLayer = 'overlay'; padState.editCol = 2; padState.editRow = 0;", saveContext);
+	vm.runInContext("padState.loadError = null; padState.selectedLayer = 'overlay'; padState.editCol = 2; padState.editRow = 0;", saveContext);
 	saveContext.padBuildSaveContext = () => ({ page: 0, name: 'Saved' });
 	saveContext.padClearDirty = () => { saveContext.padDirty = false; };
 	saveContext.showMessage = () => {};
@@ -714,4 +720,128 @@ async function checkSaveRaces() {
 	assert.deepStrictEqual(notifications, [{ message: 'Save failed: Device unavailable', type: 'error' }], 'Persistence failures must retain their toast');
 }
 
-checkWorkspaceSwitch().then(checkSaveRaces).then(() => console.log('portal_pad_dirty: PASS')).catch(error => { console.error(error); process.exitCode = 1; });
+async function checkFailedLoadProtectsSavedPad() {
+	const controls = new Map();
+	const messages = [];
+	const validationErrors = [];
+	const testContext = {
+		console, TextEncoder, MAX_ACTIONS: 3,
+		deviceInfoCache: { available_screens: [] },
+		document: {
+			getElementById(id) {
+				if (!controls.has(id)) controls.set(id, { value: '', style: {} });
+				return controls.get(id);
+			}
+		},
+		padWorkspaceReset() {}, padWorkspaceRefresh() {}, padPruneDraftIconSources() {}, padRenderGrid() {},
+		padTrackLoad() {}, padInitBindableColor() {}, padSetBindableColor() {},
+		padPageBackgroundModeChanged() {}, padRenderBindings() {}, padPopulateTemplateDropdown() {},
+		padCacheColors() {}, padGetEffectiveDefault() { return ''; },
+		padGetBindableColor() { return ''; }, padColorsToHex() {},
+		padCaptureIconLayout() { return {}; }, actionEditorListBuild() { return []; },
+		padBindingsFromJson() { return []; }, padColorToHex() { return ''; },
+		actionEditorOperation() { return { arguments: [{ name: 'target', type: 'screen', max_length: 31 }] }; },
+		actionEditorListLoad() {}, padLoadTemplateButtons: async () => {},
+		showMessage(message) { messages.push(message); },
+		padDialogShowValidationError(error) { validationErrors.push(error.message); },
+	};
+	vm.createContext(testContext);
+	vm.runInContext(fs.readFileSync('src/app/web/portal_pad_io.js', 'utf8'), testContext);
+	vm.runInContext(source, testContext);
+	testContext.padPageBackgroundModeChanged = () => {};
+	testContext.padPopulateTemplateDropdown = () => {};
+	testContext.padLoadTemplateButtons = async () => {};
+	testContext.padTrackLoad = () => {};
+	const buildSaveContext = testContext.padBuildSaveContext;
+	testContext.padBuildSaveContext = () => ({ page: 0 });
+	let writes = 0;
+	testContext.padQueuePersistence = async () => { writes++; };
+	testContext.getDeviceInfo = async () => {};
+	testContext.fetch = () => new Promise(() => {});
+	testContext.padLoadPage(0);
+	let confirmations = 0;
+	testContext.confirm = () => { confirmations++; return true; };
+	await testContext.padDeletePage();
+	await testContext.padImportPad({ target: { files: [{ text: async () => '{}' }], value: 'pad.json' } });
+	assert.strictEqual(confirmations, 0, 'A pending load must not allow replacing the pad');
+	assert(messages.some(message => /still loading/i.test(message)));
+	testContext.fetch = async () => ({ ok: false, status: 500 });
+	await testContext.padLoadPage(0);
+	assert.strictEqual(await testContext.padSavePage(), null);
+	assert.strictEqual(writes, 0, 'An unreadable saved pad must not be overwritten');
+	assert(validationErrors.some(message => /load|reload/i.test(message)));
+
+	const legacyPad = {
+		cols: 2, rows: 2, name: 'Old pad', custom_setting: { retained: true },
+		pad_actions: [{ type: 'screen' }],
+		buttons: [{ col: 0, row: 0, label: 'Keep me', bg_color: 'aabbcc',
+			actions: [{ type: 'screen' }], lp_actions: [{ type: 'mqtt' }],
+			action: 'screen', action_screen: 'pad_1', lp_action: 'screen', lp_action_screen: 'pad_2',
+			widget_type: 'numericrocker', widget_numericrocker_action: { type: 'mqtt' } }],
+		overlay_buttons: [{ col: 1, row: 1, label: 'Overlay', actions: [{ type: 'screen' }],
+			lp_actions: [{ type: 'mqtt' }] }],
+	};
+	testContext.fetch = async () => ({
+		ok: true,
+		async json() { return JSON.parse(JSON.stringify(legacyPad)); }
+	});
+	await testContext.padLoadPage(0);
+	assert.strictEqual(vm.runInContext('padState.loadError', testContext), null);
+	assert.strictEqual(vm.runInContext('padDirty', testContext), true, 'Action cleanup must remain an unsaved change');
+	assert.strictEqual(writes, 0, 'Loading a legacy pad must not write it');
+	assert(messages.some(message => /older action format.*draft/i.test(message)), 'Recovery must warn about discarded actions');
+	testContext.padTrackValidate = () => ({
+		valid: true, rows: { sizes: [] }, columns: { sizes: [] },
+	});
+	const recovered = JSON.parse(buildSaveContext().body);
+	assert.deepStrictEqual(recovered, {
+		action_format_version: 1, layout: 'grid', cols: 2, rows: 2, name: 'Old pad',
+		custom_setting: { retained: true },
+		buttons: [{ col: 0, row: 0, label: 'Keep me', bg_color: 'aabbcc', widget_type: 'numericrocker' }],
+		overlay_buttons: [{ col: 1, row: 1, label: 'Overlay' }],
+	}, 'The save payload must preserve non-action settings without restoring legacy action fields');
+	assert.doesNotThrow(() => testContext.padCheckImportedActionFormat(recovered));
+
+	for (const version of [2, '1', null, -1]) {
+		testContext.fetch = async () => ({
+			ok: true,
+			async json() { return { action_format_version: version, buttons: [] }; },
+		});
+		await testContext.padLoadPage(0);
+		assert.strictEqual(await testContext.padSavePage(), null);
+		assert.strictEqual(writes, 0, 'Newer or invalid formats must not be overwritten');
+	}
+	testContext.padTrackValidate = () => { throw new Error('An unreadable pad must not be exported'); };
+	await testContext.padExportPad();
+
+	testContext.fetch = async () => ({
+		ok: true,
+		async json() {
+			return { action_format_version: 1, cols: 2, rows: 2, buttons: [],
+				pad_actions: Array(4).fill({ op: 'screen.open', args: { target: 'pad_1' } }) };
+		}
+	});
+	await testContext.padLoadPage(0);
+	assert.strictEqual(await testContext.padSavePage(), null);
+	assert.strictEqual(writes, 0, 'An oversized action list must not be silently truncated');
+	assert(messages.some(message => /action.*limit/i.test(message)));
+
+	testContext.fetch = async () => ({
+		ok: true,
+		async json() { return { action_format_version: 1, cols: 2, rows: 2, buttons: [],
+			pad_actions: [{ op: 'screen.open', args: { target: 'pad_1' } }] }; }
+	});
+	await testContext.padLoadPage(0);
+	assert.strictEqual(vm.runInContext('padState.loadError', testContext), null, 'A valid reload clears the failure');
+	assert.strictEqual(vm.runInContext('padState.padActions[0].op', testContext), 'screen.open',
+		'Valid typed operations remain in the editor');
+	assert.strictEqual(vm.runInContext('padDirty', testContext), false, 'A current-format reload is a clean baseline');
+
+	testContext.fetch = async () => ({ ok: false, status: 404 });
+	await testContext.padLoadPage(0);
+	testContext.padLoadPage = async () => {};
+	assert(await testContext.padSavePage(), 'A confirmed empty pad can be saved');
+	assert.strictEqual(writes, 1);
+}
+
+checkWorkspaceSwitch().then(checkSaveRaces).then(checkFailedLoadProtectsSavedPad).then(() => console.log('portal_pad_dirty: PASS')).catch(error => { console.error(error); process.exitCode = 1; });

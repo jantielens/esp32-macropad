@@ -1,4 +1,7 @@
 # Bundle camera portal handlers into a standalone HAS_CAMERA-gated asset.
+# [chunk:camera HAS_CAMERA]
 portal_camera.js
+# [chunk:motion HAS_CAMERA && (HAS_DISPLAY || HAS_BUTTON)]
 portal_camera_motion.js
+# [chunk:snapshots HAS_CAMERA && HAS_STORAGE_BROWSER]
 portal_camera_snapshots.js

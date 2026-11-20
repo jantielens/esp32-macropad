@@ -119,6 +119,7 @@ struct ButtonTile {
     lv_obj_t* bg_image;       // Background image widget (or nullptr)
     image_slot_t image_slot;  // Image fetch slot (-1 = none)
     char* image_url_template;
+    bool image_presentation_dirty;
 #endif
 #if HAS_IMAGE_LIBRARY
     lv_obj_t* local_bg_image;             // Local background image widget (or nullptr)
@@ -141,6 +142,7 @@ class PadScreen : public Screen {
 private:
     uint8_t pageIndex;
     DisplayManager* displayMgr;
+    const PadConfig* actionConfig = nullptr;
 
     lv_obj_t* screen;
     lv_obj_t* container;       // Content container (offset by pixel shift margin)
@@ -229,7 +231,7 @@ private:
     // Build/destroy tile LVGL objects from config
     void buildTiles();
     void clearTiles();
-    void pollMqttBindings(bool refreshPassive);
+    void pollMqttBindings(bool refreshPassive, bool force);
     void pollColorBindings();
     void pollNumberBindings();
     void pollBtnStateBindings();
@@ -280,6 +282,9 @@ public:
     bool buttonIsOverlay(const ButtonTile* tile) const { return isOverlayButton(tile); }
 #if HAS_DISPLAY
     bool navigateButtons(const char* command);
+#if HAS_PSRAM
+    bool navigateList(const char* target, const char* command);
+#endif
 #endif
 };
 

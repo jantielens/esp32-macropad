@@ -12,7 +12,10 @@
 
 static void timers_get_config(AsyncWebServerRequest *request) {
     auto doc = make_psram_json_doc(4096);
-    timer_config_to_json(doc->to<JsonObject>());
+    if (!timer_config_to_json(doc->to<JsonObject>())) {
+        web_portal_send_json_error(request, 503, "Timer configuration unavailable; saved settings are protected");
+        return;
+    }
 
     web_portal_send_json_chunked(request, doc);
 }

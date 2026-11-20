@@ -1,6 +1,6 @@
 #include "web_portal_cors.h"
 
-#include "repo_slug_config.h"
+#include <repo_slug_config.h>
 
 #include <Arduino.h>
 

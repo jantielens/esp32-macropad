@@ -19,10 +19,8 @@
 //     brew_series_copy()/brew_markers_copy(), which snapshot under a spinlock so
 //     a concurrent deferred free in brew_tick() cannot use-after-free (mirrors
 //     the shutter capture-snapshot getters).
-//   - CONTROL tools build a ButtonAction and defer to the main loop via
-//     mcp_control_dispatch() (exactly like shutter_control) — scale/brew command
-//     dispatch runs through action_dispatch(), which may touch LVGL/audio and
-//     must not run on the web task.
+//   - CONTROL tools defer typed operation dispatch to the main loop because
+//     scale/brew operations may touch LVGL/audio and must not run on the web task.
 //   - delete_brew, delete_brew_template and set_brew_template run inline on the
 //     web task (no LVGL, no action dispatch), the same way the existing portal
 //     handlers do. NOTE: delete_brew_template and set_brew_template call
@@ -49,15 +47,18 @@
 
 #include "../scale_hal.h"
 #include "../coffee_scale_config.h"
-#include "../coffee_scale_payload.h"   // ScalePayload/BrewPayload, ACTION_TYPE_SCALE/BREW
+#include "../coffee_scale_payload.h"
 #include "../sensors/scale_smoothing.h"  // scale_smoothing_preset_name
 #include "../brew/brew_manager.h"
 #include "../brew/brew_templates.h"
 #include "../brew/brew_template_dsl.h"
 #include "../brew/brew_template_loader.h"
 #include "../brew/brew_log.h"
+#include "control_mapping.h"
 
 #include "action_dispatch.h"
+#include "action_parse.h"
+#include "action_storage.h"
 #include "log_manager.h"
 #include "storage.h"
 #include "web_portal_json.h"   // make_psram_json_doc
@@ -418,33 +419,44 @@ static bool tool_get_brew_template(const JsonObject& args, JsonObject& result, S
 
 struct CsCtrlCtx {
     char type[8];                       // ACTION_TYPE_SCALE or ACTION_TYPE_BREW
-    char command[SCALE_CMD_MAX_LEN];    // widest of the two command fields
+    char command[SCALE_CMD_MAX_LEN];
     char value[CONFIG_BINDABLE_SHORT_LEN];
 };
 
 static void exec_cs_control(const void* ctx, bool* ok, char* msg, size_t msg_len) {
     const CsCtrlCtx* c = (const CsCtrlCtx*)ctx;
-    ButtonAction act;
-    memset(&act, 0, sizeof(act));
-    strlcpy(act.type, c->type, sizeof(act.type));
-    if (strcmp(c->type, ACTION_TYPE_SCALE) == 0) {
-        ScalePayload& p = scale_payload(act);
-        strlcpy(p.command, c->command, sizeof(p.command));
-        strlcpy(p.value,   c->value,   sizeof(p.value));
-    } else {
-        BrewPayload& p = brew_payload(act);
-        strlcpy(p.command, c->command, sizeof(p.command));
-        strlcpy(p.value,   c->value,   sizeof(p.value));
+    const CsControlMapping* selected = cs_control_mapping(c->type, c->command);
+    if (!selected) {
+        *ok = false;
+        snprintf(msg, msg_len, "unknown control command");
+        return;
     }
-    action_dispatch(act, "MCP");
-    *ok = true;
-    snprintf(msg, msg_len, "dispatched %s", c->command);
+    auto doc = make_psram_json_doc(512);
+    if (!doc || doc->capacity() == 0) {
+        *ok = false;
+        snprintf(msg, msg_len, "cannot allocate control request");
+        return;
+    }
+    cs_control_request(doc->to<JsonObject>(), *selected, c->value);
+    ActionStorage storage = {};
+    ButtonAction act = {};
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(doc->as<JsonObject>(), act);
+    }
+    *ok = !doc->overflowed() && !storage.failed && act.type[0] == '@' &&
+          action_dispatch(act, "MCP") == ACTION_COMPLETE;
+    action_storage_clear(storage);
+    snprintf(msg, msg_len, *ok ? "dispatched %s" : "failed to dispatch %s", c->command);
 }
 
 static bool dispatch_cs_control(const char* type, const char* cmd, const char* value,
                                 JsonObject& result, String& err) {
     CsCtrlCtx ctx;
     memset(&ctx, 0, sizeof(ctx));
+    if (strlen(type) >= sizeof(ctx.type) || strlen(cmd) >= sizeof(ctx.command) ||
+        (value && strlen(value) >= sizeof(ctx.value)))
+        return cs_fail(result, err, CS_ERR_PARAMS, "control argument is too long");
     strlcpy(ctx.type, type, sizeof(ctx.type));
     strlcpy(ctx.command, cmd, sizeof(ctx.command));
     strlcpy(ctx.value, value ? value : "", sizeof(ctx.value));

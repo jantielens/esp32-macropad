@@ -454,6 +454,11 @@ static void test_save_body_saver_failure_frees() {
     assert(request.response_code == 500);
     assert(request._tempObject == nullptr);
     assert(s_free_count == 1);
+    AsyncWebServerRequest validation_request;
+    component_handle_save_body(&validation_request, &byte, 1, 0, 1, save_body_fail,
+                               4096, "{\"error\":\"invalid\"}", 400);
+    assert(validation_request.response_code == 400);
+    assert(validation_request._tempObject == nullptr);
     printf(" PASS\n");
 }
 

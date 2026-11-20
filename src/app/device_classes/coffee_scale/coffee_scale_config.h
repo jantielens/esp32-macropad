@@ -46,6 +46,6 @@ void coffee_scale_config_defaults();
 void coffee_scale_config_load(Preferences& prefs);
 
 // Persist coffee-scale fields to the already-open NVS namespace.
-void coffee_scale_config_save(Preferences& prefs);
+bool coffee_scale_config_save(Preferences& prefs);
 
 #endif // IS_COFFEE_SCALE

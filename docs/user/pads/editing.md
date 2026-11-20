@@ -21,6 +21,13 @@ The canvas reflects the device's aspect ratio and spacing, not an exact renderin
 of fonts, widgets, or live images. Each pad saves independently.
 **Show on Device** does not save the draft.
 
+Opening or importing a pad with an older action format removes its actions
+from the draft and shows a notification. Layout, button content, appearance,
+and other settings are retained. Recreate any needed actions before choosing
+**Save Pad**. Leaving without saving keeps the original saved pad unchanged.
+Pads with a newer action format cannot be opened for saving; use firmware
+that supports that format.
+
 In the color picker, choose **Apply** or click outside to apply valid changes
 to the draft. Choose **Cancel** or press Escape to discard picker changes.
 Save the pad to store the draft on the device.
@@ -299,7 +306,7 @@ On mobile, **Return to pad** retains edits; the inspector also has **Save Pad**.
 
 Device-wide defaults save separately. Clearing, importing, pasting, filling,
 and block placement change the draft unless the operation explicitly says it
-writes immediately; recipe installation and device import are separate paths.
+writes immediately; recipe installation is a separate path.
 
 ## Move and resize
 

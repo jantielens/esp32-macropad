@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import pathlib
+import json
 import re
-import shutil
 import subprocess
 import tempfile
 import unittest
@@ -41,29 +41,24 @@ class RemoteLogRuntimeTests(unittest.TestCase):
             "web_assets.h": ("logs_fragment_html_gz", "portal_logs_js_gz"),
         }
         with tempfile.TemporaryDirectory() as directory:
-            project = pathlib.Path(directory)
-            tools = project / "tools"
-            tools.mkdir()
-            for tool in (ROOT / "tools").iterdir():
-                (tools / tool.name).symlink_to(tool, target_is_directory=tool.is_dir())
-            app = project / "src/app"
-            app.mkdir(parents=True)
-            for name in ("web", "device_classes"):
-                shutil.copytree(ROOT / "src/app" / name, app / name)
-            (project / "src/version.h").symlink_to(ROOT / "src/version.h")
-            result = subprocess.run(["bash", str(tools / "minify-web-assets.sh")],
-                                    cwd=project, stdout=subprocess.PIPE,
-                                    stderr=subprocess.STDOUT, text=True)
-            self.assertEqual(result.returncode, 0, result.stdout)
-            generated_assets = (app / "web_assets.h").read_text()
+            generated_assets = {}
+            for enabled in (0, 1):
+                output = pathlib.Path(directory) / str(enabled)
+                command = ["c++", "-Isrc/app", f"-DHAS_REMOTE_LOG={enabled}", "-DBOARD_HAS_PSRAM"]
+                result = subprocess.run(["python3", str(ROOT / "tools/portal_assets.py"),
+                                         "esp32-macropad", "ESP32 Macropad",
+                                         "--cpp-command", json.dumps(command), "--output-dir", str(output)],
+                                        cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                self.assertEqual(result.returncode, 0, result.stdout)
+                generated_assets[enabled] = (output / "web_assets.h").read_text()
         for filename, markers in surfaces.items():
-            source = generated_assets if filename == "web_assets.h" else (
-                ROOT / "src/app" / filename).read_text()
-            if filename == "portal_components.cpp":
-                source = source.replace('#include "components/logs_component.cpp"', '"logs_component.cpp"')
-            source = re.sub(r'^\s*#include[^\n]*', '', source, flags=re.MULTILINE)
             for enabled in (0, 1):
                 with self.subTest(filename=filename, enabled=enabled):
+                    source = generated_assets[enabled] if filename == "web_assets.h" else (
+                        ROOT / "src/app" / filename).read_text()
+                    if filename == "portal_components.cpp":
+                        source = source.replace('#include "components/logs_component.cpp"', '"logs_component.cpp"')
+                    source = re.sub(r'^\s*#include[^\n]*', '', source, flags=re.MULTILINE)
                     output = subprocess.check_output(
                         ["c++", "-E", "-P", "-x", "c++", f"-DHAS_REMOTE_LOG={enabled}",
                          "-DDEBUG_CRASH_API_ENABLED=1", "-DBOARD_HAS_PSRAM", "-I", str(ROOT / "src/app"), "-"],

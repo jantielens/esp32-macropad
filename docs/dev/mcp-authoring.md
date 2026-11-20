@@ -46,6 +46,9 @@ enqueue actions, and return an execution_id while requests remain pending.
 get_ha_execution_result reports pending or completed with results indexed by
 the original action_index, including entity/service, status, HTTP status,
 duration, and error details as applicable.
+Typed HA service calls retain tracking across continuations. Their arguments
+resolve when reached; calls skipped after a failure or cancellation report
+`cancelled`. Legacy-only lists with confirmations retain their untracked path.
 
 Terminal results can include service errors and skipped later actions, not
 merely success. Four execution records are retained for roughly 60 seconds.

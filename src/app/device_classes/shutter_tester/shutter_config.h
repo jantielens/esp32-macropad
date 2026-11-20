@@ -42,6 +42,6 @@ void shutter_config_defaults();
 void shutter_config_load(Preferences& prefs);
 
 // Persist shutter-tester fields to the already-open NVS namespace.
-void shutter_config_save(Preferences& prefs);
+bool shutter_config_save(Preferences& prefs);
 
 #endif // IS_SHUTTER_TESTER
