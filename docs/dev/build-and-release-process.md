@@ -1273,6 +1273,7 @@ Follow [Semantic Versioning](https://semver.org/):
 **Notes**:
 - The board build matrix order is deterministic (board names are sorted) so CI output is stable.
 - The host-test job installs the locked Node.js dependencies and `csscompressor` for portal asset tests, plus Pillow for photoframe vector tests.
+- Host builds use `cmake --build build/host-tests --parallel 4` to bound compiler concurrency. A bare `--parallel` enables unlimited jobs with GNU Make and can exhaust runner resources.
 - Host tests use `ctest --parallel 4`. Explicit `COST` estimates prioritize both Voice Notes storage profiles and the portal asset matrix on fresh and existing build trees. A shared `RESOURCE_LOCK` serializes build-invoking checks and the camera widget manifest check without blocking unrelated tests.
 - CI regenerates `docs/compile-time-flags.md` and fails if the generated output differs (keeps the report in sync with code).
 

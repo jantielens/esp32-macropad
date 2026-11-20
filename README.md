@@ -417,9 +417,13 @@ export PATH="$HOME/.espressif/tools/cmake/<version>/bin:$PATH"
 
 ```bash
 cmake -S . -B build/host-tests
-cmake --build build/host-tests --parallel
+cmake --build build/host-tests --parallel 4
 ctest --test-dir build/host-tests --output-on-failure --parallel 4
 ```
+
+The host build limits compiler concurrency to four jobs, matching CI. Omitting
+the number after `--parallel` allows unlimited jobs with GNU Make and can
+exhaust runner resources.
 
 CTest runs up to four tests at once. Explicit scheduling costs prioritize both
 Voice Notes storage profiles and the portal asset matrix, including on the first

@@ -146,7 +146,7 @@ jobs:
         cmake -S . -B build/host-tests
 
     - name: Build host-native tests
-      run: cmake --build build/host-tests --parallel
+      run: cmake --build build/host-tests --parallel 4
 
     - name: Run host-native tests
       run: |
