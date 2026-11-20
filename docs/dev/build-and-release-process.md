@@ -1257,7 +1257,8 @@ Follow [Semantic Versioning](https://semver.org/):
 
 **Notes**:
 - The board build matrix order is deterministic (board names are sorted) so CI output is stable.
-- The host-test job installs `csscompressor` for portal asset tests and Pillow for photoframe vector tests.
+- The host-test job installs the locked Node.js dependencies and `csscompressor` for portal asset tests, plus Pillow for photoframe vector tests.
+- Host tests use `ctest --parallel 4`. Explicit `COST` estimates prioritize both Voice Notes storage profiles and the portal asset matrix on fresh and existing build trees. A shared `RESOURCE_LOCK` serializes build-invoking checks and the camera widget manifest check without blocking unrelated tests.
 - CI regenerates `docs/compile-time-flags.md` and fails if the generated output differs (keeps the report in sync with code).
 
 ### Release Workflow (`.github/workflows/release.yml`)

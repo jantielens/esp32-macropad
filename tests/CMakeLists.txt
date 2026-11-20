@@ -1543,6 +1543,7 @@ function(add_host_compile_check target source)
     target_compile_definitions(${target} PRIVATE HAS_HA_HISTORY=0 HAS_MCP=0)
     target_compile_options(${target} PRIVATE "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/Arduino.h" "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/log_manager.h" "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h")
     add_test(NAME ${target} COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target ${target})
+    set_tests_properties(${target} PROPERTIES RESOURCE_LOCK host_test_build_tree)
 endfunction()
 
 add_host_compile_check(check_sparkline_no_ha ${PROJECT_SOURCE_DIR}/src/app/widgets/sparkline_widget.cpp -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable -Wno-format-truncation)
@@ -1562,6 +1563,7 @@ foreach(script
     get_filename_component(name ${script} NAME_WE)
     add_host_command_test(${name} bash ${PROJECT_SOURCE_DIR}/tests/${script})
 endforeach()
+set_tests_properties(test_camera_preview_widget PROPERTIES RESOURCE_LOCK host_test_build_tree)
 
 add_host_command_test(test_portal_component_capacity_matrix python3 ${PROJECT_SOURCE_DIR}/tests/test_portal_component_capacity_matrix.py)
 add_host_command_test(test_widget_schema python3 ${PROJECT_SOURCE_DIR}/tools/lint_widget_schema.py)
@@ -1593,6 +1595,7 @@ foreach(script
         set_tests_properties(${name} PROPERTIES ENVIRONMENT "ACTION_CATALOG_BINARY=$<TARGET_FILE:test_action_parse>")
     endif()
 endforeach()
+set_tests_properties(test_portal_asset_gates PROPERTIES COST 66)
 
 file(GLOB action_editor_scripts CONFIGURE_DEPENDS RELATIVE "${PROJECT_SOURCE_DIR}/src/app/web"
     "${PROJECT_SOURCE_DIR}/src/app/web/portal_action_editor*.js")
@@ -1704,6 +1707,7 @@ add_host_legacy_test(${voice_notes_target}
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/shutter_session_overrides/Arduino.h
         ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
 )
+set_tests_properties(${voice_notes_target} PROPERTIES COST 101)
 endforeach()
 add_test(NAME test_voice_notes_no_psram COMMAND test_voice_notes --no-psram)
 add_host_legacy_test(test_voice_note_range

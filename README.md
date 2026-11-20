@@ -408,7 +408,8 @@ The [device power API](docs/dev/web-portal.md#device-power-control) includes:
 
 Host-native unit and integration tests run on the development machine (no ESP32 needed). They require CMake 3.20 or later. If CMake is installed through ESP-IDF but is not on `PATH`, use its toolchain directory for the commands below:
 
-The portal asset tests also require Python's `csscompressor` package.
+The portal asset tests also require Python's `csscompressor` package and the
+locked Node.js dependencies. Install those with `npm ci --prefix tools`.
 
 ```bash
 export PATH="$HOME/.espressif/tools/cmake/<version>/bin:$PATH"
@@ -417,8 +418,14 @@ export PATH="$HOME/.espressif/tools/cmake/<version>/bin:$PATH"
 ```bash
 cmake -S . -B build/host-tests
 cmake --build build/host-tests --parallel
-ctest --test-dir build/host-tests --output-on-failure
+ctest --test-dir build/host-tests --output-on-failure --parallel 4
 ```
+
+CTest runs up to four tests at once. Explicit scheduling costs prioritize both
+Voice Notes storage profiles and the portal asset matrix, including on the first
+run. Checks that modify the shared build tree use a resource lock; other tests
+can continue alongside them. Use `--parallel 1` for a serial troubleshooting run.
+Do not run separate builds or test suites concurrently in the same build tree.
 
 ## 📄 License
 
