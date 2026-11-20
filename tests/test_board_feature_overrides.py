@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import csv
 import json
 import pathlib
 import subprocess
@@ -238,6 +239,47 @@ int main() { std::puts(HW_BUTTON_DEFAULTS_JSON); }
         {"tap_actions": [{"op": "display.refresh_full", "args": {}}]},
     ]
 print("PASS: CrowPanel generic hardware action defaults")
+
+fqbn_line = next(line for line in (root / "config.sh").read_text().splitlines()
+                 if '["crowpanel-4.2-interactive"]=' in line)
+scheme = fqbn_line.split("PartitionScheme=", 1)[1].split(",", 1)[0]
+with (root / "partitions" / f"partitions_{scheme}.csv").open() as partition_file:
+    partitions = list(csv.reader(line for line in partition_file
+                                 if line.strip() and not line.startswith("#")))
+partition_end = 0x9000
+partition_by_name = {}
+for name, kind, subtype, offset, size, _ in partitions:
+    offset, size = int(offset.strip(), 0), int(size.strip(), 0)
+    assert offset == partition_end and offset % 0x1000 == 0 and size % 0x1000 == 0
+    if kind.strip() == "app":
+        assert offset % 0x10000 == 0 and size == 0x380000
+    partition_by_name[name.strip()] = (subtype.strip(), offset, size)
+    partition_end = offset + size
+assert partition_end == 8 * 1024 * 1024
+assert partition_by_name["app0"] == ("ota_0", 0x10000, 0x380000)
+assert partition_by_name["app1"] == ("ota_1", 0x390000, 0x380000)
+assert partition_by_name["storage"] == ("spiffs", 0x710000, 896 * 1024)
+assert partition_by_name["nvs"] == ("nvs", 0x9000, 0x5000)
+assert partition_by_name["otadata"] == ("ota", 0xE000, 0x2000)
+assert partition_by_name["coredump"] == ("coredump", 0x7F0000, 0x10000)
+print("PASS: CrowPanel 3.5 MiB OTA slots fit 8 MiB flash with 896 KiB storage")
+
+with tempfile.TemporaryDirectory() as directory:
+    for header in ("action_registry.h", "action_storage.h"):
+        copied_header = pathlib.Path(directory) / header
+        copied_header.write_text((root / "src/app" / header).read_text())
+    subprocess.run(
+        ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+         "-x", "c++", "-", "-I", str(root), "-I", str(root / "src/app"),
+         "-I", str(arduinojson), "-DHAS_DISPLAY=1"],
+        input=f'''#include "src/app/action_registry.h"
+#include "src/app/action_storage.h"
+#include "{directory}/action_registry.h"
+#include "{directory}/action_storage.h"
+''', text=True, check=True,
+    )
+print("PASS: action headers tolerate Arduino staging duplicate copies")
+
 for grayscale in (0, 1):
     subprocess.run(
         ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",

@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-#include <float.h>
+#include <limits>
 
 // ============================================================================
 // Value type — tagged union for numbers and strings
@@ -531,7 +531,7 @@ static bool format_checked_number(double val, char* out, size_t out_len) {
         memcpy(out, full, written + 1);
         return true;
     }
-    for (int precision = 6; precision <= DBL_DECIMAL_DIG; ++precision) {
+    for (int precision = 6; precision <= std::numeric_limits<double>::max_digits10; ++precision) {
         int written = snprintf(full, sizeof(full), "%.*g", precision, val);
         if (written < 0 || static_cast<size_t>(written) >= sizeof(full)) return false;
         if (strtod(full, nullptr) == val) {

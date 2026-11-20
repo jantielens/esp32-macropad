@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking changes
 
+* Increase CrowPanel 4.2 Interactive OTA slots to 3.5 MiB each, reducing
+  LittleFS storage to 896 KiB. Back up settings/files before upgrading from
+  the 3 MiB-slot layout, perform a full USB flash, reinitialize file storage,
+  and restore files. Firmware-only OTA cannot migrate the partition table.
+  See the [CrowPanel board guide](src/boards/crowpanel-4.2-interactive/README.md#display-and-firmware-limits).
 * Replace legacy actions with typed operations. Back up configurations before
   upgrading and recreate actions using the [action picker](docs/user/pads/actions.md);
   they are not converted automatically. Opening or importing older pads clears

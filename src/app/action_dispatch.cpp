@@ -26,8 +26,13 @@
 
 ActionDispatchContext action_dispatch_context() {
     const auto& context = thread_execution_context;
-    return {context.synchronous, context.work_guard, context.generation,
-            context.alarm_audio, context.interactive};
+    ActionDispatchContext result;
+    result.synchronous = context.synchronous;
+    result.work_guard = context.work_guard;
+    result.generation = context.generation;
+    result.alarm_audio = context.alarm_audio;
+    result.interactive = context.interactive;
+    return result;
 }
 ActionResult action_dispatch_synchronous(const ButtonAction& act, const char* label,
                                          bool (*work_guard)(uint32_t), uint32_t generation,

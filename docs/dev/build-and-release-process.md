@@ -623,6 +623,21 @@ This template automates the installation:
 - For boards using `PartitionScheme=...`, `upload.sh` defaults to a full flash (`--full`) to ensure the partition layout on the device matches what was built.
 - If you see errors like “offset not aligned” or “sketch too big”, verify your offsets are 0x10000-aligned (except NVS/otadata) and that your firmware fits in the configured app partition size.
 
+### CrowPanel 4.2 Interactive OTA Layout
+
+`crowpanel-4.2-interactive` uses `ota_3_5mb_8MB` with two 3.5 MiB OTA
+application slots and 896 KiB of LittleFS storage within its 8 MiB flash.
+NVS, OTA metadata, and the 64 KiB coredump partition retain their existing
+locations. Other boards keep their selected partition schemes.
+Run `./tools/install-custom-partitions.sh` before building on an existing
+development machine.
+
+Migration from `ota_3mb_8MB` moves the second application slot and filesystem.
+Back up settings/files first, perform a full serial flash with the new partition
+table, reinitialize file storage, and restore the files. A firmware-only OTA
+update cannot install the new layout. See the
+[board guide](../../src/boards/crowpanel-4.2-interactive/README.md#display-and-firmware-limits).
+
 ### ESP32-S3 4 MiB OTA Layout
 
 `esp32-4848S040`, `jc3248w535`, `jc3636w518`, `jc3636w518-sd`,

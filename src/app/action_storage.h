@@ -1,4 +1,5 @@
-#pragma once
+#ifndef ACTION_STORAGE_H
+#define ACTION_STORAGE_H
 
 #include "board_config.h"
 
@@ -52,3 +53,5 @@ const ActionStoredArgument* action_storage_arguments(const ActionArgumentBlock* 
 const char* action_storage_text(const ActionArgumentBlock* block, const ActionStoredArgument& argument);
 
 #endif
+
+#endif // ACTION_STORAGE_H

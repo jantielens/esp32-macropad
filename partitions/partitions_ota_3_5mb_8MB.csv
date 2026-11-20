@@ -1,0 +1,9 @@
+# CrowPanel 4.2 Interactive: two 3.5 MiB OTA slots and 896 KiB LittleFS.
+# Changing from ota_3mb_8MB requires a full serial flash and file restoration.
+# Name,    Type, SubType,  Offset,     Size,       Flags
+nvs,       data, nvs,      0x9000,     0x5000,
+otadata,   data, ota,      0xE000,     0x2000,
+app0,      app,  ota_0,    0x10000,    0x380000,
+app1,      app,  ota_1,    0x390000,   0x380000,
+storage,   data, spiffs,   0x710000,   0xE0000,
+coredump,  data, coredump, 0x7F0000,   0x10000,

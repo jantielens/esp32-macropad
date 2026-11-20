@@ -1,4 +1,5 @@
-#pragma once
+#ifndef ACTION_REGISTRY_H
+#define ACTION_REGISTRY_H
 
 #include "board_config.h"
 
@@ -138,3 +139,5 @@ constexpr bool action_type_name_fits(const char (&)[capacity]) {
     REGISTER_ACTION_TYPE(var)
 
 #endif // HAS_DISPLAY || HAS_BUTTON
+
+#endif // ACTION_REGISTRY_H
