@@ -1667,14 +1667,45 @@ Schemes with saved named definitions expose `authoring.definitions`, even
 without `docs=1`. For `pad`, this contains `max_count` (16), `name_max_bytes`
 (31), `template_max_bytes` (191), `name_pattern`
 (`^[A-Za-z][A-Za-z0-9_]*$`), `context` (`same_pad`), and
-`composition_supported` (`false`). Composition means using a `[pad:...]`
-reference inside another named binding's saved value; button-field expressions
-may still reference named bindings. The byte limits measure UTF-8 input after
+`composition_supported` (`true`), `max_chain_depth` (2),
+`max_evaluations_per_lookup` (64), `max_expression_depth` (5), and
+`dependencies_validated_on_save` (`false`). Composition means using a `[pad:...]`
+reference inside another named binding's saved value. Chain depth counts named
+bindings including the starting name, not a surrounding field expression.
+Active-template tracking stops direct and indirect cycles on first re-entry.
+Runtime budgets stop excessive depth/work; save validation does not
+perform dependency-graph analysis. Missing references and exhausted budgets
+resolve as unavailable, with the usual explicit fallback behavior.
+Local definitions still override inherited template names, including for device
+previews, which copy the immutable effective pad bindings.
+The byte limits measure UTF-8 input after
 JSON decoding, excluding the terminating NUL. They are not resolved-output or
 destination-field capacities. Ordinary scalar token resolution has a 127-byte
 payload buffer; destination fields and individual resolvers may impose
 additional limits. These constraints also appear in full and scheme-filtered
 MCP capabilities, from the same registration metadata.
+
+Binding expression parsing keeps the common 12-level ceiling, in addition to
+the five-active-expression limit. On ESP32, the dispatcher checks current stack
+headroom before entering a resolver. The bounded evaluator checks before its
+large entry frame, parser recursion and date/duration formatting. These checks
+use the current stack pointer and the calling task's stack base, not its
+historical high-water mark. Insufficient headroom returns unavailable and
+preserves normal fallback handling; it does not allocate PSRAM or enlarge task
+stacks. Ceilings can therefore be reached earlier on smaller task stacks.
+MQTT topic and HA entity discovery reuse the same named/expression traversal
+guards and effective pad context. HA visits direct tokens before delegating
+structural traversal, so its token scanner cannot multiply alias nesting depth.
+All registered resolvers also share a ceiling of ten active callbacks and
+256 evaluations per root lookup. This covers schemes that resolve templates
+internally, such as `brew:instruction`, as well as future registered schemes.
+Contextual item
+validation scans each referenced alias once, without recursion across aliases,
+to preserve item-scope restrictions; it does not reject dependency cycles.
+History expansion follows raw pad aliases into one template. Formatted/fallback
+pad references remain runtime-only; missing references, limit failures and
+expanded templates exceeding the destination capacity return an explicit
+unavailable status instead of registering a partial or context-dependent stream.
 
 The response is board-aware: device-class and feature-gated schemes appear
 only when registered by the running firmware. Clients should fetch this endpoint
@@ -4329,7 +4360,7 @@ Resolve `[scheme:params]` binding tokens against the device's **live** data and 
 ```
   Errors: `400` (bad params / invalid JSON), `503` (busy: another resolve/control job is in flight, retry; or out of memory), and `500` (the main-loop dispatch timed out or another internal failure occurred). The resolver copies its input before queuing it, so a timed-out request remains safe while the main loop finishes and releases its owned data.
 
-> **Pad save validation.** `POST /api/pad` validates the submitted pad through the shared `pad_validate()` (the same validator the MCP write tools use): grid bounds, span overflow, widget types/config caps, colors, action arrays, binding tokens (unknown scheme, bad health key, …), and the one-level `[pad:name]` rule. Grid pads may include `column_widths_px` and `row_heights_px` integer arrays, one value per track, with `0` representing Auto. Each configured axis must retain at least one Auto track, and fixed sizes must fit the active display after spacing and insets while leaving at least one pixel for every Auto track. Buttons that fall outside a shrunken grid are tolerated (hidden, and reappear when the grid grows).
+> **Pad save validation.** `POST /api/pad` validates the submitted pad through the shared `pad_validate()` (the same validator the MCP write tools use): grid bounds, span overflow, widget types/config caps, colors, action arrays, binding tokens (unknown scheme, bad health key, …), and named-binding input limits (not dependency-graph validation). Grid pads may include `column_widths_px` and `row_heights_px` integer arrays, one value per track, with `0` representing Auto. Each configured axis must retain at least one Auto track, and fixed sizes must fit the active display after spacing and insets while leaving at least one pixel for every Auto track. Buttons that fall outside a shrunken grid are tolerated (hidden, and reappear when the grid grows).
 
 > **Button background opacity.** Both `buttons` (Main) and `overlay_buttons`
 > (Overlay) accept an optional static integer `bg_opacity`, 0-100 percent.

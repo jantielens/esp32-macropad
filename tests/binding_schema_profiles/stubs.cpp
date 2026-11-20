@@ -212,7 +212,8 @@ uint32_t brew_get_stage_time_target_ms() { return 30000; }
 uint32_t brew_get_stage_time_remaining_ms() { return 18000; }
 uint32_t brew_get_stage_time_current_ms() { return 12000; }
 const char* brew_get_display_name() { return "Fixture Brew"; }
-const char* brew_get_instruction() { return "Pour steadily"; }
+const char* binding_test_brew_instruction = "Pour steadily";
+const char* brew_get_instruction() { return binding_test_brew_instruction; }
 const char* brew_get_next_label() { return "Next"; }
 const char* brew_get_advance_state() { return "action"; }
 void brew_format_stage_status(char* out, size_t out_len) { std::snprintf(out, out_len, "18/36 g"); }

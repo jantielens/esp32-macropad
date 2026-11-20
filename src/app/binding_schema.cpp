@@ -86,6 +86,12 @@ static void emit_authoring(JsonObject scheme, const BindingSchemeSpec& spec, boo
         set_text(definitions, "name_pattern", constraints.name_pattern);
         set_text(definitions, "context", constraints.context);
         definitions["composition_supported"] = constraints.composition_supported;
+        if (constraints.max_chain_depth) definitions["max_chain_depth"] = constraints.max_chain_depth;
+        if (constraints.max_evaluations_per_lookup)
+            definitions["max_evaluations_per_lookup"] = constraints.max_evaluations_per_lookup;
+        definitions["dependencies_validated_on_save"] = constraints.dependencies_validated_on_save;
+        if (constraints.max_expression_depth)
+            definitions["max_expression_depth"] = constraints.max_expression_depth;
     }
     if (!include_docs || !authoring->keys || !authoring->key_count ||
         (!spec.free_form && (!spec.key_count || !spec.key_at))) return;

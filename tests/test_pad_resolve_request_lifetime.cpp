@@ -10,16 +10,23 @@
 
 static char g_seen_input[64] = {};
 static int g_resolve_calls = 0;
+static PadConfig g_effective_pad{};
+static unsigned g_releases = 0;
+static char g_seen_binding[CONFIG_LABEL_MAX_LEN] = {};
 
-char* pad_config_read_raw(uint8_t, size_t*) { return nullptr; }
-int pad_config_resolve_ref(const char*, char*, size_t) { return -1; }
+const PadConfig* pad_config_acquire(uint8_t page) { return page == 0 ? &g_effective_pad : nullptr; }
+void pad_config_release(const PadConfig*) { ++g_releases; }
+int pad_config_resolve_ref(const char* name, char*, size_t) {
+    return !strcmp(name, "pad_0") ? 0 : -1;
+}
 
 extern "C" void pad_resolve(const char* const* inputs, size_t count,
-                            const PadBinding*, uint8_t,
+                            const PadBinding* bindings, uint8_t binding_count,
                             char* out, size_t stride) {
     assert(count == 1);
     strlcpy(g_seen_input, inputs[0], sizeof(g_seen_input));
     strlcpy(out, "resolved", stride);
+    if (binding_count) strlcpy(g_seen_binding, bindings[0].value, sizeof(g_seen_binding));
     g_resolve_calls++;
 }
 
@@ -54,6 +61,16 @@ int main() {
     assert(pad_resolve_request(args.as<JsonObjectConst>(), result.to<JsonObject>(), &error) == PAD_RESOLVE_OK);
     assert(strcmp(g_seen_input, "[test:icon-color]") == 0);
     assert(g_resolve_calls == 3);
+    g_effective_pad.binding_count = 1;
+    strlcpy(g_effective_pad.bindings[0].name, "inherited", PAD_BINDING_NAME_MAX_LEN);
+    strlcpy(g_effective_pad.bindings[0].value, "[pad:local]", CONFIG_LABEL_MAX_LEN);
+    args.clear();
+    args["screen"] = "pad_0";
+    args["bindings"].add("[pad:inherited]");
+    result.clear();
+    assert(pad_resolve_request(args.as<JsonObjectConst>(), result.to<JsonObject>(), &error) == PAD_RESOLVE_OK);
+    assert(g_releases == 1);
+    assert(!strcmp(g_seen_binding, "[pad:local]"));
     puts("pad_resolve_request lifetime test passed");
     return 0;
 }

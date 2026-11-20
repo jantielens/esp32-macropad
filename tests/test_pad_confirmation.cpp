@@ -733,7 +733,17 @@ int main() {
         bindings["hot"] = "[expr:[mqtt:home/solar/power;watts]>3000?1:0]";
         CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
         bindings["hot"] = "[expr:[pad:power]>3000?1:0]";
-        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        bindings["power"] = "[pad:hot]";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+        JsonDocument inherited;
+        inherited["bindings"]["power"] = "[mqtt:home/solar/power;watts]";
+        inherited["bindings"]["hot"] = "[expr:[pad:power]>3000?1:0]";
+        PadComposedContext context;
+        CHECK(pad_compose_context(doc.as<JsonObjectConst>(), inherited.as<JsonObjectConst>(), context) == nullptr);
+        CHECK(context.binding_count == 2);
+        CHECK(!std::strcmp(context.bindings[0].name, "power"));
+        CHECK(!std::strcmp(context.bindings[0].value, "[pad:hot]"));
     }
 
     if (g_failures) {

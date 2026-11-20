@@ -738,6 +738,32 @@ assert.deepStrictEqual(Array.from(context.padSelectTemplateButtons(
     assert.deepStrictEqual(offset(), { x: -1, y: 3 }, 'Visible bounds, including translucent edges, are centered');
 }
 
+async function checkBindingDefinitionPreview() {
+    const requests = [];
+    const preview = {
+        window: {},
+        document: { addEventListener() {} },
+        padState: { page: 3 },
+        padPvIsBinding: value => value.includes('['),
+        padPvHex: () => null,
+        padPreviewEsc: value => value,
+        fetch: async (url, options) => {
+            requests.push({ url, body: JSON.parse(options.body) });
+            return { ok: true, json: async () => ({ resolved: [{ value: 'Piek' }] }) };
+        }
+    };
+    vm.createContext(preview);
+    vm.runInContext(fs.readFileSync('src/app/web/portal_pad_defaults.js', 'utf8'), preview);
+    const chip = { style: {}, innerHTML: '', title: '' };
+    preview.padBindingPreviewUpdate(chip, { value: '[pad:energy_state]' }, 0);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepStrictEqual(requests, [{
+        url: '/api/pad/resolve',
+        body: { screen: 'pad_3', bindings: ['[pad:energy_state]'] }
+    }]);
+    assert.strictEqual(chip.title, 'Piek', 'definition preview displays the result from its saved pad context');
+}
+
 async function checkPickerResults() {
     vm.runInContext(fs.readFileSync('src/app/web/portal_icon_picker.js', 'utf8'), context);
     const nodes = new Map();
@@ -788,7 +814,7 @@ async function checkPickerResults() {
     assert.strictEqual(resultGrid.children.length, 0);
 }
 
-checkPickerResults().then(() => console.log('portal_pad_preview: PASS')).catch(error => {
+checkBindingDefinitionPreview().then(checkPickerResults).then(() => console.log('portal_pad_preview: PASS')).catch(error => {
     console.error(error);
     process.exitCode = 1;
 });

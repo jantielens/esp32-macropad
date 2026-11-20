@@ -760,6 +760,7 @@ add_host_gtest(test_ha_live
     test_ha_live.cpp ${PROJECT_SOURCE_DIR}/src/app/ha_live_state.cpp
     ${PROJECT_SOURCE_DIR}/src/app/ha_lookup_data.cpp
     ${PROJECT_SOURCE_DIR}/src/app/ha_binding.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/pad_binding.cpp
     ${PROJECT_SOURCE_DIR}/src/app/expr_binding.cpp
     ${PROJECT_SOURCE_DIR}/src/app/expr_eval.cpp
     ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp
@@ -806,6 +807,7 @@ add_host_legacy_test(test_expr_binding
 
 add_host_legacy_test(test_binding_template
     SOURCES test_binding_template.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp stubs.cpp
+    DEFINITIONS ESP_PLATFORM=1
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
     LIBRARIES m
 )

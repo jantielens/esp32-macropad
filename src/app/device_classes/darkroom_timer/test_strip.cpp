@@ -550,29 +550,33 @@ static bool strip_resolve_value(const char* params, char* out, size_t out_len) {
         int n = g_strip.segment_count;
         // Build a compact JSON object with red-tinted colors for darkroom use.
         // header_text_color / row_text_color use dim red shades to avoid fogging.
-        int pos = 0;
-        pos += snprintf(out + pos, out_len - pos,
+        const int header_len = snprintf(out, out_len,
             "{\"header_text_color\":\"#802020\",\"row_text_color\":\"#ff6060\","
             "\"columns\":[{\"key\":\"seg\",\"header\":\"#\",\"width_pct\":15},"
             "{\"key\":\"dur\",\"header\":\"Duration\",\"width_pct\":40},"
             "{\"key\":\"tot\",\"header\":\"Total\",\"width_pct\":45}],\"rows\":[");
-        for (int i = 0; i < n && pos < (int)out_len - 80; i++) {
-            if (i > 0) pos += snprintf(out + pos, out_len - pos, ",");
+        if (header_len < 0 || static_cast<size_t>(header_len) >= out_len) return false;
+        size_t pos = static_cast<size_t>(header_len);
+        for (int i = 0; i < n && out_len - pos > 80; i++) {
+            if (i > 0) out[pos++] = ',';
             // Highlight the active segment during a sequence
             bool active = (g_strip.phase == STRIP_EXPOSING && i == g_strip.current_segment - 1) ||
                           (g_strip.phase == STRIP_BETWEEN_SEGMENTS && i == g_strip.current_segment);
+            int written;
             if (active) {
-                pos += snprintf(out + pos, out_len - pos,
+                written = snprintf(out + pos, out_len - pos,
                     "{\"seg\":\"%d\",\"dur\":\"%.1fs\",\"tot\":\"%.1fs\",\"_bg\":\"#401010\"}",
                     i + 1, g_strip.segments[i].incremental_s, g_strip.segments[i].cumulative_s);
             } else {
-                pos += snprintf(out + pos, out_len - pos,
+                written = snprintf(out + pos, out_len - pos,
                     "{\"seg\":\"%d\",\"dur\":\"%.1fs\",\"tot\":\"%.1fs\"}",
                     i + 1, g_strip.segments[i].incremental_s, g_strip.segments[i].cumulative_s);
             }
+            if (written < 0 || static_cast<size_t>(written) >= out_len - pos) return false;
+            pos += static_cast<size_t>(written);
         }
-        pos += snprintf(out + pos, out_len - pos, "]}");
-        return true;
+        const int written = snprintf(out + pos, out_len - pos, "]}");
+        return written == 2 && static_cast<size_t>(written) < out_len - pos;
     }
 
     snprintf(out, out_len, "ERR:bad_key");

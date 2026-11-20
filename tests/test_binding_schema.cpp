@@ -52,7 +52,7 @@ static const BindingSchemeDoc kFreeDoc = {
     kFreeExamples, 1, nullptr, false, nullptr, 0, nullptr, nullptr,
 };
 static const BindingDefinitionConstraints kFreeDefinitions = {
-    16, 31, 191, "^[A-Za-z][A-Za-z0-9_]*$", "same_pad", false,
+    16, 31, 191, "^[A-Za-z][A-Za-z0-9_]*$", "same_pad", true, 2, 64, false, 5,
 };
 static const BindingAuthoringSpec kFreeAuthoring = {nullptr, 0, &kFreeDefinitions};
 static uint8_t patterned_key_count() { return 2; }
@@ -151,10 +151,15 @@ int main() {
                definitions["template_max_bytes"].is<unsigned>() && definitions["template_max_bytes"] == 191,
            "definition input limits are numeric and available without docs");
     expect(definitions["composition_supported"].is<bool>() &&
-               !definitions["composition_supported"].as<bool>() &&
+               definitions["composition_supported"].as<bool>() &&
+               definitions["max_chain_depth"] == 2 &&
+               definitions["max_evaluations_per_lookup"] == 64 &&
+               definitions["max_expression_depth"] == 5 &&
+               definitions["dependencies_validated_on_save"].is<bool>() &&
+               !definitions["dependencies_validated_on_save"].as<bool>() &&
                std::strcmp(definitions["context"], "same_pad") == 0 &&
                std::strcmp(definitions["name_pattern"], "^[A-Za-z][A-Za-z0-9_]*$") == 0,
-           "definition restrictions are machine-readable, including explicit unsupported composition");
+           "definition restrictions include runtime bounds and explicitly deferred dependency validation");
     expect(!free_json["authoring"]["keys"].is<JsonArray>(),
            "definition constraints do not invent catalog keys");
 

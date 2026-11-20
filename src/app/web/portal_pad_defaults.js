@@ -438,10 +438,7 @@ function padRenderBindings() {
     });
 }
 
-// Resolve one pad-binding value against live data and show it inline below the
-// row (pad binding values are standalone — the one-level rule forbids [pad:]
-// inside them — so each resolves independently). Reuses the shared preview
-// helpers (padPvIsBinding / padPvHex / padPreviewEsc).
+// Preview a definition using the saved effective pad context for any aliases.
 function padBindingPreviewUpdate(chip, valueInput, retriesLeft) {
     if (!chip || !valueInput) return;
     var val = valueInput.value.trim();
@@ -453,7 +450,7 @@ function padBindingPreviewUpdate(chip, valueInput, retriesLeft) {
     chip.innerHTML = '<span class="pad-pv-arrow">\u2192</span><span class="pad-pv-text pad-pv-muted">\u2026</span>';
     fetch('/api/pad/resolve', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bindings: [val] })
+        body: JSON.stringify({ screen: 'pad_' + padState.page, bindings: [val] })
     }).then(function(r) { return r.ok ? r.json() : null; })
       .then(function(j) {
           var v = (j && j.resolved && j.resolved[0]) ? j.resolved[0].value : '---';
@@ -465,10 +462,8 @@ function padBindingPreviewUpdate(chip, valueInput, retriesLeft) {
           inner += '<span class="pad-pv-text' + muted + '">' + padPreviewEsc(shown) + '</span>';
           chip.innerHTML = inner;
           chip.title = shown;
-          // A freshly typed [mqtt:...] topic gets subscribed on this resolve but
-          // its message may arrive just after — retry so it fills in. A
-          // not-yet-delivered topic resolves to EMPTY (not '---'), so retry on
-          // either.
+          // Newly discovered MQTT topics or HA entities may need a network update.
+          // Retry both empty and unavailable values.
           if ((typeof padPvUnresolved === 'function' ? padPvUnresolved(v) : shown.indexOf('---') !== -1) && rl > 0)
               setTimeout(function() { padBindingPreviewUpdate(chip, valueInput, rl - 1); }, 1000);
       })

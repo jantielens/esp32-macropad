@@ -5,11 +5,51 @@
 #include "ha_live.h"
 #include "binding_template.h"
 #include "binding_value.h"
+#include "pad_binding.h"
+#include "expr_binding.h"
 #include "log_manager.h"
 #include <esp_heap_caps.h>
 #include <string.h>
 
 static char* ha_snapshot = nullptr; // LVGL task only.
+
+struct HaEntityVisitor {
+    void (*visitor)(const char*, void*);
+    void* context;
+};
+
+static void collect_source(const char* source, void* context);
+
+static void collect_token(const char* scheme, size_t length, const char* params, void* context) {
+    auto& collector = *static_cast<HaEntityVisitor*>(context);
+    if (length == 2 && !strncmp(scheme, "ha", length)) {
+        const size_t size = strcspn(params, ";");
+        if (size >= HA_LIVE_ENTITY_BYTES) {
+            LOGW("HABind", "HA entity ID exceeds limit");
+            return;
+        }
+        char entity[HA_LIVE_ENTITY_BYTES];
+        memcpy(entity, params, size);
+        entity[size] = '\0';
+        collector.visitor(entity, collector.context);
+    } else if (length == 3 && !strncmp(scheme, "pad", length)) {
+        pad_binding_visit_dependencies(params, collect_source, context);
+    } else if (length == 4 && !strncmp(scheme, "expr", length)) {
+        expr_binding_visit_dependencies(params, collect_source, context);
+    }
+}
+
+static void collect_source(const char* source, void* context) {
+    if (!binding_template_visit_top_level_tokens(source, collect_token, context))
+        LOGW("HABind", "Dependency collection stopped at token scan limit");
+}
+
+void ha_binding_collect_entities(const char* templ,
+                                 void (*visitor)(const char*, void*), void* context) {
+    if (!templ || !visitor) return;
+    HaEntityVisitor collector{visitor, context};
+    collect_source(templ, &collector);
+}
 
 static BindingResolverStatus ha_resolve(const char* params, char* out, size_t size) {
     char entity[HA_LIVE_ENTITY_BYTES], path[128], format[64];
@@ -69,4 +109,6 @@ void ha_binding_init() {
 }
 #else
 void ha_binding_init() {}
+void ha_binding_collect_entities(const char*, void (*)(const char*, void*), void*) {}
+
 #endif

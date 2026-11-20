@@ -23,6 +23,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Allow named pad bindings to reuse other names on the same effective pad, so
+  labels, widget properties and colors can share one decision expression.
+  Add runtime depth/work guards, composition-aware MQTT topic and HA entity
+  discovery, raw history expansion, and effective-pad preview context. Dependency-graph
+  validation on save is deferred; invalid dependencies become unavailable at
+  runtime. Existing template byte limits remain unchanged.
+  See [named bindings](docs/user/pads/bindings.md#name-a-source-on-the-pad)
+  and [#149](https://github.com/jantielens/esp32-macropad/issues/149).
 * Add optional relative widths to Option selector options. Set Weight on an
   empty option to reserve space and push status labels or icons toward an edge.
   See [option widths and spacers](docs/user/widgets/option-selector.md#set-widths-and-reserve-empty-space).
@@ -44,11 +52,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-* Correct unsupported named pad-binding composition examples and publish
+* Stop circular named bindings at the first repeated name. Limit named chains
+  to two levels and check available task stack before recursive binding and
+  expression evaluation, returning unavailable or a fallback when space is low.
+  Keep the existing 12-level arithmetic nesting ceiling.
+* Prevent the darkroom test-strip table binding from overrunning small output
+  buffers, including when referenced through a named pad binding.
+* Correct named pad-binding authoring examples and publish
   machine-readable authoring restrictions in the binding API and MCP
   capabilities. Clarify same-pad context, name/count limits, and the 191-byte
-  UTF-8 template limit in the portal reference and user guide. Existing limits
-  and the prohibition on pad-to-pad references are unchanged.
+  UTF-8 template limit in the portal reference and user guide. Existing input
+  limits are unchanged.
   See [#148](https://github.com/jantielens/esp32-macropad/issues/148).
 
 ## [1.49.0] - 2026-11-19

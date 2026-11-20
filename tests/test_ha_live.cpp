@@ -4,10 +4,15 @@
 #include "bounded_psram_json_allocator.h"
 #include <gtest/gtest.h>
 #include <string>
+#include <vector>
 #include "binding_template.h"
 #include "expr_binding.h"
 #include "ha_binding.h"
 #include "ha_live.h"
+#include "pad_binding.h"
+#include "mqtt_sub_store.h"
+
+void mqtt_sub_store_ensure_binding_subscribed(const char*) {}
 
 static bool thermostat_connected = true;
 static std::string thermostat_snapshot;
@@ -33,9 +38,31 @@ namespace {
 using namespace ArduinoJson;
 const char* entity = "sensor.power";
 
+void init_bindings() {
+    static const bool initialized = [] {
+        ha_binding_init();
+        expr_binding_init();
+        pad_binding_init();
+        return binding_template_register("mqtt",
+            [](const char*, char*, size_t) { return BINDING_RESOLVER_UNAVAILABLE; },
+            [](const char* params, void* context) {
+                if (context)
+                    static_cast<std::vector<std::string>*>(context)->emplace_back(params, strcspn(params, ";"));
+            }, {1, 3, 2, 2, BINDING_VALIDATION_STANDARD, true});
+    }();
+    ASSERT_TRUE(initialized);
+}
+
+std::vector<std::string> collected_entities(const char* input) {
+    std::vector<std::string> entities;
+    ha_binding_collect_entities(input, [](const char* id, void* context) {
+        static_cast<std::vector<std::string>*>(context)->emplace_back(id);
+    }, &entities);
+    return entities;
+}
+
 TEST(HaLive, BureauProductionExpressionAndNestedDiscovery) {
-    ha_binding_init();
-    expr_binding_init();
+    init_bindings();
     const char* source = "[expr:[ha:climate.bureau_boven_thermostaat;attributes.temperature]>20?\"on\":\"off\"]";
     char resolved[BINDING_TEMPLATE_MAX_LEN];
     for (int temperature : {10, 19, 20, 21, 22}) {
@@ -66,6 +93,60 @@ TEST(HaLive, BureauProductionExpressionAndNestedDiscovery) {
         }
     }, &count);
     EXPECT_EQ(count, 1u);
+}
+
+TEST(HaLive, ComposedAliasesDiscoverEntitiesAndResolveWithTheEffectiveContext) {
+    init_bindings();
+    PadBinding bindings[] = {
+        {"source", "[ha:climate.bureau_boven_thermostaat;attributes.temperature]"},
+        {"alias", "[expr:[pad:source]>20?1:0]"},
+    };
+    PadBindingScope scope(bindings, 2);
+    EXPECT_EQ(collected_entities("[pad:alias;%.0f|Offline]"),
+              (std::vector<std::string>{"climate.bureau_boven_thermostaat"}));
+    thermostat_connected = true;
+    thermostat_snapshot = "{\"state\":\"heat\",\"attributes\":{\"temperature\":22}}";
+    char resolved[BINDING_TEMPLATE_MAX_LEN];
+    binding_template_resolve("[pad:alias]", resolved, sizeof(resolved));
+    EXPECT_STREQ(resolved, "1");
+    thermostat_connected = false;
+    binding_template_resolve("[pad:alias|Offline]", resolved, sizeof(resolved));
+    EXPECT_STREQ(resolved, "Offline");
+    thermostat_connected = true;
+    {
+        PadBinding local[] = {{"source", "[ha:sensor.local]"}, {"alias", "[pad:source]"}};
+        PadBindingScope override(local, 2);
+        EXPECT_EQ(collected_entities("[pad:alias]"), (std::vector<std::string>{"sensor.local"}));
+    }
+    EXPECT_EQ(collected_entities("[pad:alias]"),
+              (std::vector<std::string>{"climate.bureau_boven_thermostaat"}));
+}
+
+TEST(HaLive, DiscoveryBoundsCyclesDepthAndFanoutLikeMqtt) {
+    init_bindings();
+    PadBinding bindings[] = {
+        {"a", "[pad:b]"}, {"b", "[expr:[ha:climate.bureau_boven_thermostaat]+[mqtt:energy]]"},
+        {"third", "[pad:a]"}, {"cycle", "[pad:cycle]"},
+    };
+    PadBindingScope scope(bindings, 4);
+    EXPECT_EQ(collected_entities("[pad:a]").size(), 1u);
+    EXPECT_TRUE(collected_entities("[pad:third]").empty());
+    EXPECT_TRUE(collected_entities("[pad:cycle]").empty());
+    EXPECT_TRUE(collected_entities("[pad:missing]").empty());
+    std::string nested = "[ha:climate.bureau_boven_thermostaat]";
+    for (unsigned i = 0; i < 5; ++i) nested = "[expr:" + nested + "]";
+    EXPECT_EQ(collected_entities(nested.c_str()).size(), 1u);
+    nested = "[expr:" + nested + "]";
+    EXPECT_TRUE(collected_entities(nested.c_str()).empty());
+    snprintf(bindings[0].value, sizeof(bindings[0].value), "[pad:b][pad:b][pad:b][pad:b][pad:b]");
+    const auto ha = collected_entities("[pad:a]");
+    EXPECT_GT(ha.size(), 0u);
+    EXPECT_LE(ha.size(), PAD_BINDING_MAX_EVALUATIONS);
+    std::vector<std::string> mqtt;
+    binding_template_collect_topics("[pad:a]", &mqtt);
+    EXPECT_EQ(ha.size(), mqtt.size());
+    for (const auto& topic : mqtt) EXPECT_EQ(topic, "energy");
+    EXPECT_EQ(collected_entities("[pad:b]").size(), 1u);
 }
 
 const char* apply(JsonDocument& state, const std::string& payload) {

@@ -98,6 +98,8 @@ static void mock_health_collect(const char* params, void* user_data) {
 // expr resolver (same as test_expr_binding.cpp)
 // ============================================================================
 
+static unsigned g_expression_evaluations = 0;
+
 static char* split_format(char* buf) {
     char* last_sep = NULL;
     bool in_quotes = false;
@@ -118,6 +120,7 @@ static char* split_format(char* buf) {
 }
 
 static BindingResolverStatus expr_test_resolve(const char* params, char* out, size_t out_len) {
+    ++g_expression_evaluations;
     if (!params || !params[0]) {
         snprintf(out, out_len, "ERR:empty expr");
         return BINDING_RESOLVER_UNAVAILABLE;
@@ -226,6 +229,72 @@ static void check_str(const char* got, const char* expected, const char* label) 
     } else {
         g_pass++;
     }
+}
+
+static void check_true(bool value, const char* label) {
+    if (value) ++g_pass;
+    else {
+        printf("  FAIL [%s]\n", label);
+        ++g_fail;
+    }
+}
+
+static void test_composition_limits() {
+    auto page = make_page({
+        {"a", "[pad:b]"}, {"b", "[mqtt:bounded;value]"}, {"too_deep", "[pad:a]"},
+        {"missing", "[pad:unknown]"},
+    });
+    g_mqtt_values["bounded;value"] = "21";
+    pad_binding_set_page(&page);
+    check("[pad:a]", "21", "two names per chain work");
+    check("[pad:too_deep]", "---", "third name is unavailable");
+    check("[pad:too_deep|limit]", "limit", "excessive depth uses fallback");
+    check("[pad:missing|absent]", "absent", "missing dependency uses fallback");
+    char out[256];
+    check_true(!binding_template_resolve_checked("[pad:too_deep]", out, sizeof(out)),
+               "checked resolution rejects excessive depth");
+    check_true(pad_binding_expand(&page, "[pad:a]", out, sizeof(out)) == PadBindingExpandStatus::EXPANDED,
+               "history expands exactly two names");
+    check_str(out, "[mqtt:bounded;value]", "history expands composed sources");
+    check_true(pad_binding_expand(&page, "[pad:too_deep]", out, sizeof(out)) == PadBindingExpandStatus::UNAVAILABLE,
+               "history rejects third name");
+    g_collected_topics.clear();
+    binding_template_collect_topics("[pad:a] [pad:too_deep]", nullptr);
+    check_true(g_collected_topics == std::vector<std::string>{"bounded"},
+               "topic collection uses the same depth limit");
+    pad_binding_set_page(nullptr);
+}
+
+static void test_shared_dependencies_and_work_limit() {
+    auto page = make_page({
+        {"sum", "[expr:[pad:source]+[pad:source]]"},
+        {"source", "[mqtt:shared;value]"},
+    });
+    g_mqtt_values["shared;value"] = "2";
+    pad_binding_set_page(&page);
+    check("[pad:sum]", "4", "shared dependency is not a cycle");
+    check("[pad:source] [pad:source]", "2 2", "repeated references reset depth");
+    g_collected_topics.clear();
+    binding_template_collect_topics("[pad:sum]", nullptr);
+    check_true(g_collected_topics == std::vector<std::string>({"shared", "shared"}),
+               "collector follows both shared dependencies");
+    char out[512];
+    check_true(pad_binding_expand(&page, "[pad:sum]", out, sizeof(out)) == PadBindingExpandStatus::EXPANDED,
+               "shared dependencies expand");
+    check_str(out, "[expr:[mqtt:shared;value]+[mqtt:shared;value]]", "history expansion preserves expression");
+    check_true(pad_binding_expand(&page, "[pad:sum]", out, 16) == PadBindingExpandStatus::UNAVAILABLE,
+               "oversized expansion is not registered as partial data");
+    check_str(out, "[pad:sum]", "failed expansion restores original");
+
+    g_collected_topics.clear();
+    pad_binding_visit_dependencies("sum", +[](const char*, void*) {
+        for (unsigned i = 0; i < PAD_BINDING_MAX_EVALUATIONS; ++i)
+            binding_template_collect_topics("[pad:source]", nullptr);
+    }, nullptr);
+    check_true(g_collected_topics.size() == PAD_BINDING_MAX_EVALUATIONS - 1,
+               "collector bounds total work, not only recursion depth");
+    check("[pad:source]", "2", "work budget resets for the next lookup");
+    pad_binding_set_page(nullptr);
 }
 
 // ============================================================================
@@ -347,17 +416,40 @@ static void test_empty_params() {
 }
 
 static void test_recursive_guard() {
-    printf("--- Recursive [pad:] guard ---\n");
+    printf("--- Composed [pad:] and runtime guard ---\n");
     auto page = make_page({
-        {"a", "[pad:b]"},        // references another pad binding
+        {"a", "[pad:b]"},
         {"b", "[mqtt:x;$.v]"},
+        {"cycle", "[pad:other]"},
+        {"other", "[pad:cycle]"},
+        {"self", "[pad:self]"},
+        {"tempg", "[expr:[pad:tempg]+1]"},
+        {"mutual_a", "[expr:[pad:mutual_b]+1]"},
+        {"mutual_b", "[expr:[pad:mutual_a]+1]"},
+        {"defaulted", "[expr:[pad:defaulted|0]+1]"},
+        {"source_cycle", "[expr:[pad:source_cycle]+[mqtt:cycle/tail;$.v]]"},
     });
     pad_binding_set_page(&page);
 
-    check("[pad:a]", "---", "recursive pad ref");
-    // Non-recursive should still work
     g_mqtt_values["x;$.v"] = "42";
+    check("[pad:a]", "42", "composed pad ref");
+    check("[pad:cycle]", "---", "indirect cycle is unavailable");
+    check("[pad:self|cycle]", "cycle", "direct cycle uses explicit fallback");
+    check("[pad:cycle] [pad:a]", "--- 42", "guard unwinds after failure");
+    check("[pad:a;%.1f W]", "42.0 W", "format on composed value");
     check("[pad:b]", "42", "non-recursive works");
+    g_expression_evaluations = 0;
+    check("[pad:tempg|cycle]", "cycle", "reported self-referencing expression uses fallback");
+    check_true(g_expression_evaluations == 1, "self-cycle never re-enters its expression");
+    g_expression_evaluations = 0;
+    check("[pad:mutual_a|cycle]", "cycle", "mutual expression cycle uses fallback");
+    check_true(g_expression_evaluations == 2, "mutual cycle never re-enters an active expression");
+    check("[pad:defaulted]", "1", "cycle fallback is used at the first repeated name");
+    check("[pad:a]", "42", "valid lookup succeeds after expression cycles");
+    g_collected_topics.clear();
+    binding_template_collect_topics("[pad:source_cycle]", nullptr);
+    check_true(g_collected_topics == std::vector<std::string>{"cycle/tail"},
+               "cycle collection visits the non-cyclic source only once");
 
     pad_binding_set_page(nullptr);
 }
@@ -444,11 +536,11 @@ static void test_expand_basic() {
     });
 
     char out[256];
-    bool expanded;
+    PadBindingExpandStatus expanded;
 
     expanded = pad_binding_expand(&page, "[pad:power]", out, sizeof(out));
-    if (!expanded || strcmp(out, "[mqtt:solar/power;$.value]") != 0) {
-        printf("  FAIL [expand basic]: got \"%s\" (expanded=%d)\n", out, expanded);
+    if (expanded != PadBindingExpandStatus::EXPANDED || strcmp(out, "[mqtt:solar/power;$.value]") != 0) {
+        printf("  FAIL [expand basic]: got \"%s\" (expanded=%d)\n", out, static_cast<int>(expanded));
         g_fail++;
     } else {
         g_pass++;
@@ -456,15 +548,15 @@ static void test_expand_basic() {
 
     expanded = pad_binding_expand_bindings(page.bindings, page.binding_count,
                                            "[pad:power]", out, sizeof(out));
-    if (!expanded || strcmp(out, "[mqtt:solar/power;$.value]") != 0) {
-        printf("  FAIL [expand explicit bindings]: got \"%s\" (expanded=%d)\n", out, expanded);
+    if (expanded != PadBindingExpandStatus::EXPANDED || strcmp(out, "[mqtt:solar/power;$.value]") != 0) {
+        printf("  FAIL [expand explicit bindings]: got \"%s\" (expanded=%d)\n", out, static_cast<int>(expanded));
         g_fail++;
     } else {
         g_pass++;
     }
 
     expanded = pad_binding_expand(&page, "Prefix [pad:grid] suffix", out, sizeof(out));
-    if (!expanded || strcmp(out, "Prefix [mqtt:grid/power;$.watts] suffix") != 0) {
+    if (expanded != PadBindingExpandStatus::EXPANDED || strcmp(out, "Prefix [mqtt:grid/power;$.watts] suffix") != 0) {
         printf("  FAIL [expand with text]: got \"%s\"\n", out);
         g_fail++;
     } else {
@@ -477,9 +569,9 @@ static void test_expand_no_pad_tokens() {
     auto page = make_page({{"power", "[mqtt:solar/power;$.value]"}});
 
     char out[256];
-    bool expanded = pad_binding_expand(&page, "[mqtt:solar/power;$.value]", out, sizeof(out));
-    if (expanded || strcmp(out, "[mqtt:solar/power;$.value]") != 0) {
-        printf("  FAIL [expand no tokens]: got \"%s\" (expanded=%d)\n", out, expanded);
+    auto expanded = pad_binding_expand(&page, "[mqtt:solar/power;$.value]", out, sizeof(out));
+    if (expanded != PadBindingExpandStatus::UNCHANGED || strcmp(out, "[mqtt:solar/power;$.value]") != 0) {
+        printf("  FAIL [expand no tokens]: got \"%s\" (expanded=%d)\n", out, static_cast<int>(expanded));
         g_fail++;
     } else {
         g_pass++;
@@ -491,10 +583,10 @@ static void test_expand_unknown_binding() {
     auto page = make_page({{"power", "[mqtt:solar/power;$.value]"}});
 
     char out[256];
-    bool expanded = pad_binding_expand(&page, "[pad:unknown]", out, sizeof(out));
+    auto expanded = pad_binding_expand(&page, "[pad:unknown]", out, sizeof(out));
     // Unknown binding stays as-is
-    if (expanded || strcmp(out, "[pad:unknown]") != 0) {
-        printf("  FAIL [expand unknown]: got \"%s\" (expanded=%d)\n", out, expanded);
+    if (expanded != PadBindingExpandStatus::UNAVAILABLE || strcmp(out, "[pad:unknown]") != 0) {
+        printf("  FAIL [expand unknown]: got \"%s\" (expanded=%d)\n", out, static_cast<int>(expanded));
         g_fail++;
     } else {
         g_pass++;
@@ -507,9 +599,9 @@ static void test_expand_with_format() {
 
     char out[256];
     // [pad:power;%.2f] has format — should NOT be expanded (kept for runtime)
-    bool expanded = pad_binding_expand(&page, "[pad:power;%.2f]", out, sizeof(out));
-    if (expanded || strcmp(out, "[pad:power;%.2f]") != 0) {
-        printf("  FAIL [expand with format]: got \"%s\" (expanded=%d)\n", out, expanded);
+    auto expanded = pad_binding_expand(&page, "[pad:power;%.2f]", out, sizeof(out));
+    if (expanded != PadBindingExpandStatus::UNAVAILABLE || strcmp(out, "[pad:power;%.2f]") != 0) {
+        printf("  FAIL [expand with format]: got \"%s\" (expanded=%d)\n", out, static_cast<int>(expanded));
         g_fail++;
     } else {
         g_pass++;
@@ -519,15 +611,14 @@ static void test_expand_with_format() {
 static void test_expand_recursive_guard() {
     printf("--- pad_binding_expand: recursive guard ---\n");
     auto page = make_page({
-        {"a", "[pad:b]"},       // recursive — references another pad
-        {"b", "[mqtt:x;$.v]"},
+        {"a", "[pad:b]"},
+        {"b", "[pad:a]"},
     });
 
     char out[256];
-    // [pad:a] whose value contains [pad:b] — should stay as-is
-    bool expanded = pad_binding_expand(&page, "[pad:a]", out, sizeof(out));
-    if (expanded || strcmp(out, "[pad:a]") != 0) {
-        printf("  FAIL [expand recursive]: got \"%s\" (expanded=%d)\n", out, expanded);
+    auto expanded = pad_binding_expand(&page, "[pad:a]", out, sizeof(out));
+    if (expanded != PadBindingExpandStatus::UNAVAILABLE || strcmp(out, "[pad:a]") != 0) {
+        printf("  FAIL [expand recursive]: got \"%s\" (expanded=%d)\n", out, static_cast<int>(expanded));
         g_fail++;
     } else {
         g_pass++;
@@ -542,10 +633,10 @@ static void test_expand_multiple_tokens() {
     });
 
     char out[512];
-    bool expanded = pad_binding_expand(&page,
+    auto expanded = pad_binding_expand(&page,
         "[expr:[pad:solar] - [pad:grid]]",
         out, sizeof(out));
-    if (!expanded || strcmp(out, "[expr:[mqtt:solar/power;$.value] - [mqtt:grid/power;$.watts]]") != 0) {
+    if (expanded != PadBindingExpandStatus::EXPANDED || strcmp(out, "[expr:[mqtt:solar/power;$.value] - [mqtt:grid/power;$.watts]]") != 0) {
         printf("  FAIL [expand multiple]: got \"%s\"\n", out);
         g_fail++;
     } else {
@@ -556,10 +647,9 @@ static void test_expand_multiple_tokens() {
 static void test_expand_null_page() {
     printf("--- pad_binding_expand: null page ---\n");
     char out[256];
-    bool expanded = pad_binding_expand(nullptr, "[pad:power]", out, sizeof(out));
-    // Null page → copy as-is, return false
-    if (expanded || strcmp(out, "[pad:power]") != 0) {
-        printf("  FAIL [expand null page]: got \"%s\" (expanded=%d)\n", out, expanded);
+    auto expanded = pad_binding_expand(nullptr, "[pad:power]", out, sizeof(out));
+    if (expanded != PadBindingExpandStatus::UNAVAILABLE || strcmp(out, "[pad:power]") != 0) {
+        printf("  FAIL [expand null page]: got \"%s\" (expanded=%d)\n", out, static_cast<int>(expanded));
         g_fail++;
     } else {
         g_pass++;
@@ -637,6 +727,8 @@ int main() {
     test_no_page_context();
     test_empty_params();
     test_recursive_guard();
+    test_composition_limits();
+    test_shared_dependencies_and_work_limit();
     test_set_bindings_api();
     test_multiple_pad_tokens();
     test_health_in_pad_binding();

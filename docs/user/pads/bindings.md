@@ -185,20 +185,60 @@ Names start with an ASCII letter and contain only ASCII letters, digits, or
 underscores, up to 31 characters. A pad supports up to 16 names. Each saved
 Binding value is limited to **191 UTF-8 bytes**, not 191 characters.
 
-A named binding's value **cannot contain any `[pad:...]` reference**, even
-when there is no cycle. To calculate `hot` from the same source as `power`,
-inline the source in its definition:
+A named binding's value may reference other names in the same pad. To calculate
+`hot` from `power`, define it as:
 
 ```text
-[expr:[mqtt:home/solar;power]>3000?1:0]
+[expr:[pad:power]>3000?1:0]
 ```
 
-In a button field, `[expr:[pad:power]>3000?1:0]` is allowed.
+Use `[pad:hot]` from a button field, or map it to text or a color in another
+expression. Definitions can appear in any order, and multiple definitions can
+share the same source.
 The name must exist in the same pad's effective bindings; references cannot
 look up a different pad.
 Template bindings merge with local bindings; the local name wins.
 Use globals, not `[pad:name]`, in shared device defaults or context-free hosts.
 For previews, select that pad's context and save its definitions first.
+
+For example, define `grid` as `[mqtt:energy;grid_kw]` and `month_peak` as
+`[mqtt:energy;month_peak_kw]`, with both readings in **kW**. Define
+`energy_state` once:
+
+```text
+[expr:[pad:grid]>[pad:month_peak]?4:[pad:grid]<0?0:[pad:grid]<0.5?1:[pad:grid]<=2.5?2:3]
+```
+
+Different fields can then map the same decision to their own presentation:
+
+```text
+[expr:[pad:energy_state]==4?"Piek":"Normaal"]
+[expr:[pad:energy_state]==4?"#FF0000":"#FFFFFF"]
+```
+
+Runtime resolution allows up to **two named bindings per dependency chain**.
+For example, `energy_state` may reference `grid`; a field's surrounding
+expression does not count as a name. Put label and color mappings directly in
+their button fields, as above, rather than adding a third named level.
+Each lookup also allows up to 64 named evaluations, including
+repeated references, to bound work for heavily reused definitions.
+Up to five expression bindings can be active at once. Arithmetic parsing starts
+with the existing ceiling of twelve nested parentheses, unary operators or function calls.
+These are ceilings, not guaranteed capacity: evaluation stops earlier if the
+calling task lacks stack space. All schemes also share a limit of ten active
+resolver calls and 256 evaluations per root lookup, including schemes that
+resolve additional templates internally.
+
+Composition is not MQTT-specific: a source such as `[ha:sensor.grid_power]`,
+`[health:cpu]` or `[var:v_target]` can be reused in the same way. MQTT topic
+discovery and Home Assistant entity discovery follow the same bounded chains.
+
+Saving still checks syntax and input limits, but does not check the dependency
+graph. Circular references stop at the first repeated active name; they do not
+increment a previous value. Missing names, cycles, and exhausted runtime safety budgets become
+unavailable, showing `---` unless you provide an explicit fallback such as
+`[pad:energy_state|N/A]`. Fix the definitions rather than treating a fallback
+as a sensor measurement.
 
 Named bindings let a short reference fit a smaller field, such as a widget
 caption. They do not allow a definition longer than 191 bytes. The saved
@@ -206,6 +246,11 @@ template limit is separate from resolved-output and destination-field limits:
 ordinary token resolution can return up to 127 bytes, and the receiving field
 or widget can impose a smaller limit. A short reference does not guarantee
 that a long resolved value fits.
+
+Live history can follow raw `[pad:name]` references through a composed chain
+when the fully expanded template fits 191 bytes. Per-use pad formatting and
+fallbacks such as `[pad:name;%.1f]` or `[pad:name|0]` remain runtime-only, not
+history stream keys. Unexpandable references do not register a stream.
 
 For calculations and conditional colors, continue to [expressions](expressions.md).
 

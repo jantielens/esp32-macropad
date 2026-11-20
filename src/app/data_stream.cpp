@@ -359,9 +359,10 @@ void data_stream_rebuild() {
 
                 // Expand [pad:] tokens so streams store the underlying template
                 char expanded[BINDING_TEMPLATE_MAX_LEN];
-                if (pad_binding_expand_bindings(snapshot->bindings,
-                                                snapshot->binding_count,
-                                                binding, expanded, sizeof(expanded))) {
+                const auto expansion = pad_binding_expand_bindings(
+                    snapshot->bindings, snapshot->binding_count, binding, expanded, sizeof(expanded));
+                if (expansion == PadBindingExpandStatus::UNAVAILABLE) continue;
+                if (expansion == PadBindingExpandStatus::EXPANDED) {
                     binding = expanded;
                 }
 

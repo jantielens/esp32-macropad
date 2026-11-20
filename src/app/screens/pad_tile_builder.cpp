@@ -459,7 +459,7 @@ void PadScreen::buildTiles() {
                 for (int wb = 0; wb < MAX_WIDGET_BINDINGS; wb++) {
                     char expanded[CONFIG_LABEL_MAX_LEN];
                     if (pad_binding_expand(cfg, tile.widget_cfg.data_binding[wb],
-                                           expanded, sizeof(expanded))) {
+                                           expanded, sizeof(expanded)) == PadBindingExpandStatus::EXPANDED) {
                         strlcpy(tile.widget_cfg.data_binding[wb], expanded, CONFIG_LABEL_MAX_LEN);
                     }
                 }

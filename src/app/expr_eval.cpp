@@ -72,7 +72,12 @@ typedef struct {
     size_t      strings_used;
     expr_datetime_format_fn datetime_format;
     bool        checked;
+    expr_stack_check_fn stack_check;
 } Parser;
+
+// Include the next parser frame chain, date formatting, and error-unwind headroom.
+static constexpr size_t EXPR_PARSE_STACK_RESERVE = 3072;
+static constexpr size_t EXPR_EVAL_STACK_RESERVE = 4096;
 
 static void skip_ws(Parser* p) {
     while (p->src[p->pos] == ' ' || p->src[p->pos] == '\t' ||
@@ -98,6 +103,7 @@ static ExprVal parse_ternary(Parser* p);
 
 static ExprVal parse_nested_ternary(Parser* p) {
     if (p->nesting >= EXPR_MAX_NESTING) return make_err("depth");
+    if (p->stack_check && !p->stack_check(EXPR_PARSE_STACK_RESERVE)) return make_err("stack");
     p->nesting++;
     ExprVal value = parse_ternary(p);
     p->nesting--;
@@ -202,6 +208,7 @@ static ExprVal parse_format_function(Parser* p, bool datetime) {
         return make_err("duration: unit required");
     }
     if (!match_char(p, ')')) return make_err("format: expected closing ')'");
+    if (p->stack_check && !p->stack_check(EXPR_PARSE_STACK_RESERVE)) return make_err("stack");
     char result[EXPR_STR_MAX];
     bool ok = datetime
         ? p->datetime_format && p->datetime_format(value.num, first[0] ? first : "%Y-%m-%d %H:%M",
@@ -368,6 +375,7 @@ static ExprVal parse_unary(Parser* p) {
     if (op == '-' || op == '+') {
         p->pos++;
         if (p->nesting >= EXPR_MAX_NESTING) return make_err("depth");
+        if (p->stack_check && !p->stack_check(EXPR_PARSE_STACK_RESERVE)) return make_err("stack");
         p->nesting++;
         ExprVal v = parse_unary(p);
         p->nesting--;
@@ -547,8 +555,9 @@ static bool format_checked_number(double val, char* out, size_t out_len) {
 // Public API
 // ============================================================================
 
-static bool expr_eval_impl(const char* expression, char* out, size_t out_len,
-                           expr_datetime_format_fn datetime_format, bool checked) {
+[[gnu::noinline]] static bool expr_eval_impl(const char* expression, char* out, size_t out_len,
+                           expr_datetime_format_fn datetime_format, bool checked,
+                           expr_stack_check_fn stack_check = nullptr) {
     if (!expression || !out || out_len == 0) {
         if (out && out_len > 0) snprintf(out, out_len, "ERR:null");
         return false;
@@ -569,6 +578,7 @@ static bool expr_eval_impl(const char* expression, char* out, size_t out_len,
     parser.strings_used = 0;
     parser.datetime_format = datetime_format;
     parser.checked = checked;
+    parser.stack_check = stack_check;
 
     ExprVal result = parse_ternary(&parser);
 
@@ -605,6 +615,24 @@ bool expr_eval_with_datetime(const char* expression, char* out, size_t out_len,
 bool expr_eval_checked_with_datetime(const char* expression, char* out, size_t out_len,
                                      expr_datetime_format_fn datetime_format) {
     return expr_eval_impl(expression, out, out_len, datetime_format, true);
+}
+
+bool expr_eval_bounded_with_datetime(const char* expression, char* out, size_t out_len,
+                                     expr_datetime_format_fn datetime_format,
+                                     bool checked,
+                                     expr_stack_check_fn stack_check) {
+    // Keep the large evaluator frame below this check, including under LTO.
+    if (stack_check && !stack_check(EXPR_EVAL_STACK_RESERVE)) {
+        if (out && out_len) {
+            const char error[] = "ERR:stack";
+            size_t length = sizeof(error) - 1;
+            if (length >= out_len) length = out_len - 1;
+            memcpy(out, error, length);
+            out[length] = '\0';
+        }
+        return false;
+    }
+    return expr_eval_impl(expression, out, out_len, datetime_format, checked, stack_check);
 }
 
 bool expr_eval(const char* expression, char* out, size_t out_len) {

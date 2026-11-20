@@ -7,6 +7,9 @@
 #include "pad_config.h"
 #include <stddef.h>
 
+#define PAD_BINDING_MAX_CHAIN_DEPTH 2
+#define PAD_BINDING_MAX_EVALUATIONS 64
+
 // ============================================================================
 // Pad Binding — [pad:name] scheme for the binding template engine
 // ============================================================================
@@ -42,6 +45,10 @@ void pad_binding_set_bindings(const PadBinding* bindings, uint8_t count);
 // Read the active binding context so a temporary resolver can restore it.
 void pad_binding_get_bindings(const PadBinding** bindings, uint8_t* count);
 
+// Traverse one alias using the same depth/work guards for every transport.
+void pad_binding_visit_dependencies(const char* params,
+                                     void (*visitor)(const char*, void*), void* context);
+
 // Find an alias in an explicit binding array without using the live pad context.
 const char* pad_binding_find_template(const PadBinding* bindings, uint8_t count,
                                       const char* name, size_t name_len);
@@ -49,14 +56,18 @@ const char* pad_binding_find_template(const PadBinding* bindings, uint8_t count,
 // Expand all [pad:name] tokens in a template string to their underlying
 // binding templates (text substitution, NOT value resolution).
 // Used by data_stream_rebuild() to pre-expand before storing in streams.
-// Returns true if any [pad:] token was expanded. out is always null-terminated.
+// Formatted/fallback references remain runtime-only. Failed or oversized
+// expansions leave the original template in out; callers must not register
+// context-free streams for UNAVAILABLE results.
+enum class PadBindingExpandStatus : uint8_t { UNCHANGED, EXPANDED, UNAVAILABLE };
+// out is always null-terminated when out_len is nonzero.
 // Requires a page context (pass explicitly, does not use the global context).
-bool pad_binding_expand(const PadConfig* page, const char* templ,
-                        char* out, size_t out_len);
+PadBindingExpandStatus pad_binding_expand(const PadConfig* page, const char* templ,
+                                          char* out, size_t out_len);
 
 // Expand [pad:] tokens using an explicit binding array.
-bool pad_binding_expand_bindings(const PadBinding* bindings, uint8_t count,
-                                 const char* templ, char* out, size_t out_len);
+PadBindingExpandStatus pad_binding_expand_bindings(const PadBinding* bindings, uint8_t count,
+                                                   const char* templ, char* out, size_t out_len);
 
 // Resolve `count` binding-template strings against an optional pad binding
 // context (binds/bind_count may be NULL/0 — then [pad:] tokens resolve to the

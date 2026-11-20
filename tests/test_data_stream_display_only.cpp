@@ -8,6 +8,7 @@
 #include "data_stream.h"
 #include "esp_heap_caps.h"
 #include "pad_config.h"
+#include "pad_binding.h"
 #include "widgets/widget.h"
 #if HAS_HA_HISTORY
 #include "ha_stats.h"
@@ -61,9 +62,10 @@ extern "C" bool pad_config_get_data_stream_snapshot(uint8_t page,
     return true;
 }
 
-extern "C" bool pad_binding_expand_bindings(const PadBinding*, uint8_t,
-                                            const char*, char*, size_t) {
-    return false;
+static PadBindingExpandStatus expansion_status = PadBindingExpandStatus::UNCHANGED;
+extern "C" PadBindingExpandStatus pad_binding_expand_bindings(const PadBinding*, uint8_t,
+                                                              const char*, char*, size_t) {
+    return expansion_status;
 }
 
 extern "C" bool binding_template_resolve(const char* binding, char* out, size_t out_len) {
@@ -333,5 +335,10 @@ TEST(DataStreamDisplayOnly, PollsNumericBindingFromRegisteredWidget) {
     EXPECT_FLOAT_EQ(snapshot.samples[0], 10.25f);
     EXPECT_FLOAT_EQ(snapshot.samples[1], 12.5f);
     EXPECT_GT(snapshot.rev, initial_revision);
+
+    expansion_status = PadBindingExpandStatus::UNAVAILABLE;
+    data_stream_rebuild();
+    EXPECT_EQ(data_stream_find("[health:cpu]", 4, 4, ""), DATA_STREAM_INVALID);
+    expansion_status = PadBindingExpandStatus::UNCHANGED;
 }
 #endif

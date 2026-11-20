@@ -27,7 +27,7 @@ struct PadValidationGeometry {
 //   - Web portal: the POST /api/pad save handler
 //
 // Checks: grid bounds, span overflow, template_pad range, pad-level binding
-// name/value limits (incl. the one-level [pad:] rule), per-button colors,
+// name/value input limits, per-button colors,
 // widget types + widget config field caps, action arrays, and binding tokens
 // (unknown scheme / bad health key / list provider / timer id) in any field.
 //

@@ -5,7 +5,7 @@
 #include "ha_lookup.h"
 #include "binding_template.h"
 #include "binding_sources.h"
-#include "pad_binding.h"
+#include "ha_binding.h"
 #include "pad_config.h"
 #include "config_manager.h"
 #include "log_manager.h"
@@ -217,33 +217,10 @@ bool ha_live_read(const char* entity, char* snapshot, size_t size) {
     return false;
 }
 
-struct HaCollectContext { bool saved; unsigned depth; };
-static void collect_token(const char* scheme, size_t length, const char* params, void* argument) {
-    auto& context = *static_cast<HaCollectContext*>(argument);
-    if (length == 2 && strncmp(scheme, "ha", length) == 0) {
-        const size_t size = strcspn(params, ";");
-        if (size >= HA_LIVE_ENTITY_BYTES) { LOGW(TAG, "HA entity ID exceeds limit"); return; }
-        char entity[HA_LIVE_ENTITY_BYTES];
-        memcpy(entity, params, size);
-        entity[size] = '\0';
-        ensure_entity(entity, context.saved);
-    } else if (length == 3 && strncmp(scheme, "pad", length) == 0 && context.depth < 8) {
-        const PadBinding* bindings = nullptr;
-        uint8_t count = 0;
-        pad_binding_get_bindings(&bindings, &count);
-        const size_t name_size = strcspn(params, ";");
-        for (uint8_t i = 0; i < count; ++i) {
-            if (strlen(bindings[i].name) != name_size || strncmp(params, bindings[i].name, name_size)) continue;
-            ++context.depth;
-            binding_template_visit_tokens(bindings[i].value, collect_token, &context);
-            --context.depth;
-            break;
-        }
-    }
-}
-
-static void collect_source(const char* source, void* context) {
-    binding_template_visit_tokens(source, collect_token, context);
+static void collect_source(const char* source, void*) {
+    ha_binding_collect_entities(source, [](const char* entity, void*) {
+        ensure_entity(entity, true);
+    }, nullptr);
 }
 
 static bool checkpoint(HaRuntime& runtime) {
@@ -520,8 +497,7 @@ void ha_live_tick() {
             HaLock lock;
             for (auto& entry : g_runtime->entries) entry.saved = false;
         }
-        HaCollectContext context{true, 0};
-        binding_sources_visit(collect_source, &context);
+        binding_sources_visit(collect_source, nullptr);
         generation = pad_config_get_generation();
     }
     if (!g_runtime) return;

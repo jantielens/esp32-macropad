@@ -19,6 +19,9 @@
 // Call only from the LVGL task.
 
 #define BINDING_TEMPLATE_MAX_LEN       192   // Max resolved output length
+#define BINDING_MAX_RESOLVER_DEPTH     10
+#define BINDING_MAX_RESOLVER_EVALUATIONS 256
+#define BINDING_RESOLVER_STACK_RESERVE  3072
 #define BINDING_MAX_TOKENS             4     // Max binding tokens per label
 #define BINDING_MAX_SCHEMES             24    // Max registered binding schemes
 
@@ -223,6 +226,10 @@ struct BindingDefinitionConstraints {
     const char* name_pattern;
     const char* context;
     bool composition_supported;
+    uint8_t max_chain_depth = 0;
+    uint8_t max_evaluations_per_lookup = 0;
+    bool dependencies_validated_on_save = false;
+    uint8_t max_expression_depth = 0;
 };
 
 struct BindingAuthoringSpec {
@@ -299,6 +306,9 @@ const BindingSchemeSpec* binding_template_scheme_spec(uint8_t index);
 BindingResolverStatus binding_template_resolve_registered(const char* scheme, size_t name_len,
                                                           const char* params, char* out,
                                                           size_t out_len);
+// Current unused stack on ESP32, not the historical high-water mark.
+// Host builds without task stack bounds permit evaluation.
+bool binding_template_has_stack_headroom(size_t bytes);
 
 // True if `scheme` (length name_len) is a registered scheme name.
 bool binding_template_scheme_known(const char* scheme, size_t name_len);
@@ -364,6 +374,9 @@ void binding_template_visit_tokens(const char* templ, binding_token_visitor_fn v
 // Returns false if a parameter or nesting depth exceeds the scan limits.
 bool binding_template_visit_tokens_checked(const char* templ, binding_token_visitor_fn visitor,
                                            void* context);
+// Visit only direct tokens; scheme-owned traversal handles nested dependencies.
+bool binding_template_visit_top_level_tokens(const char* templ, binding_token_visitor_fn visitor,
+                                             void* context);
 
 #ifdef __cplusplus
 }

@@ -3,14 +3,35 @@
 // ============================================================================
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
 
 #include "binding_template.h"
+#include <esp_cpu.h>
+#include <freertos/task.h>
 
 static int g_pass = 0;
 static int g_fail = 0;
+static unsigned g_walk_calls = 0;
+static unsigned g_walk_fanout = 1;
+
+static BindingResolverStatus mock_walk(const char* params, char* out, size_t out_len) {
+    ++g_walk_calls;
+    const unsigned depth = static_cast<unsigned>(std::strtoul(params, nullptr, 10));
+    if (!depth) {
+        std::snprintf(out, out_len, "ok");
+        return BINDING_RESOLVER_RESOLVED;
+    }
+    char next[32];
+    std::snprintf(next, sizeof(next), "[walk:%u]", depth - 1);
+    for (unsigned i = 0; i < g_walk_fanout; ++i) {
+        const auto status = binding_template_resolve_status(next, out, out_len);
+        if (status != BINDING_RESOLVER_RESOLVED) return status;
+    }
+    return BINDING_RESOLVER_RESOLVED;
+}
 
 static BindingResolverStatus mock_big_resolve(const char* params, char* out, size_t out_len) {
     (void)params;
@@ -172,6 +193,27 @@ static void test_nested_token_visit() {
     check_eq(tokens[3].c_str(), "pad:power", "named dependency available for scoped expansion");
 }
 
+static void test_stack_headroom_guard() {
+    const uintptr_t previous = test_esp_stack_pointer;
+    const uintptr_t base = reinterpret_cast<uintptr_t>(test_freertos_stack_start);
+    char out[64];
+    test_esp_stack_pointer = base + BINDING_RESOLVER_STACK_RESERVE - 1;
+    g_walk_calls = 0;
+    check_true(binding_template_resolve_status("[walk:0]", out, sizeof(out)) ==
+                   BINDING_RESOLVER_UNAVAILABLE && !g_walk_calls,
+               "insufficient current stack rejects before entering the callback");
+    check_true(binding_template_resolve_checked("[walk:0|safe]", out, sizeof(out)),
+               "low stack still permits an explicit checked fallback");
+    check_eq(out, "safe", "stack exhaustion uses the requested fallback");
+    test_esp_stack_pointer = base - 1;
+    check_true(!binding_template_has_stack_headroom(1), "stack bounds do not underflow");
+    test_esp_stack_pointer = base + BINDING_RESOLVER_STACK_RESERVE;
+    check_true(binding_template_resolve_status("[walk:0]", out, sizeof(out)) ==
+                   BINDING_RESOLVER_RESOLVED && g_walk_calls == 1,
+               "exact stack reserve permits evaluation and resets after failure");
+    test_esp_stack_pointer = previous;
+}
+
 int main() {
     std::printf("=== binding_template resolver tests ===\n\n");
 
@@ -180,6 +222,25 @@ int main() {
     binding_template_register("nested", mock_nested_resolve, mock_collect, kMockFiniteSpec);
     binding_template_register("utf8", mock_utf8_resolve, mock_collect, kMockFiniteSpec);
     binding_template_register("nestedfail", mock_nested_fail, mock_collect, kMockFiniteSpec);
+    binding_template_register("walk", mock_walk, nullptr,
+                              {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, true});
+
+    char bounded[64];
+    binding_template_resolve("[walk:9]", bounded, sizeof(bounded));
+    check_eq(bounded, "ok", "ten active resolver callbacks still succeed");
+    g_walk_calls = 0;
+    check_true(binding_template_resolve_status("[walk:10]", bounded, sizeof(bounded)) ==
+                   BINDING_RESOLVER_UNAVAILABLE,
+               "arbitrary scheme re-entry is depth bounded without pad or expr tokens");
+    check_true(g_walk_calls <= BINDING_MAX_RESOLVER_DEPTH, "callback depth guard bounds stack growth");
+    g_walk_calls = 0;
+    g_walk_fanout = 4;
+    check_true(binding_template_resolve_status("[walk:6]", bounded, sizeof(bounded)) ==
+                   BINDING_RESOLVER_UNAVAILABLE,
+               "arbitrary scheme fanout is work bounded");
+    check_true(g_walk_calls <= BINDING_MAX_RESOLVER_EVALUATIONS, "callback budget bounds recursive work");
+    binding_template_resolve("[walk:0]", bounded, sizeof(bounded));
+    check_eq(bounded, "ok", "resolver guards reset after a rejected lookup");
 
     char checked[256];
     check_true(binding_template_resolve_checked("https://host/image.jpg", checked, sizeof(checked)),
@@ -206,6 +267,7 @@ int main() {
     test_single_token_unknown_scheme();
     test_metadata_parameter_validation();
     test_nested_token_visit();
+    test_stack_headroom_guard();
     test_scheme_registry_capacity();
 
     std::printf("\n=== Results: %d passed, %d failed ===\n", g_pass, g_fail);

@@ -406,7 +406,7 @@ The [device power API](docs/dev/web-portal.md#device-power-control) includes:
 | `GET`, `PUT` | `/api/component/microphone/...` | Test microphone levels, optionally hear input, and adjust input settings without saving; see the [microphone API](docs/dev/web-portal.md#microphone-api). |
 | `GET`, `POST`, `DELETE` | `/api/component/voice-notes/...` | Manage recordings, transcripts, and summaries when Voice Notes is enabled; see the [portal API](docs/dev/web-portal.md#voice-notes-api). |
 | `GET` | `/api/images?file=/images/name.png` | Authenticated local JPEG/PNG preview for [pad backgrounds](docs/user/pads/appearance.md#set-a-pad-background-image); see the [image API](docs/dev/web-portal.md#image-library). |
-| `GET` | `/api/bindings` | Discover binding schemes and named pad-binding restrictions, including UTF-8 input byte limits; see the [binding metadata API](docs/dev/web-portal.md#get-apibindings). |
+| `GET` | `/api/bindings` | Discover binding schemes, named composition support, runtime safety bounds and UTF-8 input byte limits; see the [binding metadata API](docs/dev/web-portal.md#get-apibindings). |
 
 ### Running Tests
 
