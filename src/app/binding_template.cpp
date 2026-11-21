@@ -4,6 +4,12 @@
 #include <string.h>
 #include <stdio.h>
 
+#if defined(ESP_PLATFORM)
+#include <esp_cpu.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#endif
+
 #define TAG "BindTpl"
 
 // ============================================================================
@@ -120,6 +126,20 @@ static const SchemeEntry* find_scheme(const char* name, size_t name_len) {
 
 static char* split_pipe_fallback(char* buf);
 
+static thread_local unsigned s_resolver_depth = 0;
+static thread_local unsigned s_resolver_remaining = 0;
+
+bool binding_template_has_stack_headroom(size_t bytes) {
+#if defined(ESP_PLATFORM)
+    const uintptr_t base = reinterpret_cast<uintptr_t>(pxTaskGetStackStart(nullptr));
+    const uintptr_t sp = reinterpret_cast<uintptr_t>(esp_cpu_get_sp());
+    return base && sp >= base && sp - base >= bytes;
+#else
+    (void)bytes;
+    return true;
+#endif
+}
+
 BindingResolvedValueKind binding_template_value_kind(const char* templ) {
     BindingTokenView token;
     if (!binding_template_single_token(templ, &token) ||
@@ -140,7 +160,17 @@ BindingResolverStatus binding_template_resolve_registered(const char* scheme, si
     if (!entry || !entry->resolver) {
         return BINDING_RESOLVER_UNKNOWN;
     }
-    return entry->resolver(params, out, out_len);
+    if (!s_resolver_depth) s_resolver_remaining = BINDING_MAX_RESOLVER_EVALUATIONS;
+    if (s_resolver_depth >= BINDING_MAX_RESOLVER_DEPTH || !s_resolver_remaining ||
+        !binding_template_has_stack_headroom(BINDING_RESOLVER_STACK_RESERVE)) {
+        if (out && out_len) strlcpy(out, "ERR:binding_limit", out_len);
+        return BINDING_RESOLVER_UNAVAILABLE;
+    }
+    --s_resolver_remaining;
+    ++s_resolver_depth;
+    const auto status = entry->resolver(params, out, out_len);
+    --s_resolver_depth;
+    return status;
 }
 
 // ============================================================================
@@ -486,7 +516,7 @@ void binding_template_collect_topics(const char* templ, void* user_data) {
 }
 
 static bool visit_tokens(const char* templ, binding_token_visitor_fn visitor,
-                         void* context, unsigned depth) {
+                         void* context, unsigned depth, bool recursive) {
     if (!templ || !visitor) return false;
     const char* p = templ;
     bool complete = true;
@@ -501,7 +531,7 @@ static bool visit_tokens(const char* templ, binding_token_visitor_fn visitor,
             buffer[params_len] = '\0';
             split_pipe_fallback(buffer);
             visitor(scheme, scheme_len, buffer, context);
-            if (!visit_tokens(buffer, visitor, context, depth + 1)) complete = false;
+            if (recursive && !visit_tokens(buffer, visitor, context, depth + 1, true)) complete = false;
         } else {
             complete = false;
         }
@@ -512,10 +542,15 @@ static bool visit_tokens(const char* templ, binding_token_visitor_fn visitor,
 
 void binding_template_visit_tokens(const char* templ, binding_token_visitor_fn visitor,
                                    void* context) {
-    visit_tokens(templ, visitor, context, 0);
+    visit_tokens(templ, visitor, context, 0, true);
 }
 
 bool binding_template_visit_tokens_checked(const char* templ, binding_token_visitor_fn visitor,
                                            void* context) {
-    return visit_tokens(templ, visitor, context, 0);
+    return visit_tokens(templ, visitor, context, 0, true);
+}
+
+bool binding_template_visit_top_level_tokens(const char* templ, binding_token_visitor_fn visitor,
+                                             void* context) {
+    return visit_tokens(templ, visitor, context, 0, false);
 }

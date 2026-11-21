@@ -27,6 +27,7 @@ extern DeviceConfig device_config;
 #endif
 #if HAS_IMAGE_LIBRARY
 #include "../local_image_loader.h"
+#include "../pad_background.h"
 #endif
 #include "../device_class.h"
 #if HAS_USB_HID || HAS_BLE_HID
@@ -191,6 +192,9 @@ void PadScreen::create() {
 }
 
 void PadScreen::destroy() {
+#if HAS_IMAGE_LIBRARY
+    pad_background_detach(screen);
+#endif
     clearTiles();
     if (screen) {
         lv_obj_delete(screen);
@@ -251,6 +255,9 @@ void PadScreen::show() {
 }
 
 void PadScreen::hide() {
+#if HAS_IMAGE_LIBRARY
+    pad_background_detach(screen);
+#endif
 #if HAS_USB_HID || HAS_BLE_HID
     gamepad_hid_cancel();
 #endif
@@ -368,6 +375,10 @@ void PadScreen::update() {
 }
 
 void PadScreen::pollLiveData(bool force) {
+#if HAS_IMAGE_LIBRARY
+    if (screen && cachedGeneration == pad_config_get_generation())
+        pad_background_update(screen, backgroundPath, displayMgr->getActiveWidth(), displayMgr->getActiveHeight());
+#endif
     bool refreshPassive = true;
 #if HAS_LVGL_EPAPER
 	const EpaperRefreshSettings presentationSettings = config_manager_get_epaper_refresh_settings();

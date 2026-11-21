@@ -8,15 +8,16 @@
 //                       widget list + per-widget fields come from the registry
 //                       (widget_at + describeSchema); no hand-maintained table.
 //   validate_pad      — read tool: dry-run validate a pad JSON, no save.
-//   set_button / set_buttons / remove_button / clear_pad — authoring tools.
+//   set_pad / replace_pad / set_button / set_buttons / remove_button /
+//   clear_pad — authoring tools.
 //
 // Authoring tools require mcp_authoring_enabled (gated by web_mcp via the
-// requires_authoring flag). They run on the web task: load the pad raw, splice
-// the button(s) into the JSON, VALIDATE, then hand a PSRAM buffer (pointer+len)
+// requires_authoring flag). On the web task, partial edits load and modify raw
+// JSON; replacement starts fresh. Both VALIDATE, then hand a PSRAM buffer (pointer+len)
 // to the main loop via mcp_control_dispatch (D6) which calls pad_config_save_raw
-// + pad_config_rebuild_all_caches and frees it. The 256-byte ctx is never
-// widened and the pad JSON is never inlined into it. save_raw truncates in
-// place, so validation runs before every write. Concurrent portal/LLM edits are
+// and frees it. save_raw refreshes the affected caches. The 256-byte ctx is
+// never widened and the pad JSON is never inlined into it. Validation runs
+// before every write. Concurrent portal/LLM edits are
 // last-write-wins per pad.
 // ============================================================================
 
@@ -36,11 +37,13 @@
 #include "pad_validate.h"
 #include "pad_resolve_request.h"
 #include "json_key_validation.h"
+#include "log_manager.h"
 #include "psram_json_allocator.h"
-#include "widgets/widget.h"
+#include "widgets/widget_registry.h"
 #include "binding_template.h"
 #include "binding_schema.h"
 #include "action_catalog.h"
+#include "mcp_pad_image_metadata.h"
 #if HAS_PSRAM
 #include "list_source.h"
 #endif
@@ -138,13 +141,16 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     pf["rows"] = "grid rows from 1 to grid.max_rows";
     pf["wake_screen"] = "screen id to navigate to on screensaver wake ('' = stay)";
     pf["bg_color"] = "pad background color #RRGGBB (default #000000)";
+#if HAS_IMAGE_LIBRARY
+    pf["bg_image_path"] = "optional static canonical /images path; centered fill-and-crop behind all buttons; empty clears";
+#endif
     pf["button_shadow"] = "'enabled' or 'disabled' to override the device button-shadow setting; omit to inherit";
     pf["buttons"] = "Main button array. Positions are layer-local; col/row are grid coordinates.";
     pf["overlay_buttons"] = "Optional Overlay button array sharing the pad grid and combined button capacity.";
     pf["template_pad"] = "int pad index 0..MAX_PADS-1 to inherit source Main buttons into empty destination Main positions (-1 = none). Overlay buttons do not suppress inheritance.";
-    pf["bindings"] = "object of name->binding-template, referenced elsewhere as [pad:name]. Names: [a-zA-Z][a-zA-Z0-9_]*";
+    pf["bindings"] = "object of name->binding-template, referenced as [pad:name]. Values may reference other names in the same effective pad, in any definition order; local definitions override template names. See the pad scheme's authoring.definitions for input limits and runtime depth/work bounds. Dependencies are not checked on save: missing names, cycles and excessive depth/work become unavailable at runtime (--- or an explicit fallback).";
     pf["pad_actions"] = "ordered array of up to grid.max_actions full-screen tap actions. These capture taps before Main and Overlay buttons and widgets. [] clears the list. Template pads never contribute pad_actions.";
-    pad["bindings_example"] = "{\"power\":\"[mqtt:home/solar/power;watts;%.0f]\",\"hot\":\"[expr:[pad:power]>3000?1:0]\"}";
+    pad["bindings_example"] = "{\"power\":\"[mqtt:home/solar/power;watts]\",\"hot\":\"[expr:[pad:power]>3000?1:0]\"}";
 
     JsonObject btn = result.createNestedObject("button");
     JsonArray bf = btn.createNestedArray("fields");
@@ -152,21 +158,23 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
         "col", "row", "col_span", "row_span",
         "label_top", "label_center", "label_bottom",
         "label_top_style", "label_center_style", "label_bottom_style", "reserve_label_slots",
-        "bg_color", "fg_color", "border_color", "border_width", "corner_radius", "content_pad", "button_shadow",
+        "bg_color", "bg_opacity", "fg_color", "border_color", "border_width", "corner_radius", "content_pad", "button_shadow",
         "bg_pattern", "bg_pattern_color", "pattern_spacing", "pattern_stroke_width",
         "icon", "icon_scale_pct", "icon_position", "icon_color", "icon_badge_padding", "icon_badge_color",
         "widget_position", "group_size_pct", "rocker_group_layout", "overlay_backdrop",
         "btn_state", "widget_type", "widget_data_binding", "actions", "lp_actions"
     };
     for (const char* f : fields) bf.add(f);
+    mcp_pad_image_metadata_emit(btn, HAS_IMAGE_FETCH, HAS_IMAGE_LIBRARY, HAS_NATIVE_EXTENSIONS);
     btn["layer_note"] = "Buttons are stored in buttons (Main) or overlay_buttons (Overlay). Authoring tools accept layer='main' or layer='overlay'; omitted layer means Main. Positions are local array indices, while col/row are grid coordinates.";
     btn["widget_note"] = "widget keys are flat: widget_type + widget_data_binding[_2.._4]; widget config fields (e.g. min/max/color) are flat on the button too";
     btn["content_layout_note"] = "icon_position places the icon above, below, left or right of the labels; omit to inherit device defaults (firmware default left). widget_position defaults to right; overlay-top-left, overlay-top-center, overlay-top-right, overlay-center-left, overlay-center, overlay-center-right, overlay-bottom-left, overlay-bottom-center and overlay-bottom-right place labels and icon over the full widget. overlay_backdrop=true adds a translucent button-background-colored backdrop to overlaid labels and icon; default false. Rocker and Numeric Rocker default to rocker_group_layout center; beside uses widget_position. group_size_pct is 0 for auto or 10-90 percent of the layout axis, and is ignored for overlay; centered groups are capped to the center lane without changing input zones.";
     btn["icon_badge_note"] = "icon_color is auto (follow button text), hex or a color binding, and applies to Material icons only. icon_badge_padding is 0-64 pixels per side (default 0, disables badge); omit to inherit device defaults. icon_badge_color is auto, hex or a color binding (max 191 chars, default auto). Auto blends 15% of the resolved Material icon color into the button background, or uses text color for color icons. The circle follows icon placement, visibility and clipping; the icon shrinks if space is limited.";
     btn["labels_note"] = "reserve_label_slots=true reserves a single line for each label, even when empty; longer text may be clipped. Label style y offsets still apply. Default bitmap fonts cover Latin text, digits, and basic punctuation. Uploaded static TrueType font coverage depends on the font; missing glyphs fall back to the bitmap default. Use icon for retained catalog artwork.";
     btn["button_shadow_note"] = "accepts 'enabled' or 'disabled' to override the pad setting; omit to inherit. Shadow type, color mode, offsets, and blur are device-wide Pad and Button Defaults.";
+    btn["bg_opacity_note"] = "Background color and opacity inherit together: omit both bg_color and bg_opacity to inherit device Pad and Button Defaults. To override, provide bg_color and static integer bg_opacity (0-100 percent; a color without opacity is opaque). Only the background color fill changes: 0 is transparent, 100 opaque. bg_color requires a normal color or binding, not transparent. Labels, icons, borders, patterns, images and widget fills retain their own appearance.";
     btn["fill_note"] = "Keep existing base colors. bg_pattern and supported bar patterns: none (default), diagonal, reverse_diagonal, crosshatch, dots, checkerboard; unknown names -> none. Pattern color defaults to #000000 and accepts the owning surface's color bindings. pattern_spacing: static logical px 2-64 (default 8), shared across this button. pattern_stroke_width: 1-8 (default 1), capped by spacing; dot diameter, ignored for checkerboard (spacing is square size). Numeric values clamp; malformed values use defaults. Gauge fills remain unpatterned. Track outline fields apply only to bar_chart/gauge; width 0 disables. widget_bar_track_radius: bar_chart only, static logical px 0-64 (default 4), capped at half the smaller track dimension; applies with outline off, dual baseline joins stay square. Portal badges preview fills with representative bound colors, not live widget rendering.";
-    btn["limits_note"] = "max field lengths: button labels/colors/btn_state/widget_data_binding = 191 chars, border_width/corner_radius = 63, pad binding name = 31. Widget caption/text fields are shorter (see each field's \"max\" in widgets[].config_fields, typically 63). If a binding expression is too long, declare it once as a pad-level [pad:name] binding and reference [pad:name] instead of inlining it.";
+    btn["limits_note"] = "max saved input lengths in UTF-8 bytes (excluding NUL): button labels/colors/btn_state/widget_data_binding = 191, border_width/corner_radius = 63. Widget caption/text fields are shorter (see each field's \"max\" in widgets[].config_fields, typically 63). A named pad binding can shorten references in smaller fields, but each definition is still limited to 191 bytes (see the pad scheme's authoring.definitions for composition limits). These input limits do not describe resolved-output capacity; resolver and destination buffers can impose smaller limits.";
     JsonArray states = btn.createNestedArray("btn_state");
     states.add("enabled"); states.add("disabled"); states.add("hidden");
     btn["btn_state_note"] = "accepts a binding for conditional visibility. enabled and disabled buttons both block underlying input; disabled buttons do not run actions. hidden buttons do not block. Empty means enabled; unresolved/invalid state bindings default to enabled on Main and hidden on Overlay.";
@@ -256,26 +264,31 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
 // Validation — the full pad validator now lives in pad_validate.{h,cpp} so the
 // web portal save path and these MCP tools validate through identical logic
 // (single source of truth). Call pad_validate(JsonObjectConst) — it runs before
-// every write because pad_config_save_raw truncates in place.
+// every write, before handing it to pad_config_save_raw.
 // ============================================================================
 
 // ============================================================================
-// Deferred save (ptr+len in ctx; main loop saves+rebuilds+frees) — D6
+// Deferred save (ptr+len in ctx; main loop saves+refreshes+frees) — D6
 // ============================================================================
-struct PadWriteCtx { uint8_t page; uint8_t* buf; size_t len; };
+struct PadWriteCtx { uint8_t page; uint8_t* buf; size_t len; uint32_t queued_ms; };
 
 static void exec_pad_save(const void* ctx, bool* ok, char* msg, size_t msg_len) {
     const PadWriteCtx* c = (const PadWriteCtx*)ctx;
     *ok = false;
     if (!c->buf) { strlcpy(msg, "no buffer", msg_len); return; }
+    const uint32_t started_ms = millis();
+    LOGI("MCPPad", "Pad %u write started (queue=%lu ms)", c->page,
+         (unsigned long)(started_ms - c->queued_ms));
     const char* save_error = nullptr;
     bool saved = pad_config_save_raw(c->page, c->buf, c->len, &save_error);
     heap_caps_free(c->buf);
     if (!saved) {
+        LOGW("MCPPad", "Pad %u write failed after %lu ms", c->page,
+             (unsigned long)(millis() - started_ms));
         strlcpy(msg, save_error ? save_error : "save failed", msg_len);
         return;
     }
-    pad_config_rebuild_all_caches();
+    const uint32_t saved_ms = millis();
 #if HAS_MQTT
     // Subscribe to any MQTT topics newly referenced by this pad's bindings so
     // they start resolving immediately — matching the portal save path. Without
@@ -283,6 +296,11 @@ static void exec_pad_save(const void* ctx, bool* ok, char* msg, size_t msg_len) 
     // re-saved in the portal (issue #37).
     mqtt_sub_store_subscribe_all();
 #endif
+    const uint32_t completed_ms = millis();
+    LOGI("MCPPad", "Pad %u write complete (save=%lu ms, subscriptions=%lu ms, total=%lu ms)",
+         c->page, (unsigned long)(saved_ms - started_ms),
+         (unsigned long)(completed_ms - saved_ms),
+         (unsigned long)(completed_ms - c->queued_ms));
     *ok = true;
     strlcpy(msg, "saved", msg_len);
 }
@@ -298,12 +316,16 @@ static bool commit_pad(uint8_t page, JsonDocument& doc, JsonObject& result, Stri
     if (!buf) return pad_fail(result, err, PAD_ERR_INTERNAL, "out of memory");
     size_t len = serializeJson(doc, buf, need);
 
-    PadWriteCtx ctx; ctx.page = page; ctx.buf = buf; ctx.len = len;
+    PadWriteCtx ctx; ctx.page = page; ctx.buf = buf; ctx.len = len; ctx.queued_ms = millis();
     bool ok = false; char msg[MCP_TOOL_MSG_LEN] = {0};
     McpControlResult r = mcp_control_dispatch(exec_pad_save, &ctx, sizeof(ctx),
                                               PAD_WRITE_TIMEOUT_MS, &ok, msg, sizeof(msg));
-    if (r == MCP_CONTROL_BUSY) { heap_caps_free(buf); return pad_fail(result, err, PAD_ERR_BUSY, "busy, retry"); }
+    if (r != MCP_CONTROL_OK && r != MCP_CONTROL_TIMEOUT) heap_caps_free(buf);
+    if (r == MCP_CONTROL_BUSY) return pad_fail(result, err, PAD_ERR_BUSY, "busy, retry");
     // On TIMEOUT the deferred job may still run and free buf, so do not free here.
+    if (r == MCP_CONTROL_TIMEOUT)
+        LOGW("MCPPad", "Pad %u write timed out after %lu ms; queued write may still finish",
+             page, (unsigned long)(millis() - ctx.queued_ms));
     return mcp_finish_control(r, ok, msg, result, err);
 }
 
@@ -390,11 +412,11 @@ static bool tool_validate_pad(const JsonObject& args, JsonObject& result, String
 #if HAS_MQTT || HAS_HA_LIVE || HAS_EXTERNAL_DATA
 // ============================================================================
 // resolve_bindings (read tool, authoring-gated) — resolve binding tokens
-// against LIVE data on the main loop; no save. Powers debugging/preview of what
+// against LIVE data on the LVGL task; no save. Powers debugging/preview of what
 // a binding or a proposed button's fields resolve to right now. Values only
 // (not a pixel render). Thin wrapper over the shared pad_resolve_request()
 // (also used by the portal POST /api/pad/resolve endpoint); the actual
-// resolution runs on the main loop via the deferred bridge.
+// resolution runs on the LVGL task via the display dispatcher.
 // ============================================================================
 static bool tool_resolve_bindings(const JsonObject& args, JsonObject& result, String& err) {
     const char* em = nullptr;
@@ -522,10 +544,33 @@ static bool tool_set_pad(const JsonObject& args, JsonObject& result, String& err
     if (args.containsKey("rows"))         doc["rows"] = (int)(args["rows"] | 0);
     if (args.containsKey("wake_screen"))  doc["wake_screen"] = args["wake_screen"];
     if (args.containsKey("bg_color"))     doc["bg_color"] = args["bg_color"];
+    if (args.containsKey("bg_image_path")) doc["bg_image_path"] = args["bg_image_path"];
     if (args.containsKey("template_pad")) doc["template_pad"] = (int)(args["template_pad"] | -1);
     if (args.containsKey("bindings"))     doc["bindings"] = args["bindings"];  // object copy
     if (args.containsKey("pad_actions"))  doc["pad_actions"] = args["pad_actions"];
 
+    return commit_pad((uint8_t)pg, doc, result, err);
+}
+
+static bool tool_replace_pad(const JsonObject& args, JsonObject& result, String& err) {
+    int pg = pad_index(args["screen"] | "");
+    if (pg < 0) return pad_fail(result, err, PAD_ERR_PARAMS, s_pad_err);
+    JsonObjectConst pad = args["pad"];
+    if (pad.isNull()) return pad_fail(result, err, PAD_ERR_PARAMS, "missing pad object");
+
+    BasicJsonDocument<PsramJsonAllocator> doc(48 * 1024);
+    if (!doc.set(pad) || doc.overflowed())
+        return pad_fail(result, err, PAD_ERR_INTERNAL, "out of memory");
+    for (const char* layer : {"buttons", "overlay_buttons"}) {
+        for (JsonObject button : doc[layer].as<JsonArray>()) {
+            if (!button.containsKey("bg_image_password_set")) continue;
+            if (!button["bg_image_password_set"].is<bool>() ||
+                button["bg_image_password_set"].as<bool>())
+                return pad_fail(result, err, PAD_ERR_PARAMS,
+                    "replace_pad cannot retain image passwords; supply bg_image_password explicitly or remove bg_image_password_set to clear");
+            button.remove("bg_image_password_set");
+        }
+    }
     return commit_pad((uint8_t)pg, doc, result, err);
 }
 
@@ -600,10 +645,18 @@ REGISTER_MCP_TOOL(s_tool_clear_pad);
 
 static const McpTool s_tool_set_pad = {
     "set_pad",
-    "Set pad-level fields (preserves buttons): pad_name (friendly label; arg is 'pad_name' not 'name'), layout, cols, rows, wake_screen, bg_color, template_pad (inherit buttons into empty cells), bindings (object of [pad:name] templates), and pad_actions (ordered full-screen tap actions; [] clears). Only provided keys change. 'screen' may be a 'pad_N' id or friendly name. After setting 'bindings', verify each resolves with resolve_bindings (a valid-syntax binding can still resolve to '---' or the wrong value). Requires authoring.",
-    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"pad_name\":{\"type\":\"string\"},\"layout\":{\"type\":\"string\"},\"cols\":{\"type\":\"integer\"},\"rows\":{\"type\":\"integer\"},\"wake_screen\":{\"type\":\"string\"},\"bg_color\":{\"type\":\"string\"},\"template_pad\":{\"type\":\"integer\"},\"bindings\":{\"type\":\"object\"},\"pad_actions\":{\"type\":\"array\",\"maxItems\":3,\"items\":{\"type\":\"object\"}}},\"required\":[\"screen\"]}",
+    "Set pad-level fields (preserves buttons): pad_name (friendly label; arg is 'pad_name' not 'name'), layout, cols, rows, wake_screen, bg_color, bg_image_path (static local image background; requires image library; '' clears), template_pad (inherit buttons into empty cells), bindings (object of [pad:name] templates), and pad_actions (ordered full-screen tap actions; [] clears). Only provided keys change. 'screen' may be a 'pad_N' id or friendly name. After setting 'bindings', verify each resolves with resolve_bindings (a valid-syntax binding can still resolve to '---' or the wrong value). Requires authoring.",
+    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"pad_name\":{\"type\":\"string\"},\"layout\":{\"type\":\"string\"},\"cols\":{\"type\":\"integer\"},\"rows\":{\"type\":\"integer\"},\"wake_screen\":{\"type\":\"string\"},\"bg_color\":{\"type\":\"string\"},\"bg_image_path\":{\"type\":\"string\"},\"template_pad\":{\"type\":\"integer\"},\"bindings\":{\"type\":\"object\"},\"pad_actions\":{\"type\":\"array\",\"maxItems\":3,\"items\":{\"type\":\"object\"}}},\"required\":[\"screen\"]}",
     tool_set_pad, false, true, false, true
 };
 REGISTER_MCP_TOOL(s_tool_set_pad);
+
+static const McpTool s_tool_replace_pad = {
+    "replace_pad",
+    "Replace the entire pad in one validated save: geometry, Main buttons, Overlay buttons, bindings and pad_actions together. Use instead of set_pad/set_buttons when regenerating or shrinking a populated pad. Args: screen (pad_N or friendly name), pad (complete pad JSON; use name inside pad). Grid layouts require cols and rows. No fields merge from the old pad: omitted optional fields use normal defaults/inheritance; omitted layers, bindings and actions are locally empty. Actions require action_format_version: 1. get_pad redacts image passwords; bg_image_password_set=true is rejected, false is discarded. Supply bg_image_password explicitly to set it; omission clears it. Validation failure leaves the pad unchanged. Uses the existing storage path without a new power-loss or rollback guarantee; a timeout may still save later. Concurrent edits are last-write-wins. Prepare icon artwork in the portal first. Requires authoring.",
+    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"pad\":{\"type\":\"object\"}},\"required\":[\"screen\",\"pad\"]}",
+    tool_replace_pad, false, true, false, true
+};
+REGISTER_MCP_TOOL(s_tool_replace_pad);
 
 #endif // HAS_MCP && HAS_DISPLAY

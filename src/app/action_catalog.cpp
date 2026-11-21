@@ -40,6 +40,7 @@ void action_catalog_emit(JsonArray actions) {
                     arg["type"] = type_name;
                     arg["dynamic"] = argument.dynamic;
                     arg["example"] = argument.example;
+                    if (argument.description) arg["description"] = argument.description;
                     arg["control"] = argument.control;
                     if (argument.type == ACTION_ARGUMENT_INTEGER || argument.type == ACTION_ARGUMENT_NUMBER) {
                         arg["min"] = argument.minimum;

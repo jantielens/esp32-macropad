@@ -13,9 +13,7 @@
 
 #define TAG "Storage"
 
-// Throttle: at most one usage scan per minute. FAT directory traversal on
-// large SD cards (used by SDMMCFS::usedBytes) can take hundreds of ms, so
-// avoid hammering it from every save path.
+// Throttle expensive filesystem usage queries to at most once per minute.
 static constexpr uint32_t STORAGE_USAGE_MIN_INTERVAL_MS = 60UL * 1000UL;
 static uint32_t s_last_publish_ms = 0;
 static bool s_have_published = false;
@@ -27,7 +25,11 @@ void storage_publish_usage(bool force) {
         return;
     }
     const uint64_t used = Storage.usedBytes();
-    const uint64_t total = Storage.totalBytes();
+    // Mounted capacity is stable; LittleFS totalBytes() repeats the usage query.
+    FSHealthStats cached;
+    fs_health_get(&cached);
+    const uint64_t total = force || !s_have_published
+        ? Storage.totalBytes() : cached.storage_total_bytes;
     fs_health_set_storage_usage(used, total);
     s_last_publish_ms = now;
     s_have_published = true;

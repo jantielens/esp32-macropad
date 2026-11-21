@@ -95,6 +95,36 @@ guidance, it can use `widget`, for example `sparkline`.
 For conditional icons, use the [Main and Overlay pattern](../pads/editing.md#show-a-conditional-icon).
 New icon artwork still needs preparation in the portal before MCP pad writes.
 
+## Replace a complete pad
+
+Use `replace_pad` when regenerating a pad or changing its grid and both button
+layers together. It validates the complete replacement before saving, without
+first clearing or resizing the existing pad. An invalid candidate leaves the
+stored and active pad unchanged.
+
+Use `set_pad` for selected pad settings while preserving buttons, or
+`set_buttons` for selected buttons in one layer. Replacement does not merge:
+omitted optional settings use defaults or inheritance, and omitted layers,
+bindings, and actions are locally empty. Include the grid dimensions and the
+action-format version required by the live authoring manifest.
+
+Ask the assistant to confirm the target, back up the pad, discover its schema,
+and submit the complete new design in one request. For example: "Replace pad_0
+with a 2 by 2 pad containing these Main and Overlay buttons; do not clear it
+first." New or rearranged icon artwork may require portal preparation.
+
+Image passwords are redacted by `get_pad` to `bg_image_password_set`. Replacement
+rejects a true marker rather than guessing which old button's password to retain.
+A false marker is discarded. An explicit password sets the new credential;
+omitting it clears it. Do not blindly submit a redacted read as a replacement.
+Credentials supplied through MCP pass through the assistant client and plain LAN
+HTTP; use the portal if you cannot supply them safely.
+
+Replacement uses the existing save path, without adding power-loss safety or
+guaranteeing rollback after a storage error. A timeout can still be followed by
+a completed save, so read the pad back before retrying. Avoid concurrent
+portal/assistant edits: the last completed save wins.
+
 ## Verify effects
 
 After a write, read back the affected pad/configuration and resolve its bindings.

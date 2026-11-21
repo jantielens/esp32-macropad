@@ -30,15 +30,14 @@ assert.deepStrictEqual({ ...check('#fff', 0) }, { value: '#FFFFFF', error: '' })
 assert.deepStrictEqual({ ...check('', 0) }, { value: '', error: '' });
 assert.match(check('red', 0).error, /Not a color/);
 assert.match(check('transparent', 0).error, /Not a color/);
-assert.deepStrictEqual({ ...check('transparent', 0, true, true) }, { value: 'transparent', error: '' });
-assert.match(check('transparent', 5, true, true).error, /Too long/);
-assert.strictEqual(context.padColorToHex('transparent', '#333333', true), 'transparent');
 assert.strictEqual(context.padColorToHex('transparent', '#333333'), '#333333');
-const transparentButton = { bg_color: 'transparent', fg_color: '#FFFFFF', border_color: 0 };
-context.padColorsToHex(transparentButton);
-assert.deepStrictEqual(JSON.parse(JSON.stringify(transparentButton)),
-    { bg_color: 'transparent', fg_color: 'FFFFFF', border_color: '000000' });
-assert.strictEqual(context.padColorValue('transparent'), 'transparent');
+for (const value of ['', '0', '50', '100']) {
+    const result = context.padOpacityCheck(value);
+    assert.strictEqual(result.error, '');
+    assert.strictEqual(result.value, value === '' ? null : Number(value));
+}
+for (const value of ['-1', '101', '1.5', 'no', '[mqtt:x]']) assert(context.padOpacityCheck(value).error);
+assert.match(context.padOpacitySwatchBackground('#123456', 50), /rgba\(18,52,86,0.5\).*conic-gradient/);
 assert.strictEqual(check('[expr:1]', 0).error, '');
 assert.match(check('[expr:1]', 0, false).error, /requires a color/);
 assert.strictEqual(check('#abc', 0, false).value, '#AABBCC');
@@ -82,7 +81,7 @@ assert.strictEqual(context.padThresholdSourceValidate(), false);
 assert.strictEqual(sourceError.style.display, '');
 
 const elements = {};
-for (const selector of ['#cp-base', '#cp-base-summary', '#cp-base-body', '#cp-color-editor', '#cp-fill', '#cp-fill-geometry', '#cp-gen', '#cp-fx', '#cp-input-label', '#cp-input', '#cp-recent-grid', '#cp-recent-heading', '#cp-gen-source']) {
+for (const selector of ['#cp-base', '#cp-base-summary', '#cp-base-body', '#cp-color-editor', '#cp-fill', '#cp-fill-geometry', '#cp-gen', '#cp-fx', '#cp-input-label', '#cp-input', '#cp-recent-grid', '#cp-recent-heading', '#cp-gen-source', '#cp-opacity-wrap', '#cp-opacity', '#cp-opacity-value']) {
     elements[selector] = { style: {}, children: [], value: '', focus() {}, appendChild(child) { this.children.push(child); } };
 }
 Object.defineProperty(elements['#cp-recent-grid'], 'innerHTML', { set() { this.children = []; } });
@@ -92,6 +91,7 @@ const dialog = { pop: {
 const body = { appendChild(child) { child.parentNode = this; } };
 context.document = { activeElement: null, body };
 context.padState = { editCol: 1, editRow: 1 };
+context.padGetEffectiveDefault = () => 100;
 context.padColorPopoverCreate = () => dialog;
 context.padThresholdGenLoad = () => {};
 context.padColorPopoverValidate = () => {};
@@ -260,8 +260,9 @@ assert.deepStrictEqual({ ...pickerContext.padFillBackground('none', '#123456', 1
     { image: 'none', size: 'auto' });
 
 const pickerNodes = {};
-for (const id of ['cp-input', 'cp-preview', 'cp-apply', 'cp-error', 'cp-transparent']) {
+for (const id of ['cp-input', 'cp-preview', 'cp-apply', 'cp-error', 'cp-opacity', 'cp-opacity-value']) {
     pickerNodes['#' + id] = { value: '#FFFFFF', style: {},
+        setAttribute() {},
         focus() { this.focused = true; }, classList: { add() {}, remove() {}, toggle() {} } };
 }
 pickerContext.document.createElement = () => ({
@@ -328,25 +329,47 @@ assert.strictEqual(plainTarget.value, '#FF9800', 'Cancel discards an incomplete 
 pickerContext._cpPopover = plainDraft();
 pickerNodes['#cp-input'].value = 'transparent';
 assert(pickerContext.padColorPopoverValidate(true).error);
-assert.strictEqual(pickerNodes['#cp-transparent'].hidden, true);
-plainTarget.dataset.allowTransparent = 'true';
-assert.strictEqual(pickerContext.padColorPopoverValidate(true).error, '');
-assert.strictEqual(pickerNodes['#cp-transparent'].hidden, false);
-pickerContext.padColorPopoverSubmit('transparent');
-assert.strictEqual(plainTarget.value, 'transparent');
-assert.strictEqual(plainApplyEvents, 3);
+pickerContext.padColorPopoverClose();
+const opacityTarget = {
+    value: '',
+    dispatchEvent() {
+        assert.strictEqual(plainTarget.value, '#123456', 'Observers must see the new color and opacity together');
+    }
+};
+for (const value of ['0', '50', '100']) {
+    pickerContext._cpPopover = plainDraft();
+    pickerContext._cpPopover.opacityInput = opacityTarget;
+    pickerContext._cpPopover.opacityDefault = 75;
+    pickerNodes['#cp-input'].value = '#123456';
+    pickerNodes['#cp-opacity'].value = value;
+    pickerContext.padColorPopoverSubmit('#123456');
+    assert.strictEqual(opacityTarget.value, value);
+    assert.strictEqual(plainTarget.value, '#123456');
+    assert.strictEqual(pickerNodes['#cp-opacity-value'].textContent, value + '%');
+}
+pickerContext._cpPopover = plainDraft();
+pickerContext._cpPopover.opacityInput = opacityTarget;
+pickerNodes['#cp-opacity'].value = '20';
+pickerContext.padColorPopoverClose();
+assert.strictEqual(opacityTarget.value, '100', 'Cancel must discard opacity along with color');
+pickerContext._cpPopover = plainDraft();
+pickerContext._cpPopover.opacityInput = opacityTarget;
+pickerContext._cpPopover.opacityDefault = 75;
+pickerNodes['#cp-opacity'].value = '101';
+pickerContext.padColorPopoverSubmit('#123456');
+assert.strictEqual(opacityTarget.value, '100', 'Invalid opacity must not apply');
+assert.strictEqual(pickerNodes['#cp-apply'].disabled, true);
+pickerContext.padColorPopoverClose();
 
-target.dataset.allowTransparent = 'true';
 target.dispatchEvent = function() { applyEvents++; };
 pickerContext._cpPopover = draft();
 pickerContext._cpPopover.fill.base = 'transparent';
 pickerContext.padColorPopoverApply('transparent');
-assert.strictEqual(target.value, 'transparent', 'Base transparency must survive the pattern picker');
-assert.strictEqual(applyEvents, 3);
+assert.strictEqual(applyEvents, 2, 'Base colors must no longer accept transparent');
 pickerContext._cpPopover = draft();
 pickerContext._cpPopover.fill.color = 'transparent';
 pickerContext.padColorPopoverApply('#123456');
-assert.strictEqual(applyEvents, 3, 'Pattern colors must not accept transparency');
+assert.strictEqual(applyEvents, 2, 'Pattern colors must not accept transparency');
 pickerContext.padColorPopoverClose();
 
 const defaultsFixture = JSON.parse(fs.readFileSync('tools/mock-data/pad-editor.json', 'utf8'));
@@ -404,6 +427,30 @@ defaultInputs.get('pad-def-icon-position').value = 'above';
 assert.strictEqual(context.padCollectButtonDefaults().icon_position, 'above');
 context.padLoadButtonDefaults({ firmware_defaults: defaultsFixture.firmware_defaults, icon_position: 'above' });
 assert.strictEqual(defaultInputs.get('pad-def-icon-position').value, 'above');
+defaultInputs.set('pad-def-bg-opacity', { value: '' });
+context.padLoadButtonDefaults({ firmware_defaults: defaultsFixture.firmware_defaults, bg_opacity: 0 });
+assert.strictEqual(defaultInputs.get('pad-def-bg-opacity').value, 0);
+defaultInputs.get('pad-def-bg-opacity').value = '0';
+assert.strictEqual(context.padCollectButtonDefaults().bg_opacity, 0);
+assert.strictEqual(context.padEffectiveBgOpacity(), 0);
+assert.strictEqual(context.padEffectiveBgOpacity(100), 100);
+defaultInputs.get('pad-def-bg-opacity').value = '';
+assert.strictEqual(context.padCollectButtonDefaults().bg_opacity, undefined);
+defaultInputs.get('pad-def-bg-opacity').value = '101';
+assert.throws(() => context.padCollectButtonDefaults(), /whole percentage/);
+
+const backgroundInput = { value: '#333333', classList: { contains: () => true }, dispatchEvent() {} };
+const backgroundOpacity = { value: '0' };
+const backgroundReset = { style: {} };
+defaultInputs.set('pad-edit-bg-color', backgroundInput);
+defaultInputs.set('pad-edit-bg-opacity', backgroundOpacity);
+defaultInputs.set('pad-edit-bg-color-reset', backgroundReset);
+context.padUpdateResetHints();
+assert.strictEqual(backgroundReset.style.display, 'inline', 'An explicit opacity keeps the background reset available');
+context.padResetAppearance('pad-edit-bg-color', 'bg_color');
+assert.strictEqual(backgroundInput.value, context.padGetEffectiveDefault('bg_color'));
+assert.strictEqual(backgroundOpacity.value, '', 'Reset background must clear its opacity override too');
+assert.strictEqual(backgroundReset.style.display, 'none');
 
 {
     const inputs = new Map();
@@ -493,6 +540,28 @@ assert.strictEqual(defaultInputs.get('pad-def-icon-position').value, 'above');
     selectorContext.padWidgetEditorsLoad({ widget_type: 'option_selector', ...result });
     assert.strictEqual(inputs.get('pad-edit-option-selected-fg').value, '');
     assert.strictEqual(inputs.get('pad-edit-option-1-bg_color').swatch.style.background, '#111111');
+
+    assert.strictEqual(result.widget_option_weight, undefined);
+    inputs.get('pad-edit-option-1-weight').value = '7';
+    inputs.get('pad-edit-option-2-label').value = 'Battery';
+    inputs.get('pad-edit-option-2-weight').value = '2';
+    const weighted = {};
+    selectorContext.padWidgetEditorBuild(weighted, editor);
+    assert.strictEqual(weighted.widget_option_weight, 7, 'Empty weighted slots must survive saving');
+    assert.strictEqual(weighted.widget_option_weight_2, 2);
+    assert.strictEqual(weighted.widget_option_weight_3, undefined);
+    selectorContext.padWidgetEditorsLoad({ widget_type: 'option_selector', ...weighted });
+    assert.strictEqual(inputs.get('pad-edit-option-1-weight').value, '7');
+    assert.strictEqual(inputs.get('pad-edit-option-2-weight').value, '2');
+    assert.strictEqual(inputs.get('pad-edit-option-3-weight').value, '');
+    for (const invalid of ['0', '-1', '1001', '1.5', 'not-a-number']) {
+        inputs.get('pad-edit-option-1-weight').value = invalid;
+        assert.throws(() => selectorContext.padWidgetEditorBuild({}, editor), /Weight must be an integer/);
+    }
+    inputs.get('pad-edit-option-1-weight').value = '';
+    const clearedWeight = {};
+    selectorContext.padWidgetEditorBuild(clearedWeight, editor);
+    assert.strictEqual(clearedWeight.widget_option_weight, undefined);
 
     const mode = inputs.get('pad-edit-option-mode');
     const source = inputs.get('pad-edit-option-source');

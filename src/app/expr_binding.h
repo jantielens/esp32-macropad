@@ -2,6 +2,8 @@
 
 #include "board_config.h"
 
+#define EXPR_BINDING_MAX_DEPTH 5
+
 // ============================================================================
 // Expression Binding — [expr:...] scheme for the binding template engine
 // ============================================================================
@@ -27,6 +29,10 @@ extern "C" {
 // Register the "expr" scheme with the binding template engine.
 // Call once during init, after mqtt/health/time schemes are registered.
 void expr_binding_init(void);
+
+// Strip formatting and traverse children with the shared expression depth guard.
+void expr_binding_visit_dependencies(const char* params,
+                                      void (*visitor)(const char*, void*), void* context);
 
 #ifdef __cplusplus
 }

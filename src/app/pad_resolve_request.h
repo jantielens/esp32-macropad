@@ -13,8 +13,8 @@
 //   - Web portal POST /api/pad/resolve (web_portal_pad.cpp)
 //
 // Resolves [scheme:params] tokens in the request against the device's LIVE
-// data and fills `result`. It runs pad_resolve() on the main loop via the
-// deferred main-loop bridge (binding_template_resolve is LVGL/main-task only),
+// data and fills `result`. It runs pad_resolve() on the LVGL task via the
+// existing display dispatcher (matching rendering's stack budget and context),
 // so it is safe to call from any web/async request handler. Nothing is saved.
 //
 // Request (`args`):

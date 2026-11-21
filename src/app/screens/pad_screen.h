@@ -42,7 +42,6 @@ struct RuntimeColorBinding {
     char templ[CONFIG_COLOR_MAX_LEN];                 // Original color string (template or static)
     uint32_t defaultColor;                            // Fallback color when unresolved
     uint32_t lastApplied;                             // Last applied color (skip if unchanged)
-    bool lastTransparent;
     uint8_t target;                                   // 0=bg, 1=fg, 2=border, 3-5=labels,
                                                       // 6=badge, 7=icon
     bool active;
@@ -219,6 +218,9 @@ private:
     char wakeScreen[CONFIG_SCREEN_ID_MAX_LEN]; // Cached wake_screen from config
     char pageBgTemplate[CONFIG_COLOR_MAX_LEN];     // Page background color/binding
     uint32_t pageBgDefault;                        // Fallback page bg color
+#if HAS_IMAGE_LIBRARY
+    char backgroundPath[CONFIG_BG_IMAGE_PATH_MAX_LEN] = {};
+#endif
 
     // Allocate / free the heavy binding arrays (PSRAM preferred)
     bool allocateArrays();

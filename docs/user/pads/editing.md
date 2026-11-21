@@ -22,11 +22,16 @@ of fonts, widgets, or live images. Each pad saves independently.
 **Show on Device** does not save the draft.
 
 Opening or importing a pad with an older action format removes its actions
-from the draft and shows a notification. Layout, button content, appearance,
-and other settings are retained. Recreate any needed actions before choosing
+from the draft and shows a notification. Layout, button content, and other
+supported settings are retained. Recreate any needed actions before choosing
 **Save Pad**. Leaving without saving keeps the original saved pad unchanged.
 Pads with a newer action format cannot be opened for saving; use firmware
 that supports that format.
+
+Unsupported saved button backgrounds are also removed from the draft, with a
+notification. Their color and opacity return to the device defaults on both
+Main and Overlay. Other settings are retained. Only **Save Pad** applies the
+cleanup to the stored pad.
 
 In the color picker, choose **Apply** or click outside to apply valid changes
 to the draft. Choose **Cancel** or press Escape to discard picker changes.
@@ -68,22 +73,27 @@ selected layer.
 ### Use a transparent button background
 
 On either Main or Overlay, open Button **Appearance**, then the **Background**
-picker and choose **Transparent**, or enter the literal `transparent`.
-Apply the picker and **Save Pad**. The canvas shows the pad background or the
-buttons underneath; Main stays dimmed while editing Overlay.
+picker. Under **Base Color**, adjust the **Background opacity** slider.
+The percentage beside it shows the selected value.
+Use 0% for fully transparent, 100% for opaque, or an intermediate
+value for a translucent tint. Choose **Apply**, then **Save Pad**.
+The canvas shows the pad background or buttons underneath; Main stays dimmed
+while editing Overlay. The color badge shows a checkerboard through the tint.
 
-Only the button background fill becomes transparent. Labels, icons, borders,
+Background color and opacity inherit together from **Pads > Pad and Button
+Defaults**, in its **Background** picker. The firmware default is 100% opacity.
+Editing either setting creates a complete background override.
+Use **Reset to default** beside Background to inherit both again.
+Patterns retain their separate settings when you reset the background.
+**Apply** accepts color and opacity together; **Cancel** discards both.
+
+Only the button background color fill changes opacity. Labels, icons, borders,
 shadows, patterns, images, and widget fills keep their own appearance. Other
-color fields still require a color or binding. Leaving Background unset keeps
-the normal opaque default. A Background binding can return `transparent` or a
-hex color, for example:
-
-```text
-[expr:[mqtt:sensor;value]>0?"#4CAF50":"transparent"]
-```
-
-Invalid or unresolved results use the opaque default. The canvas does not
-resolve Background bindings; it previews them with the default color.
+color fields still require a color or binding. Background also requires a normal
+color or binding; there is no separate Transparent color selection.
+Opacity is static, not bindable. Invalid or unresolved color bindings use the
+default color without changing opacity. The canvas does not resolve Background
+bindings; it previews them with the default color.
 
 Transparency does not change input behavior: enabled and disabled Overlay
 buttons still block Main underneath their full rectangles. Use **Hidden** in

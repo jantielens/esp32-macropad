@@ -24,7 +24,7 @@
     for (let slot = 1; slot <= 5; slot++) {
         fields.push(field(slot, 'label', 'label', true), field(slot, 'value', 'text', false),
             field(slot, 'fg_color', 'color', true), field(slot, 'bg_color', 'color', true),
-            field(slot, 'state', 'text', true));
+            field(slot, 'state', 'text', true), field(slot, 'weight', 'number', false));
     }
 
     function readIcon(slot) {
@@ -96,9 +96,14 @@
                     '<button type="button" class="btn btn-outline-secondary" id="' + id(slot, 'icon-remove') + '">Remove icon</button>' +
                     '<input type="hidden" id="' + id(slot, 'icon') + '"><small>Choose a label or an icon.</small></div>' +
                     text('value', 'Value', false, 'Use [event:value] in a dynamic action argument to insert this value. Required in Bound mode; otherwise optional. If set, use 1–63 ASCII letters, digits, _ or -. Nonempty values must be distinct in Local and Bound modes.') +
+                    '<details class="style-overrides" id="' + id(slot, 'overrides') + '"><summary>Style overrides (optional)</summary>' +
                     text('state', 'State', true, 'Optional: enabled, disabled, hidden, or a binding.') +
                     '<div class="widget-row option-selector-row">' + color('fg_color', 'Foreground') +
                     color('bg_color', 'Background') + '</div>' +
+                    '<div class="form-group"><label for="' + id(slot, 'weight') + '">Weight</label>' +
+                    '<input type="number" id="' + id(slot, 'weight') + '" min="1" max="1000" step="1" placeholder="Auto" aria-describedby="' + id(slot, 'weight') + '-help">' +
+                    '<small id="' + id(slot, 'weight') + '-help">Relative width, 1-1000. Blank defaults to 1 for labels and icons. Set a weight on an empty option to reserve space; clear it to remove the spacer.</small></div>' +
+                    '</details>' +
                     '</div></details>';
             }).join('');
             document.getElementById(prefix + 'mode').addEventListener('change', syncMode);
@@ -169,6 +174,9 @@
                 const icon = readIcon(slot);
                 const label = button[key(slot, 'label')] || '';
                 const value = button[key(slot, 'value')] || '';
+                const weight = button[key(slot, 'weight')];
+                if (weight !== undefined && (!Number.isInteger(weight) || weight < 1 || weight > 1000))
+                    fail(slot, 'weight', 'Weight must be an integer from 1 to 1000.');
                 if (icon) button[key(slot, 'icon')] = icon;
                 if (value && (!(label || icon) || !/^[A-Za-z0-9_-]{1,63}$/.test(value)))
                     fail(slot, 'value', 'A value requires a label or icon and must use 1–63 ASCII letters, digits, _ or -.');

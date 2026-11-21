@@ -51,6 +51,10 @@ static const BindingSchemeDoc kFreeDoc = {
     "Test", "Free-form test scheme.", kFreeParams, 1, nullptr, 0,
     kFreeExamples, 1, nullptr, false, nullptr, 0, nullptr, nullptr,
 };
+static const BindingDefinitionConstraints kFreeDefinitions = {
+    16, 31, 191, "^[A-Za-z][A-Za-z0-9_]*$", "same_pad", true, 2, 64, false, 5,
+};
+static const BindingAuthoringSpec kFreeAuthoring = {nullptr, 0, &kFreeDefinitions};
 static uint8_t patterned_key_count() { return 2; }
 static const char* patterned_key_at(uint8_t index) {
     static char key[24];
@@ -61,7 +65,9 @@ static const BindingAuthoringKey kPatternedKeys[] = {
     binding_authoring_integer("sensor_#", "ms", "125"),
     binding_authoring_integer("sensor_2", "s", "2"),
 };
-static const BindingAuthoringSpec kPatternedAuthoring = {BINDING_DOC_LIST(kPatternedKeys)};
+static const BindingAuthoringSpec kPatternedAuthoring = {
+    BINDING_DOC_LIST(kPatternedKeys), &kFreeDefinitions,
+};
 
 static BindingResolverStatus unavailable_resolve(const char* params, char*, size_t) {
     return (std::strcmp(params, "one") == 0 || std::strcmp(params, "two") == 0)
@@ -97,7 +103,8 @@ int main() {
         &kFiniteAuthoring,
     };
     const BindingSchemeSpec free_form = {
-        1, 1, 1, -1, BINDING_VALIDATION_STRUCTURAL_ONLY, true, nullptr, nullptr, &kFreeDoc
+        1, 1, 1, -1, BINDING_VALIDATION_STRUCTURAL_ONLY, true, nullptr, nullptr, &kFreeDoc,
+        &kFreeAuthoring,
     };
 
     expect(binding_template_register("finite", resolve, nullptr, finite), "finite scheme registered");
@@ -138,8 +145,23 @@ int main() {
     expect(std::strcmp(free_json["name"], "free") == 0, "free-form name emitted");
     expect(free_json["free_form"], "free-form flag emitted");
     expect(!free_json["keys"].is<JsonArray>(), "free-form scheme omits finite keys");
-    expect(!free_json["authoring"].is<JsonObject>(),
-           "free-form schemes without authoring metadata remain manual-only");
+    JsonObject definitions = free_json["authoring"]["definitions"];
+    expect(definitions["max_count"].is<unsigned>() && definitions["max_count"] == 16 &&
+               definitions["name_max_bytes"].is<unsigned>() && definitions["name_max_bytes"] == 31 &&
+               definitions["template_max_bytes"].is<unsigned>() && definitions["template_max_bytes"] == 191,
+           "definition input limits are numeric and available without docs");
+    expect(definitions["composition_supported"].is<bool>() &&
+               definitions["composition_supported"].as<bool>() &&
+               definitions["max_chain_depth"] == 2 &&
+               definitions["max_evaluations_per_lookup"] == 64 &&
+               definitions["max_expression_depth"] == 5 &&
+               definitions["dependencies_validated_on_save"].is<bool>() &&
+               !definitions["dependencies_validated_on_save"].as<bool>() &&
+               std::strcmp(definitions["context"], "same_pad") == 0 &&
+               std::strcmp(definitions["name_pattern"], "^[A-Za-z][A-Za-z0-9_]*$") == 0,
+           "definition restrictions include runtime bounds and explicitly deferred dependency validation");
+    expect(!free_json["authoring"]["keys"].is<JsonArray>(),
+           "definition constraints do not invent catalog keys");
 
     JsonDocument docs_doc;
     JsonArray docs_schemes = docs_doc["schemes"].to<JsonArray>();
@@ -166,8 +188,12 @@ int main() {
     JsonArray free_params = docs_schemes[2]["params"].as<JsonArray>();
     expect(std::strcmp(free_params[0]["default"], "%H:%M") == 0,
            "binding parameter emits its authoring default");
-    expect(!docs_schemes[2]["authoring"].is<JsonObject>(),
-           "docs-enabled schema accepts schemes without optional authoring metadata");
+    std::string compact_definitions;
+    std::string documented_definitions;
+    serializeJson(definitions, compact_definitions);
+    serializeJson(docs_schemes[2]["authoring"]["definitions"], documented_definitions);
+    expect(compact_definitions == documented_definitions,
+           "documentation does not change definition constraints");
 
     JsonDocument filtered_doc;
     JsonArray filtered = filtered_doc["bindings"]["schemes"].to<JsonArray>();
@@ -209,6 +235,8 @@ int main() {
     JsonArray structural = pattern_schemes[5]["authoring"]["keys"];
     expect(structural.size() == 2 && std::strcmp(structural[0]["key"], "sensor_#") == 0,
            "structural schemes preserve declared authoring patterns");
+    expect(pattern_schemes[5]["authoring"]["definitions"].is<JsonObject>(),
+           "catalog keys and definition constraints coexist in documented schemas");
 
     std::printf("=== Results: %d failure(s) ===\n", g_failures);
     return g_failures == 0 ? 0 : 1;

@@ -200,6 +200,10 @@ void PadScreen::buildTiles() {
 
     const PadConfig* cfg = pad_config_acquire(pageIndex);
     if (!cfg) {
+#if HAS_IMAGE_LIBRARY
+        backgroundPath[0] = '\0';
+        pad_background_release();
+#endif
         LOGE(TAG, "Pad %u config unavailable", pageIndex);
         configError = lv_label_create(container);
         lv_label_set_text(configError, "Pad configuration unavailable");
@@ -215,6 +219,10 @@ void PadScreen::buildTiles() {
 
     // Cache page-level settings
     strlcpy(wakeScreen, cfg->wake_screen, sizeof(wakeScreen));
+#if HAS_IMAGE_LIBRARY
+    strlcpy(backgroundPath, cfg->bg_image_path, sizeof(backgroundPath));
+    pad_background_update(screen, backgroundPath, displayMgr->getActiveWidth(), displayMgr->getActiveHeight());
+#endif
     strlcpy(pageBgTemplate, cfg->bg_color, sizeof(pageBgTemplate));
     { uint32_t bg = widget_default_rgb(DEFAULT_PAD_BG_COLOR); parse_hex_color(cfg->bg_color, &bg); pageBgDefault = bg; }
     if (screen) lv_obj_set_style_bg_color(screen, rgb_to_lv(pageBgDefault), 0);
@@ -332,7 +340,7 @@ void PadScreen::buildTiles() {
         uint32_t fg_def = widget_default_rgb(DEFAULT_BUTTON_FG_COLOR); parse_hex_color(bcfg.fg_color, &fg_def);
         uint32_t border_def = widget_default_rgb(DEFAULT_BUTTON_BORDER_COLOR); parse_hex_color(bcfg.border_color, &border_def);
         lv_obj_set_style_bg_color(obj, rgb_to_lv(bg_def), 0);
-        lv_obj_set_style_bg_opa(obj, strcmp(bcfg.bg_color, "transparent") == 0 ? LV_OPA_TRANSP : LV_OPA_COVER, 0);
+        lv_obj_set_style_bg_opa(obj, (bcfg.bg_opacity * LV_OPA_COVER + 50) / 100, 0);
         lv_obj_set_style_border_color(obj, rgb_to_lv(border_def), 0);
         lv_coord_t bw_def = (lv_coord_t)strtol(bcfg.border_width, nullptr, 10);
         lv_obj_set_style_border_width(obj, bw_def, 0);
@@ -451,7 +459,7 @@ void PadScreen::buildTiles() {
                 for (int wb = 0; wb < MAX_WIDGET_BINDINGS; wb++) {
                     char expanded[CONFIG_LABEL_MAX_LEN];
                     if (pad_binding_expand(cfg, tile.widget_cfg.data_binding[wb],
-                                           expanded, sizeof(expanded))) {
+                                           expanded, sizeof(expanded)) == PadBindingExpandStatus::EXPANDED) {
                         strlcpy(tile.widget_cfg.data_binding[wb], expanded, CONFIG_LABEL_MAX_LEN);
                     }
                 }
@@ -527,7 +535,6 @@ void PadScreen::buildTiles() {
             strlcpy(cb.templ, templ, sizeof(cb.templ));
             cb.defaultColor = def;
             cb.lastApplied = def; // Already rendered with default
-            cb.lastTransparent = target == 0 && strcmp(templ, "transparent") == 0;
             cb.target = target;
             cb.active = true;
             cb.hasBindings = binding_template_has_bindings(templ);
@@ -751,7 +758,6 @@ void PadScreen::buildTiles() {
         strlcpy(cb.templ, pageBgTemplate, sizeof(cb.templ));
         cb.defaultColor = pageBgDefault;
         cb.lastApplied = pageBgDefault;
-        cb.lastTransparent = false;
         cb.target = 0; // bg
         cb.active = true;
         cb.hasBindings = true;

@@ -2291,7 +2291,7 @@
       "free_form": true,
       "category": "Logic",
       "summary": "Reuse a binding defined once in the pad's Bindings list.",
-      "note": "Pads only. Use it to shorten long tokens in fields with a smaller length limit.",
+      "note": "Requires the same pad's binding context; not available in shared device defaults or context-free hosts. Up to 16 definitions; names use an ASCII letter followed by ASCII letters, digits or underscores (max 31 bytes). Each saved value is limited to 191 UTF-8 bytes and may reference other names in the same effective pad, in any definition order. Runtime allows two named bindings per chain (including the starting name) and 64 named evaluations per lookup. Cycles stop at the first repeated active name. Up to five expression bindings and twelve arithmetic nesting levels are allowed, subject to the calling task's available stack; insufficient stack makes a binding unavailable. All schemes also share a ten-active-resolver and 256-evaluations-per-root safety guard. Dependencies are not checked on save: missing names, cycles and excessive depth/work become unavailable at runtime (--- or an explicit fallback). History supports raw, unformatted pad references whose fully expanded template fits 191 bytes; per-use pad formats/fallbacks remain runtime-only. Named bindings shorten references in smaller fields; they do not increase template, resolved-output or destination-field limits.",
       "params": [
         {
           "name": "name",
@@ -2317,7 +2317,21 @@
           "code": "[expr:[pad:power] > 3000 ? \"High\" : \"Low\"]",
           "desc": "Reuse a named value inside an expression."
         }
-      ]
+      ],
+      "authoring": {
+        "definitions": {
+          "max_count": 16,
+          "name_max_bytes": 31,
+          "template_max_bytes": 191,
+          "name_pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+          "context": "same_pad",
+          "composition_supported": true,
+          "max_chain_depth": 2,
+          "max_evaluations_per_lookup": 64,
+          "dependencies_validated_on_save": false,
+          "max_expression_depth": 5
+        }
+      }
     },
     {
       "name": "timer",

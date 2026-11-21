@@ -164,16 +164,23 @@
 #define TOUCH_INT -1
 
 // ============================================================================
-// Hardware Button (onboard BOOT)
+// Hardware Buttons
 // ============================================================================
-// BOOT is the strapping button on GPIO0 (active-low, internal pull-up).
-// Usable as a runtime action button — only matters at reset (holding it low
-// at power-up enters serial download mode).
+// BOOT/GPIO0 also drives LCD_R4_PIN (the highest red-data bit). Do not
+// reconfigure it as a runtime input: INPUT_PULLUP causes a red tint.
+// The rear 8-pin connector exposes GPIO40, GPIO2, and GPIO1. These are
+// active-low button inputs only when the optional relay module is disconnected.
 #define HAS_BUTTON true
-#define NUM_HW_BUTTONS 1
+#define NUM_HW_BUTTONS 3
+// Needed to prevent check_config_mode_button() from setting
+// pinMode(0, INPUT_PULLUP)
+#define HAS_CONFIG_MODE_BUTTON false
+
 #ifdef __cplusplus
 static constexpr HwButtonDef HW_BUTTON_DEFS[NUM_HW_BUTTONS] = {
-    { .pin = 0, .active_low = true, .label = "BOOT" },
+    { .pin = 40, .active_low = true, .label = "R1" },
+    { .pin = 2, .active_low = true, .label = "R2" },
+    { .pin = 1, .active_low = true, .label = "R3" },
 };
 #endif
 

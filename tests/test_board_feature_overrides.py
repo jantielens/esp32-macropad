@@ -20,6 +20,8 @@ for board, target in (("m5stack-stopwatch", "ESP32S3"), ("crowpanel-4.2-interact
                       ("waveshare-7.8-interactive", "ESP32S3"),
                       ("inkplate6flick-interactive", "ESP32"), ("reterminal-e1003-interactive", "ESP32S3")):
     expected = dict(fixture["firmware_defaults"])
+    # Opacity is a runtime default, covered by test_font_routes, not a board macro.
+    expected.pop("bg_opacity")
     if board != "m5stack-stopwatch":
         expected.update(fixture["epaper_firmware_defaults"])
     if board in ("reterminal-e1003-interactive", "waveshare-7.8-interactive"):

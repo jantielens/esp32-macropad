@@ -94,15 +94,18 @@ uint32_t pad_option_icon_render_key(JsonObjectConst pad, JsonObjectConst button,
     text(button["icon_position"] | "");
     if (button["reserve_label_slots"] | false) text("reserve_label_slots");
     for (unsigned index = 0; index < 5; ++index) {
-        char label[32], icon[32];
+        char label[32], icon[32], weight[32];
         if (index == 0) {
             snprintf(label, sizeof(label), "widget_option_label");
             snprintf(icon, sizeof(icon), "widget_option_icon");
+            snprintf(weight, sizeof(weight), "widget_option_weight");
         } else {
             snprintf(label, sizeof(label), "widget_option_label_%u", index + 1);
             snprintf(icon, sizeof(icon), "widget_option_icon_%u", index + 1);
+            snprintf(weight, sizeof(weight), "widget_option_weight_%u", index + 1);
         }
-        number((button[label] | "")[0] || button[icon].is<JsonObjectConst>() ? 1 : 0);
+        const int default_weight = (button[label] | "")[0] || button[icon].is<JsonObjectConst>() ? 1 : 0;
+        number(button[weight] | default_weight);
     }
     const int inset = button["widget_option_inset"] | 4;
     if (inset != 4) {
@@ -282,8 +285,12 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
              b[field.key].as<unsigned>() > field.max))
             return "sparkline style value must be a whole number within its allowed range";
     }
-    const char* bg_color = b["bg_color"] | "";
-    if (strcmp(bg_color, "transparent") != 0 && !color_ok(bg_color)) return "bad bg_color";
+    if (!color_ok(b["bg_color"] | "")) return "bad bg_color";
+    if (b.containsKey("bg_opacity") &&
+        (!b["bg_opacity"].is<uint8_t>() || b["bg_opacity"].as<uint8_t>() > 100))
+        return "bg_opacity must be a whole percentage from 0 to 100";
+    if (b.containsKey("bg_opacity") && !(b["bg_color"] | "")[0])
+        return "bg_opacity requires bg_color; omit both to inherit the device background";
     if (!color_ok(b["fg_color"] | "")) return "bad fg_color";
     if (!color_ok(b["border_color"] | "")) return "bad border_color";
     const char* fill_colors[] = {"bg_pattern_color", "widget_bar_pattern_color", "widget_bar_pattern_color_2",
@@ -508,6 +515,15 @@ const char* pad_validate_context(JsonObjectConst pad, JsonObjectConst template_p
 // Validate a complete pad JSON (grid + buttons + collisions). nullptr = ok.
 const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid,
                          const PadValidationGeometry* geometry, JsonObjectConst template_pad) {
+    if (!pad["bg_image_path"].isNull()) {
+        if (!pad["bg_image_path"].is<const char*>()) return "bg_image_path must be a string";
+        const char* path = pad["bg_image_path"];
+        if (strlen(path) >= CONFIG_BG_IMAGE_PATH_MAX_LEN) return "bg_image_path too long";
+#if HAS_IMAGE_LIBRARY
+        if (path[0] && !ImageLibraryCatalog::is_image_path(path))
+            return "pad bg_image_path must be a canonical image library path";
+#endif
+    }
     const char* shadow = pad["button_shadow"] | "";
     if (shadow[0] && strcmp(shadow, "enabled") != 0 && strcmp(shadow, "disabled") != 0)
         return "bad button_shadow";
@@ -563,12 +579,6 @@ const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid,
             if (strlen(kv.key().c_str()) >= PAD_BINDING_NAME_MAX_LEN) return "binding name too long (max 31 chars)";
             const char* val = kv.value().as<const char*>();
             if (val && strlen(val) >= CONFIG_LABEL_MAX_LEN) return "binding value too long (max 191 chars)";
-            // A pad binding's value may not itself contain a [pad:...] token: the
-            // engine refuses to resolve one pad binding through another (guards
-            // against recursion) and renders blank. Catch it here instead of
-            // letting it fail silently at render time. Inline the underlying
-            // binding (or reference the base pad binding directly from the field).
-            if (val && strstr(val, "[pad:")) return "pad binding value cannot reference another [pad:...] binding (renders blank); inline the underlying binding instead";
             const char* be = action_validate_binding_tokens(val);
             if (be) return be;
         }

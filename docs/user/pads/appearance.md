@@ -174,6 +174,28 @@ Button shadow can inherit/enable/disable; type and sizing are device-wide.
 Grid spacing, edge insets, and burn-in movement are device-wide layout settings.
 Do not use pad-local named bindings in a shared device background default.
 
+## Set a pad background image
+
+A pad background sits behind all its buttons. Upload a JPEG or PNG in
+**Display > Image Library**, then choose it under **Pad > Appearance >
+Background Image** in the Pad Editor and select **Save Pad**.
+Choose **None** and save to remove it.
+
+The editor recommends the current screen resolution. Prepare artwork at that
+size to reduce decode memory; other sizes are scaled proportionally and
+center-cropped to fill the screen. There are no fit or positioning settings.
+Opaque buttons hide the image; reduce
+[button background opacity](editing.md#use-a-transparent-button-background)
+where you want it visible.
+
+The background color remains visible while loading or if loading fails.
+Backgrounds are pad-local, do not follow the slideshow, and are not inherited
+from template pads. Only one decoded pad background is retained; consecutive
+pads selecting the same file reuse it. Different images reload on navigation.
+Pad exports preserve the file reference, not the image itself. When moving a
+pad to another device, copy its image to the same Image Library path.
+See [local image uploads and limits](../media/images.md#upload-a-local-background).
+
 ## Add a pattern
 
 Supported background/bar pickers offer None, Diagonal stripes, Reverse diagonal
@@ -183,8 +205,8 @@ Dots use stroke as diameter; Checkerboard uses spacing and ignores stroke.
 Geometry is static while supported colors can be live-bound.
 
 Images normally cover these fills, including letterbox bands; do not assume PNG
-transparency reveals a pattern. Remote images with a `transparent` button
-background leave letterbox bands undrawn, revealing the content underneath.
+transparency reveals a pattern. Remote images with button background opacity
+set to 0% leave letterbox bands undrawn, revealing the content underneath.
 See [remote images](../media/images.md#fetch-a-snapshot-or-stream).
 Gauge fills are unpatterned.
 Track outlines and bar corner radius belong to their widget's Content controls.

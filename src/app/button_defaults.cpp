@@ -27,7 +27,7 @@ static const ButtonDefaults g_empty_defaults = {
      DEFAULT_BUTTON_SHADOW_COLOR, DEFAULT_BUTTON_SHADOW_DARKEN_PCT,
      DEFAULT_BUTTON_SHADOW_OFFSET_X_PX, DEFAULT_BUTTON_SHADOW_OFFSET_Y_PX, DEFAULT_BUTTON_SHADOW_DROP_BLUR_PX},
     {DEFAULT_BUTTON_SPACING_PX, DEFAULT_PAD_INSET_TOP_PX, DEFAULT_PAD_INSET_RIGHT_PX,
-        DEFAULT_PAD_INSET_BOTTOM_PX, DEFAULT_PAD_INSET_LEFT_PX, DEFAULT_PIXEL_SHIFT_DISTANCE}, "@builtin", 0
+        DEFAULT_PAD_INSET_BOTTOM_PX, DEFAULT_PAD_INSET_LEFT_PX, DEFAULT_PIXEL_SHIFT_DISTANCE}, "@builtin", 0, 100
 };
 
 static bool ensure_defaults() {
@@ -108,6 +108,7 @@ static void parse_defaults(JsonDocument& doc, ButtonDefaults* d) {
     if (doc["base_text_size"].is<uint16_t>()) d->base_text_size = doc["base_text_size"].as<uint16_t>();
 
     parse_bindable(doc["bg_color"], d->bg_color, CONFIG_COLOR_MAX_LEN, "");
+    d->bg_opacity = doc["bg_opacity"] | g_empty_defaults.bg_opacity;
     parse_bindable(doc["default_pad_bg_color"], d->default_pad_bg_color,
                    CONFIG_COLOR_MAX_LEN, "");
     parse_bindable(doc["fg_color"], d->fg_color, CONFIG_COLOR_MAX_LEN, "");
@@ -176,6 +177,16 @@ uint8_t button_defaults_get_pixel_shift_distance() {
 }
 
 const char* button_defaults_validate(JsonObjectConst config) {
+    if (config.containsKey("bg_opacity") &&
+        (!config["bg_opacity"].is<uint8_t>() || config["bg_opacity"].as<uint8_t>() > 100))
+        return "bg_opacity must be a whole percentage from 0 to 100";
+    if (config.containsKey("bg_color")) {
+        const char* color = config["bg_color"] | "";
+        uint32_t rgb;
+        if (!config["bg_color"].is<const char*>() || strlen(color) >= CONFIG_COLOR_MAX_LEN ||
+            (color[0] && !parse_hex_color(color, &rgb) && !strchr(color, '[')))
+            return "bg_color must be hex or a binding";
+    }
     if (config.containsKey("icon_badge_padding") &&
         (!config["icon_badge_padding"].is<uint8_t>() ||
          config["icon_badge_padding"].as<uint8_t>() > MAX_ICON_BADGE_PADDING))

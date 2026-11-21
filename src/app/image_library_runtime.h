@@ -13,5 +13,6 @@ bool image_library_runtime_previous(char* out, size_t out_len);
 bool image_library_runtime_reload();
 void image_library_runtime_tick(uint32_t now_ms);
 uint32_t image_library_runtime_generation();
+uint32_t image_library_runtime_content_generation();
 
 #endif // HAS_IMAGE_LIBRARY

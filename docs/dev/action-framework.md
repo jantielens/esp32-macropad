@@ -21,10 +21,17 @@ Actions persist a stable operation ID and typed arguments, for example
 `{"op":"screen.open","args":{"target":{"$template":"[item:id]"}}}`.
 Fixed arguments are native JSON values; only explicit `$template` arguments
 are evaluated. One [firmware descriptor](../../src/app/action_registry.h)
-defines argument types, limits, and execution policy. The
+defines argument types, limits, examples, optional semantic descriptions, and
+execution policy. The
 [catalog projection](../../src/app/action_catalog.cpp) exposes those
 descriptors to the [portal editor](../../src/app/web/portal_action_editor.js)
 and MCP discovery. Operation handlers stay with their subsystem owners.
+
+The `ha.service.call` service argument uses a bare name such as
+`media_play_pause`, not `media_player.media_play_pause`; its domain comes from
+`entity_id` (for example, `media_player.living_room`). The owning action module
+supplies these examples and descriptions to the shared catalog and retains
+runtime validation of the same syntax.
 
 The [parser](../../src/app/action_parse.cpp) and
 [validator](../../src/app/action_validate.cpp) check the saved contract.

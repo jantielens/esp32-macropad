@@ -91,6 +91,8 @@ function padLoadButtonDefaults(defs) {
         var el = document.getElementById(id);
         if (el) padInitBindableColor(el);
     });
+    var opacity = document.getElementById('pad-def-bg-opacity');
+    if (opacity) opacity.value = defs.bg_opacity ?? '';
     padSetBindableColor('pad-def-pad-bg-color', defs.default_pad_bg_color || '', PAD_FIRMWARE_DEFAULTS.default_pad_bg_color);
     padSetBindableColor('pad-def-bg-color', defs.bg_color || '', PAD_FIRMWARE_DEFAULTS.bg_color);
     padSetBindableColor('pad-def-fg-color', defs.fg_color || '', PAD_FIRMWARE_DEFAULTS.fg_color);
@@ -142,6 +144,11 @@ function padCollectButtonDefaults() {
     var bdc = padGetBindableColor('pad-def-border-color');
     if (pbc) d.default_pad_bg_color = pbc;
     if (bgc) d.bg_color = bgc;
+    var opacityInput = document.getElementById('pad-def-bg-opacity');
+    if (opacityInput) {
+        var opacity = padOpacityCheck(opacityInput.value);
+        if (opacity.error) throw new Error(opacity.error);
+    }
     if (fgc) d.fg_color = fgc;
     var iconColor = padGetBindableColor('pad-def-icon-color');
     if (iconColor) d.icon_color = iconColor;
@@ -190,6 +197,10 @@ function padCollectButtonDefaults() {
             delete d[field];
         }
     });
+    if (opacityInput && bgc && (opacity.value !== null || d.bg_color)) {
+        d.bg_color = bgc;
+        d.bg_opacity = opacity.value === null ? 100 : opacity.value;
+    }
     return d;
 }
 
@@ -329,6 +340,7 @@ function padResetAppearance(inputId, defaultKey) {
     var eff = padGetEffectiveDefault(defaultKey);
     var el = document.getElementById(inputId);
     if (!el) return;
+    if (defaultKey === 'bg_color') document.getElementById('pad-edit-bg-opacity').value = '';
     // Color fields use the bindable-color component
     if (el.classList.contains('bc-input')) {
         padSetBindableColor(inputId, eff);
@@ -358,7 +370,8 @@ function padUpdateResetHints() {
         if (!el || !resetEl) return;
         var val = el.value.trim().toLowerCase();
         var eff = (padGetEffectiveDefault(f.key) || '').toLowerCase();
-        resetEl.style.display = (val && val !== eff) ? 'inline' : 'none';
+        var backgroundOverride = f.key === 'bg_color' && document.getElementById('pad-edit-bg-opacity').value !== '';
+        resetEl.style.display = (backgroundOverride || (val && val !== eff)) ? 'inline' : 'none';
     });
 }
 
@@ -425,10 +438,7 @@ function padRenderBindings() {
     });
 }
 
-// Resolve one pad-binding value against live data and show it inline below the
-// row (pad binding values are standalone — the one-level rule forbids [pad:]
-// inside them — so each resolves independently). Reuses the shared preview
-// helpers (padPvIsBinding / padPvHex / padPreviewEsc).
+// Preview a definition using the saved effective pad context for any aliases.
 function padBindingPreviewUpdate(chip, valueInput, retriesLeft) {
     if (!chip || !valueInput) return;
     var val = valueInput.value.trim();
@@ -440,7 +450,7 @@ function padBindingPreviewUpdate(chip, valueInput, retriesLeft) {
     chip.innerHTML = '<span class="pad-pv-arrow">\u2192</span><span class="pad-pv-text pad-pv-muted">\u2026</span>';
     fetch('/api/pad/resolve', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bindings: [val] })
+        body: JSON.stringify({ screen: 'pad_' + padState.page, bindings: [val] })
     }).then(function(r) { return r.ok ? r.json() : null; })
       .then(function(j) {
           var v = (j && j.resolved && j.resolved[0]) ? j.resolved[0].value : '---';
@@ -452,10 +462,8 @@ function padBindingPreviewUpdate(chip, valueInput, retriesLeft) {
           inner += '<span class="pad-pv-text' + muted + '">' + padPreviewEsc(shown) + '</span>';
           chip.innerHTML = inner;
           chip.title = shown;
-          // A freshly typed [mqtt:...] topic gets subscribed on this resolve but
-          // its message may arrive just after — retry so it fills in. A
-          // not-yet-delivered topic resolves to EMPTY (not '---'), so retry on
-          // either.
+          // Newly discovered MQTT topics or HA entities may need a network update.
+          // Retry both empty and unavailable values.
           if ((typeof padPvUnresolved === 'function' ? padPvUnresolved(v) : shown.indexOf('---') !== -1) && rl > 0)
               setTimeout(function() { padBindingPreviewUpdate(chip, valueInput, rl - 1); }, 1000);
       })

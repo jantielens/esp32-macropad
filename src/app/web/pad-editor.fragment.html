@@ -85,6 +85,17 @@
                     </div>
                 </div>
             </div>
+            <div class="form-group" id="pad-background-image-group" style="margin:8px 0 0; display:none;">
+                <label for="pad-background-image" style="font-weight:600; font-size:13px; display:block; margin-bottom:4px;">Background Image</label>
+                <div style="display:flex; gap:8px;">
+                    <select id="pad-background-image" class="form-select form-select-sm" style="flex:1;"><option value="">None</option></select>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="pad-background-image-refresh" title="Refresh image library" aria-label="Refresh image library">
+                        <span class="material-symbols-outlined">refresh</span>
+                    </button>
+                </div>
+                <small class="form-text" id="pad-background-image-hint"></small>
+                <small class="form-text">Images are centered and cropped to fill the screen. Upload files in <a href="#image-library">Image Library</a>.</small>
+            </div>
             <div class="form-group" style="margin:8px 0 0;">
                 <label for="pad-button-shadow" style="font-weight:600; font-size:13px; display:block; margin-bottom:4px;">Button Shadow</label>
                 <select id="pad-button-shadow" class="form-select form-select-sm">
@@ -455,7 +466,8 @@
                                 <label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Background <span class="fx-hint" onclick="showBindingHelp()">fx</span> <span class="reset-hint material-symbols-outlined" id="pad-edit-bg-color-reset" onclick="padResetAppearance('pad-edit-bg-color','bg_color')" title="Reset to default">restart_alt</span></label>
                                 <div class="bindable-color">
                                     <div class="bc-swatch"></div>
-                                    <input type="text" id="pad-edit-bg-color" class="bc-input" data-allow-transparent="true" data-fill-pattern="bg_pattern" data-fill-color="bg_pattern_color" maxlength="191" spellcheck="false" placeholder="#hex, transparent or [binding]">
+                                    <input type="text" id="pad-edit-bg-color" class="bc-input" data-opacity-input="pad-edit-bg-opacity" data-fill-pattern="bg_pattern" data-fill-color="bg_pattern_color" maxlength="191" spellcheck="false" placeholder="#hex or [binding]">
+                                    <input type="hidden" id="pad-edit-bg-opacity">
                                 </div>
                             </div>
                             <div id="pad-edit-fg-color-wrap" style="flex:1;">
@@ -466,7 +478,7 @@
                                 </div>
                             </div>
                         </div>
-                        <small>Enter a <code>#hex</code> color or a binding like <code>[expr:…]</code> for dynamic colors. Background also accepts <code>transparent</code>.</small>
+                        <small>Enter a <code>#hex</code> color or a binding like <code>[expr:…]</code> for dynamic colors. Use background opacity for transparency.</small>
                         <div class="form-group" style="margin-top:12px;">
                             <label for="pad-edit-button-shadow">Button Shadow</label>
                             <select id="pad-edit-button-shadow" class="form-select form-select-sm">
@@ -544,6 +556,18 @@
             </div>
         </div>
     </div>
+
+    <dialog id="pad-paste-dialog" class="pad-workspace-discard pad-paste-dialog" aria-labelledby="pad-paste-title">
+        <h3 id="pad-paste-title">Paste button</h3>
+        <p>Change sources, text, or colors below, or leave them unchanged. Other settings, including actions, are copied unchanged.</p>
+        <p id="pad-paste-empty" hidden>No editable sources, text, or colors found. Paste the button unchanged.</p>
+        <div id="pad-paste-fields"></div>
+        <p id="pad-paste-error" role="alert"></p>
+        <div class="d-flex gap-2">
+            <button type="button" id="pad-paste-cancel" class="btn btn-secondary">Cancel</button>
+            <button type="button" id="pad-paste-confirm" class="btn btn-primary">Paste</button>
+        </div>
+    </dialog>
 
     <dialog id="pad-workspace-discard" class="pad-workspace-discard">
         <h3>Unsaved pad edits</h3>

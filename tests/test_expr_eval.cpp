@@ -15,6 +15,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
 
 static int g_pass = 0;
 static int g_fail = 0;
@@ -215,6 +216,35 @@ static void test_nesting_limit() {
     check_err(expression, "ERR:depth", "parenthesis nesting over limit");
 }
 
+static unsigned stack_checks_left = 0;
+
+static bool check_test_stack(size_t) {
+    if (!stack_checks_left) return false;
+    --stack_checks_left;
+    return true;
+}
+
+static void test_stack_limits() {
+    char out[128];
+    for (const char* expression : {"1", "(1)", "--1", "duration(1,\"s\")"}) {
+        stack_checks_left = !strcmp(expression, "1") ? 0 : 1;
+        const bool ok = expr_eval_bounded_with_datetime(
+            expression, out, sizeof(out), nullptr, true, check_test_stack);
+        if (ok || strcmp(out, "ERR:stack")) {
+            printf("  FAIL [stack entry/recursion guard]: %s -> %s\n", expression, out);
+            ++g_fail;
+        } else ++g_pass;
+    }
+    stack_checks_left = 3;
+    if (expr_eval_bounded_with_datetime("duration(1,\"s\")", out, sizeof(out),
+                                        nullptr, true, check_test_stack) ||
+        strcmp(out, "ERR:stack")) {
+        printf("  FAIL [stack guard before date/duration formatting]\n");
+        ++g_fail;
+    } else ++g_pass;
+    check_ok("(1)+2", "3", "stack rejection does not affect the next evaluation");
+}
+
 static void test_errors() {
     printf("--- Errors ---\n");
     check_err("",                "ERR:",    "empty");
@@ -362,6 +392,7 @@ int main() {
     test_edge_cases();
     test_issue_89_regressions();
     test_nesting_limit();
+    test_stack_limits();
     test_errors();
     test_threshold_basic();
     test_threshold_variable_arity();

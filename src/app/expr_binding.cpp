@@ -17,6 +17,21 @@
 
 #define TAG "ExprBind"
 
+static thread_local unsigned s_expression_depth = 0;
+static thread_local unsigned s_collection_depth = 0;
+
+class ExpressionDepthGuard {
+public:
+    explicit ExpressionDepthGuard(unsigned& depth) : depth_(depth), entered_(depth < EXPR_BINDING_MAX_DEPTH) {
+        if (entered_) ++depth_;
+    }
+    ~ExpressionDepthGuard() { if (entered_) --depth_; }
+    explicit operator bool() const { return entered_; }
+private:
+    unsigned& depth_;
+    bool entered_;
+};
+
 static bool format_datetime(double value, const char* format, const char* timezone,
                             char* out, size_t out_len) {
     if (!std::isfinite(value) || std::trunc(value) != value ||
@@ -183,6 +198,11 @@ static bool resolve_and_quote(const char* expr, char* out, size_t out_len) {
 // ============================================================================
 
 static BindingResolverStatus expr_binding_resolve(const char* params, char* out, size_t out_len) {
+    ExpressionDepthGuard guard(s_expression_depth);
+    if (!guard) {
+        snprintf(out, out_len, "ERR:expr_depth");
+        return BINDING_RESOLVER_UNAVAILABLE;
+    }
     if (!params || !params[0]) {
         snprintf(out, out_len, "ERR:empty expr");
         return BINDING_RESOLVER_UNAVAILABLE;
@@ -204,9 +224,10 @@ static BindingResolverStatus expr_binding_resolve(const char* params, char* out,
 
     // Step 2: Evaluate the expression
     char eval_result[EXPR_STR_MAX];
-    const bool evaluated = binding_template_checked_resolution_active()
-        ? expr_eval_checked_with_datetime(resolved, eval_result, sizeof(eval_result), format_datetime)
-        : expr_eval_with_datetime(resolved, eval_result, sizeof(eval_result), format_datetime);
+    const bool evaluated = expr_eval_bounded_with_datetime(
+        resolved, eval_result, sizeof(eval_result), format_datetime,
+        binding_template_checked_resolution_active(),
+        binding_template_has_stack_headroom);
     if (!evaluated) {
         snprintf(out, out_len, "%s", eval_result);
         return BINDING_RESOLVER_UNAVAILABLE;
@@ -225,16 +246,25 @@ static BindingResolverStatus expr_binding_resolve(const char* params, char* out,
 // Topic collector — forward inner binding tokens to collect_topics
 // ============================================================================
 
-static void expr_binding_collect(const char* params, void* user_data) {
-    if (!params) return;
+void expr_binding_visit_dependencies(const char* params,
+                                      void (*visitor)(const char*, void*), void* context) {
+    if (!params || !visitor) return;
+    ExpressionDepthGuard guard(s_collection_depth);
+    if (!guard) {
+        LOGW(TAG, "Dependency collection stopped at expression nesting limit");
+        return;
+    }
 
     // Strip format suffix (copy to avoid modifying original)
     char buf[BINDING_TEMPLATE_MAX_LEN];
     snprintf(buf, sizeof(buf), "%s", params);
     split_format(buf); // modifies buf in-place, we don't need the format here
 
-    // Forward to binding_template_collect_topics — it will find inner [mqtt:...] etc.
-    binding_template_collect_topics(buf, user_data);
+    visitor(buf, context);
+}
+
+static void expr_binding_collect(const char* params, void* user_data) {
+    expr_binding_visit_dependencies(params, binding_template_collect_topics, user_data);
 }
 
 // ============================================================================

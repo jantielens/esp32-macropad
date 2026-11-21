@@ -1,7 +1,8 @@
 // portal_pad_io.js - Pad clipboard, import/export, and device config I/O
 // Part of the ESP32 Macropad configuration portal.
 
-const PAD_ACTION_RESET_WARNING = 'This pad uses an older action format. Actions were removed from this draft; other settings are retained. Save Pad to apply, or leave without saving to keep the original.';
+const PAD_ACTION_RESET_WARNING = 'This pad uses an older action format. Actions were removed from this draft. Save Pad to apply, or leave without saving to keep the original.';
+const PAD_BACKGROUND_RESET_WARNING = 'Unsupported button backgrounds were removed from this draft. Their color and opacity now inherit the device defaults. Save Pad to apply, or leave without saving to keep the original.';
 
 function padStripPosition(btn) {
     const copy = padCloneJson(btn);
@@ -48,12 +49,16 @@ function padDialogCopyBtn() {
 
 function padDialogPasteBtn() {
     if (!padState.btnClipboard) return;
+    padPasteDialogOpen();
+}
+
+function padDialogPasteButton(source) {
     const col = padState.editCol;
     const row = padState.editRow;
     const existing = padFindButton(col, row);
     if (!existing && padState.mainButtons.length + padState.overlayButtons.length >= padMaxButtons()) {
         showMessage('Combined Main and Overlay button limit reached (' + padMaxButtons() + ')', 'error');
-        return;
+        return false;
     }
     if (typeof padWorkspaceClearButton === 'function') padWorkspaceClearButton(col, row);
 
@@ -61,7 +66,7 @@ function padDialogPasteBtn() {
     padState.buttons = padState.buttons.filter(b => !(b.col === col && b.row === row));
 
     // Paste clipboard with new position — best-effort span fitting
-    const btn = Object.assign(padCloneJson(padState.btnClipboard), { col: col, row: row });
+    const btn = Object.assign(padCloneJson(source), { col: col, row: row });
     const srcCs = btn.col_span || 1;
     const srcRs = btn.row_span || 1;
     if (srcCs > 1 || srcRs > 1) {
@@ -77,6 +82,7 @@ function padDialogPasteBtn() {
 
     // Reopen dialog to show pasted content
     padDialogOpen(col, row);
+    return true;
 }
 
 // --- Fill pad with clipboard ---
@@ -134,6 +140,7 @@ function padCopyPad() {
         name: document.getElementById('pad-name').value.trim(),
         wake_screen: document.getElementById('pad-wake-screen').value,
         bg_color: padGetBindableColor('pad-edit-page-bg-color') || padGetEffectiveDefault('default_pad_bg_color'),
+        bg_image_path: padState.backgroundImagePath,
         buttons: padCloneJson(padState.mainButtons),
         overlay_buttons: padCloneJson(padState.overlayButtons),
         bindings: padState.bindings ? padState.bindings.map(b => Object.assign({}, b)) : [],
@@ -159,6 +166,7 @@ function padPastePad() {
     document.getElementById('pad-rows').value = padState.rows;
     document.getElementById('pad-name').value = padState.padClipboard.name || '';
     document.getElementById('pad-wake-screen').value = padState.padClipboard.wake_screen || '';
+    padLoadBackgroundImage(padState.padClipboard.bg_image_path);
     padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
     padSetBindableColor('pad-edit-page-bg-color', padState.padClipboard.bg_color, padGetEffectiveDefault('default_pad_bg_color'));
     document.getElementById('pad-page-bg-mode').value = padState.padClipboard.bg_color ? 'override' : 'inherit';
@@ -217,6 +225,24 @@ function padResetOlderActions(pad) {
         }
     }
     pad.action_format_version = PAD_ACTION_FORMAT_VERSION;
+    return removed;
+}
+
+function padResetUnsupportedBackgrounds(pad) {
+    let removed = false;
+    for (const button of (pad.buttons || []).concat(pad.overlay_buttons || [])) {
+        const color = padColorValue(button.bg_color);
+        const opacity = button.bg_opacity;
+        const validOpacity = opacity === undefined ||
+            (color && Number.isInteger(opacity) && opacity >= 0 && opacity <= 100);
+        // Leave bindings intact for runtime resolution.
+        const validColor = !color || color.includes('[') ||
+            (color === color.trimStart() && padColorNormalizeLiteral(color));
+        if (validColor && validOpacity) continue;
+        delete button.bg_color;
+        delete button.bg_opacity;
+        removed = true;
+    }
     return removed;
 }
 
@@ -312,6 +338,7 @@ async function padExportPad() {
     if (padName) payload.name = padName;
     const wakeScreen = document.getElementById('pad-wake-screen').value;
     if (wakeScreen) payload.wake_screen = wakeScreen;
+    if (padState.backgroundImagePath) payload.bg_image_path = padState.backgroundImagePath;
     const expBgC = padGetBindableColor('pad-edit-page-bg-color');
     if (document.getElementById('pad-page-bg-mode').value === 'override' && expBgC) {
         payload.bg_color = expBgC.startsWith('#') ? expBgC.slice(1) : expBgC;
@@ -367,6 +394,7 @@ async function padImportPad(evt) {
         }
         const actionsReset = padResetOlderActions(json);
         padCheckImportedActionFormat(json);
+        const backgroundsReset = padResetUnsupportedBackgrounds(json);
         const importedSources = padValidateImportedIconSources([json], json._icon_sources);
         if (json.buttons.length + (json.overlay_buttons || []).length > padMaxButtons())
             throw new Error('Combined Main and Overlay button limit exceeded (' + padMaxButtons() + ')');
@@ -396,6 +424,7 @@ async function padImportPad(evt) {
         document.getElementById('pad-rows').value = padState.rows;
         document.getElementById('pad-name').value = json.name || '';
         document.getElementById('pad-wake-screen').value = json.wake_screen || '';
+        padLoadBackgroundImage(json.bg_image_path);
         padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
         padSetBindableColor('pad-edit-page-bg-color', json.bg_color || padGetEffectiveDefault('default_pad_bg_color'));
         document.getElementById('pad-page-bg-mode').value = json.bg_color ? 'override' : 'inherit';
@@ -416,7 +445,9 @@ async function padImportPad(evt) {
         padRenderGrid();
         padState.loadError = null;
         padMarkDirty();
-        if (actionsReset) showMessage(PAD_ACTION_RESET_WARNING, 'info');
+        if (actionsReset || backgroundsReset) showMessage([
+            actionsReset && PAD_ACTION_RESET_WARNING, backgroundsReset && PAD_BACKGROUND_RESET_WARNING,
+        ].filter(Boolean).join(' '), 'info');
         else showMessage('Pad imported (unsaved) — click Save Pad to apply', 'success');
     } catch (err) {
         showMessage('Import failed: ' + err.message, 'error');
@@ -513,6 +544,7 @@ async function padDeletePage() {
         document.getElementById('pad-rows').value = padState.rows;
         document.getElementById('pad-name').value = '';
         document.getElementById('pad-wake-screen').value = '';
+        padLoadBackgroundImage('');
         padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
         padSetBindableColor('pad-edit-page-bg-color', padGetEffectiveDefault('default_pad_bg_color'));
         padState.bindings = [];

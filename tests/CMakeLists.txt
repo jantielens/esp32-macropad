@@ -734,11 +734,16 @@ add_host_legacy_test(test_deferred_dispatch_slot
 
 add_host_legacy_test(test_pad_resolve_request_lifetime
     SOURCES test_pad_resolve_request_lifetime.cpp
-        ${PROJECT_SOURCE_DIR}/src/app/main_loop_bridge.cpp
         ${PROJECT_SOURCE_DIR}/src/app/pad_resolve_request.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/pad_binding.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/expr_binding.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/expr_eval.cpp
         stubs.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/pad_resolve_overrides ${HOST_ARDUINOJSON_DIR}
     OPTIONS -Wno-deprecated-declarations
+    LIBRARIES m
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/pad_resolve_overrides/Arduino.h
         ${PROJECT_SOURCE_DIR}/tests/log_manager.h
         ${PROJECT_SOURCE_DIR}/tests/board_config.h
@@ -760,6 +765,7 @@ add_host_gtest(test_ha_live
     test_ha_live.cpp ${PROJECT_SOURCE_DIR}/src/app/ha_live_state.cpp
     ${PROJECT_SOURCE_DIR}/src/app/ha_lookup_data.cpp
     ${PROJECT_SOURCE_DIR}/src/app/ha_binding.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/pad_binding.cpp
     ${PROJECT_SOURCE_DIR}/src/app/expr_binding.cpp
     ${PROJECT_SOURCE_DIR}/src/app/expr_eval.cpp
     ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp
@@ -806,6 +812,7 @@ add_host_legacy_test(test_expr_binding
 
 add_host_legacy_test(test_binding_template
     SOURCES test_binding_template.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp stubs.cpp
+    DEFINITIONS ESP_PLATFORM=1
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
     LIBRARIES m
 )
@@ -1240,11 +1247,15 @@ add_host_legacy_test(test_action_sizes
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
 )
 add_host_legacy_test(test_pad_confirmation
-    SOURCES test_pad_confirmation.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_validate.cpp ${PROJECT_SOURCE_DIR}/src/app/action_validate.cpp stubs.cpp
+    SOURCES test_pad_confirmation.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_validate.cpp ${PROJECT_SOURCE_DIR}/src/app/action_validate.cpp ${PROJECT_SOURCE_DIR}/src/app/image_library.cpp stubs.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
-    OPTIONS -Wno-deprecated-declarations
+    DEFINITIONS HAS_IMAGE_LIBRARY=1 HAS_MCP=1 TEST_HEAP_CAPS_ALLOCATOR=1
+        HAS_IMAGE_FETCH=1 HAS_NATIVE_EXTENSIONS=0 DISPLAY_WIDTH=480 DISPLAY_HEIGHT=320
+    OPTIONS -Wno-deprecated-declarations -Wno-unused-function -Wno-unused-variable
+        -ffunction-sections -fdata-sections
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
 )
+target_link_options(test_pad_confirmation PRIVATE -Wl,--gc-sections)
 add_host_legacy_test(test_camera_capture_action
     SOURCES test_camera_capture_action.cpp ${PROJECT_SOURCE_DIR}/src/app/action_catalog.cpp ${PROJECT_SOURCE_DIR}/src/app/action_continuation.cpp ${PROJECT_SOURCE_DIR}/src/app/action_registry.cpp ${PROJECT_SOURCE_DIR}/src/app/action_validate.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp stubs.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
@@ -1275,6 +1286,13 @@ target_compile_options(test_option_selector_config PRIVATE -Wno-deprecated-decla
 add_host_legacy_test(test_pad_overlay_input
     SOURCES test_pad_overlay_input.cpp
     INCLUDES ${HOST_LVGL_DIR}
+    LIBRARIES host_lvgl
+)
+add_host_legacy_test(test_pad_background
+    SOURCES test_pad_background.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_background.cpp
+    INCLUDES ${HOST_LVGL_DIR}
+    DEFINITIONS HAS_IMAGE_LIBRARY=1
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
     LIBRARIES host_lvgl
 )
 add_host_legacy_test(test_parse_hex_color SOURCES test_parse_hex_color.cpp PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)

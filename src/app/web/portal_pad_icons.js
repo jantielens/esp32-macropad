@@ -80,7 +80,7 @@ function padIconEditorSetDraft(icon) {
 }
 
 function padIconEditorColors() {
-    const background = padColorToHex(padGetBindableColor('pad-edit-bg-color'), padGetEffectiveDefault('bg_color'), true);
+    const background = padColorToHex(padGetBindableColor('pad-edit-bg-color'), padGetEffectiveDefault('bg_color'));
     const text = padColorToHex(padGetBindableColor('pad-edit-fg-color'), padGetEffectiveDefault('fg_color'));
     const foreground = padIconPreviewColor(padGetBindableColor('pad-edit-icon-color'), text);
     return { background: background || '#ffffff', foreground };
@@ -175,7 +175,7 @@ function padWidgetPreviewSymbol(preview) {
 
 // Shared semantic overview for grid buttons and the button builder.
 const PAD_CELL_PREVIEW_PROPERTIES = [
-    'label_top', 'label_center', 'label_bottom', 'bg_color', 'fg_color', 'icon_color', 'icon',
+    'label_top', 'label_center', 'label_bottom', 'bg_color', 'bg_opacity', 'fg_color', 'icon_color', 'icon',
     'bg_image_url', 'bg_image_path', 'widget_type',
     'widget_rocker_axis'
 ];
@@ -263,16 +263,16 @@ function padRenderCellContent(cell, btn, existingIcon) {
     const description = [btn.label_top, btn.label_center, btn.label_bottom, ...indicators].filter(Boolean).join('\n');
     if (description) cell.setAttribute('aria-description', description);
     else cell.removeAttribute('aria-description');
-    const background = padColorToHex(btn.bg_color, padGetEffectiveDefault('bg_color'), true);
-    const bg = background === 'transparent' ? background :
-        padColorNormalizeLiteral(background) || padGetEffectiveDefault('bg_color');
+    const background = padColorToHex(btn.bg_color, padGetEffectiveDefault('bg_color'));
+    const bg = padColorNormalizeLiteral(background) || padGetEffectiveDefault('bg_color');
+    const opacity = padButtonBgOpacity(btn);
     const fg = padColorToHex(btn.fg_color, padGetEffectiveDefault('fg_color'));
-    cell.style.background = bg;
+    cell.style.background = padColorWithOpacity(bg, opacity);
     cell.style.color = fg;
-    const luminance = padPreviewLuminance(bg === 'transparent' ? padGetEffectiveDefault('default_pad_bg_color') : bg);
+    const luminance = padPreviewLuminance(opacity === 0 ? padGetEffectiveDefault('default_pad_bg_color') : bg);
     cell.style.setProperty('--pad-resize-grip-color', luminance > 0.5 ? '#17212b' : '#ffffff');
-    cell.dataset.previewEdgeColor = bg;
-    cell.dataset.previewFillColor = bg;
+    cell.dataset.previewEdgeColor = opacity === 0 ? 'transparent' : bg;
+    cell.dataset.previewFillColor = opacity === 0 ? 'transparent' : bg;
     padUpdateCellBoundaryGuide(cell);
     cell.classList.remove('pad-cell-has-widget');
     if (widget) cell.classList.add('pad-cell-has-widget');
@@ -845,6 +845,14 @@ function padIconRenderKey(payload, button) {
     return (hash || 1).toString(16).padStart(8, '0');
 }
 
+function padOptionWeights(button) {
+    return Array.from({ length: 5 }, (_, index) => {
+        const suffix = index ? '_' + (index + 1) : '';
+        const hasContent = button['widget_option_label' + suffix] || button['widget_option_icon' + suffix];
+        return Number(button['widget_option_weight' + suffix] ?? (hasContent ? 1 : 0));
+    });
+}
+
 function padOptionIconRenderKey(payload, button, slot) {
     let hash = parseInt(padIconRenderKey(payload, button), 16);
     const values = [slot, button.widget_option_icon_size_pct ?? 0,
@@ -852,10 +860,7 @@ function padOptionIconRenderKey(payload, button, slot) {
         button.label_center ? 1 : 0, button.icon ? 1 : 0,
         button.widget_position ?? '', button.icon_position ?? ''];
     if (button.reserve_label_slots) values.push('reserve_label_slots');
-    for (let index = 1; index <= 5; index++) {
-        const suffix = index === 1 ? '' : '_' + index;
-        values.push(button['widget_option_label' + suffix] || button['widget_option_icon' + suffix] ? 1 : 0);
-    }
+    values.push(...padOptionWeights(button));
     if (Number(button.widget_option_inset ?? 4) !== 4)
         values.push('inset', button.widget_option_inset);
     if (Number(button.widget_option_height_pct ?? 100) !== 100)
@@ -1123,9 +1128,8 @@ async function padPreparePageSave(context) {
             let iconWidth = fullWidth;
             let iconHeight = fullHeight - (button.label_top ? labelHeight : 0) - (button.label_bottom ? labelHeight : 0);
             if (entry.slot) {
-                const count = padButtonIconUses(button).filter(use => use.slot).length +
-                    Array.from({ length: 5 }, (_, i) => button['widget_option_label' + (i ? '_' + (i + 1) : '')] ? 1 : 0)
-                        .reduce((a, b) => a + b, 0);
+                const weights = padOptionWeights(button);
+                const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
                 const contentPad = Math.min(50, Math.max(0, parseInt(
                     button.content_pad ?? layout.content_pad ?? padding, 10) || 0));
                 const border = Math.max(0, parseInt(button.border_width ?? layout.border_width ?? 1, 10) || 0);
@@ -1144,7 +1148,7 @@ async function padPreparePageSave(context) {
                     if (horizontal) iconWidth = widgetSize;
                     else iconHeight = widgetSize;
                 }
-                iconWidth = Math.ceil(iconWidth / Math.max(1, count));
+                iconWidth = Math.ceil(iconWidth * weights[entry.slot - 1] / totalWeight);
                 iconHeight = Math.max(1, Math.floor(iconHeight * Number(button.widget_option_height_pct ?? 100) / 100));
                 const inset = Number(button.widget_option_inset ?? 4);
                 iconWidth -= 2 * Math.min(inset, Math.floor(Math.max(0, iconWidth - 1) / 2));

@@ -117,8 +117,7 @@ static bool lookup_value(const char* key, const char* fmt,
         if (!instr[0]) return false;  // empty → binding returns fallback via pipe
         // Instruction text may contain inner bindings like [brew:stage_weight_target],
         // so resolve them before returning.
-        binding_template_resolve(instr, out, out_len);
-        return true;
+        return binding_template_resolve_status(instr, out, out_len) == BINDING_RESOLVER_RESOLVED;
     }
     if (strcmp(key, "next_label") == 0) {
         strlcpy(out, brew_get_next_label(), out_len);

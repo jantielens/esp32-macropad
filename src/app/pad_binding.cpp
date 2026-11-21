@@ -8,6 +8,7 @@
 #include "mqtt_sub_store.h"
 #endif
 #include "binding_value.h"
+#include "expr_binding.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -84,13 +85,49 @@ static const char* split_name_format(const char* params, size_t* name_len) {
     return nullptr;
 }
 
+struct PadBindingTraversal {
+    uint8_t depth = 0;
+    uint8_t remaining = 0;
+    bool limited = false;
+    const char* active[PAD_BINDING_MAX_CHAIN_DEPTH] = {};
+};
+
+class PadBindingGuard {
+public:
+    PadBindingGuard(PadBindingTraversal& traversal, const char* templ) : traversal_(traversal) {
+        if (!traversal_.depth) {
+            traversal_.remaining = PAD_BINDING_MAX_EVALUATIONS;
+            traversal_.limited = false;
+        }
+        entered_ = traversal_.depth < PAD_BINDING_MAX_CHAIN_DEPTH && traversal_.remaining;
+        for (uint8_t i = 0; entered_ && i < traversal_.depth; ++i)
+            entered_ = traversal_.active[i] != templ;
+        if (entered_) {
+            traversal_.active[traversal_.depth] = templ;
+            ++traversal_.depth;
+            --traversal_.remaining;
+        } else traversal_.limited = true;
+    }
+    ~PadBindingGuard() { if (entered_) --traversal_.depth; }
+    explicit operator bool() const { return entered_; }
+private:
+    PadBindingTraversal& traversal_;
+    bool entered_;
+};
+
+static thread_local PadBindingTraversal s_resolution;
+static thread_local PadBindingTraversal s_collection;
+static thread_local PadBindingTraversal s_value_kind;
+
 static BindingResolvedValueKind pad_binding_value_kind(const char* params) {
     if (!params || strchr(params, ';')) return BINDING_VALUE_KIND_UNKNOWN;
     const PadBinding* bindings = nullptr;
     uint8_t count = 0;
     pad_binding_effective(&bindings, &count);
     const char* templ = pad_binding_find_template(bindings, count, params, strlen(params));
-    if (!templ || strstr(templ, "[pad:")) return BINDING_VALUE_KIND_UNKNOWN;
+    if (!templ) return BINDING_VALUE_KIND_UNKNOWN;
+    PadBindingGuard guard(s_value_kind, templ);
+    if (!guard) return BINDING_VALUE_KIND_UNKNOWN;
     return binding_template_value_kind(templ);
 }
 
@@ -123,16 +160,18 @@ static BindingResolverStatus pad_binding_resolve(const char* params, char* out, 
         return BINDING_RESOLVER_UNAVAILABLE;
     }
 
-    // Guard against recursive [pad:] references in the underlying template
-    if (strstr(tmpl, "[pad:")) {
-        strlcpy(out, "ERR:recursive", out_len);  // debug only — engine overwrites with "---"
+    PadBindingGuard guard(s_resolution, tmpl);
+    if (!guard) {
+        strlcpy(out, "ERR:pad_limit", out_len);
         return BINDING_RESOLVER_UNAVAILABLE;
     }
 
     // Resolve the underlying binding template
     char resolved[BINDING_TEMPLATE_MAX_LEN];
-    const BindingResolverStatus status = binding_template_resolve_status(
-        tmpl, resolved, sizeof(resolved));
+    const BindingResolverStatus status = strstr(tmpl, "[pad:")
+        ? (binding_template_resolve_checked(tmpl, resolved, sizeof(resolved))
+            ? BINDING_RESOLVER_RESOLVED : BINDING_RESOLVER_UNAVAILABLE)
+        : binding_template_resolve_status(tmpl, resolved, sizeof(resolved));
     if (status != BINDING_RESOLVER_RESOLVED) return status;
 
     // Apply per-usage format if provided
@@ -149,11 +188,12 @@ static BindingResolverStatus pad_binding_resolve(const char* params, char* out, 
 // Topic collector — called by binding_template_collect_topics() for [pad:...]
 // ============================================================================
 
-static void pad_binding_collect(const char* params, void* user_data) {
+void pad_binding_visit_dependencies(const char* params,
+                                     void (*visitor)(const char*, void*), void* context) {
     const PadBinding* bindings = nullptr;
     uint8_t count = 0;
     pad_binding_effective(&bindings, &count);
-    if (!params || !params[0] || !bindings) return;
+    if (!params || !params[0] || !bindings || !visitor) return;
 
     size_t name_len = 0;
     split_name_format(params, &name_len);
@@ -161,56 +201,37 @@ static void pad_binding_collect(const char* params, void* user_data) {
     const char* tmpl = pad_binding_find_template(bindings, count, params, name_len);
     if (!tmpl || !tmpl[0]) return;
 
-    // Guard against recursive [pad:] in underlying template
-    if (strstr(tmpl, "[pad:")) return;
+    PadBindingGuard guard(s_collection, tmpl);
+    if (!guard) return;
 
-    // Delegate to binding_template_collect_topics to discover nested topics
-    binding_template_collect_topics(tmpl, user_data);
+    visitor(tmpl, context);
+    if (s_collection.depth == 1 && s_collection.limited)
+        LOGW(TAG, "Dependency collection stopped at pad binding cycle/nesting/work limit");
+}
+
+static void pad_binding_collect(const char* params, void* user_data) {
+    pad_binding_visit_dependencies(params, binding_template_collect_topics, user_data);
 }
 
 // ============================================================================
 // Expand utility — text substitution of [pad:name] to underlying templates
 // ============================================================================
 
-bool pad_binding_expand_bindings(const PadBinding* bindings, uint8_t count,
-                                 const char* templ, char* out, size_t out_len) {
-    if (!templ || !out || out_len == 0) {
-        if (out && out_len > 0) out[0] = '\0';
-        return false;
-    }
-    if (!bindings || count == 0) {
-        strlcpy(out, templ, out_len);
-        return false;
-    }
-
-    bool any_expanded = false;
-    size_t written = 0;
+static bool expand_bindings(const PadBinding* bindings, uint8_t count,
+                             const char* templ, char* out, size_t out_len,
+                             size_t& written, bool& any_expanded,
+                             PadBindingTraversal& traversal) {
     const char* p = templ;
-
-    while (*p && written < out_len - 1) {
-        // Look for [pad: token
+    while (*p) {
         const char* start = strstr(p, "[pad:");
-        if (!start) {
-            // No more [pad:] tokens — copy rest
-            size_t remain = strlen(p);
-            size_t space = out_len - 1 - written;
-            size_t copy = remain < space ? remain : space;
-            memcpy(out + written, p, copy);
-            written += copy;
-            break;
-        }
-
-        // Copy text before the token
-        size_t prefix = (size_t)(start - p);
-        if (prefix > 0) {
-            size_t space = out_len - 1 - written;
-            size_t copy = prefix < space ? prefix : space;
-            memcpy(out + written, p, copy);
-            written += copy;
-        }
+        const size_t prefix = start ? static_cast<size_t>(start - p) : strlen(p);
+        if (prefix >= out_len - written) return false;
+        memcpy(out + written, p, prefix);
+        written += prefix;
+        if (!start) break;
 
         // Find closing ']' with bracket depth tracking
-        const char* q = start + 5;  // past "[pad:"
+        const char* q = start + 5;
         int depth = 1;
         while (*q && depth > 0) {
             if (*q == '[') depth++;
@@ -218,67 +239,46 @@ bool pad_binding_expand_bindings(const PadBinding* bindings, uint8_t count,
             q++;
         }
 
-        if (depth != 0) {
-            // Unclosed bracket — copy as-is and move on
-            size_t tlen = (size_t)(q - start);
-            size_t space = out_len - 1 - written;
-            size_t copy = tlen < space ? tlen : space;
-            memcpy(out + written, start, copy);
-            written += copy;
-            p = q;
-            continue;
-        }
+        if (depth != 0) return false;
 
-        // Extract name (and optional format) between "pad:" and "]"
         const char* params_start = start + 5;
-        size_t params_len = (size_t)(q - 1 - params_start);
-
-        // Extract just the name portion (before ';')
-        size_t name_len = params_len;
-        const char* semi = (const char*)memchr(params_start, ';', params_len);
-        if (semi) name_len = (size_t)(semi - params_start);
-
-        // Look up binding
+        const size_t name_len = static_cast<size_t>(q - 1 - params_start);
+        // Formatting and fallback apply to the resolved alias, not its source.
+        if (memchr(params_start, ';', name_len) || memchr(params_start, '|', name_len))
+            return false;
         const char* binding_tmpl = pad_binding_find_template(bindings, count, params_start, name_len);
-        if (binding_tmpl && !strstr(binding_tmpl, "[pad:")) {
-            // If there's a format suffix, we can't simply substitute the template —
-            // the format applies to the resolved value, not the template text.
-            // For expand, we only substitute when there's NO format suffix,
-            // or keep the full [pad:name;fmt] token as-is for runtime resolution.
-            if (!semi) {
-                // No format — direct template substitution
-                size_t blen = strlen(binding_tmpl);
-                size_t space = out_len - 1 - written;
-                size_t copy = blen < space ? blen : space;
-                memcpy(out + written, binding_tmpl, copy);
-                written += copy;
-                any_expanded = true;
-            } else {
-                // Has format — keep as [pad:name;fmt] for runtime resolution
-                size_t tlen = (size_t)(q - start);
-                size_t space = out_len - 1 - written;
-                size_t copy = tlen < space ? tlen : space;
-                memcpy(out + written, start, copy);
-                written += copy;
-            }
-        } else {
-            // Unknown binding or recursive — copy token as-is
-            size_t tlen = (size_t)(q - start);
-            size_t space = out_len - 1 - written;
-            size_t copy = tlen < space ? tlen : space;
-            memcpy(out + written, start, copy);
-            written += copy;
-        }
-
+        if (!binding_tmpl) return false;
+        PadBindingGuard guard(traversal, binding_tmpl);
+        if (!guard || !expand_bindings(bindings, count, binding_tmpl, out, out_len,
+                                        written, any_expanded, traversal)) return false;
+        any_expanded = true;
         p = q;
     }
 
-    out[written] = '\0';
-    return any_expanded;
+    return true;
 }
 
-bool pad_binding_expand(const PadConfig* page, const char* templ,
-                        char* out, size_t out_len) {
+PadBindingExpandStatus pad_binding_expand_bindings(const PadBinding* bindings, uint8_t count,
+                                                   const char* templ, char* out, size_t out_len) {
+    if (!templ || !out || !out_len) {
+        if (out && out_len) out[0] = '\0';
+        LOGW(TAG, "Invalid pad binding expansion buffer");
+        return PadBindingExpandStatus::UNAVAILABLE;
+    }
+    PadBindingTraversal traversal;
+    size_t written = 0;
+    bool any_expanded = false;
+    if (!expand_bindings(bindings, count, templ, out, out_len, written, any_expanded, traversal)) {
+        strlcpy(out, templ, out_len);
+        LOGW(TAG, "Pad binding expansion unavailable (missing reference, cycle/nesting/work limit, format/fallback or capacity)");
+        return PadBindingExpandStatus::UNAVAILABLE;
+    }
+    out[written] = '\0';
+    return any_expanded ? PadBindingExpandStatus::EXPANDED : PadBindingExpandStatus::UNCHANGED;
+}
+
+PadBindingExpandStatus pad_binding_expand(const PadConfig* page, const char* templ,
+                                          char* out, size_t out_len) {
     if (!page) {
         return pad_binding_expand_bindings(nullptr, 0, templ, out, out_len);
     }
@@ -294,9 +294,7 @@ void pad_resolve(const char* const* inputs, size_t count,
                  const PadBinding* binds, uint8_t bind_count,
                  char* out, size_t stride) {
     if (!inputs || !out || stride == 0) return;
-    // Set the requested pad context (NULL clears -> [pad:] tokens resolve to the
-    // placeholder). Single-threaded (LVGL/main task) so no lock is needed.
-    pad_binding_set_bindings(binds, bind_count);
+    PadBindingScope scope(binds, bind_count);
     for (size_t i = 0; i < count; i++) {
         char* dst = out + i * stride;
         const char* in = inputs[i];
@@ -310,9 +308,6 @@ void pad_resolve(const char* const* inputs, size_t count,
 #endif
         binding_template_resolve(in, dst, stride);
     }
-    // Clear context: the live pad screen re-sets it every frame, so this avoids
-    // leaking a transient authoring/preview context into an unrelated render.
-    pad_binding_set_bindings(nullptr, 0);
 }
 
 // ============================================================================
@@ -322,6 +317,16 @@ void pad_resolve(const char* const* inputs, size_t count,
 static const BindingParamDoc kPadParams[] = {
     {"name", "Name from the pad's Bindings list."},
     {"format", "printf float format such as %.1f, or %s for text."},
+};
+
+static const BindingDefinitionConstraints kPadDefinitionConstraints = {
+    PAD_MAX_BINDINGS, PAD_BINDING_NAME_MAX_LEN - 1, CONFIG_LABEL_MAX_LEN - 1,
+    "^[A-Za-z][A-Za-z0-9_]*$", "same_pad", true,
+    PAD_BINDING_MAX_CHAIN_DEPTH, PAD_BINDING_MAX_EVALUATIONS, false, EXPR_BINDING_MAX_DEPTH,
+};
+
+static const BindingAuthoringSpec kPadAuthoring = {
+    nullptr, 0, &kPadDefinitionConstraints,
 };
 
 static const BindingExampleDoc kPadExamples[] = {
@@ -334,13 +339,22 @@ static const BindingSchemeDoc kPadDoc = {
     "Logic", "Reuse a binding defined once in the pad's Bindings list.",
     BINDING_DOC_LIST(kPadParams), BINDING_DOC_NONE, BINDING_DOC_LIST(kPadExamples),
     nullptr, false, BINDING_DOC_NONE,
-    "Pads only. Use it to shorten long tokens in fields with a smaller length limit.", nullptr,
+    "Requires the same pad's binding context; not available in shared device defaults or context-free hosts. "
+    "Up to 16 definitions; names use an ASCII letter followed by ASCII letters, digits or underscores (max 31 bytes). "
+    "Each saved value is limited to 191 UTF-8 bytes and may reference other names in the same effective pad, in any definition order. "
+    "Runtime allows two named bindings per chain (including the starting name) and 64 named evaluations per lookup. "
+    "Cycles stop at the first repeated active name. Up to five expression bindings and twelve arithmetic nesting levels are allowed, "
+    "subject to the calling task's available stack; insufficient stack makes a binding unavailable. "
+    "All schemes also share a ten-active-resolver and 256-evaluations-per-root safety guard. "
+    "Dependencies are not checked on save: missing names, cycles and excessive depth/work become unavailable at runtime (--- or an explicit fallback). "
+    "History supports raw, unformatted pad references whose fully expanded template fits 191 bytes; per-use pad formats/fallbacks remain runtime-only. "
+    "Named bindings shorten references in smaller fields; they do not increase template, resolved-output or destination-field limits.", nullptr,
 };
 
 void pad_binding_init() {
     if (!binding_template_register("pad", pad_binding_resolve, pad_binding_collect,
                                    {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr,
-                                    &kPadDoc, nullptr, nullptr, nullptr, pad_binding_value_kind})) {
+                                    &kPadDoc, &kPadAuthoring, nullptr, nullptr, pad_binding_value_kind})) {
         LOGE(TAG, "Failed to register pad binding scheme");
     }
 }

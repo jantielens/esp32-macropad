@@ -3,9 +3,11 @@
 #include <cmath>
 #include <cstdlib>
 #include <string>
+#include <utility>
 
 #include "binding_builtin_schemes.h"
 #include "binding_template.h"
+#include "expr_eval.h"
 #include "runtime_variables.h"
 #include "var_binding.h"
 #include "pad_binding.h"
@@ -532,6 +534,169 @@ static void expect_static_authoring_complete() {
 
 void binding_schema_dump_json();
 
+#if HAS_DISPLAY
+static double energy_grid_kw = 0;
+static double energy_peak_kw = 4;
+static bool energy_available = true;
+
+static void expect_every_scheme_composes() {
+    for (uint8_t index = 0; index < binding_template_scheme_count(); ++index) {
+        const char* name = binding_template_scheme_name(index);
+        const auto& spec = *binding_template_scheme_spec(index);
+        const uint8_t key_count = spec.free_form ? 0 : spec.key_count();
+        const uint8_t count = key_count ? key_count : 1;
+        for (uint8_t key = 0; key < count; ++key) {
+            PadBinding bindings[] = {{"scheme_source", ""}, {"scheme_alias", "[pad:scheme_source]"}};
+            if (!key_count) {
+                std::snprintf(bindings[0].value, sizeof(bindings[0].value), "%s", spec.doc->examples[0].code);
+            } else {
+                std::snprintf(bindings[0].value, sizeof(bindings[0].value), "[%s:%s]", name, spec.key_at(key));
+            }
+            PadBindingScope scope(bindings, 2);
+            char direct[128], composed[128];
+            const auto direct_status = binding_template_resolve_status(bindings[0].value, direct, sizeof(direct));
+            // Aliases do not promise to preserve outputs beyond the token capacity.
+            if (std::strlen(direct) == sizeof(direct) - 1) continue;
+            const auto composed_status = binding_template_resolve_status("[pad:scheme_alias]", composed, sizeof(composed));
+            const bool matches = direct_status == composed_status && !std::strcmp(direct, composed);
+            if (!matches)
+                std::printf("  COMPOSITION [%s]: %s -> %s (status %d -> %d)\n",
+                            name, direct, composed, int(direct_status), int(composed_status));
+            expect(matches, "registered scheme preserves scalar results and availability through composition");
+        }
+    }
+#if IS_DARKROOM_TIMER
+    char small_table[128];
+    expect(binding_template_resolve_registered("strip", 5, "table", small_table, sizeof(small_table)) ==
+               BINDING_RESOLVER_UNAVAILABLE, "strip table rejects the smaller scalar binding buffer");
+    char table[1024];
+    expect(binding_template_resolve_registered("strip", 5, "table", table, sizeof(table)) ==
+               BINDING_RESOLVER_RESOLVED, "strip table still resolves with a widget-sized buffer");
+    const size_t table_len = std::strlen(table);
+    expect(table[0] == '{' && std::strstr(table, "\"rows\":[") &&
+               table_len >= 2 && !std::strcmp(table + table_len - 2, "]}"),
+           "strip table preserves its rows envelope with a widget-sized buffer");
+#endif
+}
+
+static void expect_composed_pad_bindings() {
+    BindingSchemeSpec source{1, 1, 1, -1, BINDING_VALIDATION_STANDARD, true};
+    source.value_kind = +[](const char* params) {
+        return !std::strcmp(params, "id") ? BINDING_VALUE_KIND_TEXT : BINDING_VALUE_KIND_NUMBER;
+    };
+    expect(binding_template_register("energy_test",
+        +[](const char* params, char* out, size_t size) {
+            if (!energy_available) return BINDING_RESOLVER_UNAVAILABLE;
+            if (!std::strcmp(params, "id")) {
+                std::snprintf(out, size, "001");
+                return BINDING_RESOLVER_RESOLVED;
+            }
+            std::snprintf(out, size, "%g", !std::strcmp(params, "grid_kw")
+                ? energy_grid_kw : energy_peak_kw);
+            return BINDING_RESOLVER_RESOLVED;
+        }, nullptr, source), "register energy readings in kW");
+
+    PadBinding bindings[] = {
+        {"energy_state", "[expr:[pad:grid]>[pad:month_peak]?4:[pad:grid]<0?0:[pad:grid]<0.5?1:[pad:grid]<=2.5?2:3]"},
+        {"grid", "[energy_test:grid_kw]"},
+        {"month_peak", "[energy_test:peak_kw]"},
+        {"id_alias", "[pad:source_id]"},
+        {"source_id", "[energy_test:id]"},
+    };
+    PadBindingScope scope(bindings, sizeof(bindings) / sizeof(bindings[0]));
+    const char* label = "[expr:[pad:energy_state]==4?\"Piek\":\"Normaal\"]";
+    const char* color = "[expr:[pad:energy_state]==4?\"#FF0000\":\"#FFFFFF\"]";
+    char value[192] = {};
+    binding_template_resolve("[expr:((((((((1))))))))]", value, sizeof(value));
+    expect(!std::strcmp(value, "1"), "ordinary expressions retain nesting beyond seven levels");
+    expect(binding_template_resolve_checked("[expr:[pad:id_alias]==\"001\"?1:0]",
+                                             value, sizeof(value)) &&
+               !std::strcmp(value, "1"),
+           "checked expression preserves numeric-looking text through composed aliases");
+    for (const auto& boundary : {
+            std::pair<double, const char*>{-0.1, "0"}, {0, "1"}, {0.5, "2"},
+            {2.5, "2"}, {2.6, "3"}, {4.1, "4"}}) {
+        energy_grid_kw = boundary.first;
+        expect(binding_template_resolve_checked("[pad:energy_state]", value, sizeof(value)) &&
+                   !std::strcmp(value, boundary.second),
+               "production expressions compose at each energy threshold in kW");
+    }
+    energy_grid_kw = 0.2;
+    energy_peak_kw = 0.1;
+    binding_template_resolve("[pad:energy_state;%.0f]", value, sizeof(value));
+    expect(!std::strcmp(value, "4"), "peak-exceeded decision takes priority over low consumption");
+    binding_template_resolve(label, value, sizeof(value));
+    expect(!std::strcmp(value, "Piek"), "Dutch label reuses the shared decision");
+    binding_template_resolve(color, value, sizeof(value));
+    expect(!std::strcmp(value, "#FF0000"), "color reuses the same decision");
+    const char* inputs[] = {label, color};
+    char preview[2 * BINDING_TEMPLATE_MAX_LEN];
+    pad_resolve(inputs, 2, bindings, sizeof(bindings) / sizeof(bindings[0]),
+                preview, BINDING_TEMPLATE_MAX_LEN);
+    expect(!std::strcmp(preview, "Piek") && !std::strcmp(preview + BINDING_TEMPLATE_MAX_LEN, "#FF0000"),
+           "batch previews agree with rendering for composed definitions");
+    energy_available = false;
+    binding_template_resolve("[pad:energy_state|offline]", value, sizeof(value));
+    expect(!std::strcmp(value, "offline"), "unavailable sensor propagates to the outer fallback");
+    energy_available = true;
+
+    PadBinding deep[] = {
+        {"a", "[expr:[pad:b]+1]"}, {"b", "[expr:[energy_test:grid_kw]*0+1]"},
+        {"third", "[pad:a]"},
+        {"cycle", "[expr:[pad:cycle]+1]"},
+        {"defaulted", "[expr:[pad:defaulted|0]+1]"},
+    };
+    {
+        PadBindingScope deeper(deep, sizeof(deep) / sizeof(deep[0]));
+        binding_template_resolve("[pad:a]", value, sizeof(value));
+        expect(!std::strcmp(value, "2"), "two expression-bearing named bindings resolve");
+        binding_template_resolve("[expr:[expr:[expr:[pad:a]]]]", value, sizeof(value));
+        expect(!std::strcmp(value, "2"), "two names plus five expressions still reach their leaf scheme");
+        binding_template_resolve("[pad:third|limit]", value, sizeof(value));
+        expect(!std::strcmp(value, "limit"), "third expression-bearing name is bounded");
+        binding_template_resolve("[pad:cycle|cycle]", value, sizeof(value));
+        expect(!std::strcmp(value, "cycle"), "production expression cycle stops safely");
+        binding_template_resolve("[pad:defaulted]", value, sizeof(value));
+        expect(!std::strcmp(value, "1"), "production cycle fallback applies at the first repeated name");
+        std::string wrapped = "1";
+        for (unsigned i = 0; i < 5; ++i) wrapped = "[expr:" + wrapped + "]";
+        binding_template_resolve(wrapped.c_str(), value, sizeof(value));
+        expect(!std::strcmp(value, "1"), "five active expression bindings still resolve");
+        wrapped = "[expr:" + wrapped + "]";
+        binding_template_resolve(wrapped.c_str(), value, sizeof(value));
+        expect(!std::strcmp(value, "---"), "expression binding recursion is bounded independently of pad depth");
+        wrapped = std::string(EXPR_MAX_NESTING, '(') + "1" + std::string(EXPR_MAX_NESTING, ')');
+        std::snprintf(deep[1].value, sizeof(deep[1].value), "[expr:%s]", wrapped.c_str());
+        binding_template_resolve("[pad:a]", value, sizeof(value));
+        expect(!std::strcmp(value, "2"), "composed expressions retain the common parser ceiling with ample stack");
+        wrapped = "(" + wrapped + ")";
+        std::snprintf(deep[1].value, sizeof(deep[1].value), "[expr:%s]", wrapped.c_str());
+        binding_template_resolve("[pad:a|stack]", value, sizeof(value));
+        expect(!std::strcmp(value, "stack"), "composed expressions reject nesting above the common parser ceiling");
+    }
+    binding_template_resolve(label, value, sizeof(value));
+    expect(!std::strcmp(value, "Piek"), "nested pad scope restores effective bindings after failures");
+#if IS_COFFEE_SCALE
+    extern const char* binding_test_brew_instruction;
+    const char* previous = binding_test_brew_instruction;
+    PadBinding instructions[] = {{"instruction", "[brew:instruction]"}, {"step", "Pour slowly"}};
+    {
+        PadBindingScope instruction_scope(instructions, 2);
+        binding_test_brew_instruction = "[pad:step]";
+        binding_template_resolve("[pad:instruction]", value, sizeof(value));
+        expect(!std::strcmp(value, "Pour slowly"), "brew instructions can reuse the effective pad context");
+        binding_test_brew_instruction = "[brew:instruction]";
+        binding_template_resolve("[pad:instruction|cycle]", value, sizeof(value));
+        expect(!std::strcmp(value, "cycle"), "scheme-level recursion is bounded even without a pad cycle");
+        binding_test_brew_instruction = "[pad:instruction]";
+        binding_template_resolve("[pad:instruction|cycle]", value, sizeof(value));
+        expect(!std::strcmp(value, "cycle"), "mixed brew and pad cycles propagate unavailability");
+    }
+    binding_test_brew_instruction = previous;
+#endif
+}
+#endif
+
 int main(int argc, char** argv) {
     binding_builtin_schemes_init();
 #if IS_VOICE_ASSISTANT
@@ -843,6 +1008,10 @@ int main(int argc, char** argv) {
     expect(scheme_is_registered("camera"), "camera scheme registered on camera display profile");
 #endif
 
+#if HAS_DISPLAY
+    expect_every_scheme_composes();
+    expect_composed_pad_bindings();
+#endif
     std::printf("=== Results: %d failure(s) ===\n", g_failures);
     return g_failures == 0 ? 0 : 1;
 }

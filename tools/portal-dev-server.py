@@ -138,6 +138,10 @@ def reset_pad_fixtures(server, scenario="normal"):
     server.mock_icon_source_counter = 1
     server.mock_boot_actions = []
     server.mock_boot_logo_slots = {}
+    server.mock_images = {
+        "/images/background.png": base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=")
+    }
     samples = b"\0\0" * (16000 * 3)
     wav = struct.pack("<4sI4s4sIHHIIHH4sI", b"RIFF", 36 + len(samples), b"WAVE",
                       b"fmt ", 16, 1, 1, 16000, 32000, 2, 16, b"data", len(samples)) + samples
@@ -762,7 +766,14 @@ class PortalHandler(SimpleHTTPRequestHandler):
         elif path == "/api/extensions":
             self._serve_json(self.server.pad_fixture["extensions"])
         elif path == "/api/images":
-            self._serve_json({"directory": "/images", "files": []})
+            if "file" in query:
+                image = self.server.mock_images.get(query["file"][0])
+                if image is None:
+                    self._serve_json({"message": "Image file not found"}, 404)
+                else:
+                    self._serve_bytes(image, "image/png", headers={"Cache-Control": "no-store"})
+            else:
+                self._serve_json({"directory": "/images", "files": list(self.server.mock_images)})
         elif path == "/api/health":
             self._serve_json(self._health())
         elif path == "/api/health/history":

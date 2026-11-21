@@ -91,6 +91,7 @@ portal_image_library.js
 # [chunk:pad_editor HAS_DISPLAY]
 portal_pad_colors.js
 portal_pad_io.js
+portal_pad_paste.js
 portal_pad_blocks.js
 portal_icon_picker.js
 portal_recipes.js

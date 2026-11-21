@@ -16,6 +16,8 @@ struct ItemValidation {
     const PadBinding* bindings;
     uint8_t binding_count;
     const char* error;
+    const char* pending[PAD_MAX_BINDINGS] = {};
+    uint8_t pending_count = 0;
 };
 
 void validate_token(const char* scheme, size_t scheme_len, const char* params, void* context);
@@ -37,11 +39,13 @@ void validate_token(const char* scheme, size_t scheme_len, const char* params, v
         const char* alias = pad_binding_find_template(validation.bindings, validation.binding_count,
                                                       params, name_len);
         if (!alias) return;
-        if (strstr(alias, "[pad:")) {
-            validation.error = "recursive pad binding";
+        for (uint8_t i = 0; i < validation.pending_count; ++i)
+            if (validation.pending[i] == alias) return;
+        if (validation.pending_count >= PAD_MAX_BINDINGS) {
+            validation.error = "pad binding context scan exceeds definition limit";
             return;
         }
-        validate_template(alias, validation);
+        validation.pending[validation.pending_count++] = alias;
     }
 }
 
@@ -73,6 +77,9 @@ const char* item_binding_validate(const char* templ, const ListSourceDescriptor*
     if (!templ) return "binding template is required";
     ItemValidation validation = {source, bindings, binding_count, nullptr};
     validate_template(templ, validation);
+    // Visit each reachable definition once without recursing across aliases.
+    for (uint8_t i = 0; i < validation.pending_count && !validation.error; ++i)
+        validate_template(validation.pending[i], validation);
     return validation.error;
 }
 

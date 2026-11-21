@@ -11,10 +11,9 @@
 #if HAS_DISPLAY
 
 #include "binding_template.h"   // BINDING_TEMPLATE_MAX_LEN
-#include "main_loop_bridge.h"
+#include "display_manager.h"
 #include "pad_binding.h"        // pad_resolve()
-#include "pad_config.h"         // PadBinding, pad_config_read_raw, pad_config_resolve_ref
-#include "psram_json_allocator.h"
+#include "pad_config.h"
 
 #include <ArduinoJson.h>
 #include <esp_heap_caps.h>
@@ -48,7 +47,7 @@ struct ResolveCtx {
     ResolvePayload* payload;
 };
 
-// Runs on the main loop (LVGL task context) via the bridge.
+// Runs on the LVGL task, matching rendering's context and stack budget.
 static void exec_resolve(const void* ctx, bool* ok, char* msg, size_t msg_len) {
     const ResolveCtx* c = (const ResolveCtx*)ctx;
     ResolvePayload* payload = c ? c->payload : nullptr;
@@ -82,31 +81,29 @@ static void cleanup_abandoned_resolve(const void* ctx) {
     resolve_payload_free(resolve ? resolve->payload : nullptr);
 }
 
-// Copy a pad's stored [pad:name] bindings into a heap PadBinding[]. Returns the
-// count and sets *out_binds (caller frees), or 0 with *out_binds == nullptr.
-static uint8_t load_pad_bindings(uint8_t page, PadBinding** out_binds) {
+// Preview the same immutable, template-merged bindings used by rendering.
+static PadResolveStatus load_pad_bindings(uint8_t page, PadBinding** out_binds, uint8_t* count,
+                                          const char** error) {
     *out_binds = nullptr;
-    size_t len = 0;
-    char* raw = pad_config_read_raw(page, &len);
-    if (!raw) return 0;
-    BasicJsonDocument<PsramJsonAllocator> doc(len + 512);
-    DeserializationError e = deserializeJson(doc, raw, len);
-    free(raw);
-    if (e) return 0;
-    JsonObjectConst pb = doc["bindings"];
-    if (pb.isNull() || pb.size() == 0) return 0;
-    PadBinding* arr = (PadBinding*)presolve_alloc(sizeof(PadBinding) * PAD_MAX_BINDINGS);
-    if (!arr) return 0;
-    uint8_t n = 0;
-    for (JsonPairConst kv : pb) {
-        if (n >= PAD_MAX_BINDINGS) break;
-        strlcpy(arr[n].name, kv.key().c_str(), PAD_BINDING_NAME_MAX_LEN);
-        const char* v = kv.value().as<const char*>();
-        strlcpy(arr[n].value, v ? v : "", CONFIG_LABEL_MAX_LEN);
-        n++;
+    *count = 0;
+    const PadConfig* config = pad_config_acquire(page);
+    if (!config) {
+        *error = "pad context unavailable";
+        return PAD_RESOLVE_ERROR;
     }
+    const uint8_t size = config->binding_count;
+    PadBinding* arr = size
+        ? static_cast<PadBinding*>(presolve_alloc(sizeof(PadBinding) * size)) : nullptr;
+    if (size && !arr) {
+        pad_config_release(config);
+        *error = "out of memory";
+        return PAD_RESOLVE_OOM;
+    }
+    if (size) memcpy(arr, config->bindings, sizeof(PadBinding) * size);
+    pad_config_release(config);
     *out_binds = arr;
-    return n;
+    *count = size;
+    return PAD_RESOLVE_OK;
 }
 
 PadResolveStatus pad_resolve_request(JsonObjectConst args, JsonObject result,
@@ -131,7 +128,12 @@ PadResolveStatus pad_resolve_request(JsonObjectConst args, JsonObject result,
         char eb[64];
         int pg = pad_config_resolve_ref(screen, eb, sizeof(eb));
         if (pg < 0) { set_err("unknown screen"); return PAD_RESOLVE_BAD_PARAMS; }
-        bind_count = load_pad_bindings((uint8_t)pg, &binds);
+        const char* error = nullptr;
+        const auto status = load_pad_bindings(static_cast<uint8_t>(pg), &binds, &bind_count, &error);
+        if (status != PAD_RESOLVE_OK) {
+            set_err(error);
+            return status;
+        }
     }
 
     // Collect input template strings before copying them into payload-owned
@@ -193,17 +195,17 @@ PadResolveStatus pad_resolve_request(JsonObjectConst args, JsonObject result,
 
     ResolveCtx ctx = { payload };
     bool ok = false; char msg[160] = {0};
-    LoopBridgeResult r = loop_bridge_dispatch(exec_resolve, &ctx, sizeof(ctx),
-                                              RESOLVE_TIMEOUT_MS, &ok, msg, sizeof(msg),
-                                              cleanup_abandoned_resolve);
-    if (r == LOOP_BRIDGE_BUSY) {
+    DisplayTaskDispatchResult r = display_manager_dispatch(
+        exec_resolve, cleanup_abandoned_resolve, &ctx, sizeof(ctx),
+        RESOLVE_TIMEOUT_MS, &ok, msg, sizeof(msg));
+    if (r == DISPLAY_TASK_DISPATCH_BUSY) {
         resolve_payload_free(payload);
         set_err("busy, retry");
         return PAD_RESOLVE_BUSY;
     }
-    if (r != LOOP_BRIDGE_OK) {
-        if (r != LOOP_BRIDGE_TIMEOUT) resolve_payload_free(payload);
-        set_err(r == LOOP_BRIDGE_TIMEOUT ? "resolve timed out" : "resolve unavailable");
+    if (r != DISPLAY_TASK_DISPATCH_OK) {
+        if (r != DISPLAY_TASK_DISPATCH_TIMEOUT) resolve_payload_free(payload);
+        set_err(r == DISPLAY_TASK_DISPATCH_TIMEOUT ? "resolve timed out" : "resolve unavailable");
         return PAD_RESOLVE_ERROR;
     }
 

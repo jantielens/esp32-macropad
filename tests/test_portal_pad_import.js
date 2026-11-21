@@ -69,6 +69,9 @@ function makeDocument() {
 function loadPortal(context) {
     context.padWorkspaceRefresh = () => {};
     vm.createContext(context);
+    const providedGlobals = { ...context };
+    vm.runInContext(fs.readFileSync('src/app/web/portal_pad_colors.js', 'utf8'), context);
+    Object.assign(context, providedGlobals);
     for (const file of [
         'src/app/web/portal_widget_editor.js',
         'src/app/web/portal_widget_gauge.js',
@@ -352,6 +355,7 @@ async function testClearPad() {
         padState.overlayButtons = [{ col: 1, row: 1 }];
         padState.bindings = [{ name: 'color', value: '#ffffff' }];
         padState.templatePad = 1; padState.templateButtons = [{ col: 2, row: 0 }];
+        padState.backgroundImagePath = '/images/old.png';
         padState.trackValidationError = true;
         padState.importedIconSources = { stale: {} };
         padState.importedIconSourceIds = { stale: 'source' };
@@ -439,14 +443,18 @@ async function testClearPad() {
     const importPad = async pad => success.context.padImportPad({
         target: { files: [{ text: async () => JSON.stringify(pad) }], value: 'pad.json' },
     });
-    await importPad({ cols: 10, rows: 10, buttons: [{ col: 9, row: 9 }] });
+    await importPad({ cols: 10, rows: 10, bg_image_path: '/images/background.png', buttons: [{ col: 9, row: 9 }] });
     assert(success.messages.some(message => message.type === 'success' && message.message.includes('Pad imported')));
     assert.strictEqual(vm.runInContext('padState.cols', success.context), 10);
+    assert.strictEqual(JSON.parse(success.context.padBuildSaveContext().body).bg_image_path,
+        '/images/background.png', 'Imported pad background references must survive saving');
     const unpackagedWidget = {
         col: 0, row: 0, widget_type: 'external', extension_id: 'other-board-widget',
         extension_config: { source: 'sensor' }, extension_tick_interval_ms: 750,
     };
     await importPad({ action_format_version: 1, cols: 1, rows: 1, buttons: [unpackagedWidget] });
+    assert.strictEqual(JSON.parse(success.context.padBuildSaveContext().body).bg_image_path, undefined,
+        'Importing a pad without a background must clear the previous selection');
     assert.deepStrictEqual(JSON.parse(vm.runInContext('JSON.stringify(padState.buttons)', success.context)),
         [unpackagedWidget], 'Import must retain widgets whose editor is not packaged');
     assert.deepStrictEqual(JSON.parse(success.context.padBuildSaveContext().body).buttons,
@@ -464,6 +472,24 @@ async function testClearPad() {
     assert.strictEqual(vm.runInContext('padState.padActions.length', success.context), 0);
     assert.strictEqual(success.context.document.getElementById('pad-name').value, 'Legacy import');
     assert(success.messages.some(message => /older action format.*draft/i.test(message.message)));
+    const oldBackgroundPad = {
+        action_format_version: 1, cols: 10, rows: 10,
+        buttons: [{ col: 0, row: 0, label: 'Keep me', bg_color: 'transparent', bg_opacity: 25,
+            fg_color: 'ffffff', actions: [{ op: 'screen.open', args: { target: 'pad_1' } }] }],
+        overlay_buttons: [{ col: 1, row: 1, label: 'Overlay', bg_color: 'not-a-color', bg_opacity: 0 }],
+    };
+    const writesBeforeCleanup = success.requests.filter(request => request.kind === 'pad-save').length;
+    await importPad(oldBackgroundPad);
+    const cleanedBackgrounds = JSON.parse(success.context.padBuildSaveContext().body);
+    assert.deepStrictEqual(cleanedBackgrounds.buttons, [{
+        col: 0, row: 0, label: 'Keep me', fg_color: 'ffffff',
+        actions: [{ op: 'screen.open', args: { target: 'pad_1' } }],
+    }]);
+    assert.deepStrictEqual(cleanedBackgrounds.overlay_buttons, [{ col: 1, row: 1, label: 'Overlay' }]);
+    assert.strictEqual(success.requests.filter(request => request.kind === 'pad-save').length, writesBeforeCleanup,
+        'Import cleanup must not write the pad');
+    assert(success.messages.some(message => /unsupported button backgrounds.*draft/i.test(message.message)));
+    assert.strictEqual(oldBackgroundPad.buttons[0].bg_color, 'transparent', 'Import must not alter the original input');
     await importPad({ action_format_version: 2, cols: 1, rows: 1, buttons: [] });
     assert.strictEqual(vm.runInContext('padState.cols', success.context), 10, 'A newer format must not replace the draft');
     await importPad({ action_format_version: 1, cols: 1, rows: 1,
@@ -761,6 +787,11 @@ async function testClearPad() {
     };
     await optionSizing({}, 82);
     await optionSizing({ widget_option_height_pct: 50 }, 37);
+    await optionSizing({ widget_option_weight: 1, widget_option_weight_2: 9 }, 1);
+    await optionSizing({ widget_option_weight: 2, widget_option_label_2: 'Other',
+        widget_option_weight_2: 3 }, 28);
+    await optionSizing({ widget_option_weight: 3, widget_option_label_2: 'Other',
+        widget_option_weight_2: 2 }, 46);
     await optionSizing({ label_top: 'Title', widget_position: 'right', group_size_pct: 75 }, 14);
     await optionSizing({ reserve_label_slots: true, widget_position: 'right', group_size_pct: 75 }, 14);
     await optionSizing({ label_bottom: 'Title', widget_position: 'above', group_size_pct: 75 }, 14);
@@ -774,6 +805,17 @@ async function testClearPad() {
         { ...optionIcons.buttons[0], widget_option_inset: 0 }, 1), defaultInsetKey);
     assert.notStrictEqual(reuse.context.padOptionIconRenderKey(optionIcons,
         { ...optionIcons.buttons[0], widget_option_height_pct: 50 }, 1), defaultInsetKey);
+    assert.notStrictEqual(reuse.context.padOptionIconRenderKey(optionIcons,
+        { ...optionIcons.buttons[0], widget_option_weight: 2 }, 1), defaultInsetKey);
+    assert.strictEqual(reuse.context.padOptionIconRenderKey({
+        cols: 3, rows: 2, column_widths_px: [0, 40, 0]
+    }, {
+        col: 1, row: 0, col_span: 2, widget_type: 'option_selector',
+        widget_option_label: 'Cool', widget_option_icon_5: { kind: 'mono' },
+        widget_option_icon_size_pct: 75, widget_option_icon_badge_padding: 4,
+        widget_option_inset: 0, widget_option_height_pct: 50,
+        widget_option_weight: 2, widget_option_weight_3: 7
+    }, 5), '2a6ad685');
 
     const templatePayload = { ...reusePayload, template_pad: 1 };
     const requestsBeforeTemplate = reuse.requests.length;

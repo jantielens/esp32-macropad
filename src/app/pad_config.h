@@ -348,6 +348,7 @@ struct ScreenButtonConfig {
     // Visual styling — color fields are strings that may contain binding templates
     // e.g. "#FF0000" (static) or "[expr:[mqtt:t;.;%s]==\"ON\"?\"#00FF00\":\"#333333\"]" (dynamic)
     char bg_color[CONFIG_COLOR_MAX_LEN];          // default "#333333"
+    uint8_t bg_opacity;                          // resolved percentage, 0-100
     char fg_color[CONFIG_COLOR_MAX_LEN];          // default "#FFFFFF"
     char border_color[CONFIG_COLOR_MAX_LEN];      // default "#000000"
     char border_width[CONFIG_BINDABLE_SHORT_LEN]; // default "0" — static or binding
@@ -456,6 +457,7 @@ struct ButtonDefaults {
     PadLayoutSettings layout;
     char default_font[CONFIG_FONT_ID_MAX_LEN];
     uint16_t base_text_size;
+    uint8_t bg_opacity;
 };
 
 // Per-pad config
@@ -473,6 +475,7 @@ struct PadConfig {
     uint16_t row_heights_px[MAX_GRID_ROWS];   // 0 = Auto
     char wake_screen[CONFIG_SCREEN_ID_MAX_LEN]; // screen to navigate to on screensaver sleep (empty = stay)
     char bg_color[CONFIG_COLOR_MAX_LEN];         // pad background color (default "#000000")
+    char bg_image_path[CONFIG_BG_IMAGE_PATH_MAX_LEN]; // Optional static local background
     uint8_t button_shadow;                        // ButtonShadowMode override
     ButtonShadowSettings shadow;                  // resolved device-wide settings
     PadLayoutSettings layout_settings;            // resolved device-wide settings

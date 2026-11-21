@@ -962,6 +962,7 @@ protected:
         for (unsigned index = 0; index < 2; ++index) {
             auto& slot = g_selector_config.slots[index];
             slot.kind = OptionSelectorContent::Label;
+            slot.weight = 1;
             strlcpy(slot.value, index ? "heat" : "cool", sizeof(slot.value));
             strlcpy(slot.content.label, slot.value, sizeof(slot.content.label));
         }
@@ -1032,6 +1033,7 @@ TEST_F(OptionSelectorNativeWidget, ReducedHeightCentersVisualsAndRetainsTouchTar
 TEST_F(OptionSelectorNativeWidget, ZeroWidthOptionsStayHiddenAcrossResizes) {
     auto& third = g_selector_config.slots[2];
     third.kind = OptionSelectorContent::Label;
+    third.weight = 1;
     strlcpy(third.content.label, "third", sizeof(third.content.label));
     lv_obj_set_style_pad_all(button, 0, 0);
     lv_obj_set_style_border_width(button, 0, 0);
@@ -1072,6 +1074,75 @@ TEST_F(OptionSelectorNativeWidget, ZeroWidthOptionsStayHiddenAcrossResizes) {
     option_selector_widget_impl::layout(state());
     option_selector_widget_impl::render(state());
     for (unsigned i = 0; i < 3; ++i) EXPECT_TRUE(state()->slots[i].shown);
+}
+
+TEST_F(OptionSelectorNativeWidget, WeightedSpacersReserveWidthWithoutTouchTargetsOrSelection) {
+    lv_obj_set_style_pad_all(button, 0, 0);
+    lv_obj_set_style_border_width(button, 0, 0);
+    g_selector_config.slots[0] = {};
+    g_selector_config.slots[0].weight = 7;
+    g_selector_config.slots[1].weight = 1;
+    g_selector_config.slots[2] = g_selector_config.slots[1];
+    g_selector_config.slots[2].weight = 2;
+    strlcpy(g_selector_config.slots[2].value, "battery", sizeof(g_selector_config.slots[2].value));
+    g_selector_config.group_background = true;
+    create(OptionSelectorMode::Bound);
+    option_selector_widget_impl::tick(button, &config, &runtime);
+    lv_obj_update_layout(button);
+    EXPECT_EQ(lv_obj_get_child_count(button), 3u);
+    EXPECT_EQ(state()->slots[0].hit, nullptr);
+    EXPECT_EQ(lv_obj_get_width(lv_obj_get_child(button, 0)), 200);
+    EXPECT_EQ(lv_obj_get_x(state()->slots[1].hit), 140);
+    EXPECT_EQ(lv_obj_get_width(state()->slots[1].hit), 20);
+    EXPECT_EQ(lv_obj_get_x(state()->slots[2].hit), 160);
+    EXPECT_EQ(lv_obj_get_width(state()->slots[2].hit), 40);
+    g_binding_value = "";
+    option_selector_widget_impl::tick(button, &config, &runtime);
+    EXPECT_EQ(state()->selected, option_selector_widget_impl::NO_SLOT);
+
+    lv_tick_inc(400);
+    lv_area_t bounds{};
+    lv_obj_get_coords(button, &bounds);
+    pointer.point = {bounds.x1 + 70, bounds.y1 + 40};
+    pointer.pressed = true;
+    lv_indev_read(indev);
+    pointer.pressed = false;
+    lv_tick_inc(10);
+    lv_indev_read(indev);
+    EXPECT_EQ(g_dispatches, 0u);
+    EXPECT_TRUE(feedback_events.empty());
+
+    lv_obj_get_coords(state()->slots[2].hit, &bounds);
+    pointer.point = {(bounds.x1 + bounds.x2) / 2, (bounds.y1 + bounds.y2) / 2};
+    pointer.pressed = true;
+    lv_indev_read(indev);
+    pointer.pressed = false;
+    lv_tick_inc(10);
+    lv_indev_read(indev);
+    EXPECT_EQ(g_dispatches, 1u);
+    EXPECT_STREQ(g_dispatched_value, "battery");
+}
+
+TEST_F(OptionSelectorNativeWidget, WeightedRoundingResizesAndHiddenOptionsKeepTheirSpace) {
+    lv_obj_set_style_pad_all(button, 0, 0);
+    lv_obj_set_style_border_width(button, 0, 0);
+    g_selector_config.slots[0].weight = 2;
+    g_selector_config.slots[1].weight = 3;
+    named_binding_count = 1;
+    strlcpy(named_bindings[0].name, "test_state", sizeof(named_bindings[0].name));
+    strlcpy(named_bindings[0].value, "hidden", sizeof(named_bindings[0].value));
+    strlcpy(g_selector_config.slots[0].state, "[pad:test_state]", sizeof(g_selector_config.slots[0].state));
+    create(OptionSelectorMode::None);
+    for (int width : {201, 2, 300}) {
+        lv_obj_set_width(button, width);
+        option_selector_widget_impl::layout(state());
+        option_selector_widget_impl::render(state());
+        lv_obj_update_layout(button);
+        EXPECT_FALSE(state()->slots[0].shown);
+        const int start = width * 2 / 5;
+        EXPECT_EQ(lv_obj_get_x(state()->slots[1].hit), start);
+        EXPECT_EQ(lv_obj_get_width(state()->slots[1].hit), width - start);
+    }
 }
 
 TEST_F(OptionSelectorNativeWidget, EventRenderUsesAndRestoresPadBindings) {
@@ -1242,6 +1313,7 @@ TEST_F(OptionSelectorNativeWidget, IconAndTextUseSamePillWithoutResizingIcon) {
     g_selector_icon = selector_test_icon();
     g_selector_config.slots[1] = {};
     g_selector_config.slots[1].kind = OptionSelectorContent::Icon;
+    g_selector_config.slots[1].weight = 1;
     g_selector_config.slots[1].content.icon.mono = true;
     strlcpy(g_selector_config.slots[1].value, "heat", sizeof(g_selector_config.slots[1].value));
     strlcpy(g_selector_config.selected_foreground, "#FFFFFF", sizeof(g_selector_config.selected_foreground));

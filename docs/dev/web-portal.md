@@ -716,6 +716,17 @@ retain the existing icon element when its artwork and foreground color match.
 Selection changes update styling and the inspector without rebuilding the grid.
 Pad background changes update the existing grid background in place.
 
+Pad Appearance includes an optional static `bg_image_path`, selected from the
+local image library. The editor uses the device's active coordinate dimensions
+for its size hint and previews the file through authenticated
+`GET /api/images?file=...`, with centered CSS `cover`. Pad copy/paste and
+exports preserve the path; image file contents remain separate.
+Firmware uses one shared local-loader slot, keyed by path, active dimensions,
+and library-content generation. Pad switches detach the LVGL image before
+releasing its buffer; matching destinations reuse ready or pending loads.
+Non-pad navigation releases the slot. Slideshow cursor changes do not
+invalidate static backgrounds.
+
 The image-library list is cached for the mounted editor, with concurrent loads
 sharing one request. Explicit Refresh bypasses settled cached data; failures
 remain retryable, and disposal clears the cache. Live binding previews resolve
@@ -1608,6 +1619,7 @@ directory. It does not recurse into nested directories.
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/api/images?directory=/images[/album]` | Lists up to 128 supported files in one canonical image directory and immediate child directories when browsing `/images` |
+| `GET` | `/api/images?file=/images[/album]/name.png` | Streams one canonical local JPEG/PNG for editor previews with portal authentication and `Cache-Control: no-store`; missing files return `404` |
 | `POST` | `/api/images?path=/images[/album]/name.png` | Streams a JPEG or PNG up to 4 MiB to a temporary file, rejects PNG sources above 2 million pixels, then atomically renames it and rebuilds the runtime catalog |
 | `DELETE` | `/api/images?path=/images[/album]/name.png` | Deletes one canonical local image and rebuilds the runtime catalog |
 
@@ -1651,6 +1663,50 @@ the MCP capability manifest. Each entry contains `name`, `min_params`,
 literal first-parameter validation rule with portal authoring. Finite schemes
 also include their current `keys` array.
 
+Schemes with saved named definitions expose `authoring.definitions`, even
+without `docs=1`. For `pad`, this contains `max_count` (16), `name_max_bytes`
+(31), `template_max_bytes` (191), `name_pattern`
+(`^[A-Za-z][A-Za-z0-9_]*$`), `context` (`same_pad`), and
+`composition_supported` (`true`), `max_chain_depth` (2),
+`max_evaluations_per_lookup` (64), `max_expression_depth` (5), and
+`dependencies_validated_on_save` (`false`). Composition means using a `[pad:...]`
+reference inside another named binding's saved value. Chain depth counts named
+bindings including the starting name, not a surrounding field expression.
+Active-template tracking stops direct and indirect cycles on first re-entry.
+Runtime budgets stop excessive depth/work; save validation does not
+perform dependency-graph analysis. Missing references and exhausted budgets
+resolve as unavailable, with the usual explicit fallback behavior.
+Local definitions still override inherited template names, including for device
+previews, which copy the immutable effective pad bindings.
+The byte limits measure UTF-8 input after
+JSON decoding, excluding the terminating NUL. They are not resolved-output or
+destination-field capacities. Ordinary scalar token resolution has a 127-byte
+payload buffer; destination fields and individual resolvers may impose
+additional limits. These constraints also appear in full and scheme-filtered
+MCP capabilities, from the same registration metadata.
+
+Binding expression parsing keeps the common 12-level ceiling, in addition to
+the five-active-expression limit. On ESP32, the dispatcher checks current stack
+headroom before entering a resolver. The bounded evaluator checks before its
+large entry frame, parser recursion and date/duration formatting. These checks
+use the current stack pointer and the calling task's stack base, not its
+historical high-water mark. Insufficient headroom returns unavailable and
+preserves normal fallback handling; it does not allocate PSRAM or enlarge task
+stacks. Ceilings can therefore be reached earlier on smaller task stacks.
+MQTT topic and HA entity discovery reuse the same named/expression traversal
+guards and effective pad context. HA visits direct tokens before delegating
+structural traversal, so its token scanner cannot multiply alias nesting depth.
+All registered resolvers also share a ceiling of ten active callbacks and
+256 evaluations per root lookup. This covers schemes that resolve templates
+internally, such as `brew:instruction`, as well as future registered schemes.
+Contextual item
+validation scans each referenced alias once, without recursion across aliases,
+to preserve item-scope restrictions; it does not reject dependency cycles.
+History expansion follows raw pad aliases into one template. Formatted/fallback
+pad references remain runtime-only; missing references, limit failures and
+expanded templates exceeding the destination capacity return an explicit
+unavailable status instead of registering a partial or context-dependent stream.
+
 The response is board-aware: device-class and feature-gated schemes appear
 only when registered by the running firmware. Clients should fetch this endpoint
 instead of maintaining a static binding scheme or key list.
@@ -1667,6 +1723,18 @@ scheme under `bindings.schemes`; unknown names return a parameter error.
 Passing `widget` returns only that registered widget under `widgets`, plus
 `widget_common`. Use one filter at a time; unknown names are parameter errors.
 Omitting both arguments returns the full manifest.
+
+The full manifest includes button background-image discovery under
+`button.image_fields`: field types, defaults, saved-input byte limits, binding
+support, fit choices, and per-field availability. `button.background_images`
+reports `has_image_fetch` and `has_image_library`, matching `/api/info`, plus
+widget compatibility and authentication restrictions. These flags describe
+firmware support, not network reachability or the presence of a local file.
+The Extension widget (`external`) replaces button content; the portal continues
+to hide its image controls without clearing configured values or adding a notice.
+Remote URL bindings cannot use authentication, including
+`bg_image_password_set=true` from a retained portal password. This indicator is
+not an MCP password-retention mechanism.
 
 Display builds with local sensors register `[sensor:key;format]`. Its keys
 and descriptions come from the sensor registrations, including board-specific
@@ -1919,10 +1987,11 @@ Returns comprehensive device information.
   flash/NVS. A manual Connect retains that worker until association completes or
   times out, permitting teardown without another allocation. The main loop owns
   readiness and the ten-second association deadline, which starts after radio
-  initialization, scanning, and `WiFi.begin()`. The worker reuses the boot
+  initialization, any host-side scan, and `WiFi.begin()`. The worker reuses the boot
   strongest-AP selector and directed BSSID/channel connection, falling back to
-  SDK selection if scanning cannot select an AP. ESP32-P4 retains coprocessor
-  selection without a directed scan. There is no synchronous scan or blocking
+  SDK selection if scanning cannot select an AP. On ESP32-P4, the coprocessor
+  scans all channels and prefers the strongest matching AP during association,
+  without a host-side scan or BSSID pinning. There is no synchronous scan or blocking
   association wait on the main loop.
   Worker resources are released after task deletion; normal online boot still
   uses its optimized early initialization and strongest-AP selection.
@@ -3553,7 +3622,7 @@ service attempt snapshots retain their terminal state during the gap.
 
 ### MCP Server API
 
-Requires `HAS_MCP` (default on). Off by default; enabled and tokened from the portal's **MCP** card. STA-mode only. See the user-facing [MCP Server Guide](../mcp-guide.md) for client setup.
+Requires `HAS_MCP` (default on). Off by default; enabled and tokened from the portal's **MCP** card. STA-mode only. See [AI assistant setup](../user/integrations/ai-assistants.md) for client setup.
 
 #### `POST /mcp`
 
@@ -3562,7 +3631,7 @@ Single Model Context Protocol endpoint — JSON-RPC 2.0 over the MCP **Streamabl
 - **Auth:** every request must carry `Authorization: Bearer <token>`. Fails closed: when `mcp_enabled` is true but no token has been generated, all requests are refused (`401`). Independent of portal Basic Auth.
 - **Availability:** returns `404` when `mcp_enabled` is false or the device is in AP/setup mode. Performs Origin validation (any browser `Origin` → `403`; native clients send none) and does not alter the global CORS allow-list.
 - **Tools:** control and authoring tools are hidden and refused unless their respective permissions are enabled. Some read tools, including cached external data inspection, require authoring permission. Display tools are absent on `!HAS_DISPLAY` boards. Control tools run on the main loop, never on the async web task.
-- **Body cap:** request bodies above 8 KB are rejected with JSON-RPC `-32600`.
+- **Body cap:** 8 KB normally, or 48 KB when pad authoring is enabled and PSRAM is available. Larger request bodies are rejected with JSON-RPC `-32600`.
 - **Implementation note:** served by a custom `AsyncWebHandler` (not `server->on`) because MCP clients send `Accept: application/json, text/event-stream`, which the stock callback handler rejects via `isHTTP()`. `GET`/`DELETE /mcp` return `405` (no SSE stream offered) so client transport negotiation succeeds.
 
 When `HAS_EXTERNAL_DATA` is enabled, MCP `get_config` lists source names,
@@ -3572,6 +3641,41 @@ argument can contain sensitive data. `inspect_external_data` requires authoring
 permission and returns bounded pages from the cached snapshot, including source
 state and age, without fetching. Paths follow the same rules as external
 bindings. The cache may change between pages.
+
+#### Complete pad replacement
+
+`replace_pad(screen, pad)` requires authoring permission and the normal protected
+write identity check. It resolves the target, copies the supplied object into a
+fresh PSRAM-preferred JSON document, and calls `commit_pad` in
+`src/app/mcp_tools_pads.cpp`. It does not load or merge the previous pad.
+Grid layouts require `cols` and `rows`; omitted `layout` means `grid`.
+Omitted optional fields follow the existing parser's defaults/inheritance.
+Omitted Main/Overlay arrays, bindings, and pad actions are locally empty.
+Actions require `action_format_version: 1`. In contrast, `set_pad` merges selected
+pad settings and `set_buttons` edits selected positions within one layer.
+
+The complete candidate passes `pad_validate_with_template`, including geometry,
+both layers, combined capacity, template composition, bindings, and actions.
+The existing deferred main-loop callback calls `pad_config_save_raw`, which
+refreshes the changed pad and its template dependents, then refreshes MQTT
+subscriptions. It does not redundantly rebuild unrelated pad caches.
+Save-time validation and storage/OTA guards remain in that shared path.
+Candidate JSON and serialized buffers prefer PSRAM; allocation failures are
+returned as errors.
+
+`get_pad` and `GET /api/pad` share image-password redaction and expose
+`bg_image_password_set` instead. Replacement rejects a true or non-boolean
+marker and removes a false marker. Passwords must be supplied explicitly;
+omission clears them. Portal coordinate-based password retention is unchanged
+and is not used by replacement.
+
+Validation rejection occurs before writing and leaves the stored/active pad
+unchanged. Persistence uses the existing storage replacement helper, without
+introducing a new crash-safe transaction or rollback guarantee after I/O failure.
+The existing four-second dispatch timeout can return an error while the queued
+save later executes. `MCPPad` timing logs separate queue delay, save/cache work,
+and subscription refresh; the shared save path also logs its internal stages.
+Concurrent portal/MCP saves remain last-write-wins.
 
 **Example (`initialize`):**
 ```bash
@@ -3839,7 +3943,7 @@ All pad-and-button-defaults endpoints require `HAS_DISPLAY` and are gated by Bas
 
 Returns saved device-level pad and button overrides and the board-selected firmware defaults.
 
-- **Response:** JSON object with explicitly saved fields and a read-only `firmware_defaults` object. Possible override fields: `default_pad_bg_color`, `button_spacing_px`, `pixel_shift_distance_px`, `pad_inset_top_px`, `pad_inset_right_px`, `pad_inset_bottom_px`, `pad_inset_left_px`, `bg_color`, `fg_color`, `icon_color`, `icon_badge_padding`, `icon_badge_color`, `border_color`, `border_width`, `corner_radius`, `content_pad`, `label_top_style`, `label_center_style`, `label_bottom_style`, `button_shadow_enabled`, `button_shadow_type`, `button_shadow_color_mode`, `button_shadow_color`, `button_shadow_darken_pct`, `button_shadow_offset_x_px`, `button_shadow_offset_y_px`, and `button_shadow_drop_blur_px`.
+- **Response:** JSON object with explicitly saved fields and a read-only `firmware_defaults` object. Possible override fields: `default_pad_bg_color`, `button_spacing_px`, `pixel_shift_distance_px`, `pad_inset_top_px`, `pad_inset_right_px`, `pad_inset_bottom_px`, `pad_inset_left_px`, `bg_color`, `bg_opacity`, `fg_color`, `icon_color`, `icon_badge_padding`, `icon_badge_color`, `border_color`, `border_width`, `corner_radius`, `content_pad`, `label_top_style`, `label_center_style`, `label_bottom_style`, `button_shadow_enabled`, `button_shadow_type`, `button_shadow_color_mode`, `button_shadow_color`, `button_shadow_darken_pct`, `button_shadow_offset_x_px`, `button_shadow_offset_y_px`, and `button_shadow_drop_blur_px`.
 - `firmware_defaults` contains the board's appearance, layout, and shadow defaults plus widget palette fields: `widget_series_color` (and `_2`, `_3`, `_4`), `widget_track_color`, `widget_indicator_color`, `widget_tick_color`, `widget_zone_color`, `widget_reference_color`, `widget_table_bg_color`, `widget_table_fg_color`, and `widget_table_header_color`.
 - Typography overrides are `default_font` (`@builtin` or a valid uploaded ID) and `base_text_size` (`0` for Automatic, or an integer from 1 to 65535). Defaults are `@builtin` and `0`. Unavailable IDs remain saved and fall back to bitmap text.
 - Read-only `typography_status` contains `active_font`, `active_base_text_size`, `board_medium_size`, `ttf_supported`, and `reboot_required`. It describes the boot snapshot, not whether every requested font instance loaded successfully.
@@ -4283,7 +4387,7 @@ package via jsDelivr, distributed under the
 
 #### `POST /api/pad/resolve`
 
-Resolve `[scheme:params]` binding tokens against the device's **live** data and return the resolved text — used by the pad editor's **Preview live values** button to show what a binding renders to without saving. Resolution runs on the main loop (LVGL task), so the request is deferred through the shared main-loop bridge; it resolves **values** only (not a pixel render). Nothing is persisted. Requires the same portal auth as the other `/api/pad*` routes. Gated `HAS_DISPLAY && HAS_MQTT`. Shares one resolver with the MCP `resolve_bindings` tool.
+Resolve `[scheme:params]` binding tokens against the device's **live** data and return the resolved text. The pad editor's **Preview live values** button uses this to show what a binding renders to without saving. Resolution runs through the existing LVGL display dispatcher, matching rendering's task and stack budget while preserving its binding context. It resolves **values** only, not pixels. Nothing is persisted. Requires the same portal auth as the other `/api/pad*` routes. Gated `HAS_DISPLAY`. Shares one resolver with the MCP `resolve_bindings` tool.
 
 - **Request:**
 ```json
@@ -4302,16 +4406,27 @@ Resolve `[scheme:params]` binding tokens against the device's **live** data and 
   "button": { "label_center": "1240W", "fg_color": "#22c55e" }
 }
 ```
-  Errors: `400` (bad params / invalid JSON), `503` (busy: another resolve/control job is in flight, retry; or out of memory), and `500` (the main-loop dispatch timed out or another internal failure occurred). The resolver copies its input before queuing it, so a timed-out request remains safe while the main loop finishes and releases its owned data.
+  Errors: `400` (bad params / invalid JSON), `503` (busy: another display job is in flight, retry; or out of memory), and `500` (display dispatch timed out or another internal failure occurred). The resolver copies its input before queuing it, so a timed-out request remains safe while the LVGL task finishes and releases its owned data. The two-second timeout is unchanged.
 
-> **Pad save validation.** `POST /api/pad` validates the submitted pad through the shared `pad_validate()` (the same validator the MCP write tools use): grid bounds, span overflow, widget types/config caps, colors, action arrays, binding tokens (unknown scheme, bad health key, …), and the one-level `[pad:name]` rule. Grid pads may include `column_widths_px` and `row_heights_px` integer arrays, one value per track, with `0` representing Auto. Each configured axis must retain at least one Auto track, and fixed sizes must fit the active display after spacing and insets while leaving at least one pixel for every Auto track. Buttons that fall outside a shrunken grid are tolerated (hidden, and reappear when the grid grows).
+> **Pad save validation.** `POST /api/pad` validates the submitted pad through the shared `pad_validate()` (the same validator the MCP write tools use): grid bounds, span overflow, widget types/config caps, colors, action arrays, binding tokens (unknown scheme, bad health key, …), and named-binding input limits (not dependency-graph validation). Grid pads may include `column_widths_px` and `row_heights_px` integer arrays, one value per track, with `0` representing Auto. Each configured axis must retain at least one Auto track, and fixed sizes must fit the active display after spacing and insets while leaving at least one pixel for every Auto track. Buttons that fall outside a shrunken grid are tolerated (hidden, and reappear when the grid grows).
 
-> **Button background transparency.** A button's `bg_color` accepts the literal
-> `transparent` on both `buttons` (Main) and `overlay_buttons` (Overlay).
-> Background bindings can also resolve to `transparent`; invalid results restore
-> the opaque fallback. This changes only the background fill, not input blocking,
-> content opacity, or other color fields. The portal offers this choice only in
-> the button Background picker and preserves it through save/import/export.
+> **Button background opacity.** Both `buttons` (Main) and `overlay_buttons`
+> (Overlay) accept an optional static integer `bg_opacity`, 0-100 percent.
+> Omit both `bg_color` and `bg_opacity` to inherit the device background from
+> `GET/POST /api/component/button-defaults/config`; firmware opacity is 100.
+> A background override contains both fields. A color supplied without opacity
+> is opaque; opacity without a color is rejected.
+> Explicit 0 is fully transparent. `bg_color` requires a normal color or binding,
+> not the literal `transparent`. Invalid color binding results restore the fallback
+> color without changing opacity. Only the base background color fill changes,
+> not input blocking, content, patterns, shadows, images, or widget fills.
+> The Background picker stages color and opacity together, shows alpha over a
+> checkerboard in its preview and badge, and preserves overrides through
+> save/import/export. Its opacity slider has a read-only percentage.
+> Resetting Background clears both overrides.
+> On load and import, unsupported saved button background overrides clear both
+> fields from the draft, with a notification. Loading marks the cleanup unsaved;
+> only Save Pad persists it. Bindings remain intact for runtime resolution.
 
 > **Image credentials.** `GET /api/pad` never returns a button's
 > `bg_image_password`. It supplies `bg_image_password_set` instead. On a later

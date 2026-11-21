@@ -38,6 +38,24 @@ The component's exists indicator describes physical configuration-file
 existence, not whether normalized content is nonempty.
 Concurrent portal/MCP pad saves remain last-write-wins.
 
+Pad writes reuse `pad_config_save_raw`'s changed-pad and template-dependent
+cache refresh, without a second all-pad rebuild. `MCPPad` logs separate queue
+delay, save/cache work, and subscription refresh. The four-second write timeout
+is unchanged; a timeout does not prove that a queued write was cancelled.
+
+## Binding previews
+
+MCP `resolve_bindings` and portal `/api/pad/resolve` share one request helper.
+It dispatches resolution to the LVGL task, using rendering's resolver stack
+budget and existing safety guards. A scoped pad context restores the live
+renderer's bindings after the preview. No additional task or queue is created.
+Preview inputs and results remain in PSRAM-preferred payload buffers, including
+owned inputs and deferred cleanup after timeout.
+
+Previews share the display-job slot, so another display job can make them busy.
+The two-second preview timeout remains unchanged. They do not verify external
+source availability or physical panel presentation.
+
 ## Home Assistant completion
 
 [Press dispatch](../../src/app/mcp_press_button.cpp) keeps ordinary lists

@@ -124,16 +124,40 @@ void image_upload_track_contents(ImageUploadState& state, const uint8_t* data, s
 
 void image_library_get_images(AsyncWebServerRequest* request) {
     if (!portal_auth_gate(request)) return;
-    char directory[IMAGE_LIBRARY_PATH_MAX_LEN] = {};
-    if (!image_library_directory_from_request(request, directory, sizeof(directory))) {
-        web_portal_send_json_error(request, 400, "Invalid image directory");
-        return;
-    }
     portENTER_CRITICAL(&s_image_mutation_lock);
     const bool mutating = s_image_mutation_active;
     portEXIT_CRITICAL(&s_image_mutation_lock);
     if (mutating) {
         web_portal_send_json_error(request, 409, "Image library is busy");
+        return;
+    }
+    if (request->hasParam("file")) {
+        const String path = request->getParam("file")->value();
+        if (!ImageLibraryCatalog::is_image_path(path.c_str())) {
+            web_portal_send_json_error(request, 400, "Invalid image path");
+            return;
+        }
+        File file = Storage.open(path.c_str(), "r");
+        if (!file || file.isDirectory()) {
+            if (file) file.close();
+            web_portal_send_json_error(request, 404, "Image file not found");
+            return;
+        }
+        file.close();
+        const char* extension = strrchr(path.c_str(), '.');
+        auto* response = request->beginResponse(Storage, path,
+            strcasecmp(extension, ".png") == 0 ? "image/png" : "image/jpeg");
+        if (!response) {
+            web_portal_send_json_error(request, 503, "Image response unavailable");
+            return;
+        }
+        response->addHeader("Cache-Control", "no-store");
+        request->send(response);
+        return;
+    }
+    char directory[IMAGE_LIBRARY_PATH_MAX_LEN] = {};
+    if (!image_library_directory_from_request(request, directory, sizeof(directory))) {
+        web_portal_send_json_error(request, 400, "Invalid image directory");
         return;
     }
     auto* snapshot = static_cast<ImageLibrarySnapshot*>(heap_caps_malloc(

@@ -360,16 +360,18 @@ TEST_F(ListSourceTest, ItemValidationFollowsPadAliasesAndEnforcesContext) {
         {"title", "Display title", ListSourceFieldType::String, true},
     };
     static const ListSourceDescriptor source = {"[notes:recent]", "Notes", fields, 2};
-    PadBinding bindings[] = {{"selected", "[item:id]"}, {"cycle", "[pad:cycle]"}};
+    PadBinding bindings[] = {{"selected", "[item:id]"}, {"cycle", "[pad:cycle]"}, {"alias", "[pad:selected]"}};
     EXPECT_EQ(item_binding_validate("[expr:[item:title|none]==\"note\"?1:0]", &source, bindings, 2), nullptr);
     EXPECT_EQ(item_binding_validate("[pad:selected;%s]", &source, bindings, 2), nullptr);
+    EXPECT_EQ(item_binding_validate("[pad:alias]", &source, bindings, 3), nullptr);
+    EXPECT_STREQ(item_binding_validate("[pad:alias]", nullptr, bindings, 3),
+                 "item binding is unavailable in this context");
     EXPECT_STREQ(item_binding_validate("[pad:selected]", nullptr, bindings, 2),
                  "item binding is unavailable in this context");
     EXPECT_EQ(item_binding_validate("[expr:[item:unknown|0]==0]", &source, bindings, 2), nullptr);
     EXPECT_STREQ(item_binding_validate("[expr:[item:unknown|0]==0]", nullptr, bindings, 2),
                  "item binding is unavailable in this context");
-    EXPECT_STREQ(item_binding_validate("[pad:cycle]", &source, bindings, 2),
-                 "recursive pad binding");
+    EXPECT_EQ(item_binding_validate("[pad:cycle]", &source, bindings, 2), nullptr);
     EXPECT_STREQ(item_binding_validate("[list:notes.selected]", &source, bindings, 2),
                  "legacy list binding is not supported");
 

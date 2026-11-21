@@ -11,6 +11,7 @@
 constexpr uint8_t OPTION_SELECTOR_SLOTS = 5;
 constexpr uint8_t OPTION_SELECTOR_DEFAULT_INSET = 4;
 constexpr uint8_t OPTION_SELECTOR_MAX_INSET = 64;
+constexpr uint16_t OPTION_SELECTOR_MAX_WEIGHT = 1000;
 
 enum class OptionSelectorContent : uint8_t { None, Label, Icon };
 enum class OptionSelectorMode : uint8_t { None, Bound, Local };
@@ -27,6 +28,7 @@ struct OptionSelectorSlot {
     char foreground[CONFIG_COLOR_MAX_LEN];
     char background[CONFIG_COLOR_MAX_LEN];
     char state[CONFIG_BTN_STATE_MAX_LEN];
+    uint16_t weight;
     OptionSelectorContent kind;
 };
 

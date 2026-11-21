@@ -10,6 +10,7 @@
 #include "action_parse.h"
 #include "action_registry.h"
 #include "action_catalog.h"
+#include "mcp_pad_image_metadata.h"
 #include "action_validate.h"
 #include "binding_template.h"
 #include "voice_notes.h"
@@ -478,6 +479,7 @@ TEST(typed_home_assistant_validation) {
         args["data_json"] = data;
         ASSERT_TRUE(!action_operation_validate_json(document.as<JsonObjectConst>(), false));
     }
+
     for (const char* data : {"{", "[]", "42", "true", "null", "{\"x\":1,}"}) {
         args["data_json"] = data;
         ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>(), false));
@@ -511,6 +513,62 @@ TEST(typed_home_assistant_validation) {
     args["service"] = "toggle";
     args["data_json"] = std::string(sizeof(HaServicePayload::data_json), ' ');
     ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>(), false));
+}
+
+TEST(home_assistant_catalog_examples_are_valid) {
+    JsonDocument catalog;
+    action_catalog_emit(catalog.to<JsonArray>());
+    JsonObjectConst call;
+    for (JsonObjectConst owner : catalog.as<JsonArrayConst>())
+        for (JsonObjectConst operation : owner["operations"].as<JsonArrayConst>())
+            if (!strcmp(operation["id"] | "", "ha.service.call")) call = operation;
+    ASSERT_TRUE(!call.isNull());
+    JsonDocument example;
+    example["op"] = call["id"];
+    JsonObject args = example["args"].to<JsonObject>();
+    for (JsonObjectConst argument : call["arguments"].as<JsonArrayConst>()) {
+        ASSERT_TRUE((argument["description"] | "")[0]);
+        args[argument["name"].as<const char*>()] = argument["example"];
+    }
+    ASSERT_STR(args["entity_id"].as<const char*>(), "media_player.living_room");
+    ASSERT_STR(args["service"].as<const char*>(), "media_play_pause");
+    ASSERT_TRUE(!action_operation_validate_json(example.as<JsonObjectConst>(), false));
+    args["service"] = "media_player.media_play_pause";
+    ASSERT_TRUE(action_operation_validate_json(example.as<JsonObjectConst>(), false));
+}
+
+TEST(image_metadata_capabilities_and_fields) {
+    for (unsigned profile = 0; profile < 4; ++profile) {
+        const bool remote = profile & 1;
+        const bool local = profile & 2;
+        JsonDocument document;
+        JsonObject button = document.to<JsonObject>();
+        button.createNestedArray("fields").add("label_center");
+        mcp_pad_image_metadata_emit(button, remote, local, remote && local);
+        ASSERT_EQ(button["fields"].size(), 8);
+        ASSERT_STR(button["fields"][0].as<const char*>(), "label_center");
+        JsonObjectConst images = button["background_images"];
+        ASSERT_EQ(images["has_image_fetch"].as<bool>(), remote);
+        ASSERT_EQ(images["has_image_library"].as<bool>(), local);
+        ASSERT_EQ(images["incompatible_widgets"].size(), remote && local ? 1 : 0);
+        if (remote && local)
+            ASSERT_STR(images["incompatible_widgets"][0].as<const char*>(), "external");
+        ASSERT_TRUE((images["authentication_note"] | "")[0]);
+        JsonObjectConst fields = button["image_fields"];
+        ASSERT_EQ(fields["bg_image_url"]["available"].as<bool>(), remote);
+        ASSERT_EQ(fields["bg_image_path"]["available"].as<bool>(), local);
+        ASSERT_EQ(fields["bg_image_fit"]["available"].as<bool>(), remote || local);
+        ASSERT_EQ(fields["bg_image_url"]["max_length"].as<unsigned>(), CONFIG_BG_IMAGE_URL_MAX_LEN - 1);
+        ASSERT_EQ(fields["bg_image_path"]["max_length"].as<unsigned>(), CONFIG_BG_IMAGE_PATH_MAX_LEN - 1);
+        ASSERT_TRUE(fields["bg_image_url"]["bindable"].as<bool>());
+        ASSERT_TRUE(fields["bg_image_path"]["bindable"].as<bool>());
+        ASSERT_TRUE(!fields["bg_image_password"]["bindable"].as<bool>());
+        ASSERT_TRUE(fields["bg_image_password_set"]["default"].is<bool>());
+        ASSERT_EQ(fields["bg_image_interval_ms"]["max"].as<uint32_t>(), UINT32_MAX);
+        ASSERT_EQ(fields["bg_image_interval_ms"]["default"].as<unsigned>(), 0);
+        ASSERT_STR(fields["bg_image_fit"]["default"].as<const char*>(), "fill-center");
+        ASSERT_EQ(fields["bg_image_fit"]["choices"].size(), 6);
+    }
 }
 
 TEST(typed_operation_boundaries_and_capabilities) {
@@ -602,6 +660,8 @@ int main(int argc, char** argv) {
     RUN(typed_operation_round_trips);
     RUN(incompatible_action_documents_are_rejected);
     RUN(typed_home_assistant_validation);
+    RUN(home_assistant_catalog_examples_are_valid);
+    RUN(image_metadata_capabilities_and_fields);
     RUN(typed_operation_boundaries_and_capabilities);
     printf("\n=== Results: %d passed, %d failed ===\n", g_pass, g_fail);
     return g_fail > 0 ? 1 : 0;

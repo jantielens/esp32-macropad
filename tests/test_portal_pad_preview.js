@@ -160,9 +160,11 @@ for (const [background, gripColor] of [
 for (const layer of ['main', 'overlay']) {
     const cell = createElement();
     cell.dataset.layer = layer;
-    context.padRenderCellContent(cell, { bg_color: 'transparent', label_center: 'Visible content' });
-    assert.strictEqual(cell.style.background, 'transparent');
+    context.padRenderCellContent(cell, { bg_color: '#333333', bg_opacity: 0, label_center: 'Visible content' });
+    assert.strictEqual(cell.style.background, 'rgba(51,51,51,0)');
     assert(descendants(cell).some(child => child.textContent === 'Visible content'));
+    context.padRenderCellContent(cell, { bg_color: '#333333', bg_opacity: 50 });
+    assert.strictEqual(cell.style.background, 'rgba(51,51,51,0.5)');
     context.padRenderCellContent(cell, { bg_color: '[mqtt:background]' });
     assert.strictEqual(cell.style.background, '#333333', 'Unresolved preview must not retain stale transparency');
     context.padRenderCellContent(cell, { bg_color: '#333333' });
@@ -171,6 +173,16 @@ for (const layer of ['main', 'overlay']) {
     assert.strictEqual(cell.style.background, '#FFFFFF', 'Short hex backgrounds remain supported');
     context.padRenderCellContent(cell, {});
     assert.strictEqual(cell.style.background, '#333333', 'Unset backgrounds remain opaque');
+}
+{
+    const defaults = context.padGetEffectiveDefault;
+    context.padGetEffectiveDefault = key => key === 'bg_opacity' ? 60 : defaults(key);
+    const cell = createElement();
+    context.padRenderCellContent(cell, {});
+    assert.strictEqual(cell.style.background, 'rgba(51,51,51,0.6)', 'Unset background inherits color and opacity');
+    context.padRenderCellContent(cell, { bg_color: '#FFFFFF' });
+    assert.strictEqual(cell.style.background, '#FFFFFF', 'A color override without opacity is opaque, not independently inherited');
+    context.padGetEffectiveDefault = defaults;
 }
 context.deviceInfoCache.widget_catalog.push({ type: 'future_widget', name: 'Future Widget', icon: 'list',
     axis_field: 'custom_axis', horizontal_icon: 'swap_horiz', vertical_icon: 'swap_vert', default_axis: 'vertical' });
@@ -353,6 +365,15 @@ vm.runInContext(grid, context);
     background.value = '#ffffff';
     context.padUpdateGridBackground();
     assert(!cell.classes.has('pad-cell-boundary-guide'), 'Pad background changes must refresh existing guides');
+    context.deviceInfoCache.has_image_library = true;
+    context.padState.backgroundImagePath = '/images/a photo.png';
+    context.padUpdateGridBackground();
+    assert(gridElement.style.backgroundImage.includes(encodeURIComponent('/images/a photo.png')));
+    assert.strictEqual(gridElement.style.backgroundSize, 'cover');
+    assert.strictEqual(gridElement.style.backgroundPosition, 'center');
+    context.padState.backgroundImagePath = '';
+    context.padUpdateGridBackground();
+    assert.strictEqual(gridElement.style.backgroundImage, 'none', 'Clearing the selection removes its preview');
     gridElement.querySelectorAll = () => [];
     context.document.getElementById = id => id === 'pad-grid' ? gridElement : null;
 }
@@ -717,6 +738,32 @@ assert.deepStrictEqual(Array.from(context.padSelectTemplateButtons(
     assert.deepStrictEqual(offset(), { x: -1, y: 3 }, 'Visible bounds, including translucent edges, are centered');
 }
 
+async function checkBindingDefinitionPreview() {
+    const requests = [];
+    const preview = {
+        window: {},
+        document: { addEventListener() {} },
+        padState: { page: 3 },
+        padPvIsBinding: value => value.includes('['),
+        padPvHex: () => null,
+        padPreviewEsc: value => value,
+        fetch: async (url, options) => {
+            requests.push({ url, body: JSON.parse(options.body) });
+            return { ok: true, json: async () => ({ resolved: [{ value: 'Piek' }] }) };
+        }
+    };
+    vm.createContext(preview);
+    vm.runInContext(fs.readFileSync('src/app/web/portal_pad_defaults.js', 'utf8'), preview);
+    const chip = { style: {}, innerHTML: '', title: '' };
+    preview.padBindingPreviewUpdate(chip, { value: '[pad:energy_state]' }, 0);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepStrictEqual(requests, [{
+        url: '/api/pad/resolve',
+        body: { screen: 'pad_3', bindings: ['[pad:energy_state]'] }
+    }]);
+    assert.strictEqual(chip.title, 'Piek', 'definition preview displays the result from its saved pad context');
+}
+
 async function checkPickerResults() {
     vm.runInContext(fs.readFileSync('src/app/web/portal_icon_picker.js', 'utf8'), context);
     const nodes = new Map();
@@ -767,7 +814,7 @@ async function checkPickerResults() {
     assert.strictEqual(resultGrid.children.length, 0);
 }
 
-checkPickerResults().then(() => console.log('portal_pad_preview: PASS')).catch(error => {
+checkBindingDefinitionPreview().then(checkPickerResults).then(() => console.log('portal_pad_preview: PASS')).catch(error => {
     console.error(error);
     process.exitCode = 1;
 });

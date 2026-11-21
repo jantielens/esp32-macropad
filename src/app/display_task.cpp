@@ -14,6 +14,7 @@
 #include "action_list.h"
 #include "device_dialog.h"
 #include "pad_config.h"
+#include "pad_background.h"
 #include "screen_saver_manager.h"
 #if HAS_TOUCH
 #include "touch_manager.h"
@@ -319,6 +320,12 @@ void DisplayManager::lvglTask(void* pvParameter) {
 						mgr->pendingHistoryScreen = nullptr;
 
 						mgr->currentScreen = target;
+#if HAS_IMAGE_LIBRARY
+						bool targetIsPad = false;
+						for (uint8_t pi = 0; pi < MAX_PADS; ++pi)
+							if (target == mgr->padScreens[pi]) { targetIsPad = true; break; }
+						if (!targetIsPad) pad_background_release();
+#endif
 						mgr->currentScreen->show();
 						mgr->pendingScreen = nullptr;
 						if (mgr->pendingScreenInteractive) mgr->interactionChanged(mgr->pendingScreenRequestedUs);

@@ -40,6 +40,7 @@ const padState = {
     buttonDefaults: {},  // Device-level pad and button defaults (loaded from /api/button-defaults)
     templatePad: -1,     // Template pad index (-1 = none)
     templateButtons: [], // Buttons loaded from template pad (for ghost rendering)
+    backgroundImagePath: '',
     placingBlock: null,  // Block being placed (from catalog), or null
     dragSource: null,    // {col, row} of button being dragged, or null
 };
@@ -47,6 +48,14 @@ const padState = {
 function padMaxButtons() {
     const limit = Number(deviceInfoCache && deviceInfoCache.max_pad_buttons);
     return Number.isInteger(limit) && limit > 0 ? limit : 64;
+}
+
+function padLoadBackgroundImage(path) {
+    padState.backgroundImagePath = path || '';
+    // @portal-if HAS_IMAGE_LIBRARY
+    if (deviceInfoCache && deviceInfoCache.has_image_library === true)
+        padLoadLocalImageOptions(padState.backgroundImagePath, false, 'pad-background-image');
+    // @portal-endif
 }
 
 let padDirty = false;
@@ -293,6 +302,13 @@ async function padInit() {
     // @portal-endif
     padWidgetEditorsInit(deviceInfoCache, padWorkspaceWidgetSettled);
     padSetImageCapabilityVisibility(deviceInfoCache);
+    const backgroundGroup = document.getElementById('pad-background-image-group');
+    if (backgroundGroup) backgroundGroup.style.display =
+        deviceInfoCache.has_image_library === true ? '' : 'none';
+    const backgroundHint = document.getElementById('pad-background-image-hint');
+    if (backgroundHint && deviceInfoCache.display_coord_width && deviceInfoCache.display_coord_height)
+        backgroundHint.textContent = 'For best results, use a ' +
+            deviceInfoCache.display_coord_width + '\u00d7' + deviceInfoCache.display_coord_height + ' image.';
     const aeContainer = document.getElementById('pad-action-editors');
     if (aeContainer) {
         var aeOpts = { showBleHint: true, showKeyHelp: true, operations: true };
@@ -363,6 +379,17 @@ async function padInit() {
     document.getElementById('pad-edit-paste').addEventListener('click', padDialogPasteBtn);
     document.getElementById('pad-edit-clear').addEventListener('click', padDialogClear);
     // @portal-if HAS_IMAGE_LIBRARY
+    const backgroundSelect = document.getElementById('pad-background-image');
+    if (backgroundSelect) backgroundSelect.addEventListener('change', function () {
+        padState.backgroundImagePath = backgroundSelect.value;
+        padUpdateGridBackground();
+        padMarkDirty();
+    });
+    const backgroundRefresh = document.getElementById('pad-background-image-refresh');
+    if (backgroundRefresh) backgroundRefresh.addEventListener('click', function () {
+        padLoadLocalImageOptions(padState.backgroundImagePath, true, 'pad-background-image');
+        padUpdateGridBackground();
+    });
     var imageRefresh = document.getElementById('pad-edit-bg-image-refresh');
     if (imageRefresh) imageRefresh.addEventListener('click', function () {
         padLoadLocalImageOptions(document.getElementById('pad-edit-bg-image-path').value, true);
@@ -737,6 +764,7 @@ function padWidgetTypeChanged() {
 async function padLoadPage(page, defaultsReady, selectedLayer, throwOnError = false) {
     const generation = ++padLoadGeneration;
     let actionsReset = false;
+    let backgroundsReset = false;
     const section = document.getElementById('pad-config-section');
     const current = () => generation === padLoadGeneration && document.getElementById('pad-config-section') === section;
     if (typeof padWorkspaceReset === 'function') padWorkspaceReset();
@@ -774,6 +802,7 @@ async function padLoadPage(page, defaultsReady, selectedLayer, throwOnError = fa
             document.getElementById('pad-rows').value = padState.rows;
             document.getElementById('pad-name').value = '';
             document.getElementById('pad-wake-screen').value = '';
+            padLoadBackgroundImage('');
             padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
             padSetBindableColor('pad-edit-page-bg-color', padGetEffectiveDefault('default_pad_bg_color'));
             document.getElementById('pad-page-bg-mode').value = 'inherit';
@@ -800,6 +829,7 @@ async function padLoadPage(page, defaultsReady, selectedLayer, throwOnError = fa
         padCheckImportedKeys(json);
         actionsReset = padResetOlderActions(json);
         padCheckImportedActionFormat(json);
+        backgroundsReset = padResetUnsupportedBackgrounds(json);
         padState.rawJson = json;
         const maxCols = (deviceInfoCache && deviceInfoCache.max_grid_cols) || 8;
         const maxRows = (deviceInfoCache && deviceInfoCache.max_grid_rows) || 8;
@@ -811,6 +841,7 @@ async function padLoadPage(page, defaultsReady, selectedLayer, throwOnError = fa
         document.getElementById('pad-rows').value = padState.rows;
         document.getElementById('pad-name').value = json.name || '';
         document.getElementById('pad-wake-screen').value = json.wake_screen || '';
+        padLoadBackgroundImage(json.bg_image_path);
         padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
         padSetBindableColor('pad-edit-page-bg-color', json.bg_color || padGetEffectiveDefault('default_pad_bg_color'));
         document.getElementById('pad-page-bg-mode').value = json.bg_color ? 'override' : 'inherit';
@@ -845,7 +876,9 @@ async function padLoadPage(page, defaultsReady, selectedLayer, throwOnError = fa
                    padColorToHex(json.bg_color || padGetEffectiveDefault('default_pad_bg_color'), padGetEffectiveDefault('default_pad_bg_color')));
         padRenderGrid();
         padState.loadError = null;
-        if (actionsReset) showMessage(PAD_ACTION_RESET_WARNING, 'info');
+        if (actionsReset || backgroundsReset) showMessage([
+            actionsReset && PAD_ACTION_RESET_WARNING, backgroundsReset && PAD_BACKGROUND_RESET_WARNING,
+        ].filter(Boolean).join(' '), 'info');
     } catch (err) {
         if (!current()) return;
         console.error('padLoadPage error:', err);
@@ -856,11 +889,11 @@ async function padLoadPage(page, defaultsReady, selectedLayer, throwOnError = fa
     } finally {
         // Loading action lists, bindings, and template buttons can update
         // controls after the initial reset. A settled page is the clean
-        // baseline, except when older actions were removed from the draft.
+        // baseline, except when unsupported values were removed from the draft.
         if (current()) {
             padState.loadPending = false;
             if (typeof padWorkspace !== 'undefined' && padWorkspace) padWorkspace.loading = false;
-            if (actionsReset && !padState.loadError) padMarkDirty();
+            if ((actionsReset || backgroundsReset) && !padState.loadError) padMarkDirty();
             else padClearDirty();
         }
     }
@@ -922,6 +955,8 @@ function padBuildSaveContext() {
         delete payload.bg_color;
     }
     delete payload.bg_color_default;
+    if (padState.backgroundImagePath) payload.bg_image_path = padState.backgroundImagePath;
+    else delete payload.bg_image_path;
 
     // Strip legacy pad-level button_defaults (now device-level)
     delete payload.button_defaults;

@@ -944,6 +944,15 @@ public:
 5. **Destroy** - Called in DisplayManager destructor
    - Free all LVGL objects
 
+Local pad backgrounds use one shared loader slot owned by `pad_background.cpp`,
+not one decoded buffer per cached `PadScreen`. Pad navigation detaches the LVGL
+image before releasing pixels; consecutive pads with matching image paths,
+dimensions, and library-content generation reuse ready or pending loads.
+Navigation to a non-pad screen and display teardown release the slot.
+Background polling runs on the LVGL task, independently of passive binding
+refresh cadence. See [pad background selection and preview](web-portal.md)
+for the portal contract.
+
 ### Included Screens
 
 **SplashScreen** (`splash_screen.h/cpp`)

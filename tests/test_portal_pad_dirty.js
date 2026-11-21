@@ -746,6 +746,9 @@ async function checkFailedLoadProtectsSavedPad() {
 		padDialogShowValidationError(error) { validationErrors.push(error.message); },
 	};
 	vm.createContext(testContext);
+	const providedGlobals = { ...testContext };
+	vm.runInContext(fs.readFileSync('src/app/web/portal_pad_colors.js', 'utf8'), testContext);
+	Object.assign(testContext, providedGlobals);
 	vm.runInContext(fs.readFileSync('src/app/web/portal_pad_io.js', 'utf8'), testContext);
 	vm.runInContext(source, testContext);
 	testContext.padPageBackgroundModeChanged = () => {};
@@ -801,6 +804,42 @@ async function checkFailedLoadProtectsSavedPad() {
 		overlay_buttons: [{ col: 1, row: 1, label: 'Overlay' }],
 	}, 'The save payload must preserve non-action settings without restoring legacy action fields');
 	assert.doesNotThrow(() => testContext.padCheckImportedActionFormat(recovered));
+
+	const backgroundPad = {
+		action_format_version: 1, cols: 3, rows: 2, name: 'Background cleanup',
+		custom_setting: { retained: true },
+		buttons: [
+			{ col: 0, row: 0, bg_color: 'transparent', bg_opacity: 50, label: 'Keep me',
+				actions: [{ op: 'screen.open', args: { target: 'pad_1' } }] },
+			{ col: 1, row: 0, bg_color: '#abcdef', bg_opacity: 0 },
+			{ col: 2, row: 0, bg_opacity: 30 },
+		],
+		overlay_buttons: [
+			{ col: 0, row: 1, bg_color: 'obsolete', bg_opacity: 0, fg_color: 'ffffff' },
+			{ col: 1, row: 1, bg_color: '[future:color]', bg_opacity: 40 },
+			{ col: 2, row: 1, bg_color: 'ffffff', bg_opacity: 101 },
+		],
+	};
+	testContext.fetch = async () => ({ ok: true, async json() { return JSON.parse(JSON.stringify(backgroundPad)); } });
+	await testContext.padLoadPage(0);
+	assert.strictEqual(vm.runInContext('padState.loadError', testContext), null);
+	assert.strictEqual(vm.runInContext('padDirty', testContext), true, 'Background cleanup must remain an unsaved change');
+	assert.strictEqual(writes, 0, 'Background cleanup must not write the saved pad');
+	assert(messages.some(message => /unsupported button backgrounds.*draft/i.test(message)));
+	const backgroundPayload = JSON.parse(buildSaveContext().body);
+	assert.deepStrictEqual(backgroundPayload.buttons, [
+		{ col: 0, row: 0, label: 'Keep me', actions: [{ op: 'screen.open', args: { target: 'pad_1' } }] },
+		backgroundPad.buttons[1],
+		{ col: 2, row: 0 },
+	], 'Save must omit the complete unsupported background override and retain valid backgrounds and actions');
+	assert.deepStrictEqual(backgroundPayload.overlay_buttons, [
+		{ col: 0, row: 1, fg_color: 'ffffff' }, backgroundPad.overlay_buttons[1], { col: 2, row: 1 },
+	]);
+	assert.deepStrictEqual(backgroundPayload.custom_setting, { retained: true });
+	assert.strictEqual(backgroundPad.buttons[0].bg_color, 'transparent', 'Loading must leave the saved document untouched');
+	testContext.fetch = async () => ({ ok: true, async json() { return backgroundPayload; } });
+	await testContext.padLoadPage(0);
+	assert.strictEqual(vm.runInContext('padDirty', testContext), false, 'A cleaned pad must load without further cleanup');
 
 	for (const version of [2, '1', null, -1]) {
 		testContext.fetch = async () => ({

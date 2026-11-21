@@ -73,9 +73,10 @@ private:
 };
 
 // Publish current filesystem usage to `fs_health_set_storage_usage()`.
-// `usedBytes()` / `totalBytes()` walk the FAT on SD cards and can be slow
-// on large volumes, so this helper throttles repeat calls to once per minute.
+// Usage queries can be slow on LittleFS and large SD volumes, so this helper
+// throttles repeat calls to once per minute.
 // Pass `force=true` once after mount to populate the cache immediately.
+// Capacity is reused between forced refreshes, avoiding a second LittleFS scan.
 void storage_publish_usage(bool force = false);
 
 inline bool storage_boot_should_halt(bool sd_mount_succeeded) {
