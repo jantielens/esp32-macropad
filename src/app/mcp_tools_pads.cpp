@@ -41,6 +41,7 @@
 #include "binding_template.h"
 #include "binding_schema.h"
 #include "action_catalog.h"
+#include "mcp_pad_image_metadata.h"
 #if HAS_PSRAM
 #include "list_source.h"
 #endif
@@ -162,6 +163,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
         "btn_state", "widget_type", "widget_data_binding", "actions", "lp_actions"
     };
     for (const char* f : fields) bf.add(f);
+    mcp_pad_image_metadata_emit(btn, HAS_IMAGE_FETCH, HAS_IMAGE_LIBRARY, HAS_NATIVE_EXTENSIONS);
     btn["layer_note"] = "Buttons are stored in buttons (Main) or overlay_buttons (Overlay). Authoring tools accept layer='main' or layer='overlay'; omitted layer means Main. Positions are local array indices, while col/row are grid coordinates.";
     btn["widget_note"] = "widget keys are flat: widget_type + widget_data_binding[_2.._4]; widget config fields (e.g. min/max/color) are flat on the button too";
     btn["content_layout_note"] = "icon_position places the icon above, below, left or right of the labels; omit to inherit device defaults (firmware default left). widget_position defaults to right; overlay-top-left, overlay-top-center, overlay-top-right, overlay-center-left, overlay-center, overlay-center-right, overlay-bottom-left, overlay-bottom-center and overlay-bottom-right place labels and icon over the full widget. overlay_backdrop=true adds a translucent button-background-colored backdrop to overlaid labels and icon; default false. Rocker and Numeric Rocker default to rocker_group_layout center; beside uses widget_position. group_size_pct is 0 for auto or 10-90 percent of the layout axis, and is ignored for overlay; centered groups are capped to the center lane without changing input zones.";

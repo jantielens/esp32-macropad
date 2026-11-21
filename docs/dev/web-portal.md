@@ -1724,6 +1724,18 @@ Passing `widget` returns only that registered widget under `widgets`, plus
 `widget_common`. Use one filter at a time; unknown names are parameter errors.
 Omitting both arguments returns the full manifest.
 
+The full manifest includes button background-image discovery under
+`button.image_fields`: field types, defaults, saved-input byte limits, binding
+support, fit choices, and per-field availability. `button.background_images`
+reports `has_image_fetch` and `has_image_library`, matching `/api/info`, plus
+widget compatibility and authentication restrictions. These flags describe
+firmware support, not network reachability or the presence of a local file.
+The Extension widget (`external`) replaces button content; the portal continues
+to hide its image controls without clearing configured values or adding a notice.
+Remote URL bindings cannot use authentication, including
+`bg_image_password_set=true` from a retained portal password. This indicator is
+not an MCP password-retention mechanism.
+
 Display builds with local sensors register `[sensor:key;format]`. Its keys
 and descriptions come from the sensor registrations, including board-specific
 providers. For example, `[sensor:temperature;%.1f|N/A]` reads the shared cache

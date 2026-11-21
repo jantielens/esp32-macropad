@@ -58,14 +58,17 @@ const char* validate_ha_service_data(const char* data) {
 }
 const ActionArgumentDef kHaServiceCallArguments[] = {
     {"entity_id", "Entity ID", ACTION_ARGUMENT_STRING, 0, 0,
-     sizeof(((HaServicePayload*)nullptr)->entity_id) - 1, true, "[var:entity_id]", "text",
-     nullptr, 0, false, validate_ha_entity},
+     sizeof(((HaServicePayload*)nullptr)->entity_id) - 1, true, "media_player.living_room", "text",
+     nullptr, 0, false, validate_ha_entity, nullptr, 0, nullptr, 0, false, nullptr,
+     "Home Assistant entity ID with domain and object portions, such as media_player.living_room. The entity domain determines the service domain."},
     {"service", "Service", ACTION_ARGUMENT_STRING, 0, 0,
-     sizeof(((HaServicePayload*)nullptr)->service) - 1, true, "[var:service]", "text",
-     nullptr, 0, false, validate_ha_service_name},
+     sizeof(((HaServicePayload*)nullptr)->service) - 1, true, "media_play_pause", "text",
+     nullptr, 0, false, validate_ha_service_name, nullptr, 0, nullptr, 0, false, nullptr,
+     "Bare service name, such as media_play_pause, NOT media_player.media_play_pause. The domain is inferred from entity_id. Only lowercase letters, digits, and underscores are allowed."},
     {"data_json", "Service data (JSON object)", ACTION_ARGUMENT_STRING, 0, 0,
-     sizeof(((HaServicePayload*)nullptr)->data_json) - 1, true, "[var:service_data]", "json_object",
-     nullptr, 0, true, validate_ha_service_data},
+     sizeof(((HaServicePayload*)nullptr)->data_json) - 1, true, "{}", "json_object",
+     nullptr, 0, true, validate_ha_service_data, nullptr, 0, nullptr, 0, false, nullptr,
+     "Service data encoded as a JSON object string, such as {} or {\"volume_level\":0.5}. Empty means no extra service data."},
 };
 ActionResult dispatch_ha_service_call(const ActionResolvedArgument* arguments, const char* label,
                                       uint32_t token) {

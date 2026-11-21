@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-11-20
+ms.date: 2026-11-21
 ms.topic: reference
 ---
 
@@ -52,6 +52,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Complete MCP background-image discovery with field types, defaults, limits,
+  binding/authentication rules, firmware availability, and widget restrictions.
+  Add valid Home Assistant service examples and explain the bare-service rule
+  through the shared action catalog. Portal image-control visibility and
+  runtime validation remain unchanged. This addresses the discovery portion
+  of [#163](https://github.com/jantielens/esp32-macropad/issues/163).
 * Prefer the strongest matching Wi-Fi access point on ESP32-P4 when connecting,
   without locking the connection to a specific access point. Allow up to ten
   seconds on the first attempt so scanning and address assignment can finish.
