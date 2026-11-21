@@ -10,6 +10,7 @@
 #include "log_manager.h"
 #include "pad_block.h"
 #include "pad_config.h"
+#include "pad_json.h"
 #include "pad_resolve_request.h"
 #include "pad_validate.h"
 #include "psram_json_allocator.h"
@@ -86,20 +87,6 @@ static uint8_t* allocate_pad_json_buffer(size_t len) {
         buffer = (uint8_t*)heap_caps_malloc(len + 1, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     }
     return buffer;
-}
-
-static void remove_pad_image_passwords(JsonArray buttons) {
-    for (JsonObject button : buttons) {
-        const char* password = button["bg_image_password"] | "";
-        const bool password_set = password[0] != '\0';
-        button.remove("bg_image_password");
-        button["bg_image_password_set"] = password_set;
-    }
-}
-
-static void remove_pad_image_passwords(JsonDocument& pad) {
-    remove_pad_image_passwords(pad["buttons"].as<JsonArray>());
-    remove_pad_image_passwords(pad["overlay_buttons"].as<JsonArray>());
 }
 
 void handleGetPadIconContext(AsyncWebServerRequest *request) {
@@ -268,7 +255,7 @@ void handleGetPadConfig(AsyncWebServerRequest *request) {
     free(json);
     timing.mark("parse");
 
-    remove_pad_image_passwords(*doc);
+    pad_redact_image_passwords(doc->as<JsonObject>());
     timing.mark("redact");
     web_portal_send_json_chunked(request, doc, 200, &timing);
 }

@@ -675,6 +675,11 @@ static void test_pad_resolve_batch() {
     };
     const size_t stride = BINDING_TEMPLATE_MAX_LEN;
     char out[3 * BINDING_TEMPLATE_MAX_LEN];
+    PadBinding live[1] = {};
+    strlcpy(live[0].name, "power", PAD_BINDING_NAME_MAX_LEN);
+    strlcpy(live[0].value, "[health:preview_test]", CONFIG_LABEL_MAX_LEN);
+    g_health_values["preview_test"] = "77";
+    pad_binding_set_bindings(live, 1);
     g_subscription_checks.clear();
     pad_resolve(inputs, 3, binds, 1, out, stride);
 
@@ -693,11 +698,10 @@ static void test_pad_resolve_batch() {
         g_pass++;
     }
 
-    // pad_resolve clears the context afterwards, so a later [pad:] token with no
-    // context set resolves to the placeholder (mirrors the live per-frame reset).
     char one[BINDING_TEMPLATE_MAX_LEN];
     binding_template_resolve("[pad:power]", one, sizeof(one));
-    check_str(one, "---", "pad_resolve clears context after");
+    check_str(one, "77", "pad_resolve preserves live renderer context");
+    pad_binding_set_bindings(nullptr, 0);
 }
 
 // ============================================================================

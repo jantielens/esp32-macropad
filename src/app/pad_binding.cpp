@@ -294,9 +294,7 @@ void pad_resolve(const char* const* inputs, size_t count,
                  const PadBinding* binds, uint8_t bind_count,
                  char* out, size_t stride) {
     if (!inputs || !out || stride == 0) return;
-    // Set the requested pad context (NULL clears -> [pad:] tokens resolve to the
-    // placeholder). Single-threaded (LVGL/main task) so no lock is needed.
-    pad_binding_set_bindings(binds, bind_count);
+    PadBindingScope scope(binds, bind_count);
     for (size_t i = 0; i < count; i++) {
         char* dst = out + i * stride;
         const char* in = inputs[i];
@@ -310,9 +308,6 @@ void pad_resolve(const char* const* inputs, size_t count,
 #endif
         binding_template_resolve(in, dst, stride);
     }
-    // Clear context: the live pad screen re-sets it every frame, so this avoids
-    // leaking a transient authoring/preview context into an unrelated render.
-    pad_binding_set_bindings(nullptr, 0);
 }
 
 // ============================================================================

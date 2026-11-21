@@ -11,7 +11,7 @@
 #if HAS_DISPLAY
 
 #include "binding_template.h"   // BINDING_TEMPLATE_MAX_LEN
-#include "main_loop_bridge.h"
+#include "display_manager.h"
 #include "pad_binding.h"        // pad_resolve()
 #include "pad_config.h"
 
@@ -47,7 +47,7 @@ struct ResolveCtx {
     ResolvePayload* payload;
 };
 
-// Runs on the main loop (LVGL task context) via the bridge.
+// Runs on the LVGL task, matching rendering's context and stack budget.
 static void exec_resolve(const void* ctx, bool* ok, char* msg, size_t msg_len) {
     const ResolveCtx* c = (const ResolveCtx*)ctx;
     ResolvePayload* payload = c ? c->payload : nullptr;
@@ -195,17 +195,17 @@ PadResolveStatus pad_resolve_request(JsonObjectConst args, JsonObject result,
 
     ResolveCtx ctx = { payload };
     bool ok = false; char msg[160] = {0};
-    LoopBridgeResult r = loop_bridge_dispatch(exec_resolve, &ctx, sizeof(ctx),
-                                              RESOLVE_TIMEOUT_MS, &ok, msg, sizeof(msg),
-                                              cleanup_abandoned_resolve);
-    if (r == LOOP_BRIDGE_BUSY) {
+    DisplayTaskDispatchResult r = display_manager_dispatch(
+        exec_resolve, cleanup_abandoned_resolve, &ctx, sizeof(ctx),
+        RESOLVE_TIMEOUT_MS, &ok, msg, sizeof(msg));
+    if (r == DISPLAY_TASK_DISPATCH_BUSY) {
         resolve_payload_free(payload);
         set_err("busy, retry");
         return PAD_RESOLVE_BUSY;
     }
-    if (r != LOOP_BRIDGE_OK) {
-        if (r != LOOP_BRIDGE_TIMEOUT) resolve_payload_free(payload);
-        set_err(r == LOOP_BRIDGE_TIMEOUT ? "resolve timed out" : "resolve unavailable");
+    if (r != DISPLAY_TASK_DISPATCH_OK) {
+        if (r != DISPLAY_TASK_DISPATCH_TIMEOUT) resolve_payload_free(payload);
+        set_err(r == DISPLAY_TASK_DISPATCH_TIMEOUT ? "resolve timed out" : "resolve unavailable");
         return PAD_RESOLVE_ERROR;
     }
 

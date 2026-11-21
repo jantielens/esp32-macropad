@@ -36,6 +36,7 @@
 #include "ha_service.h"
 #include "screen_saver_manager.h"
 #include "pad_config.h"
+#include "pad_json.h"
 #if HAS_TOUCH
 #include "touch_manager.h"
 #endif
@@ -254,8 +255,7 @@ static bool tool_get_pad(const JsonObject& args, JsonObject& result, String& err
         return tool_fail(result, err, TOOL_ERR_PARAMS, "pad not configured");
     }
 
-    // Return the raw stored pad JSON verbatim. This is the single source of
-    // truth and round-trips losslessly: widget type-specific knobs live in an
+    // Read raw stored pad JSON: widget type-specific knobs live in an
     // opaque blob in the parsed PadConfig and cannot be reconstructed, but the
     // raw JSON still holds every field (widget_*, label_*_style, icon,
     // actions/lp_actions, template_pad, bindings, ...). Keys here match exactly
@@ -273,7 +273,11 @@ static bool tool_get_pad(const JsonObject& args, JsonObject& result, String& err
     free(raw);
     if (perr) return tool_fail(result, err, TOOL_ERR_INTERNAL, "stored pad JSON is invalid");
 
-    // Copy every stored key through unchanged, then add a few read-only helpers.
+    pad_redact_image_passwords(doc->as<JsonObject>());
+    if (doc->overflowed())
+        return tool_fail(result, err, TOOL_ERR_INTERNAL, "out of memory");
+
+    // Copy the redacted configuration, then add a few read-only helpers.
     JsonObjectConst src = doc->as<JsonObjectConst>();
     for (JsonPairConst kv : src) result[kv.key()] = kv.value();
     char sid[16];
@@ -746,7 +750,7 @@ REGISTER_MCP_TOOL(s_tool_list_pads);
 
 static const McpTool s_tool_get_pad = {
     "get_pad",
-    "Get one pad's full configuration including buttons (Main) and overlay_buttons (Overlay), shared settings, bindings, widgets, and actions. Each array has layer-local positions; use layer plus position with press_button/set_button. Counts include button_count (combined), main_button_count, and overlay_button_count. Args: screen (pad id 'pad_0' or friendly name).",
+    "Get one pad's full configuration including buttons (Main) and overlay_buttons (Overlay), shared settings, bindings, widgets, and actions. Image passwords are redacted to bg_image_password_set; this marker cannot retain credentials through replace_pad. Each array has layer-local positions; use layer plus position with press_button/set_button. Counts include button_count (combined), main_button_count, and overlay_button_count. Args: screen (pad id 'pad_0' or friendly name).",
     "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"}},\"required\":[\"screen\"]}",
     tool_get_pad, true, false, false
 };

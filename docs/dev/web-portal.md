@@ -3622,7 +3622,7 @@ service attempt snapshots retain their terminal state during the gap.
 
 ### MCP Server API
 
-Requires `HAS_MCP` (default on). Off by default; enabled and tokened from the portal's **MCP** card. STA-mode only. See the user-facing [MCP Server Guide](../mcp-guide.md) for client setup.
+Requires `HAS_MCP` (default on). Off by default; enabled and tokened from the portal's **MCP** card. STA-mode only. See [AI assistant setup](../user/integrations/ai-assistants.md) for client setup.
 
 #### `POST /mcp`
 
@@ -3631,7 +3631,7 @@ Single Model Context Protocol endpoint — JSON-RPC 2.0 over the MCP **Streamabl
 - **Auth:** every request must carry `Authorization: Bearer <token>`. Fails closed: when `mcp_enabled` is true but no token has been generated, all requests are refused (`401`). Independent of portal Basic Auth.
 - **Availability:** returns `404` when `mcp_enabled` is false or the device is in AP/setup mode. Performs Origin validation (any browser `Origin` → `403`; native clients send none) and does not alter the global CORS allow-list.
 - **Tools:** control and authoring tools are hidden and refused unless their respective permissions are enabled. Some read tools, including cached external data inspection, require authoring permission. Display tools are absent on `!HAS_DISPLAY` boards. Control tools run on the main loop, never on the async web task.
-- **Body cap:** request bodies above 8 KB are rejected with JSON-RPC `-32600`.
+- **Body cap:** 8 KB normally, or 48 KB when pad authoring is enabled and PSRAM is available. Larger request bodies are rejected with JSON-RPC `-32600`.
 - **Implementation note:** served by a custom `AsyncWebHandler` (not `server->on`) because MCP clients send `Accept: application/json, text/event-stream`, which the stock callback handler rejects via `isHTTP()`. `GET`/`DELETE /mcp` return `405` (no SSE stream offered) so client transport negotiation succeeds.
 
 When `HAS_EXTERNAL_DATA` is enabled, MCP `get_config` lists source names,
@@ -3641,6 +3641,41 @@ argument can contain sensitive data. `inspect_external_data` requires authoring
 permission and returns bounded pages from the cached snapshot, including source
 state and age, without fetching. Paths follow the same rules as external
 bindings. The cache may change between pages.
+
+#### Complete pad replacement
+
+`replace_pad(screen, pad)` requires authoring permission and the normal protected
+write identity check. It resolves the target, copies the supplied object into a
+fresh PSRAM-preferred JSON document, and calls `commit_pad` in
+`src/app/mcp_tools_pads.cpp`. It does not load or merge the previous pad.
+Grid layouts require `cols` and `rows`; omitted `layout` means `grid`.
+Omitted optional fields follow the existing parser's defaults/inheritance.
+Omitted Main/Overlay arrays, bindings, and pad actions are locally empty.
+Actions require `action_format_version: 1`. In contrast, `set_pad` merges selected
+pad settings and `set_buttons` edits selected positions within one layer.
+
+The complete candidate passes `pad_validate_with_template`, including geometry,
+both layers, combined capacity, template composition, bindings, and actions.
+The existing deferred main-loop callback calls `pad_config_save_raw`, which
+refreshes the changed pad and its template dependents, then refreshes MQTT
+subscriptions. It does not redundantly rebuild unrelated pad caches.
+Save-time validation and storage/OTA guards remain in that shared path.
+Candidate JSON and serialized buffers prefer PSRAM; allocation failures are
+returned as errors.
+
+`get_pad` and `GET /api/pad` share image-password redaction and expose
+`bg_image_password_set` instead. Replacement rejects a true or non-boolean
+marker and removes a false marker. Passwords must be supplied explicitly;
+omission clears them. Portal coordinate-based password retention is unchanged
+and is not used by replacement.
+
+Validation rejection occurs before writing and leaves the stored/active pad
+unchanged. Persistence uses the existing storage replacement helper, without
+introducing a new crash-safe transaction or rollback guarantee after I/O failure.
+The existing four-second dispatch timeout can return an error while the queued
+save later executes. `MCPPad` timing logs separate queue delay, save/cache work,
+and subscription refresh; the shared save path also logs its internal stages.
+Concurrent portal/MCP saves remain last-write-wins.
 
 **Example (`initialize`):**
 ```bash
@@ -4352,7 +4387,7 @@ package via jsDelivr, distributed under the
 
 #### `POST /api/pad/resolve`
 
-Resolve `[scheme:params]` binding tokens against the device's **live** data and return the resolved text — used by the pad editor's **Preview live values** button to show what a binding renders to without saving. Resolution runs on the main loop (LVGL task), so the request is deferred through the shared main-loop bridge; it resolves **values** only (not a pixel render). Nothing is persisted. Requires the same portal auth as the other `/api/pad*` routes. Gated `HAS_DISPLAY && HAS_MQTT`. Shares one resolver with the MCP `resolve_bindings` tool.
+Resolve `[scheme:params]` binding tokens against the device's **live** data and return the resolved text. The pad editor's **Preview live values** button uses this to show what a binding renders to without saving. Resolution runs through the existing LVGL display dispatcher, matching rendering's task and stack budget while preserving its binding context. It resolves **values** only, not pixels. Nothing is persisted. Requires the same portal auth as the other `/api/pad*` routes. Gated `HAS_DISPLAY`. Shares one resolver with the MCP `resolve_bindings` tool.
 
 - **Request:**
 ```json
@@ -4371,7 +4406,7 @@ Resolve `[scheme:params]` binding tokens against the device's **live** data and 
   "button": { "label_center": "1240W", "fg_color": "#22c55e" }
 }
 ```
-  Errors: `400` (bad params / invalid JSON), `503` (busy: another resolve/control job is in flight, retry; or out of memory), and `500` (the main-loop dispatch timed out or another internal failure occurred). The resolver copies its input before queuing it, so a timed-out request remains safe while the main loop finishes and releases its owned data.
+  Errors: `400` (bad params / invalid JSON), `503` (busy: another display job is in flight, retry; or out of memory), and `500` (display dispatch timed out or another internal failure occurred). The resolver copies its input before queuing it, so a timed-out request remains safe while the LVGL task finishes and releases its owned data. The two-second timeout is unchanged.
 
 > **Pad save validation.** `POST /api/pad` validates the submitted pad through the shared `pad_validate()` (the same validator the MCP write tools use): grid bounds, span overflow, widget types/config caps, colors, action arrays, binding tokens (unknown scheme, bad health key, …), and named-binding input limits (not dependency-graph validation). Grid pads may include `column_widths_px` and `row_heights_px` integer arrays, one value per track, with `0` representing Auto. Each configured axis must retain at least one Auto track, and fixed sizes must fit the active display after spacing and insets while leaving at least one pixel for every Auto track. Buttons that fall outside a shrunken grid are tolerated (hidden, and reappear when the grid grows).
 

@@ -14,7 +14,7 @@ inline void mcp_pad_image_metadata_emit(JsonObject button, bool remote_images,
     JsonArray incompatible = images.createNestedArray("incompatible_widgets");
     if (native_extensions) incompatible.add("external");
     images["compatibility_note"] = "The external (Extension) widget replaces button content; the portal hides background-image controls for it, independently of image capability support. Choose a different widget or no widget to restore those controls; hiding them does not clear configured image values.";
-    images["authentication_note"] = "Binding tokens in bg_image_url cannot be combined with bg_image_user, bg_image_password, or bg_image_password_set=true (a retained password). Authentication fields are static, not bindings. GET /api/pad redacts the password and exposes bg_image_password_set instead.";
+    images["authentication_note"] = "Binding tokens in bg_image_url cannot be combined with bg_image_user, bg_image_password, or bg_image_password_set=true (a retained password). Authentication fields are static, not bindings. GET /api/pad and get_pad redact the password and expose bg_image_password_set instead.";
 
     JsonArray fields = button["fields"].as<JsonArray>();
     JsonObject metadata = button.createNestedObject("image_fields");
@@ -36,14 +36,14 @@ inline void mcp_pad_image_metadata_emit(JsonObject button, bool remote_images,
     text_field("bg_image_user", CONFIG_BG_IMAGE_USER_MAX_LEN, false, remote_images)
         ["description"] = "HTTP Basic Auth username for a static remote URL.";
     text_field("bg_image_password", CONFIG_BG_IMAGE_PASS_MAX_LEN, false, remote_images)
-        ["description"] = "HTTP Basic Auth password for a static remote URL; redacted by GET /api/pad.";
+        ["description"] = "HTTP Basic Auth password for a static remote URL; redacted by GET /api/pad and get_pad.";
     fields.add("bg_image_password_set");
     JsonObject retained = metadata.createNestedObject("bg_image_password_set");
     retained["type"] = "boolean";
     retained["default"] = false;
     retained["bindable"] = false;
     retained["available"] = remote_images;
-    retained["description"] = "GET /api/pad indicator for a stored password; true on a subsequent portal save retains it. This is not an MCP password-retention mechanism. Not valid with a binding-based remote URL.";
+    retained["description"] = "GET /api/pad and get_pad indicator for a stored password; true on a subsequent portal save retains it. This is not an MCP password-retention mechanism: replace_pad rejects true and discards false. Supply bg_image_password explicitly or omit it to clear on replacement. Not valid with a binding-based remote URL.";
     fields.add("bg_image_interval_ms");
     JsonObject interval = metadata.createNestedObject("bg_image_interval_ms");
     interval["type"] = "integer";

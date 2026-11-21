@@ -23,6 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add MCP `replace_pad` to replace geometry, both button layers, bindings, and
+  actions in one validated save without intermediate clearing. Omitted optional
+  fields do not merge from the old pad. Image passwords are redacted on reads;
+  replacement requires explicit credentials rather than retained-secret markers.
+  See [complete pad replacement](docs/user/integrations/ai-assistants.md#replace-a-complete-pad)
+  and [#164](https://github.com/jantielens/esp32-macropad/issues/164).
 * Allow named pad bindings to reuse other names on the same effective pad, so
   labels, widget properties and colors can share one decision expression.
   Add runtime depth/work guards, composition-aware MQTT topic and HA entity
@@ -52,6 +58,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Reuse mounted filesystem capacity during storage-usage refreshes, avoiding
+  LittleFS's duplicate usage query after saves. Used space still refreshes at
+  the existing interval, and mount/forced refreshes update both values.
+* Run MCP and portal binding previews on the LVGL task so nested named bindings
+  use the same resolver context and stack budget as rendering. Restore the live
+  pad context after preview. Remove redundant all-pad cache rebuilding from MCP
+  saves and add queue/save/subscription timing logs without extending timeouts.
+  Release write buffers when dispatch rejects the job.
 * Complete MCP background-image discovery with field types, defaults, limits,
   binding/authentication rules, firmware availability, and widget restrictions.
   Add valid Home Assistant service examples and explain the bare-service rule

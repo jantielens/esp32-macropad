@@ -8,15 +8,16 @@
 //                       widget list + per-widget fields come from the registry
 //                       (widget_at + describeSchema); no hand-maintained table.
 //   validate_pad      — read tool: dry-run validate a pad JSON, no save.
-//   set_button / set_buttons / remove_button / clear_pad — authoring tools.
+//   set_pad / replace_pad / set_button / set_buttons / remove_button /
+//   clear_pad — authoring tools.
 //
 // Authoring tools require mcp_authoring_enabled (gated by web_mcp via the
-// requires_authoring flag). They run on the web task: load the pad raw, splice
-// the button(s) into the JSON, VALIDATE, then hand a PSRAM buffer (pointer+len)
+// requires_authoring flag). On the web task, partial edits load and modify raw
+// JSON; replacement starts fresh. Both VALIDATE, then hand a PSRAM buffer (pointer+len)
 // to the main loop via mcp_control_dispatch (D6) which calls pad_config_save_raw
-// + pad_config_rebuild_all_caches and frees it. The 256-byte ctx is never
-// widened and the pad JSON is never inlined into it. save_raw truncates in
-// place, so validation runs before every write. Concurrent portal/LLM edits are
+// and frees it. save_raw refreshes the affected caches. The 256-byte ctx is
+// never widened and the pad JSON is never inlined into it. Validation runs
+// before every write. Concurrent portal/LLM edits are
 // last-write-wins per pad.
 // ============================================================================
 
@@ -36,8 +37,9 @@
 #include "pad_validate.h"
 #include "pad_resolve_request.h"
 #include "json_key_validation.h"
+#include "log_manager.h"
 #include "psram_json_allocator.h"
-#include "widgets/widget.h"
+#include "widgets/widget_registry.h"
 #include "binding_template.h"
 #include "binding_schema.h"
 #include "action_catalog.h"
@@ -262,26 +264,31 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
 // Validation — the full pad validator now lives in pad_validate.{h,cpp} so the
 // web portal save path and these MCP tools validate through identical logic
 // (single source of truth). Call pad_validate(JsonObjectConst) — it runs before
-// every write because pad_config_save_raw truncates in place.
+// every write, before handing it to pad_config_save_raw.
 // ============================================================================
 
 // ============================================================================
-// Deferred save (ptr+len in ctx; main loop saves+rebuilds+frees) — D6
+// Deferred save (ptr+len in ctx; main loop saves+refreshes+frees) — D6
 // ============================================================================
-struct PadWriteCtx { uint8_t page; uint8_t* buf; size_t len; };
+struct PadWriteCtx { uint8_t page; uint8_t* buf; size_t len; uint32_t queued_ms; };
 
 static void exec_pad_save(const void* ctx, bool* ok, char* msg, size_t msg_len) {
     const PadWriteCtx* c = (const PadWriteCtx*)ctx;
     *ok = false;
     if (!c->buf) { strlcpy(msg, "no buffer", msg_len); return; }
+    const uint32_t started_ms = millis();
+    LOGI("MCPPad", "Pad %u write started (queue=%lu ms)", c->page,
+         (unsigned long)(started_ms - c->queued_ms));
     const char* save_error = nullptr;
     bool saved = pad_config_save_raw(c->page, c->buf, c->len, &save_error);
     heap_caps_free(c->buf);
     if (!saved) {
+        LOGW("MCPPad", "Pad %u write failed after %lu ms", c->page,
+             (unsigned long)(millis() - started_ms));
         strlcpy(msg, save_error ? save_error : "save failed", msg_len);
         return;
     }
-    pad_config_rebuild_all_caches();
+    const uint32_t saved_ms = millis();
 #if HAS_MQTT
     // Subscribe to any MQTT topics newly referenced by this pad's bindings so
     // they start resolving immediately — matching the portal save path. Without
@@ -289,6 +296,11 @@ static void exec_pad_save(const void* ctx, bool* ok, char* msg, size_t msg_len) 
     // re-saved in the portal (issue #37).
     mqtt_sub_store_subscribe_all();
 #endif
+    const uint32_t completed_ms = millis();
+    LOGI("MCPPad", "Pad %u write complete (save=%lu ms, subscriptions=%lu ms, total=%lu ms)",
+         c->page, (unsigned long)(saved_ms - started_ms),
+         (unsigned long)(completed_ms - saved_ms),
+         (unsigned long)(completed_ms - c->queued_ms));
     *ok = true;
     strlcpy(msg, "saved", msg_len);
 }
@@ -304,12 +316,16 @@ static bool commit_pad(uint8_t page, JsonDocument& doc, JsonObject& result, Stri
     if (!buf) return pad_fail(result, err, PAD_ERR_INTERNAL, "out of memory");
     size_t len = serializeJson(doc, buf, need);
 
-    PadWriteCtx ctx; ctx.page = page; ctx.buf = buf; ctx.len = len;
+    PadWriteCtx ctx; ctx.page = page; ctx.buf = buf; ctx.len = len; ctx.queued_ms = millis();
     bool ok = false; char msg[MCP_TOOL_MSG_LEN] = {0};
     McpControlResult r = mcp_control_dispatch(exec_pad_save, &ctx, sizeof(ctx),
                                               PAD_WRITE_TIMEOUT_MS, &ok, msg, sizeof(msg));
-    if (r == MCP_CONTROL_BUSY) { heap_caps_free(buf); return pad_fail(result, err, PAD_ERR_BUSY, "busy, retry"); }
+    if (r != MCP_CONTROL_OK && r != MCP_CONTROL_TIMEOUT) heap_caps_free(buf);
+    if (r == MCP_CONTROL_BUSY) return pad_fail(result, err, PAD_ERR_BUSY, "busy, retry");
     // On TIMEOUT the deferred job may still run and free buf, so do not free here.
+    if (r == MCP_CONTROL_TIMEOUT)
+        LOGW("MCPPad", "Pad %u write timed out after %lu ms; queued write may still finish",
+             page, (unsigned long)(millis() - ctx.queued_ms));
     return mcp_finish_control(r, ok, msg, result, err);
 }
 
@@ -396,11 +412,11 @@ static bool tool_validate_pad(const JsonObject& args, JsonObject& result, String
 #if HAS_MQTT || HAS_HA_LIVE || HAS_EXTERNAL_DATA
 // ============================================================================
 // resolve_bindings (read tool, authoring-gated) — resolve binding tokens
-// against LIVE data on the main loop; no save. Powers debugging/preview of what
+// against LIVE data on the LVGL task; no save. Powers debugging/preview of what
 // a binding or a proposed button's fields resolve to right now. Values only
 // (not a pixel render). Thin wrapper over the shared pad_resolve_request()
 // (also used by the portal POST /api/pad/resolve endpoint); the actual
-// resolution runs on the main loop via the deferred bridge.
+// resolution runs on the LVGL task via the display dispatcher.
 // ============================================================================
 static bool tool_resolve_bindings(const JsonObject& args, JsonObject& result, String& err) {
     const char* em = nullptr;
@@ -536,6 +552,28 @@ static bool tool_set_pad(const JsonObject& args, JsonObject& result, String& err
     return commit_pad((uint8_t)pg, doc, result, err);
 }
 
+static bool tool_replace_pad(const JsonObject& args, JsonObject& result, String& err) {
+    int pg = pad_index(args["screen"] | "");
+    if (pg < 0) return pad_fail(result, err, PAD_ERR_PARAMS, s_pad_err);
+    JsonObjectConst pad = args["pad"];
+    if (pad.isNull()) return pad_fail(result, err, PAD_ERR_PARAMS, "missing pad object");
+
+    BasicJsonDocument<PsramJsonAllocator> doc(48 * 1024);
+    if (!doc.set(pad) || doc.overflowed())
+        return pad_fail(result, err, PAD_ERR_INTERNAL, "out of memory");
+    for (const char* layer : {"buttons", "overlay_buttons"}) {
+        for (JsonObject button : doc[layer].as<JsonArray>()) {
+            if (!button.containsKey("bg_image_password_set")) continue;
+            if (!button["bg_image_password_set"].is<bool>() ||
+                button["bg_image_password_set"].as<bool>())
+                return pad_fail(result, err, PAD_ERR_PARAMS,
+                    "replace_pad cannot retain image passwords; supply bg_image_password explicitly or remove bg_image_password_set to clear");
+            button.remove("bg_image_password_set");
+        }
+    }
+    return commit_pad((uint8_t)pg, doc, result, err);
+}
+
 // ============================================================================
 // Registration
 // ============================================================================
@@ -612,5 +650,13 @@ static const McpTool s_tool_set_pad = {
     tool_set_pad, false, true, false, true
 };
 REGISTER_MCP_TOOL(s_tool_set_pad);
+
+static const McpTool s_tool_replace_pad = {
+    "replace_pad",
+    "Replace the entire pad in one validated save: geometry, Main buttons, Overlay buttons, bindings and pad_actions together. Use instead of set_pad/set_buttons when regenerating or shrinking a populated pad. Args: screen (pad_N or friendly name), pad (complete pad JSON; use name inside pad). Grid layouts require cols and rows. No fields merge from the old pad: omitted optional fields use normal defaults/inheritance; omitted layers, bindings and actions are locally empty. Actions require action_format_version: 1. get_pad redacts image passwords; bg_image_password_set=true is rejected, false is discarded. Supply bg_image_password explicitly to set it; omission clears it. Validation failure leaves the pad unchanged. Uses the existing storage path without a new power-loss or rollback guarantee; a timeout may still save later. Concurrent edits are last-write-wins. Prepare icon artwork in the portal first. Requires authoring.",
+    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"pad\":{\"type\":\"object\"}},\"required\":[\"screen\",\"pad\"]}",
+    tool_replace_pad, false, true, false, true
+};
+REGISTER_MCP_TOOL(s_tool_replace_pad);
 
 #endif // HAS_MCP && HAS_DISPLAY
