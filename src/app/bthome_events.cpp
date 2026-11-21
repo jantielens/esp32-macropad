@@ -152,7 +152,7 @@ void bthome_events_configure(const char* device_name, const bthome::EventSetting
     strlcpy(event_device_name, device_name && device_name[0] ? device_name : "esp32-macropad",
             sizeof(event_device_name));
     const bool available =
-#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO && !HAS_BLE_HID
         ble_backend_initialized();
 #else
         true;

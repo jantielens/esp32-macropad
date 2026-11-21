@@ -43,6 +43,9 @@ for language in c c++; do
     "$compiler" "${flags[@]}" -x "$language" -fsyntax-only "$tmp/profile.cpp" \
         -DBLE_BACKEND=1 -DHAS_BLE_HID=0 -DBOARD_HAS_PSRAM=1 \
         -DCONFIG_IDF_TARGET_ESP32S3=1 -DLVGL_FAST_MEM_IN_IRAM=0 -DEXPECT_IRAM=0
+    "$compiler" "${flags[@]}" -x "$language" -fsyntax-only "$tmp/profile.cpp" \
+        -DBLE_BACKEND=1 -DHAS_BLE_HID=1 -DEXPERIMENTAL_NIMBLE_HID=1 -DBOARD_HAS_PSRAM=1 \
+        -DCONFIG_IDF_TARGET_ESP32S3=1 -DLVGL_FAST_MEM_IN_IRAM=0 -DEXPECT_IRAM=0
 done
 
 reject() {
@@ -57,6 +60,8 @@ reject() {
 }
 reject 'Invalid BLE_BACKEND' -DBLE_BACKEND=99
 reject 'HID is not supported' -DBLE_BACKEND=1 -DHAS_BLE_HID=1 -DBOARD_HAS_PSRAM=1 \
+    -DCONFIG_IDF_TARGET_ESP32S3=1 -DLVGL_FAST_MEM_IN_IRAM=0
+reject 'HID is not supported' -DBLE_BACKEND=1 -DHAS_BLE_HID=1 -DEXPERIMENTAL_NIMBLE_HID=0 -DBOARD_HAS_PSRAM=1 \
     -DCONFIG_IDF_TARGET_ESP32S3=1 -DLVGL_FAST_MEM_IN_IRAM=0
 reject 'requires ESP32-S3' -DBLE_BACKEND=1 -DHAS_BLE_HID=0 -DBOARD_HAS_PSRAM=1
 reject 'requires ESP32-S3' -DBLE_BACKEND=1 -DHAS_BLE_HID=0 \

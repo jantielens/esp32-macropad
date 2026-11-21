@@ -31,6 +31,18 @@
 #define BLE_GAP_EVENT_DISCONNECT 1
 #define BLE_GAP_EVENT_PARING_COMPLETE 2
 #define BLE_GAP_EVENT_REPEAT_PAIRING 3
+#define BLE_GAP_EVENT_CONNECT 4
+#define BLE_GAP_EVENT_ENC_CHANGE 5
+#define BLE_GAP_REPEAT_PAIRING_IGNORE 2
+#define BLE_GAP_CONN_MODE_UND 2
+#define BLE_ADDR_PUBLIC 0
+#define BLE_OWN_ADDR_PUBLIC 0
+#define BLE_OWN_ADDR_RANDOM 1
+#define BLE_HS_ADV_F_DISC_GEN 2
+#define BLE_HS_ADV_F_BREDR_UNSUP 4
+#define BLE_HS_IO_NO_INPUT_OUTPUT 3
+#define BLE_SM_PAIR_KEY_DIST_ENC 1
+#define BLE_SM_PAIR_KEY_DIST_ID 2
 #define BLE_UUID16_INIT(value) {{value}}
 #define CONFIG_NIMBLE_ENABLED 1
 #define BLE_GAP_CONN_MODE_NON 0
@@ -54,6 +66,8 @@ struct ble_gap_conn_desc {
 };
 struct ble_gap_event {
     int type = 0;
+    struct { uint16_t conn_handle; int status; } connect = {};
+    struct { uint16_t conn_handle; int status; } enc_change = {};
     struct { ble_gap_conn_desc conn; int reason; } disconnect = {};
     struct { uint16_t conn_handle; int status; } pairing_complete = {};
     struct { uint16_t conn_handle; } repeat_pairing = {};
@@ -63,6 +77,17 @@ struct ble_store_value_sec { bool ltk_present; };
 struct os_mbuf { std::vector<uint8_t> bytes; };
 struct ble_uuid_t { uint16_t value; };
 struct ble_uuid16_t { ble_uuid_t u; };
+struct ble_hs_adv_fields {
+    uint8_t flags = 0;
+    uint16_t appearance = 0;
+    uint8_t appearance_is_present = 0;
+    const ble_uuid16_t* uuids16 = nullptr;
+    uint8_t num_uuids16 = 0;
+    uint8_t uuids16_is_complete = 0;
+    const uint8_t* name = nullptr;
+    uint8_t name_len = 0;
+    uint8_t name_is_complete = 0;
+};
 struct ble_gatt_access_ctxt { uint8_t op; os_mbuf* om; };
 using TestGattAccess = int (*)(uint16_t, uint16_t, ble_gatt_access_ctxt*, void*);
 struct ble_gatt_dsc_def {
@@ -95,7 +120,14 @@ inline bool claimed = false;
 inline std::string owner;
 inline bool stored_bond = false;
 inline ble_addr_t stored_peer = {};
+inline ble_gap_conn_desc current_peer = {};
 inline unsigned clears = 0;
+inline bool clear_succeeds = true;
+inline bool security_start_succeeds = true;
+inline unsigned security_starts = 0;
+inline bool gatts_reset_succeeds = true;
+inline bool public_address_available = true;
+inline uint8_t advertising_address_type = 0xff;
 inline unsigned allocations = 0;
 inline unsigned notifications = 0;
 inline bool bonding = false;
@@ -125,19 +157,51 @@ inline std::vector<std::pair<int, int>> power_calls;
 inline bool telemetry_start_succeeds = true;
 }
 
-inline int ble_hs_id_infer_auto(int, uint8_t* type) { *type = 0; return 0; }
+inline int ble_hs_id_infer_auto(int, uint8_t* type) { *type = BLE_OWN_ADDR_RANDOM; return 0; }
 inline int ble_gap_adv_set_data(const uint8_t* data, size_t length) {
     TestBle::advertisement.assign(data, data + length);
     return 0;
 }
-inline int ble_gap_adv_start(uint8_t, const void*, int32_t, const ble_gap_adv_params* parameters,
-                            int (*)(ble_gap_event*, void*), void*) {
-    ++TestBle::event_starts;
+inline int ble_gap_adv_start(uint8_t address_type, const void*, int32_t, const ble_gap_adv_params* parameters,
+                            int (*callback)(ble_gap_event*, void*), void*) {
+    if (parameters->conn_mode == BLE_GAP_CONN_MODE_UND) {
+        ++TestBle::hid_starts;
+        TestBle::advertising_address_type = address_type;
+        TestBle::gap_handler = callback;
+        if (!TestBle::telemetry_start_succeeds) return 1;
+    } else {
+        ++TestBle::event_starts;
+    }
     TestBle::event_parameters = *parameters;
-    if (TestBle::event_start_result) return TestBle::event_start_result;
+    if (parameters->conn_mode != BLE_GAP_CONN_MODE_UND && TestBle::event_start_result)
+        return TestBle::event_start_result;
     TestBle::radio_advertising = true;
     return 0;
 }
+inline int ble_hs_id_copy_addr(uint8_t type, uint8_t*, int*) {
+    return type == BLE_ADDR_PUBLIC && TestBle::public_address_available ? 0 : 1;
+}
+inline int ble_gap_conn_find(uint16_t handle, ble_gap_conn_desc* desc) {
+    if (handle != TestBle::current_peer.conn_handle) return 1;
+    *desc = TestBle::current_peer;
+    return 0;
+}
+inline int ble_gap_adv_set_fields(const ble_hs_adv_fields* fields) {
+    TestBle::appearance = fields->appearance;
+    return 0;
+}
+inline int ble_gap_adv_rsp_set_fields(const ble_hs_adv_fields*) { return 0; }
+inline int ble_gap_adv_active() { return TestBle::radio_advertising; }
+inline int ble_gap_adv_stop() {
+    if (!TestBle::stop_succeeds) return 1;
+    TestBle::radio_advertising = false;
+    return 0;
+}
+inline void ble_svc_gap_init() {}
+inline void ble_svc_gatt_init() {}
+inline int ble_svc_gap_device_name_set(const char*) { return 0; }
+inline int ble_gatts_reset() { return TestBle::gatts_reset_succeeds ? 0 : 1; }
+inline int ble_gatts_start() { return 0; }
 
 inline size_t strlcpy(char* out, const char* text, size_t capacity) {
     if (capacity) std::snprintf(out, capacity, "%s", text);
@@ -152,6 +216,7 @@ inline void config_manager_get_ble_owner_addr(char* out, size_t capacity) {
 inline void config_manager_set_ble_owner_addr(const char* owner) { TestBle::owner = owner; }
 inline int ble_store_clear() {
     ++TestBle::clears;
+    if (!TestBle::clear_succeeds) return 1;
     TestBle::stored_bond = false;
     return 0;
 }

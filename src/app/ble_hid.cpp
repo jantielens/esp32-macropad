@@ -14,15 +14,29 @@
 #include "log_manager.h"
 static constexpr uint8_t kBleLogLevel = LOG_LEVEL;
 
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+#include <NimBLEDevice.h>
+#ifdef ARDUINO
+#include <nimble/nimble/host/include/host/ble_att.h>
+#include <nimble/nimble/host/include/host/ble_gatt.h>
+#include <nimble/nimble/host/include/host/ble_hs_id.h>
+#include <nimble/nimble/host/include/host/ble_hs_mbuf.h>
+#include <nimble/nimble/host/include/host/ble_store.h>
+#include <nimble/nimble/host/include/host/ble_uuid.h>
+#include <nimble/nimble/host/services/gap/include/services/gap/ble_svc_gap.h>
+#include <nimble/nimble/host/services/gatt/include/services/gatt/ble_svc_gatt.h>
+#endif
+#else
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLESecurity.h>
-#include <HIDTypes.h>
 #include <host/ble_att.h>
 #include <host/ble_gatt.h>
 #include <host/ble_hs_mbuf.h>
 #include <host/ble_store.h>
 #include <host/ble_uuid.h>
+#endif
+#include <HIDTypes.h>
 #include <os/os_mbuf.h>
 
 // NimBLE headers redefine LOG_LEVEL_* as plain ints, colliding with our
@@ -133,7 +147,9 @@ static const uint8_t HID_REPORT_MAP[] = {
     0x75, 0x01, 0x95, 0x10, 0x81, 0x02, 0xC0
 };
 
+#if BLE_BACKEND == BLE_BACKEND_ARDUINO_CORE
 static BLEServer* bleServer = nullptr;
+#endif
 static volatile bool connected = false;
 static volatile bool pairing_mode = false;
 static volatile bool hid_service_ready = false;
@@ -218,18 +234,47 @@ static bool pairing_window_open() {
             - static_cast<uint32_t>(millis())) > 0;
 }
 
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+static int nimble_hid_gap_event(ble_gap_event* event, void*);
+#endif
+
 static bool start_advertising() {
     if (!hid_service_ready) return false;
     if (advertising_paused) {
         pending_advertising.store(true);
         return true;
     }
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+    ble_hs_adv_fields fields = {};
+    fields.flags = BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP;
+    fields.appearance = HID_KEYBOARD;
+    fields.appearance_is_present = 1;
+    const ble_uuid16_t service = BLE_UUID16_INIT(0x1812);
+    fields.uuids16 = &service;
+    fields.num_uuids16 = 1;
+    fields.uuids16_is_complete = 1;
+    ble_hs_adv_fields scan = {};
+    scan.name = reinterpret_cast<const uint8_t*>(ble_name_str);
+    scan.name_len = strlen(ble_name_str);
+    scan.name_is_complete = 1;
+    ble_gap_adv_params params = {};
+    params.conn_mode = BLE_GAP_CONN_MODE_UND;
+    params.disc_mode = BLE_GAP_DISC_MODE_GEN;
+    int rc = ble_hs_id_copy_addr(BLE_ADDR_PUBLIC, nullptr, nullptr);
+    if (rc == 0) rc = ble_gap_adv_set_fields(&fields);
+    if (rc == 0) rc = ble_gap_adv_rsp_set_fields(&scan);
+    if (rc == 0) rc = ble_gap_adv_start(BLE_OWN_ADDR_PUBLIC, nullptr, BLE_HS_FOREVER, &params, nimble_hid_gap_event, nullptr);
+    advertising_active = rc == 0;
+    if (rc != 0) LOGE(TAG, "HID advertising failed (rc=%d)", rc);
+#else
     advertising_active = BLEDevice::getAdvertising()->start();
+#endif
     if (!advertising_active) LOGE(TAG, "HID advertising failed");
     return advertising_active;
 }
 
 static void configure_hid_advertising() {
+#if BLE_BACKEND == BLE_BACKEND_ARDUINO_CORE
     BLEAdvertising* adv = BLEDevice::getAdvertising();
     adv->reset();
     adv->setAppearance(HID_KEYBOARD);
@@ -237,6 +282,7 @@ static void configure_hid_advertising() {
     adv->setScanResponse(true);
     adv->setMinPreferred(0x06);
     adv->setMaxPreferred(0x12);
+#endif
 }
 
 bool ble_hid_pause_advertising(bool paused) {
@@ -244,7 +290,11 @@ bool ble_hid_pause_advertising(bool paused) {
     if (advertising_paused == paused)
         return paused || connected || advertising_active || start_advertising();
     if (paused) {
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+        if (ble_gap_adv_active() && ble_gap_adv_stop() != 0) return false;
+#else
         if (!BLEDevice::getAdvertising()->stop()) return false;
+#endif
         advertising_paused = true;
         advertising_active = false;
         return true;
@@ -439,7 +489,11 @@ static bool init_hid_service() {
 static bool send_report_notification(uint16_t value_handle, const void* data, uint16_t size) {
     static std::atomic<uint32_t> failed_sends{0};
     if (!connected || !peer_encrypted || !peer_bonded || !hid_service_ready
-        || value_handle == 0 || bleServer == nullptr) {
+        || value_handle == 0
+#if BLE_BACKEND == BLE_BACKEND_ARDUINO_CORE
+        || bleServer == nullptr
+#endif
+        ) {
         return false;
     }
 
@@ -462,8 +516,19 @@ static bool send_report_notification(uint16_t value_handle, const void* data, ui
     return rc == 0;
 }
 
-class HidCallbacks : public BLEServerCallbacks {
-    void onConnect(BLEServer*, ble_gap_conn_desc* desc) override {
+#if BLE_BACKEND == BLE_BACKEND_ARDUINO_CORE
+#define HID_CORE_OVERRIDE override
+#else
+#define HID_CORE_OVERRIDE
+#endif
+
+class HidCallbacks
+#if BLE_BACKEND == BLE_BACKEND_ARDUINO_CORE
+    : public BLEServerCallbacks
+#endif
+{
+public:
+    void onConnect(BLEServer*, ble_gap_conn_desc* desc) HID_CORE_OVERRIDE {
         if (connected) {
             LOGW(TAG, "Rejecting second connection (handle=%u)", desc->conn_handle);
             ble_gap_terminate(desc->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
@@ -495,7 +560,7 @@ class HidCallbacks : public BLEServerCallbacks {
         }
     }
 
-    void onDisconnect(BLEServer*, ble_gap_conn_desc* desc) override {
+    void onDisconnect(BLEServer*, ble_gap_conn_desc* desc) HID_CORE_OVERRIDE {
         if (desc->conn_handle != active_conn_handle) return;
         connected = false;
         connection_epoch.fetch_add(1);
@@ -509,13 +574,18 @@ class HidCallbacks : public BLEServerCallbacks {
     }
 };
 
-class HidSecurityCallbacks : public BLESecurityCallbacks {
-    uint32_t onPassKeyRequest() override { return 0; }
-    void onPassKeyNotify(uint32_t) override {}
-    bool onConfirmPIN(uint32_t) override { return true; }
-    bool onSecurityRequest() override { return true; }
+class HidSecurityCallbacks
+#if BLE_BACKEND == BLE_BACKEND_ARDUINO_CORE
+    : public BLESecurityCallbacks
+#endif
+{
+public:
+    uint32_t onPassKeyRequest() HID_CORE_OVERRIDE { return 0; }
+    void onPassKeyNotify(uint32_t) HID_CORE_OVERRIDE {}
+    bool onConfirmPIN(uint32_t) HID_CORE_OVERRIDE { return true; }
+    bool onSecurityRequest() HID_CORE_OVERRIDE { return true; }
 
-    void onAuthenticationComplete(ble_gap_conn_desc* desc, int status) override {
+    void onAuthenticationComplete(ble_gap_conn_desc* desc, int status) HID_CORE_OVERRIDE {
         if (!connected || (!authentication_pending && !peer_encrypted)
             || desc->conn_handle != active_conn_handle) return;
         peer_encrypted = false;
@@ -586,9 +656,62 @@ static int hid_gap_event(ble_gap_event* event, void*) {
     return 0;
 }
 
-static void clear_all_bonds() {
-    ble_store_clear();
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+static HidCallbacks nimble_callbacks;
+static HidSecurityCallbacks nimble_security_callbacks;
+
+static int nimble_hid_gap_event(ble_gap_event* event, void*) {
+    ble_gap_conn_desc desc = {};
+    switch (event->type) {
+    case BLE_GAP_EVENT_CONNECT:
+        if (event->connect.status != 0) {
+            pending_advertising.store(true);
+            return 0;
+        }
+        if (ble_gap_conn_find(event->connect.conn_handle, &desc) != 0) {
+            LOGE(TAG, "Cannot inspect connected peer");
+            ble_gap_terminate(event->connect.conn_handle, BLE_ERR_AUTH_FAIL);
+            return 0;
+        }
+        nimble_callbacks.onConnect(nullptr, &desc);
+        if (connected && authentication_pending && active_conn_handle == desc.conn_handle) {
+            int rc = 0;
+            if (!NimBLEDevice::startSecurity(desc.conn_handle, &rc)) {
+                LOGE(TAG, "Cannot start BLE authentication (rc=%d)", rc);
+                authentication_pending = false;
+                ble_gap_terminate(desc.conn_handle, BLE_ERR_AUTH_FAIL);
+            }
+        }
+        return 0;
+    case BLE_GAP_EVENT_DISCONNECT:
+        hid_gap_event(event, nullptr);
+        nimble_callbacks.onDisconnect(nullptr, &event->disconnect.conn);
+        return 0;
+    case BLE_GAP_EVENT_ENC_CHANGE:
+        if (ble_gap_conn_find(event->enc_change.conn_handle, &desc) != 0) {
+            LOGE(TAG, "Cannot inspect authenticated peer");
+            ble_gap_terminate(event->enc_change.conn_handle, BLE_ERR_AUTH_FAIL);
+            return 0;
+        }
+        nimble_security_callbacks.onAuthenticationComplete(&desc, event->enc_change.status);
+        return 0;
+    case BLE_GAP_EVENT_REPEAT_PAIRING:
+        hid_gap_event(event, nullptr);
+        return BLE_GAP_REPEAT_PAIRING_IGNORE;
+    default:
+        return hid_gap_event(event, nullptr);
+    }
+}
+#endif
+
+static bool clear_all_bonds() {
+    const int rc = ble_store_clear();
+    if (rc != 0) {
+        LOGE(TAG, "Could not clear BLE bonds (rc=%d)", rc);
+        return false;
+    }
     LOGI(TAG, "Cleared all NimBLE bonds");
+    return true;
 }
 
 void ble_hid_init(const char* device_name, bool force_pairing_mode) {
@@ -616,6 +739,34 @@ void ble_hid_init(const char* device_name, bool force_pairing_mode) {
         init_error = true;
         return;
     }
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+    NimBLEDevice::setSecurityAuth(true, false, false);
+    NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
+    NimBLEDevice::setSecurityInitKey(BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID);
+    NimBLEDevice::setSecurityRespKey(BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID);
+    const int reset_rc = ble_gatts_reset();
+    if (reset_rc != 0) {
+        LOGE(TAG, "Cannot reset BLE GATT server (rc=%d)", reset_rc);
+        hid_service_ready = false;
+        init_error = true;
+        return;
+    }
+    ble_svc_gap_init();
+    ble_svc_gatt_init();
+    if (ble_svc_gap_device_name_set(ble_name_str) != 0) {
+        LOGE(TAG, "Cannot set BLE device name");
+        init_error = true;
+        return;
+    }
+    hid_service_ready = init_hid_service();
+    if (hid_service_ready) {
+        const int rc = ble_gatts_start();
+        if (rc != 0) {
+            LOGE(TAG, "ble_gatts_start failed: %d", rc);
+            hid_service_ready = false;
+        }
+    }
+#else
     static HidSecurityCallbacks secCb;
     BLEDevice::setSecurityCallbacks(&secCb);
     BLEDevice::setCustomGapHandler(hid_gap_event);
@@ -629,23 +780,30 @@ void ble_hid_init(const char* device_name, bool force_pairing_mode) {
     bleServer->setCallbacks(new HidCallbacks());
 
     hid_service_ready = init_hid_service();
+#endif
     if (!hid_service_ready) {
         LOGE(TAG, "Manual HID service registration failed");
         init_error = true;
         return;
     }
 
+#if BLE_BACKEND == BLE_BACKEND_ARDUINO_CORE
     static BLESecurity security;
     security.setAuthenticationMode(true, false, false);
     security.setCapability(ESP_IO_CAP_NONE);
     security.setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
     security.setRespEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
+#endif
 
     configure_hid_advertising();
 
     if (force_pairing_mode) {
         LOGI(TAG, "Entering BLE pairing mode");
-        clear_all_bonds();
+        if (!clear_all_bonds()) {
+            hid_service_ready = false;
+            init_error = true;
+            return;
+        }
         clear_peer_metadata();
         owner_claimed = false;
         owner_id_addr_str[0] = '\0';
@@ -662,7 +820,11 @@ void ble_hid_init(const char* device_name, bool force_pairing_mode) {
         pairing_deadline = 0;
     }
 
-    start_advertising();
+    if (!start_advertising()) {
+        hid_service_ready = false;
+        init_error = true;
+        return;
+    }
 
     LOGI(TAG, "BLE HID ready, advertising started");
 }
@@ -679,12 +841,19 @@ void ble_hid_start_pairing() {
 
     // 2. Stop advertising while we clear bonds
     if (advertising_active) {
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+        if (ble_gap_adv_stop() != 0) {
+            LOGE(TAG, "Could not stop HID advertising for pairing");
+            return;
+        }
+#else
         BLEDevice::stopAdvertising();
+#endif
         advertising_active = false;
     }
 
     // 3. Clear bonds, owner claim, and stored owner address
-    clear_all_bonds();
+    if (!clear_all_bonds()) return;
     clear_peer_metadata();
     recovery_attempted = false;
     authentication_started = 0;

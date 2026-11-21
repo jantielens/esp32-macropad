@@ -369,7 +369,7 @@ struct HwButtonDef {
 #define HAS_BLE false
 #endif
 
-#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO && HAS_BLE_HID
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO && HAS_BLE_HID && (!defined(EXPERIMENTAL_NIMBLE_HID) || !EXPERIMENTAL_NIMBLE_HID)
 #error "NimBLE-Arduino HID is not supported yet; disable HAS_BLE_HID or select the core backend"
 #endif
 

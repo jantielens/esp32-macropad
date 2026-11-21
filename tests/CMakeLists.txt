@@ -922,6 +922,14 @@ add_host_legacy_test(test_ble_hid
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
 )
 
+add_host_legacy_test(test_ble_hid_nimble
+    SOURCES test_ble_hid.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/ble_hid_overrides ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS HAS_BLE=1 HAS_BLE_HID=1 BLE_BACKEND=1 EXPERIMENTAL_NIMBLE_HID=1
+    LIBRARIES GTest::gtest_main
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+)
+
 add_host_legacy_test(test_bthome_nimble_broadcast
     SOURCES test_ble_hid.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/ble_hid_overrides ${HOST_ARDUINOJSON_DIR}

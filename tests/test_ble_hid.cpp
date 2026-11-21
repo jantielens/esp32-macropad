@@ -47,6 +47,12 @@ protected:
         TestBle::owner.clear();
         TestBle::stored_bond = false;
         TestBle::clears = 0;
+        TestBle::clear_succeeds = true;
+        TestBle::security_start_succeeds = true;
+        TestBle::security_starts = 0;
+        TestBle::gatts_reset_succeeds = true;
+        TestBle::public_address_available = true;
+        TestBle::advertising_address_type = 0xff;
         TestBle::allocations = 0;
         TestBle::notifications = 0;
         TestBle::terminations.clear();
@@ -83,16 +89,41 @@ protected:
 #if HAS_BLE_HID
     void connect() {
         peer.sec_state = {false, false};
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+        TestBle::current_peer = peer;
+        TestBle::radio_advertising = false;
+        ble_gap_event event = {};
+        event.type = BLE_GAP_EVENT_CONNECT;
+        event.connect.conn_handle = peer.conn_handle;
+        nimble_hid_gap_event(&event, nullptr);
+#else
         BLEDevice::server.callbacks->onConnect(&BLEDevice::server, &peer);
+#endif
     }
 
     void authenticate(int status = 0, bool encrypted = true, bool bonded = true) {
         peer.sec_state = {encrypted, bonded};
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+        TestBle::current_peer = peer;
+        ble_gap_event event = {};
+        event.type = BLE_GAP_EVENT_ENC_CHANGE;
+        event.enc_change.conn_handle = peer.conn_handle;
+        event.enc_change.status = status;
+        nimble_hid_gap_event(&event, nullptr);
+#else
         BLEDevice::security->onAuthenticationComplete(&peer, status);
+#endif
     }
 
     void disconnect() {
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+        ble_gap_event event = {};
+        event.type = BLE_GAP_EVENT_DISCONNECT;
+        event.disconnect.conn = peer;
+        nimble_hid_gap_event(&event, nullptr);
+#else
         BLEDevice::server.callbacks->onDisconnect(&BLEDevice::server, &peer);
+#endif
     }
 
     void pair_owner() {
@@ -176,25 +207,32 @@ TEST_F(BleHid, BthomeUsesStableTenButtonPositionsAndDistinctPackets) {
 #endif
 }
 
-#if BLE_BACKEND == BLE_BACKEND_ARDUINO_CORE
+#if BLE_BACKEND == BLE_BACKEND_ARDUINO_CORE || HAS_BLE_HID
 TEST_F(BleHid, BthomeKeepsLazyInitializationOnOtherBoards) {
     BLEDevice::initialized = false;
     BLEDevice::init_succeeds = false;
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+    NimBLEDevice::initialized = false;
+    NimBLEDevice::init_succeeds = false;
+#endif
     bthome_events_configure("Test");
-    EXPECT_FALSE(BLEDevice::getInitialized());
+    EXPECT_FALSE(ble_backend_initialized());
     ASSERT_TRUE(bthome_events_send(1, bthome::press));
     bthome_events_loop();
     EXPECT_EQ(TestBle::event_starts, 0u);
 
     BLEDevice::init_succeeds = true;
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+    NimBLEDevice::init_succeeds = true;
+#endif
     ASSERT_TRUE(bthome_events_send(1, bthome::press));
     bthome_events_loop();
-    EXPECT_TRUE(BLEDevice::getInitialized());
+    EXPECT_TRUE(ble_backend_initialized());
     EXPECT_EQ(TestBle::event_starts, 1u);
 }
 #endif
 
-#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO && !HAS_BLE_HID
 TEST_F(BleHid, BthomeRejectsFailedStartupAndPreparesWithoutAdvertising) {
     NimBLEDevice::initialized = false;
     NimBLEDevice::init_succeeds = false;
@@ -749,11 +787,54 @@ TEST_F(BleHid, RepeatPairingRequiresExplicitWindow) {
     ble_gap_event event = {};
     event.type = BLE_GAP_EVENT_REPEAT_PAIRING;
     event.repeat_pairing.conn_handle = peer.conn_handle;
-    TestBle::gap_handler(&event, nullptr);
+    const int result = TestBle::gap_handler(&event, nullptr);
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+    EXPECT_EQ(result, BLE_GAP_REPEAT_PAIRING_IGNORE);
+    EXPECT_TRUE(TestBle::stored_bond);
+#else
+    (void)result;
+#endif
     authenticate();
     EXPECT_FALSE(ble_hid_is_connected());
     EXPECT_FALSE(ble_hid_is_pairing());
     EXPECT_EQ(TestBle::terminations.size(), 1u);
+}
+
+#if BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+TEST_F(BleHid, HidAdvertisesWithStablePublicAddress) {
+    EXPECT_EQ(TestBle::advertising_address_type, BLE_OWN_ADDR_PUBLIC);
+    TestBle::public_address_available = false;
+    ble_hid_init("Test", false);
+    EXPECT_FALSE(ble_hid_is_initialized());
+    EXPECT_STREQ(ble_hid_state(), "error");
+}
+
+TEST_F(BleHid, FailedGattResetDoesNotStartHid) {
+    TestBle::gatts_reset_succeeds = false;
+    ble_hid_init("Test", false);
+    EXPECT_FALSE(ble_hid_is_initialized());
+    EXPECT_STREQ(ble_hid_state(), "error");
+}
+
+TEST_F(BleHid, SecurityStartFailureRejectsConnection) {
+    TestBle::security_start_succeeds = false;
+    connect();
+    EXPECT_EQ(TestBle::security_starts, 1u);
+    EXPECT_FALSE(ble_hid_is_connected());
+    ASSERT_EQ(TestBle::terminations.size(), 1u);
+    EXPECT_EQ(TestBle::terminations[0].second, BLE_ERR_AUTH_FAIL);
+}
+#endif
+
+TEST_F(BleHid, FailedBondClearDoesNotOpenPairingOrDiscardOwner) {
+    pair_owner();
+    disconnect();
+    const std::string owner = TestBle::owner;
+    TestBle::clear_succeeds = false;
+    ble_hid_start_pairing();
+    EXPECT_FALSE(ble_hid_is_pairing());
+    EXPECT_EQ(TestBle::owner, owner);
+    EXPECT_TRUE(TestBle::stored_bond);
 }
 
 TEST_F(BleHid, AuthenticationTimeoutRejectsLateSuccessOnce) {

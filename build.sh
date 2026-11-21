@@ -203,6 +203,9 @@ build_board() {
     local fqbn="$1"
     local board_name="$2"
     local board_build_path="$BUILD_PATH/$board_name"
+    if [[ "${EXPERIMENTAL_NIMBLE_HID:-0}" == "1" ]]; then
+        board_build_path="$BUILD_PATH/$board_name-nimble-spike"
+    fi
     local board_override_dir="$SCRIPT_DIR/src/boards/$board_name"
     local board_overrides_file="$board_override_dir/board_overrides.h"
     
@@ -227,6 +230,13 @@ build_board() {
     # Keep this allowlisted to avoid arbitrary #define injection.
     EXTRA_GLOBAL_DEFINES=""
     EXTRA_GLOBAL_FLAGS=" -include $SCRIPT_DIR/src/app/async_tcp_config.h"
+    if [[ "${EXPERIMENTAL_NIMBLE_HID:-0}" == "1" ]]; then
+        if [[ "$board_name" != "jc3636w518-sd-ble" ]]; then
+            echo "EXPERIMENTAL_NIMBLE_HID is restricted to jc3636w518-sd-ble" >&2
+            return 1
+        fi
+        EXTRA_GLOBAL_DEFINES+=" -DBLE_BACKEND=1 -DEXPERIMENTAL_NIMBLE_HID=1"
+    fi
     if [[ -f "$board_overrides_file" ]]; then
         # Numeric-valued defines (exported as -DNAME=value)
         # NOTE: Keep this allowlist tight; only export values needed by libraries.

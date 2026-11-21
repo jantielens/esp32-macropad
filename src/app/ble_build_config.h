@@ -25,7 +25,7 @@
 #define CONFIG_BT_NIMBLE_ROLE_OBSERVER 0
 #undef CONFIG_BT_NIMBLE_ROLE_BROADCASTER
 #define CONFIG_BT_NIMBLE_ROLE_BROADCASTER 1
-// Pinned library linkage requires peripheral symbols, but no GATT server is created.
+// Pinned library linkage requires peripheral symbols.
 #undef CONFIG_BT_NIMBLE_ROLE_PERIPHERAL
 #define CONFIG_BT_NIMBLE_ROLE_PERIPHERAL 1
 #undef CONFIG_BT_NIMBLE_ENABLE_CONN_REATTEMPT

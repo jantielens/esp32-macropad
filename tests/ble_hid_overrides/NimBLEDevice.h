@@ -54,6 +54,19 @@ public:
     inline static NimBLEAdvertising advertising;
     static void init(const char*) { ++TestBle::host_inits; initialized = init_succeeds; }
     static bool isInitialized() { return initialized; }
+    static void setSecurityAuth(bool bonding, bool mitm, bool sc) {
+        TestBle::bonding = bonding;
+        TestBle::mitm = mitm;
+        TestBle::secure_connections = sc;
+    }
+    static void setSecurityIOCap(uint8_t capability) { TestBle::capability = capability; }
+    static void setSecurityInitKey(uint8_t) {}
+    static void setSecurityRespKey(uint8_t) {}
+    static bool startSecurity(uint16_t, int* result) {
+        ++TestBle::security_starts;
+        *result = TestBle::security_start_succeeds ? 0 : 1;
+        return TestBle::security_start_succeeds;
+    }
     static NimBLEAdvertising* getAdvertising() { return &advertising; }
     static esp_power_level_t getPowerLevel(esp_ble_power_type_t type) {
         return esp_ble_tx_power_get(type);

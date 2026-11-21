@@ -250,7 +250,7 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 	if (g_normal_runtime_started) return;
 	g_normal_runtime_started = true;
 
-	#if (HAS_BLE || HAS_BLE_HID) && BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+	#if HAS_BLE && !HAS_BLE_HID && BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
 	bthome_events_configure(device_config.device_name, device_config.bthome_event);
 	bthome_events_prepare();
 	#endif
@@ -301,7 +301,7 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 
 	sensor_manager_init();
 
-	#if (HAS_BLE || HAS_BLE_HID) && BLE_BACKEND == BLE_BACKEND_ARDUINO_CORE
+	#if (HAS_BLE || HAS_BLE_HID) && (BLE_BACKEND == BLE_BACKEND_ARDUINO_CORE || HAS_BLE_HID)
 	bthome_events_configure(device_config.device_name, device_config.bthome_event);
 	#endif
 
@@ -616,7 +616,7 @@ void setup()
 	ble_backend_configure_power(device_config.bluetooth_tx_power_dbm);
 	#endif
 
-	#if (HAS_BLE || HAS_BLE_HID) && BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
+	#if HAS_BLE && !HAS_BLE_HID && BLE_BACKEND == BLE_BACKEND_NIMBLE_ARDUINO
 	// Reserve BLE's internal RAM before WiFi and normal-runtime allocations.
 	if (!reboot_is_ota_mode() && (boot_mode == PowerMode::AlwaysOn || boot_mode == PowerMode::Offline)) {
 		bthome_events_configure(device_config.device_name, device_config.bthome_event);
