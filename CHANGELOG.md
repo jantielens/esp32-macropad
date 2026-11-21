@@ -52,6 +52,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Prefer the strongest matching Wi-Fi access point on ESP32-P4 when connecting,
+  without locking the connection to a specific access point. Allow up to ten
+  seconds on the first attempt so scanning and address assignment can finish.
+  Log the C6 firmware version after a successful Wi-Fi startup.
 * Stop circular named bindings at the first repeated name. Limit named chains
   to two levels and check available task stack before recursive binding and
   expression evaluation, returning unavailable or a fallback when space is low.

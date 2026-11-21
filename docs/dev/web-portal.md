@@ -1975,10 +1975,11 @@ Returns comprehensive device information.
   flash/NVS. A manual Connect retains that worker until association completes or
   times out, permitting teardown without another allocation. The main loop owns
   readiness and the ten-second association deadline, which starts after radio
-  initialization, scanning, and `WiFi.begin()`. The worker reuses the boot
+  initialization, any host-side scan, and `WiFi.begin()`. The worker reuses the boot
   strongest-AP selector and directed BSSID/channel connection, falling back to
-  SDK selection if scanning cannot select an AP. ESP32-P4 retains coprocessor
-  selection without a directed scan. There is no synchronous scan or blocking
+  SDK selection if scanning cannot select an AP. On ESP32-P4, the coprocessor
+  scans all channels and prefers the strongest matching AP during association,
+  without a host-side scan or BSSID pinning. There is no synchronous scan or blocking
   association wait on the main loop.
   Worker resources are released after task deletion; normal online boot still
   uses its optimized early initialization and strongest-AP selection.

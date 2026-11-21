@@ -45,6 +45,10 @@
 #include "health_history.h"
 #endif
 #include <WiFi.h>
+#ifdef CONFIG_IDF_TARGET_ESP32P4
+#include <esp_hosted.h>
+#include <esp_mac.h>
+#endif
 #if HAS_REMOTE_LOG
 #include <esp_system.h>
 #include <esp_idf_version.h>
@@ -165,7 +169,13 @@ unsigned long last_heartbeat_ms = 0;
 
 // WiFi event handlers for connection lifecycle monitoring
 void onWiFiConnected(WiFiEvent_t event, WiFiEventInfo_t info) {
+#ifdef CONFIG_IDF_TARGET_ESP32P4
+	const auto& ap = info.wifi_sta_connected;
+	LOGI("WiFi", "Connected to AP " MACSTR " | Ch %u | auth %u - waiting for IP",
+	     MAC2STR(ap.bssid), (unsigned)ap.channel, (unsigned)ap.authmode);
+#else
 	LOGI("WiFi", "Connected to AP - waiting for IP");
+#endif
 }
 
 void onWiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info) {
@@ -174,7 +184,12 @@ void onWiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info) {
 
 void onWiFiDisconnected(WiFiEvent_t event, WiFiEventInfo_t info) {
 	uint8_t reason = info.wifi_sta_disconnected.reason;
+#ifdef CONFIG_IDF_TARGET_ESP32P4
+	LOGI("WiFi", "Disconnected - reason: %u | BSSID " MACSTR,
+	     (unsigned)reason, MAC2STR(info.wifi_sta_disconnected.bssid));
+#else
 	LOGI("WiFi", "Disconnected - reason: %d", reason);
+#endif
 
 	// Common disconnect reasons:
 	// 2 = AUTH_EXPIRE, 3 = AUTH_LEAVE, 4 = ASSOC_EXPIRE
@@ -808,6 +823,16 @@ void setup()
 			wifi_manager_start_mdns(&device_config);
 			device_telemetry_cache_rssi();
 			wifi_manager_register_events();
+			#ifdef CONFIG_IDF_TARGET_ESP32P4
+			esp_hosted_coprocessor_fwver_t version{};
+			const int version_result = esp_hosted_get_coprocessor_fwversion(&version);
+			if (version_result == ESP_OK) {
+				LOGI("WiFi", "C6 firmware: %lu.%lu.%lu", (unsigned long)version.major1,
+				     (unsigned long)version.minor1, (unsigned long)version.patch1);
+			} else {
+				LOGW("WiFi", "C6 firmware query failed: %d", version_result);
+			}
+			#endif
 			#if HAS_DISPLAY
 			time_binding_start_ntp();
 			#endif

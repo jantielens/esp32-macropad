@@ -34,7 +34,10 @@ button below both sections.
 Prefer a distinct name for each device. Use the displayed hostname rather than
 assuming spaces or punctuation in the friendly name appear in the URL.
 A router's DHCP client list can identify the device when `.local` discovery
-is unavailable.
+is unavailable. On devices with coprocessor-managed Wi-Fi, the radio scans all
+channels and prefers the strongest access point that matches the saved network
+name when connecting. It does not switch access points while connected just
+because another one has a stronger signal.
 
 ## Continue offline
 
@@ -116,12 +119,12 @@ requests, OTA, or configuration writes can reject a command without changing
 the active transport.
 
 Connect acknowledges a request, not association or HA/MQTT readiness. It does
-not pause the rest of an action list until connected. It scans for the strongest
-AP matching the saved network name, using the boot connection's selection rule.
-If scanning fails or finds no match, the Wi-Fi stack selects the AP instead.
-Firmware using coprocessor-managed Wi-Fi keeps its normal automatic selection.
-The connection timeout starts after radio startup and scanning, so allow extra
-time for that preparation. Existing actions using
+not pause the rest of an action list until connected. Like at boot, the device
+looks for the strongest access point matching the saved network name.
+On devices with coprocessor-managed Wi-Fi, the radio scans and selects an
+access point during the connection attempt. Other devices scan before the
+connection timeout starts and let the Wi-Fi stack select an access point if
+the scan fails or finds no match. Existing actions using
 `wifi_reconnect` must be updated to `wifi_connect`; no alias is retained.
 
 For local status labels, use:

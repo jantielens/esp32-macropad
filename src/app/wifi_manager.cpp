@@ -25,6 +25,9 @@ static bool g_early_init_done = false;
 
 // WiFi retry settings (boot-time only)
 static constexpr unsigned long WIFI_BACKOFF_BASE = 3000; // 3 seconds base
+#ifdef CONFIG_IDF_TARGET_ESP32P4
+static constexpr unsigned long WIFI_P4_FIRST_ATTEMPT_MS = 10000;
+#endif
 // Minimum acceptable RSSI for a cached-AP fast connect (WIFI_CACHED_RSSI_FLOOR_DBM,
 // defined in board_config.h, default -78 dBm). Above this floor the cached
 // connect is accepted and the scan is skipped (the warm-wake happy path). At or
@@ -387,7 +390,10 @@ void wifi_manager_early_init() {
 }
 
 static bool configure_station(const DeviceConfig* config) {
-		#ifndef CONFIG_IDF_TARGET_ESP32P4
+		#ifdef CONFIG_IDF_TARGET_ESP32P4
+		WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
+		WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
+		#else
 		WiFi.setSleep(false);
 		#endif
 		WiFi.setAutoReconnect(true);
@@ -514,22 +520,28 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid, u
 		}
 
 		#ifdef CONFIG_IDF_TARGET_ESP32P4
-		// ESP32-P4 ESP-Hosted: the C6 co-processor handles AP selection
-		// internally. Scanning + directed-connect (BSSID/channel) over SDIO
+		// ESP32-P4 ESP-Hosted: let the C6 scan and select the AP internally.
+		// A separate host-side scan + directed-connect (BSSID/channel) over SDIO
 		// is unreliable and can cause ASSOC_LEAVE (reason 8), especially with
-		// older C6 firmware. Use simple begin and let the C6 decide.
+		// older C6 firmware.
 		// Auto-reconnect doesn't propagate reliably over SDIO, so we
 		// re-issue WiFi.begin() on each attempt with a clean disconnect cycle.
 		for (int attempt = 0; attempt < WIFI_MAX_ATTEMPTS; attempt++) {
 				if (timeout_ms > 0 && remaining_timeout(1) == 0) break;
 				if (attempt > 0) {
+						LOGI("WiFi", "Disconnecting before retry");
 						WiFi.disconnect(false);
 						delay(500);
 				}
 				LOGI("WiFi", "Attempt %d/%d", attempt + 1, WIFI_MAX_ATTEMPTS);
-				WiFi.begin(config->wifi_ssid, config->wifi_password);
-
-				unsigned long timeout = remaining_timeout(WIFI_BACKOFF_BASE * (attempt + 1));
+				// The initial C6 scan, association, and DHCP can outlast the usual retry window.
+				const unsigned long wait_ms = attempt == 0
+						? WIFI_P4_FIRST_ATTEMPT_MS : WIFI_BACKOFF_BASE * (attempt + 1);
+				const unsigned long begin_started = millis();
+				const wl_status_t begin_status = WiFi.begin(config->wifi_ssid, config->wifi_password);
+				const unsigned long timeout = remaining_timeout(wait_ms);
+				LOGI("WiFi", "WiFi.begin: status=%d elapsed=%lums; IP wait=%lums",
+				     (int)begin_status, millis() - begin_started, timeout);
 				if (wait_for_connection(timeout)) {
 						LOGI("WiFi", "Connected: ip=%s host=%s.local RSSI=%d dBm",
 						     WiFi.localIP().toString().c_str(), WiFi.getHostname(), WiFi.RSSI());
@@ -546,7 +558,7 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid, u
 						(status == WL_CONNECTION_LOST) ? "Connection lost" :
 						(status == WL_DISCONNECTED) ? "Disconnected" :
 						"Unknown";
-				LOGW("WiFi", "Status: %s (%d)", reason, status);
+				LOGW("WiFi", "IP wait expired: %s (%d)", reason, status);
 		}
 		#else
 		uint8_t best_bssid[6];
