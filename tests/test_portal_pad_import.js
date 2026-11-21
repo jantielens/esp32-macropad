@@ -685,12 +685,33 @@ async function testClearPad() {
         return originalResponse;
     };
     const regenerationStart = success.requests.length;
+    const defaultsStages = [];
+    let defaultsYields = 0;
+    success.context.portalOperation = {
+        async run(options, action) {
+            return action({
+                stage: (message, completed, total) => defaultsStages.push({ message, completed, total }),
+                async yield() { ++defaultsYields; },
+            });
+        }
+    };
     await success.context.padSaveButtonDefaults();
     const regenerationRequests = success.requests.slice(regenerationStart);
     assert.strictEqual(regenerationRequests.filter(request => request.kind === 'pad-save').length, 2);
     assert.strictEqual(regenerationRequests.filter(request => request.kind === 'icon-install').length, 2);
     assert.deepStrictEqual(success.renderedSizes.slice(-2), [86, 86],
         'Updated default padding must size parent and inherited child variants');
+    for (const page of [1, 2]) {
+        const prefix = 'Pad ' + page + ' (' + page + ' of 2): ';
+        assert(defaultsStages.some(stage => stage.message === prefix + 'Preparing artwork'));
+        assert(defaultsStages.some(stage => stage.message === prefix + 'Uploading button images' &&
+            stage.completed === 1 && stage.total === 1));
+        assert(defaultsStages.some(stage => stage.message === prefix + 'Saving configuration'));
+    }
+    assert(defaultsYields > 0, 'Artwork preparation must yield so progress can paint');
+    assert.deepStrictEqual(defaultsStages.pop(), {
+        message: 'Finishing pad updates', completed: 2, total: 2
+    });
 
     const concurrent = await setupPadTest({ keepEditor: true });
     vm.runInContext('padState.loadError = null;', concurrent.context);

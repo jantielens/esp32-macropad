@@ -613,6 +613,18 @@ assert.strictEqual(backgroundReset.style.display, 'none');
 (async function testDefaultsSaveRebootWarning() {
     let pendingCalls = 0;
     const messages = [];
+    const stages = [];
+    const operationErrors = [];
+    context.portalOperation = {
+        async run(options, action) {
+            assert.strictEqual(options.title, 'Saving Pad and Button Defaults');
+            try {
+                return await action({ stage: message => stages.push(message) });
+            } catch (error) {
+                operationErrors.push(error.message);
+            }
+        }
+    };
     context.padCollectButtonDefaults = () => ({
         ...(context.padState.buttonDefaults || {}), base_text_size: 30
     });
@@ -629,6 +641,7 @@ assert.strictEqual(backgroundReset.style.display, 'none');
     assert.strictEqual(pendingCalls, 0);
     assert.strictEqual(regenerationCalls, 0);
     assert.strictEqual(messages.pop().type, 'success');
+    assert.deepStrictEqual(stages, ['Saving defaults', 'Refreshing defaults']);
 
     context.padLoadButtonDefaultsFromDevice = async () => context.padLoadButtonDefaults({
         typography_status: { reboot_required: true }
@@ -641,6 +654,18 @@ assert.strictEqual(backgroundReset.style.display, 'none');
     context.console = { error() {} };
     await context.padSaveButtonDefaults();
     assert.strictEqual(pendingCalls, 1);
-    assert.strictEqual(messages.pop().type, 'error');
+    assert.strictEqual(messages.length, 0);
+    assert.deepStrictEqual(operationErrors, ['Save failed: Save failed']);
+
+    context.fetch = async () => ({ ok: true });
+    context.padCollectButtonDefaults = () => ({ content_pad: '12' });
+    context.padRegenerateAllSavedIcons = async operation => {
+        assert.strictEqual(typeof operation.stage, 'function');
+        throw new Error('Icon upload failed');
+    };
+    await context.padSaveButtonDefaults();
+    assert.strictEqual(pendingCalls, 1);
+    assert.strictEqual(messages.length, 0);
+    assert.strictEqual(operationErrors.pop(), 'Defaults saved, but icon regeneration failed: Icon upload failed');
     console.log('portal_pad_colors: PASS');
 })().catch(error => { console.error(error); process.exitCode = 1; });

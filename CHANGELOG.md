@@ -28,6 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Show save progress for Pad and Button Defaults, including the current pad
+  and artwork preparation, upload, and save stages when regenerating icons.
+  Reuse the pad editor's dialog to block editing and navigation during saving
+  and report partial failures after defaults have been saved.
 * Default BLE HID support off globally, with explicit opt-ins preserving
   existing supported boards. Advertise E1003 Interactive BLE HID in installer
   metadata. Runtime HID selection still defaults Off.

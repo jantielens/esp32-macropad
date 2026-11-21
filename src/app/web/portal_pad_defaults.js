@@ -296,36 +296,40 @@ function padIconSizingDefaultsChanged(previous, next) {
 }
 
 async function padSaveButtonDefaults() {
-    let defaultsSaved = false;
-    const previousDefaults = { ...(padState.buttonDefaults || {}) };
-    try {
-    var d = padCollectButtonDefaults();
-        var resp = await fetch('/api/component/button-defaults/config', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(d),
-        });
-        if (!resp.ok) {
-            var err = await resp.json().catch(function() { return {}; });
-            throw new Error(err.error || 'HTTP ' + resp.status);
+    return portalOperation.run({ title: 'Saving Pad and Button Defaults' }, async operation => {
+        let defaultsSaved = false;
+        const previousDefaults = { ...(padState.buttonDefaults || {}) };
+        try {
+            var d = padCollectButtonDefaults();
+            operation.stage('Saving defaults');
+            var resp = await fetch('/api/component/button-defaults/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(d),
+            });
+            if (!resp.ok) {
+                var err = await resp.json().catch(function() { return {}; });
+                throw new Error(err.error || 'HTTP ' + resp.status);
+            }
+            defaultsSaved = true;
+            padState.buttonDefaults = d;
+            operation.stage('Refreshing defaults');
+            await padLoadButtonDefaultsFromDevice();
+            if (padIconSizingDefaultsChanged(previousDefaults, d)) {
+                await padRegenerateAllSavedIcons(operation);
+            }
+            if (PAD_TYPOGRAPHY_STATUS.reboot_required) {
+                setPendingReboot();
+            } else {
+                showMessage('Pad and button defaults saved', 'success');
+            }
+            // Re-render current pad grid to reflect updated defaults
+            padRenderGrid();
+        } catch (err) {
+            console.error('padSaveButtonDefaults error:', err);
+            throw new Error((defaultsSaved ? 'Defaults saved, but icon regeneration failed: ' : 'Save failed: ') + err.message);
         }
-        defaultsSaved = true;
-        padState.buttonDefaults = d;
-        await padLoadButtonDefaultsFromDevice();
-        if (padIconSizingDefaultsChanged(previousDefaults, d)) {
-            await padRegenerateAllSavedIcons();
-        }
-        if (PAD_TYPOGRAPHY_STATUS.reboot_required) {
-            setPendingReboot();
-        } else {
-            showMessage('Pad and button defaults saved', 'success');
-        }
-        // Re-render current pad grid to reflect updated defaults
-        padRenderGrid();
-    } catch (err) {
-        console.error('padSaveButtonDefaults error:', err);
-        showMessage((defaultsSaved ? 'Defaults saved, but icon regeneration failed: ' : 'Save failed: ') + err.message, 'error');
-    }
+    });
 }
 
 // Get the effective default for a button appearance field (pad default → firmware default)

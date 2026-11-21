@@ -1192,14 +1192,24 @@ async function padPreparePageSave(context) {
     });
 }
 
-async function padRegenerateAllSavedIcons() {
+async function padRegenerateAllSavedIcons(operation) {
+    if (operation) operation.stage('Waiting to update pads');
     return padQueuePersistenceOperation(async () => {
         let savedBrightness = 0;
         let brightnessBlanked = false;
         let regenerated = 0;
         try {
+            if (operation) operation.stage('Finding saved pads');
             const pages = await padFetchConfiguredPads();
-            for (const page of pages) {
+            for (const [index, page] of pages.entries()) {
+                if (operation) operation.stage('Checking Pad ' + (page + 1), index, pages.length);
+                const padOperation = operation && {
+                    stage(message, completed, total) {
+                        operation.stage('Pad ' + (page + 1) + ' (' + (index + 1) + ' of ' +
+                            pages.length + '): ' + message, completed, total);
+                    },
+                    yield: () => operation.yield(),
+                };
                 const response = await fetch('/api/pad?page=' + page);
                 if (response.status === 404) continue;
                 if (!response.ok)
@@ -1210,6 +1220,7 @@ async function padRegenerateAllSavedIcons() {
                     payload,
                     skipTemplateDependents: true,
                     blankOnSave: false,
+                    operation: padOperation,
                 });
                 if (!prepared.variants.length) continue;
 
@@ -1226,6 +1237,7 @@ async function padRegenerateAllSavedIcons() {
                 await padPersistPage(prepared);
                 regenerated++;
             }
+            if (operation) operation.stage('Finishing pad updates', pages.length, pages.length);
             if (brightnessBlanked) await new Promise(resolve => setTimeout(resolve, 500));
             return regenerated;
         } finally {

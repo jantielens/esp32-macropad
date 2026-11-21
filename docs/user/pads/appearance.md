@@ -20,6 +20,12 @@ device typography. Appearance changes apply to inheriting pads live; device
 font/base-size changes require reboot. Manage files in [Fonts](../media/fonts.md).
 Template pads fill buttons/bindings, not a second appearance cascade.
 
+Select **Save Pad and Button Defaults** to persist shared changes. Changes that
+affect icon sizing can regenerate images and save multiple pads. The progress
+dialog shows the current pad and preparation, upload, and save stages; wait for
+it to finish before editing or navigating. If regeneration fails after defaults
+are saved, the dialog reports that partial result.
+
 ## Add labels and icons
 
 Button **Content** provides Top, Center, and Bottom labels.
