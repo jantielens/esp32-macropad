@@ -109,9 +109,17 @@ struct EpaperRefreshSettings {
 static bool context_active = false;
 static void pad_binding_set_bindings(const void* bindings, uint8_t) { context_active = bindings; }
 static void mqtt_sub_store_clear_dirty() { assert(context_active); }
+struct DisplayManager {
+    uint16_t getActiveWidth() const { return 320; }
+    uint16_t getActiveHeight() const { return 240; }
+};
+static DisplayManager display_manager;
+static void pad_background_update(lv_obj_t*, const char*, uint16_t, uint16_t) {}
 struct PadScreen {
     lv_obj_t screen_object;
     lv_obj_t* screen = &screen_object;
+    DisplayManager* displayMgr = &display_manager;
+    char backgroundPath[1] = "";
     bool tilesBuilt = false;
     uint32_t cachedGeneration = 0;
     uint8_t tileCount = 0;

@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.50.0] - 2026-11-21
+
 ### Breaking changes
 
 * Replace the `transparent` button background color with Background opacity.
@@ -23,27 +25,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* Add external button inputs R1 (GPIO40), R2 (GPIO2), and R3 (GPIO1) on the
-  ESP32-4848S040 rear connector, for use without the optional relay module.
-  See [connector button inputs](src/boards/esp32-4848S040/README.md#connector-button-inputs).
-
-* Add MCP `replace_pad` to replace geometry, both button layers, bindings, and
-  actions in one validated save without intermediate clearing. Omitted optional
-  fields do not merge from the old pad. Image passwords are redacted on reads;
-  replacement requires explicit credentials rather than retained-secret markers.
-  See [complete pad replacement](docs/user/integrations/ai-assistants.md#replace-a-complete-pad)
-  and [#164](https://github.com/jantielens/esp32-macropad/issues/164).
-* Allow named pad bindings to reuse other names on the same effective pad, so
-  labels, widget properties and colors can share one decision expression.
-  Add runtime depth/work guards, composition-aware MQTT topic and HA entity
-  discovery, raw history expansion, and effective-pad preview context. Dependency-graph
-  validation on save is deferred; invalid dependencies become unavailable at
-  runtime. Existing template byte limits remain unchanged.
-  See [named bindings](docs/user/pads/bindings.md#name-a-source-on-the-pad)
-  and [#149](https://github.com/jantielens/esp32-macropad/issues/149).
-* Add optional relative widths to Option selector options. Set Weight on an
-  empty option to reserve space and push status labels or icons toward an edge.
-  See [option widths and spacers](docs/user/widgets/option-selector.md#set-widths-and-reserve-empty-space).
 * Add optional local-image pad backgrounds with a Pad Appearance selector and
   editor preview. Images fill the screen with centered cropping. Consecutive
   pads sharing a file reuse one decoded background; other images load on demand.
@@ -59,6 +40,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Home Assistant replacements also update sparkline history references while
   preserving binding formatting. Actions and other settings remain unchanged.
   See [copying buttons](docs/user/pads/reuse.md#copy-fill-and-clear).
+* Add optional relative widths to Option selector options. Set Weight on an
+  empty option to reserve space and push status labels or icons toward an edge.
+  See [option widths and spacers](docs/user/widgets/option-selector.md#set-widths-and-reserve-empty-space).
+* Allow named pad bindings to reuse other names on the same effective pad, so
+  labels, widget properties, and colors can share one decision expression.
+  Support two-level named chains in rendering, previews, MQTT topic and Home
+  Assistant entity discovery, and raw history expansion. Cycles, missing names,
+  and exhausted stack or work budgets become unavailable or use a fallback.
+  Saving does not validate the dependency graph; the existing 191-byte UTF-8
+  template limit and 12-level arithmetic nesting ceiling remain unchanged.
+  See [named bindings](docs/user/pads/bindings.md#name-a-source-on-the-pad)
+  and [#149](https://github.com/jantielens/esp32-macropad/issues/149).
+* Add MCP `replace_pad` to replace geometry, both button layers, bindings, and
+  actions in one validated save without intermediate clearing. Omitted optional
+  fields do not merge from the old pad. Image passwords are redacted on reads;
+  replacement requires explicit credentials rather than retained-secret markers.
+  Replacement uses the existing storage path, without new power-loss or rollback
+  guarantees; read the pad back after a timeout before retrying.
+  See [complete pad replacement](docs/user/integrations/ai-assistants.md#replace-a-complete-pad)
+  and [#164](https://github.com/jantielens/esp32-macropad/issues/164).
+* Add external button inputs R1 (GPIO40), R2 (GPIO2), and R3 (GPIO1) on the
+  ESP32-4848S040 rear connector, for use without the optional relay module.
+  See [connector button inputs](src/boards/esp32-4848S040/README.md#connector-button-inputs).
 
 ### Fixed
 
@@ -68,37 +72,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   actions transfer to R1; review them before connecting an external button.
   Thanks to [@zoeimogen](https://github.com/zoeimogen) for the fix in
   [#166](https://github.com/jantielens/esp32-macropad/pull/166).
-
-* Reuse mounted filesystem capacity during storage-usage refreshes, avoiding
-  LittleFS's duplicate usage query after saves. Used space still refreshes at
-  the existing interval, and mount/forced refreshes update both values.
-* Run MCP and portal binding previews on the LVGL task so nested named bindings
-  use the same resolver context and stack budget as rendering. Restore the live
-  pad context after preview. Remove redundant all-pad cache rebuilding from MCP
-  saves and add queue/save/subscription timing logs without extending timeouts.
-  Release write buffers when dispatch rejects the job.
+* Prefer the strongest matching Wi-Fi access point on ESP32-P4 when connecting,
+  without locking the connection to a specific access point. Allow up to ten
+  seconds on the first attempt so scanning and address assignment can finish.
+  Log the C6 firmware version after a successful Wi-Fi startup.
 * Complete MCP background-image discovery with field types, defaults, limits,
   binding/authentication rules, firmware availability, and widget restrictions.
   Add valid Home Assistant service examples and explain the bare-service rule
   through the shared action catalog. Portal image-control visibility and
   runtime validation remain unchanged. This addresses the discovery portion
   of [#163](https://github.com/jantielens/esp32-macropad/issues/163).
-* Prefer the strongest matching Wi-Fi access point on ESP32-P4 when connecting,
-  without locking the connection to a specific access point. Allow up to ten
-  seconds on the first attempt so scanning and address assignment can finish.
-  Log the C6 firmware version after a successful Wi-Fi startup.
-* Stop circular named bindings at the first repeated name. Limit named chains
-  to two levels and check available task stack before recursive binding and
-  expression evaluation, returning unavailable or a fallback when space is low.
-  Keep the existing 12-level arithmetic nesting ceiling.
-* Prevent the darkroom test-strip table binding from overrunning small output
-  buffers, including when referenced through a named pad binding.
 * Correct named pad-binding authoring examples and publish
   machine-readable authoring restrictions in the binding API and MCP
   capabilities. Clarify same-pad context, name/count limits, and the 191-byte
   UTF-8 template limit in the portal reference and user guide. Existing input
   limits are unchanged.
   See [#148](https://github.com/jantielens/esp32-macropad/issues/148).
+* Prevent the darkroom test-strip table binding from overrunning small output
+  buffers, including when referenced through a named pad binding.
+* Run MCP and portal binding previews on the LVGL task, restoring the live pad
+  context afterward. Avoid redundant all-pad cache rebuilding during MCP saves
+  and release write buffers when dispatch rejects a job. Add timing diagnostics
+  without extending timeouts.
+* Reuse mounted filesystem capacity during storage-usage refreshes, avoiding
+  LittleFS's duplicate usage query after saves. Used space still refreshes at
+  the existing interval, and mount/forced refreshes update both values.
 
 ## [1.49.0] - 2026-11-19
 
