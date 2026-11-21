@@ -44,6 +44,34 @@ GT911 uses address `0x5D` or `0x14`. No dedicated touch interrupt/reset GPIO
 is configured. GPIO0 is also assigned to the panel's red channel; do not treat
 it as a spare accessory pin.
 
+## Connector button inputs
+
+The rear 8-pin connector exposes three GPIO inputs for external buttons.
+These are not onboard buttons. Use them only with the optional relay module
+disconnected; the firmware does not drive relays.
+
+| Portal input | GPIO |
+| ------------ | ---- |
+| R1           | 40   |
+| R2           | 2    |
+| R3           | 1    |
+
+Inputs use internal pull-ups and are active low. An external button closes
+the selected GPIO to GND. Configure tap and hold actions under
+**Actions > Hardware Buttons**, then select **Save Hardware Buttons**.
+See [physical-button actions](../../../docs/user/device/triggers.md#physical-buttons)
+for shared action behavior.
+
+BOOT/GPIO0 is reserved for serial download recovery. It is not a runtime
+action button or a boot-hold configuration-mode button, because reconfiguring
+it as an input interferes with the display's highest red-data bit.
+Do not press BOOT during normal display operation.
+
+> [!IMPORTANT]
+> When upgrading from firmware that exposed BOOT as a runtime button, its
+> saved tap and hold actions transfer to R1 (GPIO40). Review or clear those
+> actions before connecting an external button.
+
 ## References
 
 * [Board support reference](https://github.com/aquaElectronics/esp32-4848s040-st7701)

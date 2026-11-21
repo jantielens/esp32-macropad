@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add external button inputs R1 (GPIO40), R2 (GPIO2), and R3 (GPIO1) on the
+  ESP32-4848S040 rear connector, for use without the optional relay module.
+  See [connector button inputs](src/boards/esp32-4848S040/README.md#connector-button-inputs).
+
 * Add MCP `replace_pad` to replace geometry, both button layers, bindings, and
   actions in one validated save without intermediate clearing. Omitted optional
   fields do not merge from the old pad. Image passwords are redacted on reads;
@@ -57,6 +61,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   See [copying buttons](docs/user/pads/reuse.md#copy-fill-and-clear).
 
 ### Fixed
+
+* Fix the ESP32-4848S040 display's red tint by leaving GPIO0 under display
+  control instead of configuring it as a runtime or boot-hold button.
+  BOOT remains available for serial download recovery. Previously saved BOOT
+  actions transfer to R1; review them before connecting an external button.
+  Thanks to [@zoeimogen](https://github.com/zoeimogen) for the fix in
+  [#166](https://github.com/jantielens/esp32-macropad/pull/166).
 
 * Reuse mounted filesystem capacity during storage-usage refreshes, avoiding
   LittleFS's duplicate usage query after saves. Used space still refreshes at
