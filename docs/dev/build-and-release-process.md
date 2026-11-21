@@ -646,7 +646,7 @@ update cannot install the new layout. See the
 
 ### ESP32-S3 4 MiB OTA Layout
 
-`esp32-4848S040`, `jc3248w535`, `jc3636w518`, `jc3636w518-sd`,
+`esp32-4848S040`, `jc3248w535`, `jc3636w518`, all `jc3636w518-sd` variants,
 `m5stack-stopwatch`, and `waveshare-7.8-interactive` use
 `ota_4mb_16MB_ext` to provide firmware headroom while retaining two 4 MiB OTA
 slots. The 16 MiB layout also provides 256 KiB for native Extensions and
@@ -675,6 +675,30 @@ available after the new layout is installed. The `jc3636w518-sd` variant uses
 the SD card for primary file storage; this migration does not repartition
 the SD card, but native Extensions still reside in internal flash and must
 be backed up and restored.
+
+### JC3636W518 SD HID comparisons
+
+`jc3636w518-sd` excludes HID. `jc3636w518-sd-usb` and `jc3636w518-sd-ble`
+compile USB and BLE respectively.
+Each is a real target discovered from `config.sh` by CI, releases, and the
+installer. Build one with `./build.sh <target>`; the three targets retain
+identical FQBN options, partition layout, storage wiring, and non-HID features.
+The internal-storage `jc3636w518` target remains USB-only.
+
+All three SD variants set `MALLOC_PSRAM_THRESHOLD_BYTES=128`, reusing Sticky's
+ordinary-allocation preference instead of the shared ESP32-S3 512-byte default.
+This affects ordinary allocations larger than 128 bytes, with allocator
+fallback; it does not move static variables, task stacks, or explicitly
+internal/DMA-capable buffers. BLE HID uses the core backend because
+NimBLE-Arduino HID is not supported.
+
+Compare application size and retained static/executable RAM across the three
+builds. Runtime free internal heap, largest free block, and minimum free heap
+need hardware measurements with HID Off, initialized, connected, and under
+Wi-Fi/display/SD/input load. A common 128-byte threshold isolates HID
+differences but does not measure the threshold's own benefit against 512.
+The [board memory measurements](../../src/boards/jc3636w518-sd/README.md#hid-memory-measurements)
+include the withdrawn combined build for comparison, not as a supported target.
 
 ### reTerminal E1003 Interactive Extensions
 

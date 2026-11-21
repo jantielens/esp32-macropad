@@ -1,6 +1,14 @@
 #ifndef BOARD_OVERRIDES_JC3636W518_SD_H
 #define BOARD_OVERRIDES_JC3636W518_SD_H
 
+#ifndef HAS_BLE_HID
+#define HAS_BLE_HID false
+#endif
+#ifndef HAS_USB_HID
+#define HAS_USB_HID false
+#endif
+#define MALLOC_PSRAM_THRESHOLD_BYTES 128
+
 #include "../jc3636w518/board_overrides.h"
 
 // On-board TF card slot: SDMMC 1-bit on GPIO2 (D0), GPIO3 (CLK), GPIO4 (CMD).

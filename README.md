@@ -288,6 +288,11 @@ more room without using the board's internal flash for those files.
 
 ### Pick the Right Variant
 
+JC3636W518 SD-primary builds offer no HID (`jc3636w518-sd`), USB
+(`jc3636w518-sd-usb`), or BLE (`jc3636w518-sd-ble`).
+Use the USB variant to retain the unsuffixed target's
+previous USB support. See the [SD variant guide](src/boards/jc3636w518-sd/README.md).
+
 | Capability | What to check |
 |------------|---------------|
 | USB keyboard, mouse, and gamepad | Firmware HID support and a native device/OTG connector, not a USB-UART or host-only port |

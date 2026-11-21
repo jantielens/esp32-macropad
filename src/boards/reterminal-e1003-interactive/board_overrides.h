@@ -12,6 +12,7 @@
 // macropad stack rather than the sleep-first E-Paper Frame lifecycle.
 
 #define HAS_DISPLAY true
+#define HAS_BLE_HID true
 #define HAS_TOUCH true
 #define HAS_EPAPER_PANEL true
 #define HAS_LVGL_EPAPER true

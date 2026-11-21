@@ -17,6 +17,7 @@
 // ============================================================================
 // Enable display support on this board.
 #define HAS_DISPLAY true
+#define HAS_BLE_HID true
 
 // ============================================================================
 // Driver Selection (HAL)

@@ -22,7 +22,9 @@ complete circuit schematic. Verify the board revision before wiring accessories.
 | ESP32-4848S040, square RGB display        | [`esp32-4848S040`](../../src/boards/esp32-4848S040/README.md)         |
 | Guition JC3248W535                        | [`jc3248w535`](../../src/boards/jc3248w535/README.md)                 |
 | Guition JC3636W518, round display         | [`jc3636w518`](../../src/boards/jc3636w518/README.md)                 |
-| JC3636W518 with primary SD storage        | [`jc3636w518-sd`](../../src/boards/jc3636w518-sd/README.md)           |
+| JC3636W518 with primary SD storage, no HID | [`jc3636w518-sd`](../../src/boards/jc3636w518-sd/README.md)          |
+| JC3636W518 SD with USB HID                | [`jc3636w518-sd-usb`](../../src/boards/jc3636w518-sd-usb/README.md)   |
+| JC3636W518 SD with BLE HID                | [`jc3636w518-sd-ble`](../../src/boards/jc3636w518-sd-ble/README.md)   |
 | Guition JC4827W543C, capacitive C model   | [`jc4827w543c`](../../src/boards/jc4827w543c/README.md)               |
 | Guition JC4880P433                        | [`jc4880p433`](../../src/boards/jc4880p433/README.md)                 |
 | JC4880P433 with primary SD storage        | [`jc4880p433-sd`](../../src/boards/jc4880p433-sd/README.md)           |

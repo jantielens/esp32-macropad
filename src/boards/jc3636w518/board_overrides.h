@@ -16,10 +16,14 @@
 // Enable display support on this board.
 #define HAS_DISPLAY true
 #define HAS_NATIVE_EXTENSIONS true
-// BLE HID disabled — ESP32-S3 lacks internal RAM for NimBLE + WiFi + display.
+// The internal-storage target uses USB only; SD variants select their transports.
+#ifndef HAS_BLE_HID
 #define HAS_BLE_HID false
+#endif
 #define HAS_BLE false
+#ifndef HAS_USB_HID
 #define HAS_USB_HID true
+#endif
 #define ALARM_ENABLED false
 // MCP disabled to preserve internal RAM for WiFi, SD storage, and extensions.
 #define HAS_MCP false

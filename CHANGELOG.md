@@ -14,6 +14,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking changes
+
+* Make `jc3636w518-sd` a no-HID build. Select `jc3636w518-sd-usb` to
+  retain its previous USB keyboard, mouse, and gamepad capability.
+
+### Added
+
+* Add JC3636W518 SD-primary USB-only and BLE-only HID
+  firmware targets. All SD variants prefer PSRAM for ordinary allocations
+  larger than 128 bytes. BLE requires further physical workload validation;
+  the combined USB/BLE target is excluded after initial memory testing.
+
+### Changed
+
+* Default BLE HID support off globally, with explicit opt-ins preserving
+  existing supported boards. Advertise E1003 Interactive BLE HID in installer
+  metadata. Runtime HID selection still defaults Off.
+
 ## [1.50.0] - 2026-11-21
 
 ### Breaking changes

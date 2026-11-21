@@ -56,7 +56,7 @@ reject() {
     grep -q "$diagnostic" "$tmp/error"
 }
 reject 'Invalid BLE_BACKEND' -DBLE_BACKEND=99
-reject 'HID is not supported' -DBLE_BACKEND=1 -DBOARD_HAS_PSRAM=1 \
+reject 'HID is not supported' -DBLE_BACKEND=1 -DHAS_BLE_HID=1 -DBOARD_HAS_PSRAM=1 \
     -DCONFIG_IDF_TARGET_ESP32S3=1 -DLVGL_FAST_MEM_IN_IRAM=0
 reject 'requires ESP32-S3' -DBLE_BACKEND=1 -DHAS_BLE_HID=0 -DBOARD_HAS_PSRAM=1
 reject 'requires ESP32-S3' -DBLE_BACKEND=1 -DHAS_BLE_HID=0 \

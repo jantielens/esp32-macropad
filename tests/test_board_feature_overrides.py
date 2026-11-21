@@ -316,7 +316,7 @@ static_assert(HAS_NATIVE_EXTENSIONS, "Extensions must remain enabled");
 static_assert(MALLOC_PSRAM_THRESHOLD_BYTES == 512, "Malloc threshold must be 512 bytes");
 '''
 
-for board in ("jc3248w535", "jc3636w518", "jc3636w518-sd"):
+for board in ("jc3248w535", "jc3636w518"):
     command = [
         "c++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
         "-fsyntax-only", "-x", "c++", "-", "-I", str(root),
@@ -328,6 +328,45 @@ for board in ("jc3248w535", "jc3636w518", "jc3636w518-sd"):
     assert "usb_hid" in metadata["capabilities"]
     assert "extensions" in metadata["capabilities"]
     print(f"PASS: {board}")
+
+for suffix, usb, ble in (("", 0, 0), ("-usb", 1, 0), ("-ble", 0, 1)):
+    board = "jc3636w518-sd" + suffix
+    subprocess.run(
+        ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+         "-x", "c++", "-", "-I", str(root), "-I", str(root / "src/boards" / board),
+         "-DCONFIG_IDF_TARGET_ESP32S3=1", "-DBOARD_HAS_PSRAM", "-DBOARD_HAS_OVERRIDE"],
+        input=f'''#include "src/app/board_config.h"
+#include "src/app/keyboard_transport.h"
+static_assert(HAS_USB_HID == {usb} && HAS_BLE_HID == {ble}, "Selected HID transports");
+static_assert(!HAS_BLE && BLE_BACKEND == BLE_BACKEND_ARDUINO_CORE, "Core HID backend; no telemetry");
+static_assert(USE_SD_STORAGE && HAS_SD_CARD && HAS_NATIVE_EXTENSIONS, "SD storage and extensions");
+static_assert(!ALARM_ENABLED && !HAS_MCP && !HAS_AUDIO && !HAS_IMAGE_FETCH, "Preserve constrained features");
+static_assert(MALLOC_PSRAM_THRESHOLD_BYTES == 128, "SD profiles prefer PSRAM above 128 bytes");
+static_assert(keyboard_transport_default(HAS_BLE_HID, HAS_USB_HID) == KeyboardTransport::None, "HID defaults off");
+''', text=True, check=True,
+    )
+    metadata = json.loads((root / "src/boards" / board / "metadata.json").read_text())
+    assert ("usb_hid" in metadata["capabilities"]) == bool(usb)
+    assert ("ble_hid" in metadata["capabilities"]) == bool(ble)
+    assert {"extensions", "sd_card"} <= set(metadata["capabilities"])
+    print(f"PASS: {board} transport selection and metadata")
+
+for board in sorted((root / "src/boards").iterdir()):
+    if not (board / "board_overrides.h").exists():
+        continue
+    metadata = json.loads((board / "metadata.json").read_text())
+    target = metadata["chip_family"].replace("-", "")
+    result = subprocess.check_output(
+        ["c++", "-E", "-P", "-x", "c++", "-", "-I", str(root / "src/app"),
+         "-I", str(board), "-DBOARD_HAS_OVERRIDE", f"-DCONFIG_IDF_TARGET_{target}=1"]
+        + (["-DBOARD_HAS_PSRAM"] if metadata["psram_mb"] else []),
+        input='#include "board_config.h"\nHID_CAPS HAS_USB_HID HAS_BLE_HID\n', text=True,
+    )
+    values = next(line.split()[1:] for line in result.splitlines() if line.startswith("HID_CAPS "))
+    for capability, value in zip(("usb_hid", "ble_hid"), values):
+        assert value in ("true", "false", "0", "1"), (board.name, capability, value)
+        assert (capability in metadata.get("capabilities", [])) == (value in ("true", "1")), (board.name, capability)
+print("PASS: all board HID capabilities match preprocessed metadata")
 
 for board in ("m5stack-tab5", "m5stack-tab5-sd"):
     subprocess.run(

@@ -220,7 +220,7 @@ struct HwButtonDef {
 
 // Enable BLE HID keyboard support.
 #ifndef HAS_BLE_HID
-#define HAS_BLE_HID true
+#define HAS_BLE_HID false
 #endif
 
 // Enable native USB HID keyboard, consumer-control, mouse, and gamepad output.

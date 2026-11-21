@@ -31,7 +31,7 @@ Total flags: 394
 - **HAS_BACKLIGHT** default: `false` — Enable backlight control (typically via PWM).
 - **HAS_BATTERY_INFO** default: `false` — Enable shared battery telemetry, bindings, and metadata for boards with a battery provider.
 - **HAS_BLE** default: `false` — for boards without a display (e.g. ESP32-C3 sensor nodes).
-- **HAS_BLE_HID** default: `true` — Enable BLE HID keyboard support.
+- **HAS_BLE_HID** default: `false` — Enable BLE HID keyboard support.
 - **HAS_BOOT_LOGO** default: `(HAS_DISPLAY && HAS_FILESYSTEM && HAS_PSRAM)` — Enable an optional Storage-backed boot logo on display boards with PSRAM.
 - **HAS_BUILTIN_LED** default: `false` — Enable built-in status LED support.
 - **HAS_BUTTON** default: `false` — User Button (optional)
@@ -448,7 +448,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | esp32-4848S040 |  |  |  | ✅ |  |  |  | ? |  | ✅ |  |  | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ? | ✅ |  | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |  |
 | jc3248w535 |  |  |  | ✅ |  |  |  | ? |  | ✅ |  | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ? | ✅ |  | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |  |
 | jc3636w518 |  |  |  | ✅ |  |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? |  | ? |  |  | ? | ✅ |  | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |  |
-| jc3636w518-sd |  |  |  | ✅ |  |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? |  | ? |  |  | ? | ✅ |  | ✅ | ✅ |  | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |  |
+| jc3636w518-sd |  |  |  | ✅ |  |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? |  | ? |  |  | ? | ✅ |  | ✅ | ✅ |  | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |  |
+| jc3636w518-sd-usb |  |  |  | ✅ |  |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? |  | ? |  |  | ? | ✅ |  | ✅ | ✅ |  | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |  |
+| jc3636w518-sd-ble |  |  |  | ✅ |  |  | ✅ | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? |  | ? |  |  | ? | ✅ |  | ✅ | ✅ |  | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |  |
 | m5stack-stopwatch | ✅ |  | ✅ | ✅ | ✅ |  |  | ? |  | ✅ |  | ✅ | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ✅ | ? | ✅ |  |  |  | ? | ✅ |  |  | ✅ |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |  |
 | jc4827w543c |  |  |  | ✅ |  |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ? | ? | ✅ | ? | ? | ? |  | ? |  |  | ? | ✅ |  |  |  |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |  |
 | esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  |  | ✅ | ? |  | ✅ |  | ? | ✅ |  |  |  | ? |  |  | ✅ | ? | ? | ✅ | ? | ? | ? | ? | ? |  | ✅ | ? | ✅ | ✅ | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |  |
@@ -486,6 +488,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc3248w535 | AUDIO_INPUT_DRIVER_ES8311 | AUDIO_OUTPUT_DRIVER_ES8311 | BLE_BACKEND_ARDUINO_CORE | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX | DISPLAY_SHAPE_RECT | RTC_DRIVER_NONE | TOUCH_DRIVER_AXS15231B_I2C |
 | jc3636w518 | AUDIO_INPUT_DRIVER_ES8311 | AUDIO_OUTPUT_DRIVER_PCM510XA | BLE_BACKEND_ARDUINO_CORE | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | DISPLAY_SHAPE_ROUND | RTC_DRIVER_NONE | TOUCH_DRIVER_CST816S_WIRE |
 | jc3636w518-sd | AUDIO_INPUT_DRIVER_ES8311 | AUDIO_OUTPUT_DRIVER_PCM510XA | BLE_BACKEND_ARDUINO_CORE | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | DISPLAY_SHAPE_ROUND | RTC_DRIVER_NONE | TOUCH_DRIVER_CST816S_WIRE |
+| jc3636w518-sd-usb | AUDIO_INPUT_DRIVER_ES8311 | AUDIO_OUTPUT_DRIVER_PCM510XA | BLE_BACKEND_ARDUINO_CORE | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | DISPLAY_SHAPE_ROUND | RTC_DRIVER_NONE | TOUCH_DRIVER_CST816S_WIRE |
+| jc3636w518-sd-ble | AUDIO_INPUT_DRIVER_ES8311 | AUDIO_OUTPUT_DRIVER_PCM510XA | BLE_BACKEND_ARDUINO_CORE | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | DISPLAY_SHAPE_ROUND | RTC_DRIVER_NONE | TOUCH_DRIVER_CST816S_WIRE |
 | m5stack-stopwatch | AUDIO_INPUT_DRIVER_ES8311 | AUDIO_OUTPUT_DRIVER_ES8311 | BLE_BACKEND_ARDUINO_CORE | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX_CO5300 | DISPLAY_SHAPE_ROUND | RTC_DRIVER_NONE | TOUCH_DRIVER_CST820B_WIRE |
 | jc4827w543c | AUDIO_INPUT_DRIVER_ES8311 | AUDIO_OUTPUT_DRIVER_ES8311 | BLE_BACKEND_ARDUINO_CORE | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX_NV3041A | DISPLAY_SHAPE_RECT | RTC_DRIVER_NONE | TOUCH_DRIVER_GT911 |
 | esp32-p4-lcd4b | AUDIO_INPUT_DRIVER_ES8311 | AUDIO_OUTPUT_DRIVER_ES8311 | BLE_BACKEND_ARDUINO_CORE | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ST7703_DSI | DISPLAY_SHAPE_SQUARE | RTC_DRIVER_NONE | TOUCH_DRIVER_GT911 |
@@ -684,6 +688,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/gamepad_joystick_widget.cpp
   - src/app/widgets/mousepad_widget.cpp
   - src/app/widgets/scrollpad_widget.cpp
+  - src/boards/jc3636w518-sd/board_overrides.h
+  - src/boards/jc3636w518/board_overrides.h
 - **HAS_BOOT_LOGO**
   - src/app/app.ino
   - src/app/board_config.h
@@ -1588,6 +1594,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/scrollpad_widget.cpp
   - src/boards/esp32-p4-lcd4b/board_overrides.h
   - src/boards/jc1060p470c/board_overrides.h
+  - src/boards/jc3636w518-sd/board_overrides.h
+  - src/boards/jc3636w518/board_overrides.h
   - src/boards/jc4880p433/board_overrides.h
 - **HAS_VOICE_NOTES**
   - src/app/actions/voice_note_delete_action.cpp

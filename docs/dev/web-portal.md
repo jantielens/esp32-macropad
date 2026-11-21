@@ -2793,18 +2793,21 @@ rejects key actions, and reports `keyboard_status: "disabled"`. Independent BLE
 telemetry and BTHome button events remain available. Ending HID reports cannot remove its descriptors,
 so this change also requires reboot. Windows may retain disconnected entries.
 USB is compiled for `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`,
-`jc4880p433-sd`, `jc3248w535`, `jc3636w518`, `jc3636w518-sd`, and `esp32-p4-lcd4b`.
+`jc4880p433-sd`, `jc3248w535`, `jc3636w518`, `jc3636w518-sd-usb`,
+`esp32-p4-lcd4b`, and `esp32-p4-lcd4b-sd`.
 JC3248W535 disables BLE HID and uses native TinyUSB without a CDC console;
 serial diagnostics use UART0 at 115200 baud. Native USB flashing requires
 download mode when no runtime serial port is available.
-Both JC3636W518 variants explicitly disable `HAS_BLE` and `HAS_BLE_HID` and
-use TinyUSB with application-managed CDC instead of hardware CDC.
+JC3636W518's internal-storage target remains USB-only. The SD targets select
+no HID, USB, or BLE; all disable independent
+`HAS_BLE` telemetry. The BLE variant uses the core backend, and all retain the
+same native TinyUSB FQBN with no runtime CDC console.
 The other JC4880 variants and LCD4B Voice
 explicitly disable inherited USB HID support and keep their existing serial
 build options. Only `jc1060p470c-sd` has hardware validation so far; the other
 targets still require connector/power checks and host testing. Compiled USB
-support retains TinyUSB's static internal RAM and starts CDC even when keyboard
-output is Off. Review the core VID/PID distribution policy before release;
+support retains TinyUSB's static internal RAM even when keyboard
+output is Off, but does not start the USB runtime. Review the core VID/PID distribution policy before release;
 no custom IDs are assigned.
 
 The Mousepad widget is registered only with `HAS_DISPLAY && HAS_TOUCH &&
