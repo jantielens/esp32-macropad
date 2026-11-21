@@ -245,10 +245,35 @@ static void test_boot_action_ownership_and_atomic_save() {
 
 static void test_camera_motion_action_ownership_and_atomic_save() {
     const char* path = "/config/camera_motion_actions.json";
-    storage_test_files.erase(path);
-    camera_motion_actions_init();
     const char* first = R"({"action_format_version":1,"actions":[{"op":"test.boot","args":{"value":"first"}}]})";
     const char* invalid = R"({"action_format_version":1,"actions":[{"op":"test.boot","args":{"value":true}}]})";
+    const char* incompatible[] = {
+        R"({"actions":[{"type":"test_boot"}]})",
+        R"({"action_format_version":1,"actions":[{"op":"test.boot","args":{"value":"valid"}},{"op":"missing.operation","args":{}}]})",
+    };
+    for (const char* json : incompatible) {
+        storage_test_files[path] = json;
+        camera_motion_actions_init();
+        JsonDocument defaults;
+        bool config_reset = false;
+        assert(camera_motion_actions_to_json(defaults.to<JsonArray>(), &config_reset));
+        assert(config_reset && defaults.size() == 0 && storage_test_files[path] == json);
+        boot_write_fail = true;
+        assert(!camera_motion_actions_save_raw(reinterpret_cast<const uint8_t*>(first), strlen(first)));
+        boot_write_fail = false;
+        assert(camera_motion_actions_to_json(defaults.to<JsonArray>(), &config_reset));
+        assert(config_reset && storage_test_files[path] == json);
+        assert(camera_motion_actions_save_raw(reinterpret_cast<const uint8_t*>(first), strlen(first)));
+        camera_motion_actions_init();
+        assert(camera_motion_actions_to_json(defaults.to<JsonArray>(), &config_reset));
+        assert(!config_reset && defaults[0]["args"]["value"] == "first");
+    }
+    storage_test_fail_open = true;
+    camera_motion_actions_init();
+    JsonDocument unavailable;
+    assert(!camera_motion_actions_to_json(unavailable.to<JsonArray>()));
+    storage_test_fail_open = false;
+    camera_motion_actions_init();
     assert(camera_motion_actions_save_raw(reinterpret_cast<const uint8_t*>(first), strlen(first)));
     JsonDocument retained;
     assert(camera_motion_actions_to_json(retained.to<JsonArray>()));

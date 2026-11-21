@@ -413,11 +413,77 @@ async function checkTimerLoadFailure() {
     });
 }
 
+async function checkAlarmResetRecovery() {
+    for (const section of ['schedule', 'behavior']) {
+        const nodes = new Map();
+        for (const id of ['alarm-config-form', 'alarm-save', 'alarm-warning', 'alarm-readiness',
+            'alarm-enabled', 'alarm-time', 'alarm-repeat-summary', 'alarm-once-target',
+            'alarm-lateness-minutes', 'alarm-snooze-minutes', 'alarm-dismiss-minutes',
+            ...Array.from({length: 7}, (_, day) => 'alarm-day-' + day)]) {
+            nodes.set(id, new Element());
+        }
+        const form = nodes.get('alarm-config-form');
+        const handlers = {};
+        form.dataset.section = section;
+        form.addEventListener = (event, callback) => { handlers[event] = callback; };
+        nodes.get('alarm-save').disabled = true;
+        const messages = [];
+        const requests = [];
+        let available = false;
+        let saveOk = false;
+        const ctx = {
+            window: {}, console,
+            document: {getElementById: id => nodes.get(id) || null},
+            getDeviceInfo: async () => ({}),
+            actionEditorSlotPrefixes: context.actionEditorSlotPrefixes,
+            actionEditorListRender() {}, actionEditorListLoad() {}, actionEditorWireFragment() {},
+            actionEditorListBuild: () => [],
+            actionEditorHandleError: () => false,
+            showMessage: (text, kind) => messages.push({text, kind}),
+            fetch: async (url, options) => {
+                requests.push({url, options});
+                return {
+                    ok: options ? saveOk : available,
+                    json: async () => url.endsWith('/status') ? {ready: true, enabled: false} : {
+                        action_format_version: 1, config_reset: true, lateness_minutes: 360,
+                        1: {enabled: false, hour: 7, minute: 0, weekdays: 0,
+                            snooze_minutes: 9, auto_dismiss_minutes: 30, on_ring: [], on_stop: []}
+                    }
+                };
+            }
+        };
+        vm.createContext(ctx);
+        vm.runInContext(fs.readFileSync('src/app/web/portal_alarms.js', 'utf8'), ctx);
+        await ctx.alarmInitFragment();
+        assert(nodes.get('alarm-save').disabled, 'A failed load must keep Save disabled');
+        assert.strictEqual(messages.at(-1).kind, 'error');
+        assert(!handlers.submit);
+        available = true;
+        await ctx.alarmInitFragment();
+        assert(!nodes.get('alarm-save').disabled, 'Reset defaults must remain editable');
+        assert(!nodes.get('alarm-warning').hidden);
+        assert.match(nodes.get('alarm-warning').textContent, /cleared.*Save.*Both schedule and behavior/);
+        await ctx.alarmStatusRefresh();
+        assert(!nodes.get('alarm-warning').hidden, 'Status refresh must preserve the reset warning');
+        await handlers.submit({preventDefault() {}});
+        assert(!nodes.get('alarm-warning').hidden, 'Failed saves must preserve the reset warning');
+        assert.strictEqual(messages.at(-1).kind, 'error');
+        saveOk = true;
+        await handlers.submit({preventDefault() {}});
+        assert(nodes.get('alarm-warning').hidden);
+        assert(!nodes.get('alarm-save').disabled);
+        const posted = requests.filter(request => request.options);
+        assert(posted.every(request => request.url === '/api/component/alarms/' + section));
+        assert(!Object.hasOwn(JSON.parse(posted.at(-1).options.body), 'config_reset'));
+    }
+}
+
 async function checkShutterSessionActions() {
     const requests = [];
     const drafts = new Map();
     const messages = [];
     let available = false;
+    let configReset = false;
     const started = [{ op: 'shutter.session.start', args: { camera: { $template: '[var:camera]' } } }];
     const completed = [{ op: 'screen.back', args: {} }];
     const ctx = {
@@ -430,11 +496,13 @@ async function checkShutterSessionActions() {
         fetch: async (url, options) => {
             requests.push({ url, options });
             return { ok: available, json: async () => available
-                ? { action_format_version: 1, save_start_actions: started, save_complete_actions: completed }
+                ? { action_format_version: 1, config_reset: configReset,
+                    save_start_actions: configReset ? [] : started, save_complete_actions: configReset ? [] : completed }
                 : { error: 'unavailable' } };
         },
     };
     vm.createContext(ctx);
+    vm.runInContext(fs.readFileSync('src/app/web/portal_config_actions.js', 'utf8'), ctx);
     vm.runInContext(fs.readFileSync('src/app/device_classes/shutter_tester/web/portal_shutter_config.js', 'utf8'), ctx);
     await ctx.loadShutterSessionActions();
     await ctx.saveShutterSessionActions();
@@ -446,9 +514,107 @@ async function checkShutterSessionActions() {
     assert.deepStrictEqual(JSON.parse(requests[2].options.body), {
         action_format_version: 1, save_start_actions: started, save_complete_actions: completed,
     });
+    configReset = true;
+    await ctx.loadShutterSessionActions();
+    assert(messages.some(message => message.kind === 'info' && /cleared.*Save/.test(message.text)));
+    await ctx.saveShutterSessionActions();
+    assert.deepStrictEqual(JSON.parse(requests.at(-1).options.body), {
+        action_format_version: 1, save_start_actions: [], save_complete_actions: [],
+    });
 }
 
-Promise.all([checkIndependentBootSaves(), checkSwipeActions(), checkTriggerHosts(), checkTimerLoadFailure(), checkShutterSessionActions()]).catch(error => {
+async function checkRelayResetRecovery() {
+    const requests = [];
+    const drafts = new Map();
+    const messages = [];
+    let available = false;
+    const ctx = {
+        window: {}, console: {error() {}},
+        actionEditorSlotPrefixes: context.actionEditorSlotPrefixes,
+        actionEditorLoad: (prefix, action) => drafts.set(prefix, action),
+        actionEditorBuild: prefix => drafts.get(prefix),
+        actionEditorHandleError: () => false,
+        showMessage: (text, kind) => messages.push({text, kind}),
+        fetch: async (url, options) => {
+            requests.push({url, options});
+            return {ok: available, json: async () => ({action_format_version: 1, config_reset: true})};
+        }
+    };
+    vm.createContext(ctx);
+    vm.runInContext(fs.readFileSync('src/app/web/portal_config_actions.js', 'utf8'), ctx);
+    vm.runInContext(fs.readFileSync('src/app/device_classes/darkroom_timer/web/portal_darkroom_init.js', 'utf8'), ctx);
+    await ctx.loadRelayConfig();
+    await ctx.saveRelayConfig();
+    assert.strictEqual(requests.length, 1, 'A failed relay load must not overwrite stored actions');
+    available = true;
+    await ctx.loadRelayConfig();
+    assert(messages.some(message => message.kind === 'info' && /cleared.*Save/.test(message.text)));
+    await ctx.saveRelayConfig();
+    assert.deepStrictEqual(JSON.parse(requests.at(-1).options.body), {
+        action_format_version: 1, enlarger_on: {}, enlarger_off: {}, safelight_on: {}, safelight_off: {}
+    });
+}
+
+async function checkCameraMotionResetRecovery() {
+    for (const actionsError of [false, true]) {
+        const nodes = new Map();
+        const handlers = {};
+        const messages = [];
+        const requests = [];
+        for (const id of ['camera-motion-enabled', 'camera-motion-keep-display-awake',
+            'camera-motion-analyze-every-nth-frame', 'camera-motion-analyze-every-nth-frame-value',
+            'camera-motion-analysis-rate', 'camera-motion-sensitivity', 'camera-motion-sensitivity-value',
+            'camera-presence-hold-seconds', 'camera-presence-hold-seconds-value',
+            'camera-motion-save-btn', 'camera-motion-action-editors']) {
+            const element = new Element();
+            element.closest = () => ({hidden: false});
+            element.addEventListener = (event, callback) => { handlers[id + ':' + event] = callback; };
+            nodes.set(id, element);
+        }
+        let editorsLoaded = false;
+        const ctx = {
+            window: {}, console,
+            document: {getElementById: id => nodes.get(id) || null},
+            actionEditorSlotPrefixes: context.actionEditorSlotPrefixes,
+            getDeviceInfo: async () => ({}),
+            actionEditorListRender() {},
+            actionEditorListLoad(prefixes, actions) { editorsLoaded = true; assert.strictEqual(actions.length, 0); },
+            actionEditorWireFragment() {},
+            actionEditorListBuild: () => [],
+            actionEditorHandleError: () => false,
+            showMessage: (text, kind) => messages.push({text, kind}),
+            alert: text => messages.push({text, kind: 'error'}),
+            setTimeout() {},
+            fetch: async (url, options) => {
+                requests.push({url, options});
+                return {ok: true, json: async () => ({
+                    motion_enabled: true, motion_keep_display_awake: false,
+                    motion_analyze_every_nth_frame: 2, capture_fps: 4,
+                    motion_sensitivity: 5, presence_hold_seconds: 60,
+                    action_format_version: 1, config_reset: !actionsError, actions: [],
+                    actions_error: actionsError ? 'Actions unavailable' : undefined
+                })};
+            }
+        };
+        vm.createContext(ctx);
+        vm.runInContext(fs.readFileSync('src/app/web/portal_config_actions.js', 'utf8'), ctx);
+        vm.runInContext(fs.readFileSync('src/app/web/portal_camera_motion.js', 'utf8'), ctx);
+        ctx.window.init_camera_motion_fragment();
+        await new Promise(resolve => setImmediate(resolve));
+        assert(!nodes.get('camera-motion-save-btn').disabled);
+        assert.strictEqual(editorsLoaded, !actionsError);
+        assert.strictEqual(messages.some(message => message.kind === 'info' && /cleared.*Save/.test(message.text)), !actionsError);
+        handlers['camera-motion-save-btn:click']();
+        await new Promise(resolve => setImmediate(resolve));
+        const payload = JSON.parse(requests.at(-1).options.body);
+        assert.strictEqual(Object.hasOwn(payload, 'actions'), !actionsError);
+        assert(!Object.hasOwn(payload, 'config_reset'));
+        if (!actionsError) assert.deepStrictEqual(payload.actions, []);
+    }
+}
+
+Promise.all([checkIndependentBootSaves(), checkSwipeActions(), checkTriggerHosts(), checkTimerLoadFailure(),
+    checkAlarmResetRecovery(), checkShutterSessionActions(), checkRelayResetRecovery(), checkCameraMotionResetRecovery()]).catch(error => {
     console.error(error);
     process.exitCode = 1;
 });

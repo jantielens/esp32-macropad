@@ -55,6 +55,7 @@ async function loadRelayConfig() {
             actionEditorLoad(prefix, data[RELAY_SLOT_KEYS[i]] || {});
         });
         relayConfigLoaded = true;
+        actionConfigShowReset(data);
     } catch (err) {
         console.error('Failed to load relay config:', err);
         showMessage('Could not load relay configuration: ' + err.message, 'error');

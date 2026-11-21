@@ -20,6 +20,11 @@ For a compatible Shelly HTTP endpoint, supply its host, relay index, and on/off
 action. Other supported action types can be configured, but their latency and
 delivery semantics still apply. Choose **Save Relay Config**.
 
+If saved relay actions are incompatible or unsupported, the portal shows a
+warning and loads empty slots. Configure new actions and save to replace the
+stored configuration. Loading does not rewrite the file, and failed saves
+preserve it. Read or allocation failures still block saving from the form.
+
 Test every on/off path without light-sensitive work in progress.
 Keep a physical stop/power control accessible; a queued network request is not
 proof the lamp switched.

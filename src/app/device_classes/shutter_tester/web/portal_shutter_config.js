@@ -74,6 +74,7 @@ async function loadShutterSessionActions() {
             actionEditorListLoad(ssaGroupPrefixes(g), data[g.field] || []);
         });
         ssaLoaded = true;
+        actionConfigShowReset(data);
     } catch (err) {
         console.error('Failed to load shutter session actions:', err);
         showMessage('Could not load shutter session actions: ' + err.message, 'error');

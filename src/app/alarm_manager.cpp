@@ -47,6 +47,7 @@ static time_t once_epoch = 0;
 static uint32_t timezone_revision = 0;
 static int active_snapshot = -1;
 static bool initialized = false;
+static bool config_reset = false;
 static bool storage_error = false;
 static std::atomic<bool> hook_error{false};
 static char last_error[128] = {};
@@ -189,7 +190,10 @@ static bool parse_definition(JsonObjectConst root, AlarmDefinition* output, bool
         if (invalid_hooks) *invalid_hooks = true;
         return fail("Incompatible alarm action format; recreate alarm configuration");
     }
-    if (root.size() != 3 || !root["1"].is<JsonObjectConst>()) return fail("Alarm config requires lateness_minutes and exactly slot 1");
+    const bool has_reset = root.containsKey("config_reset");
+    if ((has_reset && !root["config_reset"].is<bool>())
+        || root.size() != (has_reset ? 4U : 3U) || !root["1"].is<JsonObjectConst>())
+        return fail("Alarm config requires lateness_minutes and exactly slot 1");
     if (!root["lateness_minutes"].is<int>() || root["lateness_minutes"].as<int>() < 0
         || root["lateness_minutes"].as<int>() > 10080) return fail("lateness_minutes must be 0-10080 whole minutes");
     output->lateness_minutes = root["lateness_minutes"];
@@ -274,6 +278,7 @@ static bool persist(const AlarmDefinition& candidate, time_t handled, time_t onc
     active_snapshot = destination;
     ++generation;
     settings_dirty = settings_save_failed = false;
+    config_reset = false;
     storage_error = false;
     last_error[0] = '\0';
     return true;
@@ -382,6 +387,7 @@ static void update_forecast(time_t now) {
 void alarm_manager_init() {
     std::lock_guard<std::mutex> lock(alarm_mutex);
     initialized = false;
+    config_reset = false;
     if (!alarm_state) {
         void* memory = config_psram_alloc(sizeof(AlarmStorage), "alarm_state");
         if (!memory) { storage_error = true; fail("Alarm allocation failed"); return; }
@@ -418,7 +424,8 @@ void alarm_manager_init() {
     DefinitionPtr candidate(static_cast<AlarmDefinition*>(config_psram_alloc(sizeof(AlarmDefinition), "alarm_load")), free);
     if (!candidate) { storage_error = true; fail("Alarm allocation failed"); return; }
     bool invalid_snapshot = false;
-    bool incompatible_hooks = false;
+    int incompatible_snapshot = -1;
+    uint64_t incompatible_generation = 0;
     char saved_timezone[64] = {};
     for (int index = 0; index < 2; ++index) {
         OwnedActions candidate_actions;
@@ -430,7 +437,13 @@ void alarm_manager_init() {
         *candidate = AlarmDefinition{};
         ActionStorageScope scope(&candidate_actions.storage);
         bool invalid_hooks = false;
-        if (!parse_definition(document["data"]["config"], candidate.get(), &invalid_hooks)
+        const bool parsed = parse_definition(document["data"]["config"], candidate.get(), &invalid_hooks);
+        if (candidate_actions.storage.failed) {
+            storage_error = true;
+            fail("Alarm action allocation failed");
+            return;
+        }
+        if (!parsed
             || !document["data"]["handled_epoch"].is<int64_t>()
             || document["data"]["handled_epoch"].as<int64_t>() < 0
             || !document["data"]["once_epoch"].is<int64_t>()
@@ -440,8 +453,15 @@ void alarm_manager_init() {
             || !document["data"]["timezone"].is<const char*>()
             || strlen(document["data"]["timezone"].as<const char*>()) >= sizeof(saved_timezone)
             || ((!candidate->enabled || candidate->weekdays) && document["data"]["once_epoch"].as<int64_t>() != 0)) {
-            invalid_snapshot = true;
-            incompatible_hooks |= invalid_hooks;
+            if (invalid_hooks) {
+                const uint64_t stored_generation = document["generation"].as<uint64_t>();
+                if (incompatible_snapshot < 0 || stored_generation > incompatible_generation) {
+                    incompatible_snapshot = index;
+                    incompatible_generation = stored_generation;
+                }
+            } else {
+                invalid_snapshot = true;
+            }
             continue;
         }
         const uint64_t stored_generation = document["generation"].as<uint64_t>();
@@ -457,13 +477,16 @@ void alarm_manager_init() {
             active_snapshot = index;
         }
     }
-    if (incompatible_hooks) {
+    if (incompatible_snapshot >= 0 && (active_snapshot < 0 || incompatible_generation >= generation)) {
         action_storage_clear(alarm_state->definition_actions);
         alarm_state->definition = AlarmDefinition{};
-        storage_error = true;
-        fail("Alarm snapshot has invalid or unavailable actions; saved settings are protected");
-        LOGE("Alarm", "%s", last_error);
-        return;
+        clock_core = AlarmClockCore{};
+        once_epoch = 0;
+        // Keep the newest incompatible snapshot until its replacement is verified.
+        active_snapshot = incompatible_snapshot;
+        generation = incompatible_generation;
+        config_reset = true;
+        LOGW("Alarm", "Unsupported alarm configuration cleared in memory; save to replace stored settings");
     }
     if (invalid_snapshot) {
         storage_error = true;
@@ -474,7 +497,7 @@ void alarm_manager_init() {
     clock_core.lateness_seconds = alarm_state->definition.lateness_minutes * 60U;
     char current_timezone[64];
     time_service_get_timezone(current_timezone, sizeof(current_timezone));
-    if (active_snapshot >= 0 && strcmp(saved_timezone, current_timezone)) {
+    if (active_snapshot >= 0 && !config_reset && strcmp(saved_timezone, current_timezone)) {
         clock_core.rearm(time(nullptr), time_service_ready());
         settings_dirty = true;
         settings_save_due_ms = 0;
@@ -515,7 +538,8 @@ static bool alarm_config_apply_raw(const uint8_t* data, size_t length, bool defe
         serializeJson(current, schedule);
         const bool schedule_changed = before != schedule;
         if (before == after) {
-            if (!deferred_save && settings_dirty && !persist(alarm_state->definition, clock_core.handled_epoch, once_epoch)) {
+            if (!deferred_save && (settings_dirty || config_reset)
+                && !persist(alarm_state->definition, clock_core.handled_epoch, once_epoch)) {
                 storage_error = settings_save_failed = true;
                 return false;
             }
@@ -590,6 +614,7 @@ bool alarm_config_to_json(JsonObject root) {
     std::lock_guard<std::mutex> lock(alarm_mutex);
     if (!initialized || !alarm_state) return false;
     definition_json(alarm_state->definition, root);
+    root["config_reset"] = config_reset;
     return true;
 }
 

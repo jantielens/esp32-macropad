@@ -37,7 +37,7 @@ is distinct from record serialization and persisted pad configuration.
 
 | Method   | Route                      | Contract                             |
 | -------- | -------------------------- | ------------------------------------ |
-| GET      | `/api/relay`               | Four action slots                    |
+| GET      | `/api/relay`               | Four action slots and `config_reset`  |
 | PUT      | `/api/relay`               | Replace/validate relay configuration |
 | GET      | `/api/prints`              | Newest-first record metadata         |
 | GET      | `/api/prints?id=ID`        | Full record/segments                 |
@@ -50,6 +50,10 @@ Relay routing uses a top-level namespace because `/api/config` has prefix
 matching. The [relay handler](../../src/app/device_classes/darkroom_timer/web_portal_relay.cpp)
 and [print handler](../../src/app/device_classes/darkroom_timer/web_portal_prints.cpp)
 own validation, authentication, and persistence error handling.
+Incompatible saved relay actions load empty slots with `config_reset: true`
+without changing storage. The portal warns and permits a validated replacement
+save; successful persistence clears the flag. Read and allocation failures
+remain errors.
 
 [Print log](../../src/app/device_classes/darkroom_timer/print_log.cpp) uses the
 Storage facade under `/prints/` and a bounded FIFO.

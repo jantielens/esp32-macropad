@@ -2049,9 +2049,10 @@ notification and keeps the draft unsaved. Current-format validation failures
 and newer or invalid versions remain blocked; recovery never writes a file
 until the user saves.
 
-The five shared action configuration hosts (swipes, boot actions, hardware
-buttons, MQTT triggers, and timer expiry) recover unsupported saved documents
-in their firmware loaders. After successful JSON decoding, a configuration
+The action configuration hosts (swipes, boot actions, hardware buttons, MQTT
+triggers, timer expiry, camera motion, shutter session hooks, and darkroom relay
+slots) recover unsupported saved documents in their firmware loaders.
+After successful JSON decoding, a configuration
 validation failure clears the whole host configuration in memory, including
 MQTT topics and filters, without writing storage. Hardware button identities
 still come from the board. Allocation, storage, and JSON decoding failures
@@ -2059,6 +2060,11 @@ remain errors. GET responses include read-only `config_reset` metadata; when
 true, the portal shows a bubble notification and permits editing and saving.
 A successful save clears the flag. POST validation stays strict; omit this
 read-only flag from submitted configuration.
+Alarm snapshots use the same warning-and-save recovery with generation-aware
+selection; see the [persistent alarm component](#persistent-alarm-component).
+Camera motion GET includes `config_reset` alongside its actions; when actions
+are unreadable or cannot be allocated, `actions_error` keeps their editors
+unavailable while permitting saves of motion settings without actions.
 
 Action selectors opt into the shared dropdown's searchable mode with
 `data-search-placeholder`. The original select remains the source of truth
@@ -2369,8 +2375,11 @@ The Alarm fragment uses the shared action editor with strict
 is authenticated and gated with the component.
 Hash routing loads only the selected component's advertised assets and waits
 before fragment initialization, including on direct links. Home visits do not
-fetch the alarm script. Persisted forbidden hook types remain disabled and
-must be replaced or removed before saving.
+fetch the alarm script. Incompatible persisted action formats or hook actions
+load disabled defaults with empty hooks and read-only `config_reset: true`
+metadata. Both fragments show a warning and keep Save enabled. Saving either
+section replaces the incompatible configuration, using defaults for the other
+section. Allocation failures still make configuration unavailable.
 
 Synchronous dispatch uses `ActionTypeDef.display_lock_required` to protect UI
 work; its conservative default is `true`. Home Assistant service dispatch sets
@@ -2380,13 +2389,16 @@ The alarm manager does not hold a display lock around its hook list.
 
 | Method | Endpoint | Contract |
 |--------|----------|----------|
-| GET | `/api/component/alarms/config` | Device-wide lateness setting and normalized ID-keyed definition |
+| GET | `/api/component/alarms/config` | Device-wide lateness setting, normalized ID-keyed definition, and read-only `config_reset` |
 | POST | `/api/component/alarms/config` | Validated, durable full replacement; maximum 8192 bytes |
 | GET | `/api/component/alarms/status` | Configuration values, state/readiness/failures, one-shot target, next occurrence/countdowns, queue acknowledgement |
 | POST | `/api/component/alarms/snooze` | Queue snooze for a ringing session |
 | POST | `/api/component/alarms/cancel` | Queue cancellation without disabling the schedule |
 
 Phase 3 accepts exactly slot `1` and a device-wide lateness setting:
+
+GET also returns boolean `config_reset` metadata. Full replacements may omit
+it; a supplied boolean is ignored and cannot request a reset.
 
 ```json
 {
@@ -2484,6 +2496,12 @@ migration from earlier development snapshots. The inactive file is written,
 flushed, closed, and re-read before becoming active. A failed config save does
 not apply changes. An invalid newer snapshot falls back to the valid older one
 and reports degraded storage; two invalid snapshots leave the default disabled.
+If the newest checksum-valid snapshot has incompatible actions, defaults are
+applied in memory without changing either file. Its generation and active slot
+are retained so an explicit save, even of unchanged defaults, writes a newer
+verified replacement to the other slot. Older incompatible snapshots do not
+invalidate a newer compatible replacement on reboot. `config_reset` clears
+only after successful persistence and is not stored in the snapshot.
 
 One-shots persist a fixed epoch when enabled settings are saved. Without synced
 time they persist an unresolved target and resolve it once time is ready and OTA

@@ -56,6 +56,7 @@ static ButtonAction s_relay_actions[RELAY_SLOT_COUNT];
 static ActionStorage s_relay_storage = {};
 static SemaphoreHandle_t s_config_mutex = nullptr;
 static bool s_config_valid = false;
+static bool s_config_reset = false;
 
 // Pending slots bitmask — latest-state semantics (replaced, not accumulated)
 static volatile uint8_t s_pending_slots = 0;
@@ -214,6 +215,7 @@ void relay_load_config() {
     }
     if (!Storage.exists(RELAY_CONFIG_PATH)) {
         s_config_valid = true;
+        s_config_reset = false;
         xSemaphoreGive(s_config_mutex);
         LOGD(TAG, "No relay config file, all slots empty");
         return;
@@ -255,7 +257,14 @@ void relay_load_config() {
         memcpy(s_relay_actions, actions, sizeof(s_relay_actions));
         action_storage_move(s_relay_storage, storage);
         s_config_valid = true;
+        s_config_reset = false;
         LOGI(TAG, "Loaded relay config (%u bytes)", (unsigned)file_size);
+    } else if (actions && !storage.failed) {
+        action_storage_clear(s_relay_storage);
+        memset(s_relay_actions, 0, sizeof(s_relay_actions));
+        s_config_valid = true;
+        s_config_reset = true;
+        LOGW(TAG, "Unsupported relay actions cleared in memory; save to replace stored config");
     } else {
         LOGW(TAG, "Relay config unavailable or incompatible");
     }
@@ -278,6 +287,7 @@ void relay_controller_clear_config() {
     action_storage_clear(s_relay_storage);
     memset(s_relay_actions, 0, sizeof(s_relay_actions));
     s_config_valid = true;
+    s_config_reset = false;
     xSemaphoreGive(s_config_mutex);
     storage_publish_usage(false);
     LOGI(TAG, "Relay config deleted");
@@ -449,6 +459,7 @@ bool relay_get_config_json(std::string& out) {
     }
     BasicJsonDocument<PsramJsonAllocator> doc(4096);
     doc["action_format_version"] = 1;
+    doc["config_reset"] = s_config_reset;
     for (int i = 0; i < RELAY_SLOT_COUNT; i++) {
         JsonObject obj = doc[SLOT_KEYS[i]].to<JsonObject>();
         if (s_relay_actions[i].type[0]) action_to_json(s_relay_actions[i], obj);
@@ -498,6 +509,7 @@ bool relay_save_config_from_json(const uint8_t* json, size_t len) {
         memcpy(s_relay_actions, actions, sizeof(s_relay_actions));
         action_storage_move(s_relay_storage, storage);
         s_config_valid = true;
+        s_config_reset = false;
     }
     xSemaphoreGive(s_config_mutex);
     action_storage_clear(storage);

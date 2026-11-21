@@ -29,6 +29,7 @@ static ShutterSessionActionsConfig* g_config = nullptr;
 static ActionStorage g_storage = {};
 static SemaphoreHandle_t g_lock = nullptr;
 static bool g_config_valid = false;
+static bool g_config_reset = false;
 
 // Deferred-dispatch flag for save_complete. Set from background persist task,
 // drained from the LVGL/main loop. Spinlock keeps the read-and-clear atomic.
@@ -89,6 +90,7 @@ static bool parse_config(JsonDocument& doc, ShutterSessionActionsConfig& cfg,
 }
 
 static bool load_from_flash() {
+    g_config_reset = false;
     if (!Storage.exists(CONFIG_PATH)) {
         LOGD(TAG, "No config file, using defaults");
         return true;
@@ -123,9 +125,13 @@ static bool load_from_flash() {
 
     ActionStorage storage = {};
     if (!parse_config(doc, *g_config, storage, false)) {
+        const bool allocation_failed = storage.failed;
         action_storage_clear(storage);
         memset(g_config, 0, sizeof(*g_config));
-        return false;
+        if (allocation_failed) return false;
+        g_config_reset = true;
+        LOGW(TAG, "Unsupported shutter session actions cleared in memory; save to replace stored config");
+        return true;
     }
     action_storage_move(g_storage, storage);
     LOGI(TAG, "Loaded (start=%u complete=%u)",
@@ -157,6 +163,7 @@ bool shutter_session_actions_to_json(std::string& out) {
     }
     BasicJsonDocument<PsramJsonAllocator> doc(4096);
     doc["action_format_version"] = 1;
+    doc["config_reset"] = g_config_reset;
     JsonArray start = doc.createNestedArray("save_start_actions");
     JsonArray complete = doc.createNestedArray("save_complete_actions");
     for (uint8_t i = 0; i < g_config->save_start_count; ++i)
@@ -205,6 +212,7 @@ bool shutter_session_actions_save_raw(const uint8_t* json, size_t len) {
         *g_config = *replacement;
         action_storage_move(g_storage, storage);
         g_config_valid = true;
+        g_config_reset = false;
     }
     xSemaphoreGive(g_lock);
     action_storage_clear(storage);

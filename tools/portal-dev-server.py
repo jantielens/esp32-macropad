@@ -168,7 +168,7 @@ def reset_pad_fixtures(server, scenario="normal"):
     server.mock_voice_retry = False
     server.mock_voice_cooldown = False
     server.mock_recipe_catalog = json.loads((SCRIPT_DIR.parent / "docs/samples/recipe-catalog.json").read_text(encoding="utf-8"))
-    server.mock_alarms = {"action_format_version": 1, "lateness_minutes": 360, "1": {"enabled": False, "hour": 7, "minute": 0, "weekdays": 62,
+    server.mock_alarms = {"action_format_version": 1, "config_reset": False, "lateness_minutes": 360, "1": {"enabled": False, "hour": 7, "minute": 0, "weekdays": 62,
                                "snooze_minutes": 9, "auto_dismiss_minutes": 30,
                                "on_ring": [], "on_stop": []}}
     server.mock_alarm_status = {"active_id": 0, "state": "idle", "ready": True,
@@ -1255,7 +1255,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
                     data = merged
                 slot = data.get("1", {})
                 catalog = self._device_info(include_catalog=True)["catalog"]
-                if (set(data) != {"1", "lateness_minutes", "action_format_version"}
+                if (set(data) not in ({"1", "lateness_minutes", "action_format_version"},
+                                     {"1", "lateness_minutes", "action_format_version", "config_reset"})
+                    or ("config_reset" in data and type(data["config_reset"]) is not bool)
                     or type(data.get("action_format_version")) is not int or data["action_format_version"] != 1
                     or type(data.get("lateness_minutes")) is not int
                     or not 0 <= data["lateness_minutes"] <= 10080 or type(slot.get("enabled")) is not bool
@@ -1283,6 +1285,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                             if int(epoch) > MOCK_NOW_EPOCH:
                                 self.server.mock_alarm_status.update(once_epoch=int(epoch), once_local=local)
                                 break
+                data["config_reset"] = False
                 self.server.mock_alarms = data
                 self.server.mock_alarm_status["lateness_minutes"] = data["lateness_minutes"]
             elif path == "/api/component/alarms/snooze":

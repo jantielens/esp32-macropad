@@ -66,7 +66,7 @@ grep -q 'motion_enabled' "$COMPONENT"
 grep -q 'kCameraConfigMaxBodyBytes = 2048' "$COMPONENT"
 grep -q 'motion_sensitivity_min' "$COMPONENT"
 grep -q 'motion_analyze_every_nth_frame' "$COMPONENT"
-grep -q 'camera_motion_actions_to_json(actions)' "$COMPONENT"
+grep -q 'camera_motion_actions_to_json(actions, &config_reset)' "$COMPONENT"
 grep -q 'motion_keep_display_awake' "$COMPONENT"
 grep -q 'camera-motion-enabled' src/app/web/camera-motion.fragment.html
 grep -q 'camera-motion-sensitivity' src/app/web/camera-motion.fragment.html

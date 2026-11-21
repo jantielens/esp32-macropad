@@ -86,6 +86,7 @@ window.init_camera_motion_fragment = function () {
             actionEditorWireFragment(actionPrefixes);
             actionsLoaded = true;
             saveButton.disabled = false;
+            actionConfigShowReset(config);
         });
     }).catch(function (error) {
         alert(error.message);

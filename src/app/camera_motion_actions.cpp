@@ -29,6 +29,7 @@ CameraMotionActionsConfig* s_config = nullptr;
 ActionStorage s_storage = {};
 SemaphoreHandle_t s_lock = nullptr;
 bool s_config_valid = false;
+bool s_config_reset = false;
 
 struct SaveRequest {
     const uint8_t* json;
@@ -72,6 +73,7 @@ bool parse_actions(JsonArray actions, CameraMotionActionsConfig& config,
 }
 
 bool load_from_storage() {
+    s_config_reset = false;
     if (!s_config) return false;
     apply_defaults(s_config);
     if (!Storage.exists(kConfigPath)) return true;
@@ -98,15 +100,16 @@ bool load_from_storage() {
         LOGW("Camera", "Motion actions JSON parse error: %s", error.c_str());
         return false;
     }
-    if (!doc["action_format_version"].is<int>() || doc["action_format_version"].as<int>() != 1) {
-        LOGW("Camera", "Incompatible motion actions document; recreate it");
-        return false;
-    }
     ActionStorage storage = {};
-    if (!parse_actions(doc["actions"].as<JsonArray>(), *s_config, storage, false)) {
+    if (!doc["action_format_version"].is<int>() || doc["action_format_version"].as<int>() != 1 ||
+        !parse_actions(doc["actions"].as<JsonArray>(), *s_config, storage, false)) {
+        const bool allocation_failed = storage.failed;
         action_storage_clear(storage);
         apply_defaults(s_config);
-        return false;
+        if (allocation_failed) return false;
+        s_config_reset = true;
+        LOGW("Camera", "Unsupported motion actions cleared in memory; save to replace stored config");
+        return true;
     }
     action_storage_move(s_storage, storage);
     LOGI("Camera", "Loaded %u motion action(s)", s_config->action_count);
@@ -147,6 +150,7 @@ bool save_raw_on_main(const uint8_t* json, size_t len) {
         *s_config = *replacement;
         action_storage_move(s_storage, storage);
         s_config_valid = true;
+        s_config_reset = false;
     }
     xSemaphoreGive(s_lock);
     action_storage_clear(storage);
@@ -222,7 +226,7 @@ void camera_motion_actions_on_presence_started() {
     free(snapshot);
 }
 
-bool camera_motion_actions_to_json(JsonArray actions) {
+bool camera_motion_actions_to_json(JsonArray actions, bool* config_reset) {
     if (!s_config || !s_lock || actions.isNull()) return false;
     if (xSemaphoreTake(s_lock, portMAX_DELAY) != pdTRUE) {
         LOGE("Camera", "Failed to lock motion actions for serialization");
@@ -238,6 +242,7 @@ bool camera_motion_actions_to_json(JsonArray actions) {
         JsonObject action = actions.createNestedObject();
         action_to_json(s_config->actions[index], action);
     }
+    if (config_reset) *config_reset = s_config_reset;
     xSemaphoreGive(s_lock);
     return true;
 }

@@ -82,11 +82,13 @@ void camera_get_config(AsyncWebServerRequest* request) {
     (*doc)["last_motion"] = motion_status.has_last_motion ? motion_status.last_motion_epoch : 0;
 #if CAMERA_MOTION_ACTIONS_ENABLED
     JsonArray actions = doc->createNestedArray("actions");
-    if (!camera_motion_actions_to_json(actions)) {
+    bool config_reset = false;
+    if (!camera_motion_actions_to_json(actions, &config_reset)) {
         doc->remove("actions");
         (*doc)["actions_error"] = "Motion actions unavailable or incompatible; recreate the document";
     } else {
         (*doc)["action_format_version"] = 1;
+        (*doc)["config_reset"] = config_reset;
     }
 #endif
     JsonArray output_dimensions = doc->createNestedArray("output_dimensions");

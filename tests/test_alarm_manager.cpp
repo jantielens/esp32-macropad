@@ -783,7 +783,7 @@ static void test_state_allocation_failure() {
     assert(save(config));
 }
 
-static void test_incompatible_hook_snapshot_is_protected() {
+static void test_incompatible_hook_snapshot_can_be_replaced() {
     action_type_register(&test_owner);
     const char* invalid_actions[] = {
         R"({"op":"missing.operation","args":{}})",
@@ -830,13 +830,48 @@ static void test_incompatible_hook_snapshot_is_protected() {
             const auto before = storage_test_files;
             timezone_name = "changed";
             alarm_manager_init();
-            assert(!alarm_snapshot().ready && alarm_snapshot().storage_error);
+            assert(alarm_snapshot().ready && !alarm_snapshot().enabled);
             JsonDocument document;
-            assert(!alarm_config_to_json(document.to<JsonObject>()));
-            assert(!save(config));
-            assert(!alarm_command_submit("enable"));
+            assert(alarm_config_to_json(document.to<JsonObject>()));
+            assert(document["config_reset"] == true);
+            assert(document["1"]["on_ring"].size() == 0);
+            assert(document["1"]["on_stop"].size() == 0);
             alarm_manager_loop();
             assert(storage_test_files == before);
+            std::string replacement;
+            serializeJson(document, replacement);
+            storage_test_fail_open = true;
+            assert(!save(replacement.c_str()));
+            storage_test_fail_open = false;
+            assert(storage_test_files == before);
+            assert(alarm_config_to_json(document.to<JsonObject>()));
+            assert(document["config_reset"] == true);
+            if (!invalid && older_snapshot) {
+                storage_test_write_limit = 8;
+                assert(!save(replacement.c_str()));
+                storage_test_write_limit = SIZE_MAX;
+                assert(storage_test_files[path] == before.at(path));
+                alarm_manager_init();
+                assert(alarm_config_to_json(document.to<JsonObject>()));
+                assert(document["config_reset"] == true && !alarm_snapshot().enabled);
+            }
+            if (!invalid) {
+                const char* section = older_snapshot
+                    ? R"({"action_format_version":1,"lateness_minutes":360,"snooze_minutes":9,"auto_dismiss_minutes":30,"on_ring":[],"on_stop":[]})"
+                    : R"({"enabled":false,"hour":7,"minute":0,"weekdays":0})";
+                assert(alarm_config_save_section_raw(reinterpret_cast<const uint8_t*>(section), strlen(section),
+                    older_snapshot ? AlarmConfigSection::Behavior : AlarmConfigSection::Schedule));
+            } else {
+                assert(save(replacement.c_str()));
+            }
+            assert(storage_test_files[path] == before.at(path));
+            alarm_manager_init();
+            assert(alarm_config_to_json(document.to<JsonObject>()));
+            assert(document["config_reset"] == false);
+            assert(alarm_snapshot().ready && !alarm_snapshot().enabled);
+            assert(save(config));
+            alarm_manager_init();
+            assert(alarm_snapshot().ready && alarm_snapshot().enabled);
         }
     }
     storage_test_files.clear();
@@ -858,7 +893,7 @@ int main(int argc, char** argv) {
         std::puts("alarm manager allocation-failure: PASS");
         return 0;
     }
-    test_incompatible_hook_snapshot_is_protected();
+    test_incompatible_hook_snapshot_can_be_replaced();
     test_scoped_saves();
     test_typed_hooks();
     test_alarm_operation_dispatch();

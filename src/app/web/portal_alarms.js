@@ -49,9 +49,12 @@ async function alarmStatusRefresh() {
     if (document.getElementById('alarm-readiness') !== element) return;
     element.textContent = status.ota_deferred ? 'Firmware update' : status.ready ? '' : 'Waiting for time synchronization';
     var warning = document.getElementById('alarm-warning');
-    warning.hidden = !status.storage_error && !status.hook_error;
-    warning.textContent = status.storage_error ? 'Alarm storage unavailable' : status.hook_error ? 'An alarm action failed' : '';
     var form = document.getElementById('alarm-config-form');
+    var reset = form.dataset.configReset === 'true';
+    warning.hidden = !reset && !status.storage_error && !status.hook_error;
+    warning.textContent = reset
+        ? 'Unsupported alarm configuration was cleared. Save to replace the saved configuration. Both schedule and behavior now use defaults.'
+        : status.storage_error ? 'Alarm storage unavailable' : status.hook_error ? 'An alarm action failed' : '';
     if (form.dataset.section === 'schedule' && form.dataset.dirty !== 'true') {
         document.getElementById('alarm-enabled').checked = status.enabled;
         form.dataset.onceLocal = status.once_local || '';
@@ -76,6 +79,7 @@ async function alarmInitFragment() {
         if (settings.action_format_version !== 1) throw new Error('Incompatible alarm action format; saved settings are protected');
         var config = settings['1'];
         if (document.getElementById('alarm-config-form') !== form) return;
+        form.dataset.configReset = settings.config_reset ? 'true' : 'false';
         if (schedule) {
             document.getElementById('alarm-enabled').checked = config.enabled;
             document.getElementById('alarm-time').value = String(config.hour).padStart(2, '0') + ':' + String(config.minute).padStart(2, '0');
@@ -106,6 +110,7 @@ async function alarmInitFragment() {
                 var response = await fetch('/api/component/alarms/' + form.dataset.section, {method:'POST', headers:{'Content-Type':'application/json'}, body:submitted});
                 if (!response.ok) throw new Error('Alarm ' + form.dataset.section + ' was not saved');
                 if (document.getElementById('alarm-config-form') !== form) return;
+                form.dataset.configReset = 'false';
                 form.dataset.dirty = JSON.stringify(alarmConfigBuild()) === submitted ? 'false' : 'true';
                 showMessage(schedule ? 'Schedule saved' : 'Behavior saved', 'success');
                 await alarmStatusRefresh();

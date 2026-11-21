@@ -88,6 +88,13 @@ A **Wake display** action is a one-time wake. The keep-awake option
 resets inactivity on each confirmed motion sample; the presence hold time alone
 does not hold the display on after movement stops.
 
+If saved motion actions are incompatible or unsupported, the portal shows a
+warning and opens empty action editors. Configure new actions and save motion
+settings to replace the stored actions. Loading does not rewrite the file;
+failed action saves preserve it. If actions cannot be read or allocated, their
+editors remain unavailable, but you can still save the motion sensing settings
+without replacing actions.
+
 ## Tune and inspect
 
 Check Camera Presence under **Sensors > Sensor Data**, or use local bindings:

@@ -17,7 +17,7 @@ struct CameraMotionActionsConfig {
 
 void camera_motion_actions_init();
 void camera_motion_actions_on_presence_started();
-bool camera_motion_actions_to_json(JsonArray actions);
+bool camera_motion_actions_to_json(JsonArray actions, bool* config_reset = nullptr);
 bool camera_motion_actions_validate(JsonArray actions);
 bool camera_motion_actions_save_raw(const uint8_t* json, size_t len);
 #if HAS_MQTT

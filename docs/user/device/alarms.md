@@ -36,10 +36,17 @@ Select **Save behavior**. Schedule and Behavior save independently and apply
 without reboot. Ring/stop lists allow synchronous actions; actions that suspend
 execution, such as Delay or key sequences, are not offered.
 
-If a saved alarm snapshot contains invalid or unavailable actions, the alarm
-is disabled and its settings cannot be saved. Both snapshots are protected.
-Back them up from [Storage](storage.md), then restore compatible firmware or
-compatible snapshots and reboot.
+If saved alarm settings use an incompatible action format or contain invalid
+or unavailable actions, the alarm is disabled. Both forms show a warning and
+load defaults with empty ring/stop actions. You can configure and save new
+settings without deleting files or resetting the device.
+
+Saving either section replaces the incompatible configuration, including
+defaults for the other section. Review both Schedule and Behavior before
+enabling the alarm. Loading defaults does not change stored snapshots;
+back them up from [Storage](storage.md) before saving if you want to keep them.
+Allocation or storage failures still report errors rather than a successful
+reset or save.
 
 For sound-capable firmware, choose **Alarm > Loop Tone** or **Loop MP3** in
 the ringing action list. A useful stop action is **Sound alert > Stop alerts**.

@@ -2640,8 +2640,11 @@ bool storage_test_fail_open = false;
 size_t storage_test_write_limit = SIZE_MAX;
 FakeLittleFS LittleFS;
 static bool shutter_write_failure = false;
+static bool config_alloc_failure = false;
 void storage_publish_usage(bool) {}
-void* config_psram_alloc(size_t bytes, const char*) { return std::calloc(1, bytes); }
+void* config_psram_alloc(size_t bytes, const char*) {
+    return config_alloc_failure ? nullptr : std::calloc(1, bytes);
+}
 bool storage_write_atomic(const char* path, const uint8_t* data, size_t length) {
     if (shutter_write_failure) return false;
     storage_test_files[path] = std::string(reinterpret_cast<const char*>(data), length);
@@ -2727,15 +2730,43 @@ static bool relay_host_operations() {
     const char* path = "/config/relay_actions.json";
     storage_test_files[path] = R"({"enlarger_on":{"type":"shelly"}})";
     relay_controller_init();
-    relay_load_config();
     std::string serialized;
-    bool ok = relay_test_worker && !relay_get_config_json(serialized);
+    storage_test_fail_open = true;
+    relay_load_config();
+    bool ok = !relay_get_config_json(serialized);
+    storage_test_fail_open = false;
+    config_alloc_failure = true;
+    relay_load_config();
+    ok = ok && !relay_get_config_json(serialized);
+    config_alloc_failure = false;
+    relay_load_config();
+    JsonDocument reset;
+    ok = ok && relay_test_worker && relay_get_config_json(serialized) &&
+        !deserializeJson(reset, serialized) && reset["config_reset"] == true &&
+        reset["enlarger_on"].size() == 0 && storage_test_files[path] == R"({"enlarger_on":{"type":"shelly"}})";
+    const char* incompatible = R"({"action_format_version":1,
+        "enlarger_on":{"op":"variable.set","args":{"name":"example","value":"valid"}},
+        "enlarger_off":{"op":"missing.operation","args":{}}})";
+    storage_test_files[path] = incompatible;
+    relay_load_config();
+    ok = ok && relay_get_config_json(serialized) && !deserializeJson(reset, serialized) &&
+        reset["config_reset"] == true && reset["enlarger_on"].size() == 0 &&
+        reset["enlarger_off"].size() == 0 && storage_test_files[path] == incompatible;
+    const std::string legacy = storage_test_files[path];
     const char* config = R"({"action_format_version":1,
         "enlarger_on":{"op":"shelly.relay.set","args":{"host":{"$template":"[var:relay_host]"},"relay":0,"enabled":false}},
         "enlarger_off":{},
         "safelight_on":{},
         "safelight_off":{"op":"shelly.relay.set","args":{"host":"safe.local","relay":1,"enabled":true}}})";
+    shutter_write_failure = true;
+    ok = ok && !relay_save_config_from_json(reinterpret_cast<const uint8_t*>(config), strlen(config)) &&
+        storage_test_files[path] == legacy && relay_get_config_json(serialized) &&
+        !deserializeJson(reset, serialized) && reset["config_reset"] == true;
+    shutter_write_failure = false;
     ok = ok && relay_save_config_from_json(reinterpret_cast<const uint8_t*>(config), strlen(config));
+    relay_load_config();
+    ok = ok && relay_get_config_json(serialized) && !deserializeJson(reset, serialized) &&
+        reset["config_reset"] == false && reset["enlarger_on"]["op"] == "shelly.relay.set";
     const std::string saved = storage_test_files[path];
     shutter_write_failure = true;
     ok = ok && !relay_save_config_from_json(reinterpret_cast<const uint8_t*>(config), strlen(config)) &&
@@ -3414,11 +3445,41 @@ static bool shutter_session_hook_storage() {
     const char* path = "/config/shutter_session_actions.json";
     const char* legacy = R"({"save_start_actions":[{"type":"notify"}],"save_complete_actions":[]})";
     storage_test_files[path] = legacy;
-    shutter_session_actions_init();
     std::string serialized;
-    if (shutter_session_actions_to_json(serialized) || storage_test_files[path] != legacy) return false;
+    config_alloc_failure = true;
+    shutter_session_actions_init();
+    const bool allocation_unavailable = !shutter_session_actions_to_json(serialized);
+    config_alloc_failure = false;
+    if (!allocation_unavailable) return false;
+    storage_test_fail_open = true;
+    shutter_session_actions_init();
+    const bool read_unavailable = !shutter_session_actions_to_json(serialized);
+    storage_test_fail_open = false;
+    if (!read_unavailable) return false;
+    shutter_session_actions_init();
+    JsonDocument reset;
+    if (!shutter_session_actions_to_json(serialized) || deserializeJson(reset, serialized) ||
+        reset["config_reset"] != true || reset["save_start_actions"].size() != 0 ||
+        reset["save_complete_actions"].size() != 0 || storage_test_files[path] != legacy) return false;
+    const char* incompatible = R"({"action_format_version":1,
+        "save_start_actions":[{"op":"shutter.alignment.start","args":{}}],
+        "save_complete_actions":[{"op":"missing.operation","args":{}}]})";
+    storage_test_files[path] = incompatible;
+    shutter_session_actions_init();
+    if (!shutter_session_actions_to_json(serialized) || deserializeJson(reset, serialized) ||
+        reset["config_reset"] != true || reset["save_start_actions"].size() != 0 ||
+        reset["save_complete_actions"].size() != 0 || storage_test_files[path] != incompatible) return false;
     const char* valid = R"({"action_format_version":1,"save_start_actions":[{"op":"test.number","args":{"value":{"$template":"[var:number]"}}}],"save_complete_actions":[{"op":"shutter.alignment.start","args":{}}]})";
+    shutter_write_failure = true;
+    const bool failed_save = shutter_session_actions_save_raw(reinterpret_cast<const uint8_t*>(valid), strlen(valid));
+    shutter_write_failure = false;
+    if (failed_save || storage_test_files[path] != incompatible ||
+        !shutter_session_actions_to_json(serialized) || deserializeJson(reset, serialized) ||
+        reset["config_reset"] != true) return false;
     if (!shutter_session_actions_save_raw(reinterpret_cast<const uint8_t*>(valid), strlen(valid))) return false;
+    shutter_session_actions_init();
+    if (!shutter_session_actions_to_json(serialized) || deserializeJson(reset, serialized) ||
+        reset["config_reset"] != false) return false;
     if (!shutter_session_actions_to_json(serialized) || serialized.find("[var:number]") == std::string::npos)
         return false;
     const char* full = R"({"action_format_version":1,"save_start_actions":[{"op":"test.number","args":{"value":1}},{"op":"test.number","args":{"value":2}},{"op":"test.number","args":{"value":3}}],"save_complete_actions":[{"op":"shutter.alignment.start","args":{}},{"op":"shutter.alignment.stop","args":{}},{"op":"shutter.recalibrate","args":{}}]})";

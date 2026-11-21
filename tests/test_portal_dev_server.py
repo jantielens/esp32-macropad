@@ -836,6 +836,22 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(self.request("/api/component/alarms/schedule", "POST", {**schedule, "on_ring": []})[0], 400)
         self.assertEqual(self.request("/api/component/alarms/behavior", "POST", {**behavior, "enabled": False})[0], 400)
 
+    def test_alarm_reset_sections(self):
+        for section, body in (
+            ("schedule", {"enabled": False, "hour": 7, "minute": 0, "weekdays": 0}),
+            ("behavior", {"action_format_version": 1, "lateness_minutes": 360, "snooze_minutes": 9,
+                          "auto_dismiss_minutes": 30, "on_ring": [], "on_stop": []}),
+        ):
+            with self.subTest(section=section):
+                self.server.mock_alarms["config_reset"] = True
+                self.assertTrue(self.request("/api/component/alarms/config")[1]["config_reset"])
+                self.server.scenario = "save-error"
+                self.assertEqual(self.request(f"/api/component/alarms/{section}", "POST", body)[0], 503)
+                self.assertTrue(self.request("/api/component/alarms/config")[1]["config_reset"])
+                self.server.scenario = ""
+                self.assertEqual(self.request(f"/api/component/alarms/{section}", "POST", body)[0], 200)
+                self.assertFalse(self.request("/api/component/alarms/config")[1]["config_reset"])
+
     def test_alarm_authoring_metadata(self):
         catalog = self.request("/api/info?catalog=1")[1]["catalog"]
         action = next(item for item in catalog if item["type"] == "alarm")

@@ -36,6 +36,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   existing supported boards. Advertise E1003 Interactive BLE HID in installer
   metadata. Runtime HID selection still defaults Off.
 
+### Fixed
+
+* Allow incompatible saved alarm, shutter session, darkroom relay, and camera
+  motion actions to be replaced from the portal. Show a warning and load safe
+  defaults instead of blocking Save. Loading does not rewrite saved files;
+  failed saves preserve them, and read or allocation failures remain errors.
+  When recovering an alarm, saving either section also replaces the other
+  section with defaults. Verified replacements remain loadable after reboot.
+
 ## [1.50.0] - 2026-11-21
 
 ### Breaking changes

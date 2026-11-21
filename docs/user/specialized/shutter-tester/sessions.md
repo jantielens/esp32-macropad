@@ -71,4 +71,10 @@ write succeeded. Inspect Sessions/logs for the result.
 Direct session start/stop/toggle actions are guarded against self-triggering;
 avoid indirect loops through MQTT or other automation as well.
 
+If saved hooks are incompatible or contain unsupported actions, the portal
+shows a warning and loads empty action lists. Configure new hooks and select
+Save to replace the stored configuration. Loading does not change the saved
+file; a failed save leaves it intact. Read or allocation failures still report
+an error and block saving from the form.
+
 [Shutter setup](README.md) | [Results](results.md) | [User guides](../../README.md)
