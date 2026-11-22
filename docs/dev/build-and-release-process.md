@@ -195,6 +195,10 @@ The build system automatically applies project branding during compilation:
 4. Asset and branding headers (`web_assets.h`, `project_branding.h`) are generated
    in `build/<board>/web-assets/`, first on the compiler include path. The asset
    header rejects a mismatched feature configuration at compile time.
+   `portal_asset_version.h` carries a timestamp-based `PORTAL_ASSET_BUILD_ID`
+   generated once per asset-generation invocation. The shell and component asset
+   URLs share this ID, so unchanged development rebuilds also invalidate browser
+   caches without changing the release version or computing a hash on the device.
 5. A detectable GitHub `remote.origin.url` supplies `repo_slug_config.h` in the
    same output directory, for GitHub Pages links. A missing slug produces a
    diagnostic and empty owner/name strings, as before.
@@ -213,7 +217,7 @@ when it is missing. For an offline build, run that command beforehand. The versi
 and dependency graph are recorded in `tools/package.json` and `tools/package-lock.json`.
 Terser compresses code and mangles local names, but preserves top-level names and
 properties used by HTML handlers and dynamically loaded portal scripts.
-`web-assets/portal-assets.json` records resolved predicates and compressed array
+`web-assets/portal-assets.json` records the build ID, resolved predicates, and compressed array
 sizes for inspection. These sizes describe embedded asset payloads, not measured
 whole-firmware flash savings. See the
 [ownership convention](web-portal.md#feature-ownership-and-selection).

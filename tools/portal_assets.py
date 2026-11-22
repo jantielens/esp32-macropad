@@ -9,6 +9,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 from _render_html_template import render
@@ -192,6 +193,7 @@ def minify(text, kind):
 
 
 def generate(command, output, project, display):
+    build_id = str(time.time_ns())
     widgets = load_widgets()
     validate_editors(widgets)
     sources, bundles, members, expressions = discover()
@@ -213,7 +215,8 @@ def generate(command, output, project, display):
                              has_binding_help=enabled("HAS_DISPLAY"),
                              widget_types={widget["type"] for widget in selected_widgets},
                              has_auto_shutdown=enabled("HAS_AUTO_SHUTDOWN"),
-                             has_microphone_streaming=enabled("HAS_MICROPHONE_STREAMING"))
+                             has_microphone_streaming=enabled("HAS_MICROPHONE_STREAMING"),
+                             asset_build_id=build_id)
             symbol = stem(path) + ("_fragment" if name.endswith(".fragment.html") else "") + "_html_gz"
             if name.endswith(".fragment.html"):
                 fragments.append((name.removesuffix(".fragment.html"), symbol))
@@ -264,13 +267,16 @@ def generate(command, output, project, display):
     slug = ("#ifndef REPO_SLUG_CONFIG_H\n#define REPO_SLUG_CONFIG_H\n"
             f"#define REPO_OWNER {json.dumps(owner)}\n"
             f"#define REPO_NAME {json.dumps(repository)}\n#endif\n")
+    asset_version = ("#ifndef PORTAL_ASSET_VERSION_H\n#define PORTAL_ASSET_VERSION_H\n"
+                     f"#define PORTAL_ASSET_BUILD_ID {json.dumps(build_id)}\n#endif\n")
     output.mkdir(parents=True, exist_ok=True)
     for name, text in (("web_assets.h", header), ("project_branding.h", branding),
-                       ("repo_slug_config.h", slug)):
+                       ("repo_slug_config.h", slug), ("portal_asset_version.h", asset_version)):
         with tempfile.NamedTemporaryFile(mode="w", dir=output, delete=False) as target:
             target.write(text)
         Path(target.name).replace(output / name)
-    (output / "portal-assets.json").write_text(json.dumps({"conditions": decisions, "sizes": sizes}, indent=2) + "\n")
+    (output / "portal-assets.json").write_text(json.dumps(
+        {"build_id": build_id, "conditions": decisions, "sizes": sizes}, indent=2) + "\n")
     print(f"Portal assets: one bundle per configuration, {sum(sizes.values())} gzip bytes")
     for symbol in ("portal_js_gz", "portal_all_css_gz"):
         print(f"  {symbol}: {sizes[symbol]} bytes")

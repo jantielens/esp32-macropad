@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{PROJECT_DISPLAY_NAME}} — Configuration Portal</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/portal-all.css?v={{FIRMWARE_VERSION}}">
+  <link rel="stylesheet" href="/portal-all.css?v={{PORTAL_ASSET_BUILD_ID}}">
   <script>
     /* Apply theme immediately to prevent flash */
     (function() {
@@ -80,7 +80,7 @@
        portal.js variant. /portal.js therefore serves the entire portal JS in
        a single HTTP response with a single gzip member. -->
   {{LIVE_MICROPHONE_SCRIPT}}
-  <script src="/portal.js?v={{FIRMWARE_VERSION}}"></script>
+  <script src="/portal.js?v={{PORTAL_ASSET_BUILD_ID}}"></script>
   {{POWER_SAVINGS_SCRIPT}}
 </body>
 </html>

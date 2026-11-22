@@ -7,11 +7,20 @@
 #include "web_portal_logs.h"
 
 #include <web_assets.h>
+#include <portal_asset_version.h>
 
 #include <string.h>
 
 static constexpr const char* kImmutableAssetCacheControl =
 	"public, max-age=31536000, immutable";
+
+static const char* portal_asset_cache_control(AsyncWebServerRequest* request) {
+	if (request->hasParam("v") &&
+		request->getParam("v")->value() == PORTAL_ASSET_BUILD_ID) {
+		return kImmutableAssetCacheControl;
+	}
+	return "no-store";
+}
 
 // Serve a gzipped PROGMEM asset as a length-aware chunked stream rather than a
 // single beginResponse_P() blob. AsyncTCP only calls the filler when LWIP TX
@@ -120,7 +129,7 @@ void handleFragment(AsyncWebServerRequest *request) {
 void handlePortalPowerSavingsJS(AsyncWebServerRequest* request) {
 	if (!portal_auth_gate(request)) return;
 	request->send(begin_gzipped_asset_response(request, "application/javascript",
-		portal_power_savings_js_gz, portal_power_savings_js_gz_len, "no-cache"));
+		portal_power_savings_js_gz, portal_power_savings_js_gz_len, portal_asset_cache_control(request)));
 }
 #endif
 
@@ -128,14 +137,14 @@ void handlePortalPowerSavingsJS(AsyncWebServerRequest* request) {
 void handlePortalBluetoothJS(AsyncWebServerRequest* request) {
 	if (!portal_auth_gate(request)) return;
 	request->send(begin_gzipped_asset_response(request, "application/javascript",
-		portal_bluetooth_js_gz, portal_bluetooth_js_gz_len, "no-store"));
+		portal_bluetooth_js_gz, portal_bluetooth_js_gz_len, portal_asset_cache_control(request)));
 }
 #endif
 
 #if HAS_TTF_FONTS
 void handlePortalFontsJS(AsyncWebServerRequest* request) {
 	if (!portal_auth_gate(request)) return;
-	request->send(begin_gzipped_asset_response(request, "application/javascript", portal_fonts_js_gz, portal_fonts_js_gz_len, "no-cache", nullptr));
+	request->send(begin_gzipped_asset_response(request, "application/javascript", portal_fonts_js_gz, portal_fonts_js_gz_len, portal_asset_cache_control(request)));
 }
 #endif
 
@@ -147,7 +156,7 @@ void handlePortalLogsJS(AsyncWebServerRequest *request) {
 	}
 	if (!portal_auth_gate(request)) return;
 	request->send(begin_gzipped_asset_response(request, "application/javascript",
-		portal_logs_js_gz, portal_logs_js_gz_len, "no-store"));
+		portal_logs_js_gz, portal_logs_js_gz_len, portal_asset_cache_control(request)));
 }
 #endif
 
@@ -155,7 +164,7 @@ void handlePortalLogsJS(AsyncWebServerRequest *request) {
 void handlePortalExternalDataJS(AsyncWebServerRequest *request) {
 	if (!portal_auth_gate(request)) return;
 	request->send(begin_gzipped_asset_response(request, "application/javascript",
-		portal_external_data_js_gz, portal_external_data_js_gz_len, "no-store"));
+		portal_external_data_js_gz, portal_external_data_js_gz_len, portal_asset_cache_control(request)));
 }
 #endif
 
@@ -163,7 +172,7 @@ void handlePortalExternalDataJS(AsyncWebServerRequest *request) {
 void handlePortalAlarmsJS(AsyncWebServerRequest *request) {
 	if (!portal_auth_gate(request)) return;
 	request->send(begin_gzipped_asset_response(request, "application/javascript",
-		portal_alarms_js_gz, portal_alarms_js_gz_len, "no-store"));
+		portal_alarms_js_gz, portal_alarms_js_gz_len, portal_asset_cache_control(request)));
 }
 #endif
 
@@ -171,7 +180,7 @@ void handlePortalAlarmsJS(AsyncWebServerRequest *request) {
 void handlePortalVoiceNotesJS(AsyncWebServerRequest *request) {
 	if (!portal_auth_gate(request)) return;
 	request->send(begin_gzipped_asset_response(request, "application/javascript",
-		portal_voice_notes_js_gz, portal_voice_notes_js_gz_len, "no-store"));
+		portal_voice_notes_js_gz, portal_voice_notes_js_gz_len, portal_asset_cache_control(request)));
 }
 #endif
 
@@ -179,14 +188,14 @@ void handlePortalVoiceNotesJS(AsyncWebServerRequest *request) {
 void handlePortalLiveMicrophoneJS(AsyncWebServerRequest *request) {
 	if (!portal_auth_gate(request)) return;
 	request->send(begin_gzipped_asset_response(request, "application/javascript",
-		portal_live_microphone_js_gz, portal_live_microphone_js_gz_len, "no-store"));
+		portal_live_microphone_js_gz, portal_live_microphone_js_gz_len, portal_asset_cache_control(request)));
 }
 #endif
 #if HAS_AUDIO_INPUT
 void handlePortalMicrophoneJS(AsyncWebServerRequest *request) {
 	if (!portal_auth_gate(request)) return;
 	request->send(begin_gzipped_asset_response(request, "application/javascript",
-		portal_microphone_js_gz, portal_microphone_js_gz_len, "no-store"));
+		portal_microphone_js_gz, portal_microphone_js_gz_len, portal_asset_cache_control(request)));
 }
 #endif
 
@@ -237,7 +246,7 @@ void handlePortalAllCSS(AsyncWebServerRequest *request) {
 				"text/css",
 				portal_all_css_gz,
 				portal_all_css_gz_len,
-				kImmutableAssetCacheControl
+				portal_asset_cache_control(request)
 		);
 		request->send(response);
 }
@@ -257,7 +266,7 @@ void handlePortalJS(AsyncWebServerRequest *request) {
 				"application/javascript",
 				portal_js_gz,
 				portal_js_gz_len,
-				kImmutableAssetCacheControl
+				portal_asset_cache_control(request)
 		);
 		request->send(response);
 }
@@ -269,7 +278,7 @@ void handlePortalCameraJS(AsyncWebServerRequest *request) {
 				"application/javascript",
 				portal_camera_js_gz,
 				portal_camera_js_gz_len,
-				kImmutableAssetCacheControl
+				portal_asset_cache_control(request)
 		);
 		request->send(response);
 }
@@ -280,7 +289,7 @@ void handlePortalCameraCSS(AsyncWebServerRequest *request) {
 				"text/css",
 				portal_camera_css_gz,
 				portal_camera_css_gz_len,
-				kImmutableAssetCacheControl
+				portal_asset_cache_control(request)
 		);
 		request->send(response);
 }
@@ -293,7 +302,7 @@ void handlePortalEpaperRefreshJS(AsyncWebServerRequest *request) {
 				"application/javascript",
 				portal_epaper_refresh_js_gz,
 				portal_epaper_refresh_js_gz_len,
-				kImmutableAssetCacheControl
+				portal_asset_cache_control(request)
 		);
 		request->send(response);
 }

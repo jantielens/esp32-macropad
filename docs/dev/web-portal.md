@@ -4492,7 +4492,9 @@ Resolve `[scheme:params]` binding tokens against the device's **live** data and 
 - Assets served with `Content-Encoding: gzip` header
 - Browser automatically decompresses (transparent to user)
 - Shell and fragment HTML use `Cache-Control: no-store`, so a portal reload always discovers the firmware's current asset URLs.
-- JavaScript and CSS asset URLs include the firmware version, for example `/portal.js?v=1.28.0`, and use `Cache-Control: public, max-age=31536000, immutable`. Each released firmware version therefore loads current portal assets while repeat visits retain browser caching.
+- JavaScript and CSS asset URLs include a timestamp-based build ID, for example `/portal.js?v=1795298400123456789`. The asset generator creates one ID per invocation and shares it between the rendered shell and component URLs emitted by `/api/portal/nav`. Component definitions supply paths without query strings.
+- Requests carrying the current build ID use `Cache-Control: public, max-age=31536000, immutable`, including optional scripts. Repeat visits can reuse cached assets without contacting the device. Every rebuild changes the URLs, even when the release version and source are unchanged. Unversioned or stale-ID asset requests still receive the current content, but use `no-store` to avoid caching it under the wrong key.
+- The local portal development server keeps `no-cache` and its fixed `dev-mock` identifier. Reloading retrieves current source assets without a firmware build.
 
 ### Concurrent Request Throttling
 

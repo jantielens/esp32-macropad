@@ -12,6 +12,7 @@
 #include "web_portal_path.h"
 #include "log_manager.h"
 
+#include <portal_asset_version.h>
 #include <algorithm>
 #include <string.h>
 
@@ -69,6 +70,11 @@ static bool is_hardcoded_category(const char* id) {
         if (strcmp(id, kNavCategories[c].id) == 0) return true;
     }
     return false;
+}
+
+static void write_portal_asset_urls(JsonObject item, const char* script, const char* style) {
+    if (script) item["portal_script"] = String(script) + "?v=" PORTAL_ASSET_BUILD_ID;
+    if (style) item["portal_style"] = String(style) + "?v=" PORTAL_ASSET_BUILD_ID;
 }
 
 // ============================================================================
@@ -155,8 +161,7 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
                 JsonObject item = items_arr.createNestedObject();
                 item["id"] = items[i].id;
                 item["display_name"] = items[i].display_name;
-                if (items[i].portal_script) item["portal_script"] = items[i].portal_script;
-                if (items[i].portal_style) item["portal_style"] = items[i].portal_style;
+                write_portal_asset_urls(item, items[i].portal_script, items[i].portal_style);
             }
         }
     }
@@ -230,11 +235,15 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
             JsonObject item = items_arr.createNestedObject();
             item["id"] = items[i].id;
             item["display_name"] = items[i].display_name;
-            if (items[i].portal_script) item["portal_script"] = items[i].portal_script;
-            if (items[i].portal_style) item["portal_style"] = items[i].portal_style;
+            write_portal_asset_urls(item, items[i].portal_script, items[i].portal_style);
         }
     }
 
+    if (doc->overflowed()) {
+        LOGE(TAG, "Portal navigation JSON overflow");
+        web_portal_send_json_error(request, 500, "Portal navigation too large");
+        return;
+    }
     timing.mark("navigation");
     web_portal_send_json_chunked(request, doc, 200, &timing);
 }

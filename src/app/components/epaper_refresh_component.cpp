@@ -4,12 +4,11 @@
 
 #include "board_config.h"
 #include "display_manager.h"
-#include "version.h"
 
 namespace {
 
 constexpr const char* kEpaperRefreshPortalScript =
-    "/portal-epaper-refresh.js?v=" FIRMWARE_VERSION;
+    "/portal-epaper-refresh.js";
 
 void epaper_refresh_full_refresh_post(AsyncWebServerRequest* request) {
     if (display_manager_request_full_refresh() == DISPLAY_REFRESH_QUEUED) {

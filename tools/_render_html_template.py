@@ -8,8 +8,8 @@ project-name substitutions.
 Substitution sources:
   - Each {{KEY}} is replaced by the contents of $WEB_DIR/<file> per the
     TEMPLATES mapping below. Missing files substitute the empty string.
-  - {{PROJECT_NAME}}, {{PROJECT_DISPLAY_NAME}}, and {{FIRMWARE_VERSION}} come
-    from CLI args.
+  - {{PROJECT_NAME}}, {{PROJECT_DISPLAY_NAME}}, {{FIRMWARE_VERSION}}, and
+    {{PORTAL_ASSET_BUILD_ID}} come from CLI args.
 
 Minification:
   - Strip HTML comments
@@ -52,7 +52,8 @@ def render(input_path: Path, web_dir: Path,
            widget_flags: set[str] | None = None,
            has_auto_shutdown: bool = False,
            has_microphone_streaming: bool = False,
-           widget_types: set[str] | None = None) -> str:
+           widget_types: set[str] | None = None,
+           asset_build_id: str = "dev-mock") -> str:
     html = input_path.read_text()
 
     if "{{WIDGET_OPTIONS}}" in html or "{{WIDGET_EDITORS}}" in html:
@@ -71,10 +72,10 @@ def render(input_path: Path, web_dir: Path,
         html = html.replace("{{" + key + "}}", template)
 
     html = html.replace("{{POWER_SAVINGS_SCRIPT}}",
-                        '<script src="/portal_power_savings.js?v={{FIRMWARE_VERSION}}"></script>'
+                        '<script src="/portal_power_savings.js?v={{PORTAL_ASSET_BUILD_ID}}"></script>'
                         if has_auto_shutdown else "")
     html = html.replace("{{LIVE_MICROPHONE_SCRIPT}}",
-                        '<script src="/portal-live-microphone.js?v={{FIRMWARE_VERSION}}"></script>'
+                        '<script src="/portal-live-microphone.js?v={{PORTAL_ASSET_BUILD_ID}}"></script>'
                         if has_microphone_streaming else "")
     html = html.replace("{{MICROPHONE_LISTEN}}",
                         load_template(web_dir, "_microphone_listen.html")
@@ -82,6 +83,7 @@ def render(input_path: Path, web_dir: Path,
     html = html.replace("{{PROJECT_NAME}}", project_name)
     html = html.replace("{{PROJECT_DISPLAY_NAME}}", project_display_name)
     html = html.replace("{{FIRMWARE_VERSION}}", firmware_version)
+    html = html.replace("{{PORTAL_ASSET_BUILD_ID}}", asset_build_id)
 
     html = re.sub(r"<!--.*?-->", "", html, flags=re.DOTALL)
     html = re.sub(r"\s+", " ", html)
@@ -98,6 +100,8 @@ def main() -> int:
     p.add_argument("--project-name", required=True)
     p.add_argument("--project-display-name", required=True)
     p.add_argument("--firmware-version", required=True)
+    p.add_argument("--asset-build-id", default="dev-mock",
+                   help="Asset cache key; defaults to dev-mock for local previews")
     p.add_argument("--without-ble-hid", action="store_true")
     p.add_argument("--without-binding-help", action="store_true")
     p.add_argument("--widget-flags", nargs="*", default=None)
@@ -110,7 +114,8 @@ def main() -> int:
                             args.firmware_version, not args.without_ble_hid,
                             not args.without_binding_help,
                             None if args.widget_flags is None else set(args.widget_flags),
-                            args.with_auto_shutdown, args.with_microphone_streaming))
+                            args.with_auto_shutdown, args.with_microphone_streaming,
+                            asset_build_id=args.asset_build_id))
     return 0
 
 

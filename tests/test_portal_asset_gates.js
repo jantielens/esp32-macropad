@@ -102,7 +102,7 @@ try {
         execFileSync('python3', ['tools/portal_assets.py', 'esp32-macropad', 'ESP32 Macropad',
             '--cpp-command', JSON.stringify(compiler), '--output-dir', output], {cwd: root, stdio: 'pipe'});
         const header = fs.readFileSync(path.join(output, 'web_assets.h'), 'utf8');
-        const {conditions, sizes} = JSON.parse(fs.readFileSync(path.join(output, 'portal-assets.json')));
+        const {build_id, conditions, sizes} = JSON.parse(fs.readFileSync(path.join(output, 'portal-assets.json')));
         const selected = execFileSync(compiler[0], [...compiler.slice(1), '-I' + output,
             '-E', '-P', '-x', 'c++', path.join(output, 'web_assets.h')],
         {cwd: root, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, stdio: 'pipe'});
@@ -121,6 +121,11 @@ try {
         const shell = assets.get('shell_html_gz');
         const pad = assets.get('pad_editor_fragment_html_gz') || '';
         assert(js && css && shell);
+        assert(shell.includes('/portal.js?v=' + build_id));
+        assert(shell.includes('/portal-all.css?v=' + build_id));
+        for (const url of ['/portal_power_savings.js', '/portal-live-microphone.js']) {
+            if (shell.includes(url)) assert(shell.includes(url + '?v=' + build_id));
+        }
         for (const callback of ['uploadFirmware', 'saveFragmentConfig', 'init_wifi_fragment']) assert(js.includes(callback));
         for (const [gate, marker] of [
             ['HAS_DISPLAY', 'init_screen_preview_fragment'],

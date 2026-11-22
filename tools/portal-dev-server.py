@@ -1752,6 +1752,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
         replacements = {
             "{{PROJECT_DISPLAY_NAME}}": "ESP32 Macropad (Local Mock)",
             "{{FIRMWARE_VERSION}}": "dev-mock",
+            "{{PORTAL_ASSET_BUILD_ID}}": "dev-mock",
             "{{HEALTH_WIDGET}}": (APP_WEB_DIR / "_health_widget.html").read_text(encoding="utf-8"),
             "{{REBOOT_OVERLAY}}": (APP_WEB_DIR / "_reboot_overlay.html").read_text(encoding="utf-8"),
             "{{BINDING_HELP}}": (APP_WEB_DIR / "_binding_help.html").read_text(encoding="utf-8")

@@ -82,6 +82,8 @@ class PortalDevServerTest(unittest.TestCase):
         status, shell = self.request("/", raw=True)
         self.assertEqual(status, 200)
         self.assertNotIn("{{", shell)
+        self.assertIn('/portal.js?v=dev-mock', shell)
+        self.assertIn('/portal-all.css?v=dev-mock', shell)
         self.assertEqual(shell.count('id="binding-help-overlay"'), 1)
         headless_shell = self.request("/?profile=reterminal-e1003-frame", raw=True)[1]
         self.assertNotIn('id="binding-help-overlay"', headless_shell)
@@ -95,6 +97,14 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertIn("Data binding", fragment)
         self.assertNotIn("pad-slider-preview", fragment)
         self.assertNotIn('id="binding-help-overlay"', fragment)
+
+    def test_asset_cache_policy(self):
+        for path in ("/", "/portal.js?v=dev-mock", "/portal-all.css?v=dev-mock",
+                     "/portal-live-microphone.js?v=dev-mock", "/api/section/welcome"):
+            with urlopen(self.base + path, timeout=5) as response:
+                self.assertEqual(response.status, 200)
+                self.assertEqual(response.headers["Cache-Control"], "no-cache")
+                response.read()
 
     def test_power_savings_capability_and_round_trip(self):
         profile = "reterminal-sticky-interactive"

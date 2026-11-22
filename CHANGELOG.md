@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-11-21
+ms.date: 2026-11-22
 ms.topic: reference
 ---
 
@@ -38,6 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Refresh cached portal JavaScript and styles after every firmware build, even
+  when the release version is unchanged. Share one timestamp-based build ID
+  across bundled and optional assets, while retaining immutable browser caching
+  for repeat visits. Unversioned or stale-ID requests are not cached; local
+  portal development keeps its existing reload behavior.
 * Allow incompatible saved alarm, shutter session, darkroom relay, and camera
   motion actions to be replaced from the portal. Show a warning and load safe
   defaults instead of blocking Save. Loading does not rewrite saved files;
