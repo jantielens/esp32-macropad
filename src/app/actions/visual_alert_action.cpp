@@ -12,7 +12,7 @@ constexpr const char* kVisualAlertActionTag = "Action";
 #if defined(ARDUINO) && HAS_DISPLAY
 ActionResult dispatch_visual_alert(const VisualAlertPayload& alert, const char* label, uint32_t) {
     if (!strcmp(alert.va_op, "stop")) { visual_alert_stop(); LOGI(kVisualAlertActionTag, "%s visual_alert: stop", label); }
-    else { screen_saver_manager_notify_activity(true); VisualAlertParams params = {}; if (!parse_hex_color(alert.va_color[0] ? alert.va_color : "#FF0000", &params.color)) params.color = 0xFF0000; params.pattern = visual_alert_pattern_from_str(alert.va_pattern); params.period_ms = alert.va_period_ms ? alert.va_period_ms : VA_DEFAULT_PERIOD_MS; params.intensity = alert.va_intensity ? alert.va_intensity : VA_DEFAULT_INTENSITY; params.duration_ms = alert.va_duration_ms; visual_alert_show(&params); LOGI(kVisualAlertActionTag, "%s visual_alert: start pat=%u per=%u int=%u dur=%u", label, params.pattern, params.period_ms, params.intensity, params.duration_ms); }
+    else { screen_saver_manager_notify_activity(true); VisualAlertParams params = {}; if (!alert.va_color[0] || !parse_hex_color(alert.va_color, &params.color)) params.color = DEFAULT_VISUAL_ALERT_RGB; params.pattern = visual_alert_pattern_from_str(alert.va_pattern); params.period_ms = alert.va_period_ms ? alert.va_period_ms : VA_DEFAULT_PERIOD_MS; params.intensity = alert.va_intensity ? alert.va_intensity : VA_DEFAULT_INTENSITY; params.duration_ms = alert.va_duration_ms; visual_alert_show(&params); LOGI(kVisualAlertActionTag, "%s visual_alert: start pat=%u per=%u int=%u dur=%u", label, params.pattern, params.period_ms, params.intensity, params.duration_ms); }
     return ACTION_COMPLETE;
 }
 #endif

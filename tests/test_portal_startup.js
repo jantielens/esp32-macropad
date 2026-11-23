@@ -366,6 +366,20 @@ async function main() {
     await pageLoad;
     assert.strictEqual(rendered, true);
 
+    let loadMessage = '';
+    context.showMessage = message => { loadMessage = message; };
+    context.padLoadButtonDefaultsFromDevice = async () => { throw new Error('Defaults unavailable'); };
+    await context.padLoadPage(1);
+    assert.match(loadMessage, /Defaults unavailable/);
+    assert.match(vm.runInContext('padState.loadError', context), /Defaults unavailable/);
+    context.padLoadButtonDefaultsFromDevice = async () => {
+        vm.runInContext('padState.appearanceDefaultsReady = true;', context);
+    };
+    const retryPage = context.padLoadPage(1);
+    requests[6].resolve({ status: 404 });
+    await retryPage;
+    assert.strictEqual(vm.runInContext('padState.loadError', context), null);
+
     vm.runInContext('deviceInfoCache = { has_sound_player: true, has_native_extensions: true };', context);
     const order = [];
     let resolveDefaults;

@@ -280,12 +280,15 @@ static ButtonShadowMode parse_button_shadow_mode(JsonVariant v) {
 }
 
 static bool parse_button_fill_style(JsonObject obj, ScreenButtonConfig* btn) {
+    const char* widget_type = obj["widget_type"] | "";
+    const bool outline_widget = strcmp(widget_type, "gauge") == 0 || strcmp(widget_type, "bar_chart") == 0;
+    const int default_outline_width = outline_widget ? DEFAULT_WIDGET_TRACK_OUTLINE_WIDTH : 0;
     const char* pattern_fields[] = {"bg_pattern", "widget_bar_pattern", "widget_bar_pattern_2",
         "widget_bar_pattern_3", "widget_bar_pattern_4", "widget_bar_bg_pattern"};
     const char* color_fields[] = {"bg_pattern_color", "widget_bar_pattern_color", "widget_bar_pattern_color_2",
         "widget_bar_pattern_color_3", "widget_bar_pattern_color_4", "widget_bar_bg_pattern_color",
         "widget_track_outline_color"};
-    bool configured = obj.containsKey("pattern_spacing") || obj.containsKey("pattern_stroke_width") ||
+    bool configured = default_outline_width > 0 || obj.containsKey("pattern_spacing") || obj.containsKey("pattern_stroke_width") ||
                       obj.containsKey("widget_track_outline_width") || obj.containsKey("widget_bar_track_radius");
     for (unsigned index = 0; index < 7; ++index) configured |= obj.containsKey(color_fields[index]);
     for (unsigned index = 0; index < 6; ++index) configured |= obj.containsKey(pattern_fields[index]);
@@ -295,14 +298,15 @@ static bool parse_button_fill_style(JsonObject obj, ScreenButtonConfig* btn) {
     header.spacing = fill_geometry_clamp(obj["pattern_spacing"] | 8, 2, 64);
     header.stroke = fill_geometry_clamp(obj["pattern_stroke_width"] | 1, 1,
                                        header.spacing < 8 ? header.spacing : 8);
-    header.outline_width = fill_geometry_clamp(obj["widget_track_outline_width"] | 0, 0, 8);
+    header.outline_width = fill_geometry_clamp(obj["widget_track_outline_width"] | default_outline_width, 0, 8);
     header.track_radius = fill_geometry_clamp(obj["widget_bar_track_radius"] | 4, 0, 64);
     char color[CONFIG_COLOR_MAX_LEN];
     size_t bytes = sizeof(header);
     for (unsigned index = 0; index < 7; ++index) {
         if (index < 6) header.patterns[index] = fill_pattern_parse(obj[pattern_fields[index]] | "none");
         parse_bindable_field(obj[color_fields[index]], color,
-                             index < 5 ? CONFIG_COLOR_MAX_LEN : CONFIG_BINDABLE_SHORT_LEN, "#000000");
+                             index < 5 ? CONFIG_COLOR_MAX_LEN : CONFIG_BINDABLE_SHORT_LEN,
+                             index == 6 ? DEFAULT_WIDGET_TRACK_OUTLINE_COLOR : "#000000");
         header.color_offsets[index] = bytes;
         bytes += strlen(color) + 1;
     }
@@ -314,7 +318,8 @@ static bool parse_button_fill_style(JsonObject obj, ScreenButtonConfig* btn) {
     memcpy(style, &header, sizeof(header));
     for (unsigned index = 0; index < 7; ++index) {
         parse_bindable_field(obj[color_fields[index]], color,
-                             index < 5 ? CONFIG_COLOR_MAX_LEN : CONFIG_BINDABLE_SHORT_LEN, "#000000");
+                             index < 5 ? CONFIG_COLOR_MAX_LEN : CONFIG_BINDABLE_SHORT_LEN,
+                             index == 6 ? DEFAULT_WIDGET_TRACK_OUTLINE_COLOR : "#000000");
         memcpy(reinterpret_cast<char*>(style) + header.color_offsets[index], color, strlen(color) + 1);
     }
     btn->fill_style = style;

@@ -949,6 +949,20 @@ function padFillRefreshVisibility(resetSections) {
     if (radius) radius.style.display = editor && editor.track && editor.track.radius ? '' : 'none';
 }
 
+function padDefaultTrackOutlineWidth() {
+    const width = PAD_FIRMWARE_DEFAULTS.widget_track_outline_width;
+    if (!Number.isInteger(width) || width < 0 || width > 8) {
+        throw new Error('Track appearance defaults are unavailable. Reload the pad editor.');
+    }
+    return width;
+}
+
+function padDefaultTrackOutlineColor() {
+    const color = padColorNormalizeLiteral(PAD_FIRMWARE_DEFAULTS.widget_track_outline_color);
+    if (!color) throw new Error('Track appearance defaults are unavailable. Reload the pad editor.');
+    return color;
+}
+
 function padFillLoad(button) {
     padFillControls().forEach(function(controls) {
         controls.querySelector('select').value = padFillPattern(button[controls.dataset.patternField]);
@@ -959,8 +973,12 @@ function padFillLoad(button) {
     var spacing = padFillGeometry(button.pattern_spacing, 8, 2, 64);
     document.getElementById('pad-edit-pattern-spacing').value = spacing;
     document.getElementById('pad-edit-pattern-stroke').value = padFillGeometry(button.pattern_stroke_width, 1, 1, Math.min(8, spacing));
-    document.getElementById('pad-edit-track-outline-width').value = button.widget_track_outline_width === undefined ? 0 : button.widget_track_outline_width;
-    padSetBindableColor('pad-edit-track-outline-color', button.widget_track_outline_color, '#000000');
+    var width = document.getElementById('pad-edit-track-outline-width');
+    width.value = button.widget_track_outline_width ?? padDefaultTrackOutlineWidth();
+    width.dataset.explicit = Object.prototype.hasOwnProperty.call(button, 'widget_track_outline_width') ? '1' : '';
+    var color = document.getElementById('pad-edit-track-outline-color');
+    padSetBindableColor(color.id, button.widget_track_outline_color, padDefaultTrackOutlineColor());
+    color.dataset.explicit = Object.prototype.hasOwnProperty.call(button, 'widget_track_outline_color') ? '1' : '';
     padFillRefreshVisibility(true);
 }
 
@@ -989,10 +1007,16 @@ function padFillBuild(button, type) {
     if (editor && editor.track && editor.track.outline) {
         if (editor) padWidgetValidateField(document.getElementById('pad-edit-track-outline-width'), { kind: 'number' });
         padWidgetValidateField(document.getElementById('pad-edit-track-outline-color'), { kind: 'color', binding: {} });
-        var width = padFillGeometry(document.getElementById('pad-edit-track-outline-width').value, 0, 0, 8);
-        var color = padGetBindableColor('pad-edit-track-outline-color') || '#000000';
-        if (width || color !== '#000000') {
+        var defaultWidth = padDefaultTrackOutlineWidth();
+        var widthInput = document.getElementById('pad-edit-track-outline-width');
+        var colorInput = document.getElementById('pad-edit-track-outline-color');
+        var width = padFillGeometry(widthInput.value, defaultWidth, 0, 8);
+        var defaultColor = padDefaultTrackOutlineColor();
+        var color = padGetBindableColor('pad-edit-track-outline-color') || defaultColor;
+        if (widthInput.dataset.explicit === '1' || width !== defaultWidth) {
             button.widget_track_outline_width = width;
+        }
+        if (colorInput.dataset.explicit === '1' || color.toUpperCase() !== defaultColor) {
             button.widget_track_outline_color = color;
         }
     }

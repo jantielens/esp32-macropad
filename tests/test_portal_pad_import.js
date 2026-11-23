@@ -88,6 +88,7 @@ function setPadState(context, page, pad) {
     vm.runInContext([
         'padState.page = ' + page + ';',
         'padState.rawJson = null;',
+        'padState.appearanceDefaultsReady = true;',
         'padState.cols = __pad.cols;',
         'padState.rows = __pad.rows;',
         'padState.buttons = __pad.buttons.map(function(button) { return Object.assign({}, button); });',
@@ -443,6 +444,10 @@ async function testClearPad() {
     const importPad = async pad => success.context.padImportPad({
         target: { files: [{ text: async () => JSON.stringify(pad) }], value: 'pad.json' },
     });
+    vm.runInContext('padState.appearanceDefaultsReady = false;', success.context);
+    await importPad({ cols: 1, rows: 1, buttons: [] });
+    assert(success.messages.some(message => message.type === 'error' && message.message.includes('Reload pad and button defaults')));
+    vm.runInContext('padState.appearanceDefaultsReady = true;', success.context);
     await importPad({ cols: 10, rows: 10, bg_image_path: '/images/background.png', buttons: [{ col: 9, row: 9 }] });
     assert(success.messages.some(message => message.type === 'success' && message.message.includes('Pad imported')));
     assert.strictEqual(vm.runInContext('padState.cols', success.context), 10);

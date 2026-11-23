@@ -183,7 +183,8 @@ const padButtonBuilders = [
         ],
         sourceFields: ({ candidate }, index) => [
             ...padButtonBuilderFormattingFields(candidate),
-            { name: 'color', label: 'Line color', type: 'color', default: ['#4CAF50', '#2196F3', '#9C27B0'][index],
+            { name: 'color', label: 'Line color', type: 'color',
+                default: PAD_FIRMWARE_DEFAULTS['widget_series_color' + (index ? '_' + (index + 1) : '')],
                 error: 'Choose a valid line color.' }
         ],
         sourceOptions({ candidate }, previous) {
@@ -246,7 +247,7 @@ const padButtonBuilders = [
         validateSource: source => padButtonBuilders.find(item => item.id === 'history').validateSource(source),
         fields: () => [
             ...padButtonBuilders.find(item => item.id === 'history').fields().slice(0, 2),
-            { name: 'color', label: 'Accent color', type: 'color', default: '#4CAF50',
+            { name: 'color', label: 'Accent color', type: 'color', default: PAD_FIRMWARE_DEFAULTS.widget_series_color,
                 error: 'Choose a valid accent color.' }
         ],
         sourceFields: ({ candidate }) => padButtonBuilderFormattingFields(candidate),

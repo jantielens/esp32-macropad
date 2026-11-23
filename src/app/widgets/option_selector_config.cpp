@@ -151,9 +151,9 @@ bool option_selector_parse_config(const JsonObject& button, uint8_t* data) {
     copy_field(button, "widget_option_group_color", config.group_color, sizeof(config.group_color));
     copy_field(button, "widget_option_background_color", config.option_background, sizeof(config.option_background));
     copy_field(button, "widget_option_selected_fg_color", config.selected_foreground,
-               sizeof(config.selected_foreground), DEFAULT_WIDGET_INDICATOR_COLOR);
+               sizeof(config.selected_foreground), DEFAULT_WIDGET_OPTION_SELECTED_FG_COLOR);
     copy_field(button, "widget_option_selected_bg_color", config.selected_background,
-               sizeof(config.selected_background), DEFAULT_WIDGET_SERIES_COLOR);
+               sizeof(config.selected_background), DEFAULT_WIDGET_OPTION_SELECTED_BG_COLOR);
     config.font_size = button["widget_option_font_size"] | 0;
     config.icon_size_pct = button["widget_option_icon_size_pct"] | 0;
     config.icon_badge_padding = button["widget_option_icon_badge_padding"] | 0;

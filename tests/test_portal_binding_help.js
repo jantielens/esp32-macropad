@@ -3,9 +3,11 @@ const fs = require('fs');
 const vm = require('vm');
 
 const fixture = JSON.parse(fs.readFileSync('tools/mock-data/binding-docs.json', 'utf8'));
+const appearanceFixture = JSON.parse(fs.readFileSync('tools/mock-data/pad-editor.json', 'utf8'));
 const listeners = [];
 const context = {
     console,
+    PAD_FIRMWARE_DEFAULTS: appearanceFixture.firmware_defaults,
     TextEncoder,
     AbortController,
     DOMException,
@@ -780,6 +782,25 @@ delete context.testHelpSchemes;
     const gaugeBuilder = builders.find(builder => builder.id === 'gauge');
     const historyBuilder = builders.find(builder => builder.id === 'history');
     const iconHistoryBuilder = builders.find(builder => builder.id === 'icon_history');
+    context.PAD_FIRMWARE_DEFAULTS = { ...appearanceFixture.firmware_defaults, ...appearanceFixture.epaper_firmware_defaults };
+    for (let index = 0; index < 3; index++) {
+        assert.strictEqual(historyBuilder.sourceFields({ candidate: { formatModes: [], unit: '' } }, index)
+            .find(field => field.name === 'color').default, '#000000');
+    }
+    assert.strictEqual(iconHistoryBuilder.fields().find(field => field.name === 'color').default, '#000000');
+    const epaperControl = haButtonBuilderProvider.controlFields({
+        capabilities: { control: true }, reference: { detail: { entity_id: 'light.kitchen' } }
+    });
+    assert.strictEqual(epaperControl.find(field => field.name === 'on').default, '#000000');
+    assert.strictEqual(epaperControl.find(field => field.name === 'off').default, '#000000');
+    const epaperCandidate = { capabilities: { control: true }, reference: { detail: { entity_id: 'light.kitchen' } } };
+    assert.strictEqual(haButtonBuilderProvider.buildControl(epaperCandidate,
+        { icon: 'lightbulb', on: '#000000', off: '#000000' }).fg_color,
+        '[expr:[ha:light.kitchen]=="on"?"#000000":"#000000"|#000000]');
+    context.PAD_FIRMWARE_DEFAULTS.ha_unavailable_color = undefined;
+    assert.throws(() => haButtonBuilderProvider.buildControl(epaperCandidate,
+        { icon: 'lightbulb', on: '#000000', off: '#000000' }), /appearance defaults are unavailable/);
+    context.PAD_FIRMWARE_DEFAULTS = appearanceFixture.firmware_defaults;
     const temperature = { entity_id: 'sensor.living_room_temperature', state: '21.37', unit: '\u00b0C', paths: [] };
     const light = { entity_id: 'light.kitchen', state: 'on', unit: '', paths: [] };
     const makeCandidate = (detail, name = 'Living room') => context.haButtonBuilderCandidate(detail, name);
@@ -1165,7 +1186,7 @@ delete context.testHelpSchemes;
     barSession.draft.options.unit = '[invalid]';
     assert.throws(() => context.padButtonBuilderBuild(barSession), /delimiters/);
 
-    context.PAD_FIRMWARE_DEFAULTS = { widget_series_color: '#4CAF50' };
+    context.PAD_FIRMWARE_DEFAULTS = appearanceFixture.firmware_defaults;
     context.deviceInfoCache = { widget_catalog: [{ type: 'gauge' }] };
     assert.strictEqual(gaugeBuilder.available(makeDraft(temperature)), true);
     for (const detail of [light, { ...temperature, state: 'unavailable' },

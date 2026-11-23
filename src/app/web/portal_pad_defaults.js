@@ -57,19 +57,26 @@ async function padLoadTypographyFonts() {
 
 // Load device-level button defaults from the REST API
 async function padLoadButtonDefaultsFromDevice() {
+    padState.appearanceDefaultsReady = false;
     try {
         const resp = await fetch('/api/component/button-defaults/config');
-        if (resp.ok) {
-            const defs = await resp.json();
-            padState.buttonDefaults = defs || {};
-        } else {
-            padState.buttonDefaults = {};
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const defs = await resp.json();
+        const firmware = defs && defs.firmware_defaults;
+        if (!firmware || typeof firmware !== 'object' ||
+            !Number.isInteger(firmware.widget_track_outline_width) ||
+            firmware.widget_track_outline_width < 0 || firmware.widget_track_outline_width > 8 ||
+            !['widget_track_outline_color', 'widget_option_selected_fg_color', 'widget_option_selected_bg_color',
+              'ha_on_color', 'ha_off_color', 'ha_unavailable_color']
+                .every(key => /^#[0-9a-f]{6}$/i.test(firmware[key] || ''))) {
+            throw new Error('Invalid firmware appearance defaults');
         }
+        padLoadButtonDefaults(defs);
+        padState.appearanceDefaultsReady = true;
     } catch (e) {
-            console.error('Failed to load pad and button defaults:', e);
-        padState.buttonDefaults = {};
+        console.error('Failed to load pad and button defaults:', e);
+        throw new Error('Unable to load pad and button defaults: ' + e.message);
     }
-    padLoadButtonDefaults(padState.buttonDefaults);
 }
 
 function padLoadButtonDefaults(defs) {
@@ -300,6 +307,7 @@ async function padSaveButtonDefaults() {
         let defaultsSaved = false;
         const previousDefaults = { ...(padState.buttonDefaults || {}) };
         try {
+            if (!padState.appearanceDefaultsReady) throw new Error('Reload pad and button defaults before saving.');
             var d = padCollectButtonDefaults();
             operation.stage('Saving defaults');
             var resp = await fetch('/api/component/button-defaults/config', {
@@ -327,7 +335,7 @@ async function padSaveButtonDefaults() {
             padRenderGrid();
         } catch (err) {
             console.error('padSaveButtonDefaults error:', err);
-            throw new Error((defaultsSaved ? 'Defaults saved, but icon regeneration failed: ' : 'Save failed: ') + err.message);
+            throw new Error((defaultsSaved ? 'Defaults saved, but follow-up failed: ' : 'Save failed: ') + err.message);
         }
     });
 }

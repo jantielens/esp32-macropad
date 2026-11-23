@@ -18,16 +18,13 @@ appearance_macros = {
 }
 for board, target in (("m5stack-stopwatch", "ESP32S3"), ("crowpanel-4.2-interactive", "ESP32S3"),
                       ("waveshare-7.8-interactive", "ESP32S3"),
-                      ("inkplate6flick-interactive", "ESP32"), ("reterminal-e1003-interactive", "ESP32S3")):
+                      ("inkplate6flick-interactive", "ESP32"), ("reterminal-e1003-interactive", "ESP32S3"),
+                      ("reterminal-sticky-interactive", "ESP32S3"), ("reterminal-sticky-interactive-sd", "ESP32S3")):
     expected = dict(fixture["firmware_defaults"])
     # Opacity is a runtime default, covered by test_font_routes, not a board macro.
     expected.pop("bg_opacity")
     if board != "m5stack-stopwatch":
         expected.update(fixture["epaper_firmware_defaults"])
-    if board in ("reterminal-e1003-interactive", "waveshare-7.8-interactive"):
-        expected.update(widget_series_color_2="#555555", widget_series_color_3="#888888",
-                        widget_series_color_4="#AAAAAA", widget_track_color="#DDDDDD",
-                        widget_tick_color="#555555", widget_zone_color="#888888", widget_reference_color="#555555")
     output = []
     for field in expected:
         macro = appearance_macros.get(field, "DEFAULT_" + field.upper())
@@ -42,20 +39,90 @@ for board, target in (("m5stack-stopwatch", "ESP32S3"), ("crowpanel-4.2-interact
         output.append(f'std::cout << {macro} << "\\n";')
     source = '''#include <iostream>
 #include "src/app/pad_config.h"
+#include "src/app/dialog_appearance.h"
+#include "src/app/pad_block.cpp"
 static_assert(HAS_FACE_WIDGET, "LCD and interactive e-paper profiles include Face");
 static_assert(!HAS_LVGL_EPAPER || DISPLAY_DISABLE_ANIMATIONS, "Other e-paper animations remain disabled");
-int main() {\n''' + "\n".join(output) + "\n}"
+int main() {
+    DialogAppearance dialog;
+    if (dialog.text_color != (HAS_LVGL_EPAPER ? 0x000000u : 0xFFFFFFu) ||
+        dialog.background_color != (HAS_LVGL_EPAPER ? 0xFFFFFFu : 0x333333u) ||
+        dialog.background_pattern_color != (HAS_LVGL_EPAPER ? 0x000000u : 0x111111u) ||
+        dialog.border_color != (HAS_LVGL_EPAPER ? 0x000000u : 0x808080u) ||
+        dialog.approve_background != (HAS_LVGL_EPAPER ? 0x000000u : 0x2563EBu) ||
+        dialog.approve_color != 0xFFFFFFu ||
+        dialog.cancel_background != (HAS_LVGL_EPAPER ? 0xFFFFFFu : 0x5F6368u) ||
+        dialog.cancel_color != (HAS_LVGL_EPAPER ? 0x000000u : 0xFFFFFFu)) return 1;
+    if (BOOT_APPEARANCE_DEFAULT_BACKGROUND_RGB != (HAS_LVGL_EPAPER ? 0xFFFFFFu : 0x000000u) ||
+        BOOT_APPEARANCE_DEFAULT_TEXT_RGB != (HAS_LVGL_EPAPER ? 0x000000u : 0x646464u) ||
+        DEFAULT_VISUAL_ALERT_RGB != (HAS_LVGL_EPAPER ? 0x000000u : 0xFF0000u)) return 1;
+''' + "\n".join(output) + '''
+    pad_block_init();
+    std::cout << pad_block_catalog()[0]->buttons[1].json << "\\n";
+}'''
     with tempfile.TemporaryDirectory() as directory:
         executable = pathlib.Path(directory) / "appearance"
         subprocess.run(["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-x", "c++", "-",
-                        "-I", str(root), "-I", str(root / "src/boards" / board),
+                        "-I", str(root), "-I", str(arduinojson), "-I", str(root / "src/boards" / board),
                         "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM", f"-DCONFIG_IDF_TARGET_{target}=1",
                         "-o", str(executable)], input=source, text=True, check=True)
         actual = subprocess.check_output([str(executable)], text=True).splitlines()
+    system_info = json.loads(actual.pop())
+    expected_colors = (["#000000", "#000000", "#000000", "#FFFFFF", "#000000"]
+                       if board != "m5stack-stopwatch"
+                       else ["#4CAF50", "#2196F3", "#FF5722", "#1A1A1A", "#808080"])
+    assert [system_info[key] for key in ("widget_arc_color", "widget_arc_color_2", "widget_arc_color_3",
+                                          "widget_gauge_track_color", "widget_gauge_tick_color")] == expected_colors
     for (field, value), actual_value in zip(expected.items(), actual):
         assert actual_value == str(int(value) if isinstance(value, bool) else value), (board, field, actual_value, value)
     assert len(actual) == len(expected)
 print("PASS: LCD and e-paper board appearance defaults match portal fixtures")
+
+# A board override must win without changing the preset's independent colors.
+override_source = '''#include <iostream>
+#include "src/app/dialog_appearance.h"
+#include "src/app/pad_block.cpp"
+int main() {
+    DialogAppearance dialog;
+    if (dialog.text_color != 0x123456u || DEFAULT_WIDGET_TRACK_OUTLINE_WIDTH != 0 ||
+        std::string(DEFAULT_WIDGET_TRACK_OUTLINE_COLOR) != "#654321" ||
+        std::string(DEFAULT_WIDGET_OPTION_SELECTED_FG_COLOR) != "#123456") return 1;
+    std::cout << DEFAULT_WIDGET_SERIES_COLOR << "\\n";
+    pad_block_init();
+    std::cout << pad_block_catalog()[0]->buttons[1].json << "\\n";
+}'''
+with tempfile.TemporaryDirectory() as directory:
+    executable = pathlib.Path(directory) / "overrides"
+    subprocess.run(
+        ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-x", "c++", "-",
+         "-I", str(root), "-I", str(arduinojson),
+         "-I", str(root / "src/boards/reterminal-sticky-interactive"),
+         "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM", "-DCONFIG_IDF_TARGET_ESP32S3=1",
+         '-DDEFAULT_WIDGET_SERIES_COLOR="#123456"', "-DDEFAULT_DIALOG_TEXT_RGB=0x123456",
+         "-DDEFAULT_WIDGET_TRACK_OUTLINE_WIDTH=0",
+         '-DDEFAULT_WIDGET_TRACK_OUTLINE_COLOR="#654321"',
+         '-DDEFAULT_WIDGET_OPTION_SELECTED_FG_COLOR="#123456"',
+         '-DDEFAULT_SYSTEM_INFO_SERIES_COLOR_3="#654321"', "-o", str(executable)],
+        input=override_source, text=True, check=True,
+    )
+    overridden = subprocess.check_output([str(executable)], text=True).splitlines()
+    assert overridden[0] == "#123456"
+    preset = json.loads(overridden[1])
+    assert preset["widget_arc_color"] == "#000000"
+    assert preset["widget_arc_color_3"] == "#654321"
+print("PASS: board overrides take precedence without changing independent preset colors")
+
+for profile in ("APPEARANCE_PROFILE_LCD", "APPEARANCE_PROFILE_MONOCHROME", "APPEARANCE_PROFILE_MONOCROME", "0"):
+    result = subprocess.run(
+        ["c++", "-std=c++11", "-fsyntax-only", "-x", "c++", "-", "-I", str(root),
+         "-DAPPEARANCE_PROFILE=" + profile],
+        input='#include "src/app/appearance_profile.h"\n', text=True, capture_output=True,
+    )
+    if profile in ("APPEARANCE_PROFILE_LCD", "APPEARANCE_PROFILE_MONOCHROME"):
+        assert result.returncode == 0, result.stderr
+    else:
+        assert result.returncode != 0 and "Unknown APPEARANCE_PROFILE" in result.stderr, result.stderr
+print("PASS: unknown appearance profiles are rejected")
 
 for rtc, frame in ((1, 0), (0, 1), (1, 1)):
     result = subprocess.run(

@@ -416,31 +416,36 @@ The build system supports optional board-specific configuration using compile-ti
 
 #### Appearance Defaults
 
-Boards can override `DEFAULT_*` appearance macros in `board_overrides.h`.
-Boards without overrides retain the LCD palette and 4 px pixel shift distance.
-Use literal `#RRGGBB` strings for colors; button border width, corner radius,
-and content padding are pixel-count strings. Layout distances are integers.
+Appearance profiles in `src/app/appearance_profile.h` select defaults at compile
+time. Boards use the LCD profile unless they select the monochrome profile in
+`board_overrides.h`. Individual `DEFAULT_*` macros and boot appearance defaults
+can also be overridden there; board overrides take precedence over the profile.
+Saved settings take precedence at runtime. Profiles do not add a runtime palette
+selector or retain multiple palettes in memory.
+
+Use literal `#RRGGBB` strings for color overrides and integer RGB values for
+dialog, visual alert, and boot colors. Button border width, corner radius, and
+content padding are pixel-count strings. Layout distances are integers.
 
 ```cpp
-#define DEFAULT_PAD_BG_COLOR "#FFFFFF"
-#define DEFAULT_BUTTON_BG_COLOR "#FFFFFF"
-#define DEFAULT_BUTTON_FG_COLOR "#000000"
-#define DEFAULT_BUTTON_BORDER_WIDTH "1"
+#define APPEARANCE_PROFILE APPEARANCE_PROFILE_MONOCHROME
 #define DEFAULT_PIXEL_SHIFT_DISTANCE 0
-#define DEFAULT_WIDGET_SERIES_COLOR "#000000"
-#define DEFAULT_WIDGET_INDICATOR_COLOR "#000000"
+#define DEFAULT_BUTTON_BORDER_WIDTH "2"
 ```
 
-The [flag reference](../compile-time-flags.md) lists all pad, button, shadow,
+The [flag reference](../compile-time-flags.md) lists pad, button, shadow,
 layout, and widget palette macros. Gauge, bar chart, and sparkline series share
 four series colors; tracks, ticks, indicators, zones, reference lines, and table
-colors have separate roles. These defaults apply to missing configuration and
-unresolved color bindings. Explicit saved appearance fields take precedence.
+colors have separate roles. The profile header also defines overridable dialog,
+visual alert, System Info, Home Assistant builder, and Option Selector selected
+foreground and background defaults. Track outlines have independent color and
+width defaults. These defaults apply to missing configuration and unresolved
+color bindings. Explicit saved appearance fields take precedence.
 
-CrowPanel and Inkplate interactive targets use monochrome defaults. E1003
-interactive uses grayscale series colors. All three select a light LVGL theme
-and disable pixel shifting by default. `LVGL_THEME_DARK_MODE` controls the LVGL
-theme separately from pad and widget appearance.
+Interactive e-paper boards select monochrome defaults and disable pixel shifting.
+Their button borders and gauge/bar track outlines default to 2 px. The LCD
+profile retains distinct preset colors, including the third System Info gauge.
+`LVGL_THEME_DARK_MODE` controls the LVGL theme separately from appearance.
 
 **Board-Specific Overrides** (Optional): Create `src/boards/[board-name]/board_overrides.h`:
 

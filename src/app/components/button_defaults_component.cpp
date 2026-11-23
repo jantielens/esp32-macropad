@@ -44,6 +44,13 @@ static void button_defaults_write_firmware_defaults(JsonObject defaults) {
     defaults["widget_series_color_3"] = DEFAULT_WIDGET_SERIES_COLOR_3;
     defaults["widget_series_color_4"] = DEFAULT_WIDGET_SERIES_COLOR_4;
     defaults["widget_track_color"] = DEFAULT_WIDGET_TRACK_COLOR;
+    defaults["widget_track_outline_width"] = DEFAULT_WIDGET_TRACK_OUTLINE_WIDTH;
+    defaults["widget_track_outline_color"] = DEFAULT_WIDGET_TRACK_OUTLINE_COLOR;
+    defaults["widget_option_selected_fg_color"] = DEFAULT_WIDGET_OPTION_SELECTED_FG_COLOR;
+    defaults["widget_option_selected_bg_color"] = DEFAULT_WIDGET_OPTION_SELECTED_BG_COLOR;
+    defaults["ha_on_color"] = DEFAULT_HA_ON_COLOR;
+    defaults["ha_off_color"] = DEFAULT_HA_OFF_COLOR;
+    defaults["ha_unavailable_color"] = DEFAULT_HA_UNAVAILABLE_COLOR;
     defaults["widget_indicator_color"] = DEFAULT_WIDGET_INDICATOR_COLOR;
     defaults["widget_tick_color"] = DEFAULT_WIDGET_TICK_COLOR;
     defaults["widget_zone_color"] = DEFAULT_WIDGET_ZONE_COLOR;

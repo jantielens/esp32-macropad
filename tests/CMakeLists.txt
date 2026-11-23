@@ -1281,11 +1281,22 @@ foreach(sd 0 1)
 endforeach()
 add_host_gtest(test_option_selector_config test_option_selector_config.cpp
     ${PROJECT_SOURCE_DIR}/src/app/widgets/option_selector_config.cpp)
-target_include_directories(test_option_selector_config PRIVATE ${HOST_ARDUINOJSON_DIR})
-target_compile_definitions(test_option_selector_config PRIVATE TEST_HEAP_CAPS_ALLOCATOR=1)
-target_compile_options(test_option_selector_config PRIVATE -Wno-deprecated-declarations
+add_executable(test_option_selector_config_monochrome test_option_selector_config.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/widgets/option_selector_config.cpp)
+target_compile_features(test_option_selector_config_monochrome PRIVATE cxx_std_17)
+target_compile_options(test_option_selector_config_monochrome PRIVATE -Wall -Wextra -Werror)
+target_include_directories(test_option_selector_config_monochrome PRIVATE
+    ${PROJECT_SOURCE_DIR}/tests ${PROJECT_SOURCE_DIR}/src/app)
+target_link_libraries(test_option_selector_config_monochrome PRIVATE GTest::gtest_main)
+gtest_discover_tests(test_option_selector_config_monochrome TEST_PREFIX "Monochrome.")
+foreach(option_selector_target test_option_selector_config test_option_selector_config_monochrome)
+target_include_directories(${option_selector_target} PRIVATE ${HOST_ARDUINOJSON_DIR})
+target_compile_definitions(${option_selector_target} PRIVATE TEST_HEAP_CAPS_ALLOCATOR=1)
+target_compile_options(${option_selector_target} PRIVATE -Wno-deprecated-declarations
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/Arduino.h"
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h")
+endforeach()
+target_compile_definitions(test_option_selector_config_monochrome PRIVATE APPEARANCE_PROFILE=APPEARANCE_PROFILE_MONOCHROME)
 add_host_legacy_test(test_pad_overlay_input
     SOURCES test_pad_overlay_input.cpp
     INCLUDES ${HOST_LVGL_DIR}

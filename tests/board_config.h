@@ -8,6 +8,10 @@
 
 #define HAS_DISPLAY true
 #define HAS_MQTT    true
+#ifndef HAS_LVGL_EPAPER
+#define HAS_LVGL_EPAPER false
+#endif
+#include "../src/app/appearance_profile.h"
 #ifndef HAS_BLE_HID
 #define HAS_BLE_HID true
 #endif
@@ -74,6 +78,12 @@
 #define DEFAULT_WIDGET_TABLE_BG_COLOR "#12122a"
 #define DEFAULT_WIDGET_TABLE_FG_COLOR "#b0b0d0"
 #define DEFAULT_WIDGET_TABLE_HEADER_COLOR "#404070"
+#endif
+#ifndef DEFAULT_WIDGET_TRACK_OUTLINE_WIDTH
+#define DEFAULT_WIDGET_TRACK_OUTLINE_WIDTH (HAS_LVGL_EPAPER ? 2 : 0)
+#endif
+#ifndef DEFAULT_WIDGET_TRACK_OUTLINE_COLOR
+#define DEFAULT_WIDGET_TRACK_OUTLINE_COLOR APPEARANCE_WIDGET_TRACK_OUTLINE_COLOR
 #endif
 
 // Shutter verdict thresholds (mirrors real src/app/board_config.h defaults).

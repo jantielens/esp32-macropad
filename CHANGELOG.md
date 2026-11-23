@@ -28,6 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Use black-and-white appearance defaults on interactive e-paper devices,
+  including 2 px button borders and gauge and bar-chart track outlines.
+  Existing saved overrides remain in effect. LCD boards retain their existing
+  defaults. See [interactive e-paper](docs/user/specialized/interactive-epaper.md).
 * Improve ESP32-P4 display rendering with hardware acceleration for supported
   drawing operations and reusable patterned-fill masks. Enable bounded,
   PSRAM-only pattern caches on supported ESP32-S3 LCD/AMOLED boards as well.
@@ -46,6 +50,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Preserve explicit track outline settings when editing pads, and prevent
+  saving or importing with unavailable firmware appearance defaults.
 * Defer full-frame display rotation when OTA becomes active while waiting for
   DMA access. Release the DMA token without changing scanout ownership, then
   redraw when rendering resumes after OTA ends.

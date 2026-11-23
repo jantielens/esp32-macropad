@@ -45,6 +45,29 @@ TEST(OptionSelectorConfig, PsramFailureDoesNotFallBack) {
     EXPECT_EQ(option_selector_config(data), nullptr);
 }
 
+TEST(OptionSelectorConfig, SelectedColorsUseProfileDefaultsAndHonorOverrides) {
+    StaticJsonDocument<512> doc;
+    uint8_t data[WIDGET_CONFIG_MAX_BYTES] = {};
+    ASSERT_TRUE(option_selector_parse_config(doc.as<JsonObject>(), data));
+    const auto* config = option_selector_config(data);
+    ASSERT_NE(config, nullptr);
+    EXPECT_STREQ(config->selected_foreground, "#FFFFFF");
+#if APPEARANCE_PROFILE == APPEARANCE_PROFILE_MONOCHROME
+    EXPECT_STREQ(config->selected_background, "#000000");
+#else
+    EXPECT_STREQ(config->selected_background, "#4CAF50");
+#endif
+    option_selector_release_config(data);
+    doc["widget_option_selected_fg_color"] = "#123456";
+    doc["widget_option_selected_bg_color"] = "#ABCDEF";
+    ASSERT_TRUE(option_selector_parse_config(doc.as<JsonObject>(), data));
+    config = option_selector_config(data);
+    ASSERT_NE(config, nullptr);
+    EXPECT_STREQ(config->selected_foreground, "#123456");
+    EXPECT_STREQ(config->selected_background, "#ABCDEF");
+    option_selector_release_config(data);
+}
+
 TEST(OptionSelectorConfig, CopiesRetainConfigurationUntilLastRelease) {
     StaticJsonDocument<1024> doc;
     doc["widget_option_mode"] = "local";

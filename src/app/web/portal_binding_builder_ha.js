@@ -509,9 +509,9 @@ const haButtonBuilderProvider = {
             { name: 'icon', label: 'Material Symbol name', type: 'text', maxlength: 28, required: true,
                 default: entityId.startsWith('light.') ? 'lightbulb' : 'toggle_on',
                 link: { label: 'Browse Material Symbols', href: 'https://fonts.google.com/icons' } },
-            { name: 'on', label: 'On color', type: 'color', default: '#FFC857',
+            { name: 'on', label: 'On color', type: 'color', default: PAD_FIRMWARE_DEFAULTS.ha_on_color,
                 error: 'Choose valid on and off colors.' },
-            { name: 'off', label: 'Off color', type: 'color', default: '#64748B',
+            { name: 'off', label: 'Off color', type: 'color', default: PAD_FIRMWARE_DEFAULTS.ha_off_color,
                 error: 'Choose valid on and off colors.' }
         ];
     },
@@ -519,11 +519,15 @@ const haButtonBuilderProvider = {
         const entityId = candidate.reference.detail.entity_id;
         if (entityId.length >= 48) throw new Error('Entity IDs must be shorter than 48 characters for service actions.');
         if (!/^[a-z][a-z0-9_]{0,27}$/.test(options.icon)) throw new Error('Enter a Material Symbol name, such as lightbulb.');
+        if (!padColorNormalizeLiteral(PAD_FIRMWARE_DEFAULTS.ha_unavailable_color)) {
+            throw new Error('Home Assistant appearance defaults are unavailable. Reload the pad editor.');
+        }
         const state = this.buildBinding(candidate, { format: '' });
         return {
             icon: { catalog_id: 'material-symbols:' + options.icon.replace(/_/g, '-'), kind: 'mono' },
             label_top_style: 'color:' + (padColorNormalizeLiteral(padGetEffectiveDefault('fg_color')) || '#FFFFFF'),
-            fg_color: '[expr:' + state + '=="on"?"' + options.on + '":"' + options.off + '"|#EF6B73]',
+            fg_color: '[expr:' + state + '=="on"?"' + options.on + '":"' + options.off + '"|' +
+                PAD_FIRMWARE_DEFAULTS.ha_unavailable_color + ']',
             actions: [{ op: 'ha.service.call', args: { entity_id: entityId, service: 'toggle', data_json: '' } }]
         };
     },

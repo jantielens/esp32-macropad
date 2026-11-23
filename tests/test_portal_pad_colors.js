@@ -138,10 +138,11 @@ assert.strictEqual(context.padFillGeometry(-1, 8, 2, 64), 2);
 assert.strictEqual(context.padFillGeometry(1000, 8, 2, 64), 64);
 assert.strictEqual(context.padFillGeometry('bad', 8, 2, 64), 8);
 const fillInputs = new Map();
+context.PAD_FIRMWARE_DEFAULTS = { widget_track_outline_width: 0, widget_track_outline_color: '#000000' };
 for (const [id, value] of Object.entries({
     'pad-edit-widget-type': 'bar_chart', 'pad-edit-pattern-spacing': '8', 'pad-edit-pattern-stroke': '1',
     'pad-edit-track-outline-width': '0', 'pad-edit-track-outline-color': '#000000', 'pad-edit-track-radius': '4'
-})) fillInputs.set(id, { value, style: {}, dispatchEvent() {} });
+})) fillInputs.set(id, { id, value, dataset: {}, style: {}, dispatchEvent() {} });
 for (const id of ['pad-edit-pattern-geometry', 'pad-edit-pattern-stroke-wrap', 'pad-edit-track-outline'])
     fillInputs.set(id, { style: {} });
 const patternsSection = { dataset: {}, open: false };
@@ -194,6 +195,37 @@ assert.strictEqual(plainFill.widget_bar_pattern, undefined);
 const gaugeFill = {};
 context.padFillBuild(gaugeFill, 'gauge');
 assert.strictEqual(gaugeFill.widget_bar_track_radius, undefined);
+
+for (const [type, defaultWidth] of [['bar_chart', 0], ['gauge', 2]]) {
+    context.PAD_FIRMWARE_DEFAULTS = { widget_track_outline_width: defaultWidth, widget_track_outline_color: '#123456' };
+    fillInputs.get('pad-edit-widget-type').value = type;
+    for (const controls of fillControls) {
+        controls.querySelector('select').value = 'none';
+        controls.dataset.colorSet = '';
+    }
+    context.padFillLoad({});
+    assert.strictEqual(fillInputs.get('pad-edit-track-outline-width').value, defaultWidth);
+    const defaultFill = {};
+    context.padFillBuild(defaultFill, type);
+    assert.strictEqual(defaultFill.widget_track_outline_width, undefined);
+    assert.strictEqual(defaultFill.widget_track_outline_color, undefined);
+    context.padFillLoad({ widget_track_outline_width: defaultWidth, widget_track_outline_color: '#123456' });
+    const explicitFill = {};
+    context.padFillBuild(explicitFill, type);
+    assert.strictEqual(explicitFill.widget_track_outline_width, defaultWidth);
+    assert.strictEqual(explicitFill.widget_track_outline_color, '#123456');
+    context.padFillLoad({});
+    fillInputs.get('pad-edit-track-outline-width').value = String(defaultWidth === 0 ? 2 : 0);
+    const changedFill = {};
+    context.padFillBuild(changedFill, type);
+    assert.strictEqual(changedFill.widget_track_outline_width, defaultWidth === 0 ? 2 : 0);
+    fillInputs.get('pad-edit-track-outline-width').value = String(defaultWidth);
+    fillInputs.get('pad-edit-track-outline-width').dataset.explicit = '1';
+    const touchedFill = {};
+    context.padFillBuild(touchedFill, type);
+    assert.strictEqual(touchedFill.widget_track_outline_width, defaultWidth);
+}
+context.PAD_FIRMWARE_DEFAULTS = {};
 
 const pickerBody = { contains() { return false; }, appendChild(child) { child.parentNode = this; } };
 const pickerContext = { Event: class {}, clearTimeout() {}, document: { body: pickerBody } };
@@ -457,7 +489,7 @@ assert.strictEqual(backgroundReset.style.display, 'none');
     const labels = new Map();
     const selectorContext = {
         TextEncoder, Event: class { constructor(type) { this.type = type; } },
-        PAD_FIRMWARE_DEFAULTS: { widget_track_color: '#111111', widget_indicator_color: '#FFFFFF', widget_series_color: '#00AA00' },
+        PAD_FIRMWARE_DEFAULTS: { widget_track_color: '#111111', widget_option_selected_fg_color: '#FFFFFF', widget_option_selected_bg_color: '#00AA00' },
         padGetEffectiveDefault: () => '#222222',
         padLabelToInput: value => value,
         padLabelFromInput: id => inputs.get(id).value,
@@ -518,6 +550,10 @@ assert.strictEqual(backgroundReset.style.display, 'none');
     assert.strictEqual(inputs.get('pad-edit-option-group-color').swatch.style.background, '#111111');
     assert.strictEqual(inputs.get('pad-edit-option-selected-fg').swatch.style.background, '#FFFFFF');
     assert.strictEqual(inputs.get('pad-edit-option-selected-bg').swatch.style.background, '#00AA00');
+    selectorContext.PAD_FIRMWARE_DEFAULTS.widget_option_selected_bg_color = '#000000';
+    selectorContext.padWidgetEditorsLoad({ widget_type: 'option_selector' });
+    assert.strictEqual(inputs.get('pad-edit-option-selected-fg').swatch.style.background, '#FFFFFF');
+    assert.strictEqual(inputs.get('pad-edit-option-selected-bg').swatch.style.background, '#000000');
     assert.strictEqual(inputs.get('pad-edit-option-1-bg_color').swatch.style.background, '#111111');
     selectorContext.padSetBindableColor('pad-edit-option-background-color', '[pad:shared]');
     assert.strictEqual(inputs.get('pad-edit-option-1-bg_color').swatch.classList.contains('bc-binding'), true);
@@ -611,6 +647,31 @@ assert.strictEqual(backgroundReset.style.display, 'none');
 }
 
 (async function testDefaultsSaveRebootWarning() {
+    const loadDefaultsFromDevice = context.padLoadButtonDefaultsFromDevice;
+    context.console = { error() {} };
+    context.fetch = async () => ({ ok: false, status: 503 });
+    await assert.rejects(loadDefaultsFromDevice(), /HTTP 503/);
+    assert.strictEqual(context.padState.appearanceDefaultsReady, false);
+    context.fetch = async () => ({ ok: true, json: async () => ({ firmware_defaults: {} }) });
+    await assert.rejects(loadDefaultsFromDevice(), /Invalid firmware appearance defaults/);
+    context.fetch = async () => ({ ok: true, json: async () => ({ firmware_defaults: monoDefaults }) });
+    await loadDefaultsFromDevice();
+    assert.strictEqual(context.padState.appearanceDefaultsReady, true);
+    const fragmentButton = { disabled: false, addEventListener() {} };
+    const fragmentMessages = [];
+    const fragmentContext = {
+        window: {}, document: { getElementById: () => fragmentButton },
+        padLoadButtonDefaultsFromDevice: async () => { throw new Error('Defaults unavailable'); },
+        showMessage: (message, type) => fragmentMessages.push({ message, type })
+    };
+    vm.createContext(fragmentContext);
+    vm.runInContext(fs.readFileSync('src/app/web/portal_fragment_init.js', 'utf8'), fragmentContext);
+    fragmentContext.window.init_button_defaults_fragment();
+    assert.strictEqual(fragmentButton.disabled, true);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.strictEqual(fragmentButton.disabled, true);
+    assert.match(fragmentMessages[0].message, /Defaults unavailable/);
+    assert.strictEqual(fragmentMessages[0].type, 'error');
     let pendingCalls = 0;
     const messages = [];
     const stages = [];
@@ -633,6 +694,7 @@ assert.strictEqual(backgroundReset.style.display, 'none');
     context.padRenderGrid = () => {};
     context.setPendingReboot = () => { ++pendingCalls; };
     context.showMessage = (message, type) => messages.push({ message, type });
+    context.padState.appearanceDefaultsReady = true;
     context.fetch = async () => ({ ok: true });
     context.padLoadButtonDefaultsFromDevice = async () => context.padLoadButtonDefaults({
         typography_status: { reboot_required: false }
@@ -666,6 +728,6 @@ assert.strictEqual(backgroundReset.style.display, 'none');
     await context.padSaveButtonDefaults();
     assert.strictEqual(pendingCalls, 1);
     assert.strictEqual(messages.length, 0);
-    assert.strictEqual(operationErrors.pop(), 'Defaults saved, but icon regeneration failed: Icon upload failed');
+    assert.strictEqual(operationErrors.pop(), 'Defaults saved, but follow-up failed: Icon upload failed');
     console.log('portal_pad_colors: PASS');
 })().catch(error => { console.error(error); process.exitCode = 1; });

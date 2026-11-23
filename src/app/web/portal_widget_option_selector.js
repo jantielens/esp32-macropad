@@ -51,8 +51,8 @@
         fields.filter(field => field.kind === 'color').forEach(field => {
             const colorInput = document.getElementById(field.id);
             let fallback = track;
-            if (field.key === 'widget_option_selected_fg_color') fallback = PAD_FIRMWARE_DEFAULTS.widget_indicator_color;
-            else if (field.key === 'widget_option_selected_bg_color') fallback = PAD_FIRMWARE_DEFAULTS.widget_series_color;
+            if (field.key === 'widget_option_selected_fg_color') fallback = PAD_FIRMWARE_DEFAULTS.widget_option_selected_fg_color;
+            else if (field.key === 'widget_option_selected_bg_color') fallback = PAD_FIRMWARE_DEFAULTS.widget_option_selected_bg_color;
             else if (/^widget_option_fg_color(?:_\d+)?$/.test(field.key)) fallback = foreground;
             else if (/^widget_option_bg_color(?:_\d+)?$/.test(field.key)) fallback = background;
             colorInput.dataset.colorFallback = padColorValue(fallback);

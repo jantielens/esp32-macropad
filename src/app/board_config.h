@@ -44,6 +44,12 @@ struct HwButtonDef {
 #include "board_overrides.h"
 #endif
 
+// Select the LCD appearance unless the board chooses another profile.
+#ifndef APPEARANCE_PROFILE
+#define APPEARANCE_PROFILE APPEARANCE_PROFILE_LCD
+#endif
+#include "appearance_profile.h"
+
 // BLE implementation; existing boards retain the bundled Arduino core backend.
 #ifndef BLE_BACKEND
 #define BLE_BACKEND BLE_BACKEND_ARDUINO_CORE
@@ -1153,19 +1159,13 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #ifndef BOOT_APPEARANCE_DEFAULT_FONT_SIZE
 #define BOOT_APPEARANCE_DEFAULT_FONT_SIZE 0
 #endif
+// Default boot screen background, as an integer RGB color.
 #ifndef BOOT_APPEARANCE_DEFAULT_BACKGROUND_RGB
-#if HAS_LVGL_EPAPER
-#define BOOT_APPEARANCE_DEFAULT_BACKGROUND_RGB 0xFFFFFF
-#else
-#define BOOT_APPEARANCE_DEFAULT_BACKGROUND_RGB 0x000000
+#define BOOT_APPEARANCE_DEFAULT_BACKGROUND_RGB APPEARANCE_BOOT_BACKGROUND_RGB
 #endif
-#endif
+// Default boot screen text, as an integer RGB color.
 #ifndef BOOT_APPEARANCE_DEFAULT_TEXT_RGB
-#if HAS_LVGL_EPAPER
-#define BOOT_APPEARANCE_DEFAULT_TEXT_RGB 0x000000
-#else
-#define BOOT_APPEARANCE_DEFAULT_TEXT_RGB 0x646464
-#endif
+#define BOOT_APPEARANCE_DEFAULT_TEXT_RGB APPEARANCE_BOOT_TEXT_RGB
 #endif
 
 // Enable onboard camera hardware support.
@@ -1507,27 +1507,27 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 
 // Default pad background, as a literal #RRGGBB color.
 #ifndef DEFAULT_PAD_BG_COLOR
-#define DEFAULT_PAD_BG_COLOR "#000000"
+#define DEFAULT_PAD_BG_COLOR APPEARANCE_PAD_BG_COLOR
 #endif
 // Default button background, as a literal #RRGGBB color.
 #ifndef DEFAULT_BUTTON_BG_COLOR
-#define DEFAULT_BUTTON_BG_COLOR "#333333"
+#define DEFAULT_BUTTON_BG_COLOR APPEARANCE_BUTTON_BG_COLOR
 #endif
 // Default button text and icon color, as a literal #RRGGBB color.
 #ifndef DEFAULT_BUTTON_FG_COLOR
-#define DEFAULT_BUTTON_FG_COLOR "#FFFFFF"
+#define DEFAULT_BUTTON_FG_COLOR APPEARANCE_BUTTON_FG_COLOR
 #endif
 // Default button border, as a literal #RRGGBB color.
 #ifndef DEFAULT_BUTTON_BORDER_COLOR
-#define DEFAULT_BUTTON_BORDER_COLOR "#000000"
+#define DEFAULT_BUTTON_BORDER_COLOR APPEARANCE_BUTTON_BORDER_COLOR
 #endif
 // Default button border width, as a pixel-count string.
 #ifndef DEFAULT_BUTTON_BORDER_WIDTH
-#define DEFAULT_BUTTON_BORDER_WIDTH "0"
+#define DEFAULT_BUTTON_BORDER_WIDTH APPEARANCE_BUTTON_BORDER_WIDTH
 #endif
 // Default button corner radius, as a pixel-count string.
 #ifndef DEFAULT_BUTTON_CORNER_RADIUS
-#define DEFAULT_BUTTON_CORNER_RADIUS "8"
+#define DEFAULT_BUTTON_CORNER_RADIUS APPEARANCE_BUTTON_CORNER_RADIUS
 #endif
 // Default button content padding, as a pixel-count string.
 #ifndef DEFAULT_BUTTON_CONTENT_PAD
@@ -1571,7 +1571,7 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #endif
 // Default fixed shadow color, as a literal #RRGGBB color.
 #ifndef DEFAULT_BUTTON_SHADOW_COLOR
-#define DEFAULT_BUTTON_SHADOW_COLOR "#101010"
+#define DEFAULT_BUTTON_SHADOW_COLOR APPEARANCE_BUTTON_SHADOW_COLOR
 #endif
 // Default percentage used to darken a background-following shadow.
 #ifndef DEFAULT_BUTTON_SHADOW_DARKEN_PCT
@@ -1591,51 +1591,59 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #endif
 // Default first series color for gauges, bar charts, and sparklines (#RRGGBB).
 #ifndef DEFAULT_WIDGET_SERIES_COLOR
-#define DEFAULT_WIDGET_SERIES_COLOR "#4CAF50"
+#define DEFAULT_WIDGET_SERIES_COLOR APPEARANCE_WIDGET_SERIES_COLOR
 #endif
 // Default second widget series color (#RRGGBB).
 #ifndef DEFAULT_WIDGET_SERIES_COLOR_2
-#define DEFAULT_WIDGET_SERIES_COLOR_2 "#2196F3"
+#define DEFAULT_WIDGET_SERIES_COLOR_2 APPEARANCE_WIDGET_SERIES_COLOR_2
 #endif
 // Default third widget series color (#RRGGBB).
 #ifndef DEFAULT_WIDGET_SERIES_COLOR_3
-#define DEFAULT_WIDGET_SERIES_COLOR_3 "#9C27B0"
+#define DEFAULT_WIDGET_SERIES_COLOR_3 APPEARANCE_WIDGET_SERIES_COLOR_3
 #endif
 // Default fourth widget series color (#RRGGBB).
 #ifndef DEFAULT_WIDGET_SERIES_COLOR_4
-#define DEFAULT_WIDGET_SERIES_COLOR_4 "#FF9800"
+#define DEFAULT_WIDGET_SERIES_COLOR_4 APPEARANCE_WIDGET_SERIES_COLOR_4
 #endif
 // Default inactive gauge arc and bar chart track color (#RRGGBB).
 #ifndef DEFAULT_WIDGET_TRACK_COLOR
-#define DEFAULT_WIDGET_TRACK_COLOR "#1A1A1A"
+#define DEFAULT_WIDGET_TRACK_COLOR APPEARANCE_WIDGET_TRACK_COLOR
+#endif
+// Default gauge and bar track outline width in pixels.
+#ifndef DEFAULT_WIDGET_TRACK_OUTLINE_WIDTH
+#define DEFAULT_WIDGET_TRACK_OUTLINE_WIDTH APPEARANCE_WIDGET_TRACK_OUTLINE_WIDTH
+#endif
+// Default gauge and bar track outline color.
+#ifndef DEFAULT_WIDGET_TRACK_OUTLINE_COLOR
+#define DEFAULT_WIDGET_TRACK_OUTLINE_COLOR APPEARANCE_WIDGET_TRACK_OUTLINE_COLOR
 #endif
 // Default gauge needle, marker line, and rocker indicator color (#RRGGBB).
 #ifndef DEFAULT_WIDGET_INDICATOR_COLOR
-#define DEFAULT_WIDGET_INDICATOR_COLOR "#FFFFFF"
+#define DEFAULT_WIDGET_INDICATOR_COLOR APPEARANCE_WIDGET_INDICATOR_COLOR
 #endif
 // Default widget tick and gridline color (#RRGGBB).
 #ifndef DEFAULT_WIDGET_TICK_COLOR
-#define DEFAULT_WIDGET_TICK_COLOR "#808080"
+#define DEFAULT_WIDGET_TICK_COLOR APPEARANCE_WIDGET_TICK_COLOR
 #endif
 // Default widget marker zone color (#RRGGBB).
 #ifndef DEFAULT_WIDGET_ZONE_COLOR
-#define DEFAULT_WIDGET_ZONE_COLOR "#FF5722"
+#define DEFAULT_WIDGET_ZONE_COLOR APPEARANCE_WIDGET_ZONE_COLOR
 #endif
 // Default sparkline reference line color (#RRGGBB).
 #ifndef DEFAULT_WIDGET_REFERENCE_COLOR
-#define DEFAULT_WIDGET_REFERENCE_COLOR "#888888"
+#define DEFAULT_WIDGET_REFERENCE_COLOR APPEARANCE_WIDGET_REFERENCE_COLOR
 #endif
 // Default table widget cell background color (#RRGGBB).
 #ifndef DEFAULT_WIDGET_TABLE_BG_COLOR
-#define DEFAULT_WIDGET_TABLE_BG_COLOR "#12122a"
+#define DEFAULT_WIDGET_TABLE_BG_COLOR APPEARANCE_WIDGET_TABLE_BG_COLOR
 #endif
 // Default table widget cell text color (#RRGGBB).
 #ifndef DEFAULT_WIDGET_TABLE_FG_COLOR
-#define DEFAULT_WIDGET_TABLE_FG_COLOR "#b0b0d0"
+#define DEFAULT_WIDGET_TABLE_FG_COLOR APPEARANCE_WIDGET_TABLE_FG_COLOR
 #endif
 // Default table widget header text color (#RRGGBB).
 #ifndef DEFAULT_WIDGET_TABLE_HEADER_COLOR
-#define DEFAULT_WIDGET_TABLE_HEADER_COLOR "#404070"
+#define DEFAULT_WIDGET_TABLE_HEADER_COLOR APPEARANCE_WIDGET_TABLE_HEADER_COLOR
 #endif
 
 // ============================================================================

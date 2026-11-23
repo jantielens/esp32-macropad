@@ -8,6 +8,13 @@ their changes reach the physical panel. Its presentation settings balance
 freshness against panel refresh work and ghosting, rather than treating the
 display like a continuously refreshed LCD.
 
+Interactive e-paper defaults use black and white, with a 2 px button border and
+gauge and bar-chart track outline. You can change these in the pad editor; set
+the track outline width to 0 to hide it. Multiple widget series share black by
+default; use labels or bar-chart patterns to distinguish them.
+The Home Assistant icon-control builder also uses black for both on and off,
+so its default icon color alone does not distinguish those states.
+
 First create a [saved pad](../pads/editing.md).
 Open **Display > E-paper Presentation**.
 The panel is not a continuously refreshed LCD: successive UI changes can combine
@@ -45,6 +52,7 @@ retain interval-limited presentation; see [panel notes](../hardware.md).
 Interaction priority does not bypass startup, recovery, manual full refreshes or
 the configured full-refresh threshold. Required controller waits and full-refresh
 flashing still apply.
+
 Refresh clock values on minute boundary rechecks visible time bindings
 between passive checks. Panel scheduling and an active refresh can delay
 the visible update.

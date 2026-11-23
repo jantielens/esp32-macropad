@@ -1130,9 +1130,18 @@ window.init_pad_editor_fragment = function () {
 // ============================================================================
 
 window.init_button_defaults_fragment = function () {
-    if (typeof padLoadButtonDefaultsFromDevice === 'function') padLoadButtonDefaultsFromDevice();
     if (typeof bindingInitStaticInputs === 'function') bindingInitStaticInputs();
     var btn = document.getElementById('btn-defaults-save-btn');
+    if (btn) btn.disabled = true;
+    if (typeof padLoadButtonDefaultsFromDevice === 'function') {
+        padLoadButtonDefaultsFromDevice().then(function () {
+            if (btn) btn.disabled = false;
+        }).catch(function (error) {
+            showMessage(error.message + '. Reopen this section to retry.', 'error');
+        });
+    } else {
+        showMessage('Pad and button defaults are unavailable. Reopen this section to retry.', 'error');
+    }
     if (btn) btn.addEventListener('click', function () {
         if (typeof padSaveButtonDefaults === 'function') padSaveButtonDefaults();
     });

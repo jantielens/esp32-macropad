@@ -1,5 +1,6 @@
 #pragma once
 
+#include "board_config.h"
 #include <ArduinoJson.h>
 #include <stdint.h>
 #include "fill_pattern.h"
@@ -7,14 +8,14 @@
 // Percent dimensions use 0 for Auto. Alignment/position: 0=start, 1=center, 2=end.
 struct DialogAppearance {
     char font[32] = "";
-    uint32_t text_color = 0xFFFFFF;
-    uint32_t background_color = 0x333333;
-    uint32_t background_pattern_color = 0x111111;
-    uint32_t border_color = 0x808080;
-    uint32_t approve_background = 0x2563EB;
-    uint32_t approve_color = 0xFFFFFF;
-    uint32_t cancel_background = 0x5F6368;
-    uint32_t cancel_color = 0xFFFFFF;
+    uint32_t text_color = DEFAULT_DIALOG_TEXT_RGB;
+    uint32_t background_color = DEFAULT_DIALOG_BACKGROUND_RGB;
+    uint32_t background_pattern_color = DEFAULT_DIALOG_PATTERN_RGB;
+    uint32_t border_color = DEFAULT_DIALOG_BORDER_RGB;
+    uint32_t approve_background = DEFAULT_DIALOG_APPROVE_BACKGROUND_RGB;
+    uint32_t approve_color = DEFAULT_DIALOG_APPROVE_TEXT_RGB;
+    uint32_t cancel_background = DEFAULT_DIALOG_CANCEL_BACKGROUND_RGB;
+    uint32_t cancel_color = DEFAULT_DIALOG_CANCEL_TEXT_RGB;
     uint16_t font_size = 0;
     uint16_t button_height = 0;
     uint8_t background_opacity = 100;

@@ -382,6 +382,7 @@ async function padImportPad(evt) {
 
     try {
         if (padState.loadPending) throw new Error('Pad is still loading. Wait before importing.');
+        if (!padState.appearanceDefaultsReady) throw new Error('Reload pad and button defaults before importing.');
         if (Number(file.size) > 16 * 1024 * 1024) throw new Error('Import file exceeds the 16 MiB limit.');
         const text = await file.text();
         const json = JSON.parse(text);

@@ -46,8 +46,8 @@
                 return [{ group, key, kind: 'text', default: 'none' },
                     { group, key: key + '_color', kind: 'color', default: '#000000' }];
             }),
-            { group: 'pad-edit-bar-layout', key: 'widget_track_outline_width', kind: 'number', default: 0 },
-            { group: 'pad-edit-bar-layout', key: 'widget_track_outline_color', kind: 'color', default: '#000000' },
+            { group: 'pad-edit-bar-layout', key: 'widget_track_outline_width', kind: 'number', default: () => padDefaultTrackOutlineWidth() },
+            { group: 'pad-edit-bar-layout', key: 'widget_track_outline_color', kind: 'color', default: () => PAD_FIRMWARE_DEFAULTS.widget_track_outline_color },
             { group: 'pad-edit-bar-layout', key: 'widget_bar_track_radius', kind: 'number', default: 4 }
         ],
         previewFields: fields.filter(field => field.kind === 'color' && field.id !== 'pad-edit-widget-bar-tick-color' &&

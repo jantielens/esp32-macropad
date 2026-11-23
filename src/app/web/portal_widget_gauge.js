@@ -44,8 +44,8 @@
         actions: { tap: true, longPress: true },
         fields,
         disclosureSettings: [
-            { group: 'pad-edit-gauge-layout', key: 'widget_track_outline_width', kind: 'number', default: 0 },
-            { group: 'pad-edit-gauge-layout', key: 'widget_track_outline_color', kind: 'color', default: '#000000' }
+            { group: 'pad-edit-gauge-layout', key: 'widget_track_outline_width', kind: 'number', default: () => padDefaultTrackOutlineWidth() },
+            { group: 'pad-edit-gauge-layout', key: 'widget_track_outline_color', kind: 'color', default: () => PAD_FIRMWARE_DEFAULTS.widget_track_outline_color }
         ],
         track: { host: 'pad-edit-gauge-track-settings', outline: true }
     });

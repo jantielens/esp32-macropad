@@ -17,6 +17,7 @@ const padState = {
     rawJson: null,   // Original GET response (for merge-on-save)
     loadError: 'Pad has not loaded. Reload it before saving.',
     loadPending: false,
+    appearanceDefaultsReady: false,
     cols: 3,
     rows: 2,
     columnWidthsPx: [],
@@ -400,6 +401,10 @@ async function padInit() {
     PAD_APPEARANCE_FIELDS.forEach(function(f) {
         var el = document.getElementById(f.input);
         if (el) el.addEventListener('input', padUpdateResetHints);
+    });
+    ['pad-edit-track-outline-width', 'pad-edit-track-outline-color'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('input', function() { this.dataset.explicit = '1'; });
     });
     ['pad-edit-fg-color', 'pad-edit-icon-color'].forEach(function(id) {
         var el = document.getElementById(id);
@@ -790,8 +795,10 @@ async function padLoadPage(page, defaultsReady, selectedLayer, throwOnError = fa
     padClearDirty();
 
     try {
-        const resp = await fetch('/api/pad?page=' + page);
-        await defaultsReady;
+        const [resp] = await Promise.all([
+            fetch('/api/pad?page=' + page),
+            defaultsReady || (padState.appearanceDefaultsReady ? Promise.resolve() : padLoadButtonDefaultsFromDevice())
+        ]);
         if (!current()) return;
         if (resp.status === 404) {
             // No config for this page — show empty grid
@@ -1128,6 +1135,7 @@ async function padSavePage(options) {
         let context;
         try {
             if (!bulk && padState.loadError) throw new Error(padState.loadError);
+            if (!bulk && !padState.appearanceDefaultsReady) throw new Error('Reload pad and button defaults before saving.');
             context = padBuildSaveContext();
         } catch (error) {
             if (bulk) throw error;

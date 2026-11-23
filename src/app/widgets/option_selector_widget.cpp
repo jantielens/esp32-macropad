@@ -425,6 +425,8 @@ void describe(JsonObject& out) {
                              "widget_option_selected_bg_color"}) {
         JsonObject field = fields.createNestedObject();
         field["name"] = name; field["type"] = "color";
+        if (!strcmp(name, "widget_option_selected_fg_color")) field["default"] = DEFAULT_WIDGET_OPTION_SELECTED_FG_COLOR;
+        if (!strcmp(name, "widget_option_selected_bg_color")) field["default"] = DEFAULT_WIDGET_OPTION_SELECTED_BG_COLOR;
     }
     const char* size_names[] = {"widget_option_font_size", "widget_option_icon_size_pct",
                                 "widget_option_icon_badge_padding", "widget_option_inset"};

@@ -96,6 +96,7 @@ const loadingContext = {
 };
 vm.createContext(loadingContext);
 vm.runInContext(source, loadingContext);
+vm.runInContext('padState.appearanceDefaultsReady = true;', loadingContext);
 loadingContext.padClearDirty = () => loadingNames.push(loadingName.value);
 loadingContext.padLoadPage(1);
 assert.strictEqual(loadingName.value, 'Destination pad');
@@ -666,7 +667,7 @@ async function checkSaveRaces() {
 	const saveContext = { console, MAX_ACTIONS: 3, padWorkspace: workspace, document: { getElementById() { return root; } } };
 	vm.createContext(saveContext);
 	vm.runInContext(source.replace('let padDirty = false;', 'var padDirty = false;'), saveContext);
-	vm.runInContext("padState.loadError = null; padState.selectedLayer = 'overlay'; padState.editCol = 2; padState.editRow = 0;", saveContext);
+	vm.runInContext("padState.loadError = null; padState.appearanceDefaultsReady = true; padState.selectedLayer = 'overlay'; padState.editCol = 2; padState.editRow = 0;", saveContext);
 	saveContext.padBuildSaveContext = () => ({ page: 0, name: 'Saved' });
 	saveContext.padClearDirty = () => { saveContext.padDirty = false; };
 	saveContext.showMessage = () => {};
@@ -708,6 +709,10 @@ async function checkSaveRaces() {
 	const validationMessages = [];
 	saveContext.showMessage = (message, type) => notifications.push({ message, type });
 	saveContext.padDialogShowValidationError = error => validationMessages.push(error.message);
+	vm.runInContext('padState.appearanceDefaultsReady = false;', saveContext);
+	assert.strictEqual(await saveContext.padSavePage(), null);
+	assert.match(validationMessages.pop(), /Reload pad and button defaults/);
+	vm.runInContext('padState.appearanceDefaultsReady = true;', saveContext);
 	saveContext.padBuildSaveContext = () => { throw new Error('Invalid button span'); };
 	saveContext.padQueuePersistence = async () => { throw new Error('Validation must block persistence'); };
 	assert.strictEqual(await saveContext.padSavePage(), null);
@@ -751,6 +756,7 @@ async function checkFailedLoadProtectsSavedPad() {
 	Object.assign(testContext, providedGlobals);
 	vm.runInContext(fs.readFileSync('src/app/web/portal_pad_io.js', 'utf8'), testContext);
 	vm.runInContext(source, testContext);
+	vm.runInContext('padState.appearanceDefaultsReady = true;', testContext);
 	testContext.padPageBackgroundModeChanged = () => {};
 	testContext.padPopulateTemplateDropdown = () => {};
 	testContext.padLoadTemplateButtons = async () => {};

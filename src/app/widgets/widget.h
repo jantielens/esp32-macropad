@@ -208,14 +208,14 @@ inline void widget_describe_fill_fields(JsonArray fields, bool bar_patterns) {
             JsonObject color = fields.createNestedObject();
             color["name"] = colors[index];
             color["type"] = "color";
-            color["default"] = "#000000";
+            color["default"] = DEFAULT_WIDGET_TRACK_OUTLINE_COLOR;
             color["max"] = index < 4 ? 191 : 63;
         }
     }
     const char* names[] = {"pattern_spacing", "pattern_stroke_width", "widget_track_outline_width", "widget_bar_track_radius"};
     const int minimum[] = {2, 1, 0, 0};
     const int maximum[] = {64, 8, 8, 64};
-    const int defaults[] = {8, 1, 0, 4};
+    const int defaults[] = {8, 1, DEFAULT_WIDGET_TRACK_OUTLINE_WIDTH, 4};
     for (unsigned index = 0; index < (bar_patterns ? 4u : 3u); ++index) {
         JsonObject field = fields.createNestedObject();
         field["name"] = names[index];
