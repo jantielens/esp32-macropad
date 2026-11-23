@@ -33,6 +33,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_NAME="esp32-macropad"
 PROJECT_DISPLAY_NAME="ESP32 Macropad"
 
+# Upstream LVGL revision with ESP-IDF 5.x PPA compatibility for P4 targets.
+P4_LVGL_REVISION="cf22a42f1dc552160a2e48fde738cc8f31821827"
+
 # Board configuration (FQBN - Fully Qualified Board Name)
 # Define target boards as an associative array: ["board-name"]="FQBN"
 # - Board name is the key (used for directories, script arguments, CI/CD matrix)

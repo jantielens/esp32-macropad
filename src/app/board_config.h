@@ -1420,6 +1420,46 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 // ============================================================================
 // LVGL Configuration
 // ============================================================================
+// Enable the LVGL PPA drawing backend on P4; independent of driver rotation.
+#ifndef LVGL_USE_PPA
+#if defined(CONFIG_IDF_TARGET_ESP32P4) && HAS_DISPLAY
+#define LVGL_USE_PPA true
+#else
+#define LVGL_USE_PPA false
+#endif
+#endif
+
+// Cache reusable pattern masks in bounded PSRAM on selected display boards.
+#ifndef LVGL_CACHE_PATTERNS
+#if defined(CONFIG_IDF_TARGET_ESP32P4) && HAS_DISPLAY && HAS_PSRAM
+#define LVGL_CACHE_PATTERNS true
+#else
+#define LVGL_CACHE_PATTERNS false
+#endif
+#endif
+
+#if LVGL_CACHE_PATTERNS && (!HAS_DISPLAY || !HAS_PSRAM || HAS_EPAPER_PANEL)
+#error "LVGL_CACHE_PATTERNS requires a PSRAM-backed non-e-paper display"
+#endif
+
+// Aggregate pattern-cache allocation budget, including metadata and alignment.
+#ifndef LVGL_PATTERN_CACHE_BYTES
+#if defined(CONFIG_IDF_TARGET_ESP32P4)
+#define LVGL_PATTERN_CACHE_BYTES (2 * 1024 * 1024)
+#else
+#define LVGL_PATTERN_CACHE_BYTES (256 * 1024)
+#endif
+#endif
+
+// Free PSRAM retained when admitting an optional pattern-cache allocation.
+#ifndef LVGL_PATTERN_CACHE_RESERVE
+#if defined(CONFIG_IDF_TARGET_ESP32P4)
+#define LVGL_PATTERN_CACHE_RESERVE (8 * 1024 * 1024)
+#else
+#define LVGL_PATTERN_CACHE_RESERVE (2 * 1024 * 1024)
+#endif
+#endif
+
 // LVGL draw buffer size in pixels (larger = faster, more RAM).
 #ifndef LVGL_BUFFER_SIZE
 #define LVGL_BUFFER_SIZE (DISPLAY_WIDTH * 10)  // 10 lines buffer
@@ -1685,6 +1725,15 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 // Prefer internal RAM over PSRAM for LVGL draw buffer allocation.
 #ifndef LVGL_BUFFER_PREFER_INTERNAL
 #define LVGL_BUFFER_PREFER_INTERNAL false
+#endif
+
+// Do not fall back to internal RAM for enlarged LVGL draw buffers.
+#ifndef LVGL_BUFFER_PSRAM_ONLY
+#define LVGL_BUFFER_PSRAM_ONLY false
+#endif
+
+#if LVGL_BUFFER_PSRAM_ONLY && (LVGL_BUFFER_PREFER_INTERNAL || !HAS_PSRAM)
+#error "LVGL_BUFFER_PSRAM_ONLY requires PSRAM and PSRAM-first buffers"
 #endif
 
 // ============================================================================

@@ -74,6 +74,13 @@ struct RuntimeDiagnostics {
 	uint32_t async_flush_completed_ms;
 	uint32_t async_flush_error_count;
 	bool async_flush_in_flight;
+#if HAS_DISPLAY_DIAGNOSTICS
+	uint64_t async_flush_started_us;
+	uint64_t async_flush_total_us;
+	uint32_t async_flush_completed_count;
+	uint32_t async_flush_last_us;
+	uint32_t async_flush_peak_us;
+#endif
 	uint32_t extension_tick_started_ms;
 	uint32_t extension_tick_completed_ms;
 	uint32_t extension_tick_last_duration_ms;
@@ -83,6 +90,19 @@ struct RuntimeDiagnostics {
 
 DRAM_ATTR static portMUX_TYPE s_runtime_diagnostics_mux = portMUX_INITIALIZER_UNLOCKED;
 DRAM_ATTR static RuntimeDiagnostics s_runtime_diagnostics = {};
+
+#if HAS_DISPLAY_DIAGNOSTICS
+// Called with the runtime spinlock held, from task or ISR context.
+static void IRAM_ATTR record_async_flush_completed_locked(uint64_t now_us) {
+	if (!s_runtime_diagnostics.async_flush_in_flight) return;
+	const uint32_t elapsed_us = static_cast<uint32_t>(now_us - s_runtime_diagnostics.async_flush_started_us);
+	++s_runtime_diagnostics.async_flush_completed_count;
+	s_runtime_diagnostics.async_flush_total_us += elapsed_us;
+	s_runtime_diagnostics.async_flush_last_us = elapsed_us;
+	if (elapsed_us > s_runtime_diagnostics.async_flush_peak_us)
+		s_runtime_diagnostics.async_flush_peak_us = elapsed_us;
+}
+#endif
 
 static const char* runtime_phase_name(DeviceRuntimePhase phase) {
 	switch (phase) {
@@ -185,14 +205,26 @@ void device_telemetry_mark_sleep_refresh_complete() {
 }
 
 void device_telemetry_mark_async_flush_started() {
+#if HAS_DISPLAY_DIAGNOSTICS
+	const uint64_t now_us = esp_timer_get_time();
+#endif
 	portENTER_CRITICAL(&s_runtime_diagnostics_mux);
 	s_runtime_diagnostics.async_flush_in_flight = true;
 	s_runtime_diagnostics.async_flush_started_ms = millis();
+#if HAS_DISPLAY_DIAGNOSTICS
+	s_runtime_diagnostics.async_flush_started_us = now_us;
+#endif
 	portEXIT_CRITICAL(&s_runtime_diagnostics_mux);
 }
 
 void device_telemetry_mark_async_flush_completed(bool errored) {
+#if HAS_DISPLAY_DIAGNOSTICS
+	const uint64_t now_us = esp_timer_get_time();
+#endif
 	portENTER_CRITICAL(&s_runtime_diagnostics_mux);
+#if HAS_DISPLAY_DIAGNOSTICS
+	record_async_flush_completed_locked(now_us);
+#endif
 	s_runtime_diagnostics.async_flush_in_flight = false;
 	s_runtime_diagnostics.async_flush_completed_ms = millis();
 	if (errored) s_runtime_diagnostics.async_flush_error_count++;
@@ -201,7 +233,13 @@ void device_telemetry_mark_async_flush_completed(bool errored) {
 
 void IRAM_ATTR device_telemetry_mark_async_flush_completed_from_isr(bool errored) {
 	const uint32_t now_ms = pdTICKS_TO_MS(xTaskGetTickCountFromISR());
+#if HAS_DISPLAY_DIAGNOSTICS
+	const uint64_t now_us = esp_timer_get_time();
+#endif
 	portENTER_CRITICAL_ISR(&s_runtime_diagnostics_mux);
+#if HAS_DISPLAY_DIAGNOSTICS
+	record_async_flush_completed_locked(now_us);
+#endif
 	s_runtime_diagnostics.async_flush_in_flight = false;
 	s_runtime_diagnostics.async_flush_completed_ms = now_ms;
 	if (errored) s_runtime_diagnostics.async_flush_error_count++;
@@ -652,6 +690,12 @@ void device_telemetry_fill_api(JsonDocument &doc) {
 			runtime_doc["async_flush_complete_age_ms"] = runtime.async_flush_completed_ms
 				? now_ms - runtime.async_flush_completed_ms : 0;
 			runtime_doc["async_flush_errors"] = runtime.async_flush_error_count;
+#if HAS_DISPLAY_DIAGNOSTICS
+			runtime_doc["async_flush_completed_count"] = runtime.async_flush_completed_count;
+			runtime_doc["async_flush_total_us"] = runtime.async_flush_total_us;
+			runtime_doc["async_flush_last_us"] = runtime.async_flush_last_us;
+			runtime_doc["async_flush_peak_us"] = runtime.async_flush_peak_us;
+#endif
 
 		// Min/max fields sampled by a background timer (multi-client safe).
 		// We report a merged snapshot across the last complete window and the current
@@ -1211,6 +1255,14 @@ static void fill_common(JsonDocument &doc, bool include_ip_and_channel, bool inc
 									object["refresh_us"] = sample.refresh.refresh_us;
 									object["render_us"] = sample.refresh.render_us;
 									object["render_flush_us"] = sample.refresh.render_flush_us;
+									object["flush_wait_calls"] = sample.refresh.flush_wait_calls;
+									object["flush_wait_us"] = sample.refresh.flush_wait_us;
+									object["flush_wait_peak_us"] = sample.refresh.flush_wait_peak_us;
+									object["render_flush_wait_us"] = sample.refresh.render_flush_wait_us;
+									const uint64_t accounted_render_us = uint64_t(sample.refresh.render_flush_us) +
+											sample.refresh.render_flush_wait_us;
+									object["render_non_flush_us"] = sample.refresh.render_us >= accounted_render_us ?
+											sample.refresh.render_us - accounted_render_us : 0;
 									object["render_glyph_miss_us"] = sample.refresh.render_glyph_miss_us;
 									object["render_other_us"] = sample.refresh.render_us >= sample.refresh.render_flush_us ?
 											sample.refresh.render_us - sample.refresh.render_flush_us : 0;

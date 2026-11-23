@@ -99,6 +99,9 @@
 #define LVGL_BUFFER_PREFER_INTERNAL false
 // LVGL draw buffer size in pixels.
 #define LVGL_BUFFER_SIZE (DISPLAY_WIDTH * 16)  // 16 rows (matches sample default)
+#ifndef LVGL_CACHE_PATTERNS
+#define LVGL_CACHE_PATTERNS true
+#endif
 
 // ---------------------------------------------------------------------------
 // Backlight (LEDC)

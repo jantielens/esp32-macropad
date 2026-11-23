@@ -52,11 +52,12 @@
 #define DISPLAY_HEIGHT 720
 #define DISPLAY_ROTATION 0
 
-// LVGL draw buffer: single buffer in PSRAM.
+// LVGL draw buffers in PSRAM.
 // With DMA2D flush, PSRAM buffer is fine — the hardware DMA engine handles
 // the copy to the framebuffer without CPU involvement.
 #define LVGL_BUFFER_PREFER_INTERNAL false
 #define LVGL_BUFFER_SIZE (DISPLAY_WIDTH * 80)
+#define LVGL_DRAW_BUF_COUNT 2
 
 // LVGL refresh period — 15 ms (~66 fps target) to match IDF reference projects.
 // Default LVGL 8.4 is 30 ms (~33 fps). Panel hardware supports ~59 fps.

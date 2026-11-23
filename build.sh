@@ -330,6 +330,32 @@ build_board() {
     
     # Create board-specific build directory
     mkdir -p "$board_build_path"
+
+    local library_flags=(--libraries "$SCRIPT_DIR/libraries")
+    if [[ "$(get_chip_type_from_fqbn "$fqbn")" == "esp32p4" ]]; then
+        if [[ ! "$P4_LVGL_REVISION" =~ ^[0-9a-f]{40}$ ]]; then
+            echo -e "${RED}Error: P4_LVGL_REVISION must be a full commit SHA${NC}"
+            return 1
+        fi
+        local lvgl_libraries="$board_build_path/libraries/$P4_LVGL_REVISION"
+        local lvgl_path="$lvgl_libraries/lvgl"
+        mkdir -p "$lvgl_libraries" || return 1
+        if [[ ! -d "$lvgl_path/.git" ]]; then
+            git init -q "$lvgl_path" || return 1
+        fi
+        local lvgl_status
+        lvgl_status="$(git -C "$lvgl_path" status --porcelain)" || return 1
+        if [[ -n "$lvgl_status" ]]; then
+            echo -e "${RED}Error: cached P4 LVGL has local changes: $lvgl_path${NC}"
+            return 1
+        fi
+        if ! git -C "$lvgl_path" cat-file -e "$P4_LVGL_REVISION^{commit}" 2>/dev/null; then
+            git -C "$lvgl_path" fetch --depth=1 https://github.com/lvgl/lvgl.git "$P4_LVGL_REVISION" || return 1
+        fi
+        git -C "$lvgl_path" checkout -q --detach "$P4_LVGL_REVISION" || return 1
+        library_flags+=(--libraries "$lvgl_libraries")
+        echo "LVGL:      P4 upstream revision $P4_LVGL_REVISION"
+    fi
     
     # Board-specific build properties (from config.sh), optional profile
     BUILD_PROPS_ARR=()
@@ -350,7 +376,7 @@ build_board() {
 
     local portal_properties="$board_build_path/portal-build.properties"
     "$ARDUINO_CLI" compile --fqbn "$fqbn" --build-path "$board_intermediate_path" \
-        "${EXTRA_FLAGS[@]}" "${BUILD_PROPS_ARR[@]}" --show-properties=expanded \
+        "${library_flags[@]}" "${EXTRA_FLAGS[@]}" "${BUILD_PROPS_ARR[@]}" --show-properties=expanded \
         "$SKETCH_PATH" > "$portal_properties"
     "$SCRIPT_DIR/tools/minify-web-assets.sh" "$PROJECT_NAME" "$board_display_name" \
         --properties "$portal_properties" --output-dir "$portal_assets_path"
@@ -362,7 +388,7 @@ build_board() {
     set +e
     build_output=$("$ARDUINO_CLI" compile \
         --fqbn "$fqbn" \
-        --libraries "$SCRIPT_DIR/libraries" \
+        "${library_flags[@]}" \
         --build-path "$board_intermediate_path" \
         "${EXTRA_FLAGS[@]}" \
         "${BUILD_PROPS_ARR[@]}" \

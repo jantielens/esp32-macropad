@@ -66,6 +66,10 @@ struct DisplayRefreshStats {
     uint32_t refresh_us = 0;
     uint32_t render_us = 0;
     uint32_t render_flush_us = 0;
+    uint32_t flush_wait_calls = 0;
+    uint32_t flush_wait_us = 0;
+    uint32_t flush_wait_peak_us = 0;
+    uint32_t render_flush_wait_us = 0;
     uint64_t render_glyph_miss_us = 0;
     DisplayInvalidationStats invalidations;
 };
@@ -78,6 +82,23 @@ struct DisplayRefreshTrace {
     uint64_t glyph_miss_start_us = 0;
     bool refreshing = false;
     bool rendering = false;
+    uint64_t flush_wait_start_us = 0;
+    bool waiting_for_flush = false;
+
+    void beginFlushWait(uint64_t now_us) {
+        flush_wait_start_us = now_us;
+        waiting_for_flush = true;
+    }
+
+    void endFlushWait(uint64_t now_us) {
+        if (!waiting_for_flush) return;
+        const uint32_t duration_us = static_cast<uint32_t>(now_us - flush_wait_start_us);
+        ++stats.flush_wait_calls;
+        stats.flush_wait_us += duration_us;
+        if (duration_us > stats.flush_wait_peak_us) stats.flush_wait_peak_us = duration_us;
+        if (rendering) stats.render_flush_wait_us += duration_us;
+        waiting_for_flush = false;
+    }
 
     void beginRefresh(uint64_t now_us) {
         refresh_start_us = now_us;

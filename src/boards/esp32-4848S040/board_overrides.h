@@ -49,6 +49,9 @@
 // Saves ~19 KB internal SRAM vs LVGL_BUFFER_PREFER_INTERNAL=true.
 #define LVGL_BUFFER_PREFER_INTERNAL false
 #define LVGL_BUFFER_SIZE (DISPLAY_WIDTH * 20)  // 20 lines partial updates
+#ifndef LVGL_CACHE_PATTERNS
+#define LVGL_CACHE_PATTERNS true
+#endif
 
 // ============================================================================
 // Backlight (LEDC)

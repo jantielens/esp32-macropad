@@ -86,10 +86,18 @@
 #if __has_include("sdkconfig.h")
     #include "sdkconfig.h"
 #endif
+#if LVGL_USE_PPA && !defined(CONFIG_IDF_TARGET_ESP32P4)
+    #error "LVGL_USE_PPA requires ESP32-P4"
+#endif
 #ifdef CONFIG_CACHE_L2_CACHE_LINE_SIZE
     #define LV_DRAW_BUF_ALIGN      CONFIG_CACHE_L2_CACHE_LINE_SIZE
 #else
     #define LV_DRAW_BUF_ALIGN      64
+#endif
+
+/* The upstream PPA alignment check also uses the Kconfig spelling. */
+#if LVGL_USE_PPA && !defined(CONFIG_LV_DRAW_BUF_ALIGN)
+    #define CONFIG_LV_DRAW_BUF_ALIGN LV_DRAW_BUF_ALIGN
 #endif
 
 /* Software renderer */
@@ -106,10 +114,8 @@
     #define LV_DRAW_SW_SUPPORT_INDEXED_IMAGE 0
 #endif
 
-/* LVGL 9.5.0 PPA rejects unaligned intermediate-buffer sizes, amplified by patterns.
- * Use software drawing until a released LVGL fix supports the stable ESP32 SDK.
- * The display driver's independently aligned PPA rotation path is unaffected. */
-#define LV_USE_PPA 0
+/* This drawing backend is independent of the display driver's PPA rotation. */
+#define LV_USE_PPA LVGL_USE_PPA
 
 /*================
  * LOGGING

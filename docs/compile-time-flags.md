@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 394
+Total flags: 396
 
 ### Features (HAS_*)
 
@@ -190,6 +190,7 @@ Total flags: 394
 - **JD9165_DSI_DPI_CLK_HZ** default: `51200000L` — DPI pixel clock in Hz.
 - **LOOP_TASK_STACK_SIZE** default: `(no default)` — Measured under portal, MQTT, and pad load: 4704 bytes remained from 8192.
 - **LVGL_BUFFER_PREFER_INTERNAL** default: `false` — Prefer internal RAM over PSRAM for LVGL draw buffer allocation.
+- **LVGL_BUFFER_PSRAM_ONLY** default: `false` — Do not fall back to internal RAM for enlarged LVGL draw buffers.
 - **LVGL_BUFFER_SIZE** default: `(DISPLAY_WIDTH * 10)` — LVGL draw buffer size in pixels (larger = faster, more RAM).
 - **LVGL_REFR_PERIOD_MS** default: `(no default)` — Default LVGL 8.4 is 30 ms (~33 fps). Panel hardware supports ~59 fps.
 - **LVGL_TICK_PERIOD_MS** default: `5` — LVGL tick period in milliseconds.
@@ -348,6 +349,7 @@ Total flags: 394
 - **LCD_VSYNC_PULSE_WIDTH** default: `(no default)` — VSYNC pulse width.
 - **LD2410_OUT_DEBOUNCE_MS** default: `50` — Debounce for LD2410 OUT edge changes (ms).
 - **LED_ACTIVE_HIGH** default: `true` — LED polarity: true if HIGH turns the LED on.
+- **LVGL_CACHE_PATTERNS** default: `(no default)` — Cache reusable pattern masks in bounded PSRAM on selected display boards.
 - **LVGL_DRAW_BUF_COUNT** default: `1` — is being flushed (useful with async DMA2D or PPA rotation pipelines).
 - **LVGL_FAST_MEM_IN_IRAM** default: `(no default)` — Keep LVGL fast paths in IRAM on S3 by default; boards may trade speed for SRAM.
 - **LVGL_TASK_CORE** default: `0` — Core to pin the LVGL render task to on dual-core chips (0 or 1).
@@ -473,8 +475,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | inkplate6flick-interactive |  |  |  | ✅ |  |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  | ? | ? | ✅ | ? |  | ? |  |  | ✅ |  | ? | ✅ |  | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |  |
 | reterminal-e1003-frame |  |  |  |  | ✅ |  |  | ? |  |  |  | ? |  |  | ✅ |  | ? | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  | ? |  | ✅ | ? | ✅ |  |  |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |  |
 | reterminal-e1003-interactive |  |  |  |  |  |  | ✅ | ? |  |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ? | ✅ |  | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |  |
-| reterminal-sticky-interactive | ✅ | ✅ | ✅ |  | ✅ | ✅ |  | ? |  | ✅ |  | ✅ | ✅ | ✅ |  |  | ✅ | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ? | ✅ |  |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |  |
-| reterminal-sticky-interactive-sd | ✅ | ✅ | ✅ |  | ✅ | ✅ |  | ? |  | ✅ |  | ✅ | ✅ | ✅ |  |  | ✅ | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ? | ✅ |  |  | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |  |
+| reterminal-sticky-interactive | ✅ | ✅ | ✅ |  | ✅ | ✅ |  | ? |  | ✅ |  | ✅ | ✅ |  |  |  | ✅ | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ? | ✅ |  |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |  |
+| reterminal-sticky-interactive-sd | ✅ | ✅ | ✅ |  | ✅ | ✅ |  | ? |  | ✅ |  | ✅ | ✅ |  |  |  | ✅ | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ? | ✅ |  |  | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -1076,7 +1078,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/freetype_mono_font.h
   - src/boards/crowpanel-4.2-interactive/drivers/display/crowpanel42_epaper_driver.cpp
   - src/boards/crowpanel-4.2-interactive/drivers/display/crowpanel42_epaper_driver.h
-  - src/boards/reterminal-sticky-interactive/board_overrides.h
   - src/boards/reterminal-sticky-interactive/drivers/display/sticky_epaper/panel.cpp
   - src/boards/reterminal-sticky-interactive/drivers/display/sticky_epaper/panel.h
   - src/boards/reterminal-sticky-interactive/drivers/display/sticky_epaper_driver.cpp
@@ -2166,8 +2167,20 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/app.ino
 - **LVGL_BUFFER_PREFER_INTERNAL**
   - src/app/board_config.h
+- **LVGL_BUFFER_PSRAM_ONLY**
+  - src/app/board_config.h
+  - src/app/display_manager.cpp
 - **LVGL_BUFFER_SIZE**
   - src/app/board_config.h
+- **LVGL_CACHE_PATTERNS**
+  - src/app/board_config.h
+  - src/app/fill_draw.h
+  - src/app/fill_style_runtime.h
+  - src/boards/esp32-4848S040/board_overrides.h
+  - src/boards/jc3248w535/board_overrides.h
+  - src/boards/jc3636w518/board_overrides.h
+  - src/boards/jc4827w543c/board_overrides.h
+  - src/boards/m5stack-stopwatch/board_overrides.h
 - **LVGL_DRAW_BUF_COUNT**
   - src/app/board_config.h
   - src/app/display_manager.cpp

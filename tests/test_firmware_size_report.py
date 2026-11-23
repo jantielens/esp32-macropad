@@ -527,6 +527,16 @@ class FlagCoverageTest(unittest.TestCase):
             self.assertTrue(any("Stale classification HAS_MCP" in error for error in errors))
             self.assertTrue(any("Unclassified flag HAS_RENAMED_MCP" in error for error in errors))
 
+    def test_display_optimization_flags_cannot_escape_coverage(self):
+        root = Path(__file__).resolve().parents[1]
+        for flag in ("LVGL_USE_PPA", "LVGL_CACHE_PATTERNS"):
+            with self.subTest(flag=flag):
+                classifications = dict(report.FLAG_SUBSYSTEMS)
+                classifications.pop(flag)
+                with patch.object(report, "FLAG_SUBSYSTEMS", classifications):
+                    self.assertTrue(any(f"Unclassified flag {flag}" in error
+                                        for error in self.coverage_errors(root)))
+
     def test_classifications_require_valid_targets_and_exclusion_reasons(self):
         root = Path(__file__).resolve().parents[1]
         with patch.dict(report.FLAG_SUBSYSTEMS, {"HAS_MUSIC_ANALYSIS": "Missing subsystem"}):
@@ -544,6 +554,8 @@ class FlagCoverageTest(unittest.TestCase):
             report.Contribution("Music playback / analysis", ".text.music", "fixture.o", code=32),
             report.Contribution("Sensors / power", ".text.sensor", "fixture.o", code=16),
             report.Contribution("Device classes", ".text.device", "fixture.o", code=8),
+            report.Contribution("LVGL", ".text.lvgl", "fixture.o", code=16),
+            report.Contribution("Display / touch (HAS_DISPLAY / HAS_TOUCH)", ".text.display", "fixture.o", code=16),
         ])
         snapshot = report.compact_snapshot(totals, {"board_directory": "fixture"})
         flags = {row["name"]: row["flags"] for row in snapshot["subsystems"]}
@@ -551,6 +563,8 @@ class FlagCoverageTest(unittest.TestCase):
         self.assertIn("HAS_SENSOR_AHT10", flags["Sensors / power"])
         self.assertIn("HAS_SENSOR_HX711", flags["Sensors / power"])
         self.assertIn("IS_COFFEE_SCALE", flags["Device classes"])
+        self.assertIn("LVGL_USE_PPA", flags["LVGL"])
+        self.assertIn("LVGL_CACHE_PATTERNS", flags["Display / touch"])
         self.assertNotIn("HAS_PSRAM", {flag for values in flags.values() for flag in values})
 
 

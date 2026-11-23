@@ -550,3 +550,75 @@ static_assert(!HAS_VOICE_NOTES || USE_SD_STORAGE, "Voice Notes requires SD-prima
 ''', text=True, check=True,
     )
 print("PASS: battery info enabled only on existing provider boards and inherited variants")
+
+configured_boards = []
+for line in (root / "config.sh").read_text().splitlines():
+    line = line.strip()
+    if line.startswith('["') and '"]=' in line:
+        configured_boards.append(line.split('"', 2)[1])
+
+s3_cache_rows = {
+    "esp32-4848S040": 20, "jc3248w535": 80, "jc3636w518": 16,
+    "jc3636w518-sd": 16, "jc3636w518-sd-usb": 16, "jc3636w518-sd-ble": 16,
+    "m5stack-stopwatch": 16, "jc4827w543c": 32,
+}
+for board in configured_boards:
+    metadata = json.loads((root / "src/boards" / board / "metadata.json").read_text())
+    target = metadata["chip_family"].replace("-", "")
+    flags = ["-DBOARD_HAS_OVERRIDE", f"-DCONFIG_IDF_TARGET_{target}=1"]
+    if metadata["psram_mb"]:
+        flags.append("-DBOARD_HAS_PSRAM")
+    expected_buffer = ""
+    if board.startswith("esp32-p4-lcd4b") or board.startswith("jc4880p433"):
+        expected_buffer = 'static_assert(LVGL_BUFFER_SIZE == DISPLAY_WIDTH * 80 && LVGL_DRAW_BUF_COUNT == 2, "P4 strip profile");'
+    elif board.startswith("m5stack-tab5"):
+        expected_buffer = 'static_assert(LVGL_BUFFER_SIZE == DISPLAY_WIDTH * 160 && LVGL_DRAW_BUF_COUNT == 2 && LVGL_BUFFER_PSRAM_ONLY, "Tab5 strip profile");'
+    elif board.startswith("jc1060p470c"):
+        expected_buffer = 'static_assert(DISPLAY_ROTATION == 1 && LVGL_BUFFER_SIZE == DISPLAY_HEIGHT * 80 && LVGL_DRAW_BUF_COUNT == 2, "JC1060 portrait profile");'
+    elif board in s3_cache_rows:
+        expected_buffer = f'static_assert(LVGL_BUFFER_SIZE == DISPLAY_WIDTH * {s3_cache_rows[board]} && LVGL_DRAW_BUF_COUNT == 1, "S3 strip profile");'
+    subprocess.run(
+        ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+         "-x", "c++", "-", "-I", str(root), "-I", str(root / "src/app"),
+         "-I", str(root / "src/boards" / board), *flags],
+        input='#include "src/app/board_config.h"\n'
+              '#include "src/app/lv_conf.h"\n'
+              'static_assert(!HAS_DISPLAY_DIAGNOSTICS, "Detailed display diagnostics must default off");\n'
+              f'static_assert(LV_USE_PPA == {int(target == "ESP32P4")}, "P4 drawing backend selection");\n'
+              'static_assert(LV_DRAW_SW_DRAW_UNIT_CNT == 1, "One software draw unit");\n'
+              f'static_assert(LVGL_CACHE_PATTERNS == {int(target == "ESP32P4" or board in s3_cache_rows)}, "Pattern cache profile");\n'
+              + ('static_assert(LVGL_PATTERN_CACHE_BYTES == 2097152 && LVGL_PATTERN_CACHE_RESERVE == 8388608, "P4 cache budget");\n'
+                 if target == "ESP32P4" else
+                 'static_assert(LVGL_PATTERN_CACHE_BYTES == 262144 && LVGL_PATTERN_CACHE_RESERVE == 2097152, "S3 cache budget");\n'
+                 if board in s3_cache_rows else '')
+              + expected_buffer + "\n",
+        text=True, check=True,
+    )
+print(f"PASS: diagnostics, drawing, cache and buffer profiles for {len(configured_boards)} active targets")
+
+for board, target in (("esp32-p4-lcd4b-sd", "ESP32P4"), ("jc3636w518-sd", "ESP32S3")):
+    subprocess.run(
+        ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+         "-x", "c++", "-", "-I", str(root), "-I", str(root / "src/app"),
+         "-I", str(root / "src/boards" / board), "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM",
+         f"-DCONFIG_IDF_TARGET_{target}=1", "-DLVGL_USE_PPA=0", "-DLVGL_CACHE_PATTERNS=0"],
+        input='#include "src/app/board_config.h"\n'
+              'static_assert(!LVGL_USE_PPA && !LVGL_CACHE_PATTERNS, "Independent optimization rollback");\n',
+        text=True, check=True,
+    )
+
+resolved = subprocess.check_output(
+    ["bash", "-c", '''source "$1"
+printf 'revision %s\\n' "$P4_LVGL_REVISION"
+for board in "${!FQBN_TARGETS[@]}"; do
+    printf '%s %s\\n' "$board" "$(get_chip_type_from_fqbn "${FQBN_TARGETS[$board]}")"
+done''', "board-profiles", str(root / "config.sh")], text=True,
+)
+lines = resolved.splitlines()
+assert lines[0] == "revision cf22a42f1dc552160a2e48fde738cc8f31821827"
+chips = dict(line.split() for line in lines[1:])
+assert set(chips) == set(configured_boards)
+for board, chip in chips.items():
+    metadata = json.loads((root / "src/boards" / board / "metadata.json").read_text())
+    assert (chip == "esp32p4") == (metadata["chip_family"] == "ESP32-P4"), board
+print("PASS: independent rollback and resolved P4 dependency selection")

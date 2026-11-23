@@ -35,22 +35,34 @@ The display and touch subsystem is built on four main pillars:
 - **XPT2046_Touchscreen** - Resistive touch support
 - **FreeRTOS** - Task-based continuous rendering
 
-LVGL drawing currently uses the software renderer on ESP32-P4 as well as other
-targets (`LV_USE_PPA=0`). LVGL 9.5.0 aligns intermediate-buffer addresses but
-not their sizes to PPA cache-line requirements. Pattern fills amplify rejected
-PPA operations into a serial error storm and severe rendering stalls. This
-temporary mitigation leaves pattern rendering unchanged and may reduce P4
-drawing performance. The MIPI-DSI driver's separate PPA rotation path retains
-its aligned buffers and remains enabled.
+Non-P4 targets use LVGL 9.6.0; P4 builds select the upstream revision pinned in
+`config.sh`. The P4 LVGL PPA drawing backend is enabled independently of the
+MIPI-DSI driver's PPA rotation path. Set `LVGL_USE_PPA` to false in a board
+override to use software drawing instead. One software draw unit remains enabled
+for operations the PPA backend does not support. The candidate requires
+patterned-button and bar-track checks, rounded clipping, partial redraws,
+repeated pad navigation, and a hardware soak test.
 
-LVGL is pinned to 9.6.0 with PPA disabled. This release fixes buffer-size
-alignment, but its PPA cache code uses an API absent from Arduino-ESP32
-3.3.12's ESP-IDF 5.5.5. Re-enabling LVGL PPA
-requires patterned-button and bar-track checks, rounded clipping, partial
-redraws, repeated pad navigation, and a hardware soak test. The software-rendering
-mitigation builds for `jc1060p470c-sd` and passed an initial user hardware check.
-The LVGL allocator includes its SoC capability header directly so disabling PPA
-does not disable PSRAM-first allocation or exhaust internal DMA-capable memory.
+P4 partial rendering requests two draw buffers, preferring PSRAM: 80 rows on
+LCD4B and JC4880, 160 rows on Tab5, and 80 logical rows on JC1060. Presentation
+and display rotation are unchanged. Tab5's enlarged buffer does not fall back
+to internal RAM if PSRAM allocation fails.
+
+Patterned fills can reuse A8 masks on P4 and the configured S3 LCD/AMOLED
+boards. Cache state, draw-buffer descriptors, and pixel storage use PSRAM-only
+allocations with an aggregate cap of 2 MiB on P4 or 256 KiB on S3. Allocation
+charges include alignment and a conservative allocator-overhead allowance.
+Each admission also checks for at least 8 MiB free PSRAM on P4 or 2 MiB on S3.
+When admission fails, the original uncached drawing path remains active; the
+same geometry is not retried until it changes. Set `LVGL_CACHE_PATTERNS` to
+false in a board override to disable this cache independently of PPA drawing.
+
+LVGL still uses its existing PSRAM-first allocator for ordinary draw tasks and
+transient image-decoder state; that allocator can fall back to internal RAM.
+The cache budget does not measure those transient allocations or SDK control
+objects. The pinned LVGL A8 decoder also does not handle every transient
+allocation failure safely. Hardware memory-pressure checks are required before
+considering these profiles validated.
 
 ## Architecture Layers
 

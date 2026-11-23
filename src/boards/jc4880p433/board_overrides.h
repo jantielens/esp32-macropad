@@ -62,6 +62,7 @@
 // LVGL draw buffer: PSRAM is fine — DMA2D handles the copy to the framebuffer.
 #define LVGL_BUFFER_PREFER_INTERNAL false
 #define LVGL_BUFFER_SIZE (DISPLAY_WIDTH * 80)
+#define LVGL_DRAW_BUF_COUNT 2
 
 // LVGL refresh period — 15 ms (~66 fps target).
 #define LVGL_REFR_PERIOD_MS 15

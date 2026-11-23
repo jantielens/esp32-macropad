@@ -1,12 +1,46 @@
 #include <gtest/gtest.h>
 #include <lvgl.h>
 #include <array>
+#include <unordered_map>
 #include "Arduino.h"
 #include "board_config.h"
 #undef HAS_MQTT
 #define HAS_MQTT 0
 #include "fill_draw.h"
 #include "fill_style_runtime.h"
+
+static size_t psram_free = 16 * 1024 * 1024;
+static size_t allocation_extra = 0;
+static bool fail_psram_allocation = false;
+static unsigned allocation_attempts = 0;
+static std::unordered_map<void*, size_t> psram_allocations;
+
+size_t heap_caps_get_free_size(uint32_t caps) {
+    EXPECT_EQ(caps, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    return psram_free;
+}
+
+void* heap_caps_malloc(size_t bytes, uint32_t caps) {
+    EXPECT_EQ(caps, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    ++allocation_attempts;
+    if (fail_psram_allocation || bytes + allocation_extra + 64 > psram_free) return nullptr;
+    void* memory = malloc(bytes + allocation_extra);
+    if (memory) {
+        psram_allocations[memory] = bytes + allocation_extra;
+        psram_free -= bytes + allocation_extra + 64;
+    }
+    return memory;
+}
+
+size_t heap_caps_get_allocated_size(void* memory) {
+    return psram_allocations.at(memory);
+}
+
+void heap_caps_free(void* memory) {
+    psram_free += psram_allocations.at(memory) + 64;
+    psram_allocations.erase(memory);
+    free(memory);
+}
 
 class FillDraw : public testing::Test {
 protected:
@@ -16,6 +50,11 @@ protected:
     std::array<uint8_t, 64 * 64 * 3> pixels{};
     FillPattern pattern = FillPattern::Diagonal;
     bool outline = false;
+    bool cached = false;
+    FillPatternCache cache;
+    lv_point_t origin = {8, 8};
+    int radius = 8;
+    lv_color_t color = lv_color_black();
 
     void SetUp() override {
         static bool initialized = false;
@@ -49,12 +88,21 @@ protected:
             } else {
                 lv_area_t bounds;
                 lv_obj_get_coords(fixture->object, &bounds);
-                lv_point_t origin = {8, 8};
-                fill_draw_pattern(layer, bounds, 8, origin, fixture->pattern, lv_color_black(), 8, 1);
+                fill_draw_pattern(layer, bounds, fixture->radius, fixture->origin,
+                                  fixture->pattern, fixture->color, 8, 1,
+                                  fixture->cached ? &fixture->cache : nullptr);
             }
         }, LV_EVENT_DRAW_MAIN_END, this);
     }
-    void TearDown() override { lv_display_delete(display); }
+    void TearDown() override {
+        lv_display_delete(display);
+        cache.clear();
+        EXPECT_EQ(fill_pattern_cache_used(), 0u);
+        EXPECT_TRUE(psram_allocations.empty());
+        fail_psram_allocation = false;
+        allocation_extra = 0;
+        psram_free = 16 * 1024 * 1024;
+    }
     bool black(int horizontal, int vertical) const {
         return pixels[(vertical * 64 + horizontal) * 3] == 0;
     }
@@ -78,6 +126,77 @@ TEST_F(FillDraw, NoneDoesNotAddTexture) {
     pattern = FillPattern::None;
     render();
     EXPECT_FALSE(black(24, 24));
+}
+
+TEST_F(FillDraw, CachedMasksMatchUncachedRenderingAndFallback) {
+    for (FillPattern value : {FillPattern::Diagonal, FillPattern::ReverseDiagonal,
+                              FillPattern::Crosshatch, FillPattern::Dots, FillPattern::Checkerboard}) {
+        pattern = value;
+        cached = false;
+        render();
+        const auto reference = pixels;
+        cached = true;
+        render();
+        EXPECT_EQ(reference, pixels);
+        lv_area_t partial = {19, 17, 38, 34};
+        lv_obj_invalidate_area(object, &partial);
+        lv_refr_now(display);
+        EXPECT_EQ(reference, pixels);
+    }
+    origin = {-3, 5};
+    radius = 12;
+    color = lv_color_hex(0x2468AC);
+    lv_obj_set_size(object, 35, 27);
+    cached = false;
+    render();
+    const auto reference = pixels;
+    cached = true;
+    render();
+    EXPECT_EQ(reference, pixels);
+    cache.clear();
+    fail_psram_allocation = true;
+    render();
+    EXPECT_EQ(reference, pixels);
+    const unsigned attempts = allocation_attempts;
+    render();
+    EXPECT_EQ(allocation_attempts, attempts);
+    fail_psram_allocation = false;
+    lv_obj_set_width(object, 36);
+    render();
+    EXPECT_NE(cache.pixels, nullptr);
+}
+
+TEST_F(FillDraw, CacheAdmissionEnforcesCapReserveAndAllocatorFailure) {
+    size_t charge = 0;
+    const size_t cap = LVGL_PATTERN_CACHE_BYTES;
+    const size_t reserve = LVGL_PATTERN_CACHE_RESERVE;
+    psram_free = reserve + cap;
+    void* maximum = fill_pattern_cache_alloc(cap - 64, charge);
+    ASSERT_NE(maximum, nullptr);
+    EXPECT_EQ(charge, cap);
+    EXPECT_EQ(psram_free, reserve);
+    size_t other_charge = 0;
+    EXPECT_EQ(fill_pattern_cache_alloc(1, other_charge), nullptr);
+    fill_pattern_cache_free(maximum, charge);
+    EXPECT_EQ(fill_pattern_cache_used(), 0u);
+    psram_free = reserve + 64;
+    EXPECT_EQ(fill_pattern_cache_alloc(1, charge), nullptr);
+    psram_free = reserve + 65;
+    void* boundary = fill_pattern_cache_alloc(1, charge);
+    ASSERT_NE(boundary, nullptr);
+    EXPECT_EQ(psram_free, reserve);
+    fill_pattern_cache_free(boundary, charge);
+    psram_free = reserve + 65;
+    allocation_extra = 8;
+    EXPECT_EQ(fill_pattern_cache_alloc(1, charge), nullptr);
+    EXPECT_EQ(psram_free, reserve + 65);
+    psram_free = reserve + cap + 1024;
+    allocation_extra = 8;
+    EXPECT_EQ(fill_pattern_cache_alloc(cap - 64, charge), nullptr);
+    EXPECT_EQ(fill_pattern_cache_used(), 0u);
+    fail_psram_allocation = true;
+    EXPECT_EQ(fill_pattern_cache_alloc(64, charge), nullptr);
+    EXPECT_EQ(fill_pattern_cache_used(), 0u);
 }
 
 TEST_F(FillDraw, RuntimeCopiesColorsAndReleasesRebuiltButtons) {

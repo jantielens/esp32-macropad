@@ -39,6 +39,12 @@ This software is based in part on the work of the FreeType Team.
 
 **`arduino-libraries.txt`** - Contains the list of required Arduino libraries
 
+P4 builds use the exact upstream LVGL commit in `P4_LVGL_REVISION` in
+`config.sh`, fetched into the board's build directory. The build rejects dirty
+cached checkouts and fetch failures. Other targets continue to use the LVGL
+version from `arduino-libraries.txt`. Verify ESP-IDF compatibility before
+replacing the P4 pin with a released revision.
+
 `NimBLE-Arduino@2.5.0` supplies the opt-in
 [broadcast profile](build-and-release-process.md#ble-backend-and-broadcast-profile),
 initially selected only by Sticky. Shared compiler settings apply consistently

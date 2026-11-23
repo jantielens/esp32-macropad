@@ -614,6 +614,9 @@ endforeach()
 add_host_gtest(test_fill_draw test_fill_draw.cpp
     ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp stubs.cpp)
 target_include_directories(test_fill_draw BEFORE PRIVATE ${HOST_ARDUINOJSON_DIR})
+target_compile_definitions(test_fill_draw PRIVATE
+    LVGL_CACHE_PATTERNS=1 LVGL_PATTERN_CACHE_BYTES=262144
+    LVGL_PATTERN_CACHE_RESERVE=2097152 TEST_PATTERN_CACHE_ALLOCATOR=1)
 target_compile_options(test_fill_draw PRIVATE
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/log_manager.h")
 target_link_libraries(test_fill_draw PRIVATE host_lvgl m)

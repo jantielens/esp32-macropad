@@ -117,6 +117,14 @@ void DisplayManager::displayEventCallback(lv_event_t* event) {
 		if (mgr->framePublisher.event(*mgr->driver, code, eventUs) && mgr->presentSem)
 				xSemaphoreGive(mgr->presentSem);
 #if HAS_DISPLAY_DIAGNOSTICS
+		if (code == LV_EVENT_FLUSH_WAIT_START) {
+			mgr->cycleRefresh.beginFlushWait(eventUs);
+			return;
+		}
+		if (code == LV_EVENT_FLUSH_WAIT_FINISH) {
+			mgr->cycleRefresh.endFlushWait(eventUs);
+			return;
+		}
 		if (code == LV_EVENT_INVALIDATE_AREA) {
 			const auto* area = static_cast<const lv_area_t*>(lv_event_get_param(event));
 			if (area && area->x2 >= area->x1 && area->y2 >= area->y1) {

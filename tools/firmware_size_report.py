@@ -173,6 +173,8 @@ LIBRARIES = {
     ),
 }
 FLAG_SUBSYSTEMS = {
+    "LVGL_USE_PPA": "LVGL",
+    "LVGL_CACHE_PATTERNS": "Display / touch (HAS_DISPLAY / HAS_TOUCH)",
     "HAS_RTC": "Timers / time",
     "HAS_BATTERY_INFO": "Sensors / power",
     "HAS_FACE_WIDGET": "Widgets (HAS_DISPLAY)",
@@ -208,10 +210,13 @@ FLAG_SUBSYSTEMS = {
     "IS_VOICE_ASSISTANT": "Device classes",
 }
 EXCLUDED_FLAGS = {
+    "LVGL_BUFFER_PSRAM_ONLY": "Draw-buffer allocation policy changes memory placement, not an independently attributable flash feature.",
     "HAS_EPAPER_GRAYSCALE": "Panel rendering capability; presentation drivers own both monochrome and grayscale paths without an independent flash boundary.",
     "HAS_PSRAM": "Memory capacity and allocation affect many subsystems; there is no distinct flash owner.",
 }
-FEATURE_FLAG_PATTERN = re.compile(r"\b(?:HAS_[A-Z0-9_]+|IS_[A-Z0-9_]+|ALARM_ENABLED)\b")
+FEATURE_FLAG_PATTERN = re.compile(
+    r"\b(?:HAS_[A-Z0-9_]+|IS_[A-Z0-9_]+|ALARM_ENABLED|LVGL_USE_PPA|LVGL_CACHE_PATTERNS|LVGL_BUFFER_PSRAM_ONLY)\b"
+)
 SHARED = "Shared/unattributed"
 SECTION = re.compile(r"^\s+(\.[\w.$-]+)(?:\s+(0x[0-9a-fA-F]+)\s+(0x[0-9a-fA-F]+)\s+(.+))?\s*$")
 CONTINUATION = re.compile(r"^\s+(0x[0-9a-fA-F]+)\s+(0x[0-9a-fA-F]+)\s+(.+)$")

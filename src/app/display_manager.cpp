@@ -404,10 +404,12 @@ void DisplayManager::initLVGL() {
 				}
 		} else {
 				buf = (uint8_t*)heap_caps_aligned_alloc(buf_align, buf_size_bytes, MALLOC_CAP_SPIRAM);
+#if !LVGL_BUFFER_PSRAM_ONLY
 				if (!buf) {
 						LOGW("Display", "PSRAM alloc failed, trying internal RAM...");
 						buf = (uint8_t*)heap_caps_aligned_alloc(buf_align, buf_size_bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 				}
+#endif
 		}
 		if (!buf) {
 				LOGE("Display", "Failed to allocate LVGL buffer");

@@ -2287,6 +2287,11 @@ not report a PSRAM largest-block value on those boards.
   must not be added to cycle time. Both display fields are API-only, are `null`
   before stats are available or without a display, and report zeros during
   screen-saver rendering suspension.
+  When `HAS_DISPLAY_DIAGNOSTICS` is enabled, render samples also include
+  `flush_wait_calls`, `flush_wait_us`, `flush_wait_peak_us`,
+  `render_flush_wait_us`, and `render_non_flush_us`. Flush and wait timing can
+  include driver synchronization and is not necessarily pure CPU rendering.
+  Detailed diagnostics are off on every configured board.
 - `ble_status`: compact user-facing BLE status with values `disabled`, `ready`, `pairing`, `connected`, or `error`
 - `ble_state`: detailed BLE status with values `disabled`, `idle`, `advertising`, `pairing`, `connecting`, `claimed`, `secured`, or `error`
 - `ble_name`: configured device name plus ` BLE`; present when the BLE keyboard is initialized
@@ -2329,7 +2334,8 @@ not report a PSRAM largest-block value on those boards.
   refreshing the sleeping display.
 - `async_flush_*`: MIPI-DSI asynchronous DMA2D flush state. A growing
   `async_flush_started_age_ms` while `async_flush_in_flight` is `true`
-  indicates a completion callback did not arrive.
+  indicates a completion callback did not arrive. Detailed diagnostics also add
+  completed-count, total, last, and peak transfer durations in microseconds.
 
 #### `GET /api/health/history`
 

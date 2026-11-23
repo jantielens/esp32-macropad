@@ -211,6 +211,10 @@ preserving its other compiler flags. Shared action descriptors use default
 member initializers with aggregate initialization, and execution context uses
 C++17 inline variables. C compilation and other platforms retain their defaults.
 
+P4 builds use the isolated LVGL revision described in
+[library management](library-management.md#installed-libraries). The resolved
+FQBN selects this dependency for every P4 target.
+
 Firmware builds require Node.js 18 or newer and npm for JavaScript minification.
 The asset generator installs the pinned Terser dependency with `npm ci --prefix tools`
 when it is missing. For an offline build, run that command beforehand. The version

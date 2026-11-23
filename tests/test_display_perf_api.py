@@ -10,10 +10,24 @@ source = (root / "src/app/device_telemetry.cpp").read_text()
 start = source.index("\tif (include_api_only_fields)", source.index("// Display FPS"))
 end = source.index("// WiFi stats", start)
 block = source[start:end]
+runtime_type = source[source.index("struct RuntimeDiagnostics {"):
+                      source.index("DRAM_ATTR static portMUX_TYPE s_runtime_diagnostics_mux")]
+async_helper_start = source.index("static void IRAM_ATTR record_async_flush_completed_locked(")
+async_helper = source[async_helper_start:source.index("\n#endif", async_helper_start)]
+runtime_start = source.index('\t\t\truntime_doc["async_flush_in_flight"]')
+runtime_end = source.index("\n\t\t// Min/max fields", runtime_start)
+runtime_block = source[runtime_start:runtime_end]
 harness = r'''
 #include <ArduinoJson.h>
 #include "display_perf.h"
 #include <cassert>
+#define IRAM_ATTR
+using DeviceRuntimePhase = int;
+'''
+harness += runtime_type
+harness += '\n#if HAS_DISPLAY_DIAGNOSTICS\nstatic RuntimeDiagnostics s_runtime_diagnostics = {};\n'
+harness += async_helper + '\n#endif\n'
+harness += r'''
 #define HAS_DISPLAY 1
 static bool displayManager = true;
 static bool ready = true;
@@ -35,8 +49,32 @@ static void fill(JsonDocument& doc, bool include_api_only_fields) {
 harness += block
 harness += r'''
 }
+static void fill_runtime(JsonDocument& doc) {
+    RuntimeDiagnostics runtime = {};
+    const uint32_t now_ms = 1000;
+    JsonObject runtime_doc = doc["runtime"].to<JsonObject>();
+#if HAS_DISPLAY_DIAGNOSTICS
+    runtime.async_flush_completed_count = 2;
+    runtime.async_flush_total_us = 500;
+#endif
+'''
+harness += runtime_block
+harness += r'''
+}
 int main() {
     JsonDocument doc;
+    fill_runtime(doc);
+#if HAS_DISPLAY_DIAGNOSTICS
+    assert(doc["runtime"]["async_flush_completed_count"].as<int>() == 2);
+    assert(doc["runtime"]["async_flush_total_us"].as<int>() == 500);
+#else
+    assert(doc["runtime"]["async_flush_completed_count"].isUnbound());
+    assert(doc["runtime"]["async_flush_total_us"].isUnbound());
+    assert(doc["runtime"]["async_flush_last_us"].isUnbound());
+    assert(doc["runtime"]["async_flush_peak_us"].isUnbound());
+#endif
+    assert(doc["runtime"]["async_flush_errors"].as<int>() == 0);
+    doc.clear();
     snapshot.fps = 42;
     snapshot.cycle_us = 400;
     snapshot.cycle_peak_us = 800;
@@ -49,6 +87,23 @@ int main() {
     assert(doc["display_perf"]["cycle_us"].as<int>() == 400);
     assert(doc["display_perf"]["cycle_peak_us"].as<int>() == 800);
 #if HAS_DISPLAY_DIAGNOSTICS
+    record_async_flush_completed_locked(100);
+    assert(s_runtime_diagnostics.async_flush_completed_count == 0);
+    s_runtime_diagnostics.async_flush_in_flight = true;
+    s_runtime_diagnostics.async_flush_started_us = uint64_t(UINT32_MAX) + 100;
+    record_async_flush_completed_locked(uint64_t(UINT32_MAX) + 400);
+    s_runtime_diagnostics.async_flush_in_flight = false;
+    record_async_flush_completed_locked(uint64_t(UINT32_MAX) + 500);
+    assert(s_runtime_diagnostics.async_flush_completed_count == 1);
+    assert(s_runtime_diagnostics.async_flush_last_us == 300);
+    s_runtime_diagnostics.async_flush_in_flight = true;
+    s_runtime_diagnostics.async_flush_started_us = uint64_t(UINT32_MAX) + 600;
+    record_async_flush_completed_locked(uint64_t(UINT32_MAX) + 800);
+    s_runtime_diagnostics.async_flush_in_flight = false;
+    assert(s_runtime_diagnostics.async_flush_completed_count == 2);
+    assert(s_runtime_diagnostics.async_flush_total_us == 500);
+    assert(s_runtime_diagnostics.async_flush_peak_us == 300);
+    assert(s_runtime_diagnostics.async_flush_last_us == 200);
     DisplayRenderSample render;
     render.cycle_us = 6000000;
     render.lv_timer_us = 5000000;
@@ -57,6 +112,10 @@ int main() {
     render.refresh.refresh_us = 4700000;
     render.refresh.render_us = 4400000;
     render.refresh.render_flush_us = 4000000;
+    render.refresh.flush_wait_calls = 4;
+    render.refresh.flush_wait_us = 350000;
+    render.refresh.flush_wait_peak_us = 200000;
+    render.refresh.render_flush_wait_us = 300000;
     render.refresh.render_glyph_miss_us = 200000;
     render.glyphs = {uint64_t(1) << 34, 50, 30, 2, 250000};
     render.refresh.invalidations.add(100, 100, DisplayInvalidationSource::Timer);
@@ -76,6 +135,11 @@ int main() {
     assert(doc["display_perf"]["last_render"]["lv_timer_other_us"].as<int>() == 1000000);
     assert(doc["display_perf"]["slowest_render"]["cycle_us"].as<int>() == 6000000);
     assert(doc["display_perf"]["last_render"]["render_other_us"].as<int>() == 400000);
+    assert(doc["display_perf"]["last_render"]["flush_wait_calls"].as<int>() == 4);
+    assert(doc["display_perf"]["last_render"]["flush_wait_us"].as<int>() == 350000);
+    assert(doc["display_perf"]["last_render"]["flush_wait_peak_us"].as<int>() == 200000);
+    assert(doc["display_perf"]["last_render"]["render_flush_wait_us"].as<int>() == 300000);
+    assert(doc["display_perf"]["last_render"]["render_non_flush_us"].as<int>() == 100000);
     assert(doc["display_perf"]["last_render"]["refresh_overhead_us"].as<int>() == 300000);
     assert(doc["display_perf"]["last_render"]["timer_other_us"].as<int>() == 300000);
     assert(doc["display_perf"]["font_cache"]["hits"].as<uint64_t>() == (uint64_t(1) << 34) + 3);

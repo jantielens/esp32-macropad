@@ -40,6 +40,9 @@
 #define DISPLAY_ROTATION 0
 #define LVGL_BUFFER_PREFER_INTERNAL false
 #define LVGL_BUFFER_SIZE (DISPLAY_WIDTH * 32)
+#ifndef LVGL_CACHE_PATTERNS
+#define LVGL_CACHE_PATTERNS true
+#endif
 
 // ============================================================================
 // NV3041A QSPI display

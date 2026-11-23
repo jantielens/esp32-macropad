@@ -58,6 +58,9 @@
 // This buffer is allocated from PSRAM in DisplayManager.
 // LVGL draw buffer size in pixels.
 #define LVGL_BUFFER_SIZE (DISPLAY_WIDTH * 80)
+#ifndef LVGL_CACHE_PATTERNS
+#define LVGL_CACHE_PATTERNS true
+#endif
 
 // QSPI pins (from sample/esp_bsp.h)
 // QSPI host peripheral.

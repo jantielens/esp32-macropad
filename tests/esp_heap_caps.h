@@ -11,7 +11,11 @@
 size_t heap_caps_get_free_size(uint32_t caps);
 size_t heap_caps_get_largest_free_block(uint32_t caps);
 
-#ifdef TEST_HEAP_CAPS_ALLOCATOR
+#ifdef TEST_PATTERN_CACHE_ALLOCATOR
+void* heap_caps_malloc(size_t size, uint32_t caps);
+void heap_caps_free(void* ptr);
+size_t heap_caps_get_allocated_size(void* ptr);
+#elif defined(TEST_HEAP_CAPS_ALLOCATOR)
 void* heap_caps_malloc(size_t size, uint32_t caps);
 void heap_caps_free(void* ptr);
 bool psramFound();

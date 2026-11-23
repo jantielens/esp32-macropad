@@ -3,6 +3,9 @@
 
 #include "fill_draw.h"
 #include "widgets/widget.h"
+#if LVGL_CACHE_PATTERNS
+#include <new>
+#endif
 
 struct FillStyleRuntime {
     lv_obj_t* button;
@@ -43,9 +46,11 @@ inline void fill_style_poll(FillStyleRuntime* runtime) {
     if (changed) lv_obj_invalidate(runtime->button);
 }
 
-template<unsigned Surface>
-inline void fill_style_pattern_event(lv_event_t* event) {
-    auto* runtime = static_cast<FillStyleRuntime*>(lv_event_get_user_data(event));
+inline void fill_style_draw_pattern(lv_event_t* event, FillStyleRuntime* runtime, unsigned surface
+#if LVGL_CACHE_PATTERNS
+                                    , FillPatternCache* cache = nullptr
+#endif
+                                    ) {
     lv_obj_t* object = lv_event_get_current_target_obj(event);
     lv_area_t bounds;
     lv_area_t anchor;
@@ -59,13 +64,53 @@ inline void fill_style_pattern_event(lv_event_t* event) {
     int radius = lv_obj_get_style_radius(object, LV_PART_MAIN) - border;
     lv_point_t origin = {anchor.x1, anchor.y1};
     const ButtonFillStyle* style = runtime->style();
-    uint32_t color = runtime->colors[Surface];
-    fill_draw_pattern(lv_event_get_layer(event), bounds, radius, origin, style->patterns[Surface],
-                      lv_color_make(color >> 16, color >> 8, color), style->spacing, style->stroke);
+    uint32_t color = runtime->colors[surface];
+    fill_draw_pattern(lv_event_get_layer(event), bounds, radius, origin, style->patterns[surface],
+                      lv_color_make(color >> 16, color >> 8, color), style->spacing, style->stroke
+#if LVGL_CACHE_PATTERNS
+                      , cache
+#endif
+                      );
 }
+
+template<unsigned Surface>
+inline void fill_style_pattern_event(lv_event_t* event) {
+    fill_style_draw_pattern(event, static_cast<FillStyleRuntime*>(lv_event_get_user_data(event)), Surface);
+}
+
+#if LVGL_CACHE_PATTERNS
+struct FillPatternSurface {
+    FillStyleRuntime* runtime;
+    unsigned surface;
+    size_t charge;
+    FillPatternCache cache;
+};
+
+inline void fill_style_cached_pattern_event(lv_event_t* event) {
+    auto* state = static_cast<FillPatternSurface*>(lv_event_get_user_data(event));
+    if (lv_event_get_code(event) == LV_EVENT_DELETE) {
+        const size_t charge = state->charge;
+        state->~FillPatternSurface();
+        fill_pattern_cache_free(state, charge);
+    } else if (lv_event_get_code(event) == LV_EVENT_DRAW_MAIN_END) {
+        fill_style_draw_pattern(event, state->runtime, state->surface, &state->cache);
+    }
+}
+#endif
 
 inline void fill_style_attach_pattern(lv_obj_t* object, FillStyleRuntime* runtime, unsigned surface) {
     if (!object || !runtime || runtime->style()->patterns[surface] == FillPattern::None) return;
+#if LVGL_CACHE_PATTERNS
+    size_t charge = 0;
+    void* storage = fill_pattern_cache_alloc(sizeof(FillPatternSurface), charge);
+    if (storage) {
+        auto* state = new (storage) FillPatternSurface{runtime, surface, charge, {}};
+        if (lv_obj_add_event_cb(object, fill_style_cached_pattern_event, LV_EVENT_ALL, state)) return;
+        state->~FillPatternSurface();
+        fill_pattern_cache_free(state, charge);
+    }
+    LOGW("Fill", "Pattern cache state unavailable; using uncached drawing");
+#endif
     lv_event_cb_t callbacks[] = {fill_style_pattern_event<0>, fill_style_pattern_event<1>,
         fill_style_pattern_event<2>, fill_style_pattern_event<3>, fill_style_pattern_event<4>, fill_style_pattern_event<5>};
     lv_obj_add_event_cb(object, callbacks[surface], LV_EVENT_DRAW_MAIN_END, runtime);
