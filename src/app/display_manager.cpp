@@ -390,6 +390,7 @@ void DisplayManager::initLVGL() {
 				lv_display_add_event_cb(display, DisplayManager::displayEventCallback, LV_EVENT_ALL, this);
 #endif
 		
+		if (!driver->configureDrawBuffers(display)) {
 		// Allocate LVGL draw buffer(s).
 		// v9 uses raw byte buffers; size = pixels × bytes_per_pixel (2 for RGB565).
 		// Buffers must be aligned to LV_DRAW_BUF_ALIGN (64 bytes on P4) for PPA DMA.
@@ -434,6 +435,10 @@ void DisplayManager::initLVGL() {
 		
 		// Set buffers on display (v9 API)
 		lv_display_set_buffers(display, buf, buf2, buf_size_bytes, LV_DISPLAY_RENDER_MODE_PARTIAL);
+		LOGT("Display", "Buffer: %d pixels (%d lines), %s",
+				 LVGL_BUFFER_SIZE, LVGL_BUFFER_SIZE / driver->width(),
+				 buf2 ? "double-buffered" : "single-buffered");
+		}
 		
 		// Let driver set up hardware-specific LVGL configuration
 		driver->configureLVGL(display, (DISPLAY_ROTATION + config->display_rotation) & 3);
@@ -456,14 +461,6 @@ void DisplayManager::initLVGL() {
 		LOGT("Display", "Refresh period: %d ms", LVGL_REFR_PERIOD_MS);
 		#endif
 		
-		LOGT("Display", "Buffer: %d pixels (%d lines), %s",
-				 LVGL_BUFFER_SIZE, LVGL_BUFFER_SIZE / driver->width(),
-				 #if defined(LVGL_DRAW_BUF_COUNT) && LVGL_DRAW_BUF_COUNT == 2
-				 "double-buffered"
-				 #else
-				 "single-buffered"
-				 #endif
-		);
 		LOGT("Display", "LVGL v9 init complete");
 }
 

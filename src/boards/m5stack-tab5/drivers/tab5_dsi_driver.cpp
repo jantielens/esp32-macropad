@@ -21,7 +21,7 @@ void Tab5DsiDriver::configureLVGL(lv_display_t* display, uint8_t rotation) {
     if (isAvailable()) MipiDsiDriver::configureLVGL(display, rotation);
 }
 
-bool Tab5DsiDriver::asyncFlush() const { return isAvailable(); }
+bool Tab5DsiDriver::asyncFlush() const { return isAvailable() && MipiDsiDriver::asyncFlush(); }
 
 const mipi_dsi_init_cmd_t* Tab5DsiDriver::getInitCommands() const {
     return tab5_panel_revision() == 1 ? st7121_commands : st7123_commands;

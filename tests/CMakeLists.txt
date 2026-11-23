@@ -1591,6 +1591,7 @@ add_host_command_test(test_widget_schema python3 ${PROJECT_SOURCE_DIR}/tools/lin
 add_host_command_test(test_gauge_caption_cache python3 ${PROJECT_SOURCE_DIR}/tests/test_gauge_caption_cache.py)
 add_host_legacy_test(test_display_perf SOURCES test_display_perf.cpp DEFINITIONS HAS_DISPLAY_DIAGNOSTICS=0)
 add_host_legacy_test(test_display_perf_diagnostics SOURCES test_display_perf.cpp DEFINITIONS HAS_DISPLAY_DIAGNOSTICS=1)
+add_host_legacy_test(test_mipi_frame_fence SOURCES test_mipi_frame_fence.cpp LIBRARIES host_lvgl m)
 add_host_command_test(test_pad_refresh_schedule python3 ${PROJECT_SOURCE_DIR}/tests/test_pad_refresh_schedule.py)
 add_host_command_test(test_portal_info_preparation python3 ${PROJECT_SOURCE_DIR}/tests/test_portal_info_preparation.py)
 add_host_command_test(test_portal_dev_server python3 ${PROJECT_SOURCE_DIR}/tests/test_portal_dev_server.py)

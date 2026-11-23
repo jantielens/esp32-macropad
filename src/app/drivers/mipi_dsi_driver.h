@@ -24,12 +24,12 @@
  *   6. esp_lcd_panel_init()        — starts continuous DMA refresh from PSRAM FB
  *   7. esp_lcd_dpi_panel_get_frame_buffer() — LVGL writes pixels here
  * 
- * LVGL v9 flush path:
+ * Legacy LVGL v9 flush path:
  *   setAddrWindow → pushColors → esp_lcd_panel_draw_bitmap()
  *   → DMA2D hardware async copy → on_color_trans_done ISR callback
  *   → lv_display_flush_ready() (decouples CPU from pixel copy)
  *
- * Software rotation (when DISPLAY_ROTATION != 0):
+ * Legacy rotation (when DISPLAY_ROTATION != 0):
  *   The DPI panel driver does NOT support esp_lcd_panel_swap_xy/mirror, so
  *   rotation is done per-tile in pushColors() using the ESP32-P4 PPA
  *   (Pixel Processing Accelerator) SRM module.  The pipeline is:
@@ -45,11 +45,9 @@
  *   tile into the alternate buffer while PPA+DMA2D process the current one.
  *   This yields ~25 FPS in portrait vs ~30+ FPS in landscape on JC1060P470C.
  *
- *   If you observe display instability (tearing, glitches, rare crashes)
- *   with the async PPA pipeline, you can revert to blocking PPA by changing
- *   PPA_TRANS_MODE_NON_BLOCKING to PPA_TRANS_MODE_BLOCKING in pushColors(),
- *   removing the onPpaDone callback, and calling draw_bitmap() directly
- *   after ppa_do_scale_rotate_mirror(). This costs ~2 FPS but is simpler.
+ * With LVGL_DSI_FRAME_SWAP, native orientation renders directly into two
+ * panel buffers. Rotated orientations use one logical PSRAM frame and rotate
+ * it into the inactive panel buffer before the scanout fence.
  * 
  * Subclasses provide:
  *   - Vendor init command table (panel-specific register programming)
@@ -103,9 +101,11 @@ class MipiDsiDriver : public DisplayDriver {
                           void* user_ctx);
 protected:
     uint16_t* framebuffer;                   // DPI panel PSRAM framebuffer (from ESP-IDF)
+    uint16_t* secondFramebuffer;
+    bool frameSwapEnabled;
     esp_lcd_panel_handle_t panel_handle;      // DPI panel handle
     esp_lcd_panel_io_handle_t ioHandle;       // DBI command channel (for runtime DCS commands)
-    uint16_t* rotBuffer;                     // PPA rotation output buffer (PSRAM, cache-aligned)
+    uint16_t* rotBuffer;                     // PSRAM tile output or logical frame for PPA
     ppa_client_handle_t ppaClient;           // PPA SRM client for hardware rotation
     uint8_t currentBrightness;               // Current brightness level (0-100%)
     uint16_t displayWidth;
@@ -172,6 +172,7 @@ public:
     void pushColors(uint16_t* data, uint32_t len, bool swap_bytes = true) override;
 
     void configureLVGL(lv_display_t* disp, uint8_t rotation) override;
+    bool configureDrawBuffers(lv_display_t* disp) override;
     bool asyncFlush() const override;
 
     void displaySleep() override;

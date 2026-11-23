@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-11-22
+ms.date: 2026-11-23
 ms.topic: reference
 ---
 
@@ -28,6 +28,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Improve ESP32-P4 display rendering with hardware acceleration for supported
+  drawing operations and reusable patterned-fill masks. Enable bounded,
+  PSRAM-only pattern caches on supported ESP32-S3 LCD/AMOLED boards as well.
+  Keep detailed display-performance diagnostics disabled on every board.
+* Use synchronized double-buffered presentation across all ESP32-P4 MIPI-DSI
+  profiles to avoid split-frame tearing. Native orientation retains dirty-area
+  rendering; rotated orientations use a logical PSRAM framebuffer and hardware
+  rotation before presentation. Preserve independent rendering rollback options.
 * Show save progress for Pad and Button Defaults, including the current pad
   and artwork preparation, upload, and save stages when regenerating icons.
   Reuse the pad editor's dialog to block editing and navigation during saving
@@ -38,6 +46,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Defer full-frame display rotation when OTA becomes active while waiting for
+  DMA access. Release the DMA token without changing scanout ownership, then
+  redraw when rendering resumes after OTA ends.
 * Refresh cached portal JavaScript and styles after every firmware build, even
   when the release version is unchanged. Share one timestamp-based build ID
   across bundled and optional assets, while retaining immutable browser caching

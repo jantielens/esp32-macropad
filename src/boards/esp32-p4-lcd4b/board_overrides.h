@@ -58,6 +58,9 @@
 #define LVGL_BUFFER_PREFER_INTERNAL false
 #define LVGL_BUFFER_SIZE (DISPLAY_WIDTH * 80)
 #define LVGL_DRAW_BUF_COUNT 2
+#ifndef LVGL_DSI_FRAME_SWAP
+#define LVGL_DSI_FRAME_SWAP true
+#endif
 
 // LVGL refresh period — 15 ms (~66 fps target) to match IDF reference projects.
 // Default LVGL 8.4 is 30 ms (~33 fps). Panel hardware supports ~59 fps.

@@ -1266,6 +1266,11 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define DISPLAY_DRIVER DISPLAY_DRIVER_TFT_ESPI  // Default to TFT_eSPI
 #endif
 
+// Use coherent framebuffer presentation for MIPI-DSI rendering.
+#ifndef LVGL_DSI_FRAME_SWAP
+#define LVGL_DSI_FRAME_SWAP false
+#endif
+
 // MIPI-DSI panels continuously DMA-scan a PSRAM framebuffer. A PSRAM heap
 // free-list walk can starve that scan and produce a visible blue frame.
 #ifndef TELEMETRY_ALLOW_PSRAM_POOL_WALK

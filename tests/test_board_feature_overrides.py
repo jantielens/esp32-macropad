@@ -584,6 +584,7 @@ for board in configured_boards:
         input='#include "src/app/board_config.h"\n'
               '#include "src/app/lv_conf.h"\n'
               'static_assert(!HAS_DISPLAY_DIAGNOSTICS, "Detailed display diagnostics must default off");\n'
+              f'static_assert(LVGL_DSI_FRAME_SWAP == {int(target == "ESP32P4")}, "P4 swap profile");\n'
               f'static_assert(LV_USE_PPA == {int(target == "ESP32P4")}, "P4 drawing backend selection");\n'
               'static_assert(LV_DRAW_SW_DRAW_UNIT_CNT == 1, "One software draw unit");\n'
               f'static_assert(LVGL_CACHE_PATTERNS == {int(target == "ESP32P4" or board in s3_cache_rows)}, "Pattern cache profile");\n'
@@ -596,14 +597,15 @@ for board in configured_boards:
     )
 print(f"PASS: diagnostics, drawing, cache and buffer profiles for {len(configured_boards)} active targets")
 
-for board, target in (("esp32-p4-lcd4b-sd", "ESP32P4"), ("jc3636w518-sd", "ESP32S3")):
+for board, target in (("esp32-p4-lcd4b-sd", "ESP32P4"), ("m5stack-tab5", "ESP32P4"), ("jc3636w518-sd", "ESP32S3")):
     subprocess.run(
         ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
          "-x", "c++", "-", "-I", str(root), "-I", str(root / "src/app"),
          "-I", str(root / "src/boards" / board), "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM",
-         f"-DCONFIG_IDF_TARGET_{target}=1", "-DLVGL_USE_PPA=0", "-DLVGL_CACHE_PATTERNS=0"],
+         f"-DCONFIG_IDF_TARGET_{target}=1", "-DLVGL_USE_PPA=0", "-DLVGL_CACHE_PATTERNS=0",
+         "-DLVGL_DSI_FRAME_SWAP=0"],
         input='#include "src/app/board_config.h"\n'
-              'static_assert(!LVGL_USE_PPA && !LVGL_CACHE_PATTERNS, "Independent optimization rollback");\n',
+              'static_assert(!LVGL_USE_PPA && !LVGL_CACHE_PATTERNS && !LVGL_DSI_FRAME_SWAP, "Independent optimization rollback");\n',
         text=True, check=True,
     )
 

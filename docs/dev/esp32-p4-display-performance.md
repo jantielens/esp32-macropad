@@ -1,4 +1,15 @@
-# ESP32-P4 Display Performance Analysis
+---
+title: ESP32-P4 Display Performance Analysis
+description: Historical comparison of P4 DSI display implementations and LVGL v9 performance work.
+---
+
+## ESP32-P4 Display Performance Analysis
+
+This is a historical performance investigation. Its framebuffer descriptions,
+configuration and measurements describe the partial-rendering implementation
+at the time of testing, not the current P4 defaults. For current presentation
+and rollback behavior, see the
+[MIPI-DSI driver architecture](display-touch-architecture.md#mipi-dsi-driver-architecture-esp32-p4).
 
 > **Purpose:** Reference document comparing our DSI display driver against
 > Waveshare's official ESP-IDF sample projects, and documenting the LVGL v9

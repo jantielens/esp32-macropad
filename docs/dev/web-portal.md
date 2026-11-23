@@ -2332,7 +2332,9 @@ not report a PSRAM largest-block value on those boards.
 - `sleep_refresh_*`: periodic screen-saver refresh attempts and completion.
   An attempt without a later completion indicates the main loop blocked while
   refreshing the sleeping display.
-- `async_flush_*`: MIPI-DSI asynchronous DMA2D flush state. A growing
+- `async_flush_*`: MIPI-DSI legacy partial-rendering DMA2D flush state.
+  Synchronous coherent framebuffer presentation does not contribute to these
+  counters. A growing
   `async_flush_started_age_ms` while `async_flush_in_flight` is `true`
   indicates a completion callback did not arrive. Detailed diagnostics also add
   completed-count, total, last, and peak transfer durations in microseconds.

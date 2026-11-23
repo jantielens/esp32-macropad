@@ -15,11 +15,46 @@
 #include "../dma2d_arbiter.h"
 #include "../device_telemetry.h"
 #include "../log_manager.h"
+#include "../ota_activity.h"
+#include "mipi_frame_fence.h"
+#if HAS_DISPLAY_DIAGNOSTICS
+#include <esp_timer.h>
+#endif
+#if LVGL_DSI_FRAME_SWAP && !CONFIG_FREERTOS_SMP
+#include <freertos/idf_additions.h>
+#include <freertos/task.h>
+#endif
 #include <string.h>
 
 // MIPI DSI PHY power supply (LDO channel 3 on ESP32-P4)
 #define MIPI_DSI_PHY_PWR_LDO_CHAN       3
 #define MIPI_DSI_PHY_PWR_LDO_VOLTAGE_MV 2500
+
+static DRAM_ATTR portMUX_TYPE frameFenceMux = portMUX_INITIALIZER_UNLOCKED;
+static DRAM_ATTR StaticSemaphore_t frameFenceStorage;
+static DRAM_ATTR SemaphoreHandle_t frameFenceSemaphore = nullptr;
+static DRAM_ATTR MipiFrameFence frameFence;
+#if LVGL_DSI_FRAME_SWAP
+static MipiDirectFrame directFrame;
+#endif
+
+static bool IRAM_ATTR onFrameComplete(esp_lcd_panel_handle_t,
+                                      esp_lcd_dpi_panel_event_data_t*, void*) {
+    BaseType_t woken = pdFALSE;
+    portENTER_CRITICAL_ISR(&frameFenceMux);
+    frameFence.observeCore(xPortGetCoreID());
+    if (frameFence.complete()) xSemaphoreGiveFromISR(frameFenceSemaphore, &woken);
+    portEXIT_CRITICAL_ISR(&frameFenceMux);
+    return woken == pdTRUE;
+}
+
+#if LVGL_DSI_FRAME_SWAP
+static bool IRAM_ATTR onFrameRotated(ppa_client_handle_t, ppa_event_data_t*, void*) {
+    BaseType_t woken = pdFALSE;
+    xSemaphoreGiveFromISR(frameFenceSemaphore, &woken);
+    return woken == pdTRUE;
+}
+#endif
 
 // Forward declaration of PPA completion callback (defined below pushColors).
 bool onPpaDone(ppa_client_handle_t client,
@@ -41,7 +76,8 @@ static bool IRAM_ATTR onColorTransDone(esp_lcd_panel_handle_t panel,
 }
 
 MipiDsiDriver::MipiDsiDriver()
-    : framebuffer(nullptr), panel_handle(nullptr), ioHandle(nullptr),
+    : framebuffer(nullptr), secondFramebuffer(nullptr), frameSwapEnabled(false),
+      panel_handle(nullptr), ioHandle(nullptr),
       rotBuffer(nullptr), ppaClient(nullptr),
       currentBrightness(100),
       displayWidth(DISPLAY_WIDTH), displayHeight(DISPLAY_HEIGHT), displayRotation(DISPLAY_ROTATION),
@@ -58,6 +94,7 @@ MipiDsiDriver::~MipiDsiDriver() {
 void MipiDsiDriver::init() {
     const char* tag = getLogTag();
     MipiDsiTimingConfig timing = getTimingConfig();
+    frameSwapEnabled = LVGL_DSI_FRAME_SWAP;
 
     // ----------------------------------------------------------------
     // Attach backlight PWM BEFORE the LCD panel starts.
@@ -151,19 +188,13 @@ void MipiDsiDriver::init() {
     // 4. Create DPI panel with disable_lp=true and use_dma2d=true
     //    disable_lp: keeps D-PHY in HS mode during blanking (avoids flicker)
     //    use_dma2d: hardware-accelerated async pixel copy (avoids blocking CPU)
-    //    num_fbs=1: single framebuffer. ESP-IDF only ping-pongs between
-    //      framebuffers when the caller hands esp_lcd_panel_draw_bitmap() a
-    //      pointer that *is* one of the framebuffers (the zero-copy path).
-    //      We always pass the LVGL/PPA staging buffer, so DMA2D copies into
-    //      the currently scanned-out FB and the panel's fb index never moves.
-    //      Additional framebuffers would be allocated but never scanned out —
-    //      W*H*2 bytes of PSRAM each, for no tear protection whatsoever.
+    // Panel-owned draw buffers select the SDK's zero-copy framebuffer path.
     esp_lcd_dpi_panel_config_t dpi_config = {
         .virtual_channel = 0,
         .dpi_clk_src = MIPI_DSI_DPI_CLK_SRC_DEFAULT,
         .dpi_clock_freq_mhz = (uint32_t)(timing.dpi_clock_hz / 1000000),
         .pixel_format = LCD_COLOR_PIXEL_FORMAT_RGB565,
-        .num_fbs = 1,
+        .num_fbs = static_cast<uint8_t>(frameSwapEnabled ? 2 : 1),
         .video_timing = {
             .h_size = displayWidth,
             .v_size = displayHeight,
@@ -189,8 +220,26 @@ void MipiDsiDriver::init() {
     
     // 7. Get the PSRAM framebuffer pointer (allocated by ESP-IDF during panel creation).
     void* fb0 = nullptr;
-    ESP_ERROR_CHECK(esp_lcd_dpi_panel_get_frame_buffer(panel_handle, 1, &fb0));
+    void* fb1 = nullptr;
+    if (frameSwapEnabled) {
+        ESP_ERROR_CHECK(esp_lcd_dpi_panel_get_frame_buffer(panel_handle, 2, &fb0, &fb1));
+        if (!fb0 || !fb1 || fb0 == fb1) {
+            LOGE(tag, "Invalid panel framebuffers");
+            abort();
+        }
+        frameFenceSemaphore = xSemaphoreCreateBinaryStatic(&frameFenceStorage);
+        if (!frameFenceSemaphore) {
+            LOGE(tag, "Failed to create framebuffer fence");
+            abort();
+        }
+    } else {
+        ESP_ERROR_CHECK(esp_lcd_dpi_panel_get_frame_buffer(panel_handle, 1, &fb0));
+    }
     framebuffer = (uint16_t*)fb0;
+    secondFramebuffer = (uint16_t*)fb1;
+#if LVGL_DSI_FRAME_SWAP
+    if (frameSwapEnabled) directFrame.reset(framebuffer);
+#endif
     
     LOGI(tag, "DSI initialized: %dx%d, disable_lp=%s, use_dma2d=true, FB @ %p",
          displayWidth, displayHeight, timing.disable_lp ? "true" : "false", fb0);
@@ -198,24 +247,29 @@ void MipiDsiDriver::init() {
     delay(50);
     setBacklightBrightness(currentBrightness);
     
-    // Rotation via PPA hardware (Pixel Processing Accelerator).
-    // The DPI panel driver does NOT support swap_xy/mirror ops, so we
-    // rotate each tile in pushColors() using PPA SRM before draw_bitmap().
+    // The coherent path rotates a complete logical frame; the legacy path
+    // rotates individual tiles before copying them into the scanout buffer.
     if (displayRotation != 0) {
-        size_t rotBufSize = LVGL_BUFFER_SIZE * sizeof(uint16_t);
+        size_t rotBufSize = frameSwapEnabled
+            ? (size_t)displayWidth * displayHeight * sizeof(uint16_t)
+            : LVGL_BUFFER_SIZE * sizeof(uint16_t);
         rotBufSize = (rotBufSize + 63) & ~63; // cache-line alignment
         rotBuffer = (uint16_t*)heap_caps_aligned_alloc(64, rotBufSize, MALLOC_CAP_SPIRAM);
         if (!rotBuffer) {
             LOGE(tag, "Failed to allocate PPA rotation buffer (%u bytes)", (unsigned)rotBufSize);
+            if (frameSwapEnabled) abort();
         } else {
             ppa_client_config_t ppa_cfg = { .oper_type = PPA_OPERATION_SRM };
             ESP_ERROR_CHECK(ppa_register_client(&ppa_cfg, &ppaClient));
-            // Register PPA async completion callback — chains into draw_bitmap()
-            // after each tile rotation finishes.
             ppa_event_callbacks_t ppa_cbs = {};
+#if LVGL_DSI_FRAME_SWAP
+            ppa_cbs.on_trans_done = frameSwapEnabled ? onFrameRotated : onPpaDone;
+#else
             ppa_cbs.on_trans_done = onPpaDone;
+#endif
             ESP_ERROR_CHECK(ppa_client_register_event_callbacks(ppaClient, &ppa_cbs));
-            LOGT(tag, "PPA async rotation enabled: %u byte buffer @ %p", (unsigned)rotBufSize, rotBuffer);
+            LOGT(tag, "PPA %s rotation buffer: %u bytes @ %p",
+                 frameSwapEnabled ? "frame" : "tile", (unsigned)rotBufSize, rotBuffer);
         }
     }
 
@@ -337,8 +391,132 @@ bool onPpaDone(ppa_client_handle_t client,
 
 void MipiDsiDriver::pushColors(uint16_t* data, uint32_t len, bool swap_bytes) {
     if (!panel_handle || !data || flushW == 0 || flushH == 0) {
+#if LVGL_DSI_FRAME_SWAP
+        if (frameSwapEnabled) {
+            LOGE(getLogTag(), "Invalid direct framebuffer flush");
+            abort();
+        }
+#endif
         return;
     }
+
+#if LVGL_DSI_FRAME_SWAP
+    if (frameSwapEnabled) {
+        if (!lvglDisplay) {
+            LOGE(getLogTag(), "Invalid direct framebuffer presentation");
+            abort();
+        }
+        const bool last = lv_display_flush_is_last(lvglDisplay);
+        uint16_t* presentBuffer = data;
+        if (displayRotation != 0) {
+            if (data != rotBuffer || !ppaClient) {
+                LOGE(getLogTag(), "Invalid logical framebuffer");
+                abort();
+            }
+            if (!last) return;
+            presentBuffer = static_cast<uint16_t*>(directFrame.inactive(framebuffer, secondFramebuffer));
+        }
+        const auto flush = directFrame.accept(presentBuffer, framebuffer, secondFramebuffer, last);
+        if (flush == MipiDirectFrame::Flush::Invalid) {
+            LOGE(getLogTag(), "Invalid direct framebuffer ownership");
+            abort();
+        }
+        if (flush == MipiDirectFrame::Flush::Pending) return;
+
+        xSemaphoreTake(frameFenceSemaphore, 0);
+        if (displayRotation != 0) {
+            const size_t bytes = (size_t)displayWidth * displayHeight * sizeof(uint16_t);
+            ppa_srm_oper_config_t srm = {};
+            srm.in.buffer = rotBuffer;
+            srm.in.pic_w = width();
+            srm.in.pic_h = height();
+            srm.in.block_w = width();
+            srm.in.block_h = height();
+            srm.in.srm_cm = PPA_SRM_COLOR_MODE_RGB565;
+            srm.out.buffer = presentBuffer;
+            srm.out.buffer_size = bytes;
+            srm.out.pic_w = displayWidth;
+            srm.out.pic_h = displayHeight;
+            srm.out.srm_cm = PPA_SRM_COLOR_MODE_RGB565;
+            srm.rotation_angle = displayRotation == 1 ? PPA_SRM_ROTATION_ANGLE_270 :
+                                 displayRotation == 2 ? PPA_SRM_ROTATION_ANGLE_180 :
+                                                        PPA_SRM_ROTATION_ANGLE_90;
+            srm.scale_x = 1.0f;
+            srm.scale_y = 1.0f;
+            srm.mode = PPA_TRANS_MODE_NON_BLOCKING;
+            if (!dma2d_arbiter_acquire(1000)) {
+                LOGE(getLogTag(), "2D-DMA busy during frame rotation");
+                abort();
+            }
+            if (ota_activity_is_active()) {
+                dma2d_arbiter_release();
+                directFrame.cancel();
+                // Invalidation is forbidden inside a flush; retry after this refresh.
+                const lv_result_t retry = lv_async_call([](void* display) {
+                    lv_obj_invalidate(lv_display_get_layer_top(static_cast<lv_display_t*>(display)));
+                }, lvglDisplay);
+                if (retry != LV_RESULT_OK) {
+                    LOGE(getLogTag(), "Failed to schedule deferred frame rotation");
+                    abort();
+                }
+                LOGI(getLogTag(), "Frame rotation deferred during OTA");
+                return;
+            }
+            // PPA's own cache maintenance ignores errors; check both transitions.
+            ESP_ERROR_CHECK(esp_cache_msync(rotBuffer, bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M));
+            ESP_ERROR_CHECK(esp_cache_msync(presentBuffer, bytes, ESP_CACHE_MSYNC_FLAG_DIR_M2C));
+            ESP_ERROR_CHECK(ppa_do_scale_rotate_mirror(ppaClient, &srm));
+            if (xSemaphoreTake(frameFenceSemaphore, pdMS_TO_TICKS(1000)) != pdTRUE) {
+                LOGE(getLogTag(), "Frame rotation timed out");
+                abort();
+            }
+            dma2d_arbiter_release();
+            xSemaphoreTake(frameFenceSemaphore, 0);
+        }
+        int presentingCore = MipiFrameFence::unknownCore;
+#if !CONFIG_FREERTOS_SMP
+        const BaseType_t affinity = xTaskGetCoreID(xTaskGetCurrentTaskHandle());
+        if (affinity >= 0 && affinity < configNUM_CORES) presentingCore = affinity;
+#endif
+        // LVGL can copy earlier dirty areas outside this flush; write back all rows.
+        ESP_ERROR_CHECK(esp_lcd_panel_draw_bitmap(panel_handle, 0, 0,
+                                                  displayWidth, displayHeight, presentBuffer));
+        // On the same core the ISR cannot overlap submission. Otherwise an ISR
+        // may have selected the old buffer and must be followed by another.
+        portENTER_CRITICAL(&frameFenceMux);
+        frameFence.arm(presentingCore);
+        portEXIT_CRITICAL(&frameFenceMux);
+#if HAS_DISPLAY_DIAGNOSTICS
+        const uint64_t waitStartUs = esp_timer_get_time();
+#endif
+        if (xSemaphoreTake(frameFenceSemaphore, pdMS_TO_TICKS(1000)) != pdTRUE) {
+            LOGE(getLogTag(), "Framebuffer fence timed out");
+            abort();
+        }
+        directFrame.complete();
+#if HAS_DISPLAY_DIAGNOSTICS
+        const uint64_t waitEndUs = esp_timer_get_time();
+        const uint32_t waitUs = static_cast<uint32_t>(waitEndUs - waitStartUs);
+        static uint64_t windowStartUs = 0;
+        static uint64_t totalWaitUs = 0;
+        static uint32_t waitCount = 0;
+        static uint32_t maxWaitUs = 0;
+        if (!waitCount) windowStartUs = waitStartUs;
+        ++waitCount;
+        totalWaitUs += waitUs;
+        if (waitUs > maxWaitUs) maxWaitUs = waitUs;
+        if (waitEndUs - windowStartUs >= 5000000) {
+            LOGI(getLogTag(), "Frame fence wait: count=%lu avg_us=%lu max_us=%lu",
+                 (unsigned long)waitCount, (unsigned long)(totalWaitUs / waitCount),
+                 (unsigned long)maxWaitUs);
+            waitCount = 0;
+            totalWaitUs = 0;
+            maxWaitUs = 0;
+        }
+#endif
+        return;
+    }
+#endif
 
     // Report any draw_bitmap failure recorded by onPpaDone (ISR context can't
     // log). Drained here so a persistent fault is visible in the serial log.
@@ -470,13 +648,43 @@ void MipiDsiDriver::configureLVGL(lv_display_t* disp, uint8_t rotation) {
     // Register DMA2D completion callback so LVGL knows the draw buffer
     // can be recycled once the hardware copy finishes.
     esp_lcd_dpi_panel_event_callbacks_t cbs = {};
-    cbs.on_color_trans_done = onColorTransDone;
-    ESP_ERROR_CHECK(esp_lcd_dpi_panel_register_event_callbacks(panel_handle, &cbs, disp));
-    LOGT(getLogTag(), "DMA2D flush callback registered");
+    if (frameSwapEnabled) {
+        cbs.on_frame_buf_complete = onFrameComplete;
+    } else {
+        cbs.on_color_trans_done = onColorTransDone;
+    }
+    ESP_ERROR_CHECK(esp_lcd_dpi_panel_register_event_callbacks(
+        panel_handle, &cbs, frameSwapEnabled ? nullptr : disp));
+    LOGT(getLogTag(), "%s callback registered", frameSwapEnabled ? "Frame fence" : "DMA2D flush");
+}
+
+bool MipiDsiDriver::configureDrawBuffers(lv_display_t* disp) {
+    if (!frameSwapEnabled || !panel_handle) return false;
+    if (lv_display_get_color_format(disp) != LV_COLOR_FORMAT_RGB565 ||
+        lv_draw_buf_width_to_stride(width(), LV_COLOR_FORMAT_RGB565) !=
+            width() * sizeof(uint16_t)) {
+        LOGE(getLogTag(), "Direct framebuffers require packed RGB565 rows");
+        abort();
+    }
+    const size_t bytes = (size_t)displayWidth * displayHeight * sizeof(uint16_t);
+    if (displayRotation != 0) {
+        if (!rotBuffer || bytes % 64 || (uintptr_t)framebuffer % 64 ||
+            (uintptr_t)secondFramebuffer % 64) {
+            LOGE(getLogTag(), "Rotated framebuffers require cache-aligned PSRAM");
+            abort();
+        }
+        lv_display_set_buffers(disp, rotBuffer, nullptr, bytes, LV_DISPLAY_RENDER_MODE_DIRECT);
+        LOGI(getLogTag(), "Rotated frame swap: logical buffer and two panel buffers, %u bytes each", (unsigned)bytes);
+    } else {
+        // SDK starts scanning framebuffer 0, so LVGL must render framebuffer 1 first.
+        lv_display_set_buffers(disp, secondFramebuffer, framebuffer, bytes, LV_DISPLAY_RENDER_MODE_DIRECT);
+        LOGI(getLogTag(), "Direct frame swap: two panel buffers, %u bytes each", (unsigned)bytes);
+    }
+    return true;
 }
 
 bool MipiDsiDriver::asyncFlush() const {
-    return true;
+    return !frameSwapEnabled;
 }
 
 // Zero the DPI framebuffer and flush PSRAM cache so the scanout sees black.
@@ -502,6 +710,12 @@ void MipiDsiDriver::fillFramebuffers(uint16_t color) {
     const size_t fb_bytes = (size_t)displayWidth * (size_t)displayHeight * sizeof(uint16_t);
     memset(fb0, fill, fb_bytes);
     esp_cache_msync(fb0, fb_bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
+    if (secondFramebuffer) {
+        memset(secondFramebuffer, fill, fb_bytes);
+        esp_cache_msync(secondFramebuffer, fb_bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
+        // LVGL's saved dirty areas no longer describe the modified framebuffers.
+        if (lvglDisplay) lv_obj_invalidate(lv_display_get_layer_top(lvglDisplay));
+    }
 }
 
 void MipiDsiDriver::blankFramebuffers() {

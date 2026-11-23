@@ -180,6 +180,9 @@ public:
 				// Override if driver needs software rotation or other LVGL tweaks
 		}
 
+		// Configure driver-owned LVGL buffers, or return false for manager-owned strips.
+		virtual bool configureDrawBuffers(lv_display_t*) { return false; }
+
 		// Whether the driver signals flush-ready asynchronously (e.g., via DMA
 		// completion callback). When true, DisplayManager skips calling
 		// lv_display_flush_ready() in the flush callback.

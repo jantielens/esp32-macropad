@@ -44,9 +44,10 @@ patterned-button and bar-track checks, rounded clipping, partial redraws,
 repeated pad navigation, and a hardware soak test.
 
 P4 partial rendering requests two draw buffers, preferring PSRAM: 80 rows on
-LCD4B and JC4880, 160 rows on Tab5, and 80 logical rows on JC1060. Presentation
-and display rotation are unchanged. Tab5's enlarged buffer does not fall back
-to internal RAM if PSRAM allocation fails.
+LCD4B and JC4880, 160 rows on Tab5, and 80 logical rows on JC1060. Tab5's
+enlarged strip buffer does not fall back to internal RAM if allocation fails.
+P4 MIPI-DSI profiles use direct framebuffer swapping instead, as described in
+the MIPI-DSI section. The strip profiles remain the independent rollback path.
 
 Patterned fills can reuse A8 masks on P4 and the configured S3 LCD/AMOLED
 boards. Cache state, draw-buffer descriptors, and pixel storage use PSRAM-only
@@ -425,8 +426,8 @@ Tab5 board initialization holds the backlight off, releases the expander-owned
 LCD reset as an input with pull-up, and identifies the ST touch firmware over
 shared I2C. Version 1 selects ST7121 DSI timing and version 3 selects ST7123;
 unknown versions leave the display and touch unavailable. The older
-ILI9881C/GT911 hardware is not supported. The DSI driver uses the existing
-PSRAM framebuffer and asynchronous rendering path; panel command payloads
+ILI9881C/GT911 hardware is not supported. The DSI driver uses PSRAM
+framebuffers; panel command payloads
 remain in flash. The display and touch adapters and licensed panel command
 table live in `src/boards/m5stack-tab5/drivers/`, shared with the SD variant;
 the MIPI DSI base remains central. The ST touch driver reads bounded 7-byte contact records and
@@ -697,18 +698,9 @@ The `configureLVGL()` method allows drivers to customize LVGL behavior without m
 - **Custom DPI** - For panels with non-standard pixel density
 - **DMA2D async flush** - Register completion callback for hardware-accelerated framebuffer copy (e.g., ESP32-P4)
 
-**Example: MIPI-DSI Base Class DMA2D Callback Registration**
-
-The `MipiDsiDriver` base class registers the DMA2D completion callback so that LVGL knows when the draw buffer can be recycled after hardware-accelerated framebuffer copy. Panel subclasses (ST7703, ST7701) inherit this automatically.
-
-```cpp
-void MipiDsiDriver::configureLVGL(lv_display_t* disp, uint8_t rotation) {
-    lvglDisplay = disp;
-    esp_lcd_dpi_panel_event_callbacks_t cbs = {};
-    cbs.on_color_trans_done = onColorTransDone;
-    ESP_ERROR_CHECK(esp_lcd_dpi_panel_register_event_callbacks(panel_handle, &cbs, disp));
-}
-```
+The MIPI-DSI base class registers the DMA2D completion callback for partial
+rendering and the frame-completion callback for coherent presentation. Panel
+subclasses inherit this selection.
 
 **Example: TFT_eSPI Hardware Rotation (Default)**
 ```cpp
@@ -736,9 +728,9 @@ void DisplayManager::initLVGL() {
     lv_display_set_flush_cb(display, DisplayManager::flushCallback);
     lv_display_set_user_data(display, this);
     
-    // Allocate aligned draw buffer(s)
-    buf = (uint8_t*)heap_caps_aligned_alloc(LV_DRAW_BUF_ALIGN, buf_size_bytes, ...);
-    lv_display_set_buffers(display, buf, buf2, buf_size_bytes, LV_DISPLAY_RENDER_MODE_PARTIAL);
+    if (!driver->configureDrawBuffers(display)) {
+        // Allocate aligned draw buffers and configure partial rendering.
+    }
     
     // Call driver's LVGL configuration hook
     driver->configureLVGL(display, (DISPLAY_ROTATION + config->display_rotation) & 3);
@@ -881,6 +873,36 @@ classDiagram
 - LDO channel 3 (2500 mV) for MIPI PHY power
 - Backlight PWM with configurable duty mapping
 - Defines `MipiDsiTimingConfig` struct for per-panel timing parameters
+
+`LVGL_DSI_FRAME_SWAP` enables coherent presentation in all configured P4
+MIPI-DSI families. At native rotation, LVGL renders dirty areas into the
+inactive of two panel-owned PSRAM framebuffers and copies previously changed
+regions between them. At other rotations, LVGL renders dirty areas into one
+full logical PSRAM framebuffer. After the last dirty area, PPA rotates the
+whole logical frame into the inactive panel buffer. The driver checks cache
+transitions and waits for PPA completion before submission. This adds one
+RGB565 frame in PSRAM for rotated displays and no tile rotation buffer.
+
+After acquiring DMA arbitration, rotated presentation rechecks OTA activity
+before cache maintenance or PPA submission. If OTA is active, it releases the
+DMA token, cancels the unsubmitted frame without changing scanout ownership,
+and queues a full invalidation outside the flush callback. Rendering retries
+when the display task resumes after OTA ends.
+
+The driver submits the entire panel framebuffer before reusing the old scanout.
+It waits for one frame-complete event when the presenting task is pinned to the
+observed DMA interrupt core. The ESP-IDF interrupt remains on its allocation
+core, so that ISR cannot overlap submission on the same core. Otherwise,
+including unknown affinity or conflicting core observations, it waits for two
+events to account for an interrupt that selected the old buffer before
+submission. This depends on ESP-IDF 5.5.5 selecting and restarting DMA before
+the completion callback; revalidate that ordering after an SDK upgrade. A
+timeout aborts rather than reusing an unsafe buffer. Both panel buffers are
+blanked during sleep and the full display is invalidated after blanking.
+ESP-IDF 5.5.5 does not support PPA SRM with external buffers when flash
+encryption is enabled.
+Set the flag to `false` in the board override to restore partial rendering
+independently of PPA drawing and caching; that path can tear.
 
 **Subclass Override Points:**
 ```cpp

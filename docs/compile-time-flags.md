@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 396
+Total flags: 397
 
 ### Features (HAS_*)
 
@@ -351,6 +351,7 @@ Total flags: 396
 - **LED_ACTIVE_HIGH** default: `true` — LED polarity: true if HIGH turns the LED on.
 - **LVGL_CACHE_PATTERNS** default: `(no default)` — Cache reusable pattern masks in bounded PSRAM on selected display boards.
 - **LVGL_DRAW_BUF_COUNT** default: `1` — is being flushed (useful with async DMA2D or PPA rotation pipelines).
+- **LVGL_DSI_FRAME_SWAP** default: `false` — Use coherent framebuffer presentation for MIPI-DSI rendering.
 - **LVGL_FAST_MEM_IN_IRAM** default: `(no default)` — Keep LVGL fast paths in IRAM on S3 by default; boards may trade speed for SRAM.
 - **LVGL_TASK_CORE** default: `0` — Core to pin the LVGL render task to on dual-core chips (0 or 1).
 - **LVGL_TASK_PRIORITY** default: `4` — Default 4 matches ESP-IDF BSP convention; keeps rendering above WiFi (pri 2-3).
@@ -1074,6 +1075,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/display_task.cpp
   - src/app/drivers/it8951_epaper_driver.cpp
   - src/app/drivers/it8951_epaper_driver.h
+  - src/app/drivers/mipi_dsi_driver.cpp
   - src/app/freetype_mono_font.cpp
   - src/app/freetype_mono_font.h
   - src/boards/crowpanel-4.2-interactive/drivers/display/crowpanel42_epaper_driver.cpp
@@ -2184,6 +2186,13 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **LVGL_DRAW_BUF_COUNT**
   - src/app/board_config.h
   - src/app/display_manager.cpp
+- **LVGL_DSI_FRAME_SWAP**
+  - src/app/board_config.h
+  - src/app/drivers/mipi_dsi_driver.cpp
+  - src/boards/esp32-p4-lcd4b/board_overrides.h
+  - src/boards/jc1060p470c/board_overrides.h
+  - src/boards/jc4880p433/board_overrides.h
+  - src/boards/m5stack-tab5/board_overrides.h
 - **LVGL_FAST_MEM_IN_IRAM**
   - src/app/board_config.h
   - src/app/lv_conf.h
