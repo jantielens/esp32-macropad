@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-11-23
+ms.date: 2026-11-24
 ms.topic: reference
 ---
 
@@ -70,6 +70,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Play the configured Long-Press Feedback sound for hardware button holds.
+  Preserve tap feedback and suppress feedback when an action already produces
+  audio.
 * Preserve explicit track outline settings when editing pads, and prevent
   saving or importing with unavailable firmware appearance defaults.
 * Defer full-frame display rotation when OTA becomes active while waiting for

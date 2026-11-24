@@ -1,4 +1,5 @@
 #define HAS_BUTTON 1
+#define HAS_AUDIO 1
 #define NUM_HW_BUTTONS 2
 #define HW_BUTTON_HOLD_MS 100
 #define HW_BUTTON_DEFAULTS_JSON "{\"action_format_version\":1,\"buttons\":[{\"hold_actions\":[{\"op\":\"test.set\",\"args\":{\"value\":\"default\"}}]}]}"
@@ -23,6 +24,7 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[NUM_HW_BUTTONS] = {
 #include "../src/app/hw_buttons.h"
 #include "../src/app/device_dialog.h"
 #include "../src/app/action_dispatch.h"
+#include "../src/app/audio.h"
 #include "../src/app/mqtt_triggers.cpp"
 #include "../src/app/action_storage.cpp"
 #include "../src/app/action_parse.cpp"
@@ -45,6 +47,7 @@ static void attachInterrupt(int, void (*)(), int) {}
 
 #undef TAG
 namespace hw_host {
+DeviceConfig device_config = {};
 #include "../src/app/hw_button_config.cpp"
 #undef TAG
 #include "../src/app/hw_buttons.cpp"
@@ -67,6 +70,8 @@ const char* replacement_on_dispatch = nullptr;
 const char* hw_replacement_on_dispatch = nullptr;
 ActionContinuationOwner dispatched_owner = ACTION_CONTINUATION_OWNER_LOOP;
 bool dispatched_interactive = false;
+bool actions_have_audio = false;
+std::vector<std::string> feedback_patterns;
 
 void expect_unlocked() {
     ASSERT_NE(g_lock, nullptr);
@@ -129,6 +134,8 @@ const ActionOperationDef* action_operation_for_action(const ButtonAction& action
 }
 bool device_dialog_active() { return false; }
 uint32_t device_dialog_input_generation() { return 0; }
+bool action_list_has_audio(const ButtonAction*, uint8_t) { return actions_have_audio; }
+void audio_feedback(const char* pattern) { feedback_patterns.emplace_back(pattern); }
 ActionResult action_dispatch(const ButtonAction&, const char*, uint32_t, bool) { return ACTION_COMPLETE; }
 bool storage_write_atomic(const char* path, const uint8_t* data, size_t length) {
     if (atomic_write_fails) return false;
@@ -168,6 +175,11 @@ protected:
         allocation_fails = mutex_fails = atomic_write_fails = false;
         allocations = mutex_creations = dispatches = 0;
         dispatched_argument.clear();
+        actions_have_audio = false;
+        feedback_patterns.clear();
+        hw_host::device_config = {};
+        strlcpy(hw_host::device_config.tap_beep, "800:80", sizeof(hw_host::device_config.tap_beep));
+        strlcpy(hw_host::device_config.lp_beep, "600:40 40 600:40", sizeof(hw_host::device_config.lp_beep));
         replacement_on_dispatch = nullptr;
         hw_replacement_on_dispatch = nullptr;
         clock_ms = 0;
@@ -495,6 +507,8 @@ TEST_F(MqttTriggers, HardwareTypedSaveReloadAndDispatchUsesOwnedSnapshots) {
     EXPECT_EQ(dispatches, 1U);
     EXPECT_EQ(dispatched_owner, ACTION_CONTINUATION_OWNER_LOOP);
     EXPECT_TRUE(dispatched_interactive);
+    ASSERT_EQ(feedback_patterns.size(), 1U);
+    EXPECT_EQ(feedback_patterns[0], "800:80");
     EXPECT_STREQ(response[0]["tap_actions"][0]["args"]["value"]["$template"], "[var:tap]");
 
     ASSERT_TRUE(hw_host::hw_button_config_save_raw(reinterpret_cast<const uint8_t*>(config), strlen(config)));
@@ -507,6 +521,26 @@ TEST_F(MqttTriggers, HardwareTypedSaveReloadAndDispatchUsesOwnedSnapshots) {
     hw_host::hw_buttons_loop();
     EXPECT_EQ(dispatched_argument, "hold");
     EXPECT_EQ(dispatches, 2U);
+    ASSERT_EQ(feedback_patterns.size(), 2U);
+    EXPECT_EQ(feedback_patterns[1], "600:40 40 600:40");
+    clock_ms += HW_BUTTON_HOLD_MS;
+    hw_host::hw_buttons_loop();
+    EXPECT_EQ(feedback_patterns.size(), 2U);
+}
+
+TEST_F(MqttTriggers, HardwareHoldFeedbackRespectsDisabledCueAndAudioActions) {
+    mqtt_triggers_init();
+    hw_host::hw_button_config_init();
+    hw_host::hw_buttons_init();
+    hw_host::device_config.lp_beep[0] = '\0';
+    hw_host::dispatch_event(0, true);
+    strlcpy(hw_host::device_config.lp_beep, "none", sizeof(hw_host::device_config.lp_beep));
+    hw_host::dispatch_event(0, true);
+    strlcpy(hw_host::device_config.lp_beep, "600:40", sizeof(hw_host::device_config.lp_beep));
+    actions_have_audio = true;
+    hw_host::dispatch_event(0, true);
+    EXPECT_TRUE(feedback_patterns.empty());
+    EXPECT_EQ(dispatches, 3U);
 }
 
 TEST_F(MqttTriggers, HardwareInvalidOrFailedWritePreservesFileAndCache) {

@@ -37,6 +37,10 @@ void mqtt_sub_store_test_record_owner(const char* topic,
 
 struct DeviceConfig {
     char screen_saver_wake_binding[1];
+#if HAS_AUDIO
+    char tap_beep[128];
+    char lp_beep[128];
+#endif
 };
 
 class MqttManager {

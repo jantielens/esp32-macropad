@@ -57,12 +57,12 @@ static inline bool button_pressed(uint8_t i) {
 }
 
 #if HAS_AUDIO
-// Play the device tap_beep cue, unless the action list itself produces audio.
-static void maybe_beep(const ButtonAction* actions, uint8_t count) {
+// Play the gesture's feedback cue, unless the action list itself produces audio.
+static void maybe_beep(const ButtonAction* actions, uint8_t count, bool is_hold) {
     if (action_list_has_audio(actions, count)) {
         return;
     }
-    const char* pattern = device_config.tap_beep;
+    const char* pattern = is_hold ? device_config.lp_beep : device_config.tap_beep;
     if (pattern[0] && strcmp(pattern, "none") != 0) {
         audio_feedback(pattern);
     }
@@ -107,8 +107,7 @@ static void dispatch_event(uint8_t index, bool is_hold) {
         return;
     }
 #if HAS_AUDIO
-    // tap_beep is the tap feedback cue only; hold events do not beep.
-    if (!is_hold) maybe_beep(actions, count);
+    maybe_beep(actions, count, is_hold);
 #endif
     char label[16];
     snprintf(label, sizeof(label), "HWBtn%u%s", index, is_hold ? "H" : "T");
