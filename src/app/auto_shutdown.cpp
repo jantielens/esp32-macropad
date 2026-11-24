@@ -28,13 +28,20 @@ uint32_t noticeGeneration = 0;
 uint32_t noticeActivityMs = 0;
 uint32_t noticeStartedMs = 0;
 bool noticeAttempted = false;
+bool noticeSettling = false;
+uint32_t noticePresentedMs = 0;
+constexpr uint32_t kNoticeSettleMs = 1000;
 #endif
 
 void clear_shutdown() {
 #if HAS_DISPLAY
+#ifdef BOARD_AUTO_SHUTDOWN_CANCEL
+    BOARD_AUTO_SHUTDOWN_CANCEL(noticeGeneration);
+#endif
     if (noticeGeneration) device_dialog_dismiss_notification(noticeGeneration);
     noticeGeneration = 0;
     noticeAttempted = false;
+    noticeSettling = false;
 #endif
     action_continuation_release(shutdownToken);
     shutdownToken = 0;
@@ -86,7 +93,8 @@ void auto_shutdown_loop() {
         }
         if (!noticeAttempted && screen_saver_manager_input_ready()) {
             noticeAttempted = true;
-            if (!device_dialog_notify("Powered off automatically", 0, &noticeGeneration))
+            const bool notified = device_dialog_notify("Powered off automatically", 0, &noticeGeneration);
+            if (!notified)
                 LOGW("Power", "Auto-shutdown notification unavailable");
         }
         bool presented = false;
@@ -100,14 +108,38 @@ void auto_shutdown_loop() {
             }
             presented = state == DEVICE_NOTIFICATION_PRESENTED;
         }
-        if (!presented) {
-            if (uint32_t(now - noticeStartedMs) < ACTION_CONTINUATION_TIMEOUT_MS) return;
-            LOGW("Power", "Auto-shutdown proceeding without a displayed notification");
-        }
         if (lastActivityMs.load() != noticeActivityMs) {
             LOGI("Power", "Auto-shutdown cancelled: activity during notification");
             clear_shutdown();
             return;
+        }
+        if (!presented) {
+            if (uint32_t(now - noticeStartedMs) < ACTION_CONTINUATION_TIMEOUT_MS) return;
+            if (noticeSettling) {
+                LOGW("Power", "Auto-shutdown cancelled: final presentation timed out");
+                clear_shutdown();
+                lastActivityMs.store(now);
+                return;
+            }
+            LOGW("Power", "Auto-shutdown proceeding without a displayed notification");
+        } else {
+            if (!noticeSettling) {
+                noticeSettling = true;
+                noticePresentedMs = now;
+            }
+            if (uint32_t(now - noticePresentedMs) < kNoticeSettleMs) return;
+#ifdef BOARD_AUTO_SHUTDOWN_PREPARE
+            const DeviceNotificationState finalState = BOARD_AUTO_SHUTDOWN_PREPARE(noticeGeneration);
+            if (finalState == DEVICE_NOTIFICATION_MISSING ||
+                (finalState != DEVICE_NOTIFICATION_PRESENTED &&
+                 uint32_t(now - noticeStartedMs) >= ACTION_CONTINUATION_TIMEOUT_MS)) {
+                LOGW("Power", "Auto-shutdown cancelled: final presentation unavailable");
+                clear_shutdown();
+                lastActivityMs.store(now);
+                return;
+            }
+            if (finalState != DEVICE_NOTIFICATION_PRESENTED) return;
+#endif
         }
 #endif
     } else {

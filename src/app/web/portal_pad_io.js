@@ -272,9 +272,11 @@ function padCheckImportedActionFormat(pad) {
                 throw new Error('Operation argument information is unavailable: ' + action.op);
             const argumentsByName = new Map(operation.arguments.map(argument => [argument.name, argument]));
             if (Object.keys(action.args).some(name => !argumentsByName.has(name)) ||
-                operation.arguments.some(argument => !Object.prototype.hasOwnProperty.call(action.args, argument.name)))
+                operation.arguments.some(argument => !argument.optional &&
+                    !Object.prototype.hasOwnProperty.call(action.args, argument.name)))
                 throw new Error('Operation arguments do not match ' + action.op + '.');
             for (const argument of operation.arguments) {
+                if (argument.optional && !Object.prototype.hasOwnProperty.call(action.args, argument.name)) continue;
                 const value = action.args[argument.name];
                 if (value && typeof value === 'object' && !Array.isArray(value)) {
                     if (!argument.dynamic || Object.keys(value).length !== 1 ||

@@ -107,21 +107,26 @@ ActionArgumentBlock* action_storage_parse(ActionStorage& storage,
                                          JsonObjectConst arguments) {
     size_t text_bytes = 0;
     for (uint8_t index = 0; index < operation.argument_count; ++index) {
-        JsonVariantConst value = arguments[operation.arguments[index].name];
+        const ActionArgumentDef& argument = operation.arguments[index];
+        JsonVariantConst value = arguments[argument.name];
         if (value.is<JsonObjectConst>()) text_bytes += strlen(value["$template"].as<const char*>()) + 1;
-        else if (action_argument_is_text(operation.arguments[index].type))
-            text_bytes += strlen(value.as<const char*>()) + 1;
+        else if (action_argument_is_text(argument.type))
+            text_bytes += strlen(arguments.containsKey(argument.name)
+                ? value.as<const char*>() : argument.default_text) + 1;
     }
     ActionArgumentBlock* block = make_block(storage, operation.argument_count, text_bytes);
     if (!block) return nullptr;
     auto* stored = reinterpret_cast<ActionStoredArgument*>(block + 1);
     size_t offset = sizeof(ActionArgumentBlock) + operation.argument_count * sizeof(ActionStoredArgument);
     for (uint8_t index = 0; index < operation.argument_count; ++index) {
-        JsonVariantConst value = arguments[operation.arguments[index].name];
+        const ActionArgumentDef& argument = operation.arguments[index];
+        const bool present = arguments.containsKey(argument.name);
+        JsonVariantConst value = arguments[argument.name];
         stored[index].dynamic = value.is<JsonObjectConst>();
         if (stored[index].dynamic || action_argument_is_text(operation.arguments[index].type)) {
             const char* text = stored[index].dynamic
-                ? value["$template"].as<const char*>() : value.as<const char*>();
+                ? value["$template"].as<const char*>()
+                : present ? value.as<const char*>() : argument.default_text;
             size_t length = strlen(text);
             stored[index].offset = static_cast<uint16_t>(offset);
             memcpy(reinterpret_cast<char*>(block) + offset, text, length + 1);
@@ -129,7 +134,8 @@ ActionArgumentBlock* action_storage_parse(ActionStorage& storage,
         } else if (operation.arguments[index].type == ACTION_ARGUMENT_NUMBER) {
             stored[index].number = value.as<float>();
         } else {
-            stored[index].integer = operation.arguments[index].type == ACTION_ARGUMENT_BOOLEAN
+            stored[index].integer = !present ? argument.default_integer :
+                operation.arguments[index].type == ACTION_ARGUMENT_BOOLEAN
                 ? (value.as<bool>() ? 1 : 0) : value.as<int32_t>();
         }
     }

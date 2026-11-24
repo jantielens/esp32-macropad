@@ -55,6 +55,7 @@ struct ActionArgumentDef {
     bool has_default_integer = false;
     const char* zero_label = nullptr;
     const char* description = nullptr;
+    bool optional = false;
 };
 
 struct ActionResolvedArgument {

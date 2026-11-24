@@ -27,6 +27,13 @@ execution policy. The
 descriptors to the [portal editor](../../src/app/web/portal_action_editor.js)
 and MCP discovery. Operation handlers stay with their subsystem owners.
 
+Arguments are required unless their descriptor explicitly marks them
+`optional` and supplies a valid typed default. Validation still rejects
+explicit nulls and invalid values; parsing materializes defaults only for
+omitted optional arguments. The catalog exposes `optional` and `default` so
+portal imports and existing saved actions remain compatible with additive
+arguments, such as the Sticky shutdown message and delay.
+
 The `ha.service.call` service argument uses a bare name such as
 `media_play_pause`, not `media_player.media_play_pause`; its domain comes from
 `entity_id` (for example, `media_player.living_room`). The owning action module

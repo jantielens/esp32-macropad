@@ -167,6 +167,24 @@ const char* action_operation_validate_descriptor(const ActionOperationDef& opera
              argument.nonzero_minimum <= 0 || argument.nonzero_minimum > argument.maximum))
             return "invalid nonzero minimum";
         if (argument.type > ACTION_ARGUMENT_NUMBER) return "unsupported argument type";
+        if (argument.optional) {
+            if (action_argument_is_text(argument.type)) {
+                const char* normalized = nullptr;
+                if (!argument.default_text ||
+                    action_argument_normalize_text(argument, argument.default_text, &normalized, nullptr))
+                    return "optional argument needs a valid default";
+            } else if (!argument.has_default_integer ||
+                       (argument.type == ACTION_ARGUMENT_INTEGER &&
+                        (argument.default_integer < argument.minimum ||
+                         argument.default_integer > argument.maximum ||
+                         (argument.nonzero_minimum && argument.default_integer != 0 &&
+                          argument.default_integer < argument.nonzero_minimum))) ||
+                       (argument.type == ACTION_ARGUMENT_BOOLEAN &&
+                        argument.default_integer != 0 && argument.default_integer != 1) ||
+                       (argument.type != ACTION_ARGUMENT_INTEGER && argument.type != ACTION_ARGUMENT_BOOLEAN)) {
+                return "optional argument needs a valid default";
+            }
+        }
         if (argument.type == ACTION_ARGUMENT_ENUM) {
             if (!argument.choices || !argument.choice_count) return "enum choices are required";
             for (uint8_t choice = 0; choice < argument.choice_count; ++choice) {
@@ -234,7 +252,10 @@ const char* action_operation_validate_json(JsonObjectConst action, bool validate
     }
     for (uint8_t index = 0; index < operation->argument_count; ++index) {
         const ActionArgumentDef& argument = operation->arguments[index];
-        if (!args.containsKey(argument.name)) return "required operation argument missing";
+        if (!args.containsKey(argument.name)) {
+            if (argument.optional) continue;
+            return "required operation argument missing";
+        }
         JsonVariantConst value = args[argument.name];
         if (value.is<JsonObjectConst>()) {
             JsonObjectConst dynamic = value.as<JsonObjectConst>();

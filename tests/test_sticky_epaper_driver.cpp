@@ -365,6 +365,51 @@ static void coherentLvglFrame() {
     CHECK(fixture.driver.getPresentationStats(&stats));
     CHECK(stats.last.frame_sequence == fixture.commits);
 #endif
+    lv_obj_set_style_bg_color(lv_screen_active(), lv_color_black(), 0);
+    const size_t beforeShutdownNotice = modes().size();
+    const uint32_t noticeRequest = fixture.publisher.interactionChanged(uint64_t(clockMs) * 1000);
+    fixture.publisher.interactionChanged(uint64_t(clockMs) * 1000, true);
+    fixture.publisher.interactionChanged(uint64_t(clockMs) * 1000);
+    fixture.driver.present();
+    CHECK(modes().size() == beforeShutdownNotice);
+    CHECK(fixture.publisher.renderIfNeeded(fixture.driver, display, false));
+    CHECK(!fixture.driver.hasPresentedInteraction(noticeRequest));
+    streamHook = [&] { CHECK(!fixture.driver.hasPresentedInteraction(noticeRequest)); };
+    fixture.driver.present();
+    streamHook = nullptr;
+    CHECK(modes().size() == beforeShutdownNotice + 1 && modes().back() == 0xf7);
+    CHECK(fixture.driver.hasPresentedInteraction(noticeRequest));
+    CHECK(snapshotPixel(fixture.driver, 799, 479) == 0);
+    // Even identical notification pixels need the explicitly requested full waveform.
+    const uint32_t repeatedNotice = fixture.publisher.interactionChanged(uint64_t(clockMs) * 1000, true);
+    CHECK(!sticky_display_hold_for_shutdown(repeatedNotice));
+    CHECK(fixture.publisher.renderIfNeeded(fixture.driver, display, false));
+    CHECK(!fixture.driver.hasPresentedInteraction(repeatedNotice));
+    streamHook = [] { ota = true; };
+    fixture.driver.present();
+    streamHook = nullptr;
+    CHECK(!sticky_display_hold_for_shutdown(repeatedNotice));
+    CHECK(!fixture.driver.hasPresentedInteraction(repeatedNotice));
+    ota = false;
+    fixture.driver.present();
+    CHECK(modes().size() == beforeShutdownNotice + 2 && modes().back() == 0xf7);
+    CHECK(fixture.driver.hasPresentedInteraction(repeatedNotice));
+    CHECK(sticky_display_hold_for_shutdown(repeatedNotice));
+    // Live data may still render, but must not partially update the retained glass.
+    lv_obj_set_style_bg_color(lv_screen_active(), lv_color_white(), 0);
+    const uint32_t laterRequest = fixture.publisher.interactionChanged(uint64_t(clockMs) * 1000);
+    CHECK(fixture.publisher.renderIfNeeded(fixture.driver, display, false));
+    clockMs += 1000;
+    fixture.driver.present();
+    CHECK(modes().size() == beforeShutdownNotice + 2);
+    CHECK(!fixture.driver.hasPresentedInteraction(laterRequest));
+    CHECK(snapshotPixel(fixture.driver, 799, 479) == 0);
+    sticky_display_release_shutdown();
+    fixture.driver.present();
+    CHECK(modes().size() == beforeShutdownNotice + 3);
+    CHECK(fixture.driver.hasPresentedInteraction(laterRequest));
+    CHECK(snapshotPixel(fixture.driver, 799, 479) == 1);
+    lv_obj_set_style_bg_color(lv_screen_active(), lv_color_white(), 0);
     // Local binding requests coalesce, survive blocked owner passes, and only
     // become render intent after resolution at the safe outer boundary.
     const uint64_t bindingRequest = uint64_t(clockMs) * 1000;

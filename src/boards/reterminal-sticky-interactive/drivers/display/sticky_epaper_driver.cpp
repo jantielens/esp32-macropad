@@ -12,6 +12,22 @@
 #include <esp_timer.h>
 #endif
 
+#if HAS_AUTO_SHUTDOWN
+namespace {
+std::atomic<uint32_t> activePresentations{0};
+std::atomic<uint32_t> shutdownRequest{0}, shutdownPresented{0};
+}
+
+bool sticky_display_hold_for_shutdown(uint32_t request_sequence) {
+    shutdownRequest.store(request_sequence);
+    return request_sequence && shutdownPresented.load() == request_sequence;
+}
+
+void sticky_display_release_shutdown() {
+    shutdownRequest.store(0);
+}
+#endif
+
 StickyEpaperDriver::~StickyEpaperDriver() { releaseResources(); }
 
 void StickyEpaperDriver::releaseResources() {
@@ -29,6 +45,8 @@ void StickyEpaperDriver::releaseResources() {
     partialsSinceFull = 0;
 #if HAS_AUTO_SHUTDOWN
     presentedRequestSequence = 0;
+    shutdownRequest.store(0);
+    shutdownPresented.store(0);
 #endif
 }
 
@@ -163,6 +181,8 @@ void StickyEpaperDriver::commitFrame(const DisplayFrame& frame) {
     if (!mutex) return;
     xSemaphoreTake(mutex, portMAX_DELAY);
     schedule.commit(frame);
+    // Apply the waveform request only after its pixels have reached drawing.
+    forceFull |= frame.full_refresh;
 #if HAS_AUTO_SHUTDOWN
     if (frame.request_sequence && !schedule.changed) {
         if (baselineValid && !pending && !forceFull) {
@@ -184,10 +204,6 @@ void StickyEpaperDriver::stopPresentation() {
 }
 
 #if HAS_AUTO_SHUTDOWN
-namespace {
-std::atomic<uint32_t> activePresentations{0};
-}
-
 bool sticky_display_is_busy() {
     return activePresentations.load() != 0;
 }
@@ -213,6 +229,13 @@ void StickyEpaperDriver::present() {
     for (;;) {
         if (ota_activity_is_active() || stopping.load()) return;
         xSemaphoreTake(mutex, portMAX_DELAY);
+#if HAS_AUTO_SHUTDOWN
+        const uint32_t finalRequest = shutdownRequest.load();
+        if (finalRequest && shutdownPresented.load() == finalRequest) {
+            xSemaphoreGive(mutex);
+            return;
+        }
+#endif
         if (schedule.rendering) { xSemaphoreGive(mutex); return; }
         if (!pending && !forceFull) { xSemaphoreGive(mutex); return; }
         const EpaperRefreshSettings settings = config_manager_get_epaper_refresh_settings();
@@ -282,6 +305,9 @@ void StickyEpaperDriver::present() {
 #if HAS_AUTO_SHUTDOWN
             if (presentingFrame.request_sequence)
                 presentedRequestSequence = presentingFrame.request_sequence;
+            if (full && finalRequest && presentingFrame.request_sequence &&
+                int32_t(presentingFrame.request_sequence - finalRequest) >= 0)
+                shutdownPresented.store(finalRequest);
 #endif
             lastRefresh = millis();
             partialsSinceFull = full ? 0 : partialsSinceFull < UINT16_MAX ? partialsSinceFull + 1 : UINT16_MAX;

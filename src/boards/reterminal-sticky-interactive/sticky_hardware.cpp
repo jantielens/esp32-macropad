@@ -5,6 +5,9 @@
 #include "i2c_bus.h"
 #include "log_manager.h"
 #include "ota_activity.h"
+#include "device_dialog.h"
+#include "display_manager.h"
+#include "screen_saver_manager.h"
 #if HAS_VOICE_NOTES
 #include "voice_notes.h"
 #endif
@@ -12,6 +15,7 @@
 #include <Wire.h>
 #include <driver/gpio.h>
 #include <atomic>
+#include <string.h>
 #if USE_SD_STORAGE
 #include <SPI.h>
 #endif
@@ -24,6 +28,16 @@ bool sensorBusStarted = false;
 SPIClass sharedSpi{HSPI};
 #endif
 std::atomic<uint32_t> shutdownToken{0};
+std::atomic<bool> shutdownReserved{false};
+bool shutdownGateOwned = false;
+char shutdownMessage[CONFIG_DIALOG_MESSAGE_MAX_LEN] = {};
+uint32_t shutdownDelayMs = 0;
+uint32_t shutdownNotice = 0;
+bool shutdownPrepared = false;
+uint32_t shutdownPreparedAt = 0;
+uint32_t shutdownRequestedAt = 0;
+uint32_t finalNoticeGeneration = 0;
+uint32_t finalNoticeRequest = 0;
 bool shutdownStarted = false;
 bool shutdownSent = false;
 uint32_t shutdownStartedAt = 0;
@@ -65,9 +79,18 @@ void shutdown_failed(uint32_t token, const char* reason, bool restoreLatch) {
     recorderWaitStarted = false;
 #endif
     shutdownToken.store(0);
-    ota_activity_finish();
+    sticky_cancel_shutdown_notice(shutdownNotice);
+    if (shutdownGateOwned) {
+        ota_activity_finish();
+        shutdownGateOwned = false;
+    }
+    if (shutdownNotice) {
+        device_dialog_dismiss_notification(shutdownNotice);
+        shutdownNotice = 0;
+    }
     if (!action_continuation_complete(token, false))
         LOGE("Sticky", "Shutdown continuation expired: %lu", static_cast<unsigned long>(token));
+    shutdownReserved.store(false);
 }
 }
 
@@ -122,15 +145,63 @@ void sticky_sd_mount_failed() {
 }
 #endif
 
-bool sticky_request_shutdown(uint32_t continuation_token) {
-    if (!continuation_token || !ready) {
-        LOGW("Sticky", "Shutdown rejected: board not ready or no action continuation");
+DeviceNotificationState sticky_prepare_shutdown_notice(uint32_t generation) {
+    bool locked = false;
+    display_manager_lock_if_needed(&locked);
+    DeviceNotificationState state = device_dialog_notification_state(generation);
+    if (state == DEVICE_NOTIFICATION_PRESENTED) {
+        if (finalNoticeGeneration && finalNoticeGeneration != generation) {
+            LOGW("Sticky", "Another shutdown notification owns final presentation");
+            state = DEVICE_NOTIFICATION_MISSING;
+        } else if (!finalNoticeRequest) {
+            finalNoticeRequest = displayManager ? displayManager->interactionChanged(0, true) : 0;
+            if (finalNoticeRequest) {
+                finalNoticeGeneration = generation;
+                sticky_display_hold_for_shutdown(finalNoticeRequest);
+                state = DEVICE_NOTIFICATION_PENDING;
+            } else {
+                LOGW("Sticky", "Shutdown full refresh unavailable");
+                state = DEVICE_NOTIFICATION_MISSING;
+            }
+        } else if (!sticky_display_hold_for_shutdown(finalNoticeRequest)) {
+            state = DEVICE_NOTIFICATION_PENDING;
+        }
+    }
+    display_manager_unlock_if_needed(locked);
+    return state;
+}
+
+void sticky_cancel_shutdown_notice(uint32_t generation) {
+    if (!generation || finalNoticeGeneration != generation) return;
+    sticky_display_release_shutdown();
+    finalNoticeGeneration = finalNoticeRequest = 0;
+}
+
+bool sticky_request_shutdown(uint32_t continuation_token, const char* message, uint32_t delay_ms) {
+    if (!continuation_token || !ready || !message ||
+        strlen(message) >= sizeof(shutdownMessage) || delay_ms > STICKY_SHUTDOWN_MAX_DELAY_MS) {
+        LOGW("Sticky", "Shutdown rejected: board, continuation, message, or delay invalid");
         return false;
     }
-    if (!ota_activity_try_begin()) {
+    if (digitalRead(9) == HIGH) {
+        LOGW("Sticky", "Shutdown rejected: disconnect USB/external power first");
+        return false;
+    }
+    if (shutdownReserved.exchange(true)) {
+        LOGW("Sticky", "Shutdown rejected: another shutdown is pending");
+        return false;
+    }
+    const bool immediate = !message[0] && !delay_ms;
+    if (immediate ? !ota_activity_try_begin() : ota_activity_is_busy()) {
+        shutdownReserved.store(false);
         LOGW("Sticky", "Shutdown rejected: OTA, storage write, or power transition active");
         return false;
     }
+    shutdownGateOwned = immediate;
+    memcpy(shutdownMessage, message, strlen(message) + 1);
+    shutdownDelayMs = delay_ms;
+    shutdownPrepared = false;
+    shutdownRequestedAt = static_cast<uint32_t>(millis());
     shutdownToken.store(continuation_token);
     return true;
 }
@@ -142,6 +213,7 @@ void sticky_hardware_loop() {
     if (!shutdownStarted) {
         shutdownStarted = true;
         shutdownStartedAt = now;
+        if (shutdownMessage[0]) screen_saver_manager_wake();
     }
     if (shutdownSent) {
         if (static_cast<uint32_t>(now - shutdownSentAt) >= kPowerOffTimeoutMs)
@@ -151,6 +223,49 @@ void sticky_hardware_loop() {
     if (digitalRead(9) == HIGH) {
         shutdown_failed(token, "disconnect USB/external power first", false);
         return;
+    }
+    if (!shutdownGateOwned) {
+        if (uint32_t(now - shutdownRequestedAt) >= ACTION_CONTINUATION_TIMEOUT_MS) {
+            shutdown_failed(token, "shutdown preparation timed out", false);
+            return;
+        }
+        if (ota_activity_is_busy()) {
+            shutdown_failed(token, "OTA, storage write, or power transition started", false);
+            return;
+        }
+        if (!shutdownPrepared) {
+            if (shutdownMessage[0]) {
+                if (!screen_saver_manager_input_ready()) return;
+                if (!device_dialog_notify(shutdownMessage, 0, &shutdownNotice)) {
+                    shutdown_failed(token, "shutdown notification unavailable", false);
+                    return;
+                }
+            }
+            shutdownPreparedAt = now;
+            shutdownPrepared = true;
+        }
+        if (shutdownNotice) {
+            const DeviceNotificationState state = device_dialog_notification_state(shutdownNotice);
+            if (state == DEVICE_NOTIFICATION_MISSING) {
+                shutdown_failed(token, "shutdown notification replaced or dismissed", false);
+                return;
+            }
+            if (state != DEVICE_NOTIFICATION_PRESENTED) return;
+        }
+        if (uint32_t(now - shutdownPreparedAt) < shutdownDelayMs) return;
+        if (shutdownNotice) {
+            const DeviceNotificationState state = sticky_prepare_shutdown_notice(shutdownNotice);
+            if (state == DEVICE_NOTIFICATION_MISSING) {
+                shutdown_failed(token, "shutdown final presentation unavailable", false);
+                return;
+            }
+            if (state != DEVICE_NOTIFICATION_PRESENTED) return;
+        }
+        if (!ota_activity_try_begin()) {
+            shutdown_failed(token, "OTA, storage write, or power transition active", false);
+            return;
+        }
+        shutdownGateOwned = true;
     }
     // The AI/OK button directly enables the supply while held, bypassing the latch.
     if (digitalRead(4) == LOW) {

@@ -18,8 +18,9 @@ public:
         return true;
     }
 
-    uint32_t interactionChanged(uint64_t now) {
+    uint32_t interactionChanged(uint64_t now, bool full_refresh = false) {
         interaction.intent = DisplayIntent::Interactive;
+        interaction.full_refresh |= full_refresh;
         if (++requestSequence == 0) ++requestSequence;
         interaction.request_sequence = requestSequence;
         interaction.requested_us = now;

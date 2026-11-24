@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 402
+Total flags: 404
 
 ### Features (HAS_*)
 
@@ -247,6 +247,8 @@ Total flags: 402
 - **BME280_I2C_ADDR** default: `0x76` — BME280 I2C address (0x76 or 0x77).
 - **BOARD_ACTION_SOURCE** default: `(no default)` — Board-local action module compiled through the action aggregator.
 - **BOARD_AUDIO_CONTROL_FACTORY** default: `(no default)` — Board-owned codec rail and amplifier controls for the selected audio driver.
+- **BOARD_AUTO_SHUTDOWN_CANCEL** default: `(no default)` — Resume display presentation if automatic shutdown is cancelled or fails.
+- **BOARD_AUTO_SHUTDOWN_PREPARE** default: `(no default)` — Keep final presentation and cancellation with the board shutdown policy.
 - **BOARD_AUTO_SHUTDOWN_REQUEST** default: `(no default)` — Automatic shutdown rechecks external power before removing the supply.
 - **BOARD_DISPLAY_PREPARE** default: `(no default)` — Board readiness prerequisite for the selected display driver.
 - **BOARD_DRIVER_TABLE_NOTES** default: `(no default)` — Generated driver-table validation note.
@@ -1766,6 +1768,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions.cpp
 - **BOARD_AUDIO_CONTROL_FACTORY**
   - src/app/audio_output_drivers.cpp
+- **BOARD_AUTO_SHUTDOWN_CANCEL**
+  - src/app/auto_shutdown.cpp
+- **BOARD_AUTO_SHUTDOWN_PREPARE**
+  - src/app/auto_shutdown.cpp
 - **BOARD_AUTO_SHUTDOWN_REQUEST**
   - src/app/board_config.h
 - **BOARD_EARLY_POWER_INIT**

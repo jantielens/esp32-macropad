@@ -189,12 +189,43 @@ Before taking that shutdown reservation, the inactivity policy wakes display
 sleep and shows a non-expiring **Powered off automatically** notification.
 The dialog's generation identifies the owned notice; its interaction request
 sequence is acknowledged only after a successful physical presentation, or
-when the same pixels are already on the panel. Failed refreshes retain the
-request through retry. The policy reserves a continuation while polling without
-blocking the Arduino loop and proceeds without the notice after 60 seconds.
+when the same pixels are already on the panel. After acknowledgement,
+automatic shutdown allows one second of settling. The board-owned
+`sticky_prepare_shutdown_notice()` then holds the existing display lock while
+checking the owned notification and requesting a final full-refresh interaction
+through `DisplayManager`. The dialog API has no waveform or shutdown option.
+Sticky applies the rendered frame's `full_refresh` flag at commit, after its
+pixels have reached the drawing buffer. Even unchanged pixels require that
+requested full waveform. Failed refreshes retain the request through retry.
+After successful physical completion, the driver holds presentation until
+power-off: later LVGL frames cannot partially update the retained image.
+Only then does shutdown reserve OTA activity. Cancellation or failure releases
+the presentation hold.
+The policy reserves a continuation while polling without
+blocking the Arduino loop and proceeds without the notice after 60 seconds
+only if it was never presented. An unfinished final refresh cancels shutdown
+instead of removing power with an unconfirmed retained image.
 The hardware shutdown retains its own continuation watchdog. New activity, power
 changes, or competing OTA/configuration work cancel preparation. Failed
 shutdown clears only the policy's own notification, not a replacement dialog.
+
+Manual Sticky shutdown optionally accepts a persistent message and a bounded
+non-blocking delay. A single atomic admission flag reserves that board request;
+resolved message text is copied before publishing its token to the main loop.
+Manual and automatic shutdown share the board's final-presentation helper. The
+optional `BOARD_AUTO_SHUTDOWN_PREPARE(generation)` and
+`BOARD_AUTO_SHUTDOWN_CANCEL(generation)` hooks select that preparation and cleanup
+policy; boards without the hooks keep the ordinary notification path. The shared
+inactivity policy still owns presentation polling, settling, and cancellation.
+Message creation and the delay run before acquiring OTA activity, allowing both
+button feedback to run. After the owned notification is presented and the
+configured minimum delay from notification creation has elapsed, this path
+requests and holds the final full refresh. Pending presentation never acquires the activity
+gate; the existing 60-second preparation timeout fails shutdown and clears
+only its owned notice. Audio completion is not tracked separately. An
+empty message and zero delay retain immediate activity admission. Before
+power-off, the existing activity gate still protects writes and the recorder
+cancellation and active-presentation checks still apply.
 
 GT911 uses Wire1 SDA3/SCL2 at 400 kHz after touch power has settled for 250 ms.
 Wire0 remains on SDA1/SCL0 for later sensor adapters. The board-gated

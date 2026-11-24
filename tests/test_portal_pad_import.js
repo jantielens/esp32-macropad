@@ -176,6 +176,10 @@ async function setupPadTest(options = {}) {
                 { name: 'timer', type: 'integer', min: 1, max: 4, dynamic: true },
                 { name: 'seconds', type: 'integer', min: -86400, max: 86400, dynamic: true },
             ] };
+            if (id === 'device.shutdown') return { id, arguments: [
+                { name: 'message', type: 'string', max_length: 191, allow_empty: true, optional: true, default: '' },
+                { name: 'delay_ms', type: 'integer', min: 0, max: 30000, optional: true, default: 0 },
+            ] };
             return null;
         },
         validateBinding(value) { return { valid: value !== '[invalid' }; },
@@ -419,6 +423,12 @@ async function testClearPad() {
     await testDeviceExportDefaults();
     await testClearPad();
     const success = await setupPadTest();
+    for (const args of [{}, { message: 'Powered off' }, { delay_ms: 5000 },
+        { message: '', delay_ms: 0 }]) {
+        assert.doesNotThrow(() => success.context.padCheckImportedActionFormat({
+            action_format_version: 1, buttons: [{ actions: [{ op: 'device.shutdown', args }] }],
+        }));
+    }
     for (const invalid of [
         { action_format_version: 2, buttons: [] },
         { buttons: [{ actions: [{ op: 'screen.open', args: { target: 'pad_0' } }] }] },
@@ -431,6 +441,9 @@ async function testClearPad() {
         { action_format_version: 1, buttons: [{ actions: [{ op: 'screen.open', args: { target: { $template: '[invalid' } } }] }] },
         { action_format_version: 1, buttons: [{ actions: [{ op: 'screen.open', args: { target: '' } }] }] },
         { action_format_version: 1, buttons: [{ actions: [{ op: 'timer.adjust', args: { timer: 1.5, seconds: 1 } }] }] },
+        { action_format_version: 1, buttons: [{ actions: [{ op: 'device.shutdown', args: { message: null } }] }] },
+        { action_format_version: 1, buttons: [{ actions: [{ op: 'device.shutdown', args: { delay_ms: -1 } }] }] },
+        { action_format_version: 1, buttons: [{ actions: [{ op: 'device.shutdown', args: { delay_ms: 30001 } }] }] },
     ]) {
         assert.throws(() => success.context.padCheckImportedActionFormat(
             Object.assign({ cols: 1, rows: 1 }, invalid)));

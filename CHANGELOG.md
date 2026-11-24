@@ -26,6 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add an optional shutdown message and delay to reTerminal Sticky's Shutdown
+  action. A message requests a full e-paper refresh and remains visible after
+  power-off; shutdown waits for message presentation and the configured minimum
+  delay, leaving time for button feedback. A final full refresh holds the retained
+  image against later partial updates. Unacknowledged messages time out
+  without powering off.
+  Existing assignments keep immediate behavior with no message.
 * Enable native Extensions on both reTerminal Sticky Interactive variants.
   See the [Sticky board reference](src/boards/reterminal-sticky-interactive/README.md).
 * Add an interactive Calculator Extension with immediate arithmetic, memory
@@ -38,6 +45,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Use a final full refresh for automatic shutdown notices on e-paper after
+  presentation acknowledgement and one second of settling. Hold display updates
+  until power-off and release the hold on cancellation or failure.
 * Use black-and-white appearance defaults on interactive e-paper devices,
   including 2 px button borders and gauge and bar-chart track outlines.
   Existing saved overrides remain in effect. LCD boards retain their existing

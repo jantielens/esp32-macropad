@@ -8,6 +8,10 @@
 #define HAS_AUTO_SHUTDOWN true
 // Reuse the board's checked hardware power-off request.
 #define BOARD_AUTO_SHUTDOWN_REQUEST(token) sticky_request_shutdown(token)
+// Keep final presentation and cancellation with the board shutdown policy.
+#define BOARD_AUTO_SHUTDOWN_PREPARE(generation) sticky_prepare_shutdown_notice(generation)
+// Resume display presentation if automatic shutdown is cancelled or fails.
+#define BOARD_AUTO_SHUTDOWN_CANCEL(generation) sticky_cancel_shutdown_notice(generation)
 // Optional power-latch hook called before the rest of application setup.
 #define BOARD_EARLY_POWER_INIT sticky_early_power_init
 // Board readiness prerequisite for the selected display driver.

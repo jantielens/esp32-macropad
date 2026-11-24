@@ -102,10 +102,10 @@ void DisplayManager::requestBindingRefresh() {
 		unlockIfNeeded(didLock);
 }
 
-uint32_t DisplayManager::interactionChanged(uint64_t requestedUs) {
+uint32_t DisplayManager::interactionChanged(uint64_t requestedUs, bool full_refresh) {
 		if (!driver || !driver->coherentFrames()) return 0;
 		const uint64_t changedUs = esp_timer_get_time();
-		const uint32_t requestSequence = framePublisher.interactionChanged(requestedUs ? requestedUs : changedUs);
+		const uint32_t requestSequence = framePublisher.interactionChanged(requestedUs ? requestedUs : changedUs, full_refresh);
 		wakeRenderTask();
 		return requestSequence;
 }

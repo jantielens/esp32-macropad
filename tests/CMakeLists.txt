@@ -210,7 +210,7 @@ foreach(voice_notes 0 1)
     set(sticky_hardware_board reterminal-sticky-interactive-sd)
   endif()
   add_host_legacy_test(${sticky_hardware_target}
-    SOURCES test_sticky_hardware.cpp ${PROJECT_SOURCE_DIR}/src/app/board_hardware.cpp
+    SOURCES test_sticky_hardware.cpp
         ${PROJECT_SOURCE_DIR}/src/app/auto_shutdown.cpp
         ${PROJECT_SOURCE_DIR}/src/app/battery_info.cpp
         ${PROJECT_SOURCE_DIR}/src/app/drivers/gt911_touch_driver.cpp
@@ -221,7 +221,7 @@ foreach(voice_notes 0 1)
 )
 endforeach()
 add_host_legacy_test(test_sticky_hardware_sd
-    SOURCES test_sticky_hardware.cpp ${PROJECT_SOURCE_DIR}/src/app/board_hardware.cpp
+    SOURCES test_sticky_hardware.cpp
         ${PROJECT_SOURCE_DIR}/src/app/auto_shutdown.cpp ${PROJECT_SOURCE_DIR}/src/app/battery_info.cpp
         ${PROJECT_SOURCE_DIR}/src/app/drivers/gt911_touch_driver.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/sticky_driver_test_overrides ${HOST_ARDUINOJSON_DIR}

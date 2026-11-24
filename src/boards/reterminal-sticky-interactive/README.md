@@ -103,7 +103,7 @@ without user activity. Configure it under **Device > Power Savings**; enter
 [automatic shutdown](../../../docs/user/device/display-and-sleep.md#save-battery-power-with-automatic-shutdown)
 for activity, save behavior, and timer limitations.
 
-The board-local **reTerminal Sticky > Shutdown** action (`shutdown`) requests
+The board-local **reTerminal Sticky > Shutdown** action (`device.shutdown`) requests
 hardware power-off, not deep sleep. Assign it to a pad button or a physical
 button hold through the existing action editor; default assignments stay empty.
 Use **Save Pad** for pad buttons or **Actions > Hardware Buttons > Save Hardware
@@ -111,12 +111,35 @@ Buttons** for physical inputs. Physical-button assignments apply without reboot;
 see [trigger settings](../../../docs/user/device/triggers.md#physical-buttons).
 Shutdown does not save drafts; finish saves and uploads before invoking it.
 
+To leave a clean power-off notice on the e-paper display, configure one
+**Shutdown** action with **Shutdown message (optional)** set to `Powered off`
+and **Delay before shutdown (ms)** set to `5000`. Save the pad or hardware
+buttons as above. The message uses the notification appearance, has no expiry,
+and remains on screen after power-off. The non-blocking delay leaves rendering
+and button audio feedback running. After the message's physical presentation
+and the configured minimum delay, measured from showing the message, shutdown
+performs a final full refresh. Further display updates are held until power-off,
+so no later partial refresh changes the retained image. Audio completion is not
+tracked separately. If preparation does not finish within 60 seconds, shutdown
+fails instead of removing power without an acknowledged message.
+
+The message defaults to empty and the delay to `0`, preserving immediate
+shutdown for existing assignments. Delay accepts `0` to `30000` ms and also
+works without a message. Replacing or dismissing the shutdown message cancels
+preparation. A failed shutdown clears only its own notice. Automatic shutdown
+uses the same persistent notice, but waits for presentation acknowledgement
+and a one-second settling interval before the final full refresh and power-off.
+Cancellation or failure releases the display hold.
+
 Disconnect USB/external power before using Shutdown. Release AI/OK after
 triggering it: that button directly keeps the supply enabled while held.
 The action fails if external power is present or AI/OK remains held for five
 seconds. It also refuses admission during OTA, configuration writes, or a
 reserved power/network transition. Put Shutdown last in an action sequence;
 successful power removal cannot run subsequent actions.
+External power is checked before showing the shutdown message and again before
+power removal. OTA, protected writes, or power/network transitions that start
+during the configured delay cancel preparation rather than being interrupted.
 
 The Rev 01 schematic requires GPIO46 low, GPIO45 low, then GPIO46 high to
 clock the power latch off. If the MCU is still running after 500 ms, firmware

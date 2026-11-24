@@ -39,6 +39,7 @@ void action_catalog_emit(JsonArray actions) {
                         : argument.type == ACTION_ARGUMENT_ENUM ? "enum" : "string";
                     arg["type"] = type_name;
                     arg["dynamic"] = argument.dynamic;
+                    if (argument.optional) arg["optional"] = true;
                     arg["example"] = argument.example;
                     if (argument.description) arg["description"] = argument.description;
                     arg["control"] = argument.control;

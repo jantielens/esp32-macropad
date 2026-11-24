@@ -11,6 +11,7 @@ struct DisplayFrame {
     DisplayIntent intent = DisplayIntent::Background;
     uint64_t requested_us = 0;
     uint64_t ready_us = 0;
+    bool full_refresh = false;
 };
 
 #endif

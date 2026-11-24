@@ -2501,9 +2501,13 @@ static bool stopwatch_operation_boundaries() {
     return true;
 }
 #else
-bool sticky_request_shutdown(uint32_t token) {
+static std::string board_shutdown_message;
+static uint32_t board_shutdown_delay = 0;
+bool sticky_request_shutdown(uint32_t token, const char* message, uint32_t delay_ms) {
     if (!board_request_accepted) return false;
     board_shutdown_token = token;
+    board_shutdown_message = message;
+    board_shutdown_delay = delay_ms;
     return true;
 }
 #endif
@@ -2538,6 +2542,40 @@ static bool board_shutdown_operation() {
         board_shutdown_token && action_continuation_complete(board_shutdown_token, false);
     action_list_dispatch_continuation();
     ok = ok && get_equals("shutdown_after", "before");
+#if TEST_STICKY_OPERATIONS
+    ok = ok && board_shutdown_message.empty() && board_shutdown_delay == 0;
+    action_storage_clear(storage);
+    input["args"]["message"] = "Powered off";
+    input["args"]["delay_ms"] = 5000;
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(input.as<JsonObject>(), actions[0]);
+    }
+    JsonDocument saved;
+    action_to_json(actions[0], saved.to<JsonObject>());
+    ok = ok && !storage.failed && saved["args"]["message"] == "Powered off" &&
+        saved["args"]["delay_ms"] == 5000 &&
+        action_list_dispatch_result(actions, 1, "shutdown") == ACTION_PENDING &&
+        board_shutdown_message == "Powered off" && board_shutdown_delay == 5000;
+    action_continuation_release(board_shutdown_token);
+    for (int delay : {-1, 30001}) {
+        input["args"]["delay_ms"] = delay;
+        ok = ok && action_operation_validate_json(input.as<JsonObjectConst>());
+    }
+    input["args"]["delay_ms"] = nullptr;
+    ok = ok && action_operation_validate_json(input.as<JsonObjectConst>());
+    input["args"].remove("delay_ms");
+    ok = ok && !action_operation_validate_json(input.as<JsonObjectConst>());
+    action_storage_clear(storage);
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(input.as<JsonObject>(), actions[0]);
+    }
+    ok = ok && !storage.failed &&
+        action_list_dispatch_result(actions, 1, "shutdown") == ACTION_PENDING &&
+        board_shutdown_message == "Powered off" && board_shutdown_delay == 0;
+    action_continuation_release(board_shutdown_token);
+#endif
     action_storage_clear(storage);
     return ok;
 }

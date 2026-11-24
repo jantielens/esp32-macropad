@@ -70,14 +70,40 @@ static bool screenReady = true, notificationAvailable = true;
 static uint32_t notificationGeneration = 0, visibleNotification = 0, pendingDeadline = 0;
 static DeviceNotificationState notificationState = DEVICE_NOTIFICATION_PRESENTED;
 static unsigned notifications = 0, dismissals = 0, wakeRequests = 0;
+static std::string notificationMessage;
+static bool displayLocked = false, frameRequestAccepted = true;
+static unsigned fullRefreshRequests = 0;
+static uint32_t heldDisplayRequest = 0;
+static bool finalRefreshReady = true;
+bool sticky_display_hold_for_shutdown(uint32_t request) {
+    heldDisplayRequest = request;
+    return finalRefreshReady;
+}
+void sticky_display_release_shutdown() { heldDisplayRequest = 0; }
+class DisplayManager {
+public:
+    uint32_t interactionChanged(uint64_t, bool full_refresh) {
+        CHECK(displayLocked && full_refresh && visibleNotification);
+        ++fullRefreshRequests;
+        return frameRequestAccepted ? fullRefreshRequests : 0;
+    }
+};
+static DisplayManager shutdownDisplay;
+DisplayManager* displayManager = &shutdownDisplay;
 static uint32_t automaticRequests = 0;
 static bool activityDuringBegin = false, activityDuringNotification = false;
 static PowerMode runtimeMode = PowerMode::AlwaysOn;
 bool sticky_display_is_busy() { return displayBusy; }
 bool ota_activity_is_busy() { return otaActive || configWriteActive || transitionActive; }
 PowerMode power_manager_get_current_mode() { return runtimeMode; }
-void display_manager_lock_if_needed(bool* did_lock) { *did_lock = false; }
-void display_manager_unlock_if_needed(bool) {}
+void display_manager_lock_if_needed(bool* did_lock) {
+    *did_lock = !displayLocked;
+    displayLocked = true;
+}
+void display_manager_unlock_if_needed(bool did_lock) {
+    CHECK(displayLocked);
+    if (did_lock) displayLocked = false;
+}
 bool action_continuation_is_active() { return actionBusy; }
 bool action_continuation_is_pending(uint32_t) {
     return actionBusy && int32_t(clockMs - pendingDeadline) < 0;
@@ -85,8 +111,10 @@ bool action_continuation_is_pending(uint32_t) {
 void screen_saver_manager_wake() { ++wakeRequests; }
 bool screen_saver_manager_input_ready() { return screenReady; }
 bool device_dialog_notify(const char* message, uint32_t duration, uint32_t* generation) {
-    CHECK(std::string(message) == "Powered off automatically" && duration == 0);
-    if (!notificationAvailable) return false;
+    CHECK(duration == 0);
+    *generation = 0;
+    if (!displayManager || !notificationAvailable) return false;
+    notificationMessage = message;
     ++notifications;
     *generation = visibleNotification = ++notificationGeneration;
     return true;
@@ -217,6 +245,10 @@ void i2c_bus_init() {}
 bool i2c_bus_lock(TickType_t) { if (failLock) return false; CHECK(!locked); locked = true; return true; }
 void i2c_bus_unlock() { CHECK(locked); locked = false; }
 bool sticky_test_bus_locked() { return locked; }
+
+#define DISPLAY_MANAGER_H
+#include "../src/app/board_hardware.cpp"
+#undef DISPLAY_MANAGER_H
 
 static void resolution(uint16_t width, uint16_t height) {
     Wire1.registers[0x8146] = width & 255;
@@ -580,8 +612,11 @@ int main() {
     const ActionOperationDef& shutdown = shutdownAction->operations[0];
     CHECK(std::string(shutdown.id) == "device.shutdown");
     CHECK(shutdown.execution == ACTION_EXECUTION_PAUSABLE);
-    const auto requestShutdown = [&](uint32_t token) {
-        return shutdown.dispatch(nullptr, "test", token);
+    const auto requestShutdown = [&](uint32_t token, const char* message = "", uint32_t delay = 0) {
+        ActionResolvedArgument arguments[2] = {};
+        arguments[0].text = message;
+        arguments[1].integer = static_cast<int32_t>(delay);
+        return shutdown.dispatch(arguments, "test", token);
     };
     outputs.clear();
     CHECK(requestShutdown(0) == ACTION_FAILED);
@@ -593,9 +628,9 @@ int main() {
     BOARD_HARDWARE_LOOP();
     CHECK(outputs.empty() && audioStops == 0);
     externalPower = 1;
-    CHECK(requestShutdown(2) == ACTION_PENDING);
+    CHECK(requestShutdown(2) == ACTION_FAILED);
     BOARD_HARDWARE_LOOP();
-    CHECK(!otaActive && outputs.empty() && failedShutdowns.back() == 2 && powerLatched);
+    CHECK(!otaActive && outputs.empty() && failedShutdowns.empty() && powerLatched);
     externalPower = 0;
     aiButtonHeld = true;
     CHECK(requestShutdown(3) == ACTION_PENDING);
@@ -651,6 +686,118 @@ int main() {
     BOARD_HARDWARE_LOOP();
     CHECK(!otaActive && powerLatched && failedShutdowns.back() == 52);
 #endif
+    CHECK(requestShutdown(60, "Powered off", 30001) == ACTION_FAILED);
+    char shutdownMessage[] = "Powered off";
+    const unsigned refreshesBeforeShutdown = fullRefreshRequests;
+    CHECK(requestShutdown(60, shutdownMessage, 5000) == ACTION_PENDING);
+    shutdownMessage[0] = 'X';
+    CHECK(requestShutdown(61) == ACTION_FAILED);
+    screenReady = false;
+    outputs.clear();
+    BOARD_HARDWARE_LOOP();
+    CHECK(!otaActive && !visibleNotification && outputs.empty());
+    CHECK(fullRefreshRequests == refreshesBeforeShutdown && !displayLocked);
+    screenReady = true;
+    BOARD_HARDWARE_LOOP();
+    const uint32_t manualNotice = visibleNotification;
+    CHECK(manualNotice && notificationMessage == "Powered off" && !otaActive);
+    CHECK(fullRefreshRequests == refreshesBeforeShutdown && !displayLocked);
+    // An acknowledged frame alone must not skip the configured minimum delay.
+    clockMs += 4999;
+    BOARD_HARDWARE_LOOP();
+    CHECK(!otaActive && outputs.empty() && visibleNotification == manualNotice);
+    displayBusy = true;
+    ++clockMs;
+    BOARD_HARDWARE_LOOP();
+    CHECK(!otaActive && heldDisplayRequest && fullRefreshRequests == refreshesBeforeShutdown + 1);
+    BOARD_HARDWARE_LOOP();
+    CHECK(otaActive && outputs.empty() && visibleNotification == manualNotice);
+    displayBusy = false;
+    BOARD_HARDWARE_LOOP();
+    CHECK(!powerLatched && visibleNotification == manualNotice);
+    clockMs += 500;
+    BOARD_HARDWARE_LOOP();
+    CHECK(powerLatched && !otaActive && !visibleNotification && !heldDisplayRequest &&
+          failedShutdowns.back() == 60);
+    notificationAvailable = false;
+    CHECK(requestShutdown(61, "Powered off", 5000) == ACTION_PENDING);
+    BOARD_HARDWARE_LOOP();
+    CHECK(!otaActive && !visibleNotification && failedShutdowns.back() == 61);
+    notificationAvailable = true;
+    frameRequestAccepted = false;
+    CHECK(requestShutdown(61, "Powered off", 5000) == ACTION_PENDING);
+    BOARD_HARDWARE_LOOP();
+    clockMs += 5000;
+    BOARD_HARDWARE_LOOP();
+    CHECK(!otaActive && !visibleNotification && failedShutdowns.back() == 61 && !displayLocked);
+    frameRequestAccepted = true;
+    CHECK(requestShutdown(62, "Powered off", 5000) == ACTION_PENDING);
+    BOARD_HARDWARE_LOOP();
+    const uint32_t newerNotice = ++visibleNotification;
+    BOARD_HARDWARE_LOOP();
+    CHECK(!otaActive && failedShutdowns.back() == 62 && visibleNotification == newerNotice);
+    visibleNotification = 0;
+    for (bool* busy : {&otaActive, &configWriteActive, &transitionActive}) {
+        CHECK(requestShutdown(63, "Powered off", 5000) == ACTION_PENDING);
+        BOARD_HARDWARE_LOOP();
+        CHECK(visibleNotification && !otaActive);
+        *busy = true;
+        BOARD_HARDWARE_LOOP();
+        CHECK(*busy && !visibleNotification && failedShutdowns.back() == 63 && powerLatched);
+        *busy = false;
+    }
+    CHECK(requestShutdown(64, "Powered off", 5000) == ACTION_PENDING);
+    BOARD_HARDWARE_LOOP();
+    externalPower = 1;
+    BOARD_HARDWARE_LOOP();
+    CHECK(!otaActive && !visibleNotification && failedShutdowns.back() == 64 && powerLatched);
+    externalPower = 0;
+    clockMs = UINT32_MAX - 50;
+    CHECK(requestShutdown(65, "", 100) == ACTION_PENDING);
+    BOARD_HARDWARE_LOOP();
+    clockMs += 99;
+    BOARD_HARDWARE_LOOP();
+    CHECK(!otaActive && !visibleNotification && powerLatched);
+    ++clockMs;
+    BOARD_HARDWARE_LOOP();
+    CHECK(otaActive && !powerLatched);
+    clockMs += 500;
+    BOARD_HARDWARE_LOOP();
+    CHECK(!otaActive && powerLatched && failedShutdowns.back() == 65);
+    outputs.clear();
+    notificationState = DEVICE_NOTIFICATION_PENDING;
+    CHECK(requestShutdown(66, "Powered off", 100) == ACTION_PENDING);
+    BOARD_HARDWARE_LOOP();
+    const uint32_t waitingNotice = visibleNotification;
+    clockMs += 100;
+    BOARD_HARDWARE_LOOP();
+    CHECK(waitingNotice && visibleNotification == waitingNotice && outputs.empty() &&
+          !otaActive && powerLatched);
+    notificationState = DEVICE_NOTIFICATION_PRESENTED;
+    BOARD_HARDWARE_LOOP();
+    CHECK(!otaActive && powerLatched && heldDisplayRequest);
+    finalRefreshReady = false;
+    BOARD_HARDWARE_LOOP();
+    CHECK(!otaActive && powerLatched);
+    finalRefreshReady = true;
+    BOARD_HARDWARE_LOOP();
+    CHECK(otaActive && !powerLatched && visibleNotification == waitingNotice);
+    clockMs += 500;
+    BOARD_HARDWARE_LOOP();
+    CHECK(!otaActive && powerLatched && !visibleNotification && failedShutdowns.back() == 66);
+
+    notificationState = DEVICE_NOTIFICATION_PENDING;
+    outputs.clear();
+    CHECK(requestShutdown(67, "Powered off", 0) == ACTION_PENDING);
+    BOARD_HARDWARE_LOOP();
+    clockMs += ACTION_CONTINUATION_TIMEOUT_MS - 1;
+    BOARD_HARDWARE_LOOP();
+    CHECK(visibleNotification && outputs.empty() && !otaActive && powerLatched);
+    ++clockMs;
+    BOARD_HARDWARE_LOOP();
+    CHECK(!visibleNotification && outputs.empty() && !otaActive && powerLatched &&
+          failedShutdowns.back() == 67);
+    notificationState = DEVICE_NOTIFICATION_PRESENTED;
     const auto setPower = [&](float external) {
         if (!std::isfinite(external)) {
             clockMs += 10000;
@@ -690,6 +837,14 @@ int main() {
     }
     auto_shutdown_loop();
     auto_shutdown_loop();
+    CHECK(!otaActive && notificationMessage == "Powered off automatically");
+    clockMs += 999;
+    auto_shutdown_loop();
+    CHECK(!otaActive);
+    ++clockMs;
+    auto_shutdown_loop();
+    CHECK(!otaActive && heldDisplayRequest);
+    auto_shutdown_loop();
     CHECK(automaticRequests == 1 && otaActive && actionBusy);
     displayBusy = true;
     outputs.clear();
@@ -704,6 +859,9 @@ int main() {
     auto_shutdown_loop();
     CHECK(automaticRequests == 1);
     clockMs += 500;
+    auto_shutdown_loop();
+    auto_shutdown_loop();
+    clockMs += 1000;
     auto_shutdown_loop();
     auto_shutdown_loop();
     CHECK(automaticRequests == 2);
@@ -736,6 +894,9 @@ int main() {
     ++clockMs;
     auto_shutdown_loop();
     auto_shutdown_loop();
+    clockMs += 1000;
+    auto_shutdown_loop();
+    auto_shutdown_loop();
     CHECK(automaticRequests == 3);
     externalPower = 1;
     BOARD_HARDWARE_LOOP();
@@ -748,6 +909,9 @@ int main() {
     auto_shutdown_loop();
     CHECK(automaticRequests == 3);
     ++clockMs;
+    auto_shutdown_loop();
+    auto_shutdown_loop();
+    clockMs += 1000;
     auto_shutdown_loop();
     auto_shutdown_loop();
     CHECK(automaticRequests == 4);
@@ -777,6 +941,11 @@ int main() {
     auto_shutdown_loop();
     CHECK(!otaActive && outputs.empty());
     notificationState = DEVICE_NOTIFICATION_PRESENTED;
+    auto_shutdown_loop();
+    CHECK(!otaActive && visibleNotification == pendingNotice);
+    clockMs += 1000;
+    auto_shutdown_loop();
+    CHECK(!otaActive && heldDisplayRequest);
     auto_shutdown_loop();
     CHECK(otaActive && powerLatched && outputs.empty());
     BOARD_HARDWARE_LOOP();
@@ -842,6 +1011,7 @@ int main() {
     clockMs += ACTION_CONTINUATION_TIMEOUT_MS - 2000;
     setPower(0);
     auto_shutdown_loop();
+    auto_shutdown_loop();
     CHECK(visibleNotification && actionBusy && otaActive);
     externalPower = 1;
     BOARD_HARDWARE_LOOP();
@@ -901,6 +1071,43 @@ int main() {
     setPower(1);
     auto_shutdown_loop();
     CHECK(!actionBusy && !otaActive && !visibleNotification && powerLatched);
+    setPower(0);
+    auto_shutdown_configure(1);
+    auto_shutdown_loop();
+    clockMs += 1000;
+    notificationState = DEVICE_NOTIFICATION_PRESENTED;
+    auto_shutdown_loop();
+    auto_shutdown_loop();
+    CHECK(actionBusy && visibleNotification && !otaActive);
+    clockMs += 500;
+    auto_shutdown_notify_activity();
+    auto_shutdown_loop();
+    CHECK(!actionBusy && !visibleNotification && !otaActive && powerLatched);
+    finalRefreshReady = false;
+    for (const bool timeout : {false, true}) {
+        setPower(0);
+        auto_shutdown_configure(1);
+        auto_shutdown_loop();
+        clockMs += 1000;
+        auto_shutdown_loop();
+        auto_shutdown_loop();
+        clockMs += 1000;
+        auto_shutdown_loop();
+        CHECK(heldDisplayRequest && visibleNotification && !otaActive && powerLatched);
+        if (timeout) {
+            notificationState = DEVICE_NOTIFICATION_PENDING;
+            clockMs += ACTION_CONTINUATION_TIMEOUT_MS;
+            setPower(0);
+        } else {
+            ++clockMs;
+            auto_shutdown_notify_activity();
+        }
+        auto_shutdown_loop();
+        CHECK(!heldDisplayRequest && !visibleNotification && !actionBusy &&
+              !otaActive && powerLatched);
+        notificationState = DEVICE_NOTIFICATION_PRESENTED;
+    }
+    finalRefreshReady = true;
     std::printf("Sticky board/touch checks: %d failures\n", failures);
     return failures ? 1 : 0;
 }
