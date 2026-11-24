@@ -481,8 +481,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | inkplate6flick-interactive |  |  |  | ✅ |  |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  | ? | ? | ✅ | ? |  | ? |  |  | ✅ |  | ? | ✅ |  | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |  |
 | reterminal-e1003-frame |  |  |  |  | ✅ |  |  | ? |  |  |  | ? |  |  | ✅ |  | ? | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  | ? |  | ✅ | ? | ✅ |  |  |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |  |
 | reterminal-e1003-interactive |  |  |  |  |  |  | ✅ | ? |  |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ? | ✅ |  | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |  |
-| reterminal-sticky-interactive | ✅ | ✅ | ✅ |  | ✅ | ✅ |  | ? |  | ✅ |  | ✅ | ✅ |  |  |  | ✅ | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ? | ✅ |  |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |  |
-| reterminal-sticky-interactive-sd | ✅ | ✅ | ✅ |  | ✅ | ✅ |  | ? |  | ✅ |  | ✅ | ✅ |  |  |  | ✅ | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ? | ✅ |  |  | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |  |
+| reterminal-sticky-interactive | ✅ | ✅ | ✅ |  | ✅ | ✅ |  | ? |  | ✅ |  | ✅ | ✅ |  |  |  | ✅ | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ? | ✅ |  | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |  |
+| reterminal-sticky-interactive-sd | ✅ | ✅ | ✅ |  | ✅ | ✅ |  | ? |  | ✅ |  | ✅ | ✅ |  |  |  | ✅ | ✅ |  |  | ? | ? | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ? | ✅ |  | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)

@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking changes
 
+* Change the reTerminal Sticky Interactive partition layout for native
+  Extensions. Back up files and install the full layout over USB; an older
+  internal filesystem must be erased before restoring files.
 * Upgrade the native Extension ABI to version 18 for interactive controls.
   Rebuild and re-upload existing Extension packages for the new firmware.
 * Make `jc3636w518-sd` a no-HID build. Select `jc3636w518-sd-usb` to
@@ -23,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Enable native Extensions on both reTerminal Sticky Interactive variants.
+  See the [Sticky board reference](src/boards/reterminal-sticky-interactive/README.md).
 * Add an interactive Calculator Extension with immediate arithmetic, memory
   keys, configurable colors and fonts, and an e-paper display mode.
   See the [Calculator reference](extensions/calculator/README.md).

@@ -38,7 +38,7 @@
 // Prefer PSRAM for medium-sized ordinary allocations alongside Wi-Fi and BLE.
 #define MALLOC_PSRAM_THRESHOLD_BYTES 128
 #define HAS_USB_HID false
-#define HAS_NATIVE_EXTENSIONS false
+#define HAS_NATIVE_EXTENSIONS true
 #define HAS_IMAGE_FETCH false
 #define HAS_IMAGE_LIBRARY false
 #define HAS_AUDIO true

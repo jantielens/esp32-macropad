@@ -134,7 +134,21 @@ Wi-Fi, the portal, MQTT, MCP, persistence, and OTA use the shared firmware
 paths. The standard target stores files in internal flash. The
 [SD-primary variant](../reterminal-sticky-interactive-sd/README.md) stores
 files on a required microSD card instead. Both use a 32 MB layout with two
-8 MiB application slots and a 15.875 MiB internal filesystem.
+8 MiB application slots, a 15.625 MiB internal filesystem, and three native
+Extension slots.
+
+Install signed ESP32-S3 Extension packages in two 56 KiB slots and one
+120 KiB slot. Follow [Extension installation](../../../docs/user/media/extensions.md)
+and prefer slow-changing content on e-paper. Extension memory use, display
+responsiveness, and coexistence with Wi-Fi, BLE, and Voice Notes require
+physical validation.
+
+> [!WARNING]
+> The Extension layout shrinks the previous internal filesystem. Back up files
+> before switching layouts. Erase the old internal storage volume and flash
+> the complete firmware and partition table over USB before restoring files;
+> application-only OTA cannot change the partition table. An old larger
+> filesystem can cause a reboot loop under the new layout.
 
 Serial logging and flashing use the CH343P UART0 bridge at 115200 baud on
 GPIO43/44. USB-C does not provide native USB HID in this firmware.
@@ -159,8 +173,7 @@ a retained e-paper image or queued event does not prove readiness or delivery.
 Offline boot, AP/station switching with BLE, recovery, temporary RAM reclamation,
 and interaction latency during connection attempts remain user hardware checks.
 
-IMU, BLE HID, USB HID,
-native Extensions, remote image fetching, and the image library are disabled.
+IMU, BLE HID, USB HID, remote image fetching, and the image library are disabled.
 There is no custom charging policy, gauge calibration, low-battery shutdown,
 or battery-runtime guarantee.
 

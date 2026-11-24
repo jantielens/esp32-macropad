@@ -1,4 +1,4 @@
-# Custom partition table for the 32MB reTerminal E1003 interactive board.
+# Custom partition table for 32MB reTerminal E1003 and Sticky interactive boards.
 # Keep the storage offset unchanged; reserve the final 256KB for extensions.
 # Existing LittleFS contents may require backup and restore after shrinking it.
 # Name,       Type, SubType, Offset,     Size,       Flags

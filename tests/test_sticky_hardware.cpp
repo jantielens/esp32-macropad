@@ -239,7 +239,7 @@ int main() {
     static_assert(HAS_SD_CARD == USE_SD_STORAGE);
     static_assert(AUDIO_OUTPUT_DRIVER == AUDIO_OUTPUT_DRIVER_STICKY_PWM);
     static_assert(AUDIO_INPUT_DRIVER == AUDIO_INPUT_DRIVER_STICKY_PDM);
-    static_assert(HAS_BLE && !HAS_BLE_HID && !HAS_USB_HID && !HAS_NATIVE_EXTENSIONS);
+    static_assert(HAS_BLE && !HAS_BLE_HID && !HAS_USB_HID && HAS_NATIVE_EXTENSIONS);
     static_assert(!HAS_SENSOR_BATTERY_ADC && !HAS_SENSOR_DUMMY && !HAS_SENSOR_BME280 && !HAS_SENSOR_AHT10);
     static_assert(!HAS_IMAGE_LIBRARY && !HAS_IMAGE_FETCH && HAS_CONFIG_MODE_BUTTON && BUTTON_PIN == 5);
     static_assert(NUM_HW_BUTTONS == 3 && HW_BUTTON_DEFS[0].pin == 4 && HW_BUTTON_DEFS[1].pin == 5 && HW_BUTTON_DEFS[2].pin == 6);

@@ -154,15 +154,18 @@ Conventions:
 
 The `reterminal-sticky-interactive` target uses the existing
 `macropad` class and
-`esp32:esp32:esp32s3:FlashSize=32M,PSRAM=opi,FlashMode=qio,PartitionScheme=ota_8mb_32MB,CDCOnBoot=default`.
+`esp32:esp32:esp32s3:FlashSize=32M,PSRAM=opi,FlashMode=qio,PartitionScheme=ota_8mb_e1003_ext_32MB,CDCOnBoot=default`.
 Build only this target with `./build.sh reterminal-sticky-interactive`.
-It reuses `partitions/partitions_ota_8mb_32MB.csv` without installer changes:
-two 8 MiB OTA application slots and internal filesystem storage, with no native
-Extension region. Logging/flashing use the CH343P UART0 bridge on GPIO43/44.
+It reuses `partitions/partitions_ota_8mb_e1003_ext_32MB.csv`: two 8 MiB OTA
+application slots, a 15.625 MiB internal filesystem, and three native Extension
+slots. Logging/flashing use the CH343P UART0 bridge on GPIO43/44.
 The `reterminal-sticky-interactive-sd` variant uses the same FQBN and layout,
 with SD-primary file storage. Build it with
 `./build.sh reterminal-sticky-interactive-sd`. Both use the NimBLE broadcast
-profile; only the SD variant advertises SD storage.
+profile; only the SD variant advertises SD storage. Install custom partition
+schemes before building on an existing development machine. The partition
+change requires a full USB flash; back up and erase an old internal filesystem
+before switching layouts.
 See [Sticky hardware acceptance limits](../../src/boards/reterminal-sticky-interactive/README.md).
 
 The `waveshare-7.8-interactive` target uses
