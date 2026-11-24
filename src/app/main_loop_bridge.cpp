@@ -26,6 +26,10 @@ void loop_bridge_init() {
     s_ctrl_slot.init();
 }
 
+bool loop_bridge_is_consumer() {
+    return s_ctrl_consumer_task && xTaskGetCurrentTaskHandle() == s_ctrl_consumer_task;
+}
+
 LoopBridgeResult loop_bridge_enqueue(LoopBridgeExec exec,
                                      const void* ctx, size_t ctx_len) {
     return bridge_result(s_ctrl_slot.enqueue(exec, ctx, ctx_len, xPortInIsrContext()));
@@ -37,8 +41,7 @@ LoopBridgeResult loop_bridge_dispatch(LoopBridgeExec exec,
                                       bool* out_ok,
                                       char* out_msg, size_t out_msg_len,
                                       LoopBridgeCleanup abandoned_cleanup) {
-    const bool caller_is_consumer = s_ctrl_consumer_task &&
-                                    xTaskGetCurrentTaskHandle() == s_ctrl_consumer_task;
+    const bool caller_is_consumer = loop_bridge_is_consumer();
     return bridge_result(s_ctrl_slot.dispatch(
         exec, abandoned_cleanup, ctx, ctx_len, timeout_ms,
         caller_is_consumer, xPortInIsrContext(), out_ok, out_msg, out_msg_len));

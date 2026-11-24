@@ -269,9 +269,11 @@ bool config_manager_copy_external_sources(const DeviceConfig *config, ExternalDa
 bool config_manager_save(const DeviceConfig *config);
 #endif
 #if HAS_DISPLAY
+bool config_manager_save_brightness(DeviceConfig *config, uint8_t brightness);
 bool config_manager_save_current_brightness(DeviceConfig *config);
 #endif
 #if HAS_AUDIO
+bool config_manager_save_volume(DeviceConfig *config, uint8_t volume);
 bool config_manager_save_current_volume(DeviceConfig *config);
 #endif
 bool config_manager_factory_reset();                  // Erase entire NVS partition + wipe user filesystem (pads, icons, sounds, indexed stores)

@@ -34,7 +34,8 @@ Open **Alarm > Behavior** and configure:
 
 Select **Save behavior**. Schedule and Behavior save independently and apply
 without reboot. Ring/stop lists allow synchronous actions; actions that suspend
-execution, such as Delay or key sequences, are not offered.
+execution, such as Delay, key sequences, Save volume, or Save brightness, are
+not offered.
 
 If saved alarm settings use an incompatible action format or contain invalid
 or unavailable actions, the alarm is disabled. Both forms show a warning and

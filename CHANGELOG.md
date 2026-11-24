@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Rebuild and re-upload existing Extension packages for the new firmware.
 * Make `jc3636w518-sd` a no-HID build. Select `jc3636w518-sd-usb` to
   retain its previous USB keyboard, mouse, and gamepad capability.
+* Disallow Save volume and Save brightness in alarm ring/stop actions because
+  they now pause until saving completes. Existing alarms containing either
+  action are disabled until their settings are reconfigured and saved.
 
 ### Added
 
@@ -70,6 +73,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Prevent Save volume and Save brightness actions from crashing when invoked
+  on a PSRAM-backed display task. Persist the selected level on the main loop
+  and continue the action list only after a successful save.
 * Play the configured Long-Press Feedback sound for hardware button holds.
   Preserve tap feedback and suppress feedback when an action already produces
   audio.

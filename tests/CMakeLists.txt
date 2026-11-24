@@ -1089,7 +1089,8 @@ if(runtime_profile STREQUAL "display" OR runtime_profile STREQUAL "coffee" OR ru
         target_compile_options(test_runtime_variable_actions_${runtime_profile} PRIVATE -ffunction-sections -fdata-sections)
         # Preserve the voice-note enqueue fake; synchronous MCP dispatch uses the real bridge.
         target_link_options(test_runtime_variable_actions_${runtime_profile} PRIVATE
-            -Wl,--wrap=_Z19loop_bridge_enqueuePFvPKvPbPcmES0_m)
+            -Wl,--wrap=_Z19loop_bridge_enqueuePFvPKvPbPcmES0_m
+            -Wl,--wrap=_Z23loop_bridge_is_consumerv)
     endif()
     if(runtime_profile STREQUAL "shutter" OR runtime_profile STREQUAL "relay")
         target_compile_definitions(test_runtime_variable_actions_${runtime_profile} PRIVATE HAS_FILESYSTEM=1)

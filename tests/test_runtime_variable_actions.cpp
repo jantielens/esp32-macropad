@@ -533,12 +533,15 @@ DeviceConfig device_config = {};
 static bool save_level_allowed = true;
 static unsigned save_brightness_requests = 0;
 static unsigned save_volume_requests = 0;
-bool config_manager_save_current_brightness(DeviceConfig* config) {
+static uint8_t saved_level = 0;
+bool config_manager_save_brightness(DeviceConfig* config, uint8_t value) {
     ++save_brightness_requests;
+    saved_level = value;
     return config == &device_config && save_level_allowed;
 }
-bool config_manager_save_current_volume(DeviceConfig* config) {
+bool config_manager_save_volume(DeviceConfig* config, uint8_t value) {
     ++save_volume_requests;
+    saved_level = value;
     return config == &device_config && save_level_allowed;
 }
 static uint8_t test_brightness = 50;
@@ -1712,10 +1715,13 @@ alignas(uint32_t) static unsigned char delete_job[LOOP_BRIDGE_CTX_BYTES];
 static char deleted_note[17] = {};
 static VoiceNoteFileStatus delete_result = VoiceNoteFileStatus::Ready;
 static bool bridge_reject = false;
+static bool bridge_consumer = false;
 #if TEST_SPECIALIZED_MCP_BRIDGE
 extern "C" LoopBridgeResult __wrap__Z19loop_bridge_enqueuePFvPKvPbPcmES0_m(LoopBridgeExec exec, const void* context, size_t size);
+extern "C" bool __wrap__Z23loop_bridge_is_consumerv() { return bridge_consumer; }
 LoopBridgeResult __wrap__Z19loop_bridge_enqueuePFvPKvPbPcmES0_m(LoopBridgeExec exec, const void* context, size_t size) {
 #else
+bool loop_bridge_is_consumer() { return bridge_consumer; }
 LoopBridgeResult loop_bridge_enqueue(LoopBridgeExec exec, const void* context, size_t size) {
 #endif
     if (!exec || (!context && size) || size > sizeof(delete_job)) return LOOP_BRIDGE_INVALID;
@@ -1731,8 +1737,6 @@ static bool system_and_saved_level_operations() {
         {"device.restart", &reboot_requests},
         {"display.sleep", &sleep_requests},
         {"display.wake", &wake_requests},
-        {"display.brightness.save", &save_brightness_requests},
-        {"audio.volume.save", &save_volume_requests}
     };
     for (const Case& test : cases) {
         JsonDocument input;
@@ -1747,11 +1751,59 @@ static bool system_and_saved_level_operations() {
         const unsigned before = *test.calls;
         bool ok = !storage.failed && !action_operation_validate_json(input.as<JsonObjectConst>()) &&
             action_dispatch(action, "system") == ACTION_COMPLETE && *test.calls == before + 1;
-        if (test.calls == &save_brightness_requests || test.calls == &save_volume_requests) {
-            save_level_allowed = false;
-            ok = ok && action_dispatch(action, "system") == ACTION_FAILED && *test.calls == before + 2;
-            save_level_allowed = true;
+        action_storage_clear(storage);
+        if (!ok) return false;
+    }
+    const Case saved_levels[] = {
+        {"display.brightness.save", &save_brightness_requests},
+        {"audio.volume.save", &save_volume_requests},
+    };
+    for (const Case& test : saved_levels) {
+        JsonDocument input;
+        input[0]["op"] = test.op;
+        input[0]["args"].to<JsonObject>();
+        input[1]["op"] = "test.wide";
+        input[1]["args"]["target"] = "suffix";
+        input[1]["args"]["number"] = 1;
+        input[1]["args"]["enabled"] = true;
+        ActionStorage storage = {};
+        ButtonAction actions[2] = {};
+        {
+            ActionStorageScope scope(&storage);
+            action_parse(input[0].as<JsonObject>(), actions[0]);
+            action_parse(input[1].as<JsonObject>(), actions[1]);
         }
+        test_brightness = test_volume = 37;
+        const unsigned before = *test.calls;
+        const unsigned before_suffix = wide_calls;
+        bool ok = !storage.failed &&
+            action_list_dispatch_result(actions, 2, "save", ACTION_CONTINUATION_OWNER_LVGL, true) == ACTION_PENDING &&
+            *test.calls == before && wide_calls == before_suffix && delete_exec;
+        test_brightness = test_volume = 75;
+        bool completed = false;
+        if (ok) delete_exec(delete_job, &completed, nullptr, 0);
+        action_list_dispatch_continuation(ACTION_CONTINUATION_OWNER_LVGL);
+        ok = ok && completed && *test.calls == before + 1 && saved_level == 37 &&
+            wide_calls == before_suffix + 1;
+
+        save_level_allowed = false;
+        ok = ok && action_list_dispatch_result(actions, 2, "save", ACTION_CONTINUATION_OWNER_LVGL, true) == ACTION_PENDING;
+        completed = true;
+        if (ok) delete_exec(delete_job, &completed, nullptr, 0);
+        action_list_dispatch_continuation(ACTION_CONTINUATION_OWNER_LVGL);
+        save_level_allowed = true;
+        ok = ok && !completed && *test.calls == before + 2 && wide_calls == before_suffix + 1;
+
+        bridge_reject = true;
+        ok = ok && action_list_dispatch_result(actions, 2, "save", ACTION_CONTINUATION_OWNER_LVGL, true) == ACTION_FAILED &&
+            *test.calls == before + 2 && wide_calls == before_suffix + 1;
+        bridge_reject = false;
+        bridge_consumer = true;
+        bridge_reject = true;
+        ok = ok && action_list_dispatch_result(actions, 2, "save", ACTION_CONTINUATION_OWNER_LOOP, true) == ACTION_COMPLETE &&
+            *test.calls == before + 3 && saved_level == 75 && wide_calls == before_suffix + 2;
+        bridge_reject = false;
+        bridge_consumer = false;
         action_storage_clear(storage);
         if (!ok) return false;
     }

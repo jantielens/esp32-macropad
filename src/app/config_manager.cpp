@@ -201,18 +201,25 @@ static bool save_current_level(DeviceConfig *config, const char* key, uint8_t va
 #endif
 
 #if HAS_DISPLAY
-bool config_manager_save_current_brightness(DeviceConfig *config) {
+bool config_manager_save_brightness(DeviceConfig *config, uint8_t brightness) {
 		if (!config) return false;
-		const uint8_t brightness = screen_saver_manager_get_brightness();
 		if (brightness < MIN_USER_BRIGHTNESS) return false;
 		return save_current_level(config, KEY_BACKLIGHT_BRIGHTNESS, brightness, &config->backlight_brightness);
+}
+
+bool config_manager_save_current_brightness(DeviceConfig *config) {
+		return config_manager_save_brightness(config, screen_saver_manager_get_brightness());
 }
 #endif
 
 #if HAS_AUDIO
-bool config_manager_save_current_volume(DeviceConfig *config) {
+bool config_manager_save_volume(DeviceConfig *config, uint8_t volume) {
 		if (!config) return false;
-		return save_current_level(config, KEY_AUDIO_VOLUME, audio_get_volume(), &config->audio_volume);
+		return save_current_level(config, KEY_AUDIO_VOLUME, volume, &config->audio_volume);
+}
+
+bool config_manager_save_current_volume(DeviceConfig *config) {
+		return config_manager_save_volume(config, audio_get_volume());
 }
 #endif
 

@@ -43,6 +43,9 @@ typedef void (*LoopBridgeCleanup)(const void* ctx);
 // this has run.
 void loop_bridge_init();
 
+// True only on the task that initialized and drains the bridge.
+bool loop_bridge_is_consumer();
+
 // Web task: package a job, schedule it on the main loop, and block (bounded)
 // until it completes or the timeout elapses.
 LoopBridgeResult loop_bridge_dispatch(LoopBridgeExec exec,
