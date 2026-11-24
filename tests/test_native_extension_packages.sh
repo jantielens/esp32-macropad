@@ -10,6 +10,7 @@ SIGNING_KEY="$TMP_DIR/extension-signing-private.pem"
 openssl ecparam -name prime256v1 -genkey -noout -out "$SIGNING_KEY"
 export EXTENSION_SIGNING_KEY="$SIGNING_KEY"
 ABI_VERSION=$(sed -n 's/^#define NATIVE_EXTENSION_ABI_VERSION \([0-9][0-9]*\)u$/\1/p' src/app/native_extension_api.h)
+ABI_MINOR=$(sed -n 's/^#define NATIVE_EXTENSION_ABI_MINOR \([0-9][0-9]*\)u$/\1/p' src/app/native_extension_api.h)
 
 build_package() {
     local target=$1
@@ -64,6 +65,18 @@ while IFS= read -r source; do
     build_package s3 "$source" "$TMP_DIR/$base_name-s3.elf"
     build_package esp32 "$source" "$TMP_DIR/$base_name-esp32.elf"
 done < <(grep -rl --include='*.cpp' 'native_extension_descriptor' "$PROJECT_DIR/extensions"/*/)
+
+# A package requiring a future service revision must be rejected before signing.
+mkdir "$TMP_DIR/future-minor"
+FUTURE_MINOR=$((ABI_MINOR + 1))
+sed "s/NATIVE_EXTENSION_TICK_INTERVAL_DEFAULT_MS, 0,/NATIVE_EXTENSION_TICK_INTERVAL_DEFAULT_MS, $FUTURE_MINOR,/" \
+    extensions/hello-world/hello_world.cpp > "$TMP_DIR/future-minor/hello_world.cpp"
+if bash tools/build-extension.sh p4 "$TMP_DIR/future-minor/hello_world.cpp" \
+    "$TMP_DIR/future-minor/hello-world@1.0.0-p4.elf" >"$TMP_DIR/future-minor/log" 2>&1; then
+    echo "Package requiring a future ABI minor version unexpectedly built" >&2
+    exit 1
+fi
+grep -q "descriptor requires ABI minor $FUTURE_MINOR, firmware provides $ABI_MINOR" "$TMP_DIR/future-minor/log"
 
 first_package=$(find "$TMP_DIR" -maxdepth 1 -type f -name '*.ext' | head -n 1)
 [[ -n "$first_package" ]]

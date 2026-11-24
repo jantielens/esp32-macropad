@@ -4,10 +4,12 @@
 
 #include "log_manager.h"
 #include "device_dialog.h"
+#include "display_manager.h"
 #include "ota_activity.h"
 #include "pad_config.h"
 #include "pad_layout.h"
 #include "native_extension_text.h"
+#include "native_extension_ui.h"
 #include "storage.h"
 #if HAS_MQTT
 #include "binding_template.h"
@@ -458,7 +460,10 @@ void host_obj_set_size(void* obj, int32_t width, int32_t height) { if (obj) lv_o
 void host_obj_set_pos(void* obj, int32_t x, int32_t y) { if (obj) lv_obj_set_pos(as_obj(obj), x, y); }
 int32_t host_obj_get_width(void* obj) { return obj ? lv_obj_get_width(as_obj(obj)) : 0; }
 int32_t host_obj_get_height(void* obj) { return obj ? lv_obj_get_height(as_obj(obj)) : 0; }
-void host_obj_align(void* obj, NativeExtensionAlign align, int32_t x, int32_t y) { if (obj) lv_obj_align(as_obj(obj), static_cast<lv_align_t>(align), x, y); }
+void host_obj_align(void* obj, NativeExtensionAlign align, int32_t x, int32_t y) {
+    if (!native_extension_ui_align(obj, align, x, y))
+        host_log(NATIVE_EXTENSION_LOG_WARN, "Invalid object or alignment");
+}
 void host_obj_set_hidden(void* obj, bool hidden) { if (obj) { if (hidden) lv_obj_add_flag(as_obj(obj), LV_OBJ_FLAG_HIDDEN); else lv_obj_remove_flag(as_obj(obj), LV_OBJ_FLAG_HIDDEN); } }
 void host_obj_set_clickable(void* obj, bool clickable) { if (obj) { if (clickable) lv_obj_add_flag(as_obj(obj), LV_OBJ_FLAG_CLICKABLE); else lv_obj_remove_flag(as_obj(obj), LV_OBJ_FLAG_CLICKABLE); } }
 void host_obj_invalidate(void* obj) { if (obj) lv_obj_invalidate(as_obj(obj)); }
@@ -467,33 +472,32 @@ void host_obj_set_border(void* obj, uint32_t rgb, int32_t width, int32_t radius)
 void host_obj_set_text_color(void* obj, uint32_t rgb) { if (obj) lv_obj_set_style_text_color(as_obj(obj), host_color(rgb), 0); }
 void host_obj_set_padding(void* obj, int32_t all) { if (obj) lv_obj_set_style_pad_all(as_obj(obj), all, 0); }
 lv_event_code_t host_event_code(NativeExtensionLvglEventCode code) {
-    switch (code) {
-        case NATIVE_EXTENSION_EVENT_PRESSED: return LV_EVENT_PRESSED;
-        case NATIVE_EXTENSION_EVENT_PRESSING: return LV_EVENT_PRESSING;
-        case NATIVE_EXTENSION_EVENT_RELEASED: return LV_EVENT_RELEASED;
-        case NATIVE_EXTENSION_EVENT_CLICKED: return LV_EVENT_CLICKED;
-        case NATIVE_EXTENSION_EVENT_LONG_PRESSED: return LV_EVENT_LONG_PRESSED;
-        case NATIVE_EXTENSION_EVENT_VALUE_CHANGED: return LV_EVENT_VALUE_CHANGED;
-        case NATIVE_EXTENSION_EVENT_DELETE: return LV_EVENT_DELETE;
-    }
-    return LV_EVENT_ALL;
+    return native_extension_lvgl_event_code(code);
 }
 void host_obj_add_event_cb(void* obj, NativeExtensionLvglEventFn callback, NativeExtensionLvglEventCode code, void* user_data) { if (obj && callback) lv_obj_add_event_cb(as_obj(obj), reinterpret_cast<lv_event_cb_t>(callback), host_event_code(code), user_data); }
 NativeExtensionLvglEventCode host_event_get_code(void* event) {
     if (!event) return NATIVE_EXTENSION_EVENT_DELETE;
-    switch (lv_event_get_code(static_cast<lv_event_t*>(event))) {
-        case LV_EVENT_PRESSED: return NATIVE_EXTENSION_EVENT_PRESSED;
-        case LV_EVENT_PRESSING: return NATIVE_EXTENSION_EVENT_PRESSING;
-        case LV_EVENT_RELEASED: return NATIVE_EXTENSION_EVENT_RELEASED;
-        case LV_EVENT_CLICKED: return NATIVE_EXTENSION_EVENT_CLICKED;
-        case LV_EVENT_LONG_PRESSED: return NATIVE_EXTENSION_EVENT_LONG_PRESSED;
-        case LV_EVENT_VALUE_CHANGED: return NATIVE_EXTENSION_EVENT_VALUE_CHANGED;
-        case LV_EVENT_DELETE: return NATIVE_EXTENSION_EVENT_DELETE;
-        default: return NATIVE_EXTENSION_EVENT_DELETE;
-    }
+    return native_extension_ui_event_code(lv_event_get_code(static_cast<lv_event_t*>(event)));
 }
 void* host_event_get_target(void* event) { return event ? lv_event_get_target(static_cast<lv_event_t*>(event)) : nullptr; }
 void* host_event_get_user_data(void* event) { return event ? lv_event_get_user_data(static_cast<lv_event_t*>(event)) : nullptr; }
+
+void host_label_set_font_size(void* label, uint8_t size) {
+    if (label) lv_obj_set_style_text_font(as_obj(label), native_extension_text_font("default", size), 0);
+}
+void host_label_set_font(void* label, const char* font_name, uint8_t size) {
+    if (label) lv_obj_set_style_text_font(as_obj(label), native_extension_text_font(font_name, size), 0);
+}
+void host_label_set_wrap(void* label, int32_t width) {
+    if (!label || width <= 0) return;
+    lv_obj_set_width(as_obj(label), width);
+    lv_label_set_long_mode(as_obj(label), LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_align(as_obj(label), LV_TEXT_ALIGN_CENTER, 0);
+}
+void host_interaction_changed() {
+    if (displayManager) displayManager->interactionChanged();
+}
+bool host_display_disables_animations() { return DISPLAY_DISABLE_ANIMATIONS; }
 
 void* host_line_create(void* parent) { return parent ? lv_line_create(as_obj(parent)) : nullptr; }
 void host_line_set(void* line, int32_t x1, int32_t y1, int32_t x2, int32_t y2, uint32_t rgb, uint8_t width) {
@@ -676,15 +680,17 @@ void host_canvas_draw_text(void* canvas, int32_t x, int32_t y, const char* text,
 }
 
 const NativeExtensionCoreApi CORE_API = {
+    sizeof(NativeExtensionCoreApi),
     host_millis, host_delay_ms, host_log, host_alloc, host_free,
     host_context_get_data, host_context_set_data,
     host_math_sin, host_math_cos, host_math_sqrt, host_math_atan2,
     host_mutex_create, host_mutex_lock, host_mutex_unlock, host_mutex_destroy,
     host_notify, host_status_set,
 };
-const NativeExtensionTaskApi TASK_API = {host_task_create, host_task_cancel_requested, host_task_wait_or_cancel};
-const NativeExtensionHttpApi HTTP_API = {host_http_get};
+const NativeExtensionTaskApi TASK_API = {sizeof(NativeExtensionTaskApi), host_task_create, host_task_cancel_requested, host_task_wait_or_cancel};
+const NativeExtensionHttpApi HTTP_API = {sizeof(NativeExtensionHttpApi), host_http_get};
 const NativeExtensionUiApi UI_API = {
+    sizeof(NativeExtensionUiApi),
     host_label_create, host_label_set_text, host_obj_center,
     host_obj_create, host_obj_delete, host_obj_set_size, host_obj_set_pos,
     host_obj_get_width, host_obj_get_height, host_obj_align, host_obj_set_hidden,
@@ -693,17 +699,23 @@ const NativeExtensionUiApi UI_API = {
     host_obj_add_event_cb, host_event_get_code, host_event_get_target, host_event_get_user_data,
     host_line_create, host_line_set, host_arc_create, host_arc_set_value,
     host_spinner_create, host_table_create, host_table_set_size, host_table_set_cell_text,
+    native_extension_ui_button_create, host_label_set_font_size,
+    native_extension_ui_button_set_press_feedback,
+    native_extension_ui_event_add, native_extension_ui_event_remove,
+    host_interaction_changed, host_display_disables_animations, host_label_set_wrap, host_label_set_font,
 };
 const NativeExtensionCanvasApi CANVAS_API = {
+    sizeof(NativeExtensionCanvasApi),
     host_canvas_create, host_canvas_buffer_size, host_canvas_set_buffer,
     host_canvas_clear, host_canvas_set_pixel, host_canvas_fill_rect, host_canvas_invalidate_rect, host_canvas_draw_line,
     host_canvas_draw_circle, host_canvas_measure_text, host_canvas_draw_text, host_canvas_blit_rgb565,
 };
-const NativeExtensionBindingApi BINDING_API = {host_binding_resolve};
-const NativeExtensionButtonApi BUTTON_API = {host_button_get};
+const NativeExtensionBindingApi BINDING_API = {sizeof(NativeExtensionBindingApi), host_binding_resolve};
+const NativeExtensionButtonApi BUTTON_API = {sizeof(NativeExtensionButtonApi), host_button_get};
 
 const NativeExtensionHostApi HOST_API = {
     NATIVE_EXTENSION_ABI_VERSION,
+    sizeof(NativeExtensionHostApi), NATIVE_EXTENSION_ABI_MINOR,
     &CORE_API, &TASK_API, &HTTP_API, &UI_API, &CANVAS_API, &BINDING_API, &BUTTON_API,
 };
 
@@ -711,9 +723,17 @@ const esp_partition_t* extension_partition() {
     return esp_partition_find_first(ESP_PARTITION_TYPE_DATA, static_cast<esp_partition_subtype_t>(NATIVE_EXTENSION_PARTITION_SUBTYPE), NATIVE_EXTENSION_PARTITION_LABEL);
 }
 
+uint16_t required_abi_minor(const NativeExtensionSlotHeader& header) {
+    return static_cast<uint16_t>(header.reserved[0]) |
+           (static_cast<uint16_t>(header.reserved[1]) << 8);
+}
+bool compatible_abi(const NativeExtensionSlotHeader& header) {
+    return native_extension_abi_compatible(header.abi_version, required_abi_minor(header));
+}
+
 bool read_header(const esp_partition_t* partition, uint8_t slot, NativeExtensionSlotHeader* header) {
     if (!partition || !valid_slot(slot) || !header || esp_partition_read(partition, SLOT_OFFSET[slot], header, sizeof(*header)) != ESP_OK) return false;
-    return header->magic == SLOT_MAGIC && header->abi_version == NATIVE_EXTENSION_ABI_VERSION && header->elf_size > 0 && header->elf_size <= SLOT_CAPACITY[slot] && header->enabled <= 1 && header->id[0];
+    return header->magic == SLOT_MAGIC && compatible_abi(*header) && header->elf_size > 0 && header->elf_size <= SLOT_CAPACITY[slot] && header->enabled <= 1 && header->id[0];
 }
 
 bool read_raw_header(const esp_partition_t* partition, uint8_t slot, NativeExtensionSlotHeader* header) {
@@ -975,7 +995,8 @@ bool load_slot(const esp_partition_t* partition, uint8_t slot, const NativeExten
     }
     NativeExtensionDescriptor descriptor = {};
     if (!read_descriptor(metadata, header.elf_size, &descriptor) ||
-        descriptor.abi_version != NATIVE_EXTENSION_ABI_VERSION ||
+        !native_extension_abi_compatible(descriptor.abi_version, descriptor.required_abi_minor) ||
+        descriptor.required_abi_minor != required_abi_minor(header) ||
         strcmp(descriptor.target_abi, NATIVE_EXTENSION_TARGET_ABI) != 0 ||
         strcmp(descriptor.id, header.id) != 0 || strcmp(descriptor.version, header.version) != 0 ||
         strcmp(descriptor.target_abi, header.target_abi) != 0) { heap_caps_free(metadata); return false; }
@@ -1045,13 +1066,24 @@ void install_stage(const esp_partition_t* partition, uint8_t slot) {
         stage.magic != STAGE_MAGIC || stage.slot.elf_size == 0 ||
         stage.slot.elf_size > SLOT_CAPACITY[slot]) { if (file) file.close(); return; }
     uint8_t* elf = static_cast<uint8_t*>(heap_caps_malloc(stage.slot.elf_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    NativeExtensionDescriptor descriptor = {};
     const bool valid = elf && file.read(elf, stage.slot.elf_size) == stage.slot.elf_size &&
                        valid_elf(elf, stage.slot.elf_size) &&
-                       native_extension_verify_signature(elf, stage.slot.elf_size, stage.slot.signature);
+                       native_extension_verify_signature(elf, stage.slot.elf_size, stage.slot.signature) &&
+                       read_descriptor(elf, stage.slot.elf_size, &descriptor) &&
+                       compatible_abi(stage.slot) &&
+                       stage.slot.enabled <= 1 &&
+                       descriptor.abi_version == stage.slot.abi_version &&
+                       descriptor.required_abi_minor == required_abi_minor(stage.slot) &&
+                       strcmp(descriptor.target_abi, NATIVE_EXTENSION_TARGET_ABI) == 0 &&
+                       strncmp(descriptor.target_abi, stage.slot.target_abi, sizeof(stage.slot.target_abi)) == 0 &&
+                       strncmp(descriptor.id, stage.slot.id, sizeof(stage.slot.id)) == 0 &&
+                       strncmp(descriptor.version, stage.slot.version, sizeof(stage.slot.version)) == 0 &&
+                       strncmp(descriptor.title, stage.slot.title, sizeof(stage.slot.title)) == 0;
     if (!valid) {
         if (elf) heap_caps_free(elf);
         file.close();
-        LOGW(TAG, "Rejected staged slot %u: invalid or unsigned package", slot);
+        LOGW(TAG, "Rejected staged slot %u: invalid, incompatible, or unsigned package", slot);
         return;
     }
     if (esp_partition_erase_range(partition, SLOT_OFFSET[slot], SLOT_SIZE[slot]) != ESP_OK) {
@@ -1117,9 +1149,10 @@ bool native_extension_init() {
     for (uint8_t slot = 0; slot < NATIVE_EXTENSION_SLOT_COUNT; ++slot) {
         NativeExtensionSlotHeader header = {};
         if (!read_raw_header(partition, slot, &header)) continue;
-        if (header.abi_version != NATIVE_EXTENSION_ABI_VERSION) {
-            LOGW(TAG, "Skipped slot %u: ABI %u requires ABI %u", slot, header.abi_version,
-                 NATIVE_EXTENSION_ABI_VERSION);
+        if (!compatible_abi(header)) {
+            LOGW(TAG, "Skipped slot %u: package ABI %u.%u, firmware ABI %u.%u", slot,
+                 header.abi_version, required_abi_minor(header),
+                 NATIVE_EXTENSION_ABI_VERSION, NATIVE_EXTENSION_ABI_MINOR);
             continue;
         }
         if (header.enabled) load_slot(partition, slot, header);
@@ -1137,7 +1170,7 @@ bool native_extension_get_slot(uint8_t slot, NativeExtensionSlotInfo* out) {
     if (read_raw_header(partition, slot, &header)) {
         out->installed = true; out->enabled = header.enabled; out->elf_size = header.elf_size;
         out->abi_version = header.abi_version;
-        out->incompatible_abi = header.abi_version != NATIVE_EXTENSION_ABI_VERSION;
+        out->incompatible_abi = !compatible_abi(header);
         strlcpy(out->id, header.id, sizeof(out->id)); strlcpy(out->version, header.version, sizeof(out->version));
         strlcpy(out->target_abi, header.target_abi, sizeof(out->target_abi));
         strlcpy(out->title, header.title, sizeof(out->title));
@@ -1200,7 +1233,7 @@ NativeExtensionStageResult native_extension_stage_file(uint8_t slot, const char*
         heap_caps_free(elf);
         return NATIVE_EXTENSION_STAGE_INVALID_DESCRIPTOR;
     }
-    if (descriptor.abi_version != NATIVE_EXTENSION_ABI_VERSION) {
+    if (!native_extension_abi_compatible(descriptor.abi_version, descriptor.required_abi_minor)) {
         heap_caps_free(elf);
         return NATIVE_EXTENSION_STAGE_INCOMPATIBLE_ABI;
     }
@@ -1213,6 +1246,8 @@ NativeExtensionStageResult native_extension_stage_file(uint8_t slot, const char*
     strlcpy(slot_header.version, descriptor.version, sizeof(slot_header.version));
     slot_header.enabled = 1;
     slot_header.abi_version = descriptor.abi_version;
+    slot_header.reserved[0] = static_cast<uint8_t>(descriptor.required_abi_minor);
+    slot_header.reserved[1] = static_cast<uint8_t>(descriptor.required_abi_minor >> 8);
     strlcpy(slot_header.target_abi, descriptor.target_abi, sizeof(slot_header.target_abi));
     strlcpy(slot_header.title, descriptor.title, sizeof(slot_header.title));
     slot_header.elf_size = elf_size;

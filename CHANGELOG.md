@@ -16,11 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking changes
 
+* Upgrade the native Extension ABI to version 18 for interactive controls.
+  Rebuild and re-upload existing Extension packages for the new firmware.
 * Make `jc3636w518-sd` a no-HID build. Select `jc3636w518-sd-usb` to
   retain its previous USB keyboard, mouse, and gamepad capability.
 
 ### Added
 
+* Add an interactive Calculator Extension with immediate arithmetic, memory
+  keys, configurable colors and fonts, and an e-paper display mode.
+  See the [Calculator reference](extensions/calculator/README.md).
 * Add JC3636W518 SD-primary USB-only and BLE-only HID
   firmware targets. All SD variants prefer PSRAM for ordinary allocations
   larger than 128 bytes. BLE requires further physical workload validation;

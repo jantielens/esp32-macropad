@@ -143,9 +143,11 @@ package format and verification path.
 The build scripts reject P4 ELF files containing relocations and reject Xtensa
 ELF files containing relocations other than `R_XTENSA_RELATIVE`. Rebuild and
 upload packages for each target after a firmware update that changes
-`NATIVE_EXTENSION_ABI_VERSION`. Packages must use the current value declared in
-`native_extension_api.h`; packages built for a different ABI are intentionally
-unsupported.
+`NATIVE_EXTENSION_ABI_VERSION`. This is the ABI major version: packages built
+for a different major are intentionally unsupported. A descriptor can require
+an ABI minor version no newer than the firmware's. A staged package is checked
+again before installation, so an incompatible staged package does not replace
+the current slot.
 
 Xtensa executable internal RAM is limited. The loader only reserves the executable
 code span in internal RAM, while extension constants and writable data use
@@ -170,7 +172,7 @@ extern "C" const NativeExtensionDescriptor native_extension_descriptor = {
   "1.0.0",
   "Example Extension",
   NATIVE_EXTENSION_TICK_INTERVAL_DEFAULT_MS,
-  0,
+  0, // Required ABI minor version
 };
 ```
 
@@ -203,7 +205,7 @@ change.
 Export these C functions from every Extension:
 
 ```cpp
-extern "C" void native_extension_create_instance(
+extern "C" bool native_extension_create_instance(
     const NativeExtensionHostApi* host,
   void* extension_context,
     uint32_t instance_id,
@@ -291,9 +293,34 @@ directly import firmware symbols, so it provides grouped C-style service views:
 * `host->ui` — opaque LVGL objects, labels, layout, styling, and events
 * `host->canvas` — RGB565 canvas allocation, drawing, sprite blitting, and text
 * `host->binding` — on-demand read-only binding-template resolution
+* `host->button` — resolved colors and labels of the owning button
 
-These grouped services are the complete extension API. The portal displays the
-descriptor title, target ABI, and package runtime status.
+These grouped services are the complete extension API. The host and each
+service table begin with their size (the host's size follows its major version).
+Within an ABI major, new service members are appended, not reordered. Use
+`NATIVE_EXTENSION_API_HAS(host->ui, NativeExtensionUiApi, member)` before
+accessing an optional member, and set the descriptor's required minor version
+when the package cannot operate without a newer service. Older packages can
+run on newer firmware with the same major. The portal displays the descriptor
+title, target ABI, and package runtime status.
+
+### Interactive controls
+
+`host->ui->button_create` creates a real LVGL button. Set its geometry, colors,
+border, and text; `label_set_font_size` selects the default font at a supported
+size, `label_set_font` also selects a font by name, and `label_set_wrap` sets a
+centered, wrapped label width.
+`button_set_press_feedback` enables or disables the pressed color inversion.
+Use `display_disables_animations` to respect the firmware's display policy.
+`interaction_changed` requests interaction-priority presentation after a visible
+change where the display supports it; it does not guarantee a refresh deadline.
+
+Use `event_add` with a `NativeExtensionUiEventBinding` to receive the supplied
+user data, target, and event code directly, including `PRESS_LOST`. A null
+handler indicates failure. The Extension owns the binding and must keep it
+alive until the object is deleted or `event_remove` succeeds. Delete controls
+or remove callbacks before freeing their bindings in `destroy_instance`.
+Callbacks run on the LVGL task. Do not manipulate LVGL in `shutdown`.
 
 ### RGB565 Sprite Blitting
 
@@ -329,9 +356,8 @@ The host's HTTP helper supports plain HTTP and HTTPS. HTTPS currently calls
 low-risk integrations until certificate validation is added.
 
 The exposed LVGL surface matches the controls enabled by the firmware build.
-Use generic clickable objects for button-like controls. When a future Extension
-needs an LVGL feature not in this table, add a host wrapper, rebuild the
-firmware, and rebuild all installed Extensions.
+When an Extension needs a feature not in these tables, add an append-only host
+wrapper and advance the ABI minor version.
 
 Canvas buffers are owned by the Extension and must use RGB565. Allocate them
 with `host->core->alloc(host->canvas->canvas_buffer_size(width, height))`, then

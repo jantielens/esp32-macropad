@@ -53,6 +53,8 @@ function(add_host_gtest target)
     gtest_discover_tests(${target})
 endfunction()
 
+add_host_gtest(test_calculator ${PROJECT_SOURCE_DIR}/tests/test_calculator.cpp)
+
 function(add_host_legacy_test target)
     cmake_parse_arguments(ARG "" "" "SOURCES;DEFINITIONS;INCLUDES;LIBRARIES;OPTIONS;PREINCLUDE" ${ARGN})
     add_executable(${target} ${ARG_SOURCES})
@@ -406,6 +408,11 @@ target_compile_definitions(host_lvgl PUBLIC LV_CONF_SKIP=1 LV_USE_OS=0 LV_USE_LO
     LV_TINY_TTF_CACHE_GLYPH_CNT=16 LV_TINY_TTF_CACHE_KERNING_CNT=16
     LV_FONT_MONTSERRAT_12=1 LV_FONT_MONTSERRAT_18=1 LV_FONT_MONTSERRAT_24=1
     LV_FONT_MONTSERRAT_32=1 LV_FONT_MONTSERRAT_36=1)
+add_host_gtest(test_native_extension_ui_events test_native_extension_ui_events.cpp)
+target_link_libraries(test_native_extension_ui_events PRIVATE host_lvgl)
+add_host_gtest(test_calculator_ui test_calculator_ui.cpp
+    ${PROJECT_SOURCE_DIR}/extensions/calculator/calculator.cpp)
+target_link_libraries(test_calculator_ui PRIVATE host_lvgl)
 target_link_libraries(test_sticky_epaper_driver PRIVATE host_lvgl)
 target_link_libraries(test_sticky_epaper_driver_diagnostics PRIVATE host_lvgl)
 add_host_legacy_test(test_runtime_ttf_oom

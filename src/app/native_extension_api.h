@@ -5,7 +5,8 @@
 
 // The extension ABI is intentionally C-shaped. Native packages are built
 // separately from the firmware, so this remains the compatibility boundary.
-#define NATIVE_EXTENSION_ABI_VERSION 17u
+#define NATIVE_EXTENSION_ABI_VERSION 18u
+#define NATIVE_EXTENSION_ABI_MINOR 0u
 #define NATIVE_EXTENSION_TARGET_ABI_P4 "rv32imafc-ilp32f"
 #define NATIVE_EXTENSION_TARGET_ABI_S3 "xtensa-esp32s3"
 #define NATIVE_EXTENSION_TARGET_ABI_ESP32 "xtensa-esp32"
@@ -17,6 +18,10 @@
 #define NATIVE_EXTENSION_TICK_INTERVAL_MIN_MS 33u
 #define NATIVE_EXTENSION_TICK_INTERVAL_MAX_MS 1000u
 #define NATIVE_EXTENSION_BUTTON_LABEL_MAX_LEN 192u
+
+static inline bool native_extension_abi_compatible(uint32_t major, uint16_t required_minor) {
+    return major == NATIVE_EXTENSION_ABI_VERSION && required_minor <= NATIVE_EXTENSION_ABI_MINOR;
+}
 
 enum NativeExtensionEventResult : uint8_t {
     NATIVE_EXTENSION_PASS_THROUGH = 0,
@@ -56,6 +61,7 @@ enum NativeExtensionLvglEventCode : uint8_t {
     NATIVE_EXTENSION_EVENT_LONG_PRESSED,
     NATIVE_EXTENSION_EVENT_VALUE_CHANGED,
     NATIVE_EXTENSION_EVENT_DELETE,
+    NATIVE_EXTENSION_EVENT_PRESS_LOST,
 };
 
 struct NativeExtensionHttpResult {
@@ -74,14 +80,24 @@ struct NativeExtensionDescriptor {
     char version[16];
     char title[40];
     uint16_t tick_interval_ms;
-    uint16_t reserved;
+    uint16_t required_abi_minor;
 };
 
 typedef void (*NativeExtensionTaskFn)(void* context);
 typedef void (*NativeExtensionLvglEventFn)(void* event);
+typedef void (*NativeExtensionUiEventFn)(void* user_data, void* target,
+                                          NativeExtensionLvglEventCode event_code);
+
+// The extension owns this binding until it removes the handler or its object
+// is deleted. Callbacks run on the LVGL task.
+struct NativeExtensionUiEventBinding {
+    NativeExtensionUiEventFn callback;
+    void* user_data;
+};
 
 // Grouped source-level service views exposed to native packages.
 struct NativeExtensionCoreApi {
+    uint32_t size;
     uint32_t (*millis)();
     void (*delay_ms)(uint32_t delay_ms);
     void (*log)(NativeExtensionLogLevel level, const char* message);
@@ -103,6 +119,7 @@ struct NativeExtensionCoreApi {
 };
 
 struct NativeExtensionTaskApi {
+    uint32_t size;
     bool (*task_create)(void* extension_context, NativeExtensionTaskFn entry, const char* name,
                         uint32_t stack_bytes, void* context,
                         uint32_t priority, void** out_handle);
@@ -111,11 +128,13 @@ struct NativeExtensionTaskApi {
 };
 
 struct NativeExtensionHttpApi {
+    uint32_t size;
     bool (*http_get)(const char* url, uint8_t* response, size_t capacity,
                      uint32_t timeout_ms, NativeExtensionHttpResult* result);
 };
 
 struct NativeExtensionUiApi {
+    uint32_t size;
     void* (*label_create)(void* parent);
     void (*label_set_text)(void* label, const char* text);
     void (*obj_center)(void* obj);
@@ -147,9 +166,20 @@ struct NativeExtensionUiApi {
     void* (*table_create)(void* parent);
     void (*table_set_size)(void* table, uint16_t rows, uint16_t columns);
     void (*table_set_cell_text)(void* table, uint16_t row, uint16_t column, const char* text);
+    void* (*button_create)(void* parent);
+    void (*label_set_font_size)(void* label, uint8_t size);
+    void (*button_set_press_feedback)(void* button, bool enabled);
+    void* (*event_add)(void* obj, NativeExtensionLvglEventCode code,
+                       NativeExtensionUiEventBinding* binding);
+    bool (*event_remove)(void* obj, void* handler);
+    void (*interaction_changed)();
+    bool (*display_disables_animations)();
+    void (*label_set_wrap)(void* label, int32_t width);
+    void (*label_set_font)(void* label, const char* font_name, uint8_t size);
 };
 
 struct NativeExtensionCanvasApi {
+    uint32_t size;
     void* (*canvas_create)(void* parent);
     size_t (*canvas_buffer_size)(uint32_t width, uint32_t height);
     bool (*canvas_set_buffer)(void* canvas, void* buffer, uint32_t width, uint32_t height);
@@ -177,6 +207,7 @@ struct NativeExtensionCanvasApi {
 // owns `out`; a true return means arguments and context were valid, regardless
 // of whether the binding output is a placeholder such as "---".
 struct NativeExtensionBindingApi {
+    uint32_t size;
     bool (*resolve)(void* extension_context, uint32_t instance_id,
                     const char* template_text, char* out, size_t out_size);
 };
@@ -190,12 +221,15 @@ struct NativeExtensionButtonSnapshot {
 };
 
 struct NativeExtensionButtonApi {
+    uint32_t size;
     bool (*get)(void* extension_context, uint32_t instance_id,
                 NativeExtensionButtonSnapshot* out);
 };
 
 struct NativeExtensionHostApi {
     uint32_t abi_version;
+    uint32_t size;
+    uint32_t abi_minor;
     const NativeExtensionCoreApi* core;
     const NativeExtensionTaskApi* task;
     const NativeExtensionHttpApi* http;
@@ -204,6 +238,9 @@ struct NativeExtensionHostApi {
     const NativeExtensionBindingApi* binding;
     const NativeExtensionButtonApi* button;
 };
+
+#define NATIVE_EXTENSION_API_HAS(table, type, member) \
+    ((table) && (table)->size >= offsetof(type, member) + sizeof((table)->member) && (table)->member)
 
 typedef bool (*NativeExtensionCreateFn)(const NativeExtensionHostApi* host,
                                         void* extension_context, uint32_t instance_id, void* root,

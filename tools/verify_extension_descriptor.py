@@ -31,6 +31,7 @@ def main() -> None:
     elf_path = Path(sys.argv[2])
     header = header_path.read_text(encoding="ascii")
     abi_version = int(re.search(r"\d+", constant(header, "NATIVE_EXTENSION_ABI_VERSION")).group())
+    abi_minor = int(re.search(r"\d+", constant(header, "NATIVE_EXTENSION_ABI_MINOR")).group())
     target_abi = sys.argv[3] if len(sys.argv) == 4 else constant(header, "NATIVE_EXTENSION_TARGET_ABI").strip('"')
     descriptor_magic = int(re.search(r"0x[0-9A-Fa-f]+", constant(header, "NATIVE_EXTENSION_DESCRIPTOR_MAGIC")).group(), 16)
 
@@ -77,11 +78,13 @@ def main() -> None:
     if descriptor_offset is None or descriptor_offset + descriptor_size > len(data):
         fail("descriptor is not in a loadable ELF segment")
 
-    magic, descriptor_abi, raw_target, raw_id, raw_version, raw_title, tick_interval_ms, _ = struct.unpack_from("<II24s32s16s40sHH", data, descriptor_offset)
+    magic, descriptor_abi, raw_target, raw_id, raw_version, raw_title, tick_interval_ms, required_minor = struct.unpack_from("<II24s32s16s40sHH", data, descriptor_offset)
     if magic != descriptor_magic:
         fail("descriptor magic does not match ABI header")
     if descriptor_abi != abi_version:
         fail(f"descriptor ABI {descriptor_abi} does not match firmware ABI {abi_version}")
+    if required_minor > abi_minor:
+        fail(f"descriptor requires ABI minor {required_minor}, firmware provides {abi_minor}")
     if c_string(raw_target) != target_abi:
         fail(f"descriptor target ABI {c_string(raw_target)!r} does not match {target_abi!r}")
     if c_string(raw_id) != filename_id or c_string(raw_version) != filename_version:
