@@ -176,6 +176,7 @@ struct NativeExtensionUiApi {
     bool (*display_disables_animations)();
     void (*label_set_wrap)(void* label, int32_t width);
     void (*label_set_font)(void* label, const char* font_name, uint8_t size);
+    void (*tap_feedback)();
 };
 
 struct NativeExtensionCanvasApi {

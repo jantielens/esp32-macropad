@@ -17,6 +17,7 @@ int allocations = 0;
 int registrations = 0;
 int fail_registration = -1;
 int interactions = 0;
+int tap_sounds = 0;
 bool disable_animations = false;
 bool feedback_enabled = false;
 char selected_font[32];
@@ -75,6 +76,7 @@ void* add_event(void* obj, NativeExtensionLvglEventCode code, NativeExtensionUiE
     return native_extension_ui_event_add(obj, code, binding);
 }
 void interaction() { ++interactions; }
+void tap_feedback() { ++tap_sounds; }
 bool disabled() { return disable_animations; }
 int32_t measure(const char* text, const char* name, uint8_t size) {
     std::strncpy(measured_font, name, sizeof(measured_font) - 1);
@@ -106,7 +108,7 @@ protected:
         lv_obj_remove_style_all(root);
         lv_obj_set_size(root, 320, 320);
         lv_obj_update_layout(root);
-        allocations = registrations = interactions = 0;
+        allocations = registrations = interactions = tap_sounds = 0;
         fail_registration = -1;
         disable_animations = feedback_enabled = false;
         selected_font[0] = measured_font[0] = '\0';
@@ -141,6 +143,7 @@ protected:
         ui.display_disables_animations = disabled;
         ui.label_set_wrap = wrap;
         ui.label_set_font = named_font;
+        ui.tap_feedback = tap_feedback;
         canvas.size = sizeof(canvas);
         canvas.canvas_measure_text = measure;
         button.size = sizeof(button);
@@ -176,6 +179,16 @@ TEST_F(CalculatorUi, RoutesKeysAndReleasesInstance) {
     native_extension_destroy_instance(&host, &context, 1);
     EXPECT_EQ(lv_obj_get_child_count(root), 0u);
     EXPECT_EQ(context.data, nullptr);
+}
+
+TEST_F(CalculatorUi, RequestsTapFeedbackForEachKeyEvenWithoutDisplayChange) {
+    ASSERT_TRUE(native_extension_create_instance(&host, &context, 1, root, ""));
+    press(20);
+    press(20);
+    press(0);
+    EXPECT_STREQ(result(), "0");
+    EXPECT_EQ(tap_sounds, 3);
+    native_extension_destroy_instance(&host, &context, 1);
 }
 
 TEST_F(CalculatorUi, KeepsDisplayRightAlignedWhenValueChanges) {
@@ -218,8 +231,8 @@ TEST_F(CalculatorUi, InstancesAreIndependent) {
 }
 
 TEST_F(CalculatorUi, EpaperAndTooSmall) {
-    ASSERT_TRUE(native_extension_create_instance(&host, &context, 1, root,
-                                                  "{\"display_style\":\"epaper\"}"));
+    disable_animations = true;
+    ASSERT_TRUE(native_extension_create_instance(&host, &context, 1, root, ""));
     EXPECT_FALSE(feedback_enabled);
     lv_obj_update_layout(root);
     unsigned invalidations = 0;
@@ -231,6 +244,8 @@ TEST_F(CalculatorUi, EpaperAndTooSmall) {
     lv_obj_add_state(key, LV_STATE_PRESSED);
     lv_obj_remove_state(key, LV_STATE_PRESSED);
     EXPECT_EQ(invalidations, 0u);
+    press(20);
+    EXPECT_EQ(tap_sounds, 1);
     EXPECT_TRUE(lv_display_remove_event(display, event_index));
     native_extension_destroy_instance(&host, &context, 1);
     lv_obj_set_size(root, 120, 120);
@@ -251,7 +266,7 @@ TEST_F(CalculatorUi, DisplayPolicyDisablesFeedbackInNormalMode) {
 
 TEST_F(CalculatorUi, StylesCategoriesAndPreservesColorFallbacks) {
     const char* config =
-        "{\"display_style\":\"epaper\",\"font\":\"@builtin\",\"corner_radius\":8,"
+        "{\"font\":\"@builtin\",\"corner_radius\":8,"
         "\"keys_background\":\"#123456\",\"keys_foreground\":\"#ABCDEF\","
         "\"keys_overrides\":{\"numbers\":{\"background\":\"#010203\"},"
         "\"operators\":{\"foreground\":\"#112233\"},"
@@ -271,7 +286,7 @@ TEST_F(CalculatorUi, StylesCategoriesAndPreservesColorFallbacks) {
     check(0, 0xff0000, 0xabcdef);
     EXPECT_STREQ(selected_font, "@builtin");
     EXPECT_STREQ(measured_font, "@builtin");
-    EXPECT_FALSE(feedback_enabled);
+    EXPECT_TRUE(feedback_enabled);
     press(5);
     EXPECT_STREQ(selected_font, "@builtin");
     EXPECT_STREQ(measured_font, "@builtin");
@@ -337,7 +352,7 @@ TEST_F(CalculatorUi, DecodesEscapedFontName) {
 
 TEST_F(CalculatorUi, AcceptsCompleteConfigurationAndAutomaticRadius) {
     const char* config =
-        "{\"display_style\":\"normal\",\"font\":\"default\",\"corner_radius\":\"auto\","
+        "{\"font\":\"default\",\"corner_radius\":\"auto\","
         "\"keys_background\":\"#FFFFFF\",\"keys_foreground\":\"#111111\","
         "\"keys_overrides\":{\"numbers\":{\"background\":\"#FFFFFF\",\"foreground\":\"#111111\"},"
         "\"operators\":{\"background\":\"#333333\",\"foreground\":\"#FFFFFF\"},"
@@ -359,7 +374,8 @@ TEST_F(CalculatorUi, RejectsInvalidStyles) {
         "{\"display_border_color\":\"#FFFFFFF\"}", "{\"display_corner_radius\":-1}",
         "{\"display_corner_radius\":32768}", "{\"display_corner_radius\":01}",
         "{\"display_font\":\"\"}", "{\"display_alignment\":\"justify\"}",
-        "{\"display_alignment\":\"left\",\"display_alignment\":\"right\"}"
+        "{\"display_alignment\":\"left\",\"display_alignment\":\"right\"}",
+        "{\"display_style\":\"normal\"}", "{\"display_style\":\"epaper\"}"
     };
     for (const char* config : invalid) {
         EXPECT_FALSE(native_extension_create_instance(&host, &context, 1, root, config)) << config;
@@ -369,6 +385,13 @@ TEST_F(CalculatorUi, RejectsInvalidStyles) {
 
 TEST_F(CalculatorUi, RejectsHostWithoutNamedFontService) {
     ui.size = offsetof(NativeExtensionUiApi, label_set_font);
+    EXPECT_FALSE(native_extension_create_instance(&host, &context, 1, root, ""));
+    EXPECT_EQ(allocations, 0);
+    EXPECT_EQ(lv_obj_get_child_count(root), 0u);
+}
+
+TEST_F(CalculatorUi, RejectsHostWithoutTapFeedbackService) {
+    ui.size = offsetof(NativeExtensionUiApi, tap_feedback);
     EXPECT_FALSE(native_extension_create_instance(&host, &context, 1, root, ""));
     EXPECT_EQ(allocations, 0);
     EXPECT_EQ(lv_obj_get_child_count(root), 0u);

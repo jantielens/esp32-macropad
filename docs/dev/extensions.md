@@ -312,6 +312,8 @@ size, `label_set_font` also selects a font by name, and `label_set_wrap` sets a
 centered, wrapped label width.
 `button_set_press_feedback` enables or disables the pressed color inversion.
 Use `display_disables_animations` to respect the firmware's display policy.
+Call `tap_feedback` once for an activated control to play the configured
+device tap cue; it is silent when audio is unavailable or feedback is disabled.
 `interaction_changed` requests interaction-priority presentation after a visible
 change where the display supports it; it does not guarantee a refresh deadline.
 

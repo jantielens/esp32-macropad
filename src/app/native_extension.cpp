@@ -11,6 +11,11 @@
 #include "native_extension_text.h"
 #include "native_extension_ui.h"
 #include "storage.h"
+#if HAS_AUDIO
+#include "audio.h"
+#include "config_manager.h"
+extern DeviceConfig device_config;
+#endif
 #if HAS_MQTT
 #include "binding_template.h"
 #include "pad_binding.h"
@@ -498,6 +503,11 @@ void host_interaction_changed() {
     if (displayManager) displayManager->interactionChanged();
 }
 bool host_display_disables_animations() { return DISPLAY_DISABLE_ANIMATIONS; }
+void host_tap_feedback() {
+#if HAS_AUDIO
+    audio_feedback(device_config.tap_beep);
+#endif
+}
 
 void* host_line_create(void* parent) { return parent ? lv_line_create(as_obj(parent)) : nullptr; }
 void host_line_set(void* line, int32_t x1, int32_t y1, int32_t x2, int32_t y2, uint32_t rgb, uint8_t width) {
@@ -703,6 +713,7 @@ const NativeExtensionUiApi UI_API = {
     native_extension_ui_button_set_press_feedback,
     native_extension_ui_event_add, native_extension_ui_event_remove,
     host_interaction_changed, host_display_disables_animations, host_label_set_wrap, host_label_set_font,
+    host_tap_feedback,
 };
 const NativeExtensionCanvasApi CANVAS_API = {
     sizeof(NativeExtensionCanvasApi),

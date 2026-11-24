@@ -17,21 +17,14 @@ Calculator displays `Make widget bigger`.
 
 Add the **Extension** widget to a button and select `calculator`. Leave
 **Upscale** at 1x: Calculator uses interactive controls, not a canvas. Leave
-the configuration empty for normal display behavior, or set:
+the configuration empty to use the default appearance.
 
-```json
-{"display_style":"normal"}
-```
-
-For an interactive e-paper display, use:
-
-```json
-{"display_style":"epaper"}
-```
+Key presses follow the device's visual feedback policy and configured tap
+sound. Devices without audio, or with tap sounds disabled, remain silent.
+Remove `display_style` from older Calculator configurations.
 
 | Field | Default | Description |
 | --- | --- | --- |
-| `display_style` | `normal` | `normal` enables pressed-key feedback; `epaper` disables it. Firmware display policy can also disable feedback in normal mode. |
 | `font` | `default` | Inherit Device Typography; use `@builtin` for Montserrat or an uploaded font name. Unavailable fonts fall back to Montserrat. |
 | `corner_radius` | `auto` | `auto` uses the default radius of 3 pixels; an integer from 0 to 32767 sets the key radius in pixels. |
 | `keys_background` | Button background | Default key background as `#RRGGBB`. |
@@ -48,7 +41,6 @@ For example:
 
 ```json
 {
-  "display_style": "normal",
   "font": "default",
   "corner_radius": "auto",
   "keys_background": "#FFFFFF",

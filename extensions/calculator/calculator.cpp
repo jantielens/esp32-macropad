@@ -41,7 +41,6 @@ struct Colors {
 };
 
 struct Style {
-    bool epaper;
     int32_t radius;
     char font[32];
     Colors defaults;
@@ -246,59 +245,52 @@ bool parse_style(const char* config, Style* style) {
     while (more) {
         char key[24];
         if (!object_key(p, key, sizeof(key))) return false;
-        const int field = same_text(key, "display_style") ? 0 : same_text(key, "font") ? 1 :
-                          same_text(key, "corner_radius") ? 2 : same_text(key, "keys_background") ? 3 :
-                          same_text(key, "keys_foreground") ? 4 : same_text(key, "keys_overrides") ? 5 :
-                          same_text(key, "display_background") ? 6 : same_text(key, "display_foreground") ? 7 :
-                          same_text(key, "display_border_color") ? 8 : same_text(key, "display_corner_radius") ? 9 :
-                          same_text(key, "display_font") ? 10 : same_text(key, "display_alignment") ? 11 : -1;
+        const int field = same_text(key, "font") ? 0 :
+                          same_text(key, "corner_radius") ? 1 : same_text(key, "keys_background") ? 2 :
+                          same_text(key, "keys_foreground") ? 3 : same_text(key, "keys_overrides") ? 4 :
+                          same_text(key, "display_background") ? 5 : same_text(key, "display_foreground") ? 6 :
+                          same_text(key, "display_border_color") ? 7 : same_text(key, "display_corner_radius") ? 8 :
+                          same_text(key, "display_font") ? 9 : same_text(key, "display_alignment") ? 10 : -1;
         if (field < 0 || (seen & (1u << field))) return false;
         seen |= 1u << field;
         switch (field) {
-            case 0: {
-                char value[8];
-                if (!json_string(p, value, sizeof(value))) return false;
-                if (same_text(value, "epaper")) style->epaper = true;
-                else if (!same_text(value, "normal")) return false;
-                break;
-            }
-            case 1:
+            case 0:
                 if (!json_string(p, style->font, sizeof(style->font)) || !style->font[0]) return false;
                 break;
-            case 2:
+            case 1:
                 if (!json_radius(p, &style->radius)) return false;
                 break;
-            case 3:
+            case 2:
                 if (!json_color(p, &style->defaults.background)) return false;
                 style->defaults.has_background = true;
                 break;
-            case 4:
+            case 3:
                 if (!json_color(p, &style->defaults.foreground)) return false;
                 style->defaults.has_foreground = true;
                 break;
-            case 5:
+            case 4:
                 if (!category_object(p, style)) return false;
                 break;
-            case 6:
+            case 5:
                 if (!json_color(p, &style->display.background)) return false;
                 style->display.has_background = true;
                 break;
-            case 7:
+            case 6:
                 if (!json_color(p, &style->display.foreground)) return false;
                 style->display.has_foreground = true;
                 break;
-            case 8:
+            case 7:
                 if (!json_color(p, &style->display_border_color)) return false;
                 style->has_display_border_color = true;
                 break;
-            case 9:
+            case 8:
                 if (!json_radius(p, &style->display_radius)) return false;
                 break;
-            case 10:
+            case 9:
                 if (!json_string(p, style->display_font, sizeof(style->display_font)) ||
                     !style->display_font[0]) return false;
                 break;
-            case 11: {
+            case 10: {
                 char value[8];
                 if (!json_string(p, value, sizeof(value))) return false;
                 if (same_text(value, "left")) style->display_alignment = NATIVE_EXTENSION_ALIGN_LEFT_MID;
@@ -375,6 +367,7 @@ bool update_display(Instance* instance) {
 void key_pressed(void* context, void*, NativeExtensionLvglEventCode event_code) {
     if (event_code != NATIVE_EXTENSION_EVENT_CLICKED) return;
     auto* key = static_cast<KeyBinding*>(context);
+    key->instance->host->ui->tap_feedback();
     calculator::press(&key->instance->calculator, key->key, key->instance->host->core->math_sqrt);
     if (update_display(key->instance)) key->instance->host->ui->interaction_changed();
 }
@@ -459,7 +452,7 @@ bool make_ui(Instance* instance, void* root, const Style& style) {
         ui->obj_set_bg_color(button, background, 255);
         ui->obj_set_border(button, foreground, 1, style.radius);
         ui->obj_set_text_color(button, foreground);
-        ui->button_set_press_feedback(button, !style.epaper && !ui->display_disables_animations());
+        ui->button_set_press_feedback(button, !ui->display_disables_animations());
         void* label = ui->label_create(button);
         if (!label) return false;
         const char* text = key_text(key);
@@ -484,7 +477,8 @@ extern "C" bool native_extension_create_instance(const NativeExtensionHostApi* h
                                                    void* extension_context, uint32_t instance_id,
                                                    void* root, const char* config_json) {
     if (!host || !host->core || !host->ui || !host->canvas || !host->button || !root ||
-        !NATIVE_EXTENSION_API_HAS(host->ui, NativeExtensionUiApi, label_set_font) ||
+        !NATIVE_EXTENSION_API_HAS(host->ui, NativeExtensionUiApi, tap_feedback) ||
+        !host->ui->tap_feedback ||
         !NATIVE_EXTENSION_API_HAS(host->canvas, NativeExtensionCanvasApi, canvas_measure_text) ||
         !NATIVE_EXTENSION_API_HAS(host->button, NativeExtensionButtonApi, get)) return false;
     Style style{};

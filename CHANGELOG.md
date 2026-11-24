@@ -29,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Enable native Extensions on both reTerminal Sticky Interactive variants.
   See the [Sticky board reference](src/boards/reterminal-sticky-interactive/README.md).
 * Add an interactive Calculator Extension with immediate arithmetic, memory
-  keys, configurable colors and fonts, and an e-paper display mode.
+  keys, configurable colors and fonts, and device-managed tap feedback.
   See the [Calculator reference](extensions/calculator/README.md).
 * Add JC3636W518 SD-primary USB-only and BLE-only HID
   firmware targets. All SD variants prefer PSRAM for ordinary allocations

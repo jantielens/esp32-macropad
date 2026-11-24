@@ -553,6 +553,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/music_analysis.cpp
   - src/app/music_analysis.h
   - src/app/music_binding.cpp
+  - src/app/native_extension.cpp
   - src/app/portal_components.cpp
   - src/app/reboot_service.cpp
   - src/app/screens/pad_screen_events.cpp

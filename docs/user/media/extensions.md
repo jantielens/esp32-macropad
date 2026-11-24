@@ -61,11 +61,11 @@ large enough for the keys. Leave **Upscale** at 1x: Calculator uses interactive
 controls rather than a canvas. If the region is too small, it shows
 `Make widget bigger`; enlarge the button or its widget region.
 
-The default configuration is empty or `{"display_style":"normal"}`.
-For an interactive e-paper display, use
-`{"display_style":"epaper"}` to avoid pressed-key flashes. The display's
-firmware may suppress flashes even in normal mode. Refresh speed and ghosting
-depend on the display, and rapid touches may not appear immediately.
+Leave the configuration empty for the default appearance. Calculator keys use
+the device's tap sound when audio is available and configured, and the device
+controls whether pressed keys flash. Remove `display_style` from older
+Calculator configurations. On e-paper, refresh speed and ghosting depend on the
+display, and rapid touches may not appear immediately.
 
 You can set `font`, `corner_radius`, `keys_background`, and `keys_foreground`
 in the configuration. Use `keys_overrides` to set `background` and

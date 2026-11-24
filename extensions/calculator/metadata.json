@@ -1,4 +1,4 @@
 {
   "summary": "A simple immediate-execution calculator with memory keys.",
-  "usage": "Use an Extension widget with Upscale set to 1. Set {\"display_style\":\"epaper\"} for static key feedback. Optional settings customize the keys and result display; see the Calculator README."
+  "usage": "Use an Extension widget with Upscale set to 1. Key feedback follows the device settings. Optional settings customize the keys and result display; see the Calculator README."
 }
