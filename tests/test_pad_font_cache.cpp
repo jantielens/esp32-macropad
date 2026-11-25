@@ -1,6 +1,7 @@
 #include "pad_layout.h"
 #include "native_extension_text.h"
 #include "font_store.h"
+#include "widgets/epub_pagination.h"
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -144,6 +145,60 @@ int main(int argument_count, char** arguments) {
         const lv_font_t* explicit_font = native_extension_text_font("test-font", 18);
         CHECK(explicit_font != font && explicit_font != &lv_font_montserrat_18);
         CHECK(native_extension_text_font("missing", 24) == &lv_font_montserrat_24);
+        {
+            lv_display_t* display = lv_display_create(320, 240);
+            CHECK(display != nullptr);
+            lv_theme_t* theme = lv_theme_default_init(display, lv_color_hex(0x3399ff),
+                                                       lv_color_hex(0x303030), true, font);
+            lv_display_set_theme(display, theme);
+            CHECK(lv_theme_get_font_normal(lv_screen_active()) == font);
+            const char* text = "AVATAR waves with wide letters and \xc3\xa9" " accents across lines.";
+            static EpubGlyphCache cache{};
+            memset(&cache, 0, sizeof(cache));
+            const size_t length = strlen(text);
+            size_t offset = 0;
+            uint32_t previous = 0;
+            while (offset < length) {
+                const uint32_t code = epub_decode_utf8(text, length, offset);
+                EpubGlyphEntry* single = epub_glyph_entry(cache, code, 0, true);
+                CHECK(single != nullptr);
+                if (single) single->width = lv_font_get_glyph_width(font, code, 0);
+                if (previous) {
+                    EpubGlyphEntry* pair = epub_glyph_entry(cache, previous, code, true);
+                    CHECK(pair != nullptr);
+                    if (pair) pair->width = lv_font_get_glyph_width(font, previous, code);
+                }
+                previous = code;
+            }
+            const EpubPageMetrics metrics{&cache, 150, 5};
+            char page[512];
+            bool overflow = false;
+            offset = epub_make_page(text, length, 0, metrics, page, sizeof(page), &overflow);
+            CHECK(!overflow && offset > 0);
+            const char* line = page;
+            while (*line) {
+                const char* end = strchr(line, '\n');
+                CHECK(end != nullptr);
+                if (!end) break;
+                lv_point_t size{};
+                lv_text_get_size(&size, std::string(line, end).c_str(), font, 0, 0,
+                                 LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+                CHECK(size.x <= metrics.line_width);
+                const char* next_line = end + 1;
+                if (*next_line) {
+                    const char* word_end = next_line;
+                    while (*word_end && *word_end != ' ' && *word_end != '\n') ++word_end;
+                    std::string extended(line, end);
+                    extended += ' ';
+                    extended.append(next_line, word_end);
+                    lv_text_get_size(&size, extended.c_str(), font, 0, 0,
+                                     LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+                    CHECK(size.x > metrics.line_width);
+                }
+                line = end + 1;
+            }
+            lv_display_delete(display);
+        }
         constexpr uint32_t width = 64, height = 64;
         std::vector<uint16_t> actual(width * height + 2, 0);
         actual.front() = actual.back() = 0x1234;

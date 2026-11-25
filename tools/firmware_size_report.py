@@ -39,6 +39,11 @@ FEATURES = {
         ("voice_notes*.cpp.o", "voice_note_range.cpp.o", "voice_notes_metadata.cpp.o"),
         ("voice_notes_fragment_html_gz", "voice_notes_settings_fragment_html_gz", "portal_voice_notes_js_gz"),
     ),
+    "EPUB reader (HAS_EPUB_READER)": (
+        ("FreeInkBook*.cpp.o", "ZipCatalog.cpp.o", "XmlSax.cpp.o", "PackageParsers.cpp.o",
+         "EntityFilter.cpp.o", "expat_xml*.c.o", "miniz_impl.c.o"),
+        ("portal_widget_epub_reader_js_gz",),
+    ),
     "Sound player (HAS_SOUND_PLAYER)": (
         ("sound_player*.cpp.o", "sound_store.cpp.o", "mp3_metadata.cpp.o", "web_portal_sound*.cpp.o"),
         ("sounds_fragment_html_gz",),

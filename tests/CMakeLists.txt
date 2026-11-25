@@ -902,6 +902,22 @@ add_host_legacy_test(test_widget_common
     LIBRARIES m
 )
 
+add_library(freeinkbook_test_vendor STATIC
+    ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src/vendor/expat_xmlparse.c
+    ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src/vendor/expat_xmlrole.c
+    ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src/vendor/expat_xmltok.c
+    ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src/vendor/miniz_impl.c
+)
+target_include_directories(freeinkbook_test_vendor PRIVATE ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src)
+add_host_legacy_test(test_epub_checkpoints
+    SOURCES test_epub_checkpoints.cpp
+        ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src/epub/XmlSax.cpp
+        ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src/epub/ZipCatalog.cpp
+        ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src/text/EntityFilter.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src
+    LIBRARIES freeinkbook_test_vendor
+)
+
 add_host_legacy_test(test_minimp3_scratch
     SOURCES test_minimp3_scratch.cpp
     LIBRARIES m

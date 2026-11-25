@@ -2,6 +2,7 @@
 
 #define HAS_SD_CARD true
 #define USE_SD_STORAGE true
+#define HAS_EPUB_READER true
 #ifndef HAS_VOICE_NOTES
 #define HAS_VOICE_NOTES true
 #endif

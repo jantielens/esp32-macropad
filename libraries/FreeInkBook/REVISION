@@ -1,0 +1,7 @@
+https://github.com/Free-Ink/freeink-sdk
+f7fa9b6871192ea27d8aa37a03beaa749462c3ab
+
+The FreeInkBook container, XML and entity parser and FreeInkFont arena are
+vendored. XmlSax uses the ESP32 PSRAM allocator for Expat on the device and
+checks the application's BookSource cancellation hook between parse chunks.
+The ZIP directory scan uses a temporary arena buffer instead of task stack.
