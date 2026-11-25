@@ -5,3 +5,7 @@ The FreeInkBook container, XML and entity parser and FreeInkFont arena are
 vendored. XmlSax uses the ESP32 PSRAM allocator for Expat on the device and
 checks the application's BookSource cancellation hook between parse chunks.
 The ZIP directory scan uses a temporary arena buffer instead of task stack.
+The layout, CSS, page cache, image and TTF components are also vendored.
+PNG and TrueType temporary allocations use PSRAM on ESP32.
+For complex CSS selectors, display:none is ignored rather than applied to
+unrelated elements; the layout cache revision is incremented accordingly.

@@ -911,11 +911,18 @@ add_library(freeinkbook_test_vendor STATIC
 target_include_directories(freeinkbook_test_vendor PRIVATE ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src)
 add_host_legacy_test(test_epub_checkpoints
     SOURCES test_epub_checkpoints.cpp
+        ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src/css/Css.cpp
         ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src/epub/XmlSax.cpp
         ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src/epub/ZipCatalog.cpp
         ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src/text/EntityFilter.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src
     LIBRARIES freeinkbook_test_vendor
+)
+add_host_legacy_test(test_epub_cache_storage
+    SOURCES test_epub_cache_storage.cpp
+    DEFINITIONS HAS_FILESYSTEM=1 USE_SD_STORAGE=1 HAS_AUTO_SHUTDOWN=1
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/font_store_overrides ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
 )
 
 add_host_legacy_test(test_minimp3_scratch

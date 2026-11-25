@@ -1583,6 +1583,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_pages.cpp
   - src/app/web_portal_pages.h
   - src/app/web_portal_routes.cpp
+  - src/app/widgets/epub_sdk_worker.h
 - **HAS_USB_HID**
   - src/app/actions/gamepad_action.cpp
   - src/app/actions/key_action.cpp

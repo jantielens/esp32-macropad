@@ -267,6 +267,17 @@ int main(int argument_count, char** arguments) {
     data = font_store_load("test-font", length);
     if (!data || Storage.read_hook) return 1;
     heap_caps_free(data);
+    unsigned checkpoints = 0;
+    data = font_store_load("test-font", length, [](void* context) {
+#if USE_SD_STORAGE && HAS_AUTO_SHUTDOWN
+        if (storage_writers) std::abort();
+#endif
+        return ++*static_cast<unsigned*>(context) == 2;
+    }, &checkpoints);
+    if (data || length || checkpoints != 2) return 1;
+    data = font_store_load("test-font", length);
+    if (!data) return 1;
+    heap_caps_free(data);
     allocation_failure = true;
     length = 123;
     if (font_store_load("test-font", length) || length) return 1;

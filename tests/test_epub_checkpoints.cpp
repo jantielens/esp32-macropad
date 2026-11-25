@@ -4,6 +4,7 @@
 #include <string>
 
 #include "epub/XmlSax.h"
+#include "css/Css.h"
 
 using namespace freeink::book;
 
@@ -39,6 +40,21 @@ class TextHandler : public XmlHandler {
 };
 
 int main() {
+  char css_memory[32768];
+  Arena css_arena(css_memory, sizeof(css_memory));
+  CssStylesheetBuilder builder;
+  assert(builder.begin(css_arena));
+  const char css[] =
+      "section.title p, section.title h1 { display:none; font-style:italic; }"
+      ".hidden { display:none; }";
+  builder.addText(css, sizeof(css) - 1);
+  const CssStylesheet sheet = builder.finish();
+  const CssDecl paragraph = cascadeFor(sheet, "p", nullptr, nullptr);
+  assert(paragraph.displayNone == -1 && paragraph.styleItalic == 1);
+  assert(cascadeFor(sheet, "h1", nullptr, nullptr).displayNone == -1);
+  assert(cascadeFor(sheet, "p", "hidden", nullptr).displayNone == 1);
+  assert(parseInlineStyle("display:none").displayNone == 1);
+
   const std::string xml = "<body>" + std::string(12000, 'a') + "</body>";
   const ZipEntry entry = ZipEntryReader::rawEntry(static_cast<uint32_t>(xml.size()));
   char memory[4096];
