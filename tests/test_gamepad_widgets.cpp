@@ -1824,11 +1824,11 @@ TEST(GamepadWidgetRegistry, SupportsFullFeaturedBoards) {
     const uint8_t initial_count = widget_count();
     ASSERT_GE(initial_count, 4);
     ASSERT_LT(initial_count, 16);
-    static WidgetType placeholders[12] = {};
+    static WidgetType placeholders[20] = {};
     for (auto& placeholder : placeholders) {
         placeholder.name = "capacity_probe";
         widget_register(&placeholder);
     }
-    EXPECT_EQ(widget_count(), 16);
-    EXPECT_EQ(widget_at(15), &placeholders[15 - initial_count]);
+    EXPECT_EQ(widget_count(), 20);
+    EXPECT_EQ(widget_at(19), &placeholders[19 - initial_count]);
 }

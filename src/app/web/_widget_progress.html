@@ -1,0 +1,100 @@
+<div id="pad-edit-progress-section" style="display:none;">
+    <div class="editor-group" id="pad-edit-progress-value-group">
+        <div class="editor-group-heading" role="heading" aria-level="3">Value</div>
+        <div class="editor-group-body">
+            <div class="form-group">
+                <label for="pad-edit-progress-current">Current value <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                <input type="text" id="pad-edit-progress-current" class="binding-mono" maxlength="191" placeholder="0 or [binding]">
+                <small>A number or binding; blank starts at 0.</small>
+            </div>
+            <div class="widget-row">
+                <div class="form-group">
+                    <label for="pad-edit-progress-max">Maximum / goal <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                    <input type="text" id="pad-edit-progress-max" class="binding-mono" maxlength="63" value="100">
+                    <small>The value at which all units are active, before inversion.</small>
+                </div>
+                <div class="form-group">
+                    <label for="pad-edit-progress-units">Unit count <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                    <input type="text" id="pad-edit-progress-units" class="binding-mono" maxlength="63" value="25">
+                    <small>Visual units, independent of the range: 1–1024, if space and memory permit.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    <details class="editor-group" id="pad-edit-progress-look-group">
+        <summary>Sample looks</summary>
+        <div class="editor-group-body">
+            <div class="form-group">
+                <select id="pad-edit-progress-preset" aria-label="Sample look">
+                    <option value="">Select a sample look</option>
+                    <option value="growing_dots">Growing dots</option>
+                    <option value="uniform_dots">Uniform dots</option>
+                    <option value="dense_dots">Dense dot field</option>
+                    <option value="soft_waffle">Soft-square waffle</option>
+                    <option value="pixel_blocks">Crisp pixel blocks</option>
+                    <option value="capsule_matrix">Capsule matrix</option>
+                    <option value="rounded_strip">Rounded strip</option>
+                    <option value="fine_strip">Fine block strip</option>
+                    <option value="vertical_stack">Vertical stack</option>
+                </select>
+                <small>Applying a look replaces visual settings, including color bindings, but keeps your value, range, inversion, and unit count.</small>
+            </div>
+        </div>
+    </details>
+    <details class="editor-group" id="pad-edit-progress-range">
+        <summary>Range and interpretation</summary>
+        <div class="editor-group-body">
+            <div class="form-group"><label for="pad-edit-progress-min">Minimum <span class="fx-hint" onclick="showBindingHelp()">fx</span></label><input type="text" id="pad-edit-progress-min" class="binding-mono" maxlength="63" value="0"><small>The value at which no units are active, before inversion.</small></div>
+            <div class="form-group"><label><input type="checkbox" id="pad-edit-progress-invert"> Invert progress</label><small>Show more active units as the value decreases.</small></div>
+        </div>
+    </details>
+    <details class="editor-group" id="pad-edit-progress-layout-group">
+        <summary>Units and layout</summary>
+        <div class="editor-group-body">
+            <div class="form-group"><label for="pad-edit-progress-layout">Arrangement</label><select id="pad-edit-progress-layout"><option value="grid">Grid</option><option value="horizontal">Horizontal strip</option><option value="vertical">Vertical stack</option></select><small>Place units in a grid, one row, or one column.</small></div>
+            <div class="form-group" id="pad-edit-progress-columns-wrap"><label for="pad-edit-progress-columns">Columns</label><input type="text" id="pad-edit-progress-columns" value="auto"><small>Auto fits the count and available space; or enter 1–1024.</small></div>
+            <div class="form-group"><label for="pad-edit-progress-shape">Shape</label><select id="pad-edit-progress-shape"><option value="circle">Circle</option><option value="block">Block</option></select><small>Blocks can be square, rounded, or elongated.</small></div>
+            <div class="form-group" id="pad-edit-progress-aspect-wrap"><label for="pad-edit-progress-aspect">Block width / height</label><input type="number" id="pad-edit-progress-aspect" min="0.1" max="10" step="any" value="1"><small>Width-to-height ratio: 1 is square; 0.1–10.</small></div>
+            <div class="form-group" id="pad-edit-progress-thickness-wrap"><label for="pad-edit-progress-thickness">Strip thickness (%)</label><input type="text" id="pad-edit-progress-thickness" value="auto"><small>Block strips only: 1–100% of the available cross-axis space, or Auto.</small></div>
+            <div class="form-group"><label><input type="checkbox" id="pad-edit-progress-gaps-linked"> Match horizontal and vertical spacing</label>            <small>Matching copies horizontal spacing to vertical. With both on Auto, turn it off to spread units across the available space.</small></div>
+            <div class="widget-row">
+                <div class="form-group"><label for="pad-edit-progress-gap-x">Horizontal spacing</label><input type="text" id="pad-edit-progress-gap-x" value="auto"><small>Auto or 0–256 pixels between columns.</small></div>
+                <div class="form-group" id="pad-edit-progress-gap-y-wrap"><label for="pad-edit-progress-gap-y">Vertical spacing</label><input type="text" id="pad-edit-progress-gap-y" value="auto"><small>Auto or 0–256 pixels between rows.</small></div>
+            </div>
+            <div class="form-group" id="pad-edit-progress-rounding-wrap"><label for="pad-edit-progress-rounding">Corner rounding (%)</label><input type="number" id="pad-edit-progress-rounding" min="0" max="50" value="0"><small>0 is square; 50 gives fully rounded ends.</small></div>
+        </div>
+    </details>
+    <details class="editor-group" id="pad-edit-progress-appearance">
+        <summary>Unit appearance</summary>
+        <div class="editor-group-body">
+            <div class="form-group"><label for="pad-edit-progress-active-color">Active color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label><div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-progress-active-color" class="bc-input" maxlength="191" placeholder="Auto"></div><small>Auto inherits the button foreground.</small></div>
+            <div class="form-group"><label for="pad-edit-progress-inactive-style">Inactive treatment</label><select id="pad-edit-progress-inactive-style"><option value="auto">Auto</option><option value="filled">Filled</option><option value="outline">Outline</option><option value="hidden">Hidden</option></select><small>Auto uses filled units or outlines for one-bit mode; Hidden leaves empty positions.</small></div>
+            <div id="pad-edit-progress-inactive-options">
+                <div class="form-group"><label for="pad-edit-progress-inactive-color">Inactive color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label><div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-progress-inactive-color" class="bc-input" maxlength="191" placeholder="Auto"></div><small>Auto uses a muted foreground or panel ink.</small></div>
+                <div class="form-group"><label for="pad-edit-progress-inactive-size">Inactive size (%)</label><input type="number" id="pad-edit-progress-inactive-size" min="1" max="100" value="25"><small>Size relative to a full unit: 1–100%.</small></div>
+                <small>Explicit colors and filled units may look identical on a one-bit display.</small>
+            </div>
+        </div>
+    </details>
+    <details class="editor-group" id="pad-edit-progress-fill-group">
+        <summary>Fill and order</summary>
+        <div class="editor-group-body">
+            <div class="form-group"><label for="pad-edit-progress-partial">Partial unit</label><select id="pad-edit-progress-partial"><option value="whole">Whole</option><option value="size" selected>Size</option><option value="fill">Fill</option></select><small>Whole waits for a complete unit; Size grows it; Fill reveals part of its shape.</small></div>
+            <div class="form-group"><label for="pad-edit-progress-order">Activation pattern</label><select id="pad-edit-progress-order"><option value="rows">Rows</option><option value="columns">Columns</option><option value="snake_rows">Snake rows</option><option value="snake_columns">Snake columns</option><option value="spiral_in">Spiral inward</option><option value="spiral_out">Spiral outward</option><option value="center_out">Center outward</option><option value="edges_in">Edges inward</option><option value="diagonal">Diagonal</option><option value="random">Random</option></select><small>Choose the order in which units activate; decreases reverse it.</small></div>
+            <div class="form-group"><label for="pad-edit-progress-origin">Starting corner</label><select id="pad-edit-progress-origin"><option value="top_left">Top left</option><option value="top_right">Top right</option><option value="bottom_left">Bottom left</option><option value="bottom_right">Bottom right</option></select><small>Orients the activation pattern and automatic fill direction.</small></div>
+            <div class="form-group" id="pad-edit-progress-reshuffle-wrap"><input type="hidden" id="pad-edit-progress-seed" value="84721"><button type="button" class="btn btn-outline-secondary btn-sm" id="pad-edit-progress-reshuffle">Reshuffle</button><small>The random order remains stable until reshuffled.</small></div>
+            <div class="form-group"><label for="pad-edit-progress-direction">Within-unit fill direction</label><select id="pad-edit-progress-direction"><option value="auto">Auto</option><option value="left">Left</option><option value="right">Right</option><option value="up">Up</option><option value="down">Down</option></select><small>Controls partial Fill and Wipe; Auto follows arrangement and starting corner.</small></div>
+        </div>
+    </details>
+    <details class="editor-group" id="pad-edit-progress-animation">
+        <summary>Animation</summary>
+        <div class="editor-group-body">
+            <div class="form-group"><label for="pad-edit-progress-effect">Effect</label><select id="pad-edit-progress-effect"><option value="none">None</option><option value="fade">Fade</option><option value="grow" selected>Grow</option><option value="pop">Pop</option><option value="wipe">Wipe</option><option value="flip">Flip</option></select><small>How units transition when the value changes; Pop briefly overshoots if space permits.</small></div>
+            <div class="widget-row">
+                <div class="form-group"><label for="pad-edit-progress-duration">Duration (ms)</label><input type="number" id="pad-edit-progress-duration" min="0" max="5000" value="300"><small>Time per unit; 0 updates immediately. Maximum 5000 ms.</small></div>
+                <div class="form-group"><label for="pad-edit-progress-stagger">Stagger span (ms)</label><input type="number" id="pad-edit-progress-stagger" min="0" max="1000" value="0"><small>Total spread between the first and last unit starts; 0 starts together.</small></div>
+            </div>
+            <small>Animation is disabled on e-paper and when device-wide animations are disabled.</small>
+        </div>
+    </details>
+</div>

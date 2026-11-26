@@ -23,6 +23,7 @@ assert resolved["HAS_DISPLAY"] and not resolved["HAS_TOUCH"]
 assert resolved["HAS_USB_HID || HAS_BLE_HID"]
 assert not resolved[expressions[3]]
 assert all(resolved[expression] for expression in expressions[4:])
+assert resolve_conditions(compiler, ["HAS_PROGRESS_WIDGET"])["HAS_PROGRESS_WIDGET"]
 assert source_blocks("shared\n// @portal-if HAS_TOUCH\ntouch\n// @portal-endif\n",
                      resolved.__getitem__) == "shared\n"
 for text in ("// @portal-endif\n", "// @portal-if HAS_TOUCH\n", "// @portal-iff HAS_TOUCH\n"):

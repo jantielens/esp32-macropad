@@ -14,7 +14,7 @@ try {
             'device_dialog.cpp', 'dialog_appearance.cpp', 'actions/notify_action.cpp', 'actions/confirm_action.cpp',
             'pad_binding.cpp', 'pad_resolve_request.cpp', 'data_stream.cpp', 'web_portal_pad.cpp',
             'widgets/bar_chart_widget.cpp', 'widgets/gauge_widget.cpp', 'widgets/sparkline_widget.cpp',
-            'widgets/face_widget.cpp'
+            'widgets/face_widget.cpp', 'widgets/progress_widget.cpp'
         ]) {
             const object = path.join(directory, 'module.o');
             execFileSync('c++', ['-std=c++17', '-c', 'src/app/' + module, '-o', object,
@@ -24,6 +24,12 @@ try {
                 module + ' must emit no code or data without a display (HAS_BUTTON=' + buttons + ')');
         }
     }
+    const disabledProgressObject = path.join(directory, 'progress-disabled.o');
+    execFileSync('c++', ['-std=c++17', '-c', 'src/app/widgets/progress_widget.cpp',
+        '-o', disabledProgressObject, '-DBOARD_CONFIG_H', '-DHAS_DISPLAY=1',
+        '-DHAS_PROGRESS_WIDGET=0', '-Itests', '-Isrc/app'], {cwd: root, stdio: 'pipe'});
+    assert.equal(execFileSync('nm', ['--defined-only', disabledProgressObject], {encoding: 'utf8'}).trim(), '',
+        'Progress must emit no code or data when disabled on a display board');
     for (const [flag, modules] of [
         ['HAS_EXTERNAL_DATA', ['external_data.cpp', 'external_data_config.cpp', 'ext_binding.cpp']],
         ['HAS_VOICE_NOTES', ['voice_notes.cpp', 'voice_notes_binding.cpp', 'voice_note_range.cpp', 'voice_notes_metadata.cpp',
@@ -69,6 +75,7 @@ try {
         ['esp32c3-withsensors', 'ESP32C3', false],
         ['esp32c3-withsensors', 'ESP32C3', false, ['HAS_BUTTON=1', 'HAS_MQTT=1']],
         ['esp32-p4-lcd4b', 'ESP32P4', true],
+        ['esp32-p4-lcd4b', 'ESP32P4', true, ['HAS_PROGRESS_WIDGET=0']],
         ['esp32-p4-lcd4b', 'ESP32P4', true, ['HAS_FACE_WIDGET=0']],
         ['esp32-p4-lcd4b', 'ESP32P4', true, ['HAS_EXTERNAL_DATA=0']],
         ['esp32-p4-lcd4b', 'ESP32P4', true, ['HAS_BLE=0', 'HAS_BLE_HID=0']],
@@ -152,6 +159,9 @@ try {
             const enabled = conditions[gate];
             assert.equal(pad.includes('id="pad-edit-' + widget.type + '-widget-option"'), enabled, board + '/' + widget.type);
         }
+        const progressEnabled = conditions['HAS_DISPLAY && HAS_PROGRESS_WIDGET'];
+        assert.equal(pad.includes('id="pad-edit-progress-section"'), progressEnabled, board + '/progress editor');
+        assert.equal(js.includes('widget_progress_stagger_ms'), progressEnabled, board + '/progress script');
         for (const [gate, symbol] of [
             ['ALARM_ENABLED', 'portal_alarms_js_gz'],
             ['HAS_EXTERNAL_DATA', 'portal_external_data_js_gz'],

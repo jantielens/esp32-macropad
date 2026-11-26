@@ -24,6 +24,7 @@ collapsing a section does not disable it.
 
 ## Visualize
 
+* [Progress](progress.md) for a value shown as ordered dots, blocks, or strips
 * [Face](#face) for an animated companion that reacts to emotion names
 * [Bar Chart](bar-chart.md) for one to four numeric sources
 * [Gauge](gauge.md) for rings, signed balance, needle, and targets

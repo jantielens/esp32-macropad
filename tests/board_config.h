@@ -7,6 +7,9 @@
 #define BOARD_CONFIG_H
 
 #define HAS_DISPLAY true
+#ifndef HAS_PROGRESS_WIDGET
+#define HAS_PROGRESS_WIDGET HAS_DISPLAY
+#endif
 #define HAS_MQTT    true
 #ifndef HAS_LVGL_EPAPER
 #define HAS_LVGL_EPAPER false

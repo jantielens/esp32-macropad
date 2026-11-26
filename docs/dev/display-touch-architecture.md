@@ -1138,6 +1138,29 @@ shared label or icon objects. Gauge and Bar Chart use the same geometry calculat
 for creation and resizing. Unchanged dimensions skip geometry work, and Gauge
 repositions existing tick objects rather than recreating them.
 
+Progress uses one passive custom-drawn object. It resolves its source, range,
+count, and used color bindings on the LVGL task, and visits secondary binding
+resources for subscription discovery. Its traversal and optional animation
+arrays use the LVGL allocator, which prefers PSRAM and can fall back to
+internal RAM. Count or region changes rebuild the field and snap to the current
+value; hiding or destroying it releases animation state. E-paper and disabled
+animations do not allocate per-unit motion records.
+
+`HAS_PROGRESS_WIDGET` defaults to `HAS_DISPLAY` and can be disabled in a board
+override. The widget manifest gates both the native implementation and portal
+editor with this flag.
+
+On the jc1060p470c-sd target, Progress uses 608 bytes of the existing
+per-button configuration area and 96 bytes of runtime state. Traversal uses
+2 bytes per unit; animation adds 24 bytes per unit after the first animated
+change and retains it while the widget remains visible. Building the order
+temporarily adds 12 bytes per unit, released before motion is allocated.
+At 366 units this is 9,516 bytes for traversal plus motion,
+excluding allocator overhead; at the provisional 1,024-unit limit it is 26,624
+bytes. These allocations can fall back to internal RAM per widget, so multiple
+large widgets can exceed the available heap. Host timings and compilation do
+not establish physical-panel performance.
+
 When a region changes, `touch_manager_cancel_object_input()` cancels only its
 captured HID contacts and its active LVGL pointer gesture. Canceled contact IDs
 remain reserved until lift; the affected LVGL pointer waits for release. Other

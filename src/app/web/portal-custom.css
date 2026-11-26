@@ -663,7 +663,8 @@ body {
 .content-pane .card-header :is(h3, h5, strong),
 .nav-category-header,
 .nav-welcome-link,
-.editor-group > summary {
+.editor-group > summary,
+.editor-group > .editor-group-heading {
   font-size: 0.88rem;
   font-weight: 600;
 }
@@ -1951,6 +1952,7 @@ body {
   color: var(--portal-text); padding: 10px 14px;
   display: list-item; user-select: none;
 }
+.editor-group > .editor-group-heading { color: var(--portal-text); padding: 10px 14px; }
 .editor-group-body { padding: 0 14px 14px; }
 
 /* Small sub-heading separating action groups within a host (e.g. Tap vs
@@ -2500,7 +2502,8 @@ body:has(#pad-editor-root) #toast-container {
 #pad-edit-overlay { flex: 1; min-height: 0; }
 #pad-editor-root .pad-workspace-inspector .pad-edit-body { padding: 14px 10px 10px; }
 #pad-editor-root .editor-group { border-radius: 4px; margin-bottom: 8px; }
-#pad-editor-root .editor-group > summary { padding: 8px 10px; }
+#pad-editor-root .editor-group > summary,
+#pad-editor-root .editor-group > .editor-group-heading { padding: 8px 10px; }
 #pad-editor-root .editor-group-body { padding: 0 10px 8px; }
 #pad-editor-root .pad-workspace-inspector .form-group:not(:last-child) { margin-bottom: 10px; }
 #pad-editor-root .pad-workspace-pad-fields { flex: 1; min-height: 0; overflow: auto; padding: 14px; }

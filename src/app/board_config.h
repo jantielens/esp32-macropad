@@ -1085,6 +1085,15 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #error "HAS_FACE_WIDGET requires HAS_DISPLAY."
 #endif
 
+// Enable the Progress widget and its portal editor on display-equipped boards.
+#ifndef HAS_PROGRESS_WIDGET
+#define HAS_PROGRESS_WIDGET HAS_DISPLAY
+#endif
+
+#if HAS_PROGRESS_WIDGET && !HAS_DISPLAY
+#error "HAS_PROGRESS_WIDGET requires HAS_DISPLAY."
+#endif
+
 // Wall-clock-aligned interval between passive pad binding refreshes; 0 keeps every LVGL-cycle refresh.
 #ifndef DISPLAY_BINDING_REFRESH_INTERVAL_MS
 #define DISPLAY_BINDING_REFRESH_INTERVAL_MS 0

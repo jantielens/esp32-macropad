@@ -660,6 +660,30 @@ foreach(animations 0 1 2)
     target_link_libraries(test_face_widget_${animations} PRIVATE host_lvgl m)
 endforeach()
 
+foreach(profile 0 1 2)
+    if(profile EQUAL 0)
+        set(progress_target test_progress_widget)
+    else()
+        set(progress_target test_progress_widget_${profile})
+    endif()
+    add_host_gtest(${progress_target} test_progress_widget.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/expr_binding.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/expr_eval.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp stubs.cpp)
+    target_include_directories(${progress_target} PRIVATE ${HOST_ARDUINOJSON_DIR})
+    target_compile_definitions(${progress_target} PRIVATE HAS_MCP=1
+        DISPLAY_DISABLE_ANIMATIONS=$<STREQUAL:${profile},1>
+        HAS_LVGL_EPAPER=$<STREQUAL:${profile},2> EPAPER_RENDER_MODE_BW=0)
+    target_compile_options(${progress_target} PRIVATE -Wno-deprecated-declarations
+        "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/Arduino.h"
+        "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h"
+        "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/log_manager.h")
+    target_link_libraries(${progress_target} PRIVATE host_lvgl m)
+    target_link_options(${progress_target} PRIVATE "-Wl,--wrap=lv_malloc_core")
+endforeach()
+add_test(NAME test_progress_widget COMMAND test_progress_widget)
+
 add_host_legacy_test(test_ota_activity
     SOURCES test_ota_activity.cpp ${PROJECT_SOURCE_DIR}/src/app/ota_activity.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/storage_policy_overrides
@@ -1627,7 +1651,7 @@ foreach(script
     test_portal_pad_import.js test_portal_pad_dirty.js test_portal_recipes.js
     test_portal_ble_config.js test_portal_audio_config.js test_portal_epaper_config.js test_portal_pad_preview.js test_portal_startup.js
     test_portal_logs.js test_portal_screensaver.js test_portal_pad_colors.js test_portal_voice_notes.js test_portal_live_microphone.js
-    test_portal_binding_help.js test_portal_asset_gates.js
+    test_portal_binding_help.js test_portal_asset_gates.js test_portal_widget_progress.js
     test_portal_extension_upload.js
 )
     get_filename_component(name ${script} NAME_WE)
