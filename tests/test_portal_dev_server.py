@@ -591,7 +591,8 @@ class PortalDevServerTest(unittest.TestCase):
         parser = WidgetParser()
         parser.feed(self.request("/api/section/pad-editor", raw=True)[1])
         widgets = portal_widgets(load_widgets(), {
-            "HAS_DISPLAY", "HAS_TOUCH", "HAS_PSRAM", "HAS_FACE_WIDGET", "HAS_NATIVE_EXTENSIONS", "HAS_USB_HID"
+            "HAS_DISPLAY", "HAS_TOUCH", "HAS_PSRAM", "HAS_FACE_WIDGET", "HAS_PROGRESS_WIDGET",
+            "HAS_NATIVE_EXTENSIONS", "HAS_USB_HID"
         })
         self.assertEqual(parser.types, [widget["type"] for widget in widgets])
         self.assertEqual(len(parser.ids), len(set(parser.ids)), "Duplicate mounted control IDs")

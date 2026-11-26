@@ -69,7 +69,8 @@ protected:
     void create() {
         ASSERT_EQ(progress_widget_type.validateConfig(json.as<JsonObject>()), nullptr);
         progress_widget_type.parseConfig(json.as<JsonObject>(), config.data);
-        strlcpy(config.data_binding[0], json["widget_data_binding"] | "", sizeof(config.data_binding[0]));
+        for (unsigned i = 0; i < MAX_WIDGET_BINDINGS; ++i)
+            strlcpy(config.data_binding[i], json[value_fields[i]] | "", sizeof(config.data_binding[i]));
         progress_widget_type.createUI(button, &config, &source, nullptr, nullptr, &runtime);
         created = true;
         tick(0);
@@ -141,6 +142,267 @@ TEST_F(ProgressWidget, RejectsInvalidLiteralRangesAndCountsAtSave) {
     EXPECT_STREQ(settings().minimum, "2.5");
     EXPECT_STREQ(settings().maximum, "5.25");
     EXPECT_EQ(state().count, 5);
+}
+
+TEST_F(ProgressWidget, StackedInputsRejectNegativeValuesRangesAndInversionAndRecover) {
+    json["widget_data_binding"] = "0.14";
+    json["widget_data_binding_2"] = "-0.26";
+    EXPECT_NE(progress_widget_type.validateConfig(json.as<JsonObject>()), nullptr);
+    json["widget_data_binding_2"] = "0.26";
+    json["widget_progress_min"] = 1;
+    EXPECT_NE(progress_widget_type.validateConfig(json.as<JsonObject>()), nullptr);
+    json["widget_progress_min"] = 0;
+    json["widget_progress_invert"] = true;
+    EXPECT_NE(progress_widget_type.validateConfig(json.as<JsonObject>()), nullptr);
+    json["widget_progress_invert"] = false;
+    json["widget_progress_max"] = 3;
+    json["widget_progress_units"] = 60;
+    create();
+    EXPECT_NEAR(state().target, 8, 1e-6);
+    for (const char* invalid : {"-0.26", "---", "nan"}) {
+        strlcpy(config.data_binding[1], invalid, sizeof(config.data_binding[1]));
+        tick(0);
+        EXPECT_FALSE(state().valid);
+        strlcpy(config.data_binding[1], "0.26", sizeof(config.data_binding[1]));
+        tick(0);
+        EXPECT_TRUE(state().valid);
+        EXPECT_EQ(state().motion, nullptr);
+        EXPECT_FALSE(state().colors.running);
+    }
+    strlcpy(settings().minimum, "1", sizeof(settings().minimum));
+    tick(0);
+    EXPECT_FALSE(state().valid);
+    strlcpy(settings().minimum, "0", sizeof(settings().minimum));
+    tick(0);
+    EXPECT_TRUE(state().valid);
+}
+
+TEST_F(ProgressWidget, FractionalSeriesShareOneBlockAndClipOverflowInOrder) {
+    json["widget_data_binding"] = "0.14";
+    json["widget_data_binding_2"] = "0.26";
+    json["widget_progress_active_color"] = "#FF9800";
+    json["widget_progress_active_color_2"] = "#F44336";
+    json["widget_progress_max"] = 3;
+    json["widget_progress_units"] = 60;
+    json["widget_progress_columns"] = 5;
+    json["widget_progress_shape"] = "block";
+    json["widget_progress_origin"] = "bottom_left";
+    json["widget_progress_fill_direction"] = "right";
+    json["widget_anim_ms"] = 0;
+    create();
+    ASSERT_TRUE(state().valid);
+    EXPECT_NEAR(state().target, 8, 1e-6);
+    const auto image = render();
+    const int slot = state().slots[2];
+    const int x = state().left + (slot % state().columns) * (state().cell_w + state().gap_x);
+    const int y = state().top + (slot / state().columns) * (state().cell_h + state().gap_y) + state().cell_h / 2;
+    auto rgb = [&](int column) {
+        const size_t pixel = (y * width + column) * 3;
+        return (uint32_t(image[pixel + 2]) << 16) | (uint32_t(image[pixel + 1]) << 8) | image[pixel];
+    };
+    EXPECT_EQ(rgb(x + state().cell_w / 4), 0xFF9800u);
+    EXPECT_EQ(rgb(x + state().cell_w - 2), 0xF44336u);
+    strlcpy(config.data_binding[0], "2", sizeof(config.data_binding[0]));
+    strlcpy(config.data_binding[1], "1e308", sizeof(config.data_binding[1]));
+    tick(0);
+    EXPECT_TRUE(state().valid);
+    EXPECT_EQ(state().target, 60);
+    EXPECT_FLOAT_EQ(color_boundary(state(), 0, lv_tick_get()), 40);
+    strlcpy(config.data_binding[0], "1e308", sizeof(config.data_binding[0]));
+    tick(0);
+    EXPECT_EQ(state().target, 60);
+    EXPECT_FLOAT_EQ(color_boundary(state(), 0, lv_tick_get()), 60);
+}
+
+TEST_F(ProgressWidget, StackedPartialShapesMatchSingleSeriesCoverageInEveryDirection) {
+    json["widget_data_binding"] = "0.2";
+    json["widget_data_binding_2"] = "0.5";
+    json["widget_progress_active_color"] = "#FF9800";
+    json["widget_progress_active_color_2"] = "#F44336";
+    json["widget_progress_max"] = 1;
+    json["widget_progress_units"] = 1;
+    json["widget_progress_shape"] = "block";
+    json["widget_progress_rounding"] = 25;
+    json["widget_progress_inactive_style"] = "hidden";
+    json["widget_anim_ms"] = 0;
+    create();
+    auto coverage = [&](const auto& image) {
+        std::vector<bool> result;
+        for (size_t i = 0; i < image.size(); i += 3)
+            result.push_back(image[i] != 0x30 || image[i + 1] != 0x20 || image[i + 2] != 0x10);
+        return result;
+    };
+    for (Partial partial : {Partial::Whole, Partial::Size, Partial::Fill}) {
+        settings().partial = partial;
+        for (Direction direction : {Direction::Left, Direction::Right, Direction::Up, Direction::Down}) {
+            settings().direction = direction;
+            strlcpy(config.data_binding[0], "0.2", sizeof(config.data_binding[0]));
+            strlcpy(config.data_binding[1], "0.5", sizeof(config.data_binding[1]));
+            tick(0);
+            lv_obj_invalidate(state().object);
+            const auto stacked = coverage(render());
+            strlcpy(config.data_binding[0], "0.7", sizeof(config.data_binding[0]));
+            config.data_binding[1][0] = '\0';
+            tick(0);
+            lv_obj_invalidate(state().object);
+            EXPECT_EQ(coverage(render()), stacked) << int(partial) << " " << int(direction);
+        }
+    }
+}
+
+TEST_F(ProgressWidget, SmallBlocksKeepProportionalCornersForPartialInactiveAndGrowingUnits) {
+    json["widget_data_binding"] = "0.25";
+    json["widget_progress_max"] = 1;
+    json["widget_progress_units"] = 1;
+    json["widget_progress_shape"] = "block";
+    json["widget_progress_rounding"] = 25;
+    json["widget_progress_inactive_style"] = "hidden";
+    json["widget_progress_inactive_color"] = "#ffffff";
+    json["widget_progress_effect"] = "grow";
+    create();
+    auto cornerIsWhite = [&](float scale) {
+        const int w = static_cast<int>(lroundf(state().cell_w * scale));
+        const int h = static_cast<int>(lroundf(state().cell_h * scale));
+        const int x = state().left + (state().cell_w - w) / 2 + w / 10;
+        const int y = state().top + (state().cell_h - h) / 2 + h / 10;
+        const auto image = render();
+        const size_t pixel = (y * width + x) * 3;
+        return image[pixel] == 255 && image[pixel + 1] == 255 && image[pixel + 2] == 255;
+    };
+    EXPECT_TRUE(cornerIsWhite(0.25f));
+    settings().shape = Shape::Circle;
+    lv_obj_invalidate(state().object);
+    EXPECT_FALSE(cornerIsWhite(0.25f));
+    settings().shape = Shape::Block;
+    settings().inactive = Inactive::Filled;
+    strlcpy(config.data_binding[0], "0", sizeof(config.data_binding[0]));
+    tick(0);
+    tick(400);
+    EXPECT_TRUE(cornerIsWhite(0.25f));
+    settings().inactive = Inactive::Hidden;
+    settings().partial = Partial::Whole;
+    strlcpy(config.data_binding[0], "1", sizeof(config.data_binding[0]));
+    tick(0);
+    tick(100);
+    if (!DISPLAY_DISABLE_ANIMATIONS && !HAS_LVGL_EPAPER) {
+        ASSERT_NE(state().motion, nullptr);
+        const Sample current = sample(state().motion[0], lv_tick_get(), settings().duration);
+        EXPECT_TRUE(cornerIsWhite(current.phase));
+    }
+}
+
+TEST_F(ProgressWidget, InactiveOutlineUsesConfiguredPixelWidthAndCapsTinyShapes) {
+    json["widget_progress_units"] = 1;
+    json["widget_progress_shape"] = "block";
+    json["widget_progress_inactive_style"] = "outline";
+    json["widget_progress_inactive_color"] = "#ffffff";
+    create();
+    auto drawnWidth = [&]() {
+        const int w = static_cast<int>(lroundf(state().cell_w * settings().inactive_size / 100.0f));
+        const int x = state().left + (state().cell_w - w) / 2;
+        const int y = state().top + state().cell_h / 2;
+        const auto image = render();
+        int thickness = 0;
+        while (thickness < w) {
+            const size_t pixel = (y * width + x + thickness) * 3;
+            if (image[pixel] != 255 || image[pixel + 1] != 255 || image[pixel + 2] != 255) break;
+            ++thickness;
+        }
+        return thickness;
+    };
+    EXPECT_EQ(drawnWidth(), 2);
+    for (int thickness : {1, 5, 10}) {
+        json["widget_progress_inactive_outline_width"] = thickness;
+        ASSERT_EQ(progress_widget_type.validateConfig(json.as<JsonObject>()), nullptr);
+        progress_widget_type.parseConfig(json.as<JsonObject>(), config.data);
+        lv_obj_invalidate(state().object);
+        EXPECT_EQ(drawnWidth(), thickness);
+    }
+    settings().inactive_size = 1;
+    lv_obj_invalidate(state().object);
+    EXPECT_EQ(drawnWidth(), 2);
+    for (int invalid : {0, 11}) {
+        json["widget_progress_inactive_outline_width"] = invalid;
+        EXPECT_NE(progress_widget_type.validateConfig(json.as<JsonObject>()), nullptr);
+    }
+    json["widget_progress_inactive_outline_width"] = 1.5;
+    EXPECT_NE(progress_widget_type.validateConfig(json.as<JsonObject>()), nullptr);
+}
+
+TEST_F(ProgressWidget, RepartitionAnimatesWithoutRestartingOccupancyAndRetargetsContinuously) {
+    json["widget_data_binding"] = "20";
+    json["widget_data_binding_2"] = "20";
+    json["widget_progress_active_color"] = "#FF9800";
+    json["widget_progress_active_color_2"] = "#F44336";
+    json["widget_progress_units"] = 10;
+    json["widget_progress_shape"] = "block";
+    json["widget_progress_partial"] = "fill";
+    json["widget_progress_effect"] = "pop";
+    create();
+    const auto initial = render();
+    strlcpy(config.data_binding[0], "30", sizeof(config.data_binding[0]));
+    strlcpy(config.data_binding[1], "10", sizeof(config.data_binding[1]));
+    tick(0);
+    EXPECT_EQ(state().motion, nullptr);
+    EXPECT_EQ(state().target, 4);
+    if (DISPLAY_DISABLE_ANIMATIONS || HAS_LVGL_EPAPER) {
+        EXPECT_FALSE(state().colors.running);
+        EXPECT_FLOAT_EQ(color_boundary(state(), 0, lv_tick_get()), 3);
+        return;
+    }
+    EXPECT_TRUE(state().colors.running);
+    EXPECT_EQ(render(), initial);
+    tick(100);
+    const auto before = render();
+    EXPECT_NE(before, initial);
+    strlcpy(config.data_binding[0], "10", sizeof(config.data_binding[0]));
+    strlcpy(config.data_binding[1], "30", sizeof(config.data_binding[1]));
+    tick(0);
+    EXPECT_EQ(render(), before);
+    tick(400);
+    EXPECT_FALSE(state().colors.running);
+    EXPECT_FLOAT_EQ(color_boundary(state(), 0, lv_tick_get()), 1);
+    EXPECT_NE(render(), before);
+}
+
+TEST_F(ProgressWidget, FourSeriesAndUnusedSlotsKeepColorsAndBindingsIndependent) {
+    json["widget_data_binding"] = "10";
+    json["widget_data_binding_3"] = "20";
+    json["widget_data_binding_4"] = "30";
+    json["widget_progress_active_color_2"] = "[missing:unused]";
+    json["widget_progress_active_color_3"] = "[missing:active]";
+    create();
+    // An unavailable configured color is not allowed even when values are valid.
+    EXPECT_FALSE(state().valid);
+    strlcpy(settings().active_color[2], "#abcdef", sizeof(settings().active_color[2]));
+    tick(0);
+    EXPECT_TRUE(state().valid);
+    EXPECT_EQ(state().series_count, 4);
+    EXPECT_EQ(state().target, 15);
+    EXPECT_EQ(state().active_color[2], 0xabcdefu);
+    strlcpy(config.data_binding[1], "10", sizeof(config.data_binding[1]));
+    tick(0);
+    EXPECT_FALSE(state().valid);
+    strlcpy(settings().active_color[1], DEFAULT_WIDGET_SERIES_COLOR_2, sizeof(settings().active_color[1]));
+    tick(0);
+    ASSERT_TRUE(state().valid);
+    EXPECT_EQ(state().target, 17.5);
+    const auto image = render();
+    for (uint32_t color : state().active_color) {
+        bool found = false;
+        for (size_t i = 0; i < image.size(); i += 3) {
+            const uint32_t rgb = (uint32_t(image[i + 2]) << 16) | (uint32_t(image[i + 1]) << 8) | image[i];
+            found |= rgb == color;
+        }
+        EXPECT_TRUE(found) << std::hex << color;
+    }
+    unsigned visited = 0;
+    progress_widget_type.visitResources(config.data,
+        [](WidgetResourceKind kind, const char* key, uint8_t index, const char*, void* context) {
+            if (kind == WidgetResourceKind::Binding && !strcmp(key, "widget_progress_active_color_3") && index == 2)
+                ++*static_cast<unsigned*>(context);
+        }, &visited);
+    EXPECT_EQ(visited, 1u);
 }
 
 TEST_F(ProgressWidget, CatalogDescribesBindableInputsAndGeometryLimits) {
@@ -486,6 +748,55 @@ TEST_F(ProgressWidget, EffectsSettleIdenticallyAndReverseWithoutPixelJump) {
         if (!DISPLAY_DISABLE_ANIMATIONS && !HAS_LVGL_EPAPER && strcmp(effect, "none")) {
             EXPECT_EQ(render(), before) << effect;
         }
+    }
+}
+
+TEST_F(ProgressWidget, StackedEffectsStartWithSourceColorsAndReverseWithoutPixelJump) {
+    std::array<uint8_t, width * height * 3> baseline{};
+    bool first = true;
+    for (const char* effect : effects) {
+        if (created) { progress_widget_type.destroyUI(&runtime); created = false; }
+        json.clear();
+        json["widget_data_binding_2"] = "0";
+        json["widget_progress_active_color"] = "#FF9800";
+        json["widget_progress_active_color_2"] = "#F44336";
+        json["widget_progress_effect"] = effect;
+        json["widget_progress_partial"] = "size";
+        json["widget_progress_inactive_style"] = "hidden";
+        json["widget_progress_shape"] = "block";
+        json["widget_progress_stagger_ms"] = 300;
+        create();
+        strlcpy(config.data_binding[0], "37.5", sizeof(config.data_binding[0]));
+        tick(0);
+        tick(100);
+        const auto entering = render();
+        for (size_t i = 0; i < entering.size(); i += 3)
+            EXPECT_FALSE(entering[i] == 0x36 && entering[i + 1] == 0x43 && entering[i + 2] == 0xf4) << effect;
+        tick(700);
+        strlcpy(config.data_binding[0], "20", sizeof(config.data_binding[0]));
+        strlcpy(config.data_binding[1], "17.5", sizeof(config.data_binding[1]));
+        tick(0);
+        tick(700);
+        const auto settled = render();
+        if (first) { baseline = settled; first = false; }
+        else EXPECT_EQ(settled, baseline) << effect;
+        strlcpy(config.data_binding[0], "30", sizeof(config.data_binding[0]));
+        strlcpy(config.data_binding[1], "45", sizeof(config.data_binding[1]));
+        tick(0);
+        tick(100);
+        const auto before = render();
+        strlcpy(config.data_binding[0], "10", sizeof(config.data_binding[0]));
+        strlcpy(config.data_binding[1], "20", sizeof(config.data_binding[1]));
+        tick(0);
+        if (!DISPLAY_DISABLE_ANIMATIONS && !HAS_LVGL_EPAPER && strcmp(effect, "none")) {
+            EXPECT_EQ(render(), before) << effect;
+        }
+        tick(800);
+        strlcpy(config.data_binding[0], "0", sizeof(config.data_binding[0]));
+        strlcpy(config.data_binding[1], "0", sizeof(config.data_binding[1]));
+        tick(0);
+        tick(800);
+        EXPECT_EQ(state().target, 0);
     }
 }
 

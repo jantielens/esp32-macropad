@@ -1786,7 +1786,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
         if self._profile() == "reterminal-sticky-interactive":
             flags = {"HAS_DISPLAY", "HAS_MQTT", "HAS_AUTO_SHUTDOWN"}
         if "HAS_DISPLAY" in flags:
-            flags.add("HAS_FACE_WIDGET")
+            flags.update(("HAS_FACE_WIDGET", "HAS_PROGRESS_WIDGET"))
             info = self._device_info()
             if info.get("psram_size", 0) > 0:
                 flags.add("HAS_PSRAM")

@@ -7,7 +7,6 @@
     const field = (name, key, kind, value, binding) =>
         ({ id: prefix + name, key, kind, default: value, binding });
     const fields = [
-        field('current', 'widget_data_binding', 'text', '', { isWidgetBinding: true }),
         field('max', 'widget_progress_max', 'text', '100', { isWidgetBinding: true }),
         field('units', 'widget_progress_units', 'text', '25', { isWidgetBinding: true }),
         field('min', 'widget_progress_min', 'text', '0', { isWidgetBinding: true }),
@@ -20,10 +19,10 @@
         field('gap-x', 'widget_progress_gap_x', 'text', 'auto'),
         field('gap-y', 'widget_progress_gap_y', 'text', 'auto'),
         field('rounding', 'widget_progress_rounding', 'number', 0),
-        field('active-color', 'widget_progress_active_color', 'color', 'auto', {}),
         field('inactive-style', 'widget_progress_inactive_style', 'text', 'auto'),
         field('inactive-color', 'widget_progress_inactive_color', 'color', 'auto', {}),
         field('inactive-size', 'widget_progress_inactive_size', 'number', 25),
+        field('inactive-outline-width', 'widget_progress_inactive_outline_width', 'number', 2),
         field('partial', 'widget_progress_partial', 'text', 'size'),
         field('order', 'widget_progress_order', 'text', 'rows'),
         field('origin', 'widget_progress_origin', 'text', 'top_left'),
@@ -33,10 +32,20 @@
         field('duration', 'widget_anim_ms', 'number', 300),
         field('stagger', 'widget_progress_stagger_ms', 'number', 0)
     ];
+    const seriesFields = [];
+    const seriesName = (name, source) => name + (source === 1 ? '' : '-' + source);
+    for (let source = 1; source <= 4; source++) {
+        const suffix = source === 1 ? '' : '_' + source;
+        const value = field(seriesName('current', source), 'widget_data_binding' + suffix, 'text', '', { isWidgetBinding: true });
+        const color = field(seriesName('active-color', source), 'widget_progress_active_color' + suffix, 'color',
+            source === 1 ? 'auto' : () => PAD_FIRMWARE_DEFAULTS['widget_series_color' + suffix], {});
+        seriesFields.push(value, color);
+    }
+    fields.unshift(...seriesFields);
     const base = {
         layout: 'grid', columns: 'auto', shape: 'circle', aspect: 1, thickness: 'auto',
         'gap-x': 'auto', 'gap-y': 'auto', rounding: 0, 'active-color': 'auto',
-        'inactive-style': 'auto', 'inactive-color': 'auto', 'inactive-size': 25,
+        'inactive-style': 'auto', 'inactive-color': 'auto', 'inactive-size': 25, 'inactive-outline-width': 2,
         partial: 'size', order: 'rows', origin: 'top_left', seed: 84721,
         direction: 'auto', effect: 'grow', duration: 300, stagger: 0
     };
@@ -54,14 +63,21 @@
     function syncColors() {
         const foreground = padGetBindableColor('pad-edit-fg-color') || padGetEffectiveDefault('fg_color');
         const fallback = padColorNormalizeLiteral(foreground) || padColorValue(foreground);
-        for (const name of ['active-color', 'inactive-color']) {
+        for (const f of fields.filter(f => f.kind === 'color')) {
+            const name = f.id.slice(prefix.length);
             const el = input(name);
-            el.dataset.colorFallback = fallback;
+            const defaultValue = typeof f.default === 'function' ? f.default() : f.default;
+            el.dataset.colorFallback = defaultValue === 'auto' ? fallback : defaultValue;
             padRefreshBindableColor(el);
             const swatch = el.closest('.bindable-color').querySelector('.bc-swatch');
-            swatch.title = el.value.trim() ? '' : (name === 'active-color'
+            swatch.title = el.value.trim() ? '' : (name.startsWith('active-color')
                 ? 'Automatic: button foreground'
                 : 'Automatic: muted foreground or panel ink');
+            if (name.startsWith('active-color')) {
+                const source = name === 'active-color' ? 1 : Number(name.split('-').pop());
+                padWidgetSetGroupColor(prefix + 'source-' + source,
+                    { ...f, default: el.dataset.colorFallback }, el.dataset.bindingResolved);
+            }
         }
     }
     function syncResets() {
@@ -70,9 +86,10 @@
             const reset = document.getElementById(f.id + '-reset');
             if (!reset) return;
             const value = f.kind === 'checkbox' ? el.checked : el.value.trim();
+            const fallback = typeof f.default === 'function' ? f.default() : f.default;
             const isDefault = f.kind === 'color'
-                ? !value || value.toLowerCase() === 'auto'
-                : String(value) === String(f.default);
+                ? !value || String(value).toLowerCase() === String(fallback).toLowerCase()
+                : String(value) === String(fallback);
             reset.style.display = isDefault ? 'none' : 'inline';
         });
     }
@@ -85,6 +102,7 @@
         input('rounding-wrap').hidden = !block;
         input('gap-y-wrap').hidden = input('gaps-linked').checked;
         input('inactive-options').hidden = input('inactive-style').value === 'hidden';
+        input('inactive-outline-width-wrap').hidden = !['auto', 'outline'].includes(input('inactive-style').value);
         input('reshuffle-wrap').hidden = input('order').value !== 'random';
         syncResets();
     }
@@ -99,8 +117,9 @@
         input('stagger').dispatchEvent(new Event('input', { bubbles: true }));
     }
     fields.filter(f => f.kind === 'color').forEach(f => {
-        f.preview = () => {
+        f.preview = resolved => {
             const el = document.getElementById(f.id);
+            el.dataset.bindingResolved = resolved || '';
             if (el.value.trim().toLowerCase() === 'auto') el.value = '';
             syncColors();
         };
@@ -109,7 +128,7 @@
     function numberOrBinding(name, allowBlank) {
         const value = input(name).value.trim();
         if (!value && allowBlank) return null;
-        if (new TextEncoder().encode(value).length > (name === 'current' ? 191 : 63))
+        if (new TextEncoder().encode(value).length > (name.startsWith('current') ? 191 : 63))
             fail(name, 'Value is too long');
         if (value.includes('[')) return null;
         if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value) ||
@@ -125,11 +144,18 @@
     }
     function build(button) {
         button.widget_progress_match_spacing = input('gaps-linked').checked;
-        numberOrBinding('current', true);
+        const stacked = [2, 3, 4].some(source => input(seriesName('current', source)).value.trim());
+        for (let source = 1; source <= 4; source++) {
+            const name = seriesName('current', source);
+            const value = numberOrBinding(name, true);
+            if (stacked && value !== null && value < 0) fail(name, 'Stacked Progress requires nonnegative series');
+        }
         const min = numberOrBinding('min', false);
         const max = numberOrBinding('max', false);
         const units = numberOrBinding('units', false);
         if (min !== null && max !== null && max <= min) fail('max', 'Maximum must exceed minimum');
+        if (stacked && min !== null && min !== 0) fail('min', 'Stacked Progress requires minimum zero');
+        if (stacked && input('invert').checked) fail('invert', 'Stacked Progress cannot be inverted');
         if (units !== null && (!Number.isInteger(units) || units < 1 || units > 1024))
             fail('units', 'Unit count must be a whole number from 1 to 1024');
         for (const [name, key, minValue, maxValue] of [
@@ -138,7 +164,8 @@
             ['gap-x', 'widget_progress_gap_x', 0, 256],
             ['gap-y', 'widget_progress_gap_y', 0, 256]
         ]) autoInteger(button, name, key, minValue, maxValue);
-        for (const name of ['active-color', 'inactive-color']) {
+        for (const f of fields.filter(f => f.kind === 'color')) {
+            const name = f.id.slice(prefix.length);
             const value = input(name).value.trim();
             if (new TextEncoder().encode(value).length > 191 ||
                 (value && value !== 'auto' && !/^#[0-9a-f]{6}$/i.test(value) && !value.includes('[')))
@@ -146,7 +173,7 @@
         }
         for (const [name, minimum, maximum, integer] of [
             ['aspect', 0.1, 10, false], ['rounding', 0, 50, true],
-            ['inactive-size', 1, 100, true], ['duration', 0, 5000, true],
+            ['inactive-size', 1, 100, true], ['inactive-outline-width', 1, 10, true], ['duration', 0, 5000, true],
             ['stagger', 0, 1000, true], ['seed', 0, 4294967295, true]
         ]) {
             const value = Number(input(name).value);
@@ -181,10 +208,11 @@
                 reset.textContent = 'restart_alt';
                 reset.addEventListener('click', event => {
                     event.preventDefault();
-                    if (f.kind === 'color') padSetBindableColor(f.id, '');
+                    const fallback = typeof f.default === 'function' ? f.default() : f.default;
+                    if (f.kind === 'color') padSetBindableColor(f.id, fallback === 'auto' ? '' : fallback);
                     else {
-                        if (f.kind === 'checkbox') el.checked = f.default;
-                        else el.value = String(f.default);
+                        if (f.kind === 'checkbox') el.checked = fallback;
+                        else el.value = String(fallback);
                         el.dispatchEvent(new Event(f.kind === 'checkbox' || el.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
                     }
                     sync();
@@ -221,7 +249,9 @@
                 const recipe = recipes[input('preset').value];
                 input('preset').value = '';
                 if (!recipe || !confirm('Apply this sample look? Visual settings, including color bindings, will be replaced. Current value, range, inversion, and unit count will be kept.')) return;
-                setValues({ ...base, ...recipe });
+                const colors = Object.fromEntries(seriesFields.filter(f => f.kind === 'color').map(f =>
+                    [f.id.slice(prefix.length), typeof f.default === 'function' ? f.default() : f.default]));
+                setValues({ ...base, ...colors, ...recipe });
             });
         },
         build

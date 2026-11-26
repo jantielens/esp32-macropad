@@ -5,7 +5,7 @@ const vm = require('vm');
 class Element {
     constructor(id) {
         this.id = id; this.value = ''; this.checked = false; this.listeners = {};
-        this.dataset = {}; this.style = {}; this.textContent = id;
+        this.dataset = {}; this.style = { setProperty(name, value) { this[name] = value; } }; this.textContent = id;
         this.tagName = /(?:layout|shape|inactive-style|partial|order|origin|direction|effect|preset)$/.test(id) ? 'SELECT' : 'INPUT';
         this.swatch = { title: '' };
     }
@@ -31,6 +31,7 @@ const document = {
 let confirmed = false;
 const context = vm.createContext({
     document, TextEncoder, confirm: () => confirmed,
+    PAD_FIRMWARE_DEFAULTS: { widget_series_color_2: '#2196F3', widget_series_color_3: '#9C27B0', widget_series_color_4: '#FF9800' },
     Event: class { constructor(type) { this.type = type; } preventDefault() {} },
     padInitBindableColor() {}, padRefreshBindableColor() {},
     padGetEffectiveDefault: () => '#ffffff',
@@ -152,4 +153,59 @@ get('shape').dispatchEvent(new context.Event('change'));
 draft = {};
 context.padWidgetEditorBuild(draft, editor);
 assert.strictEqual(draft.widget_progress_thickness, 19);
+
+const stacked = {
+    widget_type: 'progress', widget_data_binding: '0.14', widget_data_binding_2: '0.26',
+    widget_progress_max: '3', widget_progress_units: '60',
+    widget_progress_active_color: '#FF9800', widget_progress_active_color_2: '#F44336',
+    widget_data_binding_4: '[pad:other]', widget_progress_active_color_4: '[pad:color]'
+};
+context.padWidgetEditorsLoad(stacked);
+draft = {};
+context.padWidgetEditorBuild(draft, editor);
+for (const key of Object.keys(stacked).filter(key => key !== 'widget_type'))
+    assert.strictEqual(draft[key], stacked[key]);
+assert.strictEqual(get('source-1').style['--pad-source-color'], '#FF9800');
+assert.strictEqual(get('source-2').style['--pad-source-color'], '#F44336');
+get('active-color-2-reset').dispatchEvent(new context.Event('click'));
+assert.strictEqual(get('active-color-2').value, '#2196F3');
+assert.strictEqual(get('source-2').style['--pad-source-color'], '#2196F3');
+get('current-2').value = '-0.26';
+assert.throws(() => context.padWidgetEditorBuild({}, editor), /nonnegative/);
+get('current-2').value = '[pad:grid_import]';
+get('min').value = '1';
+assert.throws(() => context.padWidgetEditorBuild({}, editor), /minimum zero/);
+get('min').value = '0';
+get('invert').checked = true;
+assert.throws(() => context.padWidgetEditorBuild({}, editor), /cannot be inverted/);
+get('invert').checked = false;
+context.padWidgetEditorBuild({}, editor);
+get('current-4-reset').dispatchEvent(new context.Event('click'));
+draft = {};
+context.padWidgetEditorBuild(draft, editor);
+assert.strictEqual(draft.widget_data_binding_4, undefined);
+context.padWidgetEditorsLoad({
+    widget_type: 'progress', widget_progress_inactive_style: 'outline',
+    widget_progress_inactive_outline_width: 5
+});
+assert.strictEqual(get('inactive-outline-width-wrap').hidden, false);
+draft = {};
+context.padWidgetEditorBuild(draft, editor);
+assert.strictEqual(draft.widget_progress_inactive_outline_width, 5);
+for (const treatment of ['filled', 'hidden', 'auto', 'outline']) {
+    get('inactive-style').value = treatment;
+    get('inactive-style').dispatchEvent(new context.Event('change'));
+    assert.strictEqual(get('inactive-outline-width-wrap').hidden, !['auto', 'outline'].includes(treatment));
+    draft = {};
+    context.padWidgetEditorBuild(draft, editor);
+    assert.strictEqual(draft.widget_progress_inactive_outline_width, 5);
+}
+for (const invalid of ['0', '11', '1.5']) {
+    get('inactive-outline-width').value = invalid;
+    assert.throws(() => context.padWidgetEditorBuild({}, editor), /supported range/);
+}
+get('inactive-outline-width-reset').dispatchEvent(new context.Event('click'));
+draft = {};
+context.padWidgetEditorBuild(draft, editor);
+assert.strictEqual(draft.widget_progress_inactive_outline_width, 2);
 console.log('portal_widget_progress: PASS');

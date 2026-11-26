@@ -30,9 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 * Add the passive, binding-driven Progress widget for displaying values as
-  ordered dots, blocks, or strips. Configure the range, unit count, appearance,
-  order, and transitions, or apply a sample look. Animations are disabled on
-  e-paper. See the [Progress guide](docs/user/widgets/progress.md).
+  ordered dots, blocks, or strips. Stack up to four nonnegative sources with
+  per-series colors, shared fractional units, and animated color boundaries.
+  Customize layouts, appearance, fill order, and transitions, or apply a sample
+  look. Animations are disabled on e-paper.
+  See the [Progress guide](docs/user/widgets/progress.md).
 * Add an optional shutdown message and delay to reTerminal Sticky's Shutdown
   action. A message requests a full e-paper refresh and remains visible after
   power-off; shutdown waits for message presentation and the configured minimum

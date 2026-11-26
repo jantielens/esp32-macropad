@@ -1,12 +1,45 @@
 <div id="pad-edit-progress-section" style="display:none;">
-    <div class="editor-group" id="pad-edit-progress-value-group">
-        <div class="editor-group-heading" role="heading" aria-level="3">Value</div>
+    <details class="editor-group" id="pad-edit-progress-sources" open>
+        <summary>Data sources</summary>
         <div class="editor-group-body">
+            <details class="pad-content-source" id="pad-edit-progress-source-1" open>
+                <summary>Series 1</summary>
+                <div class="pad-content-source-body">
             <div class="form-group">
                 <label for="pad-edit-progress-current">Current value <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                 <input type="text" id="pad-edit-progress-current" class="binding-mono" maxlength="191" placeholder="0 or [binding]">
                 <small>A number or binding; blank starts at 0.</small>
             </div>
+            <div class="form-group"><label for="pad-edit-progress-active-color">Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label><div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-progress-active-color" class="bc-input" maxlength="191" placeholder="Auto"></div><small>Auto inherits the button foreground.</small></div>
+                </div>
+            </details>
+            <details class="pad-content-source" id="pad-edit-progress-source-2">
+                <summary>Series 2</summary>
+                <div class="pad-content-source-body">
+                    <div class="form-group"><label for="pad-edit-progress-current-2">Current value <span class="fx-hint" onclick="showBindingHelp()">fx</span></label><input type="text" id="pad-edit-progress-current-2" class="binding-mono" maxlength="191" placeholder="Optional number or [binding]"></div>
+                    <div class="form-group"><label for="pad-edit-progress-active-color-2">Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label><div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-progress-active-color-2" class="bc-input" maxlength="191" placeholder="#hex or [binding]"></div></div>
+                </div>
+            </details>
+            <details class="pad-content-source" id="pad-edit-progress-source-3">
+                <summary>Series 3</summary>
+                <div class="pad-content-source-body">
+                    <div class="form-group"><label for="pad-edit-progress-current-3">Current value <span class="fx-hint" onclick="showBindingHelp()">fx</span></label><input type="text" id="pad-edit-progress-current-3" class="binding-mono" maxlength="191" placeholder="Optional number or [binding]"></div>
+                    <div class="form-group"><label for="pad-edit-progress-active-color-3">Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label><div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-progress-active-color-3" class="bc-input" maxlength="191" placeholder="#hex or [binding]"></div></div>
+                </div>
+            </details>
+            <details class="pad-content-source" id="pad-edit-progress-source-4">
+                <summary>Series 4</summary>
+                <div class="pad-content-source-body">
+                    <div class="form-group"><label for="pad-edit-progress-current-4">Current value <span class="fx-hint" onclick="showBindingHelp()">fx</span></label><input type="text" id="pad-edit-progress-current-4" class="binding-mono" maxlength="191" placeholder="Optional number or [binding]"></div>
+                    <div class="form-group"><label for="pad-edit-progress-active-color-4">Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label><div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-progress-active-color-4" class="bc-input" maxlength="191" placeholder="#hex or [binding]"></div></div>
+                </div>
+            </details>
+            <small>Additional sources stack in series order. Values must be nonnegative, minimum must be 0, and inversion must be off. Fractional boundaries share a unit.</small>
+        </div>
+    </details>
+    <div class="editor-group" id="pad-edit-progress-value-group">
+        <div class="editor-group-heading" role="heading" aria-level="3">Scale</div>
+        <div class="editor-group-body">
             <div class="widget-row">
                 <div class="form-group">
                     <label for="pad-edit-progress-max">Maximum / goal <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
@@ -67,11 +100,11 @@
     <details class="editor-group" id="pad-edit-progress-appearance">
         <summary>Unit appearance</summary>
         <div class="editor-group-body">
-            <div class="form-group"><label for="pad-edit-progress-active-color">Active color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label><div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-progress-active-color" class="bc-input" maxlength="191" placeholder="Auto"></div><small>Auto inherits the button foreground.</small></div>
             <div class="form-group"><label for="pad-edit-progress-inactive-style">Inactive treatment</label><select id="pad-edit-progress-inactive-style"><option value="auto">Auto</option><option value="filled">Filled</option><option value="outline">Outline</option><option value="hidden">Hidden</option></select><small>Auto uses filled units or outlines for one-bit mode; Hidden leaves empty positions.</small></div>
             <div id="pad-edit-progress-inactive-options">
                 <div class="form-group"><label for="pad-edit-progress-inactive-color">Inactive color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label><div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-progress-inactive-color" class="bc-input" maxlength="191" placeholder="Auto"></div><small>Auto uses a muted foreground or panel ink.</small></div>
                 <div class="form-group"><label for="pad-edit-progress-inactive-size">Inactive size (%)</label><input type="number" id="pad-edit-progress-inactive-size" min="1" max="100" value="25"><small>Size relative to a full unit: 1–100%.</small></div>
+                <div class="form-group" id="pad-edit-progress-inactive-outline-width-wrap"><label for="pad-edit-progress-inactive-outline-width">Outline width (px)</label><input type="number" id="pad-edit-progress-inactive-outline-width" min="1" max="10" step="1" value="2"><small>1–10 pixels, default 2. Fixed pixel width, capped to the drawn shape's dimensions. Auto uses it only in one-bit mode.</small></div>
                 <small>Explicit colors and filled units may look identical on a one-bit display.</small>
             </div>
         </div>
@@ -83,7 +116,7 @@
             <div class="form-group"><label for="pad-edit-progress-order">Activation pattern</label><select id="pad-edit-progress-order"><option value="rows">Rows</option><option value="columns">Columns</option><option value="snake_rows">Snake rows</option><option value="snake_columns">Snake columns</option><option value="spiral_in">Spiral inward</option><option value="spiral_out">Spiral outward</option><option value="center_out">Center outward</option><option value="edges_in">Edges inward</option><option value="diagonal">Diagonal</option><option value="random">Random</option></select><small>Choose the order in which units activate; decreases reverse it.</small></div>
             <div class="form-group"><label for="pad-edit-progress-origin">Starting corner</label><select id="pad-edit-progress-origin"><option value="top_left">Top left</option><option value="top_right">Top right</option><option value="bottom_left">Bottom left</option><option value="bottom_right">Bottom right</option></select><small>Orients the activation pattern and automatic fill direction.</small></div>
             <div class="form-group" id="pad-edit-progress-reshuffle-wrap"><input type="hidden" id="pad-edit-progress-seed" value="84721"><button type="button" class="btn btn-outline-secondary btn-sm" id="pad-edit-progress-reshuffle">Reshuffle</button><small>The random order remains stable until reshuffled.</small></div>
-            <div class="form-group"><label for="pad-edit-progress-direction">Within-unit fill direction</label><select id="pad-edit-progress-direction"><option value="auto">Auto</option><option value="left">Left</option><option value="right">Right</option><option value="up">Up</option><option value="down">Down</option></select><small>Controls partial Fill and Wipe; Auto follows arrangement and starting corner.</small></div>
+            <div class="form-group"><label for="pad-edit-progress-direction">Within-unit fill direction</label><select id="pad-edit-progress-direction"><option value="auto">Auto</option><option value="left">Left</option><option value="right">Right</option><option value="up">Up</option><option value="down">Down</option></select><small>Controls color boundaries, partial Fill, and Wipe; Auto follows arrangement and starting corner.</small></div>
         </div>
     </details>
     <details class="editor-group" id="pad-edit-progress-animation">
@@ -94,7 +127,7 @@
                 <div class="form-group"><label for="pad-edit-progress-duration">Duration (ms)</label><input type="number" id="pad-edit-progress-duration" min="0" max="5000" value="300"><small>Time per unit; 0 updates immediately. Maximum 5000 ms.</small></div>
                 <div class="form-group"><label for="pad-edit-progress-stagger">Stagger span (ms)</label><input type="number" id="pad-edit-progress-stagger" min="0" max="1000" value="0"><small>Total spread between the first and last unit starts; 0 starts together.</small></div>
             </div>
-            <small>Animation is disabled on e-paper and when device-wide animations are disabled.</small>
+            <small>Source color boundaries move using the same duration, without reactivating filled units. Animation is disabled on e-paper and when device-wide animations are disabled.</small>
         </div>
     </details>
 </div>

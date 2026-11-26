@@ -42,18 +42,28 @@ constexpr const char* orders[] = {"rows", "columns", "snake_rows", "snake_column
 constexpr const char* origins[] = {"top_left", "top_right", "bottom_left", "bottom_right"};
 constexpr const char* directions[] = {"auto", "left", "right", "up", "down"};
 constexpr const char* effects[] = {"none", "fade", "grow", "pop", "wipe", "flip"};
+constexpr const char* value_fields[] = {
+    "widget_data_binding", "widget_data_binding_2", "widget_data_binding_3", "widget_data_binding_4"
+};
+constexpr const char* color_fields[] = {
+    "widget_progress_active_color", "widget_progress_active_color_2",
+    "widget_progress_active_color_3", "widget_progress_active_color_4"
+};
+constexpr const char* color_defaults[] = {
+    "auto", DEFAULT_WIDGET_SERIES_COLOR_2, DEFAULT_WIDGET_SERIES_COLOR_3, DEFAULT_WIDGET_SERIES_COLOR_4
+};
 
 struct Config {
     char minimum[CONFIG_BINDABLE_SHORT_LEN];
     char maximum[CONFIG_BINDABLE_SHORT_LEN];
     char units[CONFIG_BINDABLE_SHORT_LEN];
-    char active_color[CONFIG_COLOR_MAX_LEN];
+    char active_color[MAX_WIDGET_BINDINGS][CONFIG_COLOR_MAX_LEN];
     char inactive_color[CONFIG_COLOR_MAX_LEN];
     float aspect;
     uint32_t seed;
     uint16_t columns, duration, stagger;
     int16_t gap_x, gap_y;
-    uint8_t thickness, rounding, inactive_size;
+    uint8_t thickness, rounding, inactive_size, inactive_outline_width;
     Layout layout;
     Shape shape;
     Inactive inactive;
@@ -72,6 +82,12 @@ struct Motion {
     bool running;
 };
 
+struct ColorMotion {
+    float from[MAX_WIDGET_BINDINGS - 1], to[MAX_WIDGET_BINDINGS - 1];
+    uint32_t started;
+    bool running;
+};
+
 struct State {
     lv_obj_t* object;
     lv_obj_t* parent;
@@ -80,10 +96,11 @@ struct State {
     Motion* motion;
     uint16_t count, columns, rows;
     int32_t width, height, cell_w, cell_h, gap_x, gap_y, left, top;
-    uint32_t active_color, inactive_color, last_frame;
+    uint32_t active_color[MAX_WIDGET_BINDINGS], inactive_color, last_frame;
+    ColorMotion colors;
     double target;
     const char* error;
-    uint8_t outline_width;
+    uint8_t series_count;
     bool active, valid, layout_dirty, monochrome;
 };
 
@@ -171,20 +188,39 @@ const char* validate(JsonObjectConst btn) {
         if (!valid_binding_field(btn[field], CONFIG_BINDABLE_SHORT_LEN, false))
             return "Progress range and count must be numbers or bindings of at most 63 bytes";
     }
-    for (const char* field : {"widget_progress_active_color", "widget_progress_inactive_color"}) {
+    for (const char* field : color_fields) {
         if (!valid_binding_field(btn[field], CONFIG_COLOR_MAX_LEN, true))
             return "Progress colors must be Auto, colors, or bindings of at most 191 bytes";
     }
-    if (btn.containsKey("widget_data_binding") &&
-        (!btn["widget_data_binding"].is<const char*>() ||
-         (btn["widget_data_binding"].as<const char*>()[0] &&
-          !valid_binding_field(btn["widget_data_binding"], CONFIG_LABEL_MAX_LEN, false))))
-        return "Progress current value must be a number or binding";
+    if (!valid_binding_field(btn["widget_progress_inactive_color"], CONFIG_COLOR_MAX_LEN, true))
+        return "Progress colors must be Auto, colors, or bindings of at most 191 bytes";
+    bool stacked = false;
+    for (unsigned i = 0; i < MAX_WIDGET_BINDINGS; ++i) {
+        JsonVariantConst value = btn[value_fields[i]];
+        if (value.isNull()) continue;
+        if (!value.is<const char*>() ||
+            (*value.as<const char*>() && !valid_binding_field(value, CONFIG_LABEL_MAX_LEN, false)))
+            return "Progress series value must be a number or binding";
+        if (i && *value.as<const char*>()) stacked = true;
+    }
     double min_value, max_value;
     if (literal_number(btn["widget_progress_min"], 0, &min_value) &&
         literal_number(btn["widget_progress_max"], 100, &max_value) &&
         max_value <= min_value)
         return "Progress maximum must be greater than minimum";
+    if (stacked) {
+        if (literal_number(btn["widget_progress_min"], 0, &min_value) && min_value != 0)
+            return "Stacked Progress requires minimum zero";
+        if (btn["widget_progress_invert"] == true)
+            return "Stacked Progress cannot be inverted";
+        for (const char* field : value_fields) {
+            JsonVariantConst value = btn[field];
+            if (value.isNull() || !*value.as<const char*>()) continue;
+            double amount;
+            if (literal_number(value, 0, &amount) && amount < 0)
+                return "Stacked Progress requires nonnegative series";
+        }
+    }
     if (!valid_choice(btn["widget_progress_layout"], layouts) ||
         !valid_choice(btn["widget_progress_shape"], shapes) ||
         !valid_choice(btn["widget_progress_inactive_style"], inactive_styles) ||
@@ -200,6 +236,7 @@ const char* validate(JsonObjectConst btn) {
         !valid_integer(btn["widget_progress_thickness"], 1, 100, true) ||
         !valid_integer(btn["widget_progress_rounding"], 0, 50) ||
         !valid_integer(btn["widget_progress_inactive_size"], 1, 100) ||
+        !valid_integer(btn["widget_progress_inactive_outline_width"], 1, 10) ||
         !valid_integer(btn["widget_anim_ms"], 0, 5000) ||
         !valid_integer(btn["widget_progress_stagger_ms"], 0, 1000))
         return "Progress geometry or animation setting is outside its supported range";
@@ -251,7 +288,8 @@ void parse(const JsonObject& btn, uint8_t* data) {
     parse_number_field(btn["widget_progress_min"], cfg->minimum, sizeof(cfg->minimum), "0");
     parse_number_field(btn["widget_progress_max"], cfg->maximum, sizeof(cfg->maximum), "100");
     parse_number_field(btn["widget_progress_units"], cfg->units, sizeof(cfg->units), "25");
-    widget_parse_field(btn["widget_progress_active_color"], cfg->active_color, sizeof(cfg->active_color), "auto");
+    for (unsigned i = 0; i < MAX_WIDGET_BINDINGS; ++i)
+        widget_parse_field(btn[color_fields[i]], cfg->active_color[i], sizeof(cfg->active_color[i]), color_defaults[i]);
     widget_parse_field(btn["widget_progress_inactive_color"], cfg->inactive_color, sizeof(cfg->inactive_color), "auto");
     cfg->layout = static_cast<Layout>(choice(btn["widget_progress_layout"] | "grid", layouts));
     cfg->shape = static_cast<Shape>(choice(btn["widget_progress_shape"] | "circle", shapes));
@@ -269,6 +307,7 @@ void parse(const JsonObject& btn, uint8_t* data) {
     cfg->thickness = auto_int(btn["widget_progress_thickness"], 0);
     cfg->rounding = btn["widget_progress_rounding"] | 0;
     cfg->inactive_size = btn["widget_progress_inactive_size"] | 25;
+    cfg->inactive_outline_width = btn["widget_progress_inactive_outline_width"] | 2;
     cfg->duration = btn["widget_anim_ms"] | 300;
     cfg->stagger = btn["widget_progress_stagger_ms"] | 0;
     cfg->invert = btn["widget_progress_invert"] | false;
@@ -281,7 +320,8 @@ void visit(const uint8_t* data, WidgetResourceVisitor visitor, void* context) {
     visitor(WidgetResourceKind::Binding, "widget_progress_min", 0, cfg.minimum, context);
     visitor(WidgetResourceKind::Binding, "widget_progress_max", 0, cfg.maximum, context);
     visitor(WidgetResourceKind::Binding, "widget_progress_units", 0, cfg.units, context);
-    visitor(WidgetResourceKind::Binding, "widget_progress_active_color", 0, cfg.active_color, context);
+    for (unsigned i = 0; i < MAX_WIDGET_BINDINGS; ++i)
+        visitor(WidgetResourceKind::Binding, color_fields[i], i, cfg.active_color[i], context);
     visitor(WidgetResourceKind::Binding, "widget_progress_inactive_color", 0, cfg.inactive_color, context);
 }
 
@@ -438,20 +478,53 @@ float target_for(const State& state, unsigned rank, double target) {
 }
 
 struct Sample { float value, phase; };
+float transition(uint32_t elapsed, uint16_t duration) {
+    const float t = duration ? clamp_val(elapsed / static_cast<float>(duration), 0.0f, 1.0f) : 1;
+    return t * t * (3 - 2 * t);
+}
+
 Sample sample(const Motion& motion, uint32_t now, uint16_t duration) {
     if (!motion.running) return {motion.to, motion.phase_to};
     const uint32_t elapsed = now - motion.started;
     if (elapsed < motion.delay) return {motion.from, motion.phase_from};
-    const float t = clamp_val((elapsed - motion.delay) / static_cast<float>(duration), 0.0f, 1.0f);
-    const float eased = t * t * (3 - 2 * t);
+    const float eased = transition(elapsed - motion.delay, duration);
     return {motion.from + (motion.to - motion.from) * eased,
             motion.phase_from + (motion.phase_to - motion.phase_from) * eased};
 }
 
+bool animate(const State& state) {
+    return state.valid && state.config->effect != Effect::None && state.config->duration &&
+        !DISPLAY_DISABLE_ANIMATIONS && !HAS_LVGL_EPAPER;
+}
+
+float color_boundary(const State& state, unsigned series, uint32_t now) {
+    const ColorMotion& motion = state.colors;
+    const float t = motion.running ? transition(now - motion.started, state.config->duration) : 1;
+    return motion.from[series] + (motion.to[series] - motion.from[series]) * t;
+}
+
+bool retarget_colors(State* state, const float* boundaries, uint32_t now) {
+    bool changed = false;
+    for (unsigned i = 0; i < MAX_WIDGET_BINDINGS - 1; ++i)
+        changed |= boundaries[i] != state->colors.to[i];
+    if (!changed && state->valid) return false;
+    bool visible = state->target > 0;
+    for (unsigned i = 0; !visible && state->motion && i < state->count; ++i) {
+        const Sample current = sample(state->motion[i], now, state->config->duration);
+        visible = current.value > 0 && current.phase > 0;
+    }
+    for (unsigned i = 0; i < MAX_WIDGET_BINDINGS - 1; ++i) {
+        state->colors.from[i] = color_boundary(*state, i, now);
+        state->colors.to[i] = boundaries[i];
+    }
+    state->colors.started = now;
+    state->colors.running = changed && visible && animate(*state);
+    return true;
+}
+
 void retarget(State* state, double target, uint32_t now) {
     const Config& cfg = *state->config;
-    if (!state->valid || cfg.effect == Effect::None || !cfg.duration ||
-        DISPLAY_DISABLE_ANIMATIONS || HAS_LVGL_EPAPER) {
+    if (!animate(*state)) {
         lv_free(state->motion); state->motion = nullptr;
         state->target = target;
         return;
@@ -497,17 +570,18 @@ Direction fill_direction(const Config& cfg) {
     return cfg.origin == Origin::TopRight || cfg.origin == Origin::BottomRight ? Direction::Left : Direction::Right;
 }
 
-void draw_shape(lv_layer_t* layer, lv_area_t area, int radius, uint32_t color,
-                uint8_t opacity, bool outline, uint8_t outline_width = 1) {
+void draw_shape(lv_layer_t* layer, lv_area_t area, const Config& cfg, uint32_t color,
+                uint8_t opacity, bool outline) {
     if (area.x2 < area.x1 || area.y2 < area.y1 || !opacity) return;
     lv_draw_rect_dsc_t dsc;
     lv_draw_rect_dsc_init(&dsc);
-    dsc.radius = radius;
+    dsc.radius = cfg.shape == Shape::Circle ? LV_RADIUS_CIRCLE :
+        LV_MIN(lv_area_get_width(&area), lv_area_get_height(&area)) * cfg.rounding / 100;
     dsc.bg_color = lv_color_hex(color);
     dsc.bg_opa = outline ? static_cast<uint8_t>(LV_OPA_TRANSP) : opacity;
     dsc.border_color = lv_color_hex(color);
     dsc.border_opa = opacity;
-    dsc.border_width = outline ? LV_MIN(outline_width,
+    dsc.border_width = outline ? LV_MIN(cfg.inactive_outline_width,
         LV_MIN(lv_area_get_width(&area), lv_area_get_height(&area))) : 0;
     lv_draw_rect(layer, &dsc, &area);
 }
@@ -521,18 +595,24 @@ lv_area_t scaled_area(lv_area_t area, float sx, float sy) {
     return area;
 }
 
-void clip_fill(lv_layer_t* layer, const lv_area_t& area, float amount, Direction direction) {
+void clip_segment(lv_layer_t* layer, const lv_area_t& area, float start, float end, Direction direction) {
     const int w = lv_area_get_width(&area), h = lv_area_get_height(&area);
-    const int extent = static_cast<int>(lroundf((direction == Direction::Up || direction == Direction::Down ? h : w) * amount));
+    const int length = direction == Direction::Up || direction == Direction::Down ? h : w;
+    const int first = static_cast<int>(lroundf(length * start));
+    const int last = static_cast<int>(lroundf(length * end));
     lv_area_t clip = area;
-    if (direction == Direction::Right) clip.x2 = clip.x1 + extent - 1;
-    else if (direction == Direction::Left) clip.x1 = clip.x2 - extent + 1;
-    else if (direction == Direction::Down) clip.y2 = clip.y1 + extent - 1;
-    else clip.y1 = clip.y2 - extent + 1;
+    if (direction == Direction::Right) { clip.x1 += first; clip.x2 = area.x1 + last - 1; }
+    else if (direction == Direction::Left) { clip.x1 = area.x2 - last + 1; clip.x2 -= first; }
+    else if (direction == Direction::Down) { clip.y1 += first; clip.y2 = area.y1 + last - 1; }
+    else { clip.y1 = area.y2 - last + 1; clip.y2 -= first; }
     layer->_clip_area.x1 = LV_MAX(layer->_clip_area.x1, clip.x1);
     layer->_clip_area.y1 = LV_MAX(layer->_clip_area.y1, clip.y1);
     layer->_clip_area.x2 = LV_MIN(layer->_clip_area.x2, clip.x2);
     layer->_clip_area.y2 = LV_MIN(layer->_clip_area.y2, clip.y2);
+}
+
+void clip_fill(lv_layer_t* layer, const lv_area_t& area, float amount, Direction direction) {
+    clip_segment(layer, area, 0, amount, direction);
 }
 
 void draw(lv_event_t* event) {
@@ -555,13 +635,14 @@ void draw(lv_event_t* event) {
     const Inactive inactive = cfg.inactive == Inactive::Auto ?
         (state->monochrome ? Inactive::Outline : Inactive::Filled) : cfg.inactive;
     const uint32_t now = lv_tick_get();
+    float boundaries[MAX_WIDGET_BINDINGS - 1];
+    for (unsigned i = 0; i + 1 < state->series_count; ++i)
+        boundaries[i] = color_boundary(*state, i, now);
     for (unsigned rank = 0; rank < state->count; ++rank) {
         const int slot = state->slots[rank], col = slot % state->columns, row = slot / state->columns;
         lv_area_t area{bounds.x1 + state->left + col * (state->cell_w + state->gap_x),
                        bounds.y1 + state->top + row * (state->cell_h + state->gap_y), 0, 0};
         area.x2 = area.x1 + state->cell_w - 1; area.y2 = area.y1 + state->cell_h - 1;
-        const int radius = cfg.shape == Shape::Circle ? LV_RADIUS_CIRCLE :
-            LV_MIN(lv_area_get_width(&area), lv_area_get_height(&area)) * cfg.rounding / 100;
         Sample value{target_for(*state, rank, state->target), 1};
         if (state->motion) value = sample(state->motion[rank], now, cfg.duration);
         const float phase = clamp_val(value.phase, 0.0f, 1.0f);
@@ -575,8 +656,8 @@ void draw(lv_event_t* event) {
             }
             const uint8_t opacity = !strcmp(cfg.inactive_color, "auto") && !state->monochrome
                 ? 64 : 255;
-            draw_shape(layer, track, radius, state->inactive_color, opacity,
-                       inactive == Inactive::Outline, state->outline_width);
+            draw_shape(layer, track, cfg, state->inactive_color, opacity,
+                       inactive == Inactive::Outline);
         }
         if (value.value <= 0 || phase <= 0) continue;
         float active = clamp_val(value.value, 0.0f, 1.0f);
@@ -611,7 +692,20 @@ void draw(lv_event_t* event) {
         if (cfg.partial == Partial::Fill) clip_fill(layer, active_area, active, fill_direction(cfg));
         if (cfg.effect == Effect::Wipe) clip_fill(layer, active_area, phase, fill_direction(cfg));
         const uint8_t opacity = cfg.effect == Effect::Fade ? static_cast<uint8_t>(lroundf(phase * 255)) : 255;
-        draw_shape(layer, active_area, radius, state->active_color, opacity, false);
+        const lv_area_t visible = layer->_clip_area;
+        float start = 0;
+        for (unsigned series = 0; series < state->series_count; ++series) {
+            // Size partitions the scaled shape; Fill partitions the full shape before clipping.
+            const float end = series + 1 == state->series_count ? 1 :
+                clamp_val((boundaries[series] - rank) /
+                    (cfg.partial == Partial::Size ? active : 1), 0.0f, 1.0f);
+            if (end > start) {
+                layer->_clip_area = visible;
+                clip_segment(layer, active_area, start, end, fill_direction(cfg));
+                draw_shape(layer, active_area, cfg, state->active_color[series], opacity, false);
+            }
+            start = end;
+        }
         layer->_clip_area = saved;
     }
 }
@@ -629,11 +723,10 @@ void object_deleted(lv_event_t* event) {
 }
 
 void create(lv_obj_t* parent, const WidgetConfig* widget, const ScreenButtonConfig*,
-            const PadRect*, const UIScaleInfo* scale, WidgetState* runtime) {
+            const PadRect*, const UIScaleInfo*, WidgetState* runtime) {
     auto* state = new (runtime->data) State{};
     state->parent = parent;
     state->config = reinterpret_cast<const Config*>(widget->data);
-    state->outline_width = scale ? LV_MAX(1, scale->gap / 2) : 1;
     state->active = true;
     state->layout_dirty = true;
     state->object = lv_obj_create(parent);
@@ -657,32 +750,61 @@ void tick(lv_obj_t*, const WidgetConfig* widget, WidgetState* runtime) {
     if (!state->object || !state->parent || !state->active) return;
     const Config& cfg = *state->config;
     if (!cfg.valid) { fail(state, "Invalid Progress configuration"); return; }
-    double value, minimum, maximum, units;
-    if (!resolve_number(widget->data_binding[0][0] ? widget->data_binding[0] : "0", &value) ||
-        !resolve_number(cfg.minimum, &minimum) || !resolve_number(cfg.maximum, &maximum) ||
+    double minimum, maximum, units;
+    if (!resolve_number(cfg.minimum, &minimum) || !resolve_number(cfg.maximum, &maximum) ||
         !resolve_number(cfg.units, &units) || maximum <= minimum ||
         units < 1 || units > candidate_limit || floor(units) != units) {
         fail(state, "Progress unavailable");
         return;
     }
     const uint16_t count = static_cast<uint16_t>(units);
+    state->series_count = 1;
+    for (unsigned i = 1; i < MAX_WIDGET_BINDINGS; ++i)
+        if (widget->data_binding[i][0]) state->series_count = i + 1;
+    const bool stacked = state->series_count > 1;
+    if (stacked && (minimum != 0 || cfg.invert)) {
+        fail(state, "Stacked Progress requires minimum zero and no inversion"); return;
+    }
+    double value = 0;
+    float boundaries[MAX_WIDGET_BINDINGS - 1]{};
+    for (unsigned i = 0; i < state->series_count; ++i) {
+        double amount = 0;
+        if (widget->data_binding[i][0] && !resolve_number(widget->data_binding[i], &amount)) {
+            fail(state, "Progress unavailable"); return;
+        }
+        if (stacked && amount < 0) {
+            fail(state, "Stacked Progress requires nonnegative series"); return;
+        }
+        // Saturate before adding so large finite contributions cannot overflow.
+        value = stacked ? value + fmin(amount, maximum - value) : amount;
+        if (i < MAX_WIDGET_BINDINGS - 1)
+            boundaries[i] = stacked ? static_cast<float>(value / maximum * count) : 0;
+    }
+    for (unsigned i = state->series_count; i < MAX_WIDGET_BINDINGS - 1; ++i)
+        boundaries[i] = static_cast<float>(count);
     bool monochrome = false;
 #if HAS_LVGL_EPAPER
     monochrome = display_manager_get_presentation_mode() == EPAPER_RENDER_MODE_BW;
 #endif
     const lv_color_t foreground = lv_obj_get_style_text_color(state->parent, LV_PART_MAIN);
-    uint32_t active = lv_color_to_u32(foreground) & 0xFFFFFFu, inactive = active;
-    if (strcmp(cfg.active_color, "auto") && !resolve_color(cfg.active_color, &active)) {
-        fail(state, "Progress color unavailable"); return;
+    uint32_t inactive = lv_color_to_u32(foreground) & 0xFFFFFFu;
+    bool color_changed = false;
+    for (unsigned i = 0; i < state->series_count; ++i) {
+        uint32_t active = inactive;
+        if ((i == 0 || widget->data_binding[i][0]) && strcmp(cfg.active_color[i], "auto") &&
+            !resolve_color(cfg.active_color[i], &active)) {
+            fail(state, "Progress color unavailable"); return;
+        }
+        color_changed |= state->active_color[i] != active;
+        state->active_color[i] = active;
     }
     if (cfg.inactive != Inactive::Hidden) {
         if (strcmp(cfg.inactive_color, "auto")) {
             if (!resolve_color(cfg.inactive_color, &inactive)) { fail(state, "Progress color unavailable"); return; }
         }
     }
-    const bool color_changed = state->active_color != active || state->inactive_color != inactive ||
-        state->monochrome != monochrome;
-    state->active_color = active; state->inactive_color = inactive; state->monochrome = monochrome;
+    color_changed |= state->inactive_color != inactive || state->monochrome != monochrome;
+    state->inactive_color = inactive; state->monochrome = monochrome;
     const int w = lv_obj_get_content_width(state->parent), h = lv_obj_get_content_height(state->parent);
     if (state->layout_dirty || count != state->count || w != state->width || h != state->height || !state->slots) {
         const bool resized = w != state->width || h != state->height || count != state->count;
@@ -710,16 +832,19 @@ void tick(lv_obj_t*, const WidgetConfig* widget, WidgetState* runtime) {
         state->target = target;
         changed = false;
     }
+    const bool boundaries_changed = retarget_colors(state, boundaries, lv_tick_get());
     if (changed) retarget(state, target, lv_tick_get());
     if (state->error && !state->valid && !first) return;
     if (first) { state->valid = true; state->error = nullptr; }
-    if (changed || color_changed) lv_obj_invalidate(state->object);
-    if (!state->motion) return;
+    if (changed || color_changed || boundaries_changed) lv_obj_invalidate(state->object);
+    if (!state->motion && !state->colors.running) return;
     const uint32_t now = lv_tick_get();
     if (now - state->last_frame < frame_interval) return;
     state->last_frame = now;
-    bool moving = false;
-    for (unsigned i = 0; i < state->count; ++i) {
+    bool moving = state->colors.running;
+    if (state->colors.running && now - state->colors.started >= cfg.duration)
+        state->colors.running = false;
+    for (unsigned i = 0; state->motion && i < state->count; ++i) {
         Motion& motion = state->motion[i];
         if (!motion.running) continue;
         if (now - motion.started >= static_cast<uint32_t>(motion.delay) + cfg.duration) motion.running = false;
@@ -732,6 +857,7 @@ void hide(WidgetState* runtime) {
     auto* state = reinterpret_cast<State*>(runtime->data);
     state->active = false;
     state->valid = false;
+    state->colors.running = false;
     lv_free(state->motion); state->motion = nullptr;
 }
 
@@ -775,7 +901,12 @@ void describe(JsonObject& out) {
             field["description"] = "Positive integer or binding; the field must fit the available space and memory.";
         }
     }
-    for (const char* name : {"widget_progress_active_color", "widget_progress_inactive_color"}) {
+    for (unsigned i = 0; i < MAX_WIDGET_BINDINGS; ++i) {
+        JsonObject field = fields.createNestedObject();
+        field["name"] = color_fields[i]; field["type"] = "color"; field["bindable"] = true;
+        field["default"] = color_defaults[i]; field["max_length"] = CONFIG_COLOR_MAX_LEN - 1;
+    }
+    for (const char* name : {"widget_progress_inactive_color"}) {
         JsonObject field = fields.createNestedObject();
         field["name"] = name; field["type"] = "color"; field["bindable"] = true;
         field["default"] = "auto"; field["max_length"] = CONFIG_COLOR_MAX_LEN - 1;
@@ -791,6 +922,7 @@ void describe(JsonObject& out) {
     numeric("widget_progress_aspect", 0.1, 10, 1);
     numeric("widget_progress_rounding", 0, 50, 0);
     numeric("widget_progress_inactive_size", 1, 100, 25);
+    numeric("widget_progress_inactive_outline_width", 1, 10, 2);
     numeric("widget_anim_ms", 0, 5000, 300);
     numeric("widget_progress_stagger_ms", 0, 1000, 0);
     numeric("widget_progress_seed", 0, UINT32_MAX, 84721);
@@ -809,12 +941,14 @@ void describe(JsonObject& out) {
     match_spacing["name"] = "widget_progress_match_spacing"; match_spacing["type"] = "boolean";
     match_spacing["default"] = true;
     match_spacing["description"] = "When false and both gaps are auto, spread units independently along each axis.";
-    JsonObject current = fields.createNestedObject();
-    current["name"] = "widget_data_binding"; current["type"] = "string";
-    current["bindable"] = true; current["max_length"] = CONFIG_LABEL_MAX_LEN - 1;
-    current["default"] = "0";
-    current["description"] = "Finite numeric value or binding; blank uses zero.";
-    out["note"] = "Passive Progress. Current value uses widget_data_binding; count is independent of range. E-paper and disabled animations snap. Unavailable inputs and insufficient space are reported.";
+    for (const char* name : value_fields) {
+        JsonObject current = fields.createNestedObject();
+        current["name"] = name; current["type"] = "string";
+        current["bindable"] = true; current["max_length"] = CONFIG_LABEL_MAX_LEN - 1;
+        current["default"] = "";
+        current["description"] = "Finite numeric value or binding; blank contributes zero. Additional sources enable stacking.";
+    }
+    out["note"] = "Passive Progress with up to four ordered series. Stacking requires nonnegative values, minimum zero, and no inversion. Overflow clips in series order; fractional boundaries share one shape. Count is independent of range. E-paper and disabled animations snap. Unavailable inputs and insufficient space are reported.";
 }
 #endif
 
