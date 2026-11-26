@@ -286,6 +286,11 @@ context.actionEditorLoad('operation-test', { op: 'keyboard.send', args: {
     sequence: { $template: 'a'.repeat(192) }
 } });
 assert.throws(() => context.actionEditorBuild('operation-test'), /under 192 bytes/);
+const literalText = {op: 'keyboard.type', args: {text: 'é'.repeat(1024), allow_controls: false}};
+context.actionEditorLoad('operation-test', literalText);
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('operation-test'))), literalText);
+document.getElementById('operation-test-op-keyboard.type-text-fixed').value += 'a';
+assert.throws(() => context.actionEditorBuild('operation-test'), /allowed length/);
 const soundInput = document.getElementById('operation-test-op-test.pickers-file-fixed');
 soundInput.appendChild({ value: '', textContent: 'Select a sound' });
 const pickerAction = { op: 'test.pickers', args: { button: 16, file: 'missing.mp3' } };

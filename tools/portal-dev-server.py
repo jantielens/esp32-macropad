@@ -1432,6 +1432,12 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 if not isinstance(update, dict):
                     self._serve_json({"success": False, "message": "Configuration must be an object"}, 400)
                     return
+                if "keyboard_layout" in update and update["keyboard_layout"] not in (
+                    "us", "us-intl", "gb", "fr", "be", "de", "es", "it", "pt", "br",
+                    "se", "fi", "no", "dk", "ch-de", "ch-fr", "pl", "cz", "tr", "hu",
+                ):
+                    self._serve_json({"success": False, "message": "Invalid keyboard layout"}, 400)
+                    return
                 try:
                     parse_microphone_settings(update)
                 except ValueError:
@@ -1568,6 +1574,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             self.server.mock_typography = {"default_font": self.server.mock_defaults.get("default_font", "@builtin"),
                                           "base_text_size": self.server.mock_defaults.get("base_text_size", 0)}
             self.server.mock_config["keyboard_active_transport"] = self.server.mock_config["keyboard_transport"]
+            self.server.mock_config["keyboard_active_layout"] = self.server.mock_config["keyboard_layout"]
             self.server.mock_config["keyboard_status"] = "disabled" if self.server.mock_config["keyboard_transport"] == "none" else "ready"
             self.server.mock_config["current_backlight_brightness"] = self.server.mock_config["backlight_brightness"]
             self.server.mock_config["current_audio_volume"] = self.server.mock_config.get("audio_volume", 70)
@@ -2004,6 +2011,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 "filesystem_used": 18, "filesystem_total": 100, "ip_address": "127.0.0.1",
                 "wifi_rssi": -42, "mqtt_connected": False, "mqtt_enabled": False,
                 "keyboard_transport": transport, "keyboard_status": "disabled" if transport == "none" else "ready",
+                "keyboard_layout": self.server.mock_config["keyboard_active_layout"],
+                "keyboard_output_status": "idle", "keyboard_completed_bytes": 0, "keyboard_total_bytes": 0,
                 "ble_status": "connected" if transport == "ble" else "disabled",
                 "ble_name": self.server.mock_config["device_name"] + " BLE",
                 "ble_bonded": transport == "ble", "ble_encrypted": transport == "ble"}
@@ -2116,6 +2125,8 @@ def main():
         **BTHOME_EVENT_DEFAULTS,
         "caps": {"ble": True, "mqtt": True, "ble_hid": True, "usb_hid": True},
         "keyboard_transport": "none",
+        "keyboard_layout": "us",
+        "keyboard_active_layout": "us",
         "keyboard_active_transport": "none",
         "keyboard_status": "disabled",
         "epaper_frame_rotation": 1,

@@ -561,7 +561,7 @@ void setup()
 	usb_hid_init(device_config.device_name, device_config.keyboard_transport == KeyboardTransport::Usb);
 	#endif
 	#if HAS_BLE_HID || HAS_USB_HID
-	keyboard_hid_init(device_config.keyboard_transport);
+	keyboard_hid_init(device_config.keyboard_transport, device_config.keyboard_layout);
 	#endif
 
 	#if HAS_DISPLAY

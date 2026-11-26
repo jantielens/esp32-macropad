@@ -424,6 +424,20 @@ bool keyboard_hid_request_sequence(const char* sequence, uint32_t token) {
 }
 bool keyboard_hid_is_busy() { return hid_keyboard_busy; }
 KeyboardTransport keyboard_hid_transport() { return hid_transport; }
+static std::string hid_text;
+static std::string hid_text_source;
+static bool hid_controls = false;
+static BindingResolverStatus resolve_hid_text(const char*, char* out, size_t capacity) {
+    return strlcpy(out, hid_text_source.c_str(), capacity) < capacity
+        ? BINDING_RESOLVER_RESOLVED : BINDING_RESOLVER_UNAVAILABLE;
+}
+bool keyboard_hid_request_text(const char* text, uint32_t token, bool allow_controls) {
+    hid_text = text;
+    hid_controls = allow_controls;
+    hid_keyboard_token = token;
+    return hid_keyboard_accepted;
+}
+void keyboard_hid_cancel() {}
 
 static bool hid_mouse_accepted = true;
 static unsigned hid_mouse_calls = 0;
@@ -757,6 +771,31 @@ static bool hid_operation_boundaries() {
     ok = ok && run_navigation_sequence(keyboard, "c", ACTION_FAILED) && hid_keyboard_calls == 3;
     hid_keyboard_accepted = true;
     ok = ok && run_navigation_sequence(keyboard, nullptr, ACTION_FAILED) && hid_keyboard_calls == 3;
+
+    binding_template_register("longtext", resolve_hid_text, nullptr,
+        {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, true});
+    const char* type_text = R"({"op":"keyboard.type","args":{"text":{"$template":"[longtext:x]"}}})";
+    std::string long_text(KEYBOARD_TEXT_MAX_BYTES, 'a');
+    hid_text_source = long_text;
+    ok = ok && run_hid_pending(type_text, nullptr, hid_keyboard_token, true) &&
+        hid_text == long_text && !hid_controls;
+    long_text.push_back('b');
+    hid_text_source = long_text;
+    ok = ok && run_navigation_sequence(type_text, nullptr, ACTION_FAILED) &&
+        hid_text.size() == KEYBOARD_TEXT_MAX_BYTES;
+    std::string composite;
+    for (unsigned i = 0; i < 16; ++i) composite += "[var:x]";
+    composite += std::string(16, 'a');
+    runtime_variable_set("x", std::string(127, 'a').c_str());
+    JsonDocument composed;
+    composed["op"] = "keyboard.type";
+    composed["args"]["text"]["$template"] = composite;
+    std::string composed_json;
+    serializeJson(composed, composed_json);
+    ok = ok && run_hid_pending(composed_json.c_str(), nullptr, hid_keyboard_token, true) &&
+        hid_text == std::string(KEYBOARD_TEXT_MAX_BYTES, 'a');
+    runtime_variable_set("x", "");
+    hid_text_source.clear();
 
     const char* mouse = R"({"op":"mouse.click","args":{"button":{"$template":"[event:value]"}}})";
     ok = ok && run_navigation_sequence(mouse, "right", ACTION_COMPLETE) &&

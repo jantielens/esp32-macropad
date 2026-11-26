@@ -229,6 +229,7 @@ static bool tool_get_config(const JsonObject& args, JsonObject& result, String& 
 #endif
 #if HAS_BLE_HID || HAS_USB_HID
     result["keyboard_transport"] = keyboard_transport_name(c->keyboard_transport);
+    result["keyboard_layout"] = keyboard_layout_name(c->keyboard_layout);
     result["keyboard_active_transport"] = keyboard_transport_name(keyboard_hid_transport());
     result["keyboard_status"] = keyboard_hid_status();
 #endif
@@ -1434,6 +1435,13 @@ void mcp_config_capabilities(JsonObject& out) {
     keyboard["status"] = keyboard_hid_status();
     keyboard["ready"] = keyboard_hid_is_ready();
     keyboard["busy"] = keyboard_hid_is_busy();
+    keyboard["layout"] = keyboard_layout_name(keyboard_hid_layout());
+    keyboard["text_max_bytes"] = KEYBOARD_TEXT_MAX_BYTES;
+    keyboard["output_status"] = keyboard_hid_output_status();
+    keyboard["completed_bytes"] = keyboard_hid_completed_bytes();
+    keyboard["total_bytes"] = keyboard_hid_total_bytes();
+    keyboard["text"] = "keyboard.type sends literal UTF-8; unsupported input is rejected; caller chunks at UTF-8 boundaries and waits for completion; no retry or inter-chunk reservation";
+    keyboard["cancel"] = "keyboard.cancel stops remaining output; already typed text cannot be rolled back";
     keyboard["selection"] = "portal-only keyboard_transport setting controls keyboard, mouse, and gamepad; none disables HID; default off; reboot required; no fallback or broadcast";
 #if HAS_USB_HID || HAS_BLE_HID
     JsonObject gamepad = out.createNestedObject("gamepad");

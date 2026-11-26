@@ -47,6 +47,14 @@ results before calling the handler. Legacy action documents are rejected, not
 silently translated. See [action authoring instructions](../../.github/instructions/action-types.instructions.md)
 and the [user action guide](../user/pads/actions.md) for examples.
 
+String descriptors may allow up to 2,048 UTF-8 bytes, but existing operations
+keep their individual limits. Dynamic template syntax remains limited to
+191 bytes; resolved text is checked against the descriptor's limit.
+Dispatch resolves into its bounded heap argument storage. Checked binding
+resolution uses a larger temporary buffer only when the caller requests long
+output, including a sentinel byte to detect saturated resolver output.
+Individual binding sources retain their own storage limits.
+
 ## Execution and troubleshooting
 
 The [sequence runner](../../src/app/action_list.cpp) captures the widget

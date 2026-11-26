@@ -35,8 +35,10 @@ action retains the registered descriptor and uses `@` as its discriminator.
 
 Operation descriptors accept up to `ACTION_OPERATION_MAX_ARGUMENTS` arguments.
 String limits must be positive and no larger than `ACTION_OPERATION_MAX_TEXT_LENGTH`.
-Resolved templates must also fit within `BINDING_TEMPLATE_MAX_LEN - 1` bytes.
-The descriptor limit applies to both literals and resolved templates. Handlers
+Template syntax must fit within `BINDING_TEMPLATE_MAX_LEN - 1` bytes.
+The descriptor limit applies to both literals and resolved templates, up to
+2,048 UTF-8 bytes for explicitly long-text operations. Individual binding
+sources retain their own storage limits. Handlers
 receive normalized arguments and a continuation token. Resolved text is valid
 only during the handler call, so copy anything an asynchronous worker needs.
 Declare pausable operations with `ACTION_EXECUTION_PAUSABLE`; synchronous

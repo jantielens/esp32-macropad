@@ -42,7 +42,7 @@ async function saveFragmentConfig(requiresReboot, fieldNames, validateFields) {
         'mcp_enabled', 'mcp_control_enabled', 'mcp_authoring_enabled',
         // @portal-endif
         // @portal-if HAS_USB_HID || HAS_BLE_HID
-        'keyboard_transport',
+        'keyboard_transport', 'keyboard_layout',
         // @portal-endif
         // @portal-if HAS_AUDIO
         'audio_volume', 'audio_idle_mute', 'audio_wake_delay_ms', 'tap_beep', 'lp_beep',
@@ -140,8 +140,9 @@ async function saveFragmentConfig(requiresReboot, fieldNames, validateFields) {
                 window.deviceConfig.display_rotation = Number(config.display_rotation);
             }
             // @portal-if HAS_USB_HID || HAS_BLE_HID
-            if (config.keyboard_transport !== undefined && window.deviceConfig) {
-                window.deviceConfig.keyboard_transport = config.keyboard_transport;
+            if (window.deviceConfig && (config.keyboard_transport !== undefined || config.keyboard_layout !== undefined)) {
+                if (config.keyboard_transport !== undefined) window.deviceConfig.keyboard_transport = config.keyboard_transport;
+                if (config.keyboard_layout !== undefined) window.deviceConfig.keyboard_layout = config.keyboard_layout;
                 updateKeyboardTransportSetting();
             }
             // @portal-endif

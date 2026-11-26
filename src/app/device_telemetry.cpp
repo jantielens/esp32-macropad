@@ -719,6 +719,10 @@ void device_telemetry_fill_api(JsonDocument &doc) {
 
 		#if HAS_BLE_HID || HAS_USB_HID
 		doc["keyboard_transport"] = keyboard_transport_name(keyboard_hid_transport());
+		doc["keyboard_layout"] = keyboard_layout_name(keyboard_hid_layout());
+		doc["keyboard_output_status"] = keyboard_hid_output_status();
+		doc["keyboard_completed_bytes"] = keyboard_hid_completed_bytes();
+		doc["keyboard_total_bytes"] = keyboard_hid_total_bytes();
 		doc["keyboard_status"] = keyboard_hid_status();
 		#endif
 

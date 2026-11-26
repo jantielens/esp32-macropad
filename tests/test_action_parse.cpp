@@ -10,6 +10,7 @@
 #include "action_parse.h"
 #include "action_registry.h"
 #include "action_catalog.h"
+#include "keyboard_layout.h"
 #include "mcp_pad_image_metadata.h"
 #include "action_validate.h"
 #include "binding_template.h"
@@ -365,6 +366,25 @@ TEST(key_operation_literal_and_template_boundaries) {
     templ.push_back('a');
     args["sequence"]["$template"] = templ.c_str();
     ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>(), false));
+    document.clear();
+    document["op"] = "keyboard.type";
+    std::string text(KEYBOARD_TEXT_MAX_BYTES, 'a');
+    document["args"]["text"] = text.c_str();
+    ASSERT_TRUE(!action_operation_validate_json(document.as<JsonObjectConst>()));
+    storage = {};
+    action = {};
+    {
+        ActionStorageScope scope(&storage);
+        action_parse(document.as<JsonObject>(), action);
+    }
+    output.clear();
+    action_to_json(action, output.to<JsonObject>());
+    ASSERT_TRUE(!storage.failed && text == output["args"]["text"].as<const char*>());
+    ASSERT_TRUE(!output["args"]["allow_controls"].as<bool>());
+    action_storage_clear(storage);
+    text.push_back('a');
+    document["args"]["text"] = text.c_str();
+    ASSERT_TRUE(action_operation_validate_json(document.as<JsonObjectConst>()));
 #endif
 }
 

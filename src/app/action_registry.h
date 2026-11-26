@@ -18,7 +18,7 @@ enum ActionExecutionClass { ACTION_EXECUTION_UNKNOWN, ACTION_EXECUTION_SYNC,
                             ACTION_EXECUTION_PAUSABLE };
 
 constexpr uint8_t ACTION_OPERATION_MAX_ARGUMENTS = 16;
-constexpr uint16_t ACTION_OPERATION_MAX_TEXT_LENGTH = 255;
+constexpr uint16_t ACTION_OPERATION_MAX_TEXT_LENGTH = 2048;
 
 enum ActionArgumentType : uint8_t {
     ACTION_ARGUMENT_SCREEN,

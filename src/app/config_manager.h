@@ -21,6 +21,7 @@
 #include <Arduino.h>
 #include "board_config.h"
 #include "keyboard_transport.h"
+#include "keyboard_layout.h"
 #include "external_data_config.h"
 #include "bthome_event_settings.h"
 #if HAS_VOICE_NOTES
@@ -189,6 +190,7 @@ struct DeviceConfig {
 
 #if HAS_BLE_HID || HAS_USB_HID
 		KeyboardTransport keyboard_transport;
+		KeyboardLayout keyboard_layout;
 #endif
 
 #if HAS_AUDIO

@@ -21,6 +21,32 @@
         <div class="form-text mt-2">Changes take effect after saving and rebooting.</div>
         <div class="form-text text-warning mt-2" id="keyboard-pending" role="status" style="display:none;"></div>
       </div>
+      <div class="mb-3">
+        <label class="form-label" for="keyboard_layout">Host keyboard layout</label>
+        <select class="form-select" id="keyboard_layout" name="keyboard_layout" onchange="updateKeyboardTransportSetting()">
+          <option value="us">US QWERTY</option>
+          <option value="us-intl">US International (dead keys)</option>
+          <option value="gb">UK QWERTY</option>
+          <option value="fr">French AZERTY (traditional)</option>
+          <option value="be">Belgian AZERTY</option>
+          <option value="de">German QWERTZ</option>
+          <option value="es">Spanish QWERTY</option>
+          <option value="it">Italian QWERTY</option>
+          <option value="pt">Portuguese QWERTY</option>
+          <option value="br">Brazilian ABNT2</option>
+          <option value="se">Swedish QWERTY</option>
+          <option value="fi">Finnish QWERTY (classic)</option>
+          <option value="no">Norwegian QWERTY</option>
+          <option value="dk">Danish QWERTY</option>
+          <option value="ch-de">Swiss German QWERTZ</option>
+          <option value="ch-fr">Swiss French QWERTZ</option>
+          <option value="pl">Polish Programmers</option>
+          <option value="cz">Czech QWERTZ</option>
+          <option value="tr">Turkish Q</option>
+          <option value="hu">Hungarian QWERTZ</option>
+        </select>
+        <div class="form-text">Match the active layout on your computer. Takes effect after saving and rebooting.</div>
+      </div>
       <div class="save-bar" id="keyboard-save-bar" style="display:none;">
         <button type="button" class="btn btn-primary btn-sm" id="hid-save-btn" disabled>Save</button>
       </div>

@@ -156,7 +156,9 @@ function updateKeyboardTransportSetting() {
     const config = window.deviceConfig || {};
     const selected = document.querySelector('input[type="radio"][name="keyboard_transport"]:checked');
     const save = document.getElementById('hid-save-btn');
-    if (save) save.disabled = !selected || selected.disabled || selected.value === config.keyboard_transport;
+    const layout = document.getElementById('keyboard_layout');
+    if (save) save.disabled = !selected || selected.disabled ||
+        (selected.value === config.keyboard_transport && (!layout || layout.value === config.keyboard_layout));
     const pending = document.getElementById('keyboard-pending');
     if (pending) {
         const needsReboot = config.keyboard_transport && config.keyboard_active_transport &&
@@ -293,6 +295,7 @@ async function loadConfig() {
 
         // @portal-if HAS_BLE_HID || HAS_USB_HID
         if (config.keyboard_transport !== undefined) {
+            setValueIfExists('keyboard_layout', config.keyboard_layout || 'us');
             const caps = config.caps || {};
             const selectable = !!(caps.ble_hid || caps.usb_hid);
             ['none', 'usb', 'ble'].forEach(function (transport) {

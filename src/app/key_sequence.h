@@ -8,7 +8,7 @@
 //
 // DSL syntax (space-separated steps):
 //   Key/combo:    enter, ctrl+c, ctrl+shift+t, gui+l
-//   Text literal: "Hello World" — types each ASCII char (US layout)
+//   Text literal: "Hello World" — types supported UTF-8 in the selected layout
 //   Delay:        200ms — pause N milliseconds
 //
 // Key names are case-insensitive.  Modifier aliases: win/cmd/super → gui
@@ -18,6 +18,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "keyboard_layout.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -86,6 +87,7 @@ typedef struct {
 // Parse a DSL string into a KsSequence.
 // Returns true on success. On error, seq->error contains description.
 bool ks_parse(const char* dsl, KsSequence* seq);
+bool ks_parse_layout(const char* dsl, KsSequence* seq, KeyboardLayout layout);
 
 // Map an ASCII character (0x20..0x7E) to a HID keyboard usage code + modifier.
 // Returns true if the char is mappable. Sets *usage and *modifiers.

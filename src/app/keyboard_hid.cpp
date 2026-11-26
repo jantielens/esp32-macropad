@@ -24,11 +24,12 @@ struct KeyboardRequest {
     uint32_t token;
     uint32_t epoch;
     uint32_t submitted_at;
+    uint32_t timeout_ms;
+    uint32_t cancellation_epoch;
 };
 struct KeyboardWorkspace {
     KeySequenceExecutor executor;
     KeyboardRequest request = {};
-    char sequence[256] = {};
 };
 KeyboardWorkspace* workspace = nullptr;
 bool workspace_in_psram = false;
@@ -37,6 +38,12 @@ std::atomic<bool> occupied{false};
 std::atomic<bool> pending{false};
 std::atomic<bool> ready{false};
 std::atomic<KeyboardTransport> selected{KeyboardTransport::None};
+std::atomic<KeyboardLayout> selected_layout{KeyboardLayout::Us};
+enum class OutputStatus { Idle, Running, Completed, Cancelled, Disconnected, Ota, Timeout, ReportFailed };
+std::atomic<OutputStatus> output_status{OutputStatus::Idle};
+std::atomic<uint32_t> completed_bytes{0};
+std::atomic<uint32_t> total_bytes{0};
+std::atomic<uint32_t> cancellation_epoch{0};
 uint32_t observed_epoch = 0;
 bool release_pending = true;
 KsUsageType release_type = KS_USAGE_KEYBOARD;
@@ -73,7 +80,10 @@ bool send_report(void*, KsUsageType type, uint16_t usage, uint8_t modifiers) {
     return sent;
 }
 
-void finish(bool success) {
+void finish(OutputStatus result) {
+    const bool success = result == OutputStatus::Completed;
+    completed_bytes.store(workspace->executor.completed_bytes());
+    output_status.store(result);
     if (!success) {
         workspace->executor.cancel(nullptr, nullptr);
         release_pending = true;
@@ -85,6 +95,8 @@ void finish(bool success) {
         workspace->~KeyboardWorkspace();
         heap_caps_free(workspace);
         workspace = nullptr;
+    } else {
+        workspace->executor.clear();
     }
     occupied.store(false);
     action_continuation_complete(token, success);
@@ -98,15 +110,18 @@ void finish(bool success) {
 }
 }
 
-void keyboard_hid_init(KeyboardTransport transport) {
+void keyboard_hid_init(KeyboardTransport transport, KeyboardLayout layout) {
     selected.store(keyboard_transport_resolve(transport, HAS_BLE_HID, HAS_USB_HID));
+    selected_layout.store(layout);
     LOGI(kKeyboardTag, "Transport: %s", keyboard_transport_name(selected.load()));
 }
 
-bool keyboard_hid_request_sequence(const char* sequence, uint32_t token) {
+static bool request_output(const char* sequence, uint32_t token, bool literal, bool allow_controls) {
     const uint32_t request_epoch = backend_epoch();
-    if (!token || !sequence || !sequence[0] || strlen(sequence) >= sizeof(KeyboardWorkspace::sequence) ||
+    const uint32_t request_cancellation_epoch = cancellation_epoch.load();
+    if (!token || !sequence || !sequence[0] || strlen(sequence) > (literal ? KEYBOARD_TEXT_MAX_BYTES : 255) ||
         !ready.load() || ota_activity_is_active() || occupied.exchange(true)) {
+        LOGW(kKeyboardTag, "Output rejected: invalid size/token, busy, disconnected, or OTA");
         return false;
     }
     if (!workspace) {
@@ -121,12 +136,42 @@ bool keyboard_hid_request_sequence(const char* sequence, uint32_t token) {
         workspace = new (allocation) KeyboardWorkspace{};
         workspace_in_psram = use_psram;
     }
-    strcpy(workspace->sequence, sequence);
+    const uint32_t submitted_at = millis();
+    const bool valid = literal ? workspace->executor.start_text(sequence, submitted_at, selected_layout.load(), allow_controls)
+                               : workspace->executor.start(sequence, submitted_at, selected_layout.load());
+    if (!valid || (literal && !action_continuation_set_timeout(token, workspace->executor.timeout_ms()))) {
+        LOGW(kKeyboardTag, "Output rejected: %s", valid ? "continuation unavailable" : workspace->executor.error());
+        workspace->executor.cancel(nullptr, nullptr);
+        if (!workspace_in_psram) {
+            workspace->~KeyboardWorkspace();
+            heap_caps_free(workspace);
+            workspace = nullptr;
+        } else {
+            workspace->executor.clear();
+        }
+        occupied.store(false);
+        return false;
+    }
     workspace->request.token = token;
     workspace->request.epoch = request_epoch;
-    workspace->request.submitted_at = millis();
+    workspace->request.submitted_at = submitted_at;
+    workspace->request.timeout_ms = workspace->executor.timeout_ms();
+    workspace->request.cancellation_epoch = request_cancellation_epoch;
+    completed_bytes.store(0);
+    total_bytes.store(workspace->executor.total_bytes());
+    output_status.store(OutputStatus::Running);
     pending.store(true);
     return true;
+}
+
+bool keyboard_hid_request_sequence(const char* sequence, uint32_t token) {
+    return request_output(sequence, token, false, false);
+}
+bool keyboard_hid_request_text(const char* text, uint32_t token, bool allow_controls) {
+    return request_output(text, token, true, allow_controls);
+}
+void keyboard_hid_cancel() {
+    if (occupied.load()) cancellation_epoch.fetch_add(1);
 }
 
 void keyboard_hid_loop() {
@@ -141,11 +186,13 @@ void keyboard_hid_loop() {
     }
     if (!current.token && pending.exchange(false)) {
         current = workspace->request;
-        if (current.epoch != live_epoch || !connected || ota_activity_is_active() ||
-            !workspace->executor.start(workspace->sequence, now)) finish(false);
     }
-    if (current.token && (!connected || current.epoch != live_epoch || ota_activity_is_active() ||
-                          now - current.submitted_at >= ACTION_CONTINUATION_TIMEOUT_MS)) finish(false);
+    if (current.token) {
+        if (current.cancellation_epoch != cancellation_epoch.load()) finish(OutputStatus::Cancelled);
+        else if (!connected || current.epoch != live_epoch) finish(OutputStatus::Disconnected);
+        else if (ota_activity_is_active()) finish(OutputStatus::Ota);
+        else if (now - current.submitted_at >= current.timeout_ms) finish(OutputStatus::Timeout);
+    }
     if (connected && release_pending) {
         if (send_report(nullptr, release_type, 0, 0)) {
             if (release_type == KS_USAGE_KEYBOARD) {
@@ -159,8 +206,10 @@ void keyboard_hid_loop() {
     }
     if (current.token && !release_pending) {
         const auto result = workspace->executor.poll(millis(), send_report, nullptr);
+        completed_bytes.store(workspace->executor.completed_bytes());
         if (result == KeySequenceExecutor::Result::Success || result == KeySequenceExecutor::Result::Failed) {
-            finish(result == KeySequenceExecutor::Result::Success && current.epoch == backend_epoch());
+            finish(result == KeySequenceExecutor::Result::Success && current.epoch == backend_epoch()
+                       ? OutputStatus::Completed : OutputStatus::ReportFailed);
         }
     }
     ready.store(connected && !release_pending && live_epoch == backend_epoch());
@@ -171,6 +220,22 @@ bool keyboard_hid_is_ready() { return ready.load(); }
 KeyboardTransport keyboard_hid_transport() { return selected.load(); }
 bool keyboard_hid_transport_is_ready() { return backend_ready(); }
 uint32_t keyboard_hid_transport_epoch() { return backend_epoch(); }
+KeyboardLayout keyboard_hid_layout() { return selected_layout.load(); }
+uint32_t keyboard_hid_completed_bytes() { return completed_bytes.load(); }
+uint32_t keyboard_hid_total_bytes() { return total_bytes.load(); }
+const char* keyboard_hid_output_status() {
+    switch (output_status.load()) {
+        case OutputStatus::Idle: return "idle";
+        case OutputStatus::Running: return "running";
+        case OutputStatus::Completed: return "completed";
+        case OutputStatus::Cancelled: return "cancelled";
+        case OutputStatus::Disconnected: return "disconnected";
+        case OutputStatus::Ota: return "ota";
+        case OutputStatus::Timeout: return "timeout";
+        case OutputStatus::ReportFailed: return "report_failed";
+    }
+    return "idle";
+}
 const char* keyboard_hid_status() {
     if (selected.load() == KeyboardTransport::None) return "disabled";
     if (occupied.load()) return "busy";
@@ -179,8 +244,14 @@ const char* keyboard_hid_status() {
 
 #else
 
-void keyboard_hid_init(KeyboardTransport) {}
+void keyboard_hid_init(KeyboardTransport, KeyboardLayout) {}
 bool keyboard_hid_request_sequence(const char*, uint32_t) { return false; }
+bool keyboard_hid_request_text(const char*, uint32_t, bool) { return false; }
+void keyboard_hid_cancel() {}
+KeyboardLayout keyboard_hid_layout() { return KeyboardLayout::Us; }
+uint32_t keyboard_hid_completed_bytes() { return 0; }
+uint32_t keyboard_hid_total_bytes() { return 0; }
+const char* keyboard_hid_output_status() { return "unavailable"; }
 void keyboard_hid_loop() {}
 bool keyboard_hid_is_busy() { return false; }
 bool keyboard_hid_is_ready() { return false; }

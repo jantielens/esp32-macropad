@@ -342,6 +342,8 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 
 				#if HAS_BLE_HID || HAS_USB_HID
 				(*doc)["keyboard_transport"] = keyboard_transport_name(current_config->keyboard_transport);
+				(*doc)["keyboard_layout"] = keyboard_layout_name(current_config->keyboard_layout);
+				(*doc)["keyboard_active_layout"] = keyboard_layout_name(keyboard_hid_layout());
 				(*doc)["keyboard_active_transport"] = keyboard_transport_name(keyboard_hid_transport());
 				(*doc)["keyboard_status"] = keyboard_hid_status();
 				#endif
@@ -693,6 +695,13 @@ static void process_config_update(AsyncWebServerRequest* request, DeviceConfig* 
 		#endif
 
 		KeyboardTransport requested_transport = KeyboardTransport::None;
+		KeyboardLayout requested_layout = KeyboardLayout::Us;
+		if (doc.containsKey("keyboard_layout") &&
+				(!(HAS_BLE_HID || HAS_USB_HID) || !doc["keyboard_layout"].is<const char*>() ||
+				 !keyboard_layout_parse(doc["keyboard_layout"].as<const char*>(), &requested_layout))) {
+				request->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid host keyboard layout\"}");
+				return;
+		}
 		if (doc.containsKey("keyboard_transport")) {
 				const bool valid = (HAS_BLE_HID || HAS_USB_HID) && doc["keyboard_transport"].is<const char*>() &&
 						keyboard_transport_parse(doc["keyboard_transport"].as<const char*>(), &requested_transport) &&
@@ -897,6 +906,9 @@ static void process_config_update(AsyncWebServerRequest* request, DeviceConfig* 
 		#if HAS_BLE_HID || HAS_USB_HID
 		if (doc.containsKey("keyboard_transport")) {
 				current_config->keyboard_transport = requested_transport;
+		}
+		if (doc.containsKey("keyboard_layout")) {
+				current_config->keyboard_layout = requested_layout;
 		}
 		#endif
 

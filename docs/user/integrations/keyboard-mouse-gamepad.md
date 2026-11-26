@@ -15,6 +15,22 @@ save, then reboot. Off is the initial default. There is no automatic fallback.
 The active-status section reflects the running transport, not an unsaved or
 pending selector.
 
+Select **Host keyboard layout** in the same section, save, then reboot.
+US QWERTY is the default. The 20 available layouts are:
+
+* US QWERTY, US International with dead keys, and UK QWERTY
+* Traditional French AZERTY, Belgian AZERTY, and German QWERTZ
+* Spanish, Italian, Portuguese, and Brazilian ABNT2
+* Swedish, classic Finnish, Norwegian, and Danish
+* Swiss German, Swiss French, Polish Programmers, Czech QWERTZ, Turkish Q,
+  and Hungarian QWERTZ
+
+Match the active OS layout, not the physical keycap labels. There is no automatic
+layout detection or custom-layout editor. Reference mappings follow Linux/XKB
+PC layouts, including ISO punctuation keys and the extra ABNT2 key. US
+International uses dead keys, not an AltGr-only international variant. Other
+OS variants and macOS layouts can differ; test harmless text first.
+
 USB provides keyboard/consumer keys, relative mouse, and generic HID gamepad.
 Connect a data-capable cable to the native device/OTG port, not a USB-UART or
 host-only connector. Check [board connections and power warnings](../hardware.md)
@@ -57,8 +73,8 @@ remove the saved host device and pair again to refresh its HID report layout.
 
 ## Write a key sequence
 
-Add **Send keys** in an action list. Both backends use US ASCII mapping and
-the same space-separated language:
+Add **Send keys** in an action list. Both backends use the selected host layout
+and the same space-separated language:
 
 | Input                                                                  | Meaning                        |
 | ---------------------------------------------------------------------- | ------------------------------ |
@@ -69,8 +85,16 @@ the same space-separated language:
 | `vol_up`, `vol_down`, `mute`, `play_pause`, `next_track`, `prev_track` | Consumer key                   |
 | `"Hello World"`                                                        | Literal text, including spaces |
 | `200ms`                                                                | Delay in milliseconds          |
+| `ctrl+hid:04`                                                          | Ctrl plus raw HID usage 04     |
 
 Modifiers are ctrl, shift, alt, and gui (Windows/Command).
+Bare letters and digits, including in chords, use the selected layout.
+Digit keys add Shift when needed, including on AZERTY and Czech QWERTZ.
+Named punctuation keys such as
+`minus`, navigation keys, function keys, and consumer keys remain physical
+HID usages. `hid:04` through `hid:df` select raw keyboard usages in hexadecimal,
+independent of the layout; use modifier names for modifier keys.
+Changing layout changes macro behavior without rewriting saved actions.
 For example:
 
 ```text
@@ -78,17 +102,70 @@ ctrl+a 200ms ctrl+c
 "Hello World" enter
 ```
 
-The sequence field supports bindings. Do not put passwords in reusable macros,
-exports, or public examples. A host using another keyboard layout can interpret
-US-mapped output differently; test harmless text first.
+The sequence field supports bindings and accepts up to 255 UTF-8 bytes.
+Quoted text uses the supported characters of the selected layout.
+Do not put passwords in reusable macros, exports, or public examples.
 Save the pad or action host separately.
+
+## Type literal text
+
+Use **Type text** for ordinary text, not **Send keys**. Quotes, backslashes,
+and text such as `ctrl+a 200ms` are typed literally. Do not add surrounding
+macro quotes. The text field supports bindings and accepts up to **2,048 UTF-8
+bytes**, not 2,048 characters. Empty text, invalid UTF-8, unsupported characters,
+and oversized results fail before any keys are sent.
+
+Newlines and tabs are rejected unless **Allow Enter and Tab** is enabled.
+When enabled, CRLF produces one Enter; lone CR or LF produces Enter, and tab
+produces Tab. These keys can submit a form or move focus. No Enter is appended
+automatically.
+
+For larger text, split at UTF-8 character boundaries into requests of at most
+2,048 bytes and wait for completion before sending the next chunk. For example,
+5 KiB needs three chunks. An action list waits for each Type text action before
+continuing. Stop on failure or cancellation, without retrying already typed
+chunks. Callers holding a larger message should validate all its characters
+before sending its first chunk. Other HID actions can run between chunks;
+there is no multi-chunk reservation or request queue.
+
+Accepted text and its layout remain fixed throughout the request, even if its
+source binding changes. Binding expressions themselves remain limited to
+191 bytes, and individual sources keep their own storage limits; runtime
+variables, for example, hold at most 127 bytes. Long output can come from a
+capable source or composition of smaller values.
+
+All layouts support printable ASCII. Depending on the selected layout,
+additional supported characters include precomposed Latin-1 and Latin Extended-A
+letters, accented uppercase letters, and the euro sign when a one- or
+two-stroke recipe is available. Examples include Spanish `ñ`, Brazilian `ç`,
+Nordic `å ä ø æ`, Polish `ł`, Czech `Č`, Turkish `ı İ`, and Hungarian `ő ű`.
+Plain US QWERTY remains ASCII-only.
+
+Use precomposed accented characters, such as `é`, not a letter followed by a
+combining accent. Unsupported characters are rejected, not dropped or
+transliterated. Arbitrary Unicode and OS-specific Unicode-entry shortcuts
+are not supported.
+
+Keep Caps Lock off, release physical modifiers, and finish any pending host
+dead key before starting. Some characters require a dead key followed by a
+letter or Space. On US International, this also applies to literal apostrophes,
+double quotes, backticks, carets, and tildes. Cancellation between those reports
+can leave a dead key pending on the host; clear it manually before resuming.
 
 ## Understand failure
 
-Only one macro can be pending/running. Disabled, busy, or disconnected requests
+Only one keyboard request can be pending/running. Disabled, busy, or disconnected requests
 fail instead of building a queue. Disconnect, suspension, report failure, OTA,
-or the 60-second total deadline aborts it and stops the remaining action suffix.
+or the total deadline aborts it and stops the remaining action suffix.
+Send keys keeps its 60-second deadline; Type text uses a bounded,
+stroke-count-based deadline of at least 60 seconds and at most five minutes.
 Reconnection never replays interrupted input.
+
+Use the **Cancel typing** action to stop remaining output.
+Cancellation and failure release held keys, but cannot remove text already
+typed. Output goes to whichever host application has focus. Completion means
+HID reports were executed, not proof that the application inserted the intended
+text.
 
 ## Mouse and gamepad actions
 

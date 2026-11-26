@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-11-24
+ms.date: 2026-11-26
 ms.topic: reference
 ---
 
@@ -29,6 +29,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add 20 shared USB/BLE host layouts, including US International, European
+  layouts, and Brazilian ABNT2, with one table-driven mapping engine.
+  Add literal Type text actions for up to
+  2,048 UTF-8 bytes, common accents, optional Enter/Tab output, typing progress,
+  and cancellation. Larger messages use sequential caller-managed chunks.
+  Invalid, oversized, or unsupported text is rejected before output.
+  Layout changes affect existing macros without migrating them; raw
+  `hid:XX` keys retain physical-key control.
+  See the [HID guide](docs/user/integrations/keyboard-mouse-gamepad.md).
 * Add the passive, binding-driven Progress widget for displaying values as
   ordered dots, blocks, or strips. Stack up to four nonnegative sources with
   per-series colors, shared fractional units, and animated color boundaries.

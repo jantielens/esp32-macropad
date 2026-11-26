@@ -106,19 +106,22 @@ static ActionResult dispatch_operation(const ButtonAction& action, const char* l
         const ActionArgumentDef& argument = operation.arguments[index];
         if (stored[index].dynamic) {
             char value[BINDING_TEMPLATE_MAX_LEN];
+            const bool is_text = action_argument_is_text(argument.type);
+            char* destination = is_text ? next_text : value;
+            const size_t capacity = is_text ? static_cast<size_t>(argument.max_length) + 1 : sizeof(value);
             if (!argument.dynamic) {
                 error = "dynamic argument is not permitted";
             } else if (!binding_template_well_formed(action_storage_text(block, stored[index])) ||
                        !binding_template_resolve_checked(action_storage_text(block, stored[index]),
-                                                  value, sizeof(value))) {
+                                                  destination, capacity)) {
                 error = "dynamic argument could not be resolved";
             } else {
                 const char* normalized = nullptr;
-                error = action_argument_normalize_text(argument, value, &normalized,
+                error = action_argument_normalize_text(argument, destination, &normalized,
                                                        &resolved[index].integer, &resolved[index].number);
                 if (!error && normalized) {
                     const size_t length = strlen(normalized) + 1;
-                    memcpy(next_text, normalized, length);
+                    memmove(next_text, normalized, length);
                     resolved[index].text = next_text;
                     next_text += length;
                 }

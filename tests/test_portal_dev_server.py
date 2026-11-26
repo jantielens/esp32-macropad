@@ -38,6 +38,7 @@ class PortalDevServerTest(unittest.TestCase):
             "ha_url": "http://ha.example.test", "ha_token_set": True,
             "backlight_brightness": 80, "current_backlight_brightness": 80,
             "audio_volume": 70, "current_audio_volume": 70, "keyboard_transport": "none",
+            "keyboard_layout": "us", "keyboard_active_layout": "us",
             "keyboard_active_transport": "none", "device_name": "Mock",
             "wifi_failure_mode": "ap", "ap_password": "",
         }
@@ -1411,6 +1412,20 @@ class PortalDevServerTest(unittest.TestCase):
             expected.update({field: value for field, value in zip(fields, values) if value is not None})
             self.assertEqual(widgets.pop(widget_type), expected)
         self.assertEqual(widgets, {})
+
+    def test_keyboard_layout_configuration(self):
+        self.server.mock_config["bluetooth_tx_power_dbm"] = 9
+        for layout in ("be", "us-intl", "hu"):
+            self.assertEqual(self.request("/api/config", "POST", {"keyboard_layout": layout})[0], 200)
+            config = self.request("/api/config")[1]
+            self.assertEqual(config["keyboard_layout"], layout)
+            self.assertEqual(config["keyboard_active_layout"], "us")
+        for invalid in ("unknown", 2, None):
+            self.assertEqual(self.request("/api/config", "POST", {"keyboard_layout": invalid})[0], 400)
+        self.assertEqual(self.request("/api/reboot", "POST", {})[0], 200)
+        self.assertEqual(self.request("/api/health")[1]["keyboard_layout"], "hu")
+        self.server.mock_config["keyboard_layout"] = "us"
+        self.server.mock_config["keyboard_active_layout"] = "us"
 
     def test_action_catalog_capability_projection(self):
         cases = (

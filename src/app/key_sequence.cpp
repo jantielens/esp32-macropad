@@ -376,7 +376,8 @@ static bool try_parse_delay(const char* token, size_t len, KsStep* step) {
 }
 
 // Parse a key combo token like "ctrl+shift+t" or "enter"
-static bool parse_key_combo(const char* token, size_t len, KsStep* step, char* error, size_t error_len) {
+static bool parse_key_combo(const char* token, size_t len, KsStep* step, char* error, size_t error_len,
+                            KeyboardLayout layout) {
     step->type = KS_STEP_KEY;
     step->key.modifiers = 0;
     step->key.usage = 0;
@@ -405,7 +406,29 @@ static bool parse_key_combo(const char* token, size_t len, KsStep* step, char* e
             return false;
         }
 
+        KsKeyEntry translated = {};
         const KsKeyEntry* entry = lookup_key(p, seg_len);
+        if (seg_len == 1 && ((p[0] >= 'a' && p[0] <= 'z') ||
+            (p[0] >= 'A' && p[0] <= 'Z') || (p[0] >= '0' && p[0] <= '9'))) {
+            KeyboardCharacter character = {};
+            if (keyboard_layout_character(layout, static_cast<uint8_t>(tolower(p[0])), &character)) {
+                translated.usage = character.strokes[0].usage;
+                translated.usage_type = KS_USAGE_KEYBOARD;
+                entry = &translated;
+                step->key.modifiers |= character.strokes[0].modifiers;
+            }
+        } else if (seg_len == 6 && str_eq_ci(p, "hid:", 4) &&
+                   isxdigit(static_cast<unsigned char>(p[4])) &&
+                   isxdigit(static_cast<unsigned char>(p[5]))) {
+            char hex[3] = {p[4], p[5], '\0'};
+            translated.usage = static_cast<uint16_t>(strtoul(hex, nullptr, 16));
+            if (translated.usage < 0x04 || translated.usage > 0xdf) {
+                snprintf(error, error_len, "raw HID usage must be 04..df");
+                return false;
+            }
+            translated.usage_type = KS_USAGE_KEYBOARD;
+            entry = &translated;
+        }
         if (!entry) {
             snprintf(error, error_len, "unknown key: %.*s", (int)seg_len, p);
             return false;
@@ -438,6 +461,10 @@ static bool parse_key_combo(const char* token, size_t len, KsStep* step, char* e
 }
 
 bool ks_parse(const char* dsl, KsSequence* seq) {
+    return ks_parse_layout(dsl, seq, KeyboardLayout::Us);
+}
+
+bool ks_parse_layout(const char* dsl, KsSequence* seq, KeyboardLayout layout) {
     memset(seq, 0, sizeof(KsSequence));
 
     if (!dsl || !dsl[0]) {
@@ -488,7 +515,7 @@ bool ks_parse(const char* dsl, KsSequence* seq) {
             } else {
                 // Must be a key combo
                 char err[64] = {0};
-                if (!parse_key_combo(token_start, token_len, step, err, sizeof(err))) {
+                if (!parse_key_combo(token_start, token_len, step, err, sizeof(err), layout)) {
                     set_error(seq, err);
                     return false;
                 }

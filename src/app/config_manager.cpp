@@ -131,6 +131,7 @@
 #endif
 #if HAS_BLE_HID || HAS_USB_HID
 #define KEY_KEYBOARD_TRANSPORT "kbd_transport"
+#define KEY_KEYBOARD_LAYOUT "kbd_layout"
 #endif
 #if HAS_BLE_HID
 #define KEY_BLE_OWNER      "ble_owner"
@@ -426,6 +427,7 @@ bool config_manager_load(DeviceConfig *config) {
 
 		#if HAS_BLE_HID || HAS_USB_HID
 		config->keyboard_transport = keyboard_transport_default(HAS_BLE_HID, HAS_USB_HID);
+		config->keyboard_layout = KeyboardLayout::Us;
 		#endif
 
 		#if HAS_AUDIO
@@ -665,6 +667,13 @@ bool config_manager_load(DeviceConfig *config) {
 		config->keyboard_transport = keyboard_transport_resolve(
 			static_cast<KeyboardTransport>(preferences.getUChar(KEY_KEYBOARD_TRANSPORT,
 				static_cast<uint8_t>(config->keyboard_transport))), HAS_BLE_HID, HAS_USB_HID);
+		const uint8_t stored_layout = preferences.getUChar(KEY_KEYBOARD_LAYOUT, 0);
+		if (!keyboard_layout_name(static_cast<KeyboardLayout>(stored_layout))) {
+			LOGW("Config", "Invalid stored keyboard layout; using US");
+			config->keyboard_layout = KeyboardLayout::Us;
+		} else {
+			config->keyboard_layout = static_cast<KeyboardLayout>(stored_layout);
+		}
 		#endif
 
 		#if HAS_AUDIO
@@ -977,6 +986,7 @@ static bool save_config_locked(const DeviceConfig *config) {
 
 		#if HAS_BLE_HID || HAS_USB_HID
 		writes_ok = save_UChar(KEY_KEYBOARD_TRANSPORT, static_cast<uint8_t>(config->keyboard_transport)) && writes_ok;
+		writes_ok = save_UChar(KEY_KEYBOARD_LAYOUT, static_cast<uint8_t>(config->keyboard_layout)) && writes_ok;
 		#endif
 
 		#if HAS_AUDIO
@@ -1410,6 +1420,7 @@ LOGI("Config", "Power: mode=%s dc_wake=%us idle=%us backoff_max=%us",
 
 #if HAS_BLE_HID || HAS_USB_HID
 		LOGI("Config", "Keyboard transport: %s", keyboard_transport_name(config->keyboard_transport));
+		LOGI("Config", "Host keyboard layout: %s", keyboard_layout_name(config->keyboard_layout));
 #endif
 
 #if HAS_AUDIO

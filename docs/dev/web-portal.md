@@ -2747,6 +2747,20 @@ timezone and alarm session.
 
 Keyboard builds expose `keyboard_transport` (saved preference),
 `keyboard_active_transport` (running backend), and `keyboard_status`.
+`keyboard_layout` is the saved host layout ID: `us`, `us-intl`, `gb`, `fr`,
+`be`, `de`, `es`, `it`, `pt`, `br`, `se`, `fi`, `no`, `dk`, `ch-de`, `ch-fr`,
+`pl`, `cz`, `tr`, or `hu`.
+`keyboard_active_layout` reports the running layout. Layout defaults to US,
+is persisted in NVS, and applies after reboot to both USB and BLE. Changing it
+does not migrate macros or add compatibility warnings.
+Names, IDs, and character mappings share one read-only catalog in
+`keyboard_layout.cpp`. All layouts use the same bounded one/two-stroke lookup
+and inherit verified US-equivalent ASCII entries. Mapping tables require no
+heap allocations. References use the corresponding XKB basic PC variants,
+except `us-intl` uses `us(intl)`, `br` uses `br(abnt2)`, `fi` uses `fi(classic)`,
+`ch-de` uses `ch(basic)`, and `ch-fr` uses `ch(fr)`. Dead-key recipes use
+the XKB `C.UTF-8` compose reference. The built-in catalog has no custom-layout
+configuration path.
 `caps.usb_hid` and `caps.ble_hid` describe compiled support, not host connection.
 All keyboard builds default to Off (`none`) and persist selection. The selector
 offers Off plus compiled transports, including on single-backend boards.
@@ -2767,6 +2781,16 @@ Invalid or unsupported values return 400; a transport change
 while busy returns 409, before configuration mutation. Saving does not switch
 the running stack: fragment saves use `no_reboot=1` and the existing reboot hint.
 The old `ble_enabled` toggle is removed; no migration is provided.
+
+`POST /api/config` validates `keyboard_layout` before configuration mutation;
+invalid or unsupported values return 400. The existing HID fragment saves
+transport and layout together.
+
+The health response
+includes `keyboard_layout`, `keyboard_output_status`, `keyboard_completed_bytes`,
+and `keyboard_total_bytes`. Output states are `idle`, `running`, `completed`,
+`cancelled`, `disconnected`, `ota`, `timeout`, and `report_failed`.
+Counters describe executed source bytes, not host insertion confirmation.
 
 `keyboard_hid.cpp` owns a single atomically published request and polls the
 shared `key_sequence_executor.cpp` from the main loop. USB and BLE only deliver
@@ -2795,11 +2819,22 @@ The shared macro workspace is allocated on the first accepted request, not at
 boot or connection time. PSRAM workspaces are retained for reuse until reboot;
 internal-only workspaces are freed when the request completes or aborts, before
 request ownership is released. The workspace holds the
-pending sequence and the executor's owned source and parsed steps; only active
+executor's single owned source and parsed macro steps; only active
 request metadata remains in static internal RAM. Boards with PSRAM allocate the
 workspace there; boards without PSRAM use internal RAM. Allocation failure
 rejects the request without leaving the keyboard busy, and does not fall back
 to internal RAM when PSRAM is present. Off allocates no macro workspace.
+Source and parsed steps are cleared after completion or rejection, even when
+the allocation is retained. `keyboard.type` snapshots and prevalidates at most
+2,048 UTF-8 bytes, then emits at most two strokes per character incrementally.
+It does not build a per-character report array. Its stroke-count-derived
+deadline also overrides that request's continuation watchdog, retaining a
+five-minute ceiling. `keyboard.send` keeps its 255-byte limit and 60-second
+deadline. Both validate supported quoted/literal text before output.
+`keyboard.cancel` requests cancellation through an atomic epoch;
+the loop owns release reports and continuation completion.
+See the [HID user guide](../user/integrations/keyboard-mouse-gamepad.md) for
+layout variants, character support, controls, and caller-managed chunking.
 
 Native USB requires `HAS_USB_HID`, `USBMode=default`, and `CDCOnBoot=default`.
 Arduino `Serial` provides UART0 logging at 115200 baud; no explicit CDC instance

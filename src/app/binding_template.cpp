@@ -3,6 +3,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #if defined(ESP_PLATFORM)
 #include <esp_cpu.h>
@@ -311,6 +312,17 @@ static bool resolve_template(const char* templ, char* out, size_t out_len,
 
     // Null-terminated params buffer for resolver callbacks
     char params_buf[BINDING_TEMPLATE_MAX_LEN];
+    const size_t resolved_capacity = checked_resolution_active && out_len > BINDING_TEMPLATE_MAX_LEN + 1
+        ? out_len + 1 : BINDING_TEMPLATE_MAX_LEN + 1;
+    char* large_resolved = resolved_capacity > BINDING_TEMPLATE_MAX_LEN + 1
+        ? static_cast<char*>(malloc(resolved_capacity)) : nullptr;
+    if (resolved_capacity > BINDING_TEMPLATE_MAX_LEN + 1 && !large_resolved) {
+        LOGW(TAG, "Cannot allocate long binding output");
+        out[0] = '\0';
+        checked_resolution_complete = false;
+        if (status) *status = BINDING_RESOLVER_UNAVAILABLE;
+        return false;
+    }
 
     while (*p && written < out_len - 1) {
         const char *token_start, *scheme, *params, *token_end;
@@ -363,16 +375,17 @@ static bool resolve_template(const char* templ, char* out, size_t out_len,
             // Extract pipe fallback before resolving
             char* fallback = split_pipe_fallback(params_buf);
 
-            char resolved[BINDING_TEMPLATE_MAX_LEN + 1];
+            char small_resolved[BINDING_TEMPLATE_MAX_LEN + 1];
+            char* resolved = large_resolved ? large_resolved : small_resolved;
             const bool previous_complete = checked_resolution_complete;
             BindingResolverStatus resolved_status = binding_template_resolve_registered(
-                scheme, scheme_len, params_buf, resolved, checked_resolution_active ? sizeof(resolved) : 128);
+                scheme, scheme_len, params_buf, resolved, checked_resolution_active ? resolved_capacity : 128);
             if (resolved_status == BINDING_RESOLVER_RESOLVED) {
                 any_resolved = true;
                 size_t rlen = strlen(resolved);
                 size_t space = out_len - 1 - written;
                 size_t copy = utf8_copy_length(resolved, rlen, space);
-                if (copy != rlen || (checked_resolution_active && rlen == sizeof(resolved) - 1)) fits = false;
+                if (copy != rlen || (checked_resolution_active && rlen == resolved_capacity - 1)) fits = false;
                 memcpy(out + written, resolved, copy);
                 written += copy;
             } else {
@@ -399,6 +412,7 @@ static bool resolve_template(const char* templ, char* out, size_t out_len,
         p = token_end;
     }
 
+    free(large_resolved);
     out[written] = '\0';
     if (checked_resolution_active && (!fits || *p || outcome != BINDING_RESOLVER_RESOLVED)) {
         checked_resolution_complete = false;

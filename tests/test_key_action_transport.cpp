@@ -78,6 +78,9 @@ bool action_continuation_complete(uint32_t token, bool success) {
     finished_success = success;
     return true;
 }
+bool action_continuation_set_timeout(uint32_t token, uint32_t timeout) {
+    return token && timeout >= 60000 && timeout <= 300000;
+}
 bool usb_hid_is_ready() { return backend_connected; }
 uint32_t usb_hid_epoch() { return test_epoch; }
 bool usb_hid_send_report(KsUsageType, uint16_t usage, uint8_t) {
@@ -287,9 +290,10 @@ int main() {
     assert(TEST_USB_TRANSPORT ? usb_calls == 4 && ble_calls == 0 : ble_calls == 4 && usb_calls == 0);
     assert(dispatch_key_operation(arguments, "test", 44) == ACTION_FAILED);
     assert(!keyboard_hid_request_sequence("a", 0));
-    assert(keyboard_hid_request_sequence("\"unterminated", 55));
+    const uint32_t token_before_invalid = finished_token;
+    assert(!keyboard_hid_request_sequence("\"unterminated", 55));
     keyboard_hid_loop();
-    assert(finished_token == 55 && !finished_success && !keyboard_hid_is_busy());
+    assert(finished_token == token_before_invalid && !keyboard_hid_is_busy());
     assert(allocation_calls == 2);
     poll_until_ready();
 
@@ -337,6 +341,50 @@ int main() {
     keyboard_hid_loop();
     assert(finished_token == 50 && !finished_success);
     assert(allocation_calls == 2);
+    poll_until_ready();
+    usages.clear();
+    const unsigned calls_before_invalid = usb_calls + ble_calls;
+    assert(!keyboard_hid_request_text("a\xf0\x9f\x98\x80", 160));
+    assert(!keyboard_hid_is_busy() && usb_calls + ble_calls == calls_before_invalid);
+    char literal[KEYBOARD_TEXT_MAX_BYTES + 1];
+    memset(literal, 'a', sizeof(literal) - 1);
+    literal[sizeof(literal) - 1] = '\0';
+    assert(keyboard_hid_request_text(literal, 161));
+    literal[0] = 'b';
+    assert(!keyboard_hid_request_text("busy", 162));
+    for (unsigned i = 0; keyboard_hid_is_busy() && i < 10000; ++i) {
+        keyboard_hid_loop();
+        clock_ms += 20;
+    }
+    assert(!keyboard_hid_is_busy() && finished_token == 161 && finished_success);
+    assert(usages.size() == 4096 && usages.front() == 0x04);
+    assert(keyboard_hid_completed_bytes() == KEYBOARD_TEXT_MAX_BYTES &&
+           keyboard_hid_total_bytes() == KEYBOARD_TEXT_MAX_BYTES &&
+           !strcmp(keyboard_hid_output_status(), "completed"));
+    assert(keyboard_hid_request_text("ab", 163));
+    keyboard_hid_loop();
+    keyboard_hid_cancel();
+    keyboard_hid_loop();
+    assert(finished_token == 163 && !finished_success &&
+           !strcmp(keyboard_hid_output_status(), "cancelled"));
+    poll_until_ready();
+    assert(usages.back() == 0);
+    assert(keyboard_hid_request_text("ab", 164));
+    keyboard_hid_cancel();
+    keyboard_hid_loop();
+    assert(finished_token == 164 && !finished_success);
+    poll_until_ready();
+    assert(keyboard_hid_request_text("ab", 165));
+    clock_ms += workspace->executor.timeout_ms();
+    keyboard_hid_loop();
+    assert(finished_token == 165 && !finished_success &&
+           !strcmp(keyboard_hid_output_status(), "timeout"));
+    poll_until_ready();
+    keyboard_hid_init(TEST_USB_TRANSPORT ? KeyboardTransport::Usb : KeyboardTransport::Ble, KeyboardLayout::Be);
+    assert(keyboard_hid_request_text("a", 166));
+    run_until_idle();
+    assert(finished_token == 166 && finished_success && usages[usages.size() - 2] == 0x14);
+    keyboard_hid_init(TEST_USB_TRANSPORT ? KeyboardTransport::Usb : KeyboardTransport::Ble);
 
     workspace->~KeyboardWorkspace();
     heap_caps_free(workspace);
@@ -417,10 +465,12 @@ int main() {
     assert(usages.size() >= 2 && usages[usages.size() - 2] == 4 && usages.back() == 0);
     char max_sequence[CONFIG_KEY_SEQ_MAX_LEN];
     memset(max_sequence, 'a', sizeof(max_sequence) - 1);
+    max_sequence[0] = '"';
+    max_sequence[sizeof(max_sequence) - 2] = '"';
     max_sequence[sizeof(max_sequence) - 1] = '\0';
     const ActionResolvedArgument max_key_argument{max_sequence, 0, 0};
     assert(kKeyOperations[0].dispatch(&max_key_argument, "max sequence", 132) == ACTION_PENDING);
-    assert(workspace && strcmp(workspace->sequence, max_sequence) == 0);
+    assert(workspace && workspace->executor.total_bytes() == strlen(max_sequence));
     ota_active = true;
     keyboard_hid_loop();
     assert(finished_token == 132 && !finished_success);

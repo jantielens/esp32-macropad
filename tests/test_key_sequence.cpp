@@ -5,7 +5,7 @@
 //
 // Build:
 //   g++ -std=c++17 tests/test_key_sequence.cpp src/app/key_sequence.cpp
-//       src/app/key_sequence_executor.cpp
+//       src/app/key_sequence_executor.cpp src/app/keyboard_layout.cpp
 //       -o tests/bin/test_key_sequence
 // Run:
 //   ./tests/bin/test_key_sequence
@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <cstring>
 #include <vector>
+#include <string>
 
 static int g_pass = 0;
 static int g_fail = 0;
@@ -459,6 +460,174 @@ static void test_executor() {
     g_pass++;
 }
 
+static void test_layouts_and_literal_text() {
+    const auto sink = [](void* context, KsUsageType type, uint16_t usage, uint8_t modifiers) {
+        static_cast<std::vector<ExecutorReport>*>(context)->push_back({type, usage, modifiers});
+        return true;
+    };
+    const struct {
+        KeyboardLayout layout;
+        uint32_t character;
+        uint8_t usage;
+        uint8_t modifiers;
+    } cases[] = {
+        {KeyboardLayout::Us, 'a', 0x04, 0},
+        {KeyboardLayout::Fr, 'a', 0x14, 0},
+        {KeyboardLayout::Be, 'M', 0x33, KS_MOD_LSHIFT},
+        {KeyboardLayout::De, 'z', 0x1c, 0},
+        {KeyboardLayout::Fr, '1', 0x1e, KS_MOD_LSHIFT},
+        {KeyboardLayout::Gb, '@', 0x34, KS_MOD_LSHIFT},
+        {KeyboardLayout::Gb, '\\', 0x64, 0},
+        {KeyboardLayout::Fr, '@', 0x27, KS_MOD_RALT},
+        {KeyboardLayout::Be, '@', 0x1f, KS_MOD_RALT},
+        {KeyboardLayout::Be, '!', 0x25, 0},
+        {KeyboardLayout::De, '@', 0x14, KS_MOD_RALT},
+        {KeyboardLayout::Fr, 0xe9, 0x1f, 0},
+        {KeyboardLayout::De, 0xdc, 0x2f, KS_MOD_LSHIFT},
+    };
+    for (const auto& test : cases) {
+        KeyboardCharacter character = {};
+        assert(keyboard_layout_character(test.layout, test.character, &character));
+        assert(character.count == 1 && character.strokes[0].usage == test.usage &&
+               character.strokes[0].modifiers == test.modifiers);
+    }
+    for (uint8_t index = 0; index < static_cast<uint8_t>(KeyboardLayout::Count); ++index) {
+        const KeyboardLayout layout = static_cast<KeyboardLayout>(index);
+        for (uint32_t c = 0x20; c <= 0x7e; ++c) {
+            KeyboardCharacter character = {};
+            assert(keyboard_layout_character(layout, c, &character) && character.count);
+        }
+        KsSequence sequence = {};
+        assert(ks_parse_layout("ctrl+a ctrl+hid:04 enter", &sequence, layout));
+        assert(sequence.steps[0].key.usage ==
+               (layout == KeyboardLayout::Fr || layout == KeyboardLayout::Be ? 0x14 : 0x04));
+        assert(sequence.steps[0].key.modifiers == KS_MOD_LCTRL);
+        assert(sequence.steps[1].key.usage == 0x04 && sequence.steps[1].key.modifiers == KS_MOD_LCTRL);
+        assert(sequence.steps[2].key.usage == 0x28);
+    }
+    KsSequence parsed = {};
+    assert(!ks_parse_layout("hid:00", &parsed, KeyboardLayout::Fr));
+    assert(!ks_parse_layout("hid:e0", &parsed, KeyboardLayout::Fr));
+
+    KeySequenceExecutor executor;
+    std::vector<ExecutorReport> reports;
+    const char* literal = "\"ctrl+a\" \\200ms";
+    assert(executor.start_text(literal, 0));
+    for (uint32_t now = 0; executor.active(); now += 20) executor.poll(now, sink, &reports);
+    assert(reports.size() == strlen(literal) * 2);
+    for (size_t i = 0; i < strlen(literal); ++i) {
+        uint16_t usage = 0;
+        uint8_t modifiers = 0;
+        assert(ks_ascii_to_hid(literal[i], &usage, &modifiers));
+        assert(reports[i * 2].usage == usage && reports[i * 2].modifiers == modifiers);
+        assert(reports[i * 2 + 1].usage == 0 && reports[i * 2 + 1].modifiers == 0);
+    }
+
+    reports.clear();
+    assert(executor.start_text("\xc3\xaa", 0, KeyboardLayout::Fr));
+    executor.poll(0, sink, &reports);
+    assert(executor.completed_bytes() == 0 && reports.back().usage == 0x2f);
+    executor.poll(20, sink, &reports);
+    assert(executor.completed_bytes() == 0);
+    executor.poll(20, sink, &reports);
+    assert(reports.back().usage == 0x08);
+    executor.poll(40, sink, &reports);
+    assert(executor.completed_bytes() == 2);
+    assert(executor.poll(40, sink, &reports) == KeySequenceExecutor::Result::Success);
+    assert(reports.size() == 4);
+    assert(executor.start_text("\xc3\xaa", 0, KeyboardLayout::Fr));
+    executor.poll(0, sink, &reports);
+    executor.cancel(sink, &reports);
+    assert(reports.back().usage == 0 && !executor.active());
+
+    for (const char* invalid : {"hello \x80", "hello \xc0\xaf", "hello \xed\xa0\x80",
+                               "hello \xf4\x90\x80\x80", "hello \xe2\x82", "hello \xf0\x9f\x98\x80",
+                               "hello \xc3\xa9", "hello\n", "hello\t", "hello\x7f"}) {
+        assert(!executor.start_text(invalid, 0));
+        assert(!executor.active());
+    }
+    assert(!executor.start("\"hello \xc3\xa9\"", 0));
+    assert(!executor.start_text("e\xcc\x81", 0, KeyboardLayout::Fr));
+    assert(!executor.start_text("", 0));
+    reports.clear();
+    assert(executor.start_text("a\r\nb\t", 0, KeyboardLayout::Us, true));
+    for (uint32_t now = 0; executor.active(); now += 20) executor.poll(now, sink, &reports);
+    assert(reports.size() == 8 && reports[2].usage == 0x28 && reports[6].usage == 0x2b);
+
+    std::string text(KEYBOARD_TEXT_MAX_BYTES, 'a');
+    assert(executor.start_text(text.c_str(), 0));
+    assert(executor.timeout_ms() > 60000);
+    text[0] = 'b';
+    reports.clear();
+    for (uint32_t now = 0; executor.active(); now += 20) executor.poll(now, sink, &reports);
+    assert(reports.size() == 4096 && reports[0].usage == 0x04 &&
+           executor.completed_bytes() == KEYBOARD_TEXT_MAX_BYTES);
+    text.push_back('a');
+    assert(!executor.start_text(text.c_str(), 0));
+    std::string multibyte;
+    for (unsigned i = 0; i < 1024; ++i) multibyte += "\xc3\xa9";
+    assert(executor.start_text(multibyte.c_str(), 0, KeyboardLayout::Fr));
+    executor.cancel(nullptr, nullptr);
+    std::printf("Literal executor workspace: %zu bytes\n", sizeof(executor));
+    g_pass++;
+}
+
+static void test_expanded_keyboard_layouts() {
+    const struct {
+        KeyboardLayout layout;
+        uint32_t character;
+        uint8_t usage;
+        uint8_t modifiers;
+        uint8_t second_usage = 0;
+        uint8_t second_modifiers = 0;
+    } cases[] = {
+        {KeyboardLayout::UsInternational, 0xe9, 0x08, KS_MOD_RALT},
+        {KeyboardLayout::Es, 0xf1, 0x33, 0},
+        {KeyboardLayout::It, 0xe8, 0x2f, 0},
+        {KeyboardLayout::Pt, 0xe3, 0x31, 0, 0x04, 0},
+        {KeyboardLayout::Br, 0xe7, 0x33, 0},
+        {KeyboardLayout::Br, '/', 0x87, 0},
+        {KeyboardLayout::Se, 0xe5, 0x2f, 0},
+        {KeyboardLayout::Fi, 0xe4, 0x34, 0},
+        {KeyboardLayout::No, 0xf8, 0x33, 0},
+        {KeyboardLayout::Dk, 0xe6, 0x33, 0},
+        {KeyboardLayout::ChDe, 0xe4, 0x34, 0},
+        {KeyboardLayout::ChFr, 0xe9, 0x33, 0},
+        {KeyboardLayout::Pl, 0x142, 0x0f, KS_MOD_RALT},
+        {KeyboardLayout::Cz, 0x10c, 0x2e, KS_MOD_LSHIFT, 0x06, KS_MOD_LSHIFT},
+        {KeyboardLayout::Tr, 0x131, 0x0c, 0},
+        {KeyboardLayout::Tr, 'I', 0x0c, KS_MOD_LSHIFT},
+        {KeyboardLayout::Tr, 'i', 0x34, 0},
+        {KeyboardLayout::Hu, 0x151, 0x2f, 0},
+        {KeyboardLayout::UsInternational, '\'', 0x34, 0, 0x2c, 0},
+        {KeyboardLayout::UsInternational, '"', 0x34, KS_MOD_LSHIFT, 0x2c, 0},
+        {KeyboardLayout::UsInternational, '^', 0x23, KS_MOD_LSHIFT, 0x2c, 0},
+    };
+    for (const auto& test : cases) {
+        KeyboardCharacter character = {};
+        assert(keyboard_layout_character(test.layout, test.character, &character));
+        assert(character.count == (test.second_usage ? 2 : 1));
+        assert(character.strokes[0].usage == test.usage && character.strokes[0].modifiers == test.modifiers);
+        assert(character.strokes[1].usage == test.second_usage &&
+               character.strokes[1].modifiers == test.second_modifiers);
+    }
+    KsSequence sequence = {};
+    assert(ks_parse_layout("ctrl+1 ctrl+y", &sequence, KeyboardLayout::Cz));
+    assert(sequence.steps[0].key.usage == 0x1e &&
+           sequence.steps[0].key.modifiers == (KS_MOD_LCTRL | KS_MOD_LSHIFT));
+    assert(sequence.steps[1].key.usage == 0x1d && sequence.steps[1].key.modifiers == KS_MOD_LCTRL);
+    KeyboardCharacter invalid_character = {};
+    assert(!keyboard_layout_character(KeyboardLayout::Count, 'a', &invalid_character));
+    KeyboardLayout layout = KeyboardLayout::Us;
+    assert(!keyboard_layout_parse("custom", &layout));
+    assert(!keyboard_layout_parse(nullptr, &layout));
+    for (const char* value : {"us-intl", "br", "ch-de", "ch-fr", "cz", "hu"}) {
+        assert(keyboard_layout_parse(value, &layout));
+        assert(strcmp(keyboard_layout_name(layout), value) == 0);
+    }
+    g_pass++;
+}
+
 int main() {
     char device_name[40];
     keyboard_transport_device_name(device_name, sizeof(device_name), "Kitchen Pad", KeyboardTransport::Usb);
@@ -493,6 +662,8 @@ int main() {
     assert(!keyboard_transport_parse("auto", &parsed_transport));
     assert(!keyboard_transport_parse(nullptr, &parsed_transport));
     test_executor();
+    test_layouts_and_literal_text();
+    test_expanded_keyboard_layouts();
     printf("=== Key Sequence DSL Parser Tests ===\n\n");
 
     test_simple_keys();
