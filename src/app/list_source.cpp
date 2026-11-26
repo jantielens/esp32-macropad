@@ -177,19 +177,19 @@ bool list_source_preview_length(const char* text, size_t length, size_t max_byte
     return true;
 }
 
-ListSourceSnapshot::ListSourceSnapshot()
-    : references_(1), allocator_(LIST_SOURCE_DOCUMENT_BYTES), document_(&allocator_),
+ListSourceSnapshot::ListSourceSnapshot(const ListSourceDescriptor* source)
+    : references_(1), source_(source), allocator_(LIST_SOURCE_DOCUMENT_BYTES), document_(&allocator_),
       error_(nullptr), sealed_(false) {
     document_.to<JsonArray>();
 }
 
-ListSourceSnapshot* ListSourceSnapshot::create() {
+ListSourceSnapshot* ListSourceSnapshot::create(const ListSourceDescriptor* source) {
     void* memory = heap_caps_malloc(sizeof(ListSourceSnapshot), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!memory) {
         LOGE("ListSource", "Cannot allocate snapshot in PSRAM");
         return nullptr;
     }
-    return new (memory) ListSourceSnapshot();
+    return new (memory) ListSourceSnapshot(source);
 }
 
 void ListSourceSnapshot::retain() {

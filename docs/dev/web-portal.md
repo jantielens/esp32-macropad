@@ -3589,6 +3589,25 @@ root (`/`) cannot be deleted. Returns `404` for a missing path and
 uses this endpoint for individual images, a dated camera-roll folder, and the
 latest snapshot copy.
 
+On E-reader firmware, `/books` is managed through the E-book Library API
+instead of generic storage deletion. Generic deletion of that directory or its
+contents returns `409`.
+
+### E-book Library API
+
+The component requires `HAS_EREADER` and normal portal authentication.
+`GET /api/component/ebook-library/list` returns `{"books":[{"id":"Alice.epub",
+"title":"Alice.epub","size_bytes":123456}]}`. The complete list is bounded;
+allocation or capacity failures return an error rather than a partial list.
+
+`POST /api/component/ebook-library/upload?book=<encoded-filename>` accepts a
+nonempty raw `application/octet-stream` body. It stores the file without
+checking EPUB compatibility. `DELETE /api/component/ebook-library/delete?book=<encoded-filename>`
+deletes a book after reader resources are released. Success returns
+`{"status":"ok"}`. Errors use `400` for invalid input or framing, `404` for a
+missing book, `409` for duplicate or busy storage, `503` for unavailable
+runtime resources, and `507` for storage failure or incomplete transfer.
+
 ### Voice Notes API
 
 The `voice-notes` component and its fragment and script require

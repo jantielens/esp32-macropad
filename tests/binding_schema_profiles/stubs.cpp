@@ -1,6 +1,12 @@
 #include "platform_stubs.h"
 #include <cstring>
 
+#if HAS_EREADER
+#include "ereader.h"
+EreaderSnapshot binding_test_ereader{};
+void ereader_snapshot(EreaderSnapshot* out) { *out = binding_test_ereader; }
+#endif
+
 #include <WiFi.h>
 #include "audio.h"
 #include "audio_input.h"

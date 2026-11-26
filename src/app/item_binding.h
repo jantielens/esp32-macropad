@@ -27,6 +27,7 @@ public:
     ItemBindingScope& operator=(const ItemBindingScope&) = delete;
 
     JsonObjectConst item() const;
+    const ListSourceDescriptor* source() const { return snapshot_ ? snapshot_->source() : nullptr; }
     // End every nested item scope on this task before a context boundary.
     static void end_current();
 

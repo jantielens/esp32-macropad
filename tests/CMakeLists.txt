@@ -512,6 +512,12 @@ foreach(font_backend IN ITEMS internal sd)
     endif()
     set_tests_properties(test_font_store_${font_backend} PROPERTIES TIMEOUT 15)
 endforeach()
+add_host_legacy_test(test_ereader_library
+    SOURCES test_ereader_library.cpp ${PROJECT_SOURCE_DIR}/src/app/ereader_library.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/font_store_overrides ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS HAS_EREADER=1 HAS_FILESYSTEM=1 USE_SD_STORAGE=1 HAS_AUTO_SHUTDOWN=1
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+)
 add_host_gtest(test_gamepad_widgets test_gamepad_widgets.cpp)
 target_sources(test_gamepad_widgets PRIVATE ${PROJECT_SOURCE_DIR}/src/app/pad_font_cache.cpp)
 add_host_legacy_test(test_font_routes
@@ -902,6 +908,34 @@ add_host_legacy_test(test_widget_common
     LIBRARIES m
 )
 
+add_library(freeinkbook_test_vendor STATIC
+    ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src/vendor/expat_xmlparse.c
+    ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src/vendor/expat_xmlrole.c
+    ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src/vendor/expat_xmltok.c
+    ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src/vendor/miniz_impl.c
+    ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src/vendor/unibreak_impl.c
+)
+target_include_directories(freeinkbook_test_vendor PRIVATE ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src)
+add_host_legacy_test(test_epub_checkpoints
+    SOURCES test_epub_checkpoints.cpp
+        ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src/css/Css.cpp
+        ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src/epub/XmlSax.cpp
+        ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src/epub/ZipCatalog.cpp
+        ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src/epub/ImageProbe.cpp
+        ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src/epub/PackageParsers.cpp
+        ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src/layout/ChapterLayout.cpp
+        ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src/text/Hyphenator.cpp
+        ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src/text/EntityFilter.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src
+    LIBRARIES freeinkbook_test_vendor
+)
+add_host_legacy_test(test_epub_cache_storage
+    SOURCES test_epub_cache_storage.cpp
+    DEFINITIONS HAS_FILESYSTEM=1 USE_SD_STORAGE=1 HAS_AUTO_SHUTDOWN=1
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/font_store_overrides ${PROJECT_SOURCE_DIR}/libraries/FreeInkBook/src
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+)
+
 add_host_legacy_test(test_minimp3_scratch
     SOURCES test_minimp3_scratch.cpp
     LIBRARIES m
@@ -1064,6 +1098,10 @@ add_host_legacy_test(test_runtime_variable_actions_${runtime_profile}
 )
 if(runtime_profile STREQUAL "headless_no_psram")
     target_compile_definitions(test_runtime_variable_actions_${runtime_profile} PRIVATE HAS_PSRAM=0)
+endif()
+if(runtime_profile STREQUAL "display")
+    target_compile_definitions(test_runtime_variable_actions_display PRIVATE HAS_EREADER=1 TEST_EREADER_ACTION=1)
+    target_sources(test_runtime_variable_actions_display PRIVATE ${PROJECT_SOURCE_DIR}/src/app/actions/ereader_action.cpp)
 endif()
 if(runtime_profile STREQUAL "display" OR runtime_profile STREQUAL "coffee" OR runtime_profile STREQUAL "darkroom" OR runtime_profile STREQUAL "shutter" OR runtime_profile STREQUAL "relay" OR runtime_profile STREQUAL "stopwatch" OR runtime_profile STREQUAL "sticky")
     target_compile_definitions(test_runtime_variable_actions_${runtime_profile} PRIVATE ALARM_ENABLED=1 HAS_VOICE_NOTES=1 HAS_AUDIO=1 HAS_SOUND_PLAYER=1 HAS_CAMERA=1 HAS_MCP=1)
@@ -1410,9 +1448,9 @@ set(LIST_SOURCE_TEST_SOURCES test_list_source.cpp stubs.cpp ${PROJECT_SOURCE_DIR
         ${PROJECT_SOURCE_DIR}/src/app/expr_eval.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_binding.cpp
         ${PROJECT_SOURCE_DIR}/src/app/action_parse.cpp ${PROJECT_SOURCE_DIR}/src/app/action_registry.cpp)
 add_host_legacy_test(test_list_source
-    SOURCES ${LIST_SOURCE_TEST_SOURCES}
-    INCLUDES ${PROJECT_SOURCE_DIR}/tests/list_source_overrides ${HOST_ARDUINOJSON_DIR} ${HOST_LVGL_DIR}
-    DEFINITIONS HAS_VOICE_NOTES=1 LV_CONF_SKIP=1 LIST_TEST_BUTTON_DEFAULTS=1
+    SOURCES ${LIST_SOURCE_TEST_SOURCES} ${PROJECT_SOURCE_DIR}/src/app/list_source_ereader.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/list_source_overrides ${PROJECT_SOURCE_DIR}/tests/font_store_overrides ${HOST_ARDUINOJSON_DIR} ${HOST_LVGL_DIR}
+    DEFINITIONS HAS_VOICE_NOTES=1 HAS_EREADER=1 HAS_FILESYSTEM=1 LV_CONF_SKIP=1 LIST_TEST_BUTTON_DEFAULTS=1
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
         ${PROJECT_SOURCE_DIR}/tests/Arduino.h
     OPTIONS -Wno-deprecated-declarations
@@ -1562,7 +1600,7 @@ add_binding_schema_profile(baseline "")
 add_binding_schema_profile(display_only "HAS_MQTT=0;HAS_HA_LIVE=0")
 add_binding_schema_profile(alarm_disabled "ALARM_ENABLED=0")
 add_binding_schema_profile(camera BINDING_SCHEMA_PROFILE_CAMERA)
-add_binding_schema_profile(full "BINDING_SCHEMA_PROFILE_FULL;HAS_VOICE_NOTES=1" ${PROJECT_SOURCE_DIR}/src/app/audio_input_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/image_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/voice_notes_binding.cpp)
+add_binding_schema_profile(full "BINDING_SCHEMA_PROFILE_FULL;HAS_VOICE_NOTES=1;HAS_EREADER=1" ${PROJECT_SOURCE_DIR}/src/app/audio_input_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/image_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/voice_notes_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/ereader_binding.cpp)
 # Portal dev-server fixture for GET /api/bindings?docs=1; regenerate with
 # build/host-tests/tests/test_binding_schema_full --emit-json > tools/mock-data/binding-docs.json
 add_test(NAME test_binding_docs_fixture

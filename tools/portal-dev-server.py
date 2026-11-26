@@ -263,6 +263,14 @@ class PortalHandler(SimpleHTTPRequestHandler):
     def _voice_notes_capable(self):
         return self._selected_profile() in SD_PROFILE_BASES
 
+    def _ereader_capable(self):
+        return self._selected_profile() == "reterminal-sticky-interactive-sd"
+
+    @staticmethod
+    def _valid_ebook_name(name):
+        return (6 <= len(name.encode("utf-8")) <= 63 and name.lower().endswith(".epub")
+                and not any(ord(c) < 32 or 127 <= ord(c) <= 159 or c in '/\\:*?"<>|' for c in name))
+
     def _alarm_capable(self):
         return self._profile() in ("esp32-p4-lcd4b", "crowpanel-4.2-interactive",
                                    "reterminal-sticky-interactive")
@@ -718,6 +726,12 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 schema["schemes"].append({"name": "voice_note", "min_params": 1, "max_params": 1,
                     "widget_max_params": 1, "format_param": -1, "validation_mode": 0,
                     "free_form": False, "keys": voice_keys})
+            if self._ereader_capable():
+                reader_keys = next(scheme["keys"] for scheme in docs["schemes"]
+                                   if scheme["name"] == "ereader")
+                schema["schemes"].append({"name": "ereader", "min_params": 1, "max_params": 1,
+                    "widget_max_params": 1, "format_param": -1, "validation_mode": 0,
+                    "free_form": False, "keys": reader_keys})
             if not self._mqtt_capable():
                 schema["schemes"] = [scheme for scheme in schema["schemes"] if scheme["name"] != "mqtt"]
             if self._profile() != "esp32-p4-lcd4b":
@@ -726,7 +740,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 schema["schemes"] = [scheme for scheme in schema["schemes"] if scheme["name"] != "ext"]
             if "docs" in query:
                 available = {scheme["name"] for scheme in schema["schemes"]}
-                docs["schemes"] = [s for s in docs["schemes"] if s["name"] not in ("alarm", "ha", "ext", "voice_note") or s["name"] in available]
+                docs["schemes"] = [s for s in docs["schemes"] if s["name"] not in ("alarm", "ha", "ext", "voice_note", "ereader") or s["name"] in available]
                 mqtt_scheme = next((scheme for scheme in docs["schemes"] if scheme["name"] == "mqtt"), None)
                 if mqtt_scheme:
                     if not self._mqtt_configured():
@@ -763,6 +777,13 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 self._serve_json({"message": "Fonts unavailable"}, 404)
             else:
                 self._serve_json([{"name": name, "size_bytes": len(data)} for name, data in getattr(self.server, "mock_fonts", {}).items()])
+        elif path == "/api/component/ebook-library/list":
+            if not self._ereader_capable():
+                self._serve_json({"message": "E-book library unavailable"}, 404)
+            else:
+                books = getattr(self.server, "mock_ebooks", {})
+                self._serve_json({"books": [{"id": name, "title": name, "size_bytes": len(data)}
+                                            for name, data in books.items()]})
         elif path == "/api/extensions":
             self._serve_json(self.server.pad_fixture["extensions"])
         elif path == "/api/images":
@@ -969,6 +990,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 return
             if fragment == "fonts" and not self._fonts_available():
                 self.send_error(404, "Fonts unavailable")
+                return
+            if fragment == "ebook-library" and not self._ereader_capable():
+                self.send_error(404, "E-book library unavailable")
                 return
             if fragment in ("alarm-schedule", "alarm-behavior") and not self._alarm_capable():
                 self.send_error(404, "Alarm unavailable")
@@ -1191,6 +1215,23 @@ class PortalHandler(SimpleHTTPRequestHandler):
             slot = 1 if active_slot == 0 else 0
             self.server.mock_boot_logo_slots[slot] = (body, content_type)
             self._serve_json({"success": True, "slot": slot})
+            return
+
+        if path == "/api/component/ebook-library/upload":
+            name = query.get("book", [""])[0]
+            books = getattr(self.server, "mock_ebooks", {})
+            if not self._ereader_capable():
+                self._serve_json({"message": "E-book library unavailable"}, 404)
+            elif not self._valid_ebook_name(name) or not body or self.headers.get_content_type() != "application/octet-stream":
+                self._serve_json({"message": "Invalid E-book filename or upload framing"}, 400)
+            elif name in books:
+                self._serve_json({"message": "E-book already exists"}, 409)
+            elif self.server.scenario == "save-error":
+                self._serve_json({"message": "E-book storage failed"}, 507)
+            else:
+                books[name] = body
+                self.server.mock_ebooks = books
+                self._serve_json({"status": "ok"})
             return
 
         if path == "/api/fonts/upload":
@@ -1670,6 +1711,19 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 self.server.mock_boot_logo_slots.clear()
                 self._serve_json({"success": True})
             return
+        if parsed.path == "/api/component/ebook-library/delete":
+            name = parse_qs(parsed.query).get("book", [""])[0]
+            books = getattr(self.server, "mock_ebooks", {})
+            if not self._ereader_capable():
+                self._serve_json({"message": "E-book library unavailable"}, 404)
+            elif not self._valid_ebook_name(name):
+                self._serve_json({"message": "Invalid E-book filename"}, 400)
+            elif name not in books:
+                self._serve_json({"message": "E-book not found"}, 404)
+            else:
+                del books[name]
+                self._serve_json({"status": "ok"})
+            return
         if parsed.path == "/api/fonts":
             name = parse_qs(parsed.query).get("name", [""])[0]
             fonts = getattr(self.server, "mock_fonts", {})
@@ -1756,7 +1810,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
             "{{HEALTH_WIDGET}}": (APP_WEB_DIR / "_health_widget.html").read_text(encoding="utf-8"),
             "{{REBOOT_OVERLAY}}": (APP_WEB_DIR / "_reboot_overlay.html").read_text(encoding="utf-8"),
             "{{BINDING_HELP}}": (APP_WEB_DIR / "_binding_help.html").read_text(encoding="utf-8")
-                if profile in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive") else "",
+                if profile in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive",
+                               "reterminal-sticky-interactive") else "",
             "{{POWER_SAVINGS_SCRIPT}}":
                 '<script src="/portal_power_savings.js?v=dev-mock"></script>'
                 if profile == "reterminal-sticky-interactive" else "",
@@ -1785,6 +1840,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
             flags = {"HAS_DISPLAY", "HAS_MQTT"}
         if self._profile() == "reterminal-sticky-interactive":
             flags = {"HAS_DISPLAY", "HAS_MQTT", "HAS_AUTO_SHUTDOWN"}
+        if self._ereader_capable():
+            flags.add("HAS_EREADER")
         if "HAS_DISPLAY" in flags:
             flags.add("HAS_FACE_WIDGET")
             info = self._device_info()
@@ -1894,6 +1951,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
                     {"id": "fonts", "display_name": "Fonts", "portal_script": "/portal_fonts.js"},
                 ])
             if category["id"] == "device":
+                if self._ereader_capable():
+                    category["items"].append({"id": "ebook-library", "display_name": "E-book Library"})
                 if profile == "reterminal-sticky-interactive":
                     category["items"].append({"id": "power-savings", "display_name": "Power Savings"})
                 category["items"].append({"id": "timezone", "display_name": "Timezone"})
@@ -1962,6 +2021,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                             display_coord_width=384, display_coord_height=472)
             if include_catalog:
                 enabled = {
+                    "ereader": self._ereader_capable(),
                     "alarm": info["has_alarm"], "alarm_tone": info["has_alarm"] and info["has_audio"],
                     "alarm_mp3": info["has_alarm"] and info["has_sound_player"],
                     "volume": info["has_audio"], "save_volume": info["has_audio"],
@@ -1987,13 +2047,17 @@ class PortalHandler(SimpleHTTPRequestHandler):
                                                     if op["id"] != "audio.alert.mp3"]
                 info["widget_catalog"] = [
                     widget for widget in self.server.pad_fixture["widget_catalog"]
-                    if widget.get("type") != "slider" or info["has_touch"]
+                    if (widget.get("type") != "slider" or info["has_touch"])
+                    and (widget.get("type") != "ereader" or self._ereader_capable())
                 ]
                 info["list_sources"] = [
                     source for source in self.server.pad_fixture["list_sources"]
                     if source["token"] != "[voice_note:recent_notes]"
                     or self._voice_notes_capable()
                 ]
+                if not self._ereader_capable():
+                    info["list_sources"] = [source for source in info["list_sources"]
+                                            if not source["token"].startswith("[ereader:")]
         return info
 
     def _health(self):

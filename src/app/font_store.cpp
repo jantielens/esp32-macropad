@@ -338,6 +338,18 @@ static bool font_memory_read(void* context, size_t offset, uint8_t* data, size_t
     return true;
 }
 
+struct FontLoadReader {
+    uint8_t* data;
+    bool (*should_stop)(void*);
+    void* context;
+};
+
+static bool font_load_memory_read(void* context, size_t offset, uint8_t* data, size_t length) {
+    const auto& reader = *static_cast<FontLoadReader*>(context);
+    if (reader.should_stop && reader.should_stop(reader.context)) return false;
+    return font_memory_read(reader.data, offset, data, length);
+}
+
 static void font_abort_locked(FontUpload& upload) {
     if (active_upload != &upload) return;
     LOGD("Fonts", "Upload '%s' aborted after %zu bytes", upload.name, upload.received);
@@ -477,7 +489,7 @@ FontStoreResult font_store_list(bool (*visitor)(const char*, size_t, void*), voi
     return FontStoreResult::Ok;
 }
 
-uint8_t* font_store_load(const char* name, size_t& length) {
+uint8_t* font_store_load(const char* name, size_t& length, bool (*should_stop)(void*), void* context) {
     length = 0;
     if (!font_store_validate_name(name) || !font_store_available() ||
         ota_activity_is_active()) return nullptr;
@@ -488,19 +500,21 @@ uint8_t* font_store_load(const char* name, size_t& length) {
     LOGD("Fonts", "Load '%s': begin (LittleFS)", name);
 #endif
     FontLoadOwner owner(name);
-    File file;
+    char path[48];
+    font_store_path(name, path, sizeof(path));
     size_t size;
     {
         std::lock_guard<std::mutex> lock(font_store_mutex);
+        const StorageMutationGuard guard;
+        if (!guard) return nullptr;
         if (!font_store_mount()) return nullptr;
-        char path[48];
-        font_store_path(name, path, sizeof(path));
-        file = Storage.open(path, "r");
+        File file = Storage.open(path, "r");
         if (!file) {
             LOGD("Fonts", "Load '%s': file missing or unreadable", name);
             return nullptr;
         }
         size = file.size();
+        file.close();
         owner.next = active_loads;
         active_loads = &owner;
         owner.registered = true;
@@ -512,26 +526,35 @@ uint8_t* font_store_load(const char* name, size_t& length) {
              heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
         return nullptr;
     }
-    if (!file.seek(0)) {
-        LOGW("Fonts", "Load '%s': rewind failed", name);
-        heap_caps_free(data);
-        return nullptr;
-    }
     for (size_t offset = 0; offset < size;) {
         const size_t chunk = size - offset > 4096 ? 4096 : size - offset;
-        if (ota_activity_is_active() || file.read(data + offset, chunk) != chunk) {
+        if (ota_activity_is_active() || (should_stop && should_stop(context))) {
+            LOGW("Fonts", "Load '%s': interrupted or short read at %zu/%zu bytes", name, offset, size);
+            heap_caps_free(data);
+            return nullptr;
+        }
+        bool read_ok = false;
+        {
+            const StorageMutationGuard guard;
+            if (guard) {
+                File file = Storage.open(path, "r");
+                if (file && file.seek(offset)) read_ok = file.read(data + offset, chunk) == chunk;
+                file.close();
+            }
+        }
+        if (!read_ok) {
             LOGW("Fonts", "Load '%s': interrupted or short read at %zu/%zu bytes", name, offset, size);
             heap_caps_free(data);
             return nullptr;
         }
         offset += chunk;
     }
-    if (!font_ttf_validate(size, font_memory_read, data)) {
+    FontLoadReader reader{data, should_stop, context};
+    if (!font_ttf_validate(size, font_load_memory_read, &reader)) {
         LOGW("Fonts", "Load '%s': TrueType validation failed or interrupted", name);
         heap_caps_free(data);
         return nullptr;
     }
-    file.close();
     length = size;
     LOGD("Fonts", "Load '%s': %zu bytes in %lums", name, size, millis() - started);
     return data;

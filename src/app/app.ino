@@ -68,6 +68,10 @@
 #include "list_source_health.h"
 #include "list_source_pads.h"
 #include "list_source_voice_notes.h"
+#if HAS_EREADER
+#include "ereader.h"
+#include "list_source_ereader.h"
+#endif
 #include "time_binding.h"
 #include "timer_config.h"
 #include "pad_config.h"
@@ -265,10 +269,16 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 
 	#if HAS_DISPLAY
 	set_boot_splash_status("Preparing device...");
+	#if HAS_EREADER
+	if (!ereader_init()) LOGE("Ereader", "Cannot initialize reader");
+	#endif
 	screen_saver_manager_init(&device_config);
 	#if HAS_PSRAM
 	if (!list_source_health_init()) LOGE("ListSource", "Cannot register health source");
 	if (!list_source_pads_init()) LOGE("ListSource", "Cannot register pad source");
+	#if HAS_EREADER
+	if (!list_source_ereader_init()) LOGE("ListSource", "Cannot register E-reader sources");
+	#endif
 	#if HAS_VOICE_NOTES
 	list_source_voice_notes_init();
 	#endif

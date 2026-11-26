@@ -188,6 +188,7 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_DISPLAY_REFRESH "display_refresh"
 #define ACTION_TYPE_BUTTON_NAVIGATION "button_nav"
 #define ACTION_TYPE_LIST_NAVIGATION "list_nav"
+#define ACTION_TYPE_EREADER "ereader"
 #define ACTION_TYPE_SET_VAR "set_var"
 #if HAS_VOICE_NOTES
 #define ACTION_TYPE_VOICE_NOTE_RECORD "vnote_record"

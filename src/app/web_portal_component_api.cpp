@@ -333,9 +333,6 @@ static void handleComponentActionRequest(AsyncWebServerRequest* request) {
 
     if (!portal_auth_gate(request)) return;
 
-    // If action has a body handler, it already processed the request
-    if (action->body_handler) return;
-
     if (action->handler) {
         action->handler(request);
     }

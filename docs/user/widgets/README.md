@@ -30,6 +30,7 @@ collapsing a section does not disable it.
 * [Sparkline](sparkline.md) for sampled history
 * [Table](table.md) for structured rows
 * [Text reader](#text-reader) for manually scrolling or paging through text
+* [E-reader](#e-reader) for reading a selected EPUB file
 * [Camera Preview](../media/camera.md#put-a-preview-on-a-pad) for an attached camera
 * [Extension](../media/extensions.md) for installed native content
 * [Shutter Waveform](../specialized/shutter-tester/display.md) for optical captures
@@ -88,6 +89,55 @@ binding token alone, with an optional pipe fallback. Adding prefix/suffix text
 or wrapping the token in an expression uses the normal short scalar path
 instead. See [loaded Voice Notes](../media/voice-notes.md#configure-the-detail-pad)
 for one example of a full-text source.
+
+## E-reader
+
+The E-reader displays a book inside a button. It supports DRM-free, reflowable
+EPUB files and is available only on devices with the E-reader capability.
+Complex formatting and some images may not render.
+
+1. In **Device > E-book Library**, upload a DRM-free EPUB. Upload stores the
+   file; the reader checks compatibility when you open it. Filenames must fit
+   within 63 UTF-8 bytes, including `.epub`. Delete an existing file before
+   uploading another with the same name.
+2. In **Pads > Pad Editor**, choose **E-reader** in the button's **Content**.
+   Optionally set **Text style**, for example `font:my-font;font_size:24`.
+   Leave it empty to inherit device typography. Use the existing **Padding**
+   control to change the reading area.
+3. Configure a separate button with **Open E-book**, using the filename,
+   including `.epub`. The widget does not select a book automatically.
+4. Tap the left or right half of the reader to turn pages. Separate buttons or
+   configured physical buttons can use **Navigate E-reader** for page turns or
+   chapter skips.
+
+To browse your library on a pad, configure a [List](list.md) with
+`[ereader:books]` and an **Open E-book** item action whose book is `[item:id]`.
+Use `[ereader:chapters]` on another List and configure **Open chapter** with
+chapter `[item:chapter]`. Add a following **Navigate to
+screen** action to open the reading pad at the selected chapter.
+Recreate older **Open chapter** actions that also specify a book.
+Chapter numbers follow EPUB reading order, not a publisher table of contents.
+The book List displays filenames without `.epub`. Chapter labels use an
+unambiguous matching navigation title when available, otherwise `Chapter N`;
+they open the start of the corresponding reading-order entry.
+The chapter List is empty while metadata loads or if loading fails. Use
+`[ereader:chapter_state]` and `[ereader:chapter_error|]` on ordinary button
+labels to show loading status and errors. The chapter state is `idle`,
+`loading`, `ready`, or `error`.
+
+Ordinary button labels can show `[ereader:state]`,
+`[ereader:error|]`, `[ereader:warning|]`, or
+`Chapter [ereader:chapter|?], page [ereader:page|?]`. The page count is for
+the current chapter. Missing glyphs produce a nonfatal warning; fatal errors
+also appear inside the reader. Some stylesheets and complex formatting are
+not fully supported.
+
+Only one E-reader can be visible at a time. Opening an unchanged book can
+resume its saved position; a changed or invalid book position may restart.
+Hide the reader and wait for its work to finish before deleting the active book.
+Reader actions can be rejected while work or storage operations are in progress.
+If the reader reports insufficient space, enlarge the button or reduce padding
+or font size. Reader touch input cannot run actions on the same button.
 
 ## Face
 

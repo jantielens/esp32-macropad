@@ -212,7 +212,7 @@ void list_source_loop() {
     }
     if (!job.handle) return;
     if (!job.snapshot) {
-        job.snapshot = ListSourceSnapshot::create();
+        job.snapshot = ListSourceSnapshot::create(job.handle->source);
         if (!job.snapshot) {
             publish_failure("snapshot allocation failed");
             finish_job();

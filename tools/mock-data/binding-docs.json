@@ -1,6 +1,242 @@
 {
   "schemes": [
     {
+      "name": "ereader",
+      "min_params": 1,
+      "max_params": 1,
+      "widget_max_params": 1,
+      "format_param": -1,
+      "validation_mode": 0,
+      "free_form": false,
+      "keys": [
+        "state",
+        "book",
+        "chapter",
+        "chapter_count",
+        "page",
+        "page_count",
+        "error",
+        "warning",
+        "chapter_state",
+        "chapter_error"
+      ],
+      "category": "Device",
+      "summary": "E-reader session status and current-chapter position.",
+      "params": [
+        {
+          "name": "key",
+          "desc": "E-reader state or current position key.",
+          "required": true
+        }
+      ],
+      "key_docs": [
+        {
+          "key": "state",
+          "desc": "idle, loading, ready, or error"
+        },
+        {
+          "key": "book",
+          "desc": "Selected E-book filename"
+        },
+        {
+          "key": "chapter",
+          "desc": "Current one-based reading-order chapter"
+        },
+        {
+          "key": "chapter_count",
+          "desc": "Number of reading-order entries"
+        },
+        {
+          "key": "page",
+          "desc": "Current one-based page in this chapter"
+        },
+        {
+          "key": "page_count",
+          "desc": "Page count in this chapter"
+        },
+        {
+          "key": "error",
+          "desc": "Current reader failure"
+        },
+        {
+          "key": "warning",
+          "desc": "Nonfatal warning or boundary notice"
+        },
+        {
+          "key": "chapter_state",
+          "desc": "Chapter metadata: idle, loading, ready, or error"
+        },
+        {
+          "key": "chapter_error",
+          "desc": "Chapter metadata failure"
+        }
+      ],
+      "examples": [
+        {
+          "code": "[ereader:state]",
+          "desc": "Show the reader state."
+        },
+        {
+          "code": "[ereader:warning|]",
+          "desc": "Show a warning when present."
+        },
+        {
+          "code": "Chapter [ereader:chapter|?], page [ereader:page|?]",
+          "desc": "Show the current position."
+        }
+      ],
+      "authoring": {
+        "keys": [
+          {
+            "key": "state",
+            "kind": "text",
+            "unit": "",
+            "example_value": "ready",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "book",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Alice.epub",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "chapter",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "1",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "chapter_count",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "12",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "page",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "1",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "page_count",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "8",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "error",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Cannot open EPUB",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "warning",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Some glyphs unavailable",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "chapter_state",
+            "kind": "text",
+            "unit": "",
+            "example_value": "ready",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "chapter_error",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Cannot open EPUB",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          }
+        ]
+      }
+    },
+    {
       "name": "image",
       "min_params": 1,
       "max_params": 1,

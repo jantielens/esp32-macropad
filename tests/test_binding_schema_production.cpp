@@ -16,6 +16,10 @@
 #include "alarm_manager.h"
 #include "psram_json_allocator.h"
 #include "wifi_manager.h"
+#if HAS_EREADER
+#include "ereader.h"
+extern EreaderSnapshot binding_test_ereader;
+#endif
 #if HAS_CAMERA
 #include "camera_motion.h"
 #endif
@@ -934,6 +938,24 @@ int main(int argc, char** argv) {
     expect_scheme_docs_complete();
     expect(all_registered_finite_keys_are_recognized(),
            "every production finite key is not unknown to its real resolver");
+#if HAS_EREADER
+    {
+        char value[128] = {};
+        binding_test_ereader.chapter_state = EreaderMetadataState::Loading;
+        expect(binding_template_resolve_registered("ereader", 7, "chapter_state", value, sizeof(value))
+                   == BINDING_RESOLVER_RESOLVED && !strcmp(value, "loading"),
+               "hidden chapter metadata loading is reported");
+        expect(binding_template_resolve_registered("ereader", 7, "state", value, sizeof(value))
+                   == BINDING_RESOLVER_RESOLVED && !strcmp(value, "idle"),
+               "hidden reader remains idle");
+        binding_test_ereader.chapter_state = EreaderMetadataState::Error;
+        strlcpy(binding_test_ereader.chapter_error, "Cannot open EPUB", sizeof(binding_test_ereader.chapter_error));
+        expect(binding_template_resolve_registered("ereader", 7, "chapter_error", value, sizeof(value))
+                   == BINDING_RESOLVER_RESOLVED && !strcmp(value, "Cannot open EPUB"),
+               "hidden chapter metadata error is reported");
+        binding_test_ereader = {};
+    }
+#endif
     expect_structural_resolvers_are_invoked();
 #if ALARM_ENABLED
     expect(scheme_is_registered("alarm"), "alarm registered when enabled");

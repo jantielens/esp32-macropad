@@ -102,7 +102,7 @@ ActionRunContext* action_run_capture(const PadBinding* origin_bindings, uint8_t 
     if (thread_execution_context.item_scope) {
         JsonObjectConst item = thread_execution_context.item_scope->item();
         if (!item.isNull()) {
-            context->item = ListSourceSnapshot::create();
+            context->item = ListSourceSnapshot::create(thread_execution_context.item_scope->source());
             if (!context->item || context->item->append(item) || context->item->seal()) {
                 LOGW("Action", "Cannot capture List item");
                 action_run_release(context);

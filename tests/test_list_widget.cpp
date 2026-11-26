@@ -62,6 +62,13 @@ ListSourceLoadStep load(void**, ListSourceSnapshot* snapshot, const char** error
         if ((*error = snapshot->append(item.as<JsonObjectConst>())))
             return ListSourceLoadStep::Failed;
     }
+    for (unsigned i = 6; i < item_count; ++i) {
+        std::string id = "item-" + std::to_string(i);
+        item["id"] = id;
+        item["title"] = id;
+        if ((*error = snapshot->append(item.as<JsonObjectConst>())))
+            return ListSourceLoadStep::Failed;
+    }
     return ListSourceLoadStep::Complete;
 }
 void finish(void*) {}
@@ -276,6 +283,23 @@ TEST_F(ListWidget, NavigationReservesSlotsAndPreservesItemActionsAndSelection) {
     tap(1);
     EXPECT_EQ(activated_id, "second");
     EXPECT_FALSE(feedback_events.back().use_default_tap_audio);
+}
+
+TEST_F(ListWidget, PagesAndActivatesItemsBeyondTwenty) {
+    item_count = 25;
+    ++revision;
+    JsonDocument json;
+    json["widget_list_viewport"] = "paged";
+    json["widget_list_visible_items"] = 5;
+    json["widget_list_show_navigation"] = true;
+    reconfigure(json.as<JsonObject>());
+    auto* state = list_widget_impl::get(&tile.widget_state);
+    ASSERT_EQ(state->count, 25);
+    for (unsigned i = 0; i < 7; ++i)
+        ASSERT_TRUE(list_widget_command(&tile.widget_state, "next_page"));
+    EXPECT_FALSE(lv_obj_has_flag(row(21), LV_OBJ_FLAG_HIDDEN));
+    tap(21);
+    EXPECT_EQ(activated_id, "item-21");
 }
 
 TEST_F(ListWidget, NavigationCancelsStalePressAndReleasesSlotsWhenItemsFit) {
@@ -562,7 +586,7 @@ TEST_F(ListWidget, AutoCapacityUsesTouchMinimumAndResizesIndependentlyOfItemCoun
     EXPECT_EQ(state->capacity, 1);
     EXPECT_EQ(lv_obj_get_height(row(0)), 1);
     resize_and_tick(2000);
-    EXPECT_EQ(state->capacity, LIST_SOURCE_MAX_ITEMS);
+    EXPECT_EQ(state->capacity, LIST_VISIBLE_MAX_ITEMS);
 }
 
 TEST_F(ListWidget, AutoReservesConfiguredLabelFontsEvenWhenResolvedTextIsEmpty) {

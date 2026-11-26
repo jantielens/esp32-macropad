@@ -17,6 +17,9 @@
 #if HAS_DISPLAY && HAS_PSRAM
 #include "list_navigation_action.cpp"
 #endif
+#if HAS_EREADER
+#include "ereader_action.cpp"
+#endif
 #include "mqtt_action.cpp"
 #include "bthome_action.cpp"
 #include "ha_service_action.cpp"

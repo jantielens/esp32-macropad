@@ -18,7 +18,7 @@ size_t heap_caps_get_free_size(uint32_t) { return 8192; }
 size_t heap_caps_get_largest_free_block(uint32_t) { return 4096; }
 bool ota_activity_is_active() { return false; }
 bool font_store_validate_name(const char* name) { return name && *name && strlen(name) < FONT_NAME_MAX_LEN; }
-uint8_t* font_store_load(const char* name, size_t& length) {
+uint8_t* font_store_load(const char* name, size_t& length, bool (*)(void*), void*) {
     ++g_font_loads;
     if (strcmp(name, "missing") == 0) return nullptr;
     length = sizeof(slider_font_fixture);

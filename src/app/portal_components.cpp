@@ -43,6 +43,9 @@
 #if HAS_STORAGE_BROWSER
 #include "components/storage_component.cpp"
 #endif // HAS_STORAGE_BROWSER
+#if HAS_EREADER
+#include "components/ebook_library_component.cpp"
+#endif
 
 #if HAS_CAMERA
 #include "components/camera_component.cpp"

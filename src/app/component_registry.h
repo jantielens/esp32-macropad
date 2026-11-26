@@ -12,7 +12,7 @@
 struct ComponentAction {
     const char* name;                 // e.g. "tare", "brightness"
     WebRequestMethodComposite method; // HTTP_GET, HTTP_POST, HTTP_PUT, etc.
-    ArRequestHandlerFunction handler; // for request-only handlers (no body)
+    ArRequestHandlerFunction handler; // request handler, including completion after a body
     ArBodyHandlerFunction body_handler; // for handlers that receive a body (PUT/POST with JSON)
 };
 

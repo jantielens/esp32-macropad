@@ -11,7 +11,8 @@
 
 #include "bounded_psram_json_allocator.h"
 
-constexpr size_t LIST_SOURCE_MAX_ITEMS = 20;
+constexpr size_t LIST_SOURCE_MAX_ITEMS = 253;
+constexpr size_t LIST_VISIBLE_MAX_ITEMS = 20;
 constexpr size_t LIST_SOURCE_MAX_SOURCES = 8;
 constexpr size_t LIST_SOURCE_MAX_FIELDS = 8;
 constexpr size_t LIST_SOURCE_MAX_ID_BYTES = 63;
@@ -65,7 +66,7 @@ bool list_source_preview_length(const char* text, size_t length, size_t max_byte
 // Callers must hold a reference while using a returned JsonArrayConst.
 class ListSourceSnapshot {
 public:
-    static ListSourceSnapshot* create();
+    static ListSourceSnapshot* create(const ListSourceDescriptor* source = nullptr);
     void retain();
     void release();
 
@@ -75,15 +76,17 @@ public:
     JsonArrayConst items() const;
     size_t peakBytes() const;
     uint32_t references() const;
+    const ListSourceDescriptor* source() const { return source_; }
 
     ListSourceSnapshot(const ListSourceSnapshot&) = delete;
     ListSourceSnapshot& operator=(const ListSourceSnapshot&) = delete;
 
 private:
-    ListSourceSnapshot();
+    explicit ListSourceSnapshot(const ListSourceDescriptor* source);
     ~ListSourceSnapshot() = default;
 
     std::atomic<uint32_t> references_;
+    const ListSourceDescriptor* source_;
     BoundedPsramJsonAllocator allocator_;
     JsonDocument document_;
     const char* error_;

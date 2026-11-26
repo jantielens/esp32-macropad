@@ -393,7 +393,7 @@ void layout(State* state) {
         if (row_height < auto_min_row_height) row_height = auto_min_row_height;
         capacity = (state->height + cfg.spacing) / (row_height + cfg.spacing);
         if (capacity < 1) capacity = 1;
-        if (capacity > static_cast<int32_t>(LIST_SOURCE_MAX_ITEMS)) capacity = LIST_SOURCE_MAX_ITEMS;
+        if (capacity > static_cast<int32_t>(LIST_VISIBLE_MAX_ITEMS)) capacity = LIST_VISIBLE_MAX_ITEMS;
     }
     const bool navigation = cfg.show_navigation && cfg.viewport == ListViewport::Paged;
     if (navigation && state->count > capacity && capacity < 3) capacity = 3;
@@ -552,6 +552,12 @@ bool build_rows(State* state, ListSourceSnapshot* snapshot) {
     if (!count) { snapshot->release(); message(state, "No items"); return true; }
     const size_t row_count = count +
         (state->config->show_navigation && state->config->viewport == ListViewport::Paged ? 2 : 0);
+    if (count > LIST_SOURCE_MAX_ITEMS || row_count > UINT8_MAX) {
+        snapshot->release();
+        LOGE("List", "Source exceeds row capacity");
+        message(state, "List has too many items");
+        return false;
+    }
     Row* rows = static_cast<Row*>(heap_caps_calloc(row_count, sizeof(Row), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
     if (!rows) {
         snapshot->release();
@@ -817,7 +823,7 @@ void describe(JsonObject& out) {
 
     struct Geometry { const char* name; unsigned minimum; unsigned maximum; unsigned value; };
     const Geometry geometry[] = {
-        {"widget_list_visible_items", 0, LIST_SOURCE_MAX_ITEMS, 0},
+        {"widget_list_visible_items", 0, LIST_VISIBLE_MAX_ITEMS, 0},
         {"widget_list_padding", 0, 32, 6},
         {"widget_list_spacing", 0, 32, 4},
         {"widget_list_radius", 0, 64, 8},
@@ -863,7 +869,7 @@ void describe(JsonObject& out) {
     choices.add("scroll");
     choices.add("paged");
     viewport["description"] = "Vertical touch scrolling or non-animated fixed-row paging.";
-    out["note"] = "Up to 20 items per source. Tap or hold runs item actions and optionally selects the item; item bindings cannot cross a pause or navigation. Page navigation preserves selection.";
+    out["note"] = "Up to 253 items per source, subject to memory limits. Tap or hold runs item actions and optionally selects the item; item bindings cannot cross a pause or navigation. Page navigation preserves selection.";
 }
 #endif
 

@@ -9,6 +9,11 @@
 #include "widgets/list_config.h"
 #include "action_registry.h"
 #include "lvgl_heap.h"
+#if HAS_EREADER
+#include "ereader.h"
+#include "ereader_library.h"
+#include "list_source_ereader.h"
+#endif
 #if TEST_LIST_SOURCE_HEALTH
 #include "list_source_health.h"
 #include "device_telemetry.h"
@@ -200,7 +205,7 @@ TEST_F(ListSourceTest, RecentNotesLoadOnlyOnDemandAndEnrichOnePerStep) {
     recording = false;
     list_source_loop();
     EXPECT_EQ(enriched_notes, 0u);
-    for (size_t i = 0; i < LIST_SOURCE_MAX_ITEMS; ++i) {
+    for (size_t i = 0; i < 20; ++i) {
         list_source_loop();
         EXPECT_EQ(enriched_notes, i + 1);
         invalid_note_title = false;
@@ -208,7 +213,7 @@ TEST_F(ListSourceTest, RecentNotesLoadOnlyOnDemandAndEnrichOnePerStep) {
     ListSourceSnapshot* snapshot = nullptr;
     ASSERT_EQ(list_source_read(handle, &snapshot, nullptr, nullptr), ListSourceState::Ready);
     ASSERT_NE(snapshot, nullptr);
-    ASSERT_EQ(snapshot->items().size(), LIST_SOURCE_MAX_ITEMS);
+    ASSERT_EQ(snapshot->items().size(), 20u);
     EXPECT_TRUE(snapshot->items()[0]["title"].isNull());
     EXPECT_EQ(strlen(snapshot->items()[1]["title"]), 126u);
     EXPECT_TRUE(snapshot->items()[0]["has_transcript"].as<bool>());
@@ -217,6 +222,93 @@ TEST_F(ListSourceTest, RecentNotesLoadOnlyOnDemandAndEnrichOnePerStep) {
     list_source_release(handle);
     list_source_loop();
 }
+
+#if HAS_EREADER
+namespace {
+EreaderSnapshot reader_snapshot{};
+uint32_t reader_revision = 1;
+}
+void ereader_snapshot(EreaderSnapshot* out) { *out = reader_snapshot; }
+bool ereader_chapter_title(const char* book, uint32_t chapter, char* out, size_t size) {
+    if (!reader_snapshot.chapters_available || strcmp(book, reader_snapshot.book) ||
+        !chapter || chapter > reader_snapshot.chapter_count) return false;
+    strlcpy(out, chapter == 1 ? "Down the Rabbit-Hole" : "", size);
+    return true;
+}
+uint32_t ereader_chapters_revision() { return reader_revision; }
+uint32_t ereader_library_revision() { return 1; }
+EreaderFileResult ereader_library_list(bool (*visit)(const char*, size_t, void*), void* context) {
+    return visit("Alice.epub", 123, context) ? EreaderFileResult::Ok : EreaderFileResult::StorageError;
+}
+
+TEST_F(ListSourceTest, ChaptersRefreshFromEmptyLoadingToReadyAndBackOnError) {
+    ASSERT_TRUE(list_source_ereader_init());
+    const auto* books = list_source_find("[ereader:books]");
+    ASSERT_NE(books, nullptr);
+    auto* book_handle = list_source_acquire(books);
+    ASSERT_NE(book_handle, nullptr);
+    list_source_loop();
+    ListSourceSnapshot* book_snapshot = nullptr;
+    ASSERT_EQ(list_source_read(book_handle, &book_snapshot, nullptr, nullptr), ListSourceState::Ready);
+    ASSERT_NE(book_snapshot, nullptr);
+    ASSERT_EQ(book_snapshot->items().size(), 1u);
+    EXPECT_STREQ(book_snapshot->items()[0]["id"], "Alice.epub");
+    EXPECT_STREQ(book_snapshot->items()[0]["title"], "Alice");
+    EXPECT_EQ(book_snapshot->items()[0]["size_bytes"], 123);
+    book_snapshot->release();
+    list_source_release(book_handle);
+    list_source_loop();
+    const auto* source = list_source_find("[ereader:chapters]");
+    ASSERT_NE(source, nullptr);
+    auto* handle = list_source_acquire(source);
+    ASSERT_NE(handle, nullptr);
+    reader_snapshot = {};
+    reader_snapshot.chapter_state = EreaderMetadataState::Loading;
+    list_source_loop();
+    ListSourceSnapshot* snapshot = nullptr;
+    ASSERT_EQ(list_source_read(handle, &snapshot, nullptr, nullptr), ListSourceState::Ready);
+    ASSERT_NE(snapshot, nullptr);
+    EXPECT_EQ(snapshot->items().size(), 0u);
+    snapshot->release();
+
+    strlcpy(reader_snapshot.book, "Alice.epub", sizeof(reader_snapshot.book));
+    reader_snapshot.chapters_available = true;
+    reader_snapshot.chapter_count = 2;
+    reader_snapshot.chapter_state = EreaderMetadataState::Ready;
+    ++reader_revision;
+    list_source_loop();
+    const char* error = nullptr;
+    ASSERT_EQ(list_source_read(handle, &snapshot, nullptr, &error), ListSourceState::Ready)
+        << (error ? error : "");
+    ASSERT_NE(snapshot, nullptr);
+    ASSERT_EQ(snapshot->items().size(), 2u);
+    EXPECT_STREQ(snapshot->items()[0]["title"], "Down the Rabbit-Hole");
+    EXPECT_STREQ(snapshot->items()[1]["title"], "Chapter 2");
+    EXPECT_STREQ(snapshot->items()[1]["book"], "Alice.epub");
+    EXPECT_EQ(snapshot->items()[1]["chapter"], 2);
+    snapshot->release();
+
+    reader_snapshot.chapter_count = 40;
+    ++reader_revision;
+    list_source_loop();
+    ASSERT_EQ(list_source_read(handle, &snapshot, nullptr, &error), ListSourceState::Ready)
+        << (error ? error : "");
+    ASSERT_NE(snapshot, nullptr);
+    EXPECT_EQ(snapshot->items().size(), 40u);
+    snapshot->release();
+
+    reader_snapshot.chapters_available = false;
+    reader_snapshot.chapter_state = EreaderMetadataState::Error;
+    ++reader_revision;
+    list_source_loop();
+    ASSERT_EQ(list_source_read(handle, &snapshot, nullptr, nullptr), ListSourceState::Ready);
+    ASSERT_NE(snapshot, nullptr);
+    EXPECT_EQ(snapshot->items().size(), 0u);
+    snapshot->release();
+    list_source_release(handle);
+    list_source_loop();
+}
+#endif
 
 #if TEST_LIST_SOURCE_HEALTH
 namespace {
@@ -503,7 +595,7 @@ TEST_F(ListSourceTest, ListConfigChecksSourceRowsGeometryAndOwnership) {
     EXPECT_EQ(list_validate_config(doc.as<JsonObjectConst>(), aliases, 1), nullptr);
     doc["widget_list_visible_items"] = -1;
     EXPECT_NE(list_validate_config(doc.as<JsonObjectConst>(), aliases, 1), nullptr);
-    doc["widget_list_visible_items"] = LIST_SOURCE_MAX_ITEMS + 1;
+    doc["widget_list_visible_items"] = LIST_VISIBLE_MAX_ITEMS + 1;
     EXPECT_NE(list_validate_config(doc.as<JsonObjectConst>(), aliases, 1), nullptr);
     doc["widget_list_visible_items"] = 3;
     doc["widget_list_indicator_color"] = "[item:title]";
@@ -739,14 +831,14 @@ TEST_F(ListSourceTest, DuplicateIdentityFailsWholeSnapshot) {
     snapshot->release();
 }
 
-TEST_F(ListSourceTest, MoreThanTwentyItemsCannotBePublished) {
+TEST_F(ListSourceTest, CollectionLimitRejectsEntireOversizedSnapshot) {
     auto* snapshot = ListSourceSnapshot::create();
     ASSERT_NE(snapshot, nullptr);
     JsonDocument input;
-    for (unsigned i = 0; i < 21; ++i) {
+    for (unsigned i = 0; i <= LIST_SOURCE_MAX_ITEMS; ++i) {
         input["id"] = std::string("note-") + std::to_string(i);
         const char* error = snapshot->append(input.as<JsonObjectConst>());
-        if (i < 20) ASSERT_EQ(error, nullptr);
+        if (i < LIST_SOURCE_MAX_ITEMS) ASSERT_EQ(error, nullptr);
         else EXPECT_STREQ(error, "too many items");
     }
     EXPECT_STREQ(snapshot->seal(), "too many items");

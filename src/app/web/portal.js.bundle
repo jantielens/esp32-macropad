@@ -78,6 +78,9 @@ portal_health.js
 # [chunk:storage HAS_STORAGE_BROWSER]
 portal_storage.js
 
+# [chunk:ebook_library HAS_EREADER]
+portal_ebook_library.js
+
 # [chunk:music HAS_SOUND_PLAYER]
 portal_music.js
 

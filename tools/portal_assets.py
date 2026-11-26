@@ -50,6 +50,7 @@ OWNERS = {
     "HAS_AUDIO_INPUT": "microphone portal_microphone",
     "HAS_MICROPHONE_STREAMING": "portal_live_microphone",
     "HAS_TTF_FONTS": "fonts portal_fonts",
+    "HAS_EREADER": "ebook_library",
     "HAS_STORAGE_BROWSER": "storage",
     "HAS_REMOTE_LOG": "logs portal_logs",
     "HAS_EXTERNAL_DATA": "external_data portal_external_data",

@@ -19,12 +19,15 @@ each List keeps its own focus and viewport.
 5. Add item tap or long-press actions and choose **Save Pad**.
 
 The source is one collection token, not a scalar binding or a filter. The
-available sources depend on the device:
+available sources depend on the device. In the Binding Reference, the `item`
+scheme lists each source's fields under its name and token:
 
 * `[pad:pads]`: saved pads in numeric order, with `id` and `title`
 * `[voice_note:recent_notes]`: up to 20 recent notes, newest first; optional
   titles and creation times may be unavailable. Creation times are Unix
   timestamps in seconds, not formatted dates.
+* `[ereader:books]` and `[ereader:chapters]`: E-book filenames and reading-order
+  chapters; see [E-reader](README.md#e-reader)
 * `[shutter:tests]`: guided test definitions, with `id`, optional `title`,
   `shots_per_speed`, and `speed_count`
 * `[health:metrics]`: local device health; see [Display device health](#display-device-health)

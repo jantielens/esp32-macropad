@@ -125,6 +125,11 @@ struct HwButtonDef {
 #define HAS_EXTERNAL_DATA (HAS_DISPLAY && HAS_PSRAM)
 #endif
 
+// E-reader support, enabled only on explicitly selected boards.
+#ifndef HAS_EREADER
+#define HAS_EREADER false
+#endif
+
 #if HAS_EXTERNAL_DATA && (!HAS_DISPLAY || !HAS_PSRAM)
 #error "HAS_EXTERNAL_DATA requires HAS_DISPLAY and HAS_PSRAM."
 #endif
@@ -1916,6 +1921,10 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 // Backfill sparkline history from Home Assistant Recorder statistics after a reboot.
 #ifndef HAS_HA_HISTORY
 #define HAS_HA_HISTORY (HAS_DISPLAY && (HAS_MQTT || HAS_HA_LIVE) && HAS_PSRAM)
+#endif
+
+#if HAS_EREADER && (!HAS_DISPLAY || !HAS_TOUCH || !HAS_PSRAM || !HAS_FILESYSTEM)
+#error "HAS_EREADER requires display, touch, PSRAM, and filesystem support."
 #endif
 
 #endif // BOARD_CONFIG_H

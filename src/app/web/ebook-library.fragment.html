@@ -1,0 +1,16 @@
+<div id="ebook-library-panel">
+    <div class="section-header">
+        <h2><span class="portal-icon" aria-hidden="true">menu_book</span>E-book Library</h2>
+        <p>Supports DRM-free, reflowable EPUB files. Uploading stores the file; compatibility is checked when you open it on a pad.</p>
+    </div>
+    <div class="card mb-3"><div class="card-body">
+        <div id="ebook-list" class="list-group mb-3" aria-live="polite"></div>
+        <form id="ebook-upload-form">
+            <label class="form-label" for="ebook-file">EPUB file</label>
+            <input id="ebook-file" class="form-control" type="file" accept=".epub" required>
+            <button class="btn btn-primary mt-2" type="submit">Upload</button>
+            <progress id="ebook-progress" max="100" value="0" hidden style="width:100%;margin-top:12px;"></progress>
+        </form>
+        <div id="ebook-status" class="form-text mt-2" role="status" aria-live="polite" style="overflow-wrap:anywhere;"></div>
+    </div></div>
+</div>

@@ -6,6 +6,7 @@
 
 #include "fs_health.h"
 #include "storage.h"
+#include <strings.h>
 
 namespace {
 const char* backend_name(FSBackend backend) {
@@ -122,6 +123,13 @@ bool storage_browser_remove(const String& path, const char*& error) {
         error = "invalid storage path";
         return false;
     }
+#if HAS_EREADER
+    if (!strncasecmp(path.c_str(), "/books", 6) &&
+        (path.length() == 6 || path[6] == '/')) {
+        error = "use E-book Library to delete books";
+        return false;
+    }
+#endif
     const StorageMutationGuard guard;
     if (!guard) {
         error = "storage busy";

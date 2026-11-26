@@ -133,7 +133,7 @@ const char* list_validate_config(JsonObjectConst button, const PadBinding* bindi
         if (error) return field_error(button, field, error);
     }
     struct Range { const char* field; unsigned min; unsigned max; };
-    const Range ranges[] = {{"widget_list_visible_items", 0, LIST_SOURCE_MAX_ITEMS},
+    const Range ranges[] = {{"widget_list_visible_items", 0, LIST_VISIBLE_MAX_ITEMS},
                             {"widget_list_border_width", 0, 32}, {"widget_list_selected_border_width", 0, 32},
                             {"widget_list_padding", 0, 32}, {"widget_list_spacing", 0, 32},
                             {"widget_list_radius", 0, 64}};

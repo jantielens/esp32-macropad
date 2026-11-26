@@ -78,5 +78,6 @@ FontStoreResult font_store_finish(FontUpload& upload, size_t expected);
 void font_store_abort(FontUpload& upload);
 FontStoreResult font_store_delete(const char* name);
 FontStoreResult font_store_list(bool (*visitor)(const char*, size_t, void*), void* context);
-uint8_t* font_store_load(const char* name, size_t& length);
+uint8_t* font_store_load(const char* name, size_t& length,
+                         bool (*should_stop)(void*) = nullptr, void* context = nullptr);
 #endif

@@ -19,6 +19,58 @@
 #include <cstring>
 #include <thread>
 
+#if TEST_EREADER_ACTION
+#include "ereader.h"
+#include "item_binding.h"
+static ButtonAction make_test_operation(JsonObject action);
+static const char* test_selected_book = "Alice.epub";
+static uint32_t test_selected_chapter = 0;
+bool ereader_valid_book_name(const char* name) { return name && name[0]; }
+bool ereader_open(const char*) { return true; }
+bool ereader_navigate(EreaderCommand) { return true; }
+bool ereader_open_chapter(uint32_t chapter, const char* expected_book) {
+    if (expected_book && strcmp(expected_book, test_selected_book)) return false;
+    test_selected_chapter = chapter;
+    return true;
+}
+
+static bool ereader_chapter_action_context() {
+    static const ListSourceField fields[] = {{"id", "ID", ListSourceFieldType::String, false}};
+    static const ListSourceDescriptor chapters{"[ereader:chapters]", "Chapters", fields, 1};
+    JsonDocument action_doc;
+    if (deserializeJson(action_doc, R"({"op":"ereader.open_chapter","args":{"chapter":{"$template":"[item:chapter]"}}})"))
+        return false;
+    ButtonAction action = make_test_operation(action_doc.as<JsonObject>());
+    JsonDocument row;
+    row["id"] = "2";
+    row["chapter"] = 2;
+    row["book"] = "Alice.epub";
+    auto* snapshot = ListSourceSnapshot::create(&chapters);
+    if (!snapshot || snapshot->append(row.as<JsonObjectConst>()) || snapshot->seal()) {
+        if (snapshot) snapshot->release();
+        return false;
+    }
+    test_selected_chapter = 0;
+    ActionResult first, stale;
+    {
+        ItemBindingScope scope(snapshot, 0);
+        first = action_list_dispatch_result(&action, 1, "chapter", ACTION_CONTINUATION_OWNER_LVGL, true);
+        test_selected_book = "Other.epub";
+        stale = action_list_dispatch_result(&action, 1, "chapter", ACTION_CONTINUATION_OWNER_LVGL, true);
+    }
+    snapshot->release();
+    test_selected_book = "Alice.epub";
+    JsonDocument direct_doc;
+    if (deserializeJson(direct_doc, R"({"op":"ereader.open_chapter","args":{"chapter":3}})"))
+        return false;
+    ButtonAction direct = make_test_operation(direct_doc.as<JsonObject>());
+    const ActionResult direct_result = action_list_dispatch_result(
+        &direct, 1, "chapter", ACTION_CONTINUATION_OWNER_LVGL, true);
+    return first == ACTION_COMPLETE && stale == ACTION_FAILED &&
+        direct_result == ACTION_COMPLETE && test_selected_chapter == 3;
+}
+#endif
+
 static bool outer_guard(uint32_t) { return true; }
 static bool inner_guard(uint32_t) { return true; }
 
@@ -3958,6 +4010,12 @@ int main() {
     item_binding_init();
     pad_binding_init();
     event_binding_init();
+#if TEST_EREADER_ACTION
+    if (!ereader_chapter_action_context()) {
+        std::puts("FAIL: E-reader chapter action preserves List book identity");
+        return 1;
+    }
+#endif
     action_type_register(&capture_type);
     action_type_register(&suspend_type);
     action_type_register(&nested_action);

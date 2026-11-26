@@ -3,6 +3,7 @@
 
 #include "audio_input_binding.h"
 #include "voice_notes_binding.h"
+#include "ereader_binding.h"
 #if HAS_BATTERY_INFO
 #include "battery_binding.h"
 #endif
@@ -29,6 +30,9 @@
 #include "var_binding.h"
 
 void binding_builtin_schemes_init() {
+#if HAS_EREADER
+    ereader_binding_init();
+#endif
 #if HAS_CAMERA && HAS_DISPLAY
     camera_binding_init();
 #endif

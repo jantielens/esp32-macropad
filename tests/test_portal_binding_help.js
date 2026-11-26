@@ -20,7 +20,8 @@ const context = {
     },
     fetch() {
         return Promise.resolve({ ok: true, json: () => Promise.resolve(fixture) });
-    }
+    },
+    getDeviceInfo() { return Promise.resolve(appearanceFixture); }
 };
 vm.createContext(context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_binding_validator.js', 'utf8'), context);
@@ -1570,6 +1571,52 @@ delete context.testHelpSchemes;
     const catalogProvider = vm.runInContext('catalogBindingProvider', context);
     const mqttProvider = vm.runInContext('mqttBindingProvider', context);
     const variableScheme = fixture.schemes.find(scheme => scheme.name === 'var');
+    const itemScheme = vm.runInContext("_bindingHelp.schemes.find(scheme => scheme.name === 'item')", context);
+    assert(itemScheme, 'List item scheme is present in Binding Reference metadata');
+    const itemDocs = vm.runInContext('_bhRenderScheme(scheme)', Object.assign(context, { scheme: itemScheme }));
+    assert(itemDocs.includes('Pads ([pad:pads])'));
+    assert(itemDocs.includes('[ereader:books]') && itemDocs.includes('[ereader:chapters]'));
+    assert(itemDocs.includes('[item:chapter]') && itemDocs.includes('[item:size_bytes]'));
+    assert(itemDocs.includes('Stable pad ID (string)'));
+    assert(itemDocs.includes('(string, optional)'));
+    assert(itemScheme.reference.rows.some(row =>
+        row.group === 'Pads ([pad:pads])' && row.syntax === '[item:id]'));
+    assert(itemScheme.reference.rows.some(row =>
+        row.group === 'E-book chapters ([ereader:chapters])' && row.syntax === '[item:chapter]'));
+    assert(context.bindingHelpSearch([itemScheme], 'pad:pads').some(group => group.title === 'item'));
+    assert(context.bindingHelpSearch([itemScheme], 'size_bytes').some(group => group.title === 'item'));
+    assert(itemDocs.includes('data-bh-copy="[item:chapter]"'));
+    vm.runInContext('_bindingHelp.target = {}', context);
+    assert(context._bhRenderScheme(itemScheme).includes('data-bh-insert="[item:chapter]"'));
+    vm.runInContext('_bindingHelp.target = null', context);
+    const padOnlyInfo = { list_sources: appearanceFixture.list_sources.filter(source => source.token === '[pad:pads]') };
+    context.getDeviceInfo = async () => padOnlyInfo;
+    vm.runInContext('_bindingHelp.schemes = null', context);
+    await context._bhLoad();
+    const padOnly = vm.runInContext("_bindingHelp.schemes.find(scheme => scheme.name === 'item')", context);
+    const padOnlyDocs = context._bhRenderScheme(padOnly);
+    assert(padOnlyDocs.includes('[pad:pads]'));
+    assert(!padOnlyDocs.includes('[ereader:books]'));
+    context.getDeviceInfo = async () => null;
+    vm.runInContext('_bindingHelp.schemes = null', context);
+    await context._bhLoad();
+    assert.match(vm.runInContext('_bindingHelp.error', context), /Could not load binding reference/);
+    assert.strictEqual(vm.runInContext('_bindingHelp.schemes', context), null);
+    context.getDeviceInfo = async () => appearanceFixture;
+    await context._bhLoad();
+    assert.strictEqual(vm.runInContext('_bindingHelp.error', context), '');
+    context.fetch = async () => ({
+        ok: true, json: async () => ({ schemes: fixture.schemes.filter(scheme => scheme.name !== 'item') })
+    });
+    context.getDeviceInfo = async () => { throw new Error('Unneeded catalog request'); };
+    vm.runInContext('_bindingHelp.schemes = null', context);
+    await context._bhLoad();
+    assert.strictEqual(vm.runInContext('_bindingHelp.error', context), '',
+        'Devices without the item scheme do not need a List catalog');
+    context.fetch = async () => ({ ok: true, json: async () => fixture });
+    context.getDeviceInfo = async () => appearanceFixture;
+    vm.runInContext('_bindingHelp.schemes = null', context);
+    await context._bhLoad();
     assert(variableScheme, 'runtime variable scheme is present in generated Binding Reference metadata');
     assert.strictEqual(variableScheme.first_param_pattern, '^[A-Za-z0-9_.-]{1,32}$');
     assert(context.bindingHelpKeyMatches('*', 'not_yet_created.counter'));
@@ -1673,7 +1720,7 @@ delete context.testHelpSchemes;
         ]
     };
     vm.runInContext('_bindingHelp.schemes', context).push(requiredScheme);
-    context.bindingRegisterSchema(fixture.schemes);
+    context.bindingRegisterSchema(vm.runInContext('_bindingHelp.schemes', context));
     assert.throws(() => catalogToken('test_multi', 'source'), /required parameters/);
     assert.throws(() => catalogToken('test_multi', 'source', ''), /Enter field/);
     assert.strictEqual(catalogToken('test_multi', 'source', 'field', ''), '[test_multi:source;field]');
@@ -1969,7 +2016,7 @@ delete context.testHelpSchemes;
             capabilities: ['display', 'numeric_widget', 'live_sampling'], read_only: true }] }
     };
     vm.runInContext('_bindingHelp.schemes', context).push(structuralScheme);
-    context.bindingRegisterSchema(fixture.schemes);
+    context.bindingRegisterSchema(vm.runInContext('_bindingHelp.schemes', context));
     const structuralResults = await catalogProvider.list('Sensor duration');
     assert.ok(structuralResults.some(candidate => candidate.sourceId === 'test_structural:sensor_1_ms'));
     const structuralValue = catalogButtons.prepare(catalogReference('test_structural', 'sensor_3_ms'));

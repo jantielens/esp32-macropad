@@ -459,11 +459,39 @@ function _bhLoad() {
             if (!response.ok) throw new Error('HTTP ' + response.status);
             return response.json();
         })
-        .then(payload => {
-            _bindingHelp.schemes = Array.isArray(payload && payload.schemes) ? payload.schemes : [];
-            bindingRegisterSchema(_bindingHelp.schemes);
+        .then(async payload => {
+            const schemes = Array.isArray(payload && payload.schemes) ? payload.schemes : [];
+            const item = schemes.find(scheme => scheme.name === 'item');
+            if (item) {
+                const info = await getDeviceInfo();
+                if (!info || !Array.isArray(info.list_sources))
+                    throw new Error('List source catalog unavailable');
+                const rows = info.list_sources.flatMap(source => {
+                    if (!source || !source.token || !source.title || !Array.isArray(source.fields))
+                        throw new Error('Invalid List source catalog');
+                    return source.fields.map(field => {
+                        if (!field || !field.name || !field.description || !field.type)
+                            throw new Error('Invalid List source field');
+                        const token = '[item:' + field.name + ']';
+                        return {
+                            group: source.title + ' (' + source.token + ')',
+                            syntax: token,
+                            desc: field.description + ' (' + field.type + (field.optional ? ', optional' : '') + ')',
+                            example: token
+                        };
+                    });
+                });
+                _bindingHelp.schemes = schemes.map(scheme => scheme === item
+                    ? { ...scheme, reference: { title: 'List source fields', formats: false, rows } }
+                    : scheme);
+            } else {
+                _bindingHelp.schemes = schemes;
+            }
+            bindingRegisterSchema(schemes);
         })
-        .catch(() => {
+        .catch(error => {
+            console.error('Binding Reference:', error);
+            _bindingHelp.schemes = null;
             _bindingHelp.error = 'Could not load binding reference.';
         })
         .then(() => {

@@ -54,6 +54,7 @@ class PortalDevServerTest(unittest.TestCase):
     def setUp(self):
         PORTAL.reset_pad_fixtures(self.server)
         self.server.mock_fonts = {}
+        self.server.mock_ebooks = {}
         self.server.mock_config.pop("external_data", None)
         for key in [key for key in self.server.mock_config if key.startswith("voice_notes_")]:
             self.server.mock_config.pop(key, None)
@@ -85,6 +86,8 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertIn('/portal.js?v=dev-mock', shell)
         self.assertIn('/portal-all.css?v=dev-mock', shell)
         self.assertEqual(shell.count('id="binding-help-overlay"'), 1)
+        interactive_shell = self.request("/?profile=reterminal-sticky-interactive-sd", raw=True)[1]
+        self.assertEqual(interactive_shell.count('id="binding-help-overlay"'), 1)
         headless_shell = self.request("/?profile=reterminal-e1003-frame", raw=True)[1]
         self.assertNotIn('id="binding-help-overlay"', headless_shell)
         self.assertNotIn("{{", headless_shell)
@@ -242,6 +245,33 @@ class PortalDevServerTest(unittest.TestCase):
         saved = self.request("/api/config", profile=profile)[1]
         self.assertIs(saved[field], False)
         self.assertTrue(saved["voice_notes_transcription_api_key_set"])
+
+    def test_ebook_library_fixture_and_profile_isolation(self):
+        profile = "reterminal-sticky-interactive-sd"
+        base = "/api/component/ebook-library/"
+        for selected, enabled in ((profile, True), ("reterminal-sticky-interactive", False)):
+            nav = self.request("/api/portal/nav", profile=selected)[1]
+            entries = {item["id"] for category in nav["categories"] for item in category["items"]}
+            self.assertEqual("ebook-library" in entries, enabled)
+            for suffix in ("", "?docs=1"):
+                schemes = self.request("/api/bindings" + suffix, profile=selected)[1]["schemes"]
+                self.assertEqual(any(scheme["name"] == "ereader" for scheme in schemes), enabled)
+            info = self.request("/api/info?catalog=1", profile=selected)[1]
+            self.assertEqual(any(widget["type"] == "ereader" for widget in info["widget_catalog"]), enabled)
+            self.assertEqual(any(action["type"] == "ereader" for action in info["catalog"]), enabled)
+            sources = {source["token"] for source in info["list_sources"]}
+            self.assertEqual("[ereader:books]" in sources, enabled)
+            self.assertEqual("[ereader:chapters]" in sources, enabled)
+            self.assertEqual(self.request("/api/section/ebook-library", profile=selected, raw=True)[0],
+                             200 if enabled else 404)
+            self.assertEqual(self.request(base + "list", profile=selected)[0], 200 if enabled else 404)
+        path = base + "upload?book=Alice.epub"
+        self.assertEqual(self.request(path, "POST", b"test", profile, content_type="application/octet-stream")[0], 200)
+        self.assertEqual(self.request(path, "POST", b"test", profile, content_type="application/octet-stream")[0], 409)
+        self.assertEqual(self.request(base + "list", profile=profile)[1]["books"],
+                         [{"id": "Alice.epub", "title": "Alice.epub", "size_bytes": 4}])
+        self.assertEqual(self.request(base + "delete?book=Alice.epub", "DELETE", profile=profile)[0], 200)
+        self.assertEqual(self.request(base + "delete?book=Alice.epub", "DELETE", profile=profile)[0], 404)
 
     def test_voice_notes_fixture_and_profile_isolation(self):
         profile = "reterminal-sticky-interactive-sd"

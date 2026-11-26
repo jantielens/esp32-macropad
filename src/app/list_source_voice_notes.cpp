@@ -11,6 +11,7 @@
 #include <string.h>
 
 namespace {
+constexpr size_t recent_notes_limit = 20;
 struct RecentNotesJob {
     BoundedPsramJsonAllocator allocator{LIST_SOURCE_DOCUMENT_BYTES};
     JsonDocument entries{&allocator};
@@ -30,7 +31,7 @@ ListSourceLoadStep load_recent_notes(void** opaque, ListSourceSnapshot* snapshot
         }
         job = new (memory) RecentNotesJob();
         *opaque = job;
-        const VoiceNoteRecentResult result = voice_notes_select_recent(job->entries, LIST_SOURCE_MAX_ITEMS);
+        const VoiceNoteRecentResult result = voice_notes_select_recent(job->entries, recent_notes_limit);
         if (result == VoiceNoteRecentResult::Deferred) return ListSourceLoadStep::Deferred;
         if (result != VoiceNoteRecentResult::Ready || job->entries.overflowed()) {
             *error = "cannot select recent notes";
