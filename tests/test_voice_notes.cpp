@@ -16,6 +16,8 @@
 #include "action_registry.h"
 #include "action_continuation.h"
 #include "main_loop_bridge.h"
+#include "keyboard_hid.h"
+#include "voice_notes_binding.h"
 #include <WiFi.h>
 #include <esp_heap_caps.h>
 #include <LittleFS.h>
@@ -139,6 +141,12 @@ std::string failed_note;
 VoiceNotesRequestOutcome simulated_outcome = VoiceNotesRequestOutcome::NoteFailure;
 uint64_t simulated_cooldown = 0;
 const char* transcription_text = "host transcript";
+std::atomic<unsigned> typing_attempts{0};
+bool accept_typing = true;
+std::string typed_text;
+uint32_t typing_token = 60000;
+unsigned released_typing_tokens = 0;
+unsigned pending_typing_tokens = 0;
 const char* enrichment_title = "Host title";
 const char* enrichment_summary = "Host summary.";
 char interrupted_load_id[17] = {};
@@ -258,6 +266,7 @@ bool voice_notes_transcription_request(const VoiceNotesServiceConfig&, File& rec
     if (simulate_failure) return false;
     if (fail_transcription) { result.error = "Request failed"; return false; }
     const size_t size = strlen(transcription_text) + 1;
+    result.no_speech = size == 1;
     result.text = static_cast<char*>(heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
     memcpy(result.text, transcription_text, size);
     result.status = 200;
@@ -282,6 +291,27 @@ bool voice_notes_enrichment_request(const VoiceNotesServiceConfig&, const char* 
     return true;
 }
 uint32_t esp_random() { static uint32_t value = 0; return ++value; }
+bool action_continuation_begin(const ButtonAction*, uint8_t count, const char*, uint32_t* token,
+                               ActionContinuationOwner, bool, ActionContinuationContext) {
+    assert(count == 0);
+    *token = ++typing_token;
+    return true;
+}
+void action_continuation_release(uint32_t token) {
+    assert(token == typing_token);
+    ++released_typing_tokens;
+}
+void action_continuation_mark_pending(uint32_t token) {
+    assert(token == typing_token);
+    ++pending_typing_tokens;
+}
+bool keyboard_hid_request_text(const char* text, uint32_t token, bool allow_controls) {
+    assert(token == typing_token && !allow_controls);
+    typed_text = text;
+    ++typing_attempts;
+    return accept_typing;
+}
+const char* keyboard_hid_status() { return accept_typing ? "ready" : "disconnected"; }
 bool action_continuation_complete(uint32_t token, bool success) {
     if (expired) return false;
     std::lock_guard<std::mutex> lock(completion_mutex);
@@ -378,6 +408,12 @@ int main(int argc, char**) {
     LittleFS.usage_hook = usage_hook;
     LittleFS.write_hook = write_hook;
     assert(voice_notes_init());
+    voice_notes_binding_init();
+    char latest[128] = {};
+    assert(voice_notes_latest_transcript_resolve("text", latest, sizeof(latest)) ==
+           BINDING_RESOLVER_UNAVAILABLE);
+    const ActionResolvedArgument recording_defaults[] = {{nullptr, 0, 0}};
+    const ActionResolvedArgument recording_type[] = {{nullptr, 1, 0}};
     assert(capture_psram_stack == !no_psram && capture_internal_stack == no_psram);
     const auto& toggle = voice_operation(kVoiceNoteRecordActionType, "voice_note.record.toggle");
     const auto& start = voice_operation(kVoiceNoteRecordActionType, "voice_note.record.start");
@@ -401,11 +437,11 @@ int main(int argc, char**) {
     assert(remove.dispatch(invalid_note, "test", 3000) == ACTION_FAILED && !queued_delete);
     assert(process.dispatch(nullptr, "test", 0) == ACTION_FAILED);
     block_start = true;
-    assert(toggle.dispatch(nullptr, "test", 0) == ACTION_FAILED);
-    assert(toggle.dispatch(nullptr, "test", 1) == ACTION_PENDING);
+    assert(toggle.dispatch(recording_defaults, "test", 0) == ACTION_FAILED);
+    assert(toggle.dispatch(recording_defaults, "test", 1) == ACTION_PENDING);
     wait_until([] { return start_entered.load(); });
     assert(snapshot().state == VoiceNoteState::Starting);
-    assert(toggle.dispatch(nullptr, "test", 9000) == ACTION_FAILED);
+    assert(toggle.dispatch(recording_defaults, "test", 9000) == ACTION_FAILED);
     block_start = false;
     assert(wait_completion(1));
     assert(strcmp(snapshot().scenario, "general") == 0);
@@ -420,7 +456,7 @@ int main(int argc, char**) {
     assert(snapshot().duration_ms == paused_duration);
     assert(resume.dispatch(nullptr, "test", 3) == ACTION_PENDING);
     assert(wait_completion(3));
-    assert(toggle.dispatch(nullptr, "test", 4) == ACTION_PENDING);
+    assert(toggle.dispatch(recording_defaults, "test", 4) == ACTION_PENDING);
     assert(wait_completion(4));
     VoiceNoteSnapshot saved = snapshot();
     assert(saved.state == VoiceNoteState::Idle && !owned && saved.last_clip[0]);
@@ -755,6 +791,12 @@ int main(int argc, char**) {
         result_file.close();
         assert(strcmp(persisted["transcript"]["text"], "host transcript") == 0);
         assert(strcmp(persisted["transcript"]["model"], "original") == 0);
+        assert(binding_template_resolve_checked("[voice_note:latest_transcript.text]",
+                                                latest, sizeof(latest)));
+        assert(strcmp(latest, "host transcript") == 0);
+        assert(binding_template_resolve_checked("[voice_note:latest_transcript.id]",
+                                                latest, sizeof(latest)));
+        assert(strcmp(latest, saved.last_clip) == 0);
         const auto previous = LittleFS.files.at(sidecar.c_str());
         fail_transcription = true;
         bool accepted = false;
@@ -769,6 +811,9 @@ int main(int argc, char**) {
         });
         assert(LittleFS.files.at(sidecar.c_str()) == previous);
         assert(LittleFS.files.at(path.c_str()) == original_wav);
+        assert(binding_template_resolve_checked("[voice_note:latest_transcript.text]",
+                                                latest, sizeof(latest)));
+        assert(strcmp(latest, "host transcript") == 0);
         fail_transcription = false;
         fail_transcript_write = true;
         accepted = false;
@@ -895,7 +940,7 @@ int main(int argc, char**) {
     assert(voice_notes_command(VoiceNoteCommand::Pause, 12));
     assert(wait_completion(12));
     LittleFS.short_write = true;
-    assert(save.dispatch(nullptr, "test", 13) == ACTION_PENDING);
+    assert(save.dispatch(recording_defaults, "test", 13) == ACTION_PENDING);
     assert(!wait_completion(13));
     LittleFS.short_write = false;
     assert(snapshot().state == VoiceNoteState::Error && !owned);
@@ -1736,6 +1781,121 @@ int main(int argc, char**) {
         assert(enrichment_retry_status().empty());
         assert(voice_notes_remove(resumed_id.c_str()) == VoiceNoteFileStatus::Ready);
         assert(voice_notes_remove(retry_id.c_str()) == VoiceNoteFileStatus::Ready);
+    }
+
+    {
+        VoiceNotesConfig config{};
+        strlcpy(config.transcription.endpoint, "https://example.test/", sizeof(config.transcription.endpoint));
+        strlcpy(config.transcription.api_key, "key", sizeof(config.transcription.api_key));
+        strlcpy(config.transcription.deployment, "typing", sizeof(config.transcription.deployment));
+        assert(voice_notes_processing_configure(config));
+        assert(voice_notes_processing_init());
+        auto idle = [] {
+            VoiceNotesProcessingSnapshot state{};
+            voice_notes_processing_snapshot(&state);
+            return state.state == VoiceNotesProcessingState::Idle;
+        };
+        wait_until(idle);
+        const char* expected_control = (HAS_BLE_HID || HAS_USB_HID) ? "checkbox" : "hidden";
+        assert(!strcmp(save.arguments[0].control, expected_control));
+        assert(save.arguments[0].optional && save.arguments[0].default_integer == 0);
+
+        assert(toggle.dispatch(recording_type, "test", 61001) == ACTION_PENDING);
+        assert(wait_completion(61001));
+        const unsigned read_count = reads;
+        wait_until([&] { return reads > read_count; });
+        wifi_connected = false;
+        assert(toggle.dispatch(recording_type, "test", 61002) == ACTION_PENDING);
+        assert(wait_completion(61002));
+        const std::string typing_id = snapshot().last_clip;
+        assert(typing_attempts == 0);
+        assert(voice_notes_processing_start(typing_id.c_str(), VoiceNotesProcessingMode::Missing) ==
+               VoiceNotesProcessingStart::Offline);
+        wifi_connected = true;
+        fail_transcription = true;
+        assert(voice_notes_processing_start(typing_id.c_str(), VoiceNotesProcessingMode::Missing) ==
+               VoiceNotesProcessingStart::Accepted);
+        wait_until(idle);
+        assert(typing_attempts == 0);
+        fail_transcription = false;
+        fail_transcript_write = true;
+        assert(voice_notes_processing_start(typing_id.c_str(), VoiceNotesProcessingMode::Missing) ==
+               VoiceNotesProcessingStart::Accepted);
+        wait_until(idle);
+        assert(typing_attempts == 0);
+        fail_transcript_write = false;
+        transcription_text = "Literal \"quotes\" ctrl+a [var:untouched]";
+        assert(voice_notes_processing_start(typing_id.c_str(), VoiceNotesProcessingMode::Missing) ==
+               VoiceNotesProcessingStart::Accepted);
+        wait_until(idle);
+#if HAS_BLE_HID || HAS_USB_HID
+        assert(typing_attempts == 1 && typed_text == transcription_text);
+        assert(pending_typing_tokens == 1 && released_typing_tokens == 0);
+#else
+        assert(typing_attempts == 0);
+        assert(matching_logs("typing failed", "keyboard_unavailable") == 1);
+#endif
+        assert(binding_template_resolve_checked("[voice_note:latest_transcript.id]",
+                                                latest, sizeof(latest)));
+        assert(typing_id == latest);
+        BindingTextView held{};
+        assert(voice_notes_latest_transcript_acquire_text(&held) == BINDING_RESOLVER_RESOLVED);
+        const std::string original_text = held.text;
+        std::string long_transcript(2049, 'a');
+        transcription_text = long_transcript.c_str();
+        assert(voice_notes_processing_start(typing_id.c_str(), VoiceNotesProcessingMode::Retranscribe) ==
+               VoiceNotesProcessingStart::Accepted);
+        wait_until(idle);
+        assert(original_text == held.text);
+        held.release(held.owner);
+        char typing_buffer[2049];
+        assert(!binding_template_resolve_checked("[voice_note:latest_transcript.text]",
+                                                 typing_buffer, sizeof(typing_buffer)));
+        BindingTextView full{};
+        assert(voice_notes_latest_transcript_acquire_text(&full) == BINDING_RESOLVER_RESOLVED);
+        assert(strlen(full.text) == long_transcript.size());
+        full.release(full.owner);
+#if HAS_BLE_HID || HAS_USB_HID
+        const unsigned attempted = typing_attempts;
+        assert(attempted == 1);
+#endif
+
+        for (bool no_speech : {false, true}) {
+            const uint32_t start_token = no_speech ? 61007 : 61003;
+            const uint32_t save_token = start_token + 1;
+            assert(start.dispatch(nullptr, "test", start_token) == ACTION_PENDING);
+            assert(wait_completion(start_token));
+            const unsigned before = reads;
+            wait_until([&] { return reads > before; });
+            assert(save.dispatch(recording_type, "test", save_token) == ACTION_PENDING);
+            assert(wait_completion(save_token));
+            const std::string id = snapshot().last_clip;
+            accept_typing = false;
+            transcription_text = no_speech ? "" : "Try once";
+            assert(voice_notes_processing_start(id.c_str(), VoiceNotesProcessingMode::Missing) ==
+                   VoiceNotesProcessingStart::Accepted);
+            wait_until(idle);
+            assert(!voice_notes_take_typing_request(id.c_str()));
+            accept_typing = true;
+            transcription_text = "Manual replay only";
+            assert(voice_notes_processing_start(id.c_str(), VoiceNotesProcessingMode::Retranscribe) ==
+                   VoiceNotesProcessingStart::Accepted);
+            wait_until(idle);
+        }
+#if HAS_BLE_HID || HAS_USB_HID
+        assert(typing_attempts == attempted + 1);
+        assert(released_typing_tokens == 1 && pending_typing_tokens == 1);
+#else
+        assert(typing_attempts == 0);
+#endif
+        // The option on a starting Toggle does not arm a later unselected Save.
+        assert(toggle.dispatch(recording_type, "test", 61005) == ACTION_PENDING);
+        assert(wait_completion(61005));
+        const unsigned before = reads;
+        wait_until([&] { return reads > before; });
+        assert(save.dispatch(recording_defaults, "test", 61006) == ACTION_PENDING);
+        assert(wait_completion(61006));
+        assert(!voice_notes_take_typing_request(snapshot().last_clip));
     }
 
     audio_test_stopping = true;

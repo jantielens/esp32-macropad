@@ -12,6 +12,12 @@
 #include "rtos_task_utils.h"
 #include "time_service.h"
 #include "voice_wav.h"
+#include "action_continuation.h"
+#include "keyboard_hid.h"
+#if HAS_DISPLAY && HAS_PSRAM
+#include "binding_value_json.h"
+#include "loaded_data.h"
+#endif
 #include <ArduinoJson.h>
 #include <WiFi.h>
 #include <esp_heap_caps.h>
@@ -69,6 +75,61 @@ bool g_pending_tx = false;
 bool g_pending_llm = false;
 bool g_refresh = true;
 char g_last_saved[32] = {};
+#if HAS_DISPLAY && HAS_PSRAM
+LoadedDataSnapshot* g_latest_transcript = nullptr;
+
+LoadedDataSnapshot* acquire_latest_transcript() {
+    if (!g_mutex) return nullptr;
+    xSemaphoreTake(g_mutex, portMAX_DELAY);
+    LoadedDataSnapshot* snapshot = g_latest_transcript;
+    if (snapshot) snapshot->retain();
+    xSemaphoreGive(g_mutex);
+    return snapshot;
+}
+
+void publish_latest_transcript(const char* id, const char* text) {
+    LoadedDataSnapshot* snapshot = LoadedDataSnapshot::create();
+    if (snapshot) {
+        snapshot->document()["id"] = JsonString(id, JsonString::Copied);
+        snapshot->document()["text"] = JsonString(text, JsonString::Copied);
+        if (snapshot->document().overflowed()) {
+            snapshot->release();
+            snapshot = nullptr;
+        }
+    }
+    xSemaphoreTake(g_mutex, portMAX_DELAY);
+    LoadedDataSnapshot* previous = g_latest_transcript;
+    g_latest_transcript = snapshot;
+    xSemaphoreGive(g_mutex);
+    if (previous) previous->release();
+    if (!snapshot) LOGE(TAG, "Cannot publish latest transcript note=%s", id);
+    display_manager_request_binding_refresh();
+}
+#endif
+
+void type_transcript_if_requested(const char* id, const VoiceNotesRequestResult& response) {
+    if (!voice_notes_take_typing_request(id)) return;
+    if (response.no_speech || !response.text || !response.text[0]) {
+        LOGW(TAG, "Transcript saved; typing skipped note=%s reason=no_speech", id);
+        return;
+    }
+#if (HAS_DISPLAY || HAS_BUTTON) && (HAS_BLE_HID || HAS_USB_HID)
+    uint32_t token = 0;
+    if (!action_continuation_begin(nullptr, 0, "Voice note typing", &token)) {
+        LOGW(TAG, "Transcript saved; typing failed note=%s reason=continuations_busy", id);
+        return;
+    }
+    if (!keyboard_hid_request_text(response.text, token)) {
+        action_continuation_release(token);
+        LOGW(TAG, "Transcript saved; typing failed note=%s keyboard=%s", id, keyboard_hid_status());
+        return;
+    }
+    action_continuation_mark_pending(token);
+    LOGI(TAG, "Transcript saved; typing started note=%s", id);
+#else
+    LOGW(TAG, "Transcript saved; typing failed note=%s reason=keyboard_unavailable", id);
+#endif
+}
 
 uint64_t now_ms() { return static_cast<uint64_t>(esp_timer_get_time()) / 1000; }
 uint64_t deadline(uint64_t now, uint64_t delay) {
@@ -260,7 +321,13 @@ VoiceNotesRequestOutcome transcribe(Job& job, bool replace, uint64_t& cooldown) 
                         error = "Recording or update interrupted transcription";
                         outcome = VoiceNotesRequestOutcome::Interrupted;
                     } else if (saved == SaveOutcome::Failed) error = "Could not save transcript";
-                    else outcome = VoiceNotesRequestOutcome::Success;
+                    else {
+                        outcome = VoiceNotesRequestOutcome::Success;
+#if HAS_DISPLAY && HAS_PSRAM
+                        publish_latest_transcript(job.id, response.text);
+#endif
+                        type_transcript_if_requested(job.id, response);
+                    }
                 }
             }
         }
@@ -670,6 +737,29 @@ void worker(void*) {
     }
 }
 }
+
+#if HAS_DISPLAY && HAS_PSRAM
+BindingResolverStatus voice_notes_latest_transcript_resolve(const char* key, char* out, size_t size) {
+    if (strcmp(key, "id") && strcmp(key, "text")) return BINDING_RESOLVER_UNKNOWN;
+    LoadedDataSnapshot* snapshot = acquire_latest_transcript();
+    if (!snapshot) return BINDING_RESOLVER_UNAVAILABLE;
+    const JsonVariantConst value = snapshot->data()[key];
+    const bool resolved = binding_template_checked_resolution_active()
+        ? binding_value_scalar_json(value, out, size)
+        : binding_value_scalar_json_preview(value, out, size);
+    snapshot->release();
+    return resolved ? BINDING_RESOLVER_RESOLVED : BINDING_RESOLVER_UNAVAILABLE;
+}
+
+BindingResolverStatus voice_notes_latest_transcript_acquire_text(BindingTextView* out) {
+    LoadedDataSnapshot* snapshot = acquire_latest_transcript();
+    if (!snapshot) return BINDING_RESOLVER_UNAVAILABLE;
+    out->text = snapshot->data()["text"].as<const char*>();
+    out->owner = snapshot;
+    out->release = [](void* owner) { static_cast<LoadedDataSnapshot*>(owner)->release(); };
+    return BINDING_RESOLVER_RESOLVED;
+}
+#endif
 
 bool voice_notes_normalize_endpoint(const char* input, char* output, size_t capacity) {
     if (!input || !output || !capacity) return false;

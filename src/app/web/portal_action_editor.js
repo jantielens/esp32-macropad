@@ -52,6 +52,10 @@ function actionEditorOperationHTML(prefix) {
             html += '<div id="' + base + '-group" style="display:none;">';
             operation.arguments.forEach(function(argument) {
                 var id = base + '-' + argument.name;
+                if (argument.control === 'hidden') {
+                    html += '<input type="hidden" id="' + id + '-fixed" value="' + escAttr(String(argument.default)) + '">';
+                    return;
+                }
                 html += '<div class="form-group"><div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-1">';
                 html += '<label class="form-label mb-0" id="' + id + '-label" for="' + id + '-fixed">' + argument.label + '</label>';
                 if (argument.dynamic) {
@@ -77,6 +81,9 @@ function actionEditorOperationHTML(prefix) {
                 } else if (argument.control === 'brew_templates') {
                     html += '<select class="form-select form-select-sm" id="' + id + '-fixed"' + fixedChanged + '><option value="">Loading templates...</option></select>';
                     html += '<small class="text-danger" id="' + id + '-load-error" role="alert"></small>';
+                } else if (argument.type === 'boolean' && argument.control === 'checkbox') {
+                    html += '<input type="checkbox" class="form-check-input" id="' + id + '-fixed"' +
+                        (argument.default === true ? ' checked' : '') + '>';
                 } else if (argument.type === 'boolean') {
                     html += '<select class="form-select form-select-sm" id="' + id + '-fixed"' + fixedChanged + '>';
                     html += '<option value="true"' + (argument.default === true ? ' selected' : '') + '>Enabled</option>';
@@ -114,6 +121,8 @@ function actionEditorOperationHTML(prefix) {
                     }
                 }
                 html += '</div>';
+                if (argument.description)
+                    html += '<small class="form-text">' + escAttr(argument.description) + '</small>';
                 if (argument.dynamic) {
                     html += '<div id="' + id + '-dynamic-group" style="display:none;"><input type="text" class="form-control form-control-sm binding-mono" id="' + id + '-template" placeholder="' + escAttr(argument.example) + '">';
                     var expected = argument.control === 'screens' ? 'screen ID'
@@ -305,6 +314,8 @@ function actionEditorBuildOperation(prefix, operation) {
         var dynamic = document.getElementById(base + '-dynamic');
         var input = document.getElementById(base + (dynamic && dynamic.checked ? '-template' : '-fixed'));
         var value = input ? input.value : '';
+        if (input && argument.control === 'checkbox' && !(dynamic && dynamic.checked))
+            value = String(input.checked);
         var error = '';
         if (dynamic && dynamic.checked) {
             var checked = validateBinding(value, { requireKnownScheme: true });
@@ -534,7 +545,8 @@ function actionEditorLoad(prefix, action) {
                         if (zero) zero.checked = value === 0;
                         input.value = value === 0 ? String(argument.nonzero_min) : String(value);
                         actionEditorOperationTimingChanged(prefix, operation.id, argument.name);
-                    } else input.value = dynamic ? value.$template : String(value);
+                    } else if (!dynamic && argument.control === 'checkbox') input.checked = value === true;
+                    else input.value = dynamic ? value.$template : String(value);
                     if (dynamic) input.setAttribute('data-dynamic-initialized', '1');
                     if (!dynamic && input.tagName === 'SELECT' && input.value !== String(value)) {
                         if (argument.control === 'screens' && input.hasAttribute('data-screens-loaded')) {

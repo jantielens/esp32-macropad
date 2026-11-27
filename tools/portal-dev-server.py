@@ -1987,11 +1987,15 @@ class PortalHandler(SimpleHTTPRequestHandler):
                     if enabled.get(action["type"], self._voice_notes_capable()
                                    if action["type"].startswith("vnote_") else True)
                 ]
-                if not info["has_sound_player"]:
-                    for action in info["catalog"]:
-                        if action["type"] == "sound_alert":
-                            action["operations"] = [op for op in action["operations"]
-                                                    if op["id"] != "audio.alert.mp3"]
+                for action in info["catalog"]:
+                    if action["type"] == "vnote_record" and not (info["has_usb_hid"] or info["has_ble_hid"]):
+                        for operation in action["operations"]:
+                            for argument in operation["arguments"]:
+                                if argument["name"] == "type_after_transcription":
+                                    argument["control"] = "hidden"
+                    if action["type"] == "sound_alert" and not info["has_sound_player"]:
+                        action["operations"] = [op for op in action["operations"]
+                                                if op["id"] != "audio.alert.mp3"]
                 info["widget_catalog"] = [
                     widget for widget in self.server.pad_fixture["widget_catalog"]
                     if widget.get("type") != "slider" or info["has_touch"]

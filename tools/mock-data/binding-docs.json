@@ -3996,6 +3996,8 @@
         "processing.state",
         "transcription.retry_status",
         "enrichment.retry_status",
+        "latest_transcript.text",
+        "latest_transcript.id",
         "loaded.status",
         "loaded.error",
         "loaded.id",
@@ -4008,7 +4010,7 @@
         "loaded.has_enrichment"
       ],
       "category": "Device",
-      "summary": "Local voice note recorder status and explicitly loaded note data.",
+      "summary": "Local voice note recorder status, latest transcript, and explicitly loaded note data.",
       "params": [
         {
           "name": "key",
@@ -4074,6 +4076,14 @@
           "desc": "Background processing state"
         },
         {
+          "key": "latest_transcript.text",
+          "desc": "Latest successful transcript since boot, in completion order: short scalar preview, or full text in a Text reader"
+        },
+        {
+          "key": "latest_transcript.id",
+          "desc": "Voice note ID of the latest successful transcript since boot"
+        },
+        {
           "key": "loaded.status",
           "desc": "Explicitly loaded note: idle, loading, ready, or error"
         },
@@ -4134,6 +4144,14 @@
         {
           "code": "[voice_note:transcription.retry_status]",
           "desc": "Show the transcription service retry cycle."
+        },
+        {
+          "code": "[voice_note:latest_transcript.text|No transcript]",
+          "desc": "Show the latest successful transcript."
+        },
+        {
+          "code": "[voice_note:latest_transcript.id]",
+          "desc": "Identify the note that produced the latest transcript."
         },
         {
           "code": "[voice_note:loaded.status]",
@@ -4328,6 +4346,32 @@
             "kind": "text",
             "unit": "",
             "example_value": "Retries halted",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "latest_transcript.text",
+            "kind": "text",
+            "unit": "",
+            "example_value": "A recorded conversation",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "latest_transcript.id",
+            "kind": "text",
+            "unit": "",
+            "example_value": "0000000100000002",
             "formats": [
               "raw"
             ],

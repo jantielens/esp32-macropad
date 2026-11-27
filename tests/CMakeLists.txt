@@ -1743,7 +1743,7 @@ set(FS_INDEXED_STORE_TEST_SOURCES
     ${PROJECT_SOURCE_DIR}/src/app/voice_wav.cpp
     ${PROJECT_SOURCE_DIR}/src/app/voice_notes_metadata.cpp
 )
-foreach(storage_profile IN ITEMS flash sd)
+foreach(storage_profile IN ITEMS flash sd no_hid)
     set(voice_notes_target test_voice_notes)
     set(voice_notes_storage_definitions USE_SD_STORAGE=0)
     set(voice_notes_activity_source)
@@ -1751,6 +1751,9 @@ foreach(storage_profile IN ITEMS flash sd)
         set(voice_notes_target test_voice_notes_sd)
         set(voice_notes_storage_definitions USE_SD_STORAGE=1 HAS_AUTO_SHUTDOWN=1 OTA_ACTIVITY_HOST_TEST)
         set(voice_notes_activity_source ${PROJECT_SOURCE_DIR}/src/app/ota_activity.cpp)
+    elseif(storage_profile STREQUAL "no_hid")
+        set(voice_notes_target test_voice_notes_no_hid)
+        list(APPEND voice_notes_storage_definitions HAS_BLE_HID=0)
     endif()
 add_host_legacy_test(${voice_notes_target}
     SOURCES test_voice_notes.cpp
@@ -1764,6 +1767,7 @@ add_host_legacy_test(${voice_notes_target}
         ${PROJECT_SOURCE_DIR}/src/app/voice_wav.cpp
         ${PROJECT_SOURCE_DIR}/src/app/voice_notes_metadata.cpp
         ${PROJECT_SOURCE_DIR}/src/app/voice_notes_processing.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/voice_notes_binding.cpp
         ${voice_notes_activity_source}
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/audio_input_overrides
         ${PROJECT_SOURCE_DIR}/tests/fs_indexed_store_overrides

@@ -210,7 +210,8 @@ bool voice_notes_transcription_request(const VoiceNotesServiceConfig& config, Fi
         return false;
     }
     const char* text = document["text"];
-    if (!*text) text = "No speech detected";
+    result.no_speech = !*text;
+    if (result.no_speech) text = "No speech detected";
     const size_t length = strlen(text);
     result.text = static_cast<char*>(heap_caps_malloc(length + 1, kPsramCaps));
     if (!result.text) { result.outcome = VoiceNotesRequestOutcome::ResourceFailure; result.error = "Transcript allocation failed"; return false; }

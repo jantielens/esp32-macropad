@@ -39,7 +39,9 @@ enum class VoiceNoteCandidate : uint8_t { Found, None, Error, Interrupted };
 enum class VoiceNoteRecentResult : uint8_t { Ready, Deferred, Error };
 
 bool voice_notes_init();
-bool voice_notes_command(VoiceNoteCommand command, uint32_t continuation_token);
+bool voice_notes_command(VoiceNoteCommand command, uint32_t continuation_token,
+                         bool type_after_transcription = false);
+bool voice_notes_take_typing_request(const char* id);
 void voice_notes_snapshot(VoiceNoteSnapshot* out);
 const char* voice_notes_state_name(VoiceNoteState state);
 VoiceNoteCancelStatus voice_notes_cancel();

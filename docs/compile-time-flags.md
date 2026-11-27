@@ -366,7 +366,7 @@ Total flags: 405
 - **LVGL_TASK_USE_PSRAM_STACK** default: `true` — Disable on targets whose FreeRTOS port rejects external static task stacks.
 - **LVGL_THEME_DARK_MODE** default: `true` — light theme to avoid a full-screen black background.
 - **LV_USE_PERF_MONITOR_POS** default: `(no default)` — LVGL perf monitor alignment.
-- **MALLOC_PSRAM_THRESHOLD_BYTES** default: `(no default)` — Ordinary malloc PSRAM preference threshold; ESP32/S3 with PSRAM use 512 bytes, 0 preserves SDK policy.
+- **MALLOC_PSRAM_THRESHOLD_BYTES** default: `512` — Ordinary malloc PSRAM preference threshold in bytes; 0 preserves SDK policy.
 - **NUM_HW_BUTTONS** default: `0` — Number of buttons actually declared by the board (0 = none).
 - **PORTAL_PRIMARY_CATEGORY** default: `""` — Custom nav category ID promoted to first position (empty = standard behavior).
 - **PORTAL_PRIMARY_FRAGMENT** default: `""` — Default startup fragment for board variants with a primary portal category.
@@ -668,6 +668,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/gamepad_action.cpp
   - src/app/actions/key_action.cpp
   - src/app/actions/mouse_button_action.cpp
+  - src/app/actions/voice_note_record_action.cpp
   - src/app/app.ino
   - src/app/ble_backend.cpp
   - src/app/ble_backend.h
@@ -690,6 +691,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/portal_components.cpp
   - src/app/screens/pad_screen.cpp
   - src/app/touch_manager.cpp
+  - src/app/voice_notes_processing.cpp
   - src/app/web_portal_ble.cpp
   - src/app/web_portal_ble.h
   - src/app/web_portal_config.cpp
@@ -792,6 +794,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/portal_components.cpp
   - src/app/runtime_variables.cpp
   - src/app/var_binding.cpp
+  - src/app/voice_notes_processing.cpp
   - src/app/web_portal_device_api.cpp
   - src/boards/m5stack-stopwatch/stopwatch_actions.cpp
   - src/boards/reterminal-sticky-interactive/sticky_actions.cpp
@@ -1026,6 +1029,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/voice_notes_binding.h
   - src/app/voice_notes_loaded.cpp
   - src/app/voice_notes_loaded.h
+  - src/app/voice_notes_processing.cpp
+  - src/app/voice_notes_processing.h
   - src/app/web_mcp.cpp
   - src/app/web_portal.cpp
   - src/app/web_portal_config.cpp
@@ -1588,6 +1593,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/gamepad_action.cpp
   - src/app/actions/key_action.cpp
   - src/app/actions/mouse_button_action.cpp
+  - src/app/actions/voice_note_record_action.cpp
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/config_manager.cpp
@@ -1605,6 +1611,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/touch_manager.cpp
   - src/app/usb_hid.cpp
   - src/app/usb_hid.h
+  - src/app/voice_notes_processing.cpp
   - src/app/web_portal_config.cpp
   - src/app/widgets/gamepad_button_widget.cpp
   - src/app/widgets/gamepad_joystick_widget.cpp

@@ -44,4 +44,16 @@ document.getElementById(prefix + '-op-pad.cycle-excluded_pads-dynamic').checked 
 document.getElementById(prefix + '-op-pad.cycle-excluded_pads-template').value = '[var:excluded]';
 assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild(prefix).args.excluded_pads)),
     {$template:'[var:excluded]'});
+
+const option = {name:'type_after_transcription', label:'Type transcript automatically',
+    type:'boolean', control:'checkbox', default:false, dynamic:false, optional:true};
+const recording = {id:'voice_note.record.save', arguments:[option]};
+catalog.push({type:'test_recording', operations:[recording]});
+context.actionEditorLoad(prefix, {op:recording.id, args:{type_after_transcription:true}});
+assert.strictEqual(context.actionEditorBuild(prefix).args.type_after_transcription, true);
+document.getElementById(prefix + '-op-' + recording.id + '-type_after_transcription-fixed').checked = false;
+assert.strictEqual(context.actionEditorBuild(prefix).args.type_after_transcription, false);
+option.control = 'hidden';
+context.actionEditorLoad(prefix, {op:recording.id, args:{type_after_transcription:true}});
+assert.strictEqual(context.actionEditorBuild(prefix).args.type_after_transcription, true);
 console.log('portal_action_editor_cycle: PASS');

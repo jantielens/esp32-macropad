@@ -29,6 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add optional automatic typing after a Voice Note is transcribed, using the
+  existing keyboard connection without changing recording or processing.
+  Add latest-transcript text and note ID bindings for preview and manual typing.
+  Automatic typing requests last until reboot and are attempted once.
+  See the [Voice Notes guide](docs/user/media/voice-notes.md#type-a-transcript-on-a-connected-computer).
 * Add 20 shared USB/BLE host layouts, including US International, European
   layouts, and Brazilian ABNT2, with one table-driven mapping engine.
   Add literal Type text actions for up to
@@ -63,6 +68,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Default to preferring PSRAM for ordinary allocations larger than 512 bytes
+  when PSRAM is available, preserving explicit board overrides.
 * Use a final full refresh for automatic shutdown notices on e-paper after
   presentation acknowledgement and one second of settling. Hold display updates
   until power-off and release the hold on cancellation or failure.

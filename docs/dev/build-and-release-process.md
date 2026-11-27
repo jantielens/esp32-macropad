@@ -343,20 +343,25 @@ hardware validation.
 
 ### Malloc PSRAM Preference
 
-`MALLOC_PSRAM_THRESHOLD_BYTES` defaults to `512` for classic ESP32 and ESP32-S3
-targets when `HAS_PSRAM` is enabled, including Inkplate builds. Other targets
-and boards without PSRAM default to `0`, which leaves the SDK allocation policy
-unchanged. Board overrides can select another threshold or opt out with `0`.
+`MALLOC_PSRAM_THRESHOLD_BYTES` defaults to `512` for all boards.
+Explicit board overrides remain in effect and can select another threshold
+or opt out with `0`, which leaves the SDK allocation policy unchanged.
 At the beginning of `setup()`, before subsystem initialization, firmware applies
 the preference through `heap_caps_malloc_extmem_enable()` only when PSRAM is
-compiled in and `psramFound()` confirms it is available.
+compiled in and `psramFound()` confirms it is available. Boards without usable
+PSRAM retain the SDK allocation policy.
 
 Ordinary allocations larger than the selected threshold prefer PSRAM; allocations
 at or below it prefer internal RAM. Sticky overrides the threshold to 128 bytes.
+The LCD4B family (standard, SD-primary, and Voice Assistant) overrides it to
+512 bytes to preserve internal DMA headroom for the Wi-Fi SDIO transport.
 The allocator can fall back to the other pool.
 Explicit capability allocations, including DMA-specific buffers, and task-stack
 policy are unchanged. The preference does not move existing allocations,
 including those made before `setup()`.
+
+The bundled SDK allocates mbedTLS memory explicitly in internal RAM, so this
+ordinary-allocation threshold does not redirect TLS buffers to PSRAM.
 
 ### Build Directory Layout
 

@@ -120,6 +120,9 @@ When enabled, CRLF produces one Enter; lone CR or LF produces Enter, and tab
 produces Tab. These keys can submit a form or move focus. No Enter is appended
 automatically.
 
+For microphone dictation, [type a Voice Notes transcript](../media/voice-notes.md#type-a-transcript-on-a-connected-computer)
+automatically after transcription or from a preview button.
+
 For larger text, split at UTF-8 character boundaries into requests of at most
 2,048 bytes and wait for completion before sending the next chunk. For example,
 5 KiB needs three chunks. An action list waits for each Type text action before

@@ -259,10 +259,19 @@ class PortalDevServerTest(unittest.TestCase):
                 self.assertEqual(any(scheme["name"] == "voice_note" for scheme in schemes), enabled)
                 if enabled:
                     voice = next(scheme for scheme in schemes if scheme["name"] == "voice_note")
-                    self.assertTrue({"loaded.transcript", "loaded.summary", "loaded.title"} <= set(voice["keys"]))
+                    self.assertTrue({"loaded.transcript", "loaded.summary", "loaded.title",
+                                     "latest_transcript.text", "latest_transcript.id"} <= set(voice["keys"]))
             catalog = self.request("/api/info?catalog=1", profile=selected)[1]["catalog"]
             for action_type in ("vnote_record", "vnote_process", "vnote_load", "vnote_delete"):
                 self.assertEqual(any(action["type"] == action_type for action in catalog), enabled)
+            if enabled:
+                recording = next(action for action in catalog if action["type"] == "vnote_record")
+                for operation in recording["operations"]:
+                    if operation["id"] in ("voice_note.record.save", "voice_note.record.toggle"):
+                        option = operation["arguments"][0]
+                        self.assertEqual(option["control"],
+                                         "hidden" if selected == "reterminal-sticky-interactive-sd" else "checkbox")
+                        self.assertFalse(option["default"])
             sources = self.request("/api/info?catalog=1", profile=selected)[1]["list_sources"]
             self.assertEqual(any(source["token"] == "[voice_note:recent_notes]" for source in sources), enabled)
             for path in ("/portal-voice-notes.js", "/api/section/voice-notes",
@@ -1435,9 +1444,9 @@ class PortalDevServerTest(unittest.TestCase):
             ("crowpanel-4.2-interactive", {"alarm", "display_refresh"},
              {"alarm_tone", "key", "image_next", "vnote_record"}),
             ("reterminal-sticky-interactive", {"alarm", "alarm_tone", "display_refresh", "bthome"},
-             {"alarm_mp3", "key", "image_next", "vnote_record"}),
+             {"alarm_mp3", "key", "image_next", "vnote_record", "ble_pair"}),
             ("reterminal-sticky-interactive-sd", {"vnote_record", "vnote_load", "display_refresh"},
-             {"alarm_mp3", "key", "camera_capture"}),
+             {"alarm_mp3", "key", "camera_capture", "ble_pair"}),
         )
         for profile, present, absent in cases:
             with self.subTest(profile=profile):
@@ -1450,6 +1459,10 @@ class PortalDevServerTest(unittest.TestCase):
                     self.assertEqual(any(op["id"] == "audio.alert.mp3" for op in sound["operations"]),
                                      info["has_sound_player"])
                 self.assertEqual(info["has_alarm"], "alarm" in types)
+                if profile.startswith("reterminal-sticky-interactive"):
+                    caps = self.request("/api/config", profile=profile)[1]["caps"]
+                    for capability in ("ble", "ble_hid", "usb_hid"):
+                        self.assertEqual(caps[capability], info["has_" + capability])
 
     def test_alarm_typed_hook_validation(self):
         config = self.request("/api/component/alarms/config")[1]

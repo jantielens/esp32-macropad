@@ -1733,7 +1733,7 @@ static bool accept_record = true;
 static VoiceNoteCommand recorded_command = VoiceNoteCommand::Toggle;
 static uint32_t recorded_token = 0;
 static VoiceNotesProcessingStart processing_result = VoiceNotesProcessingStart::Accepted;
-bool voice_notes_command(VoiceNoteCommand command, uint32_t token) {
+bool voice_notes_command(VoiceNoteCommand command, uint32_t token, bool) {
     recorded_command = command;
     recorded_token = token;
     return accept_record;

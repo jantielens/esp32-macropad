@@ -17,13 +17,16 @@ const char* const kKeys[] = {"recording.state", "recording.duration_s", "recordi
     "enrichment.state", "enrichment.note_id", "enrichment.error", "processing.state",
     "transcription.retry_status", "enrichment.retry_status"
 #if HAS_PSRAM
-    , "loaded.status", "loaded.error", "loaded.id", "loaded.title", "loaded.summary",
+    , "latest_transcript.text", "latest_transcript.id",
+    "loaded.status", "loaded.error", "loaded.id", "loaded.title", "loaded.summary",
     "loaded.transcript", "loaded.created_at", "loaded.duration_ms", "loaded.has_transcript",
     "loaded.has_enrichment"
 #endif
 };
 #if HAS_PSRAM
 BindingResolverStatus acquire_text(const char* key, BindingTextView* out) {
+    if (!strcmp(key, "latest_transcript.text"))
+        return voice_notes_latest_transcript_acquire_text(out);
     if (strncmp(key, "loaded.", 7)) return BINDING_RESOLVER_UNKNOWN;
     return voice_notes_loaded_acquire_text(key + 7, out);
 }
@@ -45,6 +48,8 @@ const BindingKeyDoc kKeyDocs[] = {
     {"enrichment.retry_status", "Service retry cycle: empty, Retry 1/2/3 of 3, or Retries halted; not per-note", nullptr},
     {"processing.state", "Background processing state", nullptr},
 #if HAS_PSRAM
+    {"latest_transcript.text", "Latest successful transcript since boot, in completion order: short scalar preview, or full text in a Text reader", nullptr},
+    {"latest_transcript.id", "Voice note ID of the latest successful transcript since boot", nullptr},
     {"loaded.status", "Explicitly loaded note: idle, loading, ready, or error", nullptr},
     {"loaded.error", "Most recent load failure", nullptr},
     {"loaded.id", "ID of the loaded note", nullptr},
@@ -64,6 +69,8 @@ const BindingExampleDoc kExamples[] = {
     {"[voice_note:enrichment.state]", "Show title and summary generation state."},
     {"[voice_note:transcription.retry_status]", "Show the transcription service retry cycle."},
 #if HAS_PSRAM
+    {"[voice_note:latest_transcript.text|No transcript]", "Show the latest successful transcript."},
+    {"[voice_note:latest_transcript.id]", "Identify the note that produced the latest transcript."},
     {"[voice_note:loaded.status]", "Show the explicit load state."},
     {"[voice_note:loaded.title|Untitled]", "Show a preview of the loaded note title."},
     {"[voice_note:loaded.transcript|No transcript]", "Show a preview of the loaded transcript."},
@@ -71,7 +78,7 @@ const BindingExampleDoc kExamples[] = {
 };
 const BindingSchemeDoc kRecorderDoc = {
 #if HAS_PSRAM
-    "Device", "Local voice note recorder status and explicitly loaded note data.",
+    "Device", "Local voice note recorder status, latest transcript, and explicitly loaded note data.",
 #else
     "Device", "Local voice note recorder status.",
 #endif
@@ -94,6 +101,8 @@ const BindingAuthoringKey kAuthoringKeys[] = {
     binding_authoring_text("enrichment.retry_status", "Retries halted"),
     binding_authoring_text("processing.state", "idle"),
 #if HAS_PSRAM
+    binding_authoring_text("latest_transcript.text", "A recorded conversation"),
+    binding_authoring_text("latest_transcript.id", "0000000100000002"),
     binding_authoring_text("loaded.status", "ready"),
     binding_authoring_text("loaded.error", "note not found"),
     binding_authoring_text("loaded.id", "0000000100000002"),
@@ -113,6 +122,8 @@ const char* key_at(uint8_t index) { return index < key_count() ? kKeys[index] : 
 BindingResolverStatus resolve(const char* key, char* out, size_t size) {
     if (!key || !out || !size) return BINDING_RESOLVER_UNAVAILABLE;
 #if HAS_PSRAM
+    if (strncmp(key, "latest_transcript.", 18) == 0)
+        return voice_notes_latest_transcript_resolve(key + 18, out, size);
     if (strncmp(key, "loaded.", 7) == 0) {
         bool known = false;
         for (const char* candidate : kKeys) known |= strcmp(candidate, key) == 0;

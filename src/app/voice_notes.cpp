@@ -53,6 +53,8 @@ uint32_t g_token = 0;
 uint64_t g_command_queued_us = 0;
 bool g_command_pending = false;
 bool g_command_busy = false;
+bool g_type_after_transcription = false;
+char g_typing_note_id[17] = {};
 bool g_terminating = false;
 bool g_cancel_requested = false;
 bool g_cleanup_blocked = false;
@@ -447,7 +449,7 @@ QueueResult drain_queue(Session& session) {
     }
 }
 
-bool publish(Session& session) {
+bool publish(Session& session, bool type_after_transcription = false) {
     LOGI(TAG, "Save started note=%s bytes=%lu", session.id, (unsigned long)session.data_bytes);
     const bool stopped = stop_sampling(session, false);
     if (!stopped) return false;
@@ -500,6 +502,8 @@ bool publish(Session& session) {
         portENTER_CRITICAL(&g_mux);
         if (!g_cancel_requested) {
             strlcpy(g_snapshot.last_clip, session.id, sizeof(g_snapshot.last_clip));
+            if (type_after_transcription)
+                strlcpy(g_typing_note_id, session.id, sizeof(g_typing_note_id));
             success = true;
         }
         portEXIT_CRITICAL(&g_mux);
@@ -546,6 +550,7 @@ void worker(void*) {
         const VoiceNoteCommand command = g_command;
         const uint32_t token = g_token;
         const uint64_t queued_us = g_command_queued_us;
+        const bool type_after_transcription = g_type_after_transcription;
         if (pending) {
             g_command_pending = false;
             g_token = 0;
@@ -618,7 +623,7 @@ void worker(void*) {
                 }
             } else if (command == VoiceNoteCommand::Save) {
                 SaveTiming timing(queued_us);
-                const bool saved = publish(session);
+                const bool saved = publish(session, type_after_transcription);
                 const bool cleaned = finish_session(session, token, saved, cancelled());
                 timing.report(session, saved, cleaned);
             } else {
@@ -709,7 +714,7 @@ bool voice_notes_init() {
     return true;
 }
 
-bool voice_notes_command(VoiceNoteCommand command, uint32_t token) {
+bool voice_notes_command(VoiceNoteCommand command, uint32_t token, bool type_after_transcription) {
     if (!g_initialized || !token) return false;
     const uint64_t queued_us = (command == VoiceNoteCommand::Save || command == VoiceNoteCommand::Toggle)
         ? (uint64_t)esp_timer_get_time() : 0;
@@ -744,6 +749,7 @@ bool voice_notes_command(VoiceNoteCommand command, uint32_t token) {
         if (command == VoiceNoteCommand::Discard) g_snapshot.state = VoiceNoteState::Discarding;
     }
     g_command = command;
+    g_type_after_transcription = command == VoiceNoteCommand::Save && type_after_transcription;
     g_command_queued_us = queued_us;
     g_token = token;
     g_command_pending = true;
@@ -751,6 +757,15 @@ bool voice_notes_command(VoiceNoteCommand command, uint32_t token) {
     portEXIT_CRITICAL(&g_mux);
     xTaskNotifyGive(g_worker);
     return true;
+}
+
+bool voice_notes_take_typing_request(const char* id) {
+    if (!id || !id[0]) return false;
+    portENTER_CRITICAL(&g_mux);
+    const bool requested = strcmp(g_typing_note_id, id) == 0;
+    if (requested) g_typing_note_id[0] = '\0';
+    portEXIT_CRITICAL(&g_mux);
+    return requested;
 }
 
 void voice_notes_snapshot(VoiceNoteSnapshot* out) {

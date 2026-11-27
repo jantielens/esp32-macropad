@@ -15,6 +15,7 @@ struct VoiceNotesRequestResult {
     const char* error;
     VoiceNotesRequestOutcome outcome;
     uint64_t cooldown_ms;
+    bool no_speech = false;
 };
 
 bool voice_notes_transcription_checkpoint(uint32_t ota_epoch, uint64_t recording_generation);

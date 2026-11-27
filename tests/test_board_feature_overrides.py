@@ -179,6 +179,7 @@ for board, expected, sd in (("esp32-p4-lcd4b", 0, 0), ("esp32-p4-lcd4b-sd", 1, 1
         input=f'''#include "src/app/board_config.h"
 static_assert(HAS_VOICE_NOTES == {expected}, "Voice Notes profile");
 static_assert(HAS_SD_CARD == {sd} && USE_SD_STORAGE == {sd}, "LCD4B storage selection");
+static_assert(MALLOC_PSRAM_THRESHOLD_BYTES == 512, "LCD4B variants preserve internal DMA headroom");
 ''' + ('''static_assert(SDMMC_BUS_WIDTH == 4 && SDMMC_POWER_PIN == 45 &&
               SDMMC_POWER_ACTIVE_LOW && SDMMC_LDO_CHANNEL == 4, "LCD4B SD wiring");
 ''' if sd else ""),
@@ -486,10 +487,9 @@ for target in ("ESP32", "ESP32S3", "ESP32P4", "ESP32C3", "ESP32C6", None):
         flags = [f"-DCONFIG_IDF_TARGET_{target}=1"] if target else []
         if has_psram:
             flags.append("-DBOARD_HAS_PSRAM")
-        expected = 512 if has_psram and target in ("ESP32", "ESP32S3") else 0
-        policy_cases.append((flags, expected))
+        policy_cases.append((flags, 512))
 policy_cases.extend([
-    (["-DCONFIG_IDF_TARGET_ESP32S3=1", "-DBOARD_HAS_PSRAM", "-DHAS_PSRAM=0"], 0),
+    (["-DCONFIG_IDF_TARGET_ESP32S3=1", "-DBOARD_HAS_PSRAM", "-DHAS_PSRAM=0"], 512),
     (["-DCONFIG_IDF_TARGET_ESP32=1", "-DHAS_PSRAM=1"], 512),
     (["-DCONFIG_IDF_TARGET_ESP32S3=1", "-DBOARD_HAS_PSRAM", "-DMALLOC_PSRAM_THRESHOLD_BYTES=0"], 0),
     (["-DCONFIG_IDF_TARGET_ESP32=1", "-DBOARD_HAS_PSRAM", "-DMALLOC_PSRAM_THRESHOLD_BYTES=1024"], 1024),

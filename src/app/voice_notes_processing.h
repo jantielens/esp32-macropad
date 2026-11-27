@@ -66,4 +66,9 @@ void voice_notes_transcription_snapshot(VoiceNotesTranscriptionSnapshot* out);
 const char* voice_notes_transcription_state_name(VoiceNotesTranscriptionState state);
 void voice_notes_enrichment_snapshot(VoiceNotesEnrichmentSnapshot* out);
 const char* voice_notes_enrichment_state_name(VoiceNotesEnrichmentState state);
+#if HAS_DISPLAY && HAS_PSRAM
+#include "binding_template.h"
+BindingResolverStatus voice_notes_latest_transcript_resolve(const char* key, char* out, size_t size);
+BindingResolverStatus voice_notes_latest_transcript_acquire_text(BindingTextView* out);
+#endif
 #endif

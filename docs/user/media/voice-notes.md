@@ -192,6 +192,72 @@ Labels show short UTF-8-safe previews; use a
 Checked action fields reject values that do not fit rather than using a
 truncated prefix.
 
+## Type a transcript on a connected computer
+
+On firmware with keyboard output, a voice note can type its transcript into the
+host application's focused input. First configure and connect
+[USB or BLE keyboard output](../integrations/keyboard-mouse-gamepad.md#select-and-connect),
+including the host keyboard layout. Recording, saving, cloud processing, and
+transcription retries work as usual. Typing does not enable processing or
+change its settings.
+
+### Type automatically after transcription
+
+On **Stop and save recording** or **Toggle recording (start/save)**, enable
+**Type transcript automatically** and save the pad or action host. The option
+defaults to off and applies only when saving a note; Toggle does not arm it
+when starting a recording. The option is hidden on firmware without USB or BLE
+HID support, but remains available when the keyboard connection is off or
+disconnected.
+
+Record and save one note, then let its transcription complete. Enable
+**Automatically process saved notes**, or start processing manually. If Wi-Fi
+is unavailable, automatic processing waits normally. The typing request lasts
+until reboot, so a delayed transcription can still trigger typing after Wi-Fi
+returns. Reboot clears the request, not the saved note or its pending processing.
+Only one automatic-typing request is kept; saving another note with this option
+replaces the previous request. For several recordings, use saved-note selection
+instead.
+
+Successful transcription attempts typing once. Transcription or save failures
+do not type anything; normal transcription retries can still succeed later.
+An empty speech result does not trigger automatic typing. Keyboard failures
+are reported in the device logs without changing the saved transcript.
+Connecting the keyboard later or retranscribing the note does not retry typing.
+Use **Cancel typing** to stop output already in progress.
+
+### Preview the latest transcript before typing
+
+Leave automatic typing off. Set a label or Text reader to
+`[voice_note:latest_transcript.text|No transcript]`. Add a separate
+**Keyboard > Type text** action whose **Text** is
+`[voice_note:latest_transcript.text]`, without a placeholder fallback. Save
+the pad, record one note, and wait for its transcript before tapping the typing
+button.
+
+The latest transcript is the most recently completed successful transcription
+since boot, including processing of older offline recordings. Its note ID is
+`[voice_note:latest_transcript.id]`. Failed attempts leave the previous result
+unchanged. These bindings require a display and PSRAM; labels show short
+previews and Text readers show the full text.
+
+### Type a specific saved transcript
+
+Use the [recent-notes List and detail pad](#build-recording-list-and-detail-pads)
+to load a note with `[item:id]`. On the detail pad, wait for
+`[voice_note:loaded.status]` to show `ready`, preview the transcript, then tap a
+separate **Type text** button with **Text** set to
+`[voice_note:loaded.transcript]`. Load does not wait for reading to complete;
+do not chain it immediately into Type text.
+
+Both automatic and manual typing use literal text, not keyboard macro syntax.
+The existing limit is 2,048 UTF-8 bytes per request. Unsupported characters,
+oversized results, and unavailable or busy keyboards fail without starting
+output. Automatic typing does not allow Enter or Tab and never appends Enter.
+Manual **Type text** provides an **Allow Enter and Tab** option. See the
+[keyboard text rules](../integrations/keyboard-mouse-gamepad.md#type-literal-text)
+for layout support, cancellation, and partial-output limitations.
+
 ## Delete a note from a List
 
 Add **Voice notes > Delete saved note** to a List item action and set **Note ID**
@@ -231,6 +297,8 @@ Scalar bindings use `[voice_note:key]`. The keys fall into these groups:
   ID, error, and retry status; for example, `[voice_note:transcription.error|]`
 * `loaded.*`: the shared loaded note's status, error, ID, metadata, and text
   previews; for example, `[voice_note:loaded.title|Untitled]`
+* `latest_transcript.*`: the latest successful transcript since boot and its
+  note ID; for example, `[voice_note:latest_transcript.text|No transcript]`
 
 In a bindable field, open **fx** and search the **Binding Reference** for
 `voice_note` to see the complete keys supported by your firmware. The

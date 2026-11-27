@@ -25,9 +25,11 @@
 static VoiceNoteCommand record_command = VoiceNoteCommand::Start;
 static uint32_t record_token = 0;
 static bool record_accepted = true;
-bool voice_notes_command(VoiceNoteCommand command, uint32_t token) {
+static bool record_type_after_transcription = false;
+bool voice_notes_command(VoiceNoteCommand command, uint32_t token, bool type_after_transcription) {
     record_command = command;
     record_token = token;
+    record_type_after_transcription = type_after_transcription;
     return record_accepted;
 }
 static VoiceNotesProcessingStart processing_start_result = VoiceNotesProcessingStart::Accepted;
@@ -645,6 +647,41 @@ TEST(typed_operation_boundaries_and_capabilities) {
     ASSERT_TRUE(!action.type[0]);
 }
 
+TEST(voice_note_typing_option) {
+#if HAS_VOICE_NOTES
+    const ActionOperationDef* save = action_operation_find("voice_note.record.save");
+    const ActionOperationDef* toggle = action_operation_find("voice_note.record.toggle");
+    ASSERT_TRUE(save && toggle && save->argument_count == 1 && toggle->argument_count == 1);
+    for (const char* json : {
+            R"({"op":"voice_note.record.save","args":{}})",
+            R"({"op":"voice_note.record.toggle","args":{"type_after_transcription":true}})"}) {
+        JsonDocument document;
+        ASSERT_TRUE(!deserializeJson(document, json));
+        ASSERT_TRUE(!action_operation_validate_json(document.as<JsonObjectConst>(), false));
+        ActionStorage storage{};
+        ButtonAction action{};
+        {
+            ActionStorageScope scope(&storage);
+            action_parse(document.as<JsonObject>(), action);
+        }
+        ASSERT_TRUE(!storage.failed);
+        JsonDocument serialized;
+        JsonObject output = serialized.to<JsonObject>();
+        action_to_json(action, output);
+        ASSERT_EQ(output["args"]["type_after_transcription"].as<bool>(),
+                  document["args"]["type_after_transcription"].as<bool>());
+        action_storage_clear(storage);
+    }
+    ActionResolvedArgument enabled[] = {{nullptr, 1, 0}};
+    ASSERT_EQ(save->dispatch(enabled, "test", 42), ACTION_PENDING);
+    ASSERT_EQ(record_command, VoiceNoteCommand::Save);
+    ASSERT_TRUE(record_type_after_transcription && record_token == 42);
+    record_accepted = false;
+    ASSERT_EQ(toggle->dispatch(enabled, "test", 43), ACTION_FAILED);
+    record_accepted = true;
+#endif
+}
+
 int main(int argc, char** argv) {
     if (argc == 3 && !strcmp(argv[1], "--validate-operations")) {
         JsonDocument input;
@@ -683,6 +720,7 @@ int main(int argc, char** argv) {
     RUN(home_assistant_catalog_examples_are_valid);
     RUN(image_metadata_capabilities_and_fields);
     RUN(typed_operation_boundaries_and_capabilities);
+    RUN(voice_note_typing_option);
     printf("\n=== Results: %d passed, %d failed ===\n", g_pass, g_fail);
     return g_fail > 0 ? 1 : 0;
 }

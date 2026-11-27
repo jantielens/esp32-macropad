@@ -84,13 +84,9 @@ struct HwButtonDef {
 #error "NimBLE-Arduino broadcast profile requires HAS_PSRAM; use the core backend otherwise"
 #endif
 
-// Ordinary malloc PSRAM preference threshold; ESP32/S3 with PSRAM use 512 bytes, 0 preserves SDK policy.
+// Ordinary malloc PSRAM preference threshold in bytes; 0 preserves SDK policy.
 #ifndef MALLOC_PSRAM_THRESHOLD_BYTES
-#if HAS_PSRAM && (defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S3))
 #define MALLOC_PSRAM_THRESHOLD_BYTES 512
-#else
-#define MALLOC_PSRAM_THRESHOLD_BYTES 0
-#endif
 #endif
 
 // ============================================================================
