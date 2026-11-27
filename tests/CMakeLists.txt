@@ -105,6 +105,14 @@ function(add_host_legacy_test target)
     set_tests_properties(${target} PROPERTIES WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 endfunction()
 
+add_host_legacy_test(test_tls_allocator
+    SOURCES test_tls_allocator.cpp ${PROJECT_SOURCE_DIR}/src/app/tls_allocator.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/tls_allocator_overrides
+    DEFINITIONS HAS_PSRAM=1 MBEDTLS_PSRAM_THRESHOLD_BYTES=4096
+        TEST_HEAP_CAPS_ALLOCATOR=1 TEST_HEAP_CAPS_CALLOC=1)
+add_test(NAME test_tls_allocator_missing_psram COMMAND test_tls_allocator missing-psram)
+add_test(NAME test_tls_allocator_insufficient_psram COMMAND test_tls_allocator insufficient-psram)
+
 function(add_host_command_test name)
     add_test(NAME ${name} COMMAND ${ARGN})
     set_tests_properties(${name} PROPERTIES WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})

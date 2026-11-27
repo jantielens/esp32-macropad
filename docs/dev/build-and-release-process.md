@@ -363,6 +363,47 @@ including those made before `setup()`.
 The bundled SDK allocates mbedTLS memory explicitly in internal RAM, so this
 ordinary-allocation threshold does not redirect TLS buffers to PSRAM.
 
+### Experimental mbedTLS PSRAM Allocation
+
+`MBEDTLS_PSRAM_THRESHOLD_BYTES` defaults to `0` (SDK policy). Only
+`esp32-p4-lcd4b-sd` opts in at `4096` bytes; other boards, including the other
+LCD4B variants and Sticky, retain their existing TLS allocation policy.
+The shared implementation can be opted into by another PSRAM board after its
+crypto, concurrency, and OTA paths have been validated.
+
+At startup, before application workers or networking start, firmware installs
+the global mbedTLS calloc/free hooks once. Installation requires detected PSRAM
+with a free contiguous block at least as large as the threshold. If unavailable,
+an early `TLSAlloc` error reports that the SDK allocator remains in use.
+An enabled experiment prints its threshold at boot.
+
+Allocations at or above the threshold use byte-accessible PSRAM; smaller
+allocations use byte-accessible internal RAM. There is no cross-pool fallback:
+allocation failure remains visible through `TLSAlloc` diagnostics and the
+existing heap-failure hook. Multiplication overflow is rejected, successful
+allocations are zeroed, and the common heap free handles either memory pool,
+including allocations made before installation. Existing allocations do not move.
+Rollback requires setting this flag to `0`, rebuilding, and rebooting.
+
+The hook affects all mbedTLS allocations, not just Voice Notes or record buffers.
+It can place plaintext and cryptographic material in external memory; it does
+not enable PSRAM encryption. Certificate policies, TLS record limits, explicit
+DMA allocations, hardware-crypto settings, and ordinary malloc policy are
+unchanged. External buffers may select AES-GCM's partial-hardware path and
+increase latency or CPU use. HTTPS firmware updates and native Extension
+signature verification also need hardware acceptance.
+
+Compare baseline and experiment on fresh boots with identical configuration,
+recordings, and concurrent activity. Start with 30 recording upload/enrichment
+cycles per firmware. Capture `heap_dma_internal_min`, free DMA memory, and
+`heap_dma_internal_largest` from `/api/health`, together with request latency,
+allocation/HTTP failures, and memory recovery. Largest-block readings are
+sampled, not an instantaneous minimum; preserve allocation-failure logs.
+Exercise HTTPS images, external data, HA requests, native Extensions,
+disconnect/retry, cancellation, selected-note preview, manual BLE typing,
+and HTTPS OTA. Do not retain the experiment on memory savings alone if failures,
+progressive memory loss, or unacceptable latency appear.
+
 ### Build Directory Layout
 
 Each board gets its own isolated build tree under `build/`. Final binaries (`.bin` files) are placed directly in `build/<board>/`, while `arduino-cli`'s intermediate object cache lives in a separate `intermediate/` subdirectory per board. This prevents cache thrashing when switching between boards — building board A, then board B, then board A again is incremental (seconds) rather than a full rebuild.

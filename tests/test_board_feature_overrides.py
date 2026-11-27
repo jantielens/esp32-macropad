@@ -180,6 +180,7 @@ for board, expected, sd in (("esp32-p4-lcd4b", 0, 0), ("esp32-p4-lcd4b-sd", 1, 1
 static_assert(HAS_VOICE_NOTES == {expected}, "Voice Notes profile");
 static_assert(HAS_SD_CARD == {sd} && USE_SD_STORAGE == {sd}, "LCD4B storage selection");
 static_assert(MALLOC_PSRAM_THRESHOLD_BYTES == 512, "LCD4B variants preserve internal DMA headroom");
+static_assert(MBEDTLS_PSRAM_THRESHOLD_BYTES == {4096 if sd else 0}, "TLS experiment is SD-only");
 ''' + ('''static_assert(SDMMC_BUS_WIDTH == 4 && SDMMC_POWER_PIN == 45 &&
               SDMMC_POWER_ACTIVE_LOW && SDMMC_LDO_CHANNEL == 4, "LCD4B SD wiring");
 ''' if sd else ""),
@@ -480,6 +481,7 @@ print(f"PASS: {board}")
 
 policy_source = '''#include "src/app/board_config.h"
 static_assert(MALLOC_PSRAM_THRESHOLD_BYTES == EXPECTED_THRESHOLD, "Unexpected malloc policy");
+static_assert(MBEDTLS_PSRAM_THRESHOLD_BYTES == 0, "TLS experiment must be opt-in");
 '''
 policy_cases = []
 for target in ("ESP32", "ESP32S3", "ESP32P4", "ESP32C3", "ESP32C6", None):
@@ -501,6 +503,31 @@ for flags, expected in policy_cases:
         input=policy_source, text=True, check=True,
     )
 print(f"PASS: {len(policy_cases)} target, PSRAM, and override combinations")
+
+for flags, expected_error in (
+    (["-DHAS_PSRAM=1", "-DMBEDTLS_PSRAM_THRESHOLD_BYTES=4096"], None),
+    (["-DHAS_PSRAM=0", "-DMBEDTLS_PSRAM_THRESHOLD_BYTES=4096"], "requires HAS_PSRAM"),
+    (["-DHAS_PSRAM=1", "-DMBEDTLS_PSRAM_THRESHOLD_BYTES=-1"], "must be nonnegative"),
+    (["-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM", "-DCONFIG_IDF_TARGET_ESP32P4=1",
+      "-I", str(root / "src/boards/esp32-p4-lcd4b-sd"),
+      "-DMBEDTLS_PSRAM_THRESHOLD_BYTES=0"], None),
+):
+    result = subprocess.run(
+        ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+         "-x", "c++", "-", "-I", str(root), *flags],
+        input='''#include "src/app/tls_allocator.cpp"
+#if MBEDTLS_PSRAM_THRESHOLD_BYTES == 0
+void check_disabled_allocator() { tls_allocator_init(); }
+#endif
+''' if "-DMBEDTLS_PSRAM_THRESHOLD_BYTES=0" in flags else
+        '#include "src/app/board_config.h"\n',
+        text=True, capture_output=True,
+    )
+    if expected_error:
+        assert result.returncode != 0 and expected_error in result.stderr, result.stderr
+    else:
+        assert result.returncode == 0, result.stderr
+print("PASS: TLS allocator opt-in, prerequisites, and SDK-free rollback")
 
 with tempfile.TemporaryDirectory() as directory:
     pathlib.Path(directory, "sdkconfig.h").write_text("")
@@ -553,6 +580,7 @@ runtime_source = '''#include <cassert>
 static bool psram_present = false;
 static unsigned policy_calls = 0;
 void reboot_service_boot_init() {}
+void tls_allocator_init() {}
 bool psramFound() { return psram_present; }
 void heap_caps_malloc_extmem_enable(size_t threshold) {
     assert(threshold == 512);

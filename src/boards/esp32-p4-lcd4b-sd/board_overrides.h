@@ -3,6 +3,11 @@
 
 #include "../esp32-p4-lcd4b/board_overrides.h"
 
+// Opt-in TLS memory experiment; other LCD4B variants retain the SDK allocator.
+#ifndef MBEDTLS_PSRAM_THRESHOLD_BYTES
+#define MBEDTLS_PSRAM_THRESHOLD_BYTES 4096
+#endif
+
 // Onboard MicroSD: SDMMC slot 0, GPIO39-44, with GPIO45 and LDO4 for power.
 #define HAS_SD_CARD true
 #define USE_SD_STORAGE true

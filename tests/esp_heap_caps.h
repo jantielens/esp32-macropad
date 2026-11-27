@@ -25,5 +25,9 @@ inline void* heap_caps_malloc(size_t size, uint32_t /*caps*/) { return malloc(si
 inline void heap_caps_free(void* ptr) { free(ptr); }
 inline bool psramFound() { return false; }
 #endif
+#ifdef TEST_HEAP_CAPS_CALLOC
+void* heap_caps_calloc(size_t count, size_t size, uint32_t caps);
+#else
 inline void* heap_caps_calloc(size_t count, size_t size, uint32_t /*caps*/) { return calloc(count, size); }
+#endif
 inline void* heap_caps_realloc(void* ptr, size_t size, uint32_t /*caps*/) { return realloc(ptr, size); }

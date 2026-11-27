@@ -89,6 +89,18 @@ struct HwButtonDef {
 #define MALLOC_PSRAM_THRESHOLD_BYTES 512
 #endif
 
+// Experimental mbedTLS PSRAM allocation cutoff in bytes; 0 preserves SDK policy.
+#ifndef MBEDTLS_PSRAM_THRESHOLD_BYTES
+#define MBEDTLS_PSRAM_THRESHOLD_BYTES 0
+#endif
+
+#if MBEDTLS_PSRAM_THRESHOLD_BYTES < 0
+#error "MBEDTLS_PSRAM_THRESHOLD_BYTES must be nonnegative"
+#endif
+#if MBEDTLS_PSRAM_THRESHOLD_BYTES > 0 && !HAS_PSRAM
+#error "MBEDTLS PSRAM allocation requires HAS_PSRAM"
+#endif
+
 // ============================================================================
 // Remote Diagnostics
 // Include remote log capture, portal assets, and retained-crash retrieval.

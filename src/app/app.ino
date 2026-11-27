@@ -31,6 +31,7 @@
 #include "boot_logo_store.h"
 #endif
 #include "dma2d_arbiter.h"
+#include "tls_allocator.h"
 #include "hw_buttons.h"
 #include "hw_button_config.h"
 #if HAS_DISPLAY || HAS_BUTTON
@@ -424,6 +425,8 @@ void setup()
 		heap_caps_malloc_extmem_enable(MALLOC_PSRAM_THRESHOLD_BYTES);
 	}
 	#endif
+
+	tls_allocator_init();
 
 	dma2d_arbiter_init();
 

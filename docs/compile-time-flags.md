@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 405
+Total flags: 406
 
 ### Features (HAS_*)
 
@@ -367,6 +367,7 @@ Total flags: 405
 - **LVGL_THEME_DARK_MODE** default: `true` — light theme to avoid a full-screen black background.
 - **LV_USE_PERF_MONITOR_POS** default: `(no default)` — LVGL perf monitor alignment.
 - **MALLOC_PSRAM_THRESHOLD_BYTES** default: `512` — Ordinary malloc PSRAM preference threshold in bytes; 0 preserves SDK policy.
+- **MBEDTLS_PSRAM_THRESHOLD_BYTES** default: `0` — Experimental mbedTLS PSRAM allocation cutoff in bytes; 0 preserves SDK policy.
 - **NUM_HW_BUTTONS** default: `0` — Number of buttons actually declared by the board (0 = none).
 - **PORTAL_PRIMARY_CATEGORY** default: `""` — Custom nav category ID promoted to first position (empty = standard behavior).
 - **PORTAL_PRIMARY_FRAGMENT** default: `""` — Default startup fragment for board variants with a primary portal category.
@@ -2265,6 +2266,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **MAX_PAD_BUTTONS**
   - src/app/pad_config.h
+- **MBEDTLS_PSRAM_THRESHOLD_BYTES**
+  - src/app/board_config.h
+  - src/app/tls_allocator.cpp
+  - src/app/tls_allocator.h
+  - src/boards/esp32-p4-lcd4b-sd/board_overrides.h
 - **MIN_USER_BRIGHTNESS**
   - src/app/board_config.h
 - **NUM_HW_BUTTONS**
